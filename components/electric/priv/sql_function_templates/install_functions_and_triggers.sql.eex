@@ -80,5 +80,24 @@ BEGIN
     $$, full_table_identifier, generated_functions->>'reorder_main_op');
 
     EXECUTE format($$ ALTER TABLE %s ENABLE ALWAYS TRIGGER satellite_write__save_operation_for_reordering $$, full_table_identifier);
+
+    -- Cannot have `AFTER INSERT OR UPDATE` when `REFERENCING` clause is present, hence 2 separate triggers.
+    EXECUTE format($$
+        CREATE OR REPLACE TRIGGER send_self_and_references_on_insert
+        AFTER INSERT ON %s
+        REFERENCING NEW TABLE AS new_table
+        FOR EACH STATEMENT EXECUTE FUNCTION <%= schema() %>.%I();
+    $$, full_table_identifier, generated_functions->>'send_self_trigger');
+
+    EXECUTE format($$ ALTER TABLE %s ENABLE ALWAYS TRIGGER send_self_and_references_on_insert $$, full_table_identifier);
+
+    EXECUTE format($$
+        CREATE OR REPLACE TRIGGER send_self_and_references_on_update
+        AFTER UPDATE ON %s
+        REFERENCING NEW TABLE AS new_table
+        FOR EACH STATEMENT EXECUTE FUNCTION <%= schema() %>.%I();
+    $$, full_table_identifier, generated_functions->>'send_self_trigger');
+
+    EXECUTE format($$ ALTER TABLE %s ENABLE ALWAYS TRIGGER send_self_and_references_on_update $$, full_table_identifier);
 END
 $function$;

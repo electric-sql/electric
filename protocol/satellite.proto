@@ -231,6 +231,9 @@ message SatTransOp {
         SatOpDelete delete = 5;
         SatOpMigrate migrate = 6;
         SatOpCompensation compensation = 7;
+        SatOpGone gone = 8;
+        SatOpAdditionalBegin additional_begin = 9;
+        SatOpAdditionalCommit additional_commit = 10;
     }
 }
 
@@ -249,7 +252,20 @@ message SatOpBegin {
     optional string origin = 4;
     // does this transaction contain ddl statements?
     bool is_migration = 5;
+    /** If not 0, a transient reference for additional data pseudo-transaction
+        that will be sent at a later point in the stream. It may be shared by multiple transactions
+        sent by the server at the same time, because this additional data will be queried at the same
+        time. Duplicated on SatOpCommit.
+        */
+    uint64 additional_data_ref = 6;
 }
+
+// (Producer) Replication message that indicates a transaction boundary for additional data that existed on the server
+// but the client can now see
+message SatOpAdditionalBegin {
+    uint64 ref = 1;
+}
+
 
 // (Producer) Replication message that indicates transaction boundaries
 // should be only send as payload in the SatTransOp message
@@ -257,6 +273,16 @@ message SatOpCommit {
     uint64 commit_timestamp = 1;
     string trans_id = 2;
     bytes lsn = 3;
+    /** If not 0, a transient reference for additional data pseudo-transaction
+        that will be sent at a later point in the stream. It may be shared by multiple transactions
+        sent by the server at the same time, because this additional data will be queried at the same
+        time. Duplicated on SatOpBegin.
+        */
+    uint64 additional_data_ref = 4;
+}
+
+message SatOpAdditionalCommit {
+    uint64 ref = 1;
 }
 
 // (Producer) Data manipulation message, that only should be part of the
@@ -294,6 +320,12 @@ message SatOpCompensation {
     SatOpRow pk_data = 2;
     // dependency information
     repeated string tags = 4;
+}
+
+message SatOpGone {
+    uint32 relation_id = 1;
+    SatOpRow pk_data = 2;
+
 }
 
 // Dependency information for row data.
@@ -432,7 +464,11 @@ message SatSubsResp {
                 // Attempt to request the same table more than once in one shape
                 DUPLICATE_TABLE_IN_SHAPE_DEFINITION = 4;
 
+                // Malformed WHERE clause on a table
                 INVALID_WHERE_CLAUSE = 5;
+
+                // Specified include tree does not match known schema
+                INVALID_INCLUDE_TREE = 6;
             }
 
             // error code
@@ -468,11 +504,17 @@ message SatShapeReq {
 
 // Top-level structure of a shape definition
 message SatShapeDef {
+    message Relation {
+        repeated string foreign_key = 1;
+        Select select = 2;
+    }
+
     // Select structure
     message Select {
         // table name for this select
         string tablename = 1;
-        string where = 2; 
+        string where = 2;
+        repeated Relation include = 3;
     }
 
     // Selects for the Shape definition

@@ -7,8 +7,8 @@ defmodule Electric.Replication.Eval.Runner do
   @doc """
   Generate a ref values object based on the record and a given table name
   """
-  @spec record_to_ref_values(Expr.used_refs(), map(), tuple(), Env.t()) :: {:ok, map()} | :error
-  def record_to_ref_values(used_refs, record, {_, table_name}, env \\ Env.new()) do
+  @spec record_to_ref_values(Expr.used_refs(), map(), Env.t()) :: {:ok, map()} | :error
+  def record_to_ref_values(used_refs, record, env \\ Env.new()) do
     used_refs
     # Keep only used refs that are pointing to current table
     |> Enum.filter(&match?({["this", _], _}, &1))
@@ -21,7 +21,7 @@ defmodule Electric.Replication.Eval.Runner do
 
         :error ->
           Logger.warning(
-            "Could not parse #{inspect(value)} as #{inspect(type)} while casting #{inspect(key)} of table #{table_name}"
+            "Could not parse #{inspect(value)} as #{inspect(type)} while casting #{inspect(key)}"
           )
 
           {:halt, :error}
@@ -32,9 +32,9 @@ defmodule Electric.Replication.Eval.Runner do
   @doc """
   Run a PG function parsed by `Electric.Replication.Eval.Parser` based on the inputs
   """
-  @spec execute(struct(), map()) :: {:ok, term()} | {:error, {%Func{}, [term()]}}
-  def execute(tree, ref_values) do
-    {:ok, do_execute(tree, ref_values)}
+  @spec execute(Expr.t(), map()) :: {:ok, term()} | {:error, {%Func{}, [term()]}}
+  def execute(%Expr{} = tree, ref_values) do
+    {:ok, do_execute(tree.eval, ref_values)}
   catch
     {:could_not_compute, func} -> {:error, func}
   end

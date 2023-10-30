@@ -1,0 +1,36 @@
+CREATE OR REPLACE FUNCTION <%= schema() %>.list_foreign_keys(target_schema_name TEXT, target_table_name TEXT)
+    RETURNS TABLE (constraint_name TEXT, fk_columns TEXT[], referenced_columns TEXT[], referenced_table_oid TEXT, referenced_schema TEXT, referenced_table TEXT)
+    LANGUAGE SQL
+    STABLE LEAKPROOF STRICT
+    PARALLEL SAFE
+    AS $$
+    SELECT
+        con.conname AS constraint_name,
+        ARRAY(
+            SELECT attname
+            FROM unnest(con.conkey) WITH ORDINALITY AS a(attnum, ordinality)
+            JOIN pg_attribute ON pg_attribute.attnum = a.attnum AND pg_attribute.attrelid = con.conrelid
+            ORDER BY a.ordinality
+        ) AS fk_columns,
+        ARRAY(
+            SELECT attname
+            FROM unnest(con.confkey) WITH ORDINALITY AS a(attnum, ordinality)
+            JOIN pg_attribute ON pg_attribute.attnum = a.attnum AND pg_attribute.attrelid = con.confrelid
+            ORDER BY a.ordinality
+        ) AS referenced_columns,
+        con.confrelid AS referenced_table_oid,
+        refNS.nspname AS referenced_schema,
+        refCL.relname AS referenced_table
+    FROM
+        pg_constraint con
+        JOIN pg_class CL ON CL.oid = con.conrelid
+        JOIN pg_namespace NS ON NS.oid = CL.relnamespace
+        JOIN pg_class refCL ON refCL.oid = con.confrelid
+        JOIN pg_namespace refNS ON refNS.oid = refCL.relnamespace
+    WHERE
+        con.contype = 'f'
+        AND NS.nspname = target_schema_name
+        AND CL.relname = target_table_name
+    ORDER BY
+        con.conname;
+    $$;

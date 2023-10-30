@@ -4,6 +4,37 @@ defmodule Electric.Utils do
   """
 
   @doc """
+  Get a hash of an arbitrary Elixir term in a predictable form, encoded as base64 string
+  """
+  @spec term_hash(term()) :: binary()
+  def term_hash(term),
+    do: Base.encode64(:crypto.hash(:blake2b, :erlang.term_to_iovec(term, [:deterministic])))
+
+  @doc """
+  Merge two graphs by merging their edges together.
+
+  This does not copy over unconnected nodes, because for current use-cases we only care about edges or connected nodes.
+  Implementation of graph edge search is adapted from `Graph.edges/1`, but optimized to (1) be a direct reduction and (2) not create
+  `Graph.Edge` structs since it will be immediately torn down when merging.
+  """
+  def merge_graph_edges(%Graph{} = g1, %Graph{out_edges: edges, edges: meta, vertices: vs}) do
+    edges
+    |> Enum.reduce(g1, fn {source_id, out_neighbors}, acc ->
+      source = Map.get(vs, source_id)
+
+      out_neighbors
+      |> Enum.reduce(acc, fn out_neighbor, acc ->
+        target = Map.get(vs, out_neighbor)
+        meta = Map.get(meta, {source_id, out_neighbor})
+
+        Enum.reduce(meta, acc, fn {label, weight}, acc ->
+          Graph.add_edge(acc, source, target, label: label, weight: weight)
+        end)
+      end)
+    end)
+  end
+
+  @doc """
   Helper function to be used for GenStage alike processes to control
   demand and amount of produced events
   """

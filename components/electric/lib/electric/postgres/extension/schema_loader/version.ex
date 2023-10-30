@@ -100,6 +100,14 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Version do
     fetch_table_value(pks, relation)
   end
 
+  @spec primary_keys!(t(), table_ref()) :: [name(), ...]
+  def primary_keys!(version, relation) do
+    case primary_keys(version, relation) do
+      {:ok, result} -> result
+      {:error, message} -> raise ArgumentError, message: message
+    end
+  end
+
   @spec fk_graph(t()) :: Graph.t()
   def fk_graph(%__MODULE__{fk_graph: fk_graph}) do
     fk_graph

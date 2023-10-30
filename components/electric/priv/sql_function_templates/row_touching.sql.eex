@@ -1,0 +1,25 @@
+CREATE OR REPLACE FUNCTION <%= schema() %>.__tx_store_touched_row(schema_name TEXT, table_name TEXT, serialized_pk TEXT)
+    RETURNS VOID
+    VOLATILE
+    LANGUAGE PLPGSQL AS $$
+    DECLARE
+        table_key TEXT := format('%s.%s', schema_name, table_name);
+        curr_val JSONB := COALESCE(NULLIF(current_setting('<%= schema() %>.touched_row_storage', true), ''), '{}')::jsonb;
+    BEGIN
+        IF (curr_val #> ARRAY[table_key]) IS NULL THEN
+            curr_val := jsonb_insert(curr_val, ARRAY[table_key], '{}');
+        END IF;
+
+        curr_val := jsonb_set(curr_val, ARRAY[table_key, serialized_pk], 'true');
+        PERFORM set_config('<%= schema() %>.touched_row_storage', curr_val::text, true);
+    END;
+    $$;
+
+CREATE OR REPLACE FUNCTION <%= schema() %>.__tx_is_row_already_touched(schema_name TEXT, table_name TEXT, serialized_pk TEXT)
+    RETURNS BOOLEAN
+    VOLATILE
+    LANGUAGE SQL AS $$
+    SELECT (
+        COALESCE(NULLIF(current_setting('<%= schema() %>.touched_row_storage', true), ''), '{}')::jsonb
+        #> ARRAY[format('%I.%I', schema_name, table_name), serialized_pk] IS NOT NULL);
+    $$;
