@@ -65,31 +65,94 @@ export const syncTable = async (electric: Electric, table: string) => {
   }
 }
 
-export const get_tables = async (electric: Electric) => {
+export const get_tables = (electric: Electric) => {
   return electric.db.raw({ sql: `SELECT name FROM sqlite_master WHERE type='table';` })
 }
 
-export const get_columns = async (electric: Electric, table: string) => {
+export const get_columns = (electric: Electric, table: string) => {
   return electric.db.raw({ sql: `SELECT * FROM pragma_table_info(?);`, args: [table] })
 }
 
-export const get_rows = async (electric: Electric, table: string) => {
-  return await electric.db.raw({sql: `SELECT * FROM ${table};`})
+export const get_rows = (electric: Electric, table: string) => {
+  return electric.db.raw({sql: `SELECT * FROM ${table};`})
 }
 
-export const get_items = async (electric: Electric) => {
-  return await electric.db.items.findMany({})
+export const get_timestamps = (electric: Electric) => {
+  return electric.db.timestamps.findMany()
 }
 
-export const get_item_ids = async (electric: Electric) => {
-  return await electric.db.items.findMany({
+type Timestamp = { id: string, created_at: Date, updated_at: Date }
+type Datetime = { id: string, d: Date, t: Date }
+
+export const write_timestamp = (electric: Electric, timestamp: Timestamp) => {
+  return electric.db.timestamps.create({
+    data: timestamp
+  })
+}
+
+export const write_datetime = (electric: Electric, datetime: Datetime) => {
+  return electric.db.datetimes.create({
+    data: datetime
+  })
+}
+
+export const get_timestamp = (electric: Electric, id: string): Promise<Timestamp | undefined> => {
+  return electric.db.timestamps.findUnique({
+    where: {
+      id: id
+    }
+  })
+}
+
+export const get_datetime = async (electric: Electric, id: string): Promise<Datetime | undefined> => {
+  const datetime = await electric.db.datetimes.findUnique({
+    where: {
+      id: id
+    }
+  })
+  console.log(`Found date time?:\n${JSON.stringify(datetime, undefined, 2)}`)
+  return datetime
+}
+
+export const assert_timestamp = async (electric: Electric, id: string, expectedCreatedAt: string, expectedUpdatedAt: string) => {
+  const timestamp = await get_timestamp(electric, id)
+  return check_timestamp(timestamp, expectedCreatedAt, expectedUpdatedAt)
+}
+
+export const assert_datetime = async (electric: Electric, id: string, expectedDate: string, expectedTime: string) => {
+  const datetime = await get_datetime(electric, id)
+  return check_datetime(datetime, expectedDate, expectedTime)
+}
+
+export const check_timestamp = (timestamp: Timestamp | undefined, expectedCreatedAt: string, expectedUpdatedAt: string) => {
+  return (timestamp ?? false) &&
+    timestamp!.created_at.getTime() === new Date(expectedCreatedAt).getTime() &&
+    timestamp!.updated_at.getTime() === new Date(expectedUpdatedAt).getTime()
+}
+
+export const check_datetime = (datetime: Datetime | undefined, expectedDate: string, expectedTime: string) => {
+  return (datetime ?? false) &&
+    datetime!.d.getTime() === new Date(expectedDate).getTime() &&
+    datetime!.t.getTime() === new Date(expectedTime).getTime()
+}
+
+export const get_datetimes = (electric: Electric) => {
+  return electric.db.datetimes.findMany()
+}
+
+export const get_items = (electric: Electric) => {
+  return electric.db.items.findMany({})
+}
+
+export const get_item_ids = (electric: Electric) => {
+  return electric.db.items.findMany({
     select: {
       id: true
     }
   })
 }
 
-export const get_item_columns = async (electric: Electric, table: string, column: string) => {
+export const get_item_columns = (electric: Electric, table: string, column: string) => {
   return electric.db.raw({ sql: `SELECT ${column} FROM ${table};` })
 }
 
@@ -135,8 +198,8 @@ export const delete_item = async (electric: Electric, keys: [string]) => {
   }
 }
 
-export const get_other_items = async (electric: Electric) => {
-  return await electric.db.other_items.findMany({})
+export const get_other_items = (electric: Electric) => {
+  return electric.db.other_items.findMany()
 }
 
 export const insert_other_item = async (electric: Electric, keys: [string]) => {
@@ -147,7 +210,7 @@ export const insert_other_item = async (electric: Electric, keys: [string]) => {
     }
   })
 
-  electric.db.items.create({
+  await electric.db.items.create({
     data: {
       id: "test_id_1",
       content: ""

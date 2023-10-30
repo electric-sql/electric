@@ -10,6 +10,7 @@ export interface GeneratorConfig {
   output: GeneratorOptions['generator']['output']
   config: GeneratorOptions['generator']['config']
   dmmf: GeneratorOptions['dmmf']
+  datamodel: string
 }
 
 const outputSchema = z.object({
@@ -29,7 +30,11 @@ export const generator = async (config: GeneratorConfig) => {
   }
 
   // extend the DMMF with custom functionality - see "classes" folder
-  const extendedDMMF = new ExtendedDMMF(config.dmmf, config.config)
+  const extendedDMMF = new ExtendedDMMF(
+    config.dmmf,
+    config.config,
+    config.datamodel
+  )
 
   // If data is present in the output directory, delete it.
   DirectoryHelper.removeDir(output.value)

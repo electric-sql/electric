@@ -19,67 +19,60 @@
 [invoke setup_client 1 electric_1 5133]
 
 [shell satellite_1]
-    [invoke node_await_table "timestamps"]
+    [invoke node_await_table "name: 'timestamps'"]
     [invoke node_sync_table "timestamps"]
 
 [shell pg_1]
-    !INSERT INTO public.timestamps (id, created_at, updated_at) VALUES ('00000000-0000-0000-0000-000000000001', now(), now());
-    ??INSERT 0 1
-
-[shell satellite_1]
-    [invoke node_await_get_from_table "timestamps" "00000000-0000-0000-0000-000000000001"]
-
-    !await client.get_rows(db, "timestamps")
-    ?created_at: '([0-9-]{10} [0-9:]{8}\.[0-9]+)'
-    [global created_at=$1]
-    ?updated_at: '([0-9-]{10} [0-9:]{8}\.[0-9]+)Z'
-    [global updated_at=$1]
-
-[shell pg_1]
     !INSERT INTO public.timestamps (id, created_at, updated_at) VALUES (\
-        '00000000-0000-0000-0000-000000000002',\
-        '2023-08-23 09:10:11',\
-        '2023-08-23 09:10:11.001');
+        '00000000-0000-0000-0000-000000000001',\
+        '2023-09-21 14:39:53',\
+        '2023-09-21 14:39:53.001');
     ??INSERT 0 1
 
 [shell satellite_1]
-    [invoke node_await_get_from_table "timestamps" "00000000-0000-0000-0000-000000000002"]
-
-    !await client.get_rows(db, "timestamps")
-    ??created_at: '2023-08-23 09:10:11'
-    ??updated_at: '2023-08-23 09:10:11.001Z'
-
-    [invoke node_await_insert_extended_into "timestamps" "{id: '00000000-0000-0000-0000-000000000003', created_at: '1999-01-02 00:15:54.555', updated_at: '1999-02-01 23:59:59Z'}"]
-
-[shell pg_1]
-    [invoke wait-for "SELECT * FROM public.timestamps;" "00000000-0000-0000-0000-000000000003" 10 $psql]
-
-    !SELECT * FROM public.timestamps;
-    ??00000000-0000-0000-0000-000000000001 | $created_at | $updated_at+00
-    ?00000000-0000-0000-0000-000000000002 \| 2023-08-23 09:10:11\s+\| 2023-08-23 09:10:11\.001\+00
-    ?00000000-0000-0000-0000-000000000003 \| 1999-01-02 00:15:54\.555\s+\| 1999-02-01 23:59:59\+00
+    [invoke node_await_assert_timestamp "00000000-0000-0000-0000-000000000001" "2023-09-21 14:39:53.000" "2023-09-21T14:39:53.001Z"]
 
 # Start a new Satellite client and verify that it receives all timestamps
 [invoke setup_client 2 electric_1 5133]
 
 [shell satellite_2]
-    [invoke node_await_table "timestamps"]
+    [invoke node_await_table "name: 'timestamps'"]
     [invoke node_sync_table "timestamps"]
+    # check that 2nd satellite also reads the row
+    [invoke node_await_assert_timestamp "00000000-0000-0000-0000-000000000001" "2023-09-21 14:39:53.000" "2023-09-21T14:39:53.001Z"]
+    # then insert a row containing timestamps
+    !await client.write_timestamp(db, {\
+        id: '00000000-0000-0000-0000-000000000002',\
+        created_at: new Date('2023-08-23 09:10:11'),\
+        updated_at: new Date('2023-08-23T09:10:11.001Z')\
+     });
+    ?$node
+    # check that we can now read that row
+    [invoke node_await_assert_timestamp "00000000-0000-0000-0000-000000000002" "2023-08-23 09:10:11.000" "2023-08-23T09:10:11.001Z"]
 
-    [invoke node_await_get_from_table "timestamps" "00000000-0000-0000-0000-000000000003"]
+[shell satellite_1]
+    [invoke node_await_assert_timestamp "00000000-0000-0000-0000-000000000002" "2023-08-23 09:10:11.000" "2023-08-23T09:10:11.001Z"]
 
-    !await client.get_rows(db, "timestamps")
-    ??id: '00000000-0000-0000-0000-000000000001'
-    ??created_at: '$created_at'
-    ??updated_at: '${updated_at}Z'
+[shell pg_1]
+    !INSERT INTO public.timestamps (id, created_at, updated_at) VALUES (\
+        '00000000-0000-0000-0000-000000000003',\
+        '2023-07-14 07:05:23',\
+        '2023-07-14 07:05:23.001');
+    ??INSERT 0 1
 
-    ??id: '00000000-0000-0000-0000-000000000002'
-    ??created_at: '2023-08-23 09:10:11'
-    ??updated_at: '2023-08-23 09:10:11.001Z'
+[shell satellite_1]
+    [invoke node_await_assert_timestamp "00000000-0000-0000-0000-000000000003" "2023-07-14 07:05:23.000" "2023-07-14T07:05:23.001Z"]
 
-    ??id: '00000000-0000-0000-0000-000000000003'
-    ??created_at: '1999-01-02 00:15:54.555'
-    ??updated_at: '1999-02-01 23:59:59Z'
+[shell satellite_2]
+    [invoke node_await_assert_timestamp "00000000-0000-0000-0000-000000000003" "2023-07-14 07:05:23.000" "2023-07-14T07:05:23.001Z"]
+
+[shell pg_1]
+    [invoke wait-for "SELECT * FROM public.timestamps;" "00000000-0000-0000-0000-000000000003" 10 $psql]
+
+    !SELECT * FROM public.timestamps;
+    ?00000000-0000-0000-0000-000000000001 \| 2023-09-21 14:39:53\s+\| 2023-09-21 14:39:53\.001\+00
+    ?00000000-0000-0000-0000-000000000002 \| 2023-08-23 09:10:11\s+\| 2023-08-23 09:10:11\.001\+00
+    ?00000000-0000-0000-0000-000000000003 \| 2023-07-14 07:05:23\s+\| 2023-07-14 07:05:23\.001\+00
 
 [cleanup]
   [invoke teardown]

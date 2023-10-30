@@ -3,8 +3,8 @@ import { describe, it, expect } from 'vitest'
 import { ExtendedDMMF } from '../../../extendedDMMF'
 import { loadDMMF } from '../../utils/loadDMMF'
 describe('test string validators', async () => {
-  const dmmf = await loadDMMF(`${__dirname}/string.prisma`)
-  const extendedDMMF = new ExtendedDMMF(dmmf, {})
+  const [dmmf, datamodel] = await loadDMMF(`${__dirname}/string.prisma`)
+  const extendedDMMF = new ExtendedDMMF(dmmf, {}, datamodel)
 
   describe('test validators', () => {
     const fields = {

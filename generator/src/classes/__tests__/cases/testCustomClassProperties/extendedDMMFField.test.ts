@@ -26,8 +26,10 @@ export const DEFAULT_GENERATOR_CONFIG: GeneratorConfig = {
 }
 
 describe('testSimpleModelNoValidators', async () => {
-  const dmmf = await loadDMMF(`${__dirname}/extendedDMMFField.prisma`)
-  const extendedDMMF = new ExtendedDMMF(dmmf, {})
+  const [dmmf, datamodel] = await loadDMMF(
+    `${__dirname}/extendedDMMFField.prisma`
+  )
+  const extendedDMMF = new ExtendedDMMF(dmmf, {}, datamodel)
 
   const fields = extendedDMMF.datamodel.models[0].fields
 
@@ -240,10 +242,20 @@ describe('testSimpleModelNoValidators', async () => {
     expect(fields[5].isId).toBe(false)
     expect(fields[5].isReadOnly).toBe(false)
     expect(fields[5].type).toBe('DateTime')
+    expect(fields[5].attributes).toStrictEqual([
+      {
+        type: '@default',
+        args: ['now()'],
+      },
+      {
+        type: '@db.Timestamptz',
+        args: ['6'],
+      },
+    ])
     expect(fields[5].dbNames).toBeUndefined()
     expect(fields[5].isGenerated).toBe(false)
-    expect(fields[5].hasDefaultValue).toBe(false)
-    expect(fields[5].default).toBeUndefined()
+    expect(fields[5].hasDefaultValue).toBe(true)
+    expect(fields[5].default).toStrictEqual({ name: 'now', args: [] })
     expect(fields[5].relationToFields).toBeUndefined()
     expect(fields[5].relationOnDelete).toBeUndefined()
     expect(fields[5].relationName).toBeUndefined()
@@ -413,5 +425,37 @@ describe('testSimpleModelNoValidators', async () => {
     )
     expect(fields[9].clearedDocumentation).toBeUndefined()
     expect(fields[9].zodType).toBe('string')
+
+    expect(fields[10].name).toBe('date2')
+    expect(fields[10].attributes).toStrictEqual([
+      {
+        type: '@db.Timestamp',
+        args: ['6'],
+      },
+    ])
+
+    expect(fields[11].name).toBe('time')
+    expect(fields[11].attributes).toStrictEqual([
+      {
+        type: '@db.Time',
+        args: ['6'],
+      },
+    ])
+
+    expect(fields[12].name).toBe('timetz')
+    expect(fields[12].attributes).toStrictEqual([
+      {
+        type: '@db.Timetz',
+        args: ['6'],
+      },
+    ])
+
+    expect(fields[13].name).toBe('date4')
+    expect(fields[13].attributes).toStrictEqual([
+      {
+        type: '@db.Date',
+        args: [],
+      },
+    ])
   })
 })

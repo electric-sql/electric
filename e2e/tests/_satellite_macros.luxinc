@@ -39,6 +39,18 @@
     [invoke wait-for "await client.get_rows(db, '${table}')" "${match}" 10 $node]
 [endmacro]
 
+[macro node_await_get_timestamps match]
+    [invoke wait-for "await client.get_timestamps(db)" "${match}" 10 $node]
+[endmacro]
+
+[macro node_await_assert_timestamp id timestamp timestamptz]
+    [invoke wait-for "await client.assert_timestamp(db, '${id}', '${timestamp}', '${timestamptz}')" "true" 10 $node]
+[endmacro]
+
+[macro node_await_assert_datetime id date time]
+    [invoke wait-for "await client.assert_datetime(db, '${id}', '${date}', '${time}')" "true" 10 $node]
+[endmacro]
+
 [macro node_await_table match]
     [invoke wait-for "await client.get_tables(db)" "${match}" 10 $node]
 [endmacro]

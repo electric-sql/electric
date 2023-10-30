@@ -19,7 +19,7 @@
 [invoke setup_client 1 electric_1 5133]
 
 [shell satellite_1]
-    [invoke node_await_table "datetimes"]
+    [invoke node_await_table "name: 'datetimes'"]
     [invoke node_sync_table "datetimes"]
 
 [shell pg_1]
@@ -29,22 +29,14 @@
     ??INSERT 0 3
 
 [shell satellite_1]
-    [invoke node_await_get_from_table "datetimes" "003"]
+    [invoke node_await_assert_datetime "001" "2023-08-23" "1970-01-01 11:00:59"]
+    [invoke node_await_assert_datetime "002" "0001-01-01" "1970-01-01 00:59:03.110"]
+    [invoke node_await_assert_datetime "003" "Feb 29 6000" "1970-01-01 23:05:17.999999"]
 
-    ??id: '001'
-    ??d: '2023-08-23'
-    ??t: '11:00:59'
-
-    ??id: '002'
-    ??d: '0001-01-01'
-    ??t: '00:59:03.11'
-
-    ??id: '003'
-    ??d: '6000-02-29'
-    ??t: '23:05:17.999999'
-
-    [invoke node_await_insert_extended_into "datetimes" "{id: '004', d: '1999-12-31'}"]
-    [invoke node_await_insert_extended_into "datetimes" "{id: '005', t: '00:00:00.000'}"]
+    !await client.write_datetime(db, { id: '004', d: new Date('1999-12-31'), t: new Date('1996-02-23 14:46:05.42') })
+    ?$node
+    !await client.write_datetime(db, { id: '005', d: new Date('2023-09-26'), t: new Date('2022-11-12 00:00:00.000') })
+    ?$node
 
 [shell pg_1]
     [invoke wait-for "SELECT * FROM public.datetimes;" "005" 10 $psql]
@@ -53,8 +45,8 @@
     ??001 | 2023-08-23 | 11:00:59
     ??002 | 0001-01-01 | 00:59:03.11
     ??003 | 6000-02-29 | 23:05:17.999999
-    ??004 | 1999-12-31 | <NULL>
-    ??005 | <NULL>     | 00:00:00
+    ??004 | 1999-12-31 | 14:46:05.42
+    ??005 | 2023-09-26 | 00:00:00
 
 # Start a new Satellite client and verify that it receives all dates and times
 [invoke setup_client 2 electric_1 5133]
@@ -63,26 +55,11 @@
     [invoke node_await_table "datetimes"]
     [invoke node_sync_table "datetimes"]
 
-    [invoke node_await_get_from_table "datetimes" "005"]
-    ??id: '001'
-    ??d: '2023-08-23'
-    ??t: '11:00:59'
-
-    ??id: '002'
-    ??d: '0001-01-01'
-    ??t: '00:59:03.11'
-
-    ??id: '003'
-    ??d: '6000-02-29'
-    ??t: '23:05:17.999999'
-
-    ??id: '004'
-    ??d: '1999-12-31'
-    ??t: null
-
-    ??id: '005'
-    ??d: null
-    ??t: '00:00:00'
+    [invoke node_await_assert_datetime "001" "2023-08-23" "1970-01-01 11:00:59"]
+    [invoke node_await_assert_datetime "002" "0001-01-01" "1970-01-01 00:59:03.11"]
+    [invoke node_await_assert_datetime "003" "Feb 29 6000" "1970-01-01 23:05:17.999999"]
+    [invoke node_await_assert_datetime "004" "1999-12-31" "1970-01-01 14:46:05.42"]
+    [invoke node_await_assert_datetime "005" "2023-09-26" "1970-01-01 00:00:00.000"]
 
 [cleanup]
   [invoke teardown]

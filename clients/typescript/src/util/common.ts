@@ -21,6 +21,7 @@ export const typeDecoder = {
   bool: bytesToBool,
   number: bytesToNumber,
   text: bytesToString,
+  timetz: bytesToTimetzString,
 }
 
 export const typeEncoder = {
@@ -28,6 +29,7 @@ export const typeEncoder = {
   number: numberToBytes,
   real: realToBytes,
   text: (string: string) => new TextEncoder().encode(string),
+  timetz: (string: string) => typeEncoder.text(stringToTimetzString(string)),
 }
 
 export const base64 = {
@@ -86,6 +88,27 @@ export function bytesToNumber(bytes: Uint8Array) {
 
 export function bytesToString(bytes: Uint8Array) {
   return new TextDecoder().decode(bytes)
+}
+
+/**
+ * Converts a PG string of type `timetz` to its equivalent SQLite string.
+ * e.g. '18:28:35.42108+00' -> '18:28:35.42108'
+ * @param bytes Data for this `timetz` column.
+ * @returns The SQLite string.
+ */
+function bytesToTimetzString(bytes: Uint8Array) {
+  const str = bytesToString(bytes)
+  return str.replace('+00', '')
+}
+
+/**
+ * Converts a SQLite string representing a `timetz` value to a PG string.
+ * e.g. '18:28:35.42108' -> '18:28:35.42108+00'
+ * @param str The SQLite string representing a `timetz` value.
+ * @returns The PG string.
+ */
+function stringToTimetzString(str: string) {
+  return `${str}+00`
 }
 
 export function uuid() {

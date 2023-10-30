@@ -3,9 +3,11 @@ import { QueryBuilder } from 'squel'
 import { DB } from './db'
 import * as z from 'zod'
 import { Row, Statement } from '../../util'
+import { Fields } from '../model/schema'
+import { Transformation, transformFields } from '../conversions/input'
 
 export class TransactionalDB implements DB {
-  constructor(private _tx: Transaction) {}
+  constructor(private _tx: Transaction, private _fields: Fields) {}
   run(
     statement: QueryBuilder,
     successCallback?: (db: DB, res: RunResult) => void,
@@ -16,7 +18,7 @@ export class TransactionalDB implements DB {
       { sql: text, args: values },
       (tx, res) => {
         if (typeof successCallback !== 'undefined')
-          successCallback(new TransactionalDB(tx), res)
+          successCallback(new TransactionalDB(tx, this._fields), res)
       },
       errorCallback
     )
@@ -33,8 +35,18 @@ export class TransactionalDB implements DB {
       { sql: text, args: values },
       (tx, rows) => {
         if (typeof successCallback !== 'undefined') {
-          const objects = rows.map((row) => schema.parse(row)) //.partial().parse(row))
-          successCallback(new TransactionalDB(tx), objects)
+          const objects = rows.map((row) => {
+            // convert SQLite values back to JS values
+            // and then parse the transformed object
+            // with the Zod schema to validate it
+            const transformedRow = transformFields(
+              row,
+              this._fields,
+              Transformation.Sqlite2Js
+            )
+            return schema.parse(transformedRow)
+          })
+          successCallback(new TransactionalDB(tx, this._fields), objects)
         }
       },
       errorCallback
@@ -50,7 +62,7 @@ export class TransactionalDB implements DB {
       sql,
       (tx, rows) => {
         if (typeof successCallback !== 'undefined') {
-          successCallback(new TransactionalDB(tx), rows)
+          successCallback(new TransactionalDB(tx, this._fields), rows)
         }
       },
       errorCallback

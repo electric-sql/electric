@@ -3,9 +3,11 @@ import { QueryBuilder } from 'squel'
 import { DB } from './db'
 import * as z from 'zod'
 import { Row, Statement } from '../../util'
+import { Transformation, transformFields } from '../conversions/input'
+import { Fields } from '../model/schema'
 
 export class NonTransactionalDB implements DB {
-  constructor(private _adapter: DatabaseAdapter) {}
+  constructor(private _adapter: DatabaseAdapter, private _fields: Fields) {}
 
   run(
     statement: QueryBuilder,
@@ -44,7 +46,17 @@ export class NonTransactionalDB implements DB {
       .query({ sql: text, args: values })
       .then((rows) => {
         try {
-          const objects = rows.map((row) => schema.parse(row))
+          const objects = rows.map((row) => {
+            // convert SQLite values back to JS values
+            // and then parse the transformed object
+            // with the Zod schema to validate it
+            const transformedRow = transformFields(
+              row,
+              this._fields,
+              Transformation.Sqlite2Js
+            )
+            return schema.parse(transformedRow)
+          })
           successCallback(this, objects)
         } catch (err) {
           if (typeof errorCallback !== 'undefined') {

@@ -9,6 +9,7 @@ import { DeleteInput, DeleteManyInput } from '../input/deleteInput'
 import { HKT } from '../util/hkt'
 import groupBy from 'lodash.groupby'
 import { Migration } from '../../migrators'
+import { PgType } from '../conversions/sqlite'
 
 export type Arity = 'one' | 'many'
 
@@ -16,19 +17,21 @@ export type TableName = string
 export type FieldName = string
 export type RelationName = string
 
+export type Fields = Map<FieldName, PgType>
+
 export type TableSchema<
   T extends Record<string, any>,
   CreateData extends object,
-  UpdateData,
+  UpdateData extends object,
   Select,
-  Where,
-  WhereUnique,
+  Where extends object | undefined,
+  WhereUnique extends object,
   Include extends Record<string, any>,
   OrderBy,
   ScalarFieldEnum,
   _GetPayload extends HKT
 > = {
-  fields: FieldName[]
+  fields: Fields
   relations: Relation[]
   modelSchema: z.ZodType<Partial<T>>
   createSchema: z.ZodType<CreateInput<CreateData, Select, Include>>
@@ -49,10 +52,10 @@ export type TableSchema<
 export type ExtendedTableSchema<
   T extends Record<string, any>,
   CreateData extends object,
-  UpdateData,
+  UpdateData extends object,
   Select,
-  Where,
-  WhereUnique,
+  Where extends object | undefined,
+  WhereUnique extends object,
   Include extends Record<string, any>,
   OrderBy,
   ScalarFieldEnum,
@@ -169,8 +172,12 @@ export class DbSchema<T extends TableSchemas> {
     return this.extendedTables[table]
   }
 
-  getFields(table: TableName): FieldName[] {
+  getFields(table: TableName): Fields {
     return this.extendedTables[table].fields
+  }
+
+  getFieldNames(table: TableName): FieldName[] {
+    return Array.from(this.getFields(table).keys())
   }
 
   hasRelationForField(table: TableName, field: FieldName): boolean {

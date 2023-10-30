@@ -4,6 +4,7 @@ import { OmitFieldMode } from './extendedDMMFFieldOmitField'
 import { ExtendedDMMFFieldZodType } from './extendedDMMFFieldZodType'
 import { GeneratorConfig } from '../../schemas'
 import { FormattedNames } from '../formattedNames'
+import { Attribute, Field } from 'src/utils/schemaParser'
 
 export interface ExtendedDMMFField extends DMMF.Field, FormattedNames {
   /**
@@ -90,6 +91,11 @@ export interface ExtendedDMMFField extends DMMF.Field, FormattedNames {
   readonly zodType: string
 
   /**
+   * Array of type attributes specified for this field
+   */
+  readonly attributes: Attribute[]
+
+  /**
    * Determins if the field should be omitted in the model type.
    * Makes the code more readable when it is in a seperate method.
    */
@@ -133,4 +139,19 @@ export interface ExtendedDMMFField extends DMMF.Field, FormattedNames {
 
 export class ExtendedDMMFFieldClass
   extends ExtendedDMMFFieldZodType
-  implements ExtendedDMMFField {}
+  implements ExtendedDMMFField
+{
+  // Extend the DMMF further with the type attributes
+  // that are defined on model fields in the Prisma schema
+  readonly attributes: Attribute[]
+
+  constructor(
+    field: DMMF.Field,
+    generatorConfig: GeneratorConfig,
+    modelName: string,
+    parsedField: Field
+  ) {
+    super(field, generatorConfig, modelName)
+    this.attributes = parsedField.attributes
+  }
+}

@@ -1,0 +1,45 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("PRISMA_DB_URL")
+}
+
+generator electric {
+  provider                 = "../node_modules/@electric-sql/prisma-generator/dist/bin.js"
+  output                   = "../generated/client"
+  relationModel            = true
+  writeNullishInModelTypes = true
+}
+
+generator client {
+  provider = "prisma-client-js"
+  output = "../generated/client"
+}
+
+model Items {
+  id                        String  @id
+  content                   String
+  content_text_null         String?
+  content_text_null_default String?
+  intvalue_null             Int?
+  intvalue_null_default     Int?
+  other_items               OtherItems?
+}
+
+model OtherItems {
+  id      String  @id
+  content String
+  item_id String? @unique
+  items   Items?  @relation(fields: [item_id], references: [id])
+}
+
+model Timestamps {
+  id String @id
+  created_at DateTime @db.Timestamp(3)
+  updated_at DateTime @db.Timestamptz(3)
+}
+
+model Datetimes {
+  id String   @id
+  d  DateTime @db.Date
+  t  DateTime @db.Time(3)
+}

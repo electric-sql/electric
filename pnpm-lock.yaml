@@ -1,4 +1,4 @@
-lockfileVersion: '6.0'
+lockfileVersion: '6.1'
 
 settings:
   autoInstallPeers: true
@@ -120,6 +120,9 @@ importers:
         specifier: ^3.20.2
         version: 3.21.4
     devDependencies:
+      '@electric-sql/prisma-generator':
+        specifier: workspace:*
+        version: link:../../generator
       '@ikscodes/browser-env':
         specifier: ^1.0.0
         version: 1.0.0
@@ -236,7 +239,7 @@ importers:
         version: 4.9.5
       wa-sqlite:
         specifier: git+https://github.com/rhashimoto/wa-sqlite#master
-        version: github.com/rhashimoto/wa-sqlite/a856e82f1f5736892539f6d05abbb569dd59011b
+        version: github.com/rhashimoto/wa-sqlite/6e2fcb56237cd6080c1dd5e89a18a54c71c98ee0
       web-worker:
         specifier: ^1.2.0
         version: 1.2.0
@@ -14358,8 +14361,8 @@ packages:
     resolution: {integrity: sha512-m46AKbrzKVzOzs/DZgVnG5H55N1sv1M8qZU3A8RIKbs3mrACDNeIOeilDymVb2HdmP8uwshOCF4uJ8uM9rCqJw==}
     dev: false
 
-  github.com/rhashimoto/wa-sqlite/a856e82f1f5736892539f6d05abbb569dd59011b:
-    resolution: {tarball: https://codeload.github.com/rhashimoto/wa-sqlite/tar.gz/a856e82f1f5736892539f6d05abbb569dd59011b}
+  github.com/rhashimoto/wa-sqlite/6e2fcb56237cd6080c1dd5e89a18a54c71c98ee0:
+    resolution: {tarball: https://codeload.github.com/rhashimoto/wa-sqlite/tar.gz/6e2fcb56237cd6080c1dd5e89a18a54c71c98ee0}
     name: wa-sqlite
-    version: 0.9.5
+    version: 0.9.6
     dev: true

@@ -10,6 +10,7 @@ import {
   IMPORT_STATEMENT_REGEX_PATTERN,
 } from '../constants'
 import { GeneratorConfig } from '../schemas'
+import { Model } from 'src/utils/schemaParser'
 
 /////////////////////////////////////////////////
 // TYPES  INTERFACE
@@ -46,12 +47,16 @@ export class ExtendedDMMFModel extends FormattedNames implements DMMF.Model {
   readonly writePartialTypes: boolean
   readonly writePartialRelationValueTypes: boolean
 
-  constructor(generatorConfig: GeneratorConfig, model: DMMF.Model) {
+  constructor(
+    generatorConfig: GeneratorConfig,
+    model: DMMF.Model,
+    parsedModel: Model
+  ) {
     super(model.name)
     this.generatorConfig = generatorConfig
     this.name = model.name
     this.dbName = model.dbName
-    this.fields = this._getExtendedFields(model)
+    this.fields = this._getExtendedFields(model, parsedModel)
     this.uniqueFields = model.uniqueFields
     this.uniqueIndexes = model.uniqueIndexes
     this.documentation = model.documentation
@@ -89,10 +94,17 @@ export class ExtendedDMMFModel extends FormattedNames implements DMMF.Model {
     return `[Error Location]: Model: '${this.name}'.`
   }
 
-  private _getExtendedFields(model: DMMF.Model) {
+  private _getExtendedFields(model: DMMF.Model, parsedModel: Model) {
+    const fields = parsedModel.fields
+    const fieldsDct = new Map(fields.map((f) => [f.field, f]))
     return model.fields.map(
       (field) =>
-        new ExtendedDMMFFieldClass(field, this.generatorConfig, this.name)
+        new ExtendedDMMFFieldClass(
+          field,
+          this.generatorConfig,
+          this.name,
+          fieldsDct.get(field.name)!
+        )
     )
   }
 
