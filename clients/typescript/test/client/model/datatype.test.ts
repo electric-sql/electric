@@ -277,10 +277,26 @@ test.serial('support boolean type', async (t) => {
     count: 2,
   })
 
-  const rows = await tbl.findMany({})
+  const rows = await tbl.findMany({
+    select: {
+      id: true,
+      bool: true,
+    },
+    orderBy: {
+      id: 'asc',
+    },
+  })
 
-  rows.some((r) => r.id === 1 && r.bool === true)
-  rows.some((r) => r.id === 2 && r.bool === false)
+  t.deepEqual(rows, [
+    {
+      id: 1,
+      bool: true,
+    },
+    {
+      id: 2,
+      bool: false,
+    },
+  ])
 
   // Check that it rejects invalid values
   await t.throwsAsync(
