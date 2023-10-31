@@ -34,13 +34,11 @@ See <DocPageLink path="usage/data-modelling" /> for more information.
 
 ### DDLX rules
 
-The SQL syntax you see documented on <DocPageLink path="api/ddlx" /> is not yet implemented. Neither are permissions, roles, validation or local SQLite commands. DDLX support is currently limited to electrifying tables using an SQL procedure call syntax:
+The SQL syntax you see documented on <DocPageLink path="api/ddlx" /> is not fully implemented yet. Neither are permissions, roles, validation or local SQLite commands. DDLX support is currently limited to electrifying tables using the `ENABLE ELECTRIC` syntax extension:
 
 ```sql
-CALL electric.electrify('items')
+ALTER TABLE items ENABLE ELECTRIC;
 ```
-
-You can track progress on DDLX support here [electric-sql/pg_proxy/pulls](https://github.com/electric-sql/pg_proxy/pulls).
 
 ### Shapes
 
