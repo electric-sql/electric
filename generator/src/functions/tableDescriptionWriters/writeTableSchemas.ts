@@ -123,6 +123,7 @@ function pgType(field: ExtendedDMMFField, modelName: string): string {
     case 'JSON':
       return 'JSON'
     default:
+      if (field.kind === 'enum') return 'TEXT' // treat enums as TEXT such that the ts-client correctly serializes/deserialises them as text
       return 'UNRECOGNIZED PRISMA TYPE'
   }
 }
