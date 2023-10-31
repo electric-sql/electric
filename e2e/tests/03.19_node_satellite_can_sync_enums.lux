@@ -1,0 +1,63 @@
+[doc NodeJS Satellite correctly syncs enumeration values from and to Electric]
+[include _shared.luxinc]
+[include _satellite_macros.luxinc]
+
+[invoke setup]
+
+[shell proxy_1]
+    [local sql=
+        """
+        CREATE TYPE color AS ENUM ('RED', 'GREEN', 'BLUE');
+        CREATE TABLE public.enums (
+            id TEXT PRIMARY KEY,
+            c color
+        );
+        ALTER TABLE public.enums ENABLE ELECTRIC;
+        """]
+    [invoke migrate_pg 20230908 $sql]
+
+[invoke setup_client 1 electric_1 5133]
+
+[shell satellite_1]
+    [invoke node_await_table "enums"]
+    [invoke node_sync_table "enums"]
+
+[shell pg_1]
+    !INSERT INTO public.enums (id, c) VALUES ('row1', 'RED');
+    ??INSERT 0 1
+
+[shell satellite_1]
+    # Wait for the row to arrive
+    [invoke node_await_get_enum "row1"]
+        
+    [invoke node_get_enum "row1" "'RED'"]
+
+    [invoke node_write_enum "row2" "'GREEN'"]
+    [invoke node_get_enum "row2" "'GREEN'"]
+
+    [invoke node_write_enum "row3" null]
+    [invoke node_get_enum "row3" null]
+
+[shell pg_1]
+    [invoke wait-for "SELECT * FROM public.enums;" "row1" 10 $psql]
+
+    !SELECT * FROM public.enums;
+    ??row1 | RED
+    ??row2 | GREEN
+
+# Start a new Satellite client and verify that it receives all rows
+[invoke setup_client 2 electric_1 5133]
+
+[shell satellite_2]
+    [invoke node_await_table "enums"]
+    [invoke node_sync_table "enums"]
+
+    # Wait for the rows to arrive
+    [invoke node_await_get_enum "row3"]
+
+    [invoke node_get_enum "row1" "'RED'"]
+    [invoke node_get_enum "row2" "'GREEN'"]
+    [invoke node_get_enum "row3" null]
+
+[cleanup]
+  [invoke teardown]

@@ -63,3 +63,14 @@ model Floats {
   id String @id
   f8 Float? @db.DoublePrecision /// @zod.custom.use(z.number().or(z.nan()))
 }
+
+model Enums {
+  id String @id
+  c  Color?
+}
+
+enum Color {
+  RED
+  GREEN
+  BLUE
+}

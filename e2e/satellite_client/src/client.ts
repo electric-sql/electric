@@ -5,7 +5,7 @@ import { mockSecureAuthToken } from 'electric-sql/auth/secure'
 import { setLogLevel } from 'electric-sql/debug'
 import { electrify } from 'electric-sql/node'
 import { v4 as uuidv4 } from 'uuid'
-import { schema, Electric } from './generated/client'
+import { schema, Electric, ColorType as Color } from './generated/client'
 import { globalRegistry } from 'electric-sql/satellite'
 
 setLogLevel('DEBUG')
@@ -221,6 +221,23 @@ export const write_float = (electric: Electric, id: string, f8: number) => {
     data: {
       id,
       f8,
+    }
+  })
+}
+
+export const get_enum = (electric: Electric, id: string) => {
+  return electric.db.enums.findUnique({
+    where: {
+      id: id
+    }
+  })
+}
+
+export const write_enum = (electric: Electric, id: string, c: Color | null) => {
+  return electric.db.enums.create({
+    data: {
+      id,
+      c,
     }
   })
 }

@@ -55,10 +55,21 @@
     [invoke wait-for "await client.get_float(db, '${id}')" "${id}" 10 $node]
 [endmacro]
 
+[macro node_await_get_enum id]
+    [invoke wait-for "await client.get_enum(db, '${id}')" "${id}" 10 $node]
+[endmacro]
+
 [macro node_write_float id value]
     # Can write valid floats to the DB
     !await client.write_float(db, '${id}', ${value})
     ??{ id: '${id}', f8:
+    ??$node
+[endmacro]
+
+[macro node_write_enum id value]
+    # Can write valid enums to the DB
+    !await client.write_enum(db, '${id}', ${value})
+    ??{ id: '${id}', c: ${value} }
     ??$node
 [endmacro]
 
@@ -77,6 +88,12 @@
 [macro node_get_float id expected_float8]
     !await client.get_float(db, '${id}')
     ??{ id: '${id}', f8: ${expected_float8} }
+    ??$node
+[endmacro]
+
+[macro node_get_enum id expected_enum]
+    !await client.get_enum(db, '${id}')
+    ??{ id: '${id}', c: ${expected_enum} }
     ??$node
 [endmacro]
 
