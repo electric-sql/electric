@@ -99,6 +99,12 @@ export class MockSatelliteProcess implements Satellite {
 }
 
 export class MockRegistry extends BaseRegistry {
+  private shouldFailToStart = false
+
+  setShouldFailToStart(shouldFail: boolean): void {
+    this.shouldFailToStart = shouldFail
+  }
+
   async startProcess(
     dbName: DbName,
     _dbDescription: DbSchema<any>,
@@ -109,6 +115,10 @@ export class MockRegistry extends BaseRegistry {
     config: ElectricConfig,
     overrides?: SatelliteOverrides
   ): Promise<Satellite> {
+    if (this.shouldFailToStart) {
+      throw new Error('Failed to start satellite process')
+    }
+
     const opts = { ...satelliteDefaults, ...overrides }
 
     const satellite = new MockSatelliteProcess(

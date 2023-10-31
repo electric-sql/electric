@@ -107,13 +107,16 @@ export abstract class BaseRegistry implements Registry {
       notifier,
       socketFactory,
       config
-    ).then((satellite) => {
-      delete startingPromises[dbName]
+    )
+      .then((satellite) => {
+        satellites[dbName] = satellite
 
-      satellites[dbName] = satellite
-
-      return satellite
-    })
+        return satellite
+      })
+      .finally(() => {
+        // Clean up the starting promise, whether it resolved or rejected.
+        delete startingPromises[dbName]
+      })
 
     startingPromises[dbName] = startingPromise
     return startingPromise

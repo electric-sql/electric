@@ -79,6 +79,24 @@ test('ensure satellite process started works', async (t) => {
   t.true(satellite instanceof MockSatelliteProcess)
 })
 
+test('can stop failed process', async (t) => {
+  const mockRegistry = new MockRegistry()
+
+  // Mock the satellite process to fail.
+  mockRegistry.setShouldFailToStart(true)
+
+  await t.throwsAsync(mockRegistry.ensureStarted(...args))
+
+  // This should not throw. This tests that failed processes are properly cleaned up.
+  await mockRegistry.stop(dbName)
+
+  // Next run a successful process to make sure that works.
+  mockRegistry.setShouldFailToStart(false)
+
+  const satellite = await mockRegistry.ensureStarted(...args)
+  t.true(satellite instanceof MockSatelliteProcess)
+})
+
 test('ensure starting multiple satellite processes works', async (t) => {
   const mockRegistry = new MockRegistry()
   const s1 = await mockRegistry.ensureStarted(
