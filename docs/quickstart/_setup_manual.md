@@ -16,16 +16,18 @@ See <DocPageLink path="usage/installation/postgres" /> for more info.
 
 ### Electric sync service
 
-Run the Electric sync service with `DATABASE_URL` and `LOGICAL_PUBLISHER_HOST` env vars for connectivity. For example using Docker:
+Run the Electric sync service using Docker, for example:
 
 ```shell
 docker pull electricsql/electric:latest
 docker run \
     -e "DATABASE_URL=postgresql://..." \
     -e "LOGICAL_PUBLISHER_HOST=..." \
+    -e "PG_PROXY_PASSWORD=..." \
     -e "AUTH_MODE=insecure" \
     -p 5133:5133 \
     -p 5433:5433 \
+    -p 65432:65432 \
     electricsql/electric
 ```
 
