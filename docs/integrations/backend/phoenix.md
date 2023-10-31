@@ -7,7 +7,7 @@ sidebar_position: 30
 
 ## Migrating via the Proxy
 
-As detailed in the [migrations guide](../../usage/data-modelling/migrations.md) migrations must be applied to the Electrified database via the Electric Postgres proxy.
+As detailed in the [migrations guide](../../usage/data-modelling/migrations.md) migrations must be applied to the database via the Electric proxy.
 
 The simplest solution is to create a new Ecto repo module that encapsulates the proxy connection and then configure Ecto to use it when generating and applying migrations. We then need to tweak the example release migration code to use this proxy repo.
 
@@ -54,7 +54,7 @@ config :my_app, MyApp.ProxyRepo,
 # the ProxyRepo is included in the runtime.exs configuration.
 #
 # The `PROXY_URL` environment variable is part of your deployment configuration
-# that tells you application how to connect to the Electric proxy. 
+# that tells you application how to connect to the Electric proxy.
 # e.g. `postgres://electric:proxy-password@localhost:65432/myapp`
 config :my_app, MyApp.ProxyRepo,
   ssl: false,

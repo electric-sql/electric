@@ -41,7 +41,7 @@ See the [Limitations](#limitations) section below and the [Roadmap](../../refere
 
 ## Migrations proxy
 
-Postgresql migrations are applied to Postgresql via a proxy server integrated into the Electric application.
+Schema migrations are applied to Postgres via a proxy server integrated into the Electric application.
 
 This proxy server serves various purposes:
 
@@ -50,13 +50,13 @@ This proxy server serves various purposes:
 - It validates migrations to electrified tables to ensure that changes to the schema are supported by Electric (e.g. validating the types of any added columns, ensuring that only additive migrations are applied, etc), and
 - It provides an endpoint for schema introspection to allow Electric to return its view of the underlying Postgres database to the data access library.
 
-Migrations not passed through the proxy endpoint will not be captured by Electric and will cause problems as Electric's view of the Postgresql schema will be out of sync with the actual table schema.
+Migrations not passed through the proxy endpoint will not be captured by Electric and will cause problems as Electric's view of the Postgres schema will be out of sync with the actual table schema.
 
-### Configuring and connecting to the Postgresql migration proxy
+### Configuring and connecting to the migrations proxy
 
 There are two environment variables that configure the proxy in Electric:
 
-- `PG_PROXY_PORT` (default `65432`). This is the TCP port that you should connect to in order to pass through the migration proxy. Since the proxy speaks fluent Postgres, you can connect to it via any Postgres, compatible tool, e.g. `psql -U electric -p 65432 electric`
+- `PG_PROXY_PORT` (default `65432`). This is the TCP port that [**Electric sync service**](../../api/service.md) will listen on. You should connect to it in order to pass through the migration proxy. Since the proxy speaks fluent Postgres, you can connect to it via any Postgres-compatible tool, e.g. `psql -U electric -p 65432 electric`
 
 - `PG_PROXY_PASSWORD` (no default). Access to the proxy is controlled by password (see below for information on the username). You must set this password here and pass it to any application hoping to connect to the proxy.
 
@@ -68,7 +68,7 @@ $ psql -U electric -p ${PG_PROXY_PORT} my_database
 $ psql -U electric -p ${PG_PROXY_PORT} postgres
 ```
 
-Additionally the username is almost irrelevant except in certain cases, [such as using Prisma](../../integrations/backend/prisma.md). To avoid complications we suggest using `electric` as the username when connecting to the proxy.
+Additionally the username is almost irrelevant except in certain cases, [such as when using Prisma](../../integrations/backend/prisma.md). To avoid complications we suggest using `electric` as the username when connecting to the proxy.
 
 With this in mind, you should be able to connect to the proxy directly using `psql` as outlined above and run any DDLX/migration commands you like. These will be validated, captured, and streamed to any connected clients automatically:
 
