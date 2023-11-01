@@ -7,6 +7,19 @@ sidebar_position: 70
 
 ## Migrations
 
+### Proxying
+
+To run your migrations [through the proxy](../../usage/data-modelling/migrations.md#migrations-proxy) edit your alembic `env.py` or `alembic.ini` to set the sqlalchemy `url` to connect via the proxy:
+
+```python
+pwd = os.environ['PG_PROXY_PASSWORD']
+port = os.environ['PG_PROXY_PORT']
+
+url = "postgresql://postgres:{}@localhost:{}/mydb".format(pwd, port)
+```
+
+### Applying DDLX statements
+
 Use the [`Operations.execute`](https://alembic.sqlalchemy.org/en/latest/ops.html#alembic.operations.Operations.execute) method.
 
 First, create a migration:

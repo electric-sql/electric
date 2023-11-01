@@ -7,6 +7,16 @@ sidebar_position: 50
 
 ## Migrations
 
+### Proxying
+
+To run your migrations [through the proxy](../../usage/data-modelling/migrations.md#migrations-proxy) set `DATABASE_URL` to connect to the proxy when running migrations, e.g.:
+
+```shell
+DATABASE_URL=postgresql://postgres:$PG_PROXY_PASSWORD@localhost:$PG_PROXY_PORT/mydb rake db:migrate
+```
+
+### Applying DDLX statements
+
 With [Rails](../../integrations/backend/rails.md) you can `execute` SQL in the [`change` method](https://guides.rubyonrails.org/active_record_migrations.html#using-the-change-method) of your migration class.
 
 First, create a migration:

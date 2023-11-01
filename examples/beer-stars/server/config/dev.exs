@@ -7,6 +7,11 @@ config :beer_stars, BeerStars.Repo,
   show_sensitive_data_on_connection_error: true,
   pool_size: 10
 
+config :beer_stars, BeerStars.ProxyRepo,
+  url: "postgres://electric:proxy-password@localhost:65432/beer-stars",
+  pool_size: 2,
+  priv: "priv/repo"
+
 # For development, we disable any cache and enable
 # debugging and code reloading.
 #

@@ -9,7 +9,7 @@ ElectricSQL requires a [PostgreSQL](https://www.postgresql.org/download) databas
 
 ## Compatibility
 
-ElectricSQL works with standard Postgres [version >= 13.0](https://www.postgresql.org/support/versioning/) with [logical&nbsp;replication](https://www.postgresql.org/docs/current/logical-replication.html) enabled. Note that you don't need to install any extensions or run any unsafe code.
+ElectricSQL works with standard Postgres [version >= 14.0](https://www.postgresql.org/support/versioning/) with [logical&nbsp;replication](https://www.postgresql.org/docs/current/logical-replication.html) enabled. Note that you don't need to install any extensions or run any unsafe code.
 
 ## Hosting
 
@@ -101,18 +101,18 @@ CREATE ROLE electric
     REPLICATION;
 
 GRANT ALL
-  ON DATABASE '...' 
+  ON DATABASE '...'
   TO electric;
 
-GRANT ALL 
-  ON ALL TABLES 
-  IN SCHEMA public 
+GRANT ALL
+  ON ALL TABLES
+  IN SCHEMA public
   TO electric;
 
-ALTER DEFAULT PRIVILEGES 
-  IN SCHEMA public 
-  GRANT ALL 
-    ON TABLES 
+ALTER DEFAULT PRIVILEGES
+  IN SCHEMA public
+  GRANT ALL
+    ON TABLES
     TO electric;
 ```
 
@@ -120,4 +120,3 @@ This will remove the need for `SUPERUSER`, which will increase the compatibility
 
   </div>
 </details>
-

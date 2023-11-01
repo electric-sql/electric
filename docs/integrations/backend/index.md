@@ -9,6 +9,12 @@ ElectricSQL is designed to work with [any Postgres-backed system](../../usage/in
 
 However, it's common to manage the Postgres data model using a migrations system. These are often provided by your web framework. Because ElectricSQL's [DDLX Rules](../../api/ddlx.md) are applied using DDL migrations, this section shows you how to do this using some popular frameworks.
 
+:::caution Migrations proxy
+Note that migrations should be applied via the migrations proxy as detailed in the [migrations guide](../../usage/data-modelling/migrations.md#migrations-proxy).
+
+This often means using a different `DATABASE_URL`  or otherwise adapting your database config to connect to the proxy when running your migration scripts.
+:::
+
 Some frameworks also provide or work with Postgres change data capture tooling, such as logical replication consumers. This can be useful for [Event sourcing](../event-sourcing/index.md).
 
 <DocCardList />

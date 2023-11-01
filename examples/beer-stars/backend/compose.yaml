@@ -12,8 +12,8 @@ services:
     image: postgres:14-alpine
     environment:
       POSTGRES_DB: "beer-stars"
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "password"
     command:
       - -c
       - config_file=/etc/postgresql.conf
@@ -34,11 +34,13 @@ services:
     init: true
     environment:
       DATABASE_URL: "postgresql://postgres:password@postgres:5432/beer-stars"
-      ELECTRIC_HOST: electric
-      LOGICAL_PUBLISHER_HOST: electric
-      AUTH_MODE: insecure
+      ELECTRIC_HOST: "electric"
+      LOGICAL_PUBLISHER_HOST: "electric"
+      AUTH_MODE: "insecure"
+      PG_PROXY_PASSWORD: "proxy-password"
     ports:
       - 5133:5133
+      - 65432:65432
     depends_on:
       - postgres
 
@@ -47,16 +49,21 @@ services:
     build: ../server
     init: true
     environment:
-      BEER_STARS_WORKER: true
+      BEER_STARS_WORKER: "true"
       DATABASE_HOST: "postgres"
       DATABASE_URL: "postgresql://postgres:password@postgres:5432/beer-stars"
       GITHUB_REPO: "${GITHUB_REPO:-electric-sql/electric}"
       GITHUB_TOKENS: "${GITHUB_TOKENS}"
       PHX_HOST: "localhost"
-      PHX_SERVER: true
-      PORT: 40001
+      PHX_SERVER: "true"
+      PORT: "40001"
       SECRET_KEY_BASE: "E4NrRTr/ZAPGS5Ubp0DmizfdRrRdAV1vLAC7PDQQOupVucwGTinsuEF2BlkOjBWm"
+      # connect to electric for migrations, connecting to the electric
+      # application container (not postgres) using the value of
+      # `PG_PROXY_PASSWORD` and `PG_PROXY_PORT` for the connection
+      PROXY_URL: "postgresql://electric:proxy-password@electric:65432/beer-stars"
     ports:
       - 40001:40001
     depends_on:
       - postgres
+      - electric

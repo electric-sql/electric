@@ -23,10 +23,10 @@ If you'd prefer to understand a bit more about the system before jumping into co
 
 ## Setup
 
-Get setup quickly using the [`create-electric-app`](../api/generator.md) generator. Or install, run and integrate the components yourself.
+Get setup quickly using the [`create-electric-app`](../api/generator.md) starter app. Or install, run and integrate the components yourself.
 
 <Tabs groupId="setup" queryString>
-  <TabItem value="generator" label="Use the generator">
+  <TabItem value="generator" label="Use the starter">
     <SetupGenerator />
   </TabItem>
   <TabItem value="manual" label="Install yourself">

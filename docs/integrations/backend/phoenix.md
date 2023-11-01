@@ -5,7 +5,84 @@ description: >-
 sidebar_position: 30
 ---
 
-## Migrations
+## Migrating via the Proxy
+
+As detailed in the [migrations guide](../../usage/data-modelling/migrations.md) migrations must be applied to the database via the Electric proxy.
+
+The simplest solution is to create a new Ecto repo module that encapsulates the proxy connection and then configure Ecto to use it when generating and applying migrations. We then need to tweak the example release migration code to use this proxy repo.
+
+Once this is done, we can create and apply migrations as before without danger of bypassing the proxy and moving the actual Postgres schema out-of-sync with Electric's view of it.
+
+First we add a new repo instance. Note that, unlike the main `Repo` module, we don't start this with the rest of our application.
+
+```elixir
+# lib/my_app/proxy_repo.ex
+defmodule MyApp.ProxyRepo do
+  use Ecto.Repo,
+    otp_app: :my_app,
+    adapter: Ecto.Adapters.Postgres
+end
+```
+
+Configure Ecto to use the `ProxyRepo` for its tasks. Because in most cases queries through the proxy will just pass unmodified to the backing Postgresql server, it's ok that the proxy repo will be used for other Ecto mix tasks apart from applying migrations.
+
+```elixir
+# config/config.exs
+
+config :my_app,
+  ecto_repos: [MyApp.ProxyRepo]
+```
+
+Now we need to include configuration for the `ProxyRepo` in both development and production mode:
+
+```elixir
+# config/dev.exs
+config :my_app, MyApp.ProxyRepo,
+  ssl: false,
+  url: "postgres://postgres:proxy-password@localhost:65432/myapp",
+  # we only use this repo for migrations
+  pool_size: 2,
+  # when we run `mix ecto.gen.migration ...` we want the generated migration file
+  # to belong to the "real" `MyApp.Repo` this will also mean that any existing
+  # migrations will be recognized automatically.
+  priv: "priv/repo"
+```
+
+```elixir
+# config/runtime.exs
+# because we need to apply migrations in production, ensure that
+# the ProxyRepo is included in the runtime.exs configuration.
+#
+# The `PROXY_URL` environment variable is part of your deployment configuration
+# that tells you application how to connect to the Electric proxy.
+# e.g. `postgres://postgres:proxy-password@localhost:65432/myapp`
+config :my_app, MyApp.ProxyRepo,
+  ssl: false,
+  url: System.get_env("PROXY_URL"),
+  pool_size: 2,
+  priv: "priv/repo"
+```
+
+With this infrastructure in place, running `mix ecto.migrate` will correctly apply the migrations through the proxy by default.
+
+Optionally you can tweak the way that migrations are generated and ensure that they are correctly named for the base repo rather than the proxy repo by adding an alias to your application's `mix.exs`:
+
+```elixir
+defp aliases do
+  [
+    # ...
+    "ecto.gen.migration": ["ecto.gen.migration -r MyApp.Repo"]
+  ]
+end
+```
+
+If you don't add this alias then your migrations will be named e.g. `MyApp.ProxyRepo.Migrations.MigrationName` not `MyApp.Repo.Migrations.MigrationName`.
+
+### Migrating in production via the Proxy
+
+Because we've configured Ecto to go via the proxy repo by default, the [example code from the Phoenix](https://hexdocs.pm/phoenix/releases.html#ecto-migrations-and-custom-commands) and [the EctoSQL docs](https://hexdocs.pm/ecto_sql/Ecto.Migrator.html#module-example-running-migrations-in-a-release) will just work and apply migrations through the proxy in development and production.
+
+## Creating and Applying Migrations
 
 Use the [`Ecto.Migration.execute/1`](https://hexdocs.pm/ecto_sql/Ecto.Migration.html#execute/1) function.
 
@@ -26,6 +103,8 @@ defmodule MyApp.Repo.Migrations.ElectrifyItems do
   end
 end
 ```
+
+As above, the Ecto configuration means that these actions are applied via the Electric migration proxy automatically.
 
 ## Event sourcing
 

@@ -7,6 +7,41 @@ sidebar_position: 10
 
 ## Migrations
 
+### Proxying
+
+To run your migrations [through the proxy](../../usage/data-modelling/migrations.md#migrations-proxy) add a `proxy` database to your settings:
+
+```python
+DATABASES = {
+    'default': {
+        # ...
+    },
+    'proxy': {
+        'ENGINE': 'django.db.backends.postgresql_psycopg2',
+        # Database name is ignored.
+        'NAME': 'mydb',
+        # User is normally `postgres`.
+        'USER': 'postgres',
+        # Password is the password you configure using `PG_PROXY_PASSWORD`
+        # when running the Electric sync service.
+        'PASSWORD': 'my-proxy-password',
+        # Host is the hostname where you're running Electric.
+        'HOST': 'localhost',
+        # Port is the `PG_PROXY_PORT` you set when running Electric,
+        # which defaults to 65432.
+        'PORT': '65432'
+    }
+}
+```
+
+Then when you run `python manage.py ...` commands, specify `--database=proxy`, e.g.:
+
+```shell
+./manage.py migrate --database=proxy
+```
+
+### Applying DDLX statements
+
 Use the [`RunSQL`](https://docs.djangoproject.com/en/4.2/ref/migration-operations/#runsql) operation.
 
 First, create a migration:
