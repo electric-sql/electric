@@ -8,7 +8,7 @@ config :beer_stars, BeerStars.Repo,
   pool_size: 10
 
 config :beer_stars, BeerStars.ProxyRepo,
-  url: "postgres://electric:proxy-password@localhost:65432/beer-stars",
+  url: "postgres://postgres:proxy_password@localhost:65432/beer-stars",
   pool_size: 2,
   priv: "priv/repo"
 

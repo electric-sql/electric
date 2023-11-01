@@ -12,7 +12,7 @@
     "backend:up": "yarn electric:pull && docker compose --env-file backend/.envrc -f backend/compose.yaml up --detach postgres electric",
     "build": "rm -rf dist && node builder.js",
     "build:prod": "rm -rf dist && NODE_ENV=production node builder.js",
-    "client:generate": "npx --no-install electric-sql generate --out ./src/generated/client",
+    "client:generate": "electric-sql generate --service http://localhost:5133 --proxy postgresql://prisma:proxy_password@localhost:65432/electric",
     "copy-wasm": "cp ./node_modules/wa-sqlite/dist/wa-sqlite-async.mjs ./public/wa-sqlite-async.mjs && cp ./node_modules/wa-sqlite/dist/wa-sqlite-async.wasm ./public/wa-sqlite-async.wasm",
     "db:migrate": "docker compose --env-file backend/.envrc -f backend/compose.yaml run server eval \"BeerStars.Release.migrate()\"",
     "db:psql": "psql \"postgresql://postgres:password@localhost:54321/beer-stars\"",
@@ -28,7 +28,7 @@
     "node": ">=16.11.0"
   },
   "dependencies": {
-    "@prisma/client": "4.13.0",
+    "@prisma/client": "4.8.1",
     "Base64": "^1.2.0",
     "axios": "^1.3.5",
     "electric-sql": "latest",
@@ -36,7 +36,7 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "uuid": "^9.0.0",
-    "wa-sqlite": "rhashimoto/wa-sqlite#master"
+    "wa-sqlite": "rhashimoto/wa-sqlite"
   },
   "devDependencies": {
     "@databases/pg": "^5.4.1",
@@ -49,7 +49,7 @@
     "esbuild": "^0.16.17",
     "esbuild-css-modules-plugin": "^2.7.1",
     "esbuild-plugin-inline-image": "^0.0.9",
-    "prisma": "4.13.0",
+    "prisma": "4.8.1",
     "typescript": "^4.9.5"
   }
 }

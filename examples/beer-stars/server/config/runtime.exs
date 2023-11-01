@@ -64,7 +64,7 @@ if(config_env() == :prod) do
     System.get_env("PROXY_URL") ||
       raise """
       environment variable PROXY_URL is missing.
-      For example: ecto://electric:PASS@HOST:65432/DATABASE
+      For example: ecto://postgres:PASS@HOST:65432/DATABASE
       """
 
   maybe_ipv6 = if System.get_env("ECTO_IPV6") in ~w(true 1), do: [:inet6], else: []
