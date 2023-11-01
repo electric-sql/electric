@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/schema.json",
   "build": {
-    "beforeBuildCommand": "pnpm run build-only",
-    "beforeDevCommand": "SERVE=true pnpm run dev",
+    "beforeBuildCommand": "yarn run build-only",
+    "beforeDevCommand": "SERVE=true yarn run dev",
     "devPath": "http://localhost:5173",
     "distDir": "../dist"
   },
