@@ -35,7 +35,7 @@ jobs:
           version: 8
 
       - name: install frontend dependencies
-        run: cd ./clients/typescript/ && pnpm install --no-frozen-lockfile && pnpm build && cd ../../ && cd ./examples/tauri-postgres/ && pnpm install --no-frozen-lockfile && pnpm backend:up && sleep 5 && pnpm db:migrate && sleep 5 && pnpm client:generate && sleep 5 # change this to npm or pnpm depending on which one you use
+        run: cd ./clients/typescript/ && pnpm install --no-frozen-lockfile && pnpm build && cd ../../ && cd ./examples/tauri-postgres/ && pnpm install --no-frozen-lockfile && pnpm backend:up && sleep 5 && pnpm db:migrate && sleep 5 && npx electric-sql@1.0.2 generate && sleep 5 # change this to npm or pnpm depending on which one you use
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
