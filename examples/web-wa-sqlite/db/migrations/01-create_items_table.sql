@@ -8,8 +8,7 @@
  *
  * See https://electric-sql.com/docs/usage/data-modelling for more information.
  */
-BEGIN;
-SELECT electric.migration_version('20230920_114900');
+
 -- Create a simple items table.
 CREATE TABLE IF NOT EXISTS items (
   value TEXT PRIMARY KEY NOT NULL
@@ -17,5 +16,4 @@ CREATE TABLE IF NOT EXISTS items (
 
 -- ⚡
 -- Electrify the items table
-CALL electric.electrify('items');
-COMMIT;
+ALTER TABLE items ENABLE ELECTRIC;

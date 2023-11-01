@@ -1,4 +1,5 @@
 version: "3.8"
+name: "${APP_NAME:-electric}"
 
 configs:
   postgres_config:
@@ -13,7 +14,7 @@ services:
     environment:
       POSTGRES_DB: ${APP_NAME:-electric}
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
+      POSTGRES_PASSWORD: pg_password
     command:
       - -c
       - config_file=/etc/postgresql.conf
@@ -33,10 +34,12 @@ services:
     image: "${ELECTRIC_IMAGE:-electricsql/electric:latest}"
     init: true
     environment:
-      DATABASE_URL: postgresql://postgres:password@postgres:5432/${APP_NAME:-electric}
+      DATABASE_URL: postgresql://postgres:pg_password@postgres:5432/${APP_NAME:-electric}
+      PG_PROXY_PASSWORD: proxy_password
       LOGICAL_PUBLISHER_HOST: electric
       AUTH_MODE: insecure
     ports:
-      - 5133:5133
+      - ${ELECTRIC_PORT:-5133}:5133
+      - ${ELECTRIC_PROXY_PORT:-65432}:65432
     depends_on:
       - postgres

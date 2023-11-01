@@ -12,18 +12,9 @@
   </picture>
 </a>
 
-# ElectricSQL - Web example
+# Welcome to your ElectricSQL app!
 
-This is an example web application using ElectricSQL in the browser with [wa-sqlite](https://github.com/rhashimoto/wa-sqlite).
-
-## Instructions
-
-Clone the [electric-sql/electric](https://github.com/electric-sql/electric) mono-repo and change directory into this example folder:
-
-```sh
-git clone https://github.com/electric-sql/electric
-cd electric/examples/web-wa-sqlite
-```
+This is a web application using ElectricSQL in the browser with [wa-sqlite](https://electric-sql.com/docs/integrations/drivers/web/wa-sqlite).
 
 ## Pre-reqs
 
