@@ -1,20 +1,20 @@
 {
   "name": "electric-sql-expo-example",
-  "version": "1.0.0",
+  "version": "0.7.0",
   "author": "ElectricSQL",
   "license": "Apache-2.0",
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
-    "electric:pull": "docker pull electricsql/electric:latest",
-    "backend:down": "yarn electric:pull && docker compose -f backend/compose/docker-compose.yaml down --volumes",
-    "backend:start": "docker pull electricsql/electric:latest && docker compose --env-file backend/compose/.envrc -f backend/compose/docker-compose.yaml up",
-    "backend:stop": "yarn backend:down",
+    "backend:start": "node ./backend/startCompose.js",
+    "backend:stop": "docker compose --env-file backend/compose/.envrc -f backend/compose/docker-compose.yaml stop",
     "backend:up": "yarn backend:start --detach",
-    "client:generate": "npx electric-sql generate",
-    "client:watch": "npx electric-sql generate --watch",
+    "backend:down": "docker compose --env-file backend/compose/.envrc -f backend/compose/docker-compose.yaml down --volumes",
+    "client:generate": "yarn electric:check && npx electric-sql generate --service http://localhost:5133 --proxy postgresql://prisma:proxy_password@localhost:65432/electric",
+    "client:watch": "yarn client:generate --watch",
     "db:migrate": "node ./db/migrate.js",
     "db:psql": "node ./db/connect.js",
-    "electric:start": "node ./backend/startElectric.js",
+    "electric:check": "node ./check-electric-is-running.js",
+    "ports:configure": "node ./change-ports.js",
     "start": "expo start",
     "start:android": "expo start --android",
     "start:ios": "expo start --ios"
@@ -32,14 +32,17 @@
   },
   "devDependencies": {
     "@babel/core": "^7.12.9",
-    "@databases/pg": "^5.4.1",
     "@electric-sql/prisma-generator": "latest",
+    "@databases/pg-migrations": "^5.0.2",
     "@prisma/client": "4.8.1",
     "@tsconfig/react-native": "^2.0.2",
     "@types/react": "^18.0.18",
     "@types/react-native": "^0.72.2",
+    "fs-extra": "^10.0.0",
     "prisma": "4.8.1",
+    "prompt": "^1.3.0",
     "shelljs": "^0.8.5",
+    "tcp-port-used": "^1.0.2",
     "typescript": "^5.1.3"
   }
 }

@@ -1,3 +1,6 @@
-const { DATABASE_URL } = require('./util.js')
-const { spawn } = require('child_process')
-spawn(`psql ${DATABASE_URL}`, [], { cwd: __dirname, stdio: 'inherit', shell: true })
+const { dockerCompose } = require('../util/util.js')
+const { CONTAINER_DATABASE_URL, PUBLIC_DATABASE_URL } = require('./util.js')
+
+console.info(`Connecting to proxy at ${PUBLIC_DATABASE_URL}`)
+
+dockerCompose('exec', ['-it', 'postgres', 'psql', CONTAINER_DATABASE_URL])
