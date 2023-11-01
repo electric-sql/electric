@@ -1,0 +1,7 @@
+{
+  "name": "Electric Appointments",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "react-vite"
+}

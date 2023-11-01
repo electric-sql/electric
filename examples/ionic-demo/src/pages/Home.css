@@ -1,0 +1,9 @@
+.logo {
+  width: 1.5em;
+  height: 1.5em;
+  margin: -0.4em 0 -0.4em -0.3em;
+}
+
+.app-logo {
+  height: min(30vmin, 200px);
+}
