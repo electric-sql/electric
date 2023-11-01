@@ -68,7 +68,7 @@ endif
 
 # Cut off the patch component of the version and anything else that's trailing it,
 # leaving only the leading X.Y parts of the version.
-ELECTRIC_VERSION_MINOR != echo "${ELECTRIC_VERSION}" | awk -F. '{print $$1 "." $$2}'
+ELECTRIC_VERSION_MINOR := $(shell echo "${ELECTRIC_VERSION}" | awk -F. '{print $$1 "." $$2}')
 
 docker-build-ci:
 	docker buildx build --load --build-arg ELECTRIC_VERSION=${ELECTRIC_VERSION} \
