@@ -178,7 +178,7 @@ export default function IssueBoard({ issues }: IssueBoardProps) {
       const kanbanorder = getNewKanbanOrder(prevIssue, nextIssue)
       // Keep track of moved issues so we can override the status and kanbanorder when
       // sorting issues into columns.
-      const modified = new Date().toISOString()
+      const modified = new Date()
       setMovedIssues((prev) => ({
         ...prev,
         [draggableId]: {

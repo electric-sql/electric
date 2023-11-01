@@ -1,6 +1,6 @@
 import dayjs from 'dayjs'
 
-export function formatDate(date?: string): string {
+export function formatDate(date?: Date): string {
   if (!date) return ''
-  return dayjs(new Date(date)).format('D MMM')
+  return dayjs(date).format('D MMM')
 }

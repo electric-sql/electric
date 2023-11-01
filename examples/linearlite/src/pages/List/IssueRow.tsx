@@ -22,7 +22,7 @@ function IssueRow({ issue, style }: Props) {
     db.issue.update({
       data: {
         status: status,
-        modified: new Date().toISOString(),
+        modified: new Date(),
       },
       where: {
         id: issue.id,
@@ -34,7 +34,7 @@ function IssueRow({ issue, style }: Props) {
     db.issue.update({
       data: {
         priority: priority,
-        modified: new Date().toISOString(),
+        modified: new Date(),
       },
       where: {
         id: issue.id,

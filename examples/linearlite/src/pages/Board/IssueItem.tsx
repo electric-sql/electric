@@ -41,7 +41,7 @@ const IssueItem = ({ issue, style, isDragging, provided }: IssueProps) => {
     db.issue.update({
       data: {
         priority: priority,
-        modified: new Date().toISOString(),
+        modified: new Date(),
       },
       where: {
         id: issue.id,
