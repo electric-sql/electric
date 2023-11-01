@@ -17,8 +17,8 @@ DB_CONNECTION=pgsql
 # Database name is ignored.
 DB_DATABASE=postgres
 
-# User is normally `electric`.
-DB_USERNAME=electric
+# User is normally `postgres`.
+DB_USERNAME=postgres
 # Password is the password you configure using `PG_PROXY_PASSWORD`
 # when running the Electric sync service.
 DB_PASSWORD=postgres

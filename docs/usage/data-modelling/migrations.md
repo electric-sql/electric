@@ -60,20 +60,10 @@ There are two environment variables that configure the proxy in Electric:
 
 - `PG_PROXY_PASSWORD` (no default). Access to the proxy is controlled by password (see below for information on the username). You must set this password here and pass it to any application hoping to connect to the proxy.
 
-The proxy, since it can only connect to the database configured for the rest of the Electric application, ignores any database parameter you provide when connecting, i.e. these commands are all equivalent:
+You should be able to connect to the proxy directly using `psql` as outlined above and run any DDLX/migration commands you like. These will be validated, captured, and streamed to any connected clients automatically:
 
 ```
-$ psql -U electric -p ${PG_PROXY_PORT} electric
-$ psql -U electric -p ${PG_PROXY_PORT} my_database
-$ psql -U electric -p ${PG_PROXY_PORT} postgres
-```
-
-Additionally the username is almost irrelevant except in certain cases, [such as when using Prisma](../../integrations/backend/prisma.md). To avoid complications we suggest using `electric` as the username when connecting to the proxy.
-
-With this in mind, you should be able to connect to the proxy directly using `psql` as outlined above and run any DDLX/migration commands you like. These will be validated, captured, and streamed to any connected clients automatically:
-
-```
-$ PGPASSWORD=${PG_PROXY_PASSWORD} psql -U electric -p ${PG_PROXY_PORT} electric
+$ PGPASSWORD=${PG_PROXY_PASSWORD} psql -U postgres -p ${PG_PROXY_PORT} electric
 
 electric=# CREATE TABLE public.items (id text, value text);
 CREATE TABLE

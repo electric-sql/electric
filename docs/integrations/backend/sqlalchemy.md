@@ -15,7 +15,7 @@ To run your migrations [through the proxy](../../usage/data-modelling/migrations
 pwd = os.environ['PG_PROXY_PASSWORD']
 port = os.environ['PG_PROXY_PORT']
 
-url = "postgresql://electric:{}@localhost:{}/mydb".format(pwd, port)
+url = "postgresql://postgres:{}@localhost:{}/mydb".format(pwd, port)
 ```
 
 ### Applying DDLX statements

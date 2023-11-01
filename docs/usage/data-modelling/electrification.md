@@ -11,6 +11,10 @@ In order to sync data between Postgres and local-devices, you have to first "ele
 
 You can only electrify tables with supported data types and constrainsts. See [Types](./types.md) and [Constraints](./constraints.md) for more information.
 
+:::caution Work in progress
+Currently, [only `ENABLE ELECTRIC` is supported](../../reference/roadmap.md#ddlx-rules).
+:::
+
 ## Enable
 
 Electrify tables in your [DDL migrations](./migrations.md) using the [`ALTER TABLE ... ENABLE ELECTRIC`](../../api/ddlx#enable) DDLX statement. For example, to electrify the `projects` and `issues` tables:

@@ -34,13 +34,11 @@ See <DocPageLink path="usage/data-modelling" /> for more information.
 
 ### DDLX rules
 
-The SQL syntax you see documented on <DocPageLink path="api/ddlx" /> is not yet implemented. Neither are permissions, roles, validation or local SQLite commands. DDLX support is currently limited to electrifying tables using an SQL procedure call syntax:
+The SQL syntax you see documented on <DocPageLink path="api/ddlx" /> is not fully implemented yet. Neither are permissions, roles, validation or local SQLite commands. DDLX support is currently limited to electrifying tables using the `ENABLE ELECTRIC` syntax extension:
 
 ```sql
-CALL electric.electrify('items')
+ALTER TABLE items ENABLE ELECTRIC;
 ```
-
-You can track progress on DDLX support here [electric-sql/pg_proxy/pulls](https://github.com/electric-sql/pg_proxy/pulls).
 
 ### Shapes
 
@@ -58,12 +56,17 @@ Currently, you may experience bugs or behaviour that leads to an inconsistent da
 
 In development, you can usually recover from these bugs by resetting your database(s). In the browser, if you clear localStorage and IndexedDB (for example in Chrome, "Inspect" to open the developer tools -> Application -> Storage -> Clear site data) that will reset the client and your local app will re-sync from the server.
 
-If you need to re-set your Postgres database, if you're using Docker Compose (such as with the starter template or examples) you can usually use something like `yarn backend:down` or `docker compose -f backend/compose.yaml down --volumes`. Alternatively, if you can't just nuke your whole database folder, you may need to drop the replication publication manually:
+If you need to re-set your Postgres database, if you're using Docker Compose (such as with the starter template or examples) you can usually use something like `yarn backend:down` or `docker compose -f backend/compose.yaml down --volumes`. Alternatively, if you can't just nuke your whole database folder, you'll need to manually drop the objects created by Electric:
 
 ```sql
 ALTER SUBSCRIPTION postgres_1 DISABLE;
 ALTER SUBSCRIPTION postgres_1 SET (slot_name = NONE);
-drop subscription postgres_1;
+DROP SUBSCRIPTION postgres_1;
+
+DROP PUBLICATION electric_publication;
+DROP SCHEMA electric CASCADE;
+
+SELECT pg_drop_replication_slot('electric_replication_out_test');
 ```
 
 You can then recreate your database, e.g.:

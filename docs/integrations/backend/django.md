@@ -20,8 +20,8 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql_psycopg2',
         # Database name is ignored.
         'NAME': 'mydb',
-        # User is normally `electric`.
-        'USER': 'electric',
+        # User is normally `postgres`.
+        'USER': 'postgres',
         # Password is the password you configure using `PG_PROXY_PASSWORD`
         # when running the Electric sync service.
         'PASSWORD': 'my-proxy-password',

@@ -12,7 +12,7 @@ sidebar_position: 50
 To run your migrations [through the proxy](../../usage/data-modelling/migrations.md#migrations-proxy) set `DATABASE_URL` to connect to the proxy when running migrations, e.g.:
 
 ```shell
-DATABASE_URL=postgresql://electric:$PG_PROXY_PASSWORD@localhost:$PG_PROXY_PORT/mydb rake db:migrate
+DATABASE_URL=postgresql://postgres:$PG_PROXY_PASSWORD@localhost:$PG_PROXY_PORT/mydb rake db:migrate
 ```
 
 ### Applying DDLX statements
