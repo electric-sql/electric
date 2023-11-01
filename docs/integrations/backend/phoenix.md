@@ -39,7 +39,7 @@ Now we need to include configuration for the `ProxyRepo` in both development and
 # config/dev.exs
 config :my_app, MyApp.ProxyRepo,
   ssl: false,
-  url: "postgres://electric:proxy-password@localhost:65432/myapp",
+  url: "postgres://postgres:proxy-password@localhost:65432/myapp",
   # we only use this repo for migrations
   pool_size: 2,
   # when we run `mix ecto.gen.migration ...` we want the generated migration file
@@ -55,7 +55,7 @@ config :my_app, MyApp.ProxyRepo,
 #
 # The `PROXY_URL` environment variable is part of your deployment configuration
 # that tells you application how to connect to the Electric proxy.
-# e.g. `postgres://electric:proxy-password@localhost:65432/myapp`
+# e.g. `postgres://postgres:proxy-password@localhost:65432/myapp`
 config :my_app, MyApp.ProxyRepo,
   ssl: false,
   url: System.get_env("PROXY_URL"),

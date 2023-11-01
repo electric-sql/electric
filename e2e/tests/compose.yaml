@@ -60,6 +60,6 @@ services:
       PG_PROXY_PASSWORD:
       PG_PROXY_PORT:
       INTROSPECTION_URL: "postgresql://prisma:${PG_PROXY_PASSWORD}@electric_1:${PG_PROXY_PORT}/postgres"
-      PROXY_URL: "postgresql://electric:${PG_PROXY_PASSWORD}@electric_1:${PG_PROXY_PORT}/postgres"
+      PROXY_URL: "postgresql://postgres:${PG_PROXY_PASSWORD}@electric_1:${PG_PROXY_PORT}/postgres"
     volumes:
       - ../prisma_example/prisma:/app/prisma

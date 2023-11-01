@@ -9,7 +9,7 @@ shell.config.silent = true // don't log output of child processes
 // that intend to use the DDLX syntax extension of SQL.
 const appName = fetchAppName() ?? 'electric'
 const proxyPort = fetchHostProxyPortElectric() ?? 65432
-const dbUser = 'electric'
+const dbUser = 'postgres'
 const proxyPassword = 'proxy_password'
 
 // URL to use when connecting to the proxy from the host OS
