@@ -66,14 +66,20 @@ CACHING_SETTINGS_ELECTRIC := --cache-to type=gha,mode=max,scope=${GITHUB_REF_NAM
 CACHING_SETTINGS_WS_CLIENT := --cache-to type=gha,mode=max,scope=${GITHUB_REF_NAME}-ws-client --cache-from type=gha,scope=${GITHUB_REF_NAME}-ws-client
 endif
 
+# Cut off the patch component of the version and anything else that's trailing it,
+# leaving only the leading X.Y parts of the version.
+ELECTRIC_VERSION_MINOR != echo "${ELECTRIC_VERSION}" | awk -F. '{print $$1 "." $$2}'
+
 docker-build-ci:
 	docker buildx build --load --build-arg ELECTRIC_VERSION=${ELECTRIC_VERSION} \
       -t ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION} \
       -t electric:local-build ${CACHING_SETTINGS_ELECTRIC}\
 			.
 ifeq (${TAG_AS_LATEST_AND_PUSH}, true)
+	docker tag "${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION}" "${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION_MINOR}"
 	docker tag "${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION}" "${ELECTRIC_IMAGE_NAME}:latest"
 	docker push "${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION}"
+	docker push "${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION_MINOR}"
 	docker push "${ELECTRIC_IMAGE_NAME}:latest"
 endif
 
@@ -90,7 +96,9 @@ docker-build-ci-crossplatform:
 	docker buildx build --platform linux/arm64/v8,linux/amd64 --push \
 			--build-arg ELECTRIC_VERSION=${ELECTRIC_VERSION} \
 			-t ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION} \
-			-t ${ELECTRIC_IMAGE_NAME}:latest .
+			-t ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION_MINOR} \
+			-t ${ELECTRIC_IMAGE_NAME}:latest \
+			.
 
 docker-clean:
 ifneq ($(docker images -q electric:local-build 2> /dev/null), "")
