@@ -39,3 +39,5 @@ jobs:
           releaseDraft: true
           prerelease: false
           projectPath: './examples/tauri-postgres/'
+          tauriScript: pnpm
+          args: ['tauri', 'build']
