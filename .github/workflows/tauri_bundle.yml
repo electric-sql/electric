@@ -34,7 +34,7 @@ jobs:
         with:
           version: 7.27
           run_install: |
-            - recursive: true
+            - recursive: false
 
       - name: install frontend dependencies
         run: cd ./examples/tauri-postgres/ && pnpm install && cd ../../ && cd ./examples/tauri-postgres/ && pnpm install && pnpm client:generate # change this to npm or pnpm depending on which one you use
