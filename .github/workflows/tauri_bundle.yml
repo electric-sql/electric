@@ -39,4 +39,4 @@ jobs:
           releaseDraft: true
           prerelease: false
           projectPath: './examples/tauri-postgres/'
-          tauriScript: yarn tauri
+          tauriScript: yarn install && yarn tauri
