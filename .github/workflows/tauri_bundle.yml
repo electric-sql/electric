@@ -35,7 +35,7 @@ jobs:
           version: 8
 
       - name: install frontend dependencies
-        run: cd ./examples/tauri-postgres/ && pnpm install && cd ../../ && cd ./examples/tauri-postgres/ && pnpm install && pnpm client:generate # change this to npm or pnpm depending on which one you use
+        run: cd ./examples/tauri-postgres/ && pnpm install --no-frozen-lockfile && cd ../../ && cd ./examples/tauri-postgres/ && pnpm install --no-frozen-lockfile && pnpm client:generate # change this to npm or pnpm depending on which one you use
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
