@@ -14,11 +14,11 @@
 
 # Electric Appointments: An ElectricSQL & Ionic Example
 
-This is an example showing how to build an Ionic Framework app using ElectricSQL, including packaging if for iOS and Android using Capacitor.
+This is an example showing how to build an Ionic Framework app using ElectricSQL, including packaging it for iOS and Android using Capacitor.
 
 The app is a simple appointment scheduling app, the type a company would use to schedule appointments with clients. It's split into two workflows, one for the customer to schedule an appointment, and one for an employee to view and administer their calendar.
 
-When built for the web it uses the wa-sqlite driver, for iOS and android it uses the capacitor-sqlite driver.
+When built for the web it uses the wa-sqlite driver. For iOS and Android it uses the capacitor-sqlite driver.
 
 ## Prereqs
 
@@ -56,7 +56,7 @@ Note that, if useful, you can connect to Postgres using:
 npm run db:psql
 ```
 
-The [database schema](https://electric-sql.com/docs/usage/data-modelling) for this example is in `db/migrations/create_tables.sql`.
+The [database schema](https://electric-sql.com/docs/usage/data-modelling) for this example is in `db/migrations/01-create_tables.sql`.
 You can apply it with:
 
 ```shell
