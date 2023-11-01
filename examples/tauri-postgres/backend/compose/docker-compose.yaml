@@ -31,7 +31,7 @@ services:
       - pg_data:/var/lib/postgresql/data
 
   electric:
-    image: '${ELECTRIC_IMAGE:-electricsql/electric:latest}'
+    image: '${ELECTRIC_IMAGE:-electricsql/electric:0.6.4}'
     init: true
     environment:
       DATABASE_URL: postgresql://postgres:password@postgres:5432/${APP_NAME:-electric}

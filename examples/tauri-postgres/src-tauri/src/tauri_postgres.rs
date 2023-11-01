@@ -65,6 +65,7 @@ pub async fn tauri_pg_init_database(database_dir: &str) -> PgEmbed {
     let mut conn = tauri_pg_connect(&pg, "test").await;
 
     // TODO: When
+    let _ = sqlx::query("ALTER SCHEMA public RENAME TO main;").execute(&mut conn).await.unwrap();
     let _ = sqlx::query("ALTER DATABASE test SET search_path TO main;").execute(&mut conn).await.unwrap();
 
     pg.migrate(db_name).await.unwrap();

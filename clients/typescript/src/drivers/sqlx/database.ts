@@ -34,7 +34,6 @@ export class ElectricDatabase implements Database {
   async tauri_exec(statement: Statement): Promise<QueryExecResult> {
     let [keys, values] = separateBindParams(statement.args)
     let result = await this.invoke("tauri_exec_command", { sql: statement.sql, bind_params: { keys, values } })
-    console.log("YYYYYYYY: ", result)
     return result
   }
 

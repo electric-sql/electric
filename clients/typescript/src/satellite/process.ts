@@ -202,6 +202,7 @@ export class SatelliteProcess implements Satellite {
   }
 
   async start(authConfig: AuthConfig): Promise<ConnectionWrapper> {
+    console.log("VVVV We are in start")
     await this.migrator.up()
 
     const isVerified = await this._verifyTableStructure()
@@ -811,16 +812,16 @@ export class SatelliteProcess implements Satellite {
     const shadow = this.opts.shadowTable.tablename
 
     const tablesExist = `
-      SELECT COUNT(table_name)::integer AS numTables
+      SELECT COUNT(table_name)::integer AS "numTables"
       FROM information_schema.tables
       WHERE table_type = 'BASE TABLE' AND table_name IN ($1, $2, $3);
     `
 
-    const [{ numtables }] = await this.adapter.query({
+    const [{ numTables }] = await this.adapter.query({
       sql: tablesExist,
       args: [meta, oplog, shadow],
     })
-    return numtables === 3
+    return numTables === 3
     // return numtables === '3' // TODO: This passes. Resolve the types
   }
 
@@ -895,9 +896,6 @@ export class SatelliteProcess implements Satellite {
     }
 
     // For each affected shadow row, set new tag array, unless the last oplog operation was a DELETE
-    console.log("TODO: WITH CLAUSE HERE")
-    console.log("TODO: max on rowid here even in postgres")
-    console.log("TODO: Postgres NEW vs EXCLUDED")
     // TODO: This statement may need to use `WITH` to be correct.
     const q3: Statement = {
       sql: `
@@ -997,7 +995,6 @@ export class SatelliteProcess implements Satellite {
   }
 
   async _replicateSnapshotChanges(results: OplogEntry[]): Promise<void> {
-    console.log("YYYYY: ", results)
     // TODO: Don't try replicating when outbound is inactive
     if (this.client.isClosed()) {
       return
@@ -1067,7 +1064,6 @@ export class SatelliteProcess implements Satellite {
         ORDER BY rowid ASC
     `
     const rows = await this.adapter.query({ sql: selectEntries, args: [since] })
-    console.log("YYYYYY: ", rows)
     return rows as unknown as OplogEntry[]
   }
 
@@ -1183,7 +1179,6 @@ export class SatelliteProcess implements Satellite {
         await this.mutexSnapshot()
         firstDMLChunk = false
       }
-
       const { statements, tablenames } = await this._apply(entries, origin)
       entries.forEach((e) => opLogEntries.push(e))
       statements.forEach((s) => {
@@ -1215,7 +1210,6 @@ export class SatelliteProcess implements Satellite {
           }
         }
       })
-
       // Also add statements to create the necessary triggers for the created/updated table
       affectedTables.forEach((table) => {
         const triggers = generateTriggersForTable(table)
@@ -1228,7 +1222,6 @@ export class SatelliteProcess implements Satellite {
       stmts.push(...this._disableTriggers([...createdTables]))
       newTables = new Set([...newTables, ...createdTables])
     }
-
     // Start with garbage collection, because if this a transaction after round-trip, then we don't want it in conflict resolution
     await this.maybeGarbageCollect(origin, commitTimestamp)
 
@@ -1243,7 +1236,6 @@ export class SatelliteProcess implements Satellite {
         await processDDL(chunk as SchemaChange[])
       }
     }
-
     // Now run the DML and DDL statements in-order in a transaction
     const tablenames = Array.from(tablenamesSet)
     const notNewTableNames = tablenames.filter((t) => !newTables.has(t))
@@ -1251,7 +1243,6 @@ export class SatelliteProcess implements Satellite {
     const allStatements = this._disableTriggers(notNewTableNames)
       .concat(stmts)
       .concat(this._enableTriggers(tablenames))
-
     if (transaction.migrationVersion) {
       // If a migration version is specified
       // then the transaction is a migration
@@ -1260,9 +1251,9 @@ export class SatelliteProcess implements Satellite {
         version: transaction.migrationVersion,
       })
     } else {
+      console.log(JSON.stringify(allStatements))
       await this.adapter.runInTransaction(...allStatements)
     }
-
     await this._notifyChanges(opLogEntries)
   }
 
@@ -1399,7 +1390,6 @@ export class SatelliteProcess implements Satellite {
 
     let id = 0
     const schema = 'public' // TODO
-    console.log("XXX: tableNames: ", tableNames)
     for (const table of tableNames) {
       const tableName = table.name
 
@@ -1410,13 +1400,20 @@ export class SatelliteProcess implements Satellite {
       JOIN information_schema.constraint_column_usage AS ccu USING (constraint_schema, constraint_name)
       JOIN information_schema.columns AS c ON c.table_schema = tc.constraint_schema
         AND tc.table_name = c.table_name AND ccu.column_name = c.column_name
-      WHERE constraint_type = 'PRIMARY KEY' and tc.table_name = $1;`
+      WHERE constraint_type = 'PRIMARY KEY' and tc.table_name = $1;` // gets only the primary keys
+
+      const sql2 = `SELECT c.column_name as name, c.data_type as type
+      FROM information_schema.table_constraints tc
+      JOIN information_schema.constraint_column_usage AS ccu USING (constraint_schema, constraint_name)
+      JOIN information_schema.columns AS c ON c.table_schema = tc.constraint_schema
+      AND tc.table_name = c.table_name
+      WHERE tc.table_name = $1;` // Gets all the columns
 
       const args = [tableName]
-      console.log("XXX: args: ", args)
       const columnsForTable = await this.adapter.query({ sql, args })
-      console.log("XXX: columnsForTable: ", columnsForTable)
-      if (columnsForTable.length == 0) {
+      console.log(columnsForTable)
+      const restColumnsForTable = await this.adapter.query({ sql: sql2, args })
+      if (restColumnsForTable.length == 0) {
         continue
       }
       const relation: Relation = {
@@ -1428,7 +1425,7 @@ export class SatelliteProcess implements Satellite {
       }
 
       // TODO: simplifications here as well, isNullable and primaryKey
-      for (const c of columnsForTable) {
+      for (const c of restColumnsForTable) {
         relation.columns.push({
           name: c.name!.toString(),
           type: c.type!.toString(),
@@ -1439,6 +1436,7 @@ export class SatelliteProcess implements Satellite {
       relations[`${tableName}`] = relation
     }
 
+    console.log("VVVV", relations)
     return Promise.resolve(relations)
   }
 
@@ -1520,30 +1518,28 @@ function _applyNonDeleteOperation(
     ', '
   )}) VALUES (${columnValues.map((_, index) => '$' + (index + 1)).join(',')})`
 
+  let lenColumnValues = columnValues.length
+
   const updateColumnStmts = columnNames
     .filter((c) => !(c in primaryKeyCols))
     .reduce(
-      (acc, c) => {
-        acc.where.push(`${c} = ?`)
+      (acc, c, index) => {
+        acc.where.push(`${c} = $${lenColumnValues + index + 1}`)
         acc.values.push(fullRow[c])
         return acc
       },
       { where: [] as string[], values: [] as SqlValue[] }
     )
-
   if (updateColumnStmts.values.length > 0) {
-    console.log("XXXX: if")
     insertStmt = `
                 ${insertStmt}
-                ON CONFLICT DO UPDATE SET ${updateColumnStmts.where.join(', ')}
-              `
+                ON CONFLICT (id) DO UPDATE SET ${updateColumnStmts.where.join(', ')}
+              ` // TODO: The `(id)` is hardcoded, a list of primary keys should be there
     columnValues.push(...updateColumnStmts.values)
   } else {
-    console.log("XXXX: else")
     // no changes, can ignore statement if exists
     insertStmt = `INSERT ${insertStmt} ON CONFLICT DO NOTHING`; //TODO: postgres: can we ingore this?
   }
-
   return { sql: insertStmt, args: columnValues }
 }
 

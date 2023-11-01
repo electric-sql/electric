@@ -334,8 +334,10 @@ export class SatelliteClient extends EventEmitter implements Client {
   ) {
     this.on('transaction', async (txn, ackCb) => {
       // move callback execution outside the message handling path
+      console.log("Before callback")
       await callback(txn)
       ackCb()
+      console.log("After callback")
     })
   }
 

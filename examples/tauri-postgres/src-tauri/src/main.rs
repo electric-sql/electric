@@ -16,7 +16,7 @@ use pg_embed::postgres::PgEmbed;
 
 // Tauri
 use tauri::async_runtime::block_on;
-use tauri::{State, AppHandle, WindowEvent};
+use tauri::{State, WindowEvent};
 use tauri::Manager;
 
 // Tauri plug-ins
@@ -173,13 +173,9 @@ async fn tauri_exec(
     sql: &str,
     bind_params: BindParams,
 ) -> QueryResult {
-    println!(
-        "Trace: tauri_exec: sql bind_params:\n{}\n{:?}",
-        sql, bind_params
-    );
     let sql2 = replace_question_marks(sql);
     println!(
-        "Trace: tauri_exec: AFTER CONVERSION sql bind_params:\n{}\n{:?}",
+        "tauri_exec input\n{}\n{:?}",
         sql2, bind_params
     );
 
@@ -231,10 +227,17 @@ async fn tauri_exec(
     }
 
     if err {
-        return QueryResult {
+        let result = QueryResult {
             rows_modified: 0,
             result: String::new(),
         };
+
+        println!(
+            "tauri_exec output error\n{}\n{:?}",
+            result.result, result.rows_modified
+        );
+
+        return result;
     }
 
     let mut result = String::new();
@@ -244,6 +247,11 @@ async fn tauri_exec(
         array_rows.push(row_to_json(row));
     }
     result.push_str(serde_json::to_string(&array_rows).unwrap().as_str());
+
+    println!(
+        "tauri_exec output\n{}\n{:?}",
+        result, accumulate_rows_modified
+    );
 
     QueryResult {
         rows_modified: accumulate_rows_modified,

@@ -18,6 +18,7 @@
     "db:truncate": "node ./db/truncate.js",
     "db:reload-data": "npm run db:truncate && npm run db:load-data",
     "reset": "npm run backend:down && npm run backend:up && sleep 5 && npm run db:migrate && npm run client:generate && npm run db:load-data",
+    "myreset": "npm run backend:down && npm run backend:up && sleep 5 && npm run db:migrate && sleep 5 && npm run client:generate",
     "electric:start": "node ./backend/startElectric.js",
     "dev": "vite",
     "start": "npm run dev",
@@ -27,7 +28,8 @@
     "typecheck": "tsc --noEmit --skipLibCheck",
     "check-styleguide": "prettier --check --loglevel warn . && eslint src --quiet",
     "format": "prettier --write --loglevel warn .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "logs": "(cd backend/compose/ && docker-compose logs -f --timestamps)"
   },
   "dependencies": {
     "@firefox-devtools/react-contextmenu": "^5.1.0",

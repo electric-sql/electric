@@ -118,7 +118,6 @@ export class DatabaseAdapter implements DatabaseAdapterInterface {
   // It is only meant to be used within transactions.
   async _queryUncoordinated(stmt: Statement): Promise<Row[]> {
     const res = await this.db.exec(stmt)
-    console.log("YYYYYYY: ", res)
     return resultToRows([res])
   }
 

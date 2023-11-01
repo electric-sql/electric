@@ -315,6 +315,7 @@ export const toTransactions = (
 
   return opLogEntries.reduce(
     (acc, txn) => {
+      console.log("ZZZZ", acc, txn)
       let currTxn = acc[acc.length - 1]
 
       const nextTs = to_commit_timestamp(txn.timestamp)
@@ -329,8 +330,10 @@ export const toTransactions = (
       }
 
       const change = opLogEntryToChange(txn, relations)
+      console.log("ZZ", change)
       currTxn.changes.push(change)
       currTxn.lsn = numberToBytes(txn.rowid)
+      console.log("Z", acc)
       return acc
     },
     [init]
