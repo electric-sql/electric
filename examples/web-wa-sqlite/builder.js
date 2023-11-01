@@ -28,7 +28,7 @@ const liveServer = (buildOpts) => {
   ).catch(() => process.exit(1))
 
   serve({servedir: 'dist' }, {})
-    .then(() => {
+    .then((serveResult) => {
       createServer((req, res) => {
         const { url, method, headers } = req
 
@@ -43,7 +43,7 @@ const liveServer = (buildOpts) => {
 
         const path = ~url.split('/').pop().indexOf('.') ? url : `/index.html` //for PWA with router
         req.pipe(
-          request({ hostname: '0.0.0.0', port: 8000, path, method, headers }, (prxRes) => {
+          request({ hostname: '0.0.0.0', port: serveResult.port, path, method, headers }, (prxRes) => {
             res.writeHead(prxRes.statusCode, prxRes.headers)
             prxRes.pipe(res, { end: true })
           }),
@@ -54,7 +54,9 @@ const liveServer = (buildOpts) => {
     setTimeout(() => {
       const op = { darwin: ['open'], linux: ['xdg-open'], win32: ['cmd', '/c', 'start'] }
       const ptf = process.platform
-      if (clients.length === 0) spawn(op[ptf][0], [...[op[ptf].slice(1)], `http://localhost:3001`])
+      const url = "http://localhost:3001"
+      if (clients.length === 0) spawn(op[ptf][0], [...[op[ptf].slice(1)], url])
+      console.info(`Your app is running at ${url}`)
     }, 500) // open the default browser only if it is not opened yet
   })
 }

@@ -1,43 +1,34 @@
-const fs = require('fs')
-const path = require('path')
-const { DATABASE_URL } = require('./util.js')
+const { DATABASE_URL, PUBLIC_DATABASE_URL } = require('./util.js')
+const { spawn } = require('child_process')
+const process = require('process')
 
-const createPool = require('@databases/pg')
-const { sql } = require('@databases/pg')
+console.info(`Connecting to proxy at ${PUBLIC_DATABASE_URL}`)
 
-const MIGRATIONS_DIR = process.env.MIGRATIONS_DIR || path.resolve(__dirname, 'migrations')
+const args = ["run", "-s", "pg-migrations", "apply", "--database",  DATABASE_URL, "--directory", "./db/migrations"]
+const proc = spawn("yarn", args, { cwd: __dirname, stdio: ['inherit', 'pipe', 'inherit']  })
 
-console.info(`Connecting to Postgres..`)
-const db = createPool(DATABASE_URL)
+let newMigrationsApplied = true
 
-const apply = async (fileName) => {
-  const filePath = path.join(MIGRATIONS_DIR, fileName)
-  console.log('Applying', filePath)
-
-  await db.tx(
-    (tx) => tx.query(
-      sql.file(filePath)
-    )
-  )
-}
-
-const main = async () => {
-  const fileNames = fs.readdirSync(MIGRATIONS_DIR)
-  for (const file of fileNames) {
-    if (path.extname(file) === '.sql') {
-      await apply(file)
-    }
+proc.stdout.on('data', (data) => {
+  if (data.toString().trim() === 'No migrations required') {
+    newMigrationsApplied = false
+  } else {
+    process.stdout.write(data)
   }
-  console.log('⚡️ Database is migrated.')
-}
+})
 
-try {
-  main()
-}
-catch (err) {
-  console.error(err)
-  process.exitCode = 1
-}
-finally {
-  db.dispose()
-}
+proc.on('exit', (code) => {
+  if (code === 0) {
+    if (newMigrationsApplied) {
+      console.log('⚡️ Database migrated.') 
+    } else {
+      console.log('⚡ Database already up to date.')
+    }
+  } else {
+     console.error(
+      '\x1b[31m',
+      'Failed to connect to the DB. Exit code: ' + code,
+      '\x1b[0m'
+    )
+  }
+})
