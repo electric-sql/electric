@@ -30,7 +30,7 @@ services:
       - pg_data:/var/lib/postgresql/data
 
   electric:
-    image: electricsql/electric:latest
+    image: electricsql/electric:0.7
     init: true
     environment:
       DATABASE_URL: "postgresql://postgres:password@postgres:5432/beer-stars"
