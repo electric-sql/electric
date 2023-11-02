@@ -20,7 +20,7 @@
     "start:ios": "expo start --ios"
   },
   "dependencies": {
-    "electric-sql": "latest",
+    "electric-sql": "^0.7.0",
     "expo": "~49.0.8",
     "expo-sqlite": "~11.3.3",
     "expo-status-bar": "~1.6.0",
@@ -32,7 +32,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.12.9",
-    "@electric-sql/prisma-generator": "latest",
+    "@electric-sql/prisma-generator": "^1.1.0",
     "@databases/pg-migrations": "^5.0.2",
     "@prisma/client": "4.8.1",
     "@tsconfig/react-native": "^2.0.2",
