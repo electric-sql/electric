@@ -13,6 +13,7 @@ The standard way to start Electric sync service is using the official Docker ima
 docker run \
     -e "DATABASE_URL=postgresql://..." \
     -e "LOGICAL_PUBLISHER_HOST=..." \
+    -e "PG_PROXY_PASSWORD=..." \
     -e "AUTH_JWT_ALG=HS512" \
     -e "AUTH_JWT_KEY=..." \
     -p 5133:5133 \
@@ -38,7 +39,9 @@ Everything in the table below that doesn't have a default value is required to r
 | `ELECTRIC_USE_IPV6`<p>&nbsp;&nbsp;(`false`)</p>     | Set to `yes` or `true` to make Electric listen on `::` instead of `0.0.0.0`. On Linux this allows inbound connections over both IPv6 and IPv4. On Windows and some BSD systems inbound connections will only be accepted over IPv6 when this setting is enabled.                                                                |
 | `LOGICAL_PUBLISHER_HOST`                            | Host of this electric instance for the reverse connection from Postgres. It has to be accessible from the Postgres instance that is running at `DATABASE_URL`.                                                                                                                                                                  |
 | `LOGICAL_PUBLISHER_PORT`<p>&nbsp;&nbsp;(`5433`)</p> | Port number to use for reverse connections from Postgres.                                                                                                                                                                                                                                                                       |
-| `HTTP_PORT`<p>&nbsp;&nbsp;(`5133`)</p>              | Port for HTTP connections. Includes client websocket connections on `/ws`, and other functions on `/api`                                                                                                                                                                                                                        |
+| `HTTP_PORT`<p>&nbsp;&nbsp;(`5133`)</p>              | Port for HTTP connections. Includes client websocket connections on `/ws`, and other functions on `/api`.                                                                                                                                                                                                                       |
+| `PG_PROXY_PORT`<p>&nbsp;&nbsp;(`65432`)</p>         | Port number for connections to the [Postgres migration proxy](https://electric-sql.com/docs/usage/data-modelling/migrations).                                                                                                                                                                                                   |
+| `PG_PROXY_PASSWORD`                                 | Password to use when connecting to the Postgres proxy via `psql` or any other Postgres client.                                                                                                                                                                                                                                  |
 
 ### Authentication
 
