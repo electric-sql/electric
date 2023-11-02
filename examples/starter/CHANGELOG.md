@@ -1,5 +1,28 @@
 # create-electric-app
 
+## 0.2.0
+
+### Minor Changes
+
+- d109a1e7: Major new release that introduces Electric Postgres Proxy, affecting all Electric components.
+
+### Patch Changes
+
+- 23d84eb6: Update the `db:psql` script to connect to the database using `psql` running inside of the postgres container.
+
+  This lifts the requirement of having a Postgres client installed on the host OS.
+
+- e5fb598a: Expose port 65432 used by the proxy and make it configurable. Modify the migration machinery to go through the proxy. Modify the starter template to use the new `ALTER TABLE ... ENABLE ELECTRIC` syntax.
+- cfded697: Modify CLI to introspect Postgres database through Electric's proxy.
+- dc1c576e: The starter app can now have multiple migrations and applying them with `yarn db:migrate` is now idempotent.
+- 0d879a88: Improved starter such that several (independent) Electric projects can run concurrently.
+  The starter now has 2 modes: fast mode and interactive mode.
+  In fast mode, you can provide the app name and optional ports for Electric and the webserver as arguments.
+  In interactive mode, the script will prompt for an app name and ports (suggesting defaults).
+  Port clashes are now detected and reported to the user.
+  The user can change the ports the app uses by invoking 'yarn ports:configure'.
+  Also fixes the bug where all Electric applications would forward requests to the esbuild server that is running on port 8000 instead of their own esbuild server.
+
 ## 0.1.6
 
 ### Patch Changes
