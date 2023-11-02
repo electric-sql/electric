@@ -214,7 +214,7 @@ await fs.appendFile(envrcFile, `export ELECTRIC_PROXY_PORT=${electricProxyPort}\
 // Same for `@electric-sql/prisma-generator`
 spinner.text = 'Installing dependencies (may take some time) ...'
 const proc = spawn(
-  'yarn install && yarn upgrade --exact electric-sql && yarn upgrade --exact @electric-sql/prisma-generator',
+  'yarn install && yarn upgrade --caret electric-sql && yarn upgrade --caret @electric-sql/prisma-generator',
   [],
   { stdio: ['ignore', 'ignore', 'pipe'], cwd: projectDir, shell: true }
 )
