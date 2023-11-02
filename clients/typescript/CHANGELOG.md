@@ -1,5 +1,30 @@
 # electric-sql
 
+## 0.7.0
+
+### Minor Changes
+
+- d109a1e7: Major new release that introduces Electric Postgres Proxy, affecting all Electric components.
+
+### Patch Changes
+
+- 0e24343d: [VAX-1078] Fix the issue where the client was unable to sync local writes of whole numbers to float columns.
+- d60e9ce5: handle exceptions properly in \_performSnapshot
+- 226c0048: Fix bug for table named "model"
+- d5ed97fc: prevent reconnect loop of doom on fatal errors
+- 449e7fef: Improve type-safety of the client
+- 318b26d6: Adds client-side support for booleans.
+- 00eb469d: Adds client-side support for float8 data type.
+- b5ba4823: Fix error that table already exists when re-generating client after having previously received a migration over the replication stream.
+- 3d98c1f6: New DB driver for capacitor-sqlite.
+- c1d637e3: Bump minimum capacitor-community/sqlite version to enable Android support
+- 88a53756: Adds client-side support for int2 and int4 types.
+- 3ae3f30a: Adds client-side support for timestamps, times, and dates.
+- 3fdb2890: Cleanup startingPromise in registry when the Satellite process fails to start
+- cfded697: Modify CLI to introspect Postgres database through Electric's proxy.
+- 9e9faf8b: Fixes bug with DB driver for expo-sqlite on Android.
+- 88a53756: Add client-side validations for UUIDs.
+
 ## 0.6.4
 
 ### Patch Changes

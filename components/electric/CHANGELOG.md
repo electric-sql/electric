@@ -1,5 +1,23 @@
 # @core/electric
 
+## 0.7.0
+
+### Minor Changes
+
+- d109a1e7: Major new release that introduces Electric Postgres Proxy, affecting all Electric components.
+
+### Patch Changes
+
+- ede28076: [VAX-1190] Electric crashes on too-big migrations
+- 37f3ee4c: Add ELECTRIC_USE_IPV6 configuration option to enable listening on IPv6 interfaces. Add DATABASE_USE_IPV6 configuration option to support connections to Postgres over IPv6.
+- 0ef13aa8: [VAX-907] Add a proxy for migration introspection and capture
+- cc35c12d: [VAX-1245] New extension migrations fail to apply on top of Electric v0.6.4 schema
+- 00eb469d: Adds client-side support for float8 data type.
+- ff27bc7d: [VAX-1172] Re-write DDLX parsing for improved compatibility and resiliency
+- 2a480884: [VAX-1195] Allow for user-set migration version to override automatically assigned version
+- 4092a9d3: [VAX-1212] add feature flag to temporarily disable DDLX commands
+- aa7c2650: Reject tables that have columns with DEFAULT expressions.
+
 ## 0.6.4
 
 ### Patch Changes
