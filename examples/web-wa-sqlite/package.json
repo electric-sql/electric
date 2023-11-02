@@ -1,9 +1,9 @@
 {
   "name": "electric-sql-wa-sqlite-example",
-  "version": "0.1.0",
-  "main": "builder.js",
+  "version": "0.7.0",
   "author": "ElectricSQL",
   "license": "Apache-2.0",
+  "main": "builder.js",
   "scripts": {
     "backend:start": "node ./backend/startCompose.js",
     "backend:stop": "docker compose --env-file backend/compose/.envrc -f backend/compose/docker-compose.yaml stop",
