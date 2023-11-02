@@ -27,7 +27,7 @@ export const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'column',
     alignItems: 'top',
-    height: 140
+    height: '100%'
   },
   item: {
     fontSize: 16,
