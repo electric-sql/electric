@@ -1,9 +1,9 @@
 {
-  "name": "@examples/web-wa-sqlite",
-  "version": "0.1.0",
-  "main": "builder.js",
+  "name": "electric-sql-wa-sqlite-example",
+  "version": "0.7.0",
   "author": "ElectricSQL",
   "license": "Apache-2.0",
+  "main": "builder.js",
   "scripts": {
     "backend:start": "node ./backend/startCompose.js",
     "backend:stop": "docker compose --env-file backend/compose/.envrc -f backend/compose/docker-compose.yaml stop",
@@ -24,14 +24,14 @@
     "node": ">=16.11.0"
   },
   "dependencies": {
-    "electric-sql": "latest",
+    "electric-sql": "^0.7.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "wa-sqlite": "rhashimoto/wa-sqlite"
   },
   "devDependencies": {
     "@databases/pg-migrations": "^5.0.2",
-    "@electric-sql/prisma-generator": "latest",
+    "@electric-sql/prisma-generator": "^1.1.0",
     "@prisma/client": "4.8.1",
     "@types/node": ">=16.11.0",
     "@types/react": "^18.0.18",
