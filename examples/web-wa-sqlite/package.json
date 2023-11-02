@@ -1,5 +1,5 @@
 {
-  "name": "@examples/web-wa-sqlite",
+  "name": "electric-sql-wa-sqlite-example",
   "version": "0.1.0",
   "main": "builder.js",
   "author": "ElectricSQL",
