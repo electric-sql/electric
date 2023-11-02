@@ -12,7 +12,7 @@ However, it's common to manage the Postgres data model using a migrations system
 :::caution Migrations proxy
 Note that migrations should be applied via the migrations proxy as detailed in the [migrations guide](../../usage/data-modelling/migrations.md#migrations-proxy).
 
-This often means using a different `DATABASE_URL`  or otherwise adapting your database config to connect to the proxy when running your migration scripts.
+This often means using a different `DATABASE_URL` for your migrations scripts vs your main application.
 :::
 
 Some frameworks also provide or work with Postgres change data capture tooling, such as logical replication consumers. This can be useful for [Event sourcing](../event-sourcing/index.md).

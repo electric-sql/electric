@@ -45,6 +45,8 @@ yarn start
 - you don't already have a publication called `electric_publication`
 - you have a database user with [adequate permissions](../../usage/installation/postgres.md#permissions) -- the simplest being `SUPERUSER`
 
+<!--
+
 ### Running the sync service
 
 Instead of `yarn backend:start`, run:
@@ -69,6 +71,8 @@ DATABASE_URL="postgresql://..." yarn db:migrate
 Note that this time, the database URL is used by the migration script (not running in Docker), so there's no need to use `host.docker.internal`.
 :::
 
+-->
+
 ### Postgres <-> Electric interactions
 
 The Electric sync service connects to Postgres using the `DATABASE_URL` environment variable. Postgres connects to Electric to consume a logical replication publication using the `LOGICAL_PUBLISHER_HOST` (and `LOGICAL_PUBLISHER_PORT`) environment variables:
@@ -79,4 +83,8 @@ Postgres |                               | Electric
          |-----LOGICAL_PUBLISHER_HOST--->|
 ```
 
+<!--
+
 With the `yarn electric:start` script, `LOGICAL_PUBLISHER_HOST` defaults to `localhost`. If your sync service is running on a different host, you may need to change this. Either by patching the `./backend/startElectric.js` script, or by just running the Electric sync service directly using the `docker run` command shown in <DocPageLink path="api/service" />.
+
+-->
