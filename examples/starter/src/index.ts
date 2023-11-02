@@ -17,7 +17,7 @@ const spinner = ora('Validating arguments').start()
 
 const error = (err: string) => {
   spinner.stop()
-  console.error('\x1b[31m', err + '\nnpx create-electric-app [<app-name>] [--electric-port <port>] [--electric-proxy-port <port>] [--webserver-port <port>]', '\x1b[0m')
+  console.error('\x1b[31m', err + '\nnpx create-electric-app [<app-name>] [--electric-image-tag <tag>] [--electric-port <port>] [--electric-proxy-port <port>] [--webserver-port <port>]', '\x1b[0m')
   process.exit(1)
 }
 
@@ -26,6 +26,7 @@ let args = process.argv.slice(3)
 let electricPort = 5133 // default port for Electric
 let electricProxyPort = 65432 // default port for Electric proxy
 let webserverPort = 3001 // default port for the webserver
+let electricImageTag = 'latest'
 
 // Validate the provided command line arguments
 while (args.length > 0) {
@@ -42,6 +43,10 @@ while (args.length > 0) {
   }
 
   switch (flag) {
+    case '--electric-image-tag':
+      checkValue()
+      electricImageTag = value
+      break
     case '--electric-port':
       checkValue()
       electricPort = parsePort(value)
@@ -227,20 +232,27 @@ proc.stderr.on('data', (data) => {
 proc.on('close', async (code) => {
   if (code === 0) {
     // Pull latest electric image from docker hub
-    // such that we are sure that it is compatible with the latest client
-    spinner.text = 'Pulling latest Electric image'
-    shell.exec('docker pull electricsql/electric:latest', { silent: true })
-    
-    const { stdout } = shell.exec("docker image inspect --format '{{.RepoDigests}}' electricsql/electric:latest", { silent: true })
-    const parsedHash = /^\[(.+)\]/.exec(stdout)
-    let electricImage = 'electricsql/electric:latest'
-    if (parsedHash) {
-      electricImage = parsedHash[1]
+    // unless a version has been specified on the command line
+    let electricImage = `electricsql/electric:${electricImageTag}`
+
+    let spinnerText
+    if (electricImageTag === 'latest') {
+      spinnerText = 'the latest Electric image'
+    } else {
+      spinnerText = electricImage
     }
-    else {
+    spinner.text = `Pulling ${spinnerText} from Docker Hub`
+    shell.exec(`docker pull ${electricImage}`, { silent: true })
+
+    const { stdout } = shell.exec(`docker image inspect --format '{{.RepoDigests}}' ${electricImage}`, { silent: true })
+    const parsedHash = /^\[(.+)\]/.exec(stdout)
+
+    if (electricImageTag === 'latest' && parsedHash) {
+      electricImage = parsedHash[1]
+    } else if (!parsedHash) {
       // electric image hash not found
-      // ignore it, and just let .envrc point to electricsql/electric:latest
-      console.info("Could not find hash of electric image. Using 'electricsql/electric:latest' instead.")
+      // ignore it, and just let .envrc point to the default or user-provided image tag
+      console.info(`Could not find hash of electric image. Using '${electricImage}' instead.`)
     }
 
     // write the electric image to use to .envrc file
