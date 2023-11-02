@@ -11,23 +11,18 @@ import * as SQLite from 'wa-sqlite'
 import { IDBBatchAtomicVFS } from 'wa-sqlite/src/examples/IDBBatchAtomicVFS.js'
 
 import { SqlValue, Statement } from '../../util'
-import { QueryExecResult } from '../util/results'
+import { Row } from '../../util/types'
 
 import { Mutex } from 'async-mutex'
+import { resultToRows } from '../util/results'
 
-const emptyResult = {
-  columns: [],
-  values: [],
-}
+export type Database = Pick<
+  ElectricDatabase,
+  'name' | 'exec' | 'getRowsModified'
+>
 
-export interface Database {
-  name: string
-  exec(statement: Statement): Promise<QueryExecResult>
-  getRowsModified(): number
-}
-
-export class ElectricDatabase implements Database {
-  mutex: Mutex
+export class ElectricDatabase {
+  #mutex: Mutex
 
   // Do not use this constructor directly.
   // Create a Database instance using the static `init` method instead.
@@ -36,13 +31,13 @@ export class ElectricDatabase implements Database {
     private sqlite3: SQLiteAPI,
     private db: number
   ) {
-    this.mutex = new Mutex()
+    this.#mutex = new Mutex()
   }
 
-  async exec(statement: Statement): Promise<QueryExecResult> {
+  async exec(statement: Statement): Promise<Row[]> {
     // Uses a mutex to ensure that the execution of SQL statements is not interleaved
     // otherwise wa-sqlite may encounter problems such as indices going out of bounds
-    const release = await this.mutex.acquire()
+    const release = await this.#mutex.acquire()
 
     const str = this.sqlite3.str_new(this.db, statement.sql)
     let prepared
@@ -57,7 +52,7 @@ export class ElectricDatabase implements Database {
 
     if (prepared === null) {
       release()
-      return emptyResult
+      return []
     }
 
     const stmt = prepared.stmt
@@ -80,10 +75,11 @@ export class ElectricDatabase implements Database {
         rows.push(row)
       }
 
-      return {
+      const res = {
         columns: cols,
         values: rows,
       }
+      return resultToRows(res)
     } finally {
       await this.sqlite3.finalize(stmt)
       release()

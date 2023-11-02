@@ -21,12 +21,6 @@ export class DatabaseAdapter
   }
 
   async run({ sql, args }: Statement): Promise<RunResult> {
-    if (args && !Array.isArray(args)) {
-      throw new Error(
-        `capacitor-sqlite doesn't support named query parameters, use positional parameters instead`
-      )
-    }
-
     const wrapInTransaction = false // Default is true. electric calls run from within transaction<T> so we need to disable transactions here.
 
     const result = await this.db.run(sql, args, wrapInTransaction)
@@ -35,12 +29,6 @@ export class DatabaseAdapter
   }
 
   async runInTransaction(...statements: Statement[]): Promise<RunResult> {
-    if (statements.some((x) => x.args && !Array.isArray(x.args))) {
-      throw new Error(
-        `capacitor-sqlite doesn't support named query parameters, use positional parameters instead`
-      )
-    }
-
     const set: capSQLiteSet[] = statements.map(({ sql, args }) => ({
       statement: sql,
       values: (args ?? []) as SqlValue[],
@@ -54,11 +42,6 @@ export class DatabaseAdapter
   }
 
   async query({ sql, args }: Statement): Promise<Row[]> {
-    if (args && !Array.isArray(args)) {
-      throw new Error(
-        `capacitor-sqlite doesn't support named query parameters, use positional parameters instead`
-      )
-    }
     const result = await this.db.query(sql, args)
     return result.values ?? []
   }

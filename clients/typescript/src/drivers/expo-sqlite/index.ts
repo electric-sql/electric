@@ -40,7 +40,7 @@ export const electrify = async <T extends Database, DB extends DbSchema<any>>(
   config: ElectricConfig,
   opts?: ElectrifyOptions
 ): Promise<ElectricClient<DB>> => {
-  const dbName: DbName = db._name!
+  const dbName: DbName = db._name
   const adapter = opts?.adapter || new DatabaseAdapter(db)
   const socketFactory = opts?.socketFactory || WebSocketReactNative
 

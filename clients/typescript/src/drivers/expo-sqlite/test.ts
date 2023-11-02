@@ -11,7 +11,7 @@ import { MockRegistry } from '../../satellite/mock'
 
 import { DatabaseAdapter } from './adapter'
 import { Database } from './database'
-import { MockDatabase, MockWebSQLDatabase } from './mock'
+import { MockDatabase } from './mock'
 import { MockSocket } from '../../sockets/mock'
 import { ElectricConfig } from '../../config'
 import { ElectricClient } from '../../client/model/client'
@@ -52,20 +52,18 @@ export async function initTestable<
   webSql: true,
   config?: ElectricConfig,
   opts?: ElectrifyOptions
-): RetVal<S, N, MockWebSQLDatabase>
+): RetVal<S, N, MockDatabase>
 export async function initTestable<
   S extends DbSchema<any>,
   N extends Notifier = MockNotifier
 >(
   dbName: DbName,
   dbDescription: S,
-  useWebSQLDatabase = false,
+  _useWebSQLDatabase = false,
   config: ElectricConfig = testConfig,
   opts?: ElectrifyOptions
 ): RetVal<S, N> {
-  const db = useWebSQLDatabase
-    ? new MockWebSQLDatabase(dbName)
-    : new MockDatabase(dbName)
+  const db = new MockDatabase(dbName)
 
   const adapter = opts?.adapter || new DatabaseAdapter(db)
   const migrator = opts?.migrator || new MockMigrator()

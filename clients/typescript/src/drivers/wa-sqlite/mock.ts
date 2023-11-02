@@ -1,8 +1,6 @@
-import { Database } from './database'
-import { DbName, Statement } from '../../util'
-import { QueryExecResult } from '../util/results'
+import { DbName, Row, Statement } from '../../util'
 
-export class MockDatabase implements Database {
+export class MockDatabase {
   name: DbName
   fail: Error | undefined
 
@@ -11,18 +9,15 @@ export class MockDatabase implements Database {
     this.fail = fail
   }
 
-  async exec(_statement: Statement): Promise<QueryExecResult> {
+  async exec(_statement: Statement): Promise<Row[]> {
     if (typeof this.fail !== 'undefined') throw this.fail
 
     const dbName = this.name
 
-    return {
-      columns: ['db', 'val'],
-      values: [
-        [dbName, 1],
-        [dbName, 2],
-      ],
-    }
+    return [
+      { db: dbName, val: 1 },
+      { db: dbName, val: 2 },
+    ]
   }
 
   getRowsModified(): number {

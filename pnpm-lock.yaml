@@ -202,8 +202,8 @@ importers:
         specifier: ^8.22.0
         version: 8.41.0
       expo-sqlite:
-        specifier: ^11.0.0
-        version: 11.1.1(expo@48.0.19)
+        specifier: ^11.7.0
+        version: 11.7.0(expo@48.0.19)
       husky:
         specifier: ^8.0.3
         version: 8.0.3
@@ -7247,8 +7247,8 @@ packages:
       invariant: 2.2.4
     dev: true
 
-  /expo-sqlite@11.1.1(expo@48.0.19):
-    resolution: {integrity: sha512-93KQ4Bc4+xQF2nOZC2jcJ+d0K1ooQSEYganLukw4Sp2LuxUtBsPXYTyOeisSxQSMMaz9nHiTqag8DEC1MiB7Xw==}
+  /expo-sqlite@11.7.0(expo@48.0.19):
+    resolution: {integrity: sha512-z/YudIROUJFO46TWCyEqrWH31o17xMO0ALEobsIovBk6oM/HZmWXUdEKJeWvrdM1fBvoBZ8mVa//n3B5qBLdtQ==}
     peerDependencies:
       expo: '*'
     dependencies:
