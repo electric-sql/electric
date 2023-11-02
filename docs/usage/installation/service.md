@@ -11,14 +11,16 @@ You can run the [pre-packaged Docker images](#images) published on Docker Hub, o
 
 ## Configuration
 
-The Electric sync service is configured using environment variables. The two required variables are:
+The Electric sync service is configured using environment variables. The three required variables are:
 
 - `DATABASE_URL` in the format of a Postgres [Connection URI](https://www.postgresql.org/docs/current/libpq-connect.html#id-1.7.3.8.3.6)
 - `LOGICAL_PUBLISHER_HOST` that the sync service is running on (must be accessible from the Postgres instance to establish an inbound replication subscription)
+- `PG_PROXY_PASSWORD` to safe-guard access to the [Migrations proxy](../data-modelling/migrations.md#migrations-proxy)
 
 ```shell
 DATABASE_URL="postgresql://user:password@localhost:5432/electric"
 LOGICAL_PUBLISHER_HOST="localhost"
+PG_PROXY_PASSWORD="..."
 ```
 
 See <DocPageLink path="api/service" /> for the full list of configuration options.
@@ -30,10 +32,11 @@ See <DocPageLink path="api/service" /> for the full list of configuration option
 Pre-packaged images are available on Docker Hub at [electricsql/electric](https://hub.docker.com/r/electricsql/electric). Run using e.g.:
 
 ```shell
-docker pull electricsql/electric:latest 
+docker pull electricsql/electric:latest
 docker run \
     -e "DATABASE_URL=postgresql://..." \
     -e "LOGICAL_PUBLISHER_HOST=..." \
+    -e "PG_PROXY_PASSWORD=..." \
     -e "AUTH_MODE=insecure" \
     -p 5133:5133 \
     -p 5433:5433 \
@@ -42,7 +45,7 @@ docker run \
 
 ### Compose
 
-You can deploy the sync service together with [a Postgres database](./postgres.md) in a Docker Compose file. For example:
+You can deploy the sync service together with [a Postgres database](./postgres.md) in a Docker Compose file. For example, save below contents to a file named `compose.yaml`:
 
 ```yaml
 version: '3.1'
@@ -65,10 +68,17 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:pwd@pg
       LOGICAL_PUBLISHER_HOST: electric
+      PG_PROXY_PASSWORD: proxy_password
       AUTH_MODE: insecure
     ports:
       - 5133:5133
     restart: always
+```
+
+Then start the services:
+
+```shell
+docker compose -f compose.yaml up
 ```
 
 ### Build
@@ -85,6 +95,7 @@ Then run:
 docker run \
     -e "DATABASE_URL=postgresql://..." \
     -e "LOGICAL_PUBLISHER_HOST=..." \
+    -e "PG_PROXY_PASSWORD=..." \
     -e "AUTH_MODE=insecure" \
     -p 5133:5133 \
     -p 5433:5433 \

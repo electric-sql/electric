@@ -66,4 +66,4 @@ Change into the `linearlite` example directory:
 cd electric/examples/linearlite
 ```
 
-Follow the instructions in the [README.md](https://github.com/electric-sql/electric/blob/main/examples/linearlite/README.md) and see the page here on [running the examples](./notes/running.md).
+Follow the instructions in the [README.md](https://github.com/electric-sql/electric/blob/main/examples/linearlite/README.md) and see the page here on [running the examples](./notes/running).
