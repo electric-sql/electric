@@ -24,14 +24,14 @@
     "node": ">=16.11.0"
   },
   "dependencies": {
-    "electric-sql": "latest",
+    "electric-sql": "^0.7.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "wa-sqlite": "rhashimoto/wa-sqlite"
   },
   "devDependencies": {
     "@databases/pg-migrations": "^5.0.2",
-    "@electric-sql/prisma-generator": "latest",
+    "@electric-sql/prisma-generator": "^1.1.0",
     "@prisma/client": "4.8.1",
     "@types/node": ">=16.11.0",
     "@types/react": "^18.0.18",

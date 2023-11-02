@@ -163,10 +163,10 @@
   resolved "https://registry.yarnpkg.com/@databases/validate-unicode/-/validate-unicode-1.0.0.tgz#9c7680901e82d5c572edead678ac8ad489511ec0"
   integrity sha512-dLKqxGcymeVwEb/6c44KjOnzaAafFf0Wxa8xcfEjx/qOl3rdijsKYBAtIGhtVtOlpPf/PFKfgTuFurSPn/3B/g==
 
-"@electric-sql/prisma-generator@1.0.2":
-  version "1.0.2"
-  resolved "https://registry.yarnpkg.com/@electric-sql/prisma-generator/-/prisma-generator-1.0.2.tgz#f40f03412ab95363ccc20d9fd90d6c603710d5e1"
-  integrity sha512-HB3uh4ZsCjnBaU1r89w0RG1UrDmqTaQvWCP2Uutrm/P/L7cEkitFYjKHjR1BoAu4S5SoqbpRxfFFHRitUARc4g==
+"@electric-sql/prisma-generator@^1.1.0":
+  version "1.1.0"
+  resolved "https://registry.yarnpkg.com/@electric-sql/prisma-generator/-/prisma-generator-1.1.0.tgz#a8f67e93dc48e9c09cbb81a8ebc53ca9a9b2e814"
+  integrity sha512-hUG8vy4tc8pIklYyqNkVvZqZ3GnCUVPh4hbQpsNs/IrHsqM3yH8gSOdz+wo2Q0MaAeIj34zF10KsQIJxHXRe5w==
   dependencies:
     "@prisma/generator-helper" "^4.11.0"
     code-block-writer "^11.0.3"
@@ -951,10 +951,10 @@ detect-libc@^2.0.0:
   resolved "https://registry.yarnpkg.com/detect-libc/-/detect-libc-2.0.2.tgz#8ccf2ba9315350e1241b88d0ac3b0e1fbd99605d"
   integrity sha512-UX6sGumvvqSaXgdKGUsgZWqcUyIXZ/vZTrlRT/iobiKhGL0zL4d3osHj3uqllWJK+i+sixDS/3COVEOFbupFyw==
 
-electric-sql@0.6.4:
-  version "0.6.4"
-  resolved "https://registry.yarnpkg.com/electric-sql/-/electric-sql-0.6.4.tgz#7b1d45a4b453f3614243e3ed926d5f2a62cc47db"
-  integrity sha512-o8WxzqsCf6AQJjdpmxjmt/XT8IGKwUe94K1WVwJxcDpbqRRHV63HbTVLSUbyQDHbQZBKLxjOV5WmSRgrYPjtgA==
+electric-sql@^0.7.0:
+  version "0.7.0"
+  resolved "https://registry.yarnpkg.com/electric-sql/-/electric-sql-0.7.0.tgz#0690218e0339f19972d9e1d5ddf5bd174afb1f35"
+  integrity sha512-lPwhr1gJZVN5UjTLMd2htpSu8wTSRT5hNISG6jYCTFPsaaNX4WhXKS2QUnvVHhwc8XdlNOKpVkyrLOAD+cnwYw==
   dependencies:
     async-mutex "^0.4.0"
     base-64 "^1.0.0"
