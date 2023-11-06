@@ -150,6 +150,16 @@ defmodule Electric.Postgres.Proxy.Handler do
     handle_messages(msgs, socket, state)
   end
 
+  # https://www.postgresql.org/docs/current/protocol-flow.html#PROTOCOL-FLOW-CANCELING-REQUESTS
+  # > To issue a cancel request, the frontend opens a new connection to the server and sends a
+  # > CancelRequest message, rather than the StartupMessage message that would ordinarily be sent
+  # > across a new connection. The server will process this request and then close the connection.
+  # > For security reasons, no direct reply is made to the cancel request message.
+  defp handle_messages([%M.CancelRequest{} | _msgs], _socket, state) do
+    Logger.warning("Recieved unhandled CancelRequest message from client")
+    {:close, state}
+  end
+
   defp handle_messages([%M.StartupMessage{} = msg | msgs], socket, state) do
     case msg.params do
       %{"user" => username, "database" => database, "password" => password} ->
