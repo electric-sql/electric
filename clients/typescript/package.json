@@ -232,7 +232,7 @@
     "wa-sqlite": "git+https://github.com/rhashimoto/wa-sqlite#master"
   },
   "peerDependenciesMeta": {
-    "capacitor-community/sqlite": {
+    "@capacitor-community/sqlite": {
       "optional": true
     },
     "cordova-sqlite-storage": {
