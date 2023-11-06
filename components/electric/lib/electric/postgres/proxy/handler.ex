@@ -134,9 +134,30 @@ defmodule Electric.Postgres.Proxy.Handler do
     {:continue, state}
   end
 
+  # > To initiate an SSL-encrypted connection, the frontend initially sends an SSLRequest message
+  # > rather than a StartupMessage. The server then responds with a single byte containing S or N,
+  # > indicating that it is willing or unwilling to perform SSL, respectively.
   defp handle_messages([%M.SSLRequest{} | msgs], socket, state) do
     downstream("N", socket, state)
     handle_messages(msgs, socket, state)
+  end
+
+  # > To initiate a GSSAPI-encrypted connection, the frontend initially sends a GSSENCRequest
+  # > message rather than a StartupMessage. The server then responds with a single byte containing G
+  # > or N, indicating that it is willing or unwilling to perform GSSAPI encryption, respectively
+  defp handle_messages([%M.GSSENCRequest{} | msgs], socket, state) do
+    downstream("N", socket, state)
+    handle_messages(msgs, socket, state)
+  end
+
+  # https://www.postgresql.org/docs/current/protocol-flow.html#PROTOCOL-FLOW-CANCELING-REQUESTS
+  # > To issue a cancel request, the frontend opens a new connection to the server and sends a
+  # > CancelRequest message, rather than the StartupMessage message that would ordinarily be sent
+  # > across a new connection. The server will process this request and then close the connection.
+  # > For security reasons, no direct reply is made to the cancel request message.
+  defp handle_messages([%M.CancelRequest{} | _msgs], _socket, state) do
+    Logger.warning("Recieved unhandled CancelRequest message from client")
+    {:close, state}
   end
 
   defp handle_messages([%M.StartupMessage{} = msg | msgs], socket, state) do
