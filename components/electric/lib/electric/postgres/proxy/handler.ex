@@ -134,7 +134,18 @@ defmodule Electric.Postgres.Proxy.Handler do
     {:continue, state}
   end
 
+  # > To initiate an SSL-encrypted connection, the frontend initially sends an SSLRequest message
+  # > rather than a StartupMessage. The server then responds with a single byte containing S or N,
+  # > indicating that it is willing or unwilling to perform SSL, respectively.
   defp handle_messages([%M.SSLRequest{} | msgs], socket, state) do
+    downstream("N", socket, state)
+    handle_messages(msgs, socket, state)
+  end
+
+  # > To initiate a GSSAPI-encrypted connection, the frontend initially sends a GSSENCRequest
+  # > message rather than a StartupMessage. The server then responds with a single byte containing G
+  # > or N, indicating that it is willing or unwilling to perform GSSAPI encryption, respectively
+  defp handle_messages([%M.GSSENCRequest{} | msgs], socket, state) do
     downstream("N", socket, state)
     handle_messages(msgs, socket, state)
   end
