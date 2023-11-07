@@ -516,6 +516,11 @@ defmodule Electric.Satellite.Serialization do
     val
   end
 
+  def decode_column_value!(val, type) when type in [:json, :jsonb] do
+    _ = Jason.decode!(val)
+    val
+  end
+
   def decode_column_value!(val, :time) do
     <<hh::binary-2, ?:, mm::binary-2, ?:, ss::binary-2>> <> frac = val
 
