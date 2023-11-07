@@ -563,6 +563,12 @@ defmodule Electric.Satellite.Protocol do
         {incomplete, complete} ->
           complete = Enum.reverse(complete)
 
+          {accepted, rejected} =
+            Electric.Satellite.Protocol.WriteValidation.validate_transactions!(
+              complete,
+              Connectors.origin(state.pg_connector_opts)
+            )
+
           for tx <- complete do
             telemetry_event(state, :transaction_receive, Transaction.count_operations(tx))
           end
