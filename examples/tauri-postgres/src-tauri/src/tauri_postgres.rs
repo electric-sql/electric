@@ -52,7 +52,9 @@ pub async fn tauri_pg_setup(
 pub async fn tauri_pg_init_database(database_dir: &str) -> PgEmbed {
     // let database_dir = PathBuf::from("../resources/data_test/db");
     let database_dir = PathBuf::from(database_dir);
-    let mut pg: PgEmbed = tauri_pg_setup(33333, database_dir, true, None).await.unwrap();
+    let mut pg: PgEmbed = tauri_pg_setup(33333, database_dir, true, None)
+        .await
+        .unwrap();
 
     pg.start_db().await.expect("start_db should not fail here");
     let db_name = "test";
@@ -65,8 +67,14 @@ pub async fn tauri_pg_init_database(database_dir: &str) -> PgEmbed {
     let mut conn = tauri_pg_connect(&pg, "test").await;
 
     // TODO: When
-    let _ = sqlx::query("ALTER SCHEMA public RENAME TO main;").execute(&mut conn).await.unwrap();
-    let _ = sqlx::query("ALTER DATABASE test SET search_path TO main;").execute(&mut conn).await.unwrap();
+    let _ = sqlx::query("ALTER SCHEMA public RENAME TO main;")
+        .execute(&mut conn)
+        .await
+        .unwrap();
+    let _ = sqlx::query("ALTER DATABASE test SET search_path TO main;")
+        .execute(&mut conn)
+        .await
+        .unwrap();
 
     pg.migrate(db_name).await.unwrap();
 
@@ -74,7 +82,9 @@ pub async fn tauri_pg_init_database(database_dir: &str) -> PgEmbed {
 }
 
 pub async fn tauri_pg_connect(pg: &PgEmbed, db_name: &str) -> PgConnection {
-    PgConnection::connect(pg.full_db_uri(db_name).as_str()).await.unwrap()
+    PgConnection::connect(pg.full_db_uri(db_name).as_str())
+        .await
+        .unwrap()
 }
 
 // https://stackoverflow.com/a/72904564

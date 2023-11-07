@@ -9,7 +9,7 @@
     "backend:start": "docker compose --env-file backend/compose/.envrc -f backend/compose/docker-compose.yaml up",
     "backend:stop": "npm run backend:down",
     "backend:up": "docker compose --env-file backend/compose/.envrc -f backend/compose/docker-compose.yaml up --detach",
-    "client:generate": "npx electric-sql@latest generate",
+    "client:generate": "npx electric-sql@0.6.4 generate",
     "client:watch": "npx electric-sql generate --watch",
     "db:migrate": "node ./db/migrate.js",
     "db:psql": "node ./db/connect.js",

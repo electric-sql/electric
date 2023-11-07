@@ -16,8 +16,8 @@ use pg_embed::postgres::PgEmbed;
 
 // Tauri
 use tauri::async_runtime::block_on;
-use tauri::{State, WindowEvent};
 use tauri::Manager;
+use tauri::{State, WindowEvent};
 
 // Tauri plug-ins
 use tauri_plugin_log::LogTarget;
@@ -34,6 +34,7 @@ use std::{
     time::Duration,
 };
 use tauri::async_runtime::Mutex as AsyncMutex;
+
 
 /**
  * Structures
@@ -174,10 +175,7 @@ async fn tauri_exec(
     bind_params: BindParams,
 ) -> QueryResult {
     let sql2 = replace_question_marks(sql);
-    println!(
-        "tauri_exec input\n{}\n{:?}",
-        sql2, bind_params
-    );
+    println!("tauri_exec input\n{}\n{:?}", sql2, bind_params);
 
     let mut args = PgArguments::default();
 
