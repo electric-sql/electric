@@ -280,6 +280,7 @@ function makeFilter(
     // an object containing filters is provided
     // e.g. users.findMany({ where: { id: { in: [1, 2, 3] } } })
     const fs = {
+      equals: z.any(),
       in: z.any().array().optional(),
       not: z.any().optional(),
       notIn: z.any().optional(),
@@ -293,6 +294,7 @@ function makeFilter(
     }
 
     const fsHandlers = {
+      equals: makeEqualsFilter.bind(null),
       in: makeInFilter.bind(null),
       not: makeNotFilter.bind(null),
       notIn: makeNotInFilter.bind(null),
@@ -378,6 +380,13 @@ function makeBooleanFilter(
     // Join all filters in `sqlStmts` using the requested connective (which is 'OR' or 'NOT')
     return joinStatements(sqlStmts, fieldName)
   }
+}
+
+function makeEqualsFilter(
+  fieldName: string,
+  value: unknown | undefined
+): { sql: string; args?: unknown[] } {
+  return { sql: `${fieldName} = ?`, args: [value] }
 }
 
 function makeInFilter(
