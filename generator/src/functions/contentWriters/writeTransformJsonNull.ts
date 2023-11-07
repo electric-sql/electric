@@ -17,24 +17,6 @@ export const writeTransformJsonNull = ({
     .newLine()
     .write(`export type NullableJsonInput = `)
     .write(`Prisma.JsonValue | `)
-    .write(`null | `)
-    .write(`'JsonNull' | `)
-    .write(`'DbNull' | `)
-    .write(`Prisma.NullTypes.DbNull | `)
-    .write(`Prisma.NullTypes.JsonNull;`)
+    .write(`null;`)
     .blankLine()
-
-  writer
-    .write(`export const transformJsonNull = (v?: NullableJsonInput) => `)
-    .inlineBlock(() => {
-      writer
-        .writeLine(`if (!v || v === 'DbNull') return Prisma.DbNull;`)
-        .writeLine(`if (v === 'JsonNull') return Prisma.JsonNull;`)
-        .writeLine(`return v;`)
-    })
-    .write(`;`)
-
-  if (useMultipleFiles && !getSingleFileContent) {
-    writer.blankLine().writeLine(`export default transformJsonNull;`)
-  }
 }

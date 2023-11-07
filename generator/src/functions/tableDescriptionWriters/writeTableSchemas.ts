@@ -79,6 +79,10 @@ export function writeTableSchemas(
   writer
     .writeLine('export const schema = new DbSchema(tableSchemas, migrations)')
     .writeLine('export type Electric = ElectricClient<typeof schema>')
+    .conditionalWriteLine(
+      dmmf.schema.hasJsonTypes,
+      'export const JsonNull = { __is_electric_json_null__: true }'
+    )
 }
 
 export function writeFieldsMap(
@@ -120,7 +124,7 @@ function pgType(field: ExtendedDMMFField, modelName: string): string {
       return 'DECIMAL'
     case 'Float':
       return 'FLOAT8'
-    case 'JSON':
+    case 'Json':
       return 'JSON'
     default:
       return 'UNRECOGNIZED PRISMA TYPE'

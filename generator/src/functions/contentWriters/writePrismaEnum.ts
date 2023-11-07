@@ -24,23 +24,11 @@ export const writePrismaEnum = (
     })
     writer.write(`]);`)
   } else {
-    writer
-      .conditionalWrite(
-        useMultipleFiles && name.includes('NullableJson'),
-        `import transformJsonNull from './transformJsonNull'`
-      )
-      .blankLine()
-      .write(`export const ${name}Schema = z.enum([`)
+    writer.blankLine().write(`export const ${name}Schema = z.enum([`)
     values.forEach((value) => {
       writer.write(`'${value}',`)
     })
-    writer
-      .write(`])`)
-      .conditionalWrite(!name.includes('Nullable'), `;`)
-      .conditionalWrite(
-        name.includes('Nullable'),
-        `.transform((v) => transformJsonNull(v));`
-      )
+    writer.write(`])`).conditionalWrite(!name.includes('Nullable'), `;`)
   }
 
   if (useMultipleFiles && !getSingleFileContent) {
