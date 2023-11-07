@@ -10,11 +10,12 @@ import {
   DbName,
   LSN,
   DataTransaction,
-  Transaction,
-  Relation,
   StartReplicationResponse,
   StopReplicationResponse,
   ErrorCallback,
+  TransactionCallback,
+  RelationCallback,
+  OutboundStartedCallback,
 } from '../util/types'
 import {
   ClientShapeDefinition,
@@ -63,7 +64,7 @@ export interface Satellite {
   connectivityState?: ConnectivityState
 
   start(authConfig: AuthConfig): Promise<ConnectionWrapper>
-  stop(): Promise<void>
+  stop(shutdown?: boolean): Promise<void>
   subscribe(
     shapeDefinitions: ClientShapeDefinition[]
   ): Promise<ShapeSubscription>
@@ -72,31 +73,29 @@ export interface Satellite {
 
 export interface Client {
   connect(): Promise<void>
-  close(): void
+  disconnect(): void
+  shutdown(): void
   authenticate(authState: AuthState): Promise<AuthResponse>
-  isClosed(): boolean
+  isConnected(): boolean
   startReplication(
     lsn?: LSN,
     schemaVersion?: string,
     subscriptionIds?: string[]
   ): Promise<StartReplicationResponse>
   stopReplication(): Promise<StopReplicationResponse>
-  subscribeToRelations(callback: (relation: Relation) => void): void
-  subscribeToTransactions(
-    callback: (transaction: Transaction) => Promise<void>
-  ): void
+  subscribeToRelations(callback: RelationCallback): void
+  unsubscribeToRelations(callback: RelationCallback): void
+  subscribeToTransactions(callback: TransactionCallback): void
+  unsubscribeToTransactions(callback: TransactionCallback): void
   enqueueTransaction(transaction: DataTransaction): void
   getLastSentLsn(): LSN
-  subscribeToOutboundEvent(event: 'started', callback: () => void): void
-  unsubscribeToOutboundEvent(event: 'started', callback: () => void): void
+  subscribeToOutboundStarted(callback: OutboundStartedCallback): void
+  unsubscribeToOutboundStarted(callback: OutboundStartedCallback): void
   subscribeToError(callback: ErrorCallback): void
   unsubscribeToError(callback: ErrorCallback): void
 
   subscribe(subId: string, shapes: ShapeRequest[]): Promise<SubscribeResponse>
   unsubscribe(subIds: string[]): Promise<UnsubscribeResponse>
-
-  // TODO: there is currently no way of unsubscribing from the server
-  // unsubscribe(subscriptionId: string): Promise<void>
 
   subscribeToSubscriptionEvents(
     successCallback: SubscriptionDeliveredCallback,

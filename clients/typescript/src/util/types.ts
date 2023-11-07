@@ -181,5 +181,14 @@ export enum ReplicationStatus {
 }
 
 export type ErrorCallback = (error: SatelliteError) => void
+export type RelationCallback = (relation: Relation) => void
+export type TransactionCallback = (
+  transaction: DataTransaction
+) => Promise<void>
+export type IncomingTransactionCallback = (
+  transaction: DataTransaction,
+  AckCb: () => void
+) => void
+export type OutboundStartedCallback = (lsn: LSN) => void
 
 export type ConnectivityState = 'available' | 'connected' | 'disconnected'

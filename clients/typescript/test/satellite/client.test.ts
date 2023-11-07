@@ -2,7 +2,6 @@ import anyTest, { TestFn } from 'ava'
 import Long from 'long'
 import * as Proto from '../../src/_generated/protocol/satellite'
 import { AuthState } from '../../src/auth'
-import { MockNotifier } from '../../src/notifiers'
 import {
   deserializeRow,
   SatelliteClient,
@@ -37,21 +36,13 @@ test.beforeEach((t) => {
   const server = new SatelliteWSServerStub(t)
   server.start()
 
-  const dbName = 'dbName'
-
-  const client = new SatelliteClient(
-    dbName,
-    dbDescription,
-    WebSocketNode,
-    new MockNotifier(dbName),
-    {
-      host: '127.0.0.1',
-      port: 30002,
-      timeout: 10000,
-      ssl: false,
-      pushPeriod: 100,
-    }
-  )
+  const client = new SatelliteClient(dbDescription, WebSocketNode, {
+    host: '127.0.0.1',
+    port: 30002,
+    timeout: 10000,
+    ssl: false,
+    pushPeriod: 100,
+  })
   const clientId = '91eba0c8-28ba-4a86-a6e8-42731c2c6694'
 
   t.context = {
@@ -64,7 +55,7 @@ test.beforeEach((t) => {
 
 test.afterEach.always(async (t) => {
   const { server, client } = t.context
-  client.close()
+  client.disconnect()
   server.close()
 })
 
@@ -332,13 +323,13 @@ test.serial('receive transaction over multiple messages', async (t) => {
   ])
   server.nextRpcResponse('stopReplication', [stop])
 
-  await new Promise<void>(async (res) => {
-    client.on('transaction', (transaction: DataTransaction) => {
+  await new Promise<void>((res) => {
+    client.subscribeToTransactions(async (transaction) => {
       t.is(transaction.changes.length, 3)
       res()
     })
 
-    await client.startReplication()
+    return client.startReplication()
   })
 })
 
@@ -408,8 +399,8 @@ test.serial('migration transaction contains all information', async (t) => {
   server.nextRpcResponse('startReplication', [start, relation, opLogMsg])
   server.nextRpcResponse('stopReplication', [stop])
 
-  await new Promise<void>(async (res) => {
-    client.on('transaction', (transaction: Transaction) => {
+  await new Promise<void>((res) => {
+    client.subscribeToTransactions(async (transaction: Transaction) => {
       t.is(transaction.migrationVersion, migrationVersion)
       t.deepEqual(transaction, {
         commit_timestamp: commit.commitTimestamp,
@@ -427,7 +418,7 @@ test.serial('migration transaction contains all information', async (t) => {
       res()
     })
 
-    await client.startReplication()
+    return client.startReplication()
   })
 })
 
@@ -456,17 +447,20 @@ test.serial('acknowledge lsn', async (t) => {
   server.nextRpcResponse('startReplication', [start, opLog])
   server.nextRpcResponse('stopReplication', [stop])
 
-  await new Promise<void>(async (res) => {
-    client.on('transaction', (_t: DataTransaction, ack: any) => {
-      const lsn0 = client['inbound'].last_lsn
-      t.is(lsn0, undefined)
-      ack()
-      const lsn1 = base64.fromBytes(client['inbound'].last_lsn!)
-      t.is(lsn1, 'FAKE')
-      res()
-    })
+  await new Promise<void>((res) => {
+    client['emitter'].on(
+      'transaction',
+      (_t: DataTransaction, ack: () => void) => {
+        const lsn0 = client['inbound'].last_lsn
+        t.is(lsn0, undefined)
+        ack()
+        const lsn1 = base64.fromBytes(client['inbound'].last_lsn!)
+        t.is(lsn1, 'FAKE')
+        res()
+      }
+    )
 
-    await client.startReplication()
+    return client.startReplication()
   })
 })
 
@@ -712,21 +706,24 @@ test.serial('default and null test', async (t) => {
 
   t.plan(3)
 
-  await new Promise<void>(async (res) => {
-    client.on('transaction', (transaction: any) => {
-      t.is(record['id'] as any, transaction.changes[0].record['id'] as any)
-      t.is(
-        record['content'] as any,
-        transaction.changes[0].record['content'] as any
-      )
-      t.is(
-        record['text_null'] as any,
-        transaction.changes[0].record['text_null'] as any
-      )
-      res()
-    })
+  await new Promise<void>((res) => {
+    client.subscribeToTransactions(
+      // FIXME: using any type
+      async (transaction: any) => {
+        t.is(record['id'] as any, transaction.changes[0].record['id'] as any)
+        t.is(
+          record['content'] as any,
+          transaction.changes[0].record['content'] as any
+        )
+        t.is(
+          record['text_null'] as any,
+          transaction.changes[0].record['text_null'] as any
+        )
+        res()
+      }
+    )
 
-    await client.startReplication()
+    return client.startReplication()
   })
 })
 

@@ -320,10 +320,7 @@ export class SatelliteProcess implements Satellite {
     this.client.subscribeToRelations(this._updateRelations.bind(this))
     // FIXME: calling an async function in an event emitter
     this.client.subscribeToTransactions(this._applyTransaction.bind(this))
-    this.client.subscribeToOutboundEvent(
-      'started',
-      this._throttledSnapshot.bind(this)
-    )
+    this.client.subscribeToOutboundStarted(this._throttledSnapshot.bind(this))
 
     this.client.subscribeToSubscriptionEvents(
       this._handleSubscriptionData.bind(this),
@@ -332,7 +329,7 @@ export class SatelliteProcess implements Satellite {
   }
 
   // Unsubscribe from data changes and stop polling
-  async stop(): Promise<void> {
+  async stop(shutdown?: boolean): Promise<void> {
     // Stop snapshotting and polling for changes.
     this._throttledSnapshot.cancel()
 
@@ -365,6 +362,10 @@ export class SatelliteProcess implements Satellite {
     }
 
     this._disconnect()
+
+    if (shutdown) {
+      this.client.shutdown()
+    }
   }
 
   async subscribe(
@@ -632,14 +633,6 @@ export class SatelliteProcess implements Satellite {
   _handleOrThrowClientError(error: SatelliteError): Promise<void> {
     this._disconnect()
 
-    if (!error) {
-      const e = new SatelliteError(
-        SatelliteErrorCode.INTERNAL,
-        'received an error event without an error code'
-      )
-      throw wrapFatalError(e)
-    }
-
     if (isThrowable(error)) {
       throw error
     }
@@ -661,7 +654,7 @@ export class SatelliteProcess implements Satellite {
         return this._connectWithBackoff()
       }
       case 'disconnected': {
-        this.client.close()
+        this.client.disconnect()
         return
       }
       case 'connected': {
@@ -747,7 +740,7 @@ export class SatelliteProcess implements Satellite {
   }
 
   private _disconnect(): void {
-    this.client.close()
+    this.client.disconnect()
     this._notifyConnectivityState('disconnected')
   }
 
@@ -944,7 +937,7 @@ export class SatelliteProcess implements Satellite {
 
       if (oplogEntries.length > 0) this._notifyChanges(oplogEntries)
 
-      if (!this.client.isClosed()) {
+      if (this.client.isConnected()) {
         const enqueued = this.client.getLastSentLsn()
         const enqueuedLogPos = bytesToNumber(enqueued)
 
@@ -996,7 +989,7 @@ export class SatelliteProcess implements Satellite {
 
   async _replicateSnapshotChanges(results: OplogEntry[]): Promise<void> {
     // TODO: Don't try replicating when outbound is inactive
-    if (this.client.isClosed()) {
+    if (!this.client.isConnected()) {
       return
     }
 

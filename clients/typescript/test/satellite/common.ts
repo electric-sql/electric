@@ -1,19 +1,12 @@
 import { mkdir, rm as removeFile } from 'node:fs/promises'
-import {
-  ConnectivityState,
-  DataTransaction,
-  Relation,
-  RelationsCache,
-  SqlValue,
-  randomValue,
-} from '../../src/util'
+import { randomValue } from '../../src/util'
 import Database from 'better-sqlite3'
 import type { Database as SqliteDB } from 'better-sqlite3'
 import { DatabaseAdapter } from '../../src/drivers/better-sqlite3'
 import { BundleMigrator } from '../../src/migrators'
 import { EventNotifier, MockNotifier } from '../../src/notifiers'
 import { MockSatelliteClient } from '../../src/satellite/mock'
-import { Satellite, SatelliteProcess } from '../../src/satellite'
+import { SatelliteProcess } from '../../src/satellite'
 import { TableInfo, initTableInfo } from '../support/satellite-helpers'
 import { satelliteDefaults, SatelliteOpts } from '../../src/satellite/config'
 import { Table, generateTableTriggers } from '../../src/migrators/triggers'
@@ -165,7 +158,6 @@ export const relations = {
 import migrations from '../support/migrations/migrations.js'
 import { ExecutionContext } from 'ava'
 import { AuthState } from '../../src/auth'
-import { OplogEntry } from '../../src/satellite/oplog'
 import { DbSchema, TableSchema } from '../../src/client/model/schema'
 import { PgBasicType } from '../../src/client/conversions/types'
 import { HKT } from '../../src/client/util/hkt'
@@ -183,29 +175,6 @@ type Opts = SatelliteOpts & {
 
 export interface TestNotifier extends EventNotifier {
   notifications: any[]
-}
-
-export interface TestSatellite extends Satellite {
-  _authState?: AuthState
-  relations: RelationsCache
-  initializing?: {
-    promise: Promise<void>
-    resolve: () => void
-    reject: (e?: unknown) => void
-  }
-
-  _setAuthState(authState: AuthState): Promise<void>
-  _performSnapshot(): Promise<Date>
-  _getEntries(): Promise<OplogEntry[]>
-  _apply(incoming: OplogEntry[], incoming_origin: string): void
-  _applyTransaction(transaction: DataTransaction): any
-  _setMeta(key: string, value: SqlValue): Promise<void>
-  _getMeta(key: string): Promise<string>
-  _ack(lsn: number, isAck: boolean): Promise<void>
-  _connectivityStateChanged(status: ConnectivityState): void
-  _getLocalRelations(): Promise<{ [k: string]: Relation }>
-  _connectRetryHandler: (error: Error, attempt: number) => boolean
-  _connectWithBackoff(): Promise<void>
 }
 
 export type ContextType<Extra = {}> = {
