@@ -206,7 +206,9 @@ defmodule Electric.Satellite.SerializationTest do
         {"false", :bool},
         {"yes", :bool},
         {"no", :bool},
-        {"-1", :bool}
+        {"-1", :bool},
+        {"...", :jsonb},
+        {"{[}]", :jsonb}
       ]
 
       Enum.each(test_data, fn {val, type} ->
