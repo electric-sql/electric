@@ -156,7 +156,7 @@ export class SatelliteClient implements Client {
   private allowedMutexedRpcResponses: Array<keyof Root> = []
 
   private dbDescription: DbSchema<any>
-  private isDown: boolean = false
+  private isDown = false
 
   private handlerForMessageType: { [k: string]: IncomingHandler } =
     Object.fromEntries(
