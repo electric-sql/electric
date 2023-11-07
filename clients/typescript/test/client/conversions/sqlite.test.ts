@@ -8,7 +8,7 @@ import {
   _NOT_UNIQUE_,
   _RECORD_NOT_FOUND_,
 } from '../../../src/client/validation/errors/messages'
-import { schema } from '../generated'
+import { schema, JsonNull } from '../generated'
 
 const db = new Database(':memory:')
 const electric = await electrify(
@@ -30,7 +30,7 @@ await tbl.sync()
 function setupDB() {
   db.exec('DROP TABLE IF EXISTS DataTypes')
   db.exec(
-    "CREATE TABLE DataTypes('id' int PRIMARY KEY, 'date' varchar, 'time' varchar, 'timetz' varchar, 'timestamp' varchar, 'timestamptz' varchar, 'bool' int, 'uuid' varchar, 'int2' int2, 'int4' int4, 'float8' real, 'relatedId' int);"
+    "CREATE TABLE DataTypes('id' int PRIMARY KEY, 'date' varchar, 'time' varchar, 'timetz' varchar, 'timestamp' varchar, 'timestamptz' varchar, 'bool' int, 'uuid' varchar, 'int2' int2, 'int4' int4, 'float8' real, 'json' varchar, 'relatedId' int);"
   )
 }
 
@@ -210,4 +210,80 @@ test.serial('floats are converted correctly to SQLite', async (t) => {
     { id: 3, float8: Infinity },
     { id: 4, float8: -Infinity },
   ])
+})
+
+test.serial('json is converted correctly to SQLite', async (t) => {
+  const json = { a: 1, b: true, c: { d: 'nested' }, e: [1, 2, 3], f: null }
+  await tbl.create({
+    data: {
+      id: 1,
+      json,
+    },
+  })
+
+  const rawRes = await electric.db.raw({
+    sql: 'SELECT json FROM DataTypes WHERE id = ?',
+    args: [1],
+  })
+  t.is(rawRes[0].json, JSON.stringify(json))
+
+  // Also test null values
+  // this null value is not a JSON null
+  // but a DB NULL that indicates absence of a value
+  await tbl.create({
+    data: {
+      id: 2,
+      json: null, // TODO: fix this type error --> update the typings in the generator
+    },
+  })
+
+  const rawRes2 = await electric.db.raw({
+    sql: 'SELECT json FROM DataTypes WHERE id = ?',
+    args: [2],
+  })
+  t.is(rawRes2[0].json, null)
+
+  // Also test JSON null value
+  await tbl.create({
+    data: {
+      id: 3,
+      json: JsonNull,
+    },
+  })
+
+  const rawRes3 = await electric.db.raw({
+    sql: 'SELECT json FROM DataTypes WHERE id = ?',
+    args: [3],
+  })
+  t.is(rawRes3[0].json, JSON.stringify(null))
+
+  // also test regular values
+  await tbl.create({
+    data: {
+      id: 4,
+      json: 'foo',
+    },
+  })
+
+  const rawRes4 = await electric.db.raw({
+    sql: 'SELECT json FROM DataTypes WHERE id = ?',
+    args: [4],
+  })
+
+  t.is(rawRes4[0].json, JSON.stringify('foo'))
+
+  // also test arrays
+  await tbl.create({
+    data: {
+      id: 5,
+      json: [1, 2, 3],
+    },
+  })
+
+  const rawRes5 = await electric.db.raw({
+    sql: 'SELECT json FROM DataTypes WHERE id = ?',
+    args: [5],
+  })
+
+  t.is(rawRes5[0].json, JSON.stringify([1, 2, 3]))
 })

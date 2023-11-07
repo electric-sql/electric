@@ -98,6 +98,7 @@ exports.Prisma.DataTypesScalarFieldEnum = {
   int2: 'int2',
   int4: 'int4',
   float8: 'float8',
+  json: 'json',
   relatedId: 'relatedId'
 };
 
@@ -109,6 +110,17 @@ exports.Prisma.DummyScalarFieldEnum = {
 exports.Prisma.ItemsScalarFieldEnum = {
   value: 'value',
   nbr: 'nbr'
+};
+
+exports.Prisma.JsonNullValueFilter = {
+  DbNull: Prisma.DbNull,
+  JsonNull: Prisma.JsonNull,
+  AnyNull: Prisma.AnyNull
+};
+
+exports.Prisma.NullableJsonNullValueInput = {
+  DbNull: Prisma.DbNull,
+  JsonNull: Prisma.JsonNull
 };
 
 exports.Prisma.PostScalarFieldEnum = {

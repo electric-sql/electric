@@ -1,6 +1,7 @@
 import { InvalidArgumentError } from '../validation/errors/invalidArgumentError'
 import { deserialiseBoolean, serialiseBoolean } from './datatypes/boolean'
 import { deserialiseDate, serialiseDate } from './datatypes/date'
+import { deserialiseJSON, serialiseJSON } from './datatypes/json'
 import { PgBasicType, PgDateType, PgType } from './types'
 
 /**
@@ -29,6 +30,11 @@ export function toSqlite(v: any, pgType: PgType): any {
     // and deserialise it back to `NaN` when reading from the DB.
     // cf. https://github.com/WiseLibs/better-sqlite3/issues/1088
     return 'NaN'
+  } else if (
+    pgType === PgBasicType.PG_JSON ||
+    pgType === PgBasicType.PG_JSONB
+  ) {
+    return serialiseJSON(v)
   } else {
     return v
   }
@@ -50,6 +56,12 @@ export function fromSqlite(v: any, pgType: PgType): any {
   ) {
     // it's a serialised NaN
     return NaN
+  } else if (
+    pgType === PgBasicType.PG_JSON ||
+    pgType === PgBasicType.PG_JSONB
+  ) {
+    // it's serialised JSON
+    return deserialiseJSON(v)
   } else {
     return v
   }

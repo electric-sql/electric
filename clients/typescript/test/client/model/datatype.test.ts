@@ -8,7 +8,7 @@ import {
   _NOT_UNIQUE_,
   _RECORD_NOT_FOUND_,
 } from '../../../src/client/validation/errors/messages'
-import { schema } from '../generated'
+import { schema, JsonNull } from '../generated'
 import { ZodError } from 'zod'
 
 const db = new Database(':memory:')
@@ -31,7 +31,7 @@ await tbl.sync()
 function setupDB() {
   db.exec('DROP TABLE IF EXISTS DataTypes')
   db.exec(
-    "CREATE TABLE DataTypes('id' int PRIMARY KEY, 'date' varchar, 'time' varchar, 'timetz' varchar, 'timestamp' varchar, 'timestamptz' varchar, 'bool' int, 'uuid' varchar, 'int2' int2, 'int4' int4, 'float8' real, 'relatedId' int);"
+    "CREATE TABLE DataTypes('id' int PRIMARY KEY, 'date' varchar, 'time' varchar, 'timetz' varchar, 'timestamp' varchar, 'timestamptz' varchar, 'bool' int, 'uuid' varchar, 'int2' int2, 'int4' int4, 'float8' real, 'json' varchar, 'relatedId' int);"
   )
 }
 
@@ -639,6 +639,76 @@ test.serial('support null values for float8 type', async (t) => {
     select: {
       id: true,
       float8: true,
+    },
+  })
+
+  t.deepEqual(fetchRes, expectedRes)
+})
+
+test.serial('support JSON type', async (t) => {
+  const json = { a: 1, b: true, c: { d: 'nested' }, e: [1, 2, 3], f: null }
+  const res = await tbl.create({
+    data: {
+      id: 1,
+      json,
+    },
+  })
+
+  t.deepEqual(res.json, json)
+
+  const fetchRes = await tbl.findUnique({
+    where: {
+      id: 1,
+    },
+  })
+
+  t.deepEqual(fetchRes?.json, json)
+
+  // Also test that we can write the special JsonNull value
+  const res2 = await tbl.create({
+    data: {
+      id: 2,
+      json: JsonNull,
+    },
+  })
+
+  t.deepEqual(res2.json, JsonNull)
+
+  const fetchRes2 = await tbl.findUnique({
+    where: {
+      id: 2,
+    },
+  })
+
+  t.deepEqual(fetchRes2?.json, JsonNull)
+})
+
+test.serial('support null values for JSON type', async (t) => {
+  const expectedRes = {
+    id: 1,
+    json: null,
+  }
+
+  const res = await tbl.create({
+    data: {
+      id: 1,
+      json: null,
+    },
+    select: {
+      id: true,
+      json: true,
+    },
+  })
+
+  t.deepEqual(res, expectedRes)
+
+  const fetchRes = await tbl.findUnique({
+    where: {
+      id: 1,
+    },
+    select: {
+      id: true,
+      json: true,
     },
   })
 
