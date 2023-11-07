@@ -469,6 +469,15 @@ defmodule Electric.Postgres.Proxy.PrismaTest do
                )
     end
 
+    test "parses a multi-element array" do
+      assert ["public", "private", "blue"] =
+               Prisma.parse_bind_array(
+                 <<0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 19, 0, 0, 0, 3, 0, 0, 0, 1, 0, 0, 0, 6, 112,
+                   117, 98, 108, 105, 99, 0, 0, 0, 7, 112, 114, 105, 118, 97, 116, 101, 0, 0, 0,
+                   4, 98, 108, 117, 101>>
+               )
+    end
+
     test "parses empty array" do
       assert [] =
                Prisma.parse_bind_array(
