@@ -90,12 +90,14 @@ defmodule Electric.Satellite.Protocol do
               status: nil,
               pid: nil,
               stage_sub: nil,
-              relations: %{},
+              relation_ids: %{},
               incomplete_trans: nil,
               demand: 0,
               sub_retry: nil,
               queue: :queue.new(),
               rpc_request_id: 0
+
+    @typep table_oid :: pos_integer
 
     @typedoc """
     Incoming replication Satellite -> PG
@@ -107,13 +109,7 @@ defmodule Electric.Satellite.Protocol do
             # retry is only used when there is an active consumer
             sub_retry: nil | reference(),
             stage_sub: GenStage.subscription_tag() | nil,
-            relations: %{
-              optional(PB.relation_id()) => %{
-                :schema => String.t(),
-                :table => String.t(),
-                :columns => [String.t()]
-              }
-            },
+            relation_ids: %{table_oid => PB.relation_id()},
             incomplete_trans: nil | Transaction.t(),
             demand: non_neg_integer(),
             queue: :queue.queue(Transaction.t()),
@@ -525,36 +521,35 @@ defmodule Electric.Satellite.Protocol do
   end
 
   def process_message(%SatRelation{} = msg, %State{in_rep: in_rep} = state) do
-    # Look up the latest schema for the relation to assign correct column types.
+    # Maintain a mapping from PG table OIDs to client's relation IDs.
     #
-    # Even though the server may have applied migrations to the schema that the client hasn't seen yet,
-    # we can still look up column types on it due our migrations being additive-only and backwards-compatible.
-    %{columns: columns} = SchemaCache.Global.relation!({msg.schema_name, msg.table_name})
-    relation_columns = Map.new(columns, &{&1.name, &1.type})
+    # When we receive SatOpLog messages from the client, those will be referring to tables by client-generated relation
+    # IDs. Thus we need to keep track of which relation ID corresponds to which table OID in order to look up the table
+    # info in server's schema cache.
+    {:ok, table_infos} = SchemaCache.Global.electrified_tables()
 
-    columns =
-      Enum.map(msg.columns, fn %SatRelationColumn{name: name} = col ->
-        %{name: name, type: Map.fetch!(relation_columns, name), nullable?: col.is_nullable}
+    table_oid =
+      Enum.find_value(table_infos, fn %{schema: schema, name: name, oid: oid} ->
+        if schema == msg.schema_name and name == msg.table_name do
+          oid
+        end
       end)
 
-    relations =
-      Map.put(in_rep.relations, msg.relation_id, %{
-        schema: msg.schema_name,
-        table: msg.table_name,
-        columns: columns
-      })
+    relation_ids = Map.put(in_rep.relation_ids, table_oid, msg.relation_id)
 
-    {nil, %State{state | in_rep: %InRep{in_rep | relations: relations}}}
+    {nil, %State{state | in_rep: %InRep{in_rep | relation_ids: relation_ids}}}
   end
 
-  def process_message(%SatOpLog{} = msg, %State{in_rep: in_rep} = state)
+  def process_message(%SatOpLog{} = msg, %State{in_rep: %{} = in_rep} = state)
       when in_rep?(state) do
+    {:ok, table_infos} = SchemaCache.Global.electrified_tables()
+
     try do
       case Serialization.deserialize_trans(
              state.client_id,
              msg,
              in_rep.incomplete_trans,
-             in_rep.relations,
+             build_relations_cache(table_infos, in_rep.relation_ids),
              fn _lsn -> nil end
            ) do
         {incomplete, []} ->
@@ -1020,4 +1015,14 @@ defmodule Electric.Satellite.Protocol do
   end
 
   defp rpc_encode(%module{} = message), do: IO.iodata_to_binary(module.encode!(message))
+
+  defp build_relations_cache(table_infos, relation_ids) do
+    Enum.reduce(table_infos, [], fn table_info, acc ->
+      case Map.get(relation_ids, table_info.oid) do
+        nil -> acc
+        relation_id -> [{relation_id, table_info} | acc]
+      end
+    end)
+    |> Map.new()
+  end
 end
