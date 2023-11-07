@@ -460,12 +460,21 @@ defmodule Electric.Postgres.Proxy.PrismaTest do
     end
   end
 
-  test "parse_bind_array/1" do
-    assert ["public"] =
-             Prisma.parse_bind_array(
-               <<0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 19, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 6, 112,
-                 117, 98, 108, 105, 99>>
-             )
+  describe "parse_bind_array/1" do
+    test "parses a single item array" do
+      assert ["public"] =
+               Prisma.parse_bind_array(
+                 <<0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 19, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 6, 112,
+                   117, 98, 108, 105, 99>>
+               )
+    end
+
+    test "parses empty array" do
+      assert [] =
+               Prisma.parse_bind_array(
+                 <<0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 19, 0, 0, 0, 0, 0, 0, 0, 1>>
+               )
+    end
   end
 
   describe "injector" do
