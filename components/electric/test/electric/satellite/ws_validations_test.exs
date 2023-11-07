@@ -418,6 +418,58 @@ defmodule Electric.Satellite.WsValidationsTest do
     end)
   end
 
+  test "validates json values", ctx do
+    vsn = "2023110701"
+
+    :ok =
+      migrate(
+        ctx.db,
+        vsn,
+        "CREATE TABLE public.foo (id TEXT PRIMARY KEY, j JSON, jb JSONB)",
+        electrify: "public.foo"
+      )
+
+    valid_records = [
+      %{"id" => "1", "j" => "{}", "jb" => "null"},
+      %{"id" => "2", "j" => "\"hello\"", "jb" => "[]"},
+      %{
+        "id" => "3",
+        "j" => ~s'{"foo": {"bar": ["baz", "quux"]}, "x": "I 👀 you"}',
+        "jb" => "-123"
+      },
+      %{"id" => "4", "jb" => ~s'[1, 2.0, 3e5, true, false, null, "", ["It\'s \u26a1"]]'}
+    ]
+
+    within_replication_context(ctx, vsn, fn conn ->
+      Enum.each(valid_records, fn record ->
+        tx_op_log = serialize_trans(record)
+        MockClient.send_data(conn, tx_op_log)
+      end)
+
+      refute_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
+    end)
+
+    invalid_records = [
+      %{"id" => "10", "j" => "now"},
+      %{"id" => "11", "j" => ".123"},
+      %{"id" => "12", "j" => ".."},
+      %{"id" => "13", "j" => "{]"},
+      %{"id" => "13", "jb" => "[}"},
+      %{"id" => "14", "jb" => "\"hello"},
+      %{"id" => "15", "jb" => "+"},
+      %{"id" => "16", "jb" => "-"},
+      %{"id" => "16", "jb" => "0.0.0"}
+    ]
+
+    Enum.each(invalid_records, fn record ->
+      within_replication_context(ctx, vsn, fn conn ->
+        tx_op_log = serialize_trans(record)
+        MockClient.send_data(conn, tx_op_log)
+        assert_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
+      end)
+    end)
+  end
+
   defp within_replication_context(ctx, vsn, expectation_fn) do
     with_connect(ctx.conn_opts, fn conn ->
       # Replication start ceremony
