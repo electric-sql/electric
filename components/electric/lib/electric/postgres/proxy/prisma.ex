@@ -91,17 +91,20 @@ defmodule Electric.Postgres.Proxy.Prisma do
   # >>
   def parse_bind_array(encoded_array) do
     case encoded_array do
-      <<
-        1::i32(),
-        0::i32(),
-        19::i32(),
-        1::i32(),
-        1::i32(),
-        len::i32(),
-        value::binary-size(len)
-      >> ->
-        [value]
+      <<1::i32(), 0::i32(), 19::i32(), 0::i32(), _::i32()>> ->
+        []
+
+      <<1::i32(), 0::i32(), 19::i32(), n::i32(), 1::i32(), rest::binary>> ->
+        decode_array_values(rest, n, [])
     end
+  end
+
+  defp decode_array_values(<<>>, 0, acc) do
+    Enum.reverse(acc)
+  end
+
+  defp decode_array_values(<<len::i32(), value::binary-size(len), rest::binary>>, n, acc) do
+    decode_array_values(rest, n - 1, [value | acc])
   end
 
   def injector(config, opts \\ []) do
