@@ -226,16 +226,6 @@ defmodule Electric.Postgres.Schema do
     |> is_nil()
   end
 
-  def relation(schema, sname, tname) do
-    with {:ok, table} <- fetch_table(schema, {sname, tname}) do
-      table_info(table)
-    end
-  end
-
-  def relation(schema, {sname, tname}) do
-    relation(schema, sname, tname)
-  end
-
   # want table constraint order to be constistent so that we can verify the in-memory schema with
   # that held by a pg instance.  this means re-sorting the table (or column) constraints after
   # every modification

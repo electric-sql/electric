@@ -3,14 +3,14 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
   import Mock
 
   alias Electric.Postgres.Extension.SchemaLoader
-  alias Electric.Replication.Postgres.LogicalReplicationProducer
-
-  alias Electric.Replication.Changes.{NewRecord, UpdatedRecord, Transaction, Relation}
   alias Electric.Postgres.LogicalReplication
   alias Electric.Postgres.LogicalReplication.Messages
   alias Electric.Postgres.Lsn
-  alias Electric.Replication.Postgres.Client
+
+  alias Electric.Replication.Changes.{NewRecord, UpdatedRecord, Transaction}
   alias Electric.Replication.Connectors
+  alias Electric.Replication.Postgres.Client
+  alias Electric.Replication.Postgres.LogicalReplicationProducer
 
   @uuid_oid 2950
   @varchar_oid 1043
@@ -48,7 +48,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
         &LogicalReplicationProducer.handle_info/2
       )
 
-    assert [%Relation{name: "entities"}, %Transaction{} = transaction] = events
+    assert [%Transaction{} = transaction] = events
 
     assert [%NewRecord{record: %{"id" => "test", "data" => "value"}}] = transaction.changes
   end
@@ -67,7 +67,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
         &LogicalReplicationProducer.handle_info/2
       )
 
-    assert [%Relation{name: "entities"}, %Transaction{} = transaction] = events
+    assert [%Transaction{} = transaction] = events
     assert length(transaction.changes) == 4
 
     assert [
@@ -93,7 +93,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
         &LogicalReplicationProducer.handle_info/2
       )
 
-    assert [%Relation{name: "entities"}, %Transaction{} = transaction] = events
+    assert [%Transaction{} = transaction] = events
     assert length(transaction.changes) == 5
 
     assert [

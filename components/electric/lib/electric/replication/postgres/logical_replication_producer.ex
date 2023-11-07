@@ -24,8 +24,6 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     Message
   }
 
-  alias Electric.Replication.Changes
-
   alias Electric.Replication.Changes.{
     Transaction,
     NewRecord,
@@ -45,7 +43,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
               origin: nil,
               drop_current_transaction?: false,
               types: %{},
-              ignore_relations: [],
+              ignored_relations: MapSet.new(),
               span: nil
 
     @type t() :: %__MODULE__{
@@ -58,7 +56,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
             origin: Connectors.origin(),
             drop_current_transaction?: boolean(),
             types: %{},
-            ignore_relations: [term()],
+            ignored_relations: MapSet.t(),
             span: Metrics.t() | nil
           }
   end
@@ -174,36 +172,13 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
 
   defp process_message(%Type{}, state), do: {:noreply, [], state}
 
-  defp process_message(%Relation{} = msg, state) do
+  defp process_message(%Relation{} = rel, state) do
     state =
-      case ignore_relations(msg, state) do
-        {true, state} ->
-          Logger.debug("ignore relation from electric schema #{inspect(msg)}")
-          %{state | relations: Map.put(state.relations, msg.id, msg)}
+      state
+      |> maybe_ignore_relation(rel)
+      |> Map.update!(:relations, &Map.put(&1, rel.id, rel))
 
-        false ->
-          %{state | relations: Map.put(state.relations, msg.id, msg)}
-      end
-
-    # Mapping from a `LogicalReplication.Messages.Relation` to a
-    # `Electric.Replication.Changes.Relation` is a little superfluous but keeps
-    # the clean line between pg logical replication and this internal change
-    # stream.
-    # The Relation messages are used and then dropped by the
-    # `Electric.Replication.Postgres.MigrationConsumer` stage that reads from
-    # this producer.
-    relation =
-      Changes.Relation
-      |> struct(Map.from_struct(msg))
-      |> Map.put(
-        :columns,
-        Enum.map(msg.columns, &struct(Changes.Relation.Column, Map.from_struct(&1)))
-      )
-
-    queue = :queue.in(relation, state.queue)
-    state = %{state | queue: queue}
-
-    dispatch_events(state, [])
+    {:noreply, [], state}
   end
 
   defp process_message(%Insert{} = msg, %State{} = state) do
@@ -360,7 +335,6 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     {:noreply, Enum.reverse(events), state}
   end
 
-  # TODO: Typecast to meaningful Elixir types here later
   @spec data_tuple_to_map([Relation.Column.t()], list()) :: term()
   defp data_tuple_to_map(_columns, nil), do: %{}
 
@@ -389,37 +363,25 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     Client.acknowledge_lsn(conn, lsn)
   end
 
-  # We use this fun to limit replication, electric.* tables are not expected to be
-  # replicated further from PG
-  defp ignore_relations(msg = %Relation{}, state = %State{}) do
-    case msg.id in state.ignore_relations do
-      false ->
-        # We do not encourage developers to use 'electric' schema, but some
-        # tools like sysbench do that by default, instead of 'public' schema
-
-        # TODO: VAX-680 remove this special casing of schema_migrations table
-        # once we are selectivley replicating tables
-        # ||
-        ignore? = msg.namespace == "electric" and msg.name in ["migrations", "meta"]
-        # (msg.namespace == "public" and msg.name == "schema_migrations")
-
-        if ignore? do
-          {true, %State{state | ignore_relations: [msg.id | state.ignore_relations]}}
-        else
-          false
-        end
-
-      true ->
-        {true, state}
+  # Limit replication of electric.* tables since they are not expected to be
+  # replicated further from PG.
+  defp maybe_ignore_relation(state, %Relation{} = rel) do
+    # We do not encourage developers to use 'electric' schema, but some
+    # tools like sysbench do that by default, instead of 'public' schema
+    if rel.id in state.ignored_relations or
+         (rel.namespace == "electric" and rel.name in ["migrations", "meta"]) do
+      update_in(state.ignored_relations, &MapSet.put(&1, rel.id))
+    else
+      state
     end
   end
 
   @spec maybe_drop(Messages.relation_id(), %State{}) :: boolean
-  defp maybe_drop(_id, %State{drop_current_transaction?: true}) do
+  defp maybe_drop(_rel_id, %State{drop_current_transaction?: true}) do
     true
   end
 
-  defp maybe_drop(id, %State{ignore_relations: ids}) do
-    id in ids
+  defp maybe_drop(rel_id, %State{ignored_relations: rel_ids}) do
+    rel_id in rel_ids
   end
 end
