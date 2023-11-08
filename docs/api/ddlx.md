@@ -216,7 +216,7 @@ ELECTRIC GRANT INSERT
   );
 ```
 
-Here any authenticated user can create a new project iff they correctly set the owner_id of the new project to their user_id:
+Here any authenticated user can create a new project if they correctly set the owner_id of the new project to their user_id:
 
 ```sql
 ELECTRIC GRANT INSERT
@@ -424,7 +424,7 @@ ELECTRIC ASSIGN 'deliveries:customer'
     TO deliveries.customer_id;
 ```
 
-Here users referred to by the column `user_id` in the table `user_permissions` are assigned the global role `record.reader` iff the flag `can_read_records` in the table user_permissions is true.
+Here users referred to by the column `user_id` in the table `user_permissions` are assigned the global role `record.reader` if the flag `can_read_records` in the table user_permissions is true.
 
 ```sql
 ELECTRIC ASSIGN 'record.reader'
