@@ -96,8 +96,8 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   end
 
   @impl SchemaLoader
-  def query_table_column_types(origin, relation_oid) do
-    call(origin, {:query_table_column_types, relation_oid})
+  def fetch_table_column_types(origin, tables) do
+    call(origin, {:fetch_table_column_types, tables})
   end
 
   @impl SchemaLoader
@@ -282,8 +282,8 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     {:reply, SchemaLoader.relation_oid(state.backend, type, schema, name), state}
   end
 
-  def handle_call({:query_table_column_types, relation_oid}, _from, state) do
-    {:reply, SchemaLoader.query_table_column_types(state.backend, relation_oid), state}
+  def handle_call({:fetch_table_column_types, tables}, _from, state) do
+    {:reply, SchemaLoader.fetch_table_column_types(state.backend, tables), state}
   end
 
   def handle_call({:primary_keys, sname, tname}, _from, state) do
@@ -320,7 +320,7 @@ defmodule Electric.Postgres.Extension.SchemaCache do
        |> Map.update!(:tables, fn tables ->
          Enum.reject(tables, &is_extension_relation({&1.name.schema, &1.name.name}))
        end)
-       |> Schema.table_info()}
+       |> Schema.table_infos()}
     end)
   end
 
@@ -347,20 +347,20 @@ defmodule Electric.Postgres.Extension.SchemaCache do
 
   def handle_call({:relation, oid}, _from, state) when is_integer(oid) do
     load_and_reply(state, fn schema ->
-      Schema.table_info(schema, oid)
+      Schema.single_table_info(schema, oid)
     end)
   end
 
   def handle_call({:relation, {_sname, _tname} = relation}, _from, state) do
     load_and_reply(state, fn schema ->
-      Schema.table_info(schema, relation)
+      Schema.single_table_info(schema, relation)
     end)
   end
 
   def handle_call({:relation, relation, version}, _from, state) do
     {result, state} =
       with {:ok, ^version, schema} <- SchemaLoader.load(state.backend, version) do
-        {Schema.table_info(schema, relation), state}
+        {Schema.single_table_info(schema, relation), state}
       else
         error -> {error, state}
       end
@@ -403,7 +403,7 @@ defmodule Electric.Postgres.Extension.SchemaCache do
 
   def handle_call({:internal_relation, relation}, _from, state) do
     state = load_internal_schema(state)
-    {:reply, Schema.table_info(state.internal_schema, relation), state}
+    {:reply, Schema.single_table_info(state.internal_schema, relation), state}
   end
 
   @impl GenServer

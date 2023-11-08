@@ -23,13 +23,14 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   @callback save(state(), version(), Schema.t(), [String.t()]) ::
               {:ok, state()} | {:error, term()}
   @callback relation_oid(state(), rel_type(), schema(), name()) :: oid_result()
-  @callback query_table_column_types(state(), integer()) :: {:ok, list}
   @callback primary_keys(state(), schema(), name()) :: pk_result()
   @callback primary_keys(state(), relation()) :: pk_result()
   @callback refresh_subscription(state(), name()) :: :ok | {:error, term()}
   @callback migration_history(state(), version() | nil) ::
               {:ok, [Migration.t()]} | {:error, term()}
   @callback known_migration_version?(state(), version()) :: boolean
+  @callback fetch_table_column_types(state(), [%{schema: schema(), name: name(), oid: oid()}]) ::
+              {map, map}
   @callback internal_schema(state()) :: Electric.Postgres.Schema.t()
   @callback table_electrified?(state(), relation()) :: {:ok, boolean()} | {:error, term()}
   @callback index_electrified?(state(), relation()) :: {:ok, boolean()} | {:error, term()}
@@ -71,10 +72,6 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
     module.relation_oid(state, rel_type, schema, table)
   end
 
-  def query_table_column_types({module, state}, relation_oid) do
-    module.query_table_column_types(state, relation_oid)
-  end
-
   def primary_keys({module, state}, schema, table) do
     module.primary_keys(state, schema, table)
   end
@@ -93,6 +90,10 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
 
   def known_migration_version?({module, state}, version) do
     module.known_migration_version?(state, version)
+  end
+
+  def fetch_table_column_types({module, state}, tables) do
+    module.fetch_table_column_types(state, tables)
   end
 
   def internal_schema({module, state}) do

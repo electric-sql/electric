@@ -3,6 +3,8 @@ defmodule Electric.Postgres.Extension do
   Manages our pseudo-extension code
   """
 
+  import Electric.Postgres.OidDatabase.PgType
+
   alias Electric.Postgres.{Schema, Schema.Proto, Extension.Functions, Extension.Migration}
   alias Electric.Replication.Postgres.Client
   alias Electric.Utils
@@ -566,4 +568,86 @@ defmodule Electric.Postgres.Extension do
 
   defp to_integer(i) when is_integer(i), do: i
   defp to_integer(s) when is_binary(s), do: String.to_integer(s)
+
+  @doc """
+  Given a list of `%Proto.Table{}` structs, fetch extended type info for all of their columns.
+
+  The extended type info is retrieved from the database via `Client.query_table_column_types/2`.
+
+  This function returns a tuple with two maps:
+
+    - the 1st one maps each table to a map from its column names to the "canonical type names"
+    - the 2nd one maps "canonical type names" to extended type info represented as `%Proto.TypeInfo{}` structs.
+
+  A "canonical type name" is a string value of what is either a built-in type name or a schema-qualified user-defined
+  type. It is basically `PgType.type_name() |> to_string()`.
+  """
+  @spec fetch_table_column_types(conn, [%Proto.Table{}]) ::
+          {Schema.table_column_to_type_name(), Schema.type_name_to_extended_info()}
+  def fetch_table_column_types(conn, tables) do
+    table_column_types =
+      for %{name: name} = table <- tables do
+        {:ok, column_types} = Client.query_table_column_types(conn, table.oid)
+        {{name.schema, name.name}, column_types}
+      end
+
+    column_type_names =
+      Map.new(table_column_types, fn {relation, column_types} ->
+        {relation, build_column_type_names(column_types)}
+      end)
+      # Unit tests occasionally use MockSchemaLoader which doesn't always keep an up-to-date cache of the schema. Filter
+      # out any tables for which we have an empty list of columns to avoid issues when trying to patch column type names
+      # in Schema.
+      |> Enum.reject(fn {_table, columns} -> columns == %{} end)
+      |> Map.new()
+
+    distinct_types =
+      Stream.flat_map(table_column_types, fn {_relation, column_types} ->
+        # Drop column name from each type tuple
+        Stream.map(column_types, &Tuple.delete_at(&1, 0))
+      end)
+      |> build_type_map()
+
+    {column_type_names, distinct_types}
+  end
+
+  defp build_column_type_names(column_types) do
+    Map.new(column_types, fn col ->
+      col_name = elem(col, 0)
+
+      type_name =
+        col
+        # Drop column name
+        |> Tuple.delete_at(0)
+        # Drop enum values
+        |> Tuple.delete_at(0)
+        |> pg_type_from_tuple()
+        |> type_name()
+
+      {col_name, type_name}
+    end)
+  end
+
+  defp build_type_map(type_tuples) do
+    Map.new(type_tuples, fn type_tuple ->
+      enum_values =
+        type_tuple |> elem(0) |> Electric.Postgres.ShadowTableTransformation.parse_pg_array()
+
+      record =
+        type_tuple
+        # Drop enum values
+        |> Tuple.delete_at(0)
+        |> pg_type_from_tuple()
+
+      type_info = %{
+        oid: pg_type(record, :oid),
+        kind: pg_type(record, :kind),
+        values: enum_values
+      }
+
+      {type_name(record), type_info}
+    end)
+  end
+
+  defp type_name(type_record), do: pg_type(type_record, :name) |> to_string()
 end

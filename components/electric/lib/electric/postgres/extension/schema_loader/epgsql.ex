@@ -196,7 +196,13 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
       Enum.reduce(Extension.replicated_table_ddls(), Schema.new(), fn ddl, schema ->
         Schema.update(schema, ddl, oid_loader: oid_loader)
       end)
+      |> load_types_for_schema(conn)
     end)
+  end
+
+  defp load_types_for_schema(schema, conn) do
+    {column_type_names, types} = Extension.fetch_table_column_types(conn, schema.tables)
+    Schema.patch_column_types(schema, column_type_names, types)
   end
 
   @impl true
@@ -221,9 +227,9 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
   end
 
   @impl true
-  def query_table_column_types(pool, relation_oid) do
+  def fetch_table_column_types(pool, tables) do
     checkout!(pool, fn conn ->
-      Client.query_table_column_types(conn, relation_oid)
+      Extension.fetch_table_column_types(conn, tables)
     end)
   end
 end

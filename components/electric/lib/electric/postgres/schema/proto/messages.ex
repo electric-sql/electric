@@ -697,6 +697,179 @@
       )
     )
   end,
+  defmodule Electric.Postgres.Schema.Proto.TypeInfo.TypeKind do
+    @moduledoc false
+    (
+      defstruct []
+
+      (
+        @spec default() :: :UNINITIALIZED
+        def default() do
+          :UNINITIALIZED
+        end
+      )
+
+      @spec encode(atom() | String.t()) :: integer() | atom()
+      [
+        (
+          def encode(:UNINITIALIZED) do
+            0
+          end
+
+          def encode("UNINITIALIZED") do
+            0
+          end
+        ),
+        (
+          def encode(:BASE) do
+            1
+          end
+
+          def encode("BASE") do
+            1
+          end
+        ),
+        (
+          def encode(:COMPOSITE) do
+            2
+          end
+
+          def encode("COMPOSITE") do
+            2
+          end
+        ),
+        (
+          def encode(:DOMAIN) do
+            3
+          end
+
+          def encode("DOMAIN") do
+            3
+          end
+        ),
+        (
+          def encode(:ENUM) do
+            4
+          end
+
+          def encode("ENUM") do
+            4
+          end
+        ),
+        (
+          def encode(:PSEUDO) do
+            5
+          end
+
+          def encode("PSEUDO") do
+            5
+          end
+        ),
+        (
+          def encode(:RANGE) do
+            6
+          end
+
+          def encode("RANGE") do
+            6
+          end
+        ),
+        (
+          def encode(:MULTIRANGE) do
+            7
+          end
+
+          def encode("MULTIRANGE") do
+            7
+          end
+        )
+      ]
+
+      def encode(x) do
+        x
+      end
+
+      @spec decode(integer()) :: atom() | integer()
+      [
+        def decode(0) do
+          :UNINITIALIZED
+        end,
+        def decode(1) do
+          :BASE
+        end,
+        def decode(2) do
+          :COMPOSITE
+        end,
+        def decode(3) do
+          :DOMAIN
+        end,
+        def decode(4) do
+          :ENUM
+        end,
+        def decode(5) do
+          :PSEUDO
+        end,
+        def decode(6) do
+          :RANGE
+        end,
+        def decode(7) do
+          :MULTIRANGE
+        end
+      ]
+
+      def decode(x) do
+        x
+      end
+
+      @spec constants() :: [{integer(), atom()}]
+      def constants() do
+        [
+          {0, :UNINITIALIZED},
+          {1, :BASE},
+          {2, :COMPOSITE},
+          {3, :DOMAIN},
+          {4, :ENUM},
+          {5, :PSEUDO},
+          {6, :RANGE},
+          {7, :MULTIRANGE}
+        ]
+      end
+
+      @spec has_constant?(any()) :: boolean()
+      (
+        [
+          def has_constant?(:UNINITIALIZED) do
+            true
+          end,
+          def has_constant?(:BASE) do
+            true
+          end,
+          def has_constant?(:COMPOSITE) do
+            true
+          end,
+          def has_constant?(:DOMAIN) do
+            true
+          end,
+          def has_constant?(:ENUM) do
+            true
+          end,
+          def has_constant?(:PSEUDO) do
+            true
+          end,
+          def has_constant?(:RANGE) do
+            true
+          end,
+          def has_constant?(:MULTIRANGE) do
+            true
+          end
+        ]
+
+        def has_constant?(_) do
+          false
+        end
+      )
+    )
+  end,
   defmodule Electric.Postgres.Schema.Proto.Column do
     @moduledoc false
     defstruct name: "", type: nil, constraints: []
@@ -10956,7 +11129,7 @@
   end,
   defmodule Electric.Postgres.Schema.Proto.Schema do
     @moduledoc false
-    defstruct tables: []
+    defstruct tables: [], types: %{}
 
     (
       (
@@ -10971,7 +11144,7 @@
 
         @spec encode!(struct) :: iodata | no_return
         def encode!(msg) do
-          [] |> encode_tables(msg)
+          [] |> encode_tables(msg) |> encode_types(msg)
         end
       )
 
@@ -10995,6 +11168,23 @@
           rescue
             ArgumentError ->
               reraise Protox.EncodingError.new(:tables, "invalid field value"), __STACKTRACE__
+          end
+        end,
+        defp encode_types(acc, msg) do
+          try do
+            map = Map.fetch!(msg, :types)
+
+            Enum.reduce(map, acc, fn {k, v}, acc ->
+              map_key_value_bytes = :binary.list_to_bin([Protox.Encode.encode_string(k)])
+              map_key_value_len = byte_size(map_key_value_bytes)
+              map_value_value_bytes = :binary.list_to_bin([Protox.Encode.encode_message(v)])
+              map_value_value_len = byte_size(map_value_value_bytes)
+              len = Protox.Varint.encode(2 + map_key_value_len + map_value_value_len)
+              [acc, "\x12", len, "\n", map_key_value_bytes, "\x12", map_value_value_bytes]
+            end)
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:types, "invalid field value"), __STACKTRACE__
           end
         end
       ]
@@ -11042,6 +11232,39 @@
                    tables: msg.tables ++ [Electric.Postgres.Schema.Proto.Table.decode!(delimited)]
                  ], rest}
 
+              {2, _, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+
+                {[
+                   (
+                     {entry_key, entry_value} =
+                       (
+                         {map_key, map_value} =
+                           parse_string_msg__elixir_electric_postgres_schema_proto_type_info(
+                             {:unset, :unset},
+                             delimited
+                           )
+
+                         map_key =
+                           case map_key do
+                             :unset -> Protox.Default.default(:string)
+                             _ -> map_key
+                           end
+
+                         map_value =
+                           case map_value do
+                             :unset -> struct(Electric.Postgres.Schema.Proto.TypeInfo)
+                             _ -> map_value
+                           end
+
+                         {map_key, map_value}
+                       )
+
+                     {:types, Map.put(msg.types, entry_key, entry_value)}
+                   )
+                 ], rest}
+
               {tag, wire_type, rest} ->
                 {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
                 {[], rest}
@@ -11052,7 +11275,47 @@
         end
       )
 
-      []
+      [
+        (
+          defp parse_string_msg__elixir_electric_postgres_schema_proto_type_info(map_entry, <<>>) do
+            map_entry
+          end
+
+          defp parse_string_msg__elixir_electric_postgres_schema_proto_type_info(
+                 {entry_key, entry_value},
+                 bytes
+               ) do
+            {map_entry, rest} =
+              case Protox.Decode.parse_key(bytes) do
+                {1, _, rest} ->
+                  {res, rest} =
+                    (
+                      {len, new_rest} = Protox.Varint.decode(rest)
+                      {delimited, new_rest} = Protox.Decode.parse_delimited(new_rest, len)
+                      {delimited, new_rest}
+                    )
+
+                  {{res, entry_value}, rest}
+
+                {2, _, rest} ->
+                  {res, rest} =
+                    (
+                      {len, new_rest} = Protox.Varint.decode(rest)
+                      {delimited, new_rest} = Protox.Decode.parse_delimited(new_rest, len)
+                      {Electric.Postgres.Schema.Proto.TypeInfo.decode!(delimited), new_rest}
+                    )
+
+                  {{entry_key, res}, rest}
+
+                {tag, wire_type, rest} ->
+                  {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
+                  {{entry_key, entry_value}, rest}
+              end
+
+            parse_string_msg__elixir_electric_postgres_schema_proto_type_info(map_entry, rest)
+          end
+        )
+      ]
     )
 
     (
@@ -11098,7 +11361,10 @@
               required(non_neg_integer) => {atom, Protox.Types.kind(), Protox.Types.type()}
             }
       def defs() do
-        %{1 => {:tables, :unpacked, {:message, Electric.Postgres.Schema.Proto.Table}}}
+        %{
+          1 => {:tables, :unpacked, {:message, Electric.Postgres.Schema.Proto.Table}},
+          2 => {:types, :map, {:string, {:message, Electric.Postgres.Schema.Proto.TypeInfo}}}
+        }
       end
 
       @deprecated "Use fields_defs()/0 instead"
@@ -11106,7 +11372,10 @@
               required(atom) => {non_neg_integer, Protox.Types.kind(), Protox.Types.type()}
             }
       def defs_by_name() do
-        %{tables: {1, :unpacked, {:message, Electric.Postgres.Schema.Proto.Table}}}
+        %{
+          tables: {1, :unpacked, {:message, Electric.Postgres.Schema.Proto.Table}},
+          types: {2, :map, {:string, {:message, Electric.Postgres.Schema.Proto.TypeInfo}}}
+        }
       end
     )
 
@@ -11122,6 +11391,15 @@
             name: :tables,
             tag: 1,
             type: {:message, Electric.Postgres.Schema.Proto.Table}
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "types",
+            kind: :map,
+            label: nil,
+            name: :types,
+            tag: 2,
+            type: {:string, {:message, Electric.Postgres.Schema.Proto.TypeInfo}}
           }
         ]
       end
@@ -11157,6 +11435,35 @@
 
           []
         ),
+        (
+          def field_def(:types) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "types",
+               kind: :map,
+               label: nil,
+               name: :types,
+               tag: 2,
+               type: {:string, {:message, Electric.Postgres.Schema.Proto.TypeInfo}}
+             }}
+          end
+
+          def field_def("types") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "types",
+               kind: :map,
+               label: nil,
+               name: :types,
+               tag: 2,
+               type: {:string, {:message, Electric.Postgres.Schema.Proto.TypeInfo}}
+             }}
+          end
+
+          []
+        ),
         def field_def(_) do
           {:error, :no_such_field}
         end
@@ -11182,6 +11489,9 @@
     [
       @spec(default(atom) :: {:ok, boolean | integer | String.t() | float} | {:error, atom}),
       def default(:tables) do
+        {:error, :no_default_value}
+      end,
+      def default(:types) do
         {:error, :no_default_value}
       end,
       def default(_) do
@@ -11705,6 +12015,382 @@
       end,
       def default(:oid) do
         {:ok, 0}
+      end,
+      def default(_) do
+        {:error, :no_such_field}
+      end
+    ]
+
+    (
+      @spec file_options() :: nil
+      def file_options() do
+        nil
+      end
+    )
+  end,
+  defmodule Electric.Postgres.Schema.Proto.TypeInfo do
+    @moduledoc false
+    defstruct oid: 0, kind: :UNINITIALIZED, values: []
+
+    (
+      (
+        @spec encode(struct) :: {:ok, iodata} | {:error, any}
+        def encode(msg) do
+          try do
+            {:ok, encode!(msg)}
+          rescue
+            e in [Protox.EncodingError, Protox.RequiredFieldsError] -> {:error, e}
+          end
+        end
+
+        @spec encode!(struct) :: iodata | no_return
+        def encode!(msg) do
+          [] |> encode_oid(msg) |> encode_kind(msg) |> encode_values(msg)
+        end
+      )
+
+      []
+
+      [
+        defp encode_oid(acc, msg) do
+          try do
+            if msg.oid == 0 do
+              acc
+            else
+              [acc, "\b", Protox.Encode.encode_int32(msg.oid)]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:oid, "invalid field value"), __STACKTRACE__
+          end
+        end,
+        defp encode_kind(acc, msg) do
+          try do
+            if msg.kind == :UNINITIALIZED do
+              acc
+            else
+              [
+                acc,
+                "\x10",
+                msg.kind
+                |> Electric.Postgres.Schema.Proto.TypeInfo.TypeKind.encode()
+                |> Protox.Encode.encode_enum()
+              ]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:kind, "invalid field value"), __STACKTRACE__
+          end
+        end,
+        defp encode_values(acc, msg) do
+          try do
+            case msg.values do
+              [] ->
+                acc
+
+              values ->
+                [
+                  acc,
+                  Enum.reduce(values, [], fn value, acc ->
+                    [acc, "\x1A", Protox.Encode.encode_string(value)]
+                  end)
+                ]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:values, "invalid field value"), __STACKTRACE__
+          end
+        end
+      ]
+
+      []
+    )
+
+    (
+      (
+        @spec decode(binary) :: {:ok, struct} | {:error, any}
+        def decode(bytes) do
+          try do
+            {:ok, decode!(bytes)}
+          rescue
+            e in [Protox.DecodingError, Protox.IllegalTagError, Protox.RequiredFieldsError] ->
+              {:error, e}
+          end
+        end
+
+        (
+          @spec decode!(binary) :: struct | no_return
+          def decode!(bytes) do
+            parse_key_value(bytes, struct(Electric.Postgres.Schema.Proto.TypeInfo))
+          end
+        )
+      )
+
+      (
+        @spec parse_key_value(binary, struct) :: struct
+        defp parse_key_value(<<>>, msg) do
+          msg
+        end
+
+        defp parse_key_value(bytes, msg) do
+          {field, rest} =
+            case Protox.Decode.parse_key(bytes) do
+              {0, _, _} ->
+                raise %Protox.IllegalTagError{}
+
+              {1, _, bytes} ->
+                {value, rest} = Protox.Decode.parse_int32(bytes)
+                {[oid: value], rest}
+
+              {2, _, bytes} ->
+                {value, rest} =
+                  Protox.Decode.parse_enum(
+                    bytes,
+                    Electric.Postgres.Schema.Proto.TypeInfo.TypeKind
+                  )
+
+                {[kind: value], rest}
+
+              {3, _, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+                {[values: msg.values ++ [delimited]], rest}
+
+              {tag, wire_type, rest} ->
+                {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
+                {[], rest}
+            end
+
+          msg_updated = struct(msg, field)
+          parse_key_value(rest, msg_updated)
+        end
+      )
+
+      []
+    )
+
+    (
+      @spec json_decode(iodata(), keyword()) :: {:ok, struct()} | {:error, any()}
+      def json_decode(input, opts \\ []) do
+        try do
+          {:ok, json_decode!(input, opts)}
+        rescue
+          e in Protox.JsonDecodingError -> {:error, e}
+        end
+      end
+
+      @spec json_decode!(iodata(), keyword()) :: struct() | no_return()
+      def json_decode!(input, opts \\ []) do
+        {json_library_wrapper, json_library} = Protox.JsonLibrary.get_library(opts, :decode)
+
+        Protox.JsonDecode.decode!(
+          input,
+          Electric.Postgres.Schema.Proto.TypeInfo,
+          &json_library_wrapper.decode!(json_library, &1)
+        )
+      end
+
+      @spec json_encode(struct(), keyword()) :: {:ok, iodata()} | {:error, any()}
+      def json_encode(msg, opts \\ []) do
+        try do
+          {:ok, json_encode!(msg, opts)}
+        rescue
+          e in Protox.JsonEncodingError -> {:error, e}
+        end
+      end
+
+      @spec json_encode!(struct(), keyword()) :: iodata() | no_return()
+      def json_encode!(msg, opts \\ []) do
+        {json_library_wrapper, json_library} = Protox.JsonLibrary.get_library(opts, :encode)
+        Protox.JsonEncode.encode!(msg, &json_library_wrapper.encode!(json_library, &1))
+      end
+    )
+
+    (
+      @deprecated "Use fields_defs()/0 instead"
+      @spec defs() :: %{
+              required(non_neg_integer) => {atom, Protox.Types.kind(), Protox.Types.type()}
+            }
+      def defs() do
+        %{
+          1 => {:oid, {:scalar, 0}, :int32},
+          2 =>
+            {:kind, {:scalar, :UNINITIALIZED},
+             {:enum, Electric.Postgres.Schema.Proto.TypeInfo.TypeKind}},
+          3 => {:values, :unpacked, :string}
+        }
+      end
+
+      @deprecated "Use fields_defs()/0 instead"
+      @spec defs_by_name() :: %{
+              required(atom) => {non_neg_integer, Protox.Types.kind(), Protox.Types.type()}
+            }
+      def defs_by_name() do
+        %{
+          kind:
+            {2, {:scalar, :UNINITIALIZED},
+             {:enum, Electric.Postgres.Schema.Proto.TypeInfo.TypeKind}},
+          oid: {1, {:scalar, 0}, :int32},
+          values: {3, :unpacked, :string}
+        }
+      end
+    )
+
+    (
+      @spec fields_defs() :: list(Protox.Field.t())
+      def fields_defs() do
+        [
+          %{
+            __struct__: Protox.Field,
+            json_name: "oid",
+            kind: {:scalar, 0},
+            label: :optional,
+            name: :oid,
+            tag: 1,
+            type: :int32
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "kind",
+            kind: {:scalar, :UNINITIALIZED},
+            label: :optional,
+            name: :kind,
+            tag: 2,
+            type: {:enum, Electric.Postgres.Schema.Proto.TypeInfo.TypeKind}
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "values",
+            kind: :unpacked,
+            label: :repeated,
+            name: :values,
+            tag: 3,
+            type: :string
+          }
+        ]
+      end
+
+      [
+        @spec(field_def(atom) :: {:ok, Protox.Field.t()} | {:error, :no_such_field}),
+        (
+          def field_def(:oid) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "oid",
+               kind: {:scalar, 0},
+               label: :optional,
+               name: :oid,
+               tag: 1,
+               type: :int32
+             }}
+          end
+
+          def field_def("oid") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "oid",
+               kind: {:scalar, 0},
+               label: :optional,
+               name: :oid,
+               tag: 1,
+               type: :int32
+             }}
+          end
+
+          []
+        ),
+        (
+          def field_def(:kind) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "kind",
+               kind: {:scalar, :UNINITIALIZED},
+               label: :optional,
+               name: :kind,
+               tag: 2,
+               type: {:enum, Electric.Postgres.Schema.Proto.TypeInfo.TypeKind}
+             }}
+          end
+
+          def field_def("kind") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "kind",
+               kind: {:scalar, :UNINITIALIZED},
+               label: :optional,
+               name: :kind,
+               tag: 2,
+               type: {:enum, Electric.Postgres.Schema.Proto.TypeInfo.TypeKind}
+             }}
+          end
+
+          []
+        ),
+        (
+          def field_def(:values) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "values",
+               kind: :unpacked,
+               label: :repeated,
+               name: :values,
+               tag: 3,
+               type: :string
+             }}
+          end
+
+          def field_def("values") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "values",
+               kind: :unpacked,
+               label: :repeated,
+               name: :values,
+               tag: 3,
+               type: :string
+             }}
+          end
+
+          []
+        ),
+        def field_def(_) do
+          {:error, :no_such_field}
+        end
+      ]
+    )
+
+    []
+
+    (
+      @spec required_fields() :: []
+      def required_fields() do
+        []
+      end
+    )
+
+    (
+      @spec syntax() :: atom()
+      def syntax() do
+        :proto3
+      end
+    )
+
+    [
+      @spec(default(atom) :: {:ok, boolean | integer | String.t() | float} | {:error, atom}),
+      def default(:oid) do
+        {:ok, 0}
+      end,
+      def default(:kind) do
+        {:ok, :UNINITIALIZED}
+      end,
+      def default(:values) do
+        {:error, :no_default_value}
       end,
       def default(_) do
         {:error, :no_such_field}

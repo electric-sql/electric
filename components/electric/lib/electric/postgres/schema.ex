@@ -19,6 +19,12 @@ defmodule Electric.Postgres.Schema do
   @type namespaced_name() :: {schema(), String.t()}
   @type name() ::
           String.t() | namespaced_name() | [mbinary()] | %Pg.RangeVar{} | %Proto.RangeVar{}
+  @type type_name() :: binary()
+
+  @type table_column_to_type_name :: %{namespaced_name() => %{binary => type_name()}}
+  @type type_name_to_extended_info :: %{type_name() => %Proto.TypeInfo{}}
+
+  @schema Electric.Postgres.Extension.schema()
 
   def new do
     %Proto.Schema{}
@@ -160,45 +166,49 @@ defmodule Electric.Postgres.Schema do
   end
 
   @doc """
-  Look up a table in the schema and return replication information about it.
+  Return structued description (as `%Electric.Postgres.Replication.Table{}` structs) of all tables in the schema.
   """
-  @spec table_info(t(), {name(), name()}) ::
-          {:ok, Replication.Table.t()} | {:error, term()}
-  def table_info(schema, {sname, tname}) do
-    table_info(schema, sname, tname)
+  @spec table_infos(t()) :: [Replication.Table.t()]
+  def table_infos(%Proto.Schema{tables: tables, types: types}) do
+    for table <- tables, do: build_table_info(table, types)
   end
 
-  @spec table_info(t(), integer()) :: {:ok, Replication.Table.t()} | {:error, term()}
-  def table_info(schema, oid) when is_integer(oid) do
-    with {:ok, table} <- lookup_oid(schema, oid) do
-      {:ok, table_info(table)}
-    end
-  end
-
-  @spec table_info(t(), name(), name()) :: {:ok, Replication.Table.t()} | {:error, term()}
-  def table_info(schema, sname, tname) when is_binary(sname) and is_binary(tname) do
+  @doc """
+  Lookup a single table's structued description in the schema by its Postgres schema and table name.
+  """
+  @spec single_table_info(t(), name(), name()) :: {:ok, Replication.Table.t()} | {:error, term()}
+  def single_table_info(schema, sname, tname) when is_binary(sname) and is_binary(tname) do
     with {:ok, table} <- fetch_table(schema, {sname, tname}) do
-      {:ok, table_info(table)}
+      {:ok, build_table_info(table, schema.types)}
     end
   end
 
   @doc """
-  Return replication information for a single table or all tables in the schema.
+  Lookup a single table's structued description in the schema by its Postgres schema and table name or OID.
   """
-  @spec table_info(t()) :: [Replication.Table.t()]
-  def table_info(%Proto.Schema{} = schema) do
-    for table <- schema.tables, do: table_info(table)
+  @spec single_table_info(t(), {name(), name()}) ::
+          {:ok, Replication.Table.t()} | {:error, term()}
+  def single_table_info(schema, {sname, tname}) do
+    single_table_info(schema, sname, tname)
   end
 
-  @spec table_info(%Proto.Table{}) :: Replication.Table.t()
-  def table_info(%Proto.Table{} = table) do
+  @spec single_table_info(t(), integer()) :: {:ok, Replication.Table.t()} | {:error, term()}
+  def single_table_info(schema, oid) when is_integer(oid) do
+    with {:ok, table} <- lookup_oid(schema, oid) do
+      {:ok, build_table_info(table, schema.types)}
+    end
+  end
+
+  @spec build_table_info(%Proto.Table{}, %{integer() => %Proto.TypeInfo{}}) ::
+          Replication.Table.t()
+  defp build_table_info(%Proto.Table{} = table, types) do
     {:ok, pks} = primary_keys(table)
 
     columns =
       for col <- table.columns do
         %Replication.Column{
           name: col.name,
-          type: replication_column_type(col.type),
+          type: replication_column_type(col.type, types),
           nullable?: replication_column_nullable?(col),
           # since we're using replication identity "full" all columns
           # are identity columns in replication terms
@@ -219,13 +229,15 @@ defmodule Electric.Postgres.Schema do
   end
 
   # Returns a map that is stored to be stored in the `type` field of an `Electric.Postgres.Replication.Column` struct.
-  defp replication_column_type(type) do
+  defp replication_column_type(type, type_map) do
+    type_info = Map.fetch!(type_map, type.name)
+
     %{
-      name: replication_column_type_name(type.kind, type.name),
-      kind: type.kind,
-      oid: type.oid,
+      name: replication_column_type_name(type_info.kind, type.name),
+      kind: type_info.kind,
+      oid: type_info.oid,
       modifier: List.first(type.size, -1),
-      values: type.values
+      values: type_info.values
     }
   end
 
@@ -424,15 +436,35 @@ defmodule Electric.Postgres.Schema do
     %{schema | tables: normal_tables ++ shadow_tables}
   end
 
-  def patch_table_column_type_names(
-        %Proto.Schema{tables: tables} = schema,
-        table_column_type_names
-      ) do
+  @doc """
+  Update type names in table columns and populate the `types` field on the schema.
+
+  Given two maps obtained from `Extension.fetch_table_column_types/2`, this function does the following:
+
+    - "patches" type names in columns of every `%Proto.Table{}` for which `column_type_names` has a key present. This
+      fixes non-canonical type names (e.g. `<enum type>`) obtained via parsing the SQL generated by ddlgen by replacing
+      them with canonical names (e.g. `public.<enum type>`).
+
+    - set the `type` field on the schema which is a map that has one key for every unique type used by any of the
+      schema's table columns.
+  """
+  @spec patch_column_types(
+          %Proto.Schema{},
+          table_column_to_type_name(),
+          type_name_to_extended_info()
+        ) :: %Proto.Schema{}
+  def patch_column_types(schema, column_type_names, types) do
+    schema
+    |> patch_table_column_type_names(column_type_names)
+    |> set_types(types)
+  end
+
+  defp patch_table_column_type_names(%Proto.Schema{tables: tables} = schema, column_type_names) do
     updated_tables =
       for %{name: name} = table <- tables do
-        case Map.fetch(table_column_type_names, {name.schema, name.name}) do
-          {:ok, column_type_names} ->
-            patch_single_table_column_type_names(table, column_type_names)
+        case Map.fetch(column_type_names, {name.schema, name.name}) do
+          {:ok, single_table_column_type_names} ->
+            patch_single_table_column_type_names(table, single_table_column_type_names)
 
           :error ->
             table
@@ -452,7 +484,11 @@ defmodule Electric.Postgres.Schema do
     %{table | columns: updated_columns}
   end
 
-  @schema Electric.Postgres.Extension.schema()
+  def set_types(%Proto.Schema{} = schema, types) do
+    types = Map.new(types, fn {name, info} -> {name, struct(Proto.TypeInfo, info)} end)
+    %{schema | types: types}
+  end
+
   defp is_shadow_table?(%Proto.Table{
          name: %Proto.RangeVar{schema: @schema, name: "shadow__" <> _}
        }),

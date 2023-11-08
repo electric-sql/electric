@@ -16,8 +16,6 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
     Schema
   }
 
-  import Electric.Postgres.OidDatabase.PgType
-
   require Logger
 
   import Electric.Postgres.Extension, only: [is_ddl_relation: 1, is_extension_relation: 1]
@@ -216,58 +214,22 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
 
     oid_loader = &SchemaLoader.relation_oid(loader, &1, &2, &3)
 
-    schema_after_migration =
+    schema =
       Enum.reduce(stmts, schema, fn stmt, schema ->
         Logger.info("Applying migration #{version}: #{inspect(stmt)}")
         Schema.update(schema, stmt, oid_loader: oid_loader)
       end)
       |> Schema.add_shadow_tables(oid_loader: oid_loader)
-
-    column_type_names = fetch_table_column_types(schema_after_migration.tables, loader)
-
-    patched_schema =
-      schema_after_migration
-      |> Schema.patch_table_column_type_names(column_type_names)
+      |> load_types_for_schema(loader)
 
     Logger.info("Saving schema version #{version} /#{inspect(loader)}/")
 
-    {:ok, loader} = SchemaLoader.save(loader, version, patched_schema, stmts)
-    {:ok, loader, patched_schema}
+    {:ok, loader} = SchemaLoader.save(loader, version, schema, stmts)
+    {:ok, loader, schema}
   end
 
-  def fetch_table_column_types(tables, loader) do
-    table_column_types =
-      for %{name: name} = table <- tables do
-        {:ok, column_types} = SchemaLoader.query_table_column_types(loader, table.oid)
-        {{name.schema, name.name}, column_types}
-      end
-
-    Map.new(table_column_types, fn {relation, column_types} ->
-      {relation, build_column_type_names(column_types)}
-    end)
-    # Unit tests occasionally use MockSchemaLoader which doesn't always keep an up-to-date cache of the schema. Filter
-    # out any tables for which we have an empty list of columns to avoid issues when trying to patch column type names
-    # in Schema.
-    |> Enum.reject(fn {_table, columns} -> columns == %{} end)
-    |> Map.new()
+  defp load_types_for_schema(schema, loader) do
+    {column_type_names, types} = SchemaLoader.fetch_table_column_types(loader, schema.tables)
+    Schema.patch_column_types(schema, column_type_names, types)
   end
-
-  defp build_column_type_names(column_types) do
-    Map.new(column_types, fn col ->
-      col_name = elem(col, 0)
-
-      type_name =
-        col
-        # Drop column name
-        |> Tuple.delete_at(0)
-        # Drop enum values
-        |> Tuple.delete_at(0)
-        |> pg_type_from_tuple()
-        |> type_name()
-
-      {col_name, type_name}
-    end)
-  end
-
-  defp type_name(type_record), do: pg_type(type_record, :name) |> to_string()
 end

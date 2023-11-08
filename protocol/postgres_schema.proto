@@ -1,6 +1,9 @@
 syntax = "proto3";
 
-message Schema { repeated Table tables = 1; }
+message Schema {
+  repeated Table tables = 1;
+  map<string, TypeInfo> types = 2;
+}
 
 message RangeVar {
   string name = 1;
@@ -22,9 +25,27 @@ message Column {
     repeated int32 size = 2;
     repeated int32 array = 3;
   }
+
   string name = 1;
   Type type = 2;
   repeated Constraint constraints = 3;
+}
+
+message TypeInfo {
+  enum TypeKind {
+    UNINITIALIZED = 0;
+    BASE = 1;
+    COMPOSITE = 2;
+    DOMAIN = 3;
+    ENUM = 4;
+    PSEUDO = 5;
+    RANGE = 6;
+    MULTIRANGE = 7;
+  }
+
+  int32 oid = 1;
+  TypeKind kind = 2;
+  repeated string values = 3;
 }
 
 message Constraint {

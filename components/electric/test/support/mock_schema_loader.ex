@@ -355,7 +355,7 @@ defmodule Electric.Postgres.MockSchemaLoader do
   end
 
   def electrified_tables({[version | _versions], _opts}) do
-    {:ok, Schema.table_info(version.schema)}
+    {:ok, Schema.table_infos(version.schema)}
   end
 
   def electrified_tables(_state) do
