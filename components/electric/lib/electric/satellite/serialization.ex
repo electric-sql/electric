@@ -416,11 +416,11 @@ defmodule Electric.Satellite.Serialization do
          %SatOpUpdate{row_data: row_data, old_row_data: old_row_data, tags: tags},
          columns
        ) do
-    %UpdatedRecord{
+    UpdatedRecord.new(
       record: decode_record!(row_data, columns),
       old_record: decode_record!(old_row_data, columns),
       tags: tags
-    }
+    )
   end
 
   defp op_to_change(%SatOpDelete{old_row_data: nil, tags: tags}, _columns) do

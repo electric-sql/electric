@@ -98,8 +98,8 @@ defmodule Electric.Postgres.ShadowTableTransformation do
 
   defp build_bitmask(%Changes.Compensation{}, columns), do: Enum.map(columns, fn _ -> "f" end)
 
-  defp build_bitmask(%Changes.UpdatedRecord{old_record: old, record: new}, columns),
-    do: Enum.map(columns, fn col -> if old[col] != new[col], do: "t", else: "f" end)
+  defp build_bitmask(%Changes.UpdatedRecord{changed_columns: changed}, columns),
+    do: Enum.map(columns, &if(MapSet.member?(changed, &1), do: "t", else: "f"))
 
   defp build_bitmask(%Changes.DeletedRecord{}, columns), do: Enum.map(columns, fn _ -> "f" end)
 

@@ -33,7 +33,9 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230814170745_Electr
           CONSTRAINT grants_pkey PRIMARY KEY (privilege, on_table, role, scope, column_name)
       );
       """,
+      # should the roles table be linked to the assignment table directly?
       """
+
       CREATE TABLE IF NOT EXISTS #{roles_table} (
           id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
           role VARCHAR(64) NOT NULL,
