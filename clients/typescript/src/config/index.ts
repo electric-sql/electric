@@ -19,9 +19,13 @@ export interface ElectricConfig {
    * ssl is enabled or 80 when it isn't.
    *
    * Defaults to:
-   * `http://127.0.0.1:5133`
+   * `http://localhost:5133`
    */
   url?: string
+  /**
+   * Timeout (in milliseconds) for shape subscriptions to be fulfilled.
+   */
+  timeout?: number
   /**
    * Optional flag to activate debug mode
    * which produces more verbose output.
@@ -40,6 +44,7 @@ export type HydratedConfig = {
     host: string
     port: number
     ssl: boolean
+    timeout: number
   }
   debug: boolean
   connectionBackOffOptions: ConnectionBackOffOptions
@@ -51,6 +56,7 @@ export type InternalElectricConfig = {
     host: string
     port: number
     ssl: boolean
+    timeout: number
   }
   debug?: boolean
   connectionBackOffOptions?: ConnectionBackOffOptions
@@ -63,7 +69,7 @@ export const hydrateConfig = (config: ElectricConfig): HydratedConfig => {
   }
 
   const debug = config.debug ?? false
-  const url = new URL(config.url ?? 'http://127.0.0.1:5133')
+  const url = new URL(config.url ?? 'http://localhost:5133')
 
   const isSecureProtocol = url.protocol === 'https:' || url.protocol === 'wss:'
   const sslEnabled = isSecureProtocol || url.searchParams.get('ssl') === 'true'
@@ -76,6 +82,7 @@ export const hydrateConfig = (config: ElectricConfig): HydratedConfig => {
     host: url.hostname,
     port: port,
     ssl: sslEnabled,
+    timeout: config.timeout ?? 3000,
   }
 
   const {
