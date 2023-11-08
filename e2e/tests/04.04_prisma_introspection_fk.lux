@@ -12,30 +12,19 @@
       CALL electric.migration_version('$migration_version_1');
       CREATE TABLE "Vertex" (
           "id" TEXT NOT NULL,
-          "type" TEXT NOT NULL,
           "createdAt" TIMESTAMP NOT NULL,
           "updatedAt" TIMESTAMP NOT NULL,
-          "noteHtml" TEXT,
-          "linkValidatedEdgeId" TEXT,
-          "threadValidatedEdgeId" TEXT,
-          "threadTitle" TEXT,
-          "personContactId" TEXT,
-          "personGivenName" TEXT,
-          "personFamilyName" TEXT,
-          "personDisplayName" TEXT,
 
           CONSTRAINT "Vertex_pkey" PRIMARY KEY ("id")
       );
 
       CREATE TABLE "Edge" (
           "id" TEXT NOT NULL,
-          "type" TEXT NOT NULL,
           "confidence" DOUBLE PRECISION NOT NULL,
           "createdAt" TIMESTAMP NOT NULL,
           "updatedAt" TIMESTAMP NOT NULL,
           "fromVertexId" TEXT NOT NULL REFERENCES "Vertex"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
           "toVertexId" TEXT NOT NULL REFERENCES "Vertex"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
-          "hasPersonMatchedProperty" TEXT,
 
           CONSTRAINT "Edge_pkey" PRIMARY KEY ("id")
       );
