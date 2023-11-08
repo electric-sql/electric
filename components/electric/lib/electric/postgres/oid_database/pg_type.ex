@@ -53,11 +53,6 @@ defmodule Electric.Postgres.OidDatabase.PgType do
 
   # All BASE type names are converted to atoms. This is useful for pattern-matching against literal type names.
   defp type_name("pg_catalog", name, :BASE), do: String.to_atom(name)
-
-  # We currently define a single DOMAIN type named electric.tag. It is looked up in OidDatabase as an atom, so we
-  # convert domain types to atoms for now.
-  defp type_name("electric", name, :DOMAIN), do: String.to_atom("electric." <> name)
-
   # User-defined and other custom types get schema-qualified names as strings.
   defp type_name(namespace, name, _kind), do: namespace <> "." <> name
 end

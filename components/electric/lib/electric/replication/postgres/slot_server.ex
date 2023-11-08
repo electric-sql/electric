@@ -14,13 +14,13 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
   require Logger
   alias Electric.Telemetry.Metrics
-  alias Electric.Postgres.Lsn
-  alias Electric.Postgres.LogicalReplication.Messages, as: ReplicationMessages
-  alias Electric.Postgres.Messaging
   alias Electric.Postgres.Extension
-  alias Electric.Replication.Connectors
-  alias Electric.Replication.Changes
+  alias Electric.Postgres.LogicalReplication.Messages, as: ReplicationMessages
+  alias Electric.Postgres.Lsn
+  alias Electric.Postgres.Messaging
   alias Electric.Postgres.ShadowTableTransformation
+  alias Electric.Replication.Changes
+  alias Electric.Replication.Connectors
 
   import Electric.Postgres.Extension,
     only: [is_acked_client_lsn_relation: 1, is_extension_relation: 1]
@@ -504,15 +504,15 @@ defmodule Electric.Replication.Postgres.SlotServer do
     }
   end
 
-  defp column_to_wal(column) do
+  defp column_to_wal(%Electric.Postgres.Replication.Column{} = column) do
     # If `nil`, Postgres also expects the `:key` flag to be set
     flags = if column.part_of_identity? != false, do: [:key], else: []
 
     %ReplicationMessages.Relation.Column{
       flags: flags,
       name: column.name,
-      type_oid: Electric.Postgres.OidDatabase.oid_for_name(column.type),
-      type_modifier: column.type_modifier
+      type_oid: column.type.oid,
+      type_modifier: column.type.modifier
     }
   end
 

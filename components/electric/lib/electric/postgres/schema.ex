@@ -1,8 +1,8 @@
 defmodule Electric.Postgres.Schema do
   defstruct tables: [], indexes: [], triggers: [], views: []
 
-  alias Electric.Postgres.Schema.Proto
   alias Electric.Postgres.Replication
+  alias Electric.Postgres.Schema.Proto
   alias PgQuery, as: Pg
 
   require Logger
@@ -198,9 +198,8 @@ defmodule Electric.Postgres.Schema do
       for col <- table.columns do
         %Replication.Column{
           name: col.name,
-          type: col_type(col.type),
-          nullable?: col_nullable?(col),
-          type_modifier: List.first(col.type.size, -1),
+          type: replication_column_type(col.type),
+          nullable?: replication_column_nullable?(col),
           # since we're using replication identity "full" all columns
           # are identity columns in replication terms
           part_of_identity?: true
@@ -219,15 +218,21 @@ defmodule Electric.Postgres.Schema do
     table_info
   end
 
-  defp col_type(%{name: name, array: [_ | _]}), do: {:array, col_type(name)}
-  defp col_type(%{name: name}), do: col_type(name)
+  # Returns a map that is stored to be stored in the `type` field of an `Electric.Postgres.Replication.Column` struct.
+  defp replication_column_type(type) do
+    %{
+      name: replication_column_type_name(type.kind, type.name),
+      kind: type.kind,
+      oid: type.oid,
+      modifier: List.first(type.size, -1),
+      values: type.values
+    }
+  end
 
-  defp col_type("serial2"), do: :int2
-  defp col_type(t) when t in ["serial", "serial4"], do: :int4
-  defp col_type("serial8"), do: :int8
-  defp col_type(t) when is_binary(t), do: String.to_atom(t)
+  defp replication_column_type_name(:BASE, t) when is_binary(t), do: String.to_atom(t)
+  defp replication_column_type_name(_kind, t), do: t
 
-  defp col_nullable?(col) do
+  defp replication_column_nullable?(col) do
     col.constraints
     |> Enum.find(&match?(%Proto.Constraint{constraint: {:not_null, _}}, &1))
     |> is_nil()
@@ -417,6 +422,34 @@ defmodule Electric.Postgres.Schema do
       Enum.map(normal_tables, &build_shadow_table(&1, oid_loader))
 
     %{schema | tables: normal_tables ++ shadow_tables}
+  end
+
+  def patch_table_column_type_names(
+        %Proto.Schema{tables: tables} = schema,
+        table_column_type_names
+      ) do
+    updated_tables =
+      for %{name: name} = table <- tables do
+        case Map.fetch(table_column_type_names, {name.schema, name.name}) do
+          {:ok, column_type_names} ->
+            patch_single_table_column_type_names(table, column_type_names)
+
+          :error ->
+            table
+        end
+      end
+
+    %{schema | tables: updated_tables}
+  end
+
+  defp patch_single_table_column_type_names(%Proto.Table{columns: columns} = table, type_names) do
+    updated_columns =
+      for column <- columns do
+        type_name = Map.fetch!(type_names, column.name)
+        update_in(column.type, &Map.put(&1, :name, type_name))
+      end
+
+    %{table | columns: updated_columns}
   end
 
   @schema Electric.Postgres.Extension.schema()

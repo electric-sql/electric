@@ -219,4 +219,11 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
       Extension.tx_version(conn, row)
     end)
   end
+
+  @impl true
+  def query_table_column_types(pool, relation_oid) do
+    checkout!(pool, fn conn ->
+      Client.query_table_column_types(conn, relation_oid)
+    end)
+  end
 end

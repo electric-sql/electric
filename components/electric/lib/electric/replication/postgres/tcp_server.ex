@@ -113,7 +113,7 @@ defmodule Electric.Replication.Postgres.TcpServer do
 
   require Logger
 
-  alias Electric.Postgres.{Lsn, Messaging, OidDatabase, Extension.SchemaCache}
+  alias Electric.Postgres.{Lsn, Messaging, Extension.SchemaCache}
   alias Electric.Replication.Postgres.SlotServer
 
   @pg_cancel_request_magic_sequence <<1234::16, 5678::16>>
@@ -519,9 +519,7 @@ defmodule Electric.Replication.Postgres.TcpServer do
     {:ok, %{columns: columns}} = SchemaCache.Global.relation(String.to_integer(target_oid))
 
     Messaging.row_description(attname: :name, atttypid: :oid, "?column?": :bool)
-    |> Messaging.data_rows(
-      Enum.map(columns, &{&1.name, OidDatabase.oid_for_name(&1.type), &1.part_of_identity?})
-    )
+    |> Messaging.data_rows(Enum.map(columns, &{&1.name, &1.type.oid, &1.part_of_identity?}))
     |> Messaging.command_complete("SELECT #{length(columns)}")
     |> Messaging.ready()
   end

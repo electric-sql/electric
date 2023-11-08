@@ -23,6 +23,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   @callback save(state(), version(), Schema.t(), [String.t()]) ::
               {:ok, state()} | {:error, term()}
   @callback relation_oid(state(), rel_type(), schema(), name()) :: oid_result()
+  @callback query_table_column_types(state(), integer()) :: {:ok, list}
   @callback primary_keys(state(), schema(), name()) :: pk_result()
   @callback primary_keys(state(), relation()) :: pk_result()
   @callback refresh_subscription(state(), name()) :: :ok | {:error, term()}
@@ -68,6 +69,10 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
 
   def relation_oid({module, state}, rel_type, schema, table) do
     module.relation_oid(state, rel_type, schema, table)
+  end
+
+  def query_table_column_types({module, state}, relation_oid) do
+    module.query_table_column_types(state, relation_oid)
   end
 
   def primary_keys({module, state}, schema, table) do

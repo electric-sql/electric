@@ -11,7 +11,6 @@ defmodule Electric.Postgres.Replication do
       :name,
       :type,
       :nullable?,
-      type_modifier: -1,
       part_of_identity?: false
     ]
 
@@ -19,9 +18,18 @@ defmodule Electric.Postgres.Replication do
 
     @type t() :: %__MODULE__{
             name: name(),
-            type: atom(),
+            type: %{
+              name: atom | String.t(),
+              # :kind is used when validating incoming client writes in `Electric.Satellite.Serialization`.
+              kind: atom,
+              # :oid and :modifier are used when encoding this struct into a %Replication.Column{} to be sent to Postgres
+              # as a Relation message in the logical replication stream in `Electric.Replication.Postgres.SlotServer`.
+              oid: pos_integer,
+              modifier: integer,
+              # :values holds the list of enum values if kind == :ENUM
+              values: list
+            },
             nullable?: boolean(),
-            type_modifier: integer(),
             part_of_identity?: boolean() | nil
           }
   end

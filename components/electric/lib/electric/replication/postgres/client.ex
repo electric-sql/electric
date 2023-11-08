@@ -92,6 +92,33 @@ defmodule Electric.Replication.Postgres.Client do
     {:ok, type_data}
   end
 
+  @table_column_types_query """
+    SELECT
+      attname,
+      ARRAY(SELECT enumlabel FROM pg_enum WHERE enumtypid = t.oid ORDER BY enumsortorder) AS enum_values,
+      nspname,
+      typname,
+      t.oid::text,
+      typarray::text,
+      typelem::text,
+      typlen::text,
+      typtype::text
+    FROM
+      pg_attribute
+    JOIN
+      pg_type t ON t.oid = atttypid
+    JOIN
+      pg_namespace ON pg_namespace.oid = typnamespace
+    WHERE
+      attrelid = $1
+      AND attnum > 0
+  """
+
+  def query_table_column_types(conn, table_oid) do
+    {:ok, _, rows} = :epgsql.equery(conn, @table_column_types_query, [table_oid])
+    {:ok, rows}
+  end
+
   def start_subscription(conn, name) do
     with {:ok, _, _} <- squery(conn, ~s|ALTER SUBSCRIPTION "#{name}" ENABLE|),
          {:ok, _, _} <-
