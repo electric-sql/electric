@@ -10,12 +10,12 @@ type GeneratorArgs = Partial<GeneratorOptions>
  *     Optional argument providing the url to connect to Electric.
  *     If not provided, it uses the url set in the `ELECTRIC_URL`
  *     environment variable. If that variable is not set, it
- *     resorts to the default url which is `http://localhost:5133`.
+ *     resorts to the default url which is `http://127.0.0.1:5133`.
  * - `--proxy <url>`
  *    Optional argument providing the url to connect to the PG database via the proxy.
  *    If not provided, it uses the url set in the `PG_PROXY_URL` environment variable.
  *    If that variable is not set, it resorts to the default url which is
- *    'postgresql://prisma:password@localhost:65432/electric'.
+ *    'postgresql://prisma:proxy_password@localhost:65432/electric'.
  *    NOTE: the generator introspects the PG database via the proxy,
  *          the URL must therefore connect using the "prisma" user.
  *  - `--out <path>`

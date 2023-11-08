@@ -22,14 +22,15 @@ Note that you can use an optional `--watch` flag to automatically re-generate th
 The generate script accepts a number of arguments:
 
 ```shell
-npx electric-sql generate [--service <url>] [--out <path>] [--watch [<pollingInterval>]]
+npx electric-sql generate [--service <url>] [--proxy <url>] [--out <path>] [--watch [<pollingInterval>]]
 ```
 
 All arguments are optional and are described below:
 
 | Argument | value | description |
 |----------|-------|-------------|
-| <span className="no-wrap">`--service`</span> | `<url>` | Provides the url to connect to the Electric sync service. If not provided, it uses the url set in the `ELECTRIC_URL` environment variable. If that variable is not set, it resorts to the default url which is `http://localhost:5133`. |
+| <span className="no-wrap">`--service`</span> | `<url>` | Provides the url to connect to the Electric sync service. If not provided, it uses the url set in the `ELECTRIC_URL` environment variable. If that variable is not set, it resorts to the default url which is `http://127.0.0.1:5133`. |
+| <span className="no-wrap">`--proxy`</span> | `<url>` | Provides the url to connect to Electric's database proxy. If not provided, it uses the url set in the `PG_PROXY_URL` environment variable. If that variable is not set, it resorts to the default url which is `postgresql://prisma:proxy_password@localhost:65432/electric`. |
 | <span className="no-wrap">`--out`</span> | `<path>` | Specifies where to output the generated client. Defaults to `./src/generated/client` |
 | <span className="no-wrap">`--watch`</span> | `<pollingInterval>` | Run the generator in watch mode. Accepts an optional polling interval (in milliseconds) which defines how often to poll Electric for database migrations. The default polling interval is 1000ms. |
 
