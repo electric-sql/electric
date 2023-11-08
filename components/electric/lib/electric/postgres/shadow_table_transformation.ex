@@ -96,6 +96,10 @@ defmodule Electric.Postgres.ShadowTableTransformation do
 
   defp build_bitmask(%Changes.NewRecord{}, columns), do: Enum.map(columns, fn _ -> "t" end)
 
+  defp build_bitmask(%Changes.Compensation{}, columns), do: Enum.map(columns, fn _ -> "f" end)
+
+  # TODO: Kept for compatibility with old clients that send a special update for compensation
+  # messages. remove once we're sure all clients have been updated.
   defp build_bitmask(%Changes.UpdatedRecord{old_record: nil}, columns),
     do: Enum.map(columns, fn _ -> "f" end)
 

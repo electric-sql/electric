@@ -7,7 +7,8 @@ defmodule Electric.Satellite.Serialization do
     Transaction,
     NewRecord,
     UpdatedRecord,
-    DeletedRecord
+    DeletedRecord,
+    Compensation
   }
 
   use Electric.Satellite.Protobuf
@@ -393,13 +394,18 @@ defmodule Electric.Satellite.Serialization do
     %NewRecord{record: decode_record!(row_data, columns), tags: tags}
   end
 
-  defp op_to_change(
-         %SatOpUpdate{row_data: row_data, old_row_data: nil, tags: tags},
-         columns
-       ) do
-    %UpdatedRecord{
+  defp op_to_change(%SatOpCompensation{pk_data: pk_data, tags: tags}, columns) do
+    %Compensation{
+      record: decode_record!(pk_data, columns, :allow_nulls),
+      tags: tags
+    }
+  end
+
+  # TODO: Kept for compatibility with old clients that send a special update for compensation
+  # messages. remove once we're sure all clients have been updated.
+  defp op_to_change(%SatOpUpdate{row_data: row_data, old_row_data: nil, tags: tags}, columns) do
+    %Compensation{
       record: decode_record!(row_data, columns, :allow_nulls),
-      old_record: nil,
       tags: tags
     }
   end

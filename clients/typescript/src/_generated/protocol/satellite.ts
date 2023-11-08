@@ -217,6 +217,7 @@ export interface SatTransOp {
   insert?: SatOpInsert | undefined;
   delete?: SatOpDelete | undefined;
   migrate?: SatOpMigrate | undefined;
+  compensation?: SatOpCompensation | undefined;
 }
 
 /**
@@ -293,6 +294,16 @@ export interface SatOpDelete {
   $type: "Electric.Satellite.SatOpDelete";
   relationId: number;
   oldRowData:
+    | SatOpRow
+    | undefined;
+  /** dependency information */
+  tags: string[];
+}
+
+export interface SatOpCompensation {
+  $type: "Electric.Satellite.SatOpCompensation";
+  relationId: number;
+  pkData:
     | SatOpRow
     | undefined;
   /** dependency information */
@@ -1508,6 +1519,7 @@ function createBaseSatTransOp(): SatTransOp {
     insert: undefined,
     delete: undefined,
     migrate: undefined,
+    compensation: undefined,
   };
 }
 
@@ -1532,6 +1544,9 @@ export const SatTransOp = {
     }
     if (message.migrate !== undefined) {
       SatOpMigrate.encode(message.migrate, writer.uint32(50).fork()).ldelim();
+    }
+    if (message.compensation !== undefined) {
+      SatOpCompensation.encode(message.compensation, writer.uint32(58).fork()).ldelim();
     }
     return writer;
   },
@@ -1585,6 +1600,13 @@ export const SatTransOp = {
 
           message.migrate = SatOpMigrate.decode(reader, reader.uint32());
           continue;
+        case 7:
+          if (tag !== 58) {
+            break;
+          }
+
+          message.compensation = SatOpCompensation.decode(reader, reader.uint32());
+          continue;
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1617,6 +1639,9 @@ export const SatTransOp = {
       : undefined;
     message.migrate = (object.migrate !== undefined && object.migrate !== null)
       ? SatOpMigrate.fromPartial(object.migrate)
+      : undefined;
+    message.compensation = (object.compensation !== undefined && object.compensation !== null)
+      ? SatOpCompensation.fromPartial(object.compensation)
       : undefined;
     return message;
   },
@@ -2041,6 +2066,80 @@ export const SatOpDelete = {
 };
 
 messageTypeRegistry.set(SatOpDelete.$type, SatOpDelete);
+
+function createBaseSatOpCompensation(): SatOpCompensation {
+  return { $type: "Electric.Satellite.SatOpCompensation", relationId: 0, pkData: undefined, tags: [] };
+}
+
+export const SatOpCompensation = {
+  $type: "Electric.Satellite.SatOpCompensation" as const,
+
+  encode(message: SatOpCompensation, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (message.relationId !== 0) {
+      writer.uint32(8).uint32(message.relationId);
+    }
+    if (message.pkData !== undefined) {
+      SatOpRow.encode(message.pkData, writer.uint32(18).fork()).ldelim();
+    }
+    for (const v of message.tags) {
+      writer.uint32(34).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatOpCompensation {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatOpCompensation();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 8) {
+            break;
+          }
+
+          message.relationId = reader.uint32();
+          continue;
+        case 2:
+          if (tag !== 18) {
+            break;
+          }
+
+          message.pkData = SatOpRow.decode(reader, reader.uint32());
+          continue;
+        case 4:
+          if (tag !== 34) {
+            break;
+          }
+
+          message.tags.push(reader.string());
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatOpCompensation>, I>>(base?: I): SatOpCompensation {
+    return SatOpCompensation.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatOpCompensation>, I>>(object: I): SatOpCompensation {
+    const message = createBaseSatOpCompensation();
+    message.relationId = object.relationId ?? 0;
+    message.pkData = (object.pkData !== undefined && object.pkData !== null)
+      ? SatOpRow.fromPartial(object.pkData)
+      : undefined;
+    message.tags = object.tags?.map((e) => e) || [];
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatOpCompensation.$type, SatOpCompensation);
 
 function createBaseSatOpRow(): SatOpRow {
   return { $type: "Electric.Satellite.SatOpRow", nullsBitmask: new Uint8Array(), values: [] };

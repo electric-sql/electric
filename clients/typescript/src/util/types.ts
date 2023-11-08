@@ -118,6 +118,7 @@ export enum DataChangeType {
   INSERT = 'INSERT',
   UPDATE = 'UPDATE',
   DELETE = 'DELETE',
+  COMPENSATION = 'COMPENSATION',
 }
 
 export type Change = DataChange | SchemaChange

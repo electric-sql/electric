@@ -1002,6 +1002,7 @@
             {:insert, _field_value} -> encode_insert(acc, msg)
             {:delete, _field_value} -> encode_delete(acc, msg)
             {:migrate, _field_value} -> encode_migrate(acc, msg)
+            {:compensation, _field_value} -> encode_compensation(acc, msg)
           end
         end
       ]
@@ -1059,6 +1060,16 @@
           rescue
             ArgumentError ->
               reraise Protox.EncodingError.new(:migrate, "invalid field value"), __STACKTRACE__
+          end
+        end,
+        defp encode_compensation(acc, msg) do
+          try do
+            {_, child_field_value} = msg.op
+            [acc, ":", Protox.Encode.encode_message(child_field_value)]
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:compensation, "invalid field value"),
+                      __STACKTRACE__
           end
         end
       ]
@@ -1212,6 +1223,26 @@
                    end
                  ], rest}
 
+              {7, _, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+
+                {[
+                   case msg.op do
+                     {:compensation, previous_value} ->
+                       {:op,
+                        {:compensation,
+                         Protox.MergeMessage.merge(
+                           previous_value,
+                           Electric.Satellite.SatOpCompensation.decode!(delimited)
+                         )}}
+
+                     _ ->
+                       {:op,
+                        {:compensation, Electric.Satellite.SatOpCompensation.decode!(delimited)}}
+                   end
+                 ], rest}
+
               {tag, wire_type, rest} ->
                 {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
                 {[], rest}
@@ -1274,7 +1305,8 @@
           3 => {:update, {:oneof, :op}, {:message, Electric.Satellite.SatOpUpdate}},
           4 => {:insert, {:oneof, :op}, {:message, Electric.Satellite.SatOpInsert}},
           5 => {:delete, {:oneof, :op}, {:message, Electric.Satellite.SatOpDelete}},
-          6 => {:migrate, {:oneof, :op}, {:message, Electric.Satellite.SatOpMigrate}}
+          6 => {:migrate, {:oneof, :op}, {:message, Electric.Satellite.SatOpMigrate}},
+          7 => {:compensation, {:oneof, :op}, {:message, Electric.Satellite.SatOpCompensation}}
         }
       end
 
@@ -1286,6 +1318,7 @@
         %{
           begin: {1, {:oneof, :op}, {:message, Electric.Satellite.SatOpBegin}},
           commit: {2, {:oneof, :op}, {:message, Electric.Satellite.SatOpCommit}},
+          compensation: {7, {:oneof, :op}, {:message, Electric.Satellite.SatOpCompensation}},
           delete: {5, {:oneof, :op}, {:message, Electric.Satellite.SatOpDelete}},
           insert: {4, {:oneof, :op}, {:message, Electric.Satellite.SatOpInsert}},
           migrate: {6, {:oneof, :op}, {:message, Electric.Satellite.SatOpMigrate}},
@@ -1351,6 +1384,15 @@
             name: :migrate,
             tag: 6,
             type: {:message, Electric.Satellite.SatOpMigrate}
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "compensation",
+            kind: {:oneof, :op},
+            label: :optional,
+            name: :compensation,
+            tag: 7,
+            type: {:message, Electric.Satellite.SatOpCompensation}
           }
         ]
       end
@@ -1531,6 +1573,35 @@
 
           []
         ),
+        (
+          def field_def(:compensation) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "compensation",
+               kind: {:oneof, :op},
+               label: :optional,
+               name: :compensation,
+               tag: 7,
+               type: {:message, Electric.Satellite.SatOpCompensation}
+             }}
+          end
+
+          def field_def("compensation") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "compensation",
+               kind: {:oneof, :op},
+               label: :optional,
+               name: :compensation,
+               tag: 7,
+               type: {:message, Electric.Satellite.SatOpCompensation}
+             }}
+          end
+
+          []
+        ),
         def field_def(_) do
           {:error, :no_such_field}
         end
@@ -1571,6 +1642,9 @@
         {:error, :no_default_value}
       end,
       def default(:migrate) do
+        {:error, :no_default_value}
+      end,
+      def default(:compensation) do
         {:error, :no_default_value}
       end,
       def default(_) do
@@ -13644,6 +13718,398 @@
         {:ok, 0}
       end,
       def default(:old_row_data) do
+        {:ok, nil}
+      end,
+      def default(:tags) do
+        {:error, :no_default_value}
+      end,
+      def default(_) do
+        {:error, :no_such_field}
+      end
+    ]
+
+    (
+      @spec file_options() :: nil
+      def file_options() do
+        nil
+      end
+    )
+  end,
+  defmodule Electric.Satellite.SatOpCompensation do
+    @moduledoc false
+    defstruct relation_id: 0, pk_data: nil, tags: []
+
+    (
+      (
+        @spec encode(struct) :: {:ok, iodata} | {:error, any}
+        def encode(msg) do
+          try do
+            {:ok, encode!(msg)}
+          rescue
+            e in [Protox.EncodingError, Protox.RequiredFieldsError] -> {:error, e}
+          end
+        end
+
+        @spec encode!(struct) :: iodata | no_return
+        def encode!(msg) do
+          [] |> encode_relation_id(msg) |> encode_pk_data(msg) |> encode_tags(msg)
+        end
+      )
+
+      []
+
+      [
+        defp encode_relation_id(acc, msg) do
+          try do
+            if msg.relation_id == 0 do
+              acc
+            else
+              [acc, "\b", Protox.Encode.encode_uint32(msg.relation_id)]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:relation_id, "invalid field value"),
+                      __STACKTRACE__
+          end
+        end,
+        defp encode_pk_data(acc, msg) do
+          try do
+            if msg.pk_data == nil do
+              acc
+            else
+              [acc, "\x12", Protox.Encode.encode_message(msg.pk_data)]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:pk_data, "invalid field value"), __STACKTRACE__
+          end
+        end,
+        defp encode_tags(acc, msg) do
+          try do
+            case msg.tags do
+              [] ->
+                acc
+
+              values ->
+                [
+                  acc,
+                  Enum.reduce(values, [], fn value, acc ->
+                    [acc, "\"", Protox.Encode.encode_string(value)]
+                  end)
+                ]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:tags, "invalid field value"), __STACKTRACE__
+          end
+        end
+      ]
+
+      []
+    )
+
+    (
+      (
+        @spec decode(binary) :: {:ok, struct} | {:error, any}
+        def decode(bytes) do
+          try do
+            {:ok, decode!(bytes)}
+          rescue
+            e in [Protox.DecodingError, Protox.IllegalTagError, Protox.RequiredFieldsError] ->
+              {:error, e}
+          end
+        end
+
+        (
+          @spec decode!(binary) :: struct | no_return
+          def decode!(bytes) do
+            parse_key_value(bytes, struct(Electric.Satellite.SatOpCompensation))
+          end
+        )
+      )
+
+      (
+        @spec parse_key_value(binary, struct) :: struct
+        defp parse_key_value(<<>>, msg) do
+          msg
+        end
+
+        defp parse_key_value(bytes, msg) do
+          {field, rest} =
+            case Protox.Decode.parse_key(bytes) do
+              {0, _, _} ->
+                raise %Protox.IllegalTagError{}
+
+              {1, _, bytes} ->
+                {value, rest} = Protox.Decode.parse_uint32(bytes)
+                {[relation_id: value], rest}
+
+              {2, _, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+
+                {[
+                   pk_data:
+                     Protox.MergeMessage.merge(
+                       msg.pk_data,
+                       Electric.Satellite.SatOpRow.decode!(delimited)
+                     )
+                 ], rest}
+
+              {4, _, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+                {[tags: msg.tags ++ [delimited]], rest}
+
+              {tag, wire_type, rest} ->
+                {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
+                {[], rest}
+            end
+
+          msg_updated = struct(msg, field)
+          parse_key_value(rest, msg_updated)
+        end
+      )
+
+      []
+    )
+
+    (
+      @spec json_decode(iodata(), keyword()) :: {:ok, struct()} | {:error, any()}
+      def json_decode(input, opts \\ []) do
+        try do
+          {:ok, json_decode!(input, opts)}
+        rescue
+          e in Protox.JsonDecodingError -> {:error, e}
+        end
+      end
+
+      @spec json_decode!(iodata(), keyword()) :: struct() | no_return()
+      def json_decode!(input, opts \\ []) do
+        {json_library_wrapper, json_library} = Protox.JsonLibrary.get_library(opts, :decode)
+
+        Protox.JsonDecode.decode!(
+          input,
+          Electric.Satellite.SatOpCompensation,
+          &json_library_wrapper.decode!(json_library, &1)
+        )
+      end
+
+      @spec json_encode(struct(), keyword()) :: {:ok, iodata()} | {:error, any()}
+      def json_encode(msg, opts \\ []) do
+        try do
+          {:ok, json_encode!(msg, opts)}
+        rescue
+          e in Protox.JsonEncodingError -> {:error, e}
+        end
+      end
+
+      @spec json_encode!(struct(), keyword()) :: iodata() | no_return()
+      def json_encode!(msg, opts \\ []) do
+        {json_library_wrapper, json_library} = Protox.JsonLibrary.get_library(opts, :encode)
+        Protox.JsonEncode.encode!(msg, &json_library_wrapper.encode!(json_library, &1))
+      end
+    )
+
+    (
+      @deprecated "Use fields_defs()/0 instead"
+      @spec defs() :: %{
+              required(non_neg_integer) => {atom, Protox.Types.kind(), Protox.Types.type()}
+            }
+      def defs() do
+        %{
+          1 => {:relation_id, {:scalar, 0}, :uint32},
+          2 => {:pk_data, {:scalar, nil}, {:message, Electric.Satellite.SatOpRow}},
+          4 => {:tags, :unpacked, :string}
+        }
+      end
+
+      @deprecated "Use fields_defs()/0 instead"
+      @spec defs_by_name() :: %{
+              required(atom) => {non_neg_integer, Protox.Types.kind(), Protox.Types.type()}
+            }
+      def defs_by_name() do
+        %{
+          pk_data: {2, {:scalar, nil}, {:message, Electric.Satellite.SatOpRow}},
+          relation_id: {1, {:scalar, 0}, :uint32},
+          tags: {4, :unpacked, :string}
+        }
+      end
+    )
+
+    (
+      @spec fields_defs() :: list(Protox.Field.t())
+      def fields_defs() do
+        [
+          %{
+            __struct__: Protox.Field,
+            json_name: "relationId",
+            kind: {:scalar, 0},
+            label: :optional,
+            name: :relation_id,
+            tag: 1,
+            type: :uint32
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "pkData",
+            kind: {:scalar, nil},
+            label: :optional,
+            name: :pk_data,
+            tag: 2,
+            type: {:message, Electric.Satellite.SatOpRow}
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "tags",
+            kind: :unpacked,
+            label: :repeated,
+            name: :tags,
+            tag: 4,
+            type: :string
+          }
+        ]
+      end
+
+      [
+        @spec(field_def(atom) :: {:ok, Protox.Field.t()} | {:error, :no_such_field}),
+        (
+          def field_def(:relation_id) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "relationId",
+               kind: {:scalar, 0},
+               label: :optional,
+               name: :relation_id,
+               tag: 1,
+               type: :uint32
+             }}
+          end
+
+          def field_def("relationId") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "relationId",
+               kind: {:scalar, 0},
+               label: :optional,
+               name: :relation_id,
+               tag: 1,
+               type: :uint32
+             }}
+          end
+
+          def field_def("relation_id") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "relationId",
+               kind: {:scalar, 0},
+               label: :optional,
+               name: :relation_id,
+               tag: 1,
+               type: :uint32
+             }}
+          end
+        ),
+        (
+          def field_def(:pk_data) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "pkData",
+               kind: {:scalar, nil},
+               label: :optional,
+               name: :pk_data,
+               tag: 2,
+               type: {:message, Electric.Satellite.SatOpRow}
+             }}
+          end
+
+          def field_def("pkData") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "pkData",
+               kind: {:scalar, nil},
+               label: :optional,
+               name: :pk_data,
+               tag: 2,
+               type: {:message, Electric.Satellite.SatOpRow}
+             }}
+          end
+
+          def field_def("pk_data") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "pkData",
+               kind: {:scalar, nil},
+               label: :optional,
+               name: :pk_data,
+               tag: 2,
+               type: {:message, Electric.Satellite.SatOpRow}
+             }}
+          end
+        ),
+        (
+          def field_def(:tags) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "tags",
+               kind: :unpacked,
+               label: :repeated,
+               name: :tags,
+               tag: 4,
+               type: :string
+             }}
+          end
+
+          def field_def("tags") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "tags",
+               kind: :unpacked,
+               label: :repeated,
+               name: :tags,
+               tag: 4,
+               type: :string
+             }}
+          end
+
+          []
+        ),
+        def field_def(_) do
+          {:error, :no_such_field}
+        end
+      ]
+    )
+
+    []
+
+    (
+      @spec required_fields() :: []
+      def required_fields() do
+        []
+      end
+    )
+
+    (
+      @spec syntax() :: atom()
+      def syntax() do
+        :proto3
+      end
+    )
+
+    [
+      @spec(default(atom) :: {:ok, boolean | integer | String.t() | float} | {:error, atom}),
+      def default(:relation_id) do
+        {:ok, 0}
+      end,
+      def default(:pk_data) do
         {:ok, nil}
       end,
       def default(:tags) do
