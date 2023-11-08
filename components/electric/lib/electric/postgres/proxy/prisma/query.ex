@@ -1142,7 +1142,8 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ForeignKeyV4_8 do
           # index for ordering only and will be stripped
           i,
           # make up an oid that we're unlikely to hit in real life
-          i32(table.oid + 2_000_000),
+          # and make sure every fk oid is different
+          i32(table.oid + 2_000_000 + :erlang.phash2(fk.name, 1_000_000)),
           child_column,
           fk.pk_table.name,
           parent_column,
@@ -1299,7 +1300,8 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ForeignKeyV5_2 do
           # index for ordering only and will be stripped
           i,
           # make up an oid that we're unlikely to hit in real life
-          i32(table.oid + 2_000_000),
+          # and make sure every fk oid is different
+          i32(table.oid + 2_000_000 + :erlang.phash2(fk.name, 1_000_000)),
           child_column,
           fk.pk_table.name,
           parent_column,

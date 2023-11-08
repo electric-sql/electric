@@ -4,12 +4,11 @@
 [invoke setup]
 
 [newshell developer]
-    !docker ps
-    ?SH-PROMPT:
     !mkdir -p ../prisma_example/prisma/
     ?SH-PROMPT:
     !cp ../prisma_example/schema.prisma ../prisma_example/prisma/
     ?SH-PROMPT:
+    [timeout 10]
     !make docker-prisma ARGS='prisma_example_1 prisma db pull'
     ?The introspected database was empty
     ?SH-PROMPT:
