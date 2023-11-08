@@ -1,0 +1,73 @@
+[doc Prisma introspection via proxy gives correct schema for multiple fks]
+[include _shared.luxinc]
+
+[invoke setup]
+
+[global migration_version_1=20230504114018]
+
+[shell proxy_1]
+    [invoke log "run migration $migration_version_1 on postgres"]
+    """!
+    BEGIN;
+      CALL electric.migration_version('$migration_version_1');
+      CREATE TABLE "Vertex" (
+          "id" TEXT NOT NULL,
+          "type" TEXT NOT NULL,
+          "createdAt" TIMESTAMP NOT NULL,
+          "updatedAt" TIMESTAMP NOT NULL,
+          "noteHtml" TEXT,
+          "linkValidatedEdgeId" TEXT,
+          "threadValidatedEdgeId" TEXT,
+          "threadTitle" TEXT,
+          "personContactId" TEXT,
+          "personGivenName" TEXT,
+          "personFamilyName" TEXT,
+          "personDisplayName" TEXT,
+
+          CONSTRAINT "Vertex_pkey" PRIMARY KEY ("id")
+      );
+
+      CREATE TABLE "Edge" (
+          "id" TEXT NOT NULL,
+          "type" TEXT NOT NULL,
+          "confidence" DOUBLE PRECISION NOT NULL,
+          "createdAt" TIMESTAMP NOT NULL,
+          "updatedAt" TIMESTAMP NOT NULL,
+          "fromVertexId" TEXT NOT NULL REFERENCES "Vertex"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+          "toVertexId" TEXT NOT NULL REFERENCES "Vertex"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+          "hasPersonMatchedProperty" TEXT,
+
+          CONSTRAINT "Edge_pkey" PRIMARY KEY ("id")
+      );
+
+      ALTER TABLE "Vertex" ENABLE ELECTRIC;
+      ALTER TABLE "Edge" ENABLE ELECTRIC;
+    COMMIT;
+    """
+    ?$psql
+
+
+[shell electric]
+    ?? [info] Applying migration $migration_version_1
+
+
+[newshell developer]
+    !docker ps
+    ?SH-PROMPT:
+    !mkdir -p ../prisma_example/prisma/
+    ?SH-PROMPT:
+    !cp ../prisma_example/schema.prisma ../prisma_example/prisma/
+    ?SH-PROMPT:
+    !make docker-prisma ARGS='prisma_example_1 prisma db pull'
+    ?SH-PROMPT:
+
+    !cat ../prisma_example/prisma/schema.prisma
+
+    ?confidence +Float
+    ?Vertex_Edge_fromVertexIdToVertex Vertex +@relation\("Edge_fromVertexIdToVertex", fields: \[fromVertexId\], references: \[id\]\)
+    ?Vertex_Edge_toVertexIdToVertex   Vertex +@relation\("Edge_toVertexIdToVertex", fields: \[toVertexId\], references: \[id\]\)
+
+    ?SH-PROMPT:
+
+[cleanup]
+    [invoke teardown]
