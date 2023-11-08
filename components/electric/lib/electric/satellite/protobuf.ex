@@ -126,15 +126,6 @@ defmodule Electric.Satellite.Protobuf do
     end
   end
 
-  defmodule Version do
-    defstruct major: nil, minor: nil
-
-    @type t() :: %__MODULE__{
-            major: integer,
-            minor: integer
-          }
-  end
-
   @spec decode(byte(), binary()) :: {:ok, sq_pb_msg()} | {:error, any()}
   for {module, tag} <- @mapping do
     def decode(unquote(tag), binary) do
