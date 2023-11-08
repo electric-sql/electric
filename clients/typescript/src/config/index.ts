@@ -23,7 +23,7 @@ export interface ElectricConfig {
    */
   url?: string
   /**
-   * Timeout (in milliseconds) for shape subscriptions to be fulfilled.
+   * Timeout (in milliseconds) for RPC requests to fulfill shape subscriptions.
    */
   timeout?: number
   /**
