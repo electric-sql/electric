@@ -64,8 +64,11 @@
     !cat ../prisma_example/prisma/schema.prisma
 
     ?confidence +Float
+    ?createdAt +DateTime +@db.Timestamp\(6\)
     ?Vertex_Edge_fromVertexIdToVertex Vertex +@relation\("Edge_fromVertexIdToVertex", fields: \[fromVertexId\], references: \[id\]\)
     ?Vertex_Edge_toVertexIdToVertex   Vertex +@relation\("Edge_toVertexIdToVertex", fields: \[toVertexId\], references: \[id\]\)
+    ?Edge_Edge_fromVertexIdToVertex +Edge\[\] +@relation\("Edge_fromVertexIdToVertex"\)
+    ?Edge_Edge_toVertexIdToVertex +Edge\[\] +@relation\("Edge_toVertexIdToVertex"\)
 
     ?SH-PROMPT:
 
