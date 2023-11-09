@@ -15,7 +15,6 @@ import { electrify } from '../../src/drivers/better-sqlite3'
 import path from 'path'
 import { DbSchema } from '../../src/client/model'
 import { MockSocket } from '../../src/sockets/mock'
-import { dedent } from 'ts-dedent'
 
 function encodeSatOpMigrateMsg(request: SatOpMigrate) {
   return (
