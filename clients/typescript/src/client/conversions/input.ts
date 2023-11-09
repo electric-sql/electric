@@ -1,6 +1,6 @@
 import mapValues from 'lodash.mapvalues'
 import { FieldName, Fields } from '../model/schema'
-import { fromSqlite, toSqlite } from './sqlite'
+import { fromSqlite, toSqlite, isDataObject } from './sqlite'
 import { InvalidArgumentError } from '../validation/errors/invalidArgumentError'
 import { mapObject } from '../util/functions'
 import { PgType } from './types'
@@ -333,7 +333,7 @@ function isObject(v: any): boolean {
 function isFilterObject(value: any): boolean {
   // if it is an object it can only be a timestamp or a filter object
   // because those are the only objects we support in where clauses
-  return isObject(value) && !(value instanceof Date)
+  return isObject(value) && !isDataObject(value)
 }
 
 /**
