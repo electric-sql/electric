@@ -52,7 +52,6 @@ export const satelliteDefaults: SatelliteOpts = {
 }
 
 export const satelliteClientDefaults = {
-  timeout: 3000,
   pushPeriod: 500,
 }
 
@@ -60,7 +59,7 @@ export interface SatelliteClientOpts {
   host: string
   port: number
   ssl: boolean
-  timeout?: number
+  timeout: number
   pushPeriod?: number
 }
 
