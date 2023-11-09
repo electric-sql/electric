@@ -403,7 +403,9 @@ defmodule Electric.Satellite.Serialization do
 
   # TODO: Kept for compatibility with old clients that send a special update for compensation
   # messages. remove once we're sure all clients have been updated.
-  defp op_to_change(%SatOpUpdate{row_data: row_data, old_row_data: nil, tags: tags}, columns) do
+  defp op_to_change(%SatOpUpdate{row_data: row_data, old_row_data: nil, tags: tags} = op, columns) do
+    Logger.warning("Received old-style compensation update #{inspect(op)}")
+
     %Compensation{
       record: decode_record!(row_data, columns, :allow_nulls),
       tags: tags
