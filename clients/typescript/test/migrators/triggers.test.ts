@@ -28,11 +28,11 @@ test('generateTableTriggers should create correct triggers for a table', (t) => 
     triggersSQL.includes(
       dedent`
     CREATE TRIGGER insert_main_personTable_into_oplog
-       AFTER INSERT ON personTable
+       AFTER INSERT ON "main"."personTable"
        WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == 'personTable')
     BEGIN
       INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
-      VALUES ('main', 'personTable', 'INSERT', json_object('id', cast(new.id as TEXT)), json_object('age', new.age, 'bmi', cast(new.bmi as TEXT), 'id', cast(new.id as TEXT), 'name', new.name), NULL, NULL);
+      VALUES ('main', 'personTable', 'INSERT', json_object('id', cast(new."id" as TEXT)), json_object('age', new."age", 'bmi', cast(new."bmi" as TEXT), 'id', cast(new."id" as TEXT), 'name', new."name"), NULL, NULL);
     END;
     `
     )
@@ -42,11 +42,11 @@ test('generateTableTriggers should create correct triggers for a table', (t) => 
     triggersSQL.includes(
       dedent`
     CREATE TRIGGER update_main_personTable_into_oplog
-       AFTER UPDATE ON personTable
+       AFTER UPDATE ON "main"."personTable"
        WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == 'personTable')
     BEGIN
       INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
-      VALUES ('main', 'personTable', 'UPDATE', json_object('id', cast(new.id as TEXT)), json_object('age', new.age, 'bmi', cast(new.bmi as TEXT), 'id', cast(new.id as TEXT), 'name', new.name), json_object('age', old.age, 'bmi', cast(old.bmi as TEXT), 'id', cast(old.id as TEXT), 'name', old.name), NULL);
+      VALUES ('main', 'personTable', 'UPDATE', json_object('id', cast(new."id" as TEXT)), json_object('age', new."age", 'bmi', cast(new."bmi" as TEXT), 'id', cast(new."id" as TEXT), 'name', new."name"), json_object('age', old."age", 'bmi', cast(old."bmi" as TEXT), 'id', cast(old."id" as TEXT), 'name', old."name"), NULL);
     END;
     `
     )
@@ -56,11 +56,11 @@ test('generateTableTriggers should create correct triggers for a table', (t) => 
     triggersSQL.includes(
       dedent`
     CREATE TRIGGER delete_main_personTable_into_oplog
-       AFTER DELETE ON personTable
+       AFTER DELETE ON "main"."personTable"
        WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == 'personTable')
     BEGIN
       INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
-      VALUES ('main', 'personTable', 'DELETE', json_object('id', cast(old.id as TEXT)), NULL, json_object('age', old.age, 'bmi', cast(old.bmi as TEXT), 'id', cast(old.id as TEXT), 'name', old.name), NULL);
+      VALUES ('main', 'personTable', 'DELETE', json_object('id', cast(old."id" as TEXT)), NULL, json_object('age', old."age", 'bmi', cast(old."bmi" as TEXT), 'id', cast(old."id" as TEXT), 'name', old."name"), NULL);
     END;
     `
     )
