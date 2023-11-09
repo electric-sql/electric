@@ -2,30 +2,31 @@
 import anyTest, { TestFn } from 'ava'
 
 import browserEnv from '@ikscodes/browser-env'
+// @ts-ignore
 browserEnv()
 
 import React from 'react'
 import { act, renderHook, waitFor } from '@testing-library/react'
 
-import { DatabaseAdapter } from '../../src/drivers/react-native-sqlite-storage/adapter'
-import { MockDatabase } from '../../src/drivers/react-native-sqlite-storage/mock'
+import { DatabaseAdapter } from '../../src/drivers/react-native-sqlite-storage/adapter.js'
+import { MockDatabase } from '../../src/drivers/react-native-sqlite-storage/mock.js'
 
-import { MockNotifier } from '../../src/notifiers/mock'
-import { QualifiedTablename } from '../../src/util/tablename'
-import { sleepAsync } from '../../src/util/timer'
+import { MockNotifier } from '../../src/notifiers/mock.js'
+import { QualifiedTablename } from '../../src/util/tablename.js'
+import { sleepAsync } from '../../src/util/timer.js'
 
 import {
   useConnectivityState,
   useLiveQuery,
-} from '../../src/frameworks/react/hooks'
-import { makeElectricContext } from '../../src/frameworks/react/provider'
-import { ElectricClient } from '../../src/client/model/client'
-import { schema, Electric } from '../client/generated'
-import { MockSatelliteProcess } from '../../src/satellite/mock'
-import { Migrator } from '../../src/migrators'
-import { SocketFactory } from '../../src/sockets'
-import { SatelliteOpts } from '../../src/satellite/config'
-import { Notifier } from '../../src/notifiers'
+} from '../../src/frameworks/react/hooks/index.js'
+import { makeElectricContext } from '../../src/frameworks/react/provider.js'
+import { ElectricClient } from '../../src/client/model/client.js'
+import { schema, Electric } from '../client/generated/index.js'
+import { MockSatelliteProcess } from '../../src/satellite/mock.js'
+import { Migrator } from '../../src/migrators/index.js'
+import { SocketFactory } from '../../src/sockets/index.js'
+import { SatelliteOpts } from '../../src/satellite/config.js'
+import { Notifier } from '../../src/notifiers/index.js'
 
 const assert = (stmt: any, msg: string = 'Assertion failed.'): void => {
   if (!stmt) {

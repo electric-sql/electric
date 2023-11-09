@@ -124,22 +124,6 @@
     "check-styleguide": "prettier --check --loglevel warn . && eslint src --quiet",
     "format": "prettier --write --loglevel warn ."
   },
-  "ava": {
-    "timeout": "10m",
-    "files": [
-      "test/**/*.test.ts",
-      "test/**/*.test.tsx"
-    ],
-    "extensions": {
-      "ts": "module",
-      "tsx": "module"
-    },
-    "nodeArguments": [
-      "--no-warnings",
-      "--loader=tsx"
-    ],
-    "workerThreads": false
-  },
   "lint-staged": {
     "**/*": "prettier --write --ignore-unknown"
   },
