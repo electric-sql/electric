@@ -1,5 +1,16 @@
 # electric-sql
 
+## 0.7.1
+
+### Patch Changes
+
+- dae6e7b2: Improved client events type safety
+- 1016d4b3: Use localhost instead of 127.0.0.1 as default address for Electric.
+  Update documentation of command-line options for the CLI's generate command.
+- 5da426d8: Fix bug where data types provided in input structures could not be bound to SQLite types.
+- fe39c002: Fix #627, incorrect peer dependency for Capacitor SQLite
+- 6c87d8f6: Fix bug where SQL complains about syntax error near "from" due to table names and column names not being quoted in the generated triggers.
+
 ## 0.7.0
 
 ### Minor Changes
