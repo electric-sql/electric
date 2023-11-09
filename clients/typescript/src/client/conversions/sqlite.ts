@@ -55,6 +55,18 @@ export function fromSqlite(v: any, pgType: PgType): any {
   }
 }
 
+/**
+ * Checks whether the provided value is a user-provided data object, e.g. a timestamp.
+ * This is important because `input.ts` needs to distinguish between data objects and filter objects.
+ * Data objects need to be converted to a SQLite storeable value, whereas filter objects need to be treated specially
+ * as we have to transform the values of the filter's fields (cf. `transformFieldsAllowingFilters` in `input.ts`).
+ * @param v The value to check
+ * @returns True if it is a data object, false otherwise.
+ */
+export function isDataObject(v: unknown): boolean {
+  return v instanceof Date
+}
+
 function isPgDateType(pgType: PgType): boolean {
   return (Object.values(PgDateType) as Array<string>).includes(pgType)
 }
