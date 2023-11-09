@@ -8,10 +8,10 @@ defmodule Electric.Satellite.WriteValidation.ImmutablePrimaryKey do
   end
 
   def is_allowed_update?(%UpdatedRecord{} = change, schema, _schema_loader) do
-    %{relation: {sname, tname}} = change
+    %{relation: {sname, tname}, changed_columns: changed} = change
     {:ok, pks} = Schema.primary_keys(schema, sname, tname)
 
-    case Enum.filter(change.changed_columns, fn changed -> changed in pks end) do
+    case Enum.filter(pks, &MapSet.member?(changed, &1)) do
       [] ->
         :ok
 
