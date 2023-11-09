@@ -1,4 +1,4 @@
-lockfileVersion: '6.1'
+lockfileVersion: '6.0'
 
 settings:
   autoInstallPeers: true
@@ -132,9 +132,6 @@ importers:
       '@testing-library/react':
         specifier: ^13.4.0
         version: 13.4.0(react-dom@18.2.0)(react@18.2.0)
-      '@tsmodule/tsmodule':
-        specifier: '42'
-        version: 42.6.0
       '@types/base-64':
         specifier: ^1.0.0
         version: 1.0.0
@@ -239,7 +236,7 @@ importers:
         version: 4.9.5
       wa-sqlite:
         specifier: git+https://github.com/rhashimoto/wa-sqlite#master
-        version: github.com/rhashimoto/wa-sqlite/6e2fcb56237cd6080c1dd5e89a18a54c71c98ee0
+        version: github.com/rhashimoto/wa-sqlite/d98677ed8aa5e37c9d7295242d85c2007704024c
       web-worker:
         specifier: ^1.2.0
         version: 1.2.0
@@ -14361,8 +14358,8 @@ packages:
     resolution: {integrity: sha512-m46AKbrzKVzOzs/DZgVnG5H55N1sv1M8qZU3A8RIKbs3mrACDNeIOeilDymVb2HdmP8uwshOCF4uJ8uM9rCqJw==}
     dev: false
 
-  github.com/rhashimoto/wa-sqlite/6e2fcb56237cd6080c1dd5e89a18a54c71c98ee0:
-    resolution: {tarball: https://codeload.github.com/rhashimoto/wa-sqlite/tar.gz/6e2fcb56237cd6080c1dd5e89a18a54c71c98ee0}
+  github.com/rhashimoto/wa-sqlite/d98677ed8aa5e37c9d7295242d85c2007704024c:
+    resolution: {tarball: https://codeload.github.com/rhashimoto/wa-sqlite/tar.gz/d98677ed8aa5e37c9d7295242d85c2007704024c}
     name: wa-sqlite
-    version: 0.9.6
+    version: 0.9.9
     dev: true
