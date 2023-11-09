@@ -1,4 +1,4 @@
-import * as SQLite from './expo-sqlite.js'
+import * as SQLite from 'expo-sqlite'
 
 import { electrify } from '../../src/drivers/expo-sqlite/index.js'
 import { schema } from '../client/generated/index.js'

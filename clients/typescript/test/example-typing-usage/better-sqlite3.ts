@@ -1,4 +1,4 @@
-import Database from './better-sqlite3.js'
+import Database from 'better-sqlite3'
 
 import { electrify } from '../../src/drivers/better-sqlite3/index.js'
 import { schema } from '../client/generated/index.js'

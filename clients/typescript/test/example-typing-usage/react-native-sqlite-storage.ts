@@ -1,4 +1,4 @@
-import SQLite from './react-native-sqlite-storage.js'
+import SQLite from 'react-native-sqlite-storage'
 import { electrify } from '../../src/drivers/react-native-sqlite-storage/index.js'
 import { schema } from '../client/generated/index.js'
 
