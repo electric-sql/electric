@@ -1,12 +1,12 @@
 import test from 'ava'
 
-import { relations } from '../satellite/common'
-import { InMemorySubscriptionsManager } from '../../src/satellite/shapes/manager'
+import { relations } from '../satellite/common.js'
+import { InMemorySubscriptionsManager } from '../../src/satellite/shapes/manager.js'
 import {
   InitialDataChange,
   SubscriptionData,
-} from '../../src/satellite/shapes/types'
-import { base64 } from '../../src/util'
+} from '../../src/satellite/shapes/types.js'
+import { base64 } from '../../src/util/index.js'
 
 type ContextType = {
   manager: InMemorySubscriptionsManager

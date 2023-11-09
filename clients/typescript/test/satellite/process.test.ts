@@ -3,9 +3,9 @@ import anyTest, { TestFn } from 'ava'
 import {
   MOCK_BEHIND_WINDOW_LSN,
   MOCK_INTERNAL_ERROR,
-} from '../../src/satellite/mock'
-import { QualifiedTablename } from '../../src/util/tablename'
-import { sleepAsync } from '../../src/util/timer'
+} from '../../src/satellite/mock.js'
+import { QualifiedTablename } from '../../src/util/tablename.js'
+import { sleepAsync } from '../../src/util/timer.js'
 
 import {
   OPTYPES,
@@ -16,8 +16,8 @@ import {
   generateTag,
   encodeTags,
   opLogEntryToChange,
-} from '../../src/satellite/oplog'
-import { SatelliteProcess } from '../../src/satellite/process'
+} from '../../src/satellite/oplog.js'
+import { SatelliteProcess } from '../../src/satellite/process.js'
 
 import {
   loadSatelliteMetaTable,
@@ -25,28 +25,32 @@ import {
   generateRemoteOplogEntry,
   genEncodedTags,
   getMatchingShadowEntries,
-} from '../support/satellite-helpers'
+} from '../support/satellite-helpers.js'
 import Long from 'long'
 import {
   DataChangeType,
   DataTransaction,
   SatelliteError,
   SatelliteErrorCode,
-} from '../../src/util/types'
+} from '../../src/util/types.js'
 import {
   makeContext,
   opts,
   relations,
   cleanAndStopSatellite,
   ContextType,
-} from './common'
-import { DEFAULT_LOG_POS, numberToBytes, base64 } from '../../src/util/common'
+} from './common.js'
+import {
+  DEFAULT_LOG_POS,
+  numberToBytes,
+  base64,
+} from '../../src/util/common.js'
 
 import {
   ClientShapeDefinition,
   SubscriptionData,
-} from '../../src/satellite/shapes/types'
-import { mergeEntries } from '../../src/satellite/merge'
+} from '../../src/satellite/shapes/types.js'
+import { mergeEntries } from '../../src/satellite/merge.js'
 
 const parentRecord = {
   id: 1,

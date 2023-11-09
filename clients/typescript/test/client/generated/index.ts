@@ -1,12 +1,12 @@
 import { z } from 'zod'
-import type { Prisma } from '../generated/client'
+import type { Prisma } from './client/index.js'
 import {
   TableSchema,
   DbSchema,
   Relation,
   ElectricClient,
   HKT,
-} from '../../../src/client/model'
+} from '../../../src/client/model/index.js'
 
 /////////////////////////////////////////
 // HELPER FUNCTIONS

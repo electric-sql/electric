@@ -1,7 +1,7 @@
-import { InvalidArgumentError } from '../validation/errors/invalidArgumentError'
-import { deserialiseBoolean, serialiseBoolean } from './datatypes/boolean'
-import { deserialiseDate, serialiseDate } from './datatypes/date'
-import { PgBasicType, PgDateType, PgType } from './types'
+import { InvalidArgumentError } from '../validation/errors/invalidArgumentError.js'
+import { deserialiseBoolean, serialiseBoolean } from './datatypes/boolean.js'
+import { deserialiseDate, serialiseDate } from './datatypes/date.js'
+import { PgBasicType, PgDateType, PgType } from './types.js'
 
 /**
  * This module takes care of converting TypeScript values for Postgres-specific types to a SQLite storeable value and back.

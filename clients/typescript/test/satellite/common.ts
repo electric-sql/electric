@@ -1,16 +1,16 @@
 import { mkdir, rm as removeFile } from 'node:fs/promises'
-import { randomValue } from '../../src/util'
+import { randomValue } from '../../src/util/index.js'
 import Database from 'better-sqlite3'
 import type { Database as SqliteDB } from 'better-sqlite3'
-import { DatabaseAdapter } from '../../src/drivers/better-sqlite3'
-import { BundleMigrator } from '../../src/migrators'
-import { EventNotifier, MockNotifier } from '../../src/notifiers'
-import { MockSatelliteClient } from '../../src/satellite/mock'
-import { SatelliteProcess } from '../../src/satellite'
-import { TableInfo, initTableInfo } from '../support/satellite-helpers'
-import { satelliteDefaults, SatelliteOpts } from '../../src/satellite/config'
-import { Table, generateTableTriggers } from '../../src/migrators/triggers'
-import { data as initialMigration } from '../../src/migrators/schema'
+import { DatabaseAdapter } from '../../src/drivers/better-sqlite3/index.js'
+import { BundleMigrator } from '../../src/migrators/index.js'
+import { EventNotifier, MockNotifier } from '../../src/notifiers/index.js'
+import { MockSatelliteClient } from '../../src/satellite/mock.js'
+import { SatelliteProcess } from '../../src/satellite/index.js'
+import { TableInfo, initTableInfo } from '../support/satellite-helpers.js'
+import { satelliteDefaults, SatelliteOpts } from '../../src/satellite/config.js'
+import { Table, generateTableTriggers } from '../../src/migrators/triggers.js'
+import { data as initialMigration } from '../../src/migrators/schema.js'
 
 export const dbDescription = new DbSchema(
   {
@@ -157,10 +157,10 @@ export const relations = {
 
 import migrations from '../support/migrations/migrations.js'
 import { ExecutionContext } from 'ava'
-import { AuthState } from '../../src/auth'
-import { DbSchema, TableSchema } from '../../src/client/model/schema'
-import { PgBasicType } from '../../src/client/conversions/types'
-import { HKT } from '../../src/client/util/hkt'
+import { AuthState } from '../../src/auth/index.js'
+import { DbSchema, TableSchema } from '../../src/client/model/schema.js'
+import { PgBasicType } from '../../src/client/conversions/types.js'
+import { HKT } from '../../src/client/util/hkt.js'
 
 // Speed up the intervals for testing.
 export const opts = Object.assign({}, satelliteDefaults, {

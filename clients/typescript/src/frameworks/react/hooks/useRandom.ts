@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { randomValue } from '../../../util/random'
+import { randomValue } from '../../../util/random.js'
 
 /**
  * Utility hook for a random value that sets the value to a random

@@ -10,11 +10,11 @@ import * as SQLite from 'wa-sqlite'
 // see: https://github.com/rhashimoto/wa-sqlite/tree/master/src/examples
 import { IDBBatchAtomicVFS } from 'wa-sqlite/src/examples/IDBBatchAtomicVFS.js'
 
-import { SqlValue, Statement } from '../../util'
-import { Row } from '../../util/types'
+import { SqlValue, Statement } from '../../util/index.js'
+import { Row } from '../../util/types.js'
 
 import { Mutex } from 'async-mutex'
-import { resultToRows } from '../util/results'
+import { resultToRows } from '../util/results.js'
 
 export type Database = Pick<
   ElectricDatabase,

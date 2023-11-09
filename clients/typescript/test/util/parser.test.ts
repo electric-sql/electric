@@ -1,7 +1,10 @@
 import test from 'ava'
 
-import { isPotentiallyDangerous, parseTableNames } from '../../src/util/parser'
-import { QualifiedTablename } from '../../src/util/tablename'
+import {
+  isPotentiallyDangerous,
+  parseTableNames,
+} from '../../src/util/parser.js'
+import { QualifiedTablename } from '../../src/util/tablename.js'
 
 test('selects are not dangerous', (t) => {
   const stmt = 'select foo from bar'

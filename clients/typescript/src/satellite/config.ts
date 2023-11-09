@@ -1,5 +1,5 @@
 import { IBackOffOptions } from 'exponential-backoff'
-import { QualifiedTablename } from '../util/tablename'
+import { QualifiedTablename } from '../util/tablename.js'
 
 export type ConnectionBackoffOptions = Omit<IBackOffOptions, 'retry'>
 export interface SatelliteOpts {

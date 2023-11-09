@@ -1,7 +1,7 @@
-import * as SQLite from 'expo-sqlite'
+import * as SQLite from './expo-sqlite.js'
 
-import { electrify } from '../../src/drivers/expo-sqlite'
-import { schema } from '../client/generated'
+import { electrify } from '../../src/drivers/expo-sqlite/index.js'
+import { schema } from '../client/generated/index.js'
 
 const config = {
   auth: {

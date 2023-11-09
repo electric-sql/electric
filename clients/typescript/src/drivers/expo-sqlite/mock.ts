@@ -1,6 +1,10 @@
-import { Row } from '../../util/types'
-import { Query, ResultSet, SQLiteCallback } from 'expo-sqlite/src/SQLite.types'
-import { Database } from './database'
+import { Row } from '../../util/types.js'
+import {
+  Query,
+  ResultSet,
+  SQLiteCallback,
+} from 'expo-sqlite/src/SQLite.types.js'
+import { Database } from './database.js'
 
 export class MockDatabase implements Database {
   constructor(public _name: string) {}

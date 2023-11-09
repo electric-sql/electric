@@ -1,5 +1,5 @@
-import { SatSubsDataBegin } from '../../_generated/protocol/satellite'
-import { DataChange, SatelliteError } from '../../util'
+import { SatSubsDataBegin } from '../../_generated/protocol/satellite.js'
+import { DataChange, SatelliteError } from '../../util/index.js'
 
 export const SUBSCRIPTION_DELIVERED = 'subscription_delivered'
 export const SUBSCRIPTION_ERROR = 'subscription_error'

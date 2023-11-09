@@ -1,35 +1,24 @@
 // N.b.: importing this module is an entrypoint that imports the React Native
 // environment dependencies. Specifically `react-native-fs`. You can use the
 // alternative entrypoint in `./test` to avoid importing this.
-import { DbName } from '../../util/types'
+import { DbName } from '../../util/types.js'
 
 import {
   ElectrifyOptions,
   electrify as baseElectrify,
-} from '../../electric/index'
+} from '../../electric/index.js'
 
-import { DatabaseAdapter } from './adapter'
-import { ElectricConfig } from '../../config'
-import { WebSocketReactNative } from '../../sockets/react-native'
-import { Database } from './database'
-import { ElectricClient } from '../../client/model/client'
+import { DatabaseAdapter } from './adapter.js'
+import { ElectricConfig } from '../../config/index.js'
+import { WebSocketReactNative } from '../../sockets/react-native.js'
+import { Database } from './database.js'
+import { ElectricClient } from '../../client/model/client.js'
+import { DbSchema } from '../../client/model/schema.js'
 
 export type { Database }
 
 // Provide implementation for TextEncoder/TextDecoder
 import 'fastestsmallesttextencoderdecoder'
-// Provide implementation for global uuid()
-import uuid from 'react-native-uuid'
-import { DbSchema } from '../../client/model/schema'
-;(function (global: any) {
-  global['uuid'] = uuid.v4
-})(
-  typeof global == '' + void 0
-    ? typeof self == '' + void 0
-      ? this || {}
-      : self
-    : global
-)
 
 export { DatabaseAdapter }
 

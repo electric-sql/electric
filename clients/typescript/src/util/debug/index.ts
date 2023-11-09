@@ -1,5 +1,5 @@
-import { ElectricNamespace } from '../../electric/namespace'
-import { Row } from '../types'
+import { ElectricNamespace } from '../../electric/namespace.js'
+import { Row } from '../types.js'
 import Log, { LogLevelDesc } from 'loglevel'
 
 export type DebugContext = {

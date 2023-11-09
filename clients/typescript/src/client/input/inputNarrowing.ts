@@ -1,4 +1,4 @@
-import { Removed, RemovedType } from '../util/types'
+import { Removed, RemovedType } from '../util/types.js'
 
 /*
  * This file defines types that are used

@@ -1,6 +1,6 @@
 import { SignJWT } from 'jose'
 
-import { TokenClaims } from '../index'
+import { TokenClaims } from '../index.js'
 
 export function secureAuthToken(
   claims: TokenClaims,

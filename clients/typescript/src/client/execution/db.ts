@@ -1,7 +1,7 @@
-import { RunResult } from '../../electric/adapter'
+import { RunResult } from '../../electric/adapter.js'
 import { QueryBuilder } from 'squel'
 import * as z from 'zod'
-import { Row, Statement } from '../../util'
+import { Row, Statement } from '../../util/index.js'
 
 /**
  * Interface that must be implemented by DB implementations.

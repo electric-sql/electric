@@ -5,12 +5,12 @@ import {
   Migrator,
   MigratorOptions,
   StmtMigration,
-} from './index'
-import { DatabaseAdapter } from '../electric/adapter'
-import { overrideDefined } from '../util/options'
-import { data as baseMigration } from './schema'
+} from './index.js'
+import { DatabaseAdapter } from '../electric/adapter.js'
+import { overrideDefined } from '../util/options.js'
+import { data as baseMigration } from './schema.js'
 import Log from 'loglevel'
-import { SatelliteError, SatelliteErrorCode } from '../util'
+import { SatelliteError, SatelliteErrorCode } from '../util/index.js'
 
 export const SCHEMA_VSN_ERROR_MSG = `Local schema doesn't match server's. Clear local state through developer tools and retry connection manually. If error persists, re-generate the client. Check documentation (https://electric-sql.com/docs/reference/roadmap) to learn more.`
 

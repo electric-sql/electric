@@ -1,21 +1,21 @@
-import { InternalElectricConfig, HydratedConfig } from '../config/index'
-import { DatabaseAdapter } from '../electric/adapter'
-import { Migrator } from '../migrators/index'
-import { Notifier } from '../notifiers/index'
-import { DbName } from '../util/types'
+import { InternalElectricConfig, HydratedConfig } from '../config/index.js'
+import { DatabaseAdapter } from '../electric/adapter.js'
+import { Migrator } from '../migrators/index.js'
+import { Notifier } from '../notifiers/index.js'
+import { DbName } from '../util/types.js'
 
-import { Satellite, Registry } from './index'
+import { Satellite, Registry } from './index.js'
 import {
   SatelliteClientOpts,
   SatelliteOpts,
   SatelliteOverrides,
   satelliteDefaults,
   validateConfig,
-} from './config'
-import { SatelliteProcess } from './process'
-import { SocketFactory } from '../sockets'
-import { SatelliteClient } from './client'
-import { DbSchema } from '../client/model'
+} from './config.js'
+import { SatelliteProcess } from './process.js'
+import { SocketFactory } from '../sockets/index.js'
+import { SatelliteClient } from './client.js'
+import { DbSchema } from '../client/model/index.js'
 
 export abstract class BaseRegistry implements Registry {
   satellites: {

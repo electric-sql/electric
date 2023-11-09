@@ -1,7 +1,7 @@
-import { DbName } from '../util/types'
+import { DbName } from '../util/types.js'
 
-import { Notification, Notifier } from './index'
-import { EventNotifier } from './event'
+import { Notification, Notifier } from './index.js'
+import { EventNotifier } from './event.js'
 
 export class MockNotifier extends EventNotifier implements Notifier {
   notifications: Notification[]

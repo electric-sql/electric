@@ -1,20 +1,20 @@
 // N.b.: importing this module is an entrypoint that imports the better-sqlite3
 // environment dependencies. Specifically the node filesystem.
 
-import { ElectricConfig } from '../../config/index'
+import { ElectricConfig } from '../../config/index.js'
 
 import {
   ElectrifyOptions,
   electrify as baseElectrify,
-} from '../../electric/index'
+} from '../../electric/index.js'
 
-import { DbName } from '../../util/types'
+import { DbName } from '../../util/types.js'
 
-import { DatabaseAdapter } from './adapter'
-import { Database } from './database'
-import { ElectricClient } from '../../client/model/client'
-import { DbSchema } from '../../client/model/schema'
-import { WebSocketNode } from '../../sockets/node'
+import { DatabaseAdapter } from './adapter.js'
+import { Database } from './database.js'
+import { ElectricClient } from '../../client/model/client.js'
+import { DbSchema } from '../../client/model/schema.js'
+import { WebSocketNode } from '../../sockets/node.js'
 
 export { DatabaseAdapter }
 export type { Database }

@@ -1,5 +1,5 @@
 import * as z from 'zod'
-import { generate, defaultOptions, GeneratorOptions } from './migrate'
+import { generate, defaultOptions, GeneratorOptions } from './migrate.js'
 
 type GeneratorArgs = Partial<GeneratorOptions>
 

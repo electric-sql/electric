@@ -9,9 +9,9 @@ import {
   remoteOperationsToTableChanges,
   generateTag,
   OPTYPES,
-} from './oplog'
-import { difference, union } from '../util/sets'
-import { RelationsCache, Row } from '../util'
+} from './oplog.js'
+import { difference, union } from '../util/sets.js'
+import { RelationsCache, Row } from '../util/index.js'
 
 /**
  * Merge server-sent operation with local pending oplog to arrive at the same row state the server is at.

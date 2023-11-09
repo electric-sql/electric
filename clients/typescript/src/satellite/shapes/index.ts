@@ -4,7 +4,7 @@ import {
   ShapeRequest,
   SubscriptionData,
   SubscriptionId,
-} from './types'
+} from './types.js'
 
 /**
  * Manages the state of satellite shape subscriptions

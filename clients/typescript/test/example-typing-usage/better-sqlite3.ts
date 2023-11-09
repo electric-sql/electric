@@ -1,7 +1,7 @@
-import Database from 'better-sqlite3'
+import Database from './better-sqlite3.js'
 
-import { electrify } from '../../src/drivers/better-sqlite3'
-import { schema } from '../client/generated'
+import { electrify } from '../../src/drivers/better-sqlite3/index.js'
+import { schema } from '../client/generated/index.js'
 
 const config = {
   auth: {

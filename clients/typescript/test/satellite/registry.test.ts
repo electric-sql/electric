@@ -1,12 +1,12 @@
 import test from 'ava'
 
-import { ElectricConfig } from '../../src/config/index'
-import { DatabaseAdapter } from '../../src/electric/adapter'
-import { Migrator } from '../../src/migrators/index'
-import { Notifier } from '../../src/notifiers/index'
-import { MockSatelliteProcess, MockRegistry } from '../../src/satellite/mock'
-import { SocketFactory } from '../../src/sockets'
-import { DbSchema } from '../../src/client/model'
+import { ElectricConfig } from '../../src/config/index.js'
+import { DatabaseAdapter } from '../../src/electric/adapter.js'
+import { Migrator } from '../../src/migrators/index.js'
+import { Notifier } from '../../src/notifiers/index.js'
+import { MockSatelliteProcess, MockRegistry } from '../../src/satellite/mock.js'
+import { SocketFactory } from '../../src/sockets/index.js'
+import { DbSchema } from '../../src/client/model/index.js'
 
 const dbName = 'test.db'
 

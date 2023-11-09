@@ -1,3 +1,3 @@
-import { DatabaseAdapter } from './adapter'
+import { DatabaseAdapter } from './adapter.js'
 
 export { DatabaseAdapter }

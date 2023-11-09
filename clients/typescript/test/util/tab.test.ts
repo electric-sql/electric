@@ -1,7 +1,7 @@
 import test from 'ava'
 import MemoryStorage from 'memorystorage'
-import { genUUID } from '../../src/util/random'
-import { uniqueTabId } from '../../src/util/tab'
+import { genUUID } from '../../src/util/random.js'
+import { uniqueTabId } from '../../src/util/tab.js'
 
 test('returns same tab ID', async (t) => {
   const { tabId, usingExisting } = uniqueTabId()

@@ -1,5 +1,5 @@
-import { electrify } from '../../src/drivers/cordova-sqlite-storage'
-import { schema } from '../client/generated'
+import { electrify } from '../../src/drivers/cordova-sqlite-storage/index.js'
+import { schema } from '../client/generated/index.js'
 
 const config = {
   auth: {

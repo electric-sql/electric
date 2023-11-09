@@ -1,9 +1,9 @@
-import * as Pb from '../_generated/protocol/satellite'
-import * as _m0 from 'protobufjs/minimal'
-import { SatelliteError, SatelliteErrorCode } from './types'
-import { ShapeRequest } from '../satellite/shapes/types'
-import { base64, typeDecoder } from './common'
-import { getMaskBit } from './bitmaskHelpers'
+import * as Pb from '../_generated/protocol/satellite.js'
+import * as _m0 from 'protobufjs/minimal.js'
+import { SatelliteError, SatelliteErrorCode } from './types.js'
+import { ShapeRequest } from '../satellite/shapes/types.js'
+import { base64, typeDecoder } from './common.js'
+import { getMaskBit } from './bitmaskHelpers.js'
 
 export type GetName<T extends SatPbMsg> =
   T['$type'] extends `Electric.Satellite.${infer K}` ? K : never

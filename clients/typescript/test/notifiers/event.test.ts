@@ -1,8 +1,8 @@
 import test from 'ava'
-import { ConnectivityStateChangeNotification } from '../../src/notifiers'
+import { ConnectivityStateChangeNotification } from '../../src/notifiers/index.js'
 
-import { EventNotifier } from '../../src/notifiers/event'
-import { QualifiedTablename } from '../../src/util/tablename'
+import { EventNotifier } from '../../src/notifiers/event.js'
+import { QualifiedTablename } from '../../src/util/tablename.js'
 
 test('subscribe to potential data changes', async (t) => {
   const source = new EventNotifier('test.db')

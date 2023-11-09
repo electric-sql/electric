@@ -1,9 +1,9 @@
 import mapValues from 'lodash.mapvalues'
-import { FieldName, Fields } from '../model/schema'
-import { fromSqlite, toSqlite, isDataObject } from './sqlite'
-import { InvalidArgumentError } from '../validation/errors/invalidArgumentError'
-import { mapObject } from '../util/functions'
-import { PgType } from './types'
+import { FieldName, Fields } from '../model/schema.js'
+import { fromSqlite, toSqlite, isDataObject } from './sqlite.js'
+import { InvalidArgumentError } from '../validation/errors/invalidArgumentError.js'
+import { mapObject } from '../util/functions.js'
+import { PgType } from './types.js'
 
 export enum Transformation {
   Js2Sqlite,

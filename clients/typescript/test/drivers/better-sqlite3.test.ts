@@ -2,9 +2,9 @@ import test from 'ava'
 
 import Database from 'better-sqlite3'
 
-import { DatabaseAdapter } from '../../src/drivers/better-sqlite3/adapter'
-import { MockDatabase } from '../../src/drivers/better-sqlite3/mock'
-import { QualifiedTablename } from '../../src/util/tablename'
+import { DatabaseAdapter } from '../../src/drivers/better-sqlite3/adapter.js'
+import { MockDatabase } from '../../src/drivers/better-sqlite3/mock.js'
+import { QualifiedTablename } from '../../src/util/tablename.js'
 
 test('database adapter run works', async (t) => {
   const db = new MockDatabase('test.db')

@@ -1,6 +1,6 @@
 import test from 'ava'
 
-import { prepareInsertBatchedStatements } from '../../src/util/statements'
+import { prepareInsertBatchedStatements } from '../../src/util/statements.js'
 
 test('prepareInsertBatchedStatements correctly splits up data in batches', (t) => {
   const data = [

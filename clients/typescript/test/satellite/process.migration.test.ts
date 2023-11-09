@@ -4,9 +4,9 @@ import Long from 'long'
 import {
   SatOpMigrate_Type,
   SatRelation_RelationType,
-} from '../../src/_generated/protocol/satellite'
-import { DatabaseAdapter } from '../../src/drivers/better-sqlite3'
-import { generateTag } from '../../src/satellite/oplog'
+} from '../../src/_generated/protocol/satellite.js'
+import { DatabaseAdapter } from '../../src/drivers/better-sqlite3/index.js'
+import { generateTag } from '../../src/satellite/oplog.js'
 import {
   DataChange,
   DataChangeType,
@@ -14,14 +14,14 @@ import {
   SchemaChange,
   Statement,
   Transaction,
-} from '../../src/util'
+} from '../../src/util/index.js'
 import {
   ContextType,
   cleanAndStopSatellite,
   makeContext,
   relations,
-} from './common'
-import { getMatchingShadowEntries } from '../support/satellite-helpers'
+} from './common.js'
+import { getMatchingShadowEntries } from '../support/satellite-helpers.js'
 
 type CurrentContext = ContextType<{ clientId: string; txDate: Date }>
 const test = testAny as TestFn<CurrentContext>

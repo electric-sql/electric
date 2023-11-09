@@ -1,8 +1,8 @@
 import test from 'ava'
 
-import { MockDatabase } from '../../src/drivers/wa-sqlite/mock'
-import { DatabaseAdapter } from '../../src/drivers/wa-sqlite'
-import { QualifiedTablename } from '../../src/util'
+import { MockDatabase } from '../../src/drivers/wa-sqlite/mock.js'
+import { DatabaseAdapter } from '../../src/drivers/wa-sqlite/index.js'
+import { QualifiedTablename } from '../../src/util/index.js'
 
 test('database adapter run works', async (t) => {
   const db = new MockDatabase('test.db')

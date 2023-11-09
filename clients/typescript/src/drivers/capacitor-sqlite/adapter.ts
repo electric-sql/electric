@@ -4,9 +4,9 @@ import {
   RunResult,
   TableNameImpl,
   Transaction as Tx,
-} from '../../electric/adapter'
-import { Row, SqlValue, Statement } from '../../util'
-import { Database } from './database'
+} from '../../electric/adapter.js'
+import { Row, SqlValue, Statement } from '../../util/index.js'
+import { Database } from './database.js'
 import { Mutex } from 'async-mutex'
 
 export class DatabaseAdapter

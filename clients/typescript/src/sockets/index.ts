@@ -1,5 +1,5 @@
-import { SatelliteError } from '../util'
-import { LIB_VERSION } from '../version'
+import { SatelliteError } from '../util/index.js'
+import { LIB_VERSION } from '../version/index.js'
 
 export type Data = string | Uint8Array
 

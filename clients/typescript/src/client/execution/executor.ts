@@ -1,10 +1,10 @@
-import { DatabaseAdapter, RunResult } from '../../electric/adapter'
+import { DatabaseAdapter, RunResult } from '../../electric/adapter.js'
 import { QueryBuilder } from 'squel'
-import { DB } from './db'
-import { TransactionalDB } from './transactionalDB'
-import { NonTransactionalDB } from './nonTransactionalDB'
-import { Notifier } from '../../notifiers'
-import { Fields } from '../model/schema'
+import { DB } from './db.js'
+import { TransactionalDB } from './transactionalDB.js'
+import { NonTransactionalDB } from './nonTransactionalDB.js'
+import { Notifier } from '../../notifiers/index.js'
+import { Fields } from '../model/schema.js'
 
 export class Executor {
   constructor(

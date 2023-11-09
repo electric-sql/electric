@@ -1,38 +1,41 @@
-import { CreateInput, CreateManyInput } from '../input/createInput'
-import { FindInput, FindUniqueInput } from '../input/findInput'
-import { SyncInput } from '../input/syncInput'
+import { CreateInput, CreateManyInput } from '../input/createInput.js'
+import { FindInput, FindUniqueInput } from '../input/findInput.js'
+import { SyncInput } from '../input/syncInput.js'
 import {
   parseNestedCreate,
   omitCountFromSelectAndIncludeSchema,
   parseNestedUpdate,
   validate,
-} from '../validation/validation'
-import { UpdateInput, UpdateManyInput } from '../input/updateInput'
-import { DeleteInput, DeleteManyInput } from '../input/deleteInput'
-import { DatabaseAdapter } from '../../electric/adapter'
-import { Builder } from './builder'
-import { Executor } from '../execution/executor'
-import { BatchPayload } from '../output/batchPayload'
-import { InvalidArgumentError } from '../validation/errors/invalidArgumentError'
-import { _NOT_UNIQUE_, _RECORD_NOT_FOUND_ } from '../validation/errors/messages'
-import { UpsertInput } from '../input/upsertInput'
-import { SelectSubset } from '../util/types'
-import { DB } from '../execution/db'
-import { LiveResult, LiveResultContext, Model } from './model'
-import { QualifiedTablename } from '../../util/tablename'
-import { Notifier } from '../../notifiers'
-import { forEach } from '../util/continuationHelpers'
-import { Arity, DbSchema, Fields, Relation, TableName } from './schema'
-import { HKT, Kind } from '../util/hkt'
-import { notNullNotUndefined } from '../util/functions'
+} from '../validation/validation.js'
+import { UpdateInput, UpdateManyInput } from '../input/updateInput.js'
+import { DeleteInput, DeleteManyInput } from '../input/deleteInput.js'
+import { DatabaseAdapter } from '../../electric/adapter.js'
+import { Builder } from './builder.js'
+import { Executor } from '../execution/executor.js'
+import { BatchPayload } from '../output/batchPayload.js'
+import { InvalidArgumentError } from '../validation/errors/invalidArgumentError.js'
+import {
+  _NOT_UNIQUE_,
+  _RECORD_NOT_FOUND_,
+} from '../validation/errors/messages.js'
+import { UpsertInput } from '../input/upsertInput.js'
+import { SelectSubset } from '../util/types.js'
+import { DB } from '../execution/db.js'
+import { LiveResult, LiveResultContext, Model } from './model.js'
+import { QualifiedTablename } from '../../util/tablename.js'
+import { Notifier } from '../../notifiers/index.js'
+import { forEach } from '../util/continuationHelpers.js'
+import { Arity, DbSchema, Fields, Relation, TableName } from './schema.js'
+import { HKT, Kind } from '../util/hkt.js'
+import { notNullNotUndefined } from '../util/functions.js'
 import pick from 'lodash.pick'
 import omitBy from 'lodash.omitby'
 import hasOwn from 'object.hasown'
 import * as z from 'zod'
-import { parseTableNames, Row, Statement } from '../../util'
-import { NarrowInclude } from '../input/inputNarrowing'
-import { IShapeManager } from './shapes'
-import { ShapeSubscription } from '../../satellite'
+import { parseTableNames, Row, Statement } from '../../util/index.js'
+import { NarrowInclude } from '../input/inputNarrowing.js'
+import { IShapeManager } from './shapes.js'
+import { ShapeSubscription } from '../../satellite/index.js'
 import {
   transformCreate,
   transformCreateMany,
@@ -43,7 +46,7 @@ import {
   transformUpdate,
   transformUpdateMany,
   transformUpsert,
-} from '../conversions/input'
+} from '../conversions/input.js'
 
 type AnyTable = Table<any, any, any, any, any, any, any, any, any, HKT>
 

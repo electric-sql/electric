@@ -1,21 +1,21 @@
 // Safe entrypoint for tests that avoids importing the React Native
 // specific dependencies.
-import { DbName } from '../../util/types'
+import { DbName } from '../../util/types.js'
 
-import { ElectrifyOptions, electrify } from '../../electric/index'
+import { ElectrifyOptions, electrify } from '../../electric/index.js'
 
-import { MockMigrator } from '../../migrators/mock'
-import { Notifier } from '../../notifiers/index'
-import { MockNotifier } from '../../notifiers/mock'
-import { MockRegistry } from '../../satellite/mock'
+import { MockMigrator } from '../../migrators/mock.js'
+import { Notifier } from '../../notifiers/index.js'
+import { MockNotifier } from '../../notifiers/mock.js'
+import { MockRegistry } from '../../satellite/mock.js'
 
-import { DatabaseAdapter } from './adapter'
-import { Database } from './database'
-import { MockDatabase } from './mock'
-import { MockSocket } from '../../sockets/mock'
-import { ElectricConfig } from '../../config'
-import { ElectricClient } from '../../client/model/client'
-import { DbSchema } from '../../client/model'
+import { DatabaseAdapter } from './adapter.js'
+import { Database } from './database.js'
+import { MockDatabase } from './mock.js'
+import { MockSocket } from '../../sockets/mock.js'
+import { ElectricConfig } from '../../config/index.js'
+import { ElectricClient } from '../../client/model/client.js'
+import { DbSchema } from '../../client/model/index.js'
 
 const testConfig = {
   auth: {

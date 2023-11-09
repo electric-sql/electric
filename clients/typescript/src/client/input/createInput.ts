@@ -1,4 +1,8 @@
-import { NarrowCreateData, NarrowInclude, NarrowSelect } from './inputNarrowing'
+import {
+  NarrowCreateData,
+  NarrowInclude,
+  NarrowSelect,
+} from './inputNarrowing.js'
 
 export interface CreateInput<Data extends object, Select, Include> {
   data: NarrowCreateData<Data>

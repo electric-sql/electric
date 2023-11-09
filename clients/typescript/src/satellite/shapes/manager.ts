@@ -1,4 +1,4 @@
-import { SatelliteError, SatelliteErrorCode } from '../../util/types'
+import { SatelliteError, SatelliteErrorCode } from '../../util/types.js'
 
 import EventEmitter from 'events'
 import {
@@ -8,8 +8,8 @@ import {
   ShapeRequestOrDefinition,
   SubscriptionData,
   SubscriptionId,
-} from './types'
-import { SubscriptionsManager } from '.'
+} from './types.js'
+import { SubscriptionsManager } from './index.js'
 import { hash } from 'ohash'
 
 type SubcriptionShapeDefinitions = Record<string, ShapeDefinition[]>

@@ -1,4 +1,4 @@
-import { PgDateType } from '../types'
+import { PgDateType } from '../types.js'
 
 // Serialises a `Date` object into a SQLite compatible date string
 export function serialiseDate(v: Date, pgType: PgDateType): string {

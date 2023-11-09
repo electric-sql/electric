@@ -3,16 +3,16 @@ import throttle from 'lodash.throttle'
 import {
   SatOpMigrate_Type,
   SatRelation_RelationType,
-} from '../_generated/protocol/satellite'
-import { AuthConfig, AuthState } from '../auth/index'
-import { DatabaseAdapter } from '../electric/adapter'
-import { Migrator } from '../migrators/index'
+} from '../_generated/protocol/satellite.js'
+import { AuthConfig, AuthState } from '../auth/index.js'
+import { DatabaseAdapter } from '../electric/adapter.js'
+import { Migrator } from '../migrators/index.js'
 import {
   AuthStateNotification,
   Change,
   ConnectivityStateChangeNotification,
   Notifier,
-} from '../notifiers/index'
+} from '../notifiers/index.js'
 import {
   Waiter,
   base64,
@@ -20,8 +20,8 @@ import {
   emptyPromise,
   getWaiter,
   uuid,
-} from '../util/common'
-import { QualifiedTablename } from '../util/tablename'
+} from '../util/common.js'
+import { QualifiedTablename } from '../util/tablename.js'
 import {
   ConnectivityState,
   DataChange,
@@ -37,9 +37,9 @@ import {
   Statement,
   Transaction,
   isDataChange,
-} from '../util/types'
-import { SatelliteOpts } from './config'
-import { Client, ConnectionWrapper, Satellite } from './index'
+} from '../util/types.js'
+import { SatelliteOpts } from './config.js'
+import { Client, ConnectionWrapper, Satellite } from './index.js'
 import {
   OPTYPES,
   OplogEntry,
@@ -51,15 +51,15 @@ import {
   getShadowPrimaryKey,
   primaryKeyToStr,
   toTransactions,
-} from './oplog'
+} from './oplog.js'
 
 import { Mutex } from 'async-mutex'
 import Log from 'loglevel'
-import { generateTableTriggers } from '../migrators/triggers'
-import { prepareInsertBatchedStatements } from '../util/statements'
-import { mergeEntries } from './merge'
-import { SubscriptionsManager } from './shapes'
-import { InMemorySubscriptionsManager } from './shapes/manager'
+import { generateTableTriggers } from '../migrators/triggers.js'
+import { prepareInsertBatchedStatements } from '../util/statements.js'
+import { mergeEntries } from './merge.js'
+import { SubscriptionsManager } from './shapes/index.js'
+import { InMemorySubscriptionsManager } from './shapes/manager.js'
 import {
   ClientShapeDefinition,
   InitialDataChange,
@@ -68,11 +68,16 @@ import {
   ShapeSelect,
   SubscribeResponse,
   SubscriptionData,
-} from './shapes/types'
+} from './shapes/types.js'
 import { backOff } from 'exponential-backoff'
-import { chunkBy } from '../util'
-import { isFatal, isOutOfSyncError, isThrowable, wrapFatalError } from './error'
-import { inferRelationsFromSQLite } from '../util/relations'
+import { chunkBy } from '../util/index.js'
+import {
+  isFatal,
+  isOutOfSyncError,
+  isThrowable,
+  wrapFatalError,
+} from './error.js'
+import { inferRelationsFromSQLite } from '../util/relations.js'
 
 type ChangeAccumulator = {
   [key: string]: Change

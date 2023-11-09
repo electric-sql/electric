@@ -1,17 +1,17 @@
-import { CreateInput, CreateManyInput } from '../input/createInput'
+import { CreateInput, CreateManyInput } from '../input/createInput.js'
 import squel, {
   PostgresSelect,
   QueryBuilder,
   ReturningMixin,
   WhereMixin,
 } from 'squel'
-import { FindInput, FindUniqueInput } from '../input/findInput'
-import { UpdateInput, UpdateManyInput } from '../input/updateInput'
-import { DeleteInput, DeleteManyInput } from '../input/deleteInput'
+import { FindInput, FindUniqueInput } from '../input/findInput.js'
+import { UpdateInput, UpdateManyInput } from '../input/updateInput.js'
+import { DeleteInput, DeleteManyInput } from '../input/deleteInput.js'
 import flow from 'lodash.flow'
-import { InvalidArgumentError } from '../validation/errors/invalidArgumentError'
+import { InvalidArgumentError } from '../validation/errors/invalidArgumentError.js'
 import * as z from 'zod'
-import { IShapeManager } from './shapes'
+import { IShapeManager } from './shapes.js'
 import Log from 'loglevel'
 
 const squelPostgres = squel.useFlavour('postgres')

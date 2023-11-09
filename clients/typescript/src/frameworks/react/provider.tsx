@@ -1,7 +1,7 @@
 import React, { createContext, useContext } from 'react'
 
-import { ElectricClient } from '../../client/model/client'
-import { DbSchema } from '../../client/model'
+import { ElectricClient } from '../../client/model/client.js'
+import { DbSchema } from '../../client/model/index.js'
 
 interface Props<S extends ElectricClient<DbSchema<any>>> {
   children?: React.ReactNode

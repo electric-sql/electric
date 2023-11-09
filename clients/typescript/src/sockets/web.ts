@@ -1,5 +1,5 @@
-import { ConnectionOptions, Data, Socket } from '.'
-import { SatelliteError, SatelliteErrorCode } from '../util'
+import { ConnectionOptions, Data, Socket } from './index.js'
+import { SatelliteError, SatelliteErrorCode } from '../util/index.js'
 
 // FIXME: This implementation is a bit contrived because it is not using EventEmitter
 export class WebSocketWeb implements Socket {

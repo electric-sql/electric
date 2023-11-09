@@ -1,7 +1,7 @@
 import test from 'ava'
 import { decodeJwt } from 'jose'
 
-import { insecureAuthToken } from '../../src/auth'
+import { insecureAuthToken } from '../../src/auth/index.js'
 
 test('insecureAuthToken generates expected token', async (t) => {
   const token = insecureAuthToken({ user_id: 'dummy-user' })

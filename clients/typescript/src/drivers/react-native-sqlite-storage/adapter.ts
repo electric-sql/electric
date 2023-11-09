@@ -5,12 +5,12 @@ import {
   RunResult,
   TableNameImpl,
   Transaction as Tx,
-} from '../../electric/adapter'
-import { Row, SqlValue, Statement } from '../../util'
-import { ensurePromise } from '../util/promise'
-import { rowsFromResults } from '../util/results'
-import { isInsertUpdateOrDeleteStatement } from '../../util/statements'
-import { Database, Transaction, StatementCallback } from './database'
+} from '../../electric/adapter.js'
+import { Row, SqlValue, Statement } from '../../util/index.js'
+import { ensurePromise } from '../util/promise.js'
+import { rowsFromResults } from '../util/results.js'
+import { isInsertUpdateOrDeleteStatement } from '../../util/statements.js'
+import { Database, Transaction, StatementCallback } from './database.js'
 
 export class DatabaseAdapter
   extends TableNameImpl

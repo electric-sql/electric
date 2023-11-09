@@ -1,9 +1,9 @@
-import { FindUniqueInput } from './findInput'
+import { FindUniqueInput } from './findInput.js'
 import {
   NarrowUpdateData,
   NarrowUpdateManyData,
   NarrowWhere,
-} from './inputNarrowing'
+} from './inputNarrowing.js'
 
 export interface UpdateInput<Data, Select, Where, Include>
   extends FindUniqueInput<Select, Where, Include> {

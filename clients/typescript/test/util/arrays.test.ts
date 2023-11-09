@@ -1,6 +1,6 @@
 import test from 'ava'
 
-import { chunkBy } from '../../src/util/arrays'
+import { chunkBy } from '../../src/util/arrays.js'
 
 test('chunkBy: correctly chunks an array based on a predicate', (t) => {
   const source = ['a', 'b', '', 'aa', 'bb', 'a']

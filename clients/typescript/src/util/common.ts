@@ -1,6 +1,6 @@
 import BASE64 from 'base-64'
 import { v4 } from 'uuid'
-import { SatelliteError } from './types'
+import { SatelliteError } from './types.js'
 
 // default implementation for uuid()
 // platforms that don't support 'uuid' shall override definition

@@ -1,10 +1,10 @@
 import test from 'ava'
 import Database from 'better-sqlite3'
-import { electrify } from '../../../src/drivers/better-sqlite3'
-import { schema } from '../generated'
+import { electrify } from '../../../src/drivers/better-sqlite3/index.js'
+import { schema } from '../generated/index.js'
 import { ZodError } from 'zod'
-import { InvalidArgumentError } from '../../../src/client/validation/errors/invalidArgumentError'
-import { MockRegistry } from '../../../src/satellite/mock'
+import { InvalidArgumentError } from '../../../src/client/validation/errors/invalidArgumentError.js'
+import { MockRegistry } from '../../../src/satellite/mock.js'
 /*
  * This test file is meant to check that the DAL
  * reports unrecognized/unsupported arguments

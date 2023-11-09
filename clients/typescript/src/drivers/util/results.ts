@@ -1,4 +1,4 @@
-import { Row, SqlValue } from '../../util/types'
+import { Row, SqlValue } from '../../util/types.js'
 
 export interface Results {
   rows: {

@@ -1,4 +1,4 @@
-import { SatelliteError, SatelliteErrorCode } from '../util'
+import { SatelliteError, SatelliteErrorCode } from '../util/index.js'
 import Log from 'loglevel'
 
 const fatalErrorDescription =

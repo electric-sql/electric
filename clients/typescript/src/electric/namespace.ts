@@ -1,8 +1,8 @@
 // This is the namespace that's patched onto the user's database client
 // (technically via the proxy machinery) as the `.electric` property.
-import { DatabaseAdapter } from './adapter'
-import { Notifier } from '../notifiers'
-import { ConnectivityState } from '../util/types'
+import { DatabaseAdapter } from './adapter.js'
+import { Notifier } from '../notifiers/index.js'
+import { ConnectivityState } from '../util/types.js'
 
 export class ElectricNamespace {
   adapter: DatabaseAdapter

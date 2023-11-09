@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events'
-import { ConnectionOptions, Data, Socket } from './index'
-import { SatelliteError } from '../util'
+import { ConnectionOptions, Data, Socket } from './index.js'
+import { SatelliteError } from '../util/index.js'
 
 export class MockSocket extends EventEmitter implements Socket {
   constructor() {

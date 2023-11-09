@@ -1,19 +1,19 @@
 import test from 'ava'
-import { mergeEntries } from '../../src/satellite/merge'
+import { mergeEntries } from '../../src/satellite/merge.js'
 import {
   OplogEntry,
   fromTransaction,
   primaryKeyToStr,
-} from '../../src/satellite/oplog'
+} from '../../src/satellite/oplog.js'
 import {
   DEFAULT_LOG_POS,
   DataChangeType,
   DataTransaction,
-} from '../../src/util'
+} from '../../src/util/index.js'
 import Long from 'long'
-import { relations, migrateDb, personTable } from './common'
+import { relations, migrateDb, personTable } from './common.js'
 import Database from 'better-sqlite3'
-import { satelliteDefaults } from '../../src/satellite/config'
+import { satelliteDefaults } from '../../src/satellite/config.js'
 
 test('merging entries: local no-op updates should cancel incoming delete', (t) => {
   const pk = primaryKeyToStr({ id: 1 })

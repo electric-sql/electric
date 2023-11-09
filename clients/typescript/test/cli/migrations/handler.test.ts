@@ -1,5 +1,5 @@
 import test from 'ava'
-import { parseGenerateArgs } from '../../../src/cli/migrations/handler'
+import { parseGenerateArgs } from '../../../src/cli/migrations/handler.js'
 
 test('generate accepts url to Electric endpoint', (t) => {
   const url = 'http://127.0.0.1:5133'

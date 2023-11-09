@@ -1,6 +1,6 @@
 import test from 'ava'
-import { Builder } from '../../../src/client/model/builder'
-import { ShapeManagerMock } from '../../../src/client/model/shapes'
+import { Builder } from '../../../src/client/model/builder.js'
+import { ShapeManagerMock } from '../../../src/client/model/shapes.js'
 import { ZodError } from 'zod'
 
 const shapeManager = new ShapeManagerMock()

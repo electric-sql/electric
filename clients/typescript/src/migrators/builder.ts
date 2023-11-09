@@ -1,8 +1,8 @@
 import * as z from 'zod'
-import { SatOpMigrate } from '../_generated/protocol/satellite'
-import { base64, getProtocolVersion } from '../util'
-import { Migration } from './index'
-import { generateTriggersForTable } from '../satellite/process'
+import { SatOpMigrate } from '../_generated/protocol/satellite.js'
+import { base64, getProtocolVersion } from '../util/index.js'
+import { Migration } from './index.js'
+import { generateTriggersForTable } from '../satellite/process.js'
 
 const metaDataSchema = z
   .object({

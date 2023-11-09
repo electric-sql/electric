@@ -3,11 +3,11 @@ import Database from 'better-sqlite3'
 
 import { rm as removeFile } from 'node:fs/promises'
 
-import { DatabaseAdapter } from '../../src/drivers/better-sqlite3/adapter'
-import { BundleMigrator } from '../../src/migrators/bundle'
-import { makeStmtMigration } from '../../src/migrators'
+import { DatabaseAdapter } from '../../src/drivers/better-sqlite3/adapter.js'
+import { BundleMigrator } from '../../src/migrators/bundle.js'
+import { makeStmtMigration } from '../../src/migrators/index.js'
 
-import { randomValue } from '../../src/util/random'
+import { randomValue } from '../../src/util/random.js'
 
 import migrations from '../support/migrations/migrations.js'
 

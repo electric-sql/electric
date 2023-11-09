@@ -1,8 +1,8 @@
 import sqliteParser from 'sqlite-parser'
 import { WalkBuilder } from 'walkjs'
 
-import { QualifiedTablename } from './tablename'
-import { DbNamespace } from './types'
+import { QualifiedTablename } from './tablename.js'
+import { DbNamespace } from './types.js'
 
 const dangerousKeywords = [
   'add',

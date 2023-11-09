@@ -1,19 +1,19 @@
 // N.b.: importing this module is an entrypoint that imports the Cordova
 // environment dependencies. Specifically `./filesystems/cordova`. You can
 // use the alternative entrypoint in `./test` to avoid importing this.
-import { DbName } from '../../util/types'
+import { DbName } from '../../util/types.js'
 
 import {
   ElectrifyOptions,
   electrify as baseElectrify,
-} from '../../electric/index'
+} from '../../electric/index.js'
 
-import { DatabaseAdapter } from './adapter'
-import { ElectricConfig } from '../../config'
-import { Database } from './database'
-import { MockSocket } from '../../sockets/mock'
-import { ElectricClient } from '../../client/model/client'
-import { DbSchema } from '../../client/model/schema'
+import { DatabaseAdapter } from './adapter.js'
+import { ElectricConfig } from '../../config/index.js'
+import { Database } from './database.js'
+import { MockSocket } from '../../sockets/mock.js'
+import { ElectricClient } from '../../client/model/client.js'
+import { DbSchema } from '../../client/model/schema.js'
 
 export { DatabaseAdapter }
 export type { Database }

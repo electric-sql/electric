@@ -1,8 +1,8 @@
 import test from 'ava'
 import Database from 'better-sqlite3'
-import { electrify } from '../../src/drivers/better-sqlite3'
-import { schema } from './generated'
-import { MockRegistry } from '../../src/satellite/mock'
+import { electrify } from '../../src/drivers/better-sqlite3/index.js'
+import { schema } from './generated/index.js'
+import { MockRegistry } from '../../src/satellite/mock.js'
 
 const conn = new Database(':memory:')
 const config = {

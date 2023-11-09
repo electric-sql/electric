@@ -8,11 +8,11 @@ import {
 } from 'react'
 import { hash } from 'ohash'
 
-import { ChangeNotification } from '../../../notifiers/index'
-import { QualifiedTablename, hasIntersection } from '../../../util/tablename'
+import { ChangeNotification } from '../../../notifiers/index.js'
+import { QualifiedTablename, hasIntersection } from '../../../util/tablename.js'
 
-import { ElectricContext } from '../provider'
-import { LiveResultContext } from '../../../client/model/model'
+import { ElectricContext } from '../provider.js'
+import { LiveResultContext } from '../../../client/model/model.js'
 
 export interface ResultData<T> {
   error?: unknown

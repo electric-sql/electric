@@ -1,14 +1,14 @@
-import { SatRelation_RelationType } from '../../src/_generated/protocol/satellite'
-import { serializeRow, deserializeRow } from '../../src/satellite/client'
+import { SatRelation_RelationType } from '../../src/_generated/protocol/satellite.js'
+import { serializeRow, deserializeRow } from '../../src/satellite/client.js'
 import test from 'ava'
-import { Relation, Record } from '../../src/util/types'
-import { DbSchema, TableSchema } from '../../src/client/model/schema'
-import { PgBasicType } from '../../src/client/conversions/types'
-import { HKT } from '../../src/client/util/hkt'
+import { Relation, Record } from '../../src/util/types.js'
+import { DbSchema, TableSchema } from '../../src/client/model/schema.js'
+import { PgBasicType } from '../../src/client/conversions/types.js'
+import { HKT } from '../../src/client/util/hkt.js'
 import Database from 'better-sqlite3'
-import { DatabaseAdapter } from '../../src/drivers/better-sqlite3'
-import { inferRelationsFromSQLite } from '../../src/util/relations'
-import { satelliteDefaults } from '../../src/satellite/config'
+import { DatabaseAdapter } from '../../src/drivers/better-sqlite3/index.js'
+import { inferRelationsFromSQLite } from '../../src/util/relations.js'
+import { satelliteDefaults } from '../../src/satellite/config.js'
 
 test('serialize/deserialize row data', async (t) => {
   const rel: Relation = {

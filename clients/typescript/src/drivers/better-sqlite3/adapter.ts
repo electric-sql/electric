@@ -3,16 +3,16 @@ import {
   RunResult,
   TableNameImpl,
   Transaction as Tx,
-} from '../../electric/adapter'
+} from '../../electric/adapter.js'
 
 import {
   Statement as DbStatement,
   Row,
   Statement,
   BindParams,
-} from '../../util/types'
+} from '../../util/types.js'
 
-import { Database, StatementBindParams } from './database'
+import { Database, StatementBindParams } from './database.js'
 
 export class DatabaseAdapter
   extends TableNameImpl

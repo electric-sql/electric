@@ -1,28 +1,28 @@
 import anyTest, { TestFn } from 'ava'
 import Long from 'long'
-import * as Proto from '../../src/_generated/protocol/satellite'
-import { AuthState } from '../../src/auth'
+import * as Proto from '../../src/_generated/protocol/satellite.js'
+import { AuthState } from '../../src/auth/index.js'
 import {
   deserializeRow,
   SatelliteClient,
   serializeRow,
-} from '../../src/satellite/client'
-import { OplogEntry, toTransactions } from '../../src/satellite/oplog'
-import { ShapeRequest } from '../../src/satellite/shapes/types'
-import { WebSocketNode } from '../../src/sockets/node'
-import { sleepAsync } from '../../src/util'
-import { base64, bytesToNumber } from '../../src/util/common'
+} from '../../src/satellite/client.js'
+import { OplogEntry, toTransactions } from '../../src/satellite/oplog.js'
+import { ShapeRequest } from '../../src/satellite/shapes/types.js'
+import { WebSocketNode } from '../../src/sockets/node.js'
+import { sleepAsync } from '../../src/util/index.js'
+import { base64, bytesToNumber } from '../../src/util/common.js'
 import {
   DataTransaction,
   Relation,
   SatelliteErrorCode,
   Transaction,
-} from '../../src/util/types'
-import { dbDescription, relations } from './common'
-import { RpcResponse, SatelliteWSServerStub } from './server_ws_stub'
-import { DbSchema, TableSchema } from '../../src/client/model/schema'
-import { PgBasicType } from '../../src/client/conversions/types'
-import { HKT } from '../../src/client/util/hkt'
+} from '../../src/util/types.js'
+import { dbDescription, relations } from './common.js'
+import { RpcResponse, SatelliteWSServerStub } from './server_ws_stub.js'
+import { DbSchema, TableSchema } from '../../src/client/model/schema.js'
+import { PgBasicType } from '../../src/client/conversions/types.js'
+import { HKT } from '../../src/client/util/hkt.js'
 
 interface Context extends AuthState {
   server: SatelliteWSServerStub

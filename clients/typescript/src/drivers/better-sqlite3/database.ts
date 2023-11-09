@@ -1,4 +1,4 @@
-import { BindParams, Row } from '../../util/types'
+import { BindParams, Row } from '../../util/types.js'
 import type {
   Database as OriginalDatabase,
   Statement as OriginalStatement,

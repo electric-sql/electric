@@ -1,12 +1,12 @@
-import { ElectricNamespace } from '../../electric/namespace'
-import { DbSchema, TableSchema } from './schema'
-import { liveRaw, raw, Table } from './table'
-import { Row, Statement } from '../../util'
-import { LiveResult, LiveResultContext } from './model'
-import { Notifier } from '../../notifiers'
-import { DatabaseAdapter } from '../../electric/adapter'
-import { Satellite } from '../../satellite'
-import { ShapeManager } from './shapes'
+import { ElectricNamespace } from '../../electric/namespace.js'
+import { DbSchema, TableSchema } from './schema.js'
+import { liveRaw, raw, Table } from './table.js'
+import { Row, Statement } from '../../util/index.js'
+import { LiveResult, LiveResultContext } from './model.js'
+import { Notifier } from '../../notifiers/index.js'
+import { DatabaseAdapter } from '../../electric/adapter.js'
+import { Satellite } from '../../satellite/index.js'
+import { ShapeManager } from './shapes.js'
 
 export type ClientTables<DB extends DbSchema<any>> = {
   [Tbl in keyof DB['tables']]: DB['tables'][Tbl] extends TableSchema<

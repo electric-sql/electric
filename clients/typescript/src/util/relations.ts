@@ -1,7 +1,7 @@
-import { SatRelation_RelationType } from '../_generated/protocol/satellite'
-import { DatabaseAdapter } from '../electric/adapter'
-import { SatelliteOpts } from '../satellite/config'
-import { Relation, RelationsCache } from './types'
+import { SatRelation_RelationType } from '../_generated/protocol/satellite.js'
+import { DatabaseAdapter } from '../electric/adapter.js'
+import { SatelliteOpts } from '../satellite/config.js'
+import { Relation, RelationsCache } from './types.js'
 
 // TODO: Improve this code once with Migrator and consider simplifying oplog.
 export async function inferRelationsFromSQLite(

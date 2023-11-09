@@ -1,10 +1,10 @@
-import { RunResult, Transaction } from '../../electric/adapter'
+import { RunResult, Transaction } from '../../electric/adapter.js'
 import { QueryBuilder } from 'squel'
-import { DB } from './db'
+import { DB } from './db.js'
 import * as z from 'zod'
-import { Row, Statement } from '../../util'
-import { Fields } from '../model/schema'
-import { Transformation, transformFields } from '../conversions/input'
+import { Row, Statement } from '../../util/index.js'
+import { Fields } from '../model/schema.js'
+import { Transformation, transformFields } from '../conversions/input.js'
 
 export class TransactionalDB implements DB {
   constructor(private _tx: Transaction, private _fields: Fields) {}

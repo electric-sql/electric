@@ -1,4 +1,4 @@
-import { NarrowInclude, NarrowSelect, NarrowWhere } from './inputNarrowing'
+import { NarrowInclude, NarrowSelect, NarrowWhere } from './inputNarrowing.js'
 
 export interface DeleteInput<Select, WhereUnique, Include> {
   where: WhereUnique

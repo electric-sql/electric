@@ -1,5 +1,5 @@
-import { BindParams, DbName, Row, SqlValue } from '../../util/types'
-import { Database, Statement, Transaction } from './database'
+import { BindParams, DbName, Row, SqlValue } from '../../util/types.js'
+import { Database, Statement, Transaction } from './database.js'
 
 type MockStatement<T extends BindParams = []> = Pick<
   Statement<T>,

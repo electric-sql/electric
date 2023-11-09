@@ -1,14 +1,14 @@
 import test from 'ava'
 import Database from 'better-sqlite3'
 
-import { MockRegistry } from '../../../src/satellite/mock'
+import { MockRegistry } from '../../../src/satellite/mock.js'
 
-import { electrify } from '../../../src/drivers/better-sqlite3'
+import { electrify } from '../../../src/drivers/better-sqlite3/index.js'
 import {
   _NOT_UNIQUE_,
   _RECORD_NOT_FOUND_,
-} from '../../../src/client/validation/errors/messages'
-import { schema } from '../generated'
+} from '../../../src/client/validation/errors/messages.js'
+import { schema } from '../generated/index.js'
 import { ZodError } from 'zod'
 
 const db = new Database(':memory:')

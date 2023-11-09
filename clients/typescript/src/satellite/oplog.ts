@@ -1,5 +1,5 @@
 import Long from 'long'
-import { QualifiedTablename } from '../util/tablename'
+import { QualifiedTablename } from '../util/tablename.js'
 import {
   DataChangeType,
   RelationsCache,
@@ -9,9 +9,9 @@ import {
   DataChange,
   Record as Rec,
   Relation,
-} from '../util/types'
-import { union } from '../util/sets'
-import { numberToBytes } from '../util/common'
+} from '../util/types.js'
+import { union } from '../util/sets.js'
+import { numberToBytes } from '../util/common.js'
 
 // format: UUID@timestamp_in_milliseconds
 export type Timestamp = string

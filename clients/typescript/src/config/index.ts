@@ -1,8 +1,8 @@
-import { AuthConfig } from '../auth/index'
+import { AuthConfig } from '../auth/index.js'
 import {
   ConnectionBackoffOptions as ConnectionBackOffOptions,
   satelliteDefaults,
-} from '../satellite/config'
+} from '../satellite/config.js'
 
 export interface ElectricConfig {
   auth: AuthConfig

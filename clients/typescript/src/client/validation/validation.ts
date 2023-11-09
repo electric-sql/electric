@@ -1,5 +1,5 @@
 import * as z from 'zod'
-import { InvalidArgumentError } from './errors/invalidArgumentError'
+import { InvalidArgumentError } from './errors/invalidArgumentError.js'
 
 function deepOmit(obj: Record<string, any>) {
   Object.keys(obj).forEach((key) => {

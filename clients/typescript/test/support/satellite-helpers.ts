@@ -1,4 +1,4 @@
-import { DatabaseAdapter } from '../../src/electric/adapter'
+import { DatabaseAdapter } from '../../src/electric/adapter.js'
 import {
   OplogEntry,
   OpType,
@@ -8,8 +8,8 @@ import {
   encodeTags,
   getShadowPrimaryKey,
   ShadowEntry,
-} from '../../src/satellite/oplog'
-import { Row, Statement } from '../../src/util/types'
+} from '../../src/satellite/oplog.js'
+import { Row, Statement } from '../../src/util/types.js'
 
 export interface TableInfo {
   [key: string]: TableSchema

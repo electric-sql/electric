@@ -1,9 +1,9 @@
-import { AuthConfig, AuthState } from '../auth/index'
-import { InternalElectricConfig } from '../config/index'
-import { DatabaseAdapter } from '../electric/adapter'
-import { Migrator } from '../migrators/index'
-import { Notifier } from '../notifiers/index'
-import { SocketFactory } from '../sockets'
+import { AuthConfig, AuthState } from '../auth/index.js'
+import { InternalElectricConfig } from '../config/index.js'
+import { DatabaseAdapter } from '../electric/adapter.js'
+import { Migrator } from '../migrators/index.js'
+import { Notifier } from '../notifiers/index.js'
+import { SocketFactory } from '../sockets/index.js'
 import {
   AuthResponse,
   ConnectivityState,
@@ -16,7 +16,7 @@ import {
   TransactionCallback,
   RelationCallback,
   OutboundStartedCallback,
-} from '../util/types'
+} from '../util/types.js'
 import {
   ClientShapeDefinition,
   ShapeRequest,
@@ -24,13 +24,13 @@ import {
   SubscriptionDeliveredCallback,
   SubscriptionErrorCallback,
   UnsubscribeResponse,
-} from './shapes/types'
-import { ShapeSubscription } from './process'
-import { DbSchema } from '../client/model/schema'
+} from './shapes/types.js'
+import { ShapeSubscription } from './process.js'
+import { DbSchema } from '../client/model/schema.js'
 
-export { SatelliteProcess } from './process'
-export { GlobalRegistry, globalRegistry } from './registry'
-export type { ShapeSubscription } from './process'
+export { SatelliteProcess } from './process.js'
+export { GlobalRegistry, globalRegistry } from './registry.js'
+export type { ShapeSubscription } from './process.js'
 
 // `Registry` that starts one Satellite process per database.
 export interface Registry {

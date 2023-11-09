@@ -1,9 +1,9 @@
 import { useContext, useEffect, useState } from 'react'
 
-import { ElectricNamespace } from '../../../electric'
-import { ConnectivityStateChangeNotification as Notification } from '../../../notifiers'
-import { ConnectivityState } from '../../../util/types'
-import { ElectricContext } from '../provider'
+import { ElectricNamespace } from '../../../electric/index.js'
+import { ConnectivityStateChangeNotification as Notification } from '../../../notifiers/index.js'
+import { ConnectivityState } from '../../../util/types.js'
+import { ElectricContext } from '../provider.js'
 
 type RetVal = {
   connectivityState: ConnectivityState

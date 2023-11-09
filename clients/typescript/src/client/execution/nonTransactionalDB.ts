@@ -1,10 +1,10 @@
-import { DatabaseAdapter, RunResult } from '../../electric/adapter'
+import { DatabaseAdapter, RunResult } from '../../electric/adapter.js'
 import { QueryBuilder } from 'squel'
-import { DB } from './db'
+import { DB } from './db.js'
 import * as z from 'zod'
-import { Row, Statement } from '../../util'
-import { Transformation, transformFields } from '../conversions/input'
-import { Fields } from '../model/schema'
+import { Row, Statement } from '../../util/index.js'
+import { Transformation, transformFields } from '../conversions/input.js'
+import { Fields } from '../model/schema.js'
 
 export class NonTransactionalDB implements DB {
   constructor(private _adapter: DatabaseAdapter, private _fields: Fields) {}

@@ -3,7 +3,7 @@ import {
   NarrowOrderBy,
   NarrowSelect,
   NarrowWhere,
-} from './inputNarrowing'
+} from './inputNarrowing.js'
 
 export interface FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum> {
   where?: NarrowWhere<Where>

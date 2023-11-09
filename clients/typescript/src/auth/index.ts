@@ -1,4 +1,4 @@
-export { insecureAuthToken } from './insecure'
+export { insecureAuthToken } from './insecure.js'
 
 export interface AuthState {
   clientId: string

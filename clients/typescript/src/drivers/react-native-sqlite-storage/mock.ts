@@ -5,8 +5,8 @@ import {
   StatementCallback,
   StatementErrorCallback,
 } from 'react-native-sqlite-storage'
-import { AnyFunction, DbName, Row } from '../../util/types'
-import { Database, Transaction } from './database'
+import { AnyFunction, DbName, Row } from '../../util/types.js'
+import { Database, Transaction } from './database.js'
 
 // Key is the method name, value is whether the
 // callbacks need to be reversed.

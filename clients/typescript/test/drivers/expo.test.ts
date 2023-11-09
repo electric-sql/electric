@@ -1,8 +1,8 @@
 import test from 'ava'
 
-import { MockDatabase } from '../../src/drivers/expo-sqlite/mock'
-import { DatabaseAdapter } from '../../src/drivers/expo-sqlite'
-import { QualifiedTablename } from '../../src/util'
+import { MockDatabase } from '../../src/drivers/expo-sqlite/mock.js'
+import { DatabaseAdapter } from '../../src/drivers/expo-sqlite/index.js'
+import { QualifiedTablename } from '../../src/util/index.js'
 
 test('database adapter run works', async (t) => {
   const db = new MockDatabase('test.db')

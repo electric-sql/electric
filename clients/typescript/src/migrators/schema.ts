@@ -1,4 +1,4 @@
-import { satelliteDefaults } from '../satellite/config'
+import { satelliteDefaults } from '../satellite/config.js'
 
 const { metaTable, migrationsTable, oplogTable, triggersTable, shadowTable } =
   satelliteDefaults

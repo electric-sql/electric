@@ -1,4 +1,4 @@
-import { DbName, Row, Statement } from '../../util'
+import { DbName, Row, Statement } from '../../util/index.js'
 
 export class MockDatabase {
   name: DbName

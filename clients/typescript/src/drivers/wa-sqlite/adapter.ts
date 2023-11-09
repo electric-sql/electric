@@ -1,7 +1,7 @@
-import { Database } from './database'
-import { Row } from '../../util/types'
-import { Statement } from '../../util'
-import { DatabaseAdapter as GenericDatabaseAdapter } from '../generic'
+import { Database } from './database.js'
+import { Row } from '../../util/types.js'
+import { Statement } from '../../util/index.js'
+import { DatabaseAdapter as GenericDatabaseAdapter } from '../generic/index.js'
 
 export class DatabaseAdapter extends GenericDatabaseAdapter {
   readonly db: Database

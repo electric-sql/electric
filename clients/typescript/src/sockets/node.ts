@@ -1,7 +1,7 @@
 import EventEmitter from 'events'
-import { ConnectionOptions, Data, Socket } from './index'
+import { ConnectionOptions, Data, Socket } from './index.js'
 import { WebSocket } from 'ws'
-import { SatelliteError, SatelliteErrorCode } from '../util'
+import { SatelliteError, SatelliteErrorCode } from '../util/index.js'
 
 export class WebSocketNode extends EventEmitter implements Socket {
   private socket?: WebSocket

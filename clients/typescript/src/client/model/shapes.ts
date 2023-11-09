@@ -1,4 +1,4 @@
-import { Satellite, ShapeSubscription } from '../../satellite'
+import { Satellite, ShapeSubscription } from '../../satellite/index.js'
 
 export type TableName = string
 

@@ -1,9 +1,9 @@
 import { EventEmitter } from 'events'
 
-import { AuthState } from '../auth/index'
-import { randomValue } from '../util/random'
-import { QualifiedTablename } from '../util/tablename'
-import { ConnectivityState, DbName } from '../util/types'
+import { AuthState } from '../auth/index.js'
+import { randomValue } from '../util/random.js'
+import { QualifiedTablename } from '../util/tablename.js'
+import { ConnectivityState, DbName } from '../util/types.js'
 import Log from 'loglevel'
 
 import {
@@ -19,7 +19,7 @@ import {
   Notifier,
   PotentialChangeCallback,
   PotentialChangeNotification,
-} from './index'
+} from './index.js'
 
 const EVENT_NAMES = {
   authChange: 'auth:changed',

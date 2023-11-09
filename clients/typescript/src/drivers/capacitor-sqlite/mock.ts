@@ -1,6 +1,6 @@
 import { capSQLiteChanges, DBSQLiteValues } from '@capacitor-community/sqlite'
-import { DbName } from '../../util/types'
-import { Database } from './database'
+import { DbName } from '../../util/types.js'
+import { Database } from './database.js'
 
 export class MockDatabase implements Database {
   constructor(public dbname: DbName, public fail?: Error) {}

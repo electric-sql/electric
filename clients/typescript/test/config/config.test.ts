@@ -1,5 +1,5 @@
 import test from 'ava'
-import { hydrateConfig } from '../../src/config'
+import { hydrateConfig } from '../../src/config/index.js'
 
 test('hydrateConfig adds expected defaults', async (t) => {
   const hydrated = hydrateConfig({

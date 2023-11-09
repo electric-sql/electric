@@ -95,9 +95,6 @@ importers:
       react-native-sqlite-storage:
         specifier: '>= 6.0.0'
         version: 6.0.0(react-native@0.68.0)
-      react-native-uuid:
-        specifier: ^2.0.1
-        version: 2.0.1
       sqlite-parser:
         specifier: ^1.0.1
         version: 1.0.1
@@ -177,9 +174,6 @@ importers:
       '@types/react-native-sqlite-storage':
         specifier: ^6.0.0
         version: 6.0.0
-      '@types/react-native-uuid':
-        specifier: ^2.0.0
-        version: 2.0.0
       '@types/uuid':
         specifier: ^9.0.1
         version: 9.0.1
@@ -718,6 +712,7 @@ packages:
   /@babel/plugin-proposal-class-properties@7.18.6(@babel/core@7.22.1):
     resolution: {integrity: sha512-cumfXOF0+nzZrrN8Rf0t7M+tF6sZc7vhQwYQck9q1/5w2OExlD+b4v4RpMJFaV1Z7WcDRgO6FqvxqxGlwo+RHQ==}
     engines: {node: '>=6.9.0'}
+    deprecated: This proposal has been merged to the ECMAScript standard and thus this plugin is no longer maintained. Please use @babel/plugin-transform-class-properties instead.
     peerDependencies:
       '@babel/core': ^7.0.0-0
     dependencies:
@@ -756,6 +751,7 @@ packages:
   /@babel/plugin-proposal-nullish-coalescing-operator@7.18.6(@babel/core@7.22.1):
     resolution: {integrity: sha512-wQxQzxYeJqHcfppzBDnm1yAY0jSRkUXR2z8RePZYrKwMKgMlE8+Z6LUno+bd6LvbGh8Gltvy74+9pIYkr+XkKA==}
     engines: {node: '>=6.9.0'}
+    deprecated: This proposal has been merged to the ECMAScript standard and thus this plugin is no longer maintained. Please use @babel/plugin-transform-nullish-coalescing-operator instead.
     peerDependencies:
       '@babel/core': ^7.0.0-0
     dependencies:
@@ -766,6 +762,7 @@ packages:
   /@babel/plugin-proposal-object-rest-spread@7.20.7(@babel/core@7.22.1):
     resolution: {integrity: sha512-d2S98yCiLxDVmBmE8UjGcfPvNEUbA1U5q5WxaWFUGRzJSVAZqm5W6MbPct0jxnegUZ0niLeNX+IOzEs7wYg9Dg==}
     engines: {node: '>=6.9.0'}
+    deprecated: This proposal has been merged to the ECMAScript standard and thus this plugin is no longer maintained. Please use @babel/plugin-transform-object-rest-spread instead.
     peerDependencies:
       '@babel/core': ^7.0.0-0
     dependencies:
@@ -779,6 +776,7 @@ packages:
   /@babel/plugin-proposal-optional-catch-binding@7.18.6(@babel/core@7.22.1):
     resolution: {integrity: sha512-Q40HEhs9DJQyaZfUjjn6vE8Cv4GmMHCYuMGIWUnlxH6400VGxOuwWsPt4FxXxJkC/5eOzgn0z21M9gMT4MOhbw==}
     engines: {node: '>=6.9.0'}
+    deprecated: This proposal has been merged to the ECMAScript standard and thus this plugin is no longer maintained. Please use @babel/plugin-transform-optional-catch-binding instead.
     peerDependencies:
       '@babel/core': ^7.0.0-0
     dependencies:
@@ -789,6 +787,7 @@ packages:
   /@babel/plugin-proposal-optional-chaining@7.21.0(@babel/core@7.22.1):
     resolution: {integrity: sha512-p4zeefM72gpmEe2fkUr/OnOXpWEf8nAgk7ZYVqqfFiyIG7oFfVZcCrU64hWn5xp4tQ9LkV4bTIa5rD0KANpKNA==}
     engines: {node: '>=6.9.0'}
+    deprecated: This proposal has been merged to the ECMAScript standard and thus this plugin is no longer maintained. Please use @babel/plugin-transform-optional-chaining instead.
     peerDependencies:
       '@babel/core': ^7.0.0-0
     dependencies:
@@ -2878,7 +2877,7 @@ packages:
     dependencies:
       '@types/istanbul-lib-coverage': 2.0.4
       '@types/istanbul-reports': 3.0.1
-      '@types/node': 16.18.34
+      '@types/node': 18.16.16
       '@types/yargs': 15.0.15
       chalk: 4.1.2
 
@@ -3807,13 +3806,6 @@ packages:
 
   /@types/react-native-sqlite-storage@6.0.0:
     resolution: {integrity: sha512-bzZLc+DsfSQUcUtZUa5M1Ubi/ud88Pdd3k1nbUCQ1baHHzLg95S0DidCWscDHnnuGFB+18GBbcY7r97ivb0XpA==}
-    dev: true
-
-  /@types/react-native-uuid@2.0.0:
-    resolution: {integrity: sha512-EzREcBGsE6AeXWmXbWq0RFtzBh1RLjHWHU4uwirroQD9FVpFmKdqKW4r8mmTK40FGQiYAhhyWTnWV98ID3Ajow==}
-    deprecated: This is a stub types definition. react-native-uuid provides its own type definitions, so you do not need this installed.
-    dependencies:
-      react-native-uuid: 2.0.1
     dev: true
 
   /@types/react@18.2.7:
@@ -11641,10 +11633,6 @@ packages:
     dependencies:
       react-native: 0.68.0(@babel/core@7.22.1)(@babel/preset-env@7.22.4)(react@18.2.0)
     dev: false
-
-  /react-native-uuid@2.0.1:
-    resolution: {integrity: sha512-cptnoIbL53GTCrWlb/+jrDC6tvb7ypIyzbXNJcpR3Vab0mkeaaVd5qnB3f0whXYzS+SMoSQLcUUB0gEWqkPC0g==}
-    engines: {node: '>=10.0.0', npm: '>=6.0.0'}
 
   /react-native@0.68.0(@babel/core@7.22.1)(@babel/preset-env@7.22.4)(react@18.2.0):
     resolution: {integrity: sha512-Qi8KpG9rqiU0hVp05GKkuRe8iAVhblYMwpnwG3wkBi99Z/X8iZ0jD1b1UW0/y6oesmCyGQAxpsB36imU8zg1AQ==}

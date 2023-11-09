@@ -1,7 +1,7 @@
-import { AnyDatabase } from '../drivers/index'
-import { QualifiedTablename } from '../util/tablename'
-import { Row, Statement } from '../util/types'
-import { parseTableNames } from '../util'
+import { AnyDatabase } from '../drivers/index.js'
+import { QualifiedTablename } from '../util/tablename.js'
+import { Row, Statement } from '../util/types.js'
+import { parseTableNames } from '../util/index.js'
 
 // A `DatabaseAdapter` adapts a database client to provide the
 // normalised interface defined here.

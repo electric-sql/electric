@@ -3,10 +3,10 @@ import {
   RunResult,
   TableNameImpl,
   Transaction as Tx,
-} from '../../electric/adapter'
-import { Row, SqlValue, Statement } from '../../util'
-import { rowsFromResults } from '../util/results'
-import { Database } from './database'
+} from '../../electric/adapter.js'
+import { Row, SqlValue, Statement } from '../../util/index.js'
+import { rowsFromResults } from '../util/results.js'
+import { Database } from './database.js'
 
 export class DatabaseAdapter
   extends TableNameImpl

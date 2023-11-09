@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { handleGenerate } from './migrations'
+import { handleGenerate } from './migrations/index.js'
 
 const args = process.argv
 

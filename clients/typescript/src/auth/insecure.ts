@@ -1,4 +1,4 @@
-import { TokenClaims } from './index'
+import { TokenClaims } from './index.js'
 
 export function insecureAuthToken(claims: TokenClaims): string {
   const header = {

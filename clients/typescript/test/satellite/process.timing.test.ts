@@ -1,8 +1,8 @@
 import anyTest, { TestFn } from 'ava'
-import { sleepAsync } from '../../src/util/timer'
+import { sleepAsync } from '../../src/util/timer.js'
 
-import { satelliteDefaults } from '../../src/satellite/config'
-import { makeContext, clean, ContextType } from './common'
+import { satelliteDefaults } from '../../src/satellite/config.js'
+import { makeContext, clean, ContextType } from './common.js'
 
 // Speed up the intervals for testing.
 const opts = Object.assign({}, satelliteDefaults, {

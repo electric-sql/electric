@@ -1,5 +1,5 @@
 import test from 'ava'
-import { doPascalCaseTableNames } from '../../../src/cli/migrations/migrate'
+import { doPascalCaseTableNames } from '../../../src/cli/migrations/migrate.js'
 
 const lowerCasePrismaSchema = `
 datasource db {

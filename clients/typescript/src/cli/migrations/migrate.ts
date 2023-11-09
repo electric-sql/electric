@@ -5,7 +5,7 @@ import { createWriteStream } from 'fs'
 import http from 'node:http'
 import https from 'node:https'
 import decompress from 'decompress'
-import { buildMigrations, getMigrationNames } from './builder'
+import { buildMigrations, getMigrationNames } from './builder.js'
 import { exec } from 'child_process'
 import { dedent } from 'ts-dedent'
 

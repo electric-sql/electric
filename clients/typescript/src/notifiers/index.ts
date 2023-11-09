@@ -1,9 +1,9 @@
-import { AuthState } from '../auth/index'
-import { QualifiedTablename } from '../util/tablename'
-import { ConnectivityState, DbName, RowId } from '../util/types'
+import { AuthState } from '../auth/index.js'
+import { QualifiedTablename } from '../util/tablename.js'
+import { ConnectivityState, DbName, RowId } from '../util/types.js'
 
-export { EventNotifier } from './event'
-export { MockNotifier } from './mock'
+export { EventNotifier } from './event.js'
+export { MockNotifier } from './mock.js'
 
 export interface AuthStateNotification {
   authState: AuthState

@@ -1,7 +1,7 @@
 import test from 'ava'
 
-import { MockDatabase } from '../../src/drivers/capacitor-sqlite/mock'
-import { DatabaseAdapter } from '../../src/drivers/capacitor-sqlite'
+import { MockDatabase } from '../../src/drivers/capacitor-sqlite/mock.js'
+import { DatabaseAdapter } from '../../src/drivers/capacitor-sqlite/index.js'
 
 test('database adapter run works', async (t) => {
   const db = new MockDatabase('test.db')

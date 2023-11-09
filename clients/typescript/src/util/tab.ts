@@ -1,4 +1,4 @@
-import { genUUID } from './random'
+import { genUUID } from './random.js'
 
 interface Storage {
   getItem: (key: string) => any

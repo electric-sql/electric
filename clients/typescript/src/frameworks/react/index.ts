@@ -1,2 +1,2 @@
-export * from './hooks'
-export * from './provider'
+export * from './hooks/index.js'
+export * from './provider.js'

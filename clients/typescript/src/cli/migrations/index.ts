@@ -1,1 +1,1 @@
-export { handleGenerate } from './handler'
+export { handleGenerate } from './handler.js'

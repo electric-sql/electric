@@ -3,12 +3,16 @@ import {
   SatErrorResp,
   SatRpcRequest,
   SatRpcResponse,
-} from '../_generated/protocol/satellite'
-import { SatelliteError, SatelliteErrorCode } from '../util/types'
-import { emptyPromise } from '../util/common'
+} from '../_generated/protocol/satellite.js'
+import { SatelliteError, SatelliteErrorCode } from '../util/types.js'
+import { emptyPromise } from '../util/common.js'
 import Log, { Logger } from 'loglevel'
-import { ClientRpcResponse, encodeRpcResponse, msgToString } from '../util'
-import { isDebuggingNode } from '../util/debug'
+import {
+  ClientRpcResponse,
+  encodeRpcResponse,
+  msgToString,
+} from '../util/index.js'
+import { isDebuggingNode } from '../util/debug/index.js'
 
 type RequestId = `${string}/${number}`
 type SenderFn = (msg: SatRpcRequest | SatRpcResponse) => void

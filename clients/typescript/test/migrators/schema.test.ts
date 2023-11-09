@@ -2,13 +2,13 @@ import test from 'ava'
 import Database from 'better-sqlite3'
 
 import { rm as removeFile } from 'node:fs/promises'
-import { AnyDatabase } from '../../src/drivers'
+import { AnyDatabase } from '../../src/drivers/index.js'
 
-import { DatabaseAdapter } from '../../src/drivers/better-sqlite3/adapter'
-import { BundleMigrator } from '../../src/migrators/bundle'
-import { satelliteDefaults } from '../../src/satellite/config'
+import { DatabaseAdapter } from '../../src/drivers/better-sqlite3/adapter.js'
+import { BundleMigrator } from '../../src/migrators/bundle.js'
+import { satelliteDefaults } from '../../src/satellite/config.js'
 
-import { randomValue } from '../../src/util/random'
+import { randomValue } from '../../src/util/random.js'
 
 import migrations from '../support/migrations/migrations.js'
 

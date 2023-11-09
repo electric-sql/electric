@@ -1,5 +1,5 @@
-import { ConnectionOptions, Data, Socket } from '.'
-import { SatelliteError, SatelliteErrorCode } from '../util'
+import { ConnectionOptions, Data, Socket } from './index.js'
+import { SatelliteError, SatelliteErrorCode } from '../util/index.js'
 
 export class WebSocketReactNative implements Socket {
   private socket?: WebSocket

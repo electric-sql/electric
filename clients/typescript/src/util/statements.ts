@@ -1,4 +1,4 @@
-import { SqlValue, Statement } from './types'
+import { SqlValue, Statement } from './types.js'
 
 export function isInsertUpdateOrDeleteStatement(sql: string) {
   const tpe = sql.toLowerCase().trimStart()

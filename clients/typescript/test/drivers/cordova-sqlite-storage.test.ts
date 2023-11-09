@@ -1,8 +1,8 @@
 import test from 'ava'
 
-import { DatabaseAdapter } from '../../src/drivers/cordova-sqlite-storage/adapter'
-import { MockDatabase } from '../../src/drivers/cordova-sqlite-storage/mock'
-import { QualifiedTablename } from '../../src/util/tablename'
+import { DatabaseAdapter } from '../../src/drivers/cordova-sqlite-storage/adapter.js'
+import { MockDatabase } from '../../src/drivers/cordova-sqlite-storage/mock.js'
+import { QualifiedTablename } from '../../src/util/tablename.js'
 
 test('database adapter run works', async (t) => {
   const db = new MockDatabase('test.db')

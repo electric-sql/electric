@@ -4,7 +4,7 @@ import {
   NarrowUpdateData,
   NarrowUpdateManyData,
   NarrowUpsertCreate,
-} from './inputNarrowing'
+} from './inputNarrowing.js'
 
 export interface UpsertInput<Create, Update, Select, WhereUnique, Include> {
   select?: NarrowSelect<Select>

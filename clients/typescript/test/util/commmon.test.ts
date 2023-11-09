@@ -1,7 +1,7 @@
 import test from 'ava'
 
-import { getWaiter } from '../../src/util/common'
-import { SatelliteError, SatelliteErrorCode } from '../../src/util/types'
+import { getWaiter } from '../../src/util/common.js'
+import { SatelliteError, SatelliteErrorCode } from '../../src/util/types.js'
 
 test('test getWaiter onWait resolve', async (t) => {
   const waiter = getWaiter()

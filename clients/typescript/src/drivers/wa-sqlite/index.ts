@@ -1,10 +1,13 @@
-import { DatabaseAdapter } from './adapter'
-import { ElectricDatabase } from './database'
-import { ElectricConfig } from '../../config'
-import { electrify as baseElectrify, ElectrifyOptions } from '../../electric'
-import { WebSocketWeb } from '../../sockets/web'
-import { ElectricClient, DbSchema } from '../../client/model'
-import { Database } from './database'
+import { DatabaseAdapter } from './adapter.js'
+import { ElectricDatabase } from './database.js'
+import { ElectricConfig } from '../../config/index.js'
+import {
+  electrify as baseElectrify,
+  ElectrifyOptions,
+} from '../../electric/index.js'
+import { WebSocketWeb } from '../../sockets/web.js'
+import { ElectricClient, DbSchema } from '../../client/model/index.js'
+import { Database } from './database.js'
 
 export { DatabaseAdapter, ElectricDatabase }
 export type { Database }

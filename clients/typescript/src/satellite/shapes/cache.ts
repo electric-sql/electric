@@ -6,21 +6,21 @@ import {
   SatSubsReq,
   SatSubsResp,
   SatTransOp,
-} from '../../_generated/protocol/satellite'
+} from '../../_generated/protocol/satellite.js'
 import {
   Relation,
   SatelliteError,
   SatelliteErrorCode,
   subsDataErrorToSatelliteError,
-} from '../../util'
-import { deserializeRow } from '../client'
+} from '../../util/index.js'
+import { deserializeRow } from '../client.js'
 import {
   InitialDataChange,
   SUBSCRIPTION_DELIVERED,
   SUBSCRIPTION_ERROR,
   SubscriptionData,
-} from './types'
-import { DbSchema } from '../../client/model/schema'
+} from './types.js'
+import { DbSchema } from '../../client/model/schema.js'
 
 type SubscriptionId = string
 type RequestId = string

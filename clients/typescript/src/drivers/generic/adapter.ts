@@ -3,11 +3,11 @@ import {
   RunResult,
   TableNameImpl,
   Transaction as Tx,
-} from '../../electric/adapter'
-import { Row, Statement } from '../../util'
-import { isInsertUpdateOrDeleteStatement } from '../../util/statements'
+} from '../../electric/adapter.js'
+import { Row, Statement } from '../../util/index.js'
+import { isInsertUpdateOrDeleteStatement } from '../../util/statements.js'
 import { Mutex } from 'async-mutex'
-import { AnyDatabase } from '..'
+import { AnyDatabase } from '../index.js'
 
 /**
  * A generic adapter that manages transactions manually by executing `BEGIN` and `COMMIT`/`ROLLBACK` commands.

@@ -1,9 +1,9 @@
-import { Statement } from '../util'
+import { Statement } from '../util/index.js'
 
-export { BundleMigrator } from './bundle'
-export { MockMigrator } from './mock'
-export { parseMetadata, makeMigration } from './builder'
-export type { MetaData } from './builder'
+export { BundleMigrator } from './bundle.js'
+export { MockMigrator } from './mock.js'
+export { parseMetadata, makeMigration } from './builder.js'
+export type { MetaData } from './builder.js'
 
 export interface Migration {
   statements: string[]

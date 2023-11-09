@@ -1,8 +1,8 @@
-import { AuthConfig, AuthState } from '../auth/index'
-import { DatabaseAdapter } from '../electric/adapter'
-import { Migrator } from '../migrators/index'
-import { Notifier } from '../notifiers/index'
-import { sleepAsync } from '../util/timer'
+import { AuthConfig, AuthState } from '../auth/index.js'
+import { DatabaseAdapter } from '../electric/adapter.js'
+import { Migrator } from '../migrators/index.js'
+import { Notifier } from '../notifiers/index.js'
+import { sleepAsync } from '../util/timer.js'
 import {
   AuthResponse,
   DbName,
@@ -17,17 +17,25 @@ import {
   StopReplicationResponse,
   OutboundStartedCallback,
   TransactionCallback,
-} from '../util/types'
-import { ElectricConfig } from '../config/index'
+} from '../util/types.js'
+import { ElectricConfig } from '../config/index.js'
 
-import { Client, ConnectionWrapper, Satellite } from './index'
-import { SatelliteOpts, SatelliteOverrides, satelliteDefaults } from './config'
-import { BaseRegistry } from './registry'
-import { SocketFactory } from '../sockets'
+import { Client, ConnectionWrapper, Satellite } from './index.js'
+import {
+  SatelliteOpts,
+  SatelliteOverrides,
+  satelliteDefaults,
+} from './config.js'
+import { BaseRegistry } from './registry.js'
+import { SocketFactory } from '../sockets/index.js'
 import { EventEmitter } from 'events'
-import { DEFAULT_LOG_POS, subsDataErrorToSatelliteError, base64 } from '../util'
-import { bytesToNumber, uuid } from '../util/common'
-import { generateTag } from './oplog'
+import {
+  DEFAULT_LOG_POS,
+  subsDataErrorToSatelliteError,
+  base64,
+} from '../util/index.js'
+import { bytesToNumber, uuid } from '../util/common.js'
+import { generateTag } from './oplog.js'
 import {
   ClientShapeDefinition,
   InitialDataChange,
@@ -39,15 +47,15 @@ import {
   SubscriptionDeliveredCallback,
   SubscriptionErrorCallback,
   UnsubscribeResponse,
-} from './shapes/types'
+} from './shapes/types.js'
 import {
   SatSubsDataError,
   SatSubsDataError_Code,
   SatSubsDataError_ShapeReqError,
   SatSubsDataError_ShapeReqError_Code,
-} from '../_generated/protocol/satellite'
-import { ShapeSubscription } from './process'
-import { DbSchema } from '../client/model/schema'
+} from '../_generated/protocol/satellite.js'
+import { ShapeSubscription } from './process.js'
+import { DbSchema } from '../client/model/schema.js'
 
 export const MOCK_BEHIND_WINDOW_LSN = 42
 export const MOCK_INTERNAL_ERROR = 27

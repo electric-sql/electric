@@ -1,5 +1,5 @@
 import { SQLiteDBConnection } from '@capacitor-community/sqlite'
-import { DbName } from '../../util/types'
+import { DbName } from '../../util/types.js'
 
 // A bit of a hack, but that lets us reference the actual types of the library
 // TODO: Is this the type we want to expose?

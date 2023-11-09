@@ -1,4 +1,4 @@
-import { Migrator, StmtMigration } from './index'
+import { Migrator, StmtMigration } from './index.js'
 
 export class MockMigrator implements Migrator {
   async up(): Promise<number> {

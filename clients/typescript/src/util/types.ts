@@ -4,8 +4,8 @@ import {
   SatOpMigrate_Table,
   SatOpMigrate_Type,
   SatRelation_RelationType,
-} from '../_generated/protocol/satellite'
-import { Tag } from '../satellite/oplog'
+} from '../_generated/protocol/satellite.js'
+import { Tag } from '../satellite/oplog.js'
 
 export type AnyFunction = (...args: any[]) => any
 export type BindParams = SqlValue[] | Row

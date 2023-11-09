@@ -1,4 +1,4 @@
-import { Statement } from '../util'
+import { Statement } from '../util/index.js'
 import { dedent } from 'ts-dedent'
 
 type ForeignKey = {

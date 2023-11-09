@@ -26,7 +26,7 @@ import {
   Root,
   RootClientImpl,
   SatRpcRequest,
-} from '../_generated/protocol/satellite'
+} from '../_generated/protocol/satellite.js'
 import {
   getObjFromString,
   getBufWithMsgTag,
@@ -40,8 +40,8 @@ import {
   serverErrorToSatelliteError,
   HandlerMapping,
   RpcResponder,
-} from '../util/proto'
-import { PROTOCOL_VSN, Socket, SocketFactory } from '../sockets/index'
+} from '../util/proto.js'
+import { PROTOCOL_VSN, Socket, SocketFactory } from '../sockets/index.js'
 import _m0 from 'protobufjs/minimal.js'
 import { EventEmitter } from 'events'
 import {
@@ -65,18 +65,18 @@ import {
   IncomingTransactionCallback,
   OutboundStartedCallback,
   TransactionCallback,
-} from '../util/types'
+} from '../util/types.js'
 import {
   base64,
   DEFAULT_LOG_POS,
   typeEncoder,
   typeDecoder,
   bytesToNumber,
-} from '../util/common'
-import { Client } from '.'
-import { SatelliteClientOpts, satelliteClientDefaults } from './config'
+} from '../util/common.js'
+import { Client } from './index.js'
+import { SatelliteClientOpts, satelliteClientDefaults } from './config.js'
 import Log from 'loglevel'
-import { AuthState } from '../auth'
+import { AuthState } from '../auth/index.js'
 import isequal from 'lodash.isequal'
 import {
   SUBSCRIPTION_DELIVERED,
@@ -86,13 +86,13 @@ import {
   SubscriptionDeliveredCallback,
   SubscriptionErrorCallback,
   UnsubscribeResponse,
-} from './shapes/types'
-import { SubscriptionsDataCache } from './shapes/cache'
-import { setMaskBit, getMaskBit } from '../util/bitmaskHelpers'
-import { RPC, rpcRespond, withRpcRequestLogging } from './RPC'
+} from './shapes/types.js'
+import { SubscriptionsDataCache } from './shapes/cache.js'
+import { setMaskBit, getMaskBit } from '../util/bitmaskHelpers.js'
+import { RPC, rpcRespond, withRpcRequestLogging } from './RPC.js'
 import { Mutex } from 'async-mutex'
-import { DbSchema } from '../client/model'
-import { PgBasicType, PgDateType, PgType } from '../client/conversions/types'
+import { DbSchema } from '../client/model/index.js'
+import { PgBasicType, PgDateType, PgType } from '../client/conversions/types.js'
 
 type IncomingHandler = (msg: any) => void
 

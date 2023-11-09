@@ -6,21 +6,21 @@ import {
   generateTag,
   encodeTags,
   opLogEntryToChange,
-} from '../../src/satellite/oplog'
+} from '../../src/satellite/oplog.js'
 
 import {
   generateRemoteOplogEntry,
   genEncodedTags,
   getMatchingShadowEntries,
-} from '../support/satellite-helpers'
-import { Statement } from '../../src/util/types'
+} from '../support/satellite-helpers.js'
+import { Statement } from '../../src/util/types.js'
 
 import {
   makeContext,
   cleanAndStopSatellite,
   relations,
   ContextType,
-} from './common'
+} from './common.js'
 
 const test = anyTest as TestFn<ContextType>
 test.beforeEach(makeContext)

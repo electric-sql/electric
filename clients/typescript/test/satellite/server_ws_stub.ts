@@ -1,20 +1,20 @@
 import * as http from 'http'
 import { WebSocketServer, WebSocket } from 'ws'
-import { getBufWithMsgTag, GetName, SatPbMsg } from '../../src/util/proto'
+import { getBufWithMsgTag, GetName, SatPbMsg } from '../../src/util/proto.js'
 import {
   messageTypeRegistry,
   UnknownMessage,
-} from '../../src/_generated/typeRegistry'
+} from '../../src/_generated/typeRegistry.js'
 import {
   Root,
   SatErrorResp,
   SatInStartReplicationReq,
   SatRpcRequest,
   SatRpcResponse,
-} from '../../src/_generated/protocol/satellite'
-import { toMessage } from '../../src/satellite/client'
+} from '../../src/_generated/protocol/satellite.js'
+import { toMessage } from '../../src/satellite/client.js'
 import { ExecutionContext } from 'ava'
-import { sleepAsync } from '../../src/util'
+import { sleepAsync } from '../../src/util/index.js'
 
 const PORT = 30002
 const IP = '127.0.0.1'

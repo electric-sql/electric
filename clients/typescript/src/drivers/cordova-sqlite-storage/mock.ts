@@ -1,5 +1,5 @@
-import { DbName, Row } from '../../util/types'
-import { Database } from './database'
+import { DbName, Row } from '../../util/types.js'
+import { Database } from './database.js'
 
 export class MockDatabase implements Database {
   dbname: DbName
