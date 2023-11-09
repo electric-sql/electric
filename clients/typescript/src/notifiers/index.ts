@@ -99,8 +99,8 @@ export interface Notifier {
   actuallyChanged(dbName: DbName, changes: Change[]): void
 
   // Reactive hooks then subscribe to "data has actually changed" notifications,
-  // using the info to trigger re-queries, iff the changes affect databases and
-  // tables that their queries depend on. This then trigger re-rendering iff
+  // using the info to trigger re-queries, if the changes affect databases and
+  // tables that their queries depend on. This then trigger re-rendering if
   // the query results are actually affected by the data changes.
   subscribeToDataChanges(callback: ChangeCallback): string
   unsubscribeFromDataChanges(key: string): void
