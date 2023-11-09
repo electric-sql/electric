@@ -24,8 +24,6 @@
     "zod": "^3.21.4"
   },
   "devDependencies": {
-    "@electric-sql/prisma-generator": "workspace:*",
-    "@prisma/client": "^4.11.0",
     "@tsmodule/tsmodule": "^40.0.17",
     "@types/better-sqlite3": "7.6.3",
     "@types/jsonwebtoken": "^9.0.1",
@@ -35,7 +33,6 @@
     "esbuild": "^0.18.17",
     "exponential-backoff": "^3.1.0",
     "loglevel": "^1.8.1",
-    "prisma": "^4.11.0",
     "tslint": "^6.1.3",
     "tslint-config-prettier": "^1.18.0",
     "typescript": "^4.4.3"

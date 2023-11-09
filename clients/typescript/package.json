@@ -145,6 +145,8 @@
     "**/*": "prettier --write --ignore-unknown"
   },
   "dependencies": {
+    "@electric-sql/prisma-generator": "workspace:*",
+    "@prisma/client": "4.12.0",
     "async-mutex": "^0.4.0",
     "base-64": "^1.0.0",
     "better-sqlite3": "^8.4.0",
@@ -167,6 +169,7 @@
     "long": "^5.2.0",
     "object.hasown": "^1.1.2",
     "ohash": "^1.1.2",
+    "prisma": "4.8.1",
     "protobufjs": "^7.1.1",
     "react-native-uuid": "^2.0.1",
     "sqlite-parser": "^1.0.1",
@@ -179,7 +182,6 @@
   },
   "devDependencies": {
     "@ikscodes/browser-env": "^1.0.0",
-    "@prisma/client": "^4.12.0",
     "@testing-library/react": "^13.4.0",
     "@tsmodule/tsmodule": "42",
     "@types/base-64": "^1.0.0",
@@ -210,7 +212,6 @@
     "lint-staged": "^13.1.0",
     "memorystorage": "^0.12.0",
     "prettier": "2.8.2",
-    "prisma": "^4.8.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "release-it": "^15.5.0",
