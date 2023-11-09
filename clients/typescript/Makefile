@@ -1,3 +1,6 @@
+build_generator:
+	(cd ../../generator && make deps && make build)
+
 deps:
 	pnpm install --frozen-lockfile
 #	npm install tslint tslint-config-prettier

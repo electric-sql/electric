@@ -63,6 +63,8 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           cache: pnpm
+      - name: Build Generator
+        run: make build_generator
       - name: Install
         run: make deps
       - name: Build
