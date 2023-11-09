@@ -176,7 +176,7 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
     await addValidators(prismaSchema)
 
     // Modify snake_case table names to PascalCase
-    await pascalCaseTableNames(prismaSchema)
+    await capitaliseTableNames(prismaSchema)
 
     // Generate a client from the Prisma schema
     console.log('Generating Electric client...')
@@ -239,15 +239,14 @@ async function getFileLines(prismaSchema: string): Promise<Array<string>> {
 
 /**
  * Transforms the table names in the Prisma schema
- * such that they start with a capital.
- * If the table names are snake cased,
- * i.e. contain no capitals,
- * then we convert them to PascalCase.
+ * such that they start with a capital letter.
+ * All characters before the first letter are dropped
+ * because Prisma requires model names to start with a (capital) letter.
  * @param prismaSchema Path to the Prisma schema file.
  */
-async function pascalCaseTableNames(prismaSchema: string): Promise<void> {
+async function capitaliseTableNames(prismaSchema: string): Promise<void> {
   const lines = await getFileLines(prismaSchema)
-  const casedLines = doPascalCaseTableNames(lines)
+  const casedLines = doCapitaliseTableNames(lines)
   // Write the modified Prisma schema to the file
   await fs.writeFile(prismaSchema, casedLines.join('\n'))
 }
@@ -256,20 +255,21 @@ async function pascalCaseTableNames(prismaSchema: string): Promise<void> {
  * @param lines Individual lines of the Prisma schema
  * @returns The modified lines.
  */
-export function doPascalCaseTableNames(lines: string[]): string[] {
+export function doCapitaliseTableNames(lines: string[]): string[] {
   const replacements: Map<string, string> = new Map() // maps table names to their PascalCased model name
   const modelNameToDbName: Map<string, string> = new Map() // maps the PascalCased model names to their original table name
 
-  const modelRegex = /^\s*model\s+(\w+)\s*{/
+  // Prisma requires model names to adhere to the regex: [A-Za-z][A-Za-z0-9_]*
+  const modelRegex = /^\s*model\s+([A-Za-z][A-Za-z0-9_]*)\s*{/
   const getModelName = (ln: string) => ln.match(modelRegex)?.[1]
 
   lines.forEach((ln, idx) => {
     const tableName = getModelName(ln)
     if (tableName) {
-      // Check if the model name needs capitalisation
-      const modelName = isSnakeCased(tableName)
-        ? snake2PascalCase(tableName)
-        : capitaliseFirstLetter(tableName) // always capitalise first letter
+      // Capitalise the first letter due to a bug with lowercase model names in Prisma's DMMF
+      // that leads to inconsistent type names in the generated client
+      // which in turn leads to type errors in the generated Electric client.
+      const modelName = capitaliseFirstLetter(tableName)
 
       // Replace the model name on this line
       const newLn = ln.replace(modelRegex, (_, _tableName) => {
@@ -286,26 +286,36 @@ export function doPascalCaseTableNames(lines: string[]): string[] {
   // replace references to the old table names
   // by the new model name when we are inside
   // the definition of a model
-  let insideModel = false
+  let modelName: string | undefined
+  let modelHasMapAttribute = false
+  // we're inside a model definition if we have a model name
+  const insideModel = () => modelName !== undefined
   lines = lines.flatMap((ln) => {
-    const modelName = getModelName(ln)
-    if (modelName) {
-      insideModel = true
-      // insert an `@@map` annotation if needed
-      if (modelNameToDbName.has(modelName)) {
-        const tableName = modelNameToDbName.get(modelName)
-        return [ln, `  @@map("${tableName}")`]
+    modelName = getModelName(ln) ?? modelName
+
+    if (insideModel() && ln.trim().startsWith('}')) {
+      // we're exiting the model definition
+      const tableName = modelNameToDbName.get(modelName!)!
+      modelName = undefined
+      // if no `@@map` annotation was added by Prisma add one ourselves
+      if (!modelHasMapAttribute) {
+        return [`  @@map("${tableName}")`, ln]
       }
-
+      modelHasMapAttribute = false
       return ln
     }
 
-    if (insideModel && ln.trim().startsWith('}')) {
-      insideModel = false
-      return ln
+    // the regex below matches a line containing @@map("originalTableName")
+    const nameMappingRegex = /^\s*@@map\("(.*)"\)\s*$/
+    const mapAttribute = ln.match(nameMappingRegex)
+    if (insideModel() && mapAttribute !== null) {
+      // store the mapping from the model name to the original DB name
+      modelHasMapAttribute = true
+      const originalTableName = mapAttribute[1]
+      modelNameToDbName.set(modelName!, originalTableName)
     }
 
-    if (insideModel) {
+    if (insideModel()) {
       // the regex below matches the beginning of a string
       // followed by two identifiers separated by a space
       // (first identifier is the column name, second is its type)
@@ -470,23 +480,6 @@ function migrationsFilePath(opts: Omit<GeneratorOptions, 'watch'>) {
 
 function capitaliseFirstLetter(word: string): string {
   return word.charAt(0).toUpperCase() + word.substring(1)
-}
-
-/**
- * Checks if a model name is snake cased.
- * We assume that it is snake cased if it contains no capital letters.
- * @param name The model name
- */
-function isSnakeCased(name: string): boolean {
-  return name.match(/[A-Z]/) === null
-}
-
-/**
- * Converts a snake_case model name to PascalCase.
- * @param name The snake cased model name.
- */
-function snake2PascalCase(name: string): string {
-  return name.split('_').map(capitaliseFirstLetter).join('')
 }
 
 // The below is duplicated code from the generator

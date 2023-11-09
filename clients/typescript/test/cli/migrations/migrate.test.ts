@@ -1,5 +1,5 @@
 import test from 'ava'
-import { doPascalCaseTableNames } from '../../../src/cli/migrations/migrate'
+import { doCapitaliseTableNames } from '../../../src/cli/migrations/migrate'
 
 const lowerCasePrismaSchema = `
 datasource db {
@@ -71,45 +71,45 @@ generator client {
 }
 
 model Items {
-  @@map("items")
   value String @id
   nbr   Int?
+  @@map("items")
 }
 
 model User {
-  @@map("user")
   id      Int      @id
   name    String?
   posts   Post[]
-  profile UserProfile?
+  profile User_profile?
+  @@map("user")
 }
 
 model Post {
-  @@map("post")
   id        Int @id
   title     String @unique
   contents  String
   nbr       Int?
   authorId  Int
   author    User?  @relation(fields: [authorId], references: [id])
+  @@map("post")
 }
 
-model UserProfile {
-  @@map("user_profile")
+model User_profile {
   id     Int    @id
   bio    String
   userId Int    @unique
   user   User?  @relation(fields: [userId], references: [id])
+  @@map("user_profile")
 }
 
 model Model {
-  @@map("model")
   id Int @id
+  @@map("model")
 }
 `
 
-test('migrator correctly PascalCases model names', (t) => {
-  const newSchema = doPascalCaseTableNames(
+test('migrator correctly capitalises model names', (t) => {
+  const newSchema = doCapitaliseTableNames(
     lowerCasePrismaSchema.split(/\r?\n/)
   ).join('\n')
   t.assert(newSchema === expectedPrismaSchema)
