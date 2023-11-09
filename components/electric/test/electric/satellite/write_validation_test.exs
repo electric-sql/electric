@@ -137,6 +137,11 @@ defmodule Electric.Satellite.WriteValidationTest do
 
       assert {:error, ^pre, error, ^post} =
                WriteValidation.validate_transactions!(txns, cxt.loader)
+
+      assert %{
+               tx: ^invalid,
+               verifier: WriteValidation.ImmutablePrimaryKey
+             } = error
     end
   end
 end

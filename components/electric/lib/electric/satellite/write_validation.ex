@@ -16,7 +16,29 @@ defmodule Electric.Satellite.WriteValidation do
   @callback is_allowed_delete?(delete(), Schema.t(), SchemaLoader.t()) :: allowed_result()
 
   defmodule Error do
-    defexception [:tx, :message, :verifier]
+    defstruct [:tx, :reason, :verifier, :change]
+
+    def error_response(error) do
+      %Electric.Satellite.SatErrorResp{
+        error_type: :INVALID_REQUEST,
+        lsn: error.tx.lsn,
+        message: to_string(error)
+      }
+    end
+
+    defimpl String.Chars do
+      def to_string(error) do
+        "Applying transaction [LSN #{error.tx.lsn || "?"}] " <>
+          "failed write validation tests for the following reason: " <>
+          error.reason <>
+          if(error.verifier, do: " (#{verifier_name(error.verifier)})", else: "") <>
+          if(error.change, do: " change: #{inspect(error.change)} ", else: "")
+      end
+
+      defp verifier_name(module) do
+        Module.split(module) |> Enum.at(-1)
+      end
+    end
   end
 
   @validations [
@@ -44,32 +66,50 @@ defmodule Electric.Satellite.WriteValidation do
     split_ok(txns, &is_valid_tx?(&1, schema, schema_loader), [])
   end
 
-  defp is_valid_tx?(%Changes.Transaction{changes: changes}, schema, schema_loader) do
-    all_ok?(changes, &is_valid_change?(&1, schema, schema_loader))
+  defp is_valid_tx?(%Changes.Transaction{changes: changes} = tx, schema, schema_loader) do
+    all_ok?(changes, &is_valid_change?(&1, schema, schema_loader), fn _src, error ->
+      {:error, %{error | tx: tx}}
+    end)
   end
 
   # @compile {:inline, is_valid_change?: 3}
 
   defp is_valid_change?(%Changes.NewRecord{} = insert, schema, schema_loader) do
-    all_ok?(@validations, & &1.is_allowed_insert?(insert, schema, schema_loader))
+    all_ok?(
+      @validations,
+      & &1.is_allowed_insert?(insert, schema, schema_loader),
+      &validation_error(&1, &2, insert)
+    )
   end
 
   defp is_valid_change?(%Changes.UpdatedRecord{} = update, schema, schema_loader) do
-    all_ok?(@validations, & &1.is_allowed_update?(update, schema, schema_loader))
+    all_ok?(
+      @validations,
+      & &1.is_allowed_update?(update, schema, schema_loader),
+      &validation_error(&1, &2, update)
+    )
   end
 
   defp is_valid_change?(%Changes.DeletedRecord{} = delete, schema, schema_loader) do
-    all_ok?(@validations, & &1.is_allowed_delete?(delete, schema, schema_loader))
+    all_ok?(
+      @validations,
+      & &1.is_allowed_delete?(delete, schema, schema_loader),
+      &validation_error(&1, &2, delete)
+    )
   end
 
-  defp all_ok?([], _fun) do
+  defp validation_error(validation_module, reason, change) do
+    {:error, %Error{reason: reason, verifier: validation_module, change: change}}
+  end
+
+  defp all_ok?([], _fun, _error_fun) do
     :ok
   end
 
-  defp all_ok?([c | t], fun) do
+  defp all_ok?([c | t], fun, error_fun) do
     case fun.(c) do
-      :ok -> all_ok?(t, fun)
-      {:error, _, _} = error -> error
+      :ok -> all_ok?(t, fun, error_fun)
+      {:error, error} -> error_fun.(c, error)
     end
   end
 
@@ -78,10 +118,10 @@ defmodule Electric.Satellite.WriteValidation do
       :ok ->
         split_ok(tail, fun, [tx | acc])
 
-      {:error, _, _} = error ->
+      {:error, error} ->
         # FIXME: return {valid, tx, error, tail} so that we have the tx that were ok
         # the tx that failed and the reason that it failed (plus the tx's after it)
-        {:lists.reverse(acc), [tx | tail]}
+        {:error, :lists.reverse(acc), error, tail}
     end
   end
 
