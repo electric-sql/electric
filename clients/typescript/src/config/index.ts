@@ -23,7 +23,9 @@ export interface ElectricConfig {
    */
   url?: string
   /**
-   * Timeout (in milliseconds) for RPC requests to fulfill shape subscriptions.
+   * Timeout (in milliseconds) for RPC requests.
+   * Needs to be large enough for the server to have time to deliver the full initial subscription data
+   * when the client subscribes to a shape for the first time.
    */
   timeout?: number
   /**
