@@ -95,21 +95,21 @@ const migrationMetaData = {
 
 test('parse migration meta data', (t) => {
   const metaData = parseMetadata(migrationMetaData)
-  t.assert(metaData.ops[0].table?.name === 'stars')
-  t.assert(metaData.ops[0].table?.columns.length === 5)
+  t.is(metaData.ops[0].table?.name, 'stars')
+  t.is(metaData.ops[0].table?.columns.length, 5)
 })
 
 test('generate migration from meta data', (t) => {
   const metaData = parseMetadata(migrationMetaData)
   const migration = makeMigration(metaData)
-  t.assert(migration.version === migrationMetaData.version)
-  t.assert(
+  t.is(migration.version, migrationMetaData.version)
+  t.is(
     migration.statements[0],
     'CREATE TABLE "stars" (\n  "id" TEXT NOT NULL,\n  "avatar_url" TEXT NOT NULL,\n  "name" TEXT,\n  "starred_at" TEXT NOT NULL,\n  "username" TEXT NOT NULL,\n  CONSTRAINT "stars_pkey" PRIMARY KEY ("id")\n) WITHOUT ROWID;\n'
   )
-  t.assert(
+  t.is(
     migration.statements[3],
-    "\n    CREATE TRIGGER update_ensure_main_stars_primarykey\n      BEFORE UPDATE ON main.stars\n    BEGIN\n      SELECT\n        CASE\n          WHEN old.id != new.id THEN\n\t\tRAISE (ABORT, 'cannot change the value of column id as it belongs to the primary key')\n        END;\n    END;\n    "
+    'CREATE TRIGGER update_ensure_main_stars_primarykey\n  BEFORE UPDATE ON "main"."stars"\nBEGIN\n  SELECT\n    CASE\n      WHEN old."id" != new."id" THEN\n      \t\tRAISE (ABORT, \'cannot change the value of column id as it belongs to the primary key\')\n    END;\nEND;'
   )
 })
 
@@ -133,7 +133,7 @@ test('generate index creation migration from meta data', (t) => {
     version: '20230613112725_814',
   })
   const migration = makeMigration(metaData)
-  t.assert(migration.version === migrationMetaData.version)
+  t.is(migration.version, migrationMetaData.version)
   t.deepEqual(migration.statements, [
     'CREATE INDEX idx_stars_username ON stars(username);',
   ])
