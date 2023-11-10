@@ -203,6 +203,11 @@ export class SatelliteProcess implements Satellite {
   }
 
   async start(authConfig: AuthConfig): Promise<ConnectionWrapper> {
+    const sqliteVersionRow = await this.adapter.query({
+      sql: 'SELECT sqlite_version() AS version',
+    })
+    Log.info(`Using SQLite version: ${sqliteVersionRow[0]['version']}`)
+
     await this.migrator.up()
 
     const isVerified = await this._verifyTableStructure()
