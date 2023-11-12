@@ -198,13 +198,9 @@ export const get_int = (electric: Electric, id: string) => {
   })
 }
 
-export const write_int = (electric: Electric, id: string, i2: number, i4: number) => {
+export const write_int = (electric: Electric, id: string, i2: number, i4: number, i8: number) => {
   return electric.db.ints.create({
-    data: {
-      id,
-      i2,
-      i4,
-    }
+    data: { id, i2, i4, i8 }
   })
 }
 
