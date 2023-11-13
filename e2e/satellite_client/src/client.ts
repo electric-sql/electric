@@ -216,10 +216,11 @@ export const get_float = (electric: Electric, id: string) => {
   })
 }
 
-export const write_float = (electric: Electric, id: string, f8: number) => {
+export const write_float = (electric: Electric, id: string, f4: number, f8: number) => {
   return electric.db.floats.create({
     data: {
       id,
+      f4,
       f8,
     }
   })
