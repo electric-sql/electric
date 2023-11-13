@@ -55,10 +55,10 @@
     [invoke wait-for "await client.get_float(db, '${id}')" "${id}" 10 $node]
 [endmacro]
 
-[macro node_write_float id value]
+[macro node_write_float id f4_value f8_value]
     # Can write valid floats to the DB
-    !await client.write_float(db, '${id}', ${value})
-    ??{ id: '${id}', f8:
+    !await client.write_float(db, '${id}', ${f4_value}, ${f8_value})
+    ??{ id: '${id}',
     ??$node
 [endmacro]
 
@@ -74,9 +74,9 @@
     ??$node
 [endmacro]
 
-[macro node_get_float id expected_float8]
+[macro node_get_float id expected_float4 expected_float8]
     !await client.get_float(db, '${id}')
-    ??{ id: '${id}', f8: ${expected_float8} }
+    ??{ id: '${id}', f4: ${expected_float4}, f8: ${expected_float8} }
     ??$node
 [endmacro]
 
