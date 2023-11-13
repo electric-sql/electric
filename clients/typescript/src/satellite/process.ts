@@ -203,10 +203,9 @@ export class SatelliteProcess implements Satellite {
   }
 
   async start(authConfig: AuthConfig): Promise<ConnectionWrapper> {
-    const sqliteVersionRow = await this.adapter.query({
-      sql: 'SELECT sqlite_version() AS version',
-    })
-    Log.info(`Using SQLite version: ${sqliteVersionRow[0]['version']}`)
+    if (this.opts.debug) {
+      await this.logSQLiteVersion()
+    }
 
     await this.migrator.up()
 
@@ -284,6 +283,13 @@ export class SatelliteProcess implements Satellite {
 
     const connectionPromise = this._connectWithBackoff()
     return { connectionPromise }
+  }
+
+  private async logSQLiteVersion(): Promise<void> {
+    const sqliteVersionRow = await this.adapter.query({
+      sql: 'SELECT sqlite_version() AS version',
+    })
+    Log.info(`Using SQLite version: ${sqliteVersionRow[0]['version']}`)
   }
 
   async _setAuthState(authState: AuthState): Promise<void> {

@@ -22,6 +22,8 @@ export interface SatelliteOpts {
   clearOnBehindWindow: boolean
   /** Backoff options for connecting with Electric*/
   connectionBackOffOptions: ConnectionBackoffOptions
+  /** With debug mode enabled, Satellite can show additional logs. */
+  debug: boolean
 }
 
 export interface SatelliteOverrides {
@@ -49,6 +51,7 @@ export const satelliteDefaults: SatelliteOpts = {
     numOfAttempts: 50,
     timeMultiple: 2,
   },
+  debug: false,
 }
 
 export const satelliteClientDefaults = {
