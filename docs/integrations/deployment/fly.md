@@ -225,7 +225,7 @@ Now that the database has one electrified table, we can [generate a type-safe cl
 ```shell
 $ npx electric-sql generate
       --service http://electric-on-fly-test-app.internal:5133
-      --proxy postgresql://prisma:******@electric-on-fly-test-app.internal:65432/electric
+      --proxy postgresql://prisma:******@electric-on-fly-test-app.internal:65432/postgres
 Generating Electric client...
 Successfully generated Electric client at: ./src/generated/client
 Building migrations...
