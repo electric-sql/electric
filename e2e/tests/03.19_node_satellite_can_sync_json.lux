@@ -53,9 +53,12 @@
     #[invoke node_get_json "row3" 500]
     [invoke node_get_jsonb "row3" "{ a: true, b: [ 1, 2 ] }"]
 
-    [invoke node_write_json "row4" "[ 1, { a: \"foo\" }, true ]" "'bar'"]
-    #[invoke node_get_json "row4" "[ 1, { a: \"foo\" }, true ]"]
-    [invoke node_get_jsonb "row4" "'bar'"]
+    [invoke node_write_json "row4" "'bar'" "[ 1, { a: 'foo' }, true ]"]
+    # [invoke node_get_json "row4" "'bar'"]
+    [invoke node_get_jsonb "row4" "[ 1, { a: 'foo' }, true ]"]
+
+    [invoke node_write_json "row5" "null" "[\"it's ⚡\", {}, \"\\u2603 under \\u2602\"]"]
+    [invoke node_get_jsonb "row5" "[ \"it's ⚡\", {}, '☃ under ☂' ]"]
 
 [shell pg_1]
     [invoke wait-for "SELECT * FROM public.jsons;" "row4" 10 $psql]
@@ -68,7 +71,8 @@
     ??row1 | [{"a": 1}, {"b": 5, "d": false}]
     ??row2 | <NULL>
     ??row3 | {"a": true, "b": [1, 2]}
-    ??row4 | "bar"
+    ??row4 | [1, {"a": "foo"}, true]
+    ??row5 | ["it's ⚡", {}, "☃ under ☂"]
 
 # Start a new Satellite client and verify that it receives all rows
 [invoke setup_client 2 electric_1 5133]
@@ -95,8 +99,10 @@
     #[invoke node_get_json "row3" 500]
     [invoke node_get_jsonb "row3" "{ a: true, b: [ 1, 2 ] }"]
 
-    #[invoke node_get_json "row4" "[ 1, { a: \"foo\" }, true ]"]
-    [invoke node_get_jsonb "row4" "'bar'"]
+    #[invoke node_get_json "row4" "'bar'"]
+    [invoke node_get_jsonb "row4" "[ 1, { a: 'foo' }, true ]"]
+
+    [invoke node_get_jsonb "row5" "[ \"it's ⚡\", {}, '☃ under ☂' ]"]
 
 [cleanup]
   [invoke teardown]

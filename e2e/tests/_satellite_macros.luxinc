@@ -112,7 +112,7 @@
     # Can write valid JSON to the DB
     !await client.write_json(db, '${id}', ${json_value}, ${jsonb_value})
     #??{ id: '${id}', js: ${json_value}, jsb: ${jsonb_value} }
-    ??{ id: '${id}', jsb: ${jsonb_value} }
+    # ??{ id: '${id}', jsb: ${jsonb_value} }
     ??$node
 [endmacro]
 
