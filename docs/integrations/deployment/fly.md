@@ -220,7 +220,7 @@ Applied 01-create_items_table.sql
 
 ### Generate a type-safe client
 
-Now that the database has one electrified table, we can [generate a type-safe client](../../usage/data-access-client.mdx) from it. Use the same database connection URL as in the previous step but change the username to `prisma` (this is required for the schema introspection to work correctly).
+Now that the database has one electrified table, we can [generate a type-safe client](../../usage/data-access/client.md) from it. Use the same database connection URL as in the previous step but change the username to `prisma` (this is required for the schema introspection to work correctly).
 
 ```shell
 $ npx electric-sql generate
