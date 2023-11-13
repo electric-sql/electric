@@ -55,6 +55,10 @@
     [invoke wait-for "await client.get_float(db, '${id}')" "${id}" 10 $node]
 [endmacro]
 
+[macro node_await_get_json id]
+    [invoke wait-for "await client.get_jsonb(db, '${id}')" "${id}" 10 $node]
+[endmacro]
+
 [macro node_write_float id value]
     # Can write valid floats to the DB
     !await client.write_float(db, '${id}', ${value})
@@ -77,6 +81,38 @@
 [macro node_get_float id expected_float8]
     !await client.get_float(db, '${id}')
     ??{ id: '${id}', f8: ${expected_float8} }
+    ??$node
+[endmacro]
+
+[macro node_get_json_raw id expected_json]
+    !await client.get_json_raw(db, '${id}')
+    ??${expected_json}
+    ??$node
+[endmacro]
+
+[macro node_get_jsonb_raw id expected_jsonb]
+    !await client.get_jsonb_raw(db, '${id}')
+    ??${expected_jsonb}
+    ??$node
+[endmacro]
+
+[macro node_get_json id expected_json]
+    !await client.get_json(db, '${id}')
+    ??{ id: '${id}', js: ${expected_json} }
+    ??$node
+[endmacro]
+
+[macro node_get_jsonb id expected_jsonb]
+    !await client.get_jsonb(db, '${id}')
+    ??{ id: '${id}', jsb: ${expected_jsonb} }
+    ??$node
+[endmacro]
+
+[macro node_write_json id json_value jsonb_value]
+    # Can write valid JSON to the DB
+    !await client.write_json(db, '${id}', ${json_value}, ${jsonb_value})
+    #??{ id: '${id}', js: ${json_value}, jsb: ${jsonb_value} }
+    ??{ id: '${id}', jsb: ${jsonb_value} }
     ??$node
 [endmacro]
 

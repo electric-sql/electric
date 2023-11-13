@@ -6,8 +6,7 @@ datasource db {
 generator electric {
   provider                 = "../node_modules/@electric-sql/prisma-generator/dist/bin.js"
   output                   = "../generated/client"
-  relationModel            = true
-  writeNullishInModelTypes = true
+  relationModel            = "false"
 }
 
 generator client {
@@ -23,6 +22,7 @@ model Items {
   intvalue_null             Int?
   intvalue_null_default     Int?
   other_items               OtherItems?
+  @@map("items")
 }
 
 model OtherItems {
@@ -30,36 +30,50 @@ model OtherItems {
   content String
   item_id String? @unique
   items   Items?  @relation(fields: [item_id], references: [id])
+  @@map("other_items")
 }
 
 model Timestamps {
   id String @id
   created_at DateTime @db.Timestamp(3)
   updated_at DateTime @db.Timestamptz(3)
+  @@map("timestamps")
 }
 
 model Datetimes {
   id String   @id
   d  DateTime @db.Date
   t  DateTime @db.Time(3)
+  @@map("datetimes")
 }
 
 model Bools {
   id String @id
   b  Boolean?
+  @@map("bools")
 }
 
 model Uuids {
   id String @id @db.Uuid /// @zod.string.uuid()
+  @@map("uuids")
 }
 
 model Ints {
   id String @id
   i2 Int? @db.SmallInt /// @zod.number.int().gte(-32768).lte(32767)
   i4 Int?              /// @zod.number.int().gte(-2147483648).lte(2147483647)
+  @@map("ints")
 }
 
 model Floats {
   id String @id
   f8 Float? @db.DoublePrecision /// @zod.custom.use(z.number().or(z.nan()))
+  @@map("floats")
+}
+
+model Jsons {
+  id  String @id
+  js  Json?  @db.Json
+  jsb Json?
+  @@map("jsons")
 }
