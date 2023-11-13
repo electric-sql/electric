@@ -53,6 +53,16 @@ defmodule Electric.Replication.Postgres.Client do
     end
   end
 
+  @doc """
+  Wrapper for :epgsql.with_transaction/3 that always sets `reraise` to `true` by default and makes `begin_opts` a
+  standalone function argument for easier code reading.
+  """
+  def with_transaction(mode \\ "", conn, fun, in_opts \\ [])
+      when is_binary(mode) and is_list(in_opts) do
+    opts = Keyword.merge([reraise: true, begin_opts: mode], in_opts)
+    :epgsql.with_transaction(conn, fun, opts)
+  end
+
   def close(conn) do
     :epgsql.close(conn)
   end
@@ -86,31 +96,6 @@ defmodule Electric.Replication.Postgres.Client do
     with {:ok, _, _} <- squery(conn, ~s|ALTER SUBSCRIPTION "#{name}"
             DISABLE|) do
       :ok
-    end
-  end
-
-  @spec create_publication(connection(), publication(), :all | binary | [binary]) ::
-          {:ok, String.t()}
-  def create_publication(conn, name, :all) do
-    # squery(conn, "CREATE PUBLICATION #{name} FOR ALL TABLES")
-    create_publication(conn, name, "ALL TABLES")
-  end
-
-  def create_publication(conn, name, tables) when is_list(tables) do
-    # squery(conn, "CREATE PUBLICATION #{name} FOR TABLE t1, t2")
-    table_list =
-      tables
-      |> Enum.map(&~s|"#{&1}"|)
-      |> Enum.join(", ")
-
-    create_publication(conn, name, "TABLE #{table_list}")
-  end
-
-  def create_publication(conn, name, table_spec) when is_binary(table_spec) do
-    case squery(conn, ~s|CREATE PUBLICATION "#{name}" FOR #{table_spec}|) do
-      {:ok, _, _} -> {:ok, name}
-      # TODO: Verify that the publication has the correct tables
-      {:error, {_, _, _, :duplicate_object, _, _}} -> {:ok, name}
     end
   end
 

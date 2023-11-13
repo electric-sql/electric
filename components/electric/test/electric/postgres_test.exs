@@ -3,6 +3,7 @@ defmodule Electric.PostgresTest do
   use ExUnitProperties
 
   import Electric.Postgres.TestConnection
+  alias Electric.Replication.Postgres.Client
 
   setup do
     context = create_test_db()
@@ -67,7 +68,7 @@ defmodule Electric.PostgresTest do
     trace("> " <> sql <> ";")
     if sql_file, do: IO.write(sql_file, sql <> ";\n\n")
 
-    :epgsql.with_transaction(conn, fn tx ->
+    Client.with_transaction(conn, fn tx ->
       {:ok, _count, _rows} = :epgsql.squery(tx, sql <> ";")
     end)
 

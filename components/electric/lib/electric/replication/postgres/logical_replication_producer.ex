@@ -80,7 +80,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   @impl true
   def init(conn_config) do
     origin = Connectors.origin(conn_config)
-    conn_opts = Connectors.get_connection_opts(conn_config)
+    conn_opts = Connectors.get_connection_opts(conn_config, replication: true)
     repl_opts = Connectors.get_replication_opts(conn_config)
 
     :gproc.reg(name(origin))
