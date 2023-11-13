@@ -7,7 +7,9 @@ sidebar_position: 40
 
 You can deploy ElectricSQL to [Fly.io](https://fly.io).
 
-The app config needs to include `http_service` with internal port `5133`. Electric also listens on ports `5433` and `65432` but those **must not** be exposed to the Internet unless your Postgres database or the tooling you'll be using for running migrations is hosted outside of [Fly's private network](https://fly.io/docs/reference/private-networking/). The environment variables used by Electric are described in <DocPageLink path="api/service" />.
+The app config needs to include an `http_service` with internal port `5133`. Electric also listens on ports `5433` and `65432` but those **should not** be exposed to the Internet unless your Postgres database or the tooling you'll be using for running migrations is hosted outside of [Fly's private network](https://fly.io/docs/reference/private-networking/).
+
+The environment variables used by Electric are described in <DocPageLink path="api/service" />.
 
 ## Deploying Electric
 
@@ -15,7 +17,7 @@ As a quick example, let's create a new Fly app to run Electric and connect it to
 
 ### Postgres with logical replication
 
-Before we start, make sure you have an instance of Fly Postgres deployed
+Before we start, make sure you have an instance of Fly Postgres deployed:
 
 ```shell
 $ fly pg create
@@ -34,7 +36,7 @@ Postgres cluster ancient-pine-7827 created
 Save your credentials in a secure place -- you won't be able to see them again!
 ```
 
-and configured with `wal_level=logical`
+And configured with `wal_level=logical`:
 
 ```shell
 $ fly pg -a ancient-pine-7827 config update --wal-level logical
@@ -60,7 +62,7 @@ Keep the connection URL handy, we will need it soon for the Electric sync servic
 
 ### Configure your app
 
-Save the following snippet into a file named `fly.toml` somewhere on your computer, changing the name of the app as you see fit:
+Save the following snippet into a file named `fly.toml` somewhere on your computer, changing the `app` name and `primary_region` as you see fit:
 
 ```toml
 app = "electric-on-fly-test-app"
@@ -80,8 +82,10 @@ primary_region = "otp"
   force_https = true
 ```
 
-:::note
-Don't forget to update the value of `LOGICAL_PUBLISHER_HOST` as well if you change the app name in your `fly.toml`.
+:::caution
+The `LOGICAL_PUBLISHER_HOST` should correspond to your choice of app name.
+
+If you change your app name in your `fly.toml`, make sure you change the `LOGICAL_PUBLISHER_HOST` value as well.
 :::
 
 :::tip
@@ -175,8 +179,7 @@ Visit your newly deployed app at https://electric-on-fly-test-app.fly.dev/
 ```
 
 :::caution
-We don't currently support multiple running Electric instances connected to the same database. So it's important to
-override Fly's default behaviour of creating two machines for a new app by passing the `--ha=false` flag.
+We don't *currently* support multiple running Electric instances connected to the same database. So it's important to override Fly's default behaviour of creating two machines for a new app by passing the `--ha=false` flag.
 :::
 
 Verify that it's up:
@@ -192,7 +195,7 @@ Let's see how to set up a client app to connect to the Electric sync service we'
 
 ### Configure your Private Network VPN
 
-In a real-world scenario, you would apply database migrations to the production database in the same environment where your app is deployed. For this example, though, we're executing commands on a local machine. Therefore we need to set up a WIreGuard VPN to reach both the app and the Postgres instance deployed on Fly. Follow the [official instructions](https://fly.io/docs/reference/private-networking/#private-network-vpn) to complete the setup on your machine.
+In a real-world scenario, you would apply database migrations to the production database in the same environment where your app is deployed. For this example, though, we're executing commands on a local machine. Therefore we need to set up a WireGuard VPN to reach both the app and the Postgres instance deployed on Fly. Follow the [official instructions](https://fly.io/docs/reference/private-networking/#private-network-vpn) to complete the setup on your machine.
 
 ### Apply migrations
 
@@ -215,9 +218,9 @@ Applied 01-create_items_table.sql
 1 migrations applied
 ```
 
-### Generate a type-safe Data Access Layer
+### Generate a type-safe client
 
-Now that the database has one electrified table, we can generate a type-safe client from it. Use the same database connection URL as in the previous step but change the username to `prisma` (this is requried for the schema introspection to work correctly).
+Now that the database has one electrified table, we can [generate a type-safe client](../../usage/data-access-client.mdx) from it. Use the same database connection URL as in the previous step but change the username to `prisma` (this is required for the schema introspection to work correctly).
 
 ```shell
 $ npx electric-sql generate
