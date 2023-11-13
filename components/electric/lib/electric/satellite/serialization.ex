@@ -500,15 +500,11 @@ defmodule Electric.Satellite.Serialization do
     val
   end
 
-  def decode_column_value!(val, :float8) when val in ["Infinity", "-Infinity", "NaN"], do: val
-
-  def decode_column_value!(val, :float8) do
-    case Float.parse(val) do
-      {_, ""} -> :ok
-      _ -> raise "Unexpected value for float8 colum: #{inspect(val)}"
+  def decode_column_value!(val, type) when type in [:float4, :float8] do
+    case String.downcase(val) do
+      inf_or_nan when inf_or_nan in ~w[inf infinity -inf -infinity nan] -> val
+      _ -> decode_float_value!(val, type)
     end
-
-    val
   end
 
   def decode_column_value!(val, type) when type in [:int2, :int4, :int8] do
@@ -565,6 +561,15 @@ defmodule Electric.Satellite.Serialization do
     uuid
   end
 
+  defp decode_float_value!(val, type) do
+    with {num, ""} <- Float.parse(val),
+         :ok = assert_float_in_range(num, type) do
+      val
+    else
+      _ -> raise "Unexpected value for #{type} colum: #{inspect(val)}"
+    end
+  end
+
   @int2_range -32768..32767
   @int4_range -2_147_483_648..2_147_483_647
   @int8_range -9_223_372_036_854_775_808..9_223_372_036_854_775_807
@@ -594,5 +599,28 @@ defmodule Electric.Satellite.Serialization do
     true = byte_size(fs_str) <= 6
     _ = String.to_integer(fs_str)
     :ok
+  end
+
+  defp assert_float_in_range(_num, :float8), do: :ok
+
+  defp assert_float_in_range(num, :float4) do
+    conversion_result =
+      case <<num::float-32>> do
+        <<_sign::1, 0xFF, 0::23>> ->
+          # The input is rounded up to Infinity when converted to a 32-bit floating point number.
+          # It should have been encoded as literal "Infinity" by the client.
+          :error
+
+        <<_sign::1, 0, 0::23>> when num != 0 ->
+          # The input is rounded down to zero. It should have been encoded as literal "0" by the client.
+          :error
+
+        _ ->
+          :ok
+      end
+
+    with :error <- conversion_result do
+      raise "Value for float4 column out of range: #{inspect(num)}"
+    end
   end
 end
