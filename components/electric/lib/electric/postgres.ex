@@ -84,7 +84,7 @@ defmodule Electric.Postgres do
     ~w[
       bool
       date
-      float8
+      float4 float8
       int2 int4
       text
       time

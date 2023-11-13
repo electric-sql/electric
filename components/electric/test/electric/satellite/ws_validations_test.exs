@@ -189,23 +189,27 @@ defmodule Electric.Satellite.WsValidationsTest do
       migrate(
         ctx.db,
         vsn,
-        "CREATE TABLE public.foo (id TEXT PRIMARY KEY, f8 DOUBLE PRECISION)",
+        "CREATE TABLE public.foo (id TEXT PRIMARY KEY, f4 REAL, f8 DOUBLE PRECISION)",
         electrify: "public.foo"
       )
 
     valid_records = [
-      %{"id" => "1", "f8" => "+0.0"},
-      %{"id" => "2", "f8" => "+0.1"},
-      %{"id" => "3", "f8" => "1"},
-      %{"id" => "4", "f8" => "-1"},
-      %{"id" => "5", "f8" => "7.3e-4"},
-      %{"id" => "6", "f8" => "1.23456789E+248"},
-      %{"id" => "7", "f8" => "-0.0"},
-      %{"id" => "8", "f8" => "-1.0"},
-      %{"id" => "9", "f8" => "1e-10"},
-      %{"id" => "10", "f8" => "+0"},
-      %{"id" => "11", "f8" => "-0"},
-      %{"id" => "12", "f8" => "0"}
+      %{"id" => "1", "f4" => "+0.0", "f8" => "+0.0"},
+      %{"id" => "2", "f4" => "+0.1", "f8" => "+0.1"},
+      %{"id" => "3", "f4" => "1", "f8" => "1"},
+      %{"id" => "4", "f4" => "-1", "f8" => "-1"},
+      %{"id" => "5", "f4" => "7.3e-4", "f8" => "7.3e-4"},
+      %{"id" => "6", "f4" => "3.4028234663852886e38", "f8" => "1.23456789E+248"},
+      %{"id" => "7", "f4" => "-0.0", "f8" => "-0.0"},
+      %{"id" => "8", "f4" => "-1.0", "f8" => "-1.0"},
+      %{"id" => "9", "f4" => "-1e-10", "f8" => "1e-10"},
+      %{"id" => "10", "f4" => "+0", "f8" => "+0"},
+      %{"id" => "11", "f4" => "-0", "f8" => "-0"},
+      %{"id" => "12", "f4" => "0", "f8" => "0"},
+      %{"id" => "13", "f4" => "-3.4028234663852886e38", "f8" => "-2.387561194739013e307"},
+      %{"id" => "14", "f4" => "inf", "f8" => "Infinity"},
+      %{"id" => "15", "f4" => "-INF", "f8" => "-iNfInItY"},
+      %{"id" => "16", "f4" => "nan", "f8" => "nAn"}
     ]
 
     within_replication_context(ctx, vsn, fn conn ->
@@ -228,7 +232,26 @@ defmodule Electric.Satellite.WsValidationsTest do
       %{"id" => "27", "f8" => "20_30"},
       %{"id" => "28", "f8" => "0x33"},
       %{"id" => "29", "f8" => "0b101011"},
-      %{"id" => "30", "f8" => "0o373"}
+      %{"id" => "30", "f8" => "0o373"},
+      %{"id" => "31", "f4" => "five"},
+      %{"id" => "32", "f4" => "."},
+      %{"id" => "33", "f4" => "-"},
+      %{"id" => "34", "f4" => "+"},
+      %{"id" => "35", "f4" => "0."},
+      %{"id" => "36", "f4" => " 1"},
+      %{"id" => "37", "f4" => "20_30"},
+      %{"id" => "38", "f4" => "0x33"},
+      %{"id" => "39", "f4" => "0b101011"},
+      %{"id" => "40", "f4" => "0o373"},
+      %{"id" => "41", "f4" => ""},
+      %{"id" => "42", "f4" => "1.23456789E+248"},
+      %{"id" => "43", "f4" => "-1.23456789e40"},
+      %{"id" => "44", "f4" => "0.6e-45"},
+      %{"id" => "45", "f8" => "1.8e+308"}
+      # The following number does not fit into a 64-bit float but there's no way to detect that in Elixir, short of
+      # writing our own custom parsing for this one edge case.
+      # Using the built-in string-to-float conversion, the number is parsed as `-0.0`.
+      # %{"id" => "46", "f8" => "-2.4e-324"}
     ]
 
     Enum.each(invalid_records, fn record ->

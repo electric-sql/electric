@@ -434,6 +434,8 @@ defmodule Electric.Postgres.ExtensionTest do
                  num4a INT4,
                  num4b INT,
                  num4c INTEGER,
+                 real4a FLOAT4,
+                 "Real4b" REAL,
                  real8a FLOAT8,
                  real8b DOUBLE PRECISION,
                  ts TIMESTAMP,
@@ -459,8 +461,6 @@ defmodule Electric.Postgres.ExtensionTest do
                  "C3" VARCHAR(11),
                  num8a INT8,
                  num8b BIGINT,
-                 real4a FLOAT4,
-                 "Real4b" REAL,
                  created_at TIMETZ
                );
                CALL electric.electrify('public.t1');
@@ -474,8 +474,6 @@ defmodule Electric.Postgres.ExtensionTest do
                  "C3" character varying(11)
                  num8a bigint
                  num8b bigint
-                 real4a real
-                 "Real4b" real
                  created_at time with time zone
                """
                |> String.trim()
