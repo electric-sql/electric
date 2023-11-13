@@ -5,14 +5,14 @@
     "alwaysStrict": true,
     "checkJs": false,
     "declaration": true,
-    "emitDeclarationOnly": true,
+    "noEmit": true,
     "forceConsistentCasingInFileNames": true,
     "incremental": false,
     "isolatedModules": true,
     "jsx": "preserve",
     "lib": ["ESNext", "DOM"],
     "module": "ESNext",
-    "moduleResolution": "node",
+    "moduleResolution": "Bundler",
     "noFallthroughCasesInSwitch": true,
     "noImplicitAny": true,
     "noImplicitReturns": true,
@@ -21,7 +21,7 @@
     "noUnusedParameters": true,
     "outDir": "dist",
     "resolveJsonModule": true,
-    "rootDir": "src",
+    "rootDir": "",
     "skipLibCheck": true,
     "strict": true,
     "strictBindCallApply": true,
@@ -29,6 +29,6 @@
     "strictNullChecks": true,
     "target": "ESNext"
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "test/**/*"],
   "exclude": ["node_modules", "dist"]
 }

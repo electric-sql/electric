@@ -305,7 +305,7 @@ function addFilters<T, Q extends QueryBuilder & WhereMixin>(
     const fieldValue = whereObject[fieldName as keyof T]
     const filters = makeFilter(fieldValue, fieldName)
     return filters.reduce((query, filter) => {
-      return query.where(filter.sql, ...(filter.args ?? []))
+      return query.where(filter.sql, ...(filter.args ?? [])) as Q
     }, query)
   }, q)
 }
