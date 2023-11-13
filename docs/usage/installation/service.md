@@ -32,7 +32,6 @@ See <DocPageLink path="api/service" /> for the full list of configuration option
 Pre-packaged images are available on Docker Hub at [electricsql/electric](https://hub.docker.com/r/electricsql/electric). Run using e.g.:
 
 ```shell
-docker pull electricsql/electric:latest
 docker run \
     -e "DATABASE_URL=postgresql://..." \
     -e "LOGICAL_PUBLISHER_HOST=..." \
@@ -40,6 +39,7 @@ docker run \
     -e "AUTH_MODE=insecure" \
     -p 5133:5133 \
     -p 5433:5433 \
+    -p 65432:65432 \
     electricsql/electric
 ```
 
@@ -48,30 +48,36 @@ docker run \
 You can deploy the sync service together with [a Postgres database](./postgres.md) in a Docker Compose file. For example, save below contents to a file named `compose.yaml`:
 
 ```yaml
-version: '3.1'
+version: "3.1"
+
+volumes:
+  pg_data:
 
 services:
   pg:
     image: postgres
     environment:
-      POSTGRES_PASSWORD: "pwd"
+      POSTGRES_PASSWORD: pg_password
+    command:
+      - -c
+      - wal_level=logical
     ports:
       - 5432:5432
     restart: always
-    volumes:
-      pg_data:/var/lib/postgresql/data
+    volumes: pg_data:/var/lib/postgresql/data
 
   electric:
     image: electricsql/electric
     depends_on:
       - pg
     environment:
-      DATABASE_URL: postgresql://postgres:pwd@pg
+      DATABASE_URL: postgresql://postgres:pg_password@pg/postgres
       LOGICAL_PUBLISHER_HOST: electric
       PG_PROXY_PASSWORD: proxy_password
       AUTH_MODE: insecure
     ports:
       - 5133:5133
+      - 65432:65432
     restart: always
 ```
 
@@ -99,6 +105,7 @@ docker run \
     -e "AUTH_MODE=insecure" \
     -p 5133:5133 \
     -p 5433:5433 \
+    -p 65432:65432 \
     -it electric:local-build
 ```
 
