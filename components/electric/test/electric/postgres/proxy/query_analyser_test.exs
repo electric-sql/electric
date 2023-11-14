@@ -865,23 +865,6 @@ defmodule Electric.Postgres.Proxy.QueryAnalyserTest do
       end
     end
 
-    test "ALTER TABLE { SET | RESET } ( storage_parameter = ... )", cxt do
-      stmts = [
-        "ALTER TABLE public.truths OWNER TO someone",
-        "ALTER TABLE public.truths OWNER TO CURRENT_ROLE"
-      ]
-
-      for stmt <- stmts do
-        assert [
-                 %QueryAnalysis{
-                   action: {:alter, "table"},
-                   allowed?: true,
-                   capture?: false
-                 }
-               ] = analyse(simple(stmt), cxt)
-      end
-    end
-
     test "ALTER TABLE ... mix of allowed and disallowed", cxt do
       assert [
                %QueryAnalysis{
