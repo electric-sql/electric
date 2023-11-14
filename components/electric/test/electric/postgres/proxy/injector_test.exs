@@ -575,6 +575,32 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
       |> idle!()
     end
 
+    test "enable trigger", cxt do
+      query1 =
+        "create or replace function function1() returns trigger as $$ return true; $$ language pgpsql"
+
+      query2 =
+        "alter table public.truths enable always trigger function1"
+
+      query = Enum.join([query1 <> ";", query2 <> ";"], "\n")
+
+      cxt.injector
+      |> client(begin())
+      |> server(complete_ready("BEGIN"))
+      |> client(query(query), server: query(query1))
+      |> server(complete_ready("CREATE FUNCTION1"), server: query(query2))
+      |> server(complete_ready("ALTER TABLE"),
+        client: [
+          complete("CREATE FUNCTION1"),
+          complete("ALTER TABLE"),
+          ready(:tx)
+        ]
+      )
+      |> client(commit())
+      |> server(complete_ready("COMMIT", :idle))
+      |> idle!()
+    end
+
     test "drop random things", cxt do
       cxt.injector
       |> client(begin())
