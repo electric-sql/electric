@@ -60,6 +60,31 @@
     [invoke node_write_json "row5" "null" "[\"it's ⚡\", {}, \"\\u2603 under \\u2602\"]"]
     [invoke node_get_jsonb "row5" "[ \"it's ⚡\", {}, '☃ under ☂' ]"]
 
+    # JSON does not support special floating-point values.  Per the builtin JSON.stringify() function:
+    #
+    #     > JSON.stringify([NaN, Infinity, -Infinity])
+    #     '[null,null,null]'
+    #
+    [invoke node_write_json "row6" "null" "[NaN, Infinity, -Infinity]"]
+    [invoke node_get_jsonb "row6" "[ null, null, null ]"]
+
+    # Even though JSON can encode the NUL code point and unpaired surrogates, those will fail Postgres' jsonb validation.
+    # Per the builtin JSON.stringify() function:
+    #
+    #     > JSON.stringify("hello\x00NUL")
+    #     '"hello\\u0000NUL"'
+    #     > JSON.stringify("\ud83d\ude43")
+    #     '"🙃"'
+    #     > JSON.stringify("\ud83d")
+    #     '"\\ud83d"'
+    #     > JSON.stringify("\ude43")
+    #     '"\\ude43"'
+    #
+    # NOTE: this currently causes Electric's validation to fail because the chosen JSON library
+    # does not support Unicode escape sequences.
+    [invoke node_write_json "row7" "null" "['\x00', '\ud83d\ude43', '\ud83d', '\ude43']"]
+    [invoke node_get_jsonb "row7" "[ '\"\\u0000\"', '\"🙃\"', '\"\\ud83d\"', '\"\\ude43\"' ]"]
+
 [shell pg_1]
     [invoke wait-for "SELECT * FROM public.jsons;" "row4" 10 $psql]
 
