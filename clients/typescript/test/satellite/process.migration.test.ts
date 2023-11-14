@@ -120,9 +120,21 @@ const createTable: SchemaChange = {
   table: {
     name: 'NewTable',
     columns: [
-      { name: 'id', sqliteType: 'TEXT' },
-      { name: 'foo', sqliteType: 'INTEGER' },
-      { name: 'bar', sqliteType: 'TEXT' },
+      {
+        name: 'id',
+        sqliteType: 'TEXT',
+        pgType: { name: 'TEXT', array: [], size: [] },
+      },
+      {
+        name: 'foo',
+        sqliteType: 'INTEGER',
+        pgType: { name: 'INTEGER', array: [], size: [] },
+      },
+      {
+        name: 'bar',
+        sqliteType: 'TEXT',
+        pgType: { name: 'TEXT', array: [], size: [] },
+      },
     ],
     fks: [],
     pks: ['id'],
@@ -140,10 +152,26 @@ const addColumn: SchemaChange = {
   table: {
     name: 'parent',
     columns: [
-      { name: 'id', sqliteType: 'INTEGER' },
-      { name: 'value', sqliteType: 'TEXT' },
-      { name: 'other', sqliteType: 'INTEGER' },
-      { name: 'baz', sqliteType: 'TEXT' },
+      {
+        name: 'id',
+        sqliteType: 'INTEGER',
+        pgType: { name: 'INTEGER', array: [], size: [] },
+      },
+      {
+        name: 'value',
+        sqliteType: 'TEXT',
+        pgType: { name: 'TEXT', array: [], size: [] },
+      },
+      {
+        name: 'other',
+        sqliteType: 'INTEGER',
+        pgType: { name: 'INTEGER', array: [], size: [] },
+      },
+      {
+        name: 'baz',
+        sqliteType: 'TEXT',
+        pgType: { name: 'TEXT', array: [], size: [] },
+      },
     ],
     fks: [],
     pks: ['id'],
@@ -689,7 +717,13 @@ const migrationWithFKs: SchemaChange[] = [
     `,
     table: {
       name: 'test_items',
-      columns: [{ name: 'id', sqliteType: 'TEXT' }],
+      columns: [
+        {
+          name: 'id',
+          sqliteType: 'TEXT',
+          pgType: { name: 'TEXT', array: [], size: [] },
+        },
+      ],
       fks: [],
       pks: ['id'],
     },
@@ -707,8 +741,16 @@ const migrationWithFKs: SchemaChange[] = [
     table: {
       name: 'test_other_items',
       columns: [
-        { name: 'id', sqliteType: 'TEXT' },
-        { name: 'item_id', sqliteType: 'TEXT' },
+        {
+          name: 'id',
+          sqliteType: 'TEXT',
+          pgType: { name: 'TEXT', array: [], size: [] },
+        },
+        {
+          name: 'item_id',
+          sqliteType: 'TEXT',
+          pgType: { name: 'TEXT', array: [], size: [] },
+        },
       ],
       fks: [
         {

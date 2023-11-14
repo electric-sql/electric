@@ -26,8 +26,8 @@
 [shell proxy_1]
     """!
     INSERT INTO public.ints (id, i2, i4, i8) VALUES
-      ('row1', -32768, -2147483648, -30000000000),
-      ('row2', 32767, 2147483647, 30000000000);
+      ('row1', -32768, -2147483648, -9223372036854775808),
+      ('row2', 32767, 2147483647, 9223372036854775807);
     """
     ??INSERT 0 2
 
@@ -35,21 +35,26 @@
     # Wait for the rows to arrive
     [invoke node_await_get_int "row2"]
 
-    [invoke node_get_int "row1" -32768 -2147483648 -30000000000]
-    [invoke node_get_int "row2" 32767 2147483647 30000000000]
+    [invoke node_get_int "row1" -32768 -2147483648 -9223372036854775808]
+    [invoke node_get_int "row2" 32767 2147483647 9223372036854775807]
 
     # Can write valid ints to the DB
     !await client.write_int(db, 'row3', 0, 0, 0)
-    ??{ id: 'row3', i2: 0, i4: 0, i8: 0 }
+    ??{ id: 'row3', i2: 0, i4: 0, i8: 0n }
+    ?$node
+
+    !await client.write_int(db, 'row4', 0, 0, 9223372036854775806n)
+    ??{ id: 'row4', i2: 0, i4: 0, i8: 9223372036854775806n }
     ?$node
 
 [shell proxy_1]
-    [invoke wait-for "SELECT * FROM public.ints;" "row3" 10 $psql]
+    [invoke wait-for "SELECT * FROM public.ints;" "row4" 10 $psql]
 
     !SELECT * FROM public.ints;
-    ??row1 | -32768 | -2147483648 | -30000000000
-    ??row2 |  32767 |  2147483647 |  30000000000
-    ??row3 |      0 |           0 |            0
+    ??row1 | -32768 | -2147483648 | -9223372036854775808
+    ??row2 |  32767 |  2147483647 |  9223372036854775807
+    ??row3 |      0 |           0 |                    0
+    ??row4 |      0 |           0 |  9223372036854775806
 
 # Start a new Satellite client and verify that it receives all rows
 [invoke setup_client 2 electric_1 5133]
@@ -61,21 +66,22 @@
     # Wait for the rows to arrive
     [invoke node_await_get_int "row3"]
 
-    [invoke node_get_int "row1" -32768 -2147483648 -30000000000]
-    [invoke node_get_int "row2" 32767 2147483647 30000000000]
+    [invoke node_get_int "row1" -32768 -2147483648 -9223372036854775808]
+    [invoke node_get_int "row2" 32767 2147483647 9223372036854775807]
     [invoke node_get_int "row3" 0 0 0]
+    [invoke node_get_int "row4" 0 0 9223372036854775806]
 
     # Reset the failure pattern because we don't want it to match the errors below
     -
     # Can't write invalid ints to the DB
-    !await client.write_int(db, 'row4', 32768, 5, 0)
+    !await client.write_int(db, 'row5', 32768, 5, 0)
     ??Number must be less than or equal to 32767
 
-    !await client.write_int(db, 'row4', 5, 2147483648, 0)
+    !await client.write_int(db, 'row5', 5, 2147483648, 0)
     ??Number must be less than or equal to 2147483647
 
-    #!await client.write_int(db, 'row4', 5, 0, -9223372036854775809)
-    #??Number must be less than or equal to 9223372036854775808
+    !await client.write_int(db, 'row5', 5, 0, 9223372036854775808n)
+    ??BigInt must be less than or equal to 9223372036854775807
 
 [cleanup]
   [invoke teardown]

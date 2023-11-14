@@ -111,7 +111,7 @@ export const DATE_VALIDATOR_NUMBER_AND_MESSAGE_REGEX =
 // ----------------------------------------
 
 export const BIGINT_VALIDATOR_NUMBER_AND_MESSAGE_REGEX =
-  /.(?<validator>gt|gte|lt|lte|multipleOf)(?<number>\([\w]+([,][ ]?)?(?<message>[{][ ]?message:[ ]?['"][\w\W]+['"][ ]?[}])?\))/
+  /.(?<validator>gt|gte|lt|lte|multipleOf)(?<number>\(-?[\w]+([,][ ]?)?(?<message>[{][ ]?message:[ ]?['"][\w\W]+['"][ ]?[}])?\))/
 
 export const BIGINT_VALIDATOR_MESSAGE_REGEX =
   /(?<validator>positive|nonnegative|negative|nonpositive|array)(\((?<message>[{][ ]?message:[ ]?['"][\w\W]+['"][ ]?[}])?\))/

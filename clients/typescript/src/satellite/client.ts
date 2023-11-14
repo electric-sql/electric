@@ -1130,6 +1130,7 @@ function deserializeColumnData(
   switch (columnType) {
     case PgBasicType.PG_CHAR:
     case PgDateType.PG_DATE:
+    case PgBasicType.PG_INT8:
     case PgBasicType.PG_TEXT:
     case PgDateType.PG_TIME:
     case PgDateType.PG_TIMESTAMP:
@@ -1142,7 +1143,6 @@ function deserializeColumnData(
     case PgBasicType.PG_INT:
     case PgBasicType.PG_INT2:
     case PgBasicType.PG_INT4:
-    case PgBasicType.PG_INT8:
     case PgBasicType.PG_INTEGER:
       return Number(typeDecoder.text(column))
     case PgBasicType.PG_FLOAT4:

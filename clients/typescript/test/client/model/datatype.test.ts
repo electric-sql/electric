@@ -31,7 +31,7 @@ await tbl.sync()
 function setupDB() {
   db.exec('DROP TABLE IF EXISTS DataTypes')
   db.exec(
-    "CREATE TABLE DataTypes('id' int PRIMARY KEY, 'date' varchar, 'time' varchar, 'timetz' varchar, 'timestamp' varchar, 'timestamptz' varchar, 'bool' int, 'uuid' varchar, 'int2' int2, 'int4' int4, 'float8' real, 'relatedId' int);"
+    "CREATE TABLE DataTypes('id' int PRIMARY KEY, 'date' varchar, 'time' varchar, 'timetz' varchar, 'timestamp' varchar, 'timestamptz' varchar, 'bool' int, 'uuid' varchar, 'int2' int2, 'int4' int4, 'int8' int8, 'float8' real, 'relatedId' int);"
   )
 }
 
@@ -644,3 +644,107 @@ test.serial('support null values for float8 type', async (t) => {
 
   t.deepEqual(fetchRes, expectedRes)
 })
+
+test.serial('support BigInt type', async (t) => {
+  //db.defaultSafeIntegers(true) // enables BigInt support
+  const validBigInt1 = BigInt('9223372036854775807')
+  const validBigInt2 = BigInt('-9223372036854775808')
+  const bigInts = [
+    {
+      id: 1,
+      int8: validBigInt1,
+    },
+    {
+      id: 2,
+      int8: validBigInt2,
+    },
+  ]
+
+  const res = await tbl.createMany({
+    data: bigInts,
+  })
+
+  t.deepEqual(res, {
+    count: 2,
+  })
+
+  // Check that we can read the big ints back
+  const fetchRes = await tbl.findMany({
+    select: {
+      id: true,
+      int8: true,
+    },
+    orderBy: {
+      id: 'asc',
+    },
+  })
+
+  t.deepEqual(fetchRes, bigInts)
+  //db.defaultSafeIntegers(false) // disables BigInt support
+})
+
+test.serial('support null values for BigInt type', async (t) => {
+  const expectedRes = {
+    id: 1,
+    int8: null,
+  }
+
+  const res = await tbl.create({
+    data: {
+      id: 1,
+      int8: null,
+    },
+    select: {
+      id: true,
+      int8: true,
+    },
+  })
+
+  t.deepEqual(res, expectedRes)
+
+  const fetchRes = await tbl.findUnique({
+    where: {
+      id: 1,
+    },
+    select: {
+      id: true,
+      int8: true,
+    },
+  })
+
+  t.deepEqual(fetchRes, expectedRes)
+})
+
+test.serial(
+  'throw error when value is out of range for BigInt type',
+  async (t) => {
+    const invalidBigInt1 = BigInt('9223372036854775808')
+    const invalidBigInt2 = BigInt('-9223372036854775809')
+
+    await t.throwsAsync(
+      tbl.create({
+        data: {
+          id: 1,
+          int8: invalidBigInt1,
+        },
+      }),
+      {
+        instanceOf: ZodError,
+        message: /BigInt must be less than or equal to 9223372036854775807/,
+      }
+    )
+
+    await t.throwsAsync(
+      tbl.create({
+        data: {
+          id: 2,
+          int8: invalidBigInt2,
+        },
+      }),
+      {
+        instanceOf: ZodError,
+        message: /too_small/,
+      }
+    )
+  }
+)

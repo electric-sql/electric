@@ -30,7 +30,7 @@ await tbl.sync()
 function setupDB() {
   db.exec('DROP TABLE IF EXISTS DataTypes')
   db.exec(
-    "CREATE TABLE DataTypes('id' int PRIMARY KEY, 'date' varchar, 'time' varchar, 'timetz' varchar, 'timestamp' varchar, 'timestamptz' varchar, 'bool' int, 'uuid' varchar, 'int2' int2, 'int4' int4, 'float8' real, 'relatedId' int);"
+    "CREATE TABLE DataTypes('id' int PRIMARY KEY, 'date' varchar, 'time' varchar, 'timetz' varchar, 'timestamp' varchar, 'timestamptz' varchar, 'bool' int, 'uuid' varchar, 'int2' int2, 'int4' int4, 'int8' int8, 'float8' real, 'relatedId' int);"
   )
 }
 
@@ -210,4 +210,25 @@ test.serial('floats are converted correctly to SQLite', async (t) => {
     { id: 3, float8: Infinity },
     { id: 4, float8: -Infinity },
   ])
+})
+
+test.serial('BigInts are converted correctly to SQLite', async (t) => {
+  //db.defaultSafeIntegers(true) // enables BigInt support
+  const bigInt = 9_223_372_036_854_775_807n
+  await tbl.create({
+    data: {
+      id: 1,
+      int8: bigInt,
+    },
+  })
+
+  const rawRes = await electric.db.raw({
+    sql: 'SELECT id, cast(int8 as TEXT) AS int8 FROM DataTypes WHERE id = ?',
+    args: [1],
+  })
+  // because we are executing a raw query,
+  // the returned BigInt for the `id`
+  // is not converted into a regular number
+  t.deepEqual(rawRes, [{ id: 1, int8: bigInt.toString() }])
+  //db.defaultSafeIntegers(false) // disables BigInt support
 })

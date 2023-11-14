@@ -306,6 +306,9 @@ function serialiseRow(row?: Rec): string {
         return '-Inf'
       }
     }
+    if (typeof value === 'bigint') {
+      return value.toString()
+    }
     return value
   })
 }
@@ -337,6 +340,9 @@ function deserialiseRow(str: string, rel: Pick<Relation, 'columns'>): Rec {
       } else {
         return Number(value)
       }
+    }
+    if (columnType === 'INT8' || columnType === 'BIGINT') {
+      return BigInt(value)
     }
     return value
   })
