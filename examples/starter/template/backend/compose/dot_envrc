@@ -1,2 +1,1 @@
-# Docker images for the local stack
 export POSTGRESQL_IMAGE=postgres:14-alpine
