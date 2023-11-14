@@ -32,6 +32,9 @@ importers:
       better-sqlite3:
         specifier: ^8.4.0
         version: 8.4.0
+      commander:
+        specifier: ^11.1.0
+        version: 11.1.0
       cordova-sqlite-storage:
         specifier: '>= 5.0.0'
         version: 5.0.0
@@ -41,6 +44,9 @@ importers:
       decompress:
         specifier: ^4.2.1
         version: 4.2.1
+      dotenv-flow:
+        specifier: ^4.1.0
+        version: 4.1.0
       events:
         specifier: ^3.3.0
         version: 3.3.0
@@ -95,6 +101,9 @@ importers:
       prisma:
         specifier: 4.8.1
         version: 4.8.1
+      prompts:
+        specifier: ^2.4.2
+        version: 2.4.2
       protobufjs:
         specifier: ^7.1.1
         version: 7.2.3
@@ -110,6 +119,9 @@ importers:
       squel:
         specifier: ^5.13.0
         version: 5.13.0
+      tcp-port-used:
+        specifier: ^1.0.2
+        version: 1.0.2
       ts-dedent:
         specifier: ^2.2.0
         version: 2.2.0
@@ -168,6 +180,9 @@ importers:
       '@types/node':
         specifier: ^18.8.4
         version: 18.16.16
+      '@types/prompts':
+        specifier: ^2.4.9
+        version: 2.4.9
       '@types/react':
         specifier: ^18.0.18
         version: 18.2.7
@@ -177,6 +192,9 @@ importers:
       '@types/react-native-uuid':
         specifier: ^2.0.0
         version: 2.0.0
+      '@types/tcp-port-used':
+        specifier: ^1.0.2
+        version: 1.0.2
       '@types/uuid':
         specifier: ^9.0.1
         version: 9.0.1
@@ -4324,6 +4342,13 @@ packages:
     resolution: {integrity: sha512-xFdpkAkikBgqBdG9vIlsqffDV8GpvnPEzs0IUtr1v3BEB97ijsFQ4RXVbUZwjFThhB4MDSTUfvmxUD5PGx0wXA==}
     dev: true
 
+  /@types/prompts@2.4.9:
+    resolution: {integrity: sha512-qTxFi6Buiu8+50/+3DGIWLHM6QuWsEKugJnnP6iv2Mc4ncxE4A/OJkjuVOA+5X0X1S/nq5VJRa8Lu+nwcvbrKA==}
+    dependencies:
+      '@types/node': 18.16.16
+      kleur: 3.0.3
+    dev: true
+
   /@types/prop-types@15.7.5:
     resolution: {integrity: sha512-JCB8C6SnDoQf0cNycqd/35A7MjcnK+ZTqE7judS6o7utxUCg6imJg3QK2qzHKszlTjcj2cn+NwMB2i96ubpj7w==}
     dev: true
@@ -6032,6 +6057,11 @@ packages:
     engines: {node: '>=14'}
     dev: true
 
+  /commander@11.1.0:
+    resolution: {integrity: sha512-yPVavfyCcRhmorC7rWlkHn15b4wDVgVmBA7kV4QVBsF7kv/9TKJAbAXVTxvTnwP8HHKjRCJDClKbciiYS7p0DQ==}
+    engines: {node: '>=16'}
+    dev: false
+
   /commander@2.13.0:
     resolution: {integrity: sha512-MVuS359B+YzaWqjCL/c+22gfryv+mCBPHAv3zyVI2GN8EY6IRP8VwtasXn8jyyhvvq84R4ImN1OKRtcbIasjYA==}
     dev: false
@@ -6743,6 +6773,13 @@ packages:
       is-obj: 2.0.0
     dev: true
 
+  /dotenv-flow@4.1.0:
+    resolution: {integrity: sha512-0cwP9jpQBQfyHwvE0cRhraZMkdV45TQedA8AAUZMsFzvmLcQyc1HPv+oX0OOYwLFjIlvgVepQ+WuQHbqDaHJZg==}
+    engines: {node: '>= 12.0.0'}
+    dependencies:
+      dotenv: 16.1.1
+    dev: false
+
   /dotenv@16.0.3:
     resolution: {integrity: sha512-7GO6HghkA5fYG9TYnNxi14/7K9f5occMlp3zXAuSxn7CKCxt9xbNWG7yF8hTCSUchlfWSe3uLmlPfigevRItzQ==}
     engines: {node: '>=12'}
@@ -6751,7 +6788,6 @@ packages:
   /dotenv@16.1.1:
     resolution: {integrity: sha512-UGmzIqXU/4b6Vb3R1Vrfd/4vGgVlB+mO+vEixOdfRhLeppkyW2BMhuK7TL8d0el+q9c4lW9qK2wZYhNLFhXYLA==}
     engines: {node: '>=12'}
-    dev: true
 
   /dprint-node@1.0.7:
     resolution: {integrity: sha512-NTZOW9A7ipb0n7z7nC3wftvsbceircwVHSgzobJsEQa+7RnOMbhrfX5IflA6CtC4GA63DSAiHYXa4JKEy9F7cA==}
