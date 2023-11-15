@@ -485,9 +485,18 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.TypeV4_8 do
     ]
   end
 
-  # we don't support custom types
-  def data_rows([_nspname], _schema, _config) do
-    []
+  def data_rows([nspname_array], schema, _config) do
+    namespaces = Electric.Postgres.Proxy.Prisma.Query.parse_name_array(nspname_array)
+
+    for table <- Electric.Postgres.Schema.table_infos(schema),
+        table.schema != Electric.Postgres.Extension.schema(),
+        %{type: col_type} <- table.columns,
+        col_type.kind == :ENUM,
+        [schema_name, unqualified_name] = String.split(col_type.name, "."),
+        schema_name in namespaces,
+        val <- col_type.values do
+      [unqualified_name, val, schema_name]
+    end
   end
 end
 
@@ -526,9 +535,9 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.TypeV5_2 do
     ]
   end
 
-  # we don't support custom types
-  def data_rows([_nspname], _schema, _config) do
-    []
+  def data_rows([nspname_array], schema, config) do
+    Electric.Postgres.Proxy.Prisma.Query.TypeV4_8.data_rows([nspname_array], schema, config)
+    |> Enum.map(fn [name, value, namespace] -> [name, value, namespace, nil] end)
   end
 end
 
@@ -622,6 +631,8 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ColumnV4_8 do
   end
 
   defp table_columns(table) do
+    table_schema = table.name.schema
+
     table.columns
     |> Enum.with_index()
     |> Enum.map(fn {column, i} ->
@@ -631,17 +642,17 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ColumnV4_8 do
         # the index maps to the `ordinal_position` in the query
         # and is used for sorting the columns before being stripped out
         i,
-        table.name.schema,
+        table_schema,
         table.name.name,
         column.name,
-        formatted_type(column.type),
+        formatted_type(column.type, table_schema),
         precision,
         scale,
         radix,
         datetime_precision(column),
         data_type(column.type),
         # WTF udt_name (underlying type)
-        full_data_type(column.type),
+        full_data_type(column.type, table_schema),
         # expression
         column_default(column),
         is_nullable(column),
@@ -658,14 +669,14 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ColumnV4_8 do
   @text_types Electric.Postgres.text_types()
   @integer_types Electric.Postgres.integer_types()
 
-  def formatted_type(%{name: n, array: bounds, size: size}) do
+  def formatted_type(%{name: n, array: bounds, size: size}, table_schema) do
     dim =
       case bounds do
         [] -> ""
         [_ | _] -> "[]"
       end
 
-    formatted_type_name(n, size) <> dim
+    formatted_type_name(n, table_schema, size) <> dim
   end
 
   defp sized([]), do: ""
@@ -673,15 +684,19 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ColumnV4_8 do
   defp sized(s),
     do: IO.iodata_to_binary(["(", s |> Enum.map(&to_string/1) |> Enum.intersperse(", "), ")"])
 
-  defp formatted_type_name("int4", _size), do: "integer"
-  defp formatted_type_name("int2", _size), do: "smallint"
-  defp formatted_type_name("int8", _size), do: "bigint"
+  defp formatted_type_name("int4", _table_schema, _size), do: "integer"
+  defp formatted_type_name("int2", _table_schema, _size), do: "smallint"
+  defp formatted_type_name("int8", _table_schema, _size), do: "bigint"
 
-  defp formatted_type_name("timestamptz", size),
+  defp formatted_type_name("timestamptz", _table_schema, size),
     do: "timestamp#{sized(size)} with time zone"
 
-  defp formatted_type_name("varchar", size), do: "character varying" <> sized(size)
-  defp formatted_type_name(name, size), do: name <> sized(size)
+  defp formatted_type_name("varchar", _table_schema, size), do: "character varying" <> sized(size)
+
+  defp formatted_type_name(name, table_schema, size) do
+    short_name = String.replace_prefix(name, table_schema <> ".", "")
+    short_name <> sized(size)
+  end
 
   defp data_type(%{name: "timestamptz"}) do
     "timestamp with time zone"
@@ -696,16 +711,25 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ColumnV4_8 do
   end
 
   defp data_type(%{name: name}) when name in @integer_types do
-    formatted_type_name(name, [])
+    formatted_type_name(name, nil, [])
   end
 
   defp data_type(%{name: name}) do
-    name
+    case String.split(name, ".") do
+      [_] -> name
+      [_, _] -> "USER-DEFINED"
+    end
   end
 
   # pg seems to represent internal array types as "_" <> orig type, so e.g. "_int8", "_name"
-  defp full_data_type(%{name: name, array: [_ | _]}), do: "_" <> name
-  defp full_data_type(%{name: name}), do: name
+  defp full_data_type(%{name: name, array: [_ | _]}, _table_schema), do: "_" <> name
+
+  defp full_data_type(%{name: name}, table_schema) do
+    case String.split(name, ".") do
+      [^table_schema, unqualified_name] -> unqualified_name
+      _ -> name
+    end
+  end
 
   defp numeric_precision_scale(%{type: %{name: name} = type})
        when name in @arbitrary_precision_types do
