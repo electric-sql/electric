@@ -820,6 +820,85 @@ defmodule Electric.Postgres.Proxy.QueryAnalyserTest do
                )
     end
 
+    test "ALTER TABLE ... {ENABLE | DISABLE} TRIGGER", cxt do
+      stmts = [
+        "ALTER TABLE public.truths ENABLE ALWAYS TRIGGER my_totally_valid_trigger",
+        "ALTER TABLE public.truths ENABLE TRIGGER my_totally_valid_trigger",
+        "ALTER TABLE public.truths ENABLE REPLICA TRIGGER my_totally_valid_trigger",
+        "ALTER TABLE public.truths DISABLE TRIGGER my_totally_valid_trigger"
+      ]
+
+      for stmt <- stmts do
+        assert [
+                 %QueryAnalysis{
+                   action: {:alter, "table"},
+                   allowed?: true,
+                   capture?: false
+                 }
+               ] = analyse(simple(stmt), cxt)
+      end
+    end
+
+    test "ALTER TABLE ... allowed variants", cxt do
+      stmts = [
+        "ALTER TABLE public.truths OWNER TO someone",
+        "ALTER TABLE public.truths OWNER TO CURRENT_ROLE",
+        "ALTER TABLE public.truths ALTER COLUMN something SET STORAGE PLAIN",
+        "ALTER TABLE public.truths ALTER COLUMN something SET STATISTICS 3",
+        "ALTER TABLE public.truths ALTER COLUMN something SET ( n_distinct = -1 )",
+        "ALTER TABLE public.truths ALTER COLUMN something RESET ( n_distinct )",
+        "ALTER TABLE public.truths ALTER COLUMN something SET STORAGE MAIN",
+        "ALTER TABLE public.truths ALTER COLUMN something SET COMPRESSION lz4",
+        "ALTER TABLE public.truths SET ( fillfactor = 10 )",
+        "ALTER TABLE public.truths RESET ( fillfactor )",
+        "ALTER TABLE public.truths SET ACCESS METHOD something"
+      ]
+
+      for stmt <- stmts do
+        assert [
+                 %QueryAnalysis{
+                   action: {:alter, "table"},
+                   allowed?: true,
+                   capture?: false
+                 }
+               ] = analyse(simple(stmt), cxt)
+      end
+    end
+
+    test "ALTER TABLE ... mix of allowed and disallowed", cxt do
+      assert [
+               %QueryAnalysis{
+                 action: {:alter, "table"},
+                 allowed?: false,
+                 capture?: false
+               }
+             ] =
+               analyse(
+                 simple(
+                   "alter table public.truths " <>
+                     "enable always trigger my_totally_valid_trigger, " <>
+                     "drop column hat"
+                 ),
+                 cxt
+               )
+
+      assert [
+               %QueryAnalysis{
+                 action: {:alter, "table"},
+                 allowed?: false,
+                 capture?: false
+               }
+             ] =
+               analyse(
+                 simple(
+                   "alter table public.truths " <>
+                     "drop column hat, " <>
+                     "enable always trigger my_totally_valid_trigger"
+                 ),
+                 cxt
+               )
+    end
+
     # TODO: how to handle invalid sql (that doesn't include electric syntax)?
     #       ideally we'd want to forward to pg so it can give proper
     #       error messages
