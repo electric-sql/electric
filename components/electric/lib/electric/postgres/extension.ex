@@ -650,8 +650,7 @@ defmodule Electric.Postgres.Extension do
 
   defp build_type_map(type_tuples) do
     Map.new(type_tuples, fn type_tuple ->
-      enum_values =
-        type_tuple |> elem(0) |> Electric.Postgres.ShadowTableTransformation.parse_pg_array()
+      enum_values = type_tuple |> elem(0) |> Electric.Utils.parse_pg_array()
 
       record =
         type_tuple

@@ -1,5 +1,6 @@
 defmodule Electric.Postgres.ShadowTableTransformationTest do
   use ExUnit.Case, async: true
+  import Electric.Utils, only: [parse_pg_array: 1]
   doctest Electric.Postgres.ShadowTableTransformation, import: true
 
   alias Electric.Postgres.ShadowTableTransformation
