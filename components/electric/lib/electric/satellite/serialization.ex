@@ -440,7 +440,13 @@ defmodule Electric.Satellite.Serialization do
   defp decode_values([val | values], <<0::1, bitmask::bits>>, [col | columns], opt)
        when is_binary(val) do
     %{type: col_type} = col
-    decoded_val = decode_column_value!(val, col_type.name)
+
+    decoded_val =
+      case col_type.kind do
+        :BASE -> decode_column_value!(val, col_type.name)
+        :ENUM -> validate_enum_value!(val, col_type.name, col_type.values)
+      end
+
     [{col.name, decoded_val} | decode_values(values, bitmask, columns, opt)]
   end
 
@@ -589,5 +595,13 @@ defmodule Electric.Satellite.Serialization do
   defp assert_valid_fractional_seconds("." <> fs_str) when byte_size(fs_str) <= 6 do
     _ = String.to_integer(fs_str)
     :ok
+  end
+
+  defp validate_enum_value!(val, type_name, allowed_values) do
+    if val in allowed_values do
+      val
+    else
+      raise "Unexpected value #{inspect(val)} for enum type #{type_name}"
+    end
   end
 end
