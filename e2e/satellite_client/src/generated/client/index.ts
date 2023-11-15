@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { Prisma } from '@prisma/client';
+import type { Prisma } from './prismaClient';
 import { TableSchema, DbSchema, Relation, ElectricClient, HKT } from 'electric-sql/client/model';
 import migrations from './migrations';
 
@@ -44,10 +44,10 @@ export const UuidsScalarFieldEnumSchema = z.enum(['id']);
 export const ItemsSchema = z.object({
   id: z.string(),
   content: z.string(),
-  content_text_null: z.string().nullish(),
-  content_text_null_default: z.string().nullish(),
-  intvalue_null: z.number().int().nullish(),
-  intvalue_null_default: z.number().int().nullish(),
+  content_text_null: z.string().nullable(),
+  content_text_null_default: z.string().nullable(),
+  intvalue_null: z.number().int().nullable(),
+  intvalue_null_default: z.number().int().nullable(),
 })
 
 export type Items = z.infer<typeof ItemsSchema>
@@ -59,7 +59,7 @@ export type Items = z.infer<typeof ItemsSchema>
 export const OtherItemsSchema = z.object({
   id: z.string(),
   content: z.string(),
-  item_id: z.string().nullish(),
+  item_id: z.string().nullable(),
 })
 
 export type OtherItems = z.infer<typeof OtherItemsSchema>
@@ -94,7 +94,7 @@ export type Datetimes = z.infer<typeof DatetimesSchema>
 
 export const BoolsSchema = z.object({
   id: z.string(),
-  b: z.boolean().nullish(),
+  b: z.boolean().nullable(),
 })
 
 export type Bools = z.infer<typeof BoolsSchema>
@@ -115,8 +115,8 @@ export type Uuids = z.infer<typeof UuidsSchema>
 
 export const IntsSchema = z.object({
   id: z.string(),
-  i2: z.number().int().gte(-32768).lte(32767).nullish(),
-  i4: z.number().int().gte(-2147483648).lte(2147483647).nullish(),
+  i2: z.number().int().gte(-32768).lte(32767).nullable(),
+  i4: z.number().int().gte(-2147483648).lte(2147483647).nullable(),
 })
 
 export type Ints = z.infer<typeof IntsSchema>
@@ -127,8 +127,8 @@ export type Ints = z.infer<typeof IntsSchema>
 
 export const FloatsSchema = z.object({
   id: z.string(),
-  f4: z.number().or(z.nan()).nullish(),
-  f8: z.number().or(z.nan()).nullish(),
+  f4: z.number().or(z.nan()).nullable(),
+  f8: z.number().or(z.nan()).nullable(),
 })
 
 export type Floats = z.infer<typeof FloatsSchema>
@@ -2707,7 +2707,7 @@ export const tableSchemas = {
       ],
       [
         "f4",
-        "FLOAT8"
+        "FLOAT4"
       ],
       [
         "f8",

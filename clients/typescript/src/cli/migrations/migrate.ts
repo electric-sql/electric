@@ -349,14 +349,15 @@ function addValidator(ln: string): string {
 
   if (field) {
     const intValidator = '@zod.number.int().gte(-2147483648).lte(2147483647)'
-    const float8Validator = '@zod.custom.use(z.number().or(z.nan()))'
+    const floatValidator = '@zod.custom.use(z.number().or(z.nan()))'
 
     // Map attributes to validators
     const attributeValidatorMapping = new Map([
       ['@db.Uuid', '@zod.string.uuid()'],
       ['@db.SmallInt', '@zod.number.int().gte(-32768).lte(32767)'],
       ['@db.Int', intValidator],
-      ['@db.DoublePrecision', float8Validator],
+      ['@db.DoublePrecision', floatValidator],
+      ['@db.Real', floatValidator],
     ])
     const attribute = field.attributes
       .map((a) => a.type)
@@ -371,9 +372,9 @@ function addValidator(ln: string): string {
         ['Int', intValidator],
         ['Int?', intValidator],
         ['Int[]', intValidator],
-        ['Float', float8Validator],
-        ['Float?', float8Validator],
-        ['Float[]', float8Validator],
+        ['Float', floatValidator],
+        ['Float?', floatValidator],
+        ['Float[]', floatValidator],
       ])
       const typeValidator = typeValidatorMapping.get(field.type)
 

@@ -30,7 +30,7 @@ await tbl.sync()
 function setupDB() {
   db.exec('DROP TABLE IF EXISTS DataTypes')
   db.exec(
-    "CREATE TABLE DataTypes('id' int PRIMARY KEY, 'date' varchar, 'time' varchar, 'timetz' varchar, 'timestamp' varchar, 'timestamptz' varchar, 'bool' int, 'uuid' varchar, 'int2' int2, 'int4' int4, 'float8' real, 'relatedId' int);"
+    "CREATE TABLE DataTypes('id' int PRIMARY KEY, 'date' varchar, 'time' varchar, 'timetz' varchar, 'timestamp' varchar, 'timestamptz' varchar, 'bool' int, 'uuid' varchar, 'int2' int2, 'int4' int4, 'float4' real, 'float8' real, 'relatedId' int);"
   )
 }
 
@@ -183,31 +183,35 @@ test.serial('floats are converted correctly to SQLite', async (t) => {
     data: [
       {
         id: 1,
+        float4: 1.234,
         float8: 1.234,
       },
       {
         id: 2,
+        float4: NaN,
         float8: NaN,
       },
       {
         id: 3,
+        float4: Infinity,
         float8: +Infinity,
       },
       {
         id: 4,
+        float4: -Infinity,
         float8: -Infinity,
       },
     ],
   })
 
   const rawRes = await electric.db.raw({
-    sql: 'SELECT id, float8 FROM DataTypes ORDER BY id ASC',
+    sql: 'SELECT id, float4, float8 FROM DataTypes ORDER BY id ASC',
     args: [],
   })
   t.deepEqual(rawRes, [
-    { id: 1, float8: 1.234 },
-    { id: 2, float8: 'NaN' },
-    { id: 3, float8: Infinity },
-    { id: 4, float8: -Infinity },
+    { id: 1, float4: Math.fround(1.234), float8: 1.234 },
+    { id: 2, float4: 'NaN', float8: 'NaN' },
+    { id: 3, float4: Infinity, float8: Infinity },
+    { id: 4, float4: -Infinity, float8: -Infinity },
   ])
 })

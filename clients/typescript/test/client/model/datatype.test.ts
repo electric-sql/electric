@@ -31,7 +31,7 @@ await tbl.sync()
 function setupDB() {
   db.exec('DROP TABLE IF EXISTS DataTypes')
   db.exec(
-    "CREATE TABLE DataTypes('id' int PRIMARY KEY, 'date' varchar, 'time' varchar, 'timetz' varchar, 'timestamp' varchar, 'timestamptz' varchar, 'bool' int, 'uuid' varchar, 'int2' int2, 'int4' int4, 'float8' real, 'relatedId' int);"
+    "CREATE TABLE DataTypes('id' int PRIMARY KEY, 'date' varchar, 'time' varchar, 'timetz' varchar, 'timestamp' varchar, 'timestamptz' varchar, 'bool' int, 'uuid' varchar, 'int2' int2, 'int4' int4, 'float4' real, 'float8' real, 'relatedId' int);"
   )
 }
 
@@ -643,4 +643,118 @@ test.serial('support null values for float8 type', async (t) => {
   })
 
   t.deepEqual(fetchRes, expectedRes)
+})
+
+test.serial('support float4 type', async (t) => {
+  const validFloat1 = 1.402823e36
+  const validFloat2 = -1.402823e36
+  const floats = [
+    {
+      id: 1,
+      float4: validFloat1,
+    },
+    {
+      id: 2,
+      float4: validFloat2,
+    },
+    {
+      id: 3,
+      float4: +Infinity,
+    },
+    {
+      id: 4,
+      float4: -Infinity,
+    },
+    {
+      id: 5,
+      float4: NaN,
+    },
+  ]
+
+  const res = await tbl.createMany({
+    data: floats,
+  })
+
+  t.deepEqual(res, {
+    count: 5,
+  })
+
+  // Check that we can read the floats back
+  const fetchRes = await tbl.findMany({
+    select: {
+      id: true,
+      float4: true,
+    },
+    orderBy: {
+      id: 'asc',
+    },
+  })
+
+  t.deepEqual(
+    fetchRes,
+    floats.map((o) => ({ ...o, float4: Math.fround(o.float4) }))
+  )
+})
+
+test.serial('converts numbers outside float4 range', async (t) => {
+  const tooPositive = 2 ** 150
+  const tooNegative = -(2 ** 150)
+  const tooSmallPositive = 2 ** -150
+  const tooSmallNegative = -(2 ** -150)
+  const floats = [
+    {
+      id: 1,
+      float4: tooPositive,
+    },
+    {
+      id: 2,
+      float4: tooNegative,
+    },
+    {
+      id: 3,
+      float4: tooSmallPositive,
+    },
+    {
+      id: 4,
+      float4: tooSmallNegative,
+    },
+  ]
+
+  const res = await tbl.createMany({
+    data: floats,
+  })
+
+  t.deepEqual(res, {
+    count: 4,
+  })
+
+  // Check that we can read the floats back
+  const fetchRes = await tbl.findMany({
+    select: {
+      id: true,
+      float4: true,
+    },
+    orderBy: {
+      id: 'asc',
+    },
+  })
+
+  t.deepEqual(fetchRes, [
+    {
+      id: 1,
+      float4: Infinity,
+    },
+    {
+      id: 2,
+      float4: -Infinity,
+    },
+    {
+      id: 3,
+      float4: 0,
+    },
+    {
+      id: 4,
+      float4: 0,
+    },
+  ])
 })
