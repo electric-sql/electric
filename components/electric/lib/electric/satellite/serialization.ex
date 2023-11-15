@@ -234,7 +234,7 @@ defmodule Electric.Satellite.Serialization do
             {"", {bor(bitmask <<< 1, 1), num_cols + 1}}
 
           val when is_binary(val) ->
-            {encode_value_fn.(val, col.type), {bitmask <<< 1, num_cols + 1}}
+            {encode_value_fn.(val, col.type.name), {bitmask <<< 1, num_cols + 1}}
         end
       end)
 
@@ -313,20 +313,14 @@ defmodule Electric.Satellite.Serialization do
     Enum.map(columns, fn %{name: name, type: type, nullable?: nullable?} ->
       %SatRelationColumn{
         name: name,
-        type: to_string(type),
+        type: to_string(type.name),
         is_nullable: nullable?,
         primaryKey: MapSet.member?(pks, name)
       }
     end)
   end
 
-  @type cached_relations() :: %{
-          PB.relation_id() => %{
-            schema: String.t(),
-            table: String.t(),
-            columns: [String.t()]
-          }
-        }
+  @type cached_relations() :: %{PB.relation_id() => Replication.Table.t()}
 
   @doc """
   Deserialize from Satellite PB format to internal format
@@ -378,12 +372,12 @@ defmodule Electric.Satellite.Serialization do
         {nil, [trans | complete]}
 
       %SatTransOp{op: {_, %{relation_id: relation_id} = op}}, {trans, complete} ->
-        relation = Map.get(relations, relation_id)
+        table_info = Map.fetch!(relations, relation_id)
 
         change =
           op
-          |> op_to_change(relation.columns)
-          |> Map.put(:relation, {relation.schema, relation.table})
+          |> op_to_change(table_info.columns)
+          |> Map.put(:relation, {table_info.schema, table_info.name})
 
         {%Transaction{trans | changes: [change | trans.changes]}, complete}
     end)
@@ -445,10 +439,9 @@ defmodule Electric.Satellite.Serialization do
 
   defp decode_values([val | values], <<0::1, bitmask::bits>>, [col | columns], opt)
        when is_binary(val) do
-    [
-      {col.name, decode_column_value!(val, col.type)}
-      | decode_values(values, bitmask, columns, opt)
-    ]
+    %{type: col_type} = col
+    decoded_val = decode_column_value!(val, col_type.name)
+    [{col.name, decoded_val} | decode_values(values, bitmask, columns, opt)]
   end
 
   defp decode_values(_, <<1::1, _::bits>>, [%{nullable?: false} | _], opt)
