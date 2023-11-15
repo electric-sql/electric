@@ -27,10 +27,7 @@ cd electric/examples/web-wa-sqlite
 
 ## Pre-reqs
 
-You need [NodeJS >= 16.11 and Docker Compose v2](https://electric-sql.com/docs/usage/installation/prereqs). Install `yarn` if you don't have it already:
-
-```shell
-npm -g install yarn
+You need [NodeJS >= 16.11 and Docker Compose v2](https://electric-sql.com/docs/usage/installation/prereqs).
 ```
 
 ## Install
@@ -38,7 +35,7 @@ npm -g install yarn
 Install the dependencies:
 
 ```sh
-yarn
+npm install
 ```
 
 ## Setup
@@ -46,26 +43,26 @@ yarn
 Start Postgres and Electric using Docker (see [running the examples](https://electric-sql.com/docs/examples/notes/running) for more options):
 
 ```shell
-yarn backend:up
-# Or `yarn backend:start` to foreground
+npm run backend:up
+# Or `npm run backend:start` to foreground
 ```
 
 Note that, if useful, you can connect to Postgres using:
 
 ```shell
-yarn db:psql
+npm run db:psql
 ```
 
 Setup your [database schema](https://electric-sql.com/docs/usage/data-modelling):
 
 ```shell
-yarn db:migrate
+npm run db:migrate
 ```
 
 Generate your [type-safe client](https://electric-sql.com/docs/usage/data-access/client):
 
 ```shell
-yarn client:generate
+npm run client:generate
 # or `yarn client:watch`` to re-generate whenever the DB schema changes
 ```
 
@@ -74,10 +71,10 @@ yarn client:generate
 Start your app:
 
 ```sh
-yarn start
+npm run dev
 ```
 
-Open [localhost:3001](http://localhost:3001) in your web browser.
+Open [localhost:5173](http://localhost:5173) in your web browser.
 
 ## Develop
 
