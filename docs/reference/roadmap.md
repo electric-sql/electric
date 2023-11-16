@@ -12,7 +12,7 @@ APIs are not guaranteed to be stable. Backwards incompatible changes may (and wi
 
 Key aspects of the system are not fully implemented yet:
 
-1. [Data modelling](#data-modelling) &mdash; remove constraints and ensure migration are additive
+1. [Data modelling](#data-modelling) &mdash; remove constraints and ensure migrations are additive
 2. [DDLX rules](#ddlx-rules) &mdash; limited to electrification
 3. [Shapes](#shapes) &mdash; currently limited to whole table sync
 
