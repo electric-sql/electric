@@ -11,7 +11,7 @@ type NonEmptyArray<T> = [T, ...T[]]
  * @template P The type of the priorities.
  */
 export class Mutex<P> {
-  private lockedBy: number = -1 // unlocked
+  private lockedBy = -1 // unlocked
   private nextId = 1
   private pendingQ: PriorityQueue<() => any, P>
   private lowestPriority: P

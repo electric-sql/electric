@@ -1,4 +1,4 @@
-import { DatabaseAdapter, RunResult } from '../../electric/adapter'
+import { DatabaseAdapter, RunResult, priorities } from '../../electric/adapter'
 import { QueryBuilder } from 'squel'
 import { DB } from './db'
 import * as z from 'zod'
@@ -16,7 +16,7 @@ export class NonTransactionalDB implements DB {
   ) {
     const { text, values } = statement.toParam({ numberedParameters: false })
     this._adapter
-      .run({ sql: text, args: values })
+      .run({ sql: text, args: values }, priorities.high)
       .then((res) => {
         if (typeof successCallback !== 'undefined') {
           try {
@@ -43,7 +43,7 @@ export class NonTransactionalDB implements DB {
   ) {
     const { text, values } = statement.toParam({ numberedParameters: false })
     this._adapter
-      .query({ sql: text, args: values })
+      .query({ sql: text, args: values }, priorities.high)
       .then((rows) => {
         try {
           const objects = rows.map((row) => {
@@ -77,7 +77,7 @@ export class NonTransactionalDB implements DB {
     errorCallback?: (error: any) => void
   ) {
     this._adapter
-      .query(sql)
+      .query(sql, priorities.high)
       .then((rows) => {
         if (typeof successCallback !== 'undefined') {
           successCallback(this, rows)

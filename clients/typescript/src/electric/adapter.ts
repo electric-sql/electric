@@ -1,21 +1,32 @@
 import { AnyDatabase } from '../drivers/index'
 import { QualifiedTablename } from '../util/tablename'
 import { Row, Statement } from '../util/types'
-import { parseTableNames } from '../util'
+import { Mutex, parseTableNames } from '../util'
 
-// A `DatabaseAdapter` adapts a database client to provide the
-// normalised interface defined here.
+export const priorities = {
+  default: 'DEFAULT',
+  high: 'HIGH',
+} as const
+export type Priority = (typeof priorities)[keyof typeof priorities]
+export type PriorityMutex = Mutex<Priority>
+export const priorityMutex = () =>
+  new Mutex<Priority>([priorities.high, priorities.default])
+
+/**
+ * A `DatabaseAdapter` adapts a database client to provide the
+ * normalised interface defined here.
+ */
 export interface DatabaseAdapter {
   readonly db: AnyDatabase
 
   // Runs the provided sql statement
-  run(statement: Statement): Promise<RunResult>
+  run(statement: Statement, priority?: Priority): Promise<RunResult>
 
   // Runs the provided sql as a transaction
   runInTransaction(...statements: Statement[]): Promise<RunResult>
 
   // Query the database.
-  query(statement: Statement): Promise<Row[]>
+  query(statement: Statement, priority?: Priority): Promise<Row[]>
 
   /**
    * Runs the provided __non-async__ function inside a transaction.
@@ -26,7 +37,8 @@ export interface DatabaseAdapter {
    * releasing the event loop.
    */
   transaction<T>(
-    f: (tx: Transaction, setResult: (res: T) => void) => void
+    f: (tx: Transaction, setResult: (res: T) => void) => void,
+    priority?: Priority
   ): Promise<T>
 
   // Get the tables potentially used by the query (so that we
