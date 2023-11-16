@@ -42,7 +42,7 @@ ALTER TABLE items ENABLE ELECTRIC;
 
 ### Shapes
 
-[Shape-based sync](../usage/data-access/shapes.md) using the [`sync()` function](../api/clients/typescript.md#sync) currently supports whole table sync. There is no support for `where` clauses to filter the initial target rows or `select` clauses to filter the include tree. As a result, current calls to `db.tablename.sync({...})` will "over sync" additional data onto the device.
+[Shape-based sync](../usage/data-access/shapes.md) using the [`sync()` function](../api/clients/typescript.md#sync) currently supports whole table sync. If the table contains outgoing foreign keys, then all tables that can be transitively reached by following these foreign keys must be part of the shape. There is no support for `where` clauses to filter the initial target rows or `select` clauses to filter the include tree. As a result, current calls to `db.tablename.sync({...})` will "over sync" additional data onto the device.
 
 :::note
 There is one temporary feature to filter data onto the local device: set an `electric_user_id` field on your table. If you do, then rows will only be synced if the value of that column matches the value of the authenticated user_id provided in your [auth token](../usage/auth/index.md).
