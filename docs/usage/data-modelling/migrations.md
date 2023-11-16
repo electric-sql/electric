@@ -239,6 +239,10 @@ See <DocPageLink path="integrations/backend" /> and <DocPageLink path="api/ddlx"
 
 There are currently a number of limitations on the data models and migrations that ElectricSQL supports.
 
+### Default schema
+
+Only tables in the default schema named [`public`](https://www.postgresql.org/docs/14/ddl-schemas.html#DDL-SCHEMAS-PUBLIC) can be electrified at the moment.
+
 ### Forward migrations
 
 We only currently support forward migrations. Rollbacks must be implemented as forward migrations.
