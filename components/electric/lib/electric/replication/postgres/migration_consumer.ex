@@ -149,9 +149,9 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
   end
 
   defp perform_migration({version, stmts}, state) do
-    {:ok, loader} = apply_migration(version, stmts, state.loader)
+    {:ok, loader, schema} = apply_migration(version, stmts, state.loader)
 
-    {:ok, table_count} = SchemaLoader.count_electrified_tables(loader)
+    {:ok, table_count} = SchemaLoader.count_electrified_tables(schema)
 
     Metrics.non_span_event(
       [:postgres, :migration],
@@ -208,7 +208,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
   using the given implementation of SchemaLoader.
   """
   @spec apply_migration(String.t(), [String.t()], SchemaLoader.t()) ::
-          {:ok, SchemaLoader.t()} | {:error, term()}
+          {:ok, SchemaLoader.t(), Schema.t()} | {:error, term()}
   def apply_migration(version, stmts, loader) when is_list(stmts) do
     {:ok, old_version, schema} = SchemaLoader.load(loader)
 
@@ -225,6 +225,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
 
     Logger.info("Saving schema version #{version} /#{inspect(loader)}/")
 
-    {:ok, _loader} = SchemaLoader.save(loader, version, schema, stmts)
+    {:ok, loader} = SchemaLoader.save(loader, version, schema, stmts)
+    {:ok, loader, schema}
   end
 end

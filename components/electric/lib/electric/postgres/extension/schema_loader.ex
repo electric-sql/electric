@@ -96,12 +96,16 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
     module.internal_schema(state)
   end
 
+  def count_electrified_tables(%Electric.Postgres.Schema.Proto.Schema{} = schema) do
+    {:ok,
+     Enum.count(schema.tables, fn %{name: name} ->
+       not is_extension_relation({name.schema, name.name})
+     end)}
+  end
+
   def count_electrified_tables({_module, _state} = impl) do
     with {:ok, _, schema} <- load(impl) do
-      {:ok,
-       schema
-       |> Schema.table_info()
-       |> Enum.count(&(not is_extension_relation({&1.schema, &1.name})))}
+      count_electrified_tables(schema)
     end
   end
 
