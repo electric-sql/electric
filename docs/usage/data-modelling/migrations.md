@@ -253,9 +253,9 @@ We only currently support additive migrations. This means you can't remove or re
 
 In practice this means that we only support this subset of DDL actions:
 
-- `CREATE TABLE` and its associated `ALTER TABLE .. ENABLE ELECTRIC` call,
-- `ALTER TABLE electrified_table ADD COLUMN`, and
-- `CREATE INDEX ON electrified_table`, `DROP INDEX` -- indexes can be created and dropped because they don't affect the data within the electrified tables.
+- `CREATE TABLE` and its associated `ALTER TABLE <table name> ENABLE ELECTRIC` call,
+- `ALTER TABLE <electrified table> ADD COLUMN`, and
+- `CREATE INDEX ON <electrified table>`, `DROP INDEX` -- indexes can be created and dropped because they don't affect the data within the electrified tables.
 
 ### Data types and constraints
 
