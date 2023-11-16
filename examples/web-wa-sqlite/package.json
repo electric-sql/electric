@@ -11,7 +11,7 @@
     "backend:down": "npx electric-sql stop --remove",
     "client:generate": "npx electric-sql generate",
     "client:watch": "npx electric-sql generate --watch",
-    "db:migrate": "npx pg-migrations apply --database postgresql://postgres:proxy_password@localhost:65432/electric-sql-wa-sqlite-example --directory ./db/migrations",
+    "db:migrate": "npx electric-sql with-config \"npx pg-migrations apply --database {{ELECTRIC_PROXY}} --directory ./db/migrations\"",
     "db:psql": "npx electric-sql psql",
     "ports:configure": "npx electric-sql configure-ports",
     "electric:start": "npx electric-sql start",
