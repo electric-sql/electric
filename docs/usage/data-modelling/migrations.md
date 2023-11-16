@@ -11,7 +11,14 @@ import CodeBlock from '@theme/CodeBlock';
 import ExampleSchema from '!!raw-loader!./example.prisma';
 import ExampleSQL from '!!raw-loader!./example.sql';
 
-ElectricSQL is designed to work with and on top of a Postgres data model.
+ElectricSQL is designed to work with and on top of a Postgres data model. You use migrations to define, evolve and expose parts of this data model.
+
+The key principles behind Electric's approach to migrations are:
+
+1. you can use your own preferred migrations tooling; Electric does not impose a specific migrations system on you, instead, you use whichever system you prefer, often built into [your backend framework](../../integrations/backend/index.md) if you have one, to define and evolve your schema
+2. you must configure your migrations tooling (or any Postgres connection where you're applying DDL migrations to electrified tables) to connect via the [Electric migrations proxy](#migrations-proxy)
+
+## Your data model
 
 If you don't have a data model you can create one using your preferred migrations tooling. You then use the same migrations tooling to extend your data model with [DDLX statements](./electrification.md) to expose data to the replication machinery.
 
@@ -37,53 +44,6 @@ ELECTRIC GRANT SELECT
 
 :::caution Work in progress
 See the [Limitations](#limitations) section below and the [Roadmap](../../reference/roadmap.md) page for more context.
-:::
-
-## Migrations proxy
-
-Schema migrations are applied to Postgres via a proxy server integrated into the Electric application.
-
-This proxy server serves various purposes:
-
-- It allows the use of the [DDLX syntax](../../api/ddlx.md) for managing your tables and access permissions,
-- It captures migrations applied to Electrified tables in order to propagate those DDL changes to the client schemas,
-- It validates migrations to electrified tables to ensure that changes to the schema are supported by Electric (e.g. validating the types of any added columns, ensuring that only additive migrations are applied, etc), and
-- It provides an endpoint for schema introspection to allow Electric to return its view of the underlying Postgres database to the data access library.
-
-Migrations not passed through the proxy endpoint will not be captured by Electric and will cause problems as Electric's view of the Postgres schema will be out of sync with the actual table schema.
-
-### Configuring and connecting to the migrations proxy
-
-There are two environment variables that configure the proxy in Electric:
-
-- `PG_PROXY_PORT` (default `65432`). This is the TCP port that [**Electric sync service**](../../api/service.md) will listen on. You should connect to it in order to pass through the migration proxy. Since the proxy speaks fluent Postgres, you can connect to it via any Postgres-compatible tool, e.g. `psql -U electric -p 65432 electric`
-
-- `PG_PROXY_PASSWORD` (no default). Access to the proxy is controlled by password (see below for information on the username). You must set this password here and pass it to any application hoping to connect to the proxy.
-
-You should be able to connect to the proxy directly using `psql` as outlined above and run any DDLX/migration commands you like. These will be validated, captured, and streamed to any connected clients automatically:
-
-```
-$ PGPASSWORD=${PG_PROXY_PASSWORD} psql -U postgres -p ${PG_PROXY_PORT} electric
-
-electric=# CREATE TABLE public.items (id text, value text);
-CREATE TABLE
--- since we're connecting via the proxy, the DDLX syntax will work
-electric=# ALTER TABLE public.items ENABLE ELECTRIC;
-ELECTRIC ENABLE
--- this alter table statement affects the newly electrified items table
--- and so will be captured and streamed to any connected clients
-electric=# ALTER TABLE public.items ADD COLUMN amount integer;
-ALTER TABLE
-```
-
-### Framework and application integration
-
-Your framework of choice will need to be configured in order to pass migrations (and _only_ migrations, you shouldn't connect your application to the proxy endpoint for any other purpose) through the proxy rather than directly to the underlying Postgres database.
-
-As each framework has different requirements for this, example code for each is provided in the [integrations section](../../integrations/backend/index.md)
-
-:::caution Work in progress
-We are working on providing detailed instructions for as many backend frameworks as possible. If your framework of choice hasn't been documented yet please feel free to raise an issue on our [GitHub repo](https://github.com/electric-sql/electric/issues) and we'll be happy to help.
 :::
 
 ## Creating a data model
@@ -234,6 +194,53 @@ def upgrade():
 </Tabs>
 
 See <DocPageLink path="integrations/backend" /> and <DocPageLink path="api/ddlx" /> for more information.
+
+## Migrations proxy
+
+Schema migrations to electrified tables must be applied to Postgres via a proxy server integrated into the Electric application.
+
+This proxy server serves various purposes:
+
+- It allows the use of the [DDLX syntax](../../api/ddlx.md) for managing your tables and access permissions,
+- It captures migrations applied to Electrified tables in order to propagate those DDL changes to the client schemas,
+- It validates migrations to electrified tables to ensure that changes to the schema are supported by Electric (e.g. validating the types of any added columns, ensuring that only additive migrations are applied, etc), and
+- It provides an endpoint for schema introspection to allow Electric to return its view of the underlying Postgres database to the data access library.
+
+Migrations not passed through the proxy endpoint will not be captured by Electric and will cause problems as Electric's view of the Postgres schema will be out of sync with the actual table schema.
+
+### Configuring and connecting to the migrations proxy
+
+There are two environment variables that configure the proxy in Electric:
+
+- `PG_PROXY_PORT` (default `65432`). This is the TCP port that [**Electric sync service**](../../api/service.md) will listen on. You should connect to it in order to pass through the migration proxy. Since the proxy speaks fluent Postgres, you can connect to it via any Postgres-compatible tool, e.g. `psql -U electric -p 65432 electric`
+
+- `PG_PROXY_PASSWORD` (no default). Access to the proxy is controlled by password (see below for information on the username). You must set this password here and pass it to any application hoping to connect to the proxy.
+
+You should be able to connect to the proxy directly using `psql` as outlined above and run any DDLX/migration commands you like. These will be validated, captured, and streamed to any connected clients automatically:
+
+```
+$ PGPASSWORD=${PG_PROXY_PASSWORD} psql -U postgres -p ${PG_PROXY_PORT} electric
+
+electric=# CREATE TABLE public.items (id text, value text);
+CREATE TABLE
+-- since we're connecting via the proxy, the DDLX syntax will work
+electric=# ALTER TABLE public.items ENABLE ELECTRIC;
+ELECTRIC ENABLE
+-- this alter table statement affects the newly electrified items table
+-- and so will be captured and streamed to any connected clients
+electric=# ALTER TABLE public.items ADD COLUMN amount integer;
+ALTER TABLE
+```
+
+### Framework and application integration
+
+Your framework of choice will need to be configured in order to pass migrations (and _only_ migrations, you shouldn't connect your application to the proxy endpoint for any other purpose) through the proxy rather than directly to the underlying Postgres database.
+
+As each framework has different requirements for this, example code for each is provided in the [integrations section](../../integrations/backend/index.md)
+
+:::caution Work in progress
+We are working on providing detailed instructions for as many backend frameworks as possible. If your framework of choice hasn't been documented yet please feel free to raise an issue on our [GitHub repo](https://github.com/electric-sql/electric/issues) and we'll be happy to help.
+:::
 
 ## Limitations
 
