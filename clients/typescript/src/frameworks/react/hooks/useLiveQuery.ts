@@ -187,8 +187,10 @@ function useLiveQueryWithQueryUpdates<Res>(
       // and aliases for any attached databases.
       const changedTablenames = notifier.alias(notification)
 
-      if (hasIntersection(tablenames.current, changedTablenames)) {
-        if (!ignore) runLiveQuery()
+      if (tablenames.current) {
+        if (hasIntersection(tablenames.current, changedTablenames)) {
+          if (!ignore) runLiveQuery()
+        }
       }
     }
 
