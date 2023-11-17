@@ -17,7 +17,6 @@ defmodule Electric.Postgres.LogicalReplication.Encoder do
   }
 
   alias Electric.Postgres.Lsn
-  alias Electric.Postgres.OidDatabase
 
   @doc """
   Encode a message to Postgres binary logical replication format
@@ -35,8 +34,8 @@ defmodule Electric.Postgres.LogicalReplication.Encoder do
 
       iex> encode(%#{Relation}{
       ...>   columns: [
-      ...>     %#{Column}{flags: [:key], name: "id", type: :uuid, type_modifier: 4294967295},
-      ...>     %#{Column}{flags: [:key], name: "content", type: :varchar, type_modifier: 68}
+      ...>     %#{Column}{flags: [:key], name: "id", type_oid: 2950, type_modifier: 4294967295},
+      ...>     %#{Column}{flags: [:key], name: "content", type_oid: 1043, type_modifier: 68}
       ...>   ],
       ...>   id: 16396,
       ...>   name: "entries",
@@ -189,14 +188,18 @@ defmodule Electric.Postgres.LogicalReplication.Encoder do
   defp encode_tuple_element(value) when is_binary(value),
     do: <<"t", byte_size(value)::integer-32>> <> value
 
-  defp encode_column(%Column{flags: flags, name: name, type: type, type_modifier: modifier}) do
+  defp encode_column(%Column{
+         flags: flags,
+         name: name,
+         type_oid: type_oid,
+         type_modifier: type_modifier
+       }) do
     flag =
       case flags do
         [:key] -> 1
         [] -> 0
       end
 
-    <<flag::integer-8, name::binary, 0, OidDatabase.oid_for_name(type)::integer-32,
-      modifier::integer-32>>
+    <<flag::integer-8, name::binary, 0, type_oid::integer-32, type_modifier::integer-32>>
   end
 end

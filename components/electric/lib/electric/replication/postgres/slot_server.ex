@@ -511,7 +511,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
     %ReplicationMessages.Relation.Column{
       flags: flags,
       name: column.name,
-      type: column.type,
+      type_oid: Electric.Postgres.OidDatabase.oid_for_name(column.type),
       type_modifier: column.type_modifier
     }
   end

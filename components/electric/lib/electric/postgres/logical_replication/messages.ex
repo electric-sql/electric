@@ -112,12 +112,12 @@ defmodule Electric.Postgres.LogicalReplication.Messages do
   end
 
   defmodule Relation.Column do
-    defstruct([:flags, :name, :type, :type_modifier])
+    defstruct([:flags, :name, :type_oid, :type_modifier])
 
     @type t() :: %__MODULE__{
             flags: [:key],
             name: String.t(),
-            type: atom(),
+            type_oid: pos_integer(),
             type_modifier: integer()
           }
   end

@@ -12,6 +12,9 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
   alias Electric.Replication.Postgres.Client
   alias Electric.Replication.Connectors
 
+  @uuid_oid 2950
+  @varchar_oid 1043
+
   setup_with_mocks([
     {Client, [:passthrough],
      [
@@ -37,7 +40,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
   test "Producer complies a transaction into a single message" do
     {_, events} =
       begin()
-      |> relation("entities", id: :uuid, data: :varchar)
+      |> relation("entities", id: @uuid_oid, data: @varchar_oid)
       |> insert("entities", ["test", "value"])
       |> commit_and_get_messages()
       |> process_messages(
@@ -53,7 +56,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
   test "Producer keeps proper ordering of updates within the transaction for inserts" do
     {_, events} =
       begin()
-      |> relation("entities", id: :uuid, data: :varchar)
+      |> relation("entities", id: @uuid_oid, data: @varchar_oid)
       |> insert("entities", ["test1", "value"])
       |> insert("entities", ["test2", "value"])
       |> insert("entities", ["test3", "value"])
@@ -78,7 +81,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
   test "Producer keeps proper ordering of updates within the transaction for updates" do
     {_, events} =
       begin()
-      |> relation("entities", id: :uuid, data: :varchar)
+      |> relation("entities", id: @uuid_oid, data: @varchar_oid)
       |> insert("entities", ["test", "1"])
       |> update("entities", ["test", "1"], ["test", "2"])
       |> update("entities", ["test", "2"], ["test", "3"])
@@ -135,22 +138,13 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
       replica_identity: :all_columns,
       namespace: "public",
       columns:
-        Enum.map(columns, fn
-          {name, type} when is_atom(type) ->
-            %Messages.Relation.Column{
-              flags: [],
-              name: Atom.to_string(name),
-              type: type,
-              type_modifier: 0
-            }
-
-          {name, {type, :key}} ->
-            %Messages.Relation.Column{
-              flags: [:key],
-              name: Atom.to_string(name),
-              type: type,
-              type_modifier: 0
-            }
+        Enum.map(columns, fn {name, type_oid} ->
+          %Messages.Relation.Column{
+            flags: [],
+            name: Atom.to_string(name),
+            type_oid: type_oid,
+            type_modifier: 0
+          }
         end)
     })
   end

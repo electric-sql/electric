@@ -68,13 +68,15 @@ defmodule Electric.Postgres.LogicalReplication.DecoderTest do
                %Column{
                  flags: [],
                  name: "bar",
-                 type: :text,
+                 # :text
+                 type_oid: 25,
                  type_modifier: -1
                },
                %Column{
                  flags: [:key],
                  name: "id",
-                 type: :int4,
+                 # :int4
+                 type_oid: 23,
                  type_modifier: -1
                }
              ]
@@ -96,19 +98,22 @@ defmodule Electric.Postgres.LogicalReplication.DecoderTest do
                %Column{
                  flags: [:key],
                  name: "id",
-                 type: :uuid,
+                 # :uuid
+                 type_oid: 2950,
                  type_modifier: -1
                },
                %Column{
                  flags: [:key],
                  name: "numbers",
-                 type: {:array, :int4},
+                 # {:array, :int4}
+                 type_oid: 1007,
                  type_modifier: -1
                },
                %Column{
                  flags: [:key],
                  name: "text_matrix",
-                 type: {:array, :text},
+                 # {:array, :text}
+                 type_oid: 1009,
                  type_modifier: -1
                }
              ]
