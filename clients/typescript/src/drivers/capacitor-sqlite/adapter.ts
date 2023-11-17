@@ -20,14 +20,24 @@ export class DatabaseAdapter
     this.#txMutex = new Mutex()
   }
 
+  /**
+   * Executes a single SQLite statement, without taking the lock and without wrapping it in a transaction.
+   * @param statement:
+   * @returns
+   */
   async run({ sql, args }: Statement): Promise<RunResult> {
-    const wrapInTransaction = false // Default is true. electric calls run from within transaction<T> so we need to disable transactions here.
+    const wrapInTransaction = false
 
     const result = await this.db.run(sql, args, wrapInTransaction)
     const rowsAffected = result.changes?.changes ?? 0
     return { rowsAffected }
   }
 
+  /**
+   * Runs one or more statements within a transaction block, taking the lock.
+   * @param statements
+   * @returns
+   */
   async runInTransaction(...statements: Statement[]): Promise<RunResult> {
     const set: capSQLiteSet[] = statements.map(({ sql, args }) => ({
       statement: sql,
@@ -35,12 +45,21 @@ export class DatabaseAdapter
     }))
 
     const wrapInTransaction = true
+
+    const releaseMutex = await this.#txMutex.acquire()
     const result = await this.db.executeSet(set, wrapInTransaction)
+    releaseMutex()
+
     const rowsAffected = result.changes?.changes ?? 0
     // TODO: unsure how capacitor-sqlite populates the changes value (additive?), and what is expected of electric here.
     return { rowsAffected }
   }
 
+  /**
+   * Queries a single statement, without taking the lock or wrapping in a transaction. Intended for select statements.
+   * @param
+   * @returns
+   */
   async query({ sql, args }: Statement): Promise<Row[]> {
     const result = await this.db.query(sql, args)
     return result.values ?? []
