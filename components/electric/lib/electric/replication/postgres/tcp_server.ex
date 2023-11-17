@@ -474,11 +474,7 @@ defmodule Electric.Replication.Postgres.TcpServer do
     # Tables that need to be added to the publication that we're exposing to Postgres. Otherwise, Postgres will
     # ignore any rows from those tables we send it.
     with [_pub] <- Regex.run(~r/\(\'(?<pub>[\w\_]+)\'\)/, publications_list, capture: ["pub"]),
-         {:ok, electrified_tables} <- SchemaCache.Global.electrified_tables() do
-      replicated_relations =
-        (electrified_tables ++ SchemaCache.Global.replicated_internal_tables())
-        |> Enum.map(&{&1.schema, &1.name})
-
+         {:ok, replicated_relations} <- SchemaCache.Global.replicated_relations() do
       Messaging.row_description(schemaname: :name, tablename: :name)
       |> Messaging.data_rows(replicated_relations)
       |> Messaging.command_complete("SELECT #{length(replicated_relations)}")
