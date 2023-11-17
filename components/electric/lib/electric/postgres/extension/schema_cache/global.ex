@@ -90,15 +90,15 @@ defmodule Electric.Postgres.Extension.SchemaCache.Global do
     end)
   end
 
-  def replicated_internal_tables() do
-    with_instance(fn pid ->
-      SchemaCache.replicated_internal_tables(pid)
-    end)
-  end
-
   def table_electrified?({schema, name}) do
     with_instance(fn pid ->
       SchemaCache.table_electrified?(pid, {schema, name})
+    end)
+  end
+
+  def replicated_relations() do
+    with_instance(fn pid ->
+      SchemaCache.replicated_relations(pid)
     end)
   end
 end
