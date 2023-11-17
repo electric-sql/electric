@@ -108,19 +108,12 @@ function useLiveQueryWithDependencies<Res>(
 function useLiveQueryWithQueryHash<Res>(
   runQuery: LiveResultContext<Res>
 ): ResultData<Res> {
-  const [currentQueryHash, setQueryHash] = useState(() =>
-    hash(runQuery.sourceQuery)
+  const queryHash = useMemo(
+    () => hash(runQuery.sourceQuery),
+    [runQuery.sourceQuery]
   )
 
-  // Keep track of the hash of the source query to be able to rebuild everything
-  useEffect(() => {
-    const newQueryHash = hash(runQuery.sourceQuery)
-    if (newQueryHash !== currentQueryHash) {
-      setQueryHash(newQueryHash)
-    }
-  }, [runQuery.sourceQuery])
-
-  return useLiveQueryWithQueryUpdates(runQuery, [currentQueryHash])
+  return useLiveQueryWithQueryUpdates(runQuery, [queryHash])
 }
 
 function useLiveQueryWithQueryUpdates<Res>(
