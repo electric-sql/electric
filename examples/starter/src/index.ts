@@ -7,26 +7,32 @@ import * as fs from 'fs/promises'
 import { fileURLToPath } from 'url'
 import path from 'path'
 import ora from 'ora'
-import shell from 'shelljs'
 import portUsed from 'tcp-port-used'
 import prompt from 'prompt'
 
 // Regex to check that a number is between 0 and 65535
-const portRegex = /^([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$/
+const portRegex =
+  /^([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$/
 const spinner = ora('Validating arguments').start()
 
 const error = (err: string) => {
   spinner.stop()
-  console.error('\x1b[31m', err + '\nnpx create-electric-app [<app-name>] [--electric-image-tag <tag>] [--electric-port <port>] [--electric-proxy-port <port>] [--webserver-port <port>]', '\x1b[0m')
+  console.error(
+    '\x1b[31m',
+    err +
+      '\nnpx create-electric-app [<app-name>] [--electric-port <port>] [--electric-proxy-port <port>]',
+    '\x1b[0m'
+  )
   process.exit(1)
 }
 
+const defaultElectricPort = 5133
+const defaultElectricProxyPort = 65432
+
 let projectName = process.argv[2]
 let args = process.argv.slice(3)
-let electricPort = 5133 // default port for Electric
-let electricProxyPort = 65432 // default port for Electric proxy
-let webserverPort = 3001 // default port for the webserver
-let electricImageTag = 'latest'
+let electricPort = defaultElectricPort
+let electricProxyPort = defaultElectricProxyPort
 
 // Validate the provided command line arguments
 while (args.length > 0) {
@@ -43,10 +49,6 @@ while (args.length > 0) {
   }
 
   switch (flag) {
-    case '--electric-image-tag':
-      checkValue()
-      electricImageTag = value
-      break
     case '--electric-port':
       checkValue()
       electricPort = parsePort(value)
@@ -55,10 +57,6 @@ while (args.length > 0) {
       checkValue()
       electricProxyPort = parsePort(value)
       break
-    case '--webserver-port':
-      checkValue()
-      webserverPort = parsePort(value)
-      break
     default:
       error(`Unrecognized option: '${flag}'.`)
   }
@@ -66,7 +64,8 @@ while (args.length > 0) {
 
 spinner.text = 'Validating app name'
 const appNameRegex = /^[a-z0-9]+[a-z0-9-_]*$/
-const invalidAppNameMessage = `Invalid app name. ` +
+const invalidAppNameMessage =
+  `Invalid app name. ` +
   'App names must contain only lowercase letters, decimal digits, dashes, and underscores, ' +
   'and must begin with a lowercase letter or decimal digit.'
 
@@ -93,30 +92,22 @@ if (typeof projectName === 'undefined') {
         type: 'number',
         pattern: portRegex,
         message: 'Port should be between 0 and 65535.',
-        default: electricPort
+        default: electricPort,
       },
       electricProxyPort: {
         description: "Port on which to run Electric's DB proxy",
         type: 'number',
         pattern: portRegex,
         message: 'Port should be between 0 and 65535.',
-        default: electricProxyPort
-      },
-      webserverPort: {
-        description: 'Port on which to run the webserver',
-        type: 'number',
-        pattern: portRegex,
-        message: 'Port should be between 0 and 65535.',
-        default: webserverPort
+        default: electricProxyPort,
       },
     }
-  })) as { appName: string, electricPort: number, electricProxyPort: number, webserverPort: number }
+  })) as { appName: string, electricPort: number, electricProxyPort: number }
 
   spinner.start()
   projectName = userInput.appName
   electricPort = userInput.electricPort
   electricProxyPort = userInput.electricProxyPort
-  webserverPort = userInput.webserverPort
 }
 
 spinner.text = 'Ensuring the necessary ports are free'
@@ -125,9 +116,12 @@ if (!appNameRegex.test(projectName)) {
   error(invalidAppNameMessage)
 }
 
-electricPort = await checkPort(electricPort, 'Electric', 5133)
-electricProxyPort = await checkPort(electricProxyPort, "Electric's proxy", 65432)
-webserverPort = await checkPort(webserverPort, 'the web server', 3001)
+electricPort = await checkPort(electricPort, 'Electric', defaultElectricPort)
+electricProxyPort = await checkPort(
+  electricProxyPort,
+  "Electric's proxy",
+  defaultElectricProxyPort
+)
 
 spinner.text = 'Creating project structure'
 spinner.start()
@@ -138,27 +132,9 @@ const projectDir = path.resolve(currentDir, projectName)
 await fs.mkdir(projectDir, { recursive: true })
 
 // Copy the app template to the project's directory
-const __dirname = path.dirname(fileURLToPath(import.meta.url)) // because __dirname is not defined when using modules
-const templateDir = path.resolve(__dirname, '..', 'template')
+const thisDir = path.dirname(fileURLToPath(import.meta.url))
+const templateDir = path.resolve(thisDir, '..', 'template')
 await fs.cp(templateDir, projectDir, { recursive: true })
-
-// The template stores dotfiles without the dot
-// such that they do not get picked by gitignore.
-// Now that we copies all files, we rename those
-// dotfiles to their right name
-await fs.rename(
-  path.join(projectDir, 'dot_gitignore'),
-  path.join(projectDir, '.gitignore')
-)
-await fs.rename(
-  path.join(projectDir, 'dot_npmrc'),
-  path.join(projectDir, '.npmrc')
-)
-const envrcFile = path.join(projectDir, 'backend', 'compose', '.envrc')
-await fs.rename(
-  path.join(projectDir, 'backend', 'compose', 'dot_envrc'),
-  envrcFile
-)
 
 // read package.json file and parse it as JSON
 // we could import it but then we get a warning
@@ -167,62 +143,43 @@ await fs.rename(
 // with nodeJS but the parsing of that flag
 // leads to problems on certain env implementations
 const packageJsonFile = path.join(projectDir, 'package.json')
-const projectPackageJson = JSON.parse(await fs.readFile(packageJsonFile, 'utf8'))
+const projectPackageJson = JSON.parse(
+  await fs.readFile(packageJsonFile, 'utf8')
+)
 
 // Update the project's package.json with the new project name
 projectPackageJson.name = projectName
 
-await fs.writeFile(
-  packageJsonFile,
-  JSON
-    .stringify(projectPackageJson, null, 2)
-    .replace('http://localhost:5133', `http://localhost:${electricPort}`)
-    .replace('postgresql://prisma:proxy_password@localhost:65432/electric', `postgresql://prisma:proxy_password@localhost:${electricProxyPort}/electric`)
-)
+await fs.writeFile(packageJsonFile, JSON.stringify(projectPackageJson, null, 2))
 
 // Update the project's title in the index.html file
-const indexFile = path.join(projectDir, 'public', 'index.html')
-await findAndReplaceInFile('ElectricSQL starter template', projectName, indexFile)
+const indexFile = path.join(projectDir, 'index.html')
+await findAndReplaceInFile('Web Example - ElectricSQL', projectName, indexFile)
 
-// Update the port on which Electric runs in the builder.js file
-const builderFile = path.join(projectDir, 'builder.js')
-await findAndReplaceInFile('ws://localhost:5133', `ws://localhost:${electricPort}`, builderFile)
-
-// Update the port on which Electric and its proxy run in startElectric.js file
-const startElectricFile = path.join(projectDir, 'backend', 'startElectric.js')
-await findAndReplaceInFile('5133', `${electricPort}`, startElectricFile)
-await findAndReplaceInFile('65432', `${electricProxyPort}`, startElectricFile)
-
-// Update the port of the web server of the example in the builder.js file
-await findAndReplaceInFile("listen(3001)", `listen(${webserverPort})`, builderFile)
-await findAndReplaceInFile("http://localhost:3001", `http://localhost:${webserverPort}`, builderFile)
-
-
-// Store the app's name in .envrc
-// db name must start with a letter
-// and contain only alphanumeric characters and underscores
-// so we let the name start at the first letter
-// and replace non-alphanumeric characters with _
-const name = projectName.match(/[a-zA-Z].*/)?.[0] // strips prefix of non-alphanumeric characters
-if (name) {
-  const dbName = name.replace(/[\W_]+/g, '_')
-  await fs.appendFile(envrcFile, `export APP_NAME=${dbName}\n`)
-}
-
-// Also write the port for Electric to .envrc
-await fs.appendFile(envrcFile, `export ELECTRIC_PORT=${electricPort}\n`)
-await fs.appendFile(envrcFile, `export ELECTRIC_PROXY_PORT=${electricProxyPort}\n`)
-
-// Run `yarn install` in the project directory to install the dependencies
-// Also run `yarn upgrade` to replace `electric-sql: latest` by `electric-sql: x.y.z`
-// where `x.y.z` corresponds to the latest version.
-// Same for `@electric-sql/prisma-generator`
-spinner.text = 'Installing dependencies (may take some time) ...'
-const proc = spawn(
-  'yarn install && yarn upgrade --caret electric-sql && yarn upgrade --caret @electric-sql/prisma-generator',
-  [],
-  { stdio: ['ignore', 'ignore', 'pipe'], cwd: projectDir, shell: true }
+// Create a .env.local file
+// Write the ELECTRIC_PORT and ELECTRIC_PROXY_PORT variables if they are different
+// from the default values
+await fs.writeFile(
+  path.join(projectDir, '.env.local'),
+  [
+    ...(electricPort !== defaultElectricPort
+      ? [`ELECTRIC_PORT=${electricPort}`]
+      : []),
+    ...(electricProxyPort !== defaultElectricProxyPort
+      ? [`ELECTRIC_PROXY_PORT=${electricProxyPort}`]
+      : []),
+  ].join('\n')
 )
+
+// Run `npm install` in the project directory to install the dependencies
+// Also run `npm upgrade` to replace `electric-sql: latest` by `electric-sql: x.y.z`
+// where `x.y.z` corresponds to the latest version.
+spinner.text = 'Installing dependencies (may take some time) ...'
+const proc = spawn('npm install && npm upgrade --caret electric-sql', [], {
+  stdio: ['ignore', 'ignore', 'pipe'],
+  cwd: projectDir,
+  shell: true,
+})
 
 let errors: Uint8Array[] = []
 proc.stderr.on('data', (data) => {
@@ -230,52 +187,29 @@ proc.stderr.on('data', (data) => {
 })
 
 proc.on('close', async (code) => {
-  if (code === 0) {
-    // Pull latest electric image from docker hub
-    // unless a version has been specified on the command line
-    let electricImage = `electricsql/electric:${electricImageTag}`
-
-    let spinnerText
-    if (electricImageTag === 'latest') {
-      spinnerText = 'the latest Electric image'
-    } else {
-      spinnerText = electricImage
-    }
-    spinner.text = `Pulling ${spinnerText} from Docker Hub`
-    shell.exec(`docker pull ${electricImage}`, { silent: true })
-
-    const { stdout } = shell.exec(`docker image inspect --format '{{.RepoDigests}}' ${electricImage}`, { silent: true })
-    const parsedHash = /^\[(.+)\]/.exec(stdout)
-
-    if (electricImageTag === 'latest' && parsedHash) {
-      electricImage = parsedHash[1]
-    } else if (!parsedHash) {
-      // electric image hash not found
-      // ignore it, and just let .envrc point to the default or user-provided image tag
-      console.info(`Could not find hash of electric image. Using '${electricImage}' instead.`)
-    }
-
-    // write the electric image to use to .envrc file
-    await fs.appendFile(envrcFile, `export ELECTRIC_IMAGE=${electricImage}\n`)
-  }
-
   spinner.stop()
   if (code === 0) {
     console.log(`⚡️ Your ElectricSQL app is ready at \`./${projectName}\``)
-  }
-  else {
+  } else {
     console.error(Buffer.concat(errors).toString())
-    console.log(`⚡️ Could not install project dependencies. Nevertheless the template for your app can be found at \`./${projectName}\``)
+    console.log(
+      `⚡️ Could not install project dependencies. Nevertheless the template for your app can be found at \`./${projectName}\``
+    )
   }
-
-  console.log(`Navigate to your app folder \`cd ${projectName}\` and follow the instructions in the README.md.`)
+  console.log(
+    `Navigate to your app folder \`cd ${projectName}\` and follow the instructions in the README.md.`
+  )
 })
 
 /*
  * Replaces the first occurence of `find` by `replace` in the file `file`.
  * If `find` is a regular expression that sets the `g` flag, then it replaces all occurences.
- */ 
-async function findAndReplaceInFile(find: string | RegExp, replace: string, file: string) {
+ */
+async function findAndReplaceInFile(
+  find: string | RegExp,
+  replace: string,
+  file: string
+) {
   const content = await fs.readFile(file, 'utf8')
   const replacedContent = content.replace(find, replace)
   await fs.writeFile(file, replacedContent)
@@ -287,7 +221,11 @@ async function findAndReplaceInFile(find: string | RegExp, replace: string, file
  * they want to choose another port.
  * @returns The chosen port.
  */
-async function checkPort(port: number, process: string, defaultPort: number): Promise<number> {
+async function checkPort(
+  port: number,
+  process: string,
+  defaultPort: number
+): Promise<number> {
   const portOccupied = await portUsed.check(port)
   if (!portOccupied) {
     return port
@@ -299,8 +237,8 @@ async function checkPort(port: number, process: string, defaultPort: number): Pr
   console.warn(`Port ${port} for ${process} is already in use.`)
   // Propose user to change port
   prompt.start()
-  
-  const { port: newPort } = (await prompt.get({
+
+  const { port: newPort } = await prompt.get({
     properties: {
       port: {
         description: 'Hit Enter to keep it or enter a different port number',
@@ -308,15 +246,14 @@ async function checkPort(port: number, process: string, defaultPort: number): Pr
         pattern: portRegex,
         message: 'Please choose a port between 0 and 65535',
         default: port,
-      }
-    }
-  }))
+      },
+    },
+  })
 
   if (newPort === port) {
     // user chose not to change port
     return newPort
-  }
-  else {
+  } else {
     // user changed port, check that it is free
     return checkPort(newPort, process, defaultPort)
   }
