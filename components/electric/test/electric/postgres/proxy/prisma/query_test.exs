@@ -502,7 +502,7 @@ defmodule Electric.Postgres.Proxy.Prisma.QueryTest do
     assert Enum.sort(data_rows) ==
              Enum.sort([
                [
-                 <<0, 30, 174, 92>>,
+                 <<0, 45, 226, 126>>,
                  "checked_id",
                  "checked",
                  "id",
@@ -518,7 +518,7 @@ defmodule Electric.Postgres.Proxy.Prisma.QueryTest do
                  <<0>>
                ],
                [
-                 <<0, 30, 211, 77>>,
+                 <<0, 34, 178, 22>>,
                  "checked_id",
                  "checked",
                  "id",
@@ -534,7 +534,7 @@ defmodule Electric.Postgres.Proxy.Prisma.QueryTest do
                  <<0>>
                ],
                [
-                 <<0, 30, 211, 77>>,
+                 <<0, 34, 178, 22>>,
                  "checked_value",
                  "checked",
                  "value",

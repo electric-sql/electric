@@ -500,7 +500,7 @@ defmodule Electric.Satellite.WebsocketServer do
 
     def fetch_last_acked_client_lsn(state) do
       state.pg_connector_opts
-      |> Electric.Replication.Connectors.get_connection_opts(replication: false)
+      |> Electric.Replication.Connectors.get_connection_opts()
       |> Electric.Replication.Postgres.Client.with_conn(fn conn ->
         Electric.Postgres.Extension.fetch_last_acked_client_lsn(conn, state.client_id)
       end)

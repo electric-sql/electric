@@ -1,9 +1,9 @@
 import mapValues from 'lodash.mapvalues'
 import { FieldName, Fields } from '../model/schema'
-import { fromSqlite, toSqlite } from './sqlite'
+import { fromSqlite, toSqlite, isDataObject } from './sqlite'
 import { InvalidArgumentError } from '../validation/errors/invalidArgumentError'
 import { mapObject } from '../util/functions'
-import { PgDateType, PgType } from './types'
+import { PgType } from './types'
 
 export enum Transformation {
   Js2Sqlite,
@@ -318,25 +318,22 @@ function transformFieldsAllowingFilters(
 
   if (!pgType) throw new InvalidArgumentError(`Unknown field ${field}`)
 
-  switch (pgType) {
-    // Types that require transformations
-    case PgDateType.PG_DATE:
-    case PgDateType.PG_TIME:
-    case PgDateType.PG_TIMESTAMP:
-    case PgDateType.PG_TIMESTAMPTZ:
-    case PgDateType.PG_TIMETZ:
-      if (value instanceof Date) {
-        // transform it
-        return toSqlite(value, pgType)
-      } else {
-        // it must be an object containing filters
-        // transform the values that are nested in those filters
-        return transformFilterObject(field, value, pgType, fields)
-      }
-    // other types that don't require transformations
-    default:
-      return value
+  if (isFilterObject(value)) {
+    // transform the values that are nested in those filters
+    return transformFilterObject(field, value, pgType, fields)
   }
+
+  return toSqlite(value, pgType)
+}
+
+function isObject(v: any): boolean {
+  return typeof v === 'object' && !Array.isArray(v) && v !== null
+}
+
+function isFilterObject(value: any): boolean {
+  // if it is an object it can only be a timestamp or a filter object
+  // because those are the only objects we support in where clauses
+  return isObject(value) && !isDataObject(value)
 }
 
 /**
@@ -388,6 +385,7 @@ function transformFilterObject(
   })
 
   return {
+    ...o,
     ...transformedSimpleFilterObj,
     ...transformedArrayFilterObj,
     ...transformedNotFilterObj,

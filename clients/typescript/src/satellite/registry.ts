@@ -9,7 +9,6 @@ import {
   SatelliteClientOpts,
   SatelliteOpts,
   SatelliteOverrides,
-  satelliteClientDefaults,
   satelliteDefaults,
   validateConfig,
 } from './config'
@@ -205,10 +204,10 @@ export class GlobalRegistry extends BaseRegistry {
     }
 
     const satelliteClientOpts: SatelliteClientOpts = {
-      ...satelliteClientDefaults,
       host: config.replication.host,
       port: config.replication.port,
       ssl: config.replication.ssl,
+      timeout: config.replication.timeout,
     }
 
     const client = new SatelliteClient(
@@ -220,6 +219,7 @@ export class GlobalRegistry extends BaseRegistry {
     const satelliteOpts: SatelliteOpts = {
       ...satelliteDefaults,
       connectionBackOffOptions: config.connectionBackOffOptions,
+      debug: config.debug,
     }
 
     const satellite = new SatelliteProcess(

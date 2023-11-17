@@ -12,8 +12,8 @@ APIs are not guaranteed to be stable. Backwards incompatible changes may (and wi
 
 Key aspects of the system are not fully implemented yet:
 
-1. [Data modelling](#data-modelling) &mdash; limited data types and constraints
-2. [DDLX rules](#ddlx-rules) &mdash; limited to electrification with proceedure call syntax
+1. [Data modelling](#data-modelling) &mdash; remove constraints and ensure migrations are additive
+2. [DDLX rules](#ddlx-rules) &mdash; limited to electrification
 3. [Shapes](#shapes) &mdash; currently limited to whole table sync
 
 Plus you may encounter [failure modes](#failure-modes) that you need to work around in development
@@ -34,7 +34,7 @@ See <DocPageLink path="usage/data-modelling" /> for more information.
 
 ### DDLX rules
 
-The SQL syntax you see documented on <DocPageLink path="api/ddlx" /> is not fully implemented yet. Neither are permissions, roles, validation or local SQLite commands. DDLX support is currently limited to electrifying tables using the `ENABLE ELECTRIC` syntax extension:
+The DDLX rules for permissions, roles, validation or local SQLite commands documented on <DocPageLink path="api/ddlx" /> are not fully implemented yet. DDLX support is currently limited to electrifying tables using the `ENABLE ELECTRIC` syntax extension:
 
 ```sql
 ALTER TABLE items ENABLE ELECTRIC;
@@ -42,7 +42,7 @@ ALTER TABLE items ENABLE ELECTRIC;
 
 ### Shapes
 
-[Shape-based sync](../usage/data-access/shapes.md) using the [`sync()` function](../api/clients/typescript.md#sync) currently supports whole table sync. There is no support for `where` clauses to filter the initial target rows or `select` clauses to filter the include tree. As a result, current calls to `db.tablename.sync({...})` will "over sync" additional data onto the device.
+[Shape-based sync](../usage/data-access/shapes.md) using the [`sync()` function](../api/clients/typescript.md#sync) currently supports whole table sync. If the table contains outgoing foreign keys, then all tables that can be transitively reached by following these foreign keys must be part of the shape. There is no support for `where` clauses to filter the initial target rows or `select` clauses to filter the include tree. As a result, current calls to `db.tablename.sync({...})` will "over sync" additional data onto the device.
 
 :::note
 There is one temporary feature to filter data onto the local device: set an `electric_user_id` field on your table. If you do, then rows will only be synced if the value of that column matches the value of the authenticated user_id provided in your [auth token](../usage/auth/index.md).

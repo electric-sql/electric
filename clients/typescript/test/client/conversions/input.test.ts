@@ -76,6 +76,21 @@ test.serial('findFirst transforms JS objects to SQLite', async (t) => {
   t.deepEqual(res?.timestamp, new Date(date))
 })
 
+test.serial('findFirst transforms booleans to integer in SQLite', async (t) => {
+  await electric.adapter.run({
+    sql: `INSERT INTO DataTypes('id', 'bool') VALUES (1, 0), (2, 1)`,
+  })
+
+  const res = await tbl.findFirst({
+    where: {
+      bool: true,
+    },
+  })
+
+  t.is(res?.id, 2)
+  t.is(res?.bool, true)
+})
+
 test.serial(
   'findFirst transforms JS objects in equals filter to SQLite',
   async (t) => {

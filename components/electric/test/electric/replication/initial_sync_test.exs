@@ -6,6 +6,7 @@ defmodule Electric.Replication.InitialSyncTest do
   alias Electric.Postgres.{CachedWal, Extension, Lsn}
   alias Electric.Replication.Changes.{NewRecord, Transaction}
   alias Electric.Replication.InitialSync
+  alias Electric.Replication.Postgres.Client
 
   @origin "initial-sync-test"
   @sleep_timeout 500
@@ -119,7 +120,7 @@ defmodule Electric.Replication.InitialSyncTest do
   end
 
   defp electrify_table(conn, name, version) do
-    :epgsql.with_transaction(conn, fn tx_conn ->
+    Client.with_transaction(conn, fn tx_conn ->
       {:ok, [], []} = :epgsql.squery(tx_conn, "CALL electric.electrify('#{name}')")
 
       {:ok, [], []} =

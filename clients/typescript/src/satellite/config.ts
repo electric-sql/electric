@@ -22,6 +22,8 @@ export interface SatelliteOpts {
   clearOnBehindWindow: boolean
   /** Backoff options for connecting with Electric*/
   connectionBackOffOptions: ConnectionBackoffOptions
+  /** With debug mode enabled, Satellite can show additional logs. */
+  debug: boolean
 }
 
 export interface SatelliteOverrides {
@@ -49,10 +51,10 @@ export const satelliteDefaults: SatelliteOpts = {
     numOfAttempts: 50,
     timeMultiple: 2,
   },
+  debug: false,
 }
 
 export const satelliteClientDefaults = {
-  timeout: 3000,
   pushPeriod: 500,
 }
 
@@ -60,7 +62,7 @@ export interface SatelliteClientOpts {
   host: string
   port: number
   ssl: boolean
-  timeout?: number
+  timeout: number
   pushPeriod?: number
 }
 

@@ -4,6 +4,7 @@ defmodule Electric.Postgres.Extension do
   """
 
   alias Electric.Postgres.{Schema, Schema.Proto, Extension.Functions, Extension.Migration}
+  alias Electric.Replication.Postgres.Client
   alias Electric.Utils
 
   require Logger
@@ -391,16 +392,13 @@ defmodule Electric.Postgres.Extension do
 
   defp ensure_transaction(conn, fun) when is_function(fun, 1) do
     case :epgsql.squery(conn, @is_transaction_sql) do
-      {:ok, _cols, [{"t"}]} ->
-        fun.(conn)
-
-      {:ok, _cols, [{"f"}]} ->
-        :epgsql.with_transaction(conn, fun)
+      {:ok, _cols, [{"t"}]} -> fun.(conn)
+      {:ok, _cols, [{"f"}]} -> Client.with_transaction(conn, fun)
     end
   end
 
   def create_schema(conn) do
-    ddl(conn, ~s|CREATE SCHEMA IF NOT EXISTS "#{@schema}"|)
+    {:ok, [], []} = :epgsql.squery(conn, ~s|CREATE SCHEMA IF NOT EXISTS "#{@schema}"|)
   end
 
   @create_migration_table_sql """
@@ -411,11 +409,13 @@ defmodule Electric.Postgres.Extension do
   """
 
   def create_migration_table(conn) do
-    ddl(conn, @create_migration_table_sql)
+    {:ok, [], []} = :epgsql.squery(conn, @create_migration_table_sql)
   end
 
   defp with_migration_lock(conn, fun) do
-    ddl(conn, "LOCK TABLE #{@migration_table} IN SHARE UPDATE EXCLUSIVE MODE")
+    {:ok, [], []} =
+      :epgsql.squery(conn, "LOCK TABLE #{@migration_table} IN SHARE UPDATE EXCLUSIVE MODE")
+
     fun.()
   end
 
@@ -424,14 +424,6 @@ defmodule Electric.Postgres.Extension do
       :epgsql.squery(conn, "SELECT version FROM #{@migration_table} ORDER BY version ASC")
 
     Enum.map(rows, fn {version} -> String.to_integer(version) end)
-  end
-
-  defp ddl(conn, sql, _bind \\ []) do
-    case :epgsql.squery(conn, sql) do
-      {:ok, _count} -> conn
-      {:ok, _count, _cols, _rows} -> conn
-      {:ok, _cols, _rows} -> conn
-    end
   end
 
   def migration_versions(module) when is_atom(module) do

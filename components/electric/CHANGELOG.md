@@ -1,5 +1,13 @@
 # @core/electric
 
+## 0.7.1
+
+### Patch Changes
+
+- d5a6eb3d: [VAX-1333] Fix introspection of tables with > 1 fk
+- a7007589: [VAX-1319] Fix CaseClauseError in Proxy.Prisma.parse_bind_array()
+- 1aa98bfe: [VAX-1321] Proxy crashes when GSSAPI session encryption is requested
+
 ## 0.7.0
 
 ### Minor Changes

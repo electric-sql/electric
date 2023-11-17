@@ -51,7 +51,7 @@ export UID=$(shell id -u)
 export GID=$(shell id -g)
 
 stop_dev_env:
-	docker compose -f ${DC_CONFIG} down
+	docker compose -f ${DC_CONFIG} down --volumes
 
 DOCKER_PREFIX:=$(shell basename $(CURDIR))
 docker-pgsql-%:

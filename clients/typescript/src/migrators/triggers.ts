@@ -62,14 +62,14 @@ export function generateOplogTriggers(
     `,
     dedent`
     CREATE TRIGGER update_ensure_${namespace}_${tableName}_primarykey
-      BEFORE UPDATE ON ${tableFullName}
+      BEFORE UPDATE ON "${namespace}"."${tableName}"
     BEGIN
       SELECT
         CASE
           ${primary
             .map(
               (col) =>
-                `WHEN old.${col} != new.${col} THEN\n\t\tRAISE (ABORT, 'cannot change the value of column ${col} as it belongs to the primary key')`
+                `WHEN old."${col}" != new."${col}" THEN\n\t\tRAISE (ABORT, 'cannot change the value of column ${col} as it belongs to the primary key')`
             )
             .join('\n')}
         END;
@@ -81,7 +81,7 @@ export function generateOplogTriggers(
     `,
     dedent`
     CREATE TRIGGER insert_${namespace}_${tableName}_into_oplog
-       AFTER INSERT ON ${tableFullName}
+       AFTER INSERT ON "${namespace}"."${tableName}"
        WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == '${tableFullName}')
     BEGIN
       INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
@@ -93,7 +93,7 @@ export function generateOplogTriggers(
     `,
     dedent`
     CREATE TRIGGER update_${namespace}_${tableName}_into_oplog
-       AFTER UPDATE ON ${tableFullName}
+       AFTER UPDATE ON "${namespace}"."${tableName}"
        WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == '${tableFullName}')
     BEGIN
       INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
@@ -105,7 +105,7 @@ export function generateOplogTriggers(
     `,
     dedent`
     CREATE TRIGGER delete_${namespace}_${tableName}_into_oplog
-       AFTER DELETE ON ${tableFullName}
+       AFTER DELETE ON "${namespace}"."${tableName}"
        WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == '${tableFullName}')
     BEGIN
       INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
@@ -130,10 +130,7 @@ export function generateOplogTriggers(
  * @param tables Map of all tables (needed to look up the tables that are pointed at by FKs).
  * @returns An array of SQLite statements that add the necessary compensation triggers.
  */
-function generateCompensationTriggers(
-  tableFullName: TableFullName,
-  table: Table
-): Statement[] {
+function generateCompensationTriggers(table: Table): Statement[] {
   const { tableName, namespace, foreignKeys, columnTypes } = table
 
   const makeTriggers = (foreignKey: ForeignKey) => {
@@ -153,25 +150,25 @@ function generateCompensationTriggers(
       // which can be at most once since we filter on the foreign key which is also the primary key and thus is unique.
       dedent`
       CREATE TRIGGER compensation_insert_${namespace}_${tableName}_${childKey}_into_oplog
-        AFTER INSERT ON ${tableFullName}
+        AFTER INSERT ON "${namespace}"."${tableName}"
         WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == '${fkTableNamespace}.${fkTableName}') AND
              1 == (SELECT value from _electric_meta WHERE key == 'compensations')
       BEGIN
         INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
         SELECT '${fkTableNamespace}', '${fkTableName}', 'UPDATE', json_object(${joinedFkPKs}), json_object(${joinedFkPKs}), NULL, NULL
-        FROM ${fkTableNamespace}.${fkTableName} WHERE ${foreignKey.parentKey} = new.${foreignKey.childKey};
+        FROM "${fkTableNamespace}"."${fkTableName}" WHERE "${foreignKey.parentKey}" = new."${foreignKey.childKey}";
       END;
       `,
       dedent`DROP TRIGGER IF EXISTS compensation_update_${namespace}_${tableName}_${foreignKey.childKey}_into_oplog;`,
       dedent`
       CREATE TRIGGER compensation_update_${namespace}_${tableName}_${foreignKey.childKey}_into_oplog
-         AFTER UPDATE ON ${namespace}.${tableName}
+         AFTER UPDATE ON "${namespace}"."${tableName}"
          WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == '${fkTableNamespace}.${fkTableName}') AND
               1 == (SELECT value from _electric_meta WHERE key == 'compensations')
       BEGIN
         INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
         SELECT '${fkTableNamespace}', '${fkTableName}', 'UPDATE', json_object(${joinedFkPKs}), json_object(${joinedFkPKs}), NULL, NULL
-        FROM ${fkTableNamespace}.${fkTableName} WHERE ${foreignKey.parentKey} = new.${foreignKey.childKey};
+        FROM "${fkTableNamespace}"."${fkTableName}" WHERE "${foreignKey.parentKey}" = new."${foreignKey.childKey}";
       END;
       `,
     ].map(mkStatement)
@@ -192,7 +189,7 @@ export function generateTableTriggers(
   table: Table
 ): Statement[] {
   const oplogTriggers = generateOplogTriggers(tableFullName, table)
-  const fkTriggers = generateCompensationTriggers(tableFullName, table)
+  const fkTriggers = generateCompensationTriggers(table)
   return oplogTriggers.concat(fkTriggers)
 }
 
@@ -281,12 +278,12 @@ function joinColsForJSON(
   if (typeof target === 'undefined') {
     return cols
       .sort()
-      .map((col) => `'${col}', ${castIfNeeded(col, col)}`)
+      .map((col) => `'${col}', ${castIfNeeded(col, `"${col}"`)}`)
       .join(', ')
   } else {
     return cols
       .sort()
-      .map((col) => `'${col}', ${castIfNeeded(col, `${target}.${col}`)}`)
+      .map((col) => `'${col}', ${castIfNeeded(col, `${target}."${col}"`)}`)
       .join(', ')
   }
 }

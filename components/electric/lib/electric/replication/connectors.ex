@@ -105,7 +105,7 @@ defmodule Electric.Replication.Connectors do
 
   @spec get_connection_opts(config()) :: connection_opts()
   def get_connection_opts(config, opts \\ []) do
-    replication? = Keyword.get(opts, :replication, true)
+    replication? = Keyword.get(opts, :replication, false)
 
     config
     |> Keyword.fetch!(:connection)

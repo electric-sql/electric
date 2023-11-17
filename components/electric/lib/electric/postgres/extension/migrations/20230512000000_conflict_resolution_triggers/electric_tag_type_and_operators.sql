@@ -146,13 +146,3 @@ CREATE OR REPLACE FUNCTION electric.tag_operator_cmp(first electric.tag, second 
         WHEN first < second then -1
         ELSE 1
     END;
-
-
-CREATE OPERATOR CLASS btree__electric_tag_ops
-    DEFAULT FOR TYPE electric.tag USING btree AS
-        OPERATOR 1 <,
-        OPERATOR 2 <=,
-        OPERATOR 3 =,
-        OPERATOR 4 >=,
-        OPERATOR 5 >,
-        FUNCTION 1 electric.tag_operator_cmp(electric.tag, electric.tag);

@@ -125,6 +125,34 @@ end
 defimpl QueryAnalyser, for: PgQuery.AlterTableStmt do
   import QueryAnalyser.Impl
 
+  @allowed_subtypes [
+    :AT_EnableAlwaysTrig,
+    :AT_EnableTrig,
+    :AT_EnableReplicaTrig,
+    :AT_DisableTrig,
+    :AT_ChangeOwner,
+    :AT_SetStorage,
+    :AT_SetStatistics,
+    :AT_SetOptions,
+    :AT_ResetOptions,
+    :AT_SetCompression,
+    :AT_SetRelOptions,
+    :AT_ResetRelOptions,
+    :AT_SetAccessMethod
+  ]
+
+  # actions that we maybe could support but are currently disabled:
+  #
+  # - DROP CONSTRAINT
+  # - DISABLE/ENABLE ROW LEVEL SECURITY
+  # - NO FORCE/FORCE ROW LEVEL SECURITY
+  # - CLUSTER ON
+  # - SET WITHOUT CLUSTER
+  # - SET TABLESPACE
+  #
+  # there's a bunch of stuff to do with inheritance, but my instinct is that
+  # allowing that would cause a lot of problems
+
   def analyse(stmt, %QueryAnalysis{} = analysis, _state) do
     stmt.cmds
     |> Enum.map(&unwrap_node/1)
@@ -173,6 +201,11 @@ defimpl QueryAnalyser, for: PgQuery.AlterTableStmt do
              ~s[Cannot drop column "#{cmd.name}" of electrified table #{sql_table(analysis)}]
          }
      }}
+  end
+
+  defp analyse_alter_table_cmd(%{subtype: subtype}, analysis)
+       when subtype in @allowed_subtypes do
+    {:cont, %{analysis | allowed?: analysis.allowed? && true}}
   end
 
   defp analyse_alter_table_cmd(cmd, analysis) do
