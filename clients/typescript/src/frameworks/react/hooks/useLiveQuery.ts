@@ -1,5 +1,6 @@
 import {
   useContext,
+  useRef,
   useEffect,
   useState,
   useCallback,
@@ -107,19 +108,12 @@ function useLiveQueryWithDependencies<Res>(
 function useLiveQueryWithQueryHash<Res>(
   runQuery: LiveResultContext<Res>
 ): ResultData<Res> {
-  const [currentQueryHash, setQueryHash] = useState(() =>
-    hash(runQuery.sourceQuery)
+  const queryHash = useMemo(
+    () => hash(runQuery.sourceQuery),
+    [runQuery.sourceQuery]
   )
 
-  // Keep track of the hash of the source query to be able to rebuild everything
-  useEffect(() => {
-    const newQueryHash = hash(runQuery.sourceQuery)
-    if (newQueryHash !== currentQueryHash) {
-      setQueryHash(newQueryHash)
-    }
-  }, [runQuery.sourceQuery])
-
-  return useLiveQueryWithQueryUpdates(runQuery, [currentQueryHash])
+  return useLiveQueryWithQueryUpdates(runQuery, [queryHash])
 }
 
 function useLiveQueryWithQueryUpdates<Res>(
@@ -128,9 +122,9 @@ function useLiveQueryWithQueryUpdates<Res>(
 ): ResultData<Res> {
   const electric = useContext(ElectricContext)
 
-  const [changeSubscriptionKey, setChangeSubscriptionKey] = useState<string>()
-  const [tablenames, setTablenames] = useState<QualifiedTablename[]>()
-  const [tablenamesKey, setTablenamesKey] = useState<string>()
+  const changeSubscriptionKey = useRef<string>()
+  const tablenames = useRef<QualifiedTablename[]>()
+  const tablenamesKey = useRef<string>()
   const [resultData, setResultData] = useState<ResultData<Res>>({})
 
   // The effect below is run only after the initial render
@@ -142,11 +136,12 @@ function useLiveQueryWithQueryUpdates<Res>(
     const runInitialQuery = async () => {
       try {
         const res = await runQuery()
-        const tablenamesKey = JSON.stringify(res.tablenames)
 
-        if (!ignore) setTablenames(res.tablenames)
-        if (!ignore) setTablenamesKey(tablenamesKey)
-        if (!ignore) setResultData(successResult(res.result))
+        if (!ignore) {
+          tablenamesKey.current = JSON.stringify(res.tablenames)
+          tablenames.current = res.tablenames
+          setResultData(successResult(res.result))
+        }
       } catch (err) {
         if (!ignore) setResultData(errorResult(err))
       }
@@ -178,8 +173,8 @@ function useLiveQueryWithQueryUpdates<Res>(
   useEffect(() => {
     if (
       electric === undefined ||
-      tablenamesKey === undefined ||
-      tablenames === undefined
+      tablenamesKey.current === undefined ||
+      tablenames.current === undefined
     ) {
       return
     }
@@ -192,23 +187,25 @@ function useLiveQueryWithQueryUpdates<Res>(
       // and aliases for any attached databases.
       const changedTablenames = notifier.alias(notification)
 
-      if (hasIntersection(tablenames, changedTablenames)) {
-        if (!ignore) runLiveQuery()
+      if (tablenames.current) {
+        if (hasIntersection(tablenames.current, changedTablenames)) {
+          if (!ignore) runLiveQuery()
+        }
       }
     }
 
     const key = notifier.subscribeToDataChanges(handleChange)
-    if (changeSubscriptionKey !== undefined) {
-      notifier.unsubscribeFromDataChanges(changeSubscriptionKey)
+    if (changeSubscriptionKey.current !== undefined) {
+      notifier.unsubscribeFromDataChanges(changeSubscriptionKey.current)
     }
 
-    setChangeSubscriptionKey(key)
+    changeSubscriptionKey.current = key
 
     return () => {
       ignore = true
       notifier.unsubscribeFromDataChanges(key)
     }
-  }, [electric, tablenamesKey, tablenames, runLiveQuery])
+  }, [electric, tablenamesKey.current, tablenames.current, runLiveQuery])
 
   return resultData
 }
