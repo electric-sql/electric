@@ -6,7 +6,7 @@ defmodule Electric.Postgres.OidDatabase.Defaults do
                  |> File.read!()
                  |> String.split("\n", trim: true)
                  |> Enum.drop(1)
-                 |> Enum.map(&String.split(&1, ",", trim: true))
+                 |> Enum.map(&String.split(&1, ","))
                  |> Enum.map(&List.to_tuple/1)
                  |> Enum.map(&pg_type_from_tuple/1)
 
