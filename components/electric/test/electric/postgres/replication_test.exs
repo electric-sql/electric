@@ -108,11 +108,11 @@ defmodule Electric.Postgres.ReplicationTest do
     end
   end
 
-  def oid_loader(type, schema, name) do
+  defp oid_loader(type, schema, name) do
     {:ok, Enum.join(["#{type}", schema, name], ".") |> :erlang.phash2(50_000)}
   end
 
-  def schema_update(schema \\ Schema.new(), cmds) do
+  defp schema_update(schema \\ Schema.new(), cmds) do
     Schema.update(schema, cmds, oid_loader: &oid_loader/3)
   end
 

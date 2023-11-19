@@ -33,16 +33,18 @@ defmodule Electric.Replication.ShapesTest do
 
   describe "validate_requests/2" do
     setup do
-      start_schema_cache([
-        {
-          "2023071300",
-          [
-            "CREATE TABLE public.entries (id uuid PRIMARY KEY);",
-            "CREATE TABLE public.parent (id uuid PRIMARY KEY);",
-            "CREATE TABLE public.child (id uuid PRIMARY KEY, parent_id uuid REFERENCES public.parent(id));"
-          ]
-        }
-      ])
+      start_schema_cache(
+        migrations: [
+          {
+            "2023071300",
+            [
+              "CREATE TABLE public.entries (id uuid PRIMARY KEY);",
+              "CREATE TABLE public.parent (id uuid PRIMARY KEY);",
+              "CREATE TABLE public.child (id uuid PRIMARY KEY, parent_id uuid REFERENCES public.parent(id));"
+            ]
+          }
+        ]
+      )
     end
 
     test "validates correct Protobuf requests", %{origin: origin} do

@@ -95,6 +95,8 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
 
   use Electric.Extension.Case, async: false
 
+  import Satellite.ProtocolHelpers, only: [replication_col_type: 1, replication_col_type: 2]
+
   alias Electric.Replication.Postgres
   alias Electric.Postgres.Extension
   alias Electric.Postgres.Schema
@@ -250,16 +252,14 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
                columns: [
                  %Column{
                    name: "aid",
-                   type: :uuid,
+                   type: replication_col_type(:uuid),
                    nullable?: false,
-                   type_modifier: -1,
                    part_of_identity?: true
                  },
                  %Column{
                    name: "avalue",
-                   type: :text,
+                   type: replication_col_type(:text),
                    nullable?: true,
-                   type_modifier: -1,
                    part_of_identity?: true
                  }
                ]
@@ -282,16 +282,14 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
                columns: [
                  %Column{
                    name: "aid",
-                   type: :uuid,
+                   type: replication_col_type(:uuid),
                    nullable?: false,
-                   type_modifier: -1,
                    part_of_identity?: true
                  },
                  %Column{
                    name: "avalue",
-                   type: :text,
+                   type: replication_col_type(:text),
                    nullable?: true,
-                   type_modifier: -1,
                    part_of_identity?: true
                  }
                ]
@@ -301,7 +299,6 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
     test_tx "relation/2 returns an up-to-date version after migrations", fn conn, cxt ->
       {:ok, producer} = bootstrap(conn, cxt)
 
-      # we don't actually have to apply this migration to the db as this is a schema-only thing
       version = "20230621115313"
 
       stmts = [
@@ -309,6 +306,7 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
         "ALTER TABLE a ADD COLUMN aname varchar(63);"
       ]
 
+      assert [{:ok, _, _}, {:ok, _, _}] = :epgsql.squery(conn, Enum.join(stmts))
       produce_txs(producer, [migration_transaction(conn, version, stmts)])
 
       assert {:ok, table_info} = Extension.SchemaCache.relation(cxt.origin, {"public", "a"})
@@ -316,30 +314,26 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
       assert table_info.columns == [
                %Column{
                  name: "aid",
-                 type: :uuid,
+                 type: replication_col_type(:uuid),
                  nullable?: false,
-                 type_modifier: -1,
                  part_of_identity?: true
                },
                %Column{
                  name: "avalue",
-                 type: :text,
+                 type: replication_col_type(:text),
                  nullable?: true,
-                 type_modifier: -1,
                  part_of_identity?: true
                },
                %Column{
                  name: "aupdated",
-                 type: :timestamptz,
+                 type: replication_col_type(:timestamptz),
                  nullable?: true,
-                 type_modifier: -1,
                  part_of_identity?: true
                },
                %Column{
                  name: "aname",
-                 type: :varchar,
+                 type: replication_col_type(:varchar, modifier: 63),
                  nullable?: true,
-                 type_modifier: 63,
                  part_of_identity?: true
                }
              ]
@@ -350,7 +344,6 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
 
       [version1, version2] = cxt.versions
 
-      # we don't actually have to apply this migration to the db as this is a schema-only thing
       version3 = "20230621115313"
 
       stmts = [
@@ -358,6 +351,7 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
         "ALTER TABLE a ADD COLUMN aname varchar(63);"
       ]
 
+      assert [{:ok, _, _}, {:ok, _, _}] = :epgsql.squery(conn, Enum.join(stmts))
       produce_txs(producer, [migration_transaction(conn, version3, stmts)])
 
       assert {:ok, table_info} =
@@ -366,30 +360,26 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
       assert table_info.columns == [
                %Column{
                  name: "aid",
-                 type: :uuid,
+                 type: replication_col_type(:uuid),
                  nullable?: false,
-                 type_modifier: -1,
                  part_of_identity?: true
                },
                %Column{
                  name: "avalue",
-                 type: :text,
+                 type: replication_col_type(:text),
                  nullable?: true,
-                 type_modifier: -1,
                  part_of_identity?: true
                },
                %Column{
                  name: "aupdated",
-                 type: :timestamptz,
+                 type: replication_col_type(:timestamptz),
                  nullable?: true,
-                 type_modifier: -1,
                  part_of_identity?: true
                },
                %Column{
                  name: "aname",
-                 type: :varchar,
+                 type: replication_col_type(:varchar, modifier: 63),
                  nullable?: true,
-                 type_modifier: 63,
                  part_of_identity?: true
                }
              ]
@@ -400,16 +390,14 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
       assert table_info.columns == [
                %Column{
                  name: "aid",
-                 type: :uuid,
+                 type: replication_col_type(:uuid),
                  nullable?: false,
-                 type_modifier: -1,
                  part_of_identity?: true
                },
                %Column{
                  name: "avalue",
-                 type: :text,
+                 type: replication_col_type(:text),
                  nullable?: true,
-                 type_modifier: -1,
                  part_of_identity?: true
                }
              ]
@@ -427,23 +415,20 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
                columns: [
                  %Column{
                    name: "bid1",
-                   type: :int4,
+                   type: replication_col_type(:int4),
                    nullable?: false,
-                   type_modifier: -1,
                    part_of_identity?: true
                  },
                  %Column{
                    name: "bid2",
-                   type: :int4,
+                   type: replication_col_type(:int4),
                    nullable?: false,
-                   type_modifier: -1,
                    part_of_identity?: true
                  },
                  %Column{
                    name: "bvalue",
-                   type: :text,
+                   type: replication_col_type(:text),
                    nullable?: true,
-                   type_modifier: -1,
                    part_of_identity?: true
                  }
                ]

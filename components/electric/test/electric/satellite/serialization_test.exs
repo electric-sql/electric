@@ -5,6 +5,9 @@ defmodule Electric.Satellite.SerializationTest do
 
   use Electric.Satellite.Protobuf
 
+  import Satellite.ProtocolHelpers,
+    only: [default_types: 0, replication_col: 2, replication_col: 3]
+
   alias Electric.Postgres.{Lsn, Schema, Extension.SchemaCache}
   alias Electric.Replication.Changes.Transaction
   alias Electric.Satellite.Serialization
@@ -28,16 +31,16 @@ defmodule Electric.Satellite.SerializationTest do
       }
 
       columns = [
-        %{name: "null", type: :text},
-        %{name: "this_columns_is_empty", type: :text},
-        %{name: "not_null", type: :text},
-        %{name: "id", type: :uuid},
-        %{name: "int", type: :int4},
-        %{name: "var", type: :varchar},
-        %{name: "real", type: :float8},
-        %{name: "date", type: :date},
-        %{name: "time", type: :time},
-        %{name: "bool", type: :bool}
+        replication_col("null", :text),
+        replication_col("this_columns_is_empty", :text),
+        replication_col("not_null", :text),
+        replication_col("id", :uuid),
+        replication_col("int", :int4),
+        replication_col("var", :varchar),
+        replication_col("real", :float8),
+        replication_col("date", :date),
+        replication_col("time", :time),
+        replication_col("bool", :bool)
       ]
 
       assert %SatOpRow{
@@ -65,9 +68,9 @@ defmodule Electric.Satellite.SerializationTest do
       }
 
       columns = [
-        %{name: "t1", type: :timestamptz},
-        %{name: "t2", type: :timestamptz},
-        %{name: "t3", type: :timestamptz}
+        replication_col("t1", :timestamptz),
+        replication_col("t2", :timestamptz),
+        replication_col("t3", :timestamptz)
       ]
 
       assert %SatOpRow{
@@ -101,17 +104,17 @@ defmodule Electric.Satellite.SerializationTest do
       }
 
       columns = [
-        %{name: "int", type: :int2},
-        %{name: "text", type: :text},
-        %{name: "null", type: :bytea},
-        %{name: "real1", type: :float8},
-        %{name: "real2", type: :float8},
-        %{name: "t", type: :timestamp},
-        %{name: "tz", type: :timestamptz},
-        %{name: "x", type: :float4, nullable?: true},
-        %{name: "date", type: :date},
-        %{name: "time", type: :time},
-        %{name: "bool", type: :bool}
+        replication_col("int", :int2),
+        replication_col("text", :text),
+        replication_col("null", :bytea),
+        replication_col("real1", :float8),
+        replication_col("real2", :float8),
+        replication_col("t", :timestamp),
+        replication_col("tz", :timestamptz),
+        replication_col("x", :float4, nullable?: true),
+        replication_col("date", :date),
+        replication_col("time", :time),
+        replication_col("bool", :bool)
       ]
 
       assert %{
@@ -144,13 +147,13 @@ defmodule Electric.Satellite.SerializationTest do
       }
 
       columns = [
-        %{name: "f1", type: :float8},
-        %{name: "f2", type: :float8},
-        %{name: "f3", type: :float8},
-        %{name: "f4", type: :float8},
-        %{name: "f5", type: :float8},
-        %{name: "f6", type: :float8},
-        %{name: "f7", type: :float8}
+        replication_col("f1", :float8),
+        replication_col("f2", :float8),
+        replication_col("f3", :float8),
+        replication_col("f4", :float8),
+        replication_col("f5", :float8),
+        replication_col("f6", :float8),
+        replication_col("f7", :float8)
       ]
 
       assert %{
@@ -236,7 +239,7 @@ defmodule Electric.Satellite.SerializationTest do
     test "decodes a SatOpRow struct with a long bitmask" do
       bitmask = <<0b1101000010000000::16>>
       row = %SatOpRow{nulls_bitmask: bitmask, values: Enum.map(0..8, fn _ -> "" end)}
-      columns = for i <- 0..8, do: %{name: "bit#{i}", type: :text}
+      columns = for i <- 0..8, do: replication_col("bit#{i}", :text)
 
       assert %{
                "bit0" => nil,
@@ -253,7 +256,7 @@ defmodule Electric.Satellite.SerializationTest do
   end
 
   describe "relations" do
-    alias Electric.Postgres.Replication.{Column, Table}
+    alias Electric.Postgres.Replication.Table
 
     test "correctly set the pk flag" do
       table = %Table{
@@ -262,24 +265,9 @@ defmodule Electric.Satellite.SerializationTest do
         oid: 2234,
         primary_keys: ["id1", "id2"],
         columns: [
-          %Column{
-            name: "id1",
-            type: "uuid",
-            type_modifier: nil,
-            part_of_identity?: true
-          },
-          %Column{
-            name: "id2",
-            type: "uuid",
-            type_modifier: nil,
-            part_of_identity?: true
-          },
-          %Column{
-            name: "content",
-            type: "char",
-            type_modifier: nil,
-            part_of_identity?: false
-          }
+          replication_col("id1", :uuid, part_of_identity?: true),
+          replication_col("id2", :uuid, part_of_identity?: true),
+          replication_col("content", :char)
         ]
       }
 
@@ -323,11 +311,11 @@ defmodule Electric.Satellite.SerializationTest do
       {:ok, origin: origin, loader: loader}
     end
 
-    def oid_loader(type, schema, name) do
+    defp oid_loader(type, schema, name) do
       {:ok, Enum.join(["#{type}", schema, name], ".") |> :erlang.phash2(50_000)}
     end
 
-    def schema_update(schema \\ Schema.new(), cmds) do
+    defp schema_update(schema, cmds) do
       Schema.update(schema, cmds, oid_loader: &oid_loader/3)
     end
 
@@ -344,6 +332,7 @@ defmodule Electric.Satellite.SerializationTest do
             {[], schema}
         end)
 
+      schema = Schema.set_types(schema, default_types())
       assert {:ok, _} = SchemaCache.save(cxt.origin, version, schema, stmts)
 
       tx

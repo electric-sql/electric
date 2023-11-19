@@ -5,6 +5,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
   import ElectricTest.SetupHelpers
   import ElectricTest.SatelliteHelpers
+  import Satellite.ProtocolHelpers, only: [replication_col: 2]
 
   alias Electric.Replication.SatelliteConnector
   alias Electric.Postgres.CachedWal.Producer
@@ -96,7 +97,12 @@ defmodule Electric.Satellite.WebsocketServerTest do
   end
 
   setup ctx do
-    start_schema_cache(ctx[:with_migrations] || [])
+    case Map.get(ctx, :with_migrations) do
+      nil -> []
+      migrations when is_list(migrations) -> [migrations: migrations]
+      opts when is_map(opts) -> Map.to_list(opts)
+    end
+    |> start_schema_cache()
   end
 
   describe "resource related check" do
@@ -506,10 +512,17 @@ defmodule Electric.Satellite.WebsocketServerTest do
   end
 
   describe "Incoming replication (Satellite -> PG)" do
-    @tag with_migrations: [
-           {"20230815",
-            ~s'CREATE TABLE #{@test_schema}.#{@test_table} (id uuid PRIMARY KEY, "satellite-column-1" TEXT, "satellite-column-2" VARCHAR)'}
-         ]
+    @tag with_migrations: %{
+           migrations: [
+             {"20230815",
+              ~s'CREATE TABLE #{@test_schema}.#{@test_table} (id uuid PRIMARY KEY, "satellite-column-1" TEXT, "satellite-column-2" VARCHAR)'}
+           ],
+           oids: %{
+             table: %{
+               {@test_schema, @test_table} => @test_oid
+             }
+           }
+         }
     test "common replication", ctx do
       self = self()
       client_lsn = <<0, 1, 2, 3>>
@@ -533,11 +546,16 @@ defmodule Electric.Satellite.WebsocketServerTest do
           }
 
           serialize = fn [a, b] ->
-            map = %{"satellite-column-1" => a, "satellite-column-2" => b}
+            map = %{
+              "id" => Electric.Utils.uuid4(),
+              "satellite-column-1" => a,
+              "satellite-column-2" => b
+            }
 
             Electric.Satellite.Serialization.map_to_row(map, [
-              %{name: "satellite-column-1", type: :text},
-              %{name: "satellite-column-2", type: :text}
+              replication_col("id", :uuid),
+              replication_col("satellite-column-1", :text),
+              replication_col("satellite-column-2", :varchar)
             ])
           end
 
@@ -549,12 +567,12 @@ defmodule Electric.Satellite.WebsocketServerTest do
           op_log1 =
             build_op_log([
               %SatOpBegin{commit_timestamp: ct, lsn: client_lsn},
-              %SatOpInsert{relation_id: @test_oid, row_data: serialize.([<<"a">>, <<"b">>])}
+              %SatOpInsert{relation_id: @test_oid, row_data: serialize.(["a", "b"])}
             ])
 
           op_log2 =
             build_op_log([
-              %SatOpInsert{relation_id: @test_oid, row_data: serialize.([<<"c">>, <<"d">>])},
+              %SatOpInsert{relation_id: @test_oid, row_data: serialize.(["c", "d"])},
               %SatOpCommit{}
             ])
 
@@ -566,16 +584,24 @@ defmodule Electric.Satellite.WebsocketServerTest do
           assert tx.lsn == client_lsn
           assert tx.commit_timestamp == dt
 
-          assert tx.changes == [
+          assert [
                    %NewRecord{
                      relation: {@test_schema, @test_table},
-                     record: %{"satellite-column-1" => "a", "satellite-column-2" => "b"}
+                     record: %{
+                       "id" => _,
+                       "satellite-column-1" => "a",
+                       "satellite-column-2" => "b"
+                     }
                    },
                    %NewRecord{
                      relation: {@test_schema, @test_table},
-                     record: %{"satellite-column-1" => "c", "satellite-column-2" => "d"}
+                     record: %{
+                       "id" => _,
+                       "satellite-column-1" => "c",
+                       "satellite-column-2" => "d"
+                     }
                    }
-                 ]
+                 ] = tx.changes
 
           assert tx.origin !== ""
         end)

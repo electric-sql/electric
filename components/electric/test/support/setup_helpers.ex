@@ -10,8 +10,8 @@ defmodule ElectricTest.SetupHelpers do
   Starts SchemaCache process with a given origin, and
   immediately fills it from given SQL.
   """
-  def start_schema_cache(origin \\ "fake_origin", migrations) do
-    backend = Electric.Postgres.MockSchemaLoader.start_link(migrations: migrations)
+  def start_schema_cache(origin \\ "fake_origin", backend_opts) do
+    backend = Electric.Postgres.MockSchemaLoader.backend_spec(backend_opts)
 
     start_supervised!(
       {Electric.Postgres.Extension.SchemaCache, {[origin: origin], [backend: backend]}}

@@ -35,9 +35,9 @@ defmodule Satellite.ProtocolHelpers do
       oid: @entries_relation_oid,
       primary_keys: ["id"],
       columns: [
-        %{name: "id", type: :uuid},
-        %{name: "content", type: :varchar},
-        %{name: "content_b", type: :varchar}
+        replication_col("id", :uuid),
+        replication_col("content", :varchar),
+        replication_col("content_b", :varchar)
       ]
     }
   end
@@ -49,8 +49,8 @@ defmodule Satellite.ProtocolHelpers do
       oid: @camelCase_relation_oid,
       primary_keys: ["id"],
       columns: [
-        %{name: "id", type: :text},
-        %{name: "userId", type: :text}
+        replication_col("id", :text),
+        replication_col("userId", :text)
       ]
     }
   end
@@ -132,5 +132,42 @@ defmodule Satellite.ProtocolHelpers do
       end)
 
     %SatOpLog{ops: ops}
+  end
+
+  @default_types %{
+    "bool" => %{oid: 16, kind: :BASE},
+    "int2" => %{oid: 21, kind: :BASE},
+    "int4" => %{oid: 23, kind: :BASE},
+    "int8" => %{oid: 20, kind: :BASE},
+    "text" => %{oid: 25, kind: :BASE},
+    "float4" => %{oid: 700, kind: :BASE},
+    "float8" => %{oid: 701, kind: :BASE},
+    "date" => %{oid: 1082, kind: :BASE},
+    "time" => %{oid: 1083, kind: :BASE},
+    "timestamp" => %{oid: 1114, kind: :BASE},
+    "timestamptz" => %{oid: 1184, kind: :BASE},
+    "varchar" => %{oid: 1043, kind: :BASE},
+    "uuid" => %{oid: 2950, kind: :BASE},
+    "electric.tag" => %{oid: 0, kind: :DOMAIN}
+  }
+
+  def default_types, do: @default_types
+
+  def replication_col(name, type_name, overrides \\ []) do
+    %Electric.Postgres.Replication.Column{
+      name: name,
+      type: replication_col_type(type_name)
+    }
+    |> Map.merge(Map.new(overrides))
+  end
+
+  def replication_col_type(name, overrides \\ []) do
+    base_info = %{name: name, modifier: -1, values: []}
+
+    case Map.fetch(@default_types, to_string(name)) do
+      {:ok, map} -> Map.merge(base_info, map)
+      :error -> base_info
+    end
+    |> Map.merge(Map.new(overrides))
   end
 end

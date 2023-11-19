@@ -1,40 +1,31 @@
 defmodule Electric.Postgres.MockSchemaLoader do
+  import Satellite.ProtocolHelpers, only: [default_types: 0]
+
   alias Electric.Postgres.{
     Extension.SchemaLoader,
     Extension.Migration,
     Schema
   }
 
-  def oid_loader(type, schema, name) do
+  defp oid_loader(type, schema, name) do
     {:ok, Enum.join(["#{type}", schema, name], ".") |> :erlang.phash2(50_000)}
   end
 
-  def schema_update(schema \\ Schema.new(), cmds)
-
-  def schema_update(%Schema.Proto.Schema{} = schema, cmds) when is_list(cmds) do
-    schema_update(schema, cmds, &oid_loader/3)
-  end
-
-  def schema_update(cmds, oid_loader) when is_list(cmds) and is_function(oid_loader) do
-    schema_update(Schema.new(), cmds, oid_loader)
-  end
-
-  def schema_update(%Schema.Proto.Schema{} = schema, cmds, oid_loader)
-      when is_function(oid_loader, 3) do
+  defp schema_update(%Schema.Proto.Schema{} = schema, cmds, oid_loader)
+       when is_function(oid_loader, 3) do
     Schema.update(schema, cmds, oid_loader: oid_loader)
   end
 
-  @spec migrate_versions([{version :: binary(), [stmt :: binary()]}]) :: [
-          {version :: binary(), Schema.t()}
-        ]
-  def migrate_versions(migrations, oid_loader \\ nil) do
-    oid_loader = oid_loader || (&oid_loader/3)
-
+  defp migrate_versions(migrations, oid_loader) do
     {versions, _schema} =
       migrations
       |> Enum.map(fn {opts, stmts} -> {opts, List.wrap(stmts)} end)
       |> Enum.map_reduce(Schema.new(), fn {opts, stmts}, schema ->
-        schema = Enum.reduce(stmts, schema, &schema_update(&2, &1, oid_loader))
+        schema =
+          stmts
+          |> Enum.reduce(schema, &schema_update(&2, &1, oid_loader))
+          |> Schema.set_types(default_types())
+
         {mock_version(opts, schema, stmts), schema}
       end)
 
@@ -267,6 +258,11 @@ defmodule Electric.Postgres.MockSchemaLoader do
     else
       _ -> {:error, "no oid defined for #{type}:#{schema}.#{name} in #{inspect(opts)}"}
     end
+  end
+
+  @impl true
+  def fetch_table_column_types({:agent, _pid}, _tables) do
+    {%{}, default_types()}
   end
 
   @impl true

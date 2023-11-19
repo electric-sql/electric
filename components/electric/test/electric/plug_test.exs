@@ -22,15 +22,15 @@ defmodule Electric.PlugTest do
     {"0004", ["CREATE TABLE e (id uuid PRIMARY KEY, value text NOT NULL);"]}
   ]
 
-  def oid_loader(type, schema, name) do
+  defp oid_loader(type, schema, name) do
     {:ok, Enum.join(["#{type}", schema, name], ".") |> :erlang.phash2(50_000)}
   end
 
-  def schema_update(schema \\ Schema.new(), cmds) do
+  defp schema_update(schema, cmds) do
     Schema.update(schema, cmds, oid_loader: &oid_loader/3)
   end
 
-  def apply_migrations(conn) do
+  defp apply_migrations(conn) do
     schema =
       Enum.reduce(@migrations, Schema.new(), fn {version, stmts}, schema ->
         schema =

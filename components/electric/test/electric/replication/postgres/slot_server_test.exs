@@ -6,28 +6,23 @@ defmodule Electric.Replication.Postgres.SlotServerTest do
   alias Electric.Replication.Changes
   alias Electric.Postgres.LogicalReplication
   alias Electric.Postgres.LogicalReplication.Messages
-  alias Electric.Postgres.Extension.SchemaCache
-  alias Electric.Postgres.MockSchemaLoader
+
+  import ElectricTest.SetupHelpers
 
   setup _ do
-    migrations = [
-      {"001",
-       [
-         "CREATE TABLE fake.slot_server_test (id uuid PRIMARY KEY NOT NULL, content varchar)"
-       ]}
-    ]
-
-    backend =
-      MockSchemaLoader.backend_spec(
-        migrations: migrations,
-        oids: %{
-          table: %{
-            {"fake", "slot_server_test"} => 100_003
-          }
+    start_schema_cache("fake_publication",
+      migrations: [
+        {"001",
+         [
+           "CREATE TABLE fake.slot_server_test (id uuid PRIMARY KEY NOT NULL, content varchar)"
+         ]}
+      ],
+      oids: %{
+        table: %{
+          {"fake", "slot_server_test"} => 100_003
         }
-      )
-
-    start_supervised({SchemaCache, {[origin: "fake_publication"], [backend: backend]}})
+      }
+    )
 
     :ok
   end
