@@ -24,8 +24,6 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     Message
   }
 
-  alias Electric.Replication.Changes
-
   alias Electric.Replication.Changes.{
     Transaction,
     NewRecord,
@@ -43,9 +41,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
               publication: nil,
               client: nil,
               origin: nil,
-              drop_current_transaction?: false,
               types: %{},
-              ignore_relations: [],
               span: nil
 
     @type t() :: %__MODULE__{
@@ -56,9 +52,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
             transaction: {Electric.Postgres.Lsn.t(), %Transaction{}},
             publication: String.t(),
             origin: Connectors.origin(),
-            drop_current_transaction?: boolean(),
             types: %{},
-            ignore_relations: [term()],
             span: Metrics.t() | nil
           }
   end
@@ -174,36 +168,9 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
 
   defp process_message(%Type{}, state), do: {:noreply, [], state}
 
-  defp process_message(%Relation{} = msg, state) do
-    state =
-      case ignore_relations(msg, state) do
-        {true, state} ->
-          Logger.debug("ignore relation from electric schema #{inspect(msg)}")
-          %{state | relations: Map.put(state.relations, msg.id, msg)}
-
-        false ->
-          %{state | relations: Map.put(state.relations, msg.id, msg)}
-      end
-
-    # Mapping from a `LogicalReplication.Messages.Relation` to a
-    # `Electric.Replication.Changes.Relation` is a little superfluous but keeps
-    # the clean line between pg logical replication and this internal change
-    # stream.
-    # The Relation messages are used and then dropped by the
-    # `Electric.Replication.Postgres.MigrationConsumer` stage that reads from
-    # this producer.
-    relation =
-      Changes.Relation
-      |> struct(Map.from_struct(msg))
-      |> Map.put(
-        :columns,
-        Enum.map(msg.columns, &struct(Changes.Relation.Column, Map.from_struct(&1)))
-      )
-
-    queue = :queue.in(relation, state.queue)
-    state = %{state | queue: queue}
-
-    dispatch_events(state, [])
+  defp process_message(%Relation{} = rel, state) do
+    state = Map.update!(state, :relations, &Map.put(&1, rel.id, rel))
+    {:noreply, [], state}
   end
 
   defp process_message(%Insert{} = msg, %State{} = state) do
@@ -216,12 +183,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     {lsn, txn} = state.transaction
     txn = %{txn | changes: [new_record | txn.changes]}
 
-    {:noreply, [],
-     %{
-       state
-       | transaction: {lsn, txn},
-         drop_current_transaction?: maybe_drop(msg.relation_id, state)
-     }}
+    {:noreply, [], %{state | transaction: {lsn, txn}}}
   end
 
   defp process_message(%Update{} = msg, %State{} = state) do
@@ -239,12 +201,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     {lsn, txn} = state.transaction
     txn = %{txn | changes: [updated_record | txn.changes]}
 
-    {:noreply, [],
-     %{
-       state
-       | transaction: {lsn, txn},
-         drop_current_transaction?: maybe_drop(msg.relation_id, state)
-     }}
+    {:noreply, [], %{state | transaction: {lsn, txn}}}
   end
 
   defp process_message(%Delete{} = msg, %State{} = state) do
@@ -264,12 +221,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     {lsn, txn} = state.transaction
     txn = %{txn | changes: [deleted_record | txn.changes]}
 
-    {:noreply, [],
-     %{
-       state
-       | transaction: {lsn, txn},
-         drop_current_transaction?: maybe_drop(msg.relation_id, state)
-     }}
+    {:noreply, [], %{state | transaction: {lsn, txn}}}
   end
 
   defp process_message(%Truncate{} = msg, state) do
@@ -292,18 +244,6 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   # pending demand we can meet by dispatching events.
 
   defp process_message(
-         %Commit{lsn: commit_lsn},
-         %State{transaction: {current_txn_lsn, txn}, drop_current_transaction?: true} = state
-       )
-       when commit_lsn == current_txn_lsn do
-    Logger.debug(
-      "ignoring transaction with lsn #{inspect(commit_lsn)} and contents: #{inspect(txn)}"
-    )
-
-    {:noreply, [], %{state | transaction: nil, drop_current_transaction?: false}}
-  end
-
-  defp process_message(
          %Commit{lsn: commit_lsn, end_lsn: end_lsn},
          %State{transaction: {current_txn_lsn, txn}, queue: queue} = state
        )
@@ -316,7 +256,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     Metrics.span_event(state.span, :transaction, Transaction.count_operations(event))
 
     queue = :queue.in(event, queue)
-    state = %{state | queue: queue, transaction: nil, drop_current_transaction?: false}
+    state = %{state | queue: queue, transaction: nil}
 
     dispatch_events(state, [])
   end
@@ -360,7 +300,6 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     {:noreply, Enum.reverse(events), state}
   end
 
-  # TODO: Typecast to meaningful Elixir types here later
   @spec data_tuple_to_map([Relation.Column.t()], list()) :: term()
   defp data_tuple_to_map(_columns, nil), do: %{}
 
@@ -387,39 +326,5 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   def ack(conn, origin, lsn) do
     Logger.debug("Acknowledging #{lsn}", origin: origin)
     Client.acknowledge_lsn(conn, lsn)
-  end
-
-  # We use this fun to limit replication, electric.* tables are not expected to be
-  # replicated further from PG
-  defp ignore_relations(msg = %Relation{}, state = %State{}) do
-    case msg.id in state.ignore_relations do
-      false ->
-        # We do not encourage developers to use 'electric' schema, but some
-        # tools like sysbench do that by default, instead of 'public' schema
-
-        # TODO: VAX-680 remove this special casing of schema_migrations table
-        # once we are selectivley replicating tables
-        # ||
-        ignore? = msg.namespace == "electric" and msg.name in ["migrations", "meta"]
-        # (msg.namespace == "public" and msg.name == "schema_migrations")
-
-        if ignore? do
-          {true, %State{state | ignore_relations: [msg.id | state.ignore_relations]}}
-        else
-          false
-        end
-
-      true ->
-        {true, state}
-    end
-  end
-
-  @spec maybe_drop(Messages.relation_id(), %State{}) :: boolean
-  defp maybe_drop(_id, %State{drop_current_transaction?: true}) do
-    true
-  end
-
-  defp maybe_drop(id, %State{ignore_relations: ids}) do
-    id in ids
   end
 end

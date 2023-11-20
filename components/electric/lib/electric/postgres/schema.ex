@@ -7,6 +7,7 @@ defmodule Electric.Postgres.Schema do
 
   require Logger
 
+  import Electric.Postgres.Extension, only: [is_extension_relation: 1]
   import Electric.Postgres.Schema.Proto, only: [is_unique_constraint: 1]
 
   @search_paths [nil, "public"]
@@ -42,6 +43,12 @@ defmodule Electric.Postgres.Schema do
 
   def name(name) when is_binary(name) do
     "\"" <> name <> "\""
+  end
+
+  def num_electrified_tables(schema) do
+    Enum.count(schema.tables, fn %{name: name} ->
+      not is_extension_relation({name.schema, name.name})
+    end)
   end
 
   def indexes(schema, opts \\ []) do
@@ -224,16 +231,6 @@ defmodule Electric.Postgres.Schema do
     col.constraints
     |> Enum.find(&match?(%Proto.Constraint{constraint: {:not_null, _}}, &1))
     |> is_nil()
-  end
-
-  def relation(schema, sname, tname) do
-    with {:ok, table} <- fetch_table(schema, {sname, tname}) do
-      table_info(table)
-    end
-  end
-
-  def relation(schema, {sname, tname}) do
-    relation(schema, sname, tname)
   end
 
   # want table constraint order to be constistent so that we can verify the in-memory schema with

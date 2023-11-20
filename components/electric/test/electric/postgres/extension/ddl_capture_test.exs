@@ -76,8 +76,8 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
     # and the attached index, otherwise (since we're running in a tx via the proxy)
     # the default schema loader (backed by schemaloader.epgsql) therefore
     # can't lookup schema information
-    {:ok, ^loader} = MigrationConsumer.apply_migration("001", [sql1], loader)
-    {:ok, ^loader} = MigrationConsumer.apply_migration("002", [sql4], loader)
+    {:ok, ^loader, _schema} = MigrationConsumer.apply_migration("001", [sql1], loader)
+    {:ok, ^loader, _schema} = MigrationConsumer.apply_migration("002", [sql4], loader)
 
     for sql <- [sql1, sql2, sql3, sql4, sql5] do
       {:ok, _cols, _rows} = :epgsql.squery(conn, sql)

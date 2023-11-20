@@ -1,20 +1,11 @@
 defmodule Electric.Replication.Postgres.MigrationConsumerTest do
   use ExUnit.Case, async: true
 
-  alias Electric.Replication.Changes
-
-  alias Electric.Replication.Changes.{
-    NewRecord,
-    Transaction
-  }
-
-  alias Electric.Postgres.LogicalReplication.Messages.{
-    Relation
-  }
-
-  alias Electric.Replication.Postgres.MigrationConsumer
-
   alias Electric.Postgres.MockSchemaLoader
+
+  alias Electric.Replication.Changes.NewRecord
+  alias Electric.Replication.Changes.Transaction
+  alias Electric.Replication.Postgres.MigrationConsumer
 
   defmodule FakeProducer do
     use GenStage
@@ -107,27 +98,29 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
       {:ok, origin: origin, producer: producer, version: version, loader: backend}
     end
 
-    test "migration consumer refreshes subscription after receiving a relation", cxt do
+    test "migration consumer refreshes subscription after receiving a migration", cxt do
       %{producer: producer, origin: origin, version: version} = cxt
       assert_receive {MockSchemaLoader, {:connect, _}}
 
       events = [
-        %Changes.Relation{
-          id: 1234,
-          namespace: "public",
-          name: "mistakes",
-          replica_identity: :all_columns,
-          columns: [
-            %Relation.Column{flags: [:key], name: "id", type_oid: 2950, type_modifier: nil},
-            %Relation.Column{flags: [], name: "value", type_oid: 25, type_modifier: nil},
-            %Relation.Column{flags: [], name: "price", type_oid: 23, type_modifier: nil}
+        %Transaction{
+          changes: [
+            %NewRecord{
+              relation: {"electric", "ddl_commands"},
+              record: %{
+                "id" => "6",
+                "query" => "create table something_else (id uuid primary key);",
+                "txid" => "101",
+                "txts" => "201"
+              },
+              tags: []
+            }
           ]
         }
       ]
 
       GenStage.call(producer, {:emit, cxt.loader, events, version})
 
-      refute_receive {FakeConsumer, :events, _}, 500
       assert_receive {MockSchemaLoader, {:refresh_subscription, ^origin}}, 500
     end
 
