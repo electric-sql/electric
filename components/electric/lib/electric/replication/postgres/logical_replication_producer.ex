@@ -41,9 +41,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
               publication: nil,
               client: nil,
               origin: nil,
-              drop_current_transaction?: false,
               types: %{},
-              ignored_relations: MapSet.new(),
               span: nil
 
     @type t() :: %__MODULE__{
@@ -54,9 +52,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
             transaction: {Electric.Postgres.Lsn.t(), %Transaction{}},
             publication: String.t(),
             origin: Connectors.origin(),
-            drop_current_transaction?: boolean(),
             types: %{},
-            ignored_relations: MapSet.t(),
             span: Metrics.t() | nil
           }
   end
@@ -173,11 +169,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   defp process_message(%Type{}, state), do: {:noreply, [], state}
 
   defp process_message(%Relation{} = rel, state) do
-    state =
-      state
-      |> maybe_ignore_relation(rel)
-      |> Map.update!(:relations, &Map.put(&1, rel.id, rel))
-
+    state = Map.update!(state, :relations, &Map.put(&1, rel.id, rel))
     {:noreply, [], state}
   end
 
@@ -191,12 +183,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     {lsn, txn} = state.transaction
     txn = %{txn | changes: [new_record | txn.changes]}
 
-    {:noreply, [],
-     %{
-       state
-       | transaction: {lsn, txn},
-         drop_current_transaction?: maybe_drop(msg.relation_id, state)
-     }}
+    {:noreply, [], %{state | transaction: {lsn, txn}}}
   end
 
   defp process_message(%Update{} = msg, %State{} = state) do
@@ -214,12 +201,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     {lsn, txn} = state.transaction
     txn = %{txn | changes: [updated_record | txn.changes]}
 
-    {:noreply, [],
-     %{
-       state
-       | transaction: {lsn, txn},
-         drop_current_transaction?: maybe_drop(msg.relation_id, state)
-     }}
+    {:noreply, [], %{state | transaction: {lsn, txn}}}
   end
 
   defp process_message(%Delete{} = msg, %State{} = state) do
@@ -239,12 +221,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     {lsn, txn} = state.transaction
     txn = %{txn | changes: [deleted_record | txn.changes]}
 
-    {:noreply, [],
-     %{
-       state
-       | transaction: {lsn, txn},
-         drop_current_transaction?: maybe_drop(msg.relation_id, state)
-     }}
+    {:noreply, [], %{state | transaction: {lsn, txn}}}
   end
 
   defp process_message(%Truncate{} = msg, state) do
@@ -267,18 +244,6 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   # pending demand we can meet by dispatching events.
 
   defp process_message(
-         %Commit{lsn: commit_lsn},
-         %State{transaction: {current_txn_lsn, txn}, drop_current_transaction?: true} = state
-       )
-       when commit_lsn == current_txn_lsn do
-    Logger.debug(
-      "ignoring transaction with lsn #{inspect(commit_lsn)} and contents: #{inspect(txn)}"
-    )
-
-    {:noreply, [], %{state | transaction: nil, drop_current_transaction?: false}}
-  end
-
-  defp process_message(
          %Commit{lsn: commit_lsn, end_lsn: end_lsn},
          %State{transaction: {current_txn_lsn, txn}, queue: queue} = state
        )
@@ -291,7 +256,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     Metrics.span_event(state.span, :transaction, Transaction.count_operations(event))
 
     queue = :queue.in(event, queue)
-    state = %{state | queue: queue, transaction: nil, drop_current_transaction?: false}
+    state = %{state | queue: queue, transaction: nil}
 
     dispatch_events(state, [])
   end
@@ -361,27 +326,5 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   def ack(conn, origin, lsn) do
     Logger.debug("Acknowledging #{lsn}", origin: origin)
     Client.acknowledge_lsn(conn, lsn)
-  end
-
-  # Limit replication of electric.* tables since they are not expected to be
-  # replicated further from PG.
-  defp maybe_ignore_relation(state, %Relation{} = rel) do
-    # We do not encourage developers to use 'electric' schema, but some
-    # tools like sysbench do that by default, instead of 'public' schema
-    if rel.id in state.ignored_relations or
-         (rel.namespace == "electric" and rel.name in ["migrations", "meta"]) do
-      update_in(state.ignored_relations, &MapSet.put(&1, rel.id))
-    else
-      state
-    end
-  end
-
-  @spec maybe_drop(Messages.relation_id(), %State{}) :: boolean
-  defp maybe_drop(_rel_id, %State{drop_current_transaction?: true}) do
-    true
-  end
-
-  defp maybe_drop(rel_id, %State{ignored_relations: rel_ids}) do
-    rel_id in rel_ids
   end
 end
