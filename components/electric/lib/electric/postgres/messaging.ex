@@ -7,6 +7,8 @@ defmodule Electric.Postgres.Messaging do
   and only the backend side (messages marked as `(B)`)
   """
 
+  import Electric.Postgres.OidDatabase.PgType
+
   alias Electric.Postgres.OidDatabase
   alias Electric.Postgres.Lsn
 
@@ -77,8 +79,7 @@ defmodule Electric.Postgres.Messaging do
   defp get_type_information(type) when is_atom(type), do: get_type_information({type, -1})
 
   defp get_type_information({type, modifier}) when is_atom(type) and is_integer(modifier) do
-    oid = OidDatabase.oid_for_name(type)
-    len = OidDatabase.type_length(oid)
+    pg_type(oid: oid, length: len) = OidDatabase.pg_type_for_name(type)
     {oid, len, modifier}
   end
 

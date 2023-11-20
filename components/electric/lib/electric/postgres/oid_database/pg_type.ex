@@ -8,46 +8,56 @@ defmodule Electric.Postgres.OidDatabase.PgType do
     array_oid: :_,
     element_oid: :_,
     length: :_,
-    type: :_,
-    base_type: :_,
-    rel_id: :_,
+    kind: :_,
     is_array: :_
   )
 
-  def map_type("b"), do: :base
-  def map_type("c"), do: :composite
-  def map_type("d"), do: :domain
-  def map_type("e"), do: :enum
-  def map_type("p"), do: :pseudo
-  def map_type("r"), do: :range
-  def map_type("m"), do: :multirange
+  @type kind :: :BASE | :COMPOSITE | :DOMAIN | :ENUM | :PSEUDO | :RANGE | :MULTIRANGE
+  @type t ::
+          record(:pg_type,
+            oid: pos_integer,
+            namespace: binary,
+            name: atom | binary,
+            array_oid: non_neg_integer,
+            element_oid: non_neg_integer,
+            length: integer,
+            kind: kind,
+            is_array: boolean
+          )
+
+  @spec kind(binary) :: kind
+  def kind("b"), do: :BASE
+  def kind("c"), do: :COMPOSITE
+  def kind("d"), do: :DOMAIN
+  def kind("e"), do: :ENUM
+  def kind("p"), do: :PSEUDO
+  def kind("r"), do: :RANGE
+  def kind("m"), do: :MULTIRANGE
 
   def pg_type_from_tuple(pg_type() = type), do: type
 
-  def pg_type_from_tuple({
-        namespace,
-        name,
-        oid,
-        array_oid,
-        element_oid,
-        len,
-        type,
-        base_type,
-        rel_id,
-        is_array
-      }),
-      do:
-        pg_type(
-          oid: String.to_integer(oid),
-          namespace: String.to_atom(namespace),
-          name:
-            String.to_atom(if namespace == "pg_catalog", do: name, else: namespace <> "." <> name),
-          array_oid: String.to_integer(array_oid),
-          element_oid: String.to_integer(element_oid),
-          length: String.to_integer(len),
-          type: map_type(type),
-          base_type: String.to_integer(base_type),
-          rel_id: String.to_integer(rel_id),
-          is_array: Map.fetch!(%{"t" => true, "f" => false}, is_array)
-        )
+  def pg_type_from_tuple({namespace, name, oid, array_oid, element_oid, len, typtype}) do
+    kind = kind(typtype)
+
+    pg_type(
+      namespace: namespace,
+      name: type_name(namespace, name, kind),
+      oid: String.to_integer(oid),
+      array_oid: String.to_integer(array_oid),
+      element_oid: String.to_integer(element_oid),
+      length: String.to_integer(len),
+      kind: kind,
+      is_array: array_oid == "0"
+    )
+  end
+
+  # All BASE type names are converted to atoms. This is useful for pattern-matching against literal type names.
+  defp type_name("pg_catalog", name, :BASE), do: String.to_atom(name)
+
+  # We currently define a single DOMAIN type named electric.tag. It is looked up in OidDatabase as an atom, so we
+  # convert domain types to atoms for now.
+  defp type_name("electric", name, :DOMAIN), do: String.to_atom("electric." <> name)
+
+  # User-defined and other custom types get schema-qualified names as strings.
+  defp type_name(namespace, name, _kind), do: namespace <> "." <> name
 end

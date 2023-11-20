@@ -118,9 +118,9 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
           name: "mistakes",
           replica_identity: :all_columns,
           columns: [
-            %Relation.Column{flags: [:key], name: "id", type: :uuid, type_modifier: nil},
-            %Relation.Column{flags: [], name: "value", type: :text, type_modifier: nil},
-            %Relation.Column{flags: [], name: "price", type: :int4, type_modifier: nil}
+            %Relation.Column{flags: [:key], name: "id", type_oid: 2950, type_modifier: nil},
+            %Relation.Column{flags: [], name: "value", type_oid: 25, type_modifier: nil},
+            %Relation.Column{flags: [], name: "price", type_oid: 23, type_modifier: nil}
           ]
         }
       ]
