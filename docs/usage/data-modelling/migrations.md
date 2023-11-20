@@ -239,18 +239,13 @@ See <DocPageLink path="integrations/backend" /> and <DocPageLink path="api/ddlx"
 
 There are currently a number of limitations on the data models and migrations that ElectricSQL supports.
 
-### Table names
-
-To avoid name clashes between tables, we recommend naming your tables such that they match this regex: `[a-z][A-Za-z0-9_]`.
-Internally, any character that is not part of that regex will be removed, e.g. `_myTable` will be stripped to `myTable`.
-This may lead to name clashes between tables, e.g. `_myTable`, `123myTable`, and `myTable` all clash.
-
-In addition, we capitalise the first letter of table names.
-Hence, tables named `myTable` and `MyTable` clash.
-
 ### Default schema
 
 Only tables in the default schema named [`public`](https://www.postgresql.org/docs/14/ddl-schemas.html#DDL-SCHEMAS-PUBLIC) can be electrified at the moment.
+
+### Table names
+
+The client generator sanitises table names (because of an issue in an [external library](https://github.com/chrishoermann/zod-prisma-types/issues/121)) removing any prefix that is not a letter and treating the first letter as case insensitive. For example electrifying the tables `_myTable`, `123myTable`, `myTable`, and `MyTable` will all clash on table name, causing a generator error.
 
 ### Forward migrations
 
