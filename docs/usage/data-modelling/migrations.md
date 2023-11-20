@@ -241,7 +241,7 @@ There are currently a number of limitations on the data models and migrations th
 
 ### Default schema
 
-Only tables in the default schema named [`public`](https://www.postgresql.org/docs/14/ddl-schemas.html#DDL-SCHEMAS-PUBLIC) can be electrified at the moment.
+Only tables in the default schema named [`public`](https://www.postgresql.org/docs/14/ddl-schemas.html#DDL-SCHEMAS-PUBLIC) can be electrified at the moment. We are working on lifting this restriction.
 
 ### Table names
 
