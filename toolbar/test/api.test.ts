@@ -10,7 +10,7 @@ import { ElectricConfig } from 'electric-sql/config'
 import { SocketFactory } from 'electric-sql/sockets'
 import { Notifier } from 'electric-sql/notifiers'
 import { clientApi } from '../src'
-import { DbSchema } from "electric-sql/client/model";
+import { DbSchema } from 'electric-sql/client/model'
 
 test('identity', async () => {
   const dbDescription = {} as DbSchema<any>
@@ -33,7 +33,7 @@ test('identity', async () => {
     migrator,
     notifier,
     socketFactory,
-    config
+    config,
   )
 
   const s2 = await mockRegistry.startProcess(
