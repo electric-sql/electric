@@ -1,5 +1,5 @@
-const { copyFile } = require('node:fs/promises')
-const path = require('node:path')
+import { copyFile } from 'node:fs/promises'
+import path from 'node:path'
 
 // Copies the wasm files needed for wa-sqlite
 // from `/node_modules/wa-sqlite/dist` into `public`
