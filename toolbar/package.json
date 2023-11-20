@@ -1,0 +1,42 @@
+{
+  "name": "@electric-sql/debug-toolbar",
+  "version": "0.1.0",
+  "main": "dist/index.cjs.js",
+  "module": "dist/index.esm.js",
+  "types": "dist/index.d.ts",
+  "author": "ElectricSQL",
+  "license": "Apache-2.0",
+  "scripts": {
+    "build": "node builder.js && tsc --emitDeclarationOnly --outDir dist",
+    "check-styleguide": "prettier --check --loglevel warn .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "engines": {
+    "node": ">=16.11.0"
+  },
+  "dependencies": {
+    "codemirror": "^5.65.15",
+    "react": "^18.2.0",
+    "react-codemirror2": "^7.3.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@ikscodes/browser-env": "^1.0.0",
+    "@types/node": ">=16.11.0",
+    "@types/react": "^18.0.18",
+    "@types/react-dom": "^18.0.11",
+    "electric-sql": "workspace:*",
+    "esbuild": "^0.16.17",
+    "esbuild-plugin-inline-image": "^0.0.9",
+    "prettier": "3.0.3",
+    "typescript": "^4.4.3",
+    "vitest": "^0.24.5"
+  },
+  "peerDependencies": {
+    "electric-sql": "workspace:*"
+  },
+  "files": [
+    "dist"
+  ]
+}

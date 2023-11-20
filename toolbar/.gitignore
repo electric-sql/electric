@@ -1,0 +1,10 @@
+dist
+node_modules
+# local dev app
+dev-app
+package.dev.json
+
+# We're ignoring the lockfiles here because this example is meant to act like `npx create-electric-app` in that they use latest deps
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
