@@ -38,17 +38,16 @@ defmodule Electric.Postgres.OidDatabase.PgType do
 
   def pg_type_from_tuple({namespace, name, oid, array_oid, element_oid, len, typtype}) do
     kind = kind(typtype)
-    array_oid = String.to_integer(array_oid)
 
     pg_type(
       namespace: namespace,
       name: type_name(namespace, name, kind),
       oid: String.to_integer(oid),
-      array_oid: array_oid,
+      array_oid: String.to_integer(array_oid),
       element_oid: String.to_integer(element_oid),
       length: String.to_integer(len),
       kind: kind,
-      is_array: array_oid == 0
+      is_array: array_oid == "0"
     )
   end
 
