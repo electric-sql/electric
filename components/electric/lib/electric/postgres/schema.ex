@@ -464,7 +464,10 @@ defmodule Electric.Postgres.Schema do
       for %{name: name} = table <- tables do
         case Map.fetch(column_type_names, {name.schema, name.name}) do
           {:ok, single_table_column_type_names} ->
-            patch_single_table_column_type_names(table, single_table_column_type_names)
+            patch_single_table_column_type_names(
+              table,
+              add_missing_shadow_columns(single_table_column_type_names, table)
+            )
 
           :error ->
             table
@@ -472,6 +475,45 @@ defmodule Electric.Postgres.Schema do
       end
 
     %{schema | tables: updated_tables}
+  end
+
+  # It appears that Postgres sends a logical replication message for a published table before all triggers have executed
+  # for it. This results in the `column_type_names` map to miss shadow table columns when, for example,
+  # `ALTER TABLE ... ADD COLUMN ...` is executed on an electrified table.
+  #
+  # Here's what happens:
+  #
+  #   1. `ALTER TABLE ... ADD COLUMN ...` is captured into `electric.ddl_commands`
+  #
+  #   2. Postgres delivers the new DDL row to Electric and it's picked by by MigrationConsumer
+  #
+  #   3. MigrationConsumer fetches up-to-date types for all table columns, including the shadow tables, using
+  #    `SchemaLoader.fetch_table_column_types()`
+  #
+  #   4. MigrationConsumer calls `Schema.patch_column_types()`
+  #
+  # It turns out, the up-to-date types fetched at step 3 do not include shadow versions of the newly added column. I can
+  # only assume it has to do with the relative ordering between trigger invocation and logical replication message
+  # delivery times.
+  #
+  # Since we know what types the missing shadow columns have, we can add them to the `column_type_names` map ourselves.
+  defp add_missing_shadow_columns(column_type_names, table) do
+    if is_shadow_table?(table) do
+      populate_column_types_with_missing_columns(column_type_names, table.columns)
+    else
+      column_type_names
+    end
+  end
+
+  defp populate_column_types_with_missing_columns(column_type_names, []), do: column_type_names
+
+  defp populate_column_types_with_missing_columns(column_type_names, [col | columns]) do
+    if String.starts_with?(col.name, ["_tag", "__reordered"]) do
+      Map.put_new_lazy(column_type_names, col.name, fn -> col.type.name end)
+    else
+      column_type_names
+    end
+    |> populate_column_types_with_missing_columns(columns)
   end
 
   defp patch_single_table_column_type_names(%Proto.Table{columns: columns} = table, type_names) do
