@@ -1,0 +1,44 @@
+{
+  "name": "electric-sql-wa-sqlite-example",
+  "version": "0.7.0",
+  "author": "ElectricSQL",
+  "license": "Apache-2.0",
+  "main": "builder.js",
+  "scripts": {
+    "backend:start": "cd ./backend && docker compose up",
+    "backend:stop": "cd ./backend && docker compose stop",
+    "backend:up": "cd ./backend && docker compose up -d",
+    "backend:down": "cd ./backend && docker compose -f docker-compose.yml -f ./dev/docker-compose.dev.yml down -v --remove-orphans",
+    "client:generate": "npx electric-sql generate --service http://localhost:5133 --proxy postgresql://prisma:proxy_password@localhost:65432/postgres",
+    "client:watch": "npm run client:generate --watch",
+    "db:migrate": "npx pg-migrations apply --database postgresql://postgres:proxy_password@localhost:65432/postgres --directory ./db/migrations",
+    "build": "node copy-wasm-files.js && node builder.js",
+    "build-prod": "NODE_ENV=production npm run build",
+    "start": "SERVE=true npm run build"
+  },
+  "engines": {
+    "node": ">=16.11.0"
+  },
+  "dependencies": {
+    "electric-sql": "^0.7.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "wa-sqlite": "rhashimoto/wa-sqlite"
+  },
+  "devDependencies": {
+    "@databases/pg-migrations": "^5.0.2",
+    "@electric-sql/prisma-generator": "^1.1.0",
+    "@prisma/client": "4.8.1",
+    "@types/node": ">=16.11.0",
+    "@types/react": "^18.0.18",
+    "@types/react-dom": "^18.0.11",
+    "esbuild": "^0.16.17",
+    "esbuild-plugin-inline-image": "^0.0.9",
+    "fs-extra": "^10.0.0",
+    "prisma": "4.8.1",
+    "prompt": "^1.3.0",
+    "shelljs": "^0.8.5",
+    "tcp-port-used": "^1.0.2",
+    "typescript": "^4.4.3"
+  }
+}
