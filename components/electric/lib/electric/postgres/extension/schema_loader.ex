@@ -1,6 +1,4 @@
 defmodule Electric.Postgres.Extension.SchemaLoader do
-  import Electric.Postgres.Extension, only: [is_extension_relation: 1]
-
   alias Electric.Postgres.{Schema, Extension.Migration}
   alias Electric.Replication.Connectors
 
@@ -96,16 +94,9 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
     module.internal_schema(state)
   end
 
-  def count_electrified_tables(%Electric.Postgres.Schema.Proto.Schema{} = schema) do
-    {:ok,
-     Enum.count(schema.tables, fn %{name: name} ->
-       not is_extension_relation({name.schema, name.name})
-     end)}
-  end
-
   def count_electrified_tables({_module, _state} = impl) do
     with {:ok, _, schema} <- load(impl) do
-      count_electrified_tables(schema)
+      {:ok, Schema.num_electrified_tables(schema)}
     end
   end
 

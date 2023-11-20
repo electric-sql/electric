@@ -7,6 +7,7 @@ defmodule Electric.Postgres.Schema do
 
   require Logger
 
+  import Electric.Postgres.Extension, only: [is_extension_relation: 1]
   import Electric.Postgres.Schema.Proto, only: [is_unique_constraint: 1]
 
   @search_paths [nil, "public"]
@@ -42,6 +43,12 @@ defmodule Electric.Postgres.Schema do
 
   def name(name) when is_binary(name) do
     "\"" <> name <> "\""
+  end
+
+  def num_electrified_tables(schema) do
+    Enum.count(schema.tables, fn %{name: name} ->
+      not is_extension_relation({name.schema, name.name})
+    end)
   end
 
   def indexes(schema, opts \\ []) do

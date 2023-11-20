@@ -151,11 +151,9 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
   defp perform_migration({version, stmts}, state) do
     {:ok, loader, schema} = apply_migration(version, stmts, state.loader)
 
-    {:ok, table_count} = SchemaLoader.count_electrified_tables(schema)
-
     Metrics.non_span_event(
       [:postgres, :migration],
-      %{electrified_tables: table_count},
+      %{electrified_tables: Schema.num_electrified_tables(schema)},
       %{migration_version: version}
     )
 
