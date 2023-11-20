@@ -23,3 +23,8 @@
 .App-link {
   color: #61dafb;
 }
+
+.App-auth {
+  width: 400px;
+  margin: 0 auto;
+}

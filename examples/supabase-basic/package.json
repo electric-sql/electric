@@ -7,6 +7,7 @@
   "scripts": {
     "backend:start": "cd ./backend && docker compose up",
     "backend:stop": "cd ./backend && docker compose stop",
+    "backend:restart": "cd ./backend && docker compose restart",
     "backend:up": "cd ./backend && docker compose up -d",
     "backend:down": "cd ./backend && docker compose -f docker-compose.yml -f ./dev/docker-compose.dev.yml down -v --remove-orphans",
     "client:generate": "npx electric-sql generate --service http://localhost:5133 --proxy postgresql://prisma:proxy_password@localhost:65432/postgres",
@@ -18,6 +19,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@supabase/auth-ui-react": "^0.4.6",
+    "@supabase/auth-ui-shared": "^0.1.8",
+    "@supabase/supabase-js": "^2.38.4",
     "electric-sql": "^0.7.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

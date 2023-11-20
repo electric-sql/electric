@@ -4,6 +4,7 @@ import { LIB_VERSION } from 'electric-sql/version'
 import { makeElectricContext, useLiveQuery } from 'electric-sql/react'
 import { genUUID, uniqueTabId } from 'electric-sql/util'
 import { ElectricDatabase, electrify } from 'electric-sql/wa-sqlite'
+import { SupabaseClient } from '@supabase/supabase-js'
 
 import { authToken } from './auth'
 import { Electric, Items as Item, schema } from './generated/client'
@@ -12,8 +13,14 @@ import './Example.css'
 
 const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
 
-export const Example = () => {
+interface ExampleProps {
+  supabase: SupabaseClient
+}
+
+export const Example = ({supabase}: ExampleProps) => {
   const [ electric, setElectric ] = useState<Electric>()
+
+  console.log('supabase', supabase.auth)
 
   useEffect(() => {
     let isMounted = true
@@ -53,12 +60,16 @@ export const Example = () => {
 
   return (
     <ElectricProvider db={electric}>
-      <ExampleComponent />
+      <ExampleComponent supabase={supabase} />
     </ElectricProvider>
   )
 }
 
-const ExampleComponent = () => {
+interface ExampleComponentProps {
+  supabase: SupabaseClient
+}
+
+const ExampleComponent = ({supabase}: ExampleComponentProps) => {
   const { db } = useElectric()!
   const { results } = useLiveQuery(
     db.items.liveMany()
@@ -75,6 +86,10 @@ const ExampleComponent = () => {
 
     syncItems()
   }, [])
+
+  const signOut = async () => {
+    await supabase.auth.signOut()
+  }
 
   const addItem = async () => {
     await db.items.create({
@@ -98,6 +113,9 @@ const ExampleComponent = () => {
         </button>
         <button className="button" onClick={ clearItems }>
           Clear
+        </button>
+        <button className="button" onClick={ signOut }>
+          Logout
         </button>
       </div>
       {items.map((item: Item, index: number) => (
