@@ -10,60 +10,42 @@ import { Mutex } from 'async-mutex'
 import { AnyDatabase } from '..'
 
 /**
- * A generic adapter that manages transactions manually by executing `BEGIN` and `COMMIT`/`ROLLBACK` commands.
+ * A generic database adapter.
  * Uses a mutex to ensure that transactions are not interleaved.
- * Concrete adapters extending this class must implement the `exec` and `getRowsModified` methods.
+ * Concrete adapters extending this class must implement the
+ * `exec`, `getRowsModified`, and `runInTransaction` methods.
  */
-export abstract class DatabaseAdapter
+abstract class DatabaseAdapter
   extends TableNameImpl
   implements DatabaseAdapterInterface
 {
   abstract readonly db: AnyDatabase
-  #txMutex: Mutex
+  protected txMutex: Mutex
 
   constructor() {
     super()
-    this.#txMutex = new Mutex()
+    this.txMutex = new Mutex()
   }
 
+  /**
+   * @param statement A SQL statement to execute against the DB.
+   */
   abstract exec(statement: Statement): Promise<Row[]>
+
+  /**
+   * @returns The number of rows modified by the last SQL query.
+   */
   abstract getRowsModified(): number
 
-  async runInTransaction(...statements: Statement[]): Promise<RunResult> {
-    // Uses a mutex to ensure that transactions are not interleaved.
-    // This is needed because transactions are executed manually using `BEGIN` and `COMMIT` commands.
-    const release = await this.#txMutex.acquire()
-    let open = false
-    let rowsAffected = 0
-    try {
-      await this.exec({ sql: 'BEGIN' })
-      open = true
-      for (const stmt of statements) {
-        await this.exec(stmt)
-        if (isInsertUpdateOrDeleteStatement(stmt.sql)) {
-          // Fetch the number of rows affected by the last insert, update, or delete
-          rowsAffected += this.getRowsModified()
-        }
-      }
-      return {
-        rowsAffected: rowsAffected,
-      }
-    } catch (error) {
-      await this.exec({ sql: 'ROLLBACK' })
-      open = false
-      throw error // rejects the promise with the reason for the rollback
-    } finally {
-      if (open) {
-        await this.exec({ sql: 'COMMIT' })
-      }
-      release()
-    }
-  }
+  /**
+   * @param statements A list of SQL statements to execute against the DB.
+   */
+  abstract runInTransaction(...statements: Statement[]): Promise<RunResult>
 
   async transaction<T>(
     f: (_tx: Tx, setResult: (res: T) => void) => void
   ): Promise<T> {
-    const release = await this.#txMutex.acquire()
+    const release = await this.txMutex.acquire()
 
     try {
       await this.exec({ sql: 'BEGIN' })
@@ -100,7 +82,7 @@ export abstract class DatabaseAdapter
   run(stmt: Statement): Promise<RunResult> {
     // Also uses the mutex to avoid running this query while a transaction is executing.
     // Because that would make the query part of the transaction which was not the intention.
-    return this.#txMutex.runExclusive(() => {
+    return this.txMutex.runExclusive(() => {
       return this._runUncoordinated(stmt)
     })
   }
@@ -118,7 +100,7 @@ export abstract class DatabaseAdapter
   query(stmt: Statement): Promise<Row[]> {
     // Also uses the mutex to avoid running this query while a transaction is executing.
     // Because that would make the query part of the transaction which was not the intention.
-    return this.#txMutex.runExclusive(() => {
+    return this.txMutex.runExclusive(() => {
       return this._queryUncoordinated(stmt)
     })
   }
@@ -127,6 +109,66 @@ export abstract class DatabaseAdapter
   // It is only meant to be used within transactions.
   async _queryUncoordinated(stmt: Statement): Promise<Row[]> {
     return await this.exec(stmt)
+  }
+}
+
+/**
+ * A generic database adapter that uses batch execution of SQL queries.
+ * Extend this database adapter if your driver supports batch execution of SQL queries.
+ */
+export abstract class BatchDatabaseAdapter
+  extends DatabaseAdapter
+  implements DatabaseAdapterInterface
+{
+  /**
+   * @param statements SQL statements to execute against the DB in a single batch.
+   */
+  abstract execBatch(statements: Statement[]): Promise<RunResult>
+
+  async runInTransaction(...statements: Statement[]): Promise<RunResult> {
+    // Uses a mutex to ensure that transactions are not interleaved.
+    return this.txMutex.runExclusive(() => {
+      return this.execBatch(statements)
+    })
+  }
+}
+
+/**
+ * A generic database adapter that uses serial execution of SQL queries.
+ * Extend this database adapter if your driver does not support batch execution of SQL queries.
+ */
+export abstract class SerialDatabaseAdapter
+  extends DatabaseAdapter
+  implements DatabaseAdapterInterface
+{
+  async runInTransaction(...statements: Statement[]): Promise<RunResult> {
+    // Uses a mutex to ensure that transactions are not interleaved.
+    const release = await this.txMutex.acquire()
+    let open = false
+    let rowsAffected = 0
+    try {
+      await this.exec({ sql: 'BEGIN' })
+      open = true
+      for (const stmt of statements) {
+        await this.exec(stmt)
+        if (isInsertUpdateOrDeleteStatement(stmt.sql)) {
+          // Fetch the number of rows affected by the last insert, update, or delete
+          rowsAffected += this.getRowsModified()
+        }
+      }
+      return {
+        rowsAffected: rowsAffected,
+      }
+    } catch (error) {
+      await this.exec({ sql: 'ROLLBACK' })
+      open = false
+      throw error // rejects the promise with the reason for the rollback
+    } finally {
+      if (open) {
+        await this.exec({ sql: 'COMMIT' })
+      }
+      release()
+    }
   }
 }
 
