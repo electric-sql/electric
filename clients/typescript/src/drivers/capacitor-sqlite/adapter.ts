@@ -1,23 +1,26 @@
 import { capSQLiteSet } from '@capacitor-community/sqlite'
 import {
   DatabaseAdapter as DatabaseAdapterInterface,
+  Priority,
+  PriorityMutex,
   RunResult,
   TableNameImpl,
   Transaction as Tx,
+  priorities,
+  priorityMutex,
 } from '../../electric/adapter'
 import { Row, SqlValue, Statement } from '../../util'
 import { Database } from './database'
-import { Mutex } from 'async-mutex'
 
 export class DatabaseAdapter
   extends TableNameImpl
   implements DatabaseAdapterInterface
 {
-  #txMutex: Mutex
+  #txMutex: PriorityMutex
 
   constructor(public db: Database) {
     super()
-    this.#txMutex = new Mutex()
+    this.#txMutex = priorityMutex()
   }
 
   async run({ sql, args }: Statement): Promise<RunResult> {
@@ -48,11 +51,12 @@ export class DatabaseAdapter
 
   // No async await on capacitor-sqlite promise-based APIs + the complexity of the transaction<T> API make for one ugly implementation...
   async transaction<T>(
-    f: (_tx: Tx, setResult: (res: T) => void) => void
+    f: (_tx: Tx, setResult: (res: T) => void) => void,
+    priority: Priority = priorities.default
   ): Promise<T> {
     // Acquire mutex before even instantiating the transaction object.
     // This will ensure transactions cannot get interleaved.
-    const releaseMutex = await this.#txMutex.acquire()
+    const releaseMutex = await this.#txMutex.acquire(priority)
     return new Promise<T>((resolve, reject) => {
       // Convenience function. Rejecting should always release the acquired mutex.
       const releaseMutexAndReject = (err?: any) => {
