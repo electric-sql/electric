@@ -142,8 +142,8 @@ defmodule Electric.Postgres.Extension do
         [] ->
           {:error, "no schema with version #{inspect(version)}"}
 
-        [{schema, version}] ->
-          with {:ok, schema} <- Proto.Schema.json_decode(schema) do
+        [{schema_json, version}] ->
+          with {:ok, schema} <- decode_schema_json(schema_json, conn) do
             {:ok, version, schema}
           end
       end
@@ -156,12 +156,32 @@ defmodule Electric.Postgres.Extension do
         [] ->
           {:ok, nil, Schema.new()}
 
-        [{schema, version}] ->
-          with {:ok, schema} <- Proto.Schema.json_decode(schema) do
+        [{schema_json, version}] ->
+          with {:ok, schema} <- decode_schema_json(schema_json, conn) do
             {:ok, version, schema}
           end
       end
     end
+  end
+
+  defp decode_schema_json(json, conn) do
+    with {:ok, schema} <- Proto.Schema.json_decode(json) do
+      {:ok, maybe_load_schema_types(schema, conn)}
+    end
+  end
+
+  # If the schema has no types, it must have been saved prior to the introduction of the `types` field on
+  # `Proto.Schema`. Load types at runtime as a workaround.
+  # This branch will become dead when another migration is processed by `MigrationConsumer`, causing a version
+  # of the schema with the `types` field included to be saved to the DB.
+  defp maybe_load_schema_types(%{types: type_map} = schema, conn) when map_size(type_map) == 0,
+    do: load_types_for_schema(schema, conn)
+
+  defp maybe_load_schema_types(schema, _conn), do: schema
+
+  defp load_types_for_schema(schema, conn) do
+    {column_type_names, types} = fetch_table_column_types(conn, schema.tables)
+    Schema.patch_column_types(schema, column_type_names, types)
   end
 
   def save_schema(conn, version, %Proto.Schema{} = schema, stmts) do
