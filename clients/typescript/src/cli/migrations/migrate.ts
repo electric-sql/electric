@@ -200,12 +200,14 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
 /**
  * Escapes file path for use in strings.
  * On Windows, replaces backslashes with double backslashes for string escaping.
- * 
+ *
  * @param {string} inputPath - The file path to escape.
  * @return {string} The escaped file path.
  */
 function escapePathForString(inputPath: string): string {
-  return process.platform === 'win32' ? inputPath.replace(/\\/g, '\\\\') : inputPath;
+  return process.platform === 'win32'
+    ? inputPath.replace(/\\/g, '\\\\')
+    : inputPath
 }
 
 /**
