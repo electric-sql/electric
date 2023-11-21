@@ -12,9 +12,15 @@
   </picture>
 </a>
 
-# ElectricSQL - Web example
+# ElectricSQL + Supabase (Postgres, Auth and Edge functions)
 
-This is an example web application using ElectricSQL in the browser with [wa-sqlite](https://github.com/rhashimoto/wa-sqlite).
+This is an example web application using ElectricSQL in the browser with [wa-sqlite](https://github.com/rhashimoto/wa-sqlite), using self hosted [Supabase](http://supabase.com) with it's auth and edge functions.
+
+It demonstrates including Electric in a self hosted Supabase install, sharing Supabase Auth JWT token with Electric to authenticate, and initiating an "edge function" from a trigger on a table for server side processing.
+
+`./backend/` is based on the standard [self-hosted Supabase docker setup](https://supabase.com/docs/guides/self-hosting/docker), and electric included at the end of the `docker-compose.yml'. 
+
+`./backend/volumes/functions/process/index.ts` is the edge function called from the trigger configured in `./db/migrations/02-create_process_item_trigger`, this demonstrates how server side processing of new records can be done.
 
 ## Instructions
 
@@ -22,7 +28,7 @@ Clone the [electric-sql/electric](https://github.com/electric-sql/electric) mono
 
 ```sh
 git clone https://github.com/electric-sql/electric
-cd electric/examples/web-wa-sqlite
+cd electric/examples/supabase-basic
 ```
 
 ## Pre-reqs
@@ -37,6 +43,8 @@ Install the dependencies:
 npm install
 ```
 
+If you need to change the configuration of ports, that can be done in `./backend/.env`
+
 ## Setup
 
 Start Postgres and Electric using Docker (see [running the examples](https://electric-sql.com/docs/examples/notes/running) for more options):
@@ -44,7 +52,6 @@ Start Postgres and Electric using Docker (see [running the examples](https://ele
 ```shell
 npm run backend:up
 # Or `npm run backend:start` to foreground
-```
 ```
 
 Setup your [database schema](https://electric-sql.com/docs/usage/data-modelling):
@@ -65,10 +72,10 @@ npm run client:generate
 Start your app:
 
 ```sh
-npm run start
+npm run dev
 ```
 
-Open [localhost:3001](http://localhost:3001) in your web browser.
+Open [localhost:3001](http://localhost:5173) in your web browser.
 
 ## Develop
 

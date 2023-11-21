@@ -100,7 +100,8 @@ const ExampleComponent = ({supabase}: ExampleComponentProps) => {
   const addItem = async () => {
     await db.items.create({
       data: {
-        value: genUUID(),
+        id: genUUID(),
+        status: 'submitted'
       }
     })
   }
@@ -126,7 +127,8 @@ const ExampleComponent = ({supabase}: ExampleComponentProps) => {
       </div>
       {items.map((item: Item, index: number) => (
         <p key={ index } className="item">
-          <code>{ item.value }</code>
+          <code>{ item.id }</code>
+          <code>{ item.status }</code>
         </p>
       ))}
     </div>

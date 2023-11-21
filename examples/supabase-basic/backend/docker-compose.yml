@@ -421,7 +421,7 @@ services:
       LOGICAL_PUBLISHER_HOST: electric
       AUTH_MODE: secure
       AUTH_JWT_ALG: HS256
-      AUTH_JWT_KEY: ${JWT_SECRET}
+      AUTH_JWT_KEY: ${JWT_SECRET} # Use the same JWT_SECRET as the rest of Supabase
     ports:
       - ${ELECTRIC_PORT:-5133}:5133
       - ${ELECTRIC_PROXY_PORT:-65432}:65432
