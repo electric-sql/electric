@@ -29,7 +29,7 @@
 [shell satellite_1]
     # Wait for the row to arrive
     [invoke node_await_get_enum "row1"]
-        
+
     [invoke node_get_enum "row1" "'RED'"]
 
     [invoke node_write_enum "row2" "'GREEN'"]
@@ -39,7 +39,7 @@
     [invoke node_get_enum "row3" null]
 
 [shell pg_1]
-    [invoke wait-for "SELECT * FROM public.enums;" "row1" 10 $psql]
+    [invoke wait-for "SELECT * FROM public.enums;" "row2" 10 $psql]
 
     !SELECT * FROM public.enums;
     ??row1 | RED
