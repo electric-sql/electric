@@ -39,24 +39,19 @@ export class ElectricDatabase {
     // otherwise wa-sqlite may encounter problems such as indices going out of bounds
     const release = await this.#mutex.acquire()
 
-    const str = this.sqlite3.str_new(this.db, statement.sql)
-    let prepared
+    let stmt: number | null = null
     try {
-      prepared = await this.sqlite3.prepare_v2(
+      const str = this.sqlite3.str_new(this.db, statement.sql)
+      const prepared = await this.sqlite3.prepare_v2(
         this.db,
         this.sqlite3.str_value(str)
       )
-    } finally {
-      release()
-    }
 
-    if (prepared === null) {
-      release()
-      return []
-    }
+      if (prepared === null) {
+        return []
+      }
 
-    const stmt = prepared.stmt
-    try {
+      stmt = prepared.stmt
       if (typeof statement.args !== 'undefined') {
         this.sqlite3.bind_collection(
           stmt,
@@ -81,7 +76,9 @@ export class ElectricDatabase {
       }
       return resultToRows(res)
     } finally {
-      await this.sqlite3.finalize(stmt)
+      if (stmt !== null) {
+        await this.sqlite3.finalize(stmt)
+      }
       release()
     }
   }
