@@ -6,12 +6,20 @@ import { genUUID, uniqueTabId } from 'electric-sql/util'
 import { ElectricDatabase, electrify } from 'electric-sql/wa-sqlite'
 import { SupabaseClient } from '@supabase/supabase-js'
 
-import { authToken } from './auth'
 import { Electric, Items as Item, schema } from './generated/client'
 
 import './Example.css'
 
 const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
+
+async function getSupabaseJWT(supabase: SupabaseClient) {
+  const {data} = await supabase.auth.getSession()
+  const token = data.session?.access_token
+  if (!token) {
+    throw new Error('No token')
+  }
+  return token
+}
 
 interface ExampleProps {
   supabase: SupabaseClient
@@ -20,16 +28,14 @@ interface ExampleProps {
 export const Example = ({supabase}: ExampleProps) => {
   const [ electric, setElectric ] = useState<Electric>()
 
-  console.log('supabase', supabase.auth)
-
   useEffect(() => {
     let isMounted = true
 
     const init = async () => {
+      const token = await getSupabaseJWT(supabase)
+
       const config = {
-        auth: {
-          token: authToken()
-        },
+        auth: { token },
         debug: import.meta.env.DEV,
         url: import.meta.env.ELECTRIC_URL ?? 'http://localhost:5133'
       }

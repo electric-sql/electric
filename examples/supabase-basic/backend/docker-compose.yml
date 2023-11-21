@@ -419,7 +419,7 @@ services:
       DATABASE_URL: postgresql://supabase_admin:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
       PG_PROXY_PASSWORD: proxy_password
       LOGICAL_PUBLISHER_HOST: electric
-      AUTH_MODE: insecure
+      AUTH_MODE: secure
       AUTH_JWT_ALG: HS256
       AUTH_JWT_KEY: ${JWT_SECRET}
     ports:
