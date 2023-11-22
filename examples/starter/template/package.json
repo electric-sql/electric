@@ -25,7 +25,7 @@
     "electric-sql": "latest",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "wa-sqlite": "rhashimoto/wa-sqlite"
+    "wa-sqlite": "rhashimoto/wa-sqlite#semver:^0.9.8"
   },
   "devDependencies": {
     "@databases/pg-migrations": "^5.0.2",

@@ -2307,9 +2307,9 @@ uuid@^9.0.0:
   resolved "https://registry.yarnpkg.com/uuid/-/uuid-9.0.0.tgz#592f550650024a38ceb0c562f2f6aa435761efb5"
   integrity sha512-MXcSTerfPa4uqyzStbRoTgt5XIe3x5+42+q1sDuy3R5MDk66URdLMOZe5aPX/SQd+kuYAh0FdP/pO28IkQyTeg==
 
-wa-sqlite@rhashimoto/wa-sqlite:
-  version "0.9.8"
-  resolved "https://codeload.github.com/rhashimoto/wa-sqlite/tar.gz/56628cec216432bfa67186766f02f503fae8471f"
+"wa-sqlite@rhashimoto/wa-sqlite#semver:^0.9.8":
+  version "0.9.9"
+  resolved "https://codeload.github.com/rhashimoto/wa-sqlite/tar.gz/5266fd8cdb4b3ced41352ba7b1f0e919ac37027a"
 
 walkjs@^3.2.4:
   version "3.2.4"
