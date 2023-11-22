@@ -27,3 +27,8 @@ yarn-error.log*
 
 # Optional eslint cache
 .eslintcache
+
+# Electric
+public/wa-sqlite-async.wasm
+public/wa-sqlite-async.mjs
+src/generated

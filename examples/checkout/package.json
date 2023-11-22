@@ -1,11 +1,20 @@
 {
   "name": "checkout",
-  "private": true,
-  "version": "0.0.1",
+  "author": "ElectricSQL",
+  "license": "Apache-2.0",
+  "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
+    "backend:start": "cd ./backend && docker compose up",
+    "backend:stop": "cd ./backend && docker compose stop",
+    "backend:restart": "cd ./backend && docker compose restart",
+    "backend:up": "cd ./backend && docker compose up -d",
+    "backend:down": "cd ./backend && docker compose -f docker-compose.yml -f ./dev/docker-compose.dev.yml down -v --remove-orphans",
+    "client:generate": "npx electric-sql generate --service http://localhost:5133 --proxy postgresql://prisma:proxy_password@localhost:65432/postgres",
+    "client:watch": "npm run client:generate --watch",
+    "db:migrate": "npx pg-migrations apply --database postgresql://postgres:proxy_password@localhost:65432/postgres --directory ./db/migrations",
+    "dev": "node copy-wasm-files.js && vite",
+    "build": "node copy-wasm-files.js && tsc && vite build",
     "preview": "vite preview",
     "test.e2e": "cypress run",
     "test.unit": "vitest",
@@ -21,14 +30,17 @@
     "@ionic/react-router": "^7.0.0",
     "@types/react-router": "^5.1.20",
     "@types/react-router-dom": "^5.3.3",
+    "electric-sql": "^0.7.0",
     "ionicons": "^7.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router": "^5.3.4",
-    "react-router-dom": "^5.3.4"
+    "react-router-dom": "^5.3.4",
+    "wa-sqlite": "rhashimoto/wa-sqlite"
   },
   "devDependencies": {
     "@capacitor/cli": "5.5.1",
+    "@electric-sql/prisma-generator": "^1.1.0",
     "@testing-library/dom": ">=7.21.4",
     "@testing-library/jest-dom": "^5.16.5",
     "@testing-library/react": "^14.0.0",
@@ -41,10 +53,10 @@
     "eslint": "^8.35.0",
     "eslint-plugin-react": "^7.32.2",
     "jsdom": "^22.1.0",
+    "prisma": "4.8.1",
     "terser": "^5.4.0",
     "typescript": "^5.1.6",
     "vite": "^4.3.9",
     "vitest": "^0.32.2"
-  },
-  "description": "An Ionic project"
+  }
 }
