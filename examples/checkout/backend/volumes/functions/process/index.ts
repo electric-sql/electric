@@ -2,7 +2,7 @@
 // https://deno.land/manual/getting_started/setup_your_environment
 // This enables autocomplete, go to definition, etc.
 
-import { serve } from "https://deno.land/std@0.177.1/http/server.ts"
+import { serve } from 'https://deno.land/std@0.177.1/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 function errorResponse(msg: string) {
@@ -13,15 +13,15 @@ function errorResponse(msg: string) {
 }
 
 async function asyncTimeout(ms: number) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 serve(async (request: Request) => {
-  let id: string | undefined;
-  if (request.method == "POST") {
-    const body = await request.text();
-    const data = JSON.parse(body);
-    id = data.id;
+  let id: string | undefined
+  if (request.method == 'POST') {
+    const body = await request.text()
+    const data = JSON.parse(body)
+    id = data.id
     if (!id) {
       return errorResponse('missing id in request')
     }
@@ -37,7 +37,7 @@ serve(async (request: Request) => {
   )
 
   const { data, error } = await supabaseClient
-    .from('items')
+    .from('orders')
     .select('*')
     .eq('id', id)
     .single()
@@ -46,28 +46,24 @@ serve(async (request: Request) => {
     return errorResponse(error.message)
   }
 
-  // if (data.status !== 'submitted') {
-  //   return errorResponse('item is not in submitted state')
-  // }
-
-  // Update the item status to 'processing'
+  // Update the item status to 'processingPayment'
   const { data: result, error: updateError } = await supabaseClient
-    .from('items')
-    .update({ status: 'processing' })
+    .from('orders')
+    .update({ status: 'processingPayment' })
     .eq('id', id)
     .single()
-  
-  await asyncTimeout(2500)
 
-  // Update the item status to 'processed'
+  // Simulate a payment processing delay
+  await asyncTimeout(1500)
+
+  // Update the item status to 'placed'
   const { data: result2, error: updateError2 } = await supabaseClient
-    .from('items')
-    .update({ status: 'complete' })
+    .from('orders')
+    .update({ status: 'placed' })
     .eq('id', id)
     .single()
 
-  return new Response(
-    JSON.stringify({ msg: 'ok' }),
-    { headers: { "Content-Type": "application/json" } },
-  )
+  return new Response(JSON.stringify({ msg: 'ok' }), {
+    headers: { 'Content-Type': 'application/json' },
+  })
 })

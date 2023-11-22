@@ -1,7 +1,7 @@
-DROP TRIGGER IF EXISTS "process_item_trigger" ON "public"."items";
-DROP FUNCTION IF EXISTS call_process_item_trigger();
+DROP TRIGGER IF EXISTS "process_order_trigger" ON "public"."orders";
+DROP FUNCTION IF EXISTS call_process_order_trigger();
 
-CREATE FUNCTION call_process_item_trigger() RETURNS trigger AS $$
+CREATE FUNCTION call_process_order_trigger() RETURNS trigger AS $$
 BEGIN
   PERFORM net.http_post(
     'http://kong:8000/functions/v1/process',
@@ -13,8 +13,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER "process_item_trigger" AFTER INSERT
-ON "public"."items" FOR EACH ROW
-EXECUTE FUNCTION call_process_item_trigger();
+CREATE TRIGGER "process_order_trigger" AFTER INSERT
+ON "public"."orders" FOR EACH ROW
+EXECUTE FUNCTION call_process_order_trigger();
 
-ALTER TABLE "public"."items" ENABLE ALWAYS TRIGGER process_item_trigger;
+ALTER TABLE "public"."orders" ENABLE ALWAYS TRIGGER process_order_trigger;

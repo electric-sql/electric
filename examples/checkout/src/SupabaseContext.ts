@@ -1,4 +1,9 @@
-import { createContext } from 'react';
-import { type SupabaseClient } from "@supabase/supabase-js";
+import { createContext } from 'react'
+import type { SupabaseClient, Session } from '@supabase/supabase-js'
 
-export const SupabaseContext = createContext<SupabaseClient | null>(null);
+interface SupabaseContextObject {
+  supabase: SupabaseClient
+  session: Session | null
+}
+
+export const SupabaseContext = createContext<SupabaseContextObject | null>(null)
