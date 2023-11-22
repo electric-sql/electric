@@ -246,6 +246,14 @@ We are working on providing detailed instructions for as many backend frameworks
 
 There are currently a number of limitations on the data models and migrations that ElectricSQL supports.
 
+### Default schema
+
+Only tables in the default schema named [`public`](https://www.postgresql.org/docs/14/ddl-schemas.html#DDL-SCHEMAS-PUBLIC) can be electrified at the moment. We are working on lifting this restriction.
+
+### Table names
+
+The client generator sanitises table names (because of an issue in an [external library](https://github.com/chrishoermann/zod-prisma-types/issues/121)) removing any prefix that is not a letter and treating the first letter as case insensitive. For example electrifying the tables `_myTable`, `123myTable`, `myTable`, and `MyTable` will all clash on table name, causing a generator error.
+
 ### Forward migrations
 
 We only currently support forward migrations. Rollbacks must be implemented as forward migrations.
@@ -256,9 +264,9 @@ We only currently support additive migrations. This means you can't remove or re
 
 In practice this means that we only support this subset of DDL actions:
 
-- `CREATE TABLE` and its associated `ALTER TABLE .. ENABLE ELECTRIC` call,
-- `ALTER TABLE electrified_table ADD COLUMN`, and
-- `CREATE INDEX ON electrified_table`, `DROP INDEX` -- indexes can be created and dropped because they don't affect the data within the electrified tables.
+- `CREATE TABLE` and its associated `ALTER TABLE <table name> ENABLE ELECTRIC` call,
+- `ALTER TABLE <electrified table> ADD COLUMN`, and
+- `CREATE INDEX ON <electrified table>`, `DROP INDEX` -- indexes can be created and dropped because they don't affect the data within the electrified tables.
 
 ### Data types and constraints
 
