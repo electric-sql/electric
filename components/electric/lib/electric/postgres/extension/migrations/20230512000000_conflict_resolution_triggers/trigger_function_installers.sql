@@ -508,19 +508,21 @@ BEGIN
         CREATE OR REPLACE TRIGGER postgres_write__upsert_generate_shadow_rows
         BEFORE INSERT OR UPDATE ON %s
         FOR EACH ROW
+        WHEN (electric.__session_replication_role() <> 'replica')
         EXECUTE PROCEDURE electric.%I();
     $$, full_table_identifier, generated_functions->>'create_shadow_row_from_upsert');
 
-    EXECUTE format($$ ALTER TABLE %s ENABLE TRIGGER postgres_write__upsert_generate_shadow_rows $$, full_table_identifier);
+    EXECUTE format($$ ALTER TABLE %s ENABLE ALWAYS TRIGGER postgres_write__upsert_generate_shadow_rows $$, full_table_identifier);
 
     EXECUTE format($$
         CREATE OR REPLACE TRIGGER postgres_write__delete_generate_shadow_rows
         BEFORE DELETE ON %s
         FOR EACH ROW
+        WHEN (electric.__session_replication_role() <> 'replica')
         EXECUTE PROCEDURE electric.%I();
     $$, full_table_identifier, generated_functions->>'update_shadow_row_from_delete');
 
-    EXECUTE format($$ ALTER TABLE %s ENABLE TRIGGER postgres_write__delete_generate_shadow_rows $$, full_table_identifier);
+    EXECUTE format($$ ALTER TABLE %s ENABLE ALWAYS TRIGGER postgres_write__delete_generate_shadow_rows $$, full_table_identifier);
 
     EXECUTE format($$ DROP TRIGGER IF EXISTS postgres_write__write_resolved_tags ON electric.%I $$, shadow_table_name);
     EXECUTE format($$
@@ -528,40 +530,40 @@ BEGIN
         AFTER UPDATE ON electric.%I
         DEFERRABLE INITIALLY DEFERRED
         FOR EACH ROW
-        WHEN (NOT NEW._resolved)
+        WHEN (electric.__session_replication_role() <> 'replica' AND NOT NEW._resolved)
         EXECUTE PROCEDURE electric.%I();
     $$, shadow_table_name, generated_functions->>'write_correct_max_tag');
 
-    EXECUTE format($$ ALTER TABLE electric.%I ENABLE TRIGGER postgres_write__write_resolved_tags $$, shadow_table_name);
+    EXECUTE format($$ ALTER TABLE electric.%I ENABLE ALWAYS TRIGGER postgres_write__write_resolved_tags $$, shadow_table_name);
 
     EXECUTE format($$
         CREATE OR REPLACE TRIGGER satellite_write__upsert_rows
         BEFORE INSERT ON electric.%I
         FOR EACH ROW
-        WHEN (pg_trigger_depth() < 1 AND NEW._currently_reordering IS NULL)
+        WHEN (electric.__session_replication_role() = 'replica' AND pg_trigger_depth() < 1 AND NEW._currently_reordering IS NULL)
         EXECUTE PROCEDURE electric.%I();
     $$, shadow_table_name, generated_functions->>'shadow_insert_to_upsert');
 
-    EXECUTE format($$ ALTER TABLE electric.%I ENABLE REPLICA TRIGGER satellite_write__upsert_rows $$, shadow_table_name);
+    EXECUTE format($$ ALTER TABLE electric.%I ENABLE ALWAYS TRIGGER satellite_write__upsert_rows $$, shadow_table_name);
 
     EXECUTE format($$
         CREATE OR REPLACE TRIGGER satellite_write__resolve_observed_tags
         BEFORE UPDATE ON electric.%I
         FOR EACH ROW
-        WHEN (NEW._currently_reordering IS NULL)
+        WHEN (electric.__session_replication_role() = 'replica' AND NEW._currently_reordering IS NULL)
         EXECUTE PROCEDURE electric.%I();
     $$, shadow_table_name, generated_functions->>'resolve_observed_tags');
 
-    EXECUTE format($$ ALTER TABLE electric.%I ENABLE REPLICA TRIGGER satellite_write__resolve_observed_tags $$, shadow_table_name);
+    EXECUTE format($$ ALTER TABLE electric.%I ENABLE ALWAYS TRIGGER satellite_write__resolve_observed_tags $$, shadow_table_name);
 
     EXECUTE format($$
         CREATE OR REPLACE TRIGGER satellite_write__save_operation_for_reordering
         BEFORE INSERT OR UPDATE ON %s
         FOR EACH ROW
-        WHEN (pg_trigger_depth() < 1) 
+        WHEN (electric.__session_replication_role() = 'replica' AND pg_trigger_depth() < 1)
         EXECUTE PROCEDURE electric.%I();
     $$, full_table_identifier, generated_functions->>'reorder_main_op');
 
-    EXECUTE format($$ ALTER TABLE %s ENABLE REPLICA TRIGGER satellite_write__save_operation_for_reordering $$, full_table_identifier);
+    EXECUTE format($$ ALTER TABLE %s ENABLE ALWAYS TRIGGER satellite_write__save_operation_for_reordering $$, full_table_identifier);
 END
 $function$;

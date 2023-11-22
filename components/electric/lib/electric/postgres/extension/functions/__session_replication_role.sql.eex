@@ -1,0 +1,7 @@
+CREATE OR REPLACE FUNCTION <%= @schema %>.__session_replication_role(OUT role text) AS $$
+BEGIN
+  SELECT INTO role current_setting('electric.session_replication_role');
+EXCEPTION WHEN undefined_object THEN
+  SELECT INTO role current_setting('session_replication_role');
+END;
+$$ LANGUAGE PLPGSQL;

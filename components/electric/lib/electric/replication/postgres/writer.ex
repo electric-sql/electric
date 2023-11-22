@@ -77,6 +77,7 @@ defmodule Electric.Replication.Postgres.Writer do
 
     conn_opts = Connectors.get_connection_opts(conn_config)
     {:ok, conn} = Client.connect(conn_opts)
+    {:ok, [], []} = :epgsql.squery(conn, "SET electric.session_replication_role = replica")
 
     {:consumer, %{conn: conn, origin: origin, producer_pid: nil}}
   end

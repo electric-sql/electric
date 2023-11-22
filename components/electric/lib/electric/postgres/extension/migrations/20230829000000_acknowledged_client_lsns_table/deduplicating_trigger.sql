@@ -21,7 +21,7 @@ $function$;
 CREATE OR REPLACE TRIGGER upsert_acknowledged_client_lsn
 BEFORE INSERT ON electric.acknowledged_client_lsns
 FOR EACH ROW
-WHEN (pg_trigger_depth() < 1)
+WHEN (electric.__session_replication_role() = 'replica' AND pg_trigger_depth() < 1)
 EXECUTE FUNCTION electric.upsert_acknowledged_client_lsn();
 
-ALTER TABLE electric.acknowledged_client_lsns ENABLE REPLICA TRIGGER upsert_acknowledged_client_lsn;
+ALTER TABLE electric.acknowledged_client_lsns ENABLE ALWAYS TRIGGER upsert_acknowledged_client_lsn;
