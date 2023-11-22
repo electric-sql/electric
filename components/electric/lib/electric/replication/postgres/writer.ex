@@ -46,6 +46,7 @@ defmodule Electric.Replication.Postgres.Writer do
 
     conn_opts = Connectors.get_connection_opts(conn_config)
     {:ok, conn} = Client.connect(conn_opts)
+    {:ok, [], []} = :epgsql.squery(conn, "SET electric.session_replication_role = replica")
 
     Logger.debug(
       "#{inspect(__MODULE__)} started, registered as #{inspect(name(origin))}, subscribed to #{inspect(producer_name)}"
