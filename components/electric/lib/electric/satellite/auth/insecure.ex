@@ -3,8 +3,8 @@ defmodule Electric.Satellite.Auth.Insecure do
   Implementation module of the "insecure" auth mode.
 
   This mode does not do any signature verification and treats the standard "iat", "exp", and "nbf" claims as optional.
-  The only claim it does require is "user_id" which can be either a top-level claim or nested under a configurable
-  namespace.
+  The only claim it does require is "sub" or "user_id" which can be either a top-level claim or nested under a
+  configurable namespace.
 
   You must opt in to using the "insecure" mode. We do not recommend to use it outside of development or local testing.
   As soon as you're ready to deploy Electric in any capacity, make sure to switch to the "secure" auth mode.
@@ -23,8 +23,8 @@ defmodule Electric.Satellite.Auth.Insecure do
 
   ## Options
 
-    * `namespace: <string>` - optional namespace under which the "user_id" claim will be looked up. If omitted,
-      "user_id" must be a top-level claim.
+    * `namespace: <string>` - optional namespace under which the "sub" or "user_id" claim will be looked up. If omitted,
+      "sub" or "user_id" must be a top-level claim.
   """
   @spec build_config(Access.t()) :: map
   def build_config(opts) do
