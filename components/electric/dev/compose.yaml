@@ -12,6 +12,7 @@ services:
       - "54321:5432"
     volumes:
       - ./postgres.conf:/etc/postgresql.conf:ro
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     entrypoint:
       - docker-entrypoint.sh
       - -c

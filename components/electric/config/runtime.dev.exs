@@ -17,7 +17,7 @@ config :electric, Electric.Replication.Connectors,
       host: ~c"localhost",
       port: 54321,
       database: ~c"electric",
-      username: ~c"postgres",
+      username: ~c"min_privilege",
       password: ~c"password",
       replication: ~c"database",
       ssl: false
@@ -43,3 +43,5 @@ config :electric, Electric.Replication.Connectors,
 enable_proxy_tracing? = System.get_env("PROXY_TRACING_ENABLE", "false") in ["yes", "true"]
 
 config :electric, Electric.Postgres.Proxy.Handler.Tracing, enable: enable_proxy_tracing?
+
+config :electric, write_mode: :immediate
