@@ -198,6 +198,19 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
 }
 
 /**
+ * Escapes file path for use in strings.
+ * On Windows, replaces backslashes with double backslashes for string escaping.
+ *
+ * @param {string} inputPath - The file path to escape.
+ * @return {string} The escaped file path.
+ */
+function escapePathForString(inputPath: string): string {
+  return process.platform === 'win32'
+    ? inputPath.replace(/\\/g, '\\\\')
+    : inputPath
+}
+
+/**
  * Creates a fresh Prisma schema in the provided folder.
  * The Prisma schema is initialised with a generator and a datasource.
  */
@@ -219,8 +232,8 @@ async function createPrismaSchema(
     }
 
     generator electric {
-      provider      = "${provider}"
-      output        = "${output}"
+      provider      = "${escapePathForString(provider)}"
+      output        = "${escapePathForString(output)}"
       relationModel = "false"
     }
 
