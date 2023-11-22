@@ -66,7 +66,7 @@
     "tiptap-markdown": "^0.8.2",
     "uuid": "^9.0.0",
     "vite-plugin-svgr": "^3.2.0",
-    "wa-sqlite": "github:rhashimoto/wa-sqlite#master",
+    "wa-sqlite": "rhashimoto/wa-sqlite#semver:^0.9.8",
     "zod": "^3.22.2"
   },
   "devDependencies": {

@@ -49,7 +49,7 @@
     "react-router": "^5.3.4",
     "react-router-dom": "^5.3.4",
     "uuid": "^9.0.0",
-    "wa-sqlite": "rhashimoto/wa-sqlite"
+    "wa-sqlite": "rhashimoto/wa-sqlite#semver:^0.9.8"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.0",
