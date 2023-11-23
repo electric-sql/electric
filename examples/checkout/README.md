@@ -14,7 +14,13 @@
 
 # Checkout ElectricSQL + Supabase Example
 
-This is an example web application using ElectricSQL in the browser with [wa-sqlite](https://github.com/rhashimoto/wa-sqlite), using self hosted [Supabase](http://supabase.com) with it's auth and edge functions.
+This is an example web application using ElectricSQL in the browser with [wa-sqlite](https://github.com/rhashimoto/wa-sqlite), using [Supabase](http://supabase.com) with it's auth and edge functions, and the [Ionic Framework](http://ionicframework.com) for the UI.
+
+Supabase Auth is used to register and sign in a user, the Supabase JWT is then used to establish a connection with Electric.
+
+A Supabase Edge Function is used to process the card payment on submission of the checkout. The card details would be converted to a token by a payment provider and attached to the order record, there is then a trigger on the `order` table. When a new order is inserted it calls a edge function to process the order updating it's status in real time and syncing that with the visitors local checkout.
+
+Included in the repo is a docker compose setup than enables you to run Supabase locally with Electric - the instructions below start this for development.
 
 ## Instructions
 
