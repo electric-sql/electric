@@ -37,26 +37,23 @@ export class ElectricDatabase {
   async exec(statement: Statement): Promise<Row[]> {
     // Uses a mutex to ensure that the execution of SQL statements is not interleaved
     // otherwise wa-sqlite may encounter problems such as indices going out of bounds
+    // all calls to wa-sqlite need to be coordinated through this mutex
     const release = await this.#mutex.acquire()
-
-    const str = this.sqlite3.str_new(this.db, statement.sql)
-    let prepared
     try {
-      prepared = await this.sqlite3.prepare_v2(
-        this.db,
-        this.sqlite3.str_value(str)
-      )
+      // Need to wrap all sqlite statements in a try..finally block
+      // that releases the lock at the very end, even if an error occurs
+      return await this.execSql(statement)
     } finally {
       release()
     }
+  }
 
-    if (prepared === null) {
-      release()
-      return []
-    }
-
-    const stmt = prepared.stmt
-    try {
+  // Calls to this method must always be coordinated through the mutex
+  private async execSql(statement: Statement): Promise<Row[]> {
+    // `statements` is a convenience function that manages statement compilation
+    // such that we don't have to prepare and finalize statements ourselves
+    // cf. https://rhashimoto.github.io/wa-sqlite/docs/interfaces/SQLiteAPI.html#statements
+    for await (const stmt of this.sqlite3.statements(this.db, statement.sql)) {
       if (typeof statement.args !== 'undefined') {
         this.sqlite3.bind_collection(
           stmt,
@@ -65,25 +62,20 @@ export class ElectricDatabase {
             | SQLiteCompatibleType[]
         )
       }
-
       const rows: SqlValue[][] = []
       let cols: string[] = []
-
       while ((await this.sqlite3.step(stmt)) === SQLite.SQLITE_ROW) {
         cols = cols.length === 0 ? this.sqlite3.column_names(stmt) : cols
         const row = this.sqlite3.row(stmt) as SqlValue[]
         rows.push(row)
       }
-
       const res = {
         columns: cols,
         values: rows,
       }
-      return resultToRows(res)
-    } finally {
-      await this.sqlite3.finalize(stmt)
-      release()
+      return resultToRows(res) // exit loop after one statement
     }
+    return [] // will get here only if there is no statement
   }
 
   getRowsModified() {
