@@ -4,7 +4,7 @@ defmodule Electric.Satellite.Auth.Secure do
 
   This mode requires auth tokens to be signed. It also checks for the presence of at least "iat" and "exp" claims. If
   you include values for "iss" and/or "aud" claims in your configuration, those will also be enforced. A "sub" or
-  "user_id" claims must also be present, either at the top level or under a configurable namespace.
+  "user_id" claim must also be present, either at the top level or under a configurable namespace.
 
   Auth tokens must use the same signing algorithm as the one configured in Electric.
 
