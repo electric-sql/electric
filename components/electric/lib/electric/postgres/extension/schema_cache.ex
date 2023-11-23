@@ -379,6 +379,7 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   end
 
   def handle_call({:internal_relation, relation}, _from, state) do
+    state = load_internal_schema(state)
     {:reply, Schema.table_info(state.internal_schema, relation), state}
   end
 
