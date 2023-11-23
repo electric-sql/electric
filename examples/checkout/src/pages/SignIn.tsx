@@ -15,7 +15,7 @@ import Logo from '../assets/logo.svg'
 const SignIn: React.FC = () => {
   const { supabase } = useContext(SupabaseContext)!
   return (
-    <IonPage>
+    <>
       <IonHeader>
         <IonToolbar>
           <IonTitle>
@@ -53,7 +53,7 @@ const SignIn: React.FC = () => {
           />
         </div>
       </IonContent>
-    </IonPage>
+    </>
   )
 }
 

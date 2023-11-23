@@ -33,7 +33,11 @@ import BasketCount from './components/BasketCount'
 import { SupabaseContext } from './SupabaseContext'
 import { getSupabaseJWT } from './utils'
 
-const MainRoutes = () => {
+interface MainRoutesProps {
+  onElectricLoaded: () => void
+}
+
+const MainRoutes = ({onElectricLoaded}: MainRoutesProps) => {
   const [electric, setElectric] = useState<Electric>()
   const { supabase } = useContext(SupabaseContext)!
 
@@ -82,6 +86,7 @@ const MainRoutes = () => {
         return
       }
 
+      onElectricLoaded()
       setElectric(electric)
     }
 
@@ -90,7 +95,7 @@ const MainRoutes = () => {
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [supabase])
 
   if (electric === undefined) {
     return null

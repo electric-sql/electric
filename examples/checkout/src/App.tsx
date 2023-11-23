@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { IonApp, setupIonicReact } from '@ionic/react'
+import { IonApp, setupIonicReact, IonAlert } from '@ionic/react'
 import { createClient, Session } from '@supabase/supabase-js'
 
 import SignIn from './pages/SignIn'
@@ -34,6 +34,7 @@ const supabase = createClient(supabaseUrl, anonKey)
 
 const App: React.FC = () => {
   const [session, setSession] = useState<Session | null>(null)
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -44,7 +45,16 @@ const App: React.FC = () => {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session)
+      if (session) {
+        setLoading(true)
+        setTimeout(() => {
+          // There is an issue with clock drift and the JWT being invalid
+          // this is a hackey workaround for now
+          setSession(session)
+        }, 700)
+      } else {
+        setSession(null)
+      }
     })
 
     return () => subscription.unsubscribe()
@@ -57,7 +67,18 @@ const App: React.FC = () => {
         session,
       }}
     >
-      <IonApp>{session ? <MainRoutes /> : <SignIn />}</IonApp>
+      <IonApp>
+        {session ? (
+          <MainRoutes onElectricLoaded={() => setLoading(false)} />
+        ) : (
+          <SignIn />
+        )}
+        <IonAlert
+          isOpen={loading}
+          message="Loading Store..."
+          backdropDismiss={false}
+        />
+      </IonApp>
     </SupabaseContext.Provider>
   )
 }
