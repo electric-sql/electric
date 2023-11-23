@@ -101,10 +101,10 @@ export const relations = {
       },
     ],
   },
-  floatTable: {
+  mergeTable: {
     id: 3,
     schema: 'public',
-    table: 'floatTable',
+    table: 'mergeTable',
     tableType: 0,
     columns: [
       {
@@ -114,8 +114,20 @@ export const relations = {
         primaryKey: true,
       },
       {
-        name: 'value',
+        name: 'real',
         type: 'REAL',
+        isNullable: true,
+        primaryKey: false,
+      },
+      {
+        name: 'int8',
+        type: 'INT8',
+        isNullable: true,
+        primaryKey: false,
+      },
+      {
+        name: 'bigint',
+        type: 'BIGINT',
         isNullable: true,
         primaryKey: false,
       },

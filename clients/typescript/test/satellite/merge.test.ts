@@ -1,4 +1,4 @@
-import test from 'ava'
+import test, { ExecutionContext } from 'ava'
 import { mergeEntries } from '../../src/satellite/merge'
 import {
   OplogEntry,
@@ -54,67 +54,77 @@ test('merging entries: local no-op updates should cancel incoming delete', (t) =
 })
 
 test('merge can handle infinity values', (t) => {
-  const pk = primaryKeyToStr({ id: 1 })
+  _mergeTableTest(t, {
+    initial: { real: Infinity },
+    incoming: { real: -Infinity },
+    expected: { real: -Infinity },
+  })
+})
 
-  const to_commit_timestamp = (timestamp: string): Long =>
-    Long.UZERO.add(new Date(timestamp).getTime())
+test('merge can handle NaN values', (t) => {
+  _mergeTableTest(t, {
+    initial: { real: 5.0 },
+    incoming: { real: NaN },
+    expected: { real: NaN },
+  })
+})
 
-  const tx1: DataTransaction = {
-    lsn: DEFAULT_LOG_POS,
-    commit_timestamp: to_commit_timestamp('1970-01-02T03:46:41.000Z'),
-    changes: [
-      {
-        relation: relations.floatTable,
-        type: DataChangeType.INSERT,
-        record: { id: 1, value: +Infinity },
-        tags: [],
-      },
-    ],
-  }
+test('merge can handle BigInt (INT8 pgtype) values', (t) => {
+  // Big ints are serialized as strings in the oplog
+  _mergeTableTest(t, {
+    initial: { int8: '3' },
+    incoming: { int8: '9223372036854775807' },
+    expected: { int8: BigInt('9223372036854775807') },
+  })
+})
 
-  const tx2: DataTransaction = {
-    lsn: DEFAULT_LOG_POS,
-    commit_timestamp: to_commit_timestamp('1970-01-02T03:46:42.000Z'),
-    changes: [
-      {
-        relation: relations.floatTable,
-        type: DataChangeType.INSERT,
-        record: { id: 1, value: -Infinity },
-        tags: [],
-      },
-    ],
-  }
-
-  // we go through `fromTransaction` on purpose
-  // in order to also test serialisation/deserialisation of the rows
-  const entry1: OplogEntry[] = fromTransaction(tx1, relations)
-  const entry2: OplogEntry[] = fromTransaction(tx2, relations)
-
-  const merged = mergeEntries('local', entry1, 'remote', entry2, relations)
-
-  // tx2 should win because tx1 and tx2 happened concurrently
-  // but the timestamp of tx2 > tx1
-  t.like(merged, { 'main.floatTable': { [pk]: { optype: 'UPSERT' } } })
-  t.deepEqual(merged['main.floatTable'][pk].fullRow, {
-    id: 1,
-    value: -Infinity,
+test('merge can handle BigInt (BIGINT pgtype) values', (t) => {
+  // Big ints are serialized as strings in the oplog
+  _mergeTableTest(t, {
+    initial: { bigint: '-5' },
+    incoming: { bigint: '-9223372036854775808' },
+    expected: { bigint: BigInt('-9223372036854775808') },
   })
 })
 
 const to_commit_timestamp = (timestamp: string): Long =>
   Long.UZERO.add(new Date(timestamp).getTime())
 
-test('merge can handle NaN values', (t) => {
-  const pk = primaryKeyToStr({ id: 1 })
+/**
+ * Merges two secuential transactions over the same row
+ * and checks that the value is merged correctly
+ * The operation is over the "mergeTable" table in the
+ * database schema
+ */
+function _mergeTableTest(
+  t: ExecutionContext,
+  opts: {
+    initial: Record<string, unknown>
+    incoming: Record<string, unknown>
+    expected: Record<string, unknown>
+  }
+) {
+  if (opts.initial.id !== undefined) {
+    throw new Error('id must not be provided in initial')
+  }
+  if (opts.incoming.id !== undefined) {
+    throw new Error('id must not be provided in incoming')
+  }
+  if (opts.expected.id !== undefined) {
+    throw new Error('id must not be provided in expected')
+  }
+
+  const pkId = 1
+  const pk = primaryKeyToStr({ id: pkId })
 
   const tx1: DataTransaction = {
     lsn: DEFAULT_LOG_POS,
     commit_timestamp: to_commit_timestamp('1970-01-02T03:46:41.000Z'),
     changes: [
       {
-        relation: relations.floatTable,
+        relation: relations.mergeTable,
         type: DataChangeType.INSERT,
-        record: { id: 1, value: 5.0 },
+        record: { ...opts.initial, id: pkId },
         tags: [],
       },
     ],
@@ -125,9 +135,9 @@ test('merge can handle NaN values', (t) => {
     commit_timestamp: to_commit_timestamp('1970-01-02T03:46:42.000Z'),
     changes: [
       {
-        relation: relations.floatTable,
+        relation: relations.mergeTable,
         type: DataChangeType.INSERT,
-        record: { id: 1, value: NaN },
+        record: { ...opts.incoming, id: pkId },
         tags: [],
       },
     ],
@@ -142,9 +152,13 @@ test('merge can handle NaN values', (t) => {
 
   // tx2 should win because tx1 and tx2 happened concurrently
   // but the timestamp of tx2 > tx1
-  t.like(merged, { 'main.floatTable': { [pk]: { optype: 'UPSERT' } } })
-  t.deepEqual(merged['main.floatTable'][pk].fullRow, { id: 1, value: NaN })
-})
+  t.like(merged, { 'main.mergeTable': { [pk]: { optype: 'UPSERT' } } })
+
+  t.deepEqual(merged['main.mergeTable'][pk].fullRow, {
+    ...opts.expected,
+    id: pkId,
+  })
+}
 
 test('merge works on oplog entries', (t) => {
   const db = new Database(':memory:')
