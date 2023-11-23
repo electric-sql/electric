@@ -167,7 +167,7 @@ test('merge works on oplog entries', (t) => {
   migrateDb(db, personTable)
 
   // Insert a row in the table
-  const insertRowSQL = `INSERT INTO ${personTable.tableName} (id, name, age, bmi) VALUES (9e999, 'John Doe', 30, 25.5)`
+  const insertRowSQL = `INSERT INTO ${personTable.tableName} (id, name, age, bmi, int8) VALUES (9e999, 'John Doe', 30, 25.5, 7)`
   db.exec(insertRowSQL)
 
   // Fetch the oplog entry for the inserted row
@@ -188,7 +188,14 @@ test('merge works on oplog entries', (t) => {
       {
         relation: relations[personTable.tableName as keyof typeof relations],
         type: DataChangeType.INSERT,
-        record: { age: 30, bmi: 8e888, id: 9e999, name: 'John Doe' }, // fields must be ordered alphabetically to match the behavior of the triggers
+        record: {
+          // fields must be ordered alphabetically to match the behavior of the triggers
+          age: 30,
+          bmi: 8e888,
+          id: 9e999,
+          int8: '224', // Big ints are serialized as strings in the oplog
+          name: 'John Doe',
+        },
         tags: [],
       },
     ],
@@ -214,5 +221,6 @@ test('merge works on oplog entries', (t) => {
     name: 'John Doe',
     age: 30,
     bmi: Infinity,
+    int8: 224n,
   })
 })

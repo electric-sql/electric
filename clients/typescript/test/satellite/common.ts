@@ -163,6 +163,12 @@ export const relations = {
         isNullable: true,
         primaryKey: false,
       },
+      {
+        name: 'int8',
+        type: 'INT8',
+        isNullable: true,
+        primaryKey: false,
+      },
     ],
   },
 }
@@ -261,7 +267,7 @@ export const cleanAndStopSatellite = async (
 export function migrateDb(db: SqliteDB, table: Table) {
   const tableName = table.tableName
   // Create the table in the database
-  const createTableSQL = `CREATE TABLE ${tableName} (id REAL PRIMARY KEY, name TEXT, age INTEGER, bmi REAL)`
+  const createTableSQL = `CREATE TABLE ${tableName} (id REAL PRIMARY KEY, name TEXT, age INTEGER, bmi REAL, int8 INTEGER)`
   db.exec(createTableSQL)
 
   // Apply the initial migration on the database
@@ -282,7 +288,7 @@ export function migrateDb(db: SqliteDB, table: Table) {
 export const personTable: Table = {
   namespace: 'main',
   tableName: 'personTable',
-  columns: ['id', 'name', 'age', 'bmi'],
+  columns: ['id', 'name', 'age', 'bmi', 'int8'],
   primary: ['id'],
   foreignKeys: [],
   columnTypes: {
@@ -290,5 +296,6 @@ export const personTable: Table = {
     name: { sqliteType: 'TEXT', pgType: PgBasicType.PG_TEXT },
     age: { sqliteType: 'INTEGER', pgType: PgBasicType.PG_INTEGER },
     bmi: { sqliteType: 'REAL', pgType: PgBasicType.PG_REAL },
+    int8: { sqliteType: 'INTEGER', pgType: PgBasicType.PG_INT8 },
   },
 }
