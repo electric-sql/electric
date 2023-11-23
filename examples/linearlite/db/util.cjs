@@ -8,12 +8,12 @@ shell.config.silent = true // don't log output of child processes
 // the proxy port which should be used for all DB connections
 // that intend to use the DDLX syntax extension of SQL.
 const appName = fetchAppName() ?? 'electric'
-const proxyPort = fetchHostProxyPortElectric() ?? 65432
+const proxyPort = 65432 //fetchHostProxyPortElectric() ?? 65432
 const dbUser = 'postgres'
-const proxyPassword = 'proxy_password'
+const proxyPassword = 'password'
 
 // URL to use when connecting to the proxy from the host OS
-const DATABASE_URL = buildDatabaseURL(dbUser, proxyPassword, 'localhost', proxyPort, appName)
+const DATABASE_URL = buildDatabaseURL(dbUser, proxyPassword, '127.0.0.1', proxyPort, 'electric')
 
 // URL to use when connecting to the proxy from a Docker container. This is used when `psql` is exec'd inside the
 // `postgres` service's container to connect to the poxy running in the `electric` service's container.

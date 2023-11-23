@@ -8,20 +8,20 @@ shell.config.silent = true // don't log output of child processes
 // the proxy port which should be used for all DB connections
 // that intend to use the DDLX syntax extension of SQL.
 const appName = fetchAppName() ?? 'electric'
-const proxyPort = fetchHostProxyPortElectric() ?? 65432
+const proxyPort = 65432 //fetchHostProxyPortElectric() ?? 65432
 const dbUser = 'postgres'
-const proxyPassword = 'proxy_password'
+const proxyPassword = 'password'
 
 // URL to use when connecting to the proxy from the host OS
-const DATABASE_URL = buildDatabaseURL(dbUser, proxyPassword, 'localhost', proxyPort, appName)
+const DATABASE_URL = buildDatabaseURL(dbUser, proxyPassword, '127.0.0.1', proxyPort, 'electric')
 
 // URL to use when connecting to the proxy from a Docker container. This is used when `psql` is exec'd inside the
 // `postgres` service's container to connect to the poxy running in the `electric` service's container.
-const CONTAINER_DATABASE_URL = buildDatabaseURL(dbUser, proxyPassword, 'electric', 65432, appName)
+const CONTAINER_DATABASE_URL = buildDatabaseURL(dbUser, proxyPassword, 'electric', 65432, 'electric')
 
 // URL to display in the terminal for informational purposes. It omits the password but is still a valid URL that can be
 // passed to `psql` running on the host OS.
-const PUBLIC_DATABASE_URL = buildDatabaseURL(dbUser, null, 'localhost', proxyPort, appName)
+const PUBLIC_DATABASE_URL = buildDatabaseURL(dbUser, null, 'localhost', proxyPort, 'electric')
 
 function buildDatabaseURL(user, password, host, port, dbName) {
   let url = 'postgresql://' + user

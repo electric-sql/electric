@@ -9,7 +9,7 @@
     "backend:stop": "docker compose --env-file backend/compose/.envrc -f backend/compose/docker-compose.yaml stop",
     "backend:up": "yarn backend:start --detach",
     "backend:down": "docker compose --env-file backend/compose/.envrc -f backend/compose/docker-compose.yaml down --volumes",
-    "client:generate": "yarn electric:check && npx electric-sql generate --service http://localhost:5133 --proxy postgresql://prisma:proxy_password@localhost:65432/electric",
+    "client:generate": "npx electric-sql generate --service http://127.0.0.1:5133 --proxy postgresql://prisma:password@127.0.0.1:65432/electric",
     "client:watch": "yarn client:generate --watch",
     "db:migrate": "node ./db/migrate.js",
     "db:psql": "node ./db/connect.js",
@@ -18,7 +18,7 @@
     "electric:check": "node ./check-electric-is-running.js",
     "build": "node copy-wasm-files.js && node builder.js",
     "build-prod": "NODE_ENV=production npm run build",
-    "start": "yarn electric:check && SERVE=true npm run build"
+    "start": "SERVE=true npm run build"
   },
   "engines": {
     "node": ">=16.11.0"
