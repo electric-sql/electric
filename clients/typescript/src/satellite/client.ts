@@ -235,14 +235,14 @@ export class SatelliteClient implements Client {
               `socket error but no listener is attached: ${error.message}`
             )
           }
-          this.emitter.emit('error', error)
+          this.emitter.enqueueEmit('error', error)
         })
         this.socket.onClose(() => {
           this.disconnect()
           if (this.emitter.listenerCount('error') === 0) {
             Log.error(`socket closed but no listener is attached`)
           }
-          this.emitter.emit(
+          this.emitter.enqueueEmit(
             'error',
             new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket closed')
           )
@@ -677,10 +677,10 @@ export class SatelliteClient implements Client {
         { leading: true, trailing: true }
       )
 
-      this.emitter.emit('outbound_started', message.lsn)
+      this.emitter.enqueueEmit('outbound_started', message.lsn)
       return SatInStartReplicationResp.create()
     } else {
-      this.emitter.emit(
+      this.emitter.enqueueEmit(
         'error',
         new SatelliteError(
           SatelliteErrorCode.UNEXPECTED_STATE,
@@ -705,7 +705,7 @@ export class SatelliteClient implements Client {
 
       return SatInStopReplicationResp.create()
     } else {
-      this.emitter.emit(
+      this.emitter.enqueueEmit(
         'error',
         new SatelliteError(
           SatelliteErrorCode.UNEXPECTED_STATE,
@@ -735,7 +735,7 @@ export class SatelliteClient implements Client {
 
   private handleRelation(message: SatRelation) {
     if (this.inbound.isReplicating !== ReplicationStatus.ACTIVE) {
-      this.emitter.emit(
+      this.emitter.enqueueEmit(
         'error',
         new SatelliteError(
           SatelliteErrorCode.UNEXPECTED_STATE,
@@ -761,7 +761,7 @@ export class SatelliteClient implements Client {
     }
 
     this.inbound.relations.set(relation.id, relation)
-    this.emitter.emit('relation', relation)
+    this.emitter.enqueueEmit('relation', relation)
   }
 
   private handleTransaction(message: SatOpLog) {
@@ -779,7 +779,7 @@ export class SatelliteClient implements Client {
   }
 
   private handleError(error: SatErrorResp) {
-    this.emitter.emit('error', serverErrorToSatelliteError(error))
+    this.emitter.enqueueEmit('error', serverErrorToSatelliteError(error))
   }
 
   private handleSubscription(msg: SatSubsResp): SubscribeResponse {
@@ -856,7 +856,7 @@ export class SatelliteClient implements Client {
       if (error instanceof SatelliteError) {
         // subscription errors are emitted through specific event
         if (!subscriptionError.includes(error.code)) {
-          this.emitter.emit('error', error)
+          this.emitter.enqueueEmit('error', error)
         }
       } else {
         // This is an unexpected runtime error
@@ -889,7 +889,7 @@ export class SatelliteClient implements Client {
           origin,
           migrationVersion,
         }
-        this.emitter.emit(
+        this.emitter.enqueueEmit(
           'transaction',
           transaction,
           () => (this.inbound.last_lsn = transaction.lsn)

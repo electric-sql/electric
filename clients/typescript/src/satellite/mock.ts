@@ -228,7 +228,7 @@ export class MockSatelliteClient
 
     return new Promise((resolve) => {
       const emit = () => {
-        this.emit(SUBSCRIPTION_DELIVERED, {
+        this.enqueueEmit(SUBSCRIPTION_DELIVERED, {
           subscriptionId,
           lsn: base64.toBytes('MTIz'), // base64.encode("123")
           data,
@@ -316,7 +316,7 @@ export class MockSatelliteClient
     this.replicating = true
     this.inboundAck = lsn
 
-    const t = setTimeout(() => this.emit('outbound_started', lsn), 100)
+    const t = setTimeout(() => this.enqueueEmit('outbound_started', lsn), 100)
     this.timeouts.push(t)
 
     if (lsn && bytesToNumber(lsn) == MOCK_BEHIND_WINDOW_LSN) {
@@ -389,7 +389,7 @@ export class MockSatelliteClient
       })
 
       const satError = subsDataErrorToSatelliteError(satSubsError)
-      this.emit(SUBSCRIPTION_ERROR, satError, subscriptionId)
+      this.enqueueEmit(SUBSCRIPTION_ERROR, satError, subscriptionId)
     }, timeout)
   }
 }

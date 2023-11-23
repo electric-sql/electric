@@ -2,6 +2,11 @@ type EventMap = {
   [key: string]: (...args: any[]) => void | Promise<void>
 }
 
+type EmittedEvent<Event, Arg> = {
+  event: Event
+  args: Arg[]
+}
+
 /**
  * Implementation of a typed async event emitter.
  * (Asynchronous) event listeners are called in order and awaited
@@ -13,6 +18,11 @@ export class AsyncEventEmitter<Events extends EventMap> {
   private listeners: {
     [E in keyof Events]?: Array<Events[E]>
   } = {}
+
+  private eventQueue: Array<
+    EmittedEvent<keyof Events, Parameters<Events[keyof Events]>>
+  > = []
+  private processing = false // indicates whether the event queue is currently being processed
 
   private getListeners<E extends keyof Events>(event: E): Array<Events[E]> {
     return this.listeners[event] ?? []
@@ -32,6 +42,7 @@ export class AsyncEventEmitter<Events extends EventMap> {
 
   /**
    * Adds the listener function to the end of the listeners array for the given event.
+   * The listeners will be called in order but if they are asynchronous they may run concurrently.
    * No checks are made to see if the listener has already been added.
    * Multiple calls passing the same combination of event and listener will result in the listener being added, and called, multiple times.
    * @param event The event to add the listener to.
@@ -51,6 +62,7 @@ export class AsyncEventEmitter<Events extends EventMap> {
 
   /**
    * Adds the listener function to the beginning of the listeners array for the given event.
+   * The listeners will be called in order but if they are asynchronous they may run concurrently.
    * No checks are made to see if the listener has already been added.
    * Multiple calls passing the same combination of event and listener will result in the listener being added, and called, multiple times.
    * @param event The event to prepend the listener to.
@@ -104,37 +116,69 @@ export class AsyncEventEmitter<Events extends EventMap> {
   }
 
   /**
-   * Emits an event to all listeners.
-   * Calls and awaits each of the listeners registered for the event named `event`, in the order they were registered, passing the supplied arguments to each.
+   * This synchronous method processes the queue ASYNCHRONOUSLY.
+   * IMPORTANT: When this process returns, the queue may still being processed by some asynchronous listeners.
+   * When all listeners (including async listeners) have finished processing the events from the queue,
+   * the `this.processing` flag is set to `false`.
+   *
    * If the event emitter does not have at least one listener registered for the 'error' event,
    * and an 'error' event is emitted, the error is thrown.
+   */
+  private processQueue() {
+    this.processing = true
+
+    const emittedEvent = this.eventQueue.shift()
+    if (emittedEvent) {
+      // We call all listeners and process the next event when all listeners finished.
+      // The listeners are not awaited so async listeners may execute concurrently.
+      // However, we only process the next event once all listeners for this event have settled
+      // this ensures that async listeners for distinct events do not run concurrently.
+      // If there are no other events, the recursive call will enter the else branch below
+      // and mark the queue as no longer being processed.
+      const { event, args } = emittedEvent
+      const listeners = this.getListeners(event)
+
+      if (event === 'error' && listeners.length === 0) {
+        this.processing = false
+        throw args[0]
+      }
+
+      // deep copy because once listeners mutate the `this.listeners` array as they remove themselves
+      // which breaks the `map` which iterates over that same array while the contents may shift
+      const ls = [...listeners]
+      const listenerProms = ls.map((listener) => listener(...args))
+
+      Promise
+        // wait for all listeners to finish,
+        // some may fail (i.e.return a rejected promise)
+        // but that should not stop the queue from being processed
+        // hence the use of `allSettled` rather than `all`
+        .allSettled(listenerProms)
+        .then(() => this.processQueue()) // only process the next event when all listeners have finished
+    } else {
+      // signal that the queue is no longer being processed
+      this.processing = false
+    }
+  }
+
+  /**
+   * Enqueues an event to be processed by its listeners.
+   * Calls each of the listeners registered for the event named `event` in order.
+   * If several asynchronous listeners are registered for this event, they may run concurrently.
+   * However, all (asynchronous) listeners are guaranteed to execute before the next event is processed.
+   * If the `error` event is emitted and the emitter does not have at least one listener registered for it,
+   * the error is thrown.
    * @param event The event to emit.
    * @param args The arguments to pass to the listeners.
-   * @returns A promise that is resolved  `true` if the event had listeners, `false` otherwise.
    */
-  async emit<E extends keyof Events>(
+  enqueueEmit<E extends keyof Events>(
     event: E,
     ...args: Parameters<Events[E]>
-  ): Promise<boolean> {
-    const listeners = this.getListeners(event)
-
-    if (event === 'error' && listeners.length === 0) {
-      throw args[0]
+  ) {
+    this.eventQueue.push({ event, args })
+    if (!this.processing) {
+      this.processQueue()
     }
-
-    // while iterating through the listeners
-    // the `once` listeners will remove themselves from the array of listeners
-    // which causes the array to be re-indexed and the next listener to be skipped
-    // (because the remaining elements where shifted one position to the left
-    //  but the index we use to iterate did not take this into account).
-    // Therefore, the loop adjusts the index to account for this.
-    const ogLength = listeners.length
-    for (let i = 0; i < ogLength; i++) {
-      const currentLength = listeners.length
-      const diff = ogLength - currentLength
-      await listeners[i - diff](...args)
-    }
-    return ogLength > 0
   }
 
   /**

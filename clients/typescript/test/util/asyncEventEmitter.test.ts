@@ -1,45 +1,13 @@
 import test from 'ava'
 import { AsyncEventEmitter } from '../../src/util/asyncEventEmitter'
 
-// Test that the AsyncEventEmitter executes listeners in the order they were added
-// and correctly awaits listeners before calling the next one.
-test('test AsyncEventEmitter listener order', async (t) => {
-  const emitter = new AsyncEventEmitter<{
-    event: (a: string, b: string) => void | Promise<void>
-  }>()
-
-  let order = 0
-
-  emitter.on('event', (a, b) => {
-    t.is(a, 'a')
-    t.is(b, 'b')
-    t.is(order, 0)
-    return new Promise<void>((resolve) => {
-      setTimeout(() => {
-        order++
-        resolve()
-      }, 10)
-    })
+const delay = (ms: number) => {
+  return new Promise<void>((resolve) => {
+    setTimeout(() => {
+      resolve()
+    }, ms)
   })
-
-  emitter.addListener('event', (a, b) => {
-    t.is(a, 'a')
-    t.is(b, 'b')
-    t.is(order, 1)
-    order++
-  })
-
-  emitter.on('event', (a, b) => {
-    t.is(a, 'a')
-    t.is(b, 'b')
-    t.is(order, 2)
-    order++
-  })
-
-  const res = await emitter.emit('event', 'a', 'b')
-  t.assert(res)
-  t.is(order, 3)
-})
+}
 
 // Test that the AsyncEventEmitter correctly handles multiple events
 test('test AsyncEventEmitter multiple events', async (t) => {
@@ -48,29 +16,30 @@ test('test AsyncEventEmitter multiple events', async (t) => {
     event2: () => void | Promise<void>
   }>()
 
-  let l1,
-    l2 = false
+  const log: Array<number> = []
 
   const listener1 = () => {
-    l1 = true
+    return new Promise<void>((resolve) => {
+      setTimeout(() => {
+        log.push(1)
+        resolve()
+      }, 20)
+    })
   }
 
   const listener2 = () => {
-    l2 = true
+    log.push(2)
   }
 
   emitter.on('event1', listener1)
   emitter.on('event2', listener2)
 
-  const res1 = await emitter.emit('event1')
-  t.assert(res1)
-  t.assert(l1)
-  t.assert(!l2)
+  emitter.enqueueEmit('event1')
+  emitter.enqueueEmit('event2')
 
-  const res2 = await emitter.emit('event2')
-  t.assert(res2)
-  t.assert(l1)
-  t.assert(l2)
+  // Give the emitter some time to process the queue
+  await delay(100)
+  t.deepEqual(log, [1, 2])
 })
 
 // Test that the AsyncEventEmitter calls one-time listeners only once
@@ -95,11 +64,12 @@ test('test AsyncEventEmitter once listeners', async (t) => {
 
   emitter.once('event', listener1)
   emitter.once('event', listener2)
-  await emitter.emit('event')
+  emitter.enqueueEmit('event')
 
   emitter.once('event', listener3)
-  await emitter.emit('event')
+  emitter.enqueueEmit('event')
 
+  await delay(100)
   t.is(ctr, 3)
 })
 
@@ -122,8 +92,8 @@ test('test AsyncEventEmitter prependListener', async (t) => {
   emitter.on('event', listener1)
   emitter.prependListener('event', listener2)
 
-  const res = await emitter.emit('event')
-  t.assert(res)
+  emitter.enqueueEmit('event')
+  await delay(100)
   t.deepEqual(log, [2, 1])
 })
 
@@ -167,8 +137,9 @@ test('test AsyncEventEmitter removeListener', async (t) => {
   emitter.removeListener('event', listener2)
   emitter.off('event', listener4)
 
-  const res = await emitter.emit('event')
-  t.assert(res)
+  emitter.enqueueEmit('event')
+
+  await delay(100)
   t.assert(l1)
   t.assert(!l2)
   t.assert(l3)
@@ -201,8 +172,9 @@ test('test AsyncEventEmitter remove listeners', async (t) => {
   emitter.removeAllListeners('event')
   t.is(emitter.listenerCount('event'), 0)
 
-  const res = await emitter.emit('event')
-  t.assert(!res)
+  emitter.enqueueEmit('event')
+
+  await delay(100)
   t.assert(!l1)
   t.assert(!l2)
 })
@@ -240,7 +212,7 @@ test('test AsyncEventEmitter handles errors correctly', async (t) => {
 
   // If an error event is emitted and there are no listeners, the error is thrown
   try {
-    await emitter.emit('error', err)
+    emitter.enqueueEmit('error', err)
     t.fail()
   } catch (err: any) {
     t.is(err.message, 'test error')
@@ -253,37 +225,8 @@ test('test AsyncEventEmitter handles errors correctly', async (t) => {
     t.is(err.message, 'test error')
   })
 
-  await emitter.emit('error', err)
+  emitter.enqueueEmit('error', err)
+
+  await delay(100)
   t.is(called, true)
-
-  // If a listener throws an error, the error is thrown
-  const throwCb = () => {
-    throw err
-  }
-  emitter.on('event', throwCb)
-
-  try {
-    await emitter.emit('event')
-    t.fail()
-  } catch (err: any) {
-    t.is(err.message, 'test error')
-  }
-
-  emitter.off('event', throwCb)
-
-  // If an async listener throws an error, the error is also thrown
-  emitter.on('event', async () => {
-    return new Promise((_resolve, reject) => {
-      setTimeout(() => {
-        reject(err)
-      }, 10)
-    })
-  })
-
-  try {
-    await emitter.emit('event')
-    t.fail()
-  } catch (err: any) {
-    t.is(err.message, 'test error')
-  }
 })
