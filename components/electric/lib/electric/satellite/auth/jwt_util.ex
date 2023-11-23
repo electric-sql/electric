@@ -32,7 +32,9 @@ defmodule Electric.Satellite.Auth.JWTUtil do
   end
 
   defp get_user_id(claims, namespace) when is_binary(namespace) and namespace != "",
-    do: get_in(claims, [namespace, @user_id_key]) || get_in(claims, [namespace, @legacy_user_id_key])
+    do:
+      get_in(claims, [namespace, @user_id_key]) ||
+        get_in(claims, [namespace, @legacy_user_id_key])
 
   defp get_user_id(claims, _), do: claims[@user_id_key] || claims[@legacy_user_id_key]
 
