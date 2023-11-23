@@ -54,15 +54,16 @@ async function newOrder(
 
   // In a real app, you would convert the payment details into a token
   // and add it to the order for capturing on the server.
+  console.log(session.user.id)
   const order = await db.orders.create({
     data: {
       id: order_id,
       electric_user_id: session.user.id,
       status: 'submitted',
-      recipient_name: options.shippingAddress.name,
-      delivery_address: options.shippingAddress.address,
-      delivery_postcode: options.shippingAddress.postcode,
-      delivery_country: options.shippingAddress.country,
+      recipient_name: options.shippingAddress.name || '-',
+      delivery_address: options.shippingAddress.address || '-',
+      delivery_postcode: options.shippingAddress.postcode || '-',
+      delivery_country: options.shippingAddress.country || '-',
       delivery_price: totalCost,
       created_at: new Date(),
     },
@@ -231,6 +232,7 @@ const Checkout = ({
             <IonInput
               label="Name"
               labelPlacement="floating"
+              value="Kevin McCallister"
               ref={nameInput}
             ></IonInput>
           </IonItem>
@@ -239,6 +241,9 @@ const Checkout = ({
               label="Address"
               labelPlacement="floating"
               rows={5}
+              value={`671 Lincoln Ave
+Chicago
+IL`}
               ref={addressInput}
             ></IonTextarea>
           </IonItem>
@@ -247,6 +252,7 @@ const Checkout = ({
               label="Postcode / Zip"
               labelPlacement="floating"
               ref={postcodeInput}
+              value="60093"
             ></IonInput>
           </IonItem>
           <IonItem>
@@ -254,6 +260,7 @@ const Checkout = ({
               label="Country"
               labelPlacement="floating"
               ref={countryInput}
+              value="United States"
             ></IonInput>
           </IonItem>
         </IonList>
@@ -267,6 +274,7 @@ const Checkout = ({
               label="Name on card"
               labelPlacement="floating"
               ref={cardNameInput}
+              value="Peter McCallister"
             ></IonInput>
           </IonItem>
           <IonItem>
@@ -275,6 +283,7 @@ const Checkout = ({
               label="Card number"
               labelPlacement="floating"
               placeholder="0000 0000 0000 0000"
+              value="4242 4242 4242 4242"
             ></IonInput>
           </IonItem>
           <IonItem>
@@ -283,12 +292,14 @@ const Checkout = ({
               label="Expiry"
               labelPlacement="floating"
               placeholder="00/00"
+              value="12/90"
             ></IonInput>
             <IonInput
               ref={cvcInput}
               label="CVC"
               labelPlacement="floating"
               placeholder="000"
+              value="123"
             ></IonInput>
           </IonItem>
         </IonList>

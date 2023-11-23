@@ -68,6 +68,7 @@
     "eslint-plugin-react": "^7.32.2",
     "jsdom": "^22.1.0",
     "prisma": "4.8.1",
+    "supabase": "^1.113.2",
     "terser": "^5.4.0",
     "typescript": "^5.1.6",
     "vite": "^4.3.9",
