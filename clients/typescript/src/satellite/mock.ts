@@ -24,8 +24,12 @@ import { Client, ConnectionWrapper, Satellite } from './index'
 import { SatelliteOpts, SatelliteOverrides, satelliteDefaults } from './config'
 import { BaseRegistry } from './registry'
 import { SocketFactory } from '../sockets'
-import { EventEmitter } from 'events'
-import { DEFAULT_LOG_POS, subsDataErrorToSatelliteError, base64 } from '../util'
+import {
+  DEFAULT_LOG_POS,
+  subsDataErrorToSatelliteError,
+  base64,
+  AsyncEventEmitter,
+} from '../util'
 import { bytesToNumber, uuid } from '../util/common'
 import { generateTag } from './oplog'
 import {
@@ -136,7 +140,16 @@ export class MockRegistry extends BaseRegistry {
   }
 }
 
-export class MockSatelliteClient extends EventEmitter implements Client {
+type Events = {
+  [SUBSCRIPTION_DELIVERED]: (data: SubscriptionData) => void
+  [SUBSCRIPTION_ERROR]: (error: SatelliteError, subscriptionId: string) => void
+  outbound_started: OutboundStartedCallback
+  error: ErrorCallback
+}
+export class MockSatelliteClient
+  extends AsyncEventEmitter<Events>
+  implements Client
+{
   isDown = false
   replicating = false
   disconnected = true
@@ -303,7 +316,7 @@ export class MockSatelliteClient extends EventEmitter implements Client {
     this.replicating = true
     this.inboundAck = lsn
 
-    const t = setTimeout(() => this.emit('outbound_started'), 100)
+    const t = setTimeout(() => this.emit('outbound_started', lsn), 100)
     this.timeouts.push(t)
 
     if (lsn && bytesToNumber(lsn) == MOCK_BEHIND_WINDOW_LSN) {

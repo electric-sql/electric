@@ -43,7 +43,6 @@ import {
 } from '../util/proto'
 import { PROTOCOL_VSN, Socket, SocketFactory } from '../sockets/index'
 import _m0 from 'protobufjs/minimal.js'
-import { EventEmitter } from 'events'
 import {
   AuthResponse,
   DataChangeType,
@@ -62,7 +61,6 @@ import {
   StopReplicationResponse,
   ErrorCallback,
   RelationCallback,
-  IncomingTransactionCallback,
   OutboundStartedCallback,
   TransactionCallback,
 } from '../util/types'
@@ -93,6 +91,7 @@ import { RPC, rpcRespond, withRpcRequestLogging } from './RPC'
 import { Mutex } from 'async-mutex'
 import { DbSchema } from '../client/model'
 import { PgBasicType, PgDateType, PgType } from '../client/conversions/types'
+import { AsyncEventEmitter } from '../util'
 
 type IncomingHandler = (msg: any) => void
 
@@ -105,38 +104,18 @@ const subscriptionError = [
   SatelliteErrorCode.SHAPE_DELIVERY_ERROR,
 ]
 
-interface SafeEventEmitter {
-  on(event: 'error', callback: ErrorCallback): this
-  on(event: 'relation', callback: RelationCallback): this
-  on(event: 'transaction', callback: IncomingTransactionCallback): this
-  on(event: 'outbound_started', callback: OutboundStartedCallback): this
-
-  emit(event: 'error', error: SatelliteError): boolean
-  emit(event: 'relation', relation: Relation): boolean
-  emit(
-    event: 'transaction',
-    transaction: Transaction,
-    ackCb: () => void
-  ): boolean
-  emit(event: 'outbound_started', lsn: LSN): boolean
-
-  removeListener(event: 'error', callback: ErrorCallback): void
-  removeListener(event: 'relation', callback: RelationCallback): void
-  removeListener(event: 'transaction', callback: TransactionCallback): void
-  removeListener(
-    event: 'outbound_started',
-    callback: OutboundStartedCallback
-  ): void
-
-  removeAllListeners(): void
-
-  listenerCount(event: 'error'): number
+type Events = {
+  error: (error: SatelliteError) => void
+  relation: (relation: Relation) => void
+  transaction: (transaction: Transaction, ackCb: () => void) => Promise<void>
+  outbound_started: (lsn: LSN) => void
 }
+type EventEmitter = AsyncEventEmitter<Events>
 
 export class SatelliteClient implements Client {
   private opts: Required<SatelliteClientOpts>
 
-  private emitter: SafeEventEmitter
+  private emitter: EventEmitter
 
   private socketFactory: SocketFactory
   private socket?: Socket
@@ -184,7 +163,7 @@ export class SatelliteClient implements Client {
     socketFactory: SocketFactory,
     opts: SatelliteClientOpts
   ) {
-    this.emitter = new EventEmitter() as SafeEventEmitter
+    this.emitter = new AsyncEventEmitter<Events>()
 
     this.opts = { ...satelliteClientDefaults, ...opts }
     this.socketFactory = socketFactory

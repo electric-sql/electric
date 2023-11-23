@@ -187,9 +187,7 @@ export enum ReplicationStatus {
 
 export type ErrorCallback = (error: SatelliteError) => void
 export type RelationCallback = (relation: Relation) => void
-export type TransactionCallback = (
-  transaction: DataTransaction
-) => Promise<void>
+export type TransactionCallback = (transaction: Transaction) => Promise<void>
 export type IncomingTransactionCallback = (
   transaction: DataTransaction,
   AckCb: () => void
