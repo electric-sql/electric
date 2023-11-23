@@ -225,6 +225,7 @@ message SatTransOp {
         SatOpInsert insert = 4;
         SatOpDelete delete = 5;
         SatOpMigrate migrate = 6;
+        SatOpCompensation compensation = 7;
     }
 }
 
@@ -281,6 +282,13 @@ message SatOpDelete {
     // dependency information
     repeated string tags = 3;
 
+}
+
+message SatOpCompensation {
+    uint32 relation_id = 1;
+    SatOpRow pk_data = 2;
+    // dependency information
+    repeated string tags = 4;
 }
 
 // Dependency information for row data.

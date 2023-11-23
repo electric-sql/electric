@@ -592,6 +592,15 @@ export class SatelliteClient implements Client {
             },
           })
           break
+        case DataChangeType.COMPENSATION:
+          changeOp = SatTransOp.fromPartial({
+            compensation: {
+              pkData: record,
+              relationId: relation.id,
+              tags: tags,
+            },
+          })
+          break
       }
       ops.push(changeOp)
     })

@@ -118,10 +118,9 @@ export function generateOplogTriggers(
 /**
  * Generates triggers for compensations for all foreign keys in the provided table.
  *
- * Compensation is recorded as a specially-formatted update. It acts as a no-op, with
- * previous value set to NULL, and it's on the server to figure out that this is a no-op
- * compensation operation (usually `UPDATE` would have previous row state known). The entire
- * reason for it existing is to maybe revive the row if it has been deleted, so we need correct tags.
+ * Compensation is recorded as a SatOpCompensation messaage. The entire reason
+ * for it existing is to maybe revive the row if it has been deleted, so we need
+ * correct tags.
  *
  * The compensation update contains _just_ the primary keys, no other columns are present.
  *
@@ -155,7 +154,7 @@ function generateCompensationTriggers(table: Table): Statement[] {
              1 == (SELECT value from _electric_meta WHERE key == 'compensations')
       BEGIN
         INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
-        SELECT '${fkTableNamespace}', '${fkTableName}', 'UPDATE', json_object(${joinedFkPKs}), json_object(${joinedFkPKs}), NULL, NULL
+        SELECT '${fkTableNamespace}', '${fkTableName}', 'COMPENSATION', json_object(${joinedFkPKs}), json_object(${joinedFkPKs}), NULL, NULL
         FROM "${fkTableNamespace}"."${fkTableName}" WHERE "${foreignKey.parentKey}" = new."${foreignKey.childKey}";
       END;
       `,
@@ -167,7 +166,7 @@ function generateCompensationTriggers(table: Table): Statement[] {
               1 == (SELECT value from _electric_meta WHERE key == 'compensations')
       BEGIN
         INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
-        SELECT '${fkTableNamespace}', '${fkTableName}', 'UPDATE', json_object(${joinedFkPKs}), json_object(${joinedFkPKs}), NULL, NULL
+        SELECT '${fkTableNamespace}', '${fkTableName}', 'COMPENSATION', json_object(${joinedFkPKs}), json_object(${joinedFkPKs}), NULL, NULL
         FROM "${fkTableNamespace}"."${fkTableName}" WHERE "${foreignKey.parentKey}" = new."${foreignKey.childKey}";
       END;
       `,

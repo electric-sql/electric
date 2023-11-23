@@ -129,6 +129,7 @@ defmodule Satellite.ProtocolHelpers do
         %SatOpInsert{} = op -> %SatTransOp{op: {:insert, op}}
         %SatOpUpdate{} = op -> %SatTransOp{op: {:update, op}}
         %SatOpDelete{} = op -> %SatTransOp{op: {:delete, op}}
+        %SatOpCompensation{} = op -> %SatTransOp{op: {:compensation, op}}
       end)
 
     %SatOpLog{ops: ops}

@@ -107,6 +107,7 @@ defmodule Electric.Satellite.Protobuf do
         SatOpInsert,
         SatOpUpdate,
         SatOpMigrate,
+        SatOpCompensation,
         SatTransOp,
         SatRelation,
         SatRelationColumn,
@@ -123,15 +124,6 @@ defmodule Electric.Satellite.Protobuf do
         SatUnsubsResp
       }
     end
-  end
-
-  defmodule Version do
-    defstruct major: nil, minor: nil
-
-    @type t() :: %__MODULE__{
-            major: integer,
-            minor: integer
-          }
   end
 
   @spec decode(byte(), binary()) :: {:ok, sq_pb_msg()} | {:error, any()}
