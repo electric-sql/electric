@@ -1,10 +1,7 @@
 defmodule Electric.Replication.Postgres.Writer do
   use GenStage
 
-  import Electric.Postgres.Extension,
-    only: [is_acked_client_lsn_relation: 1, is_extension_relation: 1]
-
-  alias Electric.Postgres.Extension.SchemaCache
+  alias Electric.Postgres.Extension
   alias Electric.Postgres.ShadowTableTransformation
   alias Electric.Replication.Changes
   alias Electric.Replication.Connectors
@@ -65,11 +62,8 @@ defmodule Electric.Replication.Postgres.Writer do
   @impl true
   def handle_events(events, _from, state) do
     {state, last_pos} =
-      Enum.reduce(events, {state, 0}, fn {tx, pos}, {state, last_pos} ->
-        case filter_extension_relations(tx) do
-          %{changes: []} -> {state, last_pos}
-          tx -> {send_transaction(tx, pos, state), pos}
-        end
+      Enum.reduce(events, {state, nil}, fn {tx, pos}, {state, _last_pos} ->
+        {send_transaction(tx, pos, state), pos}
       end)
 
     send(state.producer_pid, {:sent_all_up_to, last_pos})
@@ -89,26 +83,13 @@ defmodule Electric.Replication.Postgres.Writer do
     [min_demand: 10, max_demand: 50]
   end
 
-  defp filter_extension_relations(%Changes.Transaction{changes: changes} = tx) do
-    filtered_changes =
-      Enum.reject(changes, fn %{relation: relation} ->
-        if is_extension_relation(relation) and not is_acked_client_lsn_relation(relation) do
-          Logger.error("Extension relation #{inspect(relation)} in the write stream")
-        end
-
-        is_extension_relation(relation) and not is_acked_client_lsn_relation(relation)
-      end)
-
-    %{tx | changes: filtered_changes}
-  end
-
   defp send_transaction(tx, _pos, state) do
     statements = tx_changes_to_dml(tx, state)
 
     Client.with_transaction(state.conn, fn conn ->
       Enum.each(statements, fn stmt ->
         case :epgsql.squery(conn, stmt) do
-          {:ok, 0} ->
+          {:ok, _} ->
             :ok
 
           error ->
@@ -121,50 +102,53 @@ defmodule Electric.Replication.Postgres.Writer do
   end
 
   defp tx_changes_to_dml(
-         %Changes.Transaction{changes: changes, commit_timestamp: ts, origin: origin},
+         %Changes.Transaction{changes: changes, commit_timestamp: ts, origin: origin} = tx,
          state
        ) do
     relations = load_relations_from_changes(changes)
+    tag = {ts, origin}
 
-    changes
-    |> Enum.flat_map(&preprocess_changes(state.origin, &1, relations, {ts, origin}))
-    |> tap(&Logger.debug("Messages after preprocessing: #{inspect(&1, pretty: true)}"))
-    |> Enum.map(&change_to_statement(&1, relations))
+    processed_changes =
+      Enum.flat_map(changes, &split_change_into_main_and_shadow(&1, relations, tag, state.origin))
+
+    Logger.debug(fn ->
+      "Processed tx changes (# pre: #{length(changes)}, # post: #{length(processed_changes)}): " <>
+        inspect(processed_changes, pretty: true)
+    end)
+
+    tx_statements = Enum.map(processed_changes, &change_to_statement(&1, relations))
+    [acked_client_lsn_statement(tx) | tx_statements]
   end
 
   defp load_relations_from_changes(changes) do
-    {internal_relations, user_relations} =
-      changes
-      |> Enum.map(& &1.relation)
-      |> Enum.split_with(&is_extension_relation/1)
-
-    internal_relations =
-      internal_relations
-      |> Stream.uniq()
-      |> Stream.map(&SchemaCache.Global.internal_relation!/1)
-
-    user_relations =
-      user_relations
-      |> ShadowTableTransformation.add_shadow_relations()
-      |> Stream.uniq()
-      |> Stream.map(&SchemaCache.Global.relation!/1)
-
-    Stream.concat(internal_relations, user_relations)
+    changes
+    |> Enum.map(& &1.relation)
+    |> ShadowTableTransformation.add_shadow_relations()
+    |> Stream.uniq()
+    |> Stream.map(&Extension.SchemaCache.Global.relation!/1)
     |> Map.new(fn rel -> {{rel.schema, rel.name}, rel} end)
   end
 
-  defp preprocess_changes(origin, change, _, _) when is_extension_relation(change.relation) do
-    if not is_acked_client_lsn_relation(change.relation) do
-      Logger.error(
-        "Change for an extension relation in the write stream. origin=#{inspect(origin)}, change = #{inspect(change, pretty: true)}"
-      )
-    end
-
-    [change]
+  defp split_change_into_main_and_shadow(change, relations, tag, origin) do
+    ShadowTableTransformation.split_change_into_main_and_shadow(change, relations, tag, origin)
   end
 
-  defp preprocess_changes(origin, change, relations, tag) do
-    ShadowTableTransformation.split_change_into_main_and_shadow(change, relations, tag, origin)
+  # This is the same change as the one in `Electric.Replication.SatelliteCollectorProducer.update_acked_client_lsn/1`
+  # but expressed as an SQL INSERT statement. This INSERT does not cause the `upsert_acknowledged_client_lsn` trigger to
+  # fire because the trigger is anabled with `ENABLE REPLICA TRIGGER`.
+  defp acked_client_lsn_statement(tx) do
+    client_id = tx.origin
+    lsn = tx.lsn
+    values_sql = encode_values([{client_id, :text}, {lsn, :bytea}])
+
+    """
+    INSERT INTO #{Extension.acked_client_lsn_table()} AS t
+    VALUES (#{values_sql})
+    ON CONFLICT (client_id)
+      DO UPDATE
+        SET lsn = excluded.lsn
+      WHERE t.lsn IS DISTINCT FROM excluded.lsn
+    """
   end
 
   defp change_to_statement(%Changes.NewRecord{record: data, relation: table}, relations) do
@@ -173,10 +157,7 @@ defmodule Electric.Replication.Postgres.Writer do
 
     table_sql = quote_ident(table_schema, table_name)
     columns_sql = map_join(columns, &quote_ident(&1.name))
-
-    values_sql =
-      column_values(data, columns)
-      |> map_join(fn {val, type} -> encode_value(val, type) end)
+    values_sql = column_values(data, columns) |> encode_values()
 
     "INSERT INTO #{table_sql}(#{columns_sql}) VALUES (#{values_sql})"
   end
@@ -186,10 +167,15 @@ defmodule Electric.Replication.Postgres.Writer do
     Enum.map(columns, &{Map.fetch!(record, &1.name), &1.type})
   end
 
+  defp encode_values(values), do: map_join(values, fn {val, type} -> encode_value(val, type) end)
+
   defp encode_value(nil, _type), do: "NULL"
 
   defp encode_value("t", :bool), do: "true"
   defp encode_value("f", :bool), do: "false"
+
+  defp encode_value(bin, :bytea),
+    do: bin |> Electric.Postgres.Bytea.to_postgres_hex() |> quote_string()
 
   defp encode_value(val, float_type) when float_type in [:float4, :float8] do
     case Float.parse(val) do

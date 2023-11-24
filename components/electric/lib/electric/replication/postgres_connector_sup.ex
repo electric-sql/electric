@@ -37,7 +37,8 @@ defmodule Electric.Replication.PostgresConnectorSup do
         id: :postgres_schema_cache,
         start: {SchemaCache, :start_link, [conn_config]}
       },
-      {SatelliteCollectorProducer, name: SatelliteCollectorProducer.name()},
+      {SatelliteCollectorProducer,
+       name: SatelliteCollectorProducer.name(), write_mode: Connectors.write_mode(conn_config)},
       %{
         id: :postgres_producer,
         start: {Postgres.LogicalReplicationProducer, :start_link, [conn_config]}
