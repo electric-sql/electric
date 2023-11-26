@@ -1,4 +1,4 @@
-import { DatabaseAdapter, RunResult } from '../../electric/adapter'
+import { DatabaseAdapter, RunResult, priorities } from '../../electric/adapter'
 import { QueryBuilder } from 'squel'
 import { DB } from './db'
 import { TransactionalDB } from './transactionalDB'
@@ -45,19 +45,21 @@ export class Executor {
   ): Promise<A> {
     // We cast the result to `Promise<A>` because we force ourselves to always use `setResult`
     // and thus the promise will always be resolved with the value that was passed to `setResult` which is of type `A`
-    return (await this._adapter.transaction((tx, setResult) =>
-      f(
-        new TransactionalDB(tx, this._fields),
-        (res) => {
-          if (notify) {
-            this._notifier.potentiallyChanged() // inform the notifier that the data may have changed
+    return (await this._adapter.transaction(
+      (tx, setResult) =>
+        f(
+          new TransactionalDB(tx, this._fields),
+          (res) => {
+            if (notify) {
+              this._notifier.potentiallyChanged() // inform the notifier that the data may have changed
+            }
+            setResult(res)
+          },
+          () => {
+            // ignore it, errors are already caught by the adapter and will reject the promise
           }
-          setResult(res)
-        },
-        () => {
-          // ignore it, errors are already caught by the adapter and will reject the promise
-        }
-      )
+        ),
+      priorities.high
     )) as unknown as Promise<A>
   }
 

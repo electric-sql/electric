@@ -1,13 +1,20 @@
 import {
   DatabaseAdapter as DatabaseAdapterInterface,
+  Priority,
+  PriorityMutex,
   RunResult,
   TableNameImpl,
   Transaction as Tx,
+  priorities,
+  priorityMutex,
 } from '../../electric/adapter'
 import { Row, Statement } from '../../util'
 import { isInsertUpdateOrDeleteStatement } from '../../util/statements'
-import { Mutex } from 'async-mutex'
 import { AnyDatabase } from '..'
+
+// TODO: modify also capacitor-sqlite adapter because it also uses mutex
+//       then modify the DatabaseAdapterInterface to allow an additional priority parameter
+//       by default set it to `default` and only in the DAL set it to `high` when doing queries
 
 /**
  * A generic adapter that manages transactions manually by executing `BEGIN` and `COMMIT`/`ROLLBACK` commands.
@@ -19,11 +26,11 @@ export abstract class DatabaseAdapter
   implements DatabaseAdapterInterface
 {
   abstract readonly db: AnyDatabase
-  #txMutex: Mutex
+  #txMutex: PriorityMutex
 
   constructor() {
     super()
-    this.#txMutex = new Mutex()
+    this.#txMutex = priorityMutex()
   }
 
   abstract exec(statement: Statement): Promise<Row[]>
@@ -61,9 +68,10 @@ export abstract class DatabaseAdapter
   }
 
   async transaction<T>(
-    f: (_tx: Tx, setResult: (res: T) => void) => void
+    f: (_tx: Tx, setResult: (res: T) => void) => void,
+    priority: Priority = priorities.default
   ): Promise<T> {
-    const release = await this.#txMutex.acquire()
+    const release = await this.#txMutex.acquire(priority)
 
     try {
       await this.exec({ sql: 'BEGIN' })
@@ -97,12 +105,15 @@ export abstract class DatabaseAdapter
     })
   }
 
-  run(stmt: Statement): Promise<RunResult> {
+  run(
+    stmt: Statement,
+    priority: Priority = priorities.default
+  ): Promise<RunResult> {
     // Also uses the mutex to avoid running this query while a transaction is executing.
     // Because that would make the query part of the transaction which was not the intention.
     return this.#txMutex.runExclusive(() => {
       return this._runUncoordinated(stmt)
-    })
+    }, priority)
   }
 
   // Do not use this uncoordinated version directly!
@@ -115,12 +126,15 @@ export abstract class DatabaseAdapter
   }
 
   // This `query` function does not enforce that the query is read-only
-  query(stmt: Statement): Promise<Row[]> {
+  query(
+    stmt: Statement,
+    priority: Priority = priorities.default
+  ): Promise<Row[]> {
     // Also uses the mutex to avoid running this query while a transaction is executing.
     // Because that would make the query part of the transaction which was not the intention.
     return this.#txMutex.runExclusive(() => {
       return this._queryUncoordinated(stmt)
-    })
+    }, priority)
   }
 
   // Do not use this uncoordinated version directly!

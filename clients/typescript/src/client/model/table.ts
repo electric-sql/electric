@@ -9,7 +9,7 @@ import {
 } from '../validation/validation'
 import { UpdateInput, UpdateManyInput } from '../input/updateInput'
 import { DeleteInput, DeleteManyInput } from '../input/deleteInput'
-import { DatabaseAdapter } from '../../electric/adapter'
+import { DatabaseAdapter, priorities } from '../../electric/adapter'
 import { Builder } from './builder'
 import { Executor } from '../execution/executor'
 import { BatchPayload } from '../output/batchPayload'
@@ -1537,7 +1537,7 @@ export class Table<
 }
 
 export function raw(adapter: DatabaseAdapter, sql: Statement): Promise<Row[]> {
-  return adapter.query(sql)
+  return adapter.query(sql, priorities.high)
 }
 
 export function liveRaw(
