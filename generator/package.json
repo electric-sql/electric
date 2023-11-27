@@ -54,6 +54,6 @@
     "@prisma/generator-helper": "^4.11.0",
     "code-block-writer": "^11.0.3",
     "lodash": "^4.17.21",
-    "zod": "^3.21.1"
+    "zod": "3.21.1"
   }
 }

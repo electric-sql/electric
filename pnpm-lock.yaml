@@ -117,8 +117,8 @@ importers:
         specifier: ^8.8.1
         version: 8.13.0
       zod:
-        specifier: ^3.20.2
-        version: 3.21.4
+        specifier: 3.21.1
+        version: 3.21.1
     devDependencies:
       '@electric-sql/prisma-generator':
         specifier: workspace:*
@@ -353,8 +353,8 @@ importers:
         specifier: ^4.17.21
         version: 4.17.21
       zod:
-        specifier: ^3.21.1
-        version: 3.21.4
+        specifier: 3.21.1
+        version: 3.21.1
     devDependencies:
       '@prisma/internals':
         specifier: ^4.11.0
@@ -14356,6 +14356,10 @@ packages:
       compress-commons: 4.1.1
       readable-stream: 3.6.2
     dev: true
+
+  /zod@3.21.1:
+    resolution: {integrity: sha512-+dTu2m6gmCbO9Ahm4ZBDapx2O6ZY9QSPXst2WXjcznPMwf2YNpn3RevLx4KkZp1OPW/ouFcoBtBzFz/LeY69oA==}
+    dev: false
 
   /zod@3.21.4:
     resolution: {integrity: sha512-m46AKbrzKVzOzs/DZgVnG5H55N1sv1M8qZU3A8RIKbs3mrACDNeIOeilDymVb2HdmP8uwshOCF4uJ8uM9rCqJw==}
