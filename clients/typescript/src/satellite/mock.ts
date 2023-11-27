@@ -316,7 +316,7 @@ export class MockSatelliteClient
     this.replicating = true
     this.inboundAck = lsn
 
-    const t = setTimeout(() => this.enqueueEmit('outbound_started', lsn), 100)
+    const t = setTimeout(() => this.enqueueEmit('outbound_started'), 100)
     this.timeouts.push(t)
 
     if (lsn && bytesToNumber(lsn) == MOCK_BEHIND_WINDOW_LSN) {

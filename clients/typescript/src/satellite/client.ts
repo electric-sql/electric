@@ -108,7 +108,7 @@ type Events = {
   error: (error: SatelliteError) => void
   relation: (relation: Relation) => void
   transaction: (transaction: Transaction, ackCb: () => void) => Promise<void>
-  outbound_started: (lsn: LSN) => void
+  outbound_started: () => void
 }
 type EventEmitter = AsyncEventEmitter<Events>
 
@@ -677,7 +677,7 @@ export class SatelliteClient implements Client {
         { leading: true, trailing: true }
       )
 
-      this.emitter.enqueueEmit('outbound_started', message.lsn)
+      this.emitter.enqueueEmit('outbound_started')
       return SatInStartReplicationResp.create()
     } else {
       this.emitter.enqueueEmit(

@@ -192,6 +192,6 @@ export type IncomingTransactionCallback = (
   transaction: DataTransaction,
   AckCb: () => void
 ) => void
-export type OutboundStartedCallback = (lsn: LSN) => void
+export type OutboundStartedCallback = () => void
 
 export type ConnectivityState = 'available' | 'connected' | 'disconnected'
