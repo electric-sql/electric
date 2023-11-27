@@ -1,3 +1,1 @@
-import { DatabaseAdapter } from './adapter'
-
-export { DatabaseAdapter }
+export { SerialDatabaseAdapter, BatchDatabaseAdapter } from './adapter'

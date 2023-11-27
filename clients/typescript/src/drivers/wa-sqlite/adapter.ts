@@ -1,7 +1,7 @@
 import { Database } from './database'
 import { Row } from '../../util/types'
 import { Statement } from '../../util'
-import { DatabaseAdapter as GenericDatabaseAdapter } from '../generic'
+import { SerialDatabaseAdapter as GenericDatabaseAdapter } from '../generic'
 
 export class DatabaseAdapter extends GenericDatabaseAdapter {
   readonly db: Database

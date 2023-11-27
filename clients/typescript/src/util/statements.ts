@@ -1,12 +1,7 @@
 import { SqlValue, Statement } from './types'
 
-export function isInsertUpdateOrDeleteStatement(sql: string) {
-  const tpe = sql.toLowerCase().trimStart()
-  return (
-    tpe.startsWith('insert') ||
-    tpe.startsWith('update') ||
-    tpe.startsWith('delete')
-  )
+export function isInsertUpdateOrDeleteStatement(stmt: string) {
+  return /^\s*(insert|update|delete)/i.test(stmt)
 }
 
 /**
