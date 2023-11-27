@@ -33,7 +33,7 @@ abstract class DatabaseAdapter
   abstract exec(statement: Statement): Promise<Row[]>
 
   /**
-   * @returns The number of rows modified by the last SQL query.
+   * @returns The number of rows modified by the last insert/update/delete query.
    */
   abstract getRowsModified(): number
 
