@@ -107,7 +107,6 @@ function pgType(field: ExtendedDMMFField, modelName: string): string {
   const prismaType = field.type
   const attributes = field.attributes
   switch (prismaType) {
-    // BigInt, Boolean, Bytes, DateTime, Decimal, Float, Int, JSON, String
     case 'String':
       return stringToPg(attributes)
     case 'Int':
@@ -125,9 +124,19 @@ function pgType(field: ExtendedDMMFField, modelName: string): string {
     case 'Float':
       return 'FLOAT8'
     case 'Json':
-      return 'JSON'
+      return jsonToPg(attributes)
     default:
       return 'UNRECOGNIZED PRISMA TYPE'
+  }
+}
+
+function jsonToPg(attributes: Array<Attribute>) {
+  const pgTypeAttribute = attributes.find((a) => a.type.startsWith('@db'))
+  if (pgTypeAttribute && pgTypeAttribute.type === '@db.Json') {
+    return 'JSON'
+  } else {
+    // default mapping for Prisma's `Json` type is PG's JSONB
+    return 'JSONB'
   }
 }
 
