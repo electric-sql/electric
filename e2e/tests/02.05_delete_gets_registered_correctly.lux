@@ -36,8 +36,9 @@
     ?$eprompt
 
 [shell electric]
-    # Wait for it to be sent to PG
-    ??pg_slot=postgres_1 [debug] Will send 2 to subscriber:
+    # Check that the transaction made it to Postgres.SlotServer / Postgres.Writer
+    ??=postgres_1 [debug] Processed tx changes (# pre:
+    ??"content" => "original value"
 
 [shell pg_1]
     # We expect for the row to be deleted

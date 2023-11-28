@@ -20,11 +20,11 @@
         [timeout 5]
         !make start_electric_1
         -$fail_pattern
-        ?START_REPLICATION SLOT
+        ??successfully initialized connector "postgres_1"
         [progress setup finished]
 
     [shell postgres_logs]
-        ?logical replication apply worker for subscription "postgres_1" has started
+        ??has now caught up with upstream server
         # [@magnetised 2023-10-05] Prisma does stuff that causes errors, such
         # as trying to insert into non-existant tables (then creating the table
         # if it gets an error), so if I leave this fail_pattern match here the

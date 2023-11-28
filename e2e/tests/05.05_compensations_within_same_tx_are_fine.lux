@@ -65,11 +65,20 @@
     ?$eprompt
 
 [shell electric]
-    ??pg_slot=postgres_1 [debug] Will send 4 to subscriber:
-    ?pg_slot=postgres_1 \[debug\] Sending 14 messages to the subscriber: from #Lsn<[0-9A-F]+/[0-9A-F]+> to (#Lsn<[0-9A-F]+/[0-9A-F]+>)
-    [my expected_lsn=$1]
-    # We expect to see the status update without PG failing to apply the operations sent above
-    ??<StatusUpdate> [written_wal: $expected_lsn
+    # Check that the transaction made it to Postgres.SlotServer / Postgres.Writer
+    ??=postgres_1 [debug] Processed tx changes (# pre:
+    ??"content" => "test_content"
+    ??record: %{"content" => nil, "id" => "00000000-0000-0000-0000-000000000000"}
+
+    # Wait for the roundtrip of the insert back to Electric
+    ?component=CachedWal.EtsBacked \[debug\] Saving transaction \d+ at \d+/[\dA-F]+ with changes \
+      \[%Electric.Replication.Changes.NewRecord\{\
+          relation: \{"public", "items"\}, \
+          record: %\{"content" => "test_content", "id" => "00000000-0000-0000-0000-000000000000"\}
+    ?%Electric.Replication.Changes.UpdatedRecord\{\
+          relation: \{"public", "items"\}, \
+          old_record: %\{"content" => "test_content", "id" => "00000000-0000-0000-0000-000000000000"\}, \
+          record: %\{"content" => "test_content", "id" => "00000000-0000-0000-0000-000000000000"\}
 
 [cleanup]
    [invoke teardown]
