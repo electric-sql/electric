@@ -122,17 +122,23 @@ export class MockRegistry extends BaseRegistry {
 
     const opts = { ...satelliteDefaults, ...overrides }
 
-    const satellite = new MockSatelliteProcess(
-      dbName,
-      adapter,
-      migrator,
-      notifier,
-      socketFactory,
-      opts
-    )
-    await satellite.start(config.auth)
-
-    return satellite
+    const satellites = this.satellites
+    const satellite = satellites[dbName]
+    if (satellite !== undefined) {
+      return satellite
+    } else {
+      const satellite = new MockSatelliteProcess(
+        dbName,
+        adapter,
+        migrator,
+        notifier,
+        socketFactory,
+        opts
+      )
+      await satellite.start(config.auth)
+      this.satellites[dbName] = satellite
+      return satellite
+    }
   }
 }
 

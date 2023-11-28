@@ -60,6 +60,8 @@
     "./wa-sqlite": "./dist/drivers/wa-sqlite/index.js",
     "./config": "./dist/config/index.js",
     "./debug": "./dist/util/debug/index.js",
+    "./satellite/mock": "./dist/satellite/mock.js",
+    "./satellite": "./dist/satellite/index.js",
     ".": "./dist/index.js",
     "./*": "./dist/*/index.js"
   },
@@ -109,6 +111,9 @@
       ],
       "util": [
         "./dist/util/index.d.ts"
+      ],
+      "satellite/mock": [
+        "./dist/satellite/mock.d.ts"
       ]
     }
   },
@@ -217,7 +222,7 @@
     "ts-proto": "^1.125.0",
     "typeorm": "^0.3.9",
     "typescript": "^4.9",
-    "wa-sqlite": "rhashimoto/wa-sqlite#semver:^0.9.8",
+    "wa-sqlite": "git+https://github.com/rhashimoto/wa-sqlite#master",
     "web-worker": "^1.2.0"
   },
   "peerDependencies": {
@@ -229,7 +234,7 @@
     "react-native": ">= 0.68.0",
     "react-native-sqlite-storage": ">= 6.0.0",
     "typeorm": ">=0.3.0",
-    "wa-sqlite": "rhashimoto/wa-sqlite#semver:^0.9.8"
+    "wa-sqlite": "git+https://github.com/rhashimoto/wa-sqlite#master"
   },
   "peerDependenciesMeta": {
     "@capacitor-community/sqlite": {
