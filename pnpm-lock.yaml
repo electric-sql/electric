@@ -1,4 +1,4 @@
-lockfileVersion: '6.1'
+lockfileVersion: '6.0'
 
 settings:
   autoInstallPeers: true
@@ -238,8 +238,8 @@ importers:
         specifier: ^4.9
         version: 4.9.5
       wa-sqlite:
-        specifier: rhashimoto/wa-sqlite#semver:^0.9.8
-        version: github.com/rhashimoto/wa-sqlite/5266fd8cdb4b3ced41352ba7b1f0e919ac37027a
+        specifier: git+https://github.com/rhashimoto/wa-sqlite#master
+        version: github.com/rhashimoto/wa-sqlite/60d065c8065476d32117bc928172d6d3d0ce7351
       web-worker:
         specifier: ^1.2.0
         version: 1.2.0
@@ -14361,8 +14361,8 @@ packages:
     resolution: {integrity: sha512-m46AKbrzKVzOzs/DZgVnG5H55N1sv1M8qZU3A8RIKbs3mrACDNeIOeilDymVb2HdmP8uwshOCF4uJ8uM9rCqJw==}
     dev: false
 
-  github.com/rhashimoto/wa-sqlite/5266fd8cdb4b3ced41352ba7b1f0e919ac37027a:
-    resolution: {tarball: https://codeload.github.com/rhashimoto/wa-sqlite/tar.gz/5266fd8cdb4b3ced41352ba7b1f0e919ac37027a}
+  github.com/rhashimoto/wa-sqlite/60d065c8065476d32117bc928172d6d3d0ce7351:
+    resolution: {tarball: https://codeload.github.com/rhashimoto/wa-sqlite/tar.gz/60d065c8065476d32117bc928172d6d3d0ce7351}
     name: wa-sqlite
     version: 0.9.9
     dev: true
