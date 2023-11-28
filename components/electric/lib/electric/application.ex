@@ -43,7 +43,7 @@ defmodule Electric.Application do
         PostgresConnector,
         config
         |> Keyword.put(:origin, to_string(name))
-        |> Keyword.put(:write_mode, Electric.write_mode())
+        |> Keyword.put(:write_to_pg_mode, Electric.write_to_pg_mode())
       )
     end)
 

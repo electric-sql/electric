@@ -120,14 +120,9 @@ defmodule Electric.Replication.Connectors do
     |> Map.new()
   end
 
-  @spec streaming_write_mode?(config()) :: boolean
-  def streaming_write_mode?(config) do
-    write_mode(config) == :streaming
-  end
-
-  @spec write_mode(config()) :: Electric.write_mode()
-  def write_mode(config) do
-    Keyword.get(config, :write_mode, Electric.write_mode())
+  @spec write_to_pg_mode(config()) :: Electric.write_to_pg_mode()
+  def write_to_pg_mode(config) do
+    Keyword.get(config, :write_to_pg_mode, Electric.write_to_pg_mode())
   end
 
   defp new_map_with_charlists(list) do

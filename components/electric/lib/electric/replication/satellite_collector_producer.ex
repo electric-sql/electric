@@ -41,7 +41,7 @@ defmodule Electric.Replication.SatelliteCollectorProducer do
        next_key: 0,
        demand: 0,
        starting_from: -1,
-       write_mode: Keyword.get(opts, :write_mode, :streaming)
+       write_to_pg_mode: Keyword.get(opts, :write_to_pg_mode, :logical_replication)
      }}
   end
 
@@ -49,7 +49,7 @@ defmodule Electric.Replication.SatelliteCollectorProducer do
   def handle_call({:store_incoming_transactions, transactions}, _, state) do
     transactions
     |> Stream.reject(&Enum.empty?(&1.changes))
-    |> maybe_update_acked_client_lsns(state.write_mode)
+    |> maybe_update_acked_client_lsns(state.write_to_pg_mode)
     |> Stream.with_index(state.next_key)
     |> Enum.to_list()
     |> then(&ETS.Set.put(state.table, &1))
@@ -111,11 +111,11 @@ defmodule Electric.Replication.SatelliteCollectorProducer do
     end
   end
 
-  defp maybe_update_acked_client_lsns(tx_stream, :immediate),
-    do: tx_stream
-
-  defp maybe_update_acked_client_lsns(tx_stream, :streaming),
+  defp maybe_update_acked_client_lsns(tx_stream, :logical_replication),
     do: Stream.map(tx_stream, &update_acked_client_lsn/1)
+
+  defp maybe_update_acked_client_lsns(tx_stream, :direct_writes),
+    do: tx_stream
 
   # NOTE(alco):
   #

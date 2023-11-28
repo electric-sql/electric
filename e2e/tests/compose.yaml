@@ -15,7 +15,7 @@ services:
       service: electric
     environment:
       DATABASE_URL: postgresql://postgres:password@pg_1:5432/electric
-      ELECTRIC_WRITE_MODE: "${ELECTRIC_WRITE_MODE:-streaming}"
+      ELECTRIC_WRITE_TO_PG_MODE: "${ELECTRIC_WRITE_TO_PG_MODE:-logical_replication}"
       LOGICAL_PUBLISHER_HOST: electric_1
       PG_PROXY_LOG_LEVEL: info
     ports:

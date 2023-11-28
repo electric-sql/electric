@@ -27,13 +27,13 @@ jobs:
     runs-on: electric-e2e-8-32
     strategy:
       matrix:
-        write_mode: [streaming, immediate]
+        write_to_pg_mode: [logical_replication, direct_writes]
     defaults:
       run:
         working-directory: e2e
     env:
       BUILDKITE_ANALYTICS_TOKEN: ${{ secrets.BUILDKITE_TEST_ANALYTICS_E2E }}
-      ELECTRIC_WRITE_MODE: ${{ matrix.write_mode }}
+      ELECTRIC_WRITE_TO_PG_MODE: ${{ matrix.write_to_pg_mode }}
     steps:
       - uses: actions/checkout@v3
         with:

@@ -98,12 +98,14 @@ defmodule Electric.Replication.PostgresConnectorMng do
 
         state = %State{state | pg_connector_sup_monitor: Process.monitor(sup_pid)}
 
-        if Connectors.streaming_write_mode?(state.config) do
-          state = %State{state | state: :subscribe}
-          {:noreply, state, {:continue, :subscribe}}
-        else
-          state = %State{state | state: :ready}
-          {:noreply, state}
+        case Connectors.write_to_pg_mode(state.config) do
+          :logical_replication ->
+            state = %State{state | state: :subscribe}
+            {:noreply, state, {:continue, :subscribe}}
+
+          :direct_writes ->
+            state = %State{state | state: :ready}
+            {:noreply, state}
         end
 
       error ->
@@ -213,13 +215,16 @@ defmodule Electric.Replication.PostgresConnectorMng do
     publication = Map.fetch!(replication_config, :publication)
     electric_connection = Map.fetch!(replication_config, :electric_connection)
 
-    if Connectors.streaming_write_mode?(config) do
-      with {:ok, _name} <-
-             Client.create_subscription(conn, subscription, publication, electric_connection) do
+    case Connectors.write_to_pg_mode(config) do
+      :logical_replication ->
+        result = Client.create_subscription(conn, subscription, publication, electric_connection)
+
+        with {:ok, _name} <- result do
+          :ok
+        end
+
+      :direct_writes ->
         :ok
-      end
-    else
-      :ok
     end
   end
 end
