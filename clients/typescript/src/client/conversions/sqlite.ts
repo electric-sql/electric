@@ -50,6 +50,11 @@ export function fromSqlite(v: any, pgType: PgType): any {
   ) {
     // it's a serialised NaN
     return NaN
+  } else if (pgType === PgBasicType.PG_INT8) {
+    // always return BigInts for PG_INT8 values
+    // because some drivers (e.g. wa-sqlite) return a regular JS number if the value fits into a JS number
+    // but we know that it should be a BigInt based on the column type
+    return BigInt(v)
   } else {
     return v
   }

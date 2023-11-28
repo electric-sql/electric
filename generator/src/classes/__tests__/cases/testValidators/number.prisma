@@ -21,6 +21,7 @@ model NumberValidators {
     multipleOf  Int? /// @zod.number.multipleOf(5)
     finite      Int? /// @zod.number.finite()
     chained     Int? /// @zod.number.gt(5).lt(10)
+    bigint      BigInt? /// @zod.bigint.gte(-9223372036854775808n).lte(9223372036854775807n)
 }
 
 model NumberValidatorsWithMessage {

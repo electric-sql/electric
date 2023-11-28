@@ -338,6 +338,9 @@ function deserialiseRow(str: string, rel: Pick<Relation, 'columns'>): Rec {
         return Number(value)
       }
     }
+    if (columnType === 'INT8' || columnType === 'BIGINT') {
+      return BigInt(value)
+    }
     return value
   })
 }

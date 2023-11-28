@@ -107,12 +107,17 @@ export class Table<
   ) {
     this._fields = this._dbDescription.getFields(tableName)
     const fieldNames = this._dbDescription.getFieldNames(tableName)
-    this._builder = new Builder(tableName, fieldNames, shapeManager)
+    const tableDescription = this._dbDescription.getTableDescription(tableName)
+    this._builder = new Builder(
+      tableName,
+      fieldNames,
+      shapeManager,
+      tableDescription
+    )
     this._executor = new Executor(adapter, notifier, this._fields)
     this._shapeManager = shapeManager
     this._qualifiedTableName = new QualifiedTablename('main', tableName)
     this._tables = new Map()
-    const tableDescription = this._dbDescription.getTableDescription(tableName)
     this._schema = tableDescription.modelSchema
     this.createSchema = //transformCreateSchema(
       omitCountFromSelectAndIncludeSchema(tableDescription.createSchema) //, fields)
