@@ -6,12 +6,12 @@ on:
   pull_request:
     paths-ignore:
       # Root files
-      - '*'
-      - '!pnpm-lock.yaml'
+      - "*"
+      - "!pnpm-lock.yaml"
       # CI files not related to GH actions
-      - '.buildkite/**'
-      - '**/README.md'
-      - 'docs/**'
+      - ".buildkite/**"
+      - "**/README.md"
+      - "docs/**"
 
 env:
   OTP_VERSION: "25.3"
@@ -25,11 +25,15 @@ jobs:
   e2e_tests:
     name: E2E tests
     runs-on: electric-e2e-8-32
+    strategy:
+      matrix:
+        write_mode: [streaming, immediate]
     defaults:
       run:
         working-directory: e2e
     env:
       BUILDKITE_ANALYTICS_TOKEN: ${{ secrets.BUILDKITE_TEST_ANALYTICS_E2E }}
+      ELECTRIC_WRITE_MODE: ${{ matrix.write_mode }}
     steps:
       - uses: actions/checkout@v3
         with:
