@@ -418,25 +418,39 @@ export class SatelliteProcess implements Satellite {
     // and this resolver and rejecter would not yet be stored
     // this could especially happen in unit tests
     this.subscriptionNotifiers[subId] = emptyPromise()
+    // store the promise because by the time the
+    // `await this.client.subscribe(subId, shapeReqs)` call resolves
+    // the `subId` entry in the `subscriptionNotifiers` may have been deleted
+    // so we can no longer access it
+    const subProm = this.subscriptionNotifiers[subId].promise
 
-    const { subscriptionId, error }: SubscribeResponse =
-      await this.client.subscribe(subId, shapeReqs)
-    if (subId !== subscriptionId) {
+    // `clearSubAndThrow` deletes the listeners and cancels the subscription
+    const clearSubAndThrow = (error: any): never => {
       delete this.subscriptionNotifiers[subId]
       this.subscriptions.subscriptionCancelled(subId)
-      throw new Error(
-        `Expected SubscripeResponse for subscription id: ${subId} but got it for another id: ${subscriptionId}`
-      )
-    }
-
-    if (error) {
-      delete this.subscriptionNotifiers[subscriptionId]
-      this.subscriptions.subscriptionCancelled(subscriptionId)
       throw error
     }
 
-    return {
-      synced: this.subscriptionNotifiers[subId].promise,
+    try {
+      const { subscriptionId, error }: SubscribeResponse =
+        await this.client.subscribe(subId, shapeReqs)
+      if (subId !== subscriptionId) {
+        clearSubAndThrow(
+          new Error(
+            `Expected SubscripeResponse for subscription id: ${subId} but got it for another id: ${subscriptionId}`
+          )
+        )
+      }
+
+      if (error) {
+        clearSubAndThrow(error)
+      }
+
+      return {
+        synced: subProm,
+      }
+    } catch (error: any) {
+      return clearSubAndThrow(error)
     }
   }
 

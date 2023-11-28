@@ -3,6 +3,7 @@ import anyTest, { TestFn } from 'ava'
 import {
   MOCK_BEHIND_WINDOW_LSN,
   MOCK_INTERNAL_ERROR,
+  MockSatelliteClient,
 } from '../../src/satellite/mock'
 import { QualifiedTablename } from '../../src/util/tablename'
 import { sleepAsync } from '../../src/util/timer'
@@ -1340,6 +1341,38 @@ test('apply shape data and persist subscription', async (t) => {
   }
 })
 
+test('(regression) shape subscription succeeds even if subscription data is delivered before the SatSubsReq RPC call receives its SatSubsResp answer', async (t) => {
+  const { client, satellite } = t.context
+  const { runMigrations, authState } = t.context
+  await runMigrations()
+
+  const tablename = 'parent'
+
+  // relations must be present at subscription delivery
+  client.setRelations(relations)
+  client.setRelationData(tablename, parentRecord)
+
+  const conn = await satellite.start(authState)
+  await conn.connectionPromise
+
+  const shapeDef: ClientShapeDefinition = {
+    selects: [{ tablename }],
+  }
+
+  satellite!.relations = relations
+
+  // Enable the deliver first flag in the mock client
+  // such that the subscription data is delivered before the
+  // subscription promise is resolved
+  const mockClient = satellite.client as MockSatelliteClient
+  mockClient.enableDeliverFirst()
+
+  const { synced } = await satellite.subscribe([shapeDef])
+  await synced
+
+  t.pass()
+})
+
 test('multiple subscriptions for the same shape are deduplicated', async (t) => {
   const { client, satellite } = t.context
   const { runMigrations, authState } = t.context
@@ -1536,9 +1569,8 @@ test('a single subscribe with multiple tables with FKs', async (t) => {
   }
 
   satellite!.relations = relations
-  await satellite.subscribe([shapeDef1, shapeDef2])
 
-  return new Promise<void>((res, rej) => {
+  const prom = new Promise<void>((res, rej) => {
     client.subscribeToSubscriptionEvents(
       (data: SubscriptionData) => {
         // child is applied first
@@ -1561,6 +1593,10 @@ test('a single subscribe with multiple tables with FKs', async (t) => {
       () => undefined
     )
   })
+
+  await satellite.subscribe([shapeDef1, shapeDef2])
+
+  return prom
 })
 
 test.serial('a shape delivery that triggers garbage collection', async (t) => {

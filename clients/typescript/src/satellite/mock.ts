@@ -153,6 +153,8 @@ export class MockSatelliteClient extends EventEmitter implements Client {
 
   relationData: Record<string, DataRecord[]> = {}
 
+  deliverFirst = false
+
   setRelations(relations: RelationsCache): void {
     this.relations = relations
     if (this.relationsCb) {
@@ -167,6 +169,10 @@ export class MockSatelliteClient extends EventEmitter implements Client {
     const data = this.relationData[tablename]
 
     data.push(record)
+  }
+
+  enableDeliverFirst() {
+    this.deliverFirst = true
   }
 
   subscribe(
@@ -208,18 +214,31 @@ export class MockSatelliteClient extends EventEmitter implements Client {
     }
 
     return new Promise((resolve) => {
-      setTimeout(() => {
+      const emit = () => {
         this.emit(SUBSCRIPTION_DELIVERED, {
           subscriptionId,
           lsn: base64.toBytes('MTIz'), // base64.encode("123")
           data,
           shapeReqToUuid,
         } as SubscriptionData)
-      }, 1)
+      }
 
-      resolve({
-        subscriptionId,
-      })
+      const resolveProm = () => {
+        resolve({
+          subscriptionId,
+        })
+      }
+
+      if (this.deliverFirst) {
+        // When the `deliverFirst` flag is set,
+        // we deliver the subscription before resolving the promise.
+        emit()
+        setTimeout(resolveProm, 1)
+      } else {
+        // Otherwise, we resolve the promise before delivering the subscription.
+        setTimeout(emit, 1)
+        resolveProm()
+      }
     })
   }
 
