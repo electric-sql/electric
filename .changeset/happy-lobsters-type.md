@@ -1,7 +1,5 @@
 ---
 "electric-sql": patch
-"@core/electric": patch
-"create-electric-app": patch
 "@electric-sql/prisma-generator": patch
 ---
 
