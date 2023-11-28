@@ -67,7 +67,7 @@
     "uuid": "^9.0.0",
     "vite-plugin-svgr": "^3.2.0",
     "wa-sqlite": "rhashimoto/wa-sqlite#semver:^0.9.8",
-    "zod": "^3.22.2"
+    "zod": "3.21.1"
   },
   "devDependencies": {
     "@databases/pg": "^5.4.1",

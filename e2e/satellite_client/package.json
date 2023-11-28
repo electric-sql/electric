@@ -21,7 +21,7 @@
     "electric-sql": "workspace:*",
     "jsonwebtoken": "^9.0.0",
     "uuid": "^9.0.0",
-    "zod": "^3.21.4"
+    "zod": "3.21.1"
   },
   "devDependencies": {
     "@electric-sql/prisma-generator": "workspace:*",
