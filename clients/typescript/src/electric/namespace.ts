@@ -3,8 +3,10 @@
 import { DatabaseAdapter } from './adapter'
 import { Notifier } from '../notifiers'
 import { ConnectivityState } from '../util/types'
+import { globalRegistry } from '../satellite'
 
 export class ElectricNamespace {
+  dbName: string
   adapter: DatabaseAdapter
   notifier: Notifier
   private _isConnected: boolean
@@ -12,28 +14,22 @@ export class ElectricNamespace {
     return this._isConnected
   }
 
-  constructor(adapter: DatabaseAdapter, notifier: Notifier) {
+  private _stateChangeSubscription: string
+
+  constructor(dbName: string, adapter: DatabaseAdapter, notifier: Notifier) {
+    this.dbName = dbName
     this.adapter = adapter
     this.notifier = notifier
     this._isConnected = false
 
-    // XXX if you're implementing VAX-799, see the note below and maybe refactor
-    // this out of here whilst cleaning up the subscription.
-
-    // we need to set isConnected before the first event is emitted,
-    // otherwise application might be out of sync with satellite state.
-    this.notifier.subscribeToConnectivityStateChanges(
-      ({ connectivityState }) => {
-        this.setIsConnected(connectivityState)
-      }
-    )
+    this._stateChangeSubscription =
+      this.notifier.subscribeToConnectivityStateChanges(
+        ({ connectivityState }) => {
+          this.setIsConnected(connectivityState)
+        }
+      )
   }
 
-  // XXX this `isConnected` property is now only used via the ElectricClient.
-  // Now ... because the connectivity state change subscription is wired up
-  // here, we proxy this property from a dynamic `isConnected` getter on the
-  // ElectricClient. All of which is a bit unecessary and something of a
-  // code smell. As is the subscription above not being cleaned up.
   setIsConnected(connectivityState: ConnectivityState): void {
     this._isConnected = connectivityState === 'connected'
   }
@@ -43,5 +39,15 @@ export class ElectricNamespace {
   // `db.electric.notifier.potentiallyChanged()`.
   potentiallyChanged(): void {
     this.notifier.potentiallyChanged()
+  }
+
+  /**
+   * Cleans up the resources used by the `ElectricNamespace`.
+   */
+  close(): void {
+    this.notifier.unsubscribeFromConnectivityStateChanges(
+      this._stateChangeSubscription
+    )
+    globalRegistry.stop(this.dbName)
   }
 }

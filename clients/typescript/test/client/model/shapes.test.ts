@@ -56,7 +56,13 @@ async function makeContext(t: ExecutionContext<ContextType>) {
     satelliteDefaults
   )
 
-  const electric = ElectricClient.create(schema, adapter, notifier, satellite)
+  const electric = ElectricClient.create(
+    dbName,
+    schema,
+    adapter,
+    notifier,
+    satellite
+  )
   const Post = electric.db.Post
   const Items = electric.db.Items
   const User = electric.db.User

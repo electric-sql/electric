@@ -59,23 +59,20 @@ interface RawQueries {
 export class ElectricClient<
   DB extends DbSchema<any>
 > extends ElectricNamespace {
-  private _satellite: Satellite
-  public get satellite(): Satellite {
-    return this._satellite
-  }
-
   private constructor(
     public db: ClientTables<DB> & RawQueries,
+    dbName: string,
     adapter: DatabaseAdapter,
     notifier: Notifier,
-    satellite: Satellite
+    public readonly satellite: Satellite
   ) {
-    super(adapter, notifier)
-    this._satellite = satellite
+    super(dbName, adapter, notifier)
+    this.satellite = satellite
   }
 
   // Builds the DAL namespace from a `dbDescription` object
   static create<DB extends DbSchema<any>>(
+    dbName: string,
     dbDescription: DB,
     adapter: DatabaseAdapter,
     notifier: Notifier,
@@ -112,6 +109,6 @@ export class ElectricClient<
       liveRaw: liveRaw.bind(null, adapter),
     }
 
-    return new ElectricClient(db, adapter, notifier, satellite)
+    return new ElectricClient(db, dbName, adapter, notifier, satellite)
   }
 }

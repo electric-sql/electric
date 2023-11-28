@@ -56,7 +56,13 @@ test.beforeEach((t) => {
     {} as SocketFactory,
     {} as SatelliteOpts
   )
-  const dal = ElectricClient.create(schema, adapter, notifier, satellite)
+  const dal = ElectricClient.create(
+    'test.db',
+    schema,
+    adapter,
+    notifier,
+    satellite
+  )
 
   dal.db.Items.sync()
 
