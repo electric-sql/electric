@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { Prisma } from '@prisma/client';
+import type { Prisma } from './prismaClient';
 import { TableSchema, DbSchema, Relation, ElectricClient, HKT } from 'electric-sql/client/model';
 import migrations from './migrations';
 
@@ -128,8 +128,8 @@ export type Ints = z.infer<typeof IntsSchema>
 
 export const FloatsSchema = z.object({
   id: z.string(),
-  f4: z.number().or(z.nan()).nullish(),
-  f8: z.number().or(z.nan()).nullish(),
+  f4: z.number().or(z.nan()).nullable(),
+  f8: z.number().or(z.nan()).nullable(),
 })
 
 export type Floats = z.infer<typeof FloatsSchema>
@@ -2791,7 +2791,7 @@ export const tableSchemas = {
       ],
       [
         "f4",
-        "FLOAT8"
+        "FLOAT4"
       ],
       [
         "f8",

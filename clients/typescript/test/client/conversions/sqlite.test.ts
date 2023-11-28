@@ -30,7 +30,7 @@ await tbl.sync()
 function setupDB() {
   db.exec('DROP TABLE IF EXISTS DataTypes')
   db.exec(
-    "CREATE TABLE DataTypes('id' int PRIMARY KEY, 'date' varchar, 'time' varchar, 'timetz' varchar, 'timestamp' varchar, 'timestamptz' varchar, 'bool' int, 'uuid' varchar, 'int2' int2, 'int4' int4, 'int8' int8, 'float8' real, 'relatedId' int);"
+    "CREATE TABLE DataTypes('id' int PRIMARY KEY, 'date' varchar, 'time' varchar, 'timetz' varchar, 'timestamp' varchar, 'timestamptz' varchar, 'bool' int, 'uuid' varchar, 'int2' int2, 'int4' int4, 'int8' int8, 'float4' real, 'float8' real, 'relatedId' int);"
   )
 }
 
@@ -183,32 +183,43 @@ test.serial('floats are converted correctly to SQLite', async (t) => {
     data: [
       {
         id: 1,
+        float4: 1.234,
         float8: 1.234,
       },
       {
         id: 2,
+        float4: NaN,
         float8: NaN,
       },
       {
         id: 3,
+        float4: Infinity,
         float8: +Infinity,
       },
       {
         id: 4,
+        float4: -Infinity,
         float8: -Infinity,
       },
     ],
   })
 
   const rawRes = await electric.db.raw({
-    sql: 'SELECT id, float8 FROM DataTypes ORDER BY id ASC',
+    sql: 'SELECT id, float4, float8 FROM DataTypes ORDER BY id ASC',
     args: [],
   })
   t.deepEqual(rawRes, [
-    { id: 1, float8: 1.234 },
-    { id: 2, float8: 'NaN' },
-    { id: 3, float8: Infinity },
-    { id: 4, float8: -Infinity },
+    // 1.234 cannot be stored exactly in a float4
+    // hence, there is a rounding error, which is observed when we
+    // read the float4 value back into a 64-bit JS number
+    // The value 1.2339999675750732 that we read back
+    // is also what Math.fround(1.234) returns
+    // as being the nearest 32-bit single precision
+    // floating point representation of 1.234
+    { id: 1, float4: 1.2339999675750732, float8: 1.234 },
+    { id: 2, float4: 'NaN', float8: 'NaN' },
+    { id: 3, float4: Infinity, float8: Infinity },
+    { id: 4, float4: -Infinity, float8: -Infinity },
   ])
 })
 
