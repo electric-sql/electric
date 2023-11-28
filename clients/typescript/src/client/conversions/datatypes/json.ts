@@ -4,7 +4,7 @@ type JSON = string | number | boolean | Array<any> | Record<string, any>
 
 export function serialiseJSON(v: JSON): string {
   if (isJsonNull(v)) {
-    // user provided the special Prisma.JsonNull value
+    // user provided the special `JsonNull` value
     // to indicate a JSON null value rather than a DB NULL
     return JSON.stringify(null)
   }
@@ -25,8 +25,3 @@ function isJsonNull(v: JSON): boolean {
     v['__is_electric_json_null__']
   )
 }
-
-// TODO: do not use prisma's json null value
-//       but define our own
-//       and modify the generator to accept ours
-//       then we no longer have to pass it all the way through until here

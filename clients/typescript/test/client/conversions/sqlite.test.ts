@@ -233,7 +233,7 @@ test.serial('json is converted correctly to SQLite', async (t) => {
   await tbl.create({
     data: {
       id: 2,
-      json: null, // TODO: fix this type error --> update the typings in the generator
+      json: null,
     },
   })
 
