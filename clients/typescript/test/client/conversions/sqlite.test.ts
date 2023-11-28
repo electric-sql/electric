@@ -209,7 +209,14 @@ test.serial('floats are converted correctly to SQLite', async (t) => {
     args: [],
   })
   t.deepEqual(rawRes, [
-    { id: 1, float4: Math.fround(1.234), float8: 1.234 },
+    // 1.234 cannot be stored exactly in a float4
+    // hence, there is a rounding error, which is observed when we
+    // read the float4 value back into a 64-bit JS number
+    // The value 1.2339999675750732 that we read back
+    // is also what Math.fround(1.234) returns
+    // as being the nearest 32-bit single precision
+    // floating point representation of 1.234
+    { id: 1, float4: 1.2339999675750732, float8: 1.234 },
     { id: 2, float4: 'NaN', float8: 'NaN' },
     { id: 3, float4: Infinity, float8: Infinity },
     { id: 4, float4: -Infinity, float8: -Infinity },
