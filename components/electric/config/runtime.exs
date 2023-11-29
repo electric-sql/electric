@@ -120,9 +120,7 @@ if config_env() == :prod do
 
   postgresql_connection =
     System.fetch_env!("DATABASE_URL")
-    |> PostgresqlUri.parse()
-    |> then(&Keyword.put(&1, :host, &1[:hostname]))
-    |> Keyword.delete(:hostname)
+    |> Electric.Utils.parse_postgresql_uri()
     |> Keyword.put_new(:ssl, require_ssl?)
     |> Keyword.put(:ipv6, use_ipv6?)
     |> Keyword.update(:timeout, 5_000, &String.to_integer/1)

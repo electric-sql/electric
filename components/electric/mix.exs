@@ -42,7 +42,6 @@ defmodule Electric.MixProject do
       {:backoff, "~> 1.1"},
       {:mox, "~> 1.0.2"},
       {:mock, "~> 0.3.0", only: :test},
-      {:postgresql_uri, "~> 0.1.0"},
       {:ssl_verify_fun, "~> 1.1.7", override: true},
       {:jason, "~> 1.4"},
       {:dialyxir, "~> 1.3", only: [:dev], runtime: false},
