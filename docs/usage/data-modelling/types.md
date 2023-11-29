@@ -25,7 +25,6 @@ You are responsible for ensuring the uniqueness of your primary keys. If you som
 
 - `smallint` / `int2`
 - `integer` / `int` / `int4`
-- `real` / `float4`
 - `double precision` / `float8`
 
 **Strings**:
