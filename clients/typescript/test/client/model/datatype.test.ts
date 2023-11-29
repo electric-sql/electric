@@ -862,7 +862,6 @@ test.serial(
   }
 )
 
-
 test.serial('support JSON type', async (t) => {
   const json = { a: 1, b: true, c: { d: 'nested' }, e: [1, 2, 3], f: null }
   const res = await tbl.create({
