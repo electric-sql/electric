@@ -208,4 +208,167 @@ defmodule Electric.Utils do
       |> Map.put(:tcp_opts, [:inet6])
     end
   end
+
+  @doc """
+  Parse a PostgreSQL URI into a keyword list.
+
+  ## Examples
+
+      iex> parse_postgresql_uri("postgresql://postgres:password@example.com/app-db")
+      [
+        host: "example.com",
+        port: 5432,
+        database: "app-db",
+        username: "postgres",
+        password: "password",
+      ]
+
+      iex> parse_postgresql_uri("postgresql://electric@192.168.111.33:81/__shadow")
+      [
+        host: "192.168.111.33",
+        port: 81,
+        database: "__shadow",
+        username: "electric"
+      ]
+
+      iex> parse_postgresql_uri("postgresql://pg@[2001:db8::1234]:4321")
+      [
+        host: "2001:db8::1234",
+        port: 4321,
+        database: "pg",
+        username: "pg"
+      ]
+
+      iex> parse_postgresql_uri("postgresql://user@localhost:5433/")
+      [
+        host: "localhost",
+        port: 5433,
+        database: "user",
+        username: "user"
+      ]
+
+      iex> parse_postgresql_uri("postgresql://user@localhost:5433/mydb?options=-c%20synchronous_commit%3Doff")
+      [
+        host: "localhost",
+        port: 5433,
+        database: "mydb",
+        username: "user"
+      ]
+
+      iex> parse_postgresql_uri("postgresql://electric@localhost/db?replication=database")
+      [
+        host: "localhost",
+        port: 5432,
+        database: "db",
+        username: "electric",
+        replication: "database"
+      ]
+
+      iex> parse_postgresql_uri("postgresql://electric@localhost/db?replication=off")
+      [
+        host: "localhost",
+        port: 5432,
+        database: "db",
+        username: "electric"
+      ]
+
+  For the `sslmode` keyword, any value but "disable" will result in enabling SSL.
+
+      iex> parse_postgresql_uri("postgres://super_user@localhost:7801/postgres?sslmode=yesplease")
+      [
+        host: "localhost",
+        port: 7801,
+        database: "postgres",
+        username: "super_user",
+        ssl: true
+      ]
+  """
+  @spec parse_postgresql_uri(binary) :: keyword
+  def parse_postgresql_uri(uri_str) do
+    %URI{scheme: scheme, host: host, port: port, path: path, userinfo: userinfo, query: query} =
+      URI.parse(uri_str)
+
+    :ok = assert_valid_scheme!(scheme)
+
+    :ok = assert_valid_host!(host)
+    port = port || 5432
+
+    {username, password} = parse_userinfo!(userinfo)
+
+    database = parse_database(path, username)
+
+    query_params =
+      if query do
+        URI.decode_query(query)
+      else
+        %{}
+      end
+
+    [
+      host: host,
+      port: port,
+      database: database,
+      username: username,
+      password: password
+    ]
+    |> add_replication_param(query_params["replication"])
+    |> add_ssl_param(query_params["sslmode"])
+    |> Enum.reject(fn {_key, val} -> is_nil(val) end)
+  end
+
+  defp assert_valid_scheme!(scheme) when scheme in ["postgres", "postgresql"], do: :ok
+
+  defp assert_valid_scheme!(_scheme) do
+    raise "Invalid scheme in DATABASE_URL"
+  end
+
+  defp assert_valid_host!(str) do
+    if is_binary(str) and String.trim(str) != "" do
+      :ok
+    else
+      raise "Missing host in DATABASE_URL"
+    end
+  end
+
+  defp parse_userinfo!(str) do
+    try do
+      true = is_binary(str)
+
+      {username, password} =
+        case String.split(str, ":") do
+          [username] -> {username, nil}
+          [username, password] -> {username, password}
+        end
+
+      false = String.trim(username) == ""
+
+      {username, password}
+    rescue
+      _ -> raise "Invalid username or password in DATABASE_URL: #{inspect(str)}"
+    end
+  end
+
+  defp parse_database(nil, username), do: username
+  defp parse_database("/", username), do: username
+  defp parse_database("/" <> dbname, _username), do: dbname
+
+  defp add_replication_param(params, nil), do: params
+
+  defp add_replication_param(params, str) when is_binary(str) do
+    case String.downcase(str) do
+      off when off in ~w[false off no 0] -> params
+      "database" -> params ++ [replication: "database"]
+      other -> raise "Unsupported replication mode in DATABASE_URL: #{inspect(other)}"
+    end
+  end
+
+  defp add_ssl_param(params, nil), do: params
+
+  defp add_ssl_param(params, str) when is_binary(str) do
+    if String.downcase(str) == "disable" or String.trim(str) == "" do
+      params
+    else
+      params ++ [ssl: true]
+    end
+  end
 end
