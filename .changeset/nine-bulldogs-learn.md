@@ -3,4 +3,4 @@
 "@electric-sql/prisma-generator": patch
 ---
 
-Adds client-side support for JSON type.
+[VAX-825] Add client-side support for JSON type.
