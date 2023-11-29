@@ -13,8 +13,14 @@ import { InvalidArgumentError } from '../validation/errors/invalidArgumentError'
 import * as z from 'zod'
 import { IShapeManager } from './shapes'
 import Log from 'loglevel'
+import { ExtendedTableSchema } from './schema'
+import { PgBasicType } from '../conversions/types'
+import { HKT } from '../util/hkt'
 
 const squelPostgres = squel.useFlavour('postgres')
+squelPostgres.registerValueHandler('bigint', function (bigint) {
+  return bigint.toString()
+})
 
 type AnyFindInput = FindInput<any, any, any, any, any>
 
@@ -22,7 +28,19 @@ export class Builder {
   constructor(
     private _tableName: string,
     private _fields: string[],
-    private shapeManager: IShapeManager
+    private shapeManager: IShapeManager,
+    private _tableDescription: ExtendedTableSchema<
+      any,
+      any,
+      any,
+      any,
+      any,
+      any,
+      any,
+      any,
+      any,
+      HKT
+    >
   ) {}
 
   create(i: CreateInput<any, any, any>): QueryBuilder {
@@ -196,8 +214,24 @@ export class Builder {
     const fields = identificationFields
       .filter((f) => this._fields.includes(f))
       .concat(selectedFields)
+      .map((f) => this.castBigIntToText(f))
 
     return q.fields(fields)
+  }
+
+  /**
+   * Casts a field to TEXT if it is of type BigInt
+   * because not all adapters deal well with BigInts
+   * (e.g. better-sqlite3 requires BigInt support to be enabled
+   *       but then all integers are returned as BigInt...)
+   * The DAL will convert the string into a BigInt in the `fromSqlite` function from `../conversions/sqlite.ts`.
+   */
+  private castBigIntToText(field: string) {
+    const pgType = this._tableDescription.fields.get(field)
+    if (pgType === PgBasicType.PG_INT8) {
+      return `cast(${field} as TEXT) AS ${field}`
+    }
+    return field
   }
 
   private addOrderBy(i: AnyFindInput, q: PostgresSelect): PostgresSelect {
@@ -243,6 +277,13 @@ export class Builder {
     query: T
   ): T {
     return this._fields.reduce((query, field) => {
+      // if field is of type BigInt cast the result to TEXT
+      // because not all adapters deal well with BigInts
+      // the DAL will convert the string into a BigInt in the `fromSqlite` function from `../conversions/sqlite.ts`.
+      const pgType = this._tableDescription.fields.get(field)
+      if (pgType === PgBasicType.PG_INT8) {
+        return query.returning(`cast(${field} as TEXT) AS ${field}`)
+      }
       return query.returning(field)
     }, query)
   }

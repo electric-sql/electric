@@ -85,7 +85,7 @@ defmodule Electric.Postgres do
       bool
       date
       float8
-      int2 int4
+      int2 int4 int8
       text
       time
       timestamp timestamptz

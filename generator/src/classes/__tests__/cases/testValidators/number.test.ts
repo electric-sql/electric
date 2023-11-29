@@ -21,6 +21,7 @@ describe('test number validators', async () => {
       multipleOf: extendedDMMF.datamodel.models[0].fields[10],
       finite: extendedDMMF.datamodel.models[0].fields[11],
       chained: extendedDMMF.datamodel.models[0].fields[12],
+      bigint: extendedDMMF.datamodel.models[0].fields[13],
     }
 
     it(`should add gt validator for field "${fields.gt.name}"`, () => {
@@ -69,6 +70,12 @@ describe('test number validators', async () => {
 
     it(`should add chained validators for field "${fields.chained.name}"`, () => {
       expect(fields.chained.zodValidatorString).toBe('.gt(5).lt(10)')
+    })
+
+    it(`should add bigint validators for field "${fields.bigint.name}"`, () => {
+      expect(fields.bigint.zodValidatorString).toBe(
+        '.gte(-9223372036854775808n).lte(9223372036854775807n)'
+      )
     })
   })
 

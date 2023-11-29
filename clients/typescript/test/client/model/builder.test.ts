@@ -2,13 +2,16 @@ import test from 'ava'
 import { Builder } from '../../../src/client/model/builder'
 import { ShapeManagerMock } from '../../../src/client/model/shapes'
 import { ZodError } from 'zod'
+import { schema } from '../generated'
 
 const shapeManager = new ShapeManagerMock()
+const postTableDescription = schema.getTableDescription('Post')
 
 const tbl = new Builder(
   'Post',
   ['id', 'title', 'contents', 'nbr'],
-  shapeManager
+  shapeManager,
+  postTableDescription
 )
 
 // Sync all shapes such that we don't get warnings on every query

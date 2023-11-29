@@ -9,7 +9,12 @@ type ForeignKey = {
 
 type ColumnName = string
 type SQLiteType = string
-type ColumnTypes = Record<ColumnName, SQLiteType>
+type PgType = string
+type ColumnType = {
+  sqliteType: SQLiteType
+  pgType: PgType
+}
+type ColumnTypes = Record<ColumnName, ColumnType>
 
 export type Table = {
   tableName: string
@@ -219,6 +224,7 @@ export function generateTriggers(tables: Tables): Statement[] {
  * Joins the column names and values into a string of pairs of the form `'col1', val1, 'col2', val2, ...`
  * that can be used to build a JSON object in a SQLite `json_object` function call.
  * Values of type REAL are cast to text to avoid a bug in SQLite's `json_object` function (see below).
+ * Similarly, values of type INT8 (i.e. BigInts) are cast to text because JSON does not support BigInts.
  *
  * NOTE: There is a bug with SQLite's `json_object` function up to version 3.41.2
  *       that causes it to return an invalid JSON object if some value is +Infinity or -Infinity.
@@ -267,7 +273,10 @@ function joinColsForJSON(
   // casts the value to TEXT if it is of type REAL
   // to work around the bug in SQLite's `json_object` function
   const castIfNeeded = (col: string, targettedCol: string) => {
-    if (colTypes[col] === 'REAL') {
+    const tpes = colTypes[col]
+    const sqliteType = tpes.sqliteType
+    const pgType = tpes.pgType
+    if (sqliteType === 'REAL' || pgType === 'INT8' || pgType === 'BIGINT') {
       return `cast(${targettedCol} as TEXT)`
     } else {
       return targettedCol

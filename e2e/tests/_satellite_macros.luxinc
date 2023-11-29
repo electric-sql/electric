@@ -68,9 +68,9 @@
     ??$node
 [endmacro]
 
-[macro node_get_int id expected_int2 expected_int4]
+[macro node_get_int id expected_int2 expected_int4 expected_int8]
     !await client.get_int(db, '${id}')
-    ??{ id: '${id}', i2: ${expected_int2}, i4: ${expected_int4} }
+    ??{ id: '${id}', i2: ${expected_int2}, i4: ${expected_int4}, i8: ${expected_int8}n }
     ??$node
 [endmacro]
 
