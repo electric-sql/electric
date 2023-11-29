@@ -68,6 +68,7 @@ model Ints {
 
 model Floats {
   id String @id
+  f4 Float? @db.Real            /// @zod.custom.use(z.number().or(z.nan()))
   f8 Float? @db.DoublePrecision /// @zod.custom.use(z.number().or(z.nan()))
   @@map("floats")
 }

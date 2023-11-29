@@ -29,6 +29,11 @@ export function toSqlite(v: any, pgType: PgType): any {
     // and deserialise it back to `NaN` when reading from the DB.
     // cf. https://github.com/WiseLibs/better-sqlite3/issues/1088
     return 'NaN'
+  } else if (
+    pgType === PgBasicType.PG_FLOAT4 ||
+    pgType === PgBasicType.PG_REAL
+  ) {
+    return Math.fround(v)
   } else {
     return v
   }
@@ -46,10 +51,18 @@ export function fromSqlite(v: any, pgType: PgType): any {
     return deserialiseBoolean(v)
   } else if (
     v === 'NaN' &&
-    (pgType === PgBasicType.PG_FLOAT8 || pgType === PgBasicType.PG_FLOAT4)
+    (pgType === PgBasicType.PG_FLOAT8 ||
+      pgType === PgBasicType.PG_FLOAT4 ||
+      pgType === PgBasicType.PG_REAL)
   ) {
     // it's a serialised NaN
     return NaN
+  } else if (
+    pgType === PgBasicType.PG_FLOAT4 ||
+    pgType === PgBasicType.PG_REAL
+  ) {
+    // convert to float4 in case someone would have written a bigger value to SQLite directly
+    return Math.fround(v)
   } else if (pgType === PgBasicType.PG_INT8) {
     // always return BigInts for PG_INT8 values
     // because some drivers (e.g. wa-sqlite) return a regular JS number if the value fits into a JS number

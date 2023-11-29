@@ -101,6 +101,10 @@ export type Floats = {
   /**
    * @zod.custom.use(z.number().or(z.nan()))
    */
+  f4: number | null
+  /**
+   * @zod.custom.use(z.number().or(z.nan()))
+   */
   f8: number | null
 }
 
@@ -7205,50 +7209,60 @@ export namespace Prisma {
   }
 
   export type FloatsAvgAggregateOutputType = {
+    f4: number | null
     f8: number | null
   }
 
   export type FloatsSumAggregateOutputType = {
+    f4: number | null
     f8: number | null
   }
 
   export type FloatsMinAggregateOutputType = {
     id: string | null
+    f4: number | null
     f8: number | null
   }
 
   export type FloatsMaxAggregateOutputType = {
     id: string | null
+    f4: number | null
     f8: number | null
   }
 
   export type FloatsCountAggregateOutputType = {
     id: number
+    f4: number
     f8: number
     _all: number
   }
 
 
   export type FloatsAvgAggregateInputType = {
+    f4?: true
     f8?: true
   }
 
   export type FloatsSumAggregateInputType = {
+    f4?: true
     f8?: true
   }
 
   export type FloatsMinAggregateInputType = {
     id?: true
+    f4?: true
     f8?: true
   }
 
   export type FloatsMaxAggregateInputType = {
     id?: true
+    f4?: true
     f8?: true
   }
 
   export type FloatsCountAggregateInputType = {
     id?: true
+    f4?: true
     f8?: true
     _all?: true
   }
@@ -7342,6 +7356,7 @@ export namespace Prisma {
 
   export type FloatsGroupByOutputType = {
     id: string
+    f4: number | null
     f8: number | null
     _count: FloatsCountAggregateOutputType | null
     _avg: FloatsAvgAggregateOutputType | null
@@ -7366,6 +7381,7 @@ export namespace Prisma {
 
   export type FloatsSelect = {
     id?: boolean
+    f4?: boolean
     f8?: boolean
   }
 
@@ -8106,6 +8122,7 @@ export namespace Prisma {
 
   export const FloatsScalarFieldEnum: {
     id: 'id',
+    f4: 'f4',
     f8: 'f8'
   };
 
@@ -8467,11 +8484,13 @@ export namespace Prisma {
     OR?: Enumerable<FloatsWhereInput>
     NOT?: Enumerable<FloatsWhereInput>
     id?: StringFilter | string
+    f4?: FloatNullableFilter | number | null
     f8?: FloatNullableFilter | number | null
   }
 
   export type FloatsOrderByWithRelationInput = {
     id?: SortOrder
+    f4?: SortOrder
     f8?: SortOrder
   }
 
@@ -8481,6 +8500,7 @@ export namespace Prisma {
 
   export type FloatsOrderByWithAggregationInput = {
     id?: SortOrder
+    f4?: SortOrder
     f8?: SortOrder
     _count?: FloatsCountOrderByAggregateInput
     _avg?: FloatsAvgOrderByAggregateInput
@@ -8494,6 +8514,7 @@ export namespace Prisma {
     OR?: Enumerable<FloatsScalarWhereWithAggregatesInput>
     NOT?: Enumerable<FloatsScalarWhereWithAggregatesInput>
     id?: StringWithAggregatesFilter | string
+    f4?: FloatNullableWithAggregatesFilter | number | null
     f8?: FloatNullableWithAggregatesFilter | number | null
   }
 
@@ -8803,36 +8824,43 @@ export namespace Prisma {
 
   export type FloatsCreateInput = {
     id: string
+    f4?: number | null
     f8?: number | null
   }
 
   export type FloatsUncheckedCreateInput = {
     id: string
+    f4?: number | null
     f8?: number | null
   }
 
   export type FloatsUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
+    f4?: NullableFloatFieldUpdateOperationsInput | number | null
     f8?: NullableFloatFieldUpdateOperationsInput | number | null
   }
 
   export type FloatsUncheckedUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
+    f4?: NullableFloatFieldUpdateOperationsInput | number | null
     f8?: NullableFloatFieldUpdateOperationsInput | number | null
   }
 
   export type FloatsCreateManyInput = {
     id: string
+    f4?: number | null
     f8?: number | null
   }
 
   export type FloatsUpdateManyMutationInput = {
     id?: StringFieldUpdateOperationsInput | string
+    f4?: NullableFloatFieldUpdateOperationsInput | number | null
     f8?: NullableFloatFieldUpdateOperationsInput | number | null
   }
 
   export type FloatsUncheckedUpdateManyInput = {
     id?: StringFieldUpdateOperationsInput | string
+    f4?: NullableFloatFieldUpdateOperationsInput | number | null
     f8?: NullableFloatFieldUpdateOperationsInput | number | null
   }
 
@@ -9195,24 +9223,29 @@ export namespace Prisma {
 
   export type FloatsCountOrderByAggregateInput = {
     id?: SortOrder
+    f4?: SortOrder
     f8?: SortOrder
   }
 
   export type FloatsAvgOrderByAggregateInput = {
+    f4?: SortOrder
     f8?: SortOrder
   }
 
   export type FloatsMaxOrderByAggregateInput = {
     id?: SortOrder
+    f4?: SortOrder
     f8?: SortOrder
   }
 
   export type FloatsMinOrderByAggregateInput = {
     id?: SortOrder
+    f4?: SortOrder
     f8?: SortOrder
   }
 
   export type FloatsSumOrderByAggregateInput = {
+    f4?: SortOrder
     f8?: SortOrder
   }
 

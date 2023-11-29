@@ -102,16 +102,18 @@ export function writeFieldsMap(
 function pgType(field: ExtendedDMMFField, modelName: string): string {
   const prismaType = field.type
   const attributes = field.attributes
+  const getTypeAttribute = () =>
+    attributes.find((a) => a.type.startsWith('@db'))
   switch (prismaType) {
     // BigInt, Boolean, Bytes, DateTime, Decimal, Float, Int, JSON, String
     case 'String':
-      return stringToPg(attributes)
+      return stringToPg(getTypeAttribute())
     case 'Int':
-      return intToPg(attributes)
+      return intToPg(getTypeAttribute())
     case 'Boolean':
       return 'BOOL'
     case 'DateTime':
-      return dateTimeToPg(attributes, field.name, modelName)
+      return dateTimeToPg(getTypeAttribute(), field.name, modelName)
     case 'BigInt':
       return 'INT8'
     case 'Bytes':
@@ -119,7 +121,7 @@ function pgType(field: ExtendedDMMFField, modelName: string): string {
     case 'Decimal':
       return 'DECIMAL'
     case 'Float':
-      return 'FLOAT8'
+      return floatToPg(getTypeAttribute())
     case 'JSON':
       return 'JSON'
     default:
@@ -127,12 +129,20 @@ function pgType(field: ExtendedDMMFField, modelName: string): string {
   }
 }
 
+function floatToPg(pgTypeAttribute: Attribute | undefined): string {
+  if (!pgTypeAttribute || pgTypeAttribute.type === '@db.DoublePrecision') {
+    // If Prisma did not add a type attribute then the PG type was FLOAT8
+    return 'FLOAT8'
+  } else {
+    return 'FLOAT4'
+  }
+}
+
 function dateTimeToPg(
-  attributes: Array<Attribute>,
+  a: Attribute | undefined,
   field: string,
   model: string
 ): string {
-  const a = attributes.find((a) => a.type.startsWith('@db'))
   const type = a?.type
   const mapping = new Map([
     ['@db.Timestamptz', 'TIMESTAMPTZ'],
@@ -159,8 +169,7 @@ function dateTimeToPg(
   }
 }
 
-function stringToPg(attributes: Array<Attribute>) {
-  const pgTypeAttribute = attributes.find((a) => a.type.startsWith('@db'))
+function stringToPg(pgTypeAttribute: Attribute | undefined) {
   if (!pgTypeAttribute || pgTypeAttribute.type === '@db.Text') {
     // If Prisma does not add a type attribute then the PG type was TEXT
     return 'TEXT'
@@ -171,8 +180,7 @@ function stringToPg(attributes: Array<Attribute>) {
   }
 }
 
-function intToPg(attributes: Array<Attribute>) {
-  const pgTypeAttribute = attributes.find((a) => a.type.startsWith('@db'))
+function intToPg(pgTypeAttribute: Attribute | undefined) {
   if (pgTypeAttribute?.type === '@db.SmallInt') {
     return 'INT2'
   } else {

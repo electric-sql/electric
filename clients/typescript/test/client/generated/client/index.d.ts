@@ -80,6 +80,10 @@ export type DataTypes = {
   /**
    * @zod.custom.use(z.number().or(z.nan()))
    */
+  float4: number | null
+  /**
+   * @zod.custom.use(z.number().or(z.nan()))
+   */
   float8: number | null
   relatedId: number | null
 }
@@ -4803,6 +4807,7 @@ export namespace Prisma {
     int2: number | null
     int4: number | null
     int8: number | null
+    float4: number | null
     float8: number | null
     relatedId: number | null
   }
@@ -4812,6 +4817,7 @@ export namespace Prisma {
     int2: number | null
     int4: number | null
     int8: bigint | null
+    float4: number | null
     float8: number | null
     relatedId: number | null
   }
@@ -4828,6 +4834,7 @@ export namespace Prisma {
     int2: number | null
     int4: number | null
     int8: bigint | null
+    float4: number | null
     float8: number | null
     relatedId: number | null
   }
@@ -4844,6 +4851,7 @@ export namespace Prisma {
     int2: number | null
     int4: number | null
     int8: bigint | null
+    float4: number | null
     float8: number | null
     relatedId: number | null
   }
@@ -4860,6 +4868,7 @@ export namespace Prisma {
     int2: number
     int4: number
     int8: number
+    float4: number
     float8: number
     relatedId: number
     _all: number
@@ -4871,6 +4880,7 @@ export namespace Prisma {
     int2?: true
     int4?: true
     int8?: true
+    float4?: true
     float8?: true
     relatedId?: true
   }
@@ -4880,6 +4890,7 @@ export namespace Prisma {
     int2?: true
     int4?: true
     int8?: true
+    float4?: true
     float8?: true
     relatedId?: true
   }
@@ -4896,6 +4907,7 @@ export namespace Prisma {
     int2?: true
     int4?: true
     int8?: true
+    float4?: true
     float8?: true
     relatedId?: true
   }
@@ -4912,6 +4924,7 @@ export namespace Prisma {
     int2?: true
     int4?: true
     int8?: true
+    float4?: true
     float8?: true
     relatedId?: true
   }
@@ -4928,6 +4941,7 @@ export namespace Prisma {
     int2?: true
     int4?: true
     int8?: true
+    float4?: true
     float8?: true
     relatedId?: true
     _all?: true
@@ -5032,6 +5046,7 @@ export namespace Prisma {
     int2: number | null
     int4: number | null
     int8: bigint | null
+    float4: number | null
     float8: number | null
     relatedId: number | null
     _count: DataTypesCountAggregateOutputType | null
@@ -5067,6 +5082,7 @@ export namespace Prisma {
     int2?: boolean
     int4?: boolean
     int8?: boolean
+    float4?: boolean
     float8?: boolean
     relatedId?: boolean
     related?: boolean | DummyArgs
@@ -6816,6 +6832,7 @@ export namespace Prisma {
     int2: 'int2',
     int4: 'int4',
     int8: 'int8',
+    float4: 'float4',
     float8: 'float8',
     relatedId: 'relatedId'
   };
@@ -7079,6 +7096,7 @@ export namespace Prisma {
     int2?: IntNullableFilter | number | null
     int4?: IntNullableFilter | number | null
     int8?: BigIntNullableFilter | bigint | number | null
+    float4?: FloatNullableFilter | number | null
     float8?: FloatNullableFilter | number | null
     relatedId?: IntNullableFilter | number | null
     related?: XOR<DummyRelationFilter, DummyWhereInput> | null
@@ -7096,6 +7114,7 @@ export namespace Prisma {
     int2?: SortOrder
     int4?: SortOrder
     int8?: SortOrder
+    float4?: SortOrder
     float8?: SortOrder
     relatedId?: SortOrder
     related?: DummyOrderByWithRelationInput
@@ -7118,6 +7137,7 @@ export namespace Prisma {
     int2?: SortOrder
     int4?: SortOrder
     int8?: SortOrder
+    float4?: SortOrder
     float8?: SortOrder
     relatedId?: SortOrder
     _count?: DataTypesCountOrderByAggregateInput
@@ -7142,6 +7162,7 @@ export namespace Prisma {
     int2?: IntNullableWithAggregatesFilter | number | null
     int4?: IntNullableWithAggregatesFilter | number | null
     int8?: BigIntNullableWithAggregatesFilter | bigint | number | null
+    float4?: FloatNullableWithAggregatesFilter | number | null
     float8?: FloatNullableWithAggregatesFilter | number | null
     relatedId?: IntNullableWithAggregatesFilter | number | null
   }
@@ -7369,6 +7390,7 @@ export namespace Prisma {
     int2?: number | null
     int4?: number | null
     int8?: bigint | number | null
+    float4?: number | null
     float8?: number | null
     related?: DummyCreateNestedOneWithoutDatatypeInput
   }
@@ -7385,6 +7407,7 @@ export namespace Prisma {
     int2?: number | null
     int4?: number | null
     int8?: bigint | number | null
+    float4?: number | null
     float8?: number | null
     relatedId?: number | null
   }
@@ -7401,6 +7424,7 @@ export namespace Prisma {
     int2?: NullableIntFieldUpdateOperationsInput | number | null
     int4?: NullableIntFieldUpdateOperationsInput | number | null
     int8?: NullableBigIntFieldUpdateOperationsInput | bigint | number | null
+    float4?: NullableFloatFieldUpdateOperationsInput | number | null
     float8?: NullableFloatFieldUpdateOperationsInput | number | null
     related?: DummyUpdateOneWithoutDatatypeNestedInput
   }
@@ -7417,6 +7441,7 @@ export namespace Prisma {
     int2?: NullableIntFieldUpdateOperationsInput | number | null
     int4?: NullableIntFieldUpdateOperationsInput | number | null
     int8?: NullableBigIntFieldUpdateOperationsInput | bigint | number | null
+    float4?: NullableFloatFieldUpdateOperationsInput | number | null
     float8?: NullableFloatFieldUpdateOperationsInput | number | null
     relatedId?: NullableIntFieldUpdateOperationsInput | number | null
   }
@@ -7433,6 +7458,7 @@ export namespace Prisma {
     int2?: number | null
     int4?: number | null
     int8?: bigint | number | null
+    float4?: number | null
     float8?: number | null
     relatedId?: number | null
   }
@@ -7449,6 +7475,7 @@ export namespace Prisma {
     int2?: NullableIntFieldUpdateOperationsInput | number | null
     int4?: NullableIntFieldUpdateOperationsInput | number | null
     int8?: NullableBigIntFieldUpdateOperationsInput | bigint | number | null
+    float4?: NullableFloatFieldUpdateOperationsInput | number | null
     float8?: NullableFloatFieldUpdateOperationsInput | number | null
   }
 
@@ -7464,6 +7491,7 @@ export namespace Prisma {
     int2?: NullableIntFieldUpdateOperationsInput | number | null
     int4?: NullableIntFieldUpdateOperationsInput | number | null
     int8?: NullableBigIntFieldUpdateOperationsInput | bigint | number | null
+    float4?: NullableFloatFieldUpdateOperationsInput | number | null
     float8?: NullableFloatFieldUpdateOperationsInput | number | null
     relatedId?: NullableIntFieldUpdateOperationsInput | number | null
   }
@@ -7824,6 +7852,7 @@ export namespace Prisma {
     int2?: SortOrder
     int4?: SortOrder
     int8?: SortOrder
+    float4?: SortOrder
     float8?: SortOrder
     relatedId?: SortOrder
   }
@@ -7833,6 +7862,7 @@ export namespace Prisma {
     int2?: SortOrder
     int4?: SortOrder
     int8?: SortOrder
+    float4?: SortOrder
     float8?: SortOrder
     relatedId?: SortOrder
   }
@@ -7849,6 +7879,7 @@ export namespace Prisma {
     int2?: SortOrder
     int4?: SortOrder
     int8?: SortOrder
+    float4?: SortOrder
     float8?: SortOrder
     relatedId?: SortOrder
   }
@@ -7865,6 +7896,7 @@ export namespace Prisma {
     int2?: SortOrder
     int4?: SortOrder
     int8?: SortOrder
+    float4?: SortOrder
     float8?: SortOrder
     relatedId?: SortOrder
   }
@@ -7874,6 +7906,7 @@ export namespace Prisma {
     int2?: SortOrder
     int4?: SortOrder
     int8?: SortOrder
+    float4?: SortOrder
     float8?: SortOrder
     relatedId?: SortOrder
   }
@@ -8627,6 +8660,7 @@ export namespace Prisma {
     int2?: number | null
     int4?: number | null
     int8?: bigint | number | null
+    float4?: number | null
     float8?: number | null
   }
 
@@ -8642,6 +8676,7 @@ export namespace Prisma {
     int2?: number | null
     int4?: number | null
     int8?: bigint | number | null
+    float4?: number | null
     float8?: number | null
   }
 
@@ -8686,6 +8721,7 @@ export namespace Prisma {
     int2?: IntNullableFilter | number | null
     int4?: IntNullableFilter | number | null
     int8?: BigIntNullableFilter | bigint | number | null
+    float4?: FloatNullableFilter | number | null
     float8?: FloatNullableFilter | number | null
     relatedId?: IntNullableFilter | number | null
   }
@@ -8730,6 +8766,7 @@ export namespace Prisma {
     int2?: number | null
     int4?: number | null
     int8?: bigint | number | null
+    float4?: number | null
     float8?: number | null
   }
 
@@ -8745,6 +8782,7 @@ export namespace Prisma {
     int2?: NullableIntFieldUpdateOperationsInput | number | null
     int4?: NullableIntFieldUpdateOperationsInput | number | null
     int8?: NullableBigIntFieldUpdateOperationsInput | bigint | number | null
+    float4?: NullableFloatFieldUpdateOperationsInput | number | null
     float8?: NullableFloatFieldUpdateOperationsInput | number | null
   }
 
@@ -8760,6 +8798,7 @@ export namespace Prisma {
     int2?: NullableIntFieldUpdateOperationsInput | number | null
     int4?: NullableIntFieldUpdateOperationsInput | number | null
     int8?: NullableBigIntFieldUpdateOperationsInput | bigint | number | null
+    float4?: NullableFloatFieldUpdateOperationsInput | number | null
     float8?: NullableFloatFieldUpdateOperationsInput | number | null
   }
 
@@ -8775,6 +8814,7 @@ export namespace Prisma {
     int2?: NullableIntFieldUpdateOperationsInput | number | null
     int4?: NullableIntFieldUpdateOperationsInput | number | null
     int8?: NullableBigIntFieldUpdateOperationsInput | bigint | number | null
+    float4?: NullableFloatFieldUpdateOperationsInput | number | null
     float8?: NullableFloatFieldUpdateOperationsInput | number | null
   }
 

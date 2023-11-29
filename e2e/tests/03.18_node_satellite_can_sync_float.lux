@@ -1,0 +1,95 @@
+[doc NodeJS Satellite correctly syncs float values from and to Electric]
+[include _shared.luxinc]
+[include _satellite_macros.luxinc]
+
+[invoke setup]
+
+[shell proxy_1]
+    [local sql=
+        """
+        CREATE TABLE public.floats (
+            id TEXT PRIMARY KEY,
+            f4 FLOAT4,
+            f8 FLOAT8
+        );
+        ALTER TABLE public.floats ENABLE ELECTRIC;
+        """]
+    [invoke migrate_pg 20230908 $sql]
+
+[invoke setup_client 1 electric_1 5133]
+
+[shell satellite_1]
+    [invoke node_await_table "floats"]
+    [invoke node_sync_table "floats"]
+
+[shell pg_1]
+    !INSERT INTO public.floats (id, f4, f8) VALUES ('row1', 1.402e36, 1.797e308);
+    ??INSERT 0 1
+
+[shell satellite_1]
+    # Wait for the rows to arrive
+    [invoke node_await_get_float "row1"]
+
+    # JS only has 64 bit floating point numbers.
+    # Hence, when reading we are storing a 32 bit float in JS 64 bit number
+    # which makes that we can see the rounding error that was introduced
+    # e.g. we store JS' 64 bit 1.402e36 number in a 32 bit floating point number
+    #      but this cannot be stored exactly so it is rounded
+    #      if we now read the rounded value in a 64 bit float
+    #      we see the rounding error that was introduced: 1.4020000137922178e+36
+    # That's exactly what Math.fround() does, it rounds a 64 bit JS number to a 32 bit float
+    # that's stored in JS' 64 bit number (as JS only has 64 bit numbers)
+    [invoke node_get_float "row1" 1.4020000137922178e+36 1.797e+308]
+
+    [invoke node_write_float "row2" -1.402e+36 -1.797e+308]
+    [invoke node_get_float "row2" -1.4020000137922178e+36 -1.797e+308]
+
+    [invoke node_write_float "row3" -1e10 5.006]
+    [invoke node_get_float "row3" -10000000000 5.006]
+
+    [invoke node_write_float "row4" 3.402e+39 Infinity]
+    [invoke node_get_float "row4" Infinity Infinity]
+
+    [invoke node_write_float "row5" -3.402e+39 -1.797e+309]
+    [invoke node_get_float "row5" -Infinity -Infinity]
+
+    [invoke node_write_float "row6" "2 * {}" NaN]
+    [invoke node_get_float "row6" NaN NaN]
+
+    [invoke node_write_float "row7" -0 -0]
+    [invoke node_get_float "row7" 0 0]
+
+[shell pg_1]
+    [invoke wait-for "SELECT * FROM public.floats;" "row7" 10 $psql]
+
+    # Postgres stores the float4 numbers as 32-bit floats,
+    # so we are reading the same float4 numbers we wrote to it
+    !SELECT * FROM public.floats;
+    ??row1 |  1.402e+36 |  1.797e+308
+    ??row2 | -1.402e+36 | -1.797e+308
+    ??row3 |     -1e+10 |       5.006
+    ??row4 |   Infinity |    Infinity
+    ??row5 |  -Infinity |   -Infinity
+    ??row6 |        NaN |         NaN
+    ??row7 |          0 |           0
+
+# Start a new Satellite client and verify that it receives all rows
+[invoke setup_client 2 electric_1 5133]
+
+[shell satellite_2]
+    [invoke node_await_table "floats"]
+    [invoke node_sync_table "floats"]
+
+    # Wait for the rows to arrive
+    [invoke node_await_get_float "row7"]
+
+    [invoke node_get_float "row1" 1.4020000137922178e+36 1.797e+308]
+    [invoke node_get_float "row2" -1.4020000137922178e+36 -1.797e+308]
+    [invoke node_get_float "row3" -10000000000 5.006]
+    [invoke node_get_float "row4" Infinity Infinity]
+    [invoke node_get_float "row5" -Infinity -Infinity]
+    [invoke node_get_float "row6" NaN NaN]
+    [invoke node_get_float "row7" 0 0]
+
+[cleanup]
+  [invoke teardown]

@@ -145,11 +145,11 @@ defmodule Electric.Satellite.SerializationTest do
 
       columns = [
         %{name: "f1", type: :float8},
-        %{name: "f2", type: :float8},
+        %{name: "f2", type: :float4},
         %{name: "f3", type: :float8},
-        %{name: "f4", type: :float8},
+        %{name: "f4", type: :float4},
         %{name: "f5", type: :float8},
-        %{name: "f6", type: :float8},
+        %{name: "f6", type: :float4},
         %{name: "f7", type: :float8}
       ]
 
@@ -167,6 +167,7 @@ defmodule Electric.Satellite.SerializationTest do
     test "raises when the row contains an invalid value for its type" do
       test_data = [
         {"1.0", :int4},
+        {"-.1", :float4},
         {"33.", :float8},
         {"1000000", :int2},
         {"-1000000000000000", :int4},
