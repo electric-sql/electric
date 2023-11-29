@@ -5,6 +5,7 @@ import { schema } from './generated'
 import { MockRegistry } from '../../src/satellite/mock'
 import { EventNotifier } from '../../src/notifiers'
 import { mockElectricClient } from '../satellite/common'
+import { EVENT_NAMES } from '../../src/notifiers/event'
 
 const conn = new Database(':memory:')
 const config = {
@@ -20,13 +21,15 @@ await db.Items.sync() // sync the Items table
 
 async function runAndCheckNotifications(f: () => Promise<void>) {
   let notifications = 0
-  const sub = notifier.subscribeToPotentialDataChanges((_notification) => {
-    notifications = notifications + 1
-  })
+  const unsubscribe = notifier.subscribeToPotentialDataChanges(
+    (_notification) => {
+      notifications = notifications + 1
+    }
+  )
 
   await f()
 
-  notifier.unsubscribeFromPotentialDataChanges(sub)
+  unsubscribe()
   return notifications
 }
 
@@ -227,15 +230,22 @@ test.serial(
 
     // Check that the listeners are registered
     const notifier = electric.notifier as EventNotifier
-    t.assert(Object.keys(notifier._changeCallbacks).length > 0)
-    t.assert(Object.keys(notifier._connectivityStatusCallbacks).length > 0)
+    const events = [
+      EVENT_NAMES.authChange,
+      EVENT_NAMES.potentialDataChange,
+      EVENT_NAMES.connectivityStateChange,
+    ]
+    events.forEach((eventName) => {
+      t.assert(notifier.events.listenerCount(eventName) > 0)
+    })
 
     // Close the Electric client
     await electric.close()
 
     // Check that the listeners are unregistered
-    t.deepEqual(notifier._changeCallbacks, {})
-    t.deepEqual(notifier._connectivityStatusCallbacks, {})
+    events.forEach((eventName) => {
+      t.is(notifier.events.listenerCount(eventName), 0)
+    })
 
     // Check that the Satellite process is unregistered
     t.assert(!registry.satellites.hasOwnProperty(conn.name))

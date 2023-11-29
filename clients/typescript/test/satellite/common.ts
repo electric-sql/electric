@@ -180,6 +180,7 @@ import { DbSchema, TableSchema } from '../../src/client/model/schema'
 import { PgBasicType } from '../../src/client/conversions/types'
 import { HKT } from '../../src/client/util/hkt'
 import { ElectricClient } from '../../src/client/model'
+import EventEmitter from 'events'
 
 // Speed up the intervals for testing.
 export const opts = Object.assign({}, satelliteDefaults, {
@@ -258,7 +259,7 @@ export const mockElectricClient = async (
   const dbName = db.name
   const adapter = new DatabaseAdapter(db)
   const migrator = new BundleMigrator(adapter, migrations)
-  const notifier = new MockNotifier(dbName)
+  const notifier = new MockNotifier(dbName, new EventEmitter())
   const client = new MockSatelliteClient()
   const satellite = new SatelliteProcess(
     dbName,

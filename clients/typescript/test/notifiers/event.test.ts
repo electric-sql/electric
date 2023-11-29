@@ -120,13 +120,13 @@ test('no more connectivity events after unsubscribe', async (t) => {
 
   const notifications: ConnectivityStateChangeNotification[] = []
 
-  const key = target.subscribeToConnectivityStateChanges((x) => {
+  const unsubscribe = target.subscribeToConnectivityStateChanges((x) => {
     notifications.push(x)
   })
 
   source.connectivityStateChanged('test.db', 'connected')
 
-  target.unsubscribeFromConnectivityStateChanges(key)
+  unsubscribe()
 
   source.connectivityStateChanged('test.db', 'connected')
 

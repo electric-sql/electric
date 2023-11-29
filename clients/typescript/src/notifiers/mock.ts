@@ -2,12 +2,13 @@ import { DbName } from '../util/types'
 
 import { Notification, Notifier } from './index'
 import { EventNotifier } from './event'
+import EventEmitter from 'events'
 
 export class MockNotifier extends EventNotifier implements Notifier {
   notifications: Notification[]
 
-  constructor(dbName: DbName) {
-    super(dbName)
+  constructor(dbName: DbName, emitter?: EventEmitter) {
+    super(dbName, emitter)
 
     this.notifications = []
   }
