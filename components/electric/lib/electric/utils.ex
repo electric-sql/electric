@@ -318,8 +318,8 @@ defmodule Electric.Utils do
 
   defp assert_valid_scheme!(scheme) when scheme in ["postgres", "postgresql"], do: :ok
 
-  defp assert_valid_scheme!(_scheme) do
-    raise "Invalid scheme in DATABASE_URL"
+  defp assert_valid_scheme!(scheme) do
+    raise "Invalid scheme in DATABASE_URL: #{inspect(scheme)}"
   end
 
   defp assert_valid_host!(str) do
