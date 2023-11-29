@@ -30,11 +30,11 @@
 [shell satellite_1]
     # Wait for the rows to arrive
     [invoke node_await_get_json "row1"]
-        
+
     # read raw JSON that is stored in the DB
     # json must preserve whitespace and key ordering
     #[invoke node_get_json_raw "row1" "{ a: 1, c:    true, b: \"foo\", d: null, e: [1,2,3] }"]
-    # when parsed as JSON, whitespace is trimmed but key order is kept 
+    # when parsed as JSON, whitespace is trimmed but key order is kept
     #[invoke node_get_json "row1" "{ a: 1, c: true, b: \"foo\", d: null, e: [1,2,3] }"]
     # jsonb trims white space and sorts keys
     [invoke node_get_jsonb_raw "row1" "[{\"a\": 1}, {\"b\": 5, \"d\": false}]"]
@@ -110,7 +110,7 @@
     # read raw JSON that is stored in the DB
     # json must preserve whitespace and key ordering
     #[invoke node_get_json_raw "row1" "{ a: 1, c:    true, b: \"foo\", d: null, e: [1,2,3] }"]
-    # when parsed as JSON, whitespace is trimmed but key order is kept 
+    # when parsed as JSON, whitespace is trimmed but key order is kept
     #[invoke node_get_json "row1" "{ a: 1, c: true, b: \"foo\", d: null, e: [1,2,3] }"]
     # jsonb trims white space and sorts keys
     [invoke node_get_jsonb_raw "row1" "[{\"a\": 1}, {\"b\": 5, \"d\": false}]"]
