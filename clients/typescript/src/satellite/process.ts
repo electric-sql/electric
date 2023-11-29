@@ -352,20 +352,20 @@ export class SatelliteProcess implements Satellite {
       this._pollingInterval = undefined
     }
 
-    if (this._unsubscribeFromAuthState !== undefined) {
-      this._unsubscribeFromAuthState()
-      this._unsubscribeFromAuthState = undefined
-    }
+    // Unsubscribe all listeners and remove them
+    const unsubscribers = [
+      '_unsubscribeFromAuthState',
+      '_unsubscribeFromConnectivityChanges',
+      '_unsubscribeFromPotentialDataChanges',
+    ] as const
 
-    if (this._unsubscribeFromConnectivityChanges !== undefined) {
-      this._unsubscribeFromConnectivityChanges()
-      this._unsubscribeFromConnectivityChanges = undefined
-    }
-
-    if (this._unsubscribeFromPotentialDataChanges !== undefined) {
-      this._unsubscribeFromPotentialDataChanges()
-      this._unsubscribeFromPotentialDataChanges = undefined
-    }
+    unsubscribers.forEach((unsubscriber) => {
+      const unsub = this[unsubscriber]
+      if (unsub !== undefined) {
+        unsub!()
+        this[unsubscriber] = undefined
+      }
+    })
 
     this._disconnect()
 
