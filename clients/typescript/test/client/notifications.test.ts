@@ -3,6 +3,8 @@ import Database from 'better-sqlite3'
 import { electrify } from '../../src/drivers/better-sqlite3'
 import { schema } from './generated'
 import { MockRegistry } from '../../src/satellite/mock'
+import { EventNotifier } from '../../src/notifiers'
+import { mockElectricClient } from '../satellite/common'
 
 const conn = new Database(':memory:')
 const config = {
@@ -212,3 +214,30 @@ test.serial('deleteMany runs potentiallyChanged', async (t) => {
   const notifications = await runAndCheckNotifications(del)
   t.is(notifications, 1)
 })
+
+test.serial(
+  'electrification registers process and unregisters on close thereby releasing resources',
+  async (t) => {
+    const registry = new MockRegistry()
+    const electric = await mockElectricClient(conn, registry)
+
+    // Check that satellite is registered
+    const satellite = electric.satellite
+    t.is(registry.satellites[conn.name], satellite)
+
+    // Check that the listeners are registered
+    const notifier = electric.notifier as EventNotifier
+    t.assert(Object.keys(notifier._changeCallbacks).length > 0)
+    t.assert(Object.keys(notifier._connectivityStatusCallbacks).length > 0)
+
+    // Close the Electric client
+    await electric.close()
+
+    // Check that the listeners are unregistered
+    t.deepEqual(notifier._changeCallbacks, {})
+    t.deepEqual(notifier._connectivityStatusCallbacks, {})
+
+    // Check that the Satellite process is unregistered
+    t.assert(!registry.satellites.hasOwnProperty(conn.name))
+  }
+)

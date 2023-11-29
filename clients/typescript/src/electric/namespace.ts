@@ -3,12 +3,13 @@
 import { DatabaseAdapter } from './adapter'
 import { Notifier } from '../notifiers'
 import { ConnectivityState } from '../util/types'
-import { globalRegistry } from '../satellite'
+import { GlobalRegistry, Registry } from '../satellite'
 
 export class ElectricNamespace {
   dbName: string
   adapter: DatabaseAdapter
   notifier: Notifier
+  public readonly registry: Registry | GlobalRegistry
   private _isConnected: boolean
   public get isConnected(): boolean {
     return this._isConnected
@@ -16,10 +17,16 @@ export class ElectricNamespace {
 
   private _stateChangeSubscription: string
 
-  constructor(dbName: string, adapter: DatabaseAdapter, notifier: Notifier) {
+  constructor(
+    dbName: string,
+    adapter: DatabaseAdapter,
+    notifier: Notifier,
+    registry: Registry | GlobalRegistry
+  ) {
     this.dbName = dbName
     this.adapter = adapter
     this.notifier = notifier
+    this.registry = registry
     this._isConnected = false
 
     this._stateChangeSubscription =
@@ -44,10 +51,10 @@ export class ElectricNamespace {
   /**
    * Cleans up the resources used by the `ElectricNamespace`.
    */
-  close(): void {
+  async close(): Promise<void> {
     this.notifier.unsubscribeFromConnectivityStateChanges(
       this._stateChangeSubscription
     )
-    globalRegistry.stop(this.dbName)
+    await this.registry.stop(this.dbName)
   }
 }

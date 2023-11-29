@@ -5,7 +5,7 @@ import { Row, Statement } from '../../util'
 import { LiveResult, LiveResultContext } from './model'
 import { Notifier } from '../../notifiers'
 import { DatabaseAdapter } from '../../electric/adapter'
-import { Satellite } from '../../satellite'
+import { GlobalRegistry, Registry, Satellite } from '../../satellite'
 import { ShapeManager } from './shapes'
 
 export type ClientTables<DB extends DbSchema<any>> = {
@@ -64,9 +64,10 @@ export class ElectricClient<
     dbName: string,
     adapter: DatabaseAdapter,
     notifier: Notifier,
-    public readonly satellite: Satellite
+    public readonly satellite: Satellite,
+    registry: Registry | GlobalRegistry
   ) {
-    super(dbName, adapter, notifier)
+    super(dbName, adapter, notifier, registry)
     this.satellite = satellite
   }
 
@@ -76,7 +77,8 @@ export class ElectricClient<
     dbDescription: DB,
     adapter: DatabaseAdapter,
     notifier: Notifier,
-    satellite: Satellite
+    satellite: Satellite,
+    registry: Registry | GlobalRegistry
   ): ElectricClient<DB> {
     const tables = dbDescription.extendedTables
     const shapeManager = new ShapeManager(satellite)
@@ -109,6 +111,13 @@ export class ElectricClient<
       liveRaw: liveRaw.bind(null, adapter),
     }
 
-    return new ElectricClient(db, dbName, adapter, notifier, satellite)
+    return new ElectricClient(
+      db,
+      dbName,
+      adapter,
+      notifier,
+      satellite,
+      registry
+    )
   }
 }

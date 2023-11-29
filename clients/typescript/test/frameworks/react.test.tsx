@@ -21,7 +21,7 @@ import {
 import { makeElectricContext } from '../../src/frameworks/react/provider'
 import { ElectricClient } from '../../src/client/model/client'
 import { schema, Electric } from '../client/generated'
-import { MockSatelliteProcess } from '../../src/satellite/mock'
+import { MockRegistry, MockSatelliteProcess } from '../../src/satellite/mock'
 import { Migrator } from '../../src/migrators'
 import { SocketFactory } from '../../src/sockets'
 import { SatelliteOpts } from '../../src/satellite/config'
@@ -56,12 +56,14 @@ test.beforeEach((t) => {
     {} as SocketFactory,
     {} as SatelliteOpts
   )
+  const registry = new MockRegistry()
   const dal = ElectricClient.create(
     'test.db',
     schema,
     adapter,
     notifier,
-    satellite
+    satellite,
+    registry
   )
 
   dal.db.Items.sync()

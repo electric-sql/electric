@@ -74,7 +74,8 @@ export const electrify = async <DB extends DbSchema<any>>(
     dbDescription,
     adapter,
     notifier,
-    satellite
+    satellite,
+    registry
   )
 
   if (satellite.connectivityState !== undefined) {
