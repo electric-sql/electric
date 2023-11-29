@@ -1,6 +1,7 @@
 import { InvalidArgumentError } from '../validation/errors/invalidArgumentError'
 import { deserialiseBoolean, serialiseBoolean } from './datatypes/boolean'
 import { deserialiseDate, serialiseDate } from './datatypes/date'
+import { deserialiseJSON, serialiseJSON } from './datatypes/json'
 import { PgBasicType, PgDateType, PgType } from './types'
 
 /**
@@ -34,6 +35,11 @@ export function toSqlite(v: any, pgType: PgType): any {
     pgType === PgBasicType.PG_REAL
   ) {
     return Math.fround(v)
+  } else if (
+    pgType === PgBasicType.PG_JSON ||
+    pgType === PgBasicType.PG_JSONB
+  ) {
+    return serialiseJSON(v)
   } else {
     return v
   }
@@ -68,6 +74,12 @@ export function fromSqlite(v: any, pgType: PgType): any {
     // because some drivers (e.g. wa-sqlite) return a regular JS number if the value fits into a JS number
     // but we know that it should be a BigInt based on the column type
     return BigInt(v)
+  } else if (
+    pgType === PgBasicType.PG_JSON ||
+    pgType === PgBasicType.PG_JSONB
+  ) {
+    // it's serialised JSON
+    return deserialiseJSON(v)
   } else {
     return v
   }

@@ -8,6 +8,7 @@ import decompress from 'decompress'
 import { buildMigrations, getMigrationNames } from './builder'
 import { exec } from 'child_process'
 import { dedent } from 'ts-dedent'
+import { findAndReplaceInFile } from '../util'
 
 const appRoot = path.resolve() // path where the user ran `npx electric migrate`
 
@@ -182,6 +183,12 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
     console.log('Generating Electric client...')
     await generateElectricClient(prismaSchema)
     const relativePath = path.relative(appRoot, opts.out)
+    // Modify the type of JSON input values in the generated Prisma client
+    // because we deviate from Prisma's typing for JSON values
+    const outDir = opts.out
+    await extendJsonType(outDir)
+    // Delete all files generated for the Prisma client, except the typings
+    await keepOnlyPrismaTypings(outDir)
     console.log(`Successfully generated Electric client at: ./${relativePath}`)
 
     // Build the migrations
@@ -227,14 +234,15 @@ async function createPrismaSchema(
   )
   const output = path.resolve(out)
   const schema = dedent`
-    generator client {
-      provider = "prisma-client-js"
-    }
-
     generator electric {
       provider      = "${escapePathForString(provider)}"
       output        = "${escapePathForString(output)}"
       relationModel = "false"
+    }
+
+    generator client {
+      provider = "prisma-client-js"
+      output   = "${output}"
     }
 
     datasource db {
@@ -567,4 +575,30 @@ function parseAttributes(attributes: string): Array<Attribute> {
       args: parsedArgs,
     }
   })
+}
+
+/*
+ * Modifies Prisma's `InputJsonValue` type to include `null`
+ */
+function extendJsonType(prismaDir: string): Promise<void> {
+  const prismaTypings = path.join(prismaDir, 'index.d.ts')
+  const inputJsonValueRegex = /^\s*export\s*type\s*InputJsonValue\s*(=)\s*/gm
+  const replacement = 'export type InputJsonValue = null | '
+  return findAndReplaceInFile(inputJsonValueRegex, replacement, prismaTypings)
+}
+
+async function keepOnlyPrismaTypings(prismaDir: string): Promise<void> {
+  const contents = await fs.readdir(prismaDir)
+  // Delete all files except the generated Electric client and the Prisma typings
+  const proms = contents.map(async (fileOrDir) => {
+    const filePath = path.join(prismaDir, fileOrDir)
+    if (fileOrDir === 'index.d.ts') {
+      // rename this file to `prismaClient.d.ts`
+      return fs.rename(filePath, path.join(prismaDir, 'prismaClient.d.ts'))
+    } else if (fileOrDir !== 'index.ts') {
+      // delete the file or folder
+      return fs.rm(filePath, { recursive: true })
+    }
+  })
+  await Promise.all(proms)
 }

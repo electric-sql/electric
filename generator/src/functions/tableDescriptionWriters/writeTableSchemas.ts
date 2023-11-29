@@ -79,6 +79,10 @@ export function writeTableSchemas(
   writer
     .writeLine('export const schema = new DbSchema(tableSchemas, migrations)')
     .writeLine('export type Electric = ElectricClient<typeof schema>')
+    .conditionalWriteLine(
+      dmmf.schema.hasJsonTypes,
+      'export const JsonNull = { __is_electric_json_null__: true }'
+    )
 }
 
 export function writeFieldsMap(
@@ -105,7 +109,6 @@ function pgType(field: ExtendedDMMFField, modelName: string): string {
   const getTypeAttribute = () =>
     attributes.find((a) => a.type.startsWith('@db'))
   switch (prismaType) {
-    // BigInt, Boolean, Bytes, DateTime, Decimal, Float, Int, JSON, String
     case 'String':
       return stringToPg(getTypeAttribute())
     case 'Int':
@@ -122,8 +125,8 @@ function pgType(field: ExtendedDMMFField, modelName: string): string {
       return 'DECIMAL'
     case 'Float':
       return floatToPg(getTypeAttribute())
-    case 'JSON':
-      return 'JSON'
+    case 'Json':
+      return jsonToPg(attributes)
     default:
       return 'UNRECOGNIZED PRISMA TYPE'
   }
@@ -135,6 +138,16 @@ function floatToPg(pgTypeAttribute: Attribute | undefined): string {
     return 'FLOAT8'
   } else {
     return 'FLOAT4'
+  }
+}
+
+function jsonToPg(attributes: Array<Attribute>) {
+  const pgTypeAttribute = attributes.find((a) => a.type.startsWith('@db'))
+  if (pgTypeAttribute && pgTypeAttribute.type === '@db.Json') {
+    return 'JSON'
+  } else {
+    // default mapping for Prisma's `Json` type is PG's JSONB
+    return 'JSONB'
   }
 }
 

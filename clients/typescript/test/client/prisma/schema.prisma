@@ -57,6 +57,7 @@ model DataTypes {
   int8        BigInt?
   float4      Float?    @db.Real     /// @zod.custom.use(z.number().or(z.nan()))
   float8      Float?    @db.DoublePrecision /// @zod.custom.use(z.number().or(z.nan()))
+  json        Json?
   relatedId   Int?
   related     Dummy?    @relation(fields: [relatedId], references: [id])
 }

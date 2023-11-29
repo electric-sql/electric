@@ -8,7 +8,7 @@ import {
   _NOT_UNIQUE_,
   _RECORD_NOT_FOUND_,
 } from '../../../src/client/validation/errors/messages'
-import { schema } from '../generated'
+import { JsonNull, schema } from '../generated'
 import { DataTypes, Dummy } from '../generated/client'
 
 const db = new Database(':memory:')
@@ -31,7 +31,7 @@ await tbl.sync()
 function setupDB() {
   db.exec('DROP TABLE IF EXISTS DataTypes')
   db.exec(
-    "CREATE TABLE DataTypes('id' int PRIMARY KEY, 'date' varchar, 'time' varchar, 'timetz' varchar, 'timestamp' varchar, 'timestamptz' varchar, 'bool' int, 'uuid' varchar, 'int2' int2, 'int4' int4, 'int8' int8, 'float4' real, 'float8' real, 'relatedId' int);"
+    "CREATE TABLE DataTypes('id' int PRIMARY KEY, 'date' varchar, 'time' varchar, 'timetz' varchar, 'timestamp' varchar, 'timestamptz' varchar, 'bool' int, 'uuid' varchar, 'int2' int2, 'int4' int4, 'int8' int8, 'float4' real, 'float8' real, 'json' varchar, 'relatedId' int);"
   )
 
   db.exec('DROP TABLE IF EXISTS Dummy')
@@ -90,6 +90,26 @@ test.serial('findFirst transforms booleans to integer in SQLite', async (t) => {
   t.is(res?.id, 2)
   t.is(res?.bool, true)
 })
+
+test.serial(
+  'findFirst transforms json values to strings in SQLite',
+  async (t) => {
+    await electric.adapter.run({
+      sql: `INSERT INTO DataTypes('id', 'json') VALUES (1, NULL), (2, '{ "a": 5 }'), (3, 'null')`,
+    })
+
+    const res = await tbl.findFirst({
+      where: {
+        json: {
+          equals: JsonNull,
+        },
+      },
+    })
+
+    t.is(res?.id, 3)
+    t.deepEqual(res?.json, JsonNull)
+  }
+)
 
 test.serial(
   'findFirst transforms JS objects in equals filter to SQLite',
@@ -236,6 +256,7 @@ const dateNulls = {
   float4: null,
   float8: null,
   uuid: null,
+  json: null,
 }
 
 const nulls = {

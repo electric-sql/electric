@@ -72,3 +72,10 @@ model Floats {
   f8 Float? @db.DoublePrecision /// @zod.custom.use(z.number().or(z.nan()))
   @@map("floats")
 }
+
+model Jsons {
+  id  String @id
+  js  Json?  @db.Json
+  jsb Json?
+  @@map("jsons")
+}

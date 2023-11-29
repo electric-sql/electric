@@ -6,6 +6,7 @@ import { setLogLevel } from 'electric-sql/debug'
 import { electrify } from 'electric-sql/node'
 import { v4 as uuidv4 } from 'uuid'
 import { schema, Electric } from './generated/client'
+export { JsonNull } from './generated/client'
 import { globalRegistry } from 'electric-sql/satellite'
 
 setLogLevel('DEBUG')
@@ -96,7 +97,7 @@ export const write_datetime = (electric: Electric, datetime: Datetime) => {
   })
 }
 
-export const get_timestamp = (electric: Electric, id: string): Promise<Timestamp | undefined> => {
+export const get_timestamp = (electric: Electric, id: string) => {
   return electric.db.timestamps.findUnique({
     where: {
       id: id
@@ -104,7 +105,7 @@ export const get_timestamp = (electric: Electric, id: string): Promise<Timestamp
   })
 }
 
-export const get_datetime = async (electric: Electric, id: string): Promise<Datetime | undefined> => {
+export const get_datetime = async (electric: Electric, id: string) => {
   const datetime = await electric.db.datetimes.findUnique({
     where: {
       id: id
@@ -124,13 +125,13 @@ export const assert_datetime = async (electric: Electric, id: string, expectedDa
   return check_datetime(datetime, expectedDate, expectedTime)
 }
 
-export const check_timestamp = (timestamp: Timestamp | undefined, expectedCreatedAt: string, expectedUpdatedAt: string) => {
+export const check_timestamp = (timestamp: Timestamp | null, expectedCreatedAt: string, expectedUpdatedAt: string) => {
   return (timestamp ?? false) &&
     timestamp!.created_at.getTime() === new Date(expectedCreatedAt).getTime() &&
     timestamp!.updated_at.getTime() === new Date(expectedUpdatedAt).getTime()
 }
 
-export const check_datetime = (datetime: Datetime | undefined, expectedDate: string, expectedTime: string) => {
+export const check_datetime = (datetime: Datetime | null, expectedDate: string, expectedTime: string) => {
   return (datetime ?? false) &&
     datetime!.d.getTime() === new Date(expectedDate).getTime() &&
     datetime!.t.getTime() === new Date(expectedTime).getTime()
@@ -145,13 +146,13 @@ export const write_bool = (electric: Electric, id: string, b: boolean) => {
   })
 }
 
-export const get_bool = async (electric: Electric, id: string): Promise<boolean> => {
+export const get_bool = async (electric: Electric, id: string) => {
   const row = await electric.db.bools.findUnique({
     where: {
       id: id
     },
   })
-  return row.b
+  return row?.b
 }
 
 export const get_datetimes = (electric: Electric) => {
@@ -218,6 +219,58 @@ export const write_float = (electric: Electric, id: string, f4: number, f8: numb
       id,
       f4,
       f8,
+    }
+  })
+}
+
+export const get_json_raw = async (electric: Electric, id: string) => {
+  const res = await electric.db.raw({
+    sql: `SELECT js FROM jsons WHERE id = ?;`,
+    args: [id]
+  }) as unknown as Array<{ js: string }>
+  return res[0]?.js
+}
+
+export const get_jsonb_raw = async (electric: Electric, id: string) => {
+  const res = await electric.db.raw({
+    sql: `SELECT jsb FROM jsons WHERE id = ?;`,
+    args: [id]
+  }) as unknown as Array<{ jsb: string }>
+  return res[0]?.jsb
+}
+
+export const get_json = async (electric: Electric, id: string) => {
+  const res = await electric.db.jsons.findUnique({
+    where: {
+      id: id
+    },
+    select: {
+      id: true,
+      js: true,
+    }
+  })
+  return res
+}
+
+export const get_jsonb = async (electric: Electric, id: string) => {
+  const res = await electric.db.jsons.findUnique({
+    where: {
+      id: id
+    },
+    select: {
+      id: true,
+      jsb: true,
+    }
+  })
+  return res
+}
+
+export const write_json = async (electric: Electric, id: string, js: any, jsb: any) => {
+  return electric.db.jsons.create({
+    data: {
+      id,
+      //js,
+      jsb,
     }
   })
 }
