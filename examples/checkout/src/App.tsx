@@ -44,13 +44,15 @@ const App: React.FC = () => {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) {
-        setLoading(true)
+    } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      if (newSession) {
+        // if (!session) {
+        //   setLoading(true)
+        // }
         setTimeout(() => {
           // There is an issue with clock drift and the JWT being invalid
           // this is a hackey workaround for now
-          setSession(session)
+          setSession(newSession)
         }, 900)
       } else {
         setSession(null)

@@ -14,6 +14,7 @@ import {
   IonTextarea,
   IonListHeader,
   IonAlert,
+  IonModal,
 } from '@ionic/react'
 import { useContext, useState, useRef, useEffect } from 'react'
 import { useHistory } from 'react-router-dom'
@@ -24,81 +25,24 @@ import { SupabaseContext } from '../SupabaseContext'
 import { formatPrice, statusDisplay } from '../utils'
 import { BasketItem, useElectric, type Electric } from '../electric'
 import { useLiveQuery } from 'electric-sql/react'
-
-interface NewOrderOptions {
-  basket: BasketItem[]
-  shippingAddress: {
-    name: string
-    address: string
-    postcode: string
-    country: string
-  }
-  payment: {
-    name: string
-    cardNumber: string
-    expiry: string
-    cvc: string
-  }
-}
-
-async function newOrder(
-  db: Electric['db'],
-  session: Session,
-  options: NewOrderOptions
-): Promise<string> {
-  const order_id = uuidv4()
-
-  const totalCost = options.basket.reduce((acc, item) => {
-    return acc + item.quantity * item.items.price
-  }, 0)
-
-  // In a real app, you would convert the payment details into a token
-  // and add it to the order for capturing on the server.
-  console.log(session.user.id)
-  const order = await db.orders.create({
-    data: {
-      id: order_id,
-      electric_user_id: session.user.id,
-      status: 'submitted',
-      recipient_name: options.shippingAddress.name || '-',
-      delivery_address: options.shippingAddress.address || '-',
-      delivery_postcode: options.shippingAddress.postcode || '-',
-      delivery_country: options.shippingAddress.country || '-',
-      delivery_price: totalCost,
-      created_at: new Date(),
-    },
-  })
-
-  // Add the items to the order
-  await db.basket_items.updateMany({
-    data: {
-      order_id,
-    },
-    where: {
-      id: {
-        in: options.basket.map((item) => item.id),
-      },
-    },
-  })
-
-  return order_id
-}
+import CheckoutConfirm from './CheckoutConfirm'
 
 interface CheckoutProps {
   isOpen: boolean
   onDismiss: () => void
+  onCompleted: () => void
   basketItems: BasketItem[]
 }
 
 const Checkout = ({
   isOpen,
   onDismiss,
+  onCompleted,
   basketItems: basket,
 }: CheckoutProps) => {
   const { session } = useContext(SupabaseContext)!
   const { db } = useElectric()!
   const history = useHistory()
-  const [progressIsOpen, setProgressIsOpen] = useState(false)
   const nameInput = useRef<HTMLIonInputElement>(null)
   const addressInput = useRef<HTMLIonTextareaElement>(null)
   const postcodeInput = useRef<HTMLIonInputElement>(null)
@@ -107,31 +51,7 @@ const Checkout = ({
   const cardInput = useRef<HTMLIonInputElement>(null)
   const expiryInput = useRef<HTMLIonInputElement>(null)
   const cvcInput = useRef<HTMLIonInputElement>(null)
-  const [orderId, setOrderId] = useState<string>('')
-
-  const { results: order } = useLiveQuery(
-    db.orders.liveUnique({
-      where: {
-        id: orderId,
-      },
-    })
-  )
-
-  useEffect(() => {
-    if (order?.status === 'placed') {
-      // Show the order confirmation
-      // then close the checkout
-      setTimeout(() => {
-        setProgressIsOpen(false)
-        onDismiss()
-        history.push(`/account/order/${order.id}`)
-      }, 500)
-    }
-  }, [order])
-
-  const totalCost = (basket ?? []).reduce((acc, item) => {
-    return acc + item.quantity * item.items.price
-  }, 0)
+  const [confirmIsOpen, setConfirmIsOpen] = useState(false)
 
   const cardMask = useMaskito({
     options: {
@@ -191,25 +111,15 @@ const Checkout = ({
     init()
   }, [cvcInput])
 
-  async function handleCheckout() {
-    setProgressIsOpen(true)
-    const orderId = await newOrder(db, session!, {
-      basket,
-      shippingAddress: {
-        name: (nameInput.current?.value as string) ?? '',
-        address: addressInput.current?.value ?? '',
-        postcode: (postcodeInput.current?.value as string) ?? '',
-        country: (countryInput.current?.value as string) ?? '',
-      },
-      payment: {
-        name: (cardNameInput.current?.value as string) ?? '',
-        cardNumber: (cardInput.current?.value as string) ?? '',
-        expiry: (expiryInput.current?.value as string) ?? '',
-        cvc: (cvcInput.current?.value as string) ?? '',
-      },
-    })
-    setOrderId(orderId)
+  async function handleConfirm() {
+    setConfirmIsOpen(true)
   }
+
+  useEffect(() => {
+    return () => {
+      setConfirmIsOpen(false)
+    }
+  }, [])
 
   return (
     <>
@@ -311,20 +221,35 @@ IL`}
             size="large"
             className="checkout"
             style={{ margin: '10px' }}
-            onClick={handleCheckout}
+            onClick={handleConfirm}
           >
-            Pay {formatPrice(totalCost || order?.delivery_price!)}
+            Continue
           </IonButton>
         </IonToolbar>
       </IonFooter>
-      <IonAlert
-        isOpen={progressIsOpen}
-        backdropDismiss={false}
-        header={
-          order?.status === 'placed' ? 'Order Placed' : 'Order Processing'
-        }
-        subHeader={order?.status ? statusDisplay[order.status] : null}
-      ></IonAlert>
+      <IonModal isOpen={confirmIsOpen}>
+        <CheckoutConfirm
+          isOpen={confirmIsOpen}
+          onDismiss={() => {
+            setConfirmIsOpen(false)
+          }}
+          onCompleted={onCompleted}
+          orderOptions={{
+            shippingAddress: {
+              name: nameInput.current?.value?.toString() ?? '',
+              address: addressInput.current?.value?.toString() ?? '',
+              postcode: postcodeInput.current?.value?.toString() ?? '',
+              country: countryInput.current?.value?.toString() ?? '',
+            },
+            payment: {
+              name: cardNameInput.current?.value?.toString() ?? '',
+              last4: cardInput.current?.value?.toString().slice(-4) ?? '',
+              cardToken: 'A-GENERATED-CARD-TOKEN',
+            },
+            basket,
+          }}
+        />
+      </IonModal>
     </>
   )
 }

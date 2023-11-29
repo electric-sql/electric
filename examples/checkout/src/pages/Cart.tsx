@@ -19,10 +19,10 @@ import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'electric-sql/react'
 import { BasketItem, useElectric, type Electric } from '../electric'
 
-import EmptyBag from '../components/EmptyBag'
+import EmptyCart from '../components/EmptyCart'
 import { formatPrice } from '../utils'
 import Checkout from './Checkout'
-import './Bag.css'
+import './Cart.css'
 
 async function deduplicateBasketItems(
   db: Electric['db'],
@@ -52,9 +52,10 @@ async function deduplicateBasketItems(
   }
 }
 
-const Bag: React.FC = () => {
+const Cart: React.FC = () => {
   const { db } = useElectric()!
   const [checkoutIsOpen, setCheckoutIsOpen] = useState(false)
+  const frozenBasket = useRef<BasketItem[]>([])
 
   const { results: basket } = useLiveQuery(
     db.basket_items.liveMany({
@@ -77,11 +78,11 @@ const Bag: React.FC = () => {
 
   deduplicateBasketItems(db, basket ?? [])
 
-  // useEffect(() => {
-  //   return () => {
-  //     setCheckoutIsOpen(false)
-  //   }
-  // }, [])
+  useEffect(() => {
+    return () => {
+      setCheckoutIsOpen(false)
+    }
+  }, [])
 
   async function deleteItem(id: string) {
     await db.basket_items.delete({
@@ -106,21 +107,27 @@ const Bag: React.FC = () => {
     }
   }
 
+  function handleCheckout() {
+    // Freeze the basket so that it doesn't change while the user is checking out
+    frozenBasket.current = [...basket ?? []]
+    setCheckoutIsOpen(true)
+  }
+
   return (
     <IonPage>
       <IonHeader>
         <IonToolbar>
-          <IonTitle>Bag</IonTitle>
+          <IonTitle>Cart</IonTitle>
         </IonToolbar>
       </IonHeader>
       <IonContent>
         <IonHeader collapse="condense">
           <IonToolbar>
-            <IonTitle size="large">Bag</IonTitle>
+            <IonTitle size="large">Cart</IonTitle>
           </IonToolbar>
         </IonHeader>
         {!basket?.length ? (
-          <EmptyBag />
+          <EmptyCart />
         ) : (
           <IonList>
             {basket.map((basket_item) => (
@@ -174,7 +181,7 @@ const Bag: React.FC = () => {
             size="large"
             className="checkout"
             style={{ margin: '10px' }}
-            onClick={() => setCheckoutIsOpen(true)}
+            onClick={handleCheckout}
           >
             Checkout
           </IonButton>
@@ -183,12 +190,13 @@ const Bag: React.FC = () => {
       <IonModal isOpen={checkoutIsOpen}>
         <Checkout
           isOpen={checkoutIsOpen}
-          basketItems={basket}
+          basketItems={frozenBasket.current}
           onDismiss={() => setCheckoutIsOpen(false)}
+          onCompleted={() => setCheckoutIsOpen(false)}
         />
       </IonModal>
     </IonPage>
   )
 }
 
-export default Bag
+export default Cart

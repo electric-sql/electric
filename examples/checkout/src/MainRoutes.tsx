@@ -12,7 +12,7 @@ import {
 } from '@ionic/react'
 import { IonReactRouter } from '@ionic/react-router'
 import {
-  bagOutline,
+  cartOutline,
   personOutline,
   searchOutline,
   shirtOutline,
@@ -26,7 +26,7 @@ import { ElectricProvider, Electric, schema } from './electric'
 
 import Shop from './pages/Shop'
 import Item from './pages/Item'
-import Bag from './pages/Bag'
+import Cart from './pages/Cart'
 import Account from './pages/Account'
 import Order from './pages/Order'
 import BasketCount from './components/BasketCount'
@@ -115,8 +115,8 @@ const MainRoutes = ({onElectricLoaded}: MainRoutesProps) => {
             <Route exact path="/account">
               <Account />
             </Route>
-            <Route exact path="/bag">
-              <Bag />
+            <Route exact path="/cart">
+              <Cart />
             </Route>
             <Route exact path="/account/order/:id">
               <Order />
@@ -138,9 +138,9 @@ const MainRoutes = ({onElectricLoaded}: MainRoutesProps) => {
               <IonIcon aria-hidden="true" icon={personOutline} />
               <IonLabel>Account</IonLabel>
             </IonTabButton>
-            <IonTabButton tab="bag" href="/bag">
-              <IonIcon aria-hidden="true" icon={bagOutline} />
-              <IonLabel>Bag</IonLabel>
+            <IonTabButton tab="cart" href="/cart">
+              <IonIcon aria-hidden="true" icon={cartOutline} />
+              <IonLabel>Cart</IonLabel>
               <BasketCount />
             </IonTabButton>
           </IonTabBar>

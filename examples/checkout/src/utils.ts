@@ -17,21 +17,21 @@ export async function getSupabaseJWT(supabase: SupabaseClient) {
 }
 
 export const statusDisplay = {
+  awaitingSubmission: 'Awaiting Submission',
   submitted: 'Submitted',
   processingPayment: 'Processing Payment',
   placed: 'Placed',
-  processing: 'Processing',
   shipped: 'Shipped',
   delivered: 'Delivered',
   cancelled: 'Cancelled',
 }
 
 export const statusColor = {
+  awaitingSubmission: 'warning',
   submitted: 'secondary',
   processingPayment: 'secondary',
-  placed: 'primary',
-  processing: 'tertiary',
-  shipped: 'warning',
+  placed: 'success',
+  shipped: 'success',
   delivered: 'success',
   cancelled: 'danger',
 }

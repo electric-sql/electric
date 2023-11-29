@@ -1,10 +1,10 @@
 import { IonRouterLink } from '@ionic/react'
-import './EmptyBag.css'
+import './EmptyCart.css'
 
-const EmptyBag: React.FC = () => {
+const EmptyCart: React.FC = () => {
   return (
-    <div className="empty-bag">
-      <strong>Your bag is empty.</strong>
+    <div className="empty-cart">
+      <strong>Your cart is empty.</strong>
       <p>
         Explore <IonRouterLink routerLink="/shop">the Store</IonRouterLink>
       </p>
@@ -12,4 +12,4 @@ const EmptyBag: React.FC = () => {
   )
 }
 
-export default EmptyBag
+export default EmptyCart

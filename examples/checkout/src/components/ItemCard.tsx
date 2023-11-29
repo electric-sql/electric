@@ -22,7 +22,7 @@ function ItemCard({ item }: ItemProps) {
   const { session } = useContext(SupabaseContext)!
   const [toastIsOpen, setIsOpen] = useState(false)
 
-  async function addToBag() {
+  async function addToCart() {
     await db.basket_items.create({
       data: {
         id: uuidv4(),
@@ -38,8 +38,8 @@ function ItemCard({ item }: ItemProps) {
   return (
     <IonCard className="item">
       <img alt={item.name} src={`/images/items/${item.slug}.jpg`} />
-      <IonButton expand="full" size="small" onClick={addToBag}>
-        Add to bag
+      <IonButton expand="full" size="small" onClick={addToCart}>
+        Add to cart
       </IonButton>
       <IonCardHeader>
         <IonCardTitle>{item.name}</IonCardTitle>
@@ -50,7 +50,7 @@ function ItemCard({ item }: ItemProps) {
       <IonToast
         color={'primary'}
         isOpen={toastIsOpen}
-        message={`Added ${item.name} to bag`}
+        message={`Added ${item.name} to cart`}
         onDidDismiss={() => setIsOpen(false)}
         duration={1000}
         position="top"

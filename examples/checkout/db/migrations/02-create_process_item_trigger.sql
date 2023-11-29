@@ -3,6 +3,7 @@ DROP FUNCTION IF EXISTS call_process_order_trigger();
 
 CREATE FUNCTION call_process_order_trigger() RETURNS trigger AS $$
 BEGIN
+  UPDATE "public"."orders" SET "status" = 'submitted' WHERE "id" = new.id;
   PERFORM net.http_post(
     'http://kong:8000/functions/v1/process',
     ('{"id": "' || new.id || '"}')::jsonb,
