@@ -38,19 +38,6 @@ const ElectricProviderComponent = ({
       }
 
       setElectric(client)
-
-      // add the toolbar in debug mode
-      if (import.meta.env.DEV) {
-        import('@electric-sql/debug-toolbar').then((toolbar) => {
-          import('electric-sql/satellite').then((satellite) => {
-            import('@electric-sql/debug-toolbar/dist/index.cjs.css').then(
-              (_) => {
-                toolbar.default(toolbar.clientApi(satellite.globalRegistry))
-              }
-            )
-          })
-        })
-      }
     }
 
     init()
