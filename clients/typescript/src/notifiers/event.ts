@@ -239,7 +239,7 @@ export class EventNotifier implements Notifier {
 
     this._unsubscribe(EVENT_NAMES.connectivityStateChange, callback)
 
-    delete this._changeCallbacks[key]
+    delete this._connectivityStatusCallbacks[key]
   }
 
   _getDbNames(): DbName[] {

@@ -34,6 +34,10 @@ export type { ShapeSubscription } from './process'
 
 // `Registry` that starts one Satellite process per database.
 export interface Registry {
+  satellites: {
+    [key: DbName]: Satellite
+  }
+
   ensureStarted(
     dbName: DbName,
     dbDescription: DbSchema<any>,

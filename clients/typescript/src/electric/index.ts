@@ -70,10 +70,12 @@ export const electrify = async <DB extends DbSchema<any>>(
   )
 
   const electric = ElectricClient.create(
+    dbName,
     dbDescription,
     adapter,
     notifier,
-    satellite
+    satellite,
+    registry
   )
 
   if (satellite.connectivityState !== undefined) {

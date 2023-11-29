@@ -4,7 +4,7 @@ import Database from 'better-sqlite3'
 import { schema } from '../generated'
 import { DatabaseAdapter } from '../../../src/drivers/better-sqlite3'
 import { SatelliteProcess } from '../../../src/satellite/process'
-import { MockSatelliteClient } from '../../../src/satellite/mock'
+import { MockRegistry, MockSatelliteClient } from '../../../src/satellite/mock'
 import { BundleMigrator } from '../../../src/migrators'
 import { MockNotifier } from '../../../src/notifiers'
 import { randomValue } from '../../../src/util'
@@ -46,6 +46,7 @@ async function makeContext(t: ExecutionContext<ContextType>) {
   const migrator = new BundleMigrator(adapter, migrations)
   const dbName = `.tmp/test-${randomValue()}.db`
   const notifier = new MockNotifier(dbName)
+  const registry = new MockRegistry()
 
   const satellite = new SatelliteProcess(
     dbName,
@@ -56,7 +57,14 @@ async function makeContext(t: ExecutionContext<ContextType>) {
     satelliteDefaults
   )
 
-  const electric = ElectricClient.create(schema, adapter, notifier, satellite)
+  const electric = ElectricClient.create(
+    dbName,
+    schema,
+    adapter,
+    notifier,
+    satellite,
+    registry
+  )
   const Post = electric.db.Post
   const Items = electric.db.Items
   const User = electric.db.User

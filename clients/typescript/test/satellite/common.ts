@@ -6,7 +6,7 @@ import { DatabaseAdapter } from '../../src/drivers/better-sqlite3'
 import { BundleMigrator } from '../../src/migrators'
 import { EventNotifier, MockNotifier } from '../../src/notifiers'
 import { MockSatelliteClient } from '../../src/satellite/mock'
-import { SatelliteProcess } from '../../src/satellite'
+import { GlobalRegistry, Registry, SatelliteProcess } from '../../src/satellite'
 import { TableInfo, initTableInfo } from '../support/satellite-helpers'
 import { satelliteDefaults, SatelliteOpts } from '../../src/satellite/config'
 import { Table, generateTableTriggers } from '../../src/migrators/triggers'
@@ -179,6 +179,7 @@ import { AuthState } from '../../src/auth'
 import { DbSchema, TableSchema } from '../../src/client/model/schema'
 import { PgBasicType } from '../../src/client/conversions/types'
 import { HKT } from '../../src/client/util/hkt'
+import { ElectricClient } from '../../src/client/model'
 
 // Speed up the intervals for testing.
 export const opts = Object.assign({}, satelliteDefaults, {
@@ -247,6 +248,32 @@ export const makeContext = async (
     timestamp,
     authState,
   }
+}
+
+export const mockElectricClient = async (
+  db: SqliteDB,
+  registry: Registry | GlobalRegistry,
+  options: Opts = opts
+): Promise<ElectricClient<any>> => {
+  const dbName = db.name
+  const adapter = new DatabaseAdapter(db)
+  const migrator = new BundleMigrator(adapter, migrations)
+  const notifier = new MockNotifier(dbName)
+  const client = new MockSatelliteClient()
+  const satellite = new SatelliteProcess(
+    dbName,
+    adapter,
+    migrator,
+    notifier,
+    client,
+    options
+  )
+
+  await satellite.start({ clientId: '', token: 'test-token' })
+  registry.satellites[dbName] = satellite
+
+  // @ts-ignore Mock Electric client that does not contain the DAL
+  return new ElectricClient({}, dbName, adapter, notifier, satellite, registry)
 }
 
 export const clean = async (t: ExecutionContext<{ dbName: string }>) => {
