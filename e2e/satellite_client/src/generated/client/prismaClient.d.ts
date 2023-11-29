@@ -108,6 +108,16 @@ export type Floats = {
   f8: number | null
 }
 
+/**
+ * Model Jsons
+ * 
+ */
+export type Jsons = {
+  id: string
+  js: Prisma.JsonValue | null
+  jsb: Prisma.JsonValue | null
+}
+
 
 /**
  * ##  Prisma Client ʲˢ
@@ -305,6 +315,16 @@ export class PrismaClient<
     * ```
     */
   get floats(): Prisma.FloatsDelegate<GlobalReject>;
+
+  /**
+   * `prisma.jsons`: Exposes CRUD operations for the **Jsons** model.
+    * Example usage:
+    * ```ts
+    * // Fetch zero or more Jsons
+    * const jsons = await prisma.jsons.findMany()
+    * ```
+    */
+  get jsons(): Prisma.JsonsDelegate<GlobalReject>;
 }
 
 export namespace Prisma {
@@ -781,7 +801,8 @@ export namespace Prisma {
     Bools: 'Bools',
     Uuids: 'Uuids',
     Ints: 'Ints',
-    Floats: 'Floats'
+    Floats: 'Floats',
+    Jsons: 'Jsons'
   };
 
   export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -8100,6 +8121,864 @@ export namespace Prisma {
 
 
   /**
+   * Model Jsons
+   */
+
+
+  export type AggregateJsons = {
+    _count: JsonsCountAggregateOutputType | null
+    _min: JsonsMinAggregateOutputType | null
+    _max: JsonsMaxAggregateOutputType | null
+  }
+
+  export type JsonsMinAggregateOutputType = {
+    id: string | null
+  }
+
+  export type JsonsMaxAggregateOutputType = {
+    id: string | null
+  }
+
+  export type JsonsCountAggregateOutputType = {
+    id: number
+    js: number
+    jsb: number
+    _all: number
+  }
+
+
+  export type JsonsMinAggregateInputType = {
+    id?: true
+  }
+
+  export type JsonsMaxAggregateInputType = {
+    id?: true
+  }
+
+  export type JsonsCountAggregateInputType = {
+    id?: true
+    js?: true
+    jsb?: true
+    _all?: true
+  }
+
+  export type JsonsAggregateArgs = {
+    /**
+     * Filter which Jsons to aggregate.
+     */
+    where?: JsonsWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of Jsons to fetch.
+     */
+    orderBy?: Enumerable<JsonsOrderByWithRelationInput>
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the start position
+     */
+    cursor?: JsonsWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` Jsons from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` Jsons.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Count returned Jsons
+    **/
+    _count?: true | JsonsCountAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the minimum value
+    **/
+    _min?: JsonsMinAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the maximum value
+    **/
+    _max?: JsonsMaxAggregateInputType
+  }
+
+  export type GetJsonsAggregateType<T extends JsonsAggregateArgs> = {
+        [P in keyof T & keyof AggregateJsons]: P extends '_count' | 'count'
+      ? T[P] extends true
+        ? number
+        : GetScalarType<T[P], AggregateJsons[P]>
+      : GetScalarType<T[P], AggregateJsons[P]>
+  }
+
+
+
+
+  export type JsonsGroupByArgs = {
+    where?: JsonsWhereInput
+    orderBy?: Enumerable<JsonsOrderByWithAggregationInput>
+    by: JsonsScalarFieldEnum[]
+    having?: JsonsScalarWhereWithAggregatesInput
+    take?: number
+    skip?: number
+    _count?: JsonsCountAggregateInputType | true
+    _min?: JsonsMinAggregateInputType
+    _max?: JsonsMaxAggregateInputType
+  }
+
+
+  export type JsonsGroupByOutputType = {
+    id: string
+    js: JsonValue | null
+    jsb: JsonValue | null
+    _count: JsonsCountAggregateOutputType | null
+    _min: JsonsMinAggregateOutputType | null
+    _max: JsonsMaxAggregateOutputType | null
+  }
+
+  type GetJsonsGroupByPayload<T extends JsonsGroupByArgs> = Prisma.PrismaPromise<
+    Array<
+      PickArray<JsonsGroupByOutputType, T['by']> &
+        {
+          [P in ((keyof T) & (keyof JsonsGroupByOutputType))]: P extends '_count'
+            ? T[P] extends boolean
+              ? number
+              : GetScalarType<T[P], JsonsGroupByOutputType[P]>
+            : GetScalarType<T[P], JsonsGroupByOutputType[P]>
+        }
+      >
+    >
+
+
+  export type JsonsSelect = {
+    id?: boolean
+    js?: boolean
+    jsb?: boolean
+  }
+
+
+  export type JsonsGetPayload<S extends boolean | null | undefined | JsonsArgs> =
+    S extends { select: any, include: any } ? 'Please either choose `select` or `include`' :
+    S extends true ? Jsons :
+    S extends undefined ? never :
+    S extends { include: any } & (JsonsArgs | JsonsFindManyArgs)
+    ? Jsons 
+    : S extends { select: any } & (JsonsArgs | JsonsFindManyArgs)
+      ? {
+    [P in TruthyKeys<S['select']>]:
+    P extends keyof Jsons ? Jsons[P] : never
+  } 
+      : Jsons
+
+
+  type JsonsCountArgs = 
+    Omit<JsonsFindManyArgs, 'select' | 'include'> & {
+      select?: JsonsCountAggregateInputType | true
+    }
+
+  export interface JsonsDelegate<GlobalRejectSettings extends Prisma.RejectOnNotFound | Prisma.RejectPerOperation | false | undefined> {
+
+    /**
+     * Find zero or one Jsons that matches the filter.
+     * @param {JsonsFindUniqueArgs} args - Arguments to find a Jsons
+     * @example
+     * // Get one Jsons
+     * const jsons = await prisma.jsons.findUnique({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+    **/
+    findUnique<T extends JsonsFindUniqueArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
+      args: SelectSubset<T, JsonsFindUniqueArgs>
+    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findUnique', 'Jsons'> extends True ? Prisma__JsonsClient<JsonsGetPayload<T>> : Prisma__JsonsClient<JsonsGetPayload<T> | null, null>
+
+    /**
+     * Find one Jsons that matches the filter or throw an error  with `error.code='P2025'` 
+     *     if no matches were found.
+     * @param {JsonsFindUniqueOrThrowArgs} args - Arguments to find a Jsons
+     * @example
+     * // Get one Jsons
+     * const jsons = await prisma.jsons.findUniqueOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+    **/
+    findUniqueOrThrow<T extends JsonsFindUniqueOrThrowArgs>(
+      args?: SelectSubset<T, JsonsFindUniqueOrThrowArgs>
+    ): Prisma__JsonsClient<JsonsGetPayload<T>>
+
+    /**
+     * Find the first Jsons that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {JsonsFindFirstArgs} args - Arguments to find a Jsons
+     * @example
+     * // Get one Jsons
+     * const jsons = await prisma.jsons.findFirst({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+    **/
+    findFirst<T extends JsonsFindFirstArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
+      args?: SelectSubset<T, JsonsFindFirstArgs>
+    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findFirst', 'Jsons'> extends True ? Prisma__JsonsClient<JsonsGetPayload<T>> : Prisma__JsonsClient<JsonsGetPayload<T> | null, null>
+
+    /**
+     * Find the first Jsons that matches the filter or
+     * throw `NotFoundError` if no matches were found.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {JsonsFindFirstOrThrowArgs} args - Arguments to find a Jsons
+     * @example
+     * // Get one Jsons
+     * const jsons = await prisma.jsons.findFirstOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+    **/
+    findFirstOrThrow<T extends JsonsFindFirstOrThrowArgs>(
+      args?: SelectSubset<T, JsonsFindFirstOrThrowArgs>
+    ): Prisma__JsonsClient<JsonsGetPayload<T>>
+
+    /**
+     * Find zero or more Jsons that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {JsonsFindManyArgs=} args - Arguments to filter and select certain fields only.
+     * @example
+     * // Get all Jsons
+     * const jsons = await prisma.jsons.findMany()
+     * 
+     * // Get first 10 Jsons
+     * const jsons = await prisma.jsons.findMany({ take: 10 })
+     * 
+     * // Only select the `id`
+     * const jsonsWithIdOnly = await prisma.jsons.findMany({ select: { id: true } })
+     * 
+    **/
+    findMany<T extends JsonsFindManyArgs>(
+      args?: SelectSubset<T, JsonsFindManyArgs>
+    ): Prisma.PrismaPromise<Array<JsonsGetPayload<T>>>
+
+    /**
+     * Create a Jsons.
+     * @param {JsonsCreateArgs} args - Arguments to create a Jsons.
+     * @example
+     * // Create one Jsons
+     * const Jsons = await prisma.jsons.create({
+     *   data: {
+     *     // ... data to create a Jsons
+     *   }
+     * })
+     * 
+    **/
+    create<T extends JsonsCreateArgs>(
+      args: SelectSubset<T, JsonsCreateArgs>
+    ): Prisma__JsonsClient<JsonsGetPayload<T>>
+
+    /**
+     * Create many Jsons.
+     *     @param {JsonsCreateManyArgs} args - Arguments to create many Jsons.
+     *     @example
+     *     // Create many Jsons
+     *     const jsons = await prisma.jsons.createMany({
+     *       data: {
+     *         // ... provide data here
+     *       }
+     *     })
+     *     
+    **/
+    createMany<T extends JsonsCreateManyArgs>(
+      args?: SelectSubset<T, JsonsCreateManyArgs>
+    ): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Delete a Jsons.
+     * @param {JsonsDeleteArgs} args - Arguments to delete one Jsons.
+     * @example
+     * // Delete one Jsons
+     * const Jsons = await prisma.jsons.delete({
+     *   where: {
+     *     // ... filter to delete one Jsons
+     *   }
+     * })
+     * 
+    **/
+    delete<T extends JsonsDeleteArgs>(
+      args: SelectSubset<T, JsonsDeleteArgs>
+    ): Prisma__JsonsClient<JsonsGetPayload<T>>
+
+    /**
+     * Update one Jsons.
+     * @param {JsonsUpdateArgs} args - Arguments to update one Jsons.
+     * @example
+     * // Update one Jsons
+     * const jsons = await prisma.jsons.update({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+    **/
+    update<T extends JsonsUpdateArgs>(
+      args: SelectSubset<T, JsonsUpdateArgs>
+    ): Prisma__JsonsClient<JsonsGetPayload<T>>
+
+    /**
+     * Delete zero or more Jsons.
+     * @param {JsonsDeleteManyArgs} args - Arguments to filter Jsons to delete.
+     * @example
+     * // Delete a few Jsons
+     * const { count } = await prisma.jsons.deleteMany({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     * 
+    **/
+    deleteMany<T extends JsonsDeleteManyArgs>(
+      args?: SelectSubset<T, JsonsDeleteManyArgs>
+    ): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more Jsons.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {JsonsUpdateManyArgs} args - Arguments to update one or more rows.
+     * @example
+     * // Update many Jsons
+     * const jsons = await prisma.jsons.updateMany({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+    **/
+    updateMany<T extends JsonsUpdateManyArgs>(
+      args: SelectSubset<T, JsonsUpdateManyArgs>
+    ): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Create or update one Jsons.
+     * @param {JsonsUpsertArgs} args - Arguments to update or create a Jsons.
+     * @example
+     * // Update or create a Jsons
+     * const jsons = await prisma.jsons.upsert({
+     *   create: {
+     *     // ... data to create a Jsons
+     *   },
+     *   update: {
+     *     // ... in case it already exists, update
+     *   },
+     *   where: {
+     *     // ... the filter for the Jsons we want to update
+     *   }
+     * })
+    **/
+    upsert<T extends JsonsUpsertArgs>(
+      args: SelectSubset<T, JsonsUpsertArgs>
+    ): Prisma__JsonsClient<JsonsGetPayload<T>>
+
+    /**
+     * Count the number of Jsons.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {JsonsCountArgs} args - Arguments to filter Jsons to count.
+     * @example
+     * // Count the number of Jsons
+     * const count = await prisma.jsons.count({
+     *   where: {
+     *     // ... the filter for the Jsons we want to count
+     *   }
+     * })
+    **/
+    count<T extends JsonsCountArgs>(
+      args?: Subset<T, JsonsCountArgs>,
+    ): Prisma.PrismaPromise<
+      T extends _Record<'select', any>
+        ? T['select'] extends true
+          ? number
+          : GetScalarType<T['select'], JsonsCountAggregateOutputType>
+        : number
+    >
+
+    /**
+     * Allows you to perform aggregations operations on a Jsons.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {JsonsAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @example
+     * // Ordered by age ascending
+     * // Where email contains prisma.io
+     * // Limited to the 10 users
+     * const aggregations = await prisma.user.aggregate({
+     *   _avg: {
+     *     age: true,
+     *   },
+     *   where: {
+     *     email: {
+     *       contains: "prisma.io",
+     *     },
+     *   },
+     *   orderBy: {
+     *     age: "asc",
+     *   },
+     *   take: 10,
+     * })
+    **/
+    aggregate<T extends JsonsAggregateArgs>(args: Subset<T, JsonsAggregateArgs>): Prisma.PrismaPromise<GetJsonsAggregateType<T>>
+
+    /**
+     * Group by Jsons.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {JsonsGroupByArgs} args - Group by arguments.
+     * @example
+     * // Group by city, order by createdAt, get count
+     * const result = await prisma.user.groupBy({
+     *   by: ['city', 'createdAt'],
+     *   orderBy: {
+     *     createdAt: true
+     *   },
+     *   _count: {
+     *     _all: true
+     *   },
+     * })
+     * 
+    **/
+    groupBy<
+      T extends JsonsGroupByArgs,
+      HasSelectOrTake extends Or<
+        Extends<'skip', Keys<T>>,
+        Extends<'take', Keys<T>>
+      >,
+      OrderByArg extends True extends HasSelectOrTake
+        ? { orderBy: JsonsGroupByArgs['orderBy'] }
+        : { orderBy?: JsonsGroupByArgs['orderBy'] },
+      OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
+      ByFields extends TupleToUnion<T['by']>,
+      ByValid extends Has<ByFields, OrderFields>,
+      HavingFields extends GetHavingFields<T['having']>,
+      HavingValid extends Has<ByFields, HavingFields>,
+      ByEmpty extends T['by'] extends never[] ? True : False,
+      InputErrors extends ByEmpty extends True
+      ? `Error: "by" must not be empty.`
+      : HavingValid extends False
+      ? {
+          [P in HavingFields]: P extends ByFields
+            ? never
+            : P extends string
+            ? `Error: Field "${P}" used in "having" needs to be provided in "by".`
+            : [
+                Error,
+                'Field ',
+                P,
+                ` in "having" needs to be provided in "by"`,
+              ]
+        }[HavingFields]
+      : 'take' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "take", you also need to provide "orderBy"'
+      : 'skip' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "skip", you also need to provide "orderBy"'
+      : ByValid extends True
+      ? {}
+      : {
+          [P in OrderFields]: P extends ByFields
+            ? never
+            : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+        }[OrderFields]
+    >(args: SubsetIntersection<T, JsonsGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetJsonsGroupByPayload<T> : Prisma.PrismaPromise<InputErrors>
+
+  }
+
+  /**
+   * The delegate class that acts as a "Promise-like" for Jsons.
+   * Why is this prefixed with `Prisma__`?
+   * Because we want to prevent naming conflicts as mentioned in
+   * https://github.com/prisma/prisma-client-js/issues/707
+   */
+  export class Prisma__JsonsClient<T, Null = never> implements Prisma.PrismaPromise<T> {
+    private readonly _dmmf;
+    private readonly _queryType;
+    private readonly _rootField;
+    private readonly _clientMethod;
+    private readonly _args;
+    private readonly _dataPath;
+    private readonly _errorFormat;
+    private readonly _measurePerformance?;
+    private _isList;
+    private _callsite;
+    private _requestPromise?;
+    readonly [Symbol.toStringTag]: 'PrismaPromise';
+    constructor(_dmmf: runtime.DMMFClass, _queryType: 'query' | 'mutation', _rootField: string, _clientMethod: string, _args: any, _dataPath: string[], _errorFormat: ErrorFormat, _measurePerformance?: boolean | undefined, _isList?: boolean);
+
+
+    private get _document();
+    /**
+     * Attaches callbacks for the resolution and/or rejection of the Promise.
+     * @param onfulfilled The callback to execute when the Promise is resolved.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of which ever callback is executed.
+     */
+    then<TResult1 = T, TResult2 = never>(onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null, onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null): Promise<TResult1 | TResult2>;
+    /**
+     * Attaches a callback for only the rejection of the Promise.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of the callback.
+     */
+    catch<TResult = never>(onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null): Promise<T | TResult>;
+    /**
+     * Attaches a callback that is invoked when the Promise is settled (fulfilled or rejected). The
+     * resolved value cannot be modified from the callback.
+     * @param onfinally The callback to execute when the Promise is settled (fulfilled or rejected).
+     * @returns A Promise for the completion of the callback.
+     */
+    finally(onfinally?: (() => void) | undefined | null): Promise<T>;
+  }
+
+
+
+  // Custom InputTypes
+
+  /**
+   * Jsons base type for findUnique actions
+   */
+  export type JsonsFindUniqueArgsBase = {
+    /**
+     * Select specific fields to fetch from the Jsons
+     */
+    select?: JsonsSelect | null
+    /**
+     * Filter, which Jsons to fetch.
+     */
+    where: JsonsWhereUniqueInput
+  }
+
+  /**
+   * Jsons findUnique
+   */
+  export interface JsonsFindUniqueArgs extends JsonsFindUniqueArgsBase {
+   /**
+    * Throw an Error if query returns no results
+    * @deprecated since 4.0.0: use `findUniqueOrThrow` method instead
+    */
+    rejectOnNotFound?: RejectOnNotFound
+  }
+      
+
+  /**
+   * Jsons findUniqueOrThrow
+   */
+  export type JsonsFindUniqueOrThrowArgs = {
+    /**
+     * Select specific fields to fetch from the Jsons
+     */
+    select?: JsonsSelect | null
+    /**
+     * Filter, which Jsons to fetch.
+     */
+    where: JsonsWhereUniqueInput
+  }
+
+
+  /**
+   * Jsons base type for findFirst actions
+   */
+  export type JsonsFindFirstArgsBase = {
+    /**
+     * Select specific fields to fetch from the Jsons
+     */
+    select?: JsonsSelect | null
+    /**
+     * Filter, which Jsons to fetch.
+     */
+    where?: JsonsWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of Jsons to fetch.
+     */
+    orderBy?: Enumerable<JsonsOrderByWithRelationInput>
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for Jsons.
+     */
+    cursor?: JsonsWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` Jsons from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` Jsons.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of Jsons.
+     */
+    distinct?: Enumerable<JsonsScalarFieldEnum>
+  }
+
+  /**
+   * Jsons findFirst
+   */
+  export interface JsonsFindFirstArgs extends JsonsFindFirstArgsBase {
+   /**
+    * Throw an Error if query returns no results
+    * @deprecated since 4.0.0: use `findFirstOrThrow` method instead
+    */
+    rejectOnNotFound?: RejectOnNotFound
+  }
+      
+
+  /**
+   * Jsons findFirstOrThrow
+   */
+  export type JsonsFindFirstOrThrowArgs = {
+    /**
+     * Select specific fields to fetch from the Jsons
+     */
+    select?: JsonsSelect | null
+    /**
+     * Filter, which Jsons to fetch.
+     */
+    where?: JsonsWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of Jsons to fetch.
+     */
+    orderBy?: Enumerable<JsonsOrderByWithRelationInput>
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for Jsons.
+     */
+    cursor?: JsonsWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` Jsons from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` Jsons.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of Jsons.
+     */
+    distinct?: Enumerable<JsonsScalarFieldEnum>
+  }
+
+
+  /**
+   * Jsons findMany
+   */
+  export type JsonsFindManyArgs = {
+    /**
+     * Select specific fields to fetch from the Jsons
+     */
+    select?: JsonsSelect | null
+    /**
+     * Filter, which Jsons to fetch.
+     */
+    where?: JsonsWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of Jsons to fetch.
+     */
+    orderBy?: Enumerable<JsonsOrderByWithRelationInput>
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for listing Jsons.
+     */
+    cursor?: JsonsWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` Jsons from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` Jsons.
+     */
+    skip?: number
+    distinct?: Enumerable<JsonsScalarFieldEnum>
+  }
+
+
+  /**
+   * Jsons create
+   */
+  export type JsonsCreateArgs = {
+    /**
+     * Select specific fields to fetch from the Jsons
+     */
+    select?: JsonsSelect | null
+    /**
+     * The data needed to create a Jsons.
+     */
+    data: XOR<JsonsCreateInput, JsonsUncheckedCreateInput>
+  }
+
+
+  /**
+   * Jsons createMany
+   */
+  export type JsonsCreateManyArgs = {
+    /**
+     * The data used to create many Jsons.
+     */
+    data: Enumerable<JsonsCreateManyInput>
+    skipDuplicates?: boolean
+  }
+
+
+  /**
+   * Jsons update
+   */
+  export type JsonsUpdateArgs = {
+    /**
+     * Select specific fields to fetch from the Jsons
+     */
+    select?: JsonsSelect | null
+    /**
+     * The data needed to update a Jsons.
+     */
+    data: XOR<JsonsUpdateInput, JsonsUncheckedUpdateInput>
+    /**
+     * Choose, which Jsons to update.
+     */
+    where: JsonsWhereUniqueInput
+  }
+
+
+  /**
+   * Jsons updateMany
+   */
+  export type JsonsUpdateManyArgs = {
+    /**
+     * The data used to update Jsons.
+     */
+    data: XOR<JsonsUpdateManyMutationInput, JsonsUncheckedUpdateManyInput>
+    /**
+     * Filter which Jsons to update
+     */
+    where?: JsonsWhereInput
+  }
+
+
+  /**
+   * Jsons upsert
+   */
+  export type JsonsUpsertArgs = {
+    /**
+     * Select specific fields to fetch from the Jsons
+     */
+    select?: JsonsSelect | null
+    /**
+     * The filter to search for the Jsons to update in case it exists.
+     */
+    where: JsonsWhereUniqueInput
+    /**
+     * In case the Jsons found by the `where` argument doesn't exist, create a new Jsons with this data.
+     */
+    create: XOR<JsonsCreateInput, JsonsUncheckedCreateInput>
+    /**
+     * In case the Jsons was found with the provided `where` argument, update it with this data.
+     */
+    update: XOR<JsonsUpdateInput, JsonsUncheckedUpdateInput>
+  }
+
+
+  /**
+   * Jsons delete
+   */
+  export type JsonsDeleteArgs = {
+    /**
+     * Select specific fields to fetch from the Jsons
+     */
+    select?: JsonsSelect | null
+    /**
+     * Filter which Jsons to delete.
+     */
+    where: JsonsWhereUniqueInput
+  }
+
+
+  /**
+   * Jsons deleteMany
+   */
+  export type JsonsDeleteManyArgs = {
+    /**
+     * Filter which Jsons to delete
+     */
+    where?: JsonsWhereInput
+  }
+
+
+  /**
+   * Jsons without action
+   */
+  export type JsonsArgs = {
+    /**
+     * Select specific fields to fetch from the Jsons
+     */
+    select?: JsonsSelect | null
+  }
+
+
+
+  /**
    * Enums
    */
 
@@ -8149,6 +9028,32 @@ export namespace Prisma {
   };
 
   export type ItemsScalarFieldEnum = (typeof ItemsScalarFieldEnum)[keyof typeof ItemsScalarFieldEnum]
+
+
+  export const JsonNullValueFilter: {
+    DbNull: typeof DbNull,
+    JsonNull: typeof JsonNull,
+    AnyNull: typeof AnyNull
+  };
+
+  export type JsonNullValueFilter = (typeof JsonNullValueFilter)[keyof typeof JsonNullValueFilter]
+
+
+  export const JsonsScalarFieldEnum: {
+    id: 'id',
+    js: 'js',
+    jsb: 'jsb'
+  };
+
+  export type JsonsScalarFieldEnum = (typeof JsonsScalarFieldEnum)[keyof typeof JsonsScalarFieldEnum]
+
+
+  export const NullableJsonNullValueInput: {
+    DbNull: typeof DbNull,
+    JsonNull: typeof JsonNull
+  };
+
+  export type NullableJsonNullValueInput = (typeof NullableJsonNullValueInput)[keyof typeof NullableJsonNullValueInput]
 
 
   export const OtherItemsScalarFieldEnum: {
@@ -8518,6 +9423,43 @@ export namespace Prisma {
     f8?: FloatNullableWithAggregatesFilter | number | null
   }
 
+  export type JsonsWhereInput = {
+    AND?: Enumerable<JsonsWhereInput>
+    OR?: Enumerable<JsonsWhereInput>
+    NOT?: Enumerable<JsonsWhereInput>
+    id?: StringFilter | string
+    js?: JsonNullableFilter
+    jsb?: JsonNullableFilter
+  }
+
+  export type JsonsOrderByWithRelationInput = {
+    id?: SortOrder
+    js?: SortOrder
+    jsb?: SortOrder
+  }
+
+  export type JsonsWhereUniqueInput = {
+    id?: string
+  }
+
+  export type JsonsOrderByWithAggregationInput = {
+    id?: SortOrder
+    js?: SortOrder
+    jsb?: SortOrder
+    _count?: JsonsCountOrderByAggregateInput
+    _max?: JsonsMaxOrderByAggregateInput
+    _min?: JsonsMinOrderByAggregateInput
+  }
+
+  export type JsonsScalarWhereWithAggregatesInput = {
+    AND?: Enumerable<JsonsScalarWhereWithAggregatesInput>
+    OR?: Enumerable<JsonsScalarWhereWithAggregatesInput>
+    NOT?: Enumerable<JsonsScalarWhereWithAggregatesInput>
+    id?: StringWithAggregatesFilter | string
+    js?: JsonNullableWithAggregatesFilter
+    jsb?: JsonNullableWithAggregatesFilter
+  }
+
   export type ItemsCreateInput = {
     id: string
     content: string
@@ -8862,6 +9804,48 @@ export namespace Prisma {
     id?: StringFieldUpdateOperationsInput | string
     f4?: NullableFloatFieldUpdateOperationsInput | number | null
     f8?: NullableFloatFieldUpdateOperationsInput | number | null
+  }
+
+  export type JsonsCreateInput = {
+    id: string
+    js?: NullableJsonNullValueInput | InputJsonValue
+    jsb?: NullableJsonNullValueInput | InputJsonValue
+  }
+
+  export type JsonsUncheckedCreateInput = {
+    id: string
+    js?: NullableJsonNullValueInput | InputJsonValue
+    jsb?: NullableJsonNullValueInput | InputJsonValue
+  }
+
+  export type JsonsUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    js?: NullableJsonNullValueInput | InputJsonValue
+    jsb?: NullableJsonNullValueInput | InputJsonValue
+  }
+
+  export type JsonsUncheckedUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    js?: NullableJsonNullValueInput | InputJsonValue
+    jsb?: NullableJsonNullValueInput | InputJsonValue
+  }
+
+  export type JsonsCreateManyInput = {
+    id: string
+    js?: NullableJsonNullValueInput | InputJsonValue
+    jsb?: NullableJsonNullValueInput | InputJsonValue
+  }
+
+  export type JsonsUpdateManyMutationInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    js?: NullableJsonNullValueInput | InputJsonValue
+    jsb?: NullableJsonNullValueInput | InputJsonValue
+  }
+
+  export type JsonsUncheckedUpdateManyInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    js?: NullableJsonNullValueInput | InputJsonValue
+    jsb?: NullableJsonNullValueInput | InputJsonValue
   }
 
   export type StringFilter = {
@@ -9264,6 +10248,67 @@ export namespace Prisma {
     _min?: NestedFloatNullableFilter
     _max?: NestedFloatNullableFilter
   }
+  export type JsonNullableFilter = 
+    | PatchUndefined<
+        Either<Required<JsonNullableFilterBase>, Exclude<keyof Required<JsonNullableFilterBase>, 'path'>>,
+        Required<JsonNullableFilterBase>
+      >
+    | OptionalFlat<Omit<Required<JsonNullableFilterBase>, 'path'>>
+
+  export type JsonNullableFilterBase = {
+    equals?: InputJsonValue | JsonNullValueFilter
+    path?: string[]
+    string_contains?: string
+    string_starts_with?: string
+    string_ends_with?: string
+    array_contains?: InputJsonValue | null
+    array_starts_with?: InputJsonValue | null
+    array_ends_with?: InputJsonValue | null
+    lt?: InputJsonValue
+    lte?: InputJsonValue
+    gt?: InputJsonValue
+    gte?: InputJsonValue
+    not?: InputJsonValue | JsonNullValueFilter
+  }
+
+  export type JsonsCountOrderByAggregateInput = {
+    id?: SortOrder
+    js?: SortOrder
+    jsb?: SortOrder
+  }
+
+  export type JsonsMaxOrderByAggregateInput = {
+    id?: SortOrder
+  }
+
+  export type JsonsMinOrderByAggregateInput = {
+    id?: SortOrder
+  }
+  export type JsonNullableWithAggregatesFilter = 
+    | PatchUndefined<
+        Either<Required<JsonNullableWithAggregatesFilterBase>, Exclude<keyof Required<JsonNullableWithAggregatesFilterBase>, 'path'>>,
+        Required<JsonNullableWithAggregatesFilterBase>
+      >
+    | OptionalFlat<Omit<Required<JsonNullableWithAggregatesFilterBase>, 'path'>>
+
+  export type JsonNullableWithAggregatesFilterBase = {
+    equals?: InputJsonValue | JsonNullValueFilter
+    path?: string[]
+    string_contains?: string
+    string_starts_with?: string
+    string_ends_with?: string
+    array_contains?: InputJsonValue | null
+    array_starts_with?: InputJsonValue | null
+    array_ends_with?: InputJsonValue | null
+    lt?: InputJsonValue
+    lte?: InputJsonValue
+    gt?: InputJsonValue
+    gte?: InputJsonValue
+    not?: InputJsonValue | JsonNullValueFilter
+    _count?: NestedIntNullableFilter
+    _min?: NestedJsonNullableFilter
+    _max?: NestedJsonNullableFilter
+  }
 
   export type OtherItemsCreateNestedOneWithoutItemsInput = {
     create?: XOR<OtherItemsCreateWithoutItemsInput, OtherItemsUncheckedCreateWithoutItemsInput>
@@ -9568,6 +10613,28 @@ export namespace Prisma {
     _sum?: NestedFloatNullableFilter
     _min?: NestedFloatNullableFilter
     _max?: NestedFloatNullableFilter
+  }
+  export type NestedJsonNullableFilter = 
+    | PatchUndefined<
+        Either<Required<NestedJsonNullableFilterBase>, Exclude<keyof Required<NestedJsonNullableFilterBase>, 'path'>>,
+        Required<NestedJsonNullableFilterBase>
+      >
+    | OptionalFlat<Omit<Required<NestedJsonNullableFilterBase>, 'path'>>
+
+  export type NestedJsonNullableFilterBase = {
+    equals?: InputJsonValue | JsonNullValueFilter
+    path?: string[]
+    string_contains?: string
+    string_starts_with?: string
+    string_ends_with?: string
+    array_contains?: InputJsonValue | null
+    array_starts_with?: InputJsonValue | null
+    array_ends_with?: InputJsonValue | null
+    lt?: InputJsonValue
+    lte?: InputJsonValue
+    gt?: InputJsonValue
+    gte?: InputJsonValue
+    not?: InputJsonValue | JsonNullValueFilter
   }
 
   export type OtherItemsCreateWithoutItemsInput = {

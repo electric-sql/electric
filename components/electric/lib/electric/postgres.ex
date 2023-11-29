@@ -86,6 +86,7 @@ defmodule Electric.Postgres do
       date
       float4 float8
       int2 int4 int8
+      jsonb
       text
       time
       timestamp timestamptz

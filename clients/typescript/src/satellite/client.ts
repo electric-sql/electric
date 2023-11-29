@@ -1137,16 +1137,6 @@ function deserializeColumnData(
   columnType: PgType
 ): string | number {
   switch (columnType) {
-    case PgBasicType.PG_CHAR:
-    case PgDateType.PG_DATE:
-    case PgBasicType.PG_INT8:
-    case PgBasicType.PG_TEXT:
-    case PgDateType.PG_TIME:
-    case PgDateType.PG_TIMESTAMP:
-    case PgDateType.PG_TIMESTAMPTZ:
-    case PgBasicType.PG_UUID:
-    case PgBasicType.PG_VARCHAR:
-      return typeDecoder.text(column)
     case PgBasicType.PG_BOOL:
       return typeDecoder.bool(column)
     case PgBasicType.PG_INT:
@@ -1161,17 +1151,13 @@ function deserializeColumnData(
     case PgDateType.PG_TIMETZ:
       return typeDecoder.timetz(column)
     default:
-      // should not occur
-      throw new SatelliteError(
-        SatelliteErrorCode.UNKNOWN_DATA_TYPE,
-        `can't deserialize ${columnType}`
-      )
+      return typeDecoder.text(column)
   }
 }
 
 // All values serialized as textual representation
 function serializeColumnData(
-  columnValue: string | number,
+  columnValue: string | number | object,
   columnType: PgType
 ): Uint8Array {
   switch (columnType) {

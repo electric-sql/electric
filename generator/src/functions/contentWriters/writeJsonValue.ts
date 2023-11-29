@@ -19,6 +19,7 @@ export const writeJsonValue = ({
     )
     .withIndentationLevel(1, () => {
       writer
+        .writeLine(`z.null(),`)
         .writeLine(`z.string(),`)
         .writeLine(`z.number(),`)
         .writeLine(`z.boolean(),`)
