@@ -1,6 +1,7 @@
 ---
 title: Basic
 description: Minimal demo app showing how to create and remove items from a list.
+sidebar_position: 10
 ---
 
 import QRCode from 'react-qr-code'

@@ -19,6 +19,7 @@ This includes, for example:
 
 - [AWS RDS](https://repost.aws/knowledge-center/rds-postgresql-use-logical-replication) and [Aurora](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/AuroraPostgreSQL.Replication.Logical.html) (including Aurora Serverless v2)
 - [Crunchy Data](https://www.crunchydata.com) who have a free tier and logical replication enabled by default
+- [Supabase](https://supabase.com/) an open source Firebase alternative build on Postgres - see out [integration guide](../../integrations/deployment/supabase.md)
 
 There's a [long list of Postgres hosting providers here](https://www.postgresql.org/support/professional_hosting/).
 
