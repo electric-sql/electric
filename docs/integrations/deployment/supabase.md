@@ -2,59 +2,103 @@
 title: Supabase
 description: >-
   An open source Firebase alternative built on Postgres.
-sidebar_position: 30
+sidebar_position: 55
 ---
 
 ElectricSQL supports connecting to a hosted Postgres provided by [Supabase](https://supabase.com), an open source Firebase alternative that also provides many other tools, including Authentication and Edge Functions. All Supabase Postgres instances already have logical replication enabled, and so connecting is super easy.
 
-### Deploying Electric with Supabase
+Supabase does not provide hosting for the [Electric sync service](../../api/service.md) itself, and so you will want to run it close to the region your Supabase Postgres is located in. We have a [list of deployment options here](../deployment/).
+
 
 :::info
-Supabase support for Electric is currently only enabled in the canary build, available as the `electricsql/electric:canary` docker image.
+Supabase support for Electric is currently only enabled in the Canary build, available as the `electricsql/electric:canary` docker image.
 :::
 
-First, retrieve the connection details for your database by going to "Project Settings" > "Database". The top of the screen will list the host, database name, port, and user for your Postgres database. Your password for the database will have been set when you created the project. Use this to construct your `DATABASE_URL` in for the form:
+## How to connect Electric to Supabase Postgres
+
+1. Setting up a Supabase Postgres
+2. Retrieving the connection details from the Supabase dashboard
+3. Configuring Electric to connect to Supabase
+5. Running a local Electric Docker and connecting it to Supabase
+6. Verifying that Electric has successfully connected to your Supabase Postgres
+7. Running schema migrations on your database
+
+### Setting up a Supabase Postgres
+
+First, if you don't yet have a Supabase account visit [supabase.com](https://supabase.com) and create one.
+
+Creating a Postgres database with Supabase is easy. First, log in to the dashboard and click "New Project". In the form enter a name for the database, and a password that will be used to connect to it. Make a note of this password as you will need it when connecting Electric to Supabase.
+
+You will also need to select a region for you database to be hosted in. It's recommended to host both your Postgres and Electric sync service in the same region if possible to reduce latency.
+
+### Retrieving the connection details
+
+You can retrieve the connection details for your database by going to "Project Settings" > "Database" in the Supabase dashboard. The top of the screen will list the `host`, `database name`, `port`, and `user` for your Postgres database. Your password for the database will have been set when you created the project. Use this to construct your `DATABASE_URL` in the form of:
 
 ```
 postgresql://user-name:password@db.your-host.supabase.co:port/database-name
 ```
 
-Next, you must configure Electric to use the `direct_writes` mode for inbound transactions, as Supabase does not support the default inbound `logical_replication` mode. This is configured with the `ELECTRIC_INBOUND_MODE` environment variable.
+:::caution
+Do not use the "Connection Pool" connection string a little further down the screen that Supabase provides for your database, as this will prevent the sync service from operating. 
+:::
 
-These details will result in an environment configuration for Electric, similar to:
+### Configuring Electric to connect to Supabase
+
+Next, we configure Electric to connect to Supabase. The [Electric sync service](../../api/service) is available as either a Docker image or Elixir app, and it uses environment variables for configuration.
+
+You must configure Electric to use the `direct_writes` mode for inbound transactions, as Supabase does not support the default inbound `logical_replication` mode. This is configured with the `ELECTRIC_INBOUND_MODE` environment variable.
+
+Along with the other [configuration options](../../api/service.md#configuration-options), these details will result in an environment configuration for Electric, similar to:
 
 ```bash
 DATABASE_URL=postgresql://user-name:password@db.your-host.supabase.co:port/database-name
 ELECTRIC_INBOUND_MODE=direct_writes
-LOGICAL_PUBLISHER_HOST=...
 PG_PROXY_PASSWORD=...
 AUTH_JWT_ALG=HS512
 AUTH_JWT_KEY=...
 ```
 
-An example invocation of the Docker image would be:
+Depending on how you run Electric these could be passed as arguments to Docker, set in a ENV file or entered into a managed host's dashboard.
+
+### Running a local Electric Docker connected to Supabase
+
+To run a local Electric Docker and connect it to your Supabase Postgres you can run the following command.
 
 ```bash
 docker run \
     -e "DATABASE_URL=postgresql://user-name:password@db.your-host.supabase.co:port/database-name" \
     -e "ELECTRIC_INBOUND_MODE=direct_writes" \
-    -e "LOGICAL_PUBLISHER_HOST=..." \
-    -e "PG_PROXY_PASSWORD=..." \
-    -e "AUTH_JWT_ALG=HS512" \
-    -e "AUTH_JWT_KEY=..." \
+    -e "PG_PROXY_PASSWORD=my-pg-password" \
+    -e "AUTH_MODE=insecure" \
     -p 5133:5133 \
-    -p 5433:5433 \
     -p 65432:65432 \
     electricsql/electric:canary
 ```
 
-See the [full configuration options](../../api/service.md#configuration-options) for more details.
+This will start Electric in [insecure mode](../../api/service.md#authentication) and connect it to your database, which is perfect for local development. The logs will be printed to the terminal allowing you to see any errors that may occur.
+
+### Verifying that Electric has successfully connected
+
+Once you have the sync service running, it's time to verify that it has successfully connected to Supabase. The easiest way to do this is via the Supabase dashboard.
+
+First select your project, then go to the "Table Editor" on the navigation menu. You should see a left-hand side menu listing any tables in your database with a "Schema" menu above. Click this menu, and check that there is now an "Electric" schema in your Postgres database, as this will confirm that the sync service has successfully connected and initiated itself.
+
+### Running schema migrations on your database
+
+Supabase has point-and-click tools for designing a database schema, which is a great way to get started with designing your database. However, in order to "Electrify" your tables, you will need to do this via the [Electric Migration Proxy](../../usage/data-modelling/migrations.md#migrations-proxy) which is built into the sync service.
+
+For details on how to run migrations see our [migrations documentation](../../usage/data-modelling/migrations.md).
 
 :::caution
-Do not use the "Connection Pool" connection string that Supabase provides for your database, as this will prevent the sync service from operating. 
+It's important not to make schema changes to your database via the Supabase dashboard after a table has been "Electrified" as these changes will not be tracked by Electric and propagated to client databases.
 :::
 
-### Using Supabase Auth with Electric
+## Using other Supabase tools with Electric
+
+Supabase provide a suite of tools that pair well with Electric when building local-first apps, these include [Supabase Auth](#supabase-auth) and [Supabase Edge Functions](#supabase-edge-functions).
+
+### Supabase Auth
 
 [Supabase Auth](https://supabase.com/docs/guides/auth) is the perfect partner for authenticating users with Electric when using Supabase as your Postgres. It's super easy to set up: all you need to do is share the JWT key used for Supabase with Electric.
 
@@ -90,7 +134,7 @@ const electric = await electrify(conn, schema, config)
 
 You can see an example of this pattern in our [Checkout Example](https://github.com/electric-sql/electric/blob/main/examples/checkout/)
 
-### Using Supabase Edge Functions with Electric
+### Supabase Edge Functions
 
 Many apps need to run code on the server when users take actions; a great way to do this with local-first apps built with Electric is using [event sourcing](../event-sourcing). Using a combination of a Postgres trigger and a [Supabase Edge Function](https://supabase.com/docs/guides/functions), you can run server side code when your database records are synced to the server. These triggers can run on various events within the database, such as inserting, updating and deleting rows in a database.
 
