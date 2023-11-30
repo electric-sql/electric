@@ -28,8 +28,10 @@ const SignIn: React.FC = () => {
         <IonHeader collapse="condense">
           <IonToolbar>
             <IonTitle size="large">
-              <img src={Logo} alt="ElectricSQL" className="logo" />
-              Electric Store
+              <div style={{ display: 'inline-block', padding: '0 20px 0 0' }}>
+                <img src={Logo} alt="ElectricSQL" className="logo" />
+                Electric Store
+              </div>
             </IonTitle>
           </IonToolbar>
         </IonHeader>
