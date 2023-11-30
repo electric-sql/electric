@@ -16,14 +16,14 @@ Supabase support for Electric is currently only enabled in the Canary build, ava
 
 ## How to connect Electric to Supabase Postgres
 
-1. Setting up a Supabase Postgres
-2. Retrieving the connection details from the Supabase dashboard
-3. Configuring Electric to connect to Supabase
-5. Running a local Electric Docker and connecting it to Supabase
-6. Verifying that Electric has successfully connected to your Supabase Postgres
-7. Running schema migrations on your database
+1. [Setting up a Supabase Postgres](#setting-up-a-supabase-postgres)
+2. [Retrieving the connection details from the Supabase dashboard](#retrieving-the-connection-details)
+3. [Configuring Electric to connect to Supabase](#configuring-electric-to-connect-to-supabase)
+4. [Running a local Electric Docker and connecting it to Supabase](#running-a-local-electric-docker-connected-to-supabase)
+5. [Verifying that Electric has successfully connected to your Supabase Postgres](#verifying-that-electric-has-successfully-connected)
+6. [Running schema migrations on your database](#running-schema-migrations-on-your-database)
 
-### Setting up a Supabase Postgres
+### 1. Setting up a Supabase Postgres
 
 First, if you don't yet have a Supabase account visit [supabase.com](https://supabase.com) and create one.
 
@@ -31,7 +31,7 @@ Creating a Postgres database with Supabase is easy. First, log in to the dashboa
 
 You will also need to select a region for you database to be hosted in. It's recommended to host both your Postgres and Electric sync service in the same region if possible to reduce latency.
 
-### Retrieving the connection details
+### 2. Retrieving the connection details
 
 You can retrieve the connection details for your database by going to "Project Settings" > "Database" in the Supabase dashboard. The top of the screen will list the `host`, `database name`, `port`, and `user` for your Postgres database. Your password for the database will have been set when you created the project. Use this to construct your `DATABASE_URL` in the form of:
 
@@ -43,7 +43,7 @@ postgresql://user-name:password@db.your-host.supabase.co:port/database-name
 Do not use the "Connection Pool" connection string a little further down the screen that Supabase provides for your database, as this will prevent the sync service from operating. 
 :::
 
-### Configuring Electric to connect to Supabase
+### 3. Configuring Electric to connect to Supabase
 
 Next, we configure Electric to connect to Supabase. The [Electric sync service](../../api/service) is available as either a Docker image or Elixir app, and it uses environment variables for configuration.
 
@@ -61,7 +61,7 @@ AUTH_JWT_KEY=...
 
 Depending on how you run Electric these could be passed as arguments to Docker, set in a ENV file or entered into a managed host's dashboard.
 
-### Running a local Electric Docker connected to Supabase
+### 4. Running a local Electric Docker connected to Supabase
 
 To run a local Electric Docker and connect it to your Supabase Postgres you can run the following command.
 
@@ -78,13 +78,13 @@ docker run \
 
 This will start Electric in [insecure mode](../../api/service.md#authentication) and connect it to your database, which is perfect for local development. The logs will be printed to the terminal allowing you to see any errors that may occur.
 
-### Verifying that Electric has successfully connected
+### 5. Verifying that Electric has successfully connected
 
 Once you have the sync service running, it's time to verify that it has successfully connected to Supabase. The easiest way to do this is via the Supabase dashboard.
 
 First select your project, then go to the "Table Editor" on the navigation menu. You should see a left-hand side menu listing any tables in your database with a "Schema" menu above. Click this menu, and check that there is now an "Electric" schema in your Postgres database, as this will confirm that the sync service has successfully connected and initiated itself.
 
-### Running schema migrations on your database
+### 6. Running schema migrations on your database
 
 Supabase has point-and-click tools for designing a database schema, which is a great way to get started with designing your database. However, in order to "Electrify" your tables, you will need to do this via the [Electric Migration Proxy](../../usage/data-modelling/migrations.md#migrations-proxy) which is built into the sync service.
 
