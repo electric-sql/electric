@@ -49,12 +49,14 @@ const MainRoutes = ({onElectricLoaded}: MainRoutesProps) => {
 
       const config = {
         auth: { token },
-        debug: import.meta.env.DEV,
+        debug: true,//import.meta.env.DEV,
         url: import.meta.env.ELECTRIC_URL,
       }
 
       const { tabId } = uniqueTabId()
       const scopedDbName = `basic-${LIB_VERSION}-${tabId}.db`
+
+      console.log(config)
 
       const conn = await ElectricDatabase.init(scopedDbName, '')
       const electric = await electrify(conn, schema, config)

@@ -53,7 +53,7 @@ const App: React.FC = () => {
           // There is an issue with clock drift and the JWT being invalid
           // this is a hackey workaround for now
           setSession(newSession)
-        }, 900)
+        }, 1500)
       } else {
         setSession(null)
       }
