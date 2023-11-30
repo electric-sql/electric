@@ -19,7 +19,7 @@ export const writeSingleFileImportStatements: WriteStatements = (
   }
 
   writeImport(
-    `{ TableSchema, DbSchema, Relation, ElectricClient, HKT }`,
+    `{ type TableSchema, DbSchema, Relation, ElectricClient, type HKT }`,
     'electric-sql/client/model'
   )
 
