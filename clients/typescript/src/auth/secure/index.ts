@@ -33,5 +33,5 @@ export function mockSecureAuthToken(
   const mockIss = iss ?? 'dev.electric-sql.com'
   const mockKey = key ?? 'integration-tests-signing-key-example'
 
-  return secureAuthToken({ user_id: 'test-user' }, mockIss, mockKey)
+  return secureAuthToken({ sub: 'test-user' }, mockIss, mockKey)
 }

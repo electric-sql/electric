@@ -3,8 +3,8 @@ defmodule Electric.Satellite.Auth.Secure do
   Implementation module of the "secure" auth mode.
 
   This mode requires auth tokens to be signed. It also checks for the presence of at least "iat" and "exp" claims. If
-  you include values for "iss" and/or "aud" claims in your configuration, those will also be enforced. The "user_id"
-  claims must also be present, either at the top level or under a configurable namespace.
+  you include values for "iss" and/or "aud" claims in your configuration, those will also be enforced. A "sub" or
+  "user_id" claim must also be present, either at the top level or under a configurable namespace.
 
   Auth tokens must use the same signing algorithm as the one configured in Electric.
 
@@ -45,8 +45,8 @@ defmodule Electric.Satellite.Auth.Secure do
 
          "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQY..."
 
-    * `namespace: <string>` - optional namespace under which the "user_id" claim will be looked up. If omitted,
-      "user_id" must be a top-level claim.
+    * `namespace: <string>` - optional namespace under which the "sub" or "user_id" claim will be looked up. If omitted,
+      "sub" or "user_id" must be a top-level claim.
 
     * `iss: <string>` - optional issuer string to check all auth tokens with. If this is configured, JWTs without an
       "iss" claim will be considered invalid.

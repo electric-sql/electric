@@ -7,7 +7,14 @@ defmodule Electric.Satellite.Auth.JWTUtil do
   alias Electric.Satellite.Auth.TokenError
 
   # The name of the claim which holds the User ID in a JWT.
-  @user_id_key "user_id"
+  # `sub` is "subject" according to the JWT spec:
+  # https://www.rfc-editor.org/rfc/rfc7519#section-4.1.2
+  @user_id_key "sub"
+
+  # We used to use `user_id` as the key, but we changed it to `sub` to be more
+  # compliant with the JWT spec. However, we still want to support reading the
+  # old `user_id` key for backwards compatibility.
+  @legacy_user_id_key "user_id"
 
   @doc """
   Fetch the User ID from the given map of claims.
@@ -25,9 +32,11 @@ defmodule Electric.Satellite.Auth.JWTUtil do
   end
 
   defp get_user_id(claims, namespace) when is_binary(namespace) and namespace != "",
-    do: get_in(claims, [namespace, @user_id_key])
+    do:
+      get_in(claims, [namespace, @user_id_key]) ||
+        get_in(claims, [namespace, @legacy_user_id_key])
 
-  defp get_user_id(claims, _), do: claims[@user_id_key]
+  defp get_user_id(claims, _), do: claims[@user_id_key] || claims[@legacy_user_id_key]
 
   defp validate_user_id(user_id) do
     if is_binary(user_id) and String.trim(user_id) != "" do
