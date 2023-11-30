@@ -5,9 +5,9 @@ description: >-
 sidebar_position: 55
 ---
 
-ElectricSQL supports connecting to a hosted Postgres provided by [Supabase](https://supabase.com), an open source Firebase alternative that also provides many other tools, including Authentication and Edge Functions. All Supabase Postgres instances already have logical replication enabled, and so connecting is super easy.
+ElectricSQL supports connecting to a hosted Postgres provided by [Supabase](https://supabase.com), an open source Firebase alternative that also provides many other tools, including Authentication and Edge Functions. All Supabase Postgres instances already have logical replication enabled, so connecting is super easy.
 
-Supabase does not provide hosting for the [Electric sync service](../../api/service.md) itself, and so you will want to run it close to the region your Supabase Postgres is located in. We have a [list of deployment options here](../deployment/).
+Supabase does not provide hosting for the [Electric sync service](../../api/service.md) itself, so you will want to run it close to the region your Supabase Postgres is located in. We have a [list of deployment options here](../deployment/).
 
 
 :::info
