@@ -61,11 +61,11 @@ You can also open it in your mobile browser by scanning this QR code:
 
 ## Supabase integration
 
-To build this demo we used the [Supabase suite of tools](https://supabase.com/), both to host the Postgres database, as well as using Supabase Auth, and Edge Functions. Finally, the UI is built with the Ionic framework.
+The example app's UI is built with the [Ionic framework](https://ionicframework.com) and [Supabase's suite of tools](https://supabase.com/), namely, the hosted Postgres database, Supabase Auth, and Edge Functions. Finally, the UI is built with the Ionic framework.
 
 Authentication for the store uses [Supabase Auth](https://supabase.com/docs/guides/auth), using their standard form component, and then uses the same JWT token for authenticating with the Electric sync service.
 
-A [Supabase Edge Function](https://supabase.com/docs/guides/functions) is used to process orders when they are placed. This is a called from an "on insert" trigger on the 'orders table' in Postgres. When an order is placed, the order is entered as a row into the local orders table in the app; this is then synchronised with the Postgres table.
+A [Supabase Edge Function](https://supabase.com/docs/guides/functions) is used to process orders when they are placed. This is a called from an "on insert" trigger on the 'orders table' in Postgres. When an order is placed in the app, it is entered as a row into the local orders table; this is then synchronised with the remote Postgres table by Electric.
 
 For details on how to use Electric with Supabase Postgres, how you can use Supabase Auth as the authentication system for your Electric app, and how to configure Edge Function for Event Sourcing, see <DocPageLink path="integrations/deployment/supabase" />.
 

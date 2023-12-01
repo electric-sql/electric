@@ -33,11 +33,7 @@ You will also need to select a region for you database to be hosted in. It's rec
 
 ### 2. Retrieving the connection details
 
-You can retrieve the connection details for your database by going to "Project Settings" > "Database" in the Supabase dashboard. The top of the screen will list the `host`, `database name`, `port`, and `user` for your Postgres database. Your password for the database will have been set when you created the project. Use this to construct your `DATABASE_URL` in the form of:
-
-```
-postgresql://user-name:password@db.your-host.supabase.co:port/database-name
-```
+You can retrieve the connection details for your database by going to "Project Settings" > "Database" in the Supabase dashboard. Under the heading "Connection string" select the `URI` tab and copy the connection string shown, this is the `DATABASE_URL` that will be provided to Electric.
 
 :::caution
 Do not use the "Connection Pool" connection string a little further down the screen that Supabase provides for your database, as this will prevent the sync service from operating. 
@@ -80,9 +76,15 @@ This will start Electric in [insecure mode](../../api/service.md#authentication)
 
 ### 5. Verifying that Electric has successfully connected
 
-Once you have the sync service running, it's time to verify that it has successfully connected to Supabase. The easiest way to do this is via the Supabase dashboard.
+Once you have the sync service running, it's time to verify that it has successfully connected to Supabase. Run the following command with the hostname and port of the Electric sync service:
 
-First select your project, then go to the "Table Editor" on the navigation menu. You should see a left-hand side menu listing any tables in your database with a "Schema" menu above. Click this menu, and check that there is now an "Electric" schema in your Postgres database, as this will confirm that the sync service has successfully connected and initiated itself.
+```bash
+curl http://<electric host>:5133/api/status
+```
+
+It should return `Connection to Postgres is up!`, showing that Electric has successfully connected to Supabase.
+
+You can also verify that Electric has successfully initialized its Supabase schema via the Supabase dashboard; select your project, then go to the "Table Editor" on the navigation menu. You should see a left-hand side menu listing any tables in your database with a "Schema" menu above. Click this menu, and check that there is now an "Electric" schema in your Postgres database, as this will confirm that the sync service has successfully connected and initiated itself.
 
 ### 6. Running schema migrations on your database
 
@@ -96,7 +98,7 @@ It's important not to make schema changes to your database via the Supabase dash
 
 ## Using other Supabase tools with Electric
 
-Supabase provide a suite of tools that pair well with Electric when building local-first apps, these include [Supabase Auth](#supabase-auth) and [Supabase Edge Functions](#supabase-edge-functions).
+Supabase provides a suite of tools that pair well with Electric when building local-first apps, these include [Supabase Auth](#supabase-auth) and [Supabase Edge Functions](#supabase-edge-functions).
 
 ### Supabase Auth
 
@@ -176,4 +178,4 @@ ALTER TABLE "public"."my_table" ENABLE ALWAYS TRIGGER my_edge_function_trigger;
 
 This code can either be run directly against your Postgres via the Supabase console, or you can include it in your database migrations.
 
-You can see an example of this pattern in our [Checkout Example](https://github.com/electric-sql/electric/blob/main/examples/checkout/)
+You can see an example of this pattern in our [Checkout Example](https://github.com/electric-sql/electric/blob/main/examples/checkout/).
