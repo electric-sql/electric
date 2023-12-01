@@ -123,11 +123,15 @@ Supabase provides a suite of tools that pair well with Electric when building lo
 
 ### Supabase Auth
 
-[Supabase Auth](https://supabase.com/docs/guides/auth) works as an authentication solution for Electric. Authenticate using Supabase and then use the JWT returned by Supabase Auth as the [auth token for the Electric replication connection](../../usage/auth/token.md).
+[Supabase Auth](https://supabase.com/docs/guides/auth) works as an authentication solution for Electric. Authenticate using Supabase following the instructions in the [Supabase Auth documentation](https://supabase.com/docs/guides/auth). Use the JWT returned by Supabase Auth as the [auth token for the Electric replication connection](../../usage/auth/token.md).
 
-#### Authenticating users
+#### Configuring Electric to work with Supabase Auth
 
-Follow the instructions in the [Supabase Auth documentation](https://supabase.com/docs/guides/auth). Having authenticated a user, set the `session.access_token` returned by `supabase.auth.getSession()` as the value for `config.auth.token` when electrifying your database connection.
+See the sections above on [Retrieving the authentication key](#3-retrieving-the-authentication-key) and [Configuring Electric to connect to Supabase](#4-configuring-electric-to-connect-to-supabase).
+
+#### Authenticating the Electric client connection
+
+Having authenticated a user, set the `session.access_token` returned by `supabase.auth.getSession()` as the value for `config.auth.token` when electrifying your database connection.
 
 For example:
 
