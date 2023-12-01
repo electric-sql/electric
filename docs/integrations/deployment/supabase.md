@@ -17,12 +17,12 @@ Electric support for Supabase is currently enabled in the Canary build, availabl
 
 ## How to connect Electric to Supabase Postgres
 
-1. [Setting up a Supabase Postgres](#setting-up-a-supabase-postgres)
-2. [Retrieving the connection details from the Supabase dashboard](#retrieving-the-connection-details)
-3. [Retrieving the authentication key](#retrieving-the-authentication-key)
-4. [Configuring Electric to connect to Supabase](#configuring-electric-to-connect-to-supabase)
-5. [Verifying Electric initialisation](#verifying-electric-initialisation)
-6. [Electrifying tables](#electrifying-tables)
+1. [Setting up a Supabase Postgres](#1-setting-up-a-supabase-postgres)
+2. [Retrieving the connection details from the Supabase dashboard](#2-retrieving-the-connection-details)
+3. [Retrieving the authentication key](#3-retrieving-the-authentication-key)
+4. [Configuring Electric to connect to Supabase](#4-configuring-electric-to-connect-to-supabase)
+5. [Verifying Electric initialisation](#5-verifying-electric-initialisation)
+6. [Electrifying tables](#6-electrifying-tables)
 
 ### 1. Setting up a Supabase Postgres
 
