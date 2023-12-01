@@ -1,6 +1,6 @@
 ---
 title: Checkout
-description: A simple online store and checkout example using Supabase Postgres
+description: A online store and checkout example using Electric with Supabase and Ionic
 sidebar_position: 30
 ---
 
@@ -9,11 +9,9 @@ import BrowserOnly from '@docusaurus/BrowserOnly'
 
 # Checkout example
 
-This is an example of an online store and checkout built using Electric. You can see it running at [checkout-demo.electric-sql.com](http://checkout-demo.electric-sql.com/)
+This is an example of an online store and checkout app. It is built using Electric with [Supabase](#supabase-integration) and the [Ionic framework](https://ionicframework.com).
 
-The full catalogue is synchronised to the local device making all interactions instantaneous, and removing any latency, which would result in increased conversion rates. This design also enables users to browse the store, and place items into their basket, while offline. When the user reconnects, any changes they have made to their basket will be synchronised across any devices where they are logged in.
-
-This demo also uses an [Event Sourcing](../integrations/event-sourcing/) architecture, which enables a local-first checkout experience. Rather than calling an order placement API, orders and their payment details are entered into the database. A trigger is then called when the order is synced into Postgres that subsequently processes the order.
+You can see it running at [checkout-demo.electric-sql.com](http://checkout-demo.electric-sql.com/) and in the demo screencast below:
 
 <div className="pb-4">
   <div className="card mt-4">
@@ -59,15 +57,25 @@ You can also open it in your mobile browser by scanning this QR code:
   </div>
 </div>
 
+## How the example works
+
+The example app shows a simplified checkout flow for an e-commerce store. It starts with an auth screen. Once logged in, you can add products to a shopping basket. You can then checkout, entering your order and delivery details. There is then a step to place your order and wait for server confirmation that (in this case mock) payment has gone through and the order is confirmed.
+
+The product catalogue is synchronised to the local device. This makes all interactions in the ordering flow instant, with zero latency. These is a direct relationship in e-commerce between latency / loading spinners and customers abandoning their baskets. So this local-first checkout flow without loading spinners is designed to maximum conversion rates.
+
+It also enables users to browse the store, and place items into their basket, while offline. When the user reconnects, any changes they have made to their basket will be synchronised across any devices where they are logged in.
+
+When placing the order, the app uses an [Event Sourcing](../integrations/event-sourcing/) architecture to have server confirmation of the order. Rather than calling an out-of-band order placement API, orders and their payment details are entered into the database. When the order record syncs to the server, a trigger calls a server-side function. This processes the order and could do things like make payment and call fulliment APIs. When finished, it updates the order status column. This syncs back to the client and the client interface shows the order as confirmed.
+
 ## Supabase integration
 
-The example app's UI is built with the [Ionic framework](https://ionicframework.com) and [Supabase's suite of tools](https://supabase.com/), namely, the hosted Postgres database, Supabase Auth, and Edge Functions. Finally, the UI is built with the Ionic framework.
+The example app uses [Supabase](https://supabase.com) for [auth](https://supabase.com/docs/guides/auth), [edge functions](https://supabase.com/docs/guides/functions) and to host the Postgres database.
 
-Authentication for the store uses [Supabase Auth](https://supabase.com/docs/guides/auth), using their standard form component, and then uses the same JWT token for authenticating with the Electric sync service.
+Authentication for the store uses [Supabase Auth](https://supabase.com/docs/guides/auth), using their standard form component. It then uses JWT token provided by Supabase to authenticate the connection to the Electric sync service. This works by configuring the same private key to verify the token with both Supabase and Electric and because both services support reading the user ID from the `sub` claim of the JWT.
 
-A [Supabase Edge Function](https://supabase.com/docs/guides/functions) is used to process orders when they are placed. This is a called from an "on insert" trigger on the 'orders table' in Postgres. When an order is placed in the app, it is entered as a row into the local orders table; this is then synchronised with the remote Postgres table by Electric.
+A [Supabase Edge Function](https://supabase.com/docs/guides/functions) is used to process orders when they are placed. This is a called from an "on insert" trigger on the `orders` in Postgres.
 
-For details on how to use Electric with Supabase Postgres, how you can use Supabase Auth as the authentication system for your Electric app, and how to configure Edge Function for Event Sourcing, see <DocPageLink path="integrations/deployment/supabase" />.
+For more details on how to use Electric with Supabase Postgres, see <DocPageLink path="integrations/deployment/supabase" />.
 
 ## Source code
 
