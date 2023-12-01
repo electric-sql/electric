@@ -5,7 +5,7 @@ description: >-
 sidebar_position: 55
 ---
 
-ElectricSQL supports connecting to a hosted Postgres provided by [Supabase](https://supabase.com), an open source Firebase alternative that also provides many other tools, including Authentication and Edge Functions. All Supabase Postgres instances already have logical replication enabled, so connecting is super easy.
+ElectricSQL supports connecting to a hosted Postgres provided by [Supabase](https://supabase.com), an open source Firebase alternative that also provides many other tools, including Authentication and Edge Functions. All Supabase Postgres instances already have logical replication enabled, so no configuration changes are required.
 
 Supabase does not provide hosting for the [Electric sync service](../../api/service.md) itself, so you will want to run it close to the region your Supabase Postgres is located in. We have a [list of deployment options here](../deployment/).
 
@@ -100,7 +100,7 @@ Supabase provide a suite of tools that pair well with Electric when building loc
 
 ### Supabase Auth
 
-[Supabase Auth](https://supabase.com/docs/guides/auth) is the perfect partner for authenticating users with Electric when using Supabase as your Postgres. It's super easy to set up: all you need to do is share the JWT key used for Supabase with Electric.
+[Supabase Auth](https://supabase.com/docs/guides/auth) is the perfect partner for authenticating users with Electric when using Supabase as your Postgres. To set up: all you need to do is share the JWT key used for Supabase with Electric.
 
 To find your JWT key, go to the Supabase dashboard for your project, select "Project Settings", then "API", and scroll down to the JWT settings. Copy the "JWT Secret" and use that as the `AUTH_JWT_KEY` for your Electric configuration as well as settings `AUTH_JWT_ALG: HS256`.
 
