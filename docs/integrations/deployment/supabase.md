@@ -36,31 +36,7 @@ All Supabase Postgres instances come with logical replication enabled and the pe
 
 ### 2. Retrieving the connection details
 
-Once you've created your database in the Supabase dashboard, go to "Project Settings" > "Database". The top of the screen will list the `host`, `database name`, `port`, and `user` for your Postgres database. Your password for the database is the one you noted down in the previous step.
-
-Use this to construct a connection string in the form of:
-
-```shell
-postgresql://$user:$password@db.$host.supabase.co:$port/$database_name
-```
-
-So, for example, with the following values:
-
-```yaml
-host: example.com
-database name: mydb
-port: 54321
-user: dummy
-password: sekret
-```
-
-The connection string should be:
-
-```shell
-postgresql://dummy:sekret@db.example.com.supabase.co:54321/mydb
-```
-
-You will use this as the value for the `DATABASE_URL` in your [Electric sync service configuration](../../api/service.md).
+Once you've created your database in the Supabase dashboard, go to "Project Settings" > "Database" in the Supabase dashboard. Under the heading "Connection string" select the `URI` tab and copy the connection string shown. You will use this as the value for the `DATABASE_URL` in your [Electric sync service configuration](../../api/service.md).
 
 :::caution
 Do not use the "Connection Pool" connection string displayed a little further down the screen.
