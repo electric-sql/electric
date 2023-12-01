@@ -32,7 +32,7 @@ Log in to your Supabase dashboard and click "New Project". In the form enter a n
 
 Select an AWS region for your database to be hosted in. To reduce latency, we recommend that this is close to, or ideally in same region as, your Electric sync service.
 
-Create the new project and wait a few moment for it to be setup.
+Create the new project and wait a few moments for it to be setup.
 
 :::info
 All Supabase Postgres instances come with logical replication enabled and the permissions needed for Electric to work.
@@ -40,7 +40,7 @@ All Supabase Postgres instances come with logical replication enabled and the pe
 
 ### 2. Retrieving the connection details
 
-Go to "Project Settings" (look for the the gear icon at the bottom of the icon menu on the left hand side of the page) and open the "Database" section. Under the heading "Connection string" select the `URI` tab. Copy the connection string shown and save it somewhere.
+Go to "Project Settings" (look for the gear icon at the bottom of the icon menu on the left hand side of the page) and open the "Database" section. Under the heading "Connection string" select the `URI` tab. Copy the connection string shown and save it somewhere.
 
 You will use this as the value for the `DATABASE_URL` in your [Electric sync service configuration](../../api/service.md).
 
