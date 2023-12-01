@@ -28,7 +28,11 @@ Electric support for Supabase is currently enabled in the Canary build, availabl
 
 If you don't yet have a Supabase account visit [supabase.com](https://supabase.com) and create one.
 
-Log in to your Supabase dashboard and click "New Project". In the form enter a name for the database, and a password that will be used to connect to it. Make a note of this password. Select an AWS region for your database to be hosted in. To reduce latency, we recommend that this is close to, or ideally in same region as, your Electric sync service.
+Log in to your Supabase dashboard and click "New Project". In the form enter a name for the database, and a password that will be used to connect to it. Make a note of this password and save it somewhere secure.
+
+Select an AWS region for your database to be hosted in. To reduce latency, we recommend that this is close to, or ideally in same region as, your Electric sync service.
+
+Create the new project and wait a few moment for it to be setup.
 
 :::info
 All Supabase Postgres instances come with logical replication enabled and the permissions needed for Electric to work.
@@ -36,19 +40,19 @@ All Supabase Postgres instances come with logical replication enabled and the pe
 
 ### 2. Retrieving the connection details
 
-Once you've created your database in the Supabase dashboard, go to "Project Settings" > "Database" in the Supabase dashboard. Under the heading "Connection string" select the `URI` tab and copy the connection string shown. You will use this as the value for the `DATABASE_URL` in your [Electric sync service configuration](../../api/service.md).
+Go to "Project Settings" (look for the the gear icon at the bottom of the icon menu on the left hand side of the page) and open the "Database" section. Under the heading "Connection string" select the `URI` tab. Copy the connection string shown and save it somewhere.
+
+You will use this as the value for the `DATABASE_URL` in your [Electric sync service configuration](../../api/service.md).
 
 :::caution
-Do not use the "Connection Pool" connection string displayed a little further down the screen.
-
-This will prevent the sync service from operating. Because is connects via PgBouncer, which does not support logical replication.
+Do not use the "Connection Pool" connection string displayed a little further down the screen. This will prevent the sync service from operating (because it connects via PgBouncer, which does not support logical replication).
 :::
 
 ### 3. Retrieving the authentication key
 
-Still in the Supabase dashboard, select "Project Settings" -> "API".
+Now open the "API" section of the project settings. Scroll down to the "JWT settings". Reveal and copy the "JWT Secret" value. Save it somewhere secure.
 
-Scroll down to the "JWT settings". Copy the "JWT Secret" value. You will use this as the value for `AUTH_JWT_KEY` in your [Electric sync service configuration](../../api/service.md).
+You will use this as the value for `AUTH_JWT_KEY` in your [Electric sync service configuration](../../api/service.md).
 
 ### 4. Configuring Electric to connect to Supabase
 
@@ -56,13 +60,11 @@ Run your [Electric sync service](../../api/service), either locally or [via one 
 
 - set `AUTH_JWT_ALG` to `HS512` to enable secure auth mode with the right signing algorithm
 - set `AUTH_JWT_KEY` to the "JWT Secret" value you retrieved in step 3 above
-- set `DATABASE_URL` to the connection string you retrieved and constructed in step 2 above
+- set `DATABASE_URL` to the connection string you retrieved in step 2 above
 - set `ELECTRIC_INBOUND_MODE` to `direct_writes`
 - set `PG_PROXY_PASSWORD` to a secure password value and note it down
 
-Depending on how you run Electric these could be passed as arguments to Docker, set in a ENV file or entered into a managed host's dashboard.
-
-For example, to run Electric locally using Docker (replacing the `...` placeholder values with your specific values):
+Depending on how you run Electric these could be passed as arguments to Docker, set in a ENV file or entered into a managed host's dashboard. For example, to run Electric locally using Docker (replacing the `...` placeholder values with your specific values):
 
 ```shell
 docker run \
