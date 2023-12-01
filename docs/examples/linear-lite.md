@@ -1,6 +1,7 @@
 ---
 title: LinearLite
 description: Local-first project management app, based on a simplified Linear clone.
+sidebar_position: 20
 ---
 
 import QRCode from 'react-qr-code'
