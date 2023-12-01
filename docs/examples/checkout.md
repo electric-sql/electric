@@ -61,11 +61,11 @@ You can also open it in your mobile browser by scanning this QR code:
 
 The example app shows a simplified checkout flow for an e-commerce store. It starts with an auth screen. Once logged in, you can add products to a shopping basket. You can then checkout, entering your order and delivery details. There is then a step to place your order and wait for server confirmation that (in this case mock) payment has gone through and the order is confirmed.
 
-The product catalogue is synchronised to the local device. This makes all interactions in the ordering flow instant, with zero latency. These is a direct relationship in e-commerce between latency / loading spinners and customers abandoning their baskets. So this local-first checkout flow without loading spinners is designed to maximum conversion rates.
+The product catalogue is synchronised to the local device. This takes the network off the interaction path in the ordering flow. These is a direct relationship in e-commerce between latency and conversion rates. So this demonstrates a checkout flow that can maximum conversion. It also works offline, all the way up until order confirmation, which uses an [event sourcing](../integrations/event-sourcing/) pattern to have server confirmation of the order.
 
-It also enables users to browse the store, and place items into their basket, while offline. When the user reconnects, any changes they have made to their basket will be synchronised across any devices where they are logged in.
+Rather than calling an out-of-band order placement API, orders and their payment details are written to the local database. When the data syncs to the server, a Postgres database trigger calls a Supabase edge function. This processes the order and is a place where you can take payment, initiate fulfillment, etc. When finished processing, the edge function updates the order status column. This syncs back to the client and the client interface shows the order as confirmed.
 
-When placing the order, the app uses an [Event Sourcing](../integrations/event-sourcing/) architecture to have server confirmation of the order. Rather than calling an out-of-band order placement API, orders and their payment details are entered into the database. When the order record syncs to the server, a trigger calls a server-side function. This processes the order and could do things like make payment and call fulliment APIs. When finished, it updates the order status column. This syncs back to the client and the client interface shows the order as confirmed.
+This pattern allows a zero-barrier, local-first, offline-capable checkout flow to work with server-side confirmation and secure payment transactions.
 
 ## Supabase integration
 
