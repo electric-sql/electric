@@ -61,7 +61,7 @@ Run your [Electric sync service](../../api/service), either locally or [via one 
 - set `AUTH_JWT_ALG` to `HS512` to enable secure auth mode with the right signing algorithm
 - set `AUTH_JWT_KEY` to the "JWT Secret" value you retrieved in step 3 above
 - set `DATABASE_URL` to the connection string you retrieved in step 2 above
-- set `ELECTRIC_INBOUND_MODE` to `direct_writes`
+- set `ELECTRIC_WRITE_TO_PG_MODE` to `direct_writes`
 - set `PG_PROXY_PASSWORD` to a secure password value and note it down
 
 Depending on how you run Electric these could be passed as arguments to Docker, set in a ENV file or entered into a managed host's dashboard. For example, to run Electric locally using Docker (replacing the `...` placeholder values with your specific values):
@@ -71,7 +71,7 @@ docker run \
     -e "AUTH_JWT_ALG=HS512" \
     -e "AUTH_JWT_KEY=..." \
     -e "DATABASE_URL=..." \
-    -e "ELECTRIC_INBOUND_MODE=direct_writes" \
+    -e "ELECTRIC_WRITE_TO_PG_MODE=direct_writes" \
     -e "PG_PROXY_PASSWORD=..." \
     -e "PG_PROXY_PORT=65432" \
     -p 5133:5133 \
