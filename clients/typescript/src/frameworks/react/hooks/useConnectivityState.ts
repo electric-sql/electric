@@ -63,13 +63,11 @@ const useConnectivityState: HookFn = () => {
       setState(getValidState(connectivityState))
     }
 
-    const subscriptionKey =
-      notifier.subscribeToConnectivityStateChanges(handler)
+    const unsubscribe = notifier.subscribeToConnectivityStateChanges(handler)
 
     return () => {
       shouldStop = true
-
-      notifier.unsubscribeFromConnectivityStateChanges(subscriptionKey)
+      unsubscribe()
     }
   }, [electric])
 

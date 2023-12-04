@@ -12,6 +12,7 @@ import {
   Change,
   ConnectivityStateChangeNotification,
   Notifier,
+  UnsubscribeFunction,
 } from '../notifiers/index'
 import {
   Waiter,
@@ -119,13 +120,13 @@ export class SatelliteProcess implements Satellite {
   opts: SatelliteOpts
 
   _authState?: AuthState
-  _authStateSubscription?: string
+  _unsubscribeFromAuthState?: UnsubscribeFunction
 
   connectivityState?: ConnectivityState
-  _connectivityChangeSubscription?: string
+  _unsubscribeFromConnectivityChanges?: UnsubscribeFunction
 
   _pollingInterval?: any
-  _potentialDataChangeSubscription?: string
+  _unsubscribeFromPotentialDataChanges?: UnsubscribeFunction
   _throttledSnapshot: ThrottleFunction
 
   _lsn?: LSN
@@ -221,9 +222,10 @@ export class SatelliteProcess implements Satellite {
     await this._setAuthState({ clientId: clientId, token: authConfig.token })
 
     const notifierSubscriptions = Object.entries({
-      _authStateSubscription: this._authStateSubscription,
-      _connectivityChangeSubscription: this._connectivityChangeSubscription,
-      _potentialDataChangeSubscription: this._potentialDataChangeSubscription,
+      _authStateSubscription: this._unsubscribeFromAuthState,
+      _connectivityChangeSubscription: this._unsubscribeFromConnectivityChanges,
+      _potentialDataChangeSubscription:
+        this._unsubscribeFromPotentialDataChanges,
     })
     notifierSubscriptions.forEach(([name, value]) => {
       if (value !== undefined) {
@@ -237,7 +239,7 @@ export class SatelliteProcess implements Satellite {
 
     // Monitor auth state changes.
     const authStateHandler = this._updateAuthState.bind(this)
-    this._authStateSubscription =
+    this._unsubscribeFromAuthState =
       this.notifier.subscribeToAuthStateChanges(authStateHandler)
 
     // Monitor connectivity state changes.
@@ -246,13 +248,13 @@ export class SatelliteProcess implements Satellite {
     }: ConnectivityStateChangeNotification) => {
       this._handleConnectivityStateChange(connectivityState)
     }
-    this._connectivityChangeSubscription =
+    this._unsubscribeFromConnectivityChanges =
       this.notifier.subscribeToConnectivityStateChanges(
         connectivityStateHandler
       )
 
     // Request a snapshot whenever the data in our database potentially changes.
-    this._potentialDataChangeSubscription =
+    this._unsubscribeFromPotentialDataChanges =
       this.notifier.subscribeToPotentialDataChanges(this._throttledSnapshot)
 
     // Start polling to request a snapshot every `pollingInterval` ms.
@@ -350,27 +352,20 @@ export class SatelliteProcess implements Satellite {
       this._pollingInterval = undefined
     }
 
-    if (this._authStateSubscription !== undefined) {
-      this.notifier.unsubscribeFromAuthStateChanges(this._authStateSubscription)
+    // Unsubscribe all listeners and remove them
+    const unsubscribers = [
+      '_unsubscribeFromAuthState',
+      '_unsubscribeFromConnectivityChanges',
+      '_unsubscribeFromPotentialDataChanges',
+    ] as const
 
-      this._authStateSubscription = undefined
-    }
-
-    if (this._connectivityChangeSubscription !== undefined) {
-      this.notifier.unsubscribeFromConnectivityStateChanges(
-        this._connectivityChangeSubscription
-      )
-
-      this._connectivityChangeSubscription = undefined
-    }
-
-    if (this._potentialDataChangeSubscription !== undefined) {
-      this.notifier.unsubscribeFromPotentialDataChanges(
-        this._potentialDataChangeSubscription
-      )
-
-      this._potentialDataChangeSubscription = undefined
-    }
+    unsubscribers.forEach((unsubscriber) => {
+      const unsub = this[unsubscriber]
+      if (unsub !== undefined) {
+        unsub!()
+        this[unsubscriber] = undefined
+      }
+    })
 
     this._disconnect()
 

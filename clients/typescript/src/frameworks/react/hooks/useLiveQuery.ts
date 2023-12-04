@@ -9,7 +9,10 @@ import {
 } from 'react'
 import { hash } from 'ohash'
 
-import { ChangeNotification } from '../../../notifiers/index'
+import {
+  ChangeNotification,
+  UnsubscribeFunction,
+} from '../../../notifiers/index'
 import { QualifiedTablename, hasIntersection } from '../../../util/tablename'
 
 import { ElectricContext } from '../provider'
@@ -122,7 +125,7 @@ function useLiveQueryWithQueryUpdates<Res>(
 ): ResultData<Res> {
   const electric = useContext(ElectricContext)
 
-  const changeSubscriptionKey = useRef<string>()
+  const unsubscribeDataChanges = useRef<UnsubscribeFunction>()
   const tablenames = useRef<QualifiedTablename[]>()
   const tablenamesKey = useRef<string>()
   const [resultData, setResultData] = useState<ResultData<Res>>({})
@@ -194,16 +197,16 @@ function useLiveQueryWithQueryUpdates<Res>(
       }
     }
 
-    const key = notifier.subscribeToDataChanges(handleChange)
-    if (changeSubscriptionKey.current !== undefined) {
-      notifier.unsubscribeFromDataChanges(changeSubscriptionKey.current)
+    const unsubscribe = notifier.subscribeToDataChanges(handleChange)
+    if (unsubscribeDataChanges.current !== undefined) {
+      unsubscribeDataChanges.current()
     }
 
-    changeSubscriptionKey.current = key
+    unsubscribeDataChanges.current = unsubscribe
 
     return () => {
       ignore = true
-      notifier.unsubscribeFromDataChanges(key)
+      unsubscribe()
     }
   }, [electric, tablenamesKey.current, tablenames.current, runLiveQuery])
 
