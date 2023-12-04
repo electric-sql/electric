@@ -5,7 +5,11 @@ config :logger, level: :debug
 auth_provider = System.get_env("AUTH_MODE", "secure") |> Electric.Satellite.Auth.build_provider!()
 config :electric, Electric.Satellite.Auth, provider: auth_provider
 
-proxy_port = System.get_env("PG_PROXY_PORT", "65432") |> String.to_integer()
+proxy_port =
+  case System.get_env("PG_PROXY_PORT", "65432") do
+    "http" -> "http"
+    port_str -> String.to_integer(port_str)
+  end
 
 proxy_password =
   System.get_env("PG_PROXY_PASSWORD", "password")

@@ -105,17 +105,23 @@ defmodule Electric.Postgres.Proxy do
   @spec child_spec(options()) :: Supervisor.child_spec()
   def child_spec(args) do
     {:ok, conn_config} = Keyword.fetch(args, :conn_config)
-    handler_config = Keyword.get(args, :handler_config, default_handler_config())
 
     proxy_opts = Connectors.get_proxy_opts(conn_config)
-
     {:ok, listen_opts} = Map.fetch(proxy_opts, :listen)
 
-    if !is_integer(listen_opts[:port]),
-      do:
-        raise(ArgumentError,
-          message: "Proxy configuration should include `[listen: [port: 1..65535]]`"
-        )
+    listen_opts =
+      case listen_opts[:port] do
+        "http" ->
+          # TODO(alco): Let the OS choose a random available port
+          # Listen on the default port
+          Keyword.put(listen_opts, :port, 65432)
+
+        port when is_integer(port) ->
+          listen_opts
+
+        _ ->
+          raise "Proxy configuration should include `[listen: [port: 1..65535]]`"
+      end
 
     # TODO: enabling logging of tcp connections to the proxy triggers failures in the e2e
     # tests because thousandisland reports broken connections with an "error" string
@@ -123,10 +129,10 @@ defmodule Electric.Postgres.Proxy do
     #   ThousandIsland.Logger.attach_logger(log_level)
     # end
 
-    handler_state =
-      Handler.initial_state(conn_config, handler_config)
+    handler_config = Keyword.get(args, :handler_config, default_handler_config())
+    handler_state = Handler.initial_state(conn_config, handler_config)
 
-    Logger.info("Starting Proxy server listening at port #{listen_opts[:port]}")
+    Logger.info("Starting Proxy server listening on port #{listen_opts[:port]}")
 
     ThousandIsland.child_spec(
       Keyword.merge(listen_opts, handler_module: Handler, handler_options: handler_state)

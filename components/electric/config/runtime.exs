@@ -144,7 +144,11 @@ if config_env() == :prod do
         raise("Required environment variable LOGICAL_PUBLISHER_HOST is not set")
     end
 
-  proxy_port = get_env_int.("PG_PROXY_PORT", default_pg_proxy_port)
+  proxy_port =
+    case System.get_env("PG_PROXY_PORT", default_pg_proxy_port) do
+      "http" -> "http"
+      port_str -> String.to_integer(port_str)
+    end
 
   proxy_password =
     System.get_env("PG_PROXY_PASSWORD") ||
