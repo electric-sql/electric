@@ -13,7 +13,7 @@ As a result, we support a limited set of validated Postgres data types. If you t
 
 ## Primary keys
 
-Primary keys must be unique and immutable.
+Tables must have an explicit primary key. Primary keys must be unique and immutable.
 
 ElectricSQL does not support sequential autoincrementing integer IDs. You must use globally unique primary key identifiers. Typically this means binary UUIDs.
 
