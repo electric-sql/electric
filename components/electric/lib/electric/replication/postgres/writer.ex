@@ -24,35 +24,30 @@ defmodule Electric.Replication.Postgres.Writer do
   @impl true
   def init(opts) do
     conn_config = Keyword.fetch!(opts, :conn_config)
-
     origin = Connectors.origin(conn_config)
+
     :gproc.reg(name(origin))
+
     Logger.metadata(origin: origin)
-
-    # logical_publisher_position_from_lsn(state, start_lsn)
-    position = 0
-
-    {:via, :gproc, producer_name} = Keyword.fetch!(opts, :producer)
-    :gproc.await(producer_name, 1_000)
-
-    GenStage.async_subscribe(
-      self(),
-      [
-        to: {:via, :gproc, producer_name},
-        cancel: :temporary,
-        starting_from: position
-      ] ++ subscription_opts()
-    )
 
     conn_opts = Connectors.get_connection_opts(conn_config)
     {:ok, conn} = Client.connect(conn_opts)
     {:ok, [], []} = :epgsql.squery(conn, "SET electric.session_replication_role = replica")
 
+    {:via, :gproc, producer_name} = Keyword.fetch!(opts, :producer)
+
+    subscription_opts = [
+      cancel: :temporary,
+      min_demand: 10,
+      max_demand: 50
+    ]
+
     Logger.debug(
       "#{inspect(__MODULE__)} started, registered as #{inspect(name(origin))}, subscribed to #{inspect(producer_name)}"
     )
 
-    {:consumer, %{conn: conn, origin: origin, producer_pid: nil}}
+    {:consumer, %{conn: conn, origin: origin, producer_pid: nil},
+     subscribe_to: [{{:via, :gproc, producer_name}, subscription_opts}]}
   end
 
   @impl true
@@ -78,10 +73,6 @@ defmodule Electric.Replication.Postgres.Writer do
 
   defp name(name) do
     {:n, :l, {__MODULE__, name}}
-  end
-
-  defp subscription_opts do
-    [min_demand: 10, max_demand: 50]
   end
 
   defp send_transaction(tx, _pos, state) do
