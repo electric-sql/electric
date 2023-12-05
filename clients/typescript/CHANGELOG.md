@@ -1,5 +1,25 @@
 # electric-sql
 
+## 0.8.0
+
+### Minor Changes
+
+- eb722c9b: [VAX-1335] Create new protocol op to represent a compensation
+
+### Patch Changes
+
+- fb773fbb: Dispose listeners when Electric client is closed.
+- 863f9f37: Fix critical section of wa-sqlite DB adapter to avoid bad interleavings.
+- 5c4a85d4: Generic implementation of serial and batched database adapters.
+- a9bb17ca: Upgrade wa-sqlite version because of a critical bug fix in wa-sqlite.
+- 0ad1867b: Fix assertions in unit tests.
+- 3ed54698: Fix race condition in process.subscribe that made the client crash.
+- 4ad7df4d: [VAX-825] Add client-side support for JSON type.
+- 1fe8c7d6: Rely on Prisma's conversion of PG table names to Prisma model names. No longer turn snake_cased table names into PascalCased model names.
+- cf0f0963: Add comment about possibly receiving empty subsData when handling SubscriptionData message on Satellite
+- e2da540c: Windows support for the generator.
+- e091bbfb: Refactorings to the event notifier.
+
 ## 0.7.1
 
 ### Patch Changes
