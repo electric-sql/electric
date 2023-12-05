@@ -99,13 +99,13 @@ defmodule Electric.Satellite.WriteValidationTest do
     end
 
     test "invalid_tx/1", cxt do
-      {:ok, _version, schema} = SchemaLoader.load(cxt.loader)
+      {:ok, schema} = SchemaLoader.load(cxt.loader)
 
       assert Enum.any?(
                invalid_tx("001").changes,
                &match?(
                  {:error, _},
-                 WriteValidation.ImmutablePrimaryKey.is_allowed_update?(&1, schema, cxt.loader)
+                 WriteValidation.ImmutablePrimaryKey.validate_update(&1, schema, cxt.loader)
                )
              )
     end

@@ -25,8 +25,8 @@ defmodule Electric.Postgres.Proxy.Prisma.QueryTest do
 
     loader_spec = MockSchemaLoader.backend_spec(migrations: migrations)
     {:ok, loader} = SchemaLoader.connect(loader_spec, [])
-    {:ok, version, schema} = SchemaLoader.load(loader)
-    {:ok, version: version, schema: schema, loader: loader}
+    {:ok, schema_version} = SchemaLoader.load(loader)
+    {:ok, version: schema_version.version, schema: schema_version, loader: loader}
   end
 
   test "TableV5_2", cxt do

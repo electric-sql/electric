@@ -505,7 +505,7 @@ defmodule Electric.Postgres.Proxy.PrismaTest do
     end
 
     test "client server session", cxt do
-      {:ok, _version, schema} = SchemaLoader.load(cxt.loader)
+      {:ok, schema} = SchemaLoader.load(cxt.loader)
 
       Enum.reduce(@queries, {cxt.injector, 0}, fn {module, sql}, {injector, n} ->
         m = n + 1

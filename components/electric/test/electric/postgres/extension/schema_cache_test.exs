@@ -96,7 +96,7 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
   use Electric.Extension.Case, async: false
 
   alias Electric.Replication.Postgres
-  alias Electric.Postgres.Extension
+  alias Electric.Postgres.{Extension, Extension.SchemaLoader}
   alias Electric.Postgres.Schema
   alias Electric.Postgres.Replication.{Column, Table}
 
@@ -152,7 +152,8 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
          {conn_config, [producer: producer, refresh_subscription: false]}}
       )
 
-    {:ok, _pid} = start_supervised({MockConsumer, parent: self(), producer: migration_consumer})
+    {:ok, _pid} =
+      start_supervised({MockConsumer, parent: self(), producer: migration_consumer})
 
     txs =
       for {version, stmts} <- cxt.migrations do
@@ -194,49 +195,59 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
   end
 
   describe "load" do
-    test_tx "load/1 retrieves the current schema", fn conn, cxt ->
+    test_tx("load/1 retrieves the current schema", fn conn, cxt ->
       {:ok, _producer} = bootstrap(conn, cxt)
 
       [_version1, version2] = cxt.versions
 
-      assert {:ok, ^version2, schema2} = Extension.SchemaCache.load(cxt.origin)
+      assert {:ok, %{version: ^version2, schema: schema2} = schema_version} =
+               Extension.SchemaCache.load(cxt.origin)
 
       assert {:ok, table_a} = Schema.fetch_table(schema2, {"public", "a"})
       assert {:ok, table_b} = Schema.fetch_table(schema2, {"b", "b"})
 
+      assert {:ok, ^table_a} = SchemaLoader.Version.table(schema_version, {"public", "a"})
+      assert {:ok, ^table_b} = SchemaLoader.Version.table(schema_version, {"b", "b"})
+
       assert table_a.oid == table_oid(conn, "public", "a")
 
       assert table_b.oid == table_oid(conn, "b", "b")
-    end
+    end)
 
-    test_tx "load/2 retrieves the schema for the given version", fn conn, cxt ->
+    test_tx("load/2 retrieves the schema for the given version", fn conn, cxt ->
       {:ok, _producer} = bootstrap(conn, cxt)
 
       [version1, _version2] = cxt.versions
 
-      assert {:ok, ^version1, schema1} = Extension.SchemaCache.load(cxt.origin, version1)
+      assert {:ok, %{version: ^version1, schema: schema1} = schema_version} =
+               Extension.SchemaCache.load(cxt.origin, version1)
 
       assert {:ok, table_a} = Schema.fetch_table(schema1, {"public", "a"})
       assert {:error, _} = Schema.fetch_table(schema1, {"b", "b"})
 
+      assert {:ok, ^table_a} = SchemaLoader.Version.table(schema_version, {"public", "a"})
+
       assert table_a.oid == table_oid(conn, "public", "a")
-    end
+    end)
   end
 
   describe "primary_keys" do
-    test_tx "provides the correct primary keys for a table", fn conn, cxt ->
+    test_tx("provides the correct primary keys for a table", fn conn, cxt ->
       {:ok, _producer} = bootstrap(conn, cxt)
 
-      assert {:ok, ["aid"]} = Extension.SchemaCache.primary_keys(cxt.origin, "public", "a")
-      assert {:ok, ["aid"]} = Extension.SchemaCache.primary_keys(cxt.origin, {"public", "a"})
+      assert {:ok, schema_version} = Extension.SchemaCache.load(cxt.origin)
+      assert {:ok, ["aid"]} = SchemaLoader.Version.primary_keys(schema_version, "public", "a")
+      assert {:ok, ["aid"]} = SchemaLoader.Version.primary_keys(schema_version, {"public", "a"})
 
-      assert {:ok, ["bid1", "bid2"]} = Extension.SchemaCache.primary_keys(cxt.origin, "b", "b")
-      assert {:ok, ["bid1", "bid2"]} = Extension.SchemaCache.primary_keys(cxt.origin, {"b", "b"})
-    end
+      assert {:ok, ["bid1", "bid2"]} = SchemaLoader.Version.primary_keys(schema_version, "b", "b")
+
+      assert {:ok, ["bid1", "bid2"]} =
+               SchemaLoader.Version.primary_keys(schema_version, {"b", "b"})
+    end)
   end
 
   describe "relation" do
-    test_tx "relation/2 retrieves the current table info", fn conn, cxt ->
+    test_tx("relation/2 retrieves the current table info", fn conn, cxt ->
       {:ok, _producer} = bootstrap(conn, cxt)
 
       assert {:ok, table_info} = Extension.SchemaCache.relation(cxt.origin, {"public", "a"})
@@ -264,9 +275,9 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
                  }
                ]
              }
-    end
+    end)
 
-    test_tx "relation/2 accepts oids", fn conn, cxt ->
+    test_tx("relation/2 accepts oids", fn conn, cxt ->
       {:ok, _producer} = bootstrap(conn, cxt)
 
       oid = table_oid(conn, "public", "a")
@@ -296,9 +307,9 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
                  }
                ]
              }
-    end
+    end)
 
-    test_tx "relation/2 returns an up-to-date version after migrations", fn conn, cxt ->
+    test_tx("relation/2 returns an up-to-date version after migrations", fn conn, cxt ->
       {:ok, producer} = bootstrap(conn, cxt)
 
       # we don't actually have to apply this migration to the db as this is a schema-only thing
@@ -343,9 +354,9 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
                  part_of_identity?: true
                }
              ]
-    end
+    end)
 
-    test_tx "relation/3 returns specific schema version", fn conn, cxt ->
+    test_tx("relation/3 returns specific schema version", fn conn, cxt ->
       {:ok, producer} = bootstrap(conn, cxt)
 
       [version1, version2] = cxt.versions
@@ -448,7 +459,7 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
                  }
                ]
              }
-    end
+    end)
   end
 
   describe "ready?" do
@@ -456,36 +467,36 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
       refute Extension.SchemaCache.ready?(cxt.origin)
     end
 
-    test_tx "returns true if schema cache is online", fn conn, cxt ->
+    test_tx("returns true if schema cache is online", fn conn, cxt ->
       {:ok, _producer} = bootstrap(conn, cxt)
       assert Extension.SchemaCache.ready?(cxt.origin)
-    end
+    end)
   end
 
   describe "table_electrified?/2" do
-    test_tx "returns true if table present in schema", fn conn, cxt ->
+    test_tx("returns true if table present in schema", fn conn, cxt ->
       {:ok, _producer} = bootstrap(conn, cxt)
       assert {:ok, true} = Extension.SchemaCache.table_electrified?(cxt.origin, {"public", "a"})
       assert {:ok, true} = Extension.SchemaCache.table_electrified?(cxt.origin, {"b", "b"})
-    end
+    end)
 
-    test_tx "returns false if table unknown", fn conn, cxt ->
+    test_tx("returns false if table unknown", fn conn, cxt ->
       {:ok, _producer} = bootstrap(conn, cxt)
       assert {:ok, false} = Extension.SchemaCache.table_electrified?(cxt.origin, {"b", "c"})
-    end
+    end)
   end
 
   describe "index_electrified?/2" do
-    test_tx "returns true index exists in schema", fn conn, cxt ->
+    test_tx("returns true index exists in schema", fn conn, cxt ->
       {:ok, _producer} = bootstrap(conn, cxt)
       assert {:ok, true} = Extension.SchemaCache.index_electrified?(cxt.origin, {"b", "bidx"})
-    end
+    end)
 
-    test_tx "returns false for unknown indexes", fn conn, cxt ->
+    test_tx("returns false for unknown indexes", fn conn, cxt ->
       {:ok, _producer} = bootstrap(conn, cxt)
 
       assert {:ok, false} =
                Extension.SchemaCache.index_electrified?(cxt.origin, {"public", "aidx"})
-    end
+    end)
   end
 end

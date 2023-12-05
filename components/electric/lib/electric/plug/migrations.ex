@@ -2,7 +2,7 @@ defmodule Electric.Plug.Migrations do
   use Plug.Router
   use Electric.Satellite.Protobuf
 
-  alias Electric.Postgres.Extension.SchemaCache
+  alias Electric.Postgres.Extension.{SchemaCache, SchemaLoader}
 
   import Plug.Conn
 
@@ -109,8 +109,10 @@ defmodule Electric.Plug.Migrations do
 
   defp translate_stmts(version, schema, stmts, dialect) do
     Enum.flat_map(stmts, fn stmt ->
+      schema_version = SchemaLoader.Version.new(version, schema)
+
       {:ok, msgs, _relations} =
-        Electric.Postgres.Replication.migrate(schema, version, stmt, dialect)
+        Electric.Postgres.Replication.migrate(schema_version, stmt, dialect)
 
       msgs
     end)

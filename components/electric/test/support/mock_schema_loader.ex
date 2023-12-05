@@ -206,12 +206,12 @@ defmodule Electric.Postgres.MockSchemaLoader do
 
   def load({[], opts}) do
     notify(opts, :load)
-    {:ok, nil, Schema.new()}
+    {:ok, SchemaLoader.Version.new(nil, Schema.new())}
   end
 
   def load({[%{version: version, schema: schema} | _versions], opts}) do
     notify(opts, {:load, version, schema})
-    {:ok, version, schema}
+    {:ok, SchemaLoader.Version.new(version, schema)}
   end
 
   @impl true
@@ -224,7 +224,7 @@ defmodule Electric.Postgres.MockSchemaLoader do
       %Migration{schema: schema} ->
         notify(opts, {:load, version, schema})
 
-        {:ok, version, schema}
+        {:ok, SchemaLoader.Version.new(version, schema)}
 
       nil ->
         {:error, "schema version not found: #{version}"}
@@ -235,17 +235,18 @@ defmodule Electric.Postgres.MockSchemaLoader do
   def save({:agent, pid}, version, schema, stmts) do
     with :ok <-
            Agent.update(pid, fn state ->
-             {:ok, state} = save(state, version, schema, stmts)
+             {:ok, state, _schema_version} = save(state, version, schema, stmts)
              state
            end) do
-      {:ok, {:agent, pid}}
+      {:ok, {:agent, pid}, SchemaLoader.Version.new(version, schema)}
     end
   end
 
   def save({versions, opts}, version, schema, stmts) do
     notify(opts, {:save, version, schema, stmts})
 
-    {:ok, {[mock_version(version, schema, stmts) | versions], opts}}
+    {:ok, {[mock_version(version, schema, stmts) | versions], opts},
+     SchemaLoader.Version.new(version, schema)}
   end
 
   @impl true
@@ -267,41 +268,6 @@ defmodule Electric.Postgres.MockSchemaLoader do
     else
       _ -> {:error, "no oid defined for #{type}:#{schema}.#{name} in #{inspect(opts)}"}
     end
-  end
-
-  @impl true
-  def primary_keys({:agent, pid}, schema, name) do
-    Agent.get(pid, &primary_keys(&1, schema, name))
-  end
-
-  def primary_keys({_versions, %{pks: pks} = opts}, schema, name) when is_map(pks) do
-    notify(opts, {:primary_keys, schema, name})
-
-    with {:ok, tpks} <- Map.fetch(pks, {schema, name}) do
-      {:ok, tpks}
-    else
-      :error ->
-        {:error, "no pks defined for #{schema}.#{name} in #{inspect(opts)}"}
-    end
-  end
-
-  def primary_keys({[{_version, schema} | _versions], opts}, sname, tname) do
-    notify(opts, {:primary_keys, sname, tname})
-
-    Schema.primary_keys(schema, sname, tname)
-  end
-
-  def primary_keys({[], _opts}, sname, tname) do
-    {:error, "unknown table #{sname}.#{tname} and no primary keys configured"}
-  end
-
-  @impl true
-  def primary_keys({:agent, pid}, {schema, name}) do
-    Agent.get(pid, &primary_keys(&1, {schema, name}))
-  end
-
-  def primary_keys({_versions, _opts} = state, {schema, name}) do
-    primary_keys(state, schema, name)
   end
 
   @impl true

@@ -1,13 +1,13 @@
 defmodule Electric.Postgres.Proxy.Prisma.Query do
   alias Electric.Postgres.Proxy.Prisma
-  alias Electric.Postgres.Schema
+  alias Electric.Postgres.Extension.SchemaLoader
   alias PgProtocol.Message, as: M
 
   @type data_row() :: [binary()]
   @callback column_names() :: [String.t()]
   @callback parameter_description(Prisma.t()) :: [integer()]
   @callback row_description(Prisma.t()) :: [M.RowDescription.Field.t()]
-  @callback data_rows([term()], Schema.t(), Prisma.t()) :: [data_row()]
+  @callback data_rows([term()], SchemaLoader.Version.t(), Prisma.t()) :: [data_row()]
 
   # PG_VERSION_NUM => sprintf("%d%04d", $majorver, $minorver)
   defguard is_major_version(config, v)
@@ -32,8 +32,10 @@ defmodule Electric.Postgres.Proxy.Prisma.Query do
     "PostgreSQL #{v} Electric"
   end
 
-  def namespace_exists?(schema, namespace) do
-    Enum.any?(schema.tables, &(&1.name.schema == namespace))
+  def namespace_exists?(schema_version, namespace) do
+    schema_version
+    |> SchemaLoader.Version.tables()
+    |> Enum.any?(&(&1.name.schema == namespace))
   end
 
   def bool(b) when is_boolean(b) do
@@ -70,14 +72,16 @@ defmodule Electric.Postgres.Proxy.Prisma.Query do
     Prisma.parse_bind_array(name_array)
   end
 
-  def tables_in_schema(nspname_array, schema) do
+  def tables_in_schema(nspname_array, schema_version) do
     nspname_array
     |> parse_name_array()
-    |> Enum.flat_map(&tables_for_schema(&1, schema))
+    |> Enum.flat_map(&tables_for_schema(&1, schema_version))
   end
 
-  defp tables_for_schema(nspname, schema) do
-    Enum.filter(schema.tables, &(&1.name.schema == nspname))
+  defp tables_for_schema(nspname, schema_version) do
+    schema_version
+    |> SchemaLoader.Version.tables()
+    |> Enum.filter(&(&1.name.schema == nspname))
   end
 end
 
@@ -105,7 +109,7 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.VersionV5_2 do
     ]
   end
 
-  def data_rows(_binds, _schema, config) do
+  def data_rows(_binds, _schema_version, config) do
     [[server_version_string(config)]]
   end
 end
@@ -138,8 +142,8 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.NamespaceVersionV5_2 do
     ]
   end
 
-  def data_rows([nspname], schema, %{server_version: {_, v}} = config) do
-    exists = namespace_exists?(schema, nspname)
+  def data_rows([nspname], schema_version, %{server_version: {_, v}} = config) do
+    exists = namespace_exists?(schema_version, nspname)
     [[bool(exists), server_version_string(config), i32(v)]]
   end
 end
@@ -172,12 +176,12 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.NamespaceV5_2 do
     ]
   end
 
-  def data_rows([nspname_array], schema, _config) do
+  def data_rows([nspname_array], schema_version, _config) do
     # see above re questions over purpose of this..
-    # exists = namespace_exists?(schema, nspname)
+    # exists = namespace_exists?(schema_version, nspname)
     nspname_array
     |> parse_name_array()
-    |> Enum.filter(&namespace_exists?(schema, &1))
+    |> Enum.filter(&namespace_exists?(schema_version, &1))
     |> Enum.map(&[&1])
     |> Enum.sort()
   end
@@ -211,9 +215,9 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.TableListV4_8 do
     ]
   end
 
-  def data_rows([nspname_array], schema, _config) do
+  def data_rows([nspname_array], schema_version, _config) do
     nspname_array
-    |> tables_in_schema(schema)
+    |> tables_in_schema(schema_version)
     |> Enum.map(&table_entry/1)
     |> Enum.sort_by(fn [t, s] -> [s, t] end)
   end
@@ -277,9 +281,9 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.TableV5_2 do
     ]
   end
 
-  def data_rows([nspname_array], schema, _config) do
+  def data_rows([nspname_array], schema_version, _config) do
     nspname_array
-    |> tables_in_schema(schema)
+    |> tables_in_schema(schema_version)
     |> Enum.flat_map(&table_description/1)
     |> Enum.sort_by(fn [t, s | _] -> [s, t] end)
   end
@@ -355,9 +359,9 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ConstraintV5_2 do
     ]
   end
 
-  def data_rows([nspname_array], schema, _config) do
+  def data_rows([nspname_array], schema_version, _config) do
     nspname_array
-    |> tables_in_schema(schema)
+    |> tables_in_schema(schema_version)
     |> Enum.flat_map(&table_check_constraints/1)
     |> Enum.sort_by(fn [ns, tn, cn, ct | _] -> [ns, tn, cn, ct] end)
   end
@@ -410,7 +414,7 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ViewV4_8 do
   end
 
   # we don't support views
-  def data_rows([_nspname], _schema, _config) do
+  def data_rows([_nspname], _schema_version, _config) do
     []
   end
 end
@@ -450,7 +454,7 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ViewV5_2 do
   end
 
   # we don't support views
-  def data_rows([_nspname], _schema, _config) do
+  def data_rows([_nspname], _schema_version, _config) do
     []
   end
 end
@@ -486,7 +490,7 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.TypeV4_8 do
   end
 
   # we don't support custom types
-  def data_rows([_nspname], _schema, _config) do
+  def data_rows([_nspname], _schema_version, _config) do
     []
   end
 end
@@ -527,7 +531,7 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.TypeV5_2 do
   end
 
   # we don't support custom types
-  def data_rows([_nspname], _schema, _config) do
+  def data_rows([_nspname], _schema_version, _config) do
     []
   end
 end
@@ -612,10 +616,10 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ColumnV4_8 do
     ]
   end
 
-  def data_rows([nspname_array], schema, _config) do
+  def data_rows([nspname_array], schema_version, _config) do
     # ["public", "items", "id", "text", nil, nil, nil, nil, "text", "pg_catalog", "text", nil, "NO", "NO", nil, nil],
     nspname_array
-    |> tables_in_schema(schema)
+    |> tables_in_schema(schema_version)
     |> Enum.flat_map(&table_columns/1)
     |> Enum.sort_by(fn [op, ns, tn | _] -> [ns, tn, op] end)
     |> Enum.map(fn [_ | rest] -> rest end)
@@ -859,10 +863,10 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ColumnV5_2 do
     ]
   end
 
-  def data_rows([nspname_array], schema, _config) do
+  def data_rows([nspname_array], schema_version, _config) do
     # ["public", "items", "id", "text", nil, nil, nil, nil, "text", "pg_catalog", "text", nil, "NO", "NO", nil, nil],
     nspname_array
-    |> tables_in_schema(schema)
+    |> tables_in_schema(schema_version)
     |> Enum.flat_map(&table_columns/1)
     |> Enum.sort_by(fn [op, ns, tn | _] -> [ns, tn, op] end)
     |> Enum.map(fn [_ | rest] -> rest end)
@@ -1067,7 +1071,7 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ForeignKeyV4_8 do
   """
   @behaviour Electric.Postgres.Proxy.Prisma.Query
 
-  alias Electric.Postgres.Schema
+  alias Electric.Postgres.Extension.SchemaLoader
 
   import Electric.Postgres.Proxy.Prisma.Query
 
@@ -1110,17 +1114,17 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ForeignKeyV4_8 do
     ]
   end
 
-  def data_rows([nspname_array], schema, _config) do
+  def data_rows([nspname_array], schema_version, _config) do
     nspname_array
-    |> tables_in_schema(schema)
-    |> Enum.flat_map(&table_fks(&1, schema))
+    |> tables_in_schema(schema_version)
+    |> Enum.flat_map(&table_fks(&1, schema_version))
     |> Enum.sort_by(fn [colidx, ci, _, _, _, _, _, _, cn, _, _, tn, ns] ->
       [ns, tn, cn, ci, colidx]
     end)
     |> Enum.map(fn [_ | rest] -> rest end)
   end
 
-  defp table_fks(table, schema) do
+  defp table_fks(table, schema_version) do
     table.constraints
     |> Enum.filter(&is_fk/1)
     |> Enum.flat_map(fn %{constraint: {:foreign, fk}} ->
@@ -1128,7 +1132,7 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ForeignKeyV4_8 do
       |> Enum.zip(fk.fk_cols)
       |> Enum.with_index()
       |> Enum.map(fn {{parent_column, child_column}, i} ->
-        {:ok, parent_table} = Schema.fetch_table(schema, fk.pk_table)
+        {:ok, parent_table} = SchemaLoader.Version.table(schema_version, fk.pk_table)
 
         parent_idx =
           Enum.find_index(parent_table.columns, &(&1.name == parent_column)) ||
@@ -1221,7 +1225,7 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ForeignKeyV5_2 do
   """
   @behaviour Electric.Postgres.Proxy.Prisma.Query
 
-  alias Electric.Postgres.Schema
+  alias Electric.Postgres.Extension.SchemaLoader
 
   import Electric.Postgres.Proxy.Prisma.Query
 
@@ -1268,17 +1272,17 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ForeignKeyV5_2 do
     ]
   end
 
-  def data_rows([nspname_array], schema, _config) do
+  def data_rows([nspname_array], schema_version, _config) do
     nspname_array
-    |> tables_in_schema(schema)
-    |> Enum.flat_map(&table_fks(&1, schema))
+    |> tables_in_schema(schema_version)
+    |> Enum.flat_map(&table_fks(&1, schema_version))
     |> Enum.sort_by(fn [colidx, ci, _, _, _, _, _, _, cn, _, _, tn, ns, _, _] ->
       [ns, tn, cn, ci, colidx]
     end)
     |> Enum.map(fn [_ | rest] -> rest end)
   end
 
-  defp table_fks(table, schema) do
+  defp table_fks(table, schema_version) do
     table.constraints
     |> Enum.filter(&is_fk/1)
     |> Enum.flat_map(fn %{constraint: {:foreign, fk}} ->
@@ -1286,7 +1290,7 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ForeignKeyV5_2 do
       |> Enum.zip(fk.fk_cols)
       |> Enum.with_index()
       |> Enum.map(fn {{parent_column, child_column}, i} ->
-        {:ok, parent_table} = Schema.fetch_table(schema, fk.pk_table)
+        {:ok, parent_table} = SchemaLoader.Version.table(schema_version, fk.pk_table)
 
         parent_idx =
           Enum.find_index(parent_table.columns, &(&1.name == parent_column)) ||
@@ -1418,15 +1422,15 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.IndexV4_8 do
     ]
   end
 
-  def data_rows([nspname_array], schema, _config) do
+  def data_rows([nspname_array], schema_version, _config) do
     # ["public", "items_pkey", "items", "id", <<1>>, <<1>>, <<0, 0, 0, 0>>, "text_ops", <<1>>, "btree", "ASC", <<0>>, <<0>>, <<0>>]
     nspname_array
-    |> tables_in_schema(schema)
-    |> Enum.flat_map(&table_indexes(&1, schema))
+    |> tables_in_schema(schema_version)
+    |> Enum.flat_map(&table_indexes(&1, schema_version))
     |> Enum.sort_by(fn [ns, idn, tn, _, _, _, idx | _] -> [ns, tn, idn, idx] end)
   end
 
-  defp table_indexes(table, schema) do
+  defp table_indexes(table, schema_version) do
     Enum.flat_map(table.indexes, fn index ->
       index.columns
       |> Enum.with_index()
@@ -1447,10 +1451,10 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.IndexV4_8 do
           to_string(column.ordering)
         ]
       end)
-    end) ++ table_constraints(table, schema)
+    end) ++ table_constraints(table, schema_version)
   end
 
-  defp table_constraints(table, _schema) do
+  defp table_constraints(table, _schema_version) do
     Enum.flat_map(table.constraints, fn
       %{constraint: {type, constraint}} when type in [:primary, :unique] ->
         constraint.keys
@@ -1592,15 +1596,15 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.IndexV5_2 do
     ]
   end
 
-  def data_rows([nspname_array], schema, _config) do
+  def data_rows([nspname_array], schema_version, _config) do
     # ["public", "items_pkey", "items", "id", <<1>>, <<1>>, <<0, 0, 0, 0>>, "text_ops", <<1>>, "btree", "ASC", <<0>>, <<0>>, <<0>>]
     nspname_array
-    |> tables_in_schema(schema)
-    |> Enum.flat_map(&table_indexes(&1, schema))
+    |> tables_in_schema(schema_version)
+    |> Enum.flat_map(&table_indexes(&1, schema_version))
     |> Enum.sort_by(fn [ns, idn, tn, _, _, _, idx | _] -> [ns, tn, idn, idx] end)
   end
 
-  defp table_indexes(table, schema) do
+  defp table_indexes(table, schema_version) do
     Enum.flat_map(table.indexes, fn index ->
       index.columns
       |> Enum.with_index()
@@ -1624,10 +1628,10 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.IndexV5_2 do
           bool(nil)
         ]
       end)
-    end) ++ table_constraints(table, schema)
+    end) ++ table_constraints(table, schema_version)
   end
 
-  defp table_constraints(table, _schema) do
+  defp table_constraints(table, _schema_version) do
     Enum.flat_map(table.constraints, fn
       %{constraint: {type, constraint}} when type in [:primary, :unique] ->
         constraint.keys
@@ -1706,7 +1710,7 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.FunctionV5_2 do
   end
 
   # we don't support functions currently
-  def data_rows([_nspname], _schema, _config) do
+  def data_rows([_nspname], _schema_version, _config) do
     []
   end
 end
@@ -1745,7 +1749,7 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ExtensionV5_2 do
   end
 
   # we don't support extensions
-  def data_rows(_binds, _schema, _config) do
+  def data_rows(_binds, _schema_version, _config) do
     []
   end
 end
@@ -1801,7 +1805,7 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.SequenceV5_2 do
   end
 
   # we don't support sequences, so this must be empty
-  def data_rows([_nspname], _schema, _config) do
+  def data_rows([_nspname], _schema_version, _config) do
     []
   end
 end

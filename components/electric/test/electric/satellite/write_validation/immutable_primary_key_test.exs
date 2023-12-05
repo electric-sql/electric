@@ -3,6 +3,7 @@ defmodule Electric.Satellite.WriteValidation.ImmutablePrimaryKeyTest do
 
   alias Electric.Postgres.Schema
   alias Electric.Postgres.MockSchemaLoader
+  alias Electric.Postgres.Extension.SchemaLoader
   alias Electric.Replication.Changes
 
   alias Electric.Satellite.WriteValidation.ImmutablePrimaryKey
@@ -32,15 +33,19 @@ defmodule Electric.Satellite.WriteValidation.ImmutablePrimaryKeyTest do
     schema =
       Enum.reduce(migrations, Schema.new(), &Schema.update(&2, &1, oid_loader: oid_loader))
 
-    assert {:ok, ["id"]} = Schema.primary_keys(schema, "public", "single_pk")
-    assert {:ok, ["id", "owner"]} = Schema.primary_keys(schema, "public", "compound_pk")
+    schema = SchemaLoader.Version.new("001", schema)
+
+    assert {:ok, ["id"]} = SchemaLoader.Version.primary_keys(schema, "public", "single_pk")
+
+    assert {:ok, ["id", "owner"]} =
+             SchemaLoader.Version.primary_keys(schema, "public", "compound_pk")
 
     {:ok, schema: schema}
   end
 
   test "allows inserts", cxt do
     assert :ok =
-             ImmutablePrimaryKey.is_allowed_insert?(
+             ImmutablePrimaryKey.validate_insert(
                %Changes.NewRecord{
                  relation: {"public", "single_pk"},
                  record: %{
@@ -55,7 +60,7 @@ defmodule Electric.Satellite.WriteValidation.ImmutablePrimaryKeyTest do
              )
 
     assert :ok =
-             ImmutablePrimaryKey.is_allowed_insert?(
+             ImmutablePrimaryKey.validate_insert(
                %Changes.NewRecord{
                  relation: {"public", "compound_pk"},
                  record: %{
@@ -71,7 +76,7 @@ defmodule Electric.Satellite.WriteValidation.ImmutablePrimaryKeyTest do
 
   test "allows deletes", cxt do
     assert :ok =
-             ImmutablePrimaryKey.is_allowed_delete?(
+             ImmutablePrimaryKey.validate_delete(
                %Changes.DeletedRecord{
                  relation: {"public", "single_pk"},
                  old_record: %{
@@ -85,7 +90,7 @@ defmodule Electric.Satellite.WriteValidation.ImmutablePrimaryKeyTest do
              )
 
     assert :ok =
-             ImmutablePrimaryKey.is_allowed_delete?(
+             ImmutablePrimaryKey.validate_delete(
                %Changes.DeletedRecord{
                  relation: {"public", "compound_pk"},
                  old_record: %{
@@ -102,7 +107,7 @@ defmodule Electric.Satellite.WriteValidation.ImmutablePrimaryKeyTest do
 
   test "allows updates that don't affect a primary key", cxt do
     assert :ok =
-             ImmutablePrimaryKey.is_allowed_update?(
+             ImmutablePrimaryKey.validate_update(
                Changes.UpdatedRecord.new(
                  relation: {"public", "single_pk"},
                  record: %{
@@ -121,7 +126,7 @@ defmodule Electric.Satellite.WriteValidation.ImmutablePrimaryKeyTest do
              )
 
     assert :ok =
-             ImmutablePrimaryKey.is_allowed_update?(
+             ImmutablePrimaryKey.validate_update(
                Changes.UpdatedRecord.new(
                  relation: {"public", "compound_pk"},
                  old_record: %{
@@ -144,7 +149,7 @@ defmodule Electric.Satellite.WriteValidation.ImmutablePrimaryKeyTest do
 
   test "allows upserts", cxt do
     assert :ok =
-             ImmutablePrimaryKey.is_allowed_update?(
+             ImmutablePrimaryKey.validate_update(
                Changes.UpdatedRecord.new(
                  relation: {"public", "single_pk"},
                  old_record: nil,
@@ -159,7 +164,7 @@ defmodule Electric.Satellite.WriteValidation.ImmutablePrimaryKeyTest do
              )
 
     assert :ok =
-             ImmutablePrimaryKey.is_allowed_update?(
+             ImmutablePrimaryKey.validate_update(
                Changes.UpdatedRecord.new(
                  relation: {"public", "compound_pk"},
                  old_record: nil,
@@ -177,7 +182,7 @@ defmodule Electric.Satellite.WriteValidation.ImmutablePrimaryKeyTest do
 
   test "disallows updates that affect a primary key", cxt do
     assert {:error, _} =
-             ImmutablePrimaryKey.is_allowed_update?(
+             ImmutablePrimaryKey.validate_update(
                Changes.UpdatedRecord.new(
                  relation: {"public", "single_pk"},
                  old_record: %{
@@ -196,7 +201,7 @@ defmodule Electric.Satellite.WriteValidation.ImmutablePrimaryKeyTest do
              )
 
     assert {:error, _} =
-             ImmutablePrimaryKey.is_allowed_update?(
+             ImmutablePrimaryKey.validate_update(
                Changes.UpdatedRecord.new(
                  relation: {"public", "compound_pk"},
                  old_record: %{
@@ -219,7 +224,7 @@ defmodule Electric.Satellite.WriteValidation.ImmutablePrimaryKeyTest do
 
   test "disallows updates to any column in a compound pk", cxt do
     assert {:error, _} =
-             ImmutablePrimaryKey.is_allowed_update?(
+             ImmutablePrimaryKey.validate_update(
                Changes.UpdatedRecord.new(
                  relation: {"public", "compound_pk"},
                  old_record: %{

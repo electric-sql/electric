@@ -566,7 +566,7 @@ defmodule Electric.Satellite.Protocol do
 
           case WriteValidation.validate_transactions!(
                  complete,
-                 Connectors.origin(state.pg_connector_opts)
+                 {SchemaCache, Connectors.origin(state.pg_connector_opts)}
                ) do
             {:ok, accepted} ->
               {nil, send_transactions(accepted, incomplete, state)}

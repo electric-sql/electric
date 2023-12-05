@@ -149,11 +149,11 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
   end
 
   defp perform_migration({version, stmts}, state) do
-    {:ok, loader, schema} = apply_migration(version, stmts, state.loader)
+    {:ok, loader, schema_version} = apply_migration(version, stmts, state.loader)
 
     Metrics.non_span_event(
       [:postgres, :migration],
-      %{electrified_tables: Schema.num_electrified_tables(schema)},
+      %{electrified_tables: Schema.num_electrified_tables(schema_version.schema)},
       %{migration_version: version}
     )
 
@@ -208,14 +208,14 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
   @spec apply_migration(String.t(), [String.t()], SchemaLoader.t()) ::
           {:ok, SchemaLoader.t(), Schema.t()} | {:error, term()}
   def apply_migration(version, stmts, loader) when is_list(stmts) do
-    {:ok, old_version, schema} = SchemaLoader.load(loader)
+    {:ok, schema_version} = SchemaLoader.load(loader)
 
-    Logger.info("Migrating version #{old_version || "<nil>"} -> #{version}")
+    Logger.info("Migrating version #{schema_version.version || "<nil>"} -> #{version}")
 
     oid_loader = &SchemaLoader.relation_oid(loader, &1, &2, &3)
 
     schema =
-      Enum.reduce(stmts, schema, fn stmt, schema ->
+      Enum.reduce(stmts, schema_version.schema, fn stmt, schema ->
         Logger.info("Applying migration #{version}: #{inspect(stmt)}")
         Schema.update(schema, stmt, oid_loader: oid_loader)
       end)
@@ -223,7 +223,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
 
     Logger.info("Saving schema version #{version} /#{inspect(loader)}/")
 
-    {:ok, loader} = SchemaLoader.save(loader, version, schema, stmts)
-    {:ok, loader, schema}
+    {:ok, loader, schema_version} = SchemaLoader.save(loader, version, schema, stmts)
+    {:ok, loader, schema_version}
   end
 end

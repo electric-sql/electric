@@ -93,14 +93,18 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
   @impl true
   def load(pool) do
     checkout!(pool, fn conn ->
-      Extension.current_schema(conn)
+      with {:ok, version, schema} <- Extension.current_schema(conn) do
+        {:ok, SchemaLoader.Version.new(version, schema)}
+      end
     end)
   end
 
   @impl true
   def load(pool, version) do
     checkout!(pool, fn conn ->
-      Extension.schema_version(conn, version)
+      with {:ok, version, schema} <- Extension.schema_version(conn, version) do
+        {:ok, SchemaLoader.Version.new(version, schema)}
+      end
     end)
   end
 
@@ -108,7 +112,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
   def save(pool, version, schema, stmts) do
     checkout!(pool, fn conn ->
       with :ok <- Extension.save_schema(conn, version, schema, stmts) do
-        {:ok, pool}
+        {:ok, pool, SchemaLoader.Version.new(version, schema)}
       end
     end)
   end
@@ -124,34 +128,34 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
     end)
   end
 
-  @primary_keys_query """
-  SELECT a.attname
-  FROM pg_class c
-    INNER JOIN pg_namespace n ON c.relnamespace = n.oid
-    INNER JOIN pg_index i ON i.indrelid = c.oid
-    INNER JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
-  WHERE
-      n.nspname = $1
-      AND c.relname = $2
-      AND c.relkind = 'r'
-      AND i.indisprimary
-  """
+  # @primary_keys_query """
+  # SELECT a.attname
+  # FROM pg_class c
+  #   INNER JOIN pg_namespace n ON c.relnamespace = n.oid
+  #   INNER JOIN pg_index i ON i.indrelid = c.oid
+  #   INNER JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+  # WHERE
+  #     n.nspname = $1
+  #     AND c.relname = $2
+  #     AND c.relkind = 'r'
+  #     AND i.indisprimary
+  # """
 
-  @impl true
-  def primary_keys(pool, schema, name) do
-    checkout!(pool, fn conn ->
-      {:ok, _, pks_data} = :epgsql.equery(conn, @primary_keys_query, [schema, name])
+  # @impl true
+  # def primary_keys(pool, schema, name) do
+  #   checkout!(pool, fn conn ->
+  #     {:ok, _, pks_data} = :epgsql.equery(conn, @primary_keys_query, [schema, name])
 
-      {:ok, Enum.map(pks_data, &elem(&1, 0))}
-    end)
-  end
+  #     {:ok, Enum.map(pks_data, &elem(&1, 0))}
+  #   end)
+  # end
 
-  @impl true
-  def primary_keys(pool, {schema, name}) do
-    checkout!(pool, fn conn ->
-      primary_keys(conn, schema, name)
-    end)
-  end
+  # @impl true
+  # def primary_keys(pool, {schema, name}) do
+  #   checkout!(pool, fn conn ->
+  #     primary_keys(conn, schema, name)
+  #   end)
+  # end
 
   @impl true
   def refresh_subscription(pool, name) do
