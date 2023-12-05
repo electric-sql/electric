@@ -95,6 +95,8 @@ defmodule Electric.Satellite.WriteValidation do
       %Changes.NewRecord{} -> & &1.validate_insert(op, schema_version)
       %Changes.UpdatedRecord{} -> & &1.validate_update(op, schema_version)
       %Changes.DeletedRecord{} -> & &1.validate_delete(op, schema_version)
+      # ignore compensation messages
+      %Changes.Compensation{} -> fn _ -> :ok end
     end
   end
 
