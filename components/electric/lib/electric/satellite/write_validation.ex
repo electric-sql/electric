@@ -5,6 +5,7 @@ defmodule Electric.Satellite.WriteValidation do
 
   @type result() :: :ok | {:error, Changes.change(), String.t()}
   @type allowed_result() :: :ok | {:error, reason :: String.t()}
+  @type txns() :: [Changes.Transaction.t()]
 
   @type insert() :: Changes.NewRecord.t()
   @type update() :: Changes.UpdatedRecord.t()
@@ -19,6 +20,13 @@ defmodule Electric.Satellite.WriteValidation do
 
   defmodule Error do
     defstruct [:tx, :reason, :verifier, :change]
+
+    @type t() :: %__MODULE__{
+            tx: Changes.Transaction.t(),
+            reason: String.t(),
+            verifier: module(),
+            change: Changes.change()
+          }
 
     def error_response(error) do
       %Electric.Satellite.SatErrorResp{
@@ -61,13 +69,16 @@ defmodule Electric.Satellite.WriteValidation do
     end
   end
 
-  @spec validate_transactions!([Changes.Transaction.t()], Connectors.origin()) ::
-          :ok | no_return()
+  @spec validate_transactions!(txns(), SchemaLoader.t()) ::
+          {:ok, txns()} | {:error, term()} | {:error, txns(), Error.t(), txns()}
   def validate_transactions!(txns, schema_loader) do
-    {:ok, schema_version} = SchemaLoader.load(schema_loader)
-    split_ok(txns, &is_valid_tx?(&1, schema_version, schema_loader), [])
+    with {:ok, schema_version} <- SchemaLoader.load(schema_loader) do
+      split_ok(txns, &is_valid_tx?(&1, schema_version, schema_loader), [])
+    end
   end
 
+  @spec is_valid_tx?(Changes.Transaction.t(), SchemaLoader.Version.t(), SchemaLoader.t()) ::
+          :ok | {:error, Error.t()}
   defp is_valid_tx?(%Changes.Transaction{changes: changes} = tx, schema_version, schema_loader) do
     all_ok?(changes, &is_valid_change?(&1, schema_version, schema_loader), fn _src, error ->
       {:error, %{error | tx: tx}}
@@ -105,6 +116,8 @@ defmodule Electric.Satellite.WriteValidation do
     end
   end
 
+  @spec split_ok(txns(), (Changes.Transaction.t() -> :ok | {:error, Error.t()}), txns()) ::
+          {:ok, txns()} | {:error, txns(), Error.t(), txns()}
   defp split_ok([tx | tail], fun, acc) do
     case fun.(tx) do
       :ok ->

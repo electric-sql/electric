@@ -206,7 +206,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
   using the given implementation of SchemaLoader.
   """
   @spec apply_migration(String.t(), [String.t()], SchemaLoader.t()) ::
-          {:ok, SchemaLoader.t(), Schema.t()} | {:error, term()}
+          {:ok, SchemaLoader.t(), SchemaLoader.Version.t()} | {:error, term()}
   def apply_migration(version, stmts, loader) when is_list(stmts) do
     {:ok, schema_version} = SchemaLoader.load(loader)
 

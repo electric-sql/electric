@@ -90,12 +90,12 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Version do
     schema
   end
 
-  @spec primary_keys(t(), schema(), name()) :: [name()]
+  @spec primary_keys(t(), schema(), name()) :: {:ok, [name()]} | {:error, String.t()}
   def primary_keys(%__MODULE__{primary_keys: pks}, sname, tname) do
     fetch_table_value(pks, {sname, tname})
   end
 
-  @spec primary_keys(t(), table_ref()) :: [name()]
+  @spec primary_keys(t(), table_ref()) :: {:ok, [name()]} | {:error, String.t()}
   def primary_keys(%__MODULE__{primary_keys: pks}, relation) do
     fetch_table_value(pks, relation)
   end
