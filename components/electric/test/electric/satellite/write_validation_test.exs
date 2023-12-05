@@ -105,7 +105,7 @@ defmodule Electric.Satellite.WriteValidationTest do
                invalid_tx("001").changes,
                &match?(
                  {:error, _},
-                 WriteValidation.ImmutablePrimaryKey.validate_update(&1, schema, cxt.loader)
+                 WriteValidation.ImmutablePrimaryKey.validate_update(&1, schema)
                )
              )
     end

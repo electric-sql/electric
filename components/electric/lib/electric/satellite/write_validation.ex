@@ -1,6 +1,6 @@
 defmodule Electric.Satellite.WriteValidation do
   alias Electric.Satellite.WriteValidation
-  alias Electric.Replication.{Changes, Connectors}
+  alias Electric.Replication.Changes
   alias Electric.Postgres.Extension.SchemaLoader
 
   @type result() :: :ok | {:error, Changes.change(), String.t()}
@@ -11,12 +11,9 @@ defmodule Electric.Satellite.WriteValidation do
   @type update() :: Changes.UpdatedRecord.t()
   @type delete() :: Changes.DeletedRecord.t()
 
-  @callback validate_insert(insert(), SchemaLoader.Version.t(), SchemaLoader.t()) ::
-              allowed_result()
-  @callback validate_update(update(), SchemaLoader.Version.t(), SchemaLoader.t()) ::
-              allowed_result()
-  @callback validate_delete(delete(), SchemaLoader.Version.t(), SchemaLoader.t()) ::
-              allowed_result()
+  @callback validate_insert(insert(), SchemaLoader.Version.t()) :: allowed_result()
+  @callback validate_update(update(), SchemaLoader.Version.t()) :: allowed_result()
+  @callback validate_delete(delete(), SchemaLoader.Version.t()) :: allowed_result()
 
   defmodule Error do
     defstruct [:tx, :reason, :verifier, :change]
@@ -61,11 +58,11 @@ defmodule Electric.Satellite.WriteValidation do
 
       @behaviour Electric.Satellite.WriteValidation
 
-      def validate_insert(_, _, _), do: :ok
-      def validate_update(_, _, _), do: :ok
-      def validate_delete(_, _, _), do: :ok
+      def validate_insert(_, _), do: :ok
+      def validate_update(_, _), do: :ok
+      def validate_delete(_, _), do: :ok
 
-      defoverridable validate_insert: 3, validate_update: 3, validate_delete: 3
+      defoverridable validate_insert: 2, validate_update: 2, validate_delete: 2
     end
   end
 
@@ -73,31 +70,31 @@ defmodule Electric.Satellite.WriteValidation do
           {:ok, txns()} | {:error, term()} | {:error, txns(), Error.t(), txns()}
   def validate_transactions!(txns, schema_loader) do
     with {:ok, schema_version} <- SchemaLoader.load(schema_loader) do
-      split_ok(txns, &is_valid_tx?(&1, schema_version, schema_loader), [])
+      split_ok(txns, &is_valid_tx?(&1, schema_version), [])
     end
   end
 
-  @spec is_valid_tx?(Changes.Transaction.t(), SchemaLoader.Version.t(), SchemaLoader.t()) ::
+  @spec is_valid_tx?(Changes.Transaction.t(), SchemaLoader.Version.t()) ::
           :ok | {:error, Error.t()}
-  defp is_valid_tx?(%Changes.Transaction{changes: changes} = tx, schema_version, schema_loader) do
-    all_ok?(changes, &is_valid_change?(&1, schema_version, schema_loader), fn _src, error ->
+  defp is_valid_tx?(%Changes.Transaction{changes: changes} = tx, schema_version) do
+    all_ok?(changes, &is_valid_change?(&1, schema_version), fn _src, error ->
       {:error, %{error | tx: tx}}
     end)
   end
 
-  defp is_valid_change?(op, schema_version, schema_loader) do
+  defp is_valid_change?(op, schema_version) do
     all_ok?(
       @validations,
-      validation_function(op, schema_version, schema_loader),
+      validation_function(op, schema_version),
       &validation_error(&1, &2, op)
     )
   end
 
-  defp validation_function(op, schema_version, schema_loader) do
+  defp validation_function(op, schema_version) do
     case op do
-      %Changes.NewRecord{} -> & &1.validate_insert(op, schema_version, schema_loader)
-      %Changes.UpdatedRecord{} -> & &1.validate_update(op, schema_version, schema_loader)
-      %Changes.DeletedRecord{} -> & &1.validate_delete(op, schema_version, schema_loader)
+      %Changes.NewRecord{} -> & &1.validate_insert(op, schema_version)
+      %Changes.UpdatedRecord{} -> & &1.validate_update(op, schema_version)
+      %Changes.DeletedRecord{} -> & &1.validate_delete(op, schema_version)
     end
   end
 

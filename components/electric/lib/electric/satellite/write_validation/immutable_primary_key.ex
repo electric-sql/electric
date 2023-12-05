@@ -3,7 +3,7 @@ defmodule Electric.Satellite.WriteValidation.ImmutablePrimaryKey do
 
   alias Electric.Postgres.Extension.SchemaLoader
 
-  def validate_update(%UpdatedRecord{} = change, schema_version, _schema_loader) do
+  def validate_update(%UpdatedRecord{} = change, schema_version) do
     %{relation: {sname, tname} = relation, changed_columns: changed} = change
 
     if Enum.empty?(changed) do

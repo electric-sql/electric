@@ -55,8 +55,7 @@ defmodule Electric.Satellite.WriteValidation.ImmutablePrimaryKeyTest do
                    "amount" => "3"
                  }
                },
-               cxt.schema,
-               "origin"
+               cxt.schema
              )
 
     assert :ok =
@@ -69,8 +68,7 @@ defmodule Electric.Satellite.WriteValidation.ImmutablePrimaryKeyTest do
                    "amount" => "3"
                  }
                },
-               cxt.schema,
-               "origin"
+               cxt.schema
              )
   end
 
@@ -85,8 +83,7 @@ defmodule Electric.Satellite.WriteValidation.ImmutablePrimaryKeyTest do
                    "amount" => "3"
                  }
                },
-               cxt.schema,
-               "origin"
+               cxt.schema
              )
 
     assert :ok =
@@ -100,8 +97,7 @@ defmodule Electric.Satellite.WriteValidation.ImmutablePrimaryKeyTest do
                    "amount" => "3"
                  }
                },
-               cxt.schema,
-               "origin"
+               cxt.schema
              )
   end
 
@@ -121,8 +117,7 @@ defmodule Electric.Satellite.WriteValidation.ImmutablePrimaryKeyTest do
                    "amount" => "4"
                  }
                ),
-               cxt.schema,
-               "origin"
+               cxt.schema
              )
 
     assert :ok =
@@ -142,8 +137,7 @@ defmodule Electric.Satellite.WriteValidation.ImmutablePrimaryKeyTest do
                    "amount" => "4"
                  }
                ),
-               cxt.schema,
-               "origin"
+               cxt.schema
              )
   end
 
@@ -159,8 +153,7 @@ defmodule Electric.Satellite.WriteValidation.ImmutablePrimaryKeyTest do
                    "amount" => "3"
                  }
                ),
-               cxt.schema,
-               "origin"
+               cxt.schema
              )
 
     assert :ok =
@@ -175,8 +168,7 @@ defmodule Electric.Satellite.WriteValidation.ImmutablePrimaryKeyTest do
                    "amount" => "4"
                  }
                ),
-               cxt.schema,
-               "origin"
+               cxt.schema
              )
   end
 
@@ -196,8 +188,7 @@ defmodule Electric.Satellite.WriteValidation.ImmutablePrimaryKeyTest do
                    "amount" => "3"
                  }
                ),
-               cxt.schema,
-               "origin"
+               cxt.schema
              )
 
     assert {:error, _} =
@@ -217,8 +208,7 @@ defmodule Electric.Satellite.WriteValidation.ImmutablePrimaryKeyTest do
                    "amount" => "4"
                  }
                ),
-               cxt.schema,
-               "origin"
+               cxt.schema
              )
   end
 
@@ -240,8 +230,7 @@ defmodule Electric.Satellite.WriteValidation.ImmutablePrimaryKeyTest do
                    "amount" => "4"
                  }
                ),
-               cxt.schema,
-               "origin"
+               cxt.schema
              )
   end
 end
