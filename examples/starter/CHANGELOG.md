@@ -1,5 +1,11 @@
 # create-electric-app
 
+## 0.2.1
+
+### Patch Changes
+
+- a9bb17ca: Upgrade wa-sqlite version because of a critical bug fix in wa-sqlite.
+
 ## 0.2.0
 
 ### Minor Changes

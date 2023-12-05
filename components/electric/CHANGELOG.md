@@ -1,5 +1,18 @@
 # @core/electric
 
+## 0.8.0
+
+### Minor Changes
+
+- eb722c9b: [VAX-1335] Create new protocol op to represent a compensation
+
+### Patch Changes
+
+- 0dc61662: [VAX-820, VAX-1325] Add support for the BIGINT / INT8 column type in electrified tables.
+- d9efe923: [VAX-1264, VAX-1265] Fix some edge cases in the parsing of DATABASE_URL.
+- 4ad7df4d: [VAX-825] Add support for the JSONB column type in electrified tables.
+- b6e589d3: [VAX-846, VAX-849] Add support for the REAL / FLOAT4 column type in electrified tables.
+
 ## 0.7.1
 
 ### Patch Changes

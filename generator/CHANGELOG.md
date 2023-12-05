@@ -1,5 +1,12 @@
 # @electric-sql/prisma-generator
 
+## 1.1.1
+
+### Patch Changes
+
+- 4ad7df4d: [VAX-825] Add client-side support for JSON type.
+- 65f10d69: Import types using import type in generated Electric client.
+
 ## 1.1.0
 
 ### Minor Changes
