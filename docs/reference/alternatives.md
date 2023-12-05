@@ -33,6 +33,7 @@ Some of the projects that are either closer to ElectricSQL or generally better k
 Other local-first projects:
 
 - [Ampli-sync](https://ampliapps.com/sqlite-sync)
+- [CASE](https://case.app).
 - [Concordant](https://concordant.io)
 - [CRStore](https://github.com/Azarattum/CRStore)
 - [DXOS](https://dxos.org)
