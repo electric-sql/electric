@@ -25,6 +25,8 @@ You are responsible for ensuring the uniqueness of your primary keys. If you som
 
 - `smallint` / `int2`
 - `integer` / `int` / `int4`
+- `bigint` / `int8`
+- `real` / `float4`
 - `double precision` / `float8`
 
 **Strings**:
@@ -41,6 +43,7 @@ You are responsible for ensuring the uniqueness of your primary keys. If you som
 **Other**:
 
 - `boolean`
+- `jsonb`
 - `uuid`
 
 The authoritative list of supported data types is maintained in the `supported_types()` function in [`components/electric/lib/electric/postgres.ex`](https://github.com/electric-sql/electric/blob/37f3ee4cbf06ef80e80ed8663b420b2bdeb7cb1b/components/electric/lib/electric/postgres.ex#L83-L95).
