@@ -25,6 +25,8 @@ You are responsible for ensuring the uniqueness of your primary keys. If you som
 
 - `smallint` / `int2`
 - `integer` / `int` / `int4`
+- `bigint` / `int8`
+- `real` / `float4`
 - `double precision` / `float8`
 
 **Strings**:
@@ -41,9 +43,16 @@ You are responsible for ensuring the uniqueness of your primary keys. If you som
 **Other**:
 
 - `boolean`
+- `jsonb`
 - `uuid`
 
 The authoritative list of supported data types is maintained in the `supported_types()` function in [`components/electric/lib/electric/postgres.ex`](https://github.com/electric-sql/electric/blob/37f3ee4cbf06ef80e80ed8663b420b2bdeb7cb1b/components/electric/lib/electric/postgres.ex#L83-L95).
+
+:::info JSON support
+Electric defaults to a Last-Writer-Wins strategy. For JSON this is across the whole document - updating one attribute in the document counts as the document as a whole being updated. This means that conflicting updates from multiple clients are not merged together, the full state of the last writer will be stored.
+
+In future we plan to support more fine grained merge strategies for JSON data.
+:::
 
 :::caution Work in progress
 We are actively working on building out data type support. If you need a type we don't yet support, please [let us know on Discord](https://discord.electric-sql.com).
