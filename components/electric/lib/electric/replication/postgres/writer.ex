@@ -132,7 +132,7 @@ defmodule Electric.Replication.Postgres.Writer do
 
   # This is the same change as the one in `Electric.Replication.SatelliteCollectorProducer.update_acked_client_lsn/1`
   # but expressed as an SQL INSERT statement. This INSERT does not cause the `upsert_acknowledged_client_lsn` trigger to
-  # fire because the trigger is anabled with `ENABLE REPLICA TRIGGER`.
+  # fire because the trigger is enabled with `ENABLE REPLICA TRIGGER`.
   defp acked_client_lsn_statement(tx) do
     client_id = tx.origin
     lsn = tx.lsn
@@ -144,7 +144,6 @@ defmodule Electric.Replication.Postgres.Writer do
     ON CONFLICT (client_id)
       DO UPDATE
         SET lsn = excluded.lsn
-      WHERE t.lsn IS DISTINCT FROM excluded.lsn
     """
   end
 
