@@ -148,7 +148,7 @@ defmodule Electric.Replication.Postgres.Writer do
     columns = relations[table].columns
 
     table_sql = quote_ident(table_schema, table_name)
-    columns_sql = map_join(columns, &quote_ident(&1.name))
+    columns_sql = Enum.map_join(columns, ",", &quote_ident(&1.name))
     values_sql = column_values(data, columns) |> encode_values()
 
     "INSERT INTO #{table_sql}(#{columns_sql}) VALUES (#{values_sql})"
@@ -159,7 +159,8 @@ defmodule Electric.Replication.Postgres.Writer do
     Enum.map(columns, &{Map.fetch!(record, &1.name), &1.type})
   end
 
-  defp encode_values(values), do: map_join(values, fn {val, type} -> encode_value(val, type) end)
+  defp encode_values(values),
+    do: Enum.map_join(values, ",", fn {val, type} -> encode_value(val, type) end)
 
   defp encode_value(nil, _type), do: "NULL"
 
@@ -200,9 +201,5 @@ defmodule Electric.Replication.Postgres.Writer do
 
   defp escape_quotes(str, q) do
     :binary.replace(str, <<q>>, <<q, q>>, [:global])
-  end
-
-  defp map_join(list, fun) do
-    list |> Enum.map(fun) |> Enum.join(",")
   end
 end
