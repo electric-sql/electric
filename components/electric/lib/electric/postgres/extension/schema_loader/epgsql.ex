@@ -128,35 +128,6 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
     end)
   end
 
-  # @primary_keys_query """
-  # SELECT a.attname
-  # FROM pg_class c
-  #   INNER JOIN pg_namespace n ON c.relnamespace = n.oid
-  #   INNER JOIN pg_index i ON i.indrelid = c.oid
-  #   INNER JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
-  # WHERE
-  #     n.nspname = $1
-  #     AND c.relname = $2
-  #     AND c.relkind = 'r'
-  #     AND i.indisprimary
-  # """
-
-  # @impl true
-  # def primary_keys(pool, schema, name) do
-  #   checkout!(pool, fn conn ->
-  #     {:ok, _, pks_data} = :epgsql.equery(conn, @primary_keys_query, [schema, name])
-
-  #     {:ok, Enum.map(pks_data, &elem(&1, 0))}
-  #   end)
-  # end
-
-  # @impl true
-  # def primary_keys(pool, {schema, name}) do
-  #   checkout!(pool, fn conn ->
-  #     primary_keys(conn, schema, name)
-  #   end)
-  # end
-
   @impl true
   def refresh_subscription(pool, name) do
     checkout!(pool, fn conn ->
