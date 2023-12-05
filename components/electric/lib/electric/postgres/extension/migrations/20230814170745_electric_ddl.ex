@@ -34,7 +34,6 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230814170745_Electr
       );
       """,
       """
-
       CREATE TABLE IF NOT EXISTS #{roles_table} (
           id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
           role VARCHAR(64) NOT NULL,
