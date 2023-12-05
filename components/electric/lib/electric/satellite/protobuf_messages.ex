@@ -9225,7 +9225,7 @@
   end,
   defmodule Electric.Satellite.SatErrorResp do
     @moduledoc false
-    defstruct error_type: :INTERNAL, lsn: nil, message: nil, op: nil
+    defstruct error_type: :INTERNAL, lsn: nil, message: nil
 
     (
       (
@@ -9240,7 +9240,7 @@
 
         @spec encode!(struct) :: iodata | no_return
         def encode!(msg) do
-          [] |> encode_lsn(msg) |> encode_message(msg) |> encode_op(msg) |> encode_error_type(msg)
+          [] |> encode_lsn(msg) |> encode_message(msg) |> encode_error_type(msg)
         end
       )
 
@@ -9285,17 +9285,6 @@
           rescue
             ArgumentError ->
               reraise Protox.EncodingError.new(:message, "invalid field value"), __STACKTRACE__
-          end
-        end,
-        defp encode_op(acc, msg) do
-          try do
-            case msg.op do
-              nil -> [acc]
-              child_field_value -> [acc, "\"", Protox.Encode.encode_message(child_field_value)]
-            end
-          rescue
-            ArgumentError ->
-              reraise Protox.EncodingError.new(:op, "invalid field value"), __STACKTRACE__
           end
         end
       ]
@@ -9350,24 +9339,6 @@
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
                 {[message: delimited], rest}
-
-              {4, _, bytes} ->
-                {len, bytes} = Protox.Varint.decode(bytes)
-                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-
-                {[
-                   case msg.op do
-                     {:op, previous_value} ->
-                       {:op,
-                        Protox.MergeMessage.merge(
-                          previous_value,
-                          Electric.Satellite.SatTransOp.decode!(delimited)
-                        )}
-
-                     _ ->
-                       {:op, Electric.Satellite.SatTransOp.decode!(delimited)}
-                   end
-                 ], rest}
 
               {tag, wire_type, rest} ->
                 {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
@@ -9430,8 +9401,7 @@
             {:error_type, {:scalar, :INTERNAL},
              {:enum, Electric.Satellite.SatErrorResp.ErrorCode}},
           2 => {:lsn, {:oneof, :_lsn}, :bytes},
-          3 => {:message, {:oneof, :_message}, :string},
-          4 => {:op, {:oneof, :_op}, {:message, Electric.Satellite.SatTransOp}}
+          3 => {:message, {:oneof, :_message}, :string}
         }
       end
 
@@ -9444,8 +9414,7 @@
           error_type:
             {1, {:scalar, :INTERNAL}, {:enum, Electric.Satellite.SatErrorResp.ErrorCode}},
           lsn: {2, {:oneof, :_lsn}, :bytes},
-          message: {3, {:oneof, :_message}, :string},
-          op: {4, {:oneof, :_op}, {:message, Electric.Satellite.SatTransOp}}
+          message: {3, {:oneof, :_message}, :string}
         }
       end
     )
@@ -9480,15 +9449,6 @@
             name: :message,
             tag: 3,
             type: :string
-          },
-          %{
-            __struct__: Protox.Field,
-            json_name: "op",
-            kind: {:oneof, :_op},
-            label: :proto3_optional,
-            name: :op,
-            tag: 4,
-            type: {:message, Electric.Satellite.SatTransOp}
           }
         ]
       end
@@ -9593,35 +9553,6 @@
 
           []
         ),
-        (
-          def field_def(:op) do
-            {:ok,
-             %{
-               __struct__: Protox.Field,
-               json_name: "op",
-               kind: {:oneof, :_op},
-               label: :proto3_optional,
-               name: :op,
-               tag: 4,
-               type: {:message, Electric.Satellite.SatTransOp}
-             }}
-          end
-
-          def field_def("op") do
-            {:ok,
-             %{
-               __struct__: Protox.Field,
-               json_name: "op",
-               kind: {:oneof, :_op},
-               label: :proto3_optional,
-               name: :op,
-               tag: 4,
-               type: {:message, Electric.Satellite.SatTransOp}
-             }}
-          end
-
-          []
-        ),
         def field_def(_) do
           {:error, :no_such_field}
         end
@@ -9653,9 +9584,6 @@
         {:error, :no_default_value}
       end,
       def default(:message) do
-        {:error, :no_default_value}
-      end,
-      def default(:op) do
         {:error, :no_default_value}
       end,
       def default(_) do

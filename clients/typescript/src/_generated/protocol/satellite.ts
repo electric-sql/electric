@@ -91,11 +91,7 @@ export interface SatErrorResp {
     | Uint8Array
     | undefined;
   /** human readable explanation of what went wrong */
-  message?:
-    | string
-    | undefined;
-  /** the individual operation that caused the problem (if available) */
-  op?: SatTransOp | undefined;
+  message?: string | undefined;
 }
 
 export enum SatErrorResp_ErrorCode {
@@ -941,7 +937,7 @@ export const SatAuthResp = {
 messageTypeRegistry.set(SatAuthResp.$type, SatAuthResp);
 
 function createBaseSatErrorResp(): SatErrorResp {
-  return { $type: "Electric.Satellite.SatErrorResp", errorType: 0, lsn: undefined, message: undefined, op: undefined };
+  return { $type: "Electric.Satellite.SatErrorResp", errorType: 0, lsn: undefined, message: undefined };
 }
 
 export const SatErrorResp = {
@@ -956,9 +952,6 @@ export const SatErrorResp = {
     }
     if (message.message !== undefined) {
       writer.uint32(26).string(message.message);
-    }
-    if (message.op !== undefined) {
-      SatTransOp.encode(message.op, writer.uint32(34).fork()).ldelim();
     }
     return writer;
   },
@@ -991,13 +984,6 @@ export const SatErrorResp = {
 
           message.message = reader.string();
           continue;
-        case 4:
-          if (tag !== 34) {
-            break;
-          }
-
-          message.op = SatTransOp.decode(reader, reader.uint32());
-          continue;
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1016,7 +1002,6 @@ export const SatErrorResp = {
     message.errorType = object.errorType ?? 0;
     message.lsn = object.lsn ?? undefined;
     message.message = object.message ?? undefined;
-    message.op = (object.op !== undefined && object.op !== null) ? SatTransOp.fromPartial(object.op) : undefined;
     return message;
   },
 };
