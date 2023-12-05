@@ -32,6 +32,11 @@ defmodule Electric.Replication.Postgres.Writer do
 
     conn_opts = Connectors.get_connection_opts(conn_config)
     {:ok, conn} = Client.connect(conn_opts)
+
+    # Set a [custom option][1] so that the conflict resolution triggers fire even though we'll doing direct
+    # writes to PG.
+    #
+    # [1]: https://www.postgresql.org/docs/14/runtime-config-custom.html
     {:ok, [], []} = :epgsql.squery(conn, "SET electric.session_replication_role = replica")
 
     {:via, :gproc, producer_name} = Keyword.fetch!(opts, :producer)
