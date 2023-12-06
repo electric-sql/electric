@@ -282,8 +282,8 @@ defmodule Electric.Postgres.Extension.SchemaCache do
           {:ok, pks} ->
             {{:ok, pks}, state}
 
-          :error ->
-            {{:error, "table #{inspect(sname)}.#{inspect(tname)} does not exist"}, state}
+          {:error, _reason} = error ->
+            {error, state}
         end
       end
 
