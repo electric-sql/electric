@@ -1,5 +1,11 @@
 # electric-sql
 
+## 0.8.1
+
+### Patch Changes
+
+- fab106c4: Properly escape path for Windows in the generator.
+
 ## 0.8.0
 
 ### Minor Changes
