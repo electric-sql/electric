@@ -278,7 +278,7 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   def handle_call({:primary_keys, sname, tname}, _from, state) do
     {result, state} =
       with {{:ok, schema_version}, state} <- current_schema(state) do
-        case Map.fetch(schema_version.primary_keys, {sname, tname}) do
+        case SchemaLoader.Version.primary_keys(schema_version, {sname, tname}) do
           {:ok, pks} ->
             {{:ok, pks}, state}
 
