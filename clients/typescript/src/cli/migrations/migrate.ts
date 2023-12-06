@@ -251,10 +251,9 @@ async function createPrismaSchema(
       relationModel = "false"
     }
 
-    generator electric {
-      provider      = "${generatorPath}"
-      output        = "${output}"
-      relationModel = "false"
+    generator client {
+      provider = "prisma-client-js"
+      output   = "${output}"
     }
 
     datasource db {
