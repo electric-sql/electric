@@ -17,8 +17,11 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20231206130400_Conver
   def version, do: 2023_12_06_13_04_00
 
   @impl true
-  def up(_schema) do
-    [Extension.Functions.by_name(:__session_replication_role), @migration_sql]
+  def up(schema) do
+    [
+      Extension.Functions.by_name(:__session_replication_role),
+      String.replace(@migration_sql, "electric", schema)
+    ]
   end
 
   @impl true
