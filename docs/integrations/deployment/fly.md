@@ -141,10 +141,6 @@ $ fly secrets set --stage \
 Secrets have been staged, but not set on VMs. Deploy or update machines in this app for the secrets to take effect.
 ```
 
-:::info
-Double-check that your value for `DATABASE_URL` starts with `postgresql://` and ends with the database name, e.g. `/postgres`.
-:::
-
 ### Deploy!
 
 Now we're ready to deploy Electric to Fly!
