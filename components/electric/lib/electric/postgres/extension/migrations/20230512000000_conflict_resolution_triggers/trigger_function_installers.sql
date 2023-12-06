@@ -512,7 +512,7 @@ BEGIN
         EXECUTE PROCEDURE electric.%I();
     $$, full_table_identifier, generated_functions->>'create_shadow_row_from_upsert');
 
-    EXECUTE format($$ ALTER TABLE %s ENABLE ALWAYS TRIGGER postgres_write__upsert_generate_shadow_rows $$, full_table_identifier);
+    EXECUTE format($$ ALTER TABLE %s ENABLE TRIGGER postgres_write__upsert_generate_shadow_rows $$, full_table_identifier);
 
     EXECUTE format($$
         CREATE OR REPLACE TRIGGER postgres_write__delete_generate_shadow_rows
@@ -522,7 +522,7 @@ BEGIN
         EXECUTE PROCEDURE electric.%I();
     $$, full_table_identifier, generated_functions->>'update_shadow_row_from_delete');
 
-    EXECUTE format($$ ALTER TABLE %s ENABLE ALWAYS TRIGGER postgres_write__delete_generate_shadow_rows $$, full_table_identifier);
+    EXECUTE format($$ ALTER TABLE %s ENABLE TRIGGER postgres_write__delete_generate_shadow_rows $$, full_table_identifier);
 
     EXECUTE format($$ DROP TRIGGER IF EXISTS postgres_write__write_resolved_tags ON electric.%I $$, shadow_table_name);
     EXECUTE format($$
@@ -534,7 +534,7 @@ BEGIN
         EXECUTE PROCEDURE electric.%I();
     $$, shadow_table_name, generated_functions->>'write_correct_max_tag');
 
-    EXECUTE format($$ ALTER TABLE electric.%I ENABLE ALWAYS TRIGGER postgres_write__write_resolved_tags $$, shadow_table_name);
+    EXECUTE format($$ ALTER TABLE electric.%I ENABLE TRIGGER postgres_write__write_resolved_tags $$, shadow_table_name);
 
     EXECUTE format($$
         CREATE OR REPLACE TRIGGER satellite_write__upsert_rows
