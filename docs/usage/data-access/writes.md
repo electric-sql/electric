@@ -9,7 +9,7 @@ sidebar_position: 50
 
 Insert, update and delete data using the [`create`](../../api/clients/typescript.md#create), [`createMany`](../../api/clients/typescript.md#createMany), [`update`](../../api/clients/typescript.md#update), [`updateMany`](../../api/clients/typescript.md#updateMany), [`delete`](../../api/clients/typescript.md#delete) and [`deleteMany`](../../api/clients/typescript.md#deleteMany) functions.
 
-For example to insert a new project:
+For example, to insert a new project:
 
 ```ts
 const project = await db.projects.create({

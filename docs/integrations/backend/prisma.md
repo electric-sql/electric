@@ -18,7 +18,7 @@ datasource db {
 }
 ```
 
-You can then use [dotenv-cli](https://www.npmjs.com/package/dotenv-cli) to setup multiple `.env` files, for example create a `.env.proxy` with a database URL to connect to the proxy:
+You can then use [dotenv-cli](https://www.npmjs.com/package/dotenv-cli) to setup multiple `.env` files. For example, create a `.env.proxy` with a database URL to connect to the proxy:
 
 ```shell
 DATABASE_URL=postgresql://postgres:${PG_PROXY_PASSWORD}@localhost:${PG_PROXY_PORT}/mydb

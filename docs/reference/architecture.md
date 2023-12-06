@@ -137,7 +137,7 @@ Satellite processes monitor the connectivity state of the network and their unde
 - `error`: there was an error when connecting
 - `syncing`: the connection is active but is currently catching up with the server prior to replicating local writes
 
-If the connection is disconnected manually (for example using the `toggle` functionn returned by the [`useConnectivityState`](../integrations/frontend/react.md#toggleConnectivityState) hook) then it won't automatically reconnect. Otherwise if disconnected due to a transient error or network connectivity then the web socket connection will try to reconnect automatically using a backoff algorithm.
+If the connection is disconnected manually (for example, using the `toggle` functionn returned by the [`useConnectivityState`](../integrations/frontend/react.md#toggleConnectivityState) hook) then it won't automatically reconnect. Otherwise if disconnected due to a transient error or network connectivity then the web socket connection will try to reconnect automatically using a backoff algorithm.
 
 
 ## More information
