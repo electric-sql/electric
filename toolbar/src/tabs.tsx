@@ -5,16 +5,14 @@ import SQLTab from './tabs/SQLTab'
 import StatusTab from './tabs/StatusTab'
 import { ToolbarInterface } from './api/toolbar-interface'
 
-
-
 function TabItem(
-    label: string,
-    name: 'status' | 'db' | 'sql',
-    handleClick: (
+  label: string,
+  name: 'status' | 'db' | 'sql',
+  handleClick: (
     name: 'status' | 'db' | 'sql',
     e: React.MouseEvent<HTMLLIElement>,
   ) => void,
-    active: string,
+  active: string,
 ): JSX.Element {
   const className =
     active == name
@@ -39,7 +37,7 @@ export default function ToolbarTabs({
   const [active, setActive] = useState<'status' | 'db' | 'sql'>('status')
   function handleClick(
     name: 'status' | 'db' | 'sql',
-     _e: React.MouseEvent<HTMLLIElement>,
+    _e: React.MouseEvent<HTMLLIElement>,
   ) {
     setActive(name)
   }
