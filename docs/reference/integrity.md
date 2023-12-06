@@ -171,7 +171,7 @@ The following table summarises the anomalies that can occur with different datab
 
 **Problem**:<br />Cumulating the effects of individual operation might result in amplification of the intended changes. This is a particular case of failing to preserve user intention.
 
-**Example**:<br />two users modify some object’s property concurrently, for example enlarging a shape, and the semantics of the merge is to sum the deltas. The shape size will end larger than each user intended. When trying to correct the issue, the reverse situation might happen again.
+**Example**:<br />two users modify some object’s property concurrently, for example, enlarging a shape, and the semantics of the merge is to sum the deltas. The shape size will end larger than each user intended. When trying to correct the issue, the reverse situation might happen again.
 
 **Mitigation**:<br />Cumulative effects are acceptable when latency is low enough that users perceive that there are concurrent modifications to the same object.
 

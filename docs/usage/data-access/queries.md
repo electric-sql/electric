@@ -17,7 +17,7 @@ See <DocPageLink path="api/clients/typescript" /> for more details on the functi
 
 Read data using the [`findUnique`](../../api/clients/typescript.md#findUnique), [`findFirst`](../../api/clients/typescript.md#findFirst) and [`findMany`](../../api/clients/typescript.md#findMany) functions.
 
-For example to get a project by unique ID:
+For example, to get a project by unique ID:
 
 ```ts
 const result = await db.projects.findUnique({

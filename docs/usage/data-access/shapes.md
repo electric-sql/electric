@@ -149,7 +149,7 @@ If the shape subscription is invalid, the first promise will be rejected. If the
 
 Data synced onto the local device via a shape subscription appears atomically in the local database. I.e.: it all loads within a single transaction.
 
-You can query the local database at any time, for example establishing a [Live query](./queries.md#live-queries) at the same time as initiating the shape sync. The query results will initially be empty (unless data is already in the local database) and then will update once with the full set of data loaded by the shape subscription.
+You can query the local database at any time, for example, establishing a [Live query](./queries.md#live-queries) at the same time as initiating the shape sync. The query results will initially be empty (unless data is already in the local database) and then will update once with the full set of data loaded by the shape subscription.
 
 For example, this is OK:
 
@@ -229,7 +229,7 @@ const MyComponent = () => {
 }
 ```
 
-For many applications you can simply define the data you want to sync up-front, for example at app load time and then just code against the local database once the data has synced in. For others, you can craft more dynamic partial replication, for example syncing data in as the user navigates through different routes or parts of the app.
+For many applications you can simply define the data you want to sync up-front, for example, at app load time and then just code against the local database once the data has synced in. For others, you can craft more dynamic partial replication, for instance, syncing data in as the user navigates through different routes or parts of the app.
 
 ## Future capabilities
 
@@ -245,7 +245,7 @@ This limits the expressiveness of shape filter clauses to the matching capabilit
 
 Currently all shapes are always live. However, in some cases, you may want to make ephemeral queries and keep results available for offline use without always keeping them live and up-to-date. Subscription semantics will allow you to configure whether a shape subscription is maintained to keep the data synced in a shape live or not.
 
-Currently all synced data is retained forever until explicitly deleted. Retention semantics will provide a declarative API to control data retention  and deterministic behaviour when there's contention for storage resources.
+Currently all synced data is retained forever until explicitly deleted. Retention semantics will provide a declarative API to control data retention and deterministic behaviour when there's contention for storage resources.
 
 ### Discovered shapes
 
