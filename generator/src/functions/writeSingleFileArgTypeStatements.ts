@@ -15,7 +15,8 @@ export const writeSingleFileArgTypeStatements: WriteStatements = (
 
   fileWriter.writeHeading(`ARGS`, 'FAT')
 
-  dmmf.schema.outputObjectTypes.argTypes.forEach((outputType) => {
+  const types = dmmf.schema.outputObjectTypes
+  types.argTypes.forEach((outputType) => {
     outputType.prismaActionFields.forEach((field) => {
       writeOutputObjectType({ dmmf, fileWriter }, field)
     })
