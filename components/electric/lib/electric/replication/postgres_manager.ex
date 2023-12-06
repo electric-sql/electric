@@ -96,17 +96,9 @@ defmodule Electric.Replication.PostgresConnectorMng do
         {:ok, sup_pid} = PostgresConnector.start_children(state.config)
         Logger.info("successfully initialized connector #{inspect(origin)}")
 
-        state = %State{state | pg_connector_sup_monitor: Process.monitor(sup_pid)}
-
-        case Connectors.write_to_pg_mode(state.config) do
-          :logical_replication ->
-            state = %State{state | state: :subscribe}
-            {:noreply, state, {:continue, :subscribe}}
-
-          :direct_writes ->
-            state = %State{state | state: :ready}
-            {:noreply, state}
-        end
+        ref = Process.monitor(sup_pid)
+        state = %State{state | state: :subscribe, pg_connector_sup_monitor: ref}
+        {:noreply, state, {:continue, :subscribe}}
 
       error ->
         Logger.error("initialization for postgresql failed with reason: #{inspect(error)}")
@@ -115,12 +107,19 @@ defmodule Electric.Replication.PostgresConnectorMng do
   end
 
   def handle_continue(:subscribe, %State{} = state) do
-    case start_subscription(state) do
-      :ok ->
-        {:noreply, %State{state | state: :ready}}
+    case Connectors.write_to_pg_mode(state.config) do
+      :logical_replication ->
+        case start_subscription(state) do
+          :ok ->
+            {:noreply, %State{state | state: :ready}}
 
-      {:error, _} ->
-        {:noreply, schedule_retry(:subscribe, state)}
+          {:error, _} ->
+            {:noreply, schedule_retry(:subscribe, state)}
+        end
+
+      :direct_writes ->
+        :ok = stop_subscription(state)
+        {:noreply, %State{state | state: :ready}}
     end
   end
 
@@ -184,6 +183,20 @@ defmodule Electric.Replication.PostgresConnectorMng do
       error ->
         Logger.error("error while starting postgres subscription: #{inspect(error)}")
         error
+    end
+  end
+
+  defp stop_subscription(%State{conn_config: conn_config, repl_config: rep_conf} = state) do
+    case Client.with_conn(conn_config, fn conn ->
+           Client.stop_subscription(conn, rep_conf.subscription)
+         end) do
+      :ok ->
+        Logger.notice("subscription stopped for #{state.origin}")
+        :ok
+
+      error ->
+        Logger.warning("couldn't stop postgres subscription: #{inspect(error)}")
+        :ok
     end
   end
 

@@ -105,8 +105,7 @@ defmodule Electric.Replication.Postgres.Client do
 
   @spec stop_subscription(connection, String.t()) :: :ok
   def stop_subscription(conn, name) do
-    with {:ok, _, _} <- squery(conn, ~s|ALTER SUBSCRIPTION "#{name}"
-            DISABLE|) do
+    with {:ok, _, _} <- squery(conn, ~s|ALTER SUBSCRIPTION "#{name}" DISABLE|) do
       :ok
     end
   end
