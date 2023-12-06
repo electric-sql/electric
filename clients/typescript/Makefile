@@ -1,5 +1,5 @@
 build_generator:
-	(cd ../../generator && make deps && make build)
+	$(MAKE) -C ../../generator build
 
 deps:
 	pnpm install --frozen-lockfile
