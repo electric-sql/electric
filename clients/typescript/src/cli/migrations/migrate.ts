@@ -242,7 +242,7 @@ async function createPrismaSchema(
 
     generator client {
       provider = "prisma-client-js"
-      output   = "${output}"
+      output   = "${escapePathForString(output)}"
     }
 
     datasource db {
