@@ -1,7 +1,7 @@
 defmodule Electric.Extension.Case.Helpers do
   alias Electric.Postgres.Extension
-
   alias Electric.Replication.Postgres.Client
+
   require ExUnit.Assertions
 
   @doc """
@@ -13,7 +13,7 @@ defmodule Electric.Extension.Case.Helpers do
       test(unquote(message), cxt) do
         tx(
           fn conn ->
-            migrate(conn)
+            if not cxt.proxy?, do: migrate(conn)
 
             cond do
               is_function(unquote(fun), 1) -> unquote(fun).(conn)
@@ -84,62 +84,61 @@ defmodule Electric.Extension.Case.Helpers do
 end
 
 defmodule Electric.Extension.Case do
+  import ExUnit.Callbacks, only: [start_supervised: 1]
+  alias Electric.Postgres.TestConnection
+
   defmacro __using__(opts) do
     case_opts = Keyword.take(opts, [:async])
     extension_opts = Keyword.take(opts, [:proxy])
-    proxy_opts = Keyword.get(extension_opts, :proxy, false)
-    proxy? = proxy_opts not in [false, nil]
 
     proxy_opts =
-      Keyword.put_new(if(is_list(proxy_opts), do: proxy_opts, else: []), :password, "password")
+      case Keyword.get(extension_opts, :proxy) do
+        opts when is_list(opts) -> Keyword.put_new(opts, :password, "password")
+        other -> other
+      end
 
     quote do
       use ExUnit.Case, unquote(case_opts)
 
+      import Electric.Extension.Case, only: [setup_proxy_connection: 1, setup_test_connection: 1]
+      import Electric.Extension.Case.Helpers
+      import Electric.Postgres.TestConnection, only: [setup_replicated_db: 1]
+
       alias Electric.{Postgres, Postgres.Extension}
 
-      import Electric.Extension.Case.Helpers
-
-      setup [:db_connect]
-
-      def db_connect(cxt) do
-        origin = "my-origin"
-
-        if unquote(proxy?) do
-          pg_config = Electric.Postgres.TestConnection.config()
-          conn_config = [origin: origin, connection: pg_config, proxy: unquote(proxy_opts)]
-
-          handler_config = Keyword.get(unquote(proxy_opts), :handler_config, [])
-
-          {:ok, _pid} =
-            start_supervised(
-              {Electric.Postgres.Proxy,
-               Keyword.merge(unquote(proxy_opts),
-                 conn_config: conn_config
-               )}
-            )
-
-          {:ok, _pid} = start_supervised({Extension.SchemaCache, conn_config})
-        end
-
-        {:ok, conn} = start_supervised(Electric.Postgres.TestConnection.childspec(pg_config()))
-
-        {:ok, conn: conn, origin: origin}
-      end
-
-      if unquote(proxy?) do
-        def pg_config do
-          pg_config = Electric.Postgres.TestConnection.config()
-          port = get_in(unquote(proxy_opts), [:listen, :port]) || 65432
-          Keyword.merge(pg_config, port: port)
-        end
+      # When proxy_opts are present, we create a new temporary database, apply internal migrations there and create a
+      # proxy connection to it for tests.
+      # When proxy_opts are missing, a regular connection to the already running test database is created and no
+      # migrations are applied.
+      if unquote(proxy_opts) do
+        setup do: %{proxy_opts: unquote(proxy_opts)}
+        setup [:setup_replicated_db, :setup_proxy_connection]
       else
-        def pg_config do
-          Electric.Postgres.TestConnection.config()
-        end
+        setup :setup_test_connection
       end
-
-      defoverridable pg_config: 0
     end
+  end
+
+  def setup_proxy_connection(cxt) do
+    conn_config = [origin: cxt.origin, connection: cxt.pg_config, proxy: cxt.proxy_opts]
+
+    {:ok, _pid} =
+      start_supervised(
+        {Electric.Postgres.Proxy, Keyword.merge(cxt.proxy_opts, conn_config: conn_config)}
+      )
+
+    proxy_port = get_in(cxt.proxy_opts, [:listen, :port]) || 65432
+    pg_config = Keyword.merge(cxt.pg_config, port: proxy_port)
+
+    {:ok, conn} =
+      start_supervised(TestConnection.childspec(pg_config, :extension_case_proxy_connection))
+
+    %{conn: conn, proxy?: true}
+  end
+
+  def setup_test_connection(_) do
+    pg_config = Electric.Postgres.TestConnection.config()
+    {:ok, conn} = start_supervised(Electric.Postgres.TestConnection.childspec(pg_config))
+    %{origin: "my-origin", conn: conn, proxy?: false}
   end
 end
