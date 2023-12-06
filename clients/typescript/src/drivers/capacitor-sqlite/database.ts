@@ -8,15 +8,6 @@ type OriginalDatabase = SQLiteDBConnection
 // The relevant subset of the SQLitePlugin database client API
 // that we need to ensure the client we're electrifying provides.
 // TODO: verify which functions we actually need.
-export interface Database
-  extends Pick<
-    OriginalDatabase,
-    | 'executeSet'
-    | 'query'
-    | 'run'
-    | 'beginTransaction'
-    | 'commitTransaction'
-    | 'rollbackTransaction'
-  > {
+export interface Database extends Pick<OriginalDatabase, 'executeSet' | 'run'> {
   dbname?: DbName
 }
