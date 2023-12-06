@@ -4,7 +4,7 @@ import browserEnv from '@ikscodes/browser-env'
 browserEnv()
 
 import { DatabaseAdapter } from 'electric-sql/react-native'
-import { MockRegistry } from 'electric-sql/satellite/mock'
+import { MockRegistry } from 'electric-sql/satellite'
 import { Migrator } from 'electric-sql/migrators'
 import { ElectricConfig } from 'electric-sql/config'
 import { SocketFactory } from 'electric-sql/sockets'

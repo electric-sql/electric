@@ -8,9 +8,7 @@ export default function StatusTab({
   const [status, setStatus] = useState('')
 
   useEffect(() => {
-    if (dbName !== undefined) {
-      setStatus(api.getSatelliteStatus(dbName))
-    }
+    setStatus(api.getSatelliteStatus(dbName))
   }, [])
 
   return (

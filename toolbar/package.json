@@ -7,7 +7,7 @@
   "author": "ElectricSQL",
   "license": "Apache-2.0",
   "scripts": {
-    "build": "node builder.js && tsc --emitDeclarationOnly --outDir dist",
+    "build": "rm -rf ./dist && node builder.js && tsc --emitDeclarationOnly --outDir dist && cp ./util.ts ./dist/util.ts",
     "check-styleguide": "prettier --check --loglevel warn .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"

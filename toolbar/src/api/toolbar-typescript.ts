@@ -31,6 +31,6 @@ export class ToolbarTypescript implements ToolbarInterface {
 
   queryDB(dbName: string, statement: Statement): Promise<Row[]> {
     const sat = this.globalRegistry.satellites[dbName]
-    return sat?.adapter.query(statement) ?? Promise.resolve([])
+    return sat?.adapter.query(statement) ?? Promise.reject("Couldn't query satellite")
   }
 }

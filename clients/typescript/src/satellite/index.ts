@@ -35,6 +35,7 @@ import { ShapeSubscription } from './process'
 import { DbSchema } from '../client/model/schema'
 import { QualifiedTablename } from '../util'
 
+export { MockRegistry } from './mock'
 export { SatelliteProcess } from './process'
 export { GlobalRegistry, globalRegistry } from './registry'
 export type { ShapeSubscription } from './process'

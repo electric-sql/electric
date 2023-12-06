@@ -28,65 +28,20 @@ Add the toolbar to your project's `devDependencies` in `package.json`
     }
 ```
 
-In your code add the toolbar after initialising the electric database.
-
-First some imports:
+In your code add the toolbar after initialising the electric database like this.
 
 ```typescript
-// toolbar imports
-import { globalRegistry } from "electric-sql/satellite";
-import addToolbar, { typescriptApi } from '@electric-sql/debug-toolbar'
-import '@electric-sql/debug-toolbar/dist/index.cjs.css'
-```
-
-Then add the toolbar after calling `electrify`:
-
-```typescript
-// Add the debug toolbar
-addToolbar(typescriptApi(globalRegistry))
+import ('@electric-sql/debug-toolbar/util').then(util => {util.addToolbar()});
 ```
 
 This will add the toolbar to the bottom of your window
 
-## Development
+You can wrap this in a conditional statement to only add the toolbar in development eg:
 
-To develop with the toolbar you will need a project with an ElectricSQL database added. 
-You can use one of the example projects such as `examples/web-wa-sqlite`, 
-but you will have to make a few changes to the project's configuration:
-
-Add web-wa-sqlite to the pnpm workspace by adding this line to `pnpm-workspace.yaml`
-
-```yaml
-  - 'examples/web-wa-sqlite
+```typescript
+if (DEBUG_MODE) {
+    import ('@electric-sql/debug-toolbar/util').then(util => {util.addToolbar()});
+}
 ```
 
-Change the `web-wa-sqlite` dev dependencies in `Package.json` to use the local version of the 
-toolbar rather than the published one and add a dependency on `zod`:
-
-```json
-  "devDependencies": {
-    ...
-    "@electric-sql/debug-toolbar":  "workspace:*",
-    ...
-    "zod": "^3.21.1"
-  },
-```
-Run `pnpm install` in the root of this repo to install everthing.
-
-Build the toolbar:
-
-```json
-cd toolbar
-yarn build
-```
-Run the example:
-
-```
-cd ../examples/web-wa-sqlite
-yarn build
-yarn start
-```
-
-You sould now see the local version of the toolbar being used by the app. 
-When you mofify the toolbar you will have to rebuild it for the changes to appear in the app.
 

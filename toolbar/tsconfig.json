@@ -23,5 +23,5 @@
     "strict": true, // Enable all strict type checking options
     "target": "ESNext" // Specify ECMAScript target version
   },
-  "include": ["src/*", "custom.d.ts"]
+  "include": ["src/*"]
 }

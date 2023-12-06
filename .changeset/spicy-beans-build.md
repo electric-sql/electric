@@ -1,5 +1,5 @@
 ---
-"@electric-sql/debug-toolbar": major
+"@electric-sql/debug-toolbar": patch
 "electric-sql": patch
 ---
 

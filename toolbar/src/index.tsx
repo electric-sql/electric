@@ -16,13 +16,16 @@ export type ToolbarProps = {
 
 function ElectricToolbar({ api }: ToolbarProps) {
   const [hidden, setHidden] = useState(true)
-  const [dbNames, setDbNames] = useState([''])
-  const [dbName, setDbName] = useState('')
+  const [dbNames, setDbNames] = useState([""])
+  const [dbName, setDbName] = useState("")
 
   useEffect(() => {
     let names = api.getSatelliteNames()
     setDbNames(names)
-    setDbName(names[0])
+    if (names.length > 0){
+      setDbName(names[0])
+    }
+
   }, [])
 
   function handleClick() {
