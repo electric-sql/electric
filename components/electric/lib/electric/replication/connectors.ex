@@ -120,6 +120,11 @@ defmodule Electric.Replication.Connectors do
     |> Map.new()
   end
 
+  @spec write_to_pg_mode(config()) :: Electric.write_to_pg_mode()
+  def write_to_pg_mode(config) do
+    Keyword.get(config, :write_to_pg_mode, Electric.write_to_pg_mode())
+  end
+
   defp new_map_with_charlists(list) do
     Map.new(list, fn
       {k, v} when is_binary(v) -> {k, String.to_charlist(v)}

@@ -132,7 +132,6 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
     assert {:error, _error} = :epgsql.squery(conn, sql4)
   end
 
-  @tag prisma_support: true
   test_tx "ADD column; CREATE INDEX only adds a single migration", fn conn ->
     sql1 =
       "CREATE TABLE public.buttercup (id text PRIMARY KEY, value text)"
@@ -157,7 +156,6 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
     assert {:ok, [_, %{"query" => ^sql3}, %{"query" => ^sql4}]} = Extension.ddl_history(conn)
   end
 
-  @tag prisma_support: true
   test_tx "CREATE INDEX; DROP <electrified> COLUMN", fn conn ->
     sql1 =
       "CREATE TABLE public.buttercup (id text PRIMARY KEY, value text)"

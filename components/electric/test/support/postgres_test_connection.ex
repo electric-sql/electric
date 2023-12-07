@@ -223,9 +223,9 @@ defmodule Electric.Postgres.TestConnection do
     {:ok, schema: schema}
   end
 
-  def childspec(config) do
+  def childspec(config, child_id \\ :epgsql) do
     %{
-      id: :epgsql,
+      id: child_id,
       start: {:epgsql, :connect, [Electric.Utils.epgsql_config(config)]}
     }
   end

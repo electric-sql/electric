@@ -313,10 +313,6 @@ defmodule Electric.Replication.Postgres.SlotServer do
   end
 
   defp send_transaction(tx, pos, state) do
-    Logger.debug(fn ->
-      "Will send #{length(tx.changes)} to subscriber: #{inspect(tx.changes, pretty: true)}"
-    end)
-
     {wal_messages, relations, new_lsn} = convert_to_wal(tx, state)
     send_all(wal_messages, state.send_fn, state.telemetry_span)
 
@@ -410,7 +406,12 @@ defmodule Electric.Replication.Postgres.SlotServer do
     {messages, final_lsn} =
       changes
       |> Enum.flat_map(&preprocess_changes(state, &1, relations, {ts, origin}))
-      |> tap(&Logger.debug("Messages after preprocessing: #{inspect(&1, pretty: true)}"))
+      |> tap(
+        &Logger.debug(fn ->
+          "Processed tx changes (# pre: #{length(changes)}, # post: #{length(&1)}): " <>
+            inspect(&1, pretty: true)
+        end)
+      )
       |> Enum.map(&changes_to_wal(&1, relations))
       |> Enum.map_reduce(first_lsn, fn elem, lsn -> {{lsn, elem}, Lsn.increment(lsn)} end)
 

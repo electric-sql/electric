@@ -24,24 +24,35 @@ defmodule Electric.Replication.PostgresConnectorSup do
     Electric.reg(name(origin))
     postgres_producer = Postgres.LogicalReplicationProducer.get_name(origin)
     postgres_producer_consumer = Postgres.MigrationConsumer.name(origin)
+    write_to_pg_mode = Connectors.write_to_pg_mode(conn_config)
+
+    migration_consumer_opts = [
+      producer: postgres_producer,
+      refresh_subscription: write_to_pg_mode == :logical_replication
+    ]
+
+    writer_config = [conn_config: conn_config, producer: SatelliteCollectorProducer.name()]
 
     children = [
       %{
         id: :postgres_schema_cache,
         start: {SchemaCache, :start_link, [conn_config]}
       },
-      {SatelliteCollectorProducer, name: SatelliteCollectorProducer.name()},
+      {SatelliteCollectorProducer,
+       name: SatelliteCollectorProducer.name(), write_to_pg_mode: write_to_pg_mode},
       %{
         id: :postgres_producer,
         start: {Postgres.LogicalReplicationProducer, :start_link, [conn_config]}
       },
       %{
         id: :postgres_migration_consumer,
-        start:
-          {Postgres.MigrationConsumer, :start_link, [conn_config, [producer: postgres_producer]]}
+        start: {Postgres.MigrationConsumer, :start_link, [conn_config, migration_consumer_opts]}
       },
-      {Postgres.SlotServer,
-       conn_config: conn_config, producer: SatelliteCollectorProducer.name()},
+      if write_to_pg_mode == :logical_replication do
+        {Postgres.SlotServer, writer_config}
+      else
+        {Postgres.Writer, writer_config}
+      end,
       # Uses a globally registered name
       {CachedWal.EtsBacked, subscribe_to: [{postgres_producer_consumer, []}]},
       {Proxy, conn_config: conn_config}

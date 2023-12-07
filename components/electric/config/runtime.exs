@@ -15,6 +15,7 @@ default_pg_proxy_port = "65432"
 default_listen_on_ipv6 = "false"
 default_database_require_ssl = "false"
 default_database_use_ipv6 = "false"
+default_write_to_pg_mode = "logical_replication"
 
 ###
 
@@ -78,12 +79,19 @@ config :logger, :console,
 pg_server_port = get_env_int.("LOGICAL_PUBLISHER_PORT", default_pg_server_port)
 listen_on_ipv6? = get_env_bool.("ELECTRIC_USE_IPV6", default_listen_on_ipv6)
 
+write_to_pg_mode =
+  case System.get_env("ELECTRIC_WRITE_TO_PG_MODE", default_write_to_pg_mode) do
+    "logical_replication" -> :logical_replication
+    "direct_writes" -> :direct_writes
+  end
+
 config :electric,
   # Used in telemetry, and to identify the server to the client
   instance_id: System.get_env("ELECTRIC_INSTANCE_ID", Electric.Utils.uuid4()),
   http_port: get_env_int.("HTTP_PORT", default_http_server_port),
   pg_server_port: pg_server_port,
-  listen_on_ipv6?: listen_on_ipv6?
+  listen_on_ipv6?: listen_on_ipv6?,
+  write_to_pg_mode: write_to_pg_mode
 
 config :electric, Electric.Replication.Postgres,
   pg_client: Electric.Replication.Postgres.Client,
@@ -127,8 +135,10 @@ if config_env() == :prod do
     |> Keyword.put(:replication, "database")
 
   pg_server_host =
-    System.get_env("LOGICAL_PUBLISHER_HOST") ||
-      raise("Required environment variable LOGICAL_PUBLISHER_HOST is not set")
+    if write_to_pg_mode == :logical_replication do
+      System.get_env("LOGICAL_PUBLISHER_HOST") ||
+        raise("Required environment variable LOGICAL_PUBLISHER_HOST is not set")
+    end
 
   proxy_port = get_env_int.("PG_PROXY_PORT", default_pg_proxy_port)
 

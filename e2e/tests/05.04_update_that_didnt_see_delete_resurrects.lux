@@ -43,11 +43,15 @@
     ?$eprompt
 
 [shell electric]
-    # Wait for it to be sent to PG
-    ??pg_slot=postgres_1 [debug] Will send 2 to subscriber:
-    ?pg_slot=postgres_1 \[debug\] Sending 8 messages to the subscriber: from #Lsn<0/[0-9A-F]+> to (#Lsn<0/33>)
-    [my expected_lsn=$1]
-    ??<StatusUpdate> [written_wal: $expected_lsn
+    # Check that the transaction made it to Postgres.SlotServer / Postgres.Writer
+    ??=postgres_1 [debug] Processed tx changes (# pre:
+    ??"content_b" => "new value"
+
+    # Wait for the roundtrip of the insert back to Electric
+    ?component=CachedWal.EtsBacked \[debug\] Saving transaction \d+ at \d+/[\dA-F]+ with changes \
+      \[%Electric.Replication.Changes.NewRecord\{\
+          relation: \{"public", "entries"\}, \
+          record: %\{"content" => "updated value", "content_b" => "new value", "id" => "00000000-0000-0000-0000-000000000000"\}
 
 [shell pg_1]
     # We expect for the row to get "resurrected", updating only modified columns

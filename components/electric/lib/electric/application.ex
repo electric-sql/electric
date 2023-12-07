@@ -14,11 +14,20 @@ defmodule Electric.Application do
       Electric.Postgres.Proxy.SASL.SCRAMLockedCache,
       Electric.Satellite.SubscriptionManager,
       Electric.Satellite.ClientManager,
-      Electric.Replication.Connectors,
-      {ThousandIsland,
-       [port: pg_server_port(), handler_module: Electric.Replication.Postgres.TcpServer] ++
-         listener_opts()}
+      Electric.Replication.Connectors
     ]
+
+    children =
+      children ++
+        if Electric.write_to_pg_mode() == :logical_replication do
+          [
+            {ThousandIsland,
+             [port: pg_server_port(), handler_module: Electric.Replication.Postgres.TcpServer] ++
+               listener_opts()}
+          ]
+        else
+          []
+        end
 
     children =
       children ++
@@ -41,7 +50,9 @@ defmodule Electric.Application do
     |> Enum.each(fn {name, config} ->
       Connectors.start_connector(
         PostgresConnector,
-        Keyword.put(config, :origin, to_string(name))
+        config
+        |> Keyword.put(:origin, to_string(name))
+        |> Keyword.put(:write_to_pg_mode, Electric.write_to_pg_mode())
       )
     end)
 

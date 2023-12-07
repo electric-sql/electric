@@ -107,12 +107,19 @@ defmodule Electric.Replication.PostgresConnectorMng do
   end
 
   def handle_continue(:subscribe, %State{} = state) do
-    case start_subscription(state) do
-      :ok ->
-        {:noreply, %State{state | state: :ready}}
+    case Connectors.write_to_pg_mode(state.config) do
+      :logical_replication ->
+        case start_subscription(state) do
+          :ok ->
+            {:noreply, %State{state | state: :ready}}
 
-      {:error, _} ->
-        {:noreply, schedule_retry(:subscribe, state)}
+          {:error, _} ->
+            {:noreply, schedule_retry(:subscribe, state)}
+        end
+
+      :direct_writes ->
+        :ok = stop_subscription(state)
+        {:noreply, %State{state | state: :ready}}
     end
   end
 
@@ -179,11 +186,21 @@ defmodule Electric.Replication.PostgresConnectorMng do
     end
   end
 
-  def initialize_postgres(%State{origin: origin, repl_config: repl_config, config: config}) do
-    publication = Map.fetch!(repl_config, :publication)
-    subscription = Map.fetch!(repl_config, :subscription)
-    electric_connection = Map.fetch!(repl_config, :electric_connection)
+  defp stop_subscription(%State{conn_config: conn_config, repl_config: rep_conf} = state) do
+    case Client.with_conn(conn_config, fn conn ->
+           Client.stop_subscription(conn, rep_conf.subscription)
+         end) do
+      :ok ->
+        Logger.notice("subscription stopped for #{state.origin}")
+        :ok
 
+      {:error, {:error, :error, code, _reason, description, _c_stacktrace}} ->
+        Logger.warning("couldn't stop postgres subscription: #{description} (code: #{code})")
+        :ok
+    end
+  end
+
+  def initialize_postgres(%State{origin: origin, repl_config: repl_config, config: config}) do
     # get a config configuration without the replication parameter set
     # so that we can use extended query syntax
     conn_config = Connectors.get_connection_opts(config, replication: false)
@@ -194,8 +211,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
 
     Client.with_conn(conn_config, fn conn ->
       with {:ok, versions} <- Extension.migrate(conn),
-           {:ok, _} <-
-             Client.create_subscription(conn, subscription, publication, electric_connection),
+           :ok <- maybe_create_subscription(conn, config, repl_config),
            {:ok, oids} <- Client.query_oids(conn),
            :ok <- OidDatabase.save_oids(oids) do
         Logger.info(
@@ -205,5 +221,23 @@ defmodule Electric.Replication.PostgresConnectorMng do
         :ok
       end
     end)
+  end
+
+  defp maybe_create_subscription(conn, config, replication_config) do
+    subscription = Map.fetch!(replication_config, :subscription)
+    publication = Map.fetch!(replication_config, :publication)
+    electric_connection = Map.fetch!(replication_config, :electric_connection)
+
+    case Connectors.write_to_pg_mode(config) do
+      :logical_replication ->
+        result = Client.create_subscription(conn, subscription, publication, electric_connection)
+
+        with {:ok, _name} <- result do
+          :ok
+        end
+
+      :direct_writes ->
+        :ok
+    end
   end
 end

@@ -317,7 +317,8 @@ defmodule Electric.Postgres.Extension do
       Migrations.Migration_20230921161418_ProxyCompatibility,
       Migrations.Migration_20231009121515_AllowLargeMigrations,
       Migrations.Migration_20231010123118_AddPriorityToVersion,
-      Migrations.Migration_20231016141000_ConvertFunctionToProcedure
+      Migrations.Migration_20231016141000_ConvertFunctionToProcedure,
+      Migrations.Migration_20231206130400_ConvertReplicaTriggersToAlways
     ]
   end
 
