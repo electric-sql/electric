@@ -81,7 +81,7 @@ const LocalFirst = () => {
 }
 
 // The client-first component talks to the backend using an API client and
-// manually updates the local state (iff the request is successful).
+// manually updates the local state (if the request is successful).
 const CloudFirst = () => {
   const { demo } = useDemoContext()
   const [ results, setResults ] = useState()
