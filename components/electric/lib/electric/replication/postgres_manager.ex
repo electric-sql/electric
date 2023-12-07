@@ -194,8 +194,8 @@ defmodule Electric.Replication.PostgresConnectorMng do
         Logger.notice("subscription stopped for #{state.origin}")
         :ok
 
-      error ->
-        Logger.warning("couldn't stop postgres subscription: #{inspect(error)}")
+      {:error, {:error, :error, code, _reason, description, _c_stacktrace}} ->
+        Logger.warning("couldn't stop postgres subscription: #{description} (code: #{code})")
         :ok
     end
   end
