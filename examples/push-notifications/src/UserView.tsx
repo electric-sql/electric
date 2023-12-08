@@ -4,6 +4,7 @@ import { useToast } from "./toast/ToastProvider"
 import { useCallback, useEffect } from "react";
 import { genUUID } from "electric-sql/util";
 import { NotificationTemplates, Notifications, Users } from "./generated/client";
+import { templateString } from "./template_utils";
 
 
 export const UserView = ({ user } : { user: Users }) => {
@@ -38,6 +39,24 @@ export const UserView = ({ user } : { user: Users }) => {
     }
   }))
 
+  
+  const sayHi = useCallback(async (targetUserId: string) => {
+    const template : NotificationTemplates = await db.notification_templates.findFirst({
+      where: {
+        type: 'hello'
+      }
+    });
+    db.notifications.create({
+      data: {
+        notification_id: genUUID(),
+        template_id: template.template_id,
+        source_id: user.user_id,
+        target_id: targetUserId,
+        created_at: Date.now(),
+      }
+    })
+  }, [user.user_id]);
+
   useEffect(() => {
     if (!notification) return;
     const template = notification.notification_templates as NotificationTemplates;
@@ -55,32 +74,19 @@ export const UserView = ({ user } : { user: Users }) => {
 
       showToast({
         title: template.title ?? undefined,
-        message: template.message,
+        message: templateString(template.message, {
+          first_name: user.first_name,
+          last_name: user.last_name
+        }),
         action: template.action != null ? {
           cta: template.action,
-          actionFn: () => {},
+          actionFn: () => sayHi(notification.source_id),
         } : undefined,
       })
     }, 100)
     return () => clearTimeout(timer);
   }, [notification?.notification_id])
 
-  const sayHi = useCallback(async (targetUserId: string) => {
-    const template : NotificationTemplates = await db.notification_templates.findFirst({
-      where: {
-        type: 'hello'
-      }
-    });
-    db.notifications.create({
-      data: {
-        notification_id: genUUID(),
-        template_id: template.template_id,
-        source_id: user.user_id,
-        target_id: targetUserId,
-        created_at: Date.now(),
-      }
-    })
-  }, [user.user_id]);
 
   return (
     <div className="flex flex-col my-8">
