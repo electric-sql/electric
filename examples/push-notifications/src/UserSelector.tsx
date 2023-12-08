@@ -9,29 +9,68 @@ import { UserView } from "./UserView";
 
 export const UserSelector = () => {
   const { db } = useElectric()!
-  const { results } = useLiveQuery(db.users.liveMany({
+  const { results: users = [] } = useLiveQuery<Users[]>(db.users.liveMany({
     orderBy: { first_name: 'asc' }
   }))
-  const users : Users[] = results || [];
+
+  const [ selectedUserId, setSelectedUserId] = useState(users[0]?.user_id)
+  const { results: undeliveredNotifications = [] } = useLiveQuery(db.notifications.liveMany({
+    where: {
+      target_id: selectedUserId,
+      delivered_at: null
+    }
+  }));
+
+
   useEffect(() => {
     const syncItems = async () => {
       // Resolves when the shape subscription has been established.
-      const shape = await db.users.sync()
+      db.users.sync()
+      const shapes = await Promise.all([
+        db.users.sync(),
+        db.notifications.sync({ include: {
+          notification_templates: true,
+          users: true,
+        }})
+      ]);
+      
 
       // Resolves when the data has been synced into the local database.
-      await shape.synced
+      await Promise.all(shapes.map((s) => s.synced));
+
+
     }
 
     syncItems()
   }, [])
 
-
-  const [ selectedUserId, setSelectedUserId] = useState(users[0]?.user_id)
   useEffect(() => {
     if (selectedUserId === undefined) {
       setSelectedUserId(users[0]?.user_id)
+      return;
     }
+    
+    db.notifications.findMany({
+      where: {
+        target_id: selectedUserId,
+        delivered_at: null
+      }
+    })
   }, [users])
+
+  useEffect(() => {
+    if (selectedUserId == null) return;
+    db.notifications.updateMany({
+      data: {
+        delivered_at: Date.now(),
+      },
+      where: {
+        delivered_at: null,
+        target_id: selectedUserId,
+      }
+    })
+  }, [undeliveredNotifications])
+
 
 
   return (
