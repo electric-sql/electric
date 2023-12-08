@@ -19,7 +19,14 @@ export const UserView = ({ user } : { user: Users }) => {
       created_at: 'asc'
     },
     include: {
-      notification_templates: true
+      notification_templates: true,
+      users: {
+        select: {
+          user_id: true,
+          first_name: true,
+          last_name: true
+        }
+      }
     }
   }))
 
@@ -33,7 +40,6 @@ export const UserView = ({ user } : { user: Users }) => {
       first_name: 'asc'
     },
     select: {
-      user_id: true,
       first_name: true,
       last_name: true
     }
@@ -60,6 +66,7 @@ export const UserView = ({ user } : { user: Users }) => {
   useEffect(() => {
     if (!notification) return;
     const template = notification.notification_templates as NotificationTemplates;
+    const sendingUser = notification.users as Users;
     const notificationData = notification as Notifications;
 
     const timer = setTimeout(async () => {
@@ -75,8 +82,8 @@ export const UserView = ({ user } : { user: Users }) => {
       showToast({
         title: template.title ?? undefined,
         message: templateString(template.message, {
-          first_name: user.first_name,
-          last_name: user.last_name
+          first_name: sendingUser.first_name,
+          last_name: sendingUser.last_name
         }),
         action: template.action != null ? {
           cta: template.action,
