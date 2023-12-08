@@ -9,13 +9,15 @@ export type ToastId = string;
 export interface ToastProps {
   title?: string;
   message: string;
-  durationInMs: number;
+  durationInMs?: number;
   action?: ToastAction;
-  dismissable: boolean;
+  dismissable?: boolean;
 }
 
 export interface ToastData extends ToastProps {
   id: ToastId;
+  durationInMs: number;
+  dismissable: boolean;
 }
 
 export interface ToastAction {

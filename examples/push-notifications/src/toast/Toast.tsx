@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ToastData } from "./types.toast";
 
 import './Toast.css';
@@ -7,11 +7,10 @@ interface ToastComponentProps extends ToastData {
   onDismiss: () => void
 }
 
-const TOAST_HIDE_ANIMATION_DURATION_MS = 200;
+const TOAST_HIDE_ANIMATION_DURATION_MS = 150;
 
 
 export const Toast = ({
-  id,
   title,
   message,
   action,
@@ -19,12 +18,19 @@ export const Toast = ({
   durationInMs,
   onDismiss,
 }: ToastComponentProps) => {
+  const dismissFn = useRef(onDismiss);
   const [hiding, setHiding] = useState(false);
+
   const onAnimatedDismiss = () => setHiding(true);
   const onAction = useCallback(() => {
     action?.actionFn();
     onAnimatedDismiss();
   }, [action?.actionFn, onAnimatedDismiss]);
+
+  // keep reference to most upd to date callback
+  useEffect(() => {
+    dismissFn.current = onDismiss;
+  }, [onDismiss]);
 
   useEffect(() => {
     if (!hiding) {
@@ -35,8 +41,8 @@ export const Toast = ({
       const timer = setTimeout(onAnimatedDismiss, maxDuration);
       return () => clearTimeout(timer);
     }
-
-    const timer = setTimeout(onDismiss, TOAST_HIDE_ANIMATION_DURATION_MS);
+    
+    const timer = setTimeout(() => dismissFn.current(), TOAST_HIDE_ANIMATION_DURATION_MS);
     return () => clearTimeout(timer)
   }, [hiding])
 

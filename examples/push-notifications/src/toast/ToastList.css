@@ -1,0 +1,16 @@
+.toastList {
+  @apply fixed bottom-0 left-0 right-0;
+  @apply flex flex-col items-center;
+  @apply overflow-auto max-h-52;
+
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.toastList > * {
+  @apply mb-4;
+}
+
+.toastList::-webkit-scrollbar {
+  display: none;
+}
