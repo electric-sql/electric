@@ -1,5 +1,19 @@
 .toastContainer {
-  @apply flex flex-row w-full max-w-xs p-4 text-gray-500 bg-white rounded-lg shadow dark:bg-gray-800 dark:text-gray-400
+  @apply pointer-events-auto;
+  @apply flex flex-row w-full items-center;
+  @apply max-w-xs p-4 text-gray-500 bg-white rounded-lg shadow;
+  @apply dark:bg-gray-800 dark:text-gray-400;
+
+  @apply h-0 scale-x-75 opacity-0;
+  @apply transition-all;
+}
+
+.toastContainer.show {
+  @apply h-16 scale-x-100 origin-top opacity-100;
+}
+
+.toastContainer.hide {
+  @apply scale-x-50 opacity-0;
 }
 
 .toastContainer h2 {

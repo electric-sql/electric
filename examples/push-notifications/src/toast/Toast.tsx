@@ -19,9 +19,10 @@ export const Toast = ({
   onDismiss,
 }: ToastComponentProps) => {
   const dismissFn = useRef(onDismiss);
-  const [hiding, setHiding] = useState(false);
+  const [show, setShow] = useState(false);
+  const [hide, setHide] = useState(false);
 
-  const onAnimatedDismiss = () => setHiding(true);
+  const onAnimatedDismiss = () => setHide(true);
   const onAction = useCallback(() => {
     action?.actionFn();
     onAnimatedDismiss();
@@ -33,7 +34,8 @@ export const Toast = ({
   }, [onDismiss]);
 
   useEffect(() => {
-    if (!hiding) {
+    if (!hide) {
+      setShow(true);
       const maxDuration = Math.max(
         durationInMs - TOAST_HIDE_ANIMATION_DURATION_MS,
         TOAST_HIDE_ANIMATION_DURATION_MS
@@ -44,10 +46,10 @@ export const Toast = ({
     
     const timer = setTimeout(() => dismissFn.current(), TOAST_HIDE_ANIMATION_DURATION_MS);
     return () => clearTimeout(timer)
-  }, [hiding])
+  }, [hide])
 
   return (
-    <div className="toastContainer">
+    <div className={"toastContainer" + (show ? " show" : "") + (hide ? " hide" : "")}>
       <div className="contentContainer">
           {title !== undefined ? <h2>{title}</h2> : null }
           <p>{message}</p>

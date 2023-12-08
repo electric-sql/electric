@@ -1,7 +1,8 @@
 .toastList {
+  @apply pointer-events-none;
   @apply fixed bottom-0 left-0 right-0;
-  @apply flex flex-col items-center;
-  @apply overflow-auto max-h-52;
+  @apply flex flex-col items-center justify-start;
+  @apply overflow-auto max-h-52 h-52;
 
   scrollbar-width: none;
   -ms-overflow-style: none;
