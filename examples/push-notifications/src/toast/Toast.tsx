@@ -34,8 +34,12 @@ export const Toast = ({
   }, [onDismiss]);
 
   useEffect(() => {
+    if (!hide && !show) {
+      const frame = requestAnimationFrame(() => setShow(true));
+      return () => cancelAnimationFrame(frame);
+    }
+
     if (!hide) {
-      setShow(true);
       const maxDuration = Math.max(
         durationInMs - TOAST_HIDE_ANIMATION_DURATION_MS,
         TOAST_HIDE_ANIMATION_DURATION_MS
@@ -46,7 +50,7 @@ export const Toast = ({
     
     const timer = setTimeout(() => dismissFn.current(), TOAST_HIDE_ANIMATION_DURATION_MS);
     return () => clearTimeout(timer)
-  }, [hide])
+  }, [hide, show])
 
   return (
     <div className={"toastContainer" + (show ? " show" : "") + (hide ? " hide" : "")}>
