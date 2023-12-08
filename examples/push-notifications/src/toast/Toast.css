@@ -1,0 +1,19 @@
+.toastContainer {
+  @apply flex flex-row w-full max-w-xs p-4 text-gray-500 bg-white rounded-lg shadow dark:bg-gray-800 dark:text-gray-400
+}
+
+.toastContainer h2 {
+  @apply mb-1 text-sm font-semibold text-gray-900 dark:text-white
+}
+
+.toastContainer p {
+  @apply text-sm font-normal
+}
+
+.toastContainer .contentContainer {
+  @apply flex flex-1 flex-col items-start justify-center
+}
+
+.toastContainer .dismissBtn {
+  @apply text-gray-300 hover:text-gray-400 font-bold py-2 px-4 rounded-l
+}
