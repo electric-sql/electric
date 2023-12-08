@@ -10,7 +10,7 @@ const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
 
 export { useElectric };
 
-export function ElectricWrapper (props: { children: ReactElement }) {
+export function ElectricWrapper (props: { children: ReactElement[] | ReactElement }) {
   const [ electric, setElectric ] = useState<Electric>()
 
   useEffect(() => {

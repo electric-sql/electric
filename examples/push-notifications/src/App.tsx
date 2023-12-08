@@ -3,7 +3,10 @@ import './App.css'
 import './style.css'
 
 import { ElectricWrapper } from './ElectricWrapper'
-import { UserPicker } from './UserPicker'
+import { Toast } from './toast/Toast'
+import { ToastProvider } from './toast/ToastProvider'
+import { UserView } from './UserView'
+import { UserSelector } from './UserSelector'
 
 export default function App() {
 
@@ -12,7 +15,9 @@ export default function App() {
       <header className="App-header">
         <img src={logo.toString()} className="App-logo" alt="logo" />
         <ElectricWrapper>
-          <UserPicker />
+          <ToastProvider>
+            <UserSelector />
+          </ToastProvider>
         </ElectricWrapper>
       </header>
     </div>
