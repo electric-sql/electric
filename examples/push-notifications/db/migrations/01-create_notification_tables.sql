@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS notifications (
   "delivered_at" TIMESTAMPTZ,
   "read_at" TIMESTAMPTZ,
   FOREIGN KEY("source_id") REFERENCES users("user_id") ON DELETE CASCADE,
-  FOREIGN KEY("source_id") REFERENCES users("user_id") ON DELETE CASCADE
+  FOREIGN KEY("target_id") REFERENCES users("user_id") ON DELETE CASCADE
 );
 
 -- ⚡
