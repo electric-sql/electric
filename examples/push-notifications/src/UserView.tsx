@@ -6,12 +6,12 @@ import { genUUID } from "electric-sql/util";
 import { NotificationTemplates, Notifications, Users } from "./generated/client";
 
 
-export const UserView = ({ userId } : { userId: string }) => {
+export const UserView = ({ user } : { user: Users }) => {
   const { showToast } = useToast();
   const { db } = useElectric()!;
   const { results: notification } = useLiveQuery(db.notifications.liveFirst({
     where: {
-      source_id: userId,
+      target_id: user.user_id,
       read_at: null,
     },
     orderBy: {
@@ -25,7 +25,7 @@ export const UserView = ({ userId } : { userId: string }) => {
   const { results: otherUsers = [] } = useLiveQuery<Users[]>(db.users.liveMany({
     where: {
       user_id: {
-        not: userId
+        not: user.user_id
       },
     },
     orderBy: {
@@ -75,12 +75,12 @@ export const UserView = ({ userId } : { userId: string }) => {
       data: {
         notification_id: genUUID(),
         template_id: template.template_id,
-        source_id: userId,
+        source_id: user.user_id,
         target_id: targetUserId,
         created_at: Date.now(),
       }
     })
-  }, [userId]);
+  }, [user.user_id]);
 
   return (
     <div className="flex flex-col my-8">

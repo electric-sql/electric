@@ -2,7 +2,7 @@ import { useLiveQuery } from "electric-sql/react";
 import { useElectric } from "./ElectricWrapper";
 import { useToast } from "./toast/ToastProvider"
 import { Users } from "./generated/client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { TabPicker } from "./TabPicker";
 import { UserView } from "./UserView";
 
@@ -72,6 +72,12 @@ export const UserSelector = () => {
   }, [undeliveredNotifications])
 
 
+  const selectedUser = useMemo(
+    () => users.find((user) => user.user_id == selectedUserId),
+    [selectedUserId]
+  );
+
+
 
   return (
     <div>
@@ -85,7 +91,11 @@ export const UserSelector = () => {
         selected={selectedUserId}
         onSelected={(key) => setSelectedUserId(key as string)}
         />
-      <UserView userId={selectedUserId} />
+      {
+        selectedUser !== undefined ?
+          <UserView user={selectedUser} />
+          : null
+      }
     </div>
   )
 
