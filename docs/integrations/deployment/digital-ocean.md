@@ -11,11 +11,19 @@ Make sure you have a DigitalOcean account with billing activated before you foll
 
 ## Running Electric on App Platform
 
+App Platform is a Platform-as-a-Service (PaaS) offering that allows developers to publish code directly to DigitalOcean servers without worrying about the underlying infrastructure.
+
 ### Deploying Electric
 
-Use our 1-click "Deploy to DigitalOcean" button to run Electric in the cloud in no time.
+Before deploying Electric, make sure you have a Postgres database with logical replication enabled hosted somewhere where Electric will be able to connect to it. Retrieve your database's connection URI with password included and use it as the value of the `DATABASE_URL` variable when customizing the app.
 
-Navigate to https://github.com/electric-sql/electric/tree/deploy-to-do#quick-links and click on the "Deploy to DigitalOcean" button. You'll be taken to DigitalOcean's Create App wizard where you'll be able to make a few adjustments to the basic app template.
+Click on the "Deploy to DO" button below to be taken to DigitalOcean's Create App wizard.
+
+<div style={{display: "flex", "justify-content": "center"}}>
+
+[![Deploy to DO](https://www.deploytodo.com/do-btn-white.svg)](https://cloud.digitalocean.com/apps/new?repo=https://github.com/electric-sql/deploy-to-do/tree/service-only)
+
+</div>
 
 ![Create App: Resources](./digital-ocean/create-app/resources.png)
 
@@ -66,7 +74,7 @@ Let's see how to set up a client app to connect to the Electric sync service we'
 
 #### Apply migrations
 
-Apps running on DigitalOcean's App Platform are only allowed to listen on a single public HTTP port. In order to connect to the migrations proxy that runs inside Electric, we need to start a local helper server that will tunnel TCP traffic over HTTP between a local Postgres client and the migrations proxy.
+Apps running on DigitalOcean's App Platform can only accept HTTP/HTTPS connections. In order to connect to the migrations proxy that runs inside Electric, we need to start a local server that will tunnel TCP traffic over HTTP between a local Postgres client and the migrations proxy.
 
 ```shell
 $ npx electric-sql proxy-tunnel \
@@ -233,7 +241,7 @@ Save the following contents into a file called `compose.yaml`, changing the valu
 version: "3.1"
 services:
   electric:
-    image: electricsql/electric:canary
+    image: electricsql/electric
     environment:
       DATABASE_URL: "postgresql://postgres:******@example.com/postgres"
       PG_PROXY_PASSWORD: "******"
@@ -282,7 +290,7 @@ $ curl http://167.99.132.206/api/status
 Connection to Postgres is up!
 ```
 
-Unlike the DigitalOcean app we deployed above which could only listen on a single public HTTP port, a Droplet is just a virtual server that may have any number of ports open. This allows us to connect to the Electric proxy directly without having to run a local tunnel:
+Unlike the DigitalOcean app we deployed above which could only listen on standard HTTP/HTTPS ports, a Droplet is just a virtual server that may have any number of ports open. This allows us to connect to the Electric proxy directly without having to run a local tunnel:
 
 ```shell
 $ psql postgresql://postgres:******@167.99.132.206:65432/postgres
