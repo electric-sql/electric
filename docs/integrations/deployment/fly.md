@@ -34,8 +34,8 @@ app = "electric-on-fly-test-app"
 [env]
   AUTH_MODE = "insecure"
   DATABASE_URL = "postgresql://..."
-  PG_PROXY_PASSWORD = "proxy_password"
   ELECTRIC_WRITE_TO_PG_MODE = "direct_writes"
+  PG_PROXY_PASSWORD = "proxy_password"
 
 [http_service]
   internal_port = 5133
@@ -45,9 +45,9 @@ app = "electric-on-fly-test-app"
   protocol = "tcp"
   internal_port = 65432
 
-[[services.ports]]
-  port = 65432
-  handlers = ["pg_tls"]
+  [[services.ports]]
+    port = 65432
+    handlers = ["pg_tls"]
 ```
 
 ### Deploy!
