@@ -15,6 +15,12 @@ The environment variables used by Electric are described in <DocPageLink path="a
 
 As a quick example, let's create a new Fly app to run Electric and connect it to a third-party database.
 
+### Postgres with logical replication
+
+Before deploying Electric, make sure you have a Postgres database hosted somewhere where Electric will be able to connect to it and that it has logical replication enabled. Many managed hosting providers support logical replication, see <DocPageLink path="usage/installation/postgres#hosting" /> for some options.
+
+Retrieve your database's connection URI with password included and use it as the value of the `DATABASE_URL` variable in the next step.
+
 ### Configure your Fly app
 
 Save the following snippet into a file named `fly.toml` somewhere on your computer, changing the `app` name as you see fit:
