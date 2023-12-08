@@ -5,6 +5,7 @@ const { spawn } = require('child_process')
 
 const fs = require('fs-extra')
 const inlineImage = require('esbuild-plugin-inline-image')
+const postCssPlugin = require('esbuild-style-plugin')
 
 const shouldMinify = process.env.NODE_ENV === 'production'
 const shouldServe = process.env.SERVE === 'true'
@@ -81,7 +82,14 @@ let buildParams = {
     __ELECTRIC_URL__: JSON.stringify(process.env.ELECTRIC_URL ?? 'ws://localhost:5133'),
   },
   external: ["fs", "path"],
-  plugins: [inlineImage()],
+  plugins: [
+    inlineImage(),
+    postCssPlugin({
+      postcss: {
+        plugins: [require('tailwindcss'), require('autoprefixer')],
+      },
+    }),
+  ],
 };
 
 (async () => {
