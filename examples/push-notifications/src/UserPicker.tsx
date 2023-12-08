@@ -33,7 +33,7 @@ export const UserPicker = () => {
 
 
   return (
-    <ul className="flex flex-wrap text-sm font-medium text-center text-gray-500 dark:text-gray-400">
+    <ul className="tabContainer">
     {
       users.map((user: Users, idx) => (
         <li key={user.user_id} className="me-2">
