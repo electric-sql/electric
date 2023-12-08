@@ -1,10 +1,12 @@
 defmodule Electric.Application do
   @moduledoc false
 
+  use Application
+
   alias Electric.Replication.Connectors
   alias Electric.Replication.PostgresConnector
 
-  use Application
+  require Logger
 
   def start(_type, _args) do
     children = [
@@ -43,6 +45,10 @@ defmodule Electric.Application do
           []
         end
 
+    app_vsn = Application.spec(:electric, :vsn)
+    write_to_pg_mode = Electric.write_to_pg_mode()
+    Logger.info("Starting ElectricSQL #{app_vsn} in #{write_to_pg_mode} mode.")
+
     opts = [strategy: :one_for_one, name: Electric.Supervisor]
     {:ok, supervisor} = Supervisor.start_link(children, opts)
 
@@ -52,7 +58,7 @@ defmodule Electric.Application do
         PostgresConnector,
         config
         |> Keyword.put(:origin, to_string(name))
-        |> Keyword.put(:write_to_pg_mode, Electric.write_to_pg_mode())
+        |> Keyword.put(:write_to_pg_mode, write_to_pg_mode)
       )
     end)
 
