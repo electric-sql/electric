@@ -1,7 +1,5 @@
 defmodule Electric.Plug.Router do
   use Plug.Router
-  import Plug.Conn
-  require Logger
 
   plug :match
   plug Plug.Logger
