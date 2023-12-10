@@ -11,14 +11,11 @@ defmodule Electric.Plug.Status do
   get "/" do
     [origin] = PostgresConnector.connectors()
 
-    msg =
-      if :ready == PostgresConnectorMng.status(origin) do
-        "Connection to Postgres is up!"
-      else
-        "Initializing connection to Postgres..."
-      end
-
-    send_resp(conn, 200, msg)
+    if :ready == PostgresConnectorMng.status(origin) do
+      send_resp(conn, 200, "Connection to Postgres is up!")
+    else
+      send_resp(conn, 503, "Initializing connection to Postgres...")
+    end
   end
 
   match _ do
