@@ -20,7 +20,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
       :pg_connector_sup_monitor
     ]
 
-    @type status :: :initialization | :subscribing | :ready
+    @type status :: :initialization | :establishing_repl_conn | :subscribing | :ready
 
     @type t() :: %__MODULE__{
             config: Connectors.config(),
@@ -92,19 +92,39 @@ defmodule Electric.Replication.PostgresConnectorMng do
   end
 
   @impl GenServer
-  def handle_continue(:init, %State{origin: origin} = state) do
+  def handle_continue(:init, state) do
     case initialize_postgres(state) do
       :ok ->
-        {:ok, sup_pid} = PostgresConnector.start_children(state.config)
-        Logger.info("successfully initialized connector #{inspect(origin)}")
+        state = %State{state | status: :establishing_repl_conn}
+        {:noreply, state, {:continue, :establish_repl_conn}}
+
+      error ->
+        Logger.error("Initialization of Postgres state failed with reason: #{inspect(error)}.")
+        {:noreply, schedule_retry(:init, state)}
+    end
+  end
+
+  def handle_continue(:establish_repl_conn, %State{origin: origin} = state) do
+    case PostgresConnector.start_children(state.config) do
+      {:ok, sup_pid} ->
+        Logger.info("Successfully initialized Postgres connector #{inspect(origin)}.")
 
         ref = Process.monitor(sup_pid)
         state = %State{state | status: :subscribing, pg_connector_sup_monitor: ref}
         {:noreply, state, {:continue, :subscribe}}
 
-      error ->
-        Logger.error("initialization for postgresql failed with reason: #{inspect(error)}")
-        {:noreply, schedule_retry(:init, state)}
+      {:error,
+       {{:shutdown,
+         {:failed_to_start_child, :postgres_producer,
+          {:bad_return_value,
+           {:error,
+            {:error, :error, "55006", :object_in_use, "replication slot" <> _ = msg,
+             _c_stacktrace}}}}}, _supervisor_spec}} ->
+        Logger.error(
+          "Initialization of replication connection to Postgres failed with reason: #{msg}. Another instance of Electric appears to be connected to this database."
+        )
+
+        {:noreply, schedule_retry(:establish_repl_conn, state)}
     end
   end
 
@@ -131,12 +151,8 @@ defmodule Electric.Replication.PostgresConnectorMng do
   end
 
   @impl GenServer
-  def handle_info({:timeout, tref, :init}, %State{backoff: {_, tref}} = state) do
-    handle_continue(:init, state)
-  end
-
-  def handle_info({:timeout, tref, :subscribe}, %State{backoff: {_, tref}} = state) do
-    handle_continue(:subscribe, state)
+  def handle_info({:timeout, tref, action}, %State{backoff: {_, tref}} = state) do
+    handle_continue(action, state)
   end
 
   def handle_info(

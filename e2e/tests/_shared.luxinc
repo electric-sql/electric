@@ -20,7 +20,7 @@
         [timeout 5]
         !make start_electric_1
         -$fail_pattern
-        ??successfully initialized connector "postgres_1"
+        ??Successfully initialized Postgres connector "postgres_1"
         [progress setup finished]
 
     [shell postgres_logs]
