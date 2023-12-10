@@ -11,7 +11,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
 
   defmodule State do
     defstruct [
-      :state,
+      :status,
       :conn_config,
       :repl_config,
       :backoff,
@@ -19,6 +19,8 @@ defmodule Electric.Replication.PostgresConnectorMng do
       :config,
       :pg_connector_sup_monitor
     ]
+
+    @type status :: :initialization | :subscribing | :ready
 
     @type t() :: %__MODULE__{
             config: Connectors.config(),
@@ -35,7 +37,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
                 dbname: String.t()
               }
             },
-            state: :init | :subscribe | :ready,
+            status: status,
             pg_connector_sup_monitor: reference | nil
           }
   end
@@ -57,7 +59,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
     Electric.name(__MODULE__, origin)
   end
 
-  @spec status(Connectors.origin()) :: :init | :subscribe | :ready
+  @spec status(Connectors.origin()) :: State.status()
   def status(origin) do
     GenServer.call(name(origin), :status)
   end
@@ -84,7 +86,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
     %State{
       state
       | backoff: {:backoff.init(1000, 10_000), nil},
-        state: :init,
+        status: :initialization,
         pg_connector_sup_monitor: nil
     }
   end
@@ -97,7 +99,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
         Logger.info("successfully initialized connector #{inspect(origin)}")
 
         ref = Process.monitor(sup_pid)
-        state = %State{state | state: :subscribe, pg_connector_sup_monitor: ref}
+        state = %State{state | status: :subscribing, pg_connector_sup_monitor: ref}
         {:noreply, state, {:continue, :subscribe}}
 
       error ->
@@ -111,7 +113,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
       :logical_replication ->
         case start_subscription(state) do
           :ok ->
-            {:noreply, %State{state | state: :ready}}
+            {:noreply, %State{state | status: :ready}}
 
           {:error, _} ->
             {:noreply, schedule_retry(:subscribe, state)}
@@ -119,13 +121,13 @@ defmodule Electric.Replication.PostgresConnectorMng do
 
       :direct_writes ->
         :ok = stop_subscription(state)
-        {:noreply, %State{state | state: :ready}}
+        {:noreply, %State{state | status: :ready}}
     end
   end
 
   @impl GenServer
   def handle_call(:status, _from, state) do
-    {:reply, state.state, state}
+    {:reply, state.status, state}
   end
 
   @impl GenServer
