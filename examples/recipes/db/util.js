@@ -1,7 +1,12 @@
-const fs = require('fs')
-const path = require('path')
-const shell = require('shelljs')
+import fs from 'fs';
+import path from 'path';
+import shell from 'shelljs';
+import { fileURLToPath } from 'url';
+
+
 shell.config.silent = true // don't log output of child processes
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // If we are running the docker compose file,
 // the container running `electric` service will be exposing
@@ -81,8 +86,10 @@ function fetchAppName() {
   return appName
 }
 
-exports.DATABASE_URL = DATABASE_URL
-exports.CONTAINER_DATABASE_URL = CONTAINER_DATABASE_URL
-exports.PUBLIC_DATABASE_URL = PUBLIC_DATABASE_URL
-exports.fetchHostPortElectric = fetchHostPortElectric
-exports.fetchHostProxyPortElectric = fetchHostProxyPortElectric
+export {
+  DATABASE_URL,
+  CONTAINER_DATABASE_URL,
+  PUBLIC_DATABASE_URL,
+  fetchHostPortElectric,
+  fetchHostProxyPortElectric
+}

@@ -1,6 +1,11 @@
-const { DATABASE_URL, PUBLIC_DATABASE_URL } = require('./util.js')
-const { spawn } = require('child_process')
-const process = require('process')
+import { DATABASE_URL, PUBLIC_DATABASE_URL } from './util.js';
+import { spawn } from 'child_process';
+import process from 'process';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 console.info(`Connecting to proxy at ${PUBLIC_DATABASE_URL}`)
 

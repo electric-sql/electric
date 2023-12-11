@@ -5,7 +5,6 @@ import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
-
 const __dirname = path.dirname(__filename);
 
 async function findFirstMatchInFile(regex, file, notFoundError) {
@@ -19,6 +18,7 @@ async function findFirstMatchInFile(regex, file, notFoundError) {
 }
 
 async function fetchConfiguredElectricPort() {
+  return 5133
   const electricPortRegex =   /ws:\/\/localhost:([0-9]+)/
   const builderFile = path.join(__dirname, '..', 'builder.js')
   const port = await findFirstMatchInFile(electricPortRegex, builderFile, 'Could not find current Electric port in builder.js')
@@ -26,6 +26,7 @@ async function fetchConfiguredElectricPort() {
 }
 
 async function fetchConfiguredElectricProxyPort() {
+  return 65432
   const proxyPortRegex = /export ELECTRIC_PROXY_PORT=([0-9]+)/
   const builderFile = path.join(__dirname, '..', 'backend', 'compose', '.envrc')
   const port = await findFirstMatchInFile(proxyPortRegex, builderFile, "Could not find Electric's current proxy port in .envrc")
