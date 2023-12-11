@@ -10,8 +10,11 @@ module.exports = {
     'plugin:react/jsx-runtime'
   ],
   ignorePatterns: [
-    'dist', '.eslintrc.cjs', 'vite.config.ts',
-    'backend', 'db', 'scripts'],
+    'dist', '.eslintrc.cjs',
+    'vite.config.ts', 'tailwind.config.js',
+    'backend', 'db', 'scripts',
+    'src/generated/**'
+  ],
   parser: '@typescript-eslint/parser',
   parserOptions: {
     ecmaVersion: 'latest',
