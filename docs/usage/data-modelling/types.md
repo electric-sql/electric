@@ -46,7 +46,7 @@ You are responsible for ensuring the uniqueness of your primary keys. If you som
 - `jsonb`
 - `uuid`
 
-The authoritative list of supported data types is maintained in the `supported_types()` function in [`components/electric/lib/electric/postgres.ex`](https://github.com/electric-sql/electric/blob/37f3ee4cbf06ef80e80ed8663b420b2bdeb7cb1b/components/electric/lib/electric/postgres.ex#L83-L95).
+The authoritative list of supported data types is maintained in the `supported_types()` function in [`components/electric/lib/electric/postgres.ex`](https://github.com/electric-sql/electric/blob/main/components/electric/lib/electric/postgres.ex#L83-L96).
 
 :::info JSON support
 Electric defaults to a Last-Writer-Wins strategy. For JSON this is across the whole document - updating one attribute in the document counts as the document as a whole being updated. This means that conflicting updates from multiple clients are not merged together, the full state of the last writer will be stored.
