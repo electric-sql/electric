@@ -8,7 +8,7 @@ sidebar_position: 40
 Insecure mode is designed for development or testing. It supports unsigned JWTs that can be generated anywhere, including on the client, as well as signed JWTs which are accepted with no signature verification.
 
 :::warning
-Insure mode is convienient to use in development and testing.  However, you must switch to [Secure mode](./secure.md) before moving into production.
+Insure mode is convienient to use in development and testing. However, you must switch to [Secure mode](./secure.md) before moving into production.
 :::
 
 ## Example
@@ -19,7 +19,7 @@ When starting the Electric server, make the `AUTH_MODE` environment variable wit
 $ docker run -e AUTH_MODE=insecure electric-sql/electric
 ```
 
-Now, all you need to authenticate your client is a JWT with the `user_id` claim. You can use https://token.dev/ to craft a token with static claims and then copy-paste it into your client app. Alternatively, you can use something like the following function to generate JWTs at run time:
+Now, all you need to authenticate your client is a JWT with a `sub` claim (formerly `user_id`). You can use https://token.dev/ to craft a token with static claims and then copy-paste it into your client app. Alternatively, you can use something like the following function to generate JWTs at run time:
 
 ```typescript
 import jwt from 'jsonwebtoken'
@@ -27,7 +27,7 @@ import jwt from 'jsonwebtoken'
 function unsignedJWT(userId: string, customClaims?: object) {
   const claims = customClaims || {}
 
-  return jwt.sign({...claims, user_id: userId}, '', {algorithm: 'none'})
+  return jwt.sign({ ...claims, sub: userId }, '', { algorithm: 'none' })
 }
 ```
 
@@ -68,7 +68,7 @@ In a more realistic scenario, instead of hard-coding a static token, you would g
 
 ## How the server validates auth tokens
 
-The server running in the Insecure auth mode expects a single required claim `user_id` to be included in the token. All other claims are optional. If any of `iat`, `exp`, or `nbf` claims are included, they will be validated according to the JWT specification and so your token will get rejected if any of these standard claims' values are invalid.
+The server running in the Insecure auth mode expects a single required claim `sub` (formerly `user_id`) to be included in the token. All other claims are optional. If any of `iat`, `exp`, or `nbf` claims are included, they will be validated according to the JWT specification and so your token will get rejected if any of these standard claims' values are invalid.
 
 For development purposes, consider omitting standard claims from the token. If that's not possible, set a long expiration for your tokens to avoid the need to recreate them periodically or have a new token generated every time the client app is started.
 

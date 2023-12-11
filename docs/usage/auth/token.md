@@ -7,9 +7,9 @@ Authentication uses JSON Web Tokens, a [standard method](https://tools.ietf.org/
 
 ## Required claims
 
-### `user_id`
+### `sub`
 
-A valid authentication JWT must contain a `user_id` claim. This must be a non-empty string, which should correspond to the primary key UUID of the authenticated app user.
+A valid authentication JWT must contain a `sub` claim (formerly `user_id`). This must be a non-empty string, which should correspond to the primary key UUID of the authenticated app user.
 
 ## Validated claims
 
@@ -25,10 +25,10 @@ So if, in your auth JWT, you provide the following claims:
 
 ```json
 {
-  "user_id": "000",
+  "sub": "000",
   "data": {
     "foo": "bar"
-  } 
+  }
 }
 ```
 
@@ -45,7 +45,7 @@ If you can't put claims that are specific to Electric at the root of your token,
 ```json
 {
   "https://myapp.dev/jwt/claims": {
-    "user_id": "000",
+    "sub": "000",
     "data": {
       "foo": "bar"
     }
