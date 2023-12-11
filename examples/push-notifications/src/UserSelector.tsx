@@ -8,11 +8,16 @@ import { UserView } from "./UserView";
 
 export const UserSelector = () => {
   const { db } = useElectric()!
+  
   const { results: users = [] } = useLiveQuery<Users[]>(db.users.liveMany({
     orderBy: { first_name: 'asc' }
   }))
-
   const [ selectedUserId, setSelectedUserId] = useState(users[0]?.user_id)
+  const selectedUser = useMemo(
+    () => users.find((user) => user.user_id == selectedUserId),
+    [selectedUserId]
+  );
+
   const { results: undeliveredNotifications = [] } = useLiveQuery(db.notifications.liveMany({
     where: {
       target_id: selectedUserId,
@@ -54,24 +59,22 @@ export const UserSelector = () => {
     })
   }, [users])
 
+  // mark any notifications meant for the selected user
+  // as delivered - not read!
   useEffect(() => {
     if (selectedUserId == null) return;
     db.notifications.updateMany({
+      where: {
+        target_id: selectedUserId,
+        delivered_at: null,
+      },
       data: {
         delivered_at: Date.now(),
       },
-      where: {
-        delivered_at: null,
-        target_id: selectedUserId,
-      }
     })
-  }, [undeliveredNotifications])
+  }, [undeliveredNotifications, selectedUserId])
 
 
-  const selectedUser = useMemo(
-    () => users.find((user) => user.user_id == selectedUserId),
-    [selectedUserId]
-  );
 
 
 
