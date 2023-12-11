@@ -2,7 +2,7 @@ import test from 'ava'
 import { parseGenerateArgs } from '../../../src/cli/migrations/handler'
 
 test('generate accepts url to Electric endpoint', (t) => {
-  const url = 'http://127.0.0.1:5133'
+  const url = 'http://localhost:5133'
   const opts = parseGenerateArgs(['--service', url])
   t.deepEqual(opts, {
     service: url,
@@ -10,7 +10,7 @@ test('generate accepts url to Electric endpoint', (t) => {
 })
 
 test('generate accepts url without http prefix to Electric endpoint', (t) => {
-  const url = '127.0.0.1:5133'
+  const url = 'localhost:5133'
   const opts = parseGenerateArgs(['--service', url])
   t.deepEqual(opts, {
     service: 'http://' + url,
@@ -41,7 +41,7 @@ test('generate accepts watch flag with polling interval', (t) => {
 })
 
 test('generate accepts several flags', (t) => {
-  const url = 'http://127.0.0.1:5133'
+  const url = 'http://localhost:5133'
   const path = './src'
   const opts = parseGenerateArgs(['--service', url, '--out', path])
 

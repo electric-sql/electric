@@ -14,7 +14,7 @@ defmodule Satellite.TestWsClient do
   def connect(opts) do
     connection_opts =
       [
-        host: "127.0.0.1",
+        host: "localhost",
         port: 5133,
         protocol: :ws,
         path: "/ws",

@@ -33,7 +33,8 @@ config :electric, Electric.Replication.Connectors,
       # listen opts are ThousandIsland.options()
       # https://hexdocs.pm/thousand_island/ThousandIsland.html#t:options/0
       listen: [
-        port: proxy_port
+        port: proxy_port,
+        transport_options: [:inet6]
       ],
       password: proxy_password,
       log_level: :info

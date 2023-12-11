@@ -66,7 +66,7 @@ This runs active-active replication with Postgres over logical replication and e
 For example to write some data into one of the Postgres instances:
 
 ```sh
-docker exec -it -e PGPASSWORD=password electric_db_a_1 psql -h 127.0.0.1 -U electric -d electric
+docker exec -it -e PGPASSWORD=password electric_db_a_1 psql -h localhost -U electric -d electric
 ```
 
 Note that you can tear down all the containers with:
