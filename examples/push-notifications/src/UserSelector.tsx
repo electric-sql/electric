@@ -1,6 +1,5 @@
 import { useLiveQuery } from "electric-sql/react";
 import { useElectric } from "./ElectricWrapper";
-import { useToast } from "./toast/ToastProvider"
 import { Users } from "./generated/client";
 import { useEffect, useMemo, useState } from "react";
 import { TabPicker } from "./TabPicker";
@@ -25,7 +24,6 @@ export const UserSelector = () => {
   useEffect(() => {
     const syncItems = async () => {
       // Resolves when the shape subscription has been established.
-      db.users.sync()
       const shapes = await Promise.all([
         db.users.sync(),
         db.notifications.sync({ include: {
@@ -37,8 +35,6 @@ export const UserSelector = () => {
 
       // Resolves when the data has been synced into the local database.
       await Promise.all(shapes.map((s) => s.synced));
-
-
     }
 
     syncItems()

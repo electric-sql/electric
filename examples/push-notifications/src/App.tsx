@@ -9,7 +9,6 @@ import { UserView } from './UserView'
 import { UserSelector } from './UserSelector'
 
 export default function App() {
-
   return (
     <div className="App">
       <header className="App-header">
