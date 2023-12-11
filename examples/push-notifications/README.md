@@ -12,9 +12,19 @@
   </picture>
 </a>
 
-# Welcome to your ElectricSQL app!
+# ElectricSQL - notifications example
 
-This is a web application using ElectricSQL in the browser with [wa-sqlite](https://electric-sql.com/docs/integrations/drivers/web/wa-sqlite).
+This is a web application using ElectricSQL in the browser with [wa-sqlite](https://electric-sql.com/docs/integrations/drivers/web/wa-sqlite), demonstrating how a notification system for activities between users could be implemented with a thin schema and a few components.
+
+
+## Instructions
+
+Clone the [electric-sql/electric](https://github.com/electric-sql/electric) mono-repo and change directory into this example folder:
+
+```sh
+git clone https://github.com/electric-sql/electric
+cd electric/examples/push-notifications
+```
 
 ## Pre-reqs
 
@@ -72,7 +82,9 @@ Open [localhost:3001](http://localhost:3001) in your web browser.
 
 ## Develop
 
-`./src/Example.tsx` has the main example code. For more information see the:
+The components `./src/UserSelector.tsx` and `./src/UserView.tsx` contain the main notification related code, along with the database schema defined in `./db/migrations/01-create_notification_tables.sql`. Subsequent migrations only add sample data for the purpose of this example application.
+
+For more information see the:
 
 - [Documentation](https://electric-sql.com/docs)
 - [Quickstart](https://electric-sql.com/docs/quickstart)
