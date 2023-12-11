@@ -90,7 +90,7 @@ The Electric application is configured using environment variables. Everything t
 | `LOGICAL_PUBLISHER_PORT` | `5433`     | Port number to use for reverse connections from Postgres.                                                                                                                                                                                                                                                                                                                                     |
 | `HTTP_PORT`              | `5133`     | Port for HTTP connections. Includes client websocket connections on `/ws`, and other functions on `/api`.                                                                                                                                                                                                                                                                                     |
 |                          |            |                                                                                                                                                                                                                                                                                                                                                                                               |
-| `PG_PROXY_PORT`          | `65432`    | Port number for connections to the [Postgres migration proxy](https://electric-sql.com/docs/usage/data-modelling/migrations).                                                                                                                                                                                                                                                                 |
+| `PG_PROXY_PORT`          | `65432`    | <p>Port number for connections to the [Postgres migrations proxy][1].</p><p>Setting this variable to the special value `http` enables the migrations proxy to accept connections from the proxy tunnel (`npx electric-sql proxy-tunnel`) when Electric is running behind a restrictive firewall that only allows HTTP/HTTPS connections.                                                      |
 | `PG_PROXY_PASSWORD`      |            | Password to use when connecting to the Postgres proxy via `psql` or any other Postgres client.                                                                                                                                                                                                                                                                                                |
 |                          |            |                                                                                                                                                                                                                                                                                                                                                                                               |
 | `AUTH_MODE`              | `"secure"` | Authentication mode to use to authenticate Satellite clients. See below.                                                                                                                                                                                                                                                                                                                      |
@@ -101,6 +101,8 @@ The Electric application is configured using environment variables. Everything t
 | `AUTH_JWT_AUD`           |            | <p>This optional setting allows you to specificy the "audience" that will be matched against the aud claim extracted from auth tokens.</p><p>This can be used to ensure that only tokens for a specific application are used to authenticate your Satellite client.</p>                                                                                                                       |
 |                          |            |                                                                                                                                                                                                                                                                                                                                                                                               |
 | `ELECTRIC_INSTANCE_ID`   | `electric` | Unique identifier of this Electric instance when running in a cluster (not yet supported). When running locally, you can use any string                                                                                                                                                                                                                                                       |
+
+  [1]: https://electric-sql.com/docs/usage/data-modelling/migrations
 
 **Authentication**
 
@@ -153,14 +155,16 @@ Note that this procedure **MUST** be called within the same transaction as the m
 Note that if, when running on OSX, you get errors like:
 
 ```
+
 could not connect to the publisher: connection to server at \"host.docker.internal\" (192.168.65.2), port 5433 failed
-```
+
+````
 
 You may need to adjust your docker networking or run Electric within docker. To run within Docker, you can build the docker image locally:
 
 ```sh
 make docker-build
-```
+````
 
 And then run with the right env vars, e.g.:
 
