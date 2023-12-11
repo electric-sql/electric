@@ -1,0 +1,45 @@
+{
+  "name": "recipes",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "backend:start": "node ./backend/startCompose.js",
+    "backend:stop": "docker compose --env-file backend/compose/.envrc -f backend/compose/docker-compose.yaml stop",
+    "backend:up": "yarn backend:start --detach",
+    "backend:down": "docker compose --env-file backend/compose/.envrc -f backend/compose/docker-compose.yaml down --volumes",
+    "client:generate": "yarn electric:check && npx electric-sql generate --service http://localhost:5133 --proxy postgresql://prisma:proxy_password@localhost:65432/electric",
+    "client:watch": "yarn client:generate --watch",
+    "db:migrate": "node ./db/migrate.js",
+    "db:psql": "node ./db/connect.js",
+    "ports:configure": "node ./scripts/change-ports.js",
+    "electric:start": "node ./backend/startElectric.js",
+    "electric:check": "node ./scripts/check-electric-is-running.js",
+    "prebuild": "node ./scripts/copy-wasm-files.js",
+    "dev": "yarn electric:check && yarn prebuild && vite",
+    "build": "tsc && yarn prebuild && vite build",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "eslint-plugin-react": "^7.33.2",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "wa-sqlite": "rhashimoto/wa-sqlite#semver:^0.9.8"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.37",
+    "@types/react-dom": "^18.2.15",
+    "@typescript-eslint/eslint-plugin": "^6.10.0",
+    "@typescript-eslint/parser": "^6.10.0",
+    "@vitejs/plugin-react": "^4.2.0",
+    "eslint": "^8.53.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-refresh": "^0.4.4",
+    "prompt": "^1.3.0",
+    "shelljs": "^0.8.5",
+    "tcp-port-used": "^1.0.2",
+    "typescript": "^5.2.2",
+    "vite": "^5.0.0"
+  }
+}
