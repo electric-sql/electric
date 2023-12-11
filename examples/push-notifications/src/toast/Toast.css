@@ -14,6 +14,7 @@
 
 .toastContainer.hide {
   @apply scale-x-50 opacity-0;
+  @apply pointer-events-none;
 }
 
 .toastContainer h2 {
