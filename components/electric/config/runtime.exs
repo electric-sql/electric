@@ -17,7 +17,24 @@ default_database_require_ssl = "false"
 default_database_use_ipv6 = "false"
 default_write_to_pg_mode = "logical_replication"
 
+# These defaults are only set for the dev environment, so in prod errors will still get raises if any of the required
+# configuration options aren't set by the user.
+default_database_url =
+  if config_env() == :dev, do: "postgresql://postgres:password@localhost:54321/electric"
+
+default_logical_publisher_host = if config_env() == :dev, do: "host.docker.internal"
+default_pg_proxy_password = if config_env() == :dev, do: "password"
+
 ###
+
+# We only want to raise in prod because this config is also loaded in the test environment where we do not define
+# default values for all required options.
+raise_in_prod =
+  if config_env() == :prod do
+    fn msg -> raise msg end
+  else
+    fn _ -> nil end
+  end
 
 get_env_bool = fn name, default ->
   case String.downcase(System.get_env(name, default)) do
@@ -119,6 +136,75 @@ config :electric, Electric.Features,
   proxy_ddlx_assign: false,
   proxy_ddlx_unassign: false
 
+require_ssl? = get_env_bool.("DATABASE_REQUIRE_SSL", default_database_require_ssl)
+use_ipv6? = get_env_bool.("DATABASE_USE_IPV6", default_database_use_ipv6)
+
+postgresql_connection =
+  case System.get_env("DATABASE_URL", default_database_url) do
+    nil ->
+      raise_in_prod.("Required environment variable DATABASE_URL is not set")
+      nil
+
+    database_url ->
+      database_url
+      |> Electric.Utils.parse_postgresql_uri()
+      |> Keyword.put_new(:ssl, require_ssl?)
+      |> Keyword.put(:ipv6, use_ipv6?)
+      |> Keyword.update(:timeout, 5_000, &String.to_integer/1)
+      |> Keyword.put(:replication, "database")
+  end
+
+pg_server_host =
+  if write_to_pg_mode == :logical_replication do
+    System.get_env("LOGICAL_PUBLISHER_HOST", default_logical_publisher_host) ||
+      raise_in_prod.("Required environment variable LOGICAL_PUBLISHER_HOST is not set")
+  end
+
+{use_http_tunnel?, proxy_port} =
+  case String.downcase(System.get_env("PG_PROXY_PORT", default_pg_proxy_port)) do
+    "http:" <> port_str -> {true, String.to_integer(port_str)}
+    port_str -> {false, String.to_integer(port_str)}
+  end
+
+proxy_password =
+  System.get_env("PG_PROXY_PASSWORD", default_pg_proxy_password) ||
+    raise_in_prod.("Required environment variable PG_PROXY_PASSWORD is not set")
+
+proxy_listener_opts =
+  if listen_on_ipv6? do
+    [transport_options: [:inet6]]
+  else
+    []
+  end
+
+config :electric, Electric.Replication.Connectors,
+  postgres_1: [
+    producer: Electric.Replication.Postgres.LogicalReplicationProducer,
+    connection: postgresql_connection,
+    replication: [
+      electric_connection: [
+        host: pg_server_host,
+        port: pg_server_port,
+        dbname: "electric",
+        connect_timeout: postgresql_connection[:timeout]
+      ]
+    ],
+    proxy: [
+      # listen opts are ThousandIsland.options()
+      # https://hexdocs.pm/thousand_island/ThousandIsland.html#t:options/0
+      listen: [port: proxy_port] ++ proxy_listener_opts,
+      use_http_tunnel?: use_http_tunnel?,
+      password: proxy_password,
+      log_level: log_level
+    ]
+  ]
+
+enable_proxy_tracing? = System.get_env("PROXY_TRACING_ENABLE", "false") in ["yes", "true"]
+
+config :electric, Electric.Postgres.Proxy.Handler.Tracing,
+  enable: enable_proxy_tracing?,
+  colour: false
+
 # The :prod environment is inlined here because by default Mix won't copy any config/runtime.*.exs files when assembling
 # a release, and we want a single configuration file in our release.
 if config_env() == :prod do
@@ -126,64 +212,6 @@ if config_env() == :prod do
     System.get_env("AUTH_MODE", default_auth_mode) |> Electric.Satellite.Auth.build_provider!()
 
   config :electric, Electric.Satellite.Auth, provider: auth_provider
-
-  require_ssl? = get_env_bool.("DATABASE_REQUIRE_SSL", default_database_require_ssl)
-  use_ipv6? = get_env_bool.("DATABASE_USE_IPV6", default_database_use_ipv6)
-
-  postgresql_connection =
-    System.fetch_env!("DATABASE_URL")
-    |> Electric.Utils.parse_postgresql_uri()
-    |> Keyword.put_new(:ssl, require_ssl?)
-    |> Keyword.put(:ipv6, use_ipv6?)
-    |> Keyword.update(:timeout, 5_000, &String.to_integer/1)
-    |> Keyword.put(:replication, "database")
-
-  pg_server_host =
-    if write_to_pg_mode == :logical_replication do
-      System.get_env("LOGICAL_PUBLISHER_HOST") ||
-        raise("Required environment variable LOGICAL_PUBLISHER_HOST is not set")
-    end
-
-  {use_http_tunnel?, proxy_port} =
-    case String.downcase(System.get_env("PG_PROXY_PORT", default_pg_proxy_port)) do
-      "http:" <> port_str -> {true, String.to_integer(port_str)}
-      port_str -> {false, String.to_integer(port_str)}
-    end
-
-  proxy_password =
-    System.get_env("PG_PROXY_PASSWORD") ||
-      raise("Required environment variable PG_PROXY_PASSWORD is not set")
-
-  proxy_listener_opts =
-    if listen_on_ipv6? do
-      [transport_options: [:inet6]]
-    else
-      []
-    end
-
-  connectors = [
-    {"postgres_1",
-     producer: Electric.Replication.Postgres.LogicalReplicationProducer,
-     connection: postgresql_connection,
-     replication: [
-       electric_connection: [
-         host: pg_server_host,
-         port: pg_server_port,
-         dbname: "electric",
-         connect_timeout: postgresql_connection[:timeout]
-       ]
-     ],
-     proxy: [
-       # listen opts are ThousandIsland.options()
-       # https://hexdocs.pm/thousand_island/ThousandIsland.html#t:options/0
-       listen: [port: proxy_port] ++ proxy_listener_opts,
-       use_http_tunnel?: use_http_tunnel?,
-       password: proxy_password,
-       log_level: log_level
-     ]}
-  ]
-
-  config :electric, Electric.Replication.Connectors, connectors
 
   # This is intentionally an atom and not a boolean - we expect to add `:extended` state
   telemetry =
@@ -195,12 +223,6 @@ if config_env() == :prod do
     end
 
   config :electric, :telemetry, telemetry
-
-  enable_proxy_tracing? = System.get_env("PROXY_TRACING_ENABLE", "false") in ["yes", "true"]
-
-  config :electric, Electric.Postgres.Proxy.Handler.Tracing,
-    enable: enable_proxy_tracing?,
-    colour: false
 else
   config :electric, :telemetry, :disabled
   Code.require_file("runtime.#{config_env()}.exs", __DIR__)
