@@ -11,7 +11,7 @@ Generate this Typescript client as part of your build process, instantiate it wi
 
 ## Generating the client
 
-Use the [generator script](../../api/generator.md) to generate the [Typescript client](../installation/client.md):
+Use the [generator command](../../api/cli.md#generate) to generate the [Typescript client](../installation/client.md):
 
 ```shell
 npx electric-sql generate

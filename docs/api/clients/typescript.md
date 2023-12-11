@@ -7,7 +7,7 @@ sidebar_position: 10
 
 # Typescript client
 
-The <DocPageLink path="api/generator" /> page explained how to generate an Electric client for your application.
+The <DocPageLink path="api/cli#generate" /> page explained how to generate an Electric client for your application.
 In this section, we demonstrate the usage of a generated Electric client
 for an issue tracking application where users participate in projects,
 projects have issues, and users can comment on issues
