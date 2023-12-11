@@ -20,7 +20,11 @@ default_write_to_pg_mode = "logical_replication"
 ###
 
 get_env_bool = fn name, default ->
-  String.downcase(System.get_env(name, default)) in ["yes", "true"]
+  case String.downcase(System.get_env(name, default)) do
+    truthy when truthy in ~w[yes true] -> true
+    falsy when falsy in ~w[no false] -> false
+    other -> raise "Invalid value for `#{name}`: #{other}"
+  end
 end
 
 get_env_int = fn name, default ->
