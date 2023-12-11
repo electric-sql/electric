@@ -1,7 +1,18 @@
 import { writeSelect } from './writeSelect'
 import { writeNonScalarType, writeScalarType, writeSpecialType } from '..'
-import { ExtendedDMMFSchemaField } from '../../classes'
+import { ExtendedDMMF, ExtendedDMMFSchemaField } from '../../classes'
 import { type ContentWriterOptions } from '../../types'
+
+function modelHasRelation(
+  model: ExtendedDMMFSchemaField['modelType'],
+  dmmf: ExtendedDMMF
+): boolean {
+  if (typeof model === 'string') {
+    const maybeModel = dmmf.datamodel.models.find((m) => m.name === model)
+    return maybeModel?.hasRelationFields ?? false
+  }
+  return false
+}
 
 export const writeOutputObjectType = (
   { fileWriter, dmmf, getSingleFileContent = false }: ContentWriterOptions,
@@ -120,7 +131,14 @@ export const writeOutputObjectType = (
         writer.newLine()
       })
     })
-    .write(`).strict()`)
+    .write(`).strict() `)
+    // There is a typing bug that occurs only with models that have relations.
+    // a dirty fix here is to typecast the value to the expected type:
+    // cf. https://github.com/chrishoermann/zod-prisma-types/issues/98#issuecomment-1800112669
+    .conditionalWrite(
+      modelHasRelation(field.modelType, dmmf),
+      `as ${field.customArgType}`
+    )
 
   if (useMultipleFiles && !getSingleFileContent) {
     writer.blankLine().writeLine(`export default ${field.argName}Schema;`)
