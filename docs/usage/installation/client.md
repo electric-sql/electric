@@ -12,11 +12,10 @@ Install the [`electric-sql`](https://www.npmjs.com/package/electric-sql) library
 
 ### Npm
 
-Install the published [TypeScript client](https://www.npmjs.com/package/electric-sql) and [generator](https://www.npmjs.com/package/@electric-sql/prisma-generator):
+Install the published [TypeScript client](https://www.npmjs.com/package/electric-sql):
 
 ```shell
 yarn add electric-sql
-yarn add @electric-sql/prisma-generator
 ```
 
 ### GitHub
