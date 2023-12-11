@@ -78,9 +78,11 @@ docker-build-ci:
 ifeq (${TAG_AS_LATEST_AND_PUSH}, true)
 	docker tag "${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION}" "${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION_MINOR}"
 	docker tag "${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION}" "${ELECTRIC_IMAGE_NAME}:latest"
+	docker tag "${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION}" "${ELECTRIC_CANARY_IMAGE}"
 	docker push "${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION}"
 	docker push "${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION_MINOR}"
 	docker push "${ELECTRIC_IMAGE_NAME}:latest"
+	docker push "${ELECTRIC_CANARY_IMAGE}"
 endif
 
 docker-build-ws-client:
