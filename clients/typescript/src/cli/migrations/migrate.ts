@@ -9,6 +9,21 @@ import { buildMigrations, getMigrationNames } from './builder'
 import { exec } from 'child_process'
 import { dedent } from 'ts-dedent'
 import { findAndReplaceInFile } from '../util'
+import Module from 'node:module'
+
+// Rather than run `npx prisma` we resolve the path to the prisma binary so that
+// we can be sure we are using the same version of Prisma that is a dependency of
+// the Electric client.
+// `Module.createRequire(import.meta.url)` creates an old-style `require()` function
+// that can be used to resolve the path to the prisma cli script using
+// `require.resolve()`.
+// We use the same method to resolve the path to `@electric-sql/prisma-generator`.
+const require = Module.createRequire(import.meta.url)
+const prismaPath = require.resolve('prisma')
+const generatorPath = path.join(
+  path.dirname(require.resolve('@electric-sql/prisma-generator')),
+  'bin.js'
+)
 
 const appRoot = path.resolve() // path where the user ran `npx electric migrate`
 
@@ -228,14 +243,10 @@ async function createPrismaSchema(
   const prismaDir = path.join(folder, 'prisma')
   const prismaSchemaFile = path.join(prismaDir, 'schema.prisma')
   await fs.mkdir(prismaDir)
-  const provider = path.join(
-    appRoot,
-    'node_modules/@electric-sql/prisma-generator/dist/bin.js'
-  )
   const output = path.resolve(out)
   const schema = dedent`
     generator electric {
-      provider      = "${escapePathForString(provider)}"
+      provider      = "${escapePathForString(generatorPath)}"
       output        = "${escapePathForString(output)}"
       relationModel = "false"
     }
@@ -355,7 +366,7 @@ export function doCapitaliseTableNames(lines: string[]): string[] {
 
 async function introspectDB(prismaSchema: string): Promise<void> {
   await executeShellCommand(
-    `npx prisma db pull --schema="${prismaSchema}"`,
+    `node ${prismaPath} db pull --schema="${prismaSchema}"`,
     'Introspection script exited with error code: '
   )
 }
@@ -422,7 +433,7 @@ function addValidator(ln: string): string {
 
 async function generateElectricClient(prismaSchema: string): Promise<void> {
   await executeShellCommand(
-    `npx prisma generate --schema="${prismaSchema}"`,
+    `node ${prismaPath} generate --schema="${prismaSchema}"`,
     'Generator script exited with error code: '
   )
 }
