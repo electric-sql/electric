@@ -9,9 +9,12 @@ import { UserView } from "./UserView";
 export const UserSelector = () => {
   const { db } = useElectric()!
   
+  // keep track of users in the system
   const { results: users = [] } = useLiveQuery<Users[]>(db.users.liveMany({
     orderBy: { first_name: 'asc' }
   }))
+
+  // selected user will act as the "logged in" user for this demo
   const [ selectedUserId, setSelectedUserId] = useState(users[0]?.user_id)
   const selectedUser = useMemo(
     () => users.find((user) => user.user_id == selectedUserId),
@@ -25,10 +28,9 @@ export const UserSelector = () => {
     }
   }));
 
-
+  // sync all relevant tables
   useEffect(() => {
     const syncItems = async () => {
-      // Resolves when the shape subscription has been established.
       const shapes = await Promise.all([
         db.users.sync(),
         db.notifications.sync({ include: {
@@ -36,28 +38,18 @@ export const UserSelector = () => {
           users: true,
         }})
       ]);
-      
-
-      // Resolves when the data has been synced into the local database.
       await Promise.all(shapes.map((s) => s.synced));
     }
-
     syncItems()
   }, [])
 
+  // make sure a user is always selected
   useEffect(() => {
     if (selectedUserId === undefined) {
       setSelectedUserId(users[0]?.user_id)
       return;
     }
-    
-    db.notifications.findMany({
-      where: {
-        target_id: selectedUserId,
-        delivered_at: null
-      }
-    })
-  }, [users])
+  }, [users, selectedUserId])
 
   // mark any notifications meant for the selected user
   // as delivered - not read!
@@ -73,9 +65,6 @@ export const UserSelector = () => {
       },
     })
   }, [undeliveredNotifications, selectedUserId])
-
-
-
 
 
   return (
