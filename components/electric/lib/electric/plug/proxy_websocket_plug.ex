@@ -25,11 +25,14 @@ defmodule Electric.Plug.ProxyWebsocketPlug do
     conn_config = conn_config()
     proxy_config = Connectors.get_proxy_opts(conn_config)
 
-    if get_in(proxy_config, [:listen, :port]) == "http" do
-      upgrade_to_websocket(conn, Keyword.put_new(handler_opts, :conn_config, conn_config))
+    if proxy_config.use_http_tunnel? do
+      upgrade_to_websocket(conn, Keyword.put_new(handler_opts, :proxy_config, proxy_config))
     else
-      Logger.warning("Attempted WebSocket connection to the proxy but it wasn't enabled.")
-      send_resp(conn, 404, "Proxy is not configured to accept WebSocket connections")
+      Logger.warning(
+        "Attempted WebSocket connection to the migrations proxy but it wasn't enabled."
+      )
+
+      send_resp(conn, 404, "Migrations proxy is not configured to accept WebSocket connections")
     end
   end
 

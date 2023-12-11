@@ -144,10 +144,10 @@ if config_env() == :prod do
         raise("Required environment variable LOGICAL_PUBLISHER_HOST is not set")
     end
 
-  proxy_port =
-    case System.get_env("PG_PROXY_PORT", default_pg_proxy_port) do
-      "http" -> "http"
-      port_str -> String.to_integer(port_str)
+  {use_http_tunnel?, proxy_port} =
+    case String.downcase(System.get_env("PG_PROXY_PORT", default_pg_proxy_port)) do
+      "http:" <> port_str -> {true, String.to_integer(port_str)}
+      port_str -> {false, String.to_integer(port_str)}
     end
 
   proxy_password =
@@ -177,6 +177,7 @@ if config_env() == :prod do
        # listen opts are ThousandIsland.options()
        # https://hexdocs.pm/thousand_island/ThousandIsland.html#t:options/0
        listen: [port: proxy_port] ++ proxy_listener_opts,
+       use_http_tunnel?: use_http_tunnel?,
        password: proxy_password,
        log_level: log_level
      ]}

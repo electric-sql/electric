@@ -38,6 +38,7 @@ defmodule Electric.Replication.Connectors do
   @type proxy_listen_opts() :: ThousandIsland.options()
   @type proxy_opts() :: %{
           listen: proxy_listen_opts(),
+          use_http_tunnel?: boolean,
           password: String.t(),
           log_level: Logger.level()
         }

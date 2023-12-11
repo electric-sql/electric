@@ -109,19 +109,11 @@ defmodule Electric.Postgres.Proxy do
     proxy_opts = Connectors.get_proxy_opts(conn_config)
     {:ok, listen_opts} = Map.fetch(proxy_opts, :listen)
 
-    listen_opts =
-      case listen_opts[:port] do
-        "http" ->
-          # TODO(alco): Let the OS choose a random available port
-          # Listen on the default port
-          Keyword.put(listen_opts, :port, 65432)
-
-        port when is_integer(port) ->
-          listen_opts
-
-        _ ->
-          raise "Proxy configuration should include `[listen: [port: 1..65535]]`"
-      end
+    if !is_integer(listen_opts[:port]),
+      do:
+        raise(ArgumentError,
+          message: "Proxy configuration should include `[listen: [port: 1..65535]]`"
+        )
 
     # TODO: enabling logging of tcp connections to the proxy triggers failures in the e2e
     # tests because thousandisland reports broken connections with an "error" string

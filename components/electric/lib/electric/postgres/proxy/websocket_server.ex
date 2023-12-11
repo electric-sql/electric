@@ -8,10 +8,8 @@ defmodule Electric.Postgres.Proxy.WebsocketServer do
   @behaviour WebSock
 
   @impl WebSock
-  def init(_opts) do
-    # TODO(alco): look up Proxy listener's port at runtime
-    proxy_port = 65432
-    {:ok, connect(%{proxy_port: proxy_port})}
+  def init(opts) do
+    {:ok, connect(%{proxy_port: get_in(opts, [:proxy_config, :listen, :port])})}
   end
 
   @impl WebSock

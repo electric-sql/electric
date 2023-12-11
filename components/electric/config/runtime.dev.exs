@@ -5,10 +5,10 @@ config :logger, level: :debug
 auth_provider = System.get_env("AUTH_MODE", "secure") |> Electric.Satellite.Auth.build_provider!()
 config :electric, Electric.Satellite.Auth, provider: auth_provider
 
-proxy_port =
-  case System.get_env("PG_PROXY_PORT", "65432") do
-    "http" -> "http"
-    port_str -> String.to_integer(port_str)
+{use_http_tunnel?, proxy_port} =
+  case String.downcase(System.get_env("PG_PROXY_PORT", "65432")) do
+    "http:" <> port_str -> {true, String.to_integer(port_str)}
+    port_str -> {false, String.to_integer(port_str)}
   end
 
 proxy_password =
@@ -40,6 +40,7 @@ config :electric, Electric.Replication.Connectors,
         port: proxy_port,
         transport_options: [:inet6]
       ],
+      use_http_tunnel?: use_http_tunnel?,
       password: proxy_password,
       log_level: :info
     ]
