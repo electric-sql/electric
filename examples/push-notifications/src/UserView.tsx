@@ -10,9 +10,14 @@ import { templateString } from "./template_utils";
 export const UserView = ({ user } : { user: Users }) => {
   const { showToast } = useToast();
   const { db } = useElectric()!;
+
+  // find most recent delivered but unread notification meant for the given user
   const { results: notification } = useLiveQuery(db.notifications.liveFirst({
     where: {
       target_id: user.user_id,
+      delivered_at: {
+        not: null
+      },
       read_at: null,
     },
     orderBy: {
@@ -30,6 +35,7 @@ export const UserView = ({ user } : { user: Users }) => {
     }
   }))
 
+  // keep track of users other than the relevant one to be able to notify them
   const { results: otherUsers = [] } = useLiveQuery<Users[]>(db.users.liveMany({
     where: {
       user_id: {
@@ -45,7 +51,6 @@ export const UserView = ({ user } : { user: Users }) => {
     }
   }))
 
-  
   const sayHi = useCallback(async (targetUserId: string) => {
     const template : NotificationTemplates = await db.notification_templates.findFirst({
       where: {
@@ -63,6 +68,9 @@ export const UserView = ({ user } : { user: Users }) => {
     })
   }, [user.user_id]);
 
+
+  // show unread notification and mark as read with a timeout, allowing the
+  // next one to be shown
   useEffect(() => {
     if (!notification) return;
     const template = notification.notification_templates as NotificationTemplates;
