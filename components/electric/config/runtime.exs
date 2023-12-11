@@ -12,7 +12,7 @@ default_auth_mode = "secure"
 default_http_server_port = "5133"
 default_pg_server_port = "5433"
 default_pg_proxy_port = "65432"
-default_listen_on_ipv6 = "false"
+default_listen_on_ipv6 = "true"
 default_database_require_ssl = "false"
 default_database_use_ipv6 = "false"
 default_write_to_pg_mode = "logical_replication"
@@ -20,7 +20,11 @@ default_write_to_pg_mode = "logical_replication"
 ###
 
 get_env_bool = fn name, default ->
-  String.downcase(System.get_env(name, default)) in ["yes", "true"]
+  case String.downcase(System.get_env(name, default)) do
+    truthy when truthy in ~w[yes true] -> true
+    falsy when falsy in ~w[no false] -> false
+    other -> raise "Invalid value for `#{name}`: #{other}"
+  end
 end
 
 get_env_int = fn name, default ->

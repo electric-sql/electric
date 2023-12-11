@@ -610,7 +610,6 @@ defmodule Electric.Replication.Postgres.TcpServer do
   end
 
   # TODO: implement actual logic for authentication requirement
-  defp authentication_required?("127.0.0.1" <> _, _settings), do: false
   defp authentication_required?(_, _settings), do: false
 
   @spec tcp_send(binary() | nil, Socket.t()) :: :ok
