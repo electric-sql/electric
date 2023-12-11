@@ -11,7 +11,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
 
   defmodule State do
     defstruct [
-      :state,
+      :status,
       :conn_config,
       :repl_config,
       :backoff,
@@ -19,6 +19,8 @@ defmodule Electric.Replication.PostgresConnectorMng do
       :config,
       :pg_connector_sup_monitor
     ]
+
+    @type status :: :initialization | :establishing_repl_conn | :subscribing | :ready
 
     @type t() :: %__MODULE__{
             config: Connectors.config(),
@@ -35,7 +37,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
                 dbname: String.t()
               }
             },
-            state: :init | :subscribe | :ready,
+            status: status,
             pg_connector_sup_monitor: reference | nil
           }
   end
@@ -57,7 +59,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
     Electric.name(__MODULE__, origin)
   end
 
-  @spec status(Connectors.origin()) :: :init | :subscribe | :ready
+  @spec status(Connectors.origin()) :: State.status()
   def status(origin) do
     GenServer.call(name(origin), :status)
   end
@@ -84,25 +86,45 @@ defmodule Electric.Replication.PostgresConnectorMng do
     %State{
       state
       | backoff: {:backoff.init(1000, 10_000), nil},
-        state: :init,
+        status: :initialization,
         pg_connector_sup_monitor: nil
     }
   end
 
   @impl GenServer
-  def handle_continue(:init, %State{origin: origin} = state) do
+  def handle_continue(:init, state) do
     case initialize_postgres(state) do
       :ok ->
-        {:ok, sup_pid} = PostgresConnector.start_children(state.config)
-        Logger.info("successfully initialized connector #{inspect(origin)}")
-
-        ref = Process.monitor(sup_pid)
-        state = %State{state | state: :subscribe, pg_connector_sup_monitor: ref}
-        {:noreply, state, {:continue, :subscribe}}
+        state = %State{state | status: :establishing_repl_conn}
+        {:noreply, state, {:continue, :establish_repl_conn}}
 
       error ->
-        Logger.error("initialization for postgresql failed with reason: #{inspect(error)}")
+        Logger.error("Initialization of Postgres state failed with reason: #{inspect(error)}.")
         {:noreply, schedule_retry(:init, state)}
+    end
+  end
+
+  def handle_continue(:establish_repl_conn, %State{origin: origin} = state) do
+    case PostgresConnector.start_children(state.config) do
+      {:ok, sup_pid} ->
+        Logger.info("Successfully initialized Postgres connector #{inspect(origin)}.")
+
+        ref = Process.monitor(sup_pid)
+        state = %State{state | status: :subscribing, pg_connector_sup_monitor: ref}
+        {:noreply, state, {:continue, :subscribe}}
+
+      {:error,
+       {{:shutdown,
+         {:failed_to_start_child, :postgres_producer,
+          {:bad_return_value,
+           {:error,
+            {:error, :error, "55006", :object_in_use, "replication slot" <> _ = msg,
+             _c_stacktrace}}}}}, _supervisor_spec}} ->
+        Logger.error(
+          "Initialization of replication connection to Postgres failed with reason: #{msg}. Another instance of Electric appears to be connected to this database."
+        )
+
+        {:noreply, schedule_retry(:establish_repl_conn, state)}
     end
   end
 
@@ -111,7 +133,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
       :logical_replication ->
         case start_subscription(state) do
           :ok ->
-            {:noreply, %State{state | state: :ready}}
+            {:noreply, %State{state | status: :ready}}
 
           {:error, _} ->
             {:noreply, schedule_retry(:subscribe, state)}
@@ -119,22 +141,18 @@ defmodule Electric.Replication.PostgresConnectorMng do
 
       :direct_writes ->
         :ok = stop_subscription(state)
-        {:noreply, %State{state | state: :ready}}
+        {:noreply, %State{state | status: :ready}}
     end
   end
 
   @impl GenServer
   def handle_call(:status, _from, state) do
-    {:reply, state.state, state}
+    {:reply, state.status, state}
   end
 
   @impl GenServer
-  def handle_info({:timeout, tref, :init}, %State{backoff: {_, tref}} = state) do
-    handle_continue(:init, state)
-  end
-
-  def handle_info({:timeout, tref, :subscribe}, %State{backoff: {_, tref}} = state) do
-    handle_continue(:subscribe, state)
+  def handle_info({:timeout, tref, action}, %State{backoff: {_, tref}} = state) do
+    handle_continue(action, state)
   end
 
   def handle_info(

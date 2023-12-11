@@ -258,13 +258,13 @@ defmodule Electric.Postgres.TestConnection do
 
   # Wait for the Postgres connector to start. It starts the CachedWal.Producer which this test module depends on.
   defp wait_for_postgres_initialization(origin) do
-    status = PostgresConnectorMng.status(origin)
+    case PostgresConnectorMng.status(origin) do
+      :ready ->
+        :ready
 
-    if status in [:init, :subscribe] do
-      Process.sleep(50)
-      wait_for_postgres_initialization(origin)
-    else
-      status
+      _ ->
+        Process.sleep(50)
+        wait_for_postgres_initialization(origin)
     end
   end
 end
