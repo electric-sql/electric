@@ -171,6 +171,20 @@ export const relations = {
       },
     ],
   },
+  bigIntTable: {
+    id: 5,
+    schema: 'public',
+    table: 'bigIntTable',
+    tableType: 0,
+    columns: [
+      {
+        name: 'value',
+        type: 'INT8',
+        isNullable: false,
+        primaryKey: true,
+      },
+    ],
+  },
 }
 
 import migrations from '../support/migrations/migrations.js'
