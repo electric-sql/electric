@@ -268,6 +268,12 @@ In practice this means that we only support this subset of DDL actions:
 - `ALTER TABLE <electrified table> ADD COLUMN`, and
 - `CREATE INDEX ON <electrified table>`, `DROP INDEX` -- indexes can be created and dropped because they don't affect the data within the electrified tables.
 
+### No default values for columns
+
+Currently it's not possible to electrify tables that have columns with `DEFAULT` clauses. This has to do with the fact that those clauses may include Postgres expressions that are difficult or impossible to translate into an SQLite-compatible one.
+
+We will lift this limitation at some point, e.g. by discarding `DEFAULT` clauses in the SQLite schema or by supporting a limited set of default expressions.
+
 ### Data types and constraints
 
 See the pages on [Types](./types.md) and [Constraints](./constraints.md).
