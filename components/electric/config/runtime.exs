@@ -160,11 +160,14 @@ pg_server_host =
       raise_in_prod.("Required environment variable LOGICAL_PUBLISHER_HOST is not set")
   end
 
-{use_http_tunnel?, proxy_port} =
+{use_http_tunnel?, proxy_port_str} =
   case String.downcase(System.get_env("PG_PROXY_PORT", default_pg_proxy_port)) do
-    "http:" <> port_str -> {true, String.to_integer(port_str)}
-    port_str -> {false, String.to_integer(port_str)}
+    "http" -> {true, default_pg_proxy_port}
+    "http:" <> port_str -> {true, port_str}
+    port_str -> {false, port_str}
   end
+
+proxy_port = String.to_integer(proxy_port_str)
 
 proxy_password =
   System.get_env("PG_PROXY_PASSWORD", default_pg_proxy_password) ||
