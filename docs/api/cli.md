@@ -9,8 +9,8 @@ sidebar_position: 30
 
 The Electric client library comes with a CLI providing a couple of helpful commands for building Electric apps:
 
-- [`generate`](#generate) - The client library generator; this command builds the client library for your applications to use.
-- [`proxy-tunnel`](#proxy-tunnel) - A tool to enable you to connect to the Electric Postgres Proxy when you can only open an http port for the sync later.
+- [`generate`](#generate) - The type-safe client generator; this command builds the client library for your applications to use.
+- [`proxy-tunnel`](#proxy-tunnel) - A tool to enable you to connect to the Electric migrations proxy when it's deployed behind an restrictive firewall, or with a hosting provider, that only allows incoming HTTP connections.
 
 These commands are all executed in the form `npx electric-sql [command-name]` from within a project where you have installed the [client library](../usage/installation/client).
 
@@ -53,7 +53,7 @@ npx electric-sql generate --watch 5000
 
 ## `proxy-tunnel`
 
-Some deployment options for Electric only allow you to expose a single port, in which case only the http port, and not the [Postgres Proxy](../usage/data-modelling/migrations#migrations-proxy) port, will be available to connect to. In order to enable connecting to run migrations and use the generate command in these setups, you can enable a special "Proxy Tunnel" that tunnels the Postgres Proxy TCP connection over a Websocket to the Electric sync service. This is enabled on the sync service by setting the environment variable `PG_PROXY_PORT=http`.
+Some hosting providers only allow HTTP connections, which poses a challenge for deploying Electric to their platforms since it uses a separate port for connections to the [migrations proxy](../usage/data-modelling/migrations#migrations-proxy). In order to enable connecting to run migrations and use the generate command in these setups, you can enable a special "Proxy Tunnel" that tunnels the Postgres Proxy TCP connection over a Websocket to the Electric sync service. This is enabled on the sync service by setting the environment variable `PG_PROXY_PORT=http`.
 
 The `npx electric-sql proxy-tunnel` command is provided to forward TCP traffic from your local machine to the Electric Postgres Proxy when it is in this mode. It binds to a local port, allowing you to use the generator command, perform migrations, and connect with psql.
 

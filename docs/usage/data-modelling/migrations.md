@@ -214,7 +214,7 @@ There are two environment variables that configure the proxy in Electric:
 
 - `PG_PROXY_PORT` (default `65432`). This is the TCP port that [**Electric sync service**](../../api/service.md) will listen on. You should connect to it in order to pass through the migration proxy. Since the proxy speaks fluent Postgres, you can connect to it via any Postgres-compatible tool, e.g. `psql -U electric -p 65432 electric`
 
-   Some deployment targets restrict you to a single port for your service. In order to enable these platforms, `PG_PROXY_PORT` can be set to a special `http` value. This enables the use of the [Proxy Tunnel](../../api/cli.md#proxy-tunnel).
+   Some deployment targets restrict you to a single port for your service. On these platforms, `PG_PROXY_PORT` can be set to a special `http` value. This enables the use of the [Proxy Tunnel](../../api/cli.md#proxy-tunnel). Additionally, to set both the TCP port and enable the Proxy Tunnel, use a value such as `http:65432`.
 
 - `PG_PROXY_PASSWORD` (no default). Access to the proxy is controlled by password (see below for information on the username). You must set this password here and pass it to any application hoping to connect to the proxy.
 
