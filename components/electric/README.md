@@ -155,16 +155,14 @@ Note that this procedure **MUST** be called within the same transaction as the m
 Note that if, when running on OSX, you get errors like:
 
 ```
-
 could not connect to the publisher: connection to server at \"host.docker.internal\" (192.168.65.2), port 5433 failed
-
-````
+```
 
 You may need to adjust your docker networking or run Electric within docker. To run within Docker, you can build the docker image locally:
 
 ```sh
 make docker-build
-````
+```
 
 And then run with the right env vars, e.g.:
 
