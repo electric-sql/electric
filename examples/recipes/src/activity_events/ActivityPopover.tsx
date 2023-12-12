@@ -13,6 +13,8 @@ import { formatDateTime } from "./utilities"
 
 export const ActivityPopover = () => {
   const { db } = useElectric()!
+
+  // Query for 5 most recent activities
   const { results: mostRecentActivities = [] } = useLiveQuery(
     db.activity_events.liveMany({
       orderBy: {
@@ -21,7 +23,8 @@ export const ActivityPopover = () => {
       take: 5, 
     })
   )
-
+  
+  // Use raw SQL to count all unread activities
   const numUnreadActivities = useLiveQuery(
     db.liveRaw({
       sql: 'SELECT COUNT(*) FROM activity_events WHERE read_at IS NULL'
@@ -30,6 +33,7 @@ export const ActivityPopover = () => {
   const hasUnreadActivities = numUnreadActivities > 0;
 
 
+  // Update individual activity's read status through its ID
   const markActivityAsRead = (activityId: string) =>
     db.activity_events.update({
       data: {
@@ -40,7 +44,7 @@ export const ActivityPopover = () => {
       }
     })
   
-  
+  // Update all unread activities using a WHERE clause
   const markAllAsRead = () => 
     db.activity_events.updateMany({
       data: {

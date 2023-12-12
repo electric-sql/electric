@@ -9,6 +9,9 @@ export const ActivityToast = () => {
   const [open, setOpen] = useState(false);
 
   const { db } = useElectric()!
+
+  // Query for most recent activity that has occurred
+  // since rendering this component
   const { results: liveActivity } = useLiveQuery(
     db.activity_events.liveFirst({
       orderBy: {
@@ -22,12 +25,6 @@ export const ActivityToast = () => {
     })
   )
 
-  useEffect(() => {
-    if (liveActivity?.id !== undefined) {
-      setOpen(true);
-    }
-  }, [liveActivity?.id])
-
   const handleClose = (_event: React.SyntheticEvent | Event, reason?: string) => {
     if (reason === 'clickaway') {
       return;
@@ -35,6 +32,7 @@ export const ActivityToast = () => {
     setOpen(false);
   };
 
+  // Acknowledge activity by marking it as read
   const handleAck = useCallback(() => {
     if (liveActivity && liveActivity.read_at === null) {
       db.activity_events.update({
@@ -48,7 +46,12 @@ export const ActivityToast = () => {
     }
     setOpen(false);
   }, [db.activity_events, liveActivity]);
-
+  
+  useEffect(() => {
+    if (liveActivity?.id !== undefined) {
+      setOpen(true);
+    }
+  }, [liveActivity?.id])
 
   return (
     <Snackbar
