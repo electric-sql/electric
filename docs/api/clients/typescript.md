@@ -14,6 +14,63 @@ projects have issues, and users can comment on issues
 (in which case they are said to be the author of that comment).
 The data model for this application can be found on the <DocPageLink path="api/clients/typescript" /> page.
 
+## Configuration
+
+The Electric client has a few configuration options that are defined on the `ElectricConfig` type available in
+`electric-sql/config`. At a minimum, you have to include in the config object the URL to your instance of the
+[sync service](../../usage/installation/service) and an [auth token](../../usage/auth), for example:
+
+```ts
+const config: ElectricConfig = {
+  url: 'http://my-app-domain',
+  auth: {
+    token: 'eyJ0eXAiOiJKV1QiLCJhbGciOiJub25lIn0...'
+  }
+}
+```
+
+The full list of available options:
+
+- `auth: AuthConfig`
+
+   Authentication object that includes an auth token and an optional client ID.
+
+   The auth token must be a JWT that the Electric sync service will be able to validate.
+
+   Client ID is a unique identifier for this particular client or device. If omitted, a random UUID will be generated
+   the first time this client connects to the sync service.
+
+- `url?: string` (default: `"http://localhost:5133"`)
+
+   URL of the Electric sync service to connect to.
+
+   Should have the following format:
+
+   ```
+   protocol://<host>:<port>[?ssl=true]
+   ```
+
+   If the protocol is `https` or `wss` then `ssl` defaults to true. Otherwise it defaults to false.
+
+   If port is not provided, defaults to 443 when ssl is enabled or 80 when it isn't.
+
+- `debug?: boolean` (default: `false`)
+
+  Activate debug mode which logs the replication messages that are exchanged between the client and the sync service.
+
+- `timeout?: number` (default: `3000`)
+
+  Timeout (in milliseconds) for RPC requests.
+
+  Needs to be large enough for the server to have time to deliver the full initial subscription data
+  when the client subscribes to a shape for the first time.
+
+
+- `connectionBackOffOptions?: ConnectionBackOffOptions`
+
+   Configuration of the backoff strategy used when trying to reconnect to the Electric sync service after a failed
+   connection attempt.
+
 ## Instantiation
 
 To instantiate an Electric client
