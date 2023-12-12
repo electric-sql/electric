@@ -108,9 +108,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Version do
   defp fetch_table_value(values, relation) do
     case Map.fetch(values, relation) do
       {:ok, value} -> {:ok, value}
-      :error -> {:error, "Table #{inspect_table(relation)} not found"}
+      :error -> {:error, "Table #{Electric.Utils.inspect_relation(relation)} not found"}
     end
   end
-
-  defp inspect_table({s, n}), do: "#{inspect(s)}.#{inspect(n)}"
 end

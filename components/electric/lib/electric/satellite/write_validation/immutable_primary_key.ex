@@ -4,7 +4,7 @@ defmodule Electric.Satellite.WriteValidation.ImmutablePrimaryKey do
   alias Electric.Postgres.Extension.SchemaLoader
 
   def validate_update(%UpdatedRecord{} = change, schema_version) do
-    %{relation: {sname, tname} = relation, changed_columns: changed} = change
+    %{relation: relation, changed_columns: changed} = change
 
     if Enum.empty?(changed) do
       :ok
@@ -17,7 +17,7 @@ defmodule Electric.Satellite.WriteValidation.ImmutablePrimaryKey do
 
         changed_pks ->
           {:error,
-           "Attempt to update table #{inspect(sname)}.#{inspect(tname)} primary key(s) #{inspect(changed_pks)}"}
+           "Attempt to update table #{Electric.Utils.inspect_relation(relation)} primary key(s) #{inspect(changed_pks)}"}
       end
     end
   end
