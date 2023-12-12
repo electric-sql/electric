@@ -66,9 +66,7 @@ function ElectricToolbar({ api }: ToolbarProps) {
   }
 }
 
-
 export function addToolbar(globalRegistry: GlobalRegistry) {
-
   const toolbarApi = new ToolbarTypescript(globalRegistry)
   const toolbar_div = document.createElement('div')
   toolbar_div.setAttribute('id', 'electric-toolbar')
