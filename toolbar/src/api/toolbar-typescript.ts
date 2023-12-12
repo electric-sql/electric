@@ -27,7 +27,7 @@ export class ToolbarTypescript implements ToolbarInterface {
     // so we need to reload the page to close any open connections.
     // On reload, the database will be recreated.
     window.location.reload()
-    return new Promise(resolve => resolve())
+    return new Promise((resolve) => resolve())
   }
 
   queryDB(dbName: string, statement: Statement): Promise<Row[]> {
