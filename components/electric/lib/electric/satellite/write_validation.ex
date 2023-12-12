@@ -70,7 +70,7 @@ defmodule Electric.Satellite.WriteValidation do
           {:ok, txns()} | {:error, term()} | {:error, txns(), Error.t(), txns()}
   def validate_transactions!(txns, schema_loader) do
     with {:ok, schema_version} <- SchemaLoader.load(schema_loader) do
-      split_ok(txns, &is_valid_tx?(&1, schema_version), [])
+      take_while_ok(txns, &is_valid_tx?(&1, schema_version), [])
     end
   end
 
@@ -115,19 +115,19 @@ defmodule Electric.Satellite.WriteValidation do
     end
   end
 
-  @spec split_ok(txns(), (Changes.Transaction.t() -> :ok | {:error, Error.t()}), txns()) ::
+  @spec take_while_ok(txns(), (Changes.Transaction.t() -> :ok | {:error, Error.t()}), txns()) ::
           {:ok, txns()} | {:error, txns(), Error.t(), txns()}
-  defp split_ok([tx | tail], fun, acc) do
+  defp take_while_ok([tx | tail], fun, acc) do
     case fun.(tx) do
       :ok ->
-        split_ok(tail, fun, [tx | acc])
+        take_while_ok(tail, fun, [tx | acc])
 
       {:error, error} ->
         {:error, :lists.reverse(acc), error, tail}
     end
   end
 
-  defp split_ok([], _, acc) do
+  defp take_while_ok([], _, acc) do
     {:ok, :lists.reverse(acc)}
   end
 end
