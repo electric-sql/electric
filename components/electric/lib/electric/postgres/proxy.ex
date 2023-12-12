@@ -105,10 +105,8 @@ defmodule Electric.Postgres.Proxy do
   @spec child_spec(options()) :: Supervisor.child_spec()
   def child_spec(args) do
     {:ok, conn_config} = Keyword.fetch(args, :conn_config)
-    handler_config = Keyword.get(args, :handler_config, default_handler_config())
 
     proxy_opts = Connectors.get_proxy_opts(conn_config)
-
     {:ok, listen_opts} = Map.fetch(proxy_opts, :listen)
 
     if !is_integer(listen_opts[:port]),
@@ -123,10 +121,10 @@ defmodule Electric.Postgres.Proxy do
     #   ThousandIsland.Logger.attach_logger(log_level)
     # end
 
-    handler_state =
-      Handler.initial_state(conn_config, handler_config)
+    handler_config = Keyword.get(args, :handler_config, default_handler_config())
+    handler_state = Handler.initial_state(conn_config, handler_config)
 
-    Logger.info("Starting Proxy server listening at port #{listen_opts[:port]}")
+    Logger.info("Starting Proxy server listening on port #{listen_opts[:port]}")
 
     ThousandIsland.child_spec(
       Keyword.merge(listen_opts, handler_module: Handler, handler_options: handler_state)

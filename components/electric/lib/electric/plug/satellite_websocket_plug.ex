@@ -1,6 +1,9 @@
 defmodule Electric.Plug.SatelliteWebsocketPlug do
+  @behaviour Plug
+
+  import Plug.Conn
+
   require Logger
-  use Plug.Builder
 
   @protocol_prefix "electric."
 

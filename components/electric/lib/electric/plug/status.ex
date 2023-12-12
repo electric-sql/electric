@@ -1,9 +1,8 @@
 defmodule Electric.Plug.Status do
+  use Plug.Router
+
   alias Electric.Replication.PostgresConnector
   alias Electric.Replication.PostgresConnectorMng
-
-  use Plug.Router
-  import Plug.Conn
 
   plug :match
   plug :dispatch
