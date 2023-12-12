@@ -29,6 +29,10 @@ export async function handleTunnel(...args: string[]) {
  * @returns The parsed arguments.
  */
 function parseTunnelArgs(args: string[]) {
+  if (args.length % 2 !== 0 || args.length > 4) {
+    throw new Error('Invalid number of arguments')
+  }
+
   const opts: Partial<TunnelOptions> = {}
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]
