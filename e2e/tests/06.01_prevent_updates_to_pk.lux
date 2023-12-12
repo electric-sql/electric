@@ -1,0 +1,84 @@
+[doc Updates to table primary keys are rejected]
+[include _shared.luxinc]
+
+[invoke setup]
+
+[global migration_version_1=20231109154018]
+
+[shell proxy_1]
+    [invoke log "run migration $migration_version_1 on postgres"]
+    """!
+    BEGIN;
+      CALL electric.migration_version('$migration_version_1');
+      CREATE TABLE "compound_pks" (
+          "id1" TEXT NOT NULL,
+          "id2" TEXT NOT NULL,
+          "value" TEXT NOT NULL,
+          CONSTRAINT "compound_pks_pk" PRIMARY KEY ("id1", "id2")
+      );
+      ALTER TABLE "compound_pks" ENABLE ELECTRIC;
+    COMMIT;
+    """
+    ?$psql
+
+
+[shell electric]
+    ?? [info] Applying migration $migration_version_1
+
+[newshell user_1_ws1]
+    -$fail_pattern
+    [invoke start_elixir_test 1]
+    [invoke client_session 1 1]
+    
+    !alias Electric.Satellite.{SatRelation, SatRelationColumn, SatOpInsert, SatOpUpdate, SatOpRow}
+
+    """!
+    Satellite.TestWsClient.send_data(conn, %SatRelation{
+      columns: [
+        %SatRelationColumn{name: "id1", type: "text", is_nullable: false},
+        %SatRelationColumn{name: "id2", type: "text", is_nullable: false},
+        %SatRelationColumn{name: "value", type: "text", is_nullable: false},
+      ],
+      relation_id: 1,
+      schema_name: "public",
+      table_name: "compound_pks",
+      table_type: :TABLE
+    })
+    """
+    ?$eprompt
+    """!
+    Satellite.TestWsClient.send_data(conn, ProtocolHelpers.transaction("1", DateTime.to_unix(DateTime.utc_now(), :millisecond), [
+        %SatOpInsert{relation_id: 1, row_data: %SatOpRow{nulls_bitmask: <<0>>, values: ["11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222", "test content 1"]}},
+        %SatOpInsert{relation_id: 1, row_data: %SatOpRow{nulls_bitmask: <<0>>, values: ["33333333-3333-3333-3333-333333333333", "44444444-4444-4444-4444-444444444444", "test content 2"]}}
+    ]))
+    """
+    ?$eprompt
+
+[shell electric]
+    ?row_data: %Electric.Satellite.SatOpRow\{nulls_bitmask: <<0>>, values: \["11111111-1111-1111-1111-111111111111"
+    ?row_data: %Electric.Satellite.SatOpRow\{nulls_bitmask: <<0>>, values: \["33333333-3333-3333-3333-333333333333"
+
+[shell user_1_ws1]
+    # Reset the failure pattern
+    -
+    """!
+    Satellite.TestWsClient.send_data(conn, ProtocolHelpers.transaction("2", DateTime.to_unix(DateTime.utc_now(), :millisecond), [
+        %SatOpUpdate{
+            relation_id: 1,
+            old_row_data: %SatOpRow{nulls_bitmask: <<0>>, values: ["11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222", "test content 1"]},
+            row_data: %SatOpRow{nulls_bitmask: <<0>>, values: ["21111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222", "test content 2"]}
+        }
+    ]))
+    """
+    ?$eprompt
+
+[shell electric]
+    # Reset the failure pattern
+    -
+    ?failed write validation tests
+
+[shell user_1_ws1]
+    ?%Electric.Satellite.SatErrorResp\{error_type: :INVALID_REQUEST, lsn: "2"
+
+[cleanup]
+   [invoke teardown]

@@ -17,6 +17,7 @@ defmodule Electric.Replication.Shapes.ShapeRequest do
   alias Electric.Replication.Changes.Ownership
   alias Electric.Postgres.ShadowTableTransformation
   alias Electric.Postgres.Schema
+  alias Electric.Postgres.Extension.SchemaLoader
   alias Electric.Replication.Changes
   use Electric.Satellite.Protobuf
 
@@ -91,12 +92,18 @@ defmodule Electric.Replication.Shapes.ShapeRequest do
   set (see [PG documentation](https://www.postgresql.org/docs/current/transaction-iso.html#XACT-REPEATABLE-READ)
   for details.)
   """
-  @spec query_initial_data(t(), :epgsql.connection(), Schema.t(), String.t(), map()) ::
+  @spec query_initial_data(t(), :epgsql.connection(), SchemaLoader.Version.t(), String.t(), map()) ::
           {:ok, non_neg_integer, [Changes.NewRecord.t()]} | {:error, term()}
   # TODO: `filtering_context` is underdefined by design. It's a stand-in for a more complex solution while we need to enable basic functionality.
-  def query_initial_data(%__MODULE__{} = request, conn, schema, origin, filtering_context \\ %{}) do
+  def query_initial_data(
+        %__MODULE__{} = request,
+        conn,
+        schema_version,
+        origin,
+        filtering_context \\ %{}
+      ) do
     Enum.reduce_while(request.included_tables, {:ok, 0, []}, fn table, {:ok, num_records, acc} ->
-      case query_full_table(conn, table, schema, origin, filtering_context) do
+      case query_full_table(conn, table, schema_version, origin, filtering_context) do
         {:ok, count, results} ->
           {:cont, {:ok, num_records + count, acc ++ results}}
 
@@ -114,16 +121,16 @@ defmodule Electric.Replication.Shapes.ShapeRequest do
   defp query_full_table(
          conn,
          {schema_name, name} = rel,
-         %Schema.Proto.Schema{} = schema,
+         schema_version,
          origin,
          filtering_context
        ) do
     if filtering_context[:sent_tables] && MapSet.member?(filtering_context[:sent_tables], rel) do
       {:ok, 0, []}
     else
-      table = Enum.find(schema.tables, &(&1.name.schema == schema_name && &1.name.name == name))
+      {:ok, table} = SchemaLoader.Version.table(schema_version, rel)
       columns = Enum.map_join(table.columns, ", ", &~s|main."#{&1.name}"|)
-      {:ok, pks} = Schema.primary_keys(table)
+      {:ok, pks} = SchemaLoader.Version.primary_keys(schema_version, rel)
       pk_clause = Enum.map_join(pks, " AND ", &~s|main."#{&1}" = shadow."#{&1}"|)
 
       ownership_column = Ownership.id_column_name()

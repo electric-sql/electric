@@ -218,7 +218,7 @@ defmodule Electric.Postgres.TestConnection do
   def setup_with_sql_execute(_), do: :ok
 
   def load_schema(%{conn: _, origin: origin}) do
-    {:ok, _, schema} = Electric.Postgres.Extension.SchemaCache.load(origin)
+    {:ok, schema} = Electric.Postgres.Extension.SchemaCache.load(origin)
 
     {:ok, schema: schema}
   end

@@ -16,6 +16,7 @@ Current groups are:
 - `3.*` - Replication using an actual typescript client in Node
 - `4.*` - Auxillary Electric functions not immediately related to replication
 - `5.*` - Conflict resolution semantics tests
+- `6.*` - Permissions and write validations
 
 Feel free to add more.
 

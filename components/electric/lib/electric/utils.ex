@@ -371,4 +371,12 @@ defmodule Electric.Utils do
       params ++ [ssl: true]
     end
   end
+
+  @doc """
+  Output a 2-tuple relation (table) reference as pg-style `"schema"."table"`.
+  """
+  @spec inspect_relation({String.t(), String.t()}) :: String.t()
+  def inspect_relation({schema, name}) do
+    "#{inspect(schema)}.#{inspect(name)}"
+  end
 end

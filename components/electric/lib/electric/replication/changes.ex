@@ -84,14 +84,46 @@ defmodule Electric.Replication.Changes do
   end
 
   defmodule UpdatedRecord do
-    defstruct [:relation, :old_record, :record, tags: []]
+    defstruct [:relation, :old_record, :record, tags: [], changed_columns: MapSet.new()]
 
     @type t() :: %__MODULE__{
             relation: Changes.relation(),
             old_record: Changes.record() | nil,
             record: Changes.record(),
-            tags: [Changes.tag()]
+            tags: [Changes.tag()],
+            changed_columns: MapSet.t()
           }
+
+    def new(attrs) do
+      __MODULE__
+      |> struct(attrs)
+      |> build_changed_columns()
+    end
+
+    defp build_changed_columns(%{old_record: nil} = change) do
+      change
+    end
+
+    defp build_changed_columns(change) do
+      %{old_record: old, record: new} = change
+
+      # if the value is in the new but NOT the old, then it's being updated
+      # if it's in the old but NOT the new, then it's staying the same
+      changed =
+        Enum.reduce(new, MapSet.new(), fn {col_name, new_value}, changed ->
+          case Map.fetch(old, col_name) do
+            :error ->
+              MapSet.put(changed, col_name)
+
+            {:ok, old_value} ->
+              if old_value == new_value,
+                do: changed,
+                else: MapSet.put(changed, col_name)
+          end
+        end)
+
+      %{change | changed_columns: changed}
+    end
   end
 
   defmodule DeletedRecord do

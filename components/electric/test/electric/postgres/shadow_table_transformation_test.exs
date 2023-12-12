@@ -56,12 +56,12 @@ defmodule Electric.Postgres.ShadowTableTransformationTest do
     test "UPDATE operation gets converted and split correctly" do
       assert [main_change, shadow_change] =
                ShadowTableTransformation.split_change_into_main_and_shadow(
-                 %Changes.UpdatedRecord{
+                 Changes.UpdatedRecord.new(
                    relation: @relation,
                    record: %{"id" => "wow", "content" => "test", "content_b" => "new"},
                    old_record: %{"id" => "wow", "content" => "test", "content_b" => "old"},
                    tags: [@observed]
-                 },
+                 ),
                  relations(),
                  @transaction_tag,
                  nil
@@ -213,14 +213,14 @@ defmodule Electric.Postgres.ShadowTableTransformationTest do
                 "_tags" => serialize_pg_array([])
               }
             },
-            %Changes.UpdatedRecord{
+            Changes.UpdatedRecord.new(
               relation: shadow_of(@relation),
               record: %{
                 "id" => "wow",
                 "_tag" => @pg_transaction_tag,
                 "_tags" => serialize_pg_array([@pg_transaction_tag])
               }
-            }
+            )
           ]
           # to match the parsing order of logical replication producer
           |> Enum.reverse()

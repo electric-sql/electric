@@ -94,16 +94,6 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   end
 
   @impl SchemaLoader
-  def primary_keys(origin, {schema, name}) do
-    call(origin, {:primary_keys, schema, name})
-  end
-
-  @impl SchemaLoader
-  def primary_keys(origin, schema, name) do
-    call(origin, {:primary_keys, schema, name})
-  end
-
-  @impl SchemaLoader
   def refresh_subscription(origin, name) do
     call(origin, {:refresh_subscription, name})
   end
@@ -246,17 +236,28 @@ defmodule Electric.Postgres.Extension.SchemaCache do
 
   @impl GenServer
   def handle_call({:load, :current}, _from, %{current: nil} = state) do
-    {result, state} = load_current_schema(state)
-
-    {:reply, result, state}
+    with {{:ok, schema_version}, state} <- load_current_schema(state) do
+      {:reply, {:ok, schema_version}, state}
+    else
+      {error, state} ->
+        {:reply, error, state}
+    end
   end
 
-  def handle_call({:load, :current}, _from, %{current: {version, schema}} = state) do
-    {:reply, {:ok, version, schema}, state}
+  def handle_call(
+        {:load, :current},
+        _from,
+        %{current: %SchemaLoader.Version{} = schema_version} = state
+      ) do
+    {:reply, {:ok, schema_version}, state}
   end
 
-  def handle_call({:load, {:version, version}}, _from, %{current: {version, schema}} = state) do
-    {:reply, {:ok, version, schema}, state}
+  def handle_call(
+        {:load, {:version, version}},
+        _from,
+        %{current: %{version: version} = schema_version} = state
+      ) do
+    {:reply, {:ok, schema_version}, state}
   end
 
   def handle_call({:load, {:version, version}}, _from, state) do
@@ -264,9 +265,10 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   end
 
   def handle_call({:save, version, schema, stmts}, _from, state) do
-    {:ok, backend} = SchemaLoader.save(state.backend, version, schema, stmts)
+    {:ok, backend, schema_version} = SchemaLoader.save(state.backend, version, schema, stmts)
 
-    {:reply, {:ok, state.origin}, %{state | backend: backend, current: {version, schema}}}
+    {:reply, {:ok, state.origin, schema_version},
+     %{state | backend: backend, current: schema_version}}
   end
 
   def handle_call({:relation_oid, type, schema, name}, _from, state) do
@@ -275,8 +277,14 @@ defmodule Electric.Postgres.Extension.SchemaCache do
 
   def handle_call({:primary_keys, sname, tname}, _from, state) do
     {result, state} =
-      with {{:ok, _version, schema}, state} <- current_schema(state) do
-        {Schema.primary_keys(schema, sname, tname), state}
+      with {{:ok, schema_version}, state} <- current_schema(state) do
+        case SchemaLoader.Version.primary_keys(schema_version, {sname, tname}) do
+          {:ok, pks} ->
+            {{:ok, pks}, state}
+
+          {:error, _reason} = error ->
+            {error, state}
+        end
       end
 
     {:reply, result, state}
@@ -296,8 +304,8 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   end
 
   def handle_call(:electrified_tables, _from, state) do
-    load_and_reply(state, fn schema ->
-      {:ok, Schema.table_info(schema)}
+    load_and_reply(state, fn schema_version ->
+      {:ok, Schema.table_info(schema_version.schema)}
     end)
   end
 
@@ -323,21 +331,21 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   end
 
   def handle_call({:relation, oid}, _from, state) when is_integer(oid) do
-    load_and_reply(state, fn schema ->
-      Schema.table_info(schema, oid)
+    load_and_reply(state, fn schema_version ->
+      Schema.table_info(schema_version.schema, oid)
     end)
   end
 
   def handle_call({:relation, {_sname, _tname} = relation}, _from, state) do
-    load_and_reply(state, fn schema ->
-      Schema.table_info(schema, relation)
+    load_and_reply(state, fn schema_version ->
+      Schema.table_info(schema_version.schema, relation)
     end)
   end
 
   def handle_call({:relation, relation, version}, _from, state) do
     {result, state} =
-      with {:ok, ^version, schema} <- SchemaLoader.load(state.backend, version) do
-        {Schema.table_info(schema, relation), state}
+      with {:ok, schema_version} <- SchemaLoader.load(state.backend, version) do
+        {Schema.table_info(schema_version.schema, relation), state}
       else
         error -> {error, state}
       end
@@ -422,14 +430,14 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     load_current_schema(state)
   end
 
-  defp current_schema(%{current: {version, schema}} = state) do
-    {{:ok, version, schema}, state}
+  defp current_schema(%{current: schema_version} = state) do
+    {{:ok, schema_version}, state}
   end
 
   defp load_current_schema(state) do
     case SchemaLoader.load(state.backend) do
-      {:ok, version, schema} ->
-        {{:ok, version, schema}, %{state | current: {version, schema}}}
+      {:ok, schema_version} ->
+        {{:ok, schema_version}, %{state | current: schema_version}}
 
       error ->
         {error, state}
@@ -438,8 +446,8 @@ defmodule Electric.Postgres.Extension.SchemaCache do
 
   defp load_and_reply(state, process) when is_function(process, 1) do
     {result, state} =
-      with {{:ok, _version, schema}, state} <- current_schema(state) do
-        {process.(schema), state}
+      with {{:ok, schema_version}, state} <- current_schema(state) do
+        {process.(schema_version), state}
       else
         error -> {error, state}
       end

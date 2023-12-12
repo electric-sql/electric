@@ -105,10 +105,10 @@ defmodule Electric.Satellite.Serialization do
           if version && version != v,
             do: raise("Got DDL transaction with differing migration versions")
 
-          {:ok, schema} = maybe_load_schema(origin, schema, v)
+          {:ok, schema_version} = maybe_load_schema(origin, schema, v)
 
           {ops, add_relations} =
-            case Replication.migrate(schema, v, sql) do
+            case Replication.migrate(schema_version, sql) do
               {:ok, [op], relations} ->
                 {[%SatTransOp{op: {:migrate, op}} | ops], relations}
 
@@ -126,7 +126,7 @@ defmodule Electric.Satellite.Serialization do
             state
             | ops: ops,
               migration_version: v,
-              schema: schema,
+              schema: schema_version,
               new_relations: new_relations ++ add_relations,
               known_relations: known_relations
           }
@@ -167,7 +167,7 @@ defmodule Electric.Satellite.Serialization do
   end
 
   defp maybe_load_schema(origin, nil, version) do
-    with {:ok, _version, schema} <- Extension.SchemaCache.load(origin, version) do
+    with {:ok, schema} <- Extension.SchemaCache.load(origin, version) do
       {:ok, schema}
     else
       error ->
@@ -416,11 +416,11 @@ defmodule Electric.Satellite.Serialization do
          %SatOpUpdate{row_data: row_data, old_row_data: old_row_data, tags: tags},
          columns
        ) do
-    %UpdatedRecord{
+    UpdatedRecord.new(
       record: decode_record!(row_data, columns),
       old_record: decode_record!(old_row_data, columns),
       tags: tags
-    }
+    )
   end
 
   defp op_to_change(%SatOpDelete{old_row_data: nil, tags: tags}, _columns) do

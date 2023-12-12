@@ -23,6 +23,7 @@ defmodule Electric.Satellite.Protocol do
   alias Electric.Replication.Shapes.ShapeRequest
   alias Electric.Satellite.Serialization
   alias Electric.Satellite.ClientManager
+  alias Electric.Satellite.WriteValidation
   alias Electric.Telemetry.Metrics
 
   require Logger
@@ -563,16 +564,25 @@ defmodule Electric.Satellite.Protocol do
         {incomplete, complete} ->
           complete = Enum.reverse(complete)
 
-          for tx <- complete do
-            telemetry_event(state, :transaction_receive, Transaction.count_operations(tx))
+          case WriteValidation.validate_transactions!(
+                 complete,
+                 {SchemaCache, Connectors.origin(state.pg_connector_opts)}
+               ) do
+            {:ok, accepted} ->
+              {nil, send_transactions(accepted, incomplete, state)}
+
+            {:error, accepted, error, trailing} ->
+              state = send_transactions(accepted, incomplete, state)
+              telemetry_event(state, :bad_transaction)
+
+              Logger.error([
+                "WriteValidation.Error: " <> to_string(error),
+                "\n",
+                "Dropping #{length(trailing)} unapplied transactions: #{Enum.map(trailing, & &1.lsn) |> inspect()}"
+              ])
+
+              {:error, WriteValidation.Error.error_response(error)}
           end
-
-          in_rep =
-            %InRep{in_rep | incomplete_trans: incomplete}
-            |> InRep.add_to_queue(complete)
-            |> send_downstream()
-
-          {nil, %State{state | in_rep: in_rep}}
       end
     rescue
       e ->
@@ -598,6 +608,19 @@ defmodule Electric.Satellite.Protocol do
 
   def process_message(_, %State{}) do
     {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
+  end
+
+  defp send_transactions(complete, incomplete, state) do
+    for tx <- complete do
+      telemetry_event(state, :transaction_receive, Transaction.count_operations(tx))
+    end
+
+    in_rep =
+      %InRep{state.in_rep | incomplete_trans: incomplete}
+      |> InRep.add_to_queue(complete)
+      |> send_downstream()
+
+    %State{state | in_rep: in_rep}
   end
 
   @spec handle_start_replication_request(

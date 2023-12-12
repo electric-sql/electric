@@ -3,7 +3,7 @@ defmodule Electric.Postgres.ReplicationTest do
 
   use Electric.Satellite.Protobuf
 
-  alias Electric.Postgres.{Replication, Schema}
+  alias Electric.Postgres.{Replication, Schema, Extension.SchemaLoader}
 
   def parse(sql) do
     Electric.Postgres.parse!(sql)
@@ -122,8 +122,9 @@ defmodule Electric.Postgres.ReplicationTest do
       schema = schema_update(stmt)
 
       version = "20230405134615"
+      schema_version = SchemaLoader.Version.new(version, schema)
 
-      assert {:ok, [msg], [{"public", "fish"}]} = Replication.migrate(schema, version, stmt)
+      assert {:ok, [msg], [{"public", "fish"}]} = Replication.migrate(schema_version, stmt)
 
       # there are lots of tests that validate the schema is being properly updated
       # assert Schema.table_names(schema) == [~s("public"."fish"), ~s("frog"), ~s("teeth"."front")]
@@ -162,8 +163,9 @@ defmodule Electric.Postgres.ReplicationTest do
       """
 
       schema = schema_update(schema, stmt)
+      schema_version = SchemaLoader.Version.new(version, schema)
 
-      assert {:ok, [msg], [{"teeth", "front"}]} = Replication.migrate(schema, version, stmt)
+      assert {:ok, [msg], [{"teeth", "front"}]} = Replication.migrate(schema_version, stmt)
       assert Schema.table_names(schema) == [~s("public"."fish"), ~s("teeth"."front")]
       assert %SatOpMigrate{version: ^version} = msg
       %{stmts: stmts, table: table} = msg
@@ -206,8 +208,9 @@ defmodule Electric.Postgres.ReplicationTest do
       schema = schema_update(stmt)
 
       version = "20230405134615"
+      schema_version = SchemaLoader.Version.new(version, schema)
 
-      assert {:ok, [_msg], [{"public", "fish"}]} = Replication.migrate(schema, version, stmt)
+      assert {:ok, [_msg], [{"public", "fish"}]} = Replication.migrate(schema_version, stmt)
 
       # there are lots of tests that validate the schema is being properly updated
       assert Schema.table_names(schema) == [~s("public"."fish")]
@@ -216,8 +219,9 @@ defmodule Electric.Postgres.ReplicationTest do
         "ALTER TABLE fish ADD COLUMN value jsonb DEFAULT '{}', ADD COLUMN ts timestamp DEFAULT current_timestamp;"
 
       schema = schema_update(schema, stmt)
+      schema_version = SchemaLoader.Version.new(version, schema)
 
-      assert {:ok, [msg], [{"public", "fish"}]} = Replication.migrate(schema, version, stmt)
+      assert {:ok, [msg], [{"public", "fish"}]} = Replication.migrate(schema_version, stmt)
 
       assert %SatOpMigrate{version: ^version} = msg
 
@@ -263,14 +267,16 @@ defmodule Electric.Postgres.ReplicationTest do
       schema = schema_update(stmt)
 
       version = "20230405134615"
+      schema_version = SchemaLoader.Version.new(version, schema)
 
-      assert {:ok, [_msg], [{"public", "fish"}]} = Replication.migrate(schema, version, stmt)
+      assert {:ok, [_msg], [{"public", "fish"}]} = Replication.migrate(schema_version, stmt)
 
       stmt = "CREATE INDEX fish_available_index ON public.fish (avilable);"
       schema = schema_update(schema, stmt)
 
       version = "20230405134616"
-      assert {:ok, [msg], []} = Replication.migrate(schema, version, stmt)
+      schema_version = SchemaLoader.Version.new(version, schema)
+      assert {:ok, [msg], []} = Replication.migrate(schema_version, stmt)
       assert %SatOpMigrate{version: ^version} = msg
 
       %{stmts: stmts, table: table} = msg
@@ -300,9 +306,10 @@ defmodule Electric.Postgres.ReplicationTest do
 
       schema = Schema.new()
       version = "20230405134615"
+      schema_version = SchemaLoader.Version.new(version, schema)
 
       for stmt <- stmts do
-        assert {:ok, [], []} = Replication.migrate(schema, version, stmt)
+        assert {:ok, [], []} = Replication.migrate(schema_version, stmt)
       end
     end
 
@@ -322,8 +329,9 @@ defmodule Electric.Postgres.ReplicationTest do
     #   ]
 
     #   version = "20230405134615"
+    #   schema_version = SchemaLoader.Version.new(version, schema)
 
-    #   assert {:error, schema} = Replication.migrate(schema, version, stmts)
+    #   assert {:error, schema} = Replication.migrate(schema_version, stmts)
     # end
   end
 end

@@ -195,11 +195,12 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     old_data = data_tuple_to_map(relation.columns, msg.old_tuple_data)
     data = data_tuple_to_map(relation.columns, msg.tuple_data)
 
-    updated_record = %UpdatedRecord{
-      relation: {relation.namespace, relation.name},
-      old_record: old_data,
-      record: data
-    }
+    updated_record =
+      UpdatedRecord.new(
+        relation: {relation.namespace, relation.name},
+        old_record: old_data,
+        record: data
+      )
 
     {lsn, txn} = state.transaction
     txn = %{txn | changes: [updated_record | txn.changes]}
