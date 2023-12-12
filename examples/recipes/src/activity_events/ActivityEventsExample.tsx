@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from "react"
 import { useElectric } from "../electric/ElectricWrapper"
 import { useLiveQuery } from "electric-sql/react"
 import { genUUID } from "electric-sql/util"
+import { formatDateTime } from "./utilities"
 
 export const ActivityEventsExample = () => {
   const { db } = useElectric()!
@@ -142,7 +143,7 @@ const ActivityPopover = () => {
                 </ListItemIcon>
                 <ListItemText
                   primary={activity.message}
-                  secondary={formatDate(activity.timestamp)}
+                  secondary={formatDateTime(activity.timestamp)}
                 />
                 <Badge
                   color="secondary"
@@ -254,19 +255,4 @@ const ActivityToast = () => {
 
 function TransitionUp(props: SlideProps) {
   return <Slide {...props} direction="up" />;
-}
-
-function formatDate(unixTime: number): string {
-  const options: Intl.DateTimeFormatOptions = { 
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: 'numeric'
-  }
-  const formattedDate = new Date(unixTime).toLocaleDateString(
-    navigator.language,
-    options
-  );
-  return formattedDate;
 }
