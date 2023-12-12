@@ -1,35 +1,19 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import {
   Avatar, IconButton,
-  Badge, Box, Button, Collapse, Container, Fade, Grid,
+  Badge, Box, Button, Collapse, Container,
   List, ListItemButton, ListItemIcon, ListItemText,
   Popover, Slide, SlideProps, Snackbar
 } from "@mui/material"
-import { Close, FiberManualRecord, Notifications } from "@mui/icons-material"
+import { Close, Notifications } from "@mui/icons-material"
 import { NavigationBar } from "../components/NavigationBar"
-import { memo, useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useElectric } from "../electric/ElectricWrapper"
 import { useLiveQuery } from "electric-sql/react"
 import { genUUID } from "electric-sql/util"
-import { Activity_events } from "../generated/client"
 
 export const ActivityEventsExample = () => {
-  const [ visitTime ] = useState(Date.now())
   const { db } = useElectric()!
-  
-
-  const { results: mostRecentLiveActivity } = useLiveQuery(
-    db.activity_events.liveFirst({
-      orderBy: {
-        timestamp: 'desc'
-      },
-      where: {
-        timestamp: {
-          gte: visitTime
-        }
-      }
-    })
-  )
-
   useEffect(() => {
     const syncItems = async () => {
       // Resolves when the shape subscription has been established.
@@ -40,7 +24,6 @@ export const ActivityEventsExample = () => {
     }
 
     syncItems()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const generateActivity = () => {
@@ -55,31 +38,32 @@ export const ActivityEventsExample = () => {
     })
   }
 
-
   return (
-    <div>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <NavigationBar title="Activity Events" items={
         [
           <ActivityPopover key="notifications" />
         ]
       }/>
-      <Container maxWidth="sm">
-        <Grid container justifyContent="center" alignItems="center">
-          <Grid item>
-            <Button variant="outlined" onClick={generateActivity}>
-              Primary
-            </Button>
-          </Grid>
-        </Grid>
-
-        <ActivityToast key="shi" activity={mostRecentLiveActivity} />
+      <Container maxWidth="sm" sx={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100%'
+      }}>
+          <Button variant="contained" size="large" onClick={generateActivity}>
+            Generate activity
+          </Button>
+        <ActivityToast />
       </Container>
-    </div>
+    </Box>
   )
 
 }
 
 const ActivityPopover = () => {
+  const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
+
   const { db } = useElectric()!
   const { results: mostRecentActivities = [] } = useLiveQuery(
     db.activity_events.liveMany({
@@ -98,10 +82,9 @@ const ActivityPopover = () => {
   const hasUnreadActivities = numUnreadActivities > 0;
 
   
-  const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
 
 
-  const markActivityAsRead = (activityId: string) => {
+  const markActivityAsRead = (activityId: string) =>
     db.activity_events.update({
       data: {
         read_at: Date.now()
@@ -110,9 +93,9 @@ const ActivityPopover = () => {
         id: activityId,
       }
     })
-  }
   
-  const markAllAsRead = () => {
+  
+  const markAllAsRead = () => 
     db.activity_events.updateMany({
       data: {
         read_at: Date.now()
@@ -121,7 +104,6 @@ const ActivityPopover = () => {
         read_at: null
       }
     })
-  }
 
   return (
     <>
@@ -162,9 +144,12 @@ const ActivityPopover = () => {
                   primary={activity.message}
                   secondary={formatDate(activity.timestamp)}
                 />
-                <Fade in={activity.read_at == null}>
-                  <FiberManualRecord style={{color: 'red', width: 8, marginLeft: 16}}/>
-                </Fade>
+                <Badge
+                  color="secondary"
+                  variant="dot"
+                  invisible={activity.read_at !== null}
+                  sx={{ width: 24 }}
+                />
               </ListItemButton>
             ))}
           </List>
@@ -189,20 +174,29 @@ const ActivityPopover = () => {
   )
 }
 
-const ActivityToast = memo(function ActivityToastRaw({
-  activity,
-  onAck
-} : {
-  activity?: Activity_events,
-  onAck?: () => void
-}) {
+const ActivityToast = () => {
+  const [ visitTime ] = useState(Date.now())
   const [open, setOpen] = useState(false);
 
+  const { db } = useElectric()!
+  const { results: liveActivity } = useLiveQuery(
+    db.activity_events.liveFirst({
+      orderBy: {
+        timestamp: 'desc'
+      },
+      where: {
+        timestamp: {
+          gte: visitTime
+        }
+      }
+    })
+  )
+
   useEffect(() => {
-    if (activity?.id !== undefined) {
+    if (liveActivity?.id !== undefined) {
       setOpen(true);
     }
-  }, [activity?.id])
+  }, [liveActivity?.id])
 
   const handleClose = (_event: React.SyntheticEvent | Event, reason?: string) => {
     if (reason === 'clickaway') {
@@ -211,15 +205,24 @@ const ActivityToast = memo(function ActivityToastRaw({
     setOpen(false);
   };
 
-  const handleAck = () => {
-    onAck?.();
+  const handleAck = useCallback(() => {
+    if (liveActivity && liveActivity.read_at === null) {
+      db.activity_events.update({
+        data: {
+          read_at: Date.now()
+        },
+        where: {
+          id: liveActivity.id
+        }
+      })
+    }
     setOpen(false);
-  }
+  }, [liveActivity]);
 
 
   return (
     <Snackbar
-        key={activity?.id}
+        key={liveActivity?.id}
         open={open}
         autoHideDuration={6000}
         onClose={handleClose}
@@ -229,7 +232,7 @@ const ActivityToast = memo(function ActivityToastRaw({
           vertical: 'bottom',
           horizontal: 'center'
         }}
-        message={activity?.message}
+        message={liveActivity?.message}
         action={
           <>
             <Button color="secondary" size="small" onClick={handleAck}>
@@ -247,7 +250,7 @@ const ActivityToast = memo(function ActivityToastRaw({
         }
       />
   )
-}, (prevProps, newProps) => prevProps.activity?.id == newProps.activity?.id);
+}
 
 function TransitionUp(props: SlideProps) {
   return <Slide {...props} direction="up" />;
