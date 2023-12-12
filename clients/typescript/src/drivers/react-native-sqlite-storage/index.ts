@@ -13,24 +13,18 @@ import { ElectricConfig } from '../../config'
 import { WebSocketReactNative } from '../../sockets/react-native'
 import { Database } from './database'
 import { ElectricClient } from '../../client/model/client'
+import { setUUIDImpl } from '../../util/common'
 
 export type { Database }
 
 // Provide implementation for TextEncoder/TextDecoder
 import 'fastestsmallesttextencoderdecoder'
-// Provide implementation for global uuid()
-import uuid from 'react-native-uuid'
-import { DbSchema } from '../../client/model/schema'
-;(function (global: any) {
-  global['uuid'] = uuid.v4
-})(
-  typeof global == '' + void 0
-    ? typeof self == '' + void 0
-      ? this || {}
-      : self
-    : global
-)
 
+// Provide implementation for uuid()
+import uuid from 'react-native-uuid'
+setUUIDImpl(uuid.v4 as () => string)
+
+import { DbSchema } from '../../client/model/schema'
 export { DatabaseAdapter }
 
 export const electrify = async <T extends Database, DB extends DbSchema<any>>(
