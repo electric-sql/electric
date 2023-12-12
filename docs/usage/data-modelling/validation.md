@@ -11,23 +11,31 @@ User input validation is under active development. As we progress we will update
 
 ## Immutable Primary Keys
 
-Electric rejects updates to a table's primary keys. 
+Electric rejects updates to a table's primary keys.
 
-Attempting to `UPDATE` a primary key will be rejected by the server and the offending client will be forcibily disconnected.
+Attempting to `UPDATE` a primary key will be rejected by the server and the offending client will be forcibly disconnected.
 
 ```sql
 CREATE TABLE items (
-    id uuid PRIMARY KEY,
-    value text;
+  id uuid PRIMARY KEY,
+  value text
 );
 
-INSERT INTO items (id, value) VALUES ('f2ece325-219f-40e2-b5b1-fdb32e32f0ed', 'my first value');
+INSERT INTO
+  items (id, value)
+VALUES
+  ('f2ece325-219f-40e2-b5b1-fdb32e32f0ed', 'my first value');
 
 -- don't do this!
-UPDATE items SET id='cfe89786-8170-4438-b667-b7874eb5c54c' WHERE id='f2ece325-219f-40e2-b5b1-fdb32e32f0ed';
+UPDATE
+  items
+SET
+  id = 'cfe89786-8170-4438-b667-b7874eb5c54c'
+WHERE
+  id = 'f2ece325-219f-40e2-b5b1-fdb32e32f0ed';
 ```
 
-This will break leave the client in an inconsistent state and unable to sync until its local database has been reset.
+This will leave the client in an inconsistent state (with respect to the server's view of the shared state) and unable to sync until its local database has been reset.
 
 ## Roadmap
 
