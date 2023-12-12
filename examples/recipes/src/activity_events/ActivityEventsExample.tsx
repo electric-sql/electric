@@ -1,9 +1,11 @@
 import {
-  Badge, Button, Container, Grid,
-  IconButton, Popover, Slide, SlideProps, Snackbar
+  Avatar, IconButton,
+  Badge, Box, Button, Collapse, Container, Fade, Grid,
+  List, ListItemButton, ListItemIcon, ListItemText,
+  Popover, Slide, SlideProps, Snackbar
 } from "@mui/material"
+import { Close, FiberManualRecord, Notifications } from "@mui/icons-material"
 import { NavigationBar } from "../components/NavigationBar"
-import { Close, Notifications } from "@mui/icons-material"
 import { memo, useEffect, useState } from "react"
 import { useElectric } from "../electric/ElectricWrapper"
 import { useLiveQuery } from "electric-sql/react"
@@ -13,20 +15,7 @@ import { Activity_events } from "../generated/client"
 export const ActivityEventsExample = () => {
   const [ visitTime ] = useState(Date.now())
   const { db } = useElectric()!
-  // const { results: allActivities } = useLiveQuery(
-  //   db.activity_events.liveMany({
-  //     orderBy: {
-  //       timestamp: 'desc'
-  //     },
-  //     take: 5, 
-  //   })
-  // )
-
-  // const { results: numUnreadActivities } = useLiveQuery(
-  //   db.liveRaw({
-  //     sql: 'SELECT COUNT(id) as count FROM activity_events WHERE read_at = NULL'
-  //   })
-  // )
+  
 
   const { results: mostRecentLiveActivity } = useLiveQuery(
     db.activity_events.liveFirst({
@@ -71,7 +60,7 @@ export const ActivityEventsExample = () => {
     <div>
       <NavigationBar title="Activity Events" items={
         [
-          <NotificationPopover key="notifications" />
+          <ActivityPopover key="notifications" />
         ]
       }/>
       <Container maxWidth="sm">
@@ -90,15 +79,57 @@ export const ActivityEventsExample = () => {
 
 }
 
-const NotificationPopover = () => {
+const ActivityPopover = () => {
+  const { db } = useElectric()!
+  const { results: mostRecentActivities = [] } = useLiveQuery(
+    db.activity_events.liveMany({
+      orderBy: {
+        timestamp: 'desc'
+      },
+      take: 5, 
+    })
+  )
+
+  const numUnreadActivities = useLiveQuery(
+    db.liveRaw({
+      sql: 'SELECT COUNT(*) FROM activity_events WHERE read_at IS NULL'
+    })
+  ).results?.[0]?.['COUNT(*)'] ?? 0
+  const hasUnreadActivities = numUnreadActivities > 0;
+
+  
   const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
+
+
+  const markActivityAsRead = (activityId: string) => {
+    db.activity_events.update({
+      data: {
+        read_at: Date.now()
+      },
+      where: {
+        id: activityId,
+      }
+    })
+  }
+  
+  const markAllAsRead = () => {
+    db.activity_events.updateMany({
+      data: {
+        read_at: Date.now()
+      },
+      where: {
+        read_at: null
+      }
+    })
+  }
+
   return (
     <>
       <IconButton color="inherit" onClick={(e) => setAnchorEl(e.currentTarget)}>
         <Badge
           color="secondary"
           variant="dot"
-          invisible={false}
+          invisible={!hasUnreadActivities}
         >
           <Notifications />
         </Badge>
@@ -112,6 +143,47 @@ const NotificationPopover = () => {
           horizontal: 'left',
         }}
         >
+        <Box pb={1}>
+          <List>
+            {mostRecentActivities.map((activity) => (
+              <ListItemButton
+                key={activity.id}
+                onPointerEnter={
+                  () =>
+                    activity.read_at ?
+                    null :
+                    markActivityAsRead(activity.id)
+                }
+              >
+                <ListItemIcon>
+                  <Avatar>{activity.source.slice(0,1)}</Avatar>
+                </ListItemIcon>
+                <ListItemText
+                  primary={activity.message}
+                  secondary={formatDate(activity.timestamp)}
+                />
+                <Fade in={activity.read_at == null}>
+                  <FiberManualRecord style={{color: 'red', width: 8, marginLeft: 16}}/>
+                </Fade>
+              </ListItemButton>
+            ))}
+          </List>
+
+          <Button fullWidth>
+            {
+            'See all activities' +
+            (hasUnreadActivities ? ` (${numUnreadActivities} unread)` : '')
+            }
+          </Button>
+
+          <Collapse in={hasUnreadActivities} collapsedSize={0}>
+            <Button fullWidth
+              disabled={!hasUnreadActivities}
+              onClick={markAllAsRead}>
+              Mark all as read
+            </Button>
+          </Collapse>
+        </Box>
       </Popover>
     </>
   )
@@ -179,4 +251,19 @@ const ActivityToast = memo(function ActivityToastRaw({
 
 function TransitionUp(props: SlideProps) {
   return <Slide {...props} direction="up" />;
+}
+
+function formatDate(unixTime: number): string {
+  const options: Intl.DateTimeFormatOptions = { 
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric'
+  }
+  const formattedDate = new Date(unixTime).toLocaleDateString(
+    navigator.language,
+    options
+  );
+  return formattedDate;
 }
