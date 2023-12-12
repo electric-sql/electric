@@ -1,12 +1,72 @@
 import {
   Badge, Button, Container, Grid,
-  IconButton, Popover, Slide, Snackbar
+  IconButton, Popover, Slide, SlideProps, Snackbar
 } from "@mui/material"
 import { NavigationBar } from "../components/NavigationBar"
 import { Close, Notifications } from "@mui/icons-material"
-import { useState } from "react"
+import { memo, useEffect, useState } from "react"
+import { useElectric } from "../electric/ElectricWrapper"
+import { useLiveQuery } from "electric-sql/react"
+import { genUUID } from "electric-sql/util"
+import { Activity_events } from "../generated/client"
 
 export const ActivityEventsExample = () => {
+  const [ visitTime ] = useState(Date.now())
+  const { db } = useElectric()!
+  // const { results: allActivities } = useLiveQuery(
+  //   db.activity_events.liveMany({
+  //     orderBy: {
+  //       timestamp: 'desc'
+  //     },
+  //     take: 5, 
+  //   })
+  // )
+
+  // const { results: numUnreadActivities } = useLiveQuery(
+  //   db.liveRaw({
+  //     sql: 'SELECT COUNT(id) as count FROM activity_events WHERE read_at = NULL'
+  //   })
+  // )
+
+  const { results: mostRecentLiveActivity } = useLiveQuery(
+    db.activity_events.liveFirst({
+      orderBy: {
+        timestamp: 'desc'
+      },
+      where: {
+        timestamp: {
+          gte: visitTime
+        }
+      }
+    })
+  )
+
+  useEffect(() => {
+    const syncItems = async () => {
+      // Resolves when the shape subscription has been established.
+      const shape = await db.activity_events.sync()
+
+      // Resolves when the data has been synced into the local database.
+      await shape.synced
+    }
+
+    syncItems()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const generateActivity = () => {
+    db.activity_events.create({
+      data: {
+        id: genUUID(),
+        source: 'Alice',
+        activity_type: 'like',
+        timestamp: Date.now(),
+        message: Math.random() > 0.5 ? 'Alice liked your comment' : 'Bob commented on your post',
+      }
+    })
+  }
+
+
   return (
     <div>
       <NavigationBar title="Activity Events" items={
@@ -17,13 +77,13 @@ export const ActivityEventsExample = () => {
       <Container maxWidth="sm">
         <Grid container justifyContent="center" alignItems="center">
           <Grid item>
-            <Button variant="outlined">
+            <Button variant="outlined" onClick={generateActivity}>
               Primary
             </Button>
           </Grid>
         </Grid>
 
-      <NotificationToast />
+        <ActivityToast key="shi" activity={mostRecentLiveActivity} />
       </Container>
     </div>
   )
@@ -57,11 +117,20 @@ const NotificationPopover = () => {
   )
 }
 
-const NotificationToast = () => {
+const ActivityToast = memo(function ActivityToastRaw({
+  activity,
+  onAck
+} : {
+  activity?: Activity_events,
+  onAck?: () => void
+}) {
   const [open, setOpen] = useState(false);
-  const [messageInfo, setMessageInfo] = useState<string | undefined>(
-    undefined,
-  );
+
+  useEffect(() => {
+    if (activity?.id !== undefined) {
+      setOpen(true);
+    }
+  }, [activity?.id])
 
   const handleClose = (_event: React.SyntheticEvent | Event, reason?: string) => {
     if (reason === 'clickaway') {
@@ -70,25 +139,29 @@ const NotificationToast = () => {
     setOpen(false);
   };
 
-  const handleExited = () => {
-    setMessageInfo(undefined);
-  };
+  const handleAck = () => {
+    onAck?.();
+    setOpen(false);
+  }
+
 
   return (
     <Snackbar
+        key={activity?.id}
         open={open}
+        autoHideDuration={6000}
         onClose={handleClose}
-        TransitionComponent={(props) => <Slide {...props} direction="up" />}
-        TransitionProps= {{ onExited: handleExited }}
+        TransitionComponent={TransitionUp}
+        TransitionProps= {{ onExited: () => setOpen(false) }}
         anchorOrigin={{
           vertical: 'bottom',
           horizontal: 'center'
         }}
-        message={messageInfo}
+        message={activity?.message}
         action={
           <>
-            <Button color="secondary" size="small" onClick={handleClose}>
-              UNDO
+            <Button color="secondary" size="small" onClick={handleAck}>
+              Mark as read
             </Button>
             <IconButton
               aria-label="close"
@@ -102,4 +175,8 @@ const NotificationToast = () => {
         }
       />
   )
+}, (prevProps, newProps) => prevProps.activity?.id == newProps.activity?.id);
+
+function TransitionUp(props: SlideProps) {
+  return <Slide {...props} direction="up" />;
 }
