@@ -8,7 +8,9 @@ import ReactDOM from 'react-dom/client'
 import ToolbarTabs from './tabs'
 import { ToolbarInterface } from './api/toolbar-interface'
 import { ToolbarTypescript } from './api/toolbar-typescript'
-import { GlobalRegistry } from 'electric-sql/satellite'
+import { ElectricClient } from 'electric-sql/client/model'
+
+import {Registry, GlobalRegistry} from 'electric-sql/satellite'
 
 export type ToolbarProps = {
   api: ToolbarInterface
@@ -66,12 +68,12 @@ function ElectricToolbar({ api }: ToolbarProps) {
   }
 }
 
-export function clientApi(globalRegistry: GlobalRegistry) {
-  return new ToolbarTypescript(globalRegistry)
+export function clientApi(registry: GlobalRegistry | Registry) {
+  return new ToolbarTypescript(registry)
 }
 
-export function addToolbar(globalRegistry: GlobalRegistry) {
-  const toolbarApi = clientApi(globalRegistry)
+export function addToolbar(electric: ElectricClient<any>) {
+  const toolbarApi = clientApi(electric.registry)
   const toolbar_div = document.createElement('div')
   toolbar_div.setAttribute('id', 'electric-toolbar')
   toolbar_div.setAttribute('class', 'electric-toolbar')

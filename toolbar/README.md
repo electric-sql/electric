@@ -32,14 +32,14 @@ First some imports
 
 ```typescript
 import { addToolbar } from '@electric-sql/debug-toolbar'
-import { globalRegistry } from 'electric-sql/satellite'
 import '@electric-sql/debug-toolbar/dist/index.cjs.css'
 ```
 
-Then in your code add the toolbar after initialising the electric database like this:
+Then in your code after calling `electrify` pass the electric client into addToolbar:
 
 ```typescript
-addToolbar(globalRegistry)
+const electricClient = await electrify(conn, schema, config)
+addToolbar(electricClient)
 ```
 
 This will add the toolbar to the bottom of your window

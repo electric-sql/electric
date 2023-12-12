@@ -1,20 +1,20 @@
 import { ToolbarInterface } from './toolbar-interface'
 import { Row, Statement, ConnectivityState } from 'electric-sql/util'
-import { GlobalRegistry } from 'electric-sql/satellite'
+import {Registry, GlobalRegistry} from 'electric-sql/satellite'
 
 export class ToolbarTypescript implements ToolbarInterface {
-  private globalRegistry: GlobalRegistry
+  private registry: Registry | GlobalRegistry
 
-  constructor(globalRegistry: GlobalRegistry) {
-    this.globalRegistry = globalRegistry
+  constructor(registry: Registry | GlobalRegistry) {
+    this.registry = registry
   }
 
   getSatelliteNames(): string[] {
-    return Object.keys(this.globalRegistry.satellites)
+    return Object.keys(this.registry.satellites)
   }
 
   getSatelliteStatus(name: string): ConnectivityState | 'Not found' {
-    const sat = this.globalRegistry.satellites[name]
+    const sat = this.registry.satellites[name]
     return sat?.connectivityState ?? 'Not found'
   }
 
@@ -31,7 +31,7 @@ export class ToolbarTypescript implements ToolbarInterface {
   }
 
   queryDB(dbName: string, statement: Statement): Promise<Row[]> {
-    const sat = this.globalRegistry.satellites[dbName]
+    const sat = this.registry.satellites[dbName]
     return (
       sat?.adapter.query(statement) ??
       Promise.reject("Couldn't query satellite")
