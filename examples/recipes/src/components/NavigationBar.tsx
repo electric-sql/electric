@@ -1,11 +1,11 @@
 import { AppBar, Box, IconButton, Link, Toolbar, Typography } from '@mui/material'
-import logo from '../assets/electric_logo.svg'
 import { ReactElement } from 'react'
+import { ElectricLogo } from './ElectricLogo'
 
 
 export const NavigationBar = ({ title, items = [] } : { title: string, items?: ReactElement[] }) => (
     <Box sx={{ flexGrow: 1, mb: 2 }}>
-      <AppBar position="static">
+      <AppBar position="static" color="primary">
         <Toolbar>
           <IconButton
             size="large"
@@ -15,8 +15,8 @@ export const NavigationBar = ({ title, items = [] } : { title: string, items?: R
             sx={{ mr: 2 }}
           >
             <Link href="https://electric-sql.com" target="_blank" rel="noreferrer"
-              underline="none" sx={{ fontSize: 0}}>
-              <img src={logo} width="32px" />
+              underline="none" sx={{ fontSize: 0 }}>
+              <ElectricLogo />
             </Link>
           </IconButton>
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>

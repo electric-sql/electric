@@ -6,7 +6,7 @@ import { Close } from "@mui/icons-material";
 
 export const ActivityToast = () => {
   const [ visitTime ] = useState(Date.now())
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(false)
 
   const { db } = useElectric()!
 
@@ -57,7 +57,7 @@ export const ActivityToast = () => {
     <Snackbar
         key={liveActivity?.id}
         open={open}
-        autoHideDuration={6000}
+        autoHideDuration={3000}
         onClose={handleClose}
         TransitionComponent={TransitionUp}
         TransitionProps= {{ onExited: () => setOpen(false) }}
@@ -69,11 +69,11 @@ export const ActivityToast = () => {
         action={
           <>
             {liveActivity?.action && 
-              <Button color="primary" size="small">
+              <Button variant="text" color="inherit" size="small">
                 {liveActivity.action}
               </Button>
             }
-            <Button color="primary" size="small" onClick={handleAck}>
+            <Button variant="text" color="inherit" size="small" onClick={handleAck}>
               Mark as read
             </Button>
             <IconButton
