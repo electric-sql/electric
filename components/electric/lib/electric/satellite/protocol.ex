@@ -574,11 +574,12 @@ defmodule Electric.Satellite.Protocol do
             {:error, accepted, error, trailing} ->
               state = send_transactions(accepted, incomplete, state)
               telemetry_event(state, :bad_transaction)
-              Logger.error(to_string(error))
 
-              Logger.error(
+              Logger.error([
+                "WriteValidation.Error: " <> to_string(error),
+                "\n",
                 "Dropping #{length(trailing)} unapplied transactions: #{Enum.map(trailing, & &1.lsn) |> inspect()}"
-              )
+              ])
 
               {:error, WriteValidation.Error.error_response(error)}
           end
