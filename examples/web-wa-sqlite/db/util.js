@@ -48,7 +48,7 @@ function fetchHostProxyPortElectric() {
 // Returns the host port to which the `containerPort` of the `container` is bound.
 // Returns undefined if the port is not bound or container does not exist.
 function fetchHostPort(container, containerPort, service) {
-  const output = shell.exec(`docker inspect --format='{{(index (index .NetworkSettings.Ports "${containerPort}/tcp") 0).HostPort}}' ${container}`)
+  const output = shell.exec(`docker inspect --format="{{(index (index .NetworkSettings.Ports \\"${containerPort}/tcp\\") 0).HostPort}}" ${container}`)
   if (output.code !== 0) {
     // Electric is not running for this app
     error(`${service} appears not to be running for this app.\nDocker container ${container} not running.`)

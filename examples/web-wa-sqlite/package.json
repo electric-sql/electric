@@ -17,8 +17,8 @@
     "electric:start": "node ./backend/startElectric.js",
     "electric:check": "node ./check-electric-is-running.js",
     "build": "node copy-wasm-files.js && node builder.js",
-    "build-prod": "NODE_ENV=production npm run build",
-    "start": "yarn electric:check && SERVE=true npm run build"
+    "build-prod": "cross-env NODE_ENV=production npm run build",
+    "start": "yarn electric:check && cross-env SERVE=true npm run build"
   },
   "engines": {
     "node": ">=16.11.0"
@@ -36,6 +36,7 @@
     "@types/node": ">=16.11.0",
     "@types/react": "^18.0.18",
     "@types/react-dom": "^18.0.11",
+    "cross-env": "^7.0.3",
     "esbuild": "^0.16.17",
     "esbuild-plugin-inline-image": "^0.0.9",
     "fs-extra": "^10.0.0",

@@ -246,7 +246,7 @@ async function createPrismaSchema(
   const output = path.resolve(out)
   const schema = dedent`
     generator electric {
-      provider      = "${escapePathForString(generatorPath)}"
+      provider      = "node ${escapePathForString(generatorPath)}"
       output        = "${escapePathForString(output)}"
       relationModel = "false"
     }
