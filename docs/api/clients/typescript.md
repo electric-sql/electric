@@ -29,7 +29,7 @@ const config: ElectricConfig = {
 }
 ```
 
-The full list of available options:
+### Available options
 
 - `auth: AuthConfig`
 
@@ -70,6 +70,26 @@ The full list of available options:
 
    Configuration of the backoff strategy used when trying to reconnect to the Electric sync service after a failed
    connection attempt.
+
+### Configuring example apps
+
+In our example apps and in apps created with `npx create-electric-app`, the `url` and `debug` options are looked up as
+`ELECTRIC_URL` and `DEBUG_MODE` environment variables, respectively.
+
+So, for example, to include the URL of a hosted instance of Electric into the production build of your app, put it in
+the `ELECTRIC_URL` environment variable when running your build command:
+
+```shell
+ELECTRIC_URL=https://my-app-domain.com npm run build
+# or
+ELECTRIC_URL=wss://my-app-domain.com npm run build
+```
+
+To run your app in development with debug mode enabled:
+
+```shell
+ELECTRIC_URL=http://localhost:5133 DEBUG_MODE=true npm run start
+```
 
 ## Instantiation
 
