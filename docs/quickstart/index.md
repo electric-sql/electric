@@ -76,6 +76,7 @@ ELECTRIC GRANT ALL
 
 ```tsx
 const config = {
+  url: "http://localhost:5133",
   auth: {
     token: '<your JWT>'
   }
