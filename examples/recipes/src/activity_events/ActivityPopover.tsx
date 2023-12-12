@@ -1,0 +1,137 @@
+import {
+  Avatar, IconButton,
+  Badge, Box, Button, Collapse,
+  List, ListItemButton, ListItemIcon, ListItemText,
+  Popover
+} from "@mui/material"
+import { Notifications } from "@mui/icons-material"
+import { ReactElement, useState } from "react"
+import { useElectric } from "../electric/ElectricWrapper"
+import { useLiveQuery } from "electric-sql/react"
+import { formatDateTime } from "./utilities"
+
+
+export const ActivityPopover = () => {
+  const { db } = useElectric()!
+  const { results: mostRecentActivities = [] } = useLiveQuery(
+    db.activity_events.liveMany({
+      orderBy: {
+        timestamp: 'desc'
+      },
+      take: 5, 
+    })
+  )
+
+  const numUnreadActivities = useLiveQuery(
+    db.liveRaw({
+      sql: 'SELECT COUNT(*) FROM activity_events WHERE read_at IS NULL'
+    })
+  ).results?.[0]?.['COUNT(*)'] ?? 0
+  const hasUnreadActivities = numUnreadActivities > 0;
+
+
+  const markActivityAsRead = (activityId: string) =>
+    db.activity_events.update({
+      data: {
+        read_at: Date.now()
+      },
+      where: {
+        id: activityId,
+      }
+    })
+  
+  
+  const markAllAsRead = () => 
+    db.activity_events.updateMany({
+      data: {
+        read_at: Date.now()
+      },
+      where: {
+        read_at: null
+      }
+    })
+
+  return (
+    <NotificationPopover showBadge={hasUnreadActivities}>
+        <Box pb={1}>
+          <List>
+            {mostRecentActivities.map((activity) => (
+              <ListItemButton
+                key={activity.id}
+                onPointerEnter={
+                  () =>
+                    activity.read_at ?
+                    null :
+                    markActivityAsRead(activity.id)
+                }
+              >
+                <ListItemIcon>
+                  <Avatar>{activity.source.slice(0,1)}</Avatar>
+                </ListItemIcon>
+                <ListItemText
+                  primary={activity.message}
+                  secondary={formatDateTime(activity.timestamp)}
+                />
+                <Badge
+                  color="secondary"
+                  variant="dot"
+                  invisible={activity.read_at !== null}
+                  sx={{ width: 24 }}
+                />
+              </ListItemButton>
+            ))}
+          </List>
+
+          <Button fullWidth>
+            {
+            'See all activities' +
+            (hasUnreadActivities ? ` (${numUnreadActivities} unread)` : '')
+            }
+          </Button>
+
+          <Collapse in={hasUnreadActivities} collapsedSize={0}>
+            <Button fullWidth
+              disabled={!hasUnreadActivities}
+              onClick={markAllAsRead}>
+              Mark all as read
+            </Button>
+          </Collapse>
+        </Box>
+    </NotificationPopover>
+  )
+}
+
+const NotificationPopover = ({
+  children,
+  showBadge = false
+}: {
+  children: ReactElement[] | ReactElement,
+  showBadge: boolean
+}) => {
+
+  const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
+  return (
+    <>
+      <IconButton color="inherit" onClick={(e) => setAnchorEl(e.currentTarget)}>
+        <Badge
+          color="secondary"
+          variant="dot"
+          invisible={!showBadge}
+        >
+          <Notifications />
+        </Badge>
+      </IconButton>
+      <Popover
+        open={anchorEl !== null}
+        onClose={() => setAnchorEl(null)}
+        anchorEl={anchorEl}
+        anchorOrigin={{
+          vertical: 'bottom',
+          horizontal: 'left',
+        }}
+        >
+        {children}
+      </Popover>
+    </>
+  )
+}
