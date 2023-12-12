@@ -13,7 +13,7 @@ User input validation is under active development. As we progress we will update
 
 Electric rejects updates to a table's primary keys.
 
-Attempting to `UPDATE` a primary key will be rejected by the server and the offending client will be forcibly disconnected.
+In order to maintain referential integrity and track changes from connected clients, Electric requires all primary keys to be treated as immutable. An attempt to synchronise a client where a primary key has been changed will be rejected by the server and the offending client will be forcibly disconnected.
 
 ```sql
 CREATE TABLE items (
@@ -35,7 +35,9 @@ WHERE
   id = 'f2ece325-219f-40e2-b5b1-fdb32e32f0ed';
 ```
 
-This will leave the client in an inconsistent state (with respect to the server's view of the shared state) and unable to sync until its local database has been reset.
+This will leave the client in an inconsistent state and unable to sync until the local database has been reset.
+
+Currently this validation is only applied by the sync service, but in future there will also be client-side validation.
 
 ## Roadmap
 
