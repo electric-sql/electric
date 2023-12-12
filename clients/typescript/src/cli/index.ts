@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { handleGenerate } from './migrations'
+import { handleTunnel } from './tunnel'
 
 const args = process.argv
 
@@ -19,6 +20,7 @@ const [_node, _file, command, ...commandArgs] = process.argv
 type CommandHandlers = Record<string, (...args: string[]) => Promise<void>>
 const commandHandlers: CommandHandlers = {
   generate: handleGenerate,
+  'proxy-tunnel': handleTunnel,
 }
 
 if (!Object.prototype.hasOwnProperty.call(commandHandlers, command)) {
