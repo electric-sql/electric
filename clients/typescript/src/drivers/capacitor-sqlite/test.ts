@@ -9,14 +9,13 @@ import { Notifier } from '../../notifiers/index'
 import { MockNotifier } from '../../notifiers/mock'
 import { MockRegistry } from '../../satellite/mock'
 
-import { DatabaseAdapter as CapacitorSQLiteAdapater } from './adapter'
+import { DatabaseAdapter as CapacitorSQLiteAdapter } from './adapter'
 import { Database } from './database'
 import { MockDatabase } from './mock'
 import { MockSocket } from '../../sockets/mock'
 import { ElectricClient } from '../../client/model/client'
 import { ElectricConfig } from '../../config'
 import { DbSchema } from '../../client/model'
-import { DatabaseAdapter } from '../better-sqlite3'
 
 const testConfig = {
   auth: {
@@ -39,7 +38,7 @@ export const initTestable = async <
 ): RetVal<DB, N> => {
   const db = new MockDatabase(dbName)
 
-  const adapter = opts?.adapter || new CapacitorSQLiteAdapater(db)
+  const adapter = opts?.adapter || new CapacitorSQLiteAdapter(db)
   const notifier = (opts?.notifier as N) || new MockNotifier(dbName)
   const migrator = opts?.migrator || new MockMigrator()
   const socketFactory = opts?.socketFactory || MockSocket
@@ -48,7 +47,7 @@ export const initTestable = async <
   const dal = await electrify(
     dbName,
     dbDescription,
-    adapter as DatabaseAdapter,
+    adapter,
     socketFactory,
     config,
     {
