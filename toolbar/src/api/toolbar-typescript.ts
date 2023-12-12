@@ -1,6 +1,6 @@
 import { ToolbarInterface } from './toolbar-interface'
 import { Row, Statement, ConnectivityState } from 'electric-sql/util'
-import {Registry, GlobalRegistry} from 'electric-sql/satellite'
+import { Registry, GlobalRegistry } from 'electric-sql/satellite'
 
 export class ToolbarTypescript implements ToolbarInterface {
   private registry: Registry | GlobalRegistry

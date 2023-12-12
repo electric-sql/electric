@@ -10,7 +10,7 @@ import { ToolbarInterface } from './api/toolbar-interface'
 import { ToolbarTypescript } from './api/toolbar-typescript'
 import { ElectricClient } from 'electric-sql/client/model'
 
-import {Registry, GlobalRegistry} from 'electric-sql/satellite'
+import { Registry, GlobalRegistry } from 'electric-sql/satellite'
 
 export type ToolbarProps = {
   api: ToolbarInterface
