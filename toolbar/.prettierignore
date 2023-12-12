@@ -2,10 +2,6 @@
 *.md
 .DS_Store
 dist/
-dev-app/dist/
-dev-app/public/
-dev-app/db/
-dev-app/backend/
 node_modules/
 .gitignore
 .github/

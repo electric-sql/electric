@@ -16,7 +16,7 @@ export type ToolbarProps = {
 
 function ElectricToolbar({ api }: ToolbarProps) {
   const [hidden, setHidden] = useState(true)
-  const [dbNames, setDbNames] = useState([''])
+  const [dbNames, setDbNames] = useState<Array<string>>([])
   const [dbName, setDbName] = useState('')
 
   useEffect(() => {
@@ -66,11 +66,10 @@ function ElectricToolbar({ api }: ToolbarProps) {
   }
 }
 
-export function clientApi(globalRegistry: GlobalRegistry): ToolbarInterface {
-  return new ToolbarTypescript(globalRegistry)
-}
 
-export default function addToolbar(toolbarApi: ToolbarInterface) {
+export function addToolbar(globalRegistry: GlobalRegistry) {
+
+  const toolbarApi = new ToolbarTypescript(globalRegistry)
   const toolbar_div = document.createElement('div')
   toolbar_div.setAttribute('id', 'electric-toolbar')
   toolbar_div.setAttribute('class', 'electric-toolbar')

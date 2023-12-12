@@ -28,20 +28,22 @@ Add the toolbar to your project's `devDependencies` in `package.json`
     }
 ```
 
-In your code add the toolbar after initialising the electric database like this.
+First some imports 
 
 ```typescript
-import ('@electric-sql/debug-toolbar/util').then(util => {util.addToolbar()});
+import { addToolbar } from '@electric-sql/debug-toolbar'
+import { globalRegistry } from 'electric-sql/satellite'
+import '@electric-sql/debug-toolbar/dist/index.cjs.css'
+```
+
+Then in your code add the toolbar after initialising the electric database like this:
+
+```typescript
+addToolbar(globalRegistry)
 ```
 
 This will add the toolbar to the bottom of your window
 
-You can wrap this in a conditional statement to only add the toolbar in development eg:
 
-```typescript
-if (DEBUG_MODE) {
-    import ('@electric-sql/debug-toolbar/util').then(util => {util.addToolbar()});
-}
-```
 
 
