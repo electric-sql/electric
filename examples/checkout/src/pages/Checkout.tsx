@@ -2,7 +2,6 @@ import {
   IonButton,
   IonContent,
   IonHeader,
-  IonPage,
   IonTitle,
   IonToolbar,
   IonFooter,
@@ -13,25 +12,18 @@ import {
   IonLabel,
   IonTextarea,
   IonListHeader,
-  IonAlert,
   IonModal,
 } from '@ionic/react'
-import { useContext, useState, useRef, useEffect } from 'react'
-import { useHistory } from 'react-router-dom'
-import { v4 as uuidv4 } from 'uuid'
-import type { Session } from '@supabase/supabase-js'
+import { useState, useRef, useEffect } from 'react'
 import { useMaskito } from '@maskito/react'
-import { SupabaseContext } from '../SupabaseContext'
-import { formatPrice, statusDisplay } from '../utils'
-import { BasketItem, useElectric, type Electric } from '../electric'
-import { useLiveQuery } from 'electric-sql/react'
+import { type BasketItemWithItem } from '../electric'
 import CheckoutConfirm from './CheckoutConfirm'
 
 interface CheckoutProps {
   isOpen: boolean
   onDismiss: () => void
   onCompleted: () => void
-  basketItems: BasketItem[]
+  basketItems: BasketItemWithItem[]
 }
 
 const Checkout = ({
@@ -40,9 +32,6 @@ const Checkout = ({
   onCompleted,
   basketItems: basket,
 }: CheckoutProps) => {
-  const { session } = useContext(SupabaseContext)!
-  const { db } = useElectric()!
-  const history = useHistory()
   const nameInput = useRef<HTMLIonInputElement>(null)
   const addressInput = useRef<HTMLIonTextareaElement>(null)
   const postcodeInput = useRef<HTMLIonInputElement>(null)

@@ -2,31 +2,29 @@ import {
   IonButton,
   IonContent,
   IonHeader,
-  IonPage,
   IonTitle,
   IonToolbar,
   IonFooter,
   IonButtons,
   IonList,
   IonItem,
-  IonInput,
   IonLabel,
-  IonTextarea,
   IonListHeader,
-  IonAlert,
 } from '@ionic/react'
-import { useContext, useState, useRef, useEffect } from 'react'
+import { useContext } from 'react'
 import { useHistory } from 'react-router-dom'
 import { v4 as uuidv4 } from 'uuid'
 import type { Session } from '@supabase/supabase-js'
-import { useMaskito } from '@maskito/react'
 import { SupabaseContext } from '../SupabaseContext'
-import { formatPrice, statusDisplay } from '../utils'
-import { BasketItem, useElectric, type Electric } from '../electric'
-import { useLiveQuery } from 'electric-sql/react'
+import { formatPrice } from '../utils'
+import {
+  useElectric,
+  type Electric,
+  type BasketItemWithItem,
+} from '../electric'
 
 interface NewOrderOptions {
-  basket: BasketItem[]
+  basket: BasketItemWithItem[]
   shippingAddress: {
     name: string
     address: string
@@ -120,7 +118,6 @@ const CheckoutConfirm = ({
         </IonToolbar>
       </IonHeader>
       <IonContent color="light">
-
         <IonList inset={true}>
           <IonListHeader>
             <IonLabel>Items</IonLabel>

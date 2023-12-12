@@ -1,14 +1,12 @@
 import { useState, useEffect, useContext } from 'react'
 import { Redirect, Route } from 'react-router-dom'
 import {
-  IonApp,
   IonIcon,
   IonLabel,
   IonRouterOutlet,
   IonTabBar,
   IonTabButton,
   IonTabs,
-  IonBadge,
 } from '@ionic/react'
 import { IonReactRouter } from '@ionic/react-router'
 import {
@@ -20,7 +18,6 @@ import {
 
 import { LIB_VERSION } from 'electric-sql/version'
 import { uniqueTabId } from 'electric-sql/util'
-import { useLiveQuery } from 'electric-sql/react'
 import { ElectricDatabase, electrify } from 'electric-sql/wa-sqlite'
 import { ElectricProvider, Electric, schema } from './electric'
 

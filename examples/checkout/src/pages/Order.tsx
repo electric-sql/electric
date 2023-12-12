@@ -16,15 +16,15 @@ import { useContext } from 'react'
 import { useParams } from 'react-router-dom'
 import { SupabaseContext } from '../SupabaseContext'
 import { useLiveQuery } from 'electric-sql/react'
-import { BasketItem, useElectric, type Electric } from '../electric'
-import { formatPrice, statusDisplay, statusColor } from '../utils'
+import { useElectric, type OrderWithItems } from '../electric'
+import { formatPrice, statusDisplay, statusColor, Status } from '../utils'
 
 const Order: React.FC = () => {
-  const { supabase, session } = useContext(SupabaseContext)!
+  const { session } = useContext(SupabaseContext)!
   const { db } = useElectric()!
   const { id } = useParams<{ id: string }>()
 
-  const { results: order } = useLiveQuery(
+  const { results } = useLiveQuery(
     db.orders.liveFirst({
       where: {
         electric_user_id: session?.user.id,
@@ -39,6 +39,7 @@ const Order: React.FC = () => {
       },
     })
   )
+  const order = results as OrderWithItems
 
   return (
     <IonPage>
@@ -63,8 +64,8 @@ const Order: React.FC = () => {
             <IonLabel>
               <h1>Status</h1>
             </IonLabel>
-            <IonBadge slot="end" color={statusColor[order?.status]}>
-              {statusDisplay[order?.status]}
+            <IonBadge slot="end" color={statusColor[order?.status as Status]}>
+              {statusDisplay[order?.status as Status]}
             </IonBadge>
           </IonItem>
           {order?.basket_items.map((item) => (

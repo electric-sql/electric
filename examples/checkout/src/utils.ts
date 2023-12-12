@@ -26,7 +26,11 @@ export const statusDisplay = {
   cancelled: 'Cancelled',
 }
 
-export const statusColor = {
+export type Status = keyof typeof statusDisplay
+
+export const statusColor: {
+  [key in Status]: string
+} = {
   awaitingSubmission: 'warning',
   submitted: 'secondary',
   processingPayment: 'secondary',

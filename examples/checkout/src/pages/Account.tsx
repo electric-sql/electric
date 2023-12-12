@@ -14,14 +14,14 @@ import {
 import { useContext } from 'react'
 import { SupabaseContext } from '../SupabaseContext'
 import { useLiveQuery } from 'electric-sql/react'
-import { BasketItem, useElectric, type Electric } from '../electric'
-import { formatPrice, statusDisplay, statusColor } from '../utils'
+import { useElectric, type OrderWithItems } from '../electric'
+import { formatPrice, statusDisplay, statusColor, type Status } from '../utils'
 
 const Account: React.FC = () => {
   const { supabase, session } = useContext(SupabaseContext)!
   const { db } = useElectric()!
 
-  const { results: orders } = useLiveQuery(
+  const { results } = useLiveQuery(
     db.orders.liveMany({
       where: {
         electric_user_id: session?.user.id,
@@ -31,6 +31,7 @@ const Account: React.FC = () => {
       },
     })
   )
+  const orders = results as OrderWithItems[]
 
   const signOut = async () => {
     await supabase.auth.signOut()
@@ -64,8 +65,8 @@ const Account: React.FC = () => {
                   {formatPrice(order.delivery_price)}
                 </p>
               </IonLabel>
-              <IonBadge slot="end" color={statusColor[order.status]}>
-                {statusDisplay[order.status] ?? order.status}
+              <IonBadge slot="end" color={statusColor[order.status as Status]}>
+                {statusDisplay[order.status as Status] ?? order.status}
               </IonBadge>
             </IonItem>
           ))}

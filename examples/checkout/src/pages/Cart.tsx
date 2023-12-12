@@ -17,7 +17,7 @@ import {
 } from '@ionic/react'
 import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'electric-sql/react'
-import { BasketItem, useElectric, type Electric } from '../electric'
+import { BasketItem, useElectric, type Electric, type BasketItemWithItem } from '../electric'
 
 import EmptyCart from '../components/EmptyCart'
 import { formatPrice } from '../utils'
@@ -55,9 +55,9 @@ async function deduplicateBasketItems(
 const Cart: React.FC = () => {
   const { db } = useElectric()!
   const [checkoutIsOpen, setCheckoutIsOpen] = useState(false)
-  const frozenBasket = useRef<BasketItem[]>([])
+  const frozenBasket = useRef<BasketItemWithItem[]>([])
 
-  const { results: basket } = useLiveQuery(
+  const { results } = useLiveQuery(
     db.basket_items.liveMany({
       orderBy: {
         created_at: 'desc',
@@ -71,6 +71,7 @@ const Cart: React.FC = () => {
       },
     })
   )
+  const basket = results as BasketItemWithItem[]
 
   const totalCost = (basket ?? []).reduce((acc, item) => {
     return acc + item.quantity * item.items.price
@@ -174,7 +175,7 @@ const Cart: React.FC = () => {
           </IonList>
         )}
       </IonContent>
-      {basket?.length > 0 && (
+      {!!basket?.length && (
         <IonFooter>
           <IonButton
             expand="full"
