@@ -4,7 +4,7 @@ defmodule Electric.Replication.ChangesTest do
   alias Electric.Replication.Changes.UpdatedRecord
 
   describe "UpdatedRecord.changed_columns" do
-    test "is empty is old_record is nil" do
+    test "is empty when old_record is nil" do
       changed_columns = MapSet.new([])
 
       assert %UpdatedRecord{changed_columns: ^changed_columns} =
