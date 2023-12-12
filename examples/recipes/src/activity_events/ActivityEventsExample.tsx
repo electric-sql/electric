@@ -10,8 +10,7 @@ import { NavigationBar } from "../components/NavigationBar"
 import { useCallback, useEffect, useState } from "react"
 import { useElectric } from "../electric/ElectricWrapper"
 import { useLiveQuery } from "electric-sql/react"
-import { genUUID } from "electric-sql/util"
-import { formatDateTime } from "./utilities"
+import { formatDateTime, generateActivity } from "./utilities"
 
 export const ActivityEventsExample = () => {
   const { db } = useElectric()!
@@ -27,15 +26,9 @@ export const ActivityEventsExample = () => {
     syncItems()
   }, [])
 
-  const generateActivity = () => {
+  const generateUserActivity = () => {
     db.activity_events.create({
-      data: {
-        id: genUUID(),
-        source: 'Alice',
-        activity_type: 'like',
-        timestamp: Date.now(),
-        message: Math.random() > 0.5 ? 'Alice liked your comment' : 'Bob commented on your post',
-      }
+      data: generateActivity()
     })
   }
 
@@ -52,7 +45,7 @@ export const ActivityEventsExample = () => {
         justifyContent: 'center',
         height: '100%'
       }}>
-          <Button variant="contained" size="large" onClick={generateActivity}>
+          <Button variant="contained" size="large" onClick={generateUserActivity}>
             Generate activity
           </Button>
         <ActivityToast />
@@ -236,7 +229,12 @@ const ActivityToast = () => {
         message={liveActivity?.message}
         action={
           <>
-            <Button color="secondary" size="small" onClick={handleAck}>
+            {liveActivity?.action && 
+              <Button color="primary" size="small">
+                {liveActivity.action}
+              </Button>
+            }
+            <Button color="primary" size="small" onClick={handleAck}>
               Mark as read
             </Button>
             <IconButton
