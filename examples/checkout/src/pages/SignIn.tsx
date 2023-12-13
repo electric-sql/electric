@@ -37,7 +37,7 @@ const SignIn: React.FC = () => {
         <div className="ion-padding">
           <Auth
             supabaseClient={supabase}
-            providers={[]}
+            providers={['github']}
             appearance={{
               theme: ThemeSupa,
               variables: {
