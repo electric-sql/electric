@@ -306,6 +306,9 @@ function serialiseRow(row?: Rec): string {
         return '-Inf'
       }
     }
+    if (typeof value === 'bigint') {
+      return value.toString()
+    }
     return value
   })
 }

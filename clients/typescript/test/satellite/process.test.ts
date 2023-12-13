@@ -277,6 +277,32 @@ test('snapshot of INSERT after DELETE', async (t) => {
   t.is(resultingValue, null)
 })
 
+test('snapshot of INSERT with bigint', async (t) => {
+  const { adapter, runMigrations, satellite, authState } = t.context
+
+  await runMigrations()
+
+  await adapter.run({
+    sql: `INSERT INTO bigIntTable(value) VALUES (1)`,
+  })
+
+  await satellite._setAuthState(authState)
+  await satellite._performSnapshot()
+  const entries = await satellite._getEntries()
+  const clientId = satellite._authState!.clientId
+
+  const merged = localOperationsToTableChanges(
+    entries,
+    (timestamp: Date) => {
+      return generateTag(clientId, timestamp)
+    },
+    relations
+  )
+  const [_, keyChanges] = merged['main.bigIntTable']['{"value":"1"}']
+  const resultingValue = keyChanges.changes.value.value
+  t.is(resultingValue, 1n)
+})
+
 test('take snapshot and merge local wins', async (t) => {
   const { adapter, runMigrations, satellite, tableInfo, authState } = t.context
   await runMigrations()
