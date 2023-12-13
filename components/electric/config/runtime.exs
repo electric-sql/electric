@@ -13,7 +13,7 @@ default_http_server_port = "5133"
 default_pg_server_port = "5433"
 default_pg_proxy_port = "65432"
 default_listen_on_ipv6 = "true"
-default_database_require_ssl = "false"
+default_database_require_ssl = "true"
 default_database_use_ipv6 = "true"
 default_write_to_pg_mode = "logical_replication"
 
@@ -137,6 +137,21 @@ config :electric, Electric.Features,
   proxy_ddlx_unassign: false
 
 require_ssl? = get_env_bool.("DATABASE_REQUIRE_SSL", default_database_require_ssl)
+
+# Always try connecting with SSL first.
+#
+# When require_ssl?=true, :epgsql will try to connect using SSL and fail if the server does not accept encrypted
+# connections.
+#
+# When require_ssl?=false, :epgsql will try to connect using SSL first, then fallback to an unencrypted connection
+# if that fails.
+use_ssl? =
+  if require_ssl? do
+    :required
+  else
+    true
+  end
+
 use_ipv6? = get_env_bool.("DATABASE_USE_IPV6", default_database_use_ipv6)
 
 postgresql_connection =
@@ -148,7 +163,7 @@ postgresql_connection =
     database_url ->
       database_url
       |> Electric.Utils.parse_postgresql_uri()
-      |> Keyword.put_new(:ssl, require_ssl?)
+      |> Keyword.put_new(:ssl, use_ssl?)
       |> Keyword.put(:ipv6, use_ipv6?)
       |> Keyword.update(:timeout, 5_000, &String.to_integer/1)
       |> Keyword.put(:replication, "database")
