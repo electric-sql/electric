@@ -19,9 +19,8 @@ docker run \
     -p 5133:5133 \
     -p 5433:5433 \
     -p 65432:65432 \
+    -t \
     electricsql/electric
 ```
 
-If you'd like to run Electric and Postgres together in Docker, feel free to use the [Docker Compose file][1] from our starter template as a reference.
-
-[1]: https://github.com/electric-sql/electric/blob/main/examples/starter/template/backend/compose/docker-compose.yaml
+Alternatively, using Docker Compose we can configure an instance of the Electric sync service in a `compose.yaml` file stored locally and deploy it to a remote machine that has the Docker daemon running. See instructions for deploying Electric to a [Digital Ocean Droplet](digital-ocean#deploying-electric-using-docker-compose) for an example of such setup.
