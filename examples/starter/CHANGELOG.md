@@ -1,5 +1,11 @@
 # create-electric-app
 
+## 0.2.2
+
+### Patch Changes
+
+- 071175d4: Improve Windows support
+
 ## 0.2.1
 
 ### Patch Changes
