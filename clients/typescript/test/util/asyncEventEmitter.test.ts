@@ -48,29 +48,17 @@ test('test AsyncEventEmitter once listeners', async (t) => {
     event: () => void | Promise<void>
   }>()
 
-  let ctr = 0
+  const listener: () => void = () => t.pass()
 
-  const listener1 = () => {
-    ctr++
-  }
-
-  const listener2 = () => {
-    ctr++
-  }
-
-  const listener3 = () => {
-    ctr++
-  }
-
-  emitter.once('event', listener1)
-  emitter.once('event', listener2)
+  emitter.once('event', listener)
+  emitter.once('event', listener)
   emitter.enqueueEmit('event')
 
-  emitter.once('event', listener3)
+  emitter.once('event', listener)
   emitter.enqueueEmit('event')
 
   await delay(100)
-  t.is(ctr, 3)
+  t.plan(3)
 })
 
 // Test that listeners can be prepended
@@ -103,9 +91,9 @@ test('test AsyncEventEmitter removeListener', async (t) => {
     event: () => void | Promise<void>
   }>()
 
-  let l1,
-    l2,
-    l3,
+  let l1 = false,
+    l2 = false,
+    l3 = false,
     l4 = false
 
   const listener1 = () => {

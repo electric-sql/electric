@@ -146,7 +146,7 @@ export class AsyncEventEmitter<Events extends EventMap> {
       // deep copy because once listeners mutate the `this.listeners` array as they remove themselves
       // which breaks the `map` which iterates over that same array while the contents may shift
       const ls = [...listeners]
-      const listenerProms = ls.map((listener) => listener(...args))
+      const listenerProms = ls.map(async (listener) => await listener(...args))
 
       Promise
         // wait for all listeners to finish,
