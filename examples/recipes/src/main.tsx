@@ -4,11 +4,16 @@ import App from './App.tsx'
 import { ElectricWrapper } from './electric/ElectricWrapper.tsx';
 import { RouterProvider, createBrowserRouter } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
+import { CssBaseline } from '@mui/material';
+
 import { ActivityEventsExample } from './activity_events/ActivityEventsExample.tsx';
 
+import '@fontsource/roboto/300.css';
+import '@fontsource/roboto/400.css';
+import '@fontsource/roboto/500.css';
+import '@fontsource/roboto/700.css';
 import './index.css'
 import theme from './theme.ts';
-import { CssBaseline } from '@mui/material';
 
 
 const router = createBrowserRouter([

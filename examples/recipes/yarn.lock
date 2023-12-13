@@ -642,6 +642,11 @@
   resolved "https://registry.npmjs.org/@floating-ui/utils/-/utils-0.1.6.tgz"
   integrity sha512-OfX7E2oUDYxtBvsuS4e/jSn4Q9Qb6DzgeYtsAdkPZ47znpoNsMgZw0+tVijiv3uGNR6dgNlty6r9rzIzHjtd/A==
 
+"@fontsource/roboto@^5.0.8":
+  version "5.0.8"
+  resolved "https://registry.yarnpkg.com/@fontsource/roboto/-/roboto-5.0.8.tgz#613b477a56f21b5705db1a67e995c033ef317f76"
+  integrity sha512-XxPltXs5R31D6UZeLIV1td3wTXU3jzd3f2DLsXI8tytMGBkIsGcc9sIyiupRtA8y73HAhuSCeweOoBqf6DbWCA==
+
 "@humanwhocodes/config-array@^0.11.13":
   version "0.11.13"
   resolved "https://registry.npmjs.org/@humanwhocodes/config-array/-/config-array-0.11.13.tgz"
