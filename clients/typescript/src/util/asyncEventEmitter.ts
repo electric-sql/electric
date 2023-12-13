@@ -9,8 +9,10 @@ type EmittedEvent<Event, Arg> = {
 
 /**
  * Implementation of a typed async event emitter.
- * (Asynchronous) event listeners are called in order and awaited
- * such that the next listener is called only after the previous one finished.
+ * This event emitter maintains a queue of events,
+ * the events are processed in order and the next is not started
+ * until all (async) event listeners for the previous event have finished.
+ * Event listers for a single event are processed concurrently, events are processed sequentially.
  * Typings are inspired by the 'typed-emitter' package.
  */
 export class AsyncEventEmitter<Events extends EventMap> {
