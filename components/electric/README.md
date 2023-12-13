@@ -104,6 +104,7 @@ The Electric application is configured using environment variables. Everything t
 | `ELECTRIC_INSTANCE_ID`      | `electric`            | Unique identifier of this Electric instance when running in a cluster (not yet supported). When running locally, you can use any string                                                                                                                                                                                                                                                              |
 
 [1]: https://electric-sql.com/docs/usage/data-modelling/migrations#migrations-proxy
+[2]: https://electric-sql.com/docs/api/cli#proxy-tunnel
 
 **Authentication**
 

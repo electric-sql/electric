@@ -62,7 +62,7 @@ dotenv -e .env.proxy -- npx prisma migrate dev
 
 ## Generator
 
-Electric uses a customised version of the [zod-prisma-types](https://github.com/chrishoermann/zod-prisma-types) Prisma client generator to [generate](../../api/generator.md) the [Electric Client](../../usage/data-access/client.md).
+Electric uses a customised version of the [zod-prisma-types](https://github.com/chrishoermann/zod-prisma-types) Prisma client generator to [generate](../../api/cli.md#generate) the [Electric Client](../../usage/data-access/client.md).
 
 ## Event sourcing
 
