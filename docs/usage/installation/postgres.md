@@ -18,8 +18,12 @@ Many managed hosting providers support logical replication (either out of the bo
 This includes, for example:
 
 - [AWS RDS](https://repost.aws/knowledge-center/rds-postgresql-use-logical-replication) and [Aurora](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/AuroraPostgreSQL.Replication.Logical.html) (including Aurora Serverless v2)
+
 - [Crunchy Data](https://www.crunchydata.com) who have a free tier and logical replication enabled by default
-- [Supabase](https://supabase.com/) who provide managed Postgres hosting with logical replication and a suite of other backend-as-a-service tools, including auth and edge functions (see <DocPageLink path="integrations/deployment/supabase" /> for more information about using Electric with Supabase)
+
+- [Supabase](https://supabase.com/) who provide managed Postgres hosting with logical replication and a suite of other backend-as-a-service tools, including auth and edge functions.
+
+  See <DocPageLink path="integrations/deployment/supabase" /> for more information about using Electric with Supabase.
 
 There's a [long list of Postgres hosting providers here](https://www.postgresql.org/support/professional_hosting/).
 
