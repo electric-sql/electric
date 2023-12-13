@@ -1,5 +1,20 @@
 # electric-sql
 
+## 0.8.2
+
+### Patch Changes
+
+- 0dfb35d8: [VAX-1324] Prevent updates to table PKs
+- 9ffb11aa: Modify Satellite client to use async event emitter.
+- 9676b4d0: New "npx electric-sql proxy-tunnel" command that tunnels a Postgres TCP connection over a websocket for the Postgres Proxy.
+- 4fc11d3a: Capacitor sqlite DB driver re-implemented to extend the new generic BatchDatabaseAdapter.
+- 071175d4: Improve Windows support
+- d5cdbf10: Prisma and the electric client generator are now dependencies of the client, you no longer have to include them as dependencies of a project using Electric. Projects can also depend on a different version of Prisma to the one used by Electric.
+- 9a32ea9f: Fix bug with BigInt primary keys.
+- Updated dependencies [22652fb3]
+- Updated dependencies [38e1e44b]
+  - @electric-sql/prisma-generator@1.1.2
+
 ## 0.8.1
 
 ### Patch Changes

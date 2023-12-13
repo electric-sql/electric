@@ -1,5 +1,17 @@
 # @core/electric
 
+## 0.8.1
+
+### Patch Changes
+
+- 0dfb35d8: [VAX-1324] Prevent updates to table PKs
+- a3d4bfe2: Electric now opens all its ports to listen both on IPv4- and IPv6-capable interfaces. This obviates the need for the ELECTRIC_USE_IPV6 configuration setting in most cases.
+- 34a89b4a: Automatically publish electricsql/electric:canary images to Docker Hub on every push to main.
+- b57ec927: [VAX-1417] Add the option to tunnel TCP connections to the migrations proxy over regular WebSocket connections.
+- 34a89b4a: Log the version of the Electric sync service on startup.
+- 11878e74: Log a descriptive error message when Electric fails to open a replication connection to Postgres.
+- ddb70c97: [VAX-1374] Add a new write-to-pg mode that applies client updates as DML statements as opposed to streaming them to Postgres over a logical replication connection.
+
 ## 0.8.0
 
 ### Minor Changes

@@ -1,5 +1,12 @@
 # @electric-sql/prisma-generator
 
+## 1.1.2
+
+### Patch Changes
+
+- 22652fb3: Change generator to add .js extention to imports for nodenext compatibility
+- 38e1e44b: Fix type issue in generated client for DB schemas containing relations.
+
 ## 1.1.1
 
 ### Patch Changes
