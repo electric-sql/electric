@@ -87,13 +87,17 @@ Log in to your Supabase dashboard and click "New Project". In the form enter a n
 
 Go to the "Database" section of the project, and select "Extensions". Search for "pg_net" and enable it.
 
-### 3. Retrieving the connection details
+### 3. Retrieving the Project reference id
 
-Go to "Project Settings" (look for the gear icon at the bottom of the icon menu on the left hand side of the page) and open the "Database" section. Under the heading "Connection string" select the URI tab. Copy the connection string shown and save it somewhere.
+Go to "Project Settings" (look for the gear icon at the bottom of the icon menu on the left hand side of the page) and open the "General" section. In the top section copy the "Project reference id". This is used for deploying the edge function.
+
+### 4. Retrieving the connection details
+
+Now open the "Database" section. Under the heading "Connection string" select the URI tab. Copy the connection string shown and save it somewhere.
 
 You will use this as the value for the DATABASE_URL in your Electric sync service configuration.
 
-### 4. Retrieving the Project URL and JWT and API authentication keys
+### 5. Retrieving the Project URL and JWT and API authentication keys
 
 Now open the "API" section of the project settings. Copy the "Project URL", this is the value you will use for the `ELECTRIC_SUPABASE_URL` setting below.
 
@@ -101,19 +105,40 @@ Copy the `anon`/`public` and `service_roll` API keys. These are used for the `EL
 
 Scroll down to the "JWT settings". Reveal and copy the "JWT Secret" value. You will use this as the value for AUTH_JWT_KEY in your Electric sync service configuration.
 
-### 5. Configuring Electric and the app to connect to Supabase
+### 6. Configuring Electric and the app to connect to Supabase
 
 Edit the `./elecric/docker-compose.yml` file, settings the `DATABASE_URL` and `ELECTRIC_WRITE_MODE` to the values retrieved above.
 
 Edit the `.env` file and set `ELECTRIC_SUPABASE_URL`,  `ELECTRIC_SUPABASE_ANON_KEY` and `DATABASE_URL` to the values retrieved above. 
 
-### 6. Modify the `AFTER INSERT` trigger
+### 7. Modify the `AFTER INSERT` trigger
 
 Edit the `./db/migrations/02-create_process_item_trigger.sql` file so that the `"Authorization":"Bearer xxxx"` "Bearer Token" value is that of the `service_roll` API key you retrieved above.
 
-### 7. Migrate the database, load the store catalog and generate the client
+### 8. Deploy the Edge Function
 
-TODO
+To deploy the "process" edge function from `./supabase/function/process` run this command with the "Project reference id" you retrieved above.
+
+```sh
+npx supabase functions deploy process --project-ref xxxxxxxxxxxxx
+```
+
+### 9. Start a local Electric sync service
+
+To run the local electric sync service run:
+
+```sh
+cd ./electric
+docker compose up
+```
+
+### 9. Migrate the database, load the store catalog and generate the client
+
+To apply the migrations to the database, run:
+
+```sh
+node ./db/migrate.js
+```
 
 Generate your [type-safe client](https://electric-sql.com/docs/usage/data-access/client):
 
@@ -122,9 +147,9 @@ npm run client:generate
 # or `npm run client:watch`` to re-generate whenever the DB schema changes
 ```
 
-### 8. Run the App
+### 10. Run the App
 
-To start your the app run:
+To start the app run:
 
 ```sh
 npm run dev

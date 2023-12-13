@@ -7,7 +7,7 @@ name: checkout-hosted-supabase
 services:
   electric:
     container_name: electric
-    image: electric:local-build
+    image: electric:latest
     init: true
     environment:
       DATABASE_URL: postgresql://postgres:xxxxx@db.yourprojecthost.supabase.co:5432/postgres

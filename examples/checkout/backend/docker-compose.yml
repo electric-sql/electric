@@ -405,7 +405,7 @@ services:
 
   electric:
     container_name: electric
-    image: '${ELECTRIC_IMAGE:-electricsql/electric:latest}'
+    image: ${ELECTRIC_IMAGE:-electricsql/electric:latest}
     init: true
     environment:
       DATABASE_URL: postgresql://supabase_admin:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
