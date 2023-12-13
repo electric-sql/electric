@@ -43,7 +43,7 @@ export class DatabaseAdapter extends GenericDatabaseAdapter {
 
   /**
    *
-   * @returns the number of rows modifierd by the last exec or execBatch call.
+   * @returns the number of rows modified by the last exec or execBatch call.
    * Because Capacitor-SQLite does not expose sqlite3_changes, the value returned here is cached
    * from the previous query's reported value, which is 0 for queries other than INSERT, UPDATE or DELETE.
    * Calling getRowsModified() right after execBatch should return an accurate aggregated result, regardless
