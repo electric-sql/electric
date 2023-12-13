@@ -99,4 +99,15 @@ defmodule Electric.Replication.PostgresConnector do
       "Another instance of Electric appears to be connected to this database."
     )
   end
+
+  defp log_child_error(:postgres_producer, {:bad_return_value, {:error, :wal_level_not_logical}}) do
+    Electric.Errors.print_fatal_error(
+      :dbconf,
+      "Your Postgres database is not configured with wal_level=logical.",
+      """
+      Visit https://electric-sql.com/docs/usage/installation/postgres
+      to learn more about Electric's requirements for Postgres.
+      """
+    )
+  end
 end
