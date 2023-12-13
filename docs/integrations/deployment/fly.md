@@ -41,6 +41,13 @@ app = "electric-on-fly-test-app"
   internal_port = 5133
   force_https = true
 
+  [[http_service.checks]]
+    interval = "10s"
+    timeout = "1s"
+    grace_period = "20s"
+    method = "GET"
+    path = "/api/status"
+
 [[services]]
   protocol = "tcp"
   internal_port = 65432
