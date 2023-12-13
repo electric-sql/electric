@@ -12,12 +12,7 @@ import { ShapeRequest } from '../../src/satellite/shapes/types'
 import { WebSocketNode } from '../../src/sockets/node'
 import { sleepAsync } from '../../src/util'
 import { base64, bytesToNumber } from '../../src/util/common'
-import {
-  DataTransaction,
-  Relation,
-  SatelliteErrorCode,
-  Transaction,
-} from '../../src/util/types'
+import { Relation, SatelliteErrorCode, Transaction } from '../../src/util/types'
 import { dbDescription, relations } from './common'
 import { RpcResponse, SatelliteWSServerStub } from './server_ws_stub'
 import { DbSchema, TableSchema } from '../../src/client/model/schema'
@@ -450,7 +445,7 @@ test.serial('acknowledge lsn', async (t) => {
   await new Promise<void>((res) => {
     client['emitter'].on(
       'transaction',
-      (_t: DataTransaction, ack: () => void) => {
+      async (_t: Transaction, ack: () => void) => {
         const lsn0 = client['inbound'].last_lsn
         t.is(lsn0, undefined)
         ack()

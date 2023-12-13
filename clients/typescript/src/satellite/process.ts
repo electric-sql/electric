@@ -331,7 +331,6 @@ export class SatelliteProcess implements Satellite {
   setClientListeners(): void {
     this.client.subscribeToError(this._handleClientError.bind(this))
     this.client.subscribeToRelations(this._updateRelations.bind(this))
-    // FIXME: calling an async function in an event emitter
     this.client.subscribeToTransactions(this._applyTransaction.bind(this))
     this.client.subscribeToOutboundStarted(this._throttledSnapshot.bind(this))
 
