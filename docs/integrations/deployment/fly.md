@@ -13,7 +13,7 @@ The environment variables used by Electric are described in <DocPageLink path="a
 
 ## Deploying Electric
 
-As a quick example, let's create a new Fly app to run Electric and connect it to a third-party database.
+As a quick example, let's create a new Fly app to run Electric and connect it to a third-party database such as [Supabase](./supabase.md).
 
 ### Postgres with logical replication
 
