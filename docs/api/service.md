@@ -43,6 +43,12 @@ Everything in the table below that doesn't have a default value is required to r
 
 ### Write-to-PG mode
 
+Electric writes data to Postgres using one of two modes: logical replication or direct writes. Which mode you choose to use affects your networking config and the database user permissions required.
+
+:::note
+Logical replication was the only mode available prior to v0.8, when we introduced the new direct writes mode.
+:::
+
 | Variable                                                              | Description                                                                                                                                                    |
 | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ELECTRIC_WRITE_TO_PG_MODE`<p>&nbsp;&nbsp;(`logical_replication`)</p> | <p>The mode to use when syncing client updates to Postgres.</p><p>Allowed values: `logical_replication`, `direct_writes`.</p>                                  |
