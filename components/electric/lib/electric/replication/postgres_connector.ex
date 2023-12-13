@@ -36,6 +36,7 @@ defmodule Electric.Replication.PostgresConnector do
         restart: :temporary
       }
     )
+    |> log_connector_sup_startup_error()
   end
 
   @spec stop_children(Connectors.origin()) :: :ok | {:error, :not_found}
@@ -69,5 +70,33 @@ defmodule Electric.Replication.PostgresConnector do
   @spec connector_config(Connectors.origin()) :: Connectors.config()
   def connector_config(origin) do
     PostgresConnectorMng.connector_config(origin)
+  end
+
+  defp log_connector_sup_startup_error({:ok, _sup_pid} = ok), do: ok
+
+  defp log_connector_sup_startup_error(
+         {:error, {{:shutdown, {:failed_to_start_child, child_id, reason}}, _supervisor_spec}}
+       ) do
+    _ = log_child_error(child_id, reason)
+    :error
+  end
+
+  defp log_child_error(
+         :postgres_producer,
+         {:bad_return_value,
+          {:error,
+           {:error, :error, "55006", :object_in_use, "replication slot" <> _ = msg, _c_stacktrace}}} =
+           reason
+       ) do
+    Logger.error("Initialization of PostgresConnectorSup failed with reason: #{inspect(reason)}.")
+
+    Electric.Errors.print_error(
+      :conn,
+      """
+      Failed to establish replication connection to Postgres:
+        #{msg}
+      """,
+      "Another instance of Electric appears to be connected to this database."
+    )
   end
 end

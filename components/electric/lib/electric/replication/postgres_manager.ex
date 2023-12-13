@@ -129,17 +129,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
         state = %State{state | status: :subscribing, pg_connector_sup_monitor: ref}
         {:noreply, state, {:continue, :subscribe}}
 
-      {:error,
-       {{:shutdown,
-         {:failed_to_start_child, :postgres_producer,
-          {:bad_return_value,
-           {:error,
-            {:error, :error, "55006", :object_in_use, "replication slot" <> _ = msg,
-             _c_stacktrace}}}}}, _supervisor_spec}} ->
-        Logger.error(
-          "Initialization of replication connection to Postgres failed with reason: #{msg}. Another instance of Electric appears to be connected to this database."
-        )
-
+      :error ->
         {:noreply, schedule_retry(:establish_repl_conn, state)}
     end
   end
