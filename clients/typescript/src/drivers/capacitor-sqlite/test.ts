@@ -9,7 +9,7 @@ import { Notifier } from '../../notifiers/index'
 import { MockNotifier } from '../../notifiers/mock'
 import { MockRegistry } from '../../satellite/mock'
 
-import { DatabaseAdapter } from './adapter'
+import { DatabaseAdapter as CapacitorSQLiteAdapter } from './adapter'
 import { Database } from './database'
 import { MockDatabase } from './mock'
 import { MockSocket } from '../../sockets/mock'
@@ -38,7 +38,7 @@ export const initTestable = async <
 ): RetVal<DB, N> => {
   const db = new MockDatabase(dbName)
 
-  const adapter = opts?.adapter || new DatabaseAdapter(db)
+  const adapter = opts?.adapter || new CapacitorSQLiteAdapter(db)
   const notifier = (opts?.notifier as N) || new MockNotifier(dbName)
   const migrator = opts?.migrator || new MockMigrator()
   const socketFactory = opts?.socketFactory || MockSocket

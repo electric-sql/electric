@@ -18,7 +18,7 @@ test('database adapter query works', async (t) => {
   const db = new MockDatabase(dbName)
   const adapter = new DatabaseAdapter(db)
 
-  const sql = 'select * from bars'
+  const sql = 'select * from bars;'
   const result = await adapter.query({ sql })
 
   t.deepEqual(result, [
@@ -48,7 +48,7 @@ test('database adapter interactive transaction works', async (t) => {
   const db = new MockDatabase(dbName)
   const adapter = new DatabaseAdapter(db)
 
-  const sql = 'select * from bars'
+  const sql = 'select * from bars;'
   const res = await adapter.transaction<number>((tx, setResult) => {
     tx.run({ sql }, (tx, res) => {
       t.assert(res.rowsAffected == 0)
