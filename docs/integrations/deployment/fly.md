@@ -37,6 +37,7 @@ app = "electric-on-fly-test-app"
   ELECTRIC_WRITE_TO_PG_MODE = "direct_writes"
   PG_PROXY_PASSWORD = "proxy_password"
 
+# The main Internet-facing service of Electric to which clients will be connecting.
 [http_service]
   internal_port = 5133
   force_https = true
@@ -48,6 +49,7 @@ app = "electric-on-fly-test-app"
     method = "GET"
     path = "/api/status"
 
+# Service definition for the migrations proxy that should be accessible on a separate TCP port.
 [[services]]
   protocol = "tcp"
   internal_port = 65432
@@ -110,10 +112,10 @@ Visit your newly deployed app at https://electric-on-fly-test-app.fly.dev/
 ```
 
 :::caution
-We don't _currently_ support multiple running Electric instances connected to the same database. So it's important to override Fly's default behaviour of creating two machines for a new app by passing the `--ha=false` flag to `fly launch` and `fly deploy` commands.
+We don't _currently_ support multiple running Electric instances connected to the same database. So it's important to override Fly's default behaviour of creating two machines for a new app by passing the `--ha=false` flag to `fly launch`.
 :::
 
-Verify app's status using `fly apps list`:
+Verify app's status using `fly app list`:
 
 ```shell
 $ fly app list
