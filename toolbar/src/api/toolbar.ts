@@ -1,8 +1,8 @@
-import { ToolbarInterface } from './toolbar-interface'
+import { Interface } from './interface'
 import { Row, Statement, ConnectivityState } from 'electric-sql/util'
 import { Registry, GlobalRegistry } from 'electric-sql/satellite'
 
-export class ToolbarTypescript implements ToolbarInterface {
+export class Toolbar implements Interface {
   private registry: Registry | GlobalRegistry
 
   constructor(registry: Registry | GlobalRegistry) {

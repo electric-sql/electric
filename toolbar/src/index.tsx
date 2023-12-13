@@ -6,14 +6,14 @@ import { useState } from 'react'
 import ReactDOM from 'react-dom/client'
 
 import ToolbarTabs from './tabs'
-import { ToolbarInterface } from './api/toolbar-interface'
-import { ToolbarTypescript } from './api/toolbar-typescript'
+import { Interface } from './api/interface'
+import { Toolbar } from './api/toolbar'
 import { ElectricClient } from 'electric-sql/client/model'
 
 import { Registry, GlobalRegistry } from 'electric-sql/satellite'
 
 export type ToolbarProps = {
-  api: ToolbarInterface
+  api: Interface
 }
 
 function ElectricToolbar({ api }: ToolbarProps) {
@@ -69,7 +69,7 @@ function ElectricToolbar({ api }: ToolbarProps) {
 }
 
 export function clientApi(registry: GlobalRegistry | Registry) {
-  return new ToolbarTypescript(registry)
+  return new Toolbar(registry)
 }
 
 export function addToolbar(electric: ElectricClient<any>) {

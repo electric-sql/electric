@@ -3,7 +3,7 @@ import React, { useState } from 'react'
 import LocalDBTab from './tabs/LocalDBTab'
 import SQLTab from './tabs/SQLTab'
 import StatusTab from './tabs/StatusTab'
-import { ToolbarInterface } from './api/toolbar-interface'
+import { Interface } from './api/interface'
 
 function TabItem(
   label: string,
@@ -27,7 +27,7 @@ function TabItem(
 
 export type ToolbarTabsProps = {
   dbName: string
-  api: ToolbarInterface
+  api: Interface
 }
 
 export default function ToolbarTabs({
