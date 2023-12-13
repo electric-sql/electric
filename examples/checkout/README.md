@@ -16,6 +16,8 @@
 
 This is an example web application using ElectricSQL in the browser with [wa-sqlite](https://github.com/rhashimoto/wa-sqlite), using [Supabase](http://supabase.com) with it's auth and edge functions, and the [Ionic Framework](http://ionicframework.com) for the UI.
 
+The app is deployed here for you to try out: http://checkout-demo.electric-sql.com/
+
 Supabase Auth is used to register and sign in a user, the Supabase JWT is then used to establish a connection with Electric.
 
 A Supabase Edge Function is used to process the card payment on submission of the checkout. The card details would be converted to a token by a payment provider and attached to the order record, there is then a trigger on the `order` table. When a new order is inserted it calls a edge function to process the order updating it's status in real time and syncing that with the visitors local checkout.
@@ -107,7 +109,7 @@ Scroll down to the "JWT settings". Reveal and copy the "JWT Secret" value. You w
 
 ### 6. Configuring Electric and the app to connect to Supabase
 
-Edit the `./elecric/docker-compose.yml` file, settings the `DATABASE_URL` and `ELECTRIC_WRITE_MODE` to the values retrieved above.
+Edit the `./elecric/docker-compose.yml` file, setting the `DATABASE_URL` and `AUTH_JWT_KEY` to the values retrieved above.
 
 Edit the `.env` file and set `ELECTRIC_SUPABASE_URL`,  `ELECTRIC_SUPABASE_ANON_KEY` and `DATABASE_URL` to the values retrieved above. 
 
@@ -159,6 +161,7 @@ npm run dev
 
 For more information see the:
 
+- [Electric with Supabase documentation](https://electric-sql.com/docs/integrations/deployment/supabase)
 - [Documentation](https://electric-sql.com/docs)
 - [Quickstart](https://electric-sql.com/docs/quickstart)
 - [Usage guide](https://electric-sql.com/docs/usage)
