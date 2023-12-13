@@ -45,9 +45,9 @@ npm install
 
 If you need to change the configuration of ports, that can be done in `./backend/.env`
 
-## Setup
+## Setup and run locally using a local Supabase stack
 
-Start Postgres and Electric using Docker (see [running the examples](https://electric-sql.com/docs/examples/notes/running) for more options):
+Start local Supabase and Electric using Docker (see [running the examples](https://electric-sql.com/docs/examples/notes/running) for more options):
 
 ```shell
 npm run backend:up
@@ -67,8 +67,6 @@ npm run client:generate
 # or `npm run client:watch`` to re-generate whenever the DB schema changes
 ```
 
-## Run
-
 Start your app:
 
 ```sh
@@ -76,6 +74,61 @@ npm run dev
 ```
 
 Open [localhost:3001](http://localhost:5173) in your web browser.
+
+## Setup to run against hosted Supabase
+
+If you don't yet have a Supabase account visit [supabase.com](supabase.com) and create one.
+
+### 1. Setting up a Supabase Postgres
+
+Log in to your Supabase dashboard and click "New Project". In the form enter a name for the database, and a password that will be used to connect to it. Make a note of this password and save it somewhere secure.
+
+### 2. Enable the `pg_net` extension
+
+Go to the "Database" section of the project, and select "Extensions". Search for "pg_net" and enable it.
+
+### 3. Retrieving the connection details
+
+Go to "Project Settings" (look for the gear icon at the bottom of the icon menu on the left hand side of the page) and open the "Database" section. Under the heading "Connection string" select the URI tab. Copy the connection string shown and save it somewhere.
+
+You will use this as the value for the DATABASE_URL in your Electric sync service configuration.
+
+### 4. Retrieving the Project URL and JWT and API authentication keys
+
+Now open the "API" section of the project settings. Copy the "Project URL", this is the value you will use for the `ELECTRIC_SUPABASE_URL` setting below.
+
+Copy the `anon`/`public` and `service_roll` API keys. These are used for the `ELECTRIC_SUPABASE_ANON_KEY` and trigger "Bearer Token" respectively.
+
+Scroll down to the "JWT settings". Reveal and copy the "JWT Secret" value. You will use this as the value for AUTH_JWT_KEY in your Electric sync service configuration.
+
+### 5. Configuring Electric and the app to connect to Supabase
+
+Edit the `./elecric/docker-compose.yml` file, settings the `DATABASE_URL` and `ELECTRIC_WRITE_MODE` to the values retrieved above.
+
+Edit the `.env` file and set `ELECTRIC_SUPABASE_URL`,  `ELECTRIC_SUPABASE_ANON_KEY` and `DATABASE_URL` to the values retrieved above. 
+
+### 6. Modify the `AFTER INSERT` trigger
+
+Edit the `./db/migrations/02-create_process_item_trigger.sql` file so that the `"Authorization":"Bearer xxxx"` "Bearer Token" value is that of the `service_roll` API key you retrieved above.
+
+### 7. Migrate the database, load the store catalog and generate the client
+
+TODO
+
+Generate your [type-safe client](https://electric-sql.com/docs/usage/data-access/client):
+
+```shell
+npm run client:generate
+# or `npm run client:watch`` to re-generate whenever the DB schema changes
+```
+
+### 8. Run the App
+
+To start your the app run:
+
+```sh
+npm run dev
+```
 
 ## Develop
 
