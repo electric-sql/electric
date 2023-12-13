@@ -10,7 +10,7 @@ ElectricSQL provides a JSON Web Token based authentication mechanism for [client
 
 ## Overview
 
-Your application must generate a [valid JWT](./token.md). This must have at least a `user_id` claim, which should be a non-empty string matching the primary key UUID of the authenticated user.
+Your application must generate a [valid JWT](./token.md). This must have at least a `sub` claim (formerly `user_id`), which should be a non-empty string matching the primary key UUID of the authenticated user.
 
 Pass this JWT as a string value to the [`electrify`](../../api/clients/typescript.md) function when [instantiating your client](../data-access/client.md), e.g.:
 

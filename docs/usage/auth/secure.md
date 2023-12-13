@@ -20,7 +20,7 @@ $ docker run \
     electric-sql/electric
 ```
 
-Now, all you need to authenticate your client is a JWT that includes the `user_id` claim and is signed using the same `ES256` algorithm and the matching private key.
+Now, all you need to authenticate your client is a JWT that includes a `sub` claim (formerly `user_id`) and is signed using the same `ES256` algorithm and the matching private key.
 
 See the [JWT library for your programming environment](https://github.com/iamchathu/awesome-jwt#libraries) for more information. Below are two examples for generating a token manually and using Elixir:
 
@@ -34,7 +34,7 @@ For example, using the following claims
 
 ```
 {
-  "user_id": "1",
+  "sub": "1",
   "iat": 1684749213,
   "exp": 1684759213
 }
@@ -67,7 +67,7 @@ defmodule JWTUtil do
   def signed_auth_token(user_id, private_key) do
     config = Joken.Config.default_claims()
     signer = Joken.Signer.create("ES256", %{"pem" => private_key})
-    Joken.generate_and_sign!(config, %{"user_id" => user_id}, signer)
+    Joken.generate_and_sign!(config, %{"sub" => user_id}, signer)
   end
 end
 
@@ -112,7 +112,7 @@ const { db } = await electrify(conn, schema, config)
 
 ## How the server validates auth tokens
 
-The sync service running in secure auth mode expects the standard `iat` and `exp` claims, as well as the custom `user_id` claim to be included in the token.
+The sync service running in secure auth mode expects the standard `iat` and `exp` claims, as well as the custom `sub` claim (formerly `user_id`) to be included in the token.
 
 If any of `iat`, `exp`, or `nbf` claims are included, they will be validated according to the JWT specification and so your token will get rejected if any of these standard claims' values are invalid. If you additionally configure the "issuer" and/or "audience" of the Secure auth mode, then the `iss` and/or `aud` claims are also required to be included in the auth token.
 
@@ -138,16 +138,16 @@ See [Generating signing keys](#generating-signing-keys) below to learn more abou
 
 ### `AUTH_JWT_NAMESPACE`
 
-This is an optional setting that specifies the location inside the token of custom claims that are specific to Electric. Currently, only the `user_id` custom claim is required.
+This is an optional setting that specifies the location inside the token of custom claims that are specific to Electric. Currently, only the `sub` custom claim (formerly `user_id`) is required.
 
-By default, if this setting is omitted or is set to an empty string, the `user_id` claim is looked up at the top level. We recommend using the `https://<your-app-domain>/jwt/claims` namespace for custom claims to avoid collisions with any other applications in the future. E.g.
+By default, if this setting is omitted or is set to an empty string, the `sub` / `user_id` claim is looked up at the top level. We recommend using the `https://<your-app-domain>/jwt/claims` namespace for custom claims to avoid collisions with any other applications in the future. E.g.
 
 ```
 {
   "iat": 1684749213,
   "exp": 1684759213,
   "https://example.com/jwt/claims": {
-    "user_id": "1"
+    "sub": "1"
   }
 }
 ```

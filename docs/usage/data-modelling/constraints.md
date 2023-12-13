@@ -27,6 +27,10 @@ CREATE TABLE comments (
 
 This works even when making writes locally in an offline database. See [Introduction -> Conflict-free offline -> Preserving data integrity](../../intro/offline.md#preserving-data-integrity) and the Rich-CRDT post on [Compensations](/blog/2022/05/03/introducing-rich-crdts#compensations) for more information.
 
+:::info
+To preserve referential integrity Electric prevents [updates to a table's primary keys](./validation.md#immutable-primary-keys).
+:::
+
 ### Not-null constraints
 
 ElectricSQL supports [not-null constraints](https://www.postgresql.org/docs/current/ddl-constraints.html#id-1.5.4.6.6) as long as the constraint is defined when creating the column.

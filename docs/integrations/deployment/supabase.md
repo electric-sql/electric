@@ -11,10 +11,6 @@ We support both the hosted [Supabase Platform](https://supabase.com/docs/guides/
 
 Supabase is an open source Firebase alternative. It provides a Postgres database, authentication, APIs, edge functions, realtime subscriptions, storage and vector embeddings. Supabase is **not** an application or web service host. To use Electric with Supabase, you still need to deploy your own Electric sync service.
 
-:::note
-Electric support for Supabase is currently enabled in the Canary build, available as the `electricsql/electric:canary` docker image.
-:::
-
 ## How to connect Electric to Supabase Postgres
 
 1. [Setting up a Supabase Postgres](#1-setting-up-a-supabase-postgres)
@@ -76,7 +72,7 @@ docker run \
     -e "PG_PROXY_PORT=65432" \
     -p 5133:5133 \
     -p 65432:65432 \
-    electricsql/electric:canary
+    electricsql/electric
 ```
 
 This will start Electric and connect it to your Supabase database. Logs will be printed to the terminal allowing you to see any errors that may occur.

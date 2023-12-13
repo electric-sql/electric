@@ -25,7 +25,7 @@ The exact code for instantiating your database client depends on the SQLite driv
 
 1. initialise an SQLite database connection (`conn`) using your underlying driver
 2. import your database schema (`schema`) from the `./generated/client` folder
-3. configure your [authentication token](../auth/index.md) (`config.auth.token`)
+3. configure your [authentication token](../auth/index.md) (`config.auth.token`) and other parameters
 4. pass these to your driver's `electrify` function to instantiate the client
 
 For example, for [wa-sqlite](../../integrations/drivers/web/wa-sqlite.md) in the web browser:
@@ -35,9 +35,11 @@ import { ElectricDatabase, electrify } from 'electric-sql/wa-sqlite'
 import { schema } from './generated/client'
 
 const config = {
+  url: "http://localhost:5133",
   auth: {
     token: '...'
-  }
+  },
+  debug: true
 }
 
 const init = async () => {
