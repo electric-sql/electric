@@ -37,7 +37,7 @@ export const ActivityPopover = () => {
   const markActivityAsRead = (activityId: string) =>
     db.activity_events.update({
       data: {
-        read_at: Date.now()
+        read_at: new Date()
       },
       where: {
         id: activityId,
@@ -48,7 +48,7 @@ export const ActivityPopover = () => {
   const markAllAsRead = () => 
     db.activity_events.updateMany({
       data: {
-        read_at: Date.now()
+        read_at: new Date()
       },
       where: {
         read_at: null

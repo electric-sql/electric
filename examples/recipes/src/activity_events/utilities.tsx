@@ -4,10 +4,10 @@ import { Activity_events } from "../generated/client";
 
 /**
  * Formats a date to a human-readable timestamp.
- * @param unixTimeMs - the UNIX timestamp in milliseconds
+ * @param date - the date to format
  * @returns {string}
  */
-export function formatDateTime(unixTimeMs: number): string {
+export function formatDateTime(date: Date): string {
   const options: Intl.DateTimeFormatOptions = { 
     year: 'numeric',
     month: 'short',
@@ -15,7 +15,7 @@ export function formatDateTime(unixTimeMs: number): string {
     hour: 'numeric',
     minute: 'numeric'
   }
-  const formattedDate = new Date(unixTimeMs).toLocaleDateString(
+  const formattedDate = date.toLocaleDateString(
     navigator.language,
     options
   );
