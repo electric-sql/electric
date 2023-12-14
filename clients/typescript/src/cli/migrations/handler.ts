@@ -67,7 +67,10 @@ export function parseGenerateArgs(args: string[]): GeneratorArgs {
         }
       } else {
         genArgs[
-          flag as keyof Omit<GeneratorArgs, 'watch' | 'pollingInterval'>
+          flag as keyof Omit<
+            GeneratorArgs,
+            'watch' | 'pollingInterval' | 'exitOnError'
+          >
         ] = arg
       }
       flag = undefined
