@@ -5,7 +5,7 @@ import { useLiveQuery } from "electric-sql/react";
 import { Close } from "@mui/icons-material";
 
 export const ActivityToast = () => {
-  const [ visitTime ] = useState(Date.now())
+  const [ visitTime ] = useState(new Date())
   const [open, setOpen] = useState(false)
 
   const { db } = useElectric()!
@@ -37,7 +37,7 @@ export const ActivityToast = () => {
     if (liveActivity && liveActivity.read_at === null) {
       db.activity_events.update({
         data: {
-          read_at: Date.now()
+          read_at: new Date()
         },
         where: {
           id: liveActivity.id
