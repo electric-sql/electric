@@ -7,12 +7,12 @@ name: checkout-hosted-supabase
 services:
   electric:
     container_name: electric
-    image: electric:latest
+    image: electricsql/electric:0.8
     init: true
     environment:
       DATABASE_URL: postgresql://postgres:xxxxx@db.yourprojecthost.supabase.co:5432/postgres
       PG_PROXY_PASSWORD: proxy_password
-      ELECTRIC_WRITE_MODE: immediate
+      ELECTRIC_WRITE_TO_PG_MODE: direct_writes
       AUTH_MODE: secure
       AUTH_JWT_ALG: HS256
       AUTH_JWT_KEY: XXXXXXXXXXX

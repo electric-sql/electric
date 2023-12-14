@@ -45,9 +45,14 @@ Install the dependencies:
 npm install
 ```
 
-If you need to change the configuration of ports, that can be done in `./backend/.env`
+## Running the app
 
-## Setup and run locally using a local Supabase stack
+There are two methods described below to run the app:
+
+1. [Run locally using a local Supabase stack](#run-locally-using-a-local-supabase-stack) 
+2. [Run against hosted Supabase, with a local Electric sync service](#run-against-hosted-supabase)
+
+## Run locally using a local Supabase stack
 
 Start local Supabase and Electric using Docker (see [running the examples](https://electric-sql.com/docs/examples/notes/running) for more options):
 
@@ -55,6 +60,8 @@ Start local Supabase and Electric using Docker (see [running the examples](https
 npm run backend:up
 # Or `npm run backend:start` to foreground
 ```
+
+If you need to change the configuration of ports for the local Supabase docker containers, that can be done in `./backend/.env`
 
 Setup your [database schema](https://electric-sql.com/docs/usage/data-modelling):
 
@@ -77,7 +84,7 @@ npm run dev
 
 Open [localhost:3001](http://localhost:5173) in your web browser.
 
-## Setup to run against hosted Supabase
+## Run against hosted Supabase
 
 If you don't yet have a Supabase account visit [supabase.com](supabase.com) and create one.
 
@@ -87,7 +94,7 @@ Log in to your Supabase dashboard and click "New Project". In the form enter a n
 
 ### 2. Enable the `pg_net` extension
 
-Go to the "Database" section of the project, and select "Extensions". Search for "pg_net" and enable it.
+Go to the "Database" section of the project, and select "Extensions". Search for "pg_net" and enable it for the "public" schema.
 
 ### 3. Retrieving the Project reference id
 
@@ -109,9 +116,9 @@ Scroll down to the "JWT settings". Reveal and copy the "JWT Secret" value. You w
 
 ### 6. Configuring Electric and the app to connect to Supabase
 
-Edit the `./elecric/docker-compose.yml` file, setting the `DATABASE_URL` and `AUTH_JWT_KEY` to the values retrieved above.
+Edit the `./electric/docker-compose.yml` file, setting the `DATABASE_URL` and `AUTH_JWT_KEY` to the values retrieved above.
 
-Edit the `.env` file and set `ELECTRIC_SUPABASE_URL`,  `ELECTRIC_SUPABASE_ANON_KEY` and `DATABASE_URL` to the values retrieved above. 
+Edit the `./.env` file and set `ELECTRIC_SUPABASE_URL`,  `ELECTRIC_SUPABASE_ANON_KEY` and `DATABASE_URL` to the values retrieved above. 
 
 ### 7. Modify the `AFTER INSERT` trigger
 
