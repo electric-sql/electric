@@ -31,6 +31,8 @@ If you don't yet have a Supabase account visit [supabase.com](https://supabase.c
 
 Log in to your Supabase dashboard and click "New Project". In the form enter a name for the database, and a password that will be used to connect to it. Make a note of this password and save it somewhere secure.
 
+![New Project](./supabase/new-project.png)
+
 Select an AWS region for your database to be hosted in. To reduce latency, we recommend that this is close to, or ideally in same region as, your Electric sync service.
 
 Create the new project and wait a few moments for it to be setup.
@@ -43,6 +45,8 @@ All Supabase Postgres instances come with logical replication enabled and the pe
 
 Go to "Project Settings" (look for the gear icon at the bottom of the icon menu on the left hand side of the page) and open the "Database" section. Under the heading "Connection string" select the `URI` tab. Copy the connection string shown and save it somewhere.
 
+![Connection Details](./supabase/connection-details.png)
+
 You will use this as the value for the `DATABASE_URL` in your [Electric sync service configuration](../../api/service.md).
 
 :::caution
@@ -52,6 +56,8 @@ Do not use the "Connection Pool" connection string displayed a little further do
 ### 3. Retrieving the authentication key
 
 Now open the "API" section of the project settings. Scroll down to the "JWT settings". Reveal and copy the "JWT Secret" value. Save it somewhere secure.
+
+![JWT Key](./supabase/jwt-key.png)
 
 You will use this as the value for `AUTH_JWT_KEY` in your [Electric sync service configuration](../../api/service.md).
 
@@ -85,6 +91,8 @@ This will start Electric and connect it to your Supabase database. Logs will be 
 ### 5. Verifying Electric initialisation
 
 You can verify that Electric has initialised your database sucessfully using the Supabase dashboard. Select your project, then go to the "Table Editor" on the navigation menu. You should see a left-hand side menu listing any tables in your database with a "Schema" menu above.
+
+![Verifying Electric Schema](./supabase/schema.png)
 
 Click this menu, and check that there is now an `electric` schema in your Postgres database. This confirms that the sync service has successfully initialised your database.
 
