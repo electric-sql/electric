@@ -3,7 +3,7 @@ import {
   List, ListItem, ListItemText, ListSubheader,
   Paper, TextField, Typography
 } from "@mui/material"
-import {  Fragment, useCallback, useEffect, useState } from "react"
+import {  Fragment, useEffect, useState } from "react"
 import { useElectric } from "../electric/ElectricWrapper"
 import { useLiveQuery } from "electric-sql/react"
 
