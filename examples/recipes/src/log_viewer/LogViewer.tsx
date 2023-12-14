@@ -3,7 +3,7 @@ import {
   List, ListItem, ListItemText, ListSubheader,
   Paper, TextField, Typography
 } from "@mui/material"
-import {  useCallback, useEffect, useState } from "react"
+import {  Fragment, useCallback, useEffect, useState } from "react"
 import { useElectric } from "../electric/ElectricWrapper"
 import { useLiveQuery } from "electric-sql/react"
 
@@ -41,49 +41,49 @@ export const LogViewer = ({ defaultNumLogs = 10} : { defaultNumLogs?: number }) 
     }
   }, [searchFilter, defaultNumLogs])
 
-  const handleShowMore = useCallback(
-    () => setNumLogsToShow(Math.min(numLogsToShow + defaultNumLogs, totalNumberOfLogs)),
-    [numLogsToShow, defaultNumLogs, totalNumberOfLogs],
+  const handleShowMore = () => setNumLogsToShow(
+    (currentNum) => Math.min(
+      currentNum + defaultNumLogs,
+      totalNumberOfLogs
+    )
   )
 
   return (
-    <div>
-      <Paper>
-        <List disablePadding dense>
-          <ListSubheader sx={{
-            py: 1, 
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
-          }}>
-            <Typography variant="h5">
-              Logs
-            </Typography>
-            <TextField
-              variant="outlined"
-              size="small"
-              label="Search filter"
-              onChange={(e) => setSearchFilter(e.target.value)}
+    <Paper>
+      <List disablePadding dense>
+        <ListSubheader key="log-header" sx={{
+          py: 1, 
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <Typography variant="h5">
+            Logs
+          </Typography>
+          <TextField
+            variant="outlined"
+            size="small"
+            label="Search filter"
+            onChange={(e) => setSearchFilter(e.target.value)}
+            />
+        </ListSubheader>            
+        {logs.map((log, index) => (
+          <Fragment key={log.id}>
+            <ListItem >
+              <ListItemText
+                primary={`${log.timestamp.toISOString()}: ${JSON.stringify(log.content, null, 2)}`}
               />
-          </ListSubheader>            
-          {logs.map((log, index) => (
-            <>
-              <ListItem key={index}>
-                <ListItemText
-                  primary={`${log.timestamp.toISOString()}: ${JSON.stringify(log.content, null, 2)}`}
-                />
-              </ListItem>
-              {index < logs.length - 1 && <Divider />}
-            </>
-          ))}
+            </ListItem>
+            {index < logs.length - 1 && <Divider />}
+          </Fragment>
+        ))}
 
-          <Collapse in={totalNumberOfLogs > numLogsToShow}>
-            <Button fullWidth onClick={handleShowMore}>
-              {`Show more logs (${totalNumberOfLogs - numLogsToShow} more)`}
-            </Button>
-          </Collapse>
-        </List>
-      </Paper>
-    </div>
+        <Collapse key="show-more-logs" in={totalNumberOfLogs > numLogsToShow}>
+          <Button fullWidth onClick={handleShowMore}>
+            {`Show more logs (${totalNumberOfLogs - numLogsToShow} more)`}
+          </Button>
+        </Collapse>
+      </List>
+    </Paper>
   );
 };
