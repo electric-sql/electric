@@ -62,7 +62,7 @@ defmodule Electric.MixProject do
       {:pg_query_ex, github: "electric-sql/pg_query_ex"},
       {:nimble_pool, "~> 1.0"},
       {:bandit, "~> 1.0-pre"},
-      {:thousand_island, "~> 1.0-pre"},
+      {:thousand_island, "~> 1.2"},
       {:mint_web_socket, "~> 1.0"},
       {:mint, "~> 1.5"},
       {:req, "~> 0.4"},
