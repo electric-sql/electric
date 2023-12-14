@@ -35,6 +35,7 @@ export const defaultOptions = {
   out: path.join(appRoot, 'src/generated/client'),
   watch: false,
   pollingInterval: 1000, // in ms
+  debug: false, // set to `true` to retain failed migration folder for debugging
   exitOnError: true,
 }
 
@@ -219,8 +220,11 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
     // Rethrow error - finally statement still runs
     if (!opts.exitOnError) throw e
   } finally {
-    // Delete our temporary directory
-    await fs.rm(tmpFolder, { recursive: true })
+    // Delete our temporary directory unless
+    // generation failed in debug mode
+    if (!generationFailed || !opts.debug) {
+      await fs.rm(tmpFolder, { recursive: true })
+    }
 
     // In case of process exit, make sure to run after folder removal
     if (generationFailed && opts.exitOnError) process.exit(1)

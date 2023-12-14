@@ -27,6 +27,10 @@ type GeneratorArgs = Partial<GeneratorOptions>
  *     When new migrations are found, the client is rebuilt automatically.
  *     You can provide an optional polling interval in milliseconds,
  *     which is how often we should poll Electric for new migrations.
+ *  - `--debug`
+ *     Optional flag to use for inspecting generator issues. If this
+ *     flag is enabled, the temporary migrations folder is retained in
+ *     case of an error for inspection.
  * @param args Arguments passed to the generate command.
  */
 export async function handleGenerate(...args: string[]) {
@@ -48,44 +52,53 @@ export function parseGenerateArgs(args: string[]): GeneratorArgs {
       flag = checkFlag(arg)
     else {
       // the value for the flag
-      if (flag === 'watch') {
-        // the --watch flag is special because
-        // it accepts an optional argument
-        // which is the polling interval in ms
-        genArgs[flag] = true
-        try {
-          genArgs.pollingInterval = z
-            .number()
-            .int()
-            .positive()
-            .parse(parseInt(arg))
-        } catch (_e) {
-          console.error(
-            `The provided argument to --watch is not a valid polling interval. Should be a time in milliseconds (i.e. a positive integer).`
-          )
-          process.exit(9)
-        }
-      } else {
-        genArgs[
-          flag as keyof Omit<
-            GeneratorArgs,
-            'watch' | 'pollingInterval' | 'exitOnError'
-          >
-        ] = arg
+      switch (flag) {
+        case 'watch':
+          // the --watch flag is special because
+          // it accepts an optional argument
+          // which is the polling interval in ms
+          genArgs[flag] = true
+          try {
+            genArgs.pollingInterval = z
+              .number()
+              .int()
+              .positive()
+              .parse(parseInt(arg))
+          } catch (_e) {
+            console.error(
+              `The provided argument to --watch is not a valid polling interval. Should be a time in milliseconds (i.e. a positive integer).`
+            )
+            process.exit(9)
+          }
+          break
+        case 'debug':
+          genArgs[flag] = true
+          break
+        default:
+          genArgs[
+            flag as keyof Omit<
+              GeneratorArgs,
+              'watch' | 'pollingInterval' | 'exitOnError' | 'debug'
+            >
+          ] = arg
       }
+
       flag = undefined
     }
   }
 
   if (flag) {
-    if (flag === 'watch') {
-      genArgs[flag] = true
-    } else {
-      // a flag that expects an argument was provided but the argument is missing
-      console.error(
-        `Missing argument for flag --${flag} passed to generate command.`
-      )
-      process.exit(9)
+    switch (flag) {
+      case 'watch':
+      case 'debug':
+        genArgs[flag] = true
+        break
+      default:
+        // a flag that expects an argument was provided but the argument is missing
+        console.error(
+          `Missing argument for flag --${flag} passed to generate command.`
+        )
+        process.exit(9)
     }
   }
 
@@ -105,7 +118,7 @@ export function parseGenerateArgs(args: string[]): GeneratorArgs {
 }
 
 function checkFlag(flag: string): keyof GeneratorArgs {
-  const supportedFlags = ['--service', '--out', '--watch', '--proxy']
+  const supportedFlags = ['--service', '--out', '--watch', '--proxy', '--debug']
   if (supportedFlags.includes(flag))
     return flag.substring(2) as keyof GeneratorArgs
   // substring removes the double dash --

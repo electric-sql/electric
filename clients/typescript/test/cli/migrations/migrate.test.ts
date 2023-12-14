@@ -120,39 +120,54 @@ test('migrator correctly capitalises model names', (t) => {
   t.assert(newSchema === expectedPrismaSchema)
 })
 
-test('migrator should always delete temporary folder', async (t) => {
-  let generationError = null
-
-  // silence error for test
-  const origConsoleError = console.error
-  console.error = (_) => {
-    // no-op
+// NOTE(msfstef): running two tests in one as it requires sequential order
+test('migrator should always delete temporary folder (except for debug)', async (t) => {
+  // tries to generate client, returns `true` if failed
+  const failedGenerate = async (debug = false) => {
+    // silence error for test
+    const origConsoleError = console.error
+    console.error = (_) => {
+      // no-op
+    }
+    let migrationFailed = false
+    try {
+      await generate({
+        ...defaultOptions,
+        // prevent process.exit call to perform test
+        exitOnError: false,
+        // if set to true, temporary folder is retained on failure
+        debug: debug,
+      })
+    } catch (e) {
+      migrationFailed = true
+    }
+    console.error = origConsoleError
+    return migrationFailed
   }
 
-  try {
-    await generate({
-      ...defaultOptions,
-      // prevent process.exit call to perform test
-      exitOnError: false,
-    })
-  } catch (e) {
-    generationError = e
+  const findMigrationFolder = async (): Promise<string | null> => {
+    const files = await fs.readdirSync('./')
+    for (const file of files) {
+      if (file.startsWith('.electric_migrations_tmp')) {
+        return file
+      }
+    }
+    return null
   }
 
-  console.error = origConsoleError
+  await failedGenerate(false)
 
   // should fail generaton
-  t.assert(generationError !== null)
-
-  const files = await fs.readdirSync('./')
-  let migrationFoldersPresent = false
-  for (const file of files) {
-    if (file.startsWith('.electric_migrations_tmp')) {
-      migrationFoldersPresent = true
-      break
-    }
-  }
+  t.assert(await failedGenerate(false))
 
   // should have cleaned up temporary folders
-  t.assert(!migrationFoldersPresent)
+  t.assert((await findMigrationFolder()) === null)
+
+  // should fail generaton in debug mode
+  t.assert(await failedGenerate(true))
+
+  // should have retained migration folder
+  const debugMigrationFolder = await findMigrationFolder()
+  t.assert(debugMigrationFolder !== null)
+  await fs.rmdirSync(debugMigrationFolder as string, { recursive: true })
 })
