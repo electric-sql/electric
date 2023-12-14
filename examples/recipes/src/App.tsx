@@ -14,6 +14,9 @@ function App() {
         <Link component={RouterLink} to="/activity-events" underline="hover">
           Actvity Events
         </Link>
+        <Link component={RouterLink} to="/log-viewer" underline="hover">
+          Log Viewer
+        </Link>
       </Box>
     </>
   )
