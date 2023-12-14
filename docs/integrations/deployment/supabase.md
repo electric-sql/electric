@@ -88,6 +88,10 @@ docker run \
 
 This will start Electric and connect it to your Supabase database. Logs will be printed to the terminal allowing you to see any errors that may occur.
 
+:::info
+Supabase support was enabled in Electric v0.8, you should ensure that docker pulls at least that version. You can specifically use 0.8 by using the tagged version: `electricsql/electric:0.8`.
+:::
+
 ### 5. Verifying Electric initialisation
 
 You can verify that Electric has initialised your database sucessfully using the Supabase dashboard. Select your project, then go to the "Table Editor" on the navigation menu. You should see a left-hand side menu listing any tables in your database with a "Schema" menu above.
