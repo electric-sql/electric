@@ -20,6 +20,11 @@ Supabase is an open source Firebase alternative. It provides a Postgres database
 5. [Verifying Electric initialisation](#5-verifying-electric-initialisation)
 6. [Electrifying tables](#6-electrifying-tables)
 
+Using other Supabase tools with Electric:
+
+- [Supabase Auth](#supabase-auth)
+- [Supabase Edge Functions](#supabase-edge-functions)
+
 ### 1. Setting up a Supabase Postgres
 
 If you don't yet have a Supabase account visit [supabase.com](https://supabase.com) and create one.
@@ -106,7 +111,7 @@ ELECTRIC ENABLE
 This will opt the `items` table in your public schema in to sync via Electric.
 
 :::caution
-Electric does not yet support permissions. Electrified tables are exposed to the public Internet.
+The permissions system for Electric is still in development. Electrified tables are exposed to the public Internet. [See our roadmap for details](/docs/reference/roadmap).
 :::
 
 :::caution

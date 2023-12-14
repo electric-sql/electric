@@ -13,7 +13,7 @@ Triggers can be setup to run on various events within the database, such as inse
 
 ## Setting up triggers with Edge Functions
 
-First, you need to ensure that the `pg_net` extension is enabled for your project - this is an extension that enables you to call an Edge Function url via SQL. The steps are as follows:
+First, you need to ensure that the `pg_net` extension is enabled for the "public" schema of your project - this is an extension that enables you to call an Edge Function url via SQL. The steps are as follows:
 
 1. in the Supabase Platform dashboard go to "Database" -> "Extensions", search for `pg_net`, and ensure it is toggled on
 2. create an Edge Function, following the instructions in the [Supabase documentation](https://supabase.com/docs/guides/functions)
