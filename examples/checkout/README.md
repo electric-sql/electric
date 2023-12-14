@@ -94,7 +94,7 @@ Log in to your Supabase dashboard and click "New Project". In the form enter a n
 
 ### 2. Enable the `pg_net` extension
 
-Go to the "Database" section of the project, and select "Extensions". Search for "pg_net" and enable it for the "public" schema.
+Go to the "Database" section of the project, and select "Extensions". Search for "pg_net" and enable it for the "extension" schema.
 
 ### 3. Retrieving the Project reference id
 
