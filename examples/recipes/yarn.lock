@@ -356,10 +356,10 @@
   resolved "https://registry.npmjs.org/@databases/validate-unicode/-/validate-unicode-1.0.0.tgz"
   integrity sha512-dLKqxGcymeVwEb/6c44KjOnzaAafFf0Wxa8xcfEjx/qOl3rdijsKYBAtIGhtVtOlpPf/PFKfgTuFurSPn/3B/g==
 
-"@electric-sql/prisma-generator@^1.1.1":
-  version "1.1.1"
-  resolved "https://registry.yarnpkg.com/@electric-sql/prisma-generator/-/prisma-generator-1.1.1.tgz#05df86b9ba572599b94cf54557c010b41daa0c3f"
-  integrity sha512-Ftjf6gNPkK8fF4TTLXSiHfqVEWbNwiqITEh7wWDuaXVDhAZAR1dDVbsy1q1teILemZoqJGJ7BOieP3qkCV1sUw==
+"@electric-sql/prisma-generator@1.1.2":
+  version "1.1.2"
+  resolved "https://registry.yarnpkg.com/@electric-sql/prisma-generator/-/prisma-generator-1.1.2.tgz#2038cf597d73167f05c98b08c95544804580cbfe"
+  integrity sha512-8vlWEQHw3r+1W97TGTowPdAhQL58Ltk0bTyJ43LMhwHR0J3F+AFGE65ceKF1XezXrt1KXx3w48SdNBGwHOamWg==
   dependencies:
     "@prisma/generator-helper" "^4.11.0"
     code-block-writer "^11.0.3"
@@ -822,12 +822,12 @@
   resolved "https://registry.npmjs.org/@popperjs/core/-/core-2.11.8.tgz"
   integrity sha512-P1st0aksCrn9sGZhp8GMYwBnQsbvAWsZAX44oXNNvLHGqAOcoVxmjZiohstwQ7SqKnbR47akdNi+uleWD8+g6A==
 
-"@prisma/client@^4.8.1":
-  version "4.8.1"
-  resolved "https://registry.npmjs.org/@prisma/client/-/client-4.8.1.tgz"
-  integrity sha512-d4xhZhETmeXK/yZ7K0KcVOzEfI5YKGGEr4F5SBV04/MU4ncN/HcE28sy3e4Yt8UFW0ZuImKFQJE+9rWt9WbGSQ==
+"@prisma/client@4.12.0":
+  version "4.12.0"
+  resolved "https://registry.yarnpkg.com/@prisma/client/-/client-4.12.0.tgz#119b692888b1fe0fd3305c7d0e0ac48520aa6839"
+  integrity sha512-j9/ighfWwux97J2dS15nqhl60tYoH8V0IuSsgZDb6bCFcQD3fXbXmxjYC8GHhIgOk3lB7Pq+8CwElz2MiDpsSg==
   dependencies:
-    "@prisma/engines-version" "4.8.0-61.d6e67a83f971b175a593ccc12e15c4a757f93ffe"
+    "@prisma/engines-version" "4.12.0-67.659ef412370fa3b41cd7bf6e94587c1dfb7f67e7"
 
 "@prisma/debug@4.16.2":
   version "4.16.2"
@@ -838,10 +838,10 @@
     debug "4.3.4"
     strip-ansi "6.0.1"
 
-"@prisma/engines-version@4.8.0-61.d6e67a83f971b175a593ccc12e15c4a757f93ffe":
-  version "4.8.0-61.d6e67a83f971b175a593ccc12e15c4a757f93ffe"
-  resolved "https://registry.npmjs.org/@prisma/engines-version/-/engines-version-4.8.0-61.d6e67a83f971b175a593ccc12e15c4a757f93ffe.tgz"
-  integrity sha512-MHSOSexomRMom8QN4t7bu87wPPD+pa+hW9+71JnVcF3DqyyO/ycCLhRL1we3EojRpZxKvuyGho2REQsMCvxcJw==
+"@prisma/engines-version@4.12.0-67.659ef412370fa3b41cd7bf6e94587c1dfb7f67e7":
+  version "4.12.0-67.659ef412370fa3b41cd7bf6e94587c1dfb7f67e7"
+  resolved "https://registry.yarnpkg.com/@prisma/engines-version/-/engines-version-4.12.0-67.659ef412370fa3b41cd7bf6e94587c1dfb7f67e7.tgz#51a1cc5c886564b542acde64a873645d0dee2566"
+  integrity sha512-JIHNj5jlXb9mcaJwakM0vpgRYJIAurxTUqM0iX0tfEQA5XLZ9ONkIckkhuAKdAzocZ+80GYg7QSsfpjg7OxbOA==
 
 "@prisma/engines@4.8.1":
   version "4.8.1"
@@ -1822,11 +1822,13 @@ dom-helpers@^5.0.1:
     "@babel/runtime" "^7.8.7"
     csstype "^3.0.2"
 
-electric-sql@^0.8.1:
-  version "0.8.1"
-  resolved "https://registry.yarnpkg.com/electric-sql/-/electric-sql-0.8.1.tgz#9c175614c458f710f06be477e634cf4229dca6ea"
-  integrity sha512-NXLzpf/VZycvVp66JSBPg2VGLfrGEvroCD96iEJ8rAFr/2Fj3VehJmfZCR+Pqbn/4PUUQA97k8Q9EJ3zNP7ypQ==
+electric-sql@^0.8.2:
+  version "0.8.2"
+  resolved "https://registry.yarnpkg.com/electric-sql/-/electric-sql-0.8.2.tgz#5331f1f083eb87d92647c94162afe8afdec0a2f8"
+  integrity sha512-oy9w9CKJbQKGgaHz7xK1ZgQWEtfVWCeNLI4FSp5Ut7Ww+xf1Qbm0RusqER33yolJuinsb3AhGdUXrfCeMCKQhQ==
   dependencies:
+    "@electric-sql/prisma-generator" "1.1.2"
+    "@prisma/client" "4.12.0"
     async-mutex "^0.4.0"
     base-64 "^1.0.0"
     better-sqlite3 "^8.4.0"
@@ -1849,6 +1851,7 @@ electric-sql@^0.8.1:
     long "^5.2.0"
     object.hasown "^1.1.2"
     ohash "^1.1.2"
+    prisma "4.8.1"
     protobufjs "^7.1.1"
     react-native-uuid "^2.0.1"
     sqlite-parser "^1.0.1"
