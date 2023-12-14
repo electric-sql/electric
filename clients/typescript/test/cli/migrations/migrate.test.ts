@@ -154,5 +154,5 @@ test('migrator should always delete temporary folder', async (t) => {
   }
 
   // should have cleaned up temporary folders
-  t.assert(migrationFoldersPresent == false)
+  t.assert(!migrationFoldersPresent)
 })
