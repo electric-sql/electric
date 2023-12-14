@@ -1,6 +1,6 @@
 import test from 'ava'
 import fs from 'fs'
-import { spawn } from 'child_process';
+import { spawn } from 'child_process'
 import { doCapitaliseTableNames } from '../../../src/cli/migrations/migrate'
 
 const lowerCasePrismaSchema = `
@@ -120,13 +120,13 @@ test('migrator correctly capitalises model names', (t) => {
 test('migrator should always delete temporary folder', async (t) => {
   // NOTE(msfstef): failure exits process so can't run inside test
   // unless we mock out the process.exit call
-  await spawn('npx', ['ts-node', './failedMigration.ts']);
+  await spawn('npx', ['ts-node', './failedMigration.ts'])
 
   const files = fs.readdirSync('./')
   let migrationFoldersPresent = false
   for (const file of files) {
     if (file.startsWith('.electric_migrations_tmp')) {
-      migrationFoldersPresent = true;
+      migrationFoldersPresent = true
       break
     }
   }
