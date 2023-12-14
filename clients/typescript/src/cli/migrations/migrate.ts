@@ -171,6 +171,7 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
   // Create a unique temporary folder in which to save
   // intermediate files without risking collisions
   const tmpFolder = await fs.mkdtemp('.electric_migrations_tmp_')
+  let failedToGenerate = false
 
   try {
     const migrationsPath = path.join(tmpFolder, 'migrations')
@@ -211,11 +212,12 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
     await buildMigrations(migrationsFolder, migrationsFile)
     console.log('Successfully built migrations')
   } catch (e: any) {
+    failedToGenerate = true
     console.error('generate command failed: ' + e)
-    process.exit(1)
   } finally {
     // Delete our temporary directory
     await fs.rm(tmpFolder, { recursive: true })
+    if (failedToGenerate) process.exit(1)
   }
 }
 
