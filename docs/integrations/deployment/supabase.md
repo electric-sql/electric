@@ -54,7 +54,7 @@ You will use this as the value for `AUTH_JWT_KEY` in your [Electric sync service
 
 Run your [Electric sync service](../../api/service), either locally or [via one of the other deployment options](./index.md), with the following [configuration options](../../api/service.md#configuration-options):
 
-- set `AUTH_JWT_ALG` to `HS512` to enable secure auth mode with the right signing algorithm
+- set `AUTH_JWT_ALG` to `HS256` to enable secure auth mode with the right signing algorithm
 - set `AUTH_JWT_KEY` to the "JWT Secret" value you retrieved in step 3 above
 - set `DATABASE_URL` to the connection string you retrieved in step 2 above
 - set `ELECTRIC_WRITE_TO_PG_MODE` to `direct_writes`
@@ -64,7 +64,7 @@ Depending on how you run Electric these could be passed as arguments to Docker, 
 
 ```shell
 docker run \
-    -e "AUTH_JWT_ALG=HS512" \
+    -e "AUTH_JWT_ALG=HS256" \
     -e "AUTH_JWT_KEY=..." \
     -e "DATABASE_URL=..." \
     -e "ELECTRIC_WRITE_TO_PG_MODE=direct_writes" \
