@@ -14,7 +14,7 @@ default_pg_server_port = "5433"
 default_pg_proxy_port = "65432"
 default_listen_on_ipv6 = "true"
 default_database_require_ssl = "false"
-default_database_use_ipv6 = "false"
+default_database_use_ipv6 = "true"
 default_write_to_pg_mode = "logical_replication"
 
 # These defaults are only set for the dev environment, so in prod errors will still get raises if any of the required
