@@ -75,7 +75,7 @@ export const LogViewer = ({ defaultNumLogs = 10} : { defaultNumLogs?: number }) 
           <Collapse in={totalNumberOfLogs > numLogsToShow}>
             <Button
               fullWidth
-              onClick={() => setNumLogsToShow((num) => num + defaultNumLogs)}
+              onClick={() => setNumLogsToShow(totalNumberOfLogs)}
             >
               {`Show more logs (${totalNumberOfLogs - numLogsToShow} more)`}
             </Button>
