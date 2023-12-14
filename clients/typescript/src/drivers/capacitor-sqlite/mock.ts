@@ -21,6 +21,10 @@ export class MockDatabase implements Database {
     })
   }
 
+  query(): Promise<any> {
+    throw new Error('Not implemented')
+  }
+
   private resolveIfNotFail<T>(value: T): Promise<T> {
     if (typeof this.fail !== 'undefined') return Promise.reject(this.fail)
     else return Promise.resolve(value)
