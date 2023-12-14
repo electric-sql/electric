@@ -3,7 +3,7 @@ import {
   List, ListItem, ListItemText, ListSubheader,
   Paper, TextField, Typography
 } from "@mui/material"
-import {  useEffect, useState } from "react"
+import {  useCallback, useEffect, useState } from "react"
 import { useElectric } from "../electric/ElectricWrapper"
 import { useLiveQuery } from "electric-sql/react"
 
@@ -41,6 +41,11 @@ export const LogViewer = ({ defaultNumLogs = 10} : { defaultNumLogs?: number }) 
     }
   }, [searchFilter, defaultNumLogs])
 
+  const handleShowMore = useCallback(
+    () => setNumLogsToShow(Math.min(numLogsToShow + defaultNumLogs, totalNumberOfLogs)),
+    [numLogsToShow, defaultNumLogs, totalNumberOfLogs],
+  )
+
   return (
     <div>
       <Paper>
@@ -73,10 +78,7 @@ export const LogViewer = ({ defaultNumLogs = 10} : { defaultNumLogs?: number }) 
           ))}
 
           <Collapse in={totalNumberOfLogs > numLogsToShow}>
-            <Button
-              fullWidth
-              onClick={() => setNumLogsToShow(totalNumberOfLogs)}
-            >
+            <Button fullWidth onClick={handleShowMore}>
               {`Show more logs (${totalNumberOfLogs - numLogsToShow} more)`}
             </Button>
           </Collapse>
