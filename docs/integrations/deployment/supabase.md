@@ -157,48 +157,10 @@ const conn = await ElectricDatabase.init('myApp.db', '')
 const electric = await electrify(conn, schema, config)
 ```
 
-You can see an example of this pattern in our [Checkout Example](https://github.com/electric-sql/electric/blob/main/examples/checkout/)
+You can see an example of this pattern in our [Checkout Example](../../examples/checkout.md).
 
 ### Supabase Edge Functions
 
-Many apps need to run code on the server when users take actions; a great way to do this with local-first apps built with Electric is using [event sourcing](../event-sourcing). Using a combination of a Postgres trigger and a [Supabase Edge Function](https://supabase.com/docs/guides/functions), you can run server side code when your database records are synced to the server. These triggers can run on various events within the database, such as inserting, updating and deleting rows in a database.
+Many apps need to run code on the server in response to user actions. For example, to handle [secure transactions](/blog/2023/12/15/secure-transactions-with-local-first).
 
-First, you need to ensure that the `pg_net` extension is enabled for your project - this is an extension that enables you to call an Edge Function url via SQL. In the dashboard go to "Database" -> "Extensions" and search for `pg_net`, and ensure it is toggled on.
-
-To create an Edge Function for your app, follow the instructions in the [Supabase Auth documentation](https://supabase.com/docs/guides/functions).
-
-Finally, you need to configure a trigger to call the Edge Function. Supabase has great documentation on [Postgres Triggers](https://supabase.com/docs/guides/database/postgres/triggers).
-
-The "AFTER INSERT" trigger in the example below will be called whenever a new row in "my_table" is synced to the server. It then uses the `pg_net` extension to call an Edge Function at its URL. The Edge Function is passed a JSON body with the `id` of the new row inserted; it can use this to retrieve the row using the Supabase Client API and process it.
-
-```sql
--- Drop any previous version of the trigger and function
-DROP TRIGGER IF EXISTS "my_edge_function_trigger" ON "public"."my_table";
-DROP FUNCTION IF EXISTS call_my_edge_function_trigger();
-
--- The function called by the trigger
-CREATE FUNCTION call_my_edge_function_trigger() RETURNS trigger AS $$
-BEGIN
-  PERFORM net.http_post(
-    'https://YOUR-SUPABASE-HOST.supabase.co/functions/v1/my_edge_function',
-    ('{"id": "' || new.id || '"}')::jsonb,
-    '{}'::jsonb,
-    '{"Content-type":"application/json","Authorization":"YOUR-SERVICE-ROLL-KEY"}'::jsonb
-  );
-  RETURN NULL;
-END;
-$$ LANGUAGE plpgsql;
-
--- Configure the function to be called by an "AFTER INSERT" trigger
-CREATE TRIGGER "my_edge_function_trigger" AFTER INSERT
-ON "public"."my_table" FOR EACH ROW
-EXECUTE FUNCTION call_my_edge_function_trigger();
-
--- This next line is required to ensure that triggers on the table are called
--- as a result of the Electric sync
-ALTER TABLE "public"."my_table" ENABLE ALWAYS TRIGGER my_edge_function_trigger;
-```
-
-This code can either be run directly against your Postgres via the Supabase console, or you can include it in your database migrations.
-
-You can see an example of this pattern in our [Checkout Example](https://github.com/electric-sql/electric/blob/main/examples/checkout/).
+A great way to do this with Supabase is to use a combination of Postgres triggers and Edge Functions. This pattern is documented in the [Supabase event sourcing guide](../event-sourcing/supabase.md).
