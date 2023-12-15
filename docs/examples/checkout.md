@@ -69,13 +69,9 @@ This pattern allows a zero-barrier, local-first, offline-capable checkout flow t
 
 ## Supabase integration
 
-The example app uses [Supabase](https://supabase.com) for [auth](https://supabase.com/docs/guides/auth), [edge functions](https://supabase.com/docs/guides/functions) and to host the Postgres database.
+The example app uses [Supabase](https://supabase.com) for auth, edge functions and to host the Postgres database. See <DocPageLink path="integrations/deployment/supabase" /> for details on using Electric with Supabase.
 
-Authentication for the store uses [Supabase Auth](https://supabase.com/docs/guides/auth), using their standard form component. It then uses JWT token provided by Supabase to authenticate the connection to the Electric sync service. This works by configuring the same private key to verify the token with both Supabase and Electric and because both services support reading the user ID from the `sub` claim of the JWT.
-
-A [Supabase Edge Function](https://supabase.com/docs/guides/functions) is used to process orders when they are placed. This is a called from an "on insert" trigger on the `orders` in Postgres.
-
-For more details on how to use Electric with Supabase Postgres, see <DocPageLink path="integrations/deployment/supabase" />.
+Authentication for the store uses [Supabase Auth](https://supabase.com/docs/guides/auth), using their standard form component. It then uses JWT token provided by Supabase to authenticate the connection to the Electric sync service. A [Supabase Edge Function](../integrations/event-sourcing/supabase.md) is used to process orders when they are placed.
 
 ## Source code
 
