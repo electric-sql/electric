@@ -20,11 +20,18 @@ Supabase is an open source Firebase alternative. It provides a Postgres database
 5. [Verifying Electric initialisation](#5-verifying-electric-initialisation)
 6. [Electrifying tables](#6-electrifying-tables)
 
+Using other Supabase tools with Electric:
+
+- [Supabase Auth](#supabase-auth)
+- [Supabase Edge Functions](#supabase-edge-functions)
+
 ### 1. Setting up a Supabase Postgres
 
 If you don't yet have a Supabase account visit [supabase.com](https://supabase.com) and create one.
 
 Log in to your Supabase dashboard and click "New Project". In the form enter a name for the database, and a password that will be used to connect to it. Make a note of this password and save it somewhere secure.
+
+![New Project](./supabase/new-project.png)
 
 Select an AWS region for your database to be hosted in. To reduce latency, we recommend that this is close to, or ideally in same region as, your Electric sync service.
 
@@ -38,6 +45,8 @@ All Supabase Postgres instances come with logical replication enabled and the pe
 
 Go to "Project Settings" (look for the gear icon at the bottom of the icon menu on the left hand side of the page) and open the "Database" section. Under the heading "Connection string" select the `URI` tab. Copy the connection string shown and save it somewhere.
 
+![Connection Details](./supabase/connection-details.png)
+
 You will use this as the value for the `DATABASE_URL` in your [Electric sync service configuration](../../api/service.md).
 
 :::caution
@@ -48,13 +57,15 @@ Do not use the "Connection Pool" connection string displayed a little further do
 
 Now open the "API" section of the project settings. Scroll down to the "JWT settings". Reveal and copy the "JWT Secret" value. Save it somewhere secure.
 
+![JWT Key](./supabase/jwt-key.png)
+
 You will use this as the value for `AUTH_JWT_KEY` in your [Electric sync service configuration](../../api/service.md).
 
 ### 4. Configuring Electric to connect to Supabase
 
 Run your [Electric sync service](../../api/service), either locally or [via one of the other deployment options](./index.md), with the following [configuration options](../../api/service.md#configuration-options):
 
-- set `AUTH_JWT_ALG` to `HS512` to enable secure auth mode with the right signing algorithm
+- set `AUTH_JWT_ALG` to `HS256` to enable secure auth mode with the right signing algorithm
 - set `AUTH_JWT_KEY` to the "JWT Secret" value you retrieved in step 3 above
 - set `DATABASE_URL` to the connection string you retrieved in step 2 above
 - set `ELECTRIC_WRITE_TO_PG_MODE` to `direct_writes`
@@ -64,7 +75,7 @@ Depending on how you run Electric these could be passed as arguments to Docker, 
 
 ```shell
 docker run \
-    -e "AUTH_JWT_ALG=HS512" \
+    -e "AUTH_JWT_ALG=HS256" \
     -e "AUTH_JWT_KEY=..." \
     -e "DATABASE_URL=..." \
     -e "ELECTRIC_WRITE_TO_PG_MODE=direct_writes" \
@@ -77,9 +88,15 @@ docker run \
 
 This will start Electric and connect it to your Supabase database. Logs will be printed to the terminal allowing you to see any errors that may occur.
 
+:::info
+Supabase support was enabled in Electric v0.8, you should ensure that docker pulls at least that version. You can specifically use 0.8 by using the tagged version: `electricsql/electric:0.8`.
+:::
+
 ### 5. Verifying Electric initialisation
 
 You can verify that Electric has initialised your database sucessfully using the Supabase dashboard. Select your project, then go to the "Table Editor" on the navigation menu. You should see a left-hand side menu listing any tables in your database with a "Schema" menu above.
+
+![Verifying Electric Schema](./supabase/schema.png)
 
 Click this menu, and check that there is now an `electric` schema in your Postgres database. This confirms that the sync service has successfully initialised your database.
 
@@ -106,7 +123,7 @@ ELECTRIC ENABLE
 This will opt the `items` table in your public schema in to sync via Electric.
 
 :::caution
-Electric does not yet support permissions. Electrified tables are exposed to the public Internet.
+The permissions system for Electric is still in development. Electrified tables are exposed to the public Internet. [See our roadmap for details](/docs/reference/roadmap).
 :::
 
 :::caution
