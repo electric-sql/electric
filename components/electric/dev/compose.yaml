@@ -1,6 +1,16 @@
 version: "3.1"
 name: "electric_dev"
 
+configs:
+  postgresql_conf:
+    file: ./postgresql.conf
+  hba_file:
+    file: ./pg_hba.conf
+  ssl_cert_file:
+    file: ./server.crt
+  ssl_key_file:
+    file: ./server.key
+
 services:
   postgres:
     image: postgres:14-alpine
@@ -10,12 +20,17 @@ services:
       POSTGRES_PASSWORD: password
     ports:
       - "54321:5432"
-    volumes:
-      - ./postgres.conf:/etc/postgresql.conf:ro
-    entrypoint:
-      - docker-entrypoint.sh
+    configs:
+      - source: postgresql_conf
+        target: /etc/postgresql.conf
+      - source: hba_file
+        target: /etc/pg_hba.conf
+      - source: ssl_cert_file
+        target: /etc/server.crt
+      - source: ssl_key_file
+        target: /etc/server.key
+    command:
       - -c
       - config_file=/etc/postgresql.conf
-    privileged: true
     extra_hosts:
       - "host.docker.internal:host-gateway"
