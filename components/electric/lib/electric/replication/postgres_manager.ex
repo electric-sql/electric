@@ -110,6 +110,10 @@ defmodule Electric.Replication.PostgresConnectorMng do
         state = %State{state | status: :establishing_repl_conn}
         {:noreply, state, {:continue, :establish_repl_conn}}
 
+      {:error, {:ssl_negotiation_failed, _}} when state.conn_opts.ssl != :required ->
+        state = fallback_to_nossl(state)
+        {:noreply, state, {:continue, :init}}
+
       error ->
         Logger.error("Initialization of Postgres state failed with reason: #{inspect(error)}.")
         {:noreply, schedule_retry(:init, state)}
@@ -295,5 +299,19 @@ defmodule Electric.Replication.PostgresConnectorMng do
 
   defp resolve_host_to_addr(%{host: host, ipv6: false}) do
     :inet.getaddr(host, :inet)
+  end
+
+  defp fallback_to_nossl(state) do
+    Logger.warning(
+      "Falling back to trying an unencrypted connection to Postgres, since DATABASE_REQUIRE_SSL=false."
+    )
+
+    connector_config = put_in(state.connector_config, [:connection, :ssl], false)
+
+    %State{
+      state
+      | connector_config: connector_config,
+        conn_opts: Connectors.get_connection_opts(connector_config)
+    }
   end
 end
