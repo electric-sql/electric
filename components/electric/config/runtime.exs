@@ -163,10 +163,10 @@ postgresql_connection =
     database_url ->
       database_url
       |> Electric.Utils.parse_postgresql_uri()
-      |> Keyword.put_new(:ssl, use_ssl?)
+      |> Keyword.put(:ssl, use_ssl?)
       |> Keyword.put(:ipv6, use_ipv6?)
-      |> Keyword.update(:timeout, 5_000, &String.to_integer/1)
       |> Keyword.put(:replication, "database")
+      |> Keyword.update(:timeout, 5_000, &String.to_integer/1)
   end
 
 pg_server_host =
