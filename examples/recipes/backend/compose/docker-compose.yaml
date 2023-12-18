@@ -54,6 +54,9 @@ services:
       PG_HOST: postgres
       PG_DATABASE: ${APP_NAME:-electric}
       PG_PORT: ${PG_PORT:-5432}
+      DEMO_API_PORT: ${DEMO_API_PORT:-3123}
+    ports:
+      - ${DEMO_API_PORT:-3123}:3123
     depends_on:
       - postgres
     volumes:
