@@ -171,6 +171,7 @@ export class SatelliteClient implements Client {
         SatRpcResponse: (msg) => this.rpcClient.handleResponse(msg),
         SatRpcRequest: (msg) => this.handleRpcRequest(msg),
         SatOpLogAck: (msg) => void msg, // Server doesn't send that
+        SatPerms: (msg) => void msg,
       } satisfies HandlerMapping).map((e) => [getFullTypeName(e[0]), e[1]])
     )
 

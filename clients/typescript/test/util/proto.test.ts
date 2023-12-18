@@ -30,6 +30,7 @@ test('shapeRequestToSatShapeReq: correctly converts a nested request', (t) => {
         select: {
           $type: 'Electric.Satellite.SatShapeDef.Select',
           include: [],
+          schemaname: undefined,
           tablename: 'other',
           where: '',
         },
