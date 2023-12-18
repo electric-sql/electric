@@ -17,6 +17,9 @@ function App() {
         <Link component={RouterLink} to="/log-viewer" underline="hover">
           Log Viewer
         </Link>
+        <Link component={RouterLink} to="/request-response" underline="hover">
+          Request/Response Pattern
+        </Link>
       </Box>
     </>
   )

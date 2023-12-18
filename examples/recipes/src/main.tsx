@@ -14,6 +14,7 @@ import theme from './theme.ts';
 
 import { ActivityEventsExample } from './activity_events/ActivityEventsExample.tsx';
 import { LogViewerExample } from './log_viewer/LogViewerExample.tsx';
+import { RequestResponseExample } from './request_response/RequestResponseExample.tsx';
 
 
 const router = createBrowserRouter([
@@ -28,6 +29,10 @@ const router = createBrowserRouter([
   {
     path: "/log-viewer",
     element: <LogViewerExample />
+  },
+  {
+    path: "/request-response",
+    element: <RequestResponseExample />
   },
 ]);
 
