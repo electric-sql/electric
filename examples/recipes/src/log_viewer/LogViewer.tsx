@@ -3,7 +3,7 @@ import {
   List, ListItem, ListItemText, ListSubheader,
   Paper, TextField, Typography
 } from "@mui/material"
-import {  Fragment, useCallback, useEffect, useState } from "react"
+import React, {  Fragment, useCallback, useEffect, useState } from "react"
 import { useElectric } from "../electric/ElectricWrapper"
 import { useLiveQuery } from "electric-sql/react"
 
@@ -47,14 +47,43 @@ export const LogViewer = ({
     }
   }, [searchFilter, defaultNumLogsToShow])
 
+  // Increase number of logs to "take" from db
   const handleShowMore = useCallback(() => setNumLogsToShow(
       (currentNum) => currentNum + additionalLogsToShow
     ),
     [additionalLogsToShow]
   )
 
-  const hasMoreLogsToShow = totalNumberOfLogs > numLogsToShow;
+  return <LogViewerView
+    logs={logs}
+    numHiddenLogs={totalNumberOfLogs - numLogsToShow}
+    onSearchFilterChange={setSearchFilter}
+    onShowMoreLogs={handleShowMore}
+  />
+};
 
+interface Log {
+  id: string,
+  timestamp: Date,
+  content: string,
+}
+
+const LogViewerView = ({
+  logs,
+  numHiddenLogs,
+  onSearchFilterChange,
+  onShowMoreLogs
+} : {
+  logs: Log[],
+  numHiddenLogs: number,
+  onSearchFilterChange: (filter: string) => void,
+  onShowMoreLogs: () => void
+}) => {
+  const handleSearchInputChange = useCallback<React.ChangeEventHandler<HTMLInputElement>>(
+    (e) => onSearchFilterChange(e.target.value),
+    [onSearchFilterChange]
+  );
+  const hasMoreLogsToShow = numHiddenLogs > 0;
   return (
     <Paper>
       <List disablePadding dense>
@@ -71,7 +100,7 @@ export const LogViewer = ({
             variant="outlined"
             size="small"
             label="Search filter"
-            onChange={(e) => setSearchFilter(e.target.value)}
+            onChange={handleSearchInputChange}
             />
         </ListSubheader>            
         {logs.map((log, index) => (
@@ -86,10 +115,10 @@ export const LogViewer = ({
         ))}
 
         <Collapse key="show-more-logs" in={hasMoreLogsToShow}>
-          <Button fullWidth onClick={handleShowMore}>
+          <Button fullWidth onClick={onShowMoreLogs}>
             {
               hasMoreLogsToShow ?
-                  `Show more logs (${totalNumberOfLogs - numLogsToShow} more)` :
+                  `Show more logs (${numHiddenLogs} more)` :
                   'Show more logs'
             }
           </Button>
@@ -97,4 +126,4 @@ export const LogViewer = ({
       </List>
     </Paper>
   );
-};
+}
