@@ -26,7 +26,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - 5432
+      - ${PG_PORT:-5432}:5432
     volumes:
       - pg_data:/var/lib/postgresql/data
 
@@ -34,7 +34,7 @@ services:
     image: "${ELECTRIC_IMAGE:-electricsql/electric:latest}"
     init: true
     environment:
-      DATABASE_URL: postgresql://postgres:pg_password@postgres:5432/${APP_NAME:-electric}
+      DATABASE_URL: postgresql://postgres:pg_password@postgres:${PG_PORT:-5432}/${APP_NAME:-electric}
       PG_PROXY_PASSWORD: proxy_password
       LOGICAL_PUBLISHER_HOST: electric
       AUTH_MODE: insecure
@@ -43,3 +43,18 @@ services:
       - ${ELECTRIC_PROXY_PORT:-65432}:65432
     depends_on:
       - postgres
+
+  demo-server:
+    build:
+      context: "../demo-server/."
+      dockerfile: Dockerfile
+    environment:
+      PG_USER: postgres
+      PG_PASSWORD: pg_password
+      PG_HOST: postgres
+      PG_DATABASE: ${APP_NAME:-electric}
+      PG_PORT: ${PG_PORT:-5432}
+    depends_on:
+      - postgres
+    volumes:
+      - ../demo-server:/usr/src/app
