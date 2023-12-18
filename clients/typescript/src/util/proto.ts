@@ -122,6 +122,7 @@ const msgtypetuples: MappingTuples = {
   SatShapeDataEnd: [18, Pb.SatShapeDataEnd],
   SatRpcRequest: [21, Pb.SatRpcRequest],
   SatRpcResponse: [22, Pb.SatRpcResponse],
+  SatPerms: [23, Pb.SatPerms],
 }
 
 const msgtypemapping = Object.fromEntries(
@@ -172,6 +173,7 @@ export type SatPbMsg =
   | Pb.SatSubsDataEnd
   | Pb.SatShapeDataBegin
   | Pb.SatShapeDataEnd
+  | Pb.SatPerms
 
 export type SatPbMsgObj<
   Msg extends { $type: string },
@@ -407,6 +409,8 @@ export function msgToString(message: MessageOfInterest): string {
       return `#SatRpcResponse{method: ${message.method}, requestId: ${
         message.requestId
       }${message.error ? ', error: ' + msgToString(message.error) : ''}}`
+    case 'Electric.Satellite.SatPerms':
+      return `#SatPerms{}`
   }
 }
 

@@ -510,6 +510,7 @@ export interface SatShapeDef_Select {
   $type: "Electric.Satellite.SatShapeDef.Select";
   /** table name for this select */
   tablename: string;
+  schemaname?: string | undefined;
 }
 
 /**
@@ -583,6 +584,108 @@ export interface SatShapeDataBegin {
 /** End delimiter for the initial shape data */
 export interface SatShapeDataEnd {
   $type: "Electric.Satellite.SatShapeDataEnd";
+}
+
+/**
+ * represents the client permissions
+ * - `Rules`: the global permission rules, defined by the DDLX
+ * - `Roles`: a users actual assigned roles
+ */
+export interface SatPerms {
+  $type: "Electric.Satellite.SatPerms";
+  id: Long;
+  rules: SatPerms_Rules | undefined;
+  roles: SatPerms_Roles | undefined;
+}
+
+export enum SatPerms_Privilege {
+  DELETE = 0,
+  INSERT = 1,
+  SELECT = 2,
+  UPDATE = 3,
+  UNRECOGNIZED = -1,
+}
+
+export enum SatPerms_PredefinedRole {
+  ANYONE = 0,
+  AUTHENTICATED = 1,
+  UNRECOGNIZED = -1,
+}
+
+export interface SatPerms_Table {
+  $type: "Electric.Satellite.SatPerms.Table";
+  schema: string;
+  name: string;
+}
+
+export interface SatPerms_Column {
+  $type: "Electric.Satellite.SatPerms.Column";
+  table: SatPerms_Table | undefined;
+  column: string;
+}
+
+export interface SatPerms_Path {
+  $type: "Electric.Satellite.SatPerms.Path";
+  columns: SatPerms_Column[];
+}
+
+export interface SatPerms_Scope {
+  $type: "Electric.Satellite.SatPerms.Scope";
+  table: SatPerms_Table | undefined;
+  id: string;
+}
+
+export interface SatPerms_RoleName {
+  $type: "Electric.Satellite.SatPerms.RoleName";
+  predefined?: SatPerms_PredefinedRole | undefined;
+  application?: string | undefined;
+}
+
+export interface SatPerms_Grant {
+  $type: "Electric.Satellite.SatPerms.Grant";
+  id: string;
+  table: SatPerms_Table | undefined;
+  role: SatPerms_RoleName | undefined;
+  privileges: SatPerms_Privilege[];
+  columns: string[];
+  scope?: SatPerms_Table | undefined;
+  path?: SatPerms_Path | undefined;
+  check?: string | undefined;
+}
+
+export interface SatPerms_Assign {
+  $type: "Electric.Satellite.SatPerms.Assign";
+  id: string;
+  table: SatPerms_Table | undefined;
+  userColumn?: string | undefined;
+  roleColumn?: string | undefined;
+  roleName?: string | undefined;
+  scope?: SatPerms_Table | undefined;
+  if?: string | undefined;
+}
+
+export interface SatPerms_Role {
+  $type: "Electric.Satellite.SatPerms.Role";
+  id: string;
+  role: string;
+  userId: string;
+  assignId: string;
+  scope?: SatPerms_Scope | undefined;
+}
+
+/**
+ * split the rules and roles info into distinct messages so they can be
+ * serialized separately
+ */
+export interface SatPerms_Rules {
+  $type: "Electric.Satellite.SatPerms.Rules";
+  grants: SatPerms_Grant[];
+  assigns: SatPerms_Assign[];
+}
+
+export interface SatPerms_Roles {
+  $type: "Electric.Satellite.SatPerms.Roles";
+  roles: SatPerms_Role[];
 }
 
 function createBaseSatRpcRequest(): SatRpcRequest {
@@ -3166,7 +3269,7 @@ export const SatShapeDef = {
 messageTypeRegistry.set(SatShapeDef.$type, SatShapeDef);
 
 function createBaseSatShapeDef_Select(): SatShapeDef_Select {
-  return { $type: "Electric.Satellite.SatShapeDef.Select", tablename: "" };
+  return { $type: "Electric.Satellite.SatShapeDef.Select", tablename: "", schemaname: undefined };
 }
 
 export const SatShapeDef_Select = {
@@ -3175,6 +3278,9 @@ export const SatShapeDef_Select = {
   encode(message: SatShapeDef_Select, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (message.tablename !== "") {
       writer.uint32(10).string(message.tablename);
+    }
+    if (message.schemaname !== undefined) {
+      writer.uint32(18).string(message.schemaname);
     }
     return writer;
   },
@@ -3193,6 +3299,13 @@ export const SatShapeDef_Select = {
 
           message.tablename = reader.string();
           continue;
+        case 2:
+          if (tag !== 18) {
+            break;
+          }
+
+          message.schemaname = reader.string();
+          continue;
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3209,6 +3322,7 @@ export const SatShapeDef_Select = {
   fromPartial<I extends Exact<DeepPartial<SatShapeDef_Select>, I>>(object: I): SatShapeDef_Select {
     const message = createBaseSatShapeDef_Select();
     message.tablename = object.tablename ?? "";
+    message.schemaname = object.schemaname ?? undefined;
     return message;
   },
 };
@@ -3578,6 +3692,873 @@ export const SatShapeDataEnd = {
 };
 
 messageTypeRegistry.set(SatShapeDataEnd.$type, SatShapeDataEnd);
+
+function createBaseSatPerms(): SatPerms {
+  return { $type: "Electric.Satellite.SatPerms", id: Long.ZERO, rules: undefined, roles: undefined };
+}
+
+export const SatPerms = {
+  $type: "Electric.Satellite.SatPerms" as const,
+
+  encode(message: SatPerms, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (!message.id.isZero()) {
+      writer.uint32(8).int64(message.id);
+    }
+    if (message.rules !== undefined) {
+      SatPerms_Rules.encode(message.rules, writer.uint32(26).fork()).ldelim();
+    }
+    if (message.roles !== undefined) {
+      SatPerms_Roles.encode(message.roles, writer.uint32(34).fork()).ldelim();
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatPerms {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatPerms();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 8) {
+            break;
+          }
+
+          message.id = reader.int64() as Long;
+          continue;
+        case 3:
+          if (tag !== 26) {
+            break;
+          }
+
+          message.rules = SatPerms_Rules.decode(reader, reader.uint32());
+          continue;
+        case 4:
+          if (tag !== 34) {
+            break;
+          }
+
+          message.roles = SatPerms_Roles.decode(reader, reader.uint32());
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatPerms>, I>>(base?: I): SatPerms {
+    return SatPerms.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatPerms>, I>>(object: I): SatPerms {
+    const message = createBaseSatPerms();
+    message.id = (object.id !== undefined && object.id !== null) ? Long.fromValue(object.id) : Long.ZERO;
+    message.rules = (object.rules !== undefined && object.rules !== null)
+      ? SatPerms_Rules.fromPartial(object.rules)
+      : undefined;
+    message.roles = (object.roles !== undefined && object.roles !== null)
+      ? SatPerms_Roles.fromPartial(object.roles)
+      : undefined;
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatPerms.$type, SatPerms);
+
+function createBaseSatPerms_Table(): SatPerms_Table {
+  return { $type: "Electric.Satellite.SatPerms.Table", schema: "", name: "" };
+}
+
+export const SatPerms_Table = {
+  $type: "Electric.Satellite.SatPerms.Table" as const,
+
+  encode(message: SatPerms_Table, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (message.schema !== "") {
+      writer.uint32(10).string(message.schema);
+    }
+    if (message.name !== "") {
+      writer.uint32(18).string(message.name);
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatPerms_Table {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatPerms_Table();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 10) {
+            break;
+          }
+
+          message.schema = reader.string();
+          continue;
+        case 2:
+          if (tag !== 18) {
+            break;
+          }
+
+          message.name = reader.string();
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatPerms_Table>, I>>(base?: I): SatPerms_Table {
+    return SatPerms_Table.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatPerms_Table>, I>>(object: I): SatPerms_Table {
+    const message = createBaseSatPerms_Table();
+    message.schema = object.schema ?? "";
+    message.name = object.name ?? "";
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatPerms_Table.$type, SatPerms_Table);
+
+function createBaseSatPerms_Column(): SatPerms_Column {
+  return { $type: "Electric.Satellite.SatPerms.Column", table: undefined, column: "" };
+}
+
+export const SatPerms_Column = {
+  $type: "Electric.Satellite.SatPerms.Column" as const,
+
+  encode(message: SatPerms_Column, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (message.table !== undefined) {
+      SatPerms_Table.encode(message.table, writer.uint32(10).fork()).ldelim();
+    }
+    if (message.column !== "") {
+      writer.uint32(18).string(message.column);
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatPerms_Column {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatPerms_Column();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 10) {
+            break;
+          }
+
+          message.table = SatPerms_Table.decode(reader, reader.uint32());
+          continue;
+        case 2:
+          if (tag !== 18) {
+            break;
+          }
+
+          message.column = reader.string();
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatPerms_Column>, I>>(base?: I): SatPerms_Column {
+    return SatPerms_Column.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatPerms_Column>, I>>(object: I): SatPerms_Column {
+    const message = createBaseSatPerms_Column();
+    message.table = (object.table !== undefined && object.table !== null)
+      ? SatPerms_Table.fromPartial(object.table)
+      : undefined;
+    message.column = object.column ?? "";
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatPerms_Column.$type, SatPerms_Column);
+
+function createBaseSatPerms_Path(): SatPerms_Path {
+  return { $type: "Electric.Satellite.SatPerms.Path", columns: [] };
+}
+
+export const SatPerms_Path = {
+  $type: "Electric.Satellite.SatPerms.Path" as const,
+
+  encode(message: SatPerms_Path, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    for (const v of message.columns) {
+      SatPerms_Column.encode(v!, writer.uint32(10).fork()).ldelim();
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatPerms_Path {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatPerms_Path();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 10) {
+            break;
+          }
+
+          message.columns.push(SatPerms_Column.decode(reader, reader.uint32()));
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatPerms_Path>, I>>(base?: I): SatPerms_Path {
+    return SatPerms_Path.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatPerms_Path>, I>>(object: I): SatPerms_Path {
+    const message = createBaseSatPerms_Path();
+    message.columns = object.columns?.map((e) => SatPerms_Column.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatPerms_Path.$type, SatPerms_Path);
+
+function createBaseSatPerms_Scope(): SatPerms_Scope {
+  return { $type: "Electric.Satellite.SatPerms.Scope", table: undefined, id: "" };
+}
+
+export const SatPerms_Scope = {
+  $type: "Electric.Satellite.SatPerms.Scope" as const,
+
+  encode(message: SatPerms_Scope, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (message.table !== undefined) {
+      SatPerms_Table.encode(message.table, writer.uint32(10).fork()).ldelim();
+    }
+    if (message.id !== "") {
+      writer.uint32(18).string(message.id);
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatPerms_Scope {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatPerms_Scope();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 10) {
+            break;
+          }
+
+          message.table = SatPerms_Table.decode(reader, reader.uint32());
+          continue;
+        case 2:
+          if (tag !== 18) {
+            break;
+          }
+
+          message.id = reader.string();
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatPerms_Scope>, I>>(base?: I): SatPerms_Scope {
+    return SatPerms_Scope.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatPerms_Scope>, I>>(object: I): SatPerms_Scope {
+    const message = createBaseSatPerms_Scope();
+    message.table = (object.table !== undefined && object.table !== null)
+      ? SatPerms_Table.fromPartial(object.table)
+      : undefined;
+    message.id = object.id ?? "";
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatPerms_Scope.$type, SatPerms_Scope);
+
+function createBaseSatPerms_RoleName(): SatPerms_RoleName {
+  return { $type: "Electric.Satellite.SatPerms.RoleName", predefined: undefined, application: undefined };
+}
+
+export const SatPerms_RoleName = {
+  $type: "Electric.Satellite.SatPerms.RoleName" as const,
+
+  encode(message: SatPerms_RoleName, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (message.predefined !== undefined) {
+      writer.uint32(8).int32(message.predefined);
+    }
+    if (message.application !== undefined) {
+      writer.uint32(18).string(message.application);
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatPerms_RoleName {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatPerms_RoleName();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 8) {
+            break;
+          }
+
+          message.predefined = reader.int32() as any;
+          continue;
+        case 2:
+          if (tag !== 18) {
+            break;
+          }
+
+          message.application = reader.string();
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatPerms_RoleName>, I>>(base?: I): SatPerms_RoleName {
+    return SatPerms_RoleName.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatPerms_RoleName>, I>>(object: I): SatPerms_RoleName {
+    const message = createBaseSatPerms_RoleName();
+    message.predefined = object.predefined ?? undefined;
+    message.application = object.application ?? undefined;
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatPerms_RoleName.$type, SatPerms_RoleName);
+
+function createBaseSatPerms_Grant(): SatPerms_Grant {
+  return {
+    $type: "Electric.Satellite.SatPerms.Grant",
+    id: "",
+    table: undefined,
+    role: undefined,
+    privileges: [],
+    columns: [],
+    scope: undefined,
+    path: undefined,
+    check: undefined,
+  };
+}
+
+export const SatPerms_Grant = {
+  $type: "Electric.Satellite.SatPerms.Grant" as const,
+
+  encode(message: SatPerms_Grant, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    if (message.table !== undefined) {
+      SatPerms_Table.encode(message.table, writer.uint32(18).fork()).ldelim();
+    }
+    if (message.role !== undefined) {
+      SatPerms_RoleName.encode(message.role, writer.uint32(26).fork()).ldelim();
+    }
+    writer.uint32(34).fork();
+    for (const v of message.privileges) {
+      writer.int32(v);
+    }
+    writer.ldelim();
+    for (const v of message.columns) {
+      writer.uint32(42).string(v!);
+    }
+    if (message.scope !== undefined) {
+      SatPerms_Table.encode(message.scope, writer.uint32(50).fork()).ldelim();
+    }
+    if (message.path !== undefined) {
+      SatPerms_Path.encode(message.path, writer.uint32(58).fork()).ldelim();
+    }
+    if (message.check !== undefined) {
+      writer.uint32(66).string(message.check);
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatPerms_Grant {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatPerms_Grant();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 10) {
+            break;
+          }
+
+          message.id = reader.string();
+          continue;
+        case 2:
+          if (tag !== 18) {
+            break;
+          }
+
+          message.table = SatPerms_Table.decode(reader, reader.uint32());
+          continue;
+        case 3:
+          if (tag !== 26) {
+            break;
+          }
+
+          message.role = SatPerms_RoleName.decode(reader, reader.uint32());
+          continue;
+        case 4:
+          if (tag === 32) {
+            message.privileges.push(reader.int32() as any);
+
+            continue;
+          }
+
+          if (tag === 34) {
+            const end2 = reader.uint32() + reader.pos;
+            while (reader.pos < end2) {
+              message.privileges.push(reader.int32() as any);
+            }
+
+            continue;
+          }
+
+          break;
+        case 5:
+          if (tag !== 42) {
+            break;
+          }
+
+          message.columns.push(reader.string());
+          continue;
+        case 6:
+          if (tag !== 50) {
+            break;
+          }
+
+          message.scope = SatPerms_Table.decode(reader, reader.uint32());
+          continue;
+        case 7:
+          if (tag !== 58) {
+            break;
+          }
+
+          message.path = SatPerms_Path.decode(reader, reader.uint32());
+          continue;
+        case 8:
+          if (tag !== 66) {
+            break;
+          }
+
+          message.check = reader.string();
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatPerms_Grant>, I>>(base?: I): SatPerms_Grant {
+    return SatPerms_Grant.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatPerms_Grant>, I>>(object: I): SatPerms_Grant {
+    const message = createBaseSatPerms_Grant();
+    message.id = object.id ?? "";
+    message.table = (object.table !== undefined && object.table !== null)
+      ? SatPerms_Table.fromPartial(object.table)
+      : undefined;
+    message.role = (object.role !== undefined && object.role !== null)
+      ? SatPerms_RoleName.fromPartial(object.role)
+      : undefined;
+    message.privileges = object.privileges?.map((e) => e) || [];
+    message.columns = object.columns?.map((e) => e) || [];
+    message.scope = (object.scope !== undefined && object.scope !== null)
+      ? SatPerms_Table.fromPartial(object.scope)
+      : undefined;
+    message.path = (object.path !== undefined && object.path !== null)
+      ? SatPerms_Path.fromPartial(object.path)
+      : undefined;
+    message.check = object.check ?? undefined;
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatPerms_Grant.$type, SatPerms_Grant);
+
+function createBaseSatPerms_Assign(): SatPerms_Assign {
+  return {
+    $type: "Electric.Satellite.SatPerms.Assign",
+    id: "",
+    table: undefined,
+    userColumn: undefined,
+    roleColumn: undefined,
+    roleName: undefined,
+    scope: undefined,
+    if: undefined,
+  };
+}
+
+export const SatPerms_Assign = {
+  $type: "Electric.Satellite.SatPerms.Assign" as const,
+
+  encode(message: SatPerms_Assign, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    if (message.table !== undefined) {
+      SatPerms_Table.encode(message.table, writer.uint32(18).fork()).ldelim();
+    }
+    if (message.userColumn !== undefined) {
+      writer.uint32(26).string(message.userColumn);
+    }
+    if (message.roleColumn !== undefined) {
+      writer.uint32(34).string(message.roleColumn);
+    }
+    if (message.roleName !== undefined) {
+      writer.uint32(42).string(message.roleName);
+    }
+    if (message.scope !== undefined) {
+      SatPerms_Table.encode(message.scope, writer.uint32(50).fork()).ldelim();
+    }
+    if (message.if !== undefined) {
+      writer.uint32(58).string(message.if);
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatPerms_Assign {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatPerms_Assign();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 10) {
+            break;
+          }
+
+          message.id = reader.string();
+          continue;
+        case 2:
+          if (tag !== 18) {
+            break;
+          }
+
+          message.table = SatPerms_Table.decode(reader, reader.uint32());
+          continue;
+        case 3:
+          if (tag !== 26) {
+            break;
+          }
+
+          message.userColumn = reader.string();
+          continue;
+        case 4:
+          if (tag !== 34) {
+            break;
+          }
+
+          message.roleColumn = reader.string();
+          continue;
+        case 5:
+          if (tag !== 42) {
+            break;
+          }
+
+          message.roleName = reader.string();
+          continue;
+        case 6:
+          if (tag !== 50) {
+            break;
+          }
+
+          message.scope = SatPerms_Table.decode(reader, reader.uint32());
+          continue;
+        case 7:
+          if (tag !== 58) {
+            break;
+          }
+
+          message.if = reader.string();
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatPerms_Assign>, I>>(base?: I): SatPerms_Assign {
+    return SatPerms_Assign.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatPerms_Assign>, I>>(object: I): SatPerms_Assign {
+    const message = createBaseSatPerms_Assign();
+    message.id = object.id ?? "";
+    message.table = (object.table !== undefined && object.table !== null)
+      ? SatPerms_Table.fromPartial(object.table)
+      : undefined;
+    message.userColumn = object.userColumn ?? undefined;
+    message.roleColumn = object.roleColumn ?? undefined;
+    message.roleName = object.roleName ?? undefined;
+    message.scope = (object.scope !== undefined && object.scope !== null)
+      ? SatPerms_Table.fromPartial(object.scope)
+      : undefined;
+    message.if = object.if ?? undefined;
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatPerms_Assign.$type, SatPerms_Assign);
+
+function createBaseSatPerms_Role(): SatPerms_Role {
+  return { $type: "Electric.Satellite.SatPerms.Role", id: "", role: "", userId: "", assignId: "", scope: undefined };
+}
+
+export const SatPerms_Role = {
+  $type: "Electric.Satellite.SatPerms.Role" as const,
+
+  encode(message: SatPerms_Role, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    if (message.role !== "") {
+      writer.uint32(18).string(message.role);
+    }
+    if (message.userId !== "") {
+      writer.uint32(26).string(message.userId);
+    }
+    if (message.assignId !== "") {
+      writer.uint32(34).string(message.assignId);
+    }
+    if (message.scope !== undefined) {
+      SatPerms_Scope.encode(message.scope, writer.uint32(42).fork()).ldelim();
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatPerms_Role {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatPerms_Role();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 10) {
+            break;
+          }
+
+          message.id = reader.string();
+          continue;
+        case 2:
+          if (tag !== 18) {
+            break;
+          }
+
+          message.role = reader.string();
+          continue;
+        case 3:
+          if (tag !== 26) {
+            break;
+          }
+
+          message.userId = reader.string();
+          continue;
+        case 4:
+          if (tag !== 34) {
+            break;
+          }
+
+          message.assignId = reader.string();
+          continue;
+        case 5:
+          if (tag !== 42) {
+            break;
+          }
+
+          message.scope = SatPerms_Scope.decode(reader, reader.uint32());
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatPerms_Role>, I>>(base?: I): SatPerms_Role {
+    return SatPerms_Role.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatPerms_Role>, I>>(object: I): SatPerms_Role {
+    const message = createBaseSatPerms_Role();
+    message.id = object.id ?? "";
+    message.role = object.role ?? "";
+    message.userId = object.userId ?? "";
+    message.assignId = object.assignId ?? "";
+    message.scope = (object.scope !== undefined && object.scope !== null)
+      ? SatPerms_Scope.fromPartial(object.scope)
+      : undefined;
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatPerms_Role.$type, SatPerms_Role);
+
+function createBaseSatPerms_Rules(): SatPerms_Rules {
+  return { $type: "Electric.Satellite.SatPerms.Rules", grants: [], assigns: [] };
+}
+
+export const SatPerms_Rules = {
+  $type: "Electric.Satellite.SatPerms.Rules" as const,
+
+  encode(message: SatPerms_Rules, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    for (const v of message.grants) {
+      SatPerms_Grant.encode(v!, writer.uint32(10).fork()).ldelim();
+    }
+    for (const v of message.assigns) {
+      SatPerms_Assign.encode(v!, writer.uint32(18).fork()).ldelim();
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatPerms_Rules {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatPerms_Rules();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 10) {
+            break;
+          }
+
+          message.grants.push(SatPerms_Grant.decode(reader, reader.uint32()));
+          continue;
+        case 2:
+          if (tag !== 18) {
+            break;
+          }
+
+          message.assigns.push(SatPerms_Assign.decode(reader, reader.uint32()));
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatPerms_Rules>, I>>(base?: I): SatPerms_Rules {
+    return SatPerms_Rules.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatPerms_Rules>, I>>(object: I): SatPerms_Rules {
+    const message = createBaseSatPerms_Rules();
+    message.grants = object.grants?.map((e) => SatPerms_Grant.fromPartial(e)) || [];
+    message.assigns = object.assigns?.map((e) => SatPerms_Assign.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatPerms_Rules.$type, SatPerms_Rules);
+
+function createBaseSatPerms_Roles(): SatPerms_Roles {
+  return { $type: "Electric.Satellite.SatPerms.Roles", roles: [] };
+}
+
+export const SatPerms_Roles = {
+  $type: "Electric.Satellite.SatPerms.Roles" as const,
+
+  encode(message: SatPerms_Roles, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    for (const v of message.roles) {
+      SatPerms_Role.encode(v!, writer.uint32(18).fork()).ldelim();
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatPerms_Roles {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatPerms_Roles();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 2:
+          if (tag !== 18) {
+            break;
+          }
+
+          message.roles.push(SatPerms_Role.decode(reader, reader.uint32()));
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatPerms_Roles>, I>>(base?: I): SatPerms_Roles {
+    return SatPerms_Roles.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatPerms_Roles>, I>>(object: I): SatPerms_Roles {
+    const message = createBaseSatPerms_Roles();
+    message.roles = object.roles?.map((e) => SatPerms_Role.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatPerms_Roles.$type, SatPerms_Roles);
 
 /** Main RPC service that the Electric server fulfills */
 export interface Root {

@@ -14,7 +14,7 @@ defmodule Electric.Replication.Changes do
 
   require Logger
 
-  @type db_identifier() :: String.t()
+  @type db_identifier() :: Electric.Postgres.name()
   @type relation() :: {schema :: db_identifier(), table :: db_identifier()}
   @type record() :: %{(column_name :: db_identifier()) => column_data :: binary()}
   @type relation_id() :: non_neg_integer

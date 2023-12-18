@@ -64,7 +64,7 @@ defmodule Electric.Replication.ShapesTest do
         }
       }
 
-      assert {:error, [{"id1", :TABLE_NOT_FOUND, "Unknown tables: who knows"}]} =
+      assert {:error, [{"id1", :TABLE_NOT_FOUND, "Unknown tables: \"public\".\"who knows\""}]} =
                Shapes.validate_requests([request], origin)
     end
 

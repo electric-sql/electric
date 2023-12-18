@@ -19,6 +19,23 @@ defmodule Electric.DDLX.Command.Error do
 
   defstruct @keys
 
+  @behaviour Exception
+
+  @impl Exception
+  def blame(error, stacktrace) do
+    {error, stacktrace}
+  end
+
+  @impl Exception
+  def exception(args) do
+    struct(__MODULE__, args)
+  end
+
+  @impl Exception
+  def message(%__MODULE__{message: message}) do
+    message
+  end
+
   defimpl Command do
     def pg_sql(_) do
       []
@@ -29,5 +46,7 @@ defmodule Electric.DDLX.Command.Error do
     end
 
     def tag(_), do: "ELECTRIC ERROR"
+
+    def to_protobuf(_), do: []
   end
 end

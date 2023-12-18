@@ -83,25 +83,25 @@ defmodule Electric.Replication.Shapes do
     end
   end
 
-  defp tables_should_exist(%SatShapeDef{selects: selects}, graph) do
-    tables = Enum.map(selects, & &1.tablename)
+  defp tables_should_exist(shape_def, graph) do
+    tables = shape_tables(shape_def)
 
     case Enum.reject(tables, &Graph.has_vertex?(graph, &1)) do
       [] -> :ok
-      unknowns -> {:TABLE_NOT_FOUND, "Unknown tables: #{Enum.join(unknowns, ",")}"}
+      unknowns -> {:TABLE_NOT_FOUND, "Unknown tables: #{inspect_table_list(unknowns)}"}
     end
   end
 
   defp tables_should_not_duplicate(%SatShapeDef{selects: selects}) do
-    if Utils.has_duplicates_by?(selects, & &1.tablename) do
+    if Utils.has_duplicates_by?(selects, &select_table/1) do
       {:DUPLICATE_TABLE_IN_SHAPE_DEFINITION, "Cannot select same table twice"}
     else
       :ok
     end
   end
 
-  defp all_fks_should_be_included(%SatShapeDef{selects: selects}, graph) do
-    queried_tables = Enum.map(selects, & &1.tablename)
+  defp all_fks_should_be_included(shape_def, graph) do
+    queried_tables = shape_tables(shape_def)
 
     case Graph.reachable(graph, queried_tables) -- queried_tables do
       [] ->
@@ -109,7 +109,20 @@ defmodule Electric.Replication.Shapes do
 
       missing_reachable ->
         {:REFERENTIAL_INTEGRITY_VIOLATION,
-         "Some tables are missing from the shape request, but are referenced by FKs on the requested tables: #{Enum.join(missing_reachable, ",")}"}
+         "Some tables are missing from the shape request, but are referenced by FKs on the requested tables: #{inspect_table_list(missing_reachable)}"}
     end
+  end
+
+  defp shape_tables(%SatShapeDef{selects: selects}) do
+    Enum.map(selects, &select_table/1)
+  end
+
+  # see [VAX-1633] for issues around the schemaname field
+  defp select_table(%SatShapeDef.Select{schemaname: schema, tablename: name}) do
+    {schema || "public", name}
+  end
+
+  defp inspect_table_list(tables) do
+    tables |> Enum.map(&Electric.Utils.inspect_relation/1) |> Enum.join(",")
   end
 end
