@@ -3,12 +3,18 @@ import {
   List, ListItem, ListItemText, ListSubheader,
   Paper, TextField, Typography
 } from "@mui/material"
-import {  Fragment, useEffect, useState } from "react"
+import {  Fragment, useCallback, useEffect, useState } from "react"
 import { useElectric } from "../electric/ElectricWrapper"
 import { useLiveQuery } from "electric-sql/react"
 
-export const LogViewer = ({ defaultNumLogs = 10} : { defaultNumLogs?: number }) => {
-  const [numLogsToShow, setNumLogsToShow] = useState(defaultNumLogs)
+export const LogViewer = ({
+  defaultNumLogsToShow = 10,
+  additionalLogsToShow = 10,
+} : {
+  defaultNumLogsToShow?: number,
+  additionalLogsToShow?: number
+}) => {
+  const [numLogsToShow, setNumLogsToShow] = useState(defaultNumLogsToShow)
   const [searchFilter, setSearchFilter] = useState('')
 
   const { db } = useElectric()!
@@ -37,16 +43,17 @@ export const LogViewer = ({ defaultNumLogs = 10} : { defaultNumLogs?: number }) 
   // Reset number of logs shown when updating search filter
   useEffect(() => {
     if (searchFilter.length > 0) {
-      setNumLogsToShow(defaultNumLogs)
+      setNumLogsToShow(defaultNumLogsToShow)
     }
-  }, [searchFilter, defaultNumLogs])
+  }, [searchFilter, defaultNumLogsToShow])
 
-  const handleShowMore = () => setNumLogsToShow(
-    (currentNum) => Math.min(
-      currentNum + defaultNumLogs,
-      totalNumberOfLogs
-    )
+  const handleShowMore = useCallback(() => setNumLogsToShow(
+      (currentNum) => currentNum + additionalLogsToShow
+    ),
+    [additionalLogsToShow]
   )
+
+  const hasMoreLogsToShow = totalNumberOfLogs > numLogsToShow;
 
   return (
     <Paper>
@@ -78,9 +85,13 @@ export const LogViewer = ({ defaultNumLogs = 10} : { defaultNumLogs?: number }) 
           </Fragment>
         ))}
 
-        <Collapse key="show-more-logs" in={totalNumberOfLogs > numLogsToShow}>
+        <Collapse key="show-more-logs" in={hasMoreLogsToShow}>
           <Button fullWidth onClick={handleShowMore}>
-            {`Show more logs (${totalNumberOfLogs - numLogsToShow} more)`}
+            {
+              hasMoreLogsToShow ?
+                  `Show more logs (${totalNumberOfLogs - numLogsToShow} more)` :
+                  'Show more logs'
+            }
           </Button>
         </Collapse>
       </List>
