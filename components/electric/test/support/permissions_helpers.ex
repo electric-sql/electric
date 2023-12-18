@@ -1,17 +1,23 @@
 defmodule ElectricTest.PermissionsHelpers do
+  defmodule Auth do
+    def user_id do
+      "92bafe18-a818-4a3f-874f-590324140478"
+    end
+
+    def user(id \\ user_id()) do
+      %Electric.Satellite.Auth{user_id: id}
+    end
+
+    def nobody do
+      %Electric.Satellite.Auth{user_id: nil}
+    end
+  end
+
   defmodule Perms do
     alias Electric.Satellite.SatPerms, as: P
 
-    def build(ddlx, roles \\ [], auth) do
+    def build(ddlx, roles, auth \\ Auth.user()) do
       Electric.Satellite.Permissions.build(to_grants(ddlx), roles, auth)
-      # %P{
-      #   rules: %P.Rules{
-      #     grants: to_grants(ddlx)
-      #   },
-      #   roles: %P.Roles{
-      #     roles: roles
-      #   }
-      # }
     end
 
     defp to_grants(ddlx) do
@@ -94,20 +100,6 @@ defmodule ElectricTest.PermissionsHelpers do
     def insert(), do: [:INSERT]
     def select(), do: [:SELECT]
     def update(), do: [:UPDATE]
-  end
-
-  defmodule Auth do
-    def user_id do
-      "92bafe18-a818-4a3f-874f-590324140478"
-    end
-
-    def user(id \\ user_id()) do
-      %Electric.Satellite.Auth{user_id: id}
-    end
-
-    def nobody do
-      %Electric.Satellite.Auth{user_id: nil}
-    end
   end
 
   defmodule Tree do

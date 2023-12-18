@@ -145,19 +145,18 @@ defmodule Electric.Satellite.PermissionsTest do
     end
   end
 
-  describe "allowed/3" do
+  describe "write_allowed/3" do
     test "scoped role, change out of scope", cxt do
       perms =
         Perms.build(
           ~s[GRANT ALL ON #{table(@comments)} TO (projects, 'editor')],
           [
             Roles.role("editor", @projects, "p2")
-          ],
-          Auth.user()
+          ]
         )
 
       assert {:error, _} =
-               Permissions.allowed(
+               Permissions.write_allowed(
                  perms,
                  cxt.tree,
                  # issue i1 belongs to project p1
@@ -165,7 +164,7 @@ defmodule Electric.Satellite.PermissionsTest do
                )
 
       assert :ok =
-               Permissions.allowed(
+               Permissions.write_allowed(
                  perms,
                  cxt.tree,
                  # issue i3 belongs to project p2
@@ -179,12 +178,11 @@ defmodule Electric.Satellite.PermissionsTest do
           ~s[GRANT ALL ON #{table(@comments)} TO (projects, 'editor')],
           [
             Roles.role("editor")
-          ],
-          Auth.user()
+          ]
         )
 
       assert {:error, _} =
-               Permissions.allowed(
+               Permissions.write_allowed(
                  perms,
                  cxt.tree,
                  # issue i1 belongs to project p1
@@ -199,12 +197,11 @@ defmodule Electric.Satellite.PermissionsTest do
           [
             # we have an editor role within project p2
             Roles.role("editor", @projects, "p2")
-          ],
-          Auth.user()
+          ]
         )
 
       assert {:error, _} =
-               Permissions.allowed(
+               Permissions.write_allowed(
                  perms,
                  cxt.tree,
                  # issue i1 belongs to project p1
@@ -212,7 +209,7 @@ defmodule Electric.Satellite.PermissionsTest do
                )
 
       assert :ok =
-               Permissions.allowed(
+               Permissions.write_allowed(
                  perms,
                  cxt.tree,
                  # issue i3 belongs to project p2
@@ -229,19 +226,22 @@ defmodule Electric.Satellite.PermissionsTest do
           ],
           [
             Roles.role("editor")
-          ],
-          Auth.user()
+          ]
         )
 
       assert {:error, _} =
-               Permissions.allowed(
+               Permissions.write_allowed(
                  perms,
                  cxt.tree,
                  Chgs.insert(@comments, %{"id" => "c100", "issue_id" => "i1"})
                )
 
       assert :ok =
-               Permissions.allowed(perms, cxt.tree, Chgs.insert(@reactions, %{"id" => "r100"}))
+               Permissions.write_allowed(
+                 perms,
+                 cxt.tree,
+                 Chgs.insert(@reactions, %{"id" => "r100"})
+               )
     end
 
     test "unscoped role, unscoped grant", cxt do
@@ -250,12 +250,11 @@ defmodule Electric.Satellite.PermissionsTest do
           ~s[GRANT UPDATE ON #{table(@comments)} TO 'editor'],
           [
             Roles.role("editor")
-          ],
-          Auth.user()
+          ]
         )
 
       assert :ok =
-               Permissions.allowed(
+               Permissions.write_allowed(
                  perms,
                  cxt.tree,
                  Chgs.update(@comments, %{"id" => "c100", "issue_id" => "i1", "text" => "old"}, %{
@@ -264,7 +263,7 @@ defmodule Electric.Satellite.PermissionsTest do
                )
 
       assert {:error, _} =
-               Permissions.allowed(
+               Permissions.write_allowed(
                  perms,
                  cxt.tree,
                  Chgs.insert(@comments, %{"id" => "c100", "issue_id" => "i1"})
@@ -281,12 +280,11 @@ defmodule Electric.Satellite.PermissionsTest do
           [
             Roles.role("editor", @projects, "p2"),
             Roles.role("admin")
-          ],
-          Auth.user()
+          ]
         )
 
       assert :ok =
-               Permissions.allowed(
+               Permissions.write_allowed(
                  perms,
                  cxt.tree,
                  Chgs.update(@regions, %{"id" => "r1", "name" => "region"}, %{
@@ -299,11 +297,11 @@ defmodule Electric.Satellite.PermissionsTest do
       perms =
         Perms.build(
           ~s[GRANT ALL ON #{table(@comments)} TO AUTHENTICATED],
-          Auth.user()
+          []
         )
 
       assert :ok =
-               Permissions.allowed(
+               Permissions.write_allowed(
                  perms,
                  cxt.tree,
                  Chgs.insert(@comments, %{"id" => "c10"})
@@ -314,11 +312,11 @@ defmodule Electric.Satellite.PermissionsTest do
       perms =
         Perms.build(
           ~s[GRANT SELECT ON #{table(@comments)} TO AUTHENTICATED],
-          Auth.user()
+          []
         )
 
       assert {:error, _} =
-               Permissions.allowed(
+               Permissions.write_allowed(
                  perms,
                  cxt.tree,
                  Chgs.insert(@comments, %{"id" => "c10"})
@@ -326,10 +324,11 @@ defmodule Electric.Satellite.PermissionsTest do
     end
 
     test "AUTHENTICATED w/o user_id", cxt do
-      perms = Perms.build(~s[GRANT ALL ON #{table(@comments)} TO AUTHENTICATED], Auth.nobody())
+      perms =
+        Perms.build(~s[GRANT ALL ON #{table(@comments)} TO AUTHENTICATED], [], Auth.nobody())
 
       assert {:error, _} =
-               Permissions.allowed(
+               Permissions.write_allowed(
                  perms,
                  cxt.tree,
                  Chgs.insert(@comments, %{"id" => "c10"})
@@ -340,11 +339,12 @@ defmodule Electric.Satellite.PermissionsTest do
       perms =
         Perms.build(
           ~s[GRANT ALL ON #{table(@comments)} TO ANYONE],
+          [],
           Auth.nobody()
         )
 
       assert :ok =
-               Permissions.allowed(
+               Permissions.write_allowed(
                  perms,
                  cxt.tree,
                  Chgs.insert(@comments, %{"id" => "c10"})
@@ -360,19 +360,18 @@ defmodule Electric.Satellite.PermissionsTest do
           ],
           [
             Roles.role("editor")
-          ],
-          Auth.user()
+          ]
         )
 
       assert :ok =
-               Permissions.allowed(
+               Permissions.write_allowed(
                  perms,
                  cxt.tree,
                  Chgs.insert(@comments, %{"id" => "c10", "text" => "something"})
                )
 
       assert {:error, _} =
-               Permissions.allowed(
+               Permissions.write_allowed(
                  perms,
                  cxt.tree,
                  Chgs.insert(@comments, %{
@@ -383,14 +382,14 @@ defmodule Electric.Satellite.PermissionsTest do
                )
 
       assert :ok =
-               Permissions.allowed(
+               Permissions.write_allowed(
                  perms,
                  cxt.tree,
                  Chgs.update(@comments, %{"id" => "c10"}, %{"text" => "updated"})
                )
 
       assert {:error, _} =
-               Permissions.allowed(
+               Permissions.write_allowed(
                  perms,
                  cxt.tree,
                  Chgs.update(@comments, %{"id" => "c10"}, %{
@@ -412,12 +411,11 @@ defmodule Electric.Satellite.PermissionsTest do
             # read-only role on project p2
             Roles.role("reader", @projects, "p2"),
             Roles.role("editor", @projects, "p3")
-          ],
-          Auth.user()
+          ]
         )
 
       assert :ok =
-               Permissions.allowed(
+               Permissions.write_allowed(
                  perms,
                  cxt.tree,
                  Chgs.update(@issues, %{"id" => "i1"}, %{"project_id" => "p3"})
@@ -425,11 +423,51 @@ defmodule Electric.Satellite.PermissionsTest do
 
       # attempt to move an issue into a project we don't have write access to
       assert {:error, _} =
-               Permissions.allowed(
+               Permissions.write_allowed(
                  perms,
                  cxt.tree,
                  Chgs.update(@issues, %{"id" => "i1"}, %{"project_id" => "p2"})
                )
+    end
+  end
+
+  describe "filter_read/3" do
+    test "removes changes we don't have permissions to see", cxt do
+      perms =
+        Perms.build(
+          [
+            ~s[GRANT ALL ON #{table(@issues)} TO 'editor'],
+            ~s[GRANT ALL ON #{table(@comments)} TO 'editor'],
+            ~s[GRANT READ ON #{table(@issues)} TO 'reader'],
+            ~s[GRANT READ ON #{table(@comments)} TO 'reader'],
+            ~s[GRANT ALL ON #{table(@workspaces)} TO 'global_admin']
+          ],
+          [
+            Roles.role("editor", @projects, "p1"),
+            Roles.role("reader", @projects, "p2"),
+            Roles.role("global_admin")
+          ]
+        )
+
+      changes = [
+        Chgs.update(@issues, %{"id" => "i1"}, %{"text" => "updated"}),
+        Chgs.insert(@issues, %{"id" => "i100", "project_id" => "p1"}),
+        Chgs.insert(@issues, %{"id" => "i101", "project_id" => "p2"}),
+        # no perms on the p3 project scope
+        Chgs.insert(@issues, %{"id" => "i102", "project_id" => "p3"}),
+        Chgs.update(@comments, %{"id" => "c1"}, %{"text" => "updated"}),
+        # no perms on the reactions table
+        Chgs.update(@reactions, %{"id" => "r1"}, %{"text" => "updated"}),
+        Chgs.insert(@workspaces, %{"id" => "w100"})
+      ]
+
+      assert Permissions.filter_read(perms, cxt.tree, changes) == [
+               Chgs.update(@issues, %{"id" => "i1"}, %{"text" => "updated"}),
+               Chgs.insert(@issues, %{"id" => "i100", "project_id" => "p1"}),
+               Chgs.insert(@issues, %{"id" => "i101", "project_id" => "p2"}),
+               Chgs.update(@comments, %{"id" => "c1"}, %{"text" => "updated"}),
+               Chgs.insert(@workspaces, %{"id" => "w100"})
+             ]
     end
   end
 end
