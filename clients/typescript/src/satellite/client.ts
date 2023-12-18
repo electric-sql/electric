@@ -150,6 +150,7 @@ export class SatelliteClient implements Client {
         SatShapeDataEnd: (msg) => this.handleShapeDataEnd(msg),
         SatRpcResponse: (msg) => this.rpcClient.handleResponse(msg),
         SatRpcRequest: (msg) => this.handleRpcRequest(msg),
+        SatPerms: (_msg) => true,
       } satisfies HandlerMapping).map((e) => [getFullTypeName(e[0]), e[1]])
     )
 

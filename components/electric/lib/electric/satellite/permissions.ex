@@ -18,7 +18,7 @@ defmodule Electric.Satellite.Permissions do
 
   @type t() :: %__MODULE__{
           source: %{grants: [%SatPerms.Grant{}], roles: [%SatPerms.Role{}]},
-          roles: [compiled_role()],
+          roles: compiled_role(),
           auth: Auth.t()
         }
 
@@ -227,7 +227,6 @@ defmodule Electric.Satellite.Permissions do
         :INSERT -> "INSERT INTO "
         :DELETE -> "DELETE FROM "
         :UPDATE -> "UPDATE "
-        :SELECT -> "SELECT FROM "
       end
 
     {:error,

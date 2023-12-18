@@ -173,6 +173,7 @@ export type SatPbMsg =
   | Pb.SatSubsDataEnd
   | Pb.SatShapeDataBegin
   | Pb.SatShapeDataEnd
+  | Pb.SatPerms
 
 export type SatPbMsgObj<
   Msg extends { $type: string },
@@ -408,6 +409,8 @@ export function msgToString(message: MessageOfInterest): string {
       return `#SatRpcResponse{method: ${message.method}, requestId: ${
         message.requestId
       }${message.error ? ', error: ' + msgToString(message.error) : ''}}`
+    case 'Electric.Satellite.SatPerms':
+      return `#SatPerms{}`
   }
 }
 

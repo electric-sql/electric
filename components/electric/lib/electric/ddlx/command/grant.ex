@@ -74,8 +74,7 @@ defmodule Electric.DDLX.Command.Grant do
     end
   end
 
-  @spec to_protobuf(t()) :: %P.Grant{}
-  def(to_protobuf(grant)) do
+  def to_protobuf(grant) do
     %{on_table: {schema, name}} = grant
 
     %P.Grant{

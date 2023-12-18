@@ -598,10 +598,10 @@ export interface SatPerms {
 }
 
 export enum SatPerms_Privilege {
-  SELECT = 0,
+  DELETE = 0,
   INSERT = 1,
-  UPDATE = 2,
-  DELETE = 3,
+  SELECT = 2,
+  UPDATE = 3,
   UNRECOGNIZED = -1,
 }
 

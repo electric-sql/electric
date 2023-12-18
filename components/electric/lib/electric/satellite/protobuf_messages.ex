@@ -585,20 +585,20 @@
       defstruct []
 
       (
-        @spec default() :: :SELECT
+        @spec default() :: :DELETE
         def default() do
-          :SELECT
+          :DELETE
         end
       )
 
       @spec encode(atom() | String.t()) :: integer() | atom()
       [
         (
-          def encode(:SELECT) do
+          def encode(:DELETE) do
             0
           end
 
-          def encode("SELECT") do
+          def encode("DELETE") do
             0
           end
         ),
@@ -612,20 +612,20 @@
           end
         ),
         (
-          def encode(:UPDATE) do
+          def encode(:SELECT) do
             2
           end
 
-          def encode("UPDATE") do
+          def encode("SELECT") do
             2
           end
         ),
         (
-          def encode(:DELETE) do
+          def encode(:UPDATE) do
             3
           end
 
-          def encode("DELETE") do
+          def encode("UPDATE") do
             3
           end
         )
@@ -638,16 +638,16 @@
       @spec decode(integer()) :: atom() | integer()
       [
         def decode(0) do
-          :SELECT
+          :DELETE
         end,
         def decode(1) do
           :INSERT
         end,
         def decode(2) do
-          :UPDATE
+          :SELECT
         end,
         def decode(3) do
-          :DELETE
+          :UPDATE
         end
       ]
 
@@ -657,22 +657,22 @@
 
       @spec constants() :: [{integer(), atom()}]
       def constants() do
-        [{0, :SELECT}, {1, :INSERT}, {2, :UPDATE}, {3, :DELETE}]
+        [{0, :DELETE}, {1, :INSERT}, {2, :SELECT}, {3, :UPDATE}]
       end
 
       @spec has_constant?(any()) :: boolean()
       (
         [
-          def has_constant?(:SELECT) do
+          def has_constant?(:DELETE) do
             true
           end,
           def has_constant?(:INSERT) do
             true
           end,
-          def has_constant?(:UPDATE) do
+          def has_constant?(:SELECT) do
             true
           end,
-          def has_constant?(:DELETE) do
+          def has_constant?(:UPDATE) do
             true
           end
         ]
