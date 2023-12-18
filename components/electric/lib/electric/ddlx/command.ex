@@ -7,6 +7,9 @@ defprotocol Electric.DDLX.Command do
 
   @spec tag(t()) :: String.t()
   def tag(command)
+
+  @spec to_protobuf(t()) :: [Electric.Satellite.Protobuf.perms_msg()] | []
+  def to_protobuf(command)
 end
 
 defimpl Electric.DDLX.Command, for: List do
@@ -20,5 +23,9 @@ defimpl Electric.DDLX.Command, for: List do
 
   def tag([cmd | _commands]) do
     Electric.DDLX.Command.tag(cmd)
+  end
+
+  def to_protobuf(cmds) do
+    Enum.flat_map(cmds, &Electric.DDLX.Command.to_protobuf/1)
   end
 end
