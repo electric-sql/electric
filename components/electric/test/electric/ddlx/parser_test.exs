@@ -445,6 +445,53 @@ defmodule Electric.DDLX.ParserTest do
              }
     end
 
+    test "parse grant with multiple privileges" do
+      sql =
+        "ELECTRIC GRANT INSERT, UPDATE, DELETE ON thing.Köln_en$ts TO 'projects:house.admin' USING project_id CHECK (name = 'Paul');"
+
+      {:ok, result} = Parser.parse(sql)
+
+      assert result == %Command.Grant{
+               check_fn: "name = 'Paul'",
+               column_names: ["*"],
+               on_table: {"thing", "köln_en$ts"},
+               privileges: ["insert", "update", "delete"],
+               role: "house.admin",
+               scope: {"public", "projects"},
+               using_path: ["project_id"]
+             }
+
+      sql =
+        "ELECTRIC GRANT READ, WRITE ON thing.Köln_en$ts TO 'projects:house.admin' USING project_id CHECK (name = 'Paul');"
+
+      {:ok, result} = Parser.parse(sql)
+
+      assert result == %Command.Grant{
+               check_fn: "name = 'Paul'",
+               column_names: ["*"],
+               on_table: {"thing", "köln_en$ts"},
+               privileges: ["select", "insert", "update", "delete"],
+               role: "house.admin",
+               scope: {"public", "projects"},
+               using_path: ["project_id"]
+             }
+
+      sql =
+        "ELECTRIC GRANT READ, WRITE, UPDATE ON thing.Köln_en$ts TO 'projects:house.admin' USING project_id CHECK (name = 'Paul');"
+
+      {:ok, result} = Parser.parse(sql)
+
+      assert result == %Command.Grant{
+               check_fn: "name = 'Paul'",
+               column_names: ["*"],
+               on_table: {"thing", "köln_en$ts"},
+               privileges: ["select", "insert", "update", "delete"],
+               role: "house.admin",
+               scope: {"public", "projects"},
+               using_path: ["project_id"]
+             }
+    end
+
     test "parse grant with all" do
       sql = "ELECTRIC GRANT ALL ON thing.Köln_en$ts TO 'house.admin';"
       {:ok, result} = Parser.parse(sql)
