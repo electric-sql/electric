@@ -23,6 +23,10 @@ defmodule Electric.DDLX.Parser.Build do
     end
   end
 
+  def split_role_def(role, _opts) when role in [:AUTHENTICATED, :ANYONE] do
+    {:ok, scope: nil, role_name: "__#{role |> to_string() |> String.downcase()}__"}
+  end
+
   def split_role_def(role_def, opts) do
     case String.split(role_def, ":", parts: 2) do
       [scope, role] ->

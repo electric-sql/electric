@@ -396,6 +396,23 @@ defmodule Electric.DDLX.ParserTest do
              }
     end
 
+    test "parse scoped grant" do
+      sql =
+        "ELECTRIC GRANT UPDATE (status, name) ON thing.\"Köln_en$ts\" TO (projects, 'house.admin') USING issue_id;"
+
+      {:ok, result} = Parser.parse(sql)
+
+      assert result == %Command.Grant{
+               privileges: ["update"],
+               on_table: {"thing", "Köln_en$ts"},
+               role: "house.admin",
+               column_names: ["status", "name"],
+               scope: {"public", "projects"},
+               using_path: ["issue_id"],
+               check_fn: nil
+             }
+    end
+
     test "parse grant with no columns" do
       sql = "ELECTRIC GRANT UPDATE ON thing.\"Köln_en$ts\" TO 'projects:house.admin';"
       {:ok, result} = Parser.parse(sql)
@@ -438,6 +455,36 @@ defmodule Electric.DDLX.ParserTest do
                on_table: {"thing", "köln_en$ts"},
                privileges: ["select", "insert", "update", "delete"],
                role: "house.admin",
+               scope: "__global__",
+               using_path: nil
+             }
+    end
+
+    test "parse grant to anyone" do
+      sql = "ELECTRIC GRANT ALL ON thing.Köln_en$ts TO ANYONE;"
+      {:ok, result} = Parser.parse(sql)
+
+      assert result == %Command.Grant{
+               check_fn: nil,
+               column_names: ["*"],
+               on_table: {"thing", "köln_en$ts"},
+               privileges: ["select", "insert", "update", "delete"],
+               role: "__anyone__",
+               scope: "__global__",
+               using_path: nil
+             }
+    end
+
+    test "parse grant to authenticated" do
+      sql = "ELECTRIC GRANT ALL ON thing.Köln_en$ts TO AUTHENTICATED;"
+      {:ok, result} = Parser.parse(sql)
+
+      assert result == %Command.Grant{
+               check_fn: nil,
+               column_names: ["*"],
+               on_table: {"thing", "köln_en$ts"},
+               privileges: ["select", "insert", "update", "delete"],
+               role: "__authenticated__",
                scope: "__global__",
                using_path: nil
              }
