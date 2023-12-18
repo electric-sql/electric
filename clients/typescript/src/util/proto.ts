@@ -122,6 +122,7 @@ const msgtypetuples: MappingTuples = {
   SatShapeDataEnd: [18, Pb.SatShapeDataEnd],
   SatRpcRequest: [21, Pb.SatRpcRequest],
   SatRpcResponse: [22, Pb.SatRpcResponse],
+  SatPerms: [23, Pb.SatPerms],
 }
 
 const msgtypemapping = Object.fromEntries(

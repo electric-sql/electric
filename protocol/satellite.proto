@@ -545,3 +545,79 @@ message SatShapeDataBegin {
 // End delimiter for the initial shape data
 message SatShapeDataEnd {
 }
+
+// represents the client permissions
+// - `Rules`: the global permission rules, defined by the DDLX
+// - `Roles`: a users actual assigned roles
+message SatPerms {
+    message Table {
+        string schema = 1;
+        string name = 2;
+    }
+    message Column {
+        Table table = 1;
+        string column = 2;
+    }
+    message Path {
+        repeated Column columns = 1;
+    }
+    message Scope {
+        Table table = 1;
+        string id = 2;
+    }
+    enum Privilege {
+        DELETE = 0;
+        INSERT = 1;
+        SELECT = 2;
+        UPDATE = 3;
+    }
+    enum PredefinedRole {
+        ANYONE = 0;
+        AUTHENTICATED = 1;
+    }
+    message RoleName {
+        oneof role {
+            PredefinedRole predefined = 1;
+            string application = 2;
+        }
+    }
+    message Grant {
+        string id = 1;
+        Table table = 2;
+        RoleName role = 3;
+        repeated Privilege privileges = 4;
+        repeated string columns = 5;
+        optional Table scope = 6;
+        optional Path path = 7;
+        optional string check = 8;
+    }
+    message Assign {
+        string id = 1;
+        Table table = 2;
+        optional string user_column = 3;
+        optional string role_column = 4;
+        optional string role_name = 5;
+        optional Table scope = 6;
+        optional string if = 7;
+    }
+    message Role {
+        string id = 1;
+        string role = 2;
+        string user_id = 3;
+        string assign_id = 4;
+        optional Scope scope = 5;
+    }
+    // split the rules and roles info into distinct messages so they can be
+    // serialized separately
+    message Rules {
+        repeated Grant grants = 1;
+        repeated Assign assigns = 2;
+    }
+    message Roles {
+        repeated Role roles = 2;
+    }
+
+    int64 id = 1;
+    Rules rules = 3;
+    Roles roles = 4;
+}
