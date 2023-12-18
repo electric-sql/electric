@@ -11,20 +11,20 @@ interface ElectricFetchParams {
   data?: string
 }
 
-interface ElectricFetchResponse {
+interface ElectricFetchResponse<R> {
   response?: {
     statusCode: number,
-    data?: string
+    data?: R
   },
   requestProcessing: boolean,
   cancelRequest: () => void
 }
 
-export function useElectricFetch({
+export function useElectricFetch<ResultType>({
   path,
   method,
   data
-} : ElectricFetchParams) : ElectricFetchResponse {
+} : ElectricFetchParams) : ElectricFetchResponse<ResultType> {
   const { db } = useElectric()!;
   const [requestId, setRequestId] = useState('')
 
@@ -68,7 +68,7 @@ export function useElectricFetch({
     response: response != null ?
       {
         statusCode: response.status_code,
-        data: response.data?.toString()
+        data: response.data as ResultType
       } :
       undefined,
     requestProcessing,
