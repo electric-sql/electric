@@ -39,5 +39,7 @@ defmodule Electric.DDLX.Command.SQLite do
     def tag(_) do
       ""
     end
+
+    def to_protobuf(_), do: []
   end
 end

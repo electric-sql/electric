@@ -194,6 +194,7 @@ export class SatelliteClient implements Client {
         SatOpLogAck: (msg) => void msg, // Server doesn't send that
         SatUnsubsDataBegin: (msg) => this.handleUnsubsDataBegin(msg),
         SatUnsubsDataEnd: (msg) => this.handleUnsubsDataEnd(msg),
+        SatPerms: (msg) => void msg,
       } satisfies HandlerMapping).map((e) => [getFullTypeName(e[0]), e[1]])
     )
 
