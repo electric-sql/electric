@@ -178,6 +178,13 @@
     "zod": "^3.20.2"
   },
   "devDependencies": {
+    "@analogjs/vite-plugin-angular": "^0.2.18",
+    "@angular/common": "^17.0.2",
+    "@angular/compiler": "^17.0.2",
+    "@angular/compiler-cli": "^17.0.2",
+    "@angular/core": "^17.0.2",
+    "@angular/platform-browser": "^17.0.2",
+    "@angular/platform-browser-dynamic": "^17.0.2",
     "@ikscodes/browser-env": "^1.0.0",
     "@prisma/client": "^4.12.0",
     "@testing-library/react": "^13.4.0",
@@ -209,6 +216,7 @@
     "husky": "^8.0.3",
     "lint-staged": "^13.1.0",
     "memorystorage": "^0.12.0",
+    "ng-packagr": "^17.0.0",
     "prettier": "2.8.2",
     "prisma": "^4.8.1",
     "react": "^18.2.0",
@@ -218,7 +226,8 @@
     "typeorm": "^0.3.9",
     "typescript": "^4.9",
     "wa-sqlite": "rhashimoto/wa-sqlite#semver:^0.9.8",
-    "web-worker": "^1.2.0"
+    "web-worker": "^1.2.0",
+    "zone.js": "^0.14.2"
   },
   "peerDependencies": {
     "@capacitor-community/sqlite": ">= 5.4.1",
@@ -229,10 +238,14 @@
     "react-native": ">= 0.68.0",
     "react-native-sqlite-storage": ">= 6.0.0",
     "typeorm": ">=0.3.0",
-    "wa-sqlite": "rhashimoto/wa-sqlite#semver:^0.9.8"
+    "wa-sqlite": "rhashimoto/wa-sqlite#semver:^0.9.8",
+    "@angular/core": "^17"
   },
   "peerDependenciesMeta": {
     "@capacitor-community/sqlite": {
+      "optional": true
+    },
+    "@angular/core": {
       "optional": true
     },
     "cordova-sqlite-storage": {
