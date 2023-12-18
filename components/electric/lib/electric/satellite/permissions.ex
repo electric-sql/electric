@@ -40,8 +40,6 @@ defmodule Electric.Satellite.Permissions do
       )
       |> Map.new(&classify_roles/1)
 
-    # dbg(role_grants)
-
     %__MODULE__{source: %{grants: grants, roles: roles}, roles: role_grants, auth: auth}
   end
 
@@ -56,7 +54,7 @@ defmodule Electric.Satellite.Permissions do
   # `privilege` on `table` no matter what the scope. This function analyses the roles for a
   # given `{table, privilege}` and makes that test efficient.
   defp classify_roles({grant_perm, grant_roles}) do
-    case Enum.split_with(grant_roles, fn {grant, role} -> Role.has_scope?(role) end) do
+    case Enum.split_with(grant_roles, fn {_grant, role} -> Role.has_scope?(role) end) do
       {scoped, [] = _unscoped} -> {grant_perm, %{global?: false, unscoped: [], scoped: scoped}}
       {scoped, unscoped} -> {grant_perm, %{global?: true, unscoped: unscoped, scoped: scoped}}
     end
@@ -76,6 +74,39 @@ defmodule Electric.Satellite.Permissions do
 
   @spec allowed(%__MODULE__{}, Scope.t(), Changes.change()) :: :ok | {:error, String.t()}
   def allowed(%__MODULE__{} = perms, scope_resolv, change) do
+    change
+    |> expand_change(scope_resolv)
+    |> verify_all_changes(perms, scope_resolv)
+  end
+
+  defp expand_change(change, scope_resolv) when is_update(change) do
+    case Scope.modifies_fk?(scope_resolv, change) do
+      # TODO: if update alters fk, translate to orig update + insert with updated cols
+      {:ok, false} ->
+        [change]
+
+      {:ok, true} ->
+        # expand an update that modifies a foreign key into the original update
+        # plus a "pseudo"-insert into the scope defined by the updated foreign key
+        insert = %Changes.NewRecord{relation: change.relation, record: change.record}
+        [change, insert]
+    end
+  end
+
+  defp expand_change(change, _scope_resolv) do
+    [change]
+  end
+
+  defp verify_all_changes(changes, perms, scope_resolv) do
+    Enum.reduce_while(changes, :ok, fn change, :ok ->
+      case change_is_allowed(change, perms, scope_resolv) do
+        :ok -> {:cont, :ok}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp change_is_allowed(change, perms, scope_resolv) do
     action = required_permission(change)
 
     with {:ok, grant_roles} <- Map.fetch(perms.roles, action),
@@ -88,7 +119,7 @@ defmodule Electric.Satellite.Permissions do
     end
   end
 
-  defp grant_for_permission(%{global?: true, unscoped: grant_roles}, scope_resolv, change) do
+  defp grant_for_permission(%{global?: true, unscoped: grant_roles}, _scope_resolv, change) do
     with {grant, role} <- grant_giving_permission(grant_roles, change) do
       {:ok, role, grant}
     end

@@ -121,6 +121,28 @@ defmodule Electric.Satellite.PermissionsTest do
           record: %{"id" => "r100"}
         })
     end
+
+    test "scope_id!/3 at root of scope", cxt do
+      {:ok, "p1"} =
+        Scope.scope_id!(cxt.tree, @projects, %Changes.NewRecord{
+          relation: @issues,
+          record: %{"id" => "i100", "project_id" => "p1"}
+        })
+    end
+
+    test "modifies_fk?/2", cxt do
+      assert {:ok, true} =
+               Scope.modifies_fk?(
+                 cxt.tree,
+                 Chgs.update(@issues, %{"project_id" => "1"}, %{"project_id" => "2"})
+               )
+
+      assert {:ok, false} =
+               Scope.modifies_fk?(
+                 cxt.tree,
+                 Chgs.update(@issues, %{"project_id" => "1"}, %{"comment" => "something"})
+               )
+    end
   end
 
   describe "allowed/3" do
@@ -383,10 +405,11 @@ defmodule Electric.Satellite.PermissionsTest do
         Perms.build(
           [
             ~s[GRANT ALL ON #{table(@issues)} TO 'editor'],
-            ~s[GRANT SELECT ON #{table(@issues)} TO 'reader']
+            ~s[GRANT UPDATE, SELECT ON #{table(@issues)} TO 'reader']
           ],
           [
             Roles.role("editor", @projects, "p1"),
+            # read-only role on project p2
             Roles.role("reader", @projects, "p2"),
             Roles.role("editor", @projects, "p3")
           ],
@@ -400,6 +423,7 @@ defmodule Electric.Satellite.PermissionsTest do
                  Chgs.update(@issues, %{"id" => "i1"}, %{"project_id" => "p3"})
                )
 
+      # attempt to move an issue into a project we don't have write access to
       assert {:error, _} =
                Permissions.allowed(
                  perms,

@@ -19,13 +19,22 @@ defmodule Electric.Satellite.Permissions.Scope do
   @callback scope_id!(state(), root :: relation(), Changes.change()) ::
               {:ok, id()} | {:error, String.t()} | no_return()
 
+  @callback modifies_fk?(state(), Changes.UpdatedRecord.t()) ::
+              {:ok, boolean()} | {:error, term()}
+
   defguardp is_relation(r) when is_tuple(r) and tuple_size(r) == 2
 
   defguardp is_change(c)
             when is_struct(c, Changes.NewRecord) or is_struct(c, Changes.DeletedRecord) or
                    is_struct(c, Changes.UpdatedRecord)
 
+  defguardp is_update(c) when is_struct(c, Changes.UpdatedRecord)
+
   def scope_id!({module, state}, root, change) when is_relation(root) and is_change(change) do
     module.scope_id!(state, root, change)
+  end
+
+  def modifies_fk?({module, state}, change) when is_update(change) do
+    module.modifies_fk?(state, change)
   end
 end

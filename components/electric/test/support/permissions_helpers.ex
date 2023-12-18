@@ -188,10 +188,20 @@ defmodule ElectricTest.PermissionsHelpers do
       scope_root_id(graph, root, table, id)
     end
 
+    @impl Electric.Satellite.Permissions.Scope
+    def modifies_fk?({_graph, fks}, update) do
+      {:ok, _parent, fk} = relation_fk(fks, update)
+      {:ok, MapSet.member?(update.changed_columns, fk)}
+    end
+
     defp scope_root_id(graph, root, table, id) do
       case path(graph, table, id) do
         nil ->
           {:error, "record #{inspect(table)} id: #{inspect(id)} does not exist"}
+
+        # we're already at the root of the tree
+        [{^root, ^id} | _path] ->
+          {:ok, id}
 
         [{^table, ^id} | path] ->
           error = {:error, "#{inspect(table)} not in scope #{inspect(root)}"}
@@ -206,14 +216,20 @@ defmodule ElectricTest.PermissionsHelpers do
       end
     end
 
-    # there's probably a better way to do this
-    defp fk_for_change(fks, %{relation: relation, record: record}) do
+    defp relation_fk(fks, %{relation: relation}) do
       %Graph.Edge{v2: parent, label: fk} =
         Graph.get_shortest_path(fks, relation, @root)
         |> Enum.chunk_every(2, 1, :discard)
         |> Enum.take(1)
         |> Enum.map(fn [a, b] -> Graph.edges(fks, a, b) |> hd() end)
         |> hd()
+
+      {:ok, parent, fk}
+    end
+
+    # there's probably a better way to do this
+    defp fk_for_change(fks, %{record: record} = change) do
+      {:ok, parent, fk} = relation_fk(fks, change)
 
       case Map.fetch(record, fk) do
         {:ok, id} ->
