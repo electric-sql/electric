@@ -38,7 +38,7 @@ Terminals
    'ALTER' 'TABLE' 'DISABLE' 'ENABLE' 'ELECTRIC' 'NULL' 'UNASSIGN' 'ASSIGN' 'TO' 'IF'
    'GRANT' 'ON' 'USING' 'SELECT' 'INSERT' 'UPDATE' 'DELETE' 'ALL' 'READ' 'WRITE' 'CHECK'
    'REVOKE' 'FROM' 'SQLITE'
-   'AUTHENTICATED' 'ANYONE'
+   'AUTHENTICATED' 'ANYONE' 'PRIVILEGES'
    string  int float
    unquoted_identifier quoted_identifier
    '=' '>' '<' '<=' '>=' '!=' '<>' '+' '/' '*' '-'
@@ -161,6 +161,7 @@ permissions -> privileges column_list : [{privilege, '$1'}] ++ '$2'.
 
 privileges -> '$empty' : [].
 privileges -> 'ALL' :  [<<"select">>, <<"insert">>, <<"update">>, <<"delete">>].
+privileges -> 'ALL' 'PRIVILEGES' :  [<<"select">>, <<"insert">>, <<"update">>, <<"delete">>].
 privileges -> privilege : '$1'.
 privileges -> privilege ',' privileges : lists:uniq('$1' ++ '$3').
 

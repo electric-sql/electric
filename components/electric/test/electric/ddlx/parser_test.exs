@@ -505,6 +505,19 @@ defmodule Electric.DDLX.ParserTest do
                scope: "__global__",
                using_path: nil
              }
+
+      sql = "ELECTRIC GRANT ALL PRIVILEGES ON thing.Köln_en$ts TO 'house.admin';"
+      {:ok, result} = Parser.parse(sql)
+
+      assert result == %Command.Grant{
+               check_fn: nil,
+               column_names: ["*"],
+               on_table: {"thing", "köln_en$ts"},
+               privileges: ["select", "insert", "update", "delete"],
+               role: "house.admin",
+               scope: "__global__",
+               using_path: nil
+             }
     end
 
     test "parse grant to anyone" do
