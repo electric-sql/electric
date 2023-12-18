@@ -59,5 +59,3 @@ services:
       - ${DEMO_API_PORT:-3123}:3123
     depends_on:
       - postgres
-    volumes:
-      - ../demo-server:/usr/src/app
