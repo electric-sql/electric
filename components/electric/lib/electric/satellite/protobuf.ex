@@ -14,7 +14,8 @@ defmodule Electric.Satellite.Protobuf do
     SatRpcResponse,
     SatOpLogAck,
     SatUnsubsDataBegin,
-    SatUnsubsDataEnd
+    SatUnsubsDataEnd,
+    SatPerms
   }
 
   require Logger
@@ -36,7 +37,8 @@ defmodule Electric.Satellite.Protobuf do
     SatRpcResponse => 22,
     SatOpLogAck => 23,
     SatUnsubsDataBegin => 24,
-    SatUnsubsDataEnd => 25
+    SatUnsubsDataEnd => 25,
+    SatPerms => 26
   }
 
   if Enum.any?(Map.values(@mapping), &(&1 in @reserved)) do
@@ -77,6 +79,7 @@ defmodule Electric.Satellite.Protobuf do
           | %SatRpcResponse{}
           | %SatUnsubsDataBegin{}
           | %SatUnsubsDataEnd{}
+          | %SatPerms{}
 
   @type rpc_req() ::
           %Satellite.SatAuthReq{}
@@ -91,6 +94,8 @@ defmodule Electric.Satellite.Protobuf do
           | %Satellite.SatInStopReplicationResp{}
           | %Satellite.SatSubsResp{}
           | %Satellite.SatUnsubsResp{}
+
+  @type perms_msg() :: %SatPerms.Grant{} | %SatPerms.Assign{}
 
   defmacro __using__(_opts) do
     quote do
@@ -134,7 +139,8 @@ defmodule Electric.Satellite.Protobuf do
         SatOpAdditionalCommit,
         SatOpLogAck,
         SatUnsubsDataBegin,
-        SatUnsubsDataEnd
+        SatUnsubsDataEnd,
+        SatPerms
       }
     end
   end

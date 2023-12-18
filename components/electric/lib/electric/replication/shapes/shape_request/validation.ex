@@ -23,7 +23,7 @@ defmodule Electric.Replication.Shapes.ShapeRequest.Validation do
   @spec prepare_layer_base(%Select{}, Graph.t(), Schema.t(), term(), term()) ::
           {:ok, Layer.t()} | error()
   def prepare_layer_base(%Select{} = select, fk_graph, schema, request_id, parent_key \\ nil) do
-    with {:ok, table} <- validate_table_exists(select.tablename, fk_graph),
+    with {:ok, table} <- validate_table_exists(select.schemaname, select.tablename, fk_graph),
          {:ok, where} <- validate_where(select.where, for: table, schema: schema) do
       select_hash = Utils.term_hash({parent_key, select})
 
@@ -41,14 +41,20 @@ defmodule Electric.Replication.Shapes.ShapeRequest.Validation do
 
   defp pks(schema, table), do: Schema.primary_keys!(schema, table)
 
-  @spec validate_table_exists(String.t(), Graph.t()) :: {:ok, relation()} | error()
-  defp validate_table_exists(schema \\ "public", name, fk_graph) do
+  @spec validate_table_exists(String.t() | nil, String.t(), Graph.t()) ::
+          {:ok, relation()} | error()
+  defp validate_table_exists(nil, name, fk_graph) do
+    validate_table_exists("public", name, fk_graph)
+  end
+
+  defp validate_table_exists(schema, name, fk_graph) do
     cond do
       name == "" or byte_size(name) not in 1..64 or not String.printable?(name) ->
         {:error, {:TABLE_NOT_FOUND, "Invalid table name"}}
 
       not Graph.has_vertex?(fk_graph, {schema, name}) ->
-        {:error, {:TABLE_NOT_FOUND, "Unknown table #{name}"}}
+        {:error,
+         {:TABLE_NOT_FOUND, "Unknown table #{Electric.Utils.inspect_relation({schema, name})}"}}
 
       true ->
         {:ok, {schema, name}}
