@@ -2,6 +2,7 @@ import { Box, Container } from "@mui/material"
 import { NavigationBar } from "../components/NavigationBar"
 import { useEffect } from "react"
 import { useElectric } from "../electric/ElectricWrapper"
+import { Calculator } from "./Calculator"
 
 export const RequestResponseExample = () => {
   const { db } = useElectric()!
@@ -26,6 +27,7 @@ export const RequestResponseExample = () => {
     <Box>
       <NavigationBar title="Request/Response Pattern" />
       <Container maxWidth="md" sx={{ py: 4 }}>
+        <Calculator />
       </Container>
     </Box>
   )
