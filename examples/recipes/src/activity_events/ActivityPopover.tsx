@@ -8,7 +8,7 @@ import { Notifications } from "@mui/icons-material"
 import { ReactElement, useState } from "react"
 import { useElectric } from "../electric/ElectricWrapper"
 import { useLiveQuery } from "electric-sql/react"
-import { formatDateTime } from "./utilities"
+import { CURRENT_USER, formatDateTime } from "./utilities"
 
 
 export const ActivityPopover = () => {
@@ -17,6 +17,9 @@ export const ActivityPopover = () => {
   // Query for 5 most recent activities
   const { results: mostRecentActivities = [] } = useLiveQuery(
     db.activity_events.liveMany({
+      where: {
+        target: CURRENT_USER,
+      },
       orderBy: {
         timestamp: 'desc'
       },
@@ -27,7 +30,9 @@ export const ActivityPopover = () => {
   // Use raw SQL to count all unread activities
   const numUnreadActivities = useLiveQuery(
     db.liveRaw({
-      sql: 'SELECT COUNT(*) FROM activity_events WHERE read_at IS NULL'
+      sql: `
+      SELECT COUNT(*) FROM activity_events
+      WHERE target = '${CURRENT_USER}' AND read_at IS NULL`
     })
   ).results?.[0]?.['COUNT(*)'] ?? 0
   const hasUnreadActivities = numUnreadActivities > 0;

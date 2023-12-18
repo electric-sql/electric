@@ -22,6 +22,7 @@ export function formatDateTime(date: Date): string {
   return formattedDate;
 }
 
+export const CURRENT_USER = 'me';
 
 const users = [
   'Alice',
@@ -92,6 +93,7 @@ export function generateActivity(): Activity_events {
   return {
     id: genUUID(),
     source: user,
+    target: CURRENT_USER,
     activity_type: activityType,
     timestamp: new Date(),
     message: getActivityText(user, activityType),
