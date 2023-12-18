@@ -27,7 +27,7 @@ export const Calculator = () => {
         summands.map((summand, index) => (
           <Slider
             key={index}
-            sx={{ pt: 8 }}
+            sx={{ pt: 10 }}
             min={-100}
             max={100}
             defaultValue={summand}
@@ -41,22 +41,23 @@ export const Calculator = () => {
         ))
       }
 
-      <Box sx={{ display: 'flex', flexDirection: 'row' }}>
+      <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center' }}>
         <Typography variant="h5">
           Sum
         </Typography>
         {
           requestProcessing &&
-            <CircularProgress />
+            <CircularProgress size={15} sx={{ ml: 1 }} />
         }
       </Box>
 
       <Slider
         key="sum"
-        sx={{ pt: 7 }}
-        min={-100}
-        max={100}
+        sx={{ pt: 10 }}
+        min={-200}
+        max={200}
         value={response?.statusCode == 200 ? response!.data!.sum : 0}
+        valueLabelFormat={(val) => response?.statusCode == 200 ? val : 'processing...'}
         valueLabelDisplay="on"
         disabled
       />
