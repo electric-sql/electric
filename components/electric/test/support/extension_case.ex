@@ -120,11 +120,12 @@ defmodule Electric.Extension.Case do
   end
 
   def setup_proxy_connection(cxt) do
-    conn_config = [origin: cxt.origin, connection: cxt.pg_config, proxy: cxt.proxy_opts]
+    connector_config = [origin: cxt.origin, connection: cxt.pg_config, proxy: cxt.proxy_opts]
 
     {:ok, _pid} =
       start_supervised(
-        {Electric.Postgres.Proxy, Keyword.merge(cxt.proxy_opts, conn_config: conn_config)}
+        {Electric.Postgres.Proxy,
+         Keyword.merge(cxt.proxy_opts, connector_config: connector_config)}
       )
 
     proxy_port = get_in(cxt.proxy_opts, [:listen, :port]) || 65432

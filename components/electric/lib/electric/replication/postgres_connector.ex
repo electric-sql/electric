@@ -8,33 +8,30 @@ defmodule Electric.Replication.PostgresConnector do
   alias Electric.Replication.PostgresConnectorSup
 
   @spec start_link(Connectors.config()) :: Supervisor.on_start()
-  def start_link(conn_config) do
-    Supervisor.start_link(__MODULE__, conn_config)
+  def start_link(connector_config) do
+    Supervisor.start_link(__MODULE__, connector_config)
   end
 
   @impl Supervisor
-  def init(conn_config) do
-    origin = Connectors.origin(conn_config)
-    Electric.reg(name(origin))
+  def init(connector_config) do
+    origin = Connectors.origin(connector_config)
+    name = name(origin)
+    Electric.reg(name)
 
-    children = [
-      # %{id: :sup, start: {PostgresConnectorSup, :start_link, [origin]}, type: :supervisor},
-      %{id: :mng, start: {PostgresConnectorMng, :start_link, [conn_config]}}
-    ]
-
+    children = [%{id: :mng, start: {PostgresConnectorMng, :start_link, [connector_config]}}]
     Supervisor.init(children, strategy: :one_for_all)
   end
 
   @spec start_children(Connectors.config()) :: Supervisor.on_start_child()
-  def start_children(conn_config) do
-    origin = Connectors.origin(conn_config)
+  def start_children(connector_config) do
+    origin = Connectors.origin(connector_config)
     connector = name(origin)
 
     Supervisor.start_child(
       connector,
       %{
         id: :sup,
-        start: {PostgresConnectorSup, :start_link, [conn_config]},
+        start: {PostgresConnectorSup, :start_link, [connector_config]},
         type: :supervisor,
         restart: :temporary
       }

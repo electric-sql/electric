@@ -11,23 +11,23 @@ defmodule Electric.Replication.PostgresConnectorMng do
 
   defmodule State do
     defstruct [
-      :status,
-      :conn_config,
-      :repl_config,
-      :backoff,
       :origin,
-      :config,
+      :connector_config,
+      :conn_opts,
+      :repl_opts,
+      :write_to_pg_mode,
+      :status,
+      :backoff,
       :pg_connector_sup_monitor
     ]
 
     @type status :: :initialization | :establishing_repl_conn | :subscribing | :ready
 
     @type t() :: %__MODULE__{
-            config: Connectors.config(),
-            backoff: term,
-            conn_config: %{},
             origin: Connectors.origin(),
-            repl_config: %{
+            connector_config: Connectors.config(),
+            conn_opts: :epgsql.connect_opts_map(),
+            repl_opts: %{
               publication: String.t(),
               slot: String.t(),
               subscription: String.t(),
@@ -37,19 +37,21 @@ defmodule Electric.Replication.PostgresConnectorMng do
                 dbname: String.t()
               }
             },
+            write_to_pg_mode: Electric.write_to_pg_mode(),
             status: status,
+            backoff: term,
             pg_connector_sup_monitor: reference | nil
           }
   end
 
   @spec start_link(Connectors.config()) :: {:ok, pid} | :ignore | {:error, term}
-  def start_link(conn_config) do
-    GenServer.start_link(__MODULE__, conn_config, [])
+  def start_link(connector_config) do
+    GenServer.start_link(__MODULE__, connector_config, [])
   end
 
   @spec name(Connectors.config()) :: Electric.reg_name()
-  def name(config) when is_list(config) do
-    config
+  def name(connector_config) when is_list(connector_config) do
+    connector_config
     |> Connectors.origin()
     |> name()
   end
@@ -65,18 +67,21 @@ defmodule Electric.Replication.PostgresConnectorMng do
   end
 
   @impl GenServer
-  def init(conn_config) do
-    origin = Connectors.origin(conn_config)
-    Electric.reg(name(origin))
+  def init(connector_config) do
+    origin = Connectors.origin(connector_config)
+    name = name(origin)
+    Electric.reg(name)
+
     Logger.metadata(origin: origin)
     Process.flag(:trap_exit, true)
 
     state =
       reset_state(%State{
-        config: conn_config,
-        conn_config: Connectors.get_connection_opts(conn_config),
         origin: origin,
-        repl_config: Connectors.get_replication_opts(conn_config)
+        connector_config: connector_config,
+        conn_opts: Connectors.get_connection_opts(connector_config),
+        repl_opts: Connectors.get_replication_opts(connector_config),
+        write_to_pg_mode: Connectors.write_to_pg_mode(connector_config)
       })
 
     {:ok, state, {:continue, :init}}
@@ -104,10 +109,10 @@ defmodule Electric.Replication.PostgresConnectorMng do
     end
   end
 
-  def handle_continue(:establish_repl_conn, %State{origin: origin} = state) do
-    case PostgresConnector.start_children(state.config) do
+  def handle_continue(:establish_repl_conn, %State{} = state) do
+    case PostgresConnector.start_children(state.connector_config) do
       {:ok, sup_pid} ->
-        Logger.info("Successfully initialized Postgres connector #{inspect(origin)}.")
+        Logger.info("Successfully initialized Postgres connector #{inspect(state.origin)}.")
 
         ref = Process.monitor(sup_pid)
         state = %State{state | status: :subscribing, pg_connector_sup_monitor: ref}
@@ -128,21 +133,16 @@ defmodule Electric.Replication.PostgresConnectorMng do
     end
   end
 
-  def handle_continue(:subscribe, %State{} = state) do
-    case Connectors.write_to_pg_mode(state.config) do
-      :logical_replication ->
-        case start_subscription(state) do
-          :ok ->
-            {:noreply, %State{state | status: :ready}}
-
-          {:error, _} ->
-            {:noreply, schedule_retry(:subscribe, state)}
-        end
-
-      :direct_writes ->
-        :ok = stop_subscription(state)
-        {:noreply, %State{state | status: :ready}}
+  def handle_continue(:subscribe, %State{write_to_pg_mode: :logical_replication} = state) do
+    case start_subscription(state) do
+      :ok -> {:noreply, %State{state | status: :ready}}
+      {:error, _} -> {:noreply, schedule_retry(:subscribe, state)}
     end
+  end
+
+  def handle_continue(:subscribe, %State{write_to_pg_mode: :direct_writes} = state) do
+    :ok = stop_subscription(state)
+    {:noreply, %State{state | status: :ready}}
   end
 
   @impl GenServer
@@ -187,15 +187,13 @@ defmodule Electric.Replication.PostgresConnectorMng do
     end
   end
 
-  defp start_subscription(%State{conn_config: conn_config, repl_config: rep_conf} = state) do
-    case Client.with_conn(
-           conn_config,
-           fn conn ->
-             Client.start_subscription(conn, rep_conf.subscription)
-           end
-         ) do
+  defp start_subscription(%State{origin: origin, conn_opts: conn_opts, repl_opts: repl_opts}) do
+    Client.with_conn(conn_opts, fn conn ->
+      Client.start_subscription(conn, repl_opts.subscription)
+    end)
+    |> case do
       :ok ->
-        Logger.notice("subscription started for #{state.origin}")
+        Logger.notice("subscription started for #{origin}")
         :ok
 
       error ->
@@ -204,12 +202,13 @@ defmodule Electric.Replication.PostgresConnectorMng do
     end
   end
 
-  defp stop_subscription(%State{conn_config: conn_config, repl_config: rep_conf} = state) do
-    case Client.with_conn(conn_config, fn conn ->
-           Client.stop_subscription(conn, rep_conf.subscription)
-         end) do
+  defp stop_subscription(%State{origin: origin, conn_opts: conn_opts, repl_opts: repl_opts}) do
+    Client.with_conn(conn_opts, fn conn ->
+      Client.stop_subscription(conn, repl_opts.subscription)
+    end)
+    |> case do
       :ok ->
-        Logger.notice("subscription stopped for #{state.origin}")
+        Logger.notice("subscription stopped for #{origin}")
         :ok
 
       {:error, {:error, :error, code, _reason, description, _c_stacktrace}} ->
@@ -218,18 +217,14 @@ defmodule Electric.Replication.PostgresConnectorMng do
     end
   end
 
-  def initialize_postgres(%State{origin: origin, repl_config: repl_config, config: config}) do
-    # get a config configuration without the replication parameter set
-    # so that we can use extended query syntax
-    conn_config = Connectors.get_connection_opts(config, replication: false)
-
+  def initialize_postgres(%State{origin: origin, conn_opts: conn_opts} = state) do
     Logger.debug(
-      "Attempting to initialize #{origin}: #{conn_config.username}@#{conn_config.host}:#{conn_config.port}"
+      "Attempting to initialize #{origin}: #{conn_opts.username}@#{conn_opts.host}:#{conn_opts.port}"
     )
 
-    Client.with_conn(conn_config, fn conn ->
+    Client.with_conn(conn_opts, fn conn ->
       with {:ok, versions} <- Extension.migrate(conn),
-           :ok <- maybe_create_subscription(conn, config, repl_config),
+           :ok <- maybe_create_subscription(conn, state.write_to_pg_mode, state.repl_opts),
            {:ok, oids} <- Client.query_oids(conn),
            :ok <- OidDatabase.save_oids(oids) do
         Logger.info(
@@ -241,21 +236,18 @@ defmodule Electric.Replication.PostgresConnectorMng do
     end)
   end
 
-  defp maybe_create_subscription(conn, config, replication_config) do
-    subscription = Map.fetch!(replication_config, :subscription)
-    publication = Map.fetch!(replication_config, :publication)
-    electric_connection = Map.fetch!(replication_config, :electric_connection)
+  defp maybe_create_subscription(conn, :logical_replication, repl_opts) do
+    %{
+      subscription: subscription,
+      publication: publication,
+      electric_connection: electric_connection
+    } = repl_opts
 
-    case Connectors.write_to_pg_mode(config) do
-      :logical_replication ->
-        result = Client.create_subscription(conn, subscription, publication, electric_connection)
-
-        with {:ok, _name} <- result do
-          :ok
-        end
-
-      :direct_writes ->
-        :ok
+    with {:ok, _name} <-
+           Client.create_subscription(conn, subscription, publication, electric_connection) do
+      :ok
     end
   end
+
+  defp maybe_create_subscription(_conn, :direct_writes, _repl_opts), do: :ok
 end
