@@ -9,6 +9,8 @@ interface SumResult {
 export const Calculator = ({ defaultSummands = [5, 10]}: { defaultSummands?: number[] }) => {
   const [ summands, setSummands ] = useState<number[]>(defaultSummands)
 
+  // Request data from your API's /sum endpoint, see
+  // utilities.ts for useElectricFetch's implementation
   const {
     response,
     requestProcessing,

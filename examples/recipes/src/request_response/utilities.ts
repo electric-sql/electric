@@ -28,6 +28,9 @@ export function useElectricFetch<ResultType>({
   const { db } = useElectric()!;
   const [requestId, setRequestId] = useState('')
 
+
+  // If a response is not present, mark request as
+  // cancelled to prevent further processing on the backend
   const cancelRequest = useCallback(
     async (requestIdToCancel: string) => {
       setRequestId('')
@@ -43,6 +46,9 @@ export function useElectricFetch<ResultType>({
     [db.requests, db.responses]
   )
 
+
+  // Add an entry to the requests table, to be handled
+  // by the backend and marked as being processed when synced
   useEffect(() => {
     const newRequestId = genUUID()
     db.requests.create({
@@ -63,11 +69,16 @@ export function useElectricFetch<ResultType>({
   }, [db.requests, cancelRequest, path, method, data])
 
 
+  // Keep track of whether the backend has started processing
+  // the request
   const requestProcessing = useLiveQuery(db.requests.liveFirst({
     select: { processing: true },
     where: { id: requestId }
   })).results?.processing ?? false
 
+
+  // Listen for response to the given request in the
+  // responses table, using the request ID to match it
   const response = useLiveQuery(db.responses.liveFirst({
     where: { request_id: requestId }
   })).results

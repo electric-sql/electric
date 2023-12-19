@@ -10,6 +10,8 @@ import { useEffect, useState } from "react"
 export const CalculatorAuditLog = () => {
   const [ rows, setRows ] = useState<string[][]>([[]]);
   const { db } = useElectric()!
+
+  // Find 5 most recent requests made
   const { results: requests = [] } = useLiveQuery(db.requests.liveMany({
     select: {
       id: true,
@@ -24,6 +26,9 @@ export const CalculatorAuditLog = () => {
     take: 5,
   }))
 
+
+  // Format the requests into table rows, and match them to responses
+  // if present
   useEffect(() => {
     const generateRows = async () => {
       const newRows = await Promise.all(requests.map(async (request) => {
@@ -48,6 +53,7 @@ export const CalculatorAuditLog = () => {
         } else if (request.processing) {
           result = 'processing'
         } else {
+          // match request to response, if there is one
           const responseData = ((await db.responses.findFirst({
             select: {
               data: true,
@@ -68,11 +74,6 @@ export const CalculatorAuditLog = () => {
   generateRows();
   }, [db.responses, requests])
 
-
-
-
-
-
   return (
     <CalculatorAuditLogView
       header={['Date', 'Operation', 'Result']}
@@ -85,7 +86,7 @@ const CalculatorAuditLogView = ({ header, rows } : { header: string[], rows: str
   return (
     <TableContainer component={Paper} sx={{ maxWidth: 600, margin: 'auto' }}>
       <Typography variant="h5" sx={{ p: 2 }}>
-        Calculator Audit Log
+        Request Audit Log
       </Typography>
       <Table>
         <TableHead>
