@@ -333,6 +333,18 @@ defmodule Electric.Replication.PostgresConnectorMng do
     """
   end
 
+  defp extra_error_description(%MatchError{
+         term: {:error, {:error, :error, _code, :insufficient_privilege, _msg, _c_stacktrace}}
+       }) do
+    """
+    The Postgres role used by Electric does not have sufficient privileges.
+
+    Electric needs to be able to create and manage its internal schema and to open a replication connection
+    to the database. Make sure that the role included in DATABASE_URL has the CREATE ON DATABASE privilege
+    and the REPLICATION role attribute.
+    """
+  end
+
   defp extra_error_description(_) do
     """
     Double-check the value of DATABASE_URL and make sure your database
