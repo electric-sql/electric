@@ -29,14 +29,18 @@ export function useElectricFetch<ResultType>({
   const [requestId, setRequestId] = useState('')
 
   const cancelRequest = useCallback(
-    (requestIdToCancel: string) => {
+    async (requestIdToCancel: string) => {
       setRequestId('')
+      const response = await db.responses.findFirst({
+        where: { request_id: requestIdToCancel }
+      })
+      if (response !== null) return
       db.requests.update({
         data: { cancelled: true },
         where: { id: requestIdToCancel }
       })
     },
-    [db.requests]
+    [db.requests, db.responses]
   )
 
   useEffect(() => {

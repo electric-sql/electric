@@ -1,8 +1,9 @@
-import { Box, Container, Switch } from "@mui/material"
+import { Box, Container, Divider, Switch } from "@mui/material"
 import { NavigationBar } from "../components/NavigationBar"
 import { useEffect } from "react"
 import { useElectric } from "../electric/ElectricWrapper"
 import { Calculator } from "./Calculator"
+import { CalculatorAuditLog } from "./CalculatorAuditLog"
 import { useConnectivityState } from "electric-sql/react"
 import { Wifi, WifiOff } from "@mui/icons-material"
 
@@ -38,6 +39,8 @@ export const RequestResponseExample = () => {
       ]}/>
       <Container maxWidth="md" sx={{ py: 4 }}>
         <Calculator />
+        <Divider sx={{ my: 2 }} />
+        <CalculatorAuditLog />
       </Container>
     </Box>
   )
