@@ -35,11 +35,12 @@ defmodule Electric.Postgres.Proxy.Injector do
 
       session_id = Keyword.get(connection, :session_id, 0)
 
-      mode = Map.get(per_user, connection[:username], default)
+      mode =
+        Map.get(per_user, connection[:username]) || per_database_injector(connection) || default
 
       capture =
         mode
-        |> default_capture_mode()
+        |> configure_capture_mode()
         |> initialise_capture_mode(connection)
 
       Logger.info("Initialising injector in capture mode #{inspect(capture || "default")}")
@@ -52,15 +53,22 @@ defmodule Electric.Postgres.Proxy.Injector do
     end
   end
 
-  defp default_capture_mode(nil) do
-    @default_mode
+  defp per_database_injector(connection) do
+    case Keyword.get(connection, :database) do
+      "prisma_migrate_shadow_db" <> _ ->
+        Logger.debug("Connection to prisma shadow db: using transparent injector")
+        {Injector.Transparent, []}
+
+      _ ->
+        nil
+    end
   end
 
-  defp default_capture_mode(module) when is_atom(module) do
+  defp configure_capture_mode(module) when is_atom(module) do
     {module, []}
   end
 
-  defp default_capture_mode({module, params})
+  defp configure_capture_mode({module, params})
        when is_atom(module) and (is_list(params) or is_map(params)) do
     {module, params}
   end
