@@ -26,7 +26,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
     @type t() :: %__MODULE__{
             origin: Connectors.origin(),
             connector_config: Connectors.config(),
-            conn_opts: :epgsql.connect_opts_map(),
+            conn_opts: Connectors.connection_opts(),
             repl_opts: %{
               publication: String.t(),
               slot: String.t(),

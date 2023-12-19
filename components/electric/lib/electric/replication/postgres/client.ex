@@ -16,8 +16,10 @@ defmodule Electric.Replication.Postgres.Client do
   @spec connect(Connectors.connection_opts()) ::
           {:ok, connection :: pid()} | {:error, reason :: :epgsql.connect_error()}
   def connect(conn_opts) do
-    %{ip_addr: ip_addr, username: username, password: password} = conn_opts
-    :epgsql.connect(ip_addr, username, password, conn_opts)
+    {%{ip_addr: ip_addr}, %{username: username, password: password} = epgsql_conn_opts} =
+      Connectors.pop_extraneous_conn_opts(conn_opts)
+
+    :epgsql.connect(ip_addr, username, password, epgsql_conn_opts)
   end
 
   @spec with_conn(Connectors.connection_opts(), fun()) :: term() | {:error, term()}
@@ -35,9 +37,10 @@ defmodule Electric.Replication.Postgres.Client do
 
     {:ok, conn} = :epgsql_sock.start_link()
 
-    %{ip_addr: ip_addr, username: username, password: password} = conn_opts
+    {%{ip_addr: ip_addr}, %{username: username, password: password} = epgsql_conn_opts} =
+      Connectors.pop_extraneous_conn_opts(conn_opts)
 
-    case :epgsql.connect(conn, ip_addr, username, password, conn_opts) do
+    case :epgsql.connect(conn, ip_addr, username, password, epgsql_conn_opts) do
       {:ok, ^conn} ->
         try do
           fun.(conn)

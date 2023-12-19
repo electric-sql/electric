@@ -129,6 +129,12 @@ defmodule Electric.Replication.Connectors do
     Keyword.get(config, :write_to_pg_mode, Electric.write_to_pg_mode())
   end
 
+  # This is needed to please Dialyzer.
+  @spec pop_extraneous_conn_opts(connection_opts()) :: {map, :epgsql.connect_opts_map()}
+  def pop_extraneous_conn_opts(conn_opts) do
+    Map.split(conn_opts, [:ipv6, :ip_addr])
+  end
+
   defp new_map_with_charlists(list) do
     Map.new(list, fn
       {k, v} when is_binary(v) -> {k, String.to_charlist(v)}
