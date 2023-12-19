@@ -262,7 +262,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
 
   defp maybe_create_subscription(_conn, :direct_writes, _repl_opts), do: :ok
 
-  defp preflight_connector_config(connector_config) do
+  def preflight_connector_config(connector_config) do
     {:ok, ip_addr} =
       connector_config
       |> Connectors.get_connection_opts()

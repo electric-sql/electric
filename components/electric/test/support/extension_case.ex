@@ -138,8 +138,7 @@ defmodule Electric.Extension.Case do
   end
 
   def setup_test_connection(_) do
-    pg_config = Electric.Postgres.TestConnection.config()
-    {:ok, conn} = start_supervised(Electric.Postgres.TestConnection.childspec(pg_config))
+    {:ok, conn} = start_supervised(TestConnection.childspec(TestConnection.config()))
     %{origin: "my-origin", conn: conn, proxy?: false}
   end
 end

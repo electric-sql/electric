@@ -16,7 +16,7 @@ defmodule Electric.Postgres.Proxy.EctoTest do
 
     connector_config = [
       origin: "my_origin",
-      connection: context.pg_config,
+      connection: context.conn_opts,
       proxy: [password: "password", listen: [port: port]]
     ]
 

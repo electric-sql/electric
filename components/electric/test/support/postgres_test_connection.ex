@@ -63,19 +63,20 @@ defmodule Electric.Postgres.TestConnection do
       )
 
     pg_config = Keyword.put(config, :database, db_name)
-    {:ok, conn} = start_supervised(Electric.Postgres.TestConnection.childspec(pg_config))
+    conn_opts = conn_opts(pg_config)
+    {:ok, conn} = start_supervised(Electric.Postgres.TestConnection.childspec(conn_opts))
 
     setup_fun.(conn)
 
     on_exit(fn ->
-      {:ok, conn} = Client.connect(pg_config)
+      {:ok, conn} = Client.connect(conn_opts)
       teardown_fun.(conn)
       terminate_all_connections(conn, db_name)
       Client.close(conn)
       dropdb(db_name, config)
     end)
 
-    %{db: db_name, pg_config: pg_config, conn: conn}
+    %{db: db_name, pg_config: pg_config, conn_opts: conn_opts, conn: conn}
   end
 
   def terminate_all_connections(conn, db_name) do
@@ -127,12 +128,19 @@ defmodule Electric.Postgres.TestConnection do
       port: System.get_env("PG_PORT", "54321") |> String.to_integer(),
       database: System.get_env("PG_DB", "electric"),
       username: System.get_env("PG_USERNAME", "postgres"),
-      password: System.get_env("PGPASSWORD", "password")
+      password: System.get_env("PGPASSWORD", "password"),
+      ipv6: false
     ]
     |> Enum.map(fn
       {k, v} when is_binary(v) -> {k, String.to_charlist(v)}
       other -> other
     end)
+  end
+
+  def conn_opts(config) when is_list(config) do
+    [connection: config]
+    |> PostgresConnectorMng.preflight_connector_config()
+    |> Electric.Replication.Connectors.get_connection_opts()
   end
 
   def setup_electrified_tables(%{conn: conn}) do
@@ -223,9 +231,16 @@ defmodule Electric.Postgres.TestConnection do
   end
 
   def childspec(config, child_id \\ :epgsql) do
+    conn_opts =
+      if is_list(config) do
+        conn_opts(config)
+      else
+        config
+      end
+
     %{
       id: child_id,
-      start: {Client, :connect, [config]}
+      start: {Client, :connect, [conn_opts]}
     }
   end
 
