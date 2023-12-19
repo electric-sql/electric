@@ -30,13 +30,14 @@ defmodule Electric.Postgres.Proxy.Injector do
 
       capture_mode_opts = Keyword.get(opts, :capture_mode, [])
 
-      default = Keyword.get(capture_mode_opts, :default, @default_mode)
-      per_user = Keyword.get(capture_mode_opts, :per_user, %{})
+      default_injector = Keyword.get(capture_mode_opts, :default, @default_mode)
 
       session_id = Keyword.get(connection, :session_id, 0)
 
       mode =
-        Map.get(per_user, connection[:username]) || per_database_injector(connection) || default
+        per_database_injector(connection) ||
+          per_user_injector(capture_mode_opts, connection) ||
+          default_injector
 
       capture =
         mode
@@ -62,6 +63,10 @@ defmodule Electric.Postgres.Proxy.Injector do
       _ ->
         nil
     end
+  end
+
+  defp per_user_injector(opts, connection) do
+    get_in(opts, [:per_user, connection[:username]])
   end
 
   defp configure_capture_mode(module) when is_atom(module) do
