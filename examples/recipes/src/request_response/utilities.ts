@@ -17,7 +17,7 @@ interface ElectricFetchResponse<R> {
     data?: R
   },
   requestProcessing: boolean,
-  cancelRequest: () => void
+  cancelRequest?: () => void
 }
 
 export function useElectricFetch<ResultType>({
@@ -75,6 +75,8 @@ export function useElectricFetch<ResultType>({
       } :
       undefined,
     requestProcessing,
-    cancelRequest: () => cancelRequest(requestId),
+    cancelRequest: requestId !== '' ?
+      () => cancelRequest(requestId) :
+      undefined,
   }
 }
