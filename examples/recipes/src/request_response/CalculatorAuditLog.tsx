@@ -4,11 +4,9 @@ import { Paper, Typography,
 } from "@mui/material"
 import { useElectric } from "../electric/ElectricWrapper"
 import { useLiveQuery } from "electric-sql/react"
-import { useEffect, useState } from "react"
 
 
 export const CalculatorAuditLog = () => {
-  const [ rows, setRows ] = useState<string[][]>([[]]);
   const { db } = useElectric()!
 
   // Find 5 most recent requests made
@@ -26,53 +24,51 @@ export const CalculatorAuditLog = () => {
     take: 5,
   }))
 
+  const { results: responses = [] } = useLiveQuery(db.responses.liveMany({
+    select: {
+      request_id: true,
+      data: true,
+    },
+    where: {
+      request_id: {
+        in: requests.map((r) => r.id),
+      }
+    }
+  }))
+
 
   // Format the requests into table rows, and match them to responses
   // if present
-  useEffect(() => {
-    const generateRows = async () => {
-      const newRows = await Promise.all(requests.map(async (request) => {
-        const timestamp = request.timestamp.toISOString()
+  const rows = requests.map((request) => {
+    const timestamp = request.timestamp.toISOString()
 
-        const summands = (
-          JSON.parse(request.data?.toString() ?? '{}') as { summands: number[] }
-        ).summands;
-          
-        const formattedSummands = summands.map(
-            (summand, idx) => idx == 0 ?
-              `${summand}` :
-              (summand < 0 ?
-                ` - ${Math.abs(summand)}` :
-                ` + ${Math.abs(summand)}`
-              )
-        ).join('')
+    const summands = (
+      JSON.parse(request.data?.toString() ?? '{}') as { summands: number[] }
+    ).summands;
+    const formattedSummands = summands.map(
+        (summand, idx) => idx == 0 ?
+          `${summand}` :
+          (summand < 0 ?
+            ` - ${Math.abs(summand)}` :
+            ` + ${Math.abs(summand)}`
+          )
+    ).join('')
 
-        let result: string;
-        if (request.cancelled) {
-          result = 'cancelled'
-        } else if (request.processing) {
-          result = 'processing'
-        } else {
-          // match request to response, if there is one
-          const responseData = ((await db.responses.findFirst({
-            select: {
-              data: true,
-            },
-            where: {
-                request_id: request.id
-            }
-          }))?.data ?? {}) as { sum?: number }
-
-          result = responseData.sum?.toString() ?? 'requested'
-        }
-
-        return [timestamp, formattedSummands, result]
-    }))
-    setRows(newRows);
-  };
-
-  generateRows();
-  }, [db.responses, requests])
+    let result = 'requested'
+    if (request.cancelled) {
+      result = 'cancelled'
+    } else if (request.processing) {
+      result = 'processing'
+    } else {
+      // match request to response, if there is one
+      const responseSum = (responses.find(
+        (res) => res.request_id == request.id)?.data as { sum?: number }
+      )?.sum?.toString()
+      
+      result = responseSum ?? result
+    }
+    return [timestamp, formattedSummands, result]
+  })
 
   return (
     <CalculatorAuditLogView
