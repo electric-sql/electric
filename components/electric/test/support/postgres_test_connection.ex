@@ -110,15 +110,15 @@ defmodule Electric.Postgres.TestConnection do
 
     context = Map.merge(context, create_test_db(setup_fun, teardown_fun))
 
-    pg_connector_opts =
+    connector_config =
       context
       |> pg_connector_config()
       |> Keyword.put(:origin, "#{origin}")
 
-    {:ok, _} = PostgresConnector.start_link(pg_connector_opts)
+    {:ok, _} = PostgresConnector.start_link(connector_config)
     assert :ready == wait_for_postgres_initialization(origin)
 
-    Map.put(context, :pg_connector_opts, pg_connector_opts)
+    Map.put(context, :connector_config, PostgresConnector.connector_config(origin))
   end
 
   def config do

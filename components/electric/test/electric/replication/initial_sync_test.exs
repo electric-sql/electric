@@ -17,15 +17,17 @@ defmodule Electric.Replication.InitialSyncTest do
 
     test "returns electrified table migrations", %{
       conn: conn,
-      pg_connector_opts: pg_connector_opts
+      connector_config: connector_config
     } do
+      origin = Electric.Replication.Connectors.origin(connector_config)
+
       :ok = create_users_table(conn)
       :ok = create_documents_table(conn)
 
       version_1 = "20230830140000"
       version_2 = "20230830140100"
 
-      assert [] == InitialSync.migrations_since(nil, pg_connector_opts)
+      assert [] == InitialSync.migrations_since(nil, origin)
 
       :ok = electrify_table(conn, "public.users", version_1)
 
@@ -41,7 +43,7 @@ defmodule Electric.Replication.InitialSyncTest do
                  xid: xid,
                  commit_timestamp: timestamp
                }
-             ] = InitialSync.migrations_since(nil, pg_connector_opts, current_lsn)
+             ] = InitialSync.migrations_since(nil, origin, current_lsn)
 
       assert is_integer(xid)
       assert %DateTime{} = timestamp
@@ -78,7 +80,7 @@ defmodule Electric.Replication.InitialSyncTest do
                  xid: xid2,
                  commit_timestamp: timestamp2
                }
-             ] = InitialSync.migrations_since(nil, pg_connector_opts, current_lsn)
+             ] = InitialSync.migrations_since(nil, origin, current_lsn)
 
       assert is_integer(xid1)
       assert is_integer(xid2)

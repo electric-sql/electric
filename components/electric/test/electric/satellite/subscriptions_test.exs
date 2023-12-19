@@ -19,8 +19,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
 
       plug =
         {Electric.Plug.SatelliteWebsocketPlug,
-         auth_provider: Electric.Satellite.Auth.provider(),
-         pg_connector_opts: ctx.pg_connector_opts}
+         auth_provider: Electric.Satellite.Auth.provider(), connector_config: ctx.connector_config}
 
       start_link_supervised!({Bandit, port: port, plug: plug})
 

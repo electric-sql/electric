@@ -66,6 +66,11 @@ defmodule Electric.Replication.PostgresConnectorMng do
     GenServer.call(name(origin), :status)
   end
 
+  @spec connector_config(Connectors.origin()) :: Connectors.config()
+  def connector_config(origin) do
+    GenServer.call(name(origin), :connector_config)
+  end
+
   @impl GenServer
   def init(connector_config) do
     origin = Connectors.origin(connector_config)
@@ -150,6 +155,10 @@ defmodule Electric.Replication.PostgresConnectorMng do
   @impl GenServer
   def handle_call(:status, _from, state) do
     {:reply, state.status, state}
+  end
+
+  def handle_call(:connector_config, _from, state) do
+    {:reply, state.connector_config, state}
   end
 
   @impl GenServer

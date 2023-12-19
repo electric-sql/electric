@@ -56,4 +56,18 @@ defmodule Electric.Replication.PostgresConnector do
   def name(origin) when is_binary(origin) do
     Electric.name(__MODULE__, origin)
   end
+
+  def connector_config do
+    # NOTE(alco): Perhaps we can make this less hard-coded by requiring callers to pass the origin in as an argument.
+    [{connector_name, _}] = Application.get_env(:electric, Electric.Replication.Connectors)
+
+    connector_name
+    |> to_string()
+    |> connector_config()
+  end
+
+  @spec connector_config(Connectors.origin()) :: Connectors.config()
+  def connector_config(origin) do
+    PostgresConnectorMng.connector_config(origin)
+  end
 end
