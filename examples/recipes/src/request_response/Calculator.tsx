@@ -6,8 +6,8 @@ interface SumResult {
   sum: number
 }
 
-export const Calculator = ({ initialSummands = [5, 10]}: { initialSummands?: number[] }) => {
-  const [ summands, setSummands ] = useState<number[]>(initialSummands)
+export const Calculator = ({ defaultSummands = [5, 10]}: { defaultSummands?: number[] }) => {
+  const [ summands, setSummands ] = useState<number[]>(defaultSummands)
 
   const {
     response,
@@ -19,6 +19,40 @@ export const Calculator = ({ initialSummands = [5, 10]}: { initialSummands?: num
     data: JSON.stringify({ summands }),
   })
 
+  return <CaclulatorView
+    defaultSummands={defaultSummands}
+    summands={summands}
+    sum={response?.data?.sum ?? null}
+    processing={requestProcessing}
+    cancelled={!cancelRequest}
+    onCancel={cancelRequest}
+    onSummandChange={(newSummand, index) => setSummands((prevSummands) => {
+      const newSummands = [...prevSummands];
+      newSummands[index] = newSummand;
+      return newSummands;
+    })}
+  />
+}
+
+const CaclulatorView = ({
+  defaultSummands,
+  summands,
+  sum,
+  processing,
+  cancelled,
+  onCancel,
+  onSummandChange,
+  summandRange = [-100, 100],
+} : {
+  defaultSummands: number[],
+  summands: number[],
+  sum: number | null,
+  processing: boolean,
+  cancelled: boolean,
+  onCancel?: () => void
+  onSummandChange: (newSummand : number, index : number) => void
+  summandRange? : [number, number]
+}) => {
   return (
     <Paper sx={{ p: 3 }}>
       <Box sx={{
@@ -32,10 +66,10 @@ export const Calculator = ({ initialSummands = [5, 10]}: { initialSummands?: num
         </Typography>
         <Button 
           variant="text" color="info"
-          disabled={!!response || !cancelRequest}
-          onClick={cancelRequest}
+          disabled={sum !== null || cancelled}
+          onClick={onCancel}
         >
-          { requestProcessing && 
+          { processing && 
             <CircularProgress color="info" size={15} sx={{ mr: 1 }} />
           }
           Cancel request
@@ -46,15 +80,13 @@ export const Calculator = ({ initialSummands = [5, 10]}: { initialSummands?: num
           <Slider
             key={index}
             sx={{ pt: 10 }}
-            min={-100}
-            max={100}
-            defaultValue={initialSummands[index]}
+            min={summandRange[0]}
+            max={summandRange[1]}
+            defaultValue={defaultSummands[index]}
             valueLabelDisplay="on"
-            onChangeCommitted={(_, value) => value !== summand ? setSummands((prevSummands) => {
-              const newSummands = [...prevSummands]
-              newSummands[index] = value as number
-              return newSummands
-            }) : null}
+            onChangeCommitted={(_, value) =>
+              value !== summand && onSummandChange(value as number, index)
+            }
           />
         ))
       }
@@ -64,13 +96,12 @@ export const Calculator = ({ initialSummands = [5, 10]}: { initialSummands?: num
       <Slider
         key="sum"
         sx={{ pt: 10 }}
-        min={-200}
-        max={200}
-        value={response?.statusCode == 200 ? response!.data!.sum : 0}
-        valueLabelDisplay={!!response && !requestProcessing ? "on" : "off"}
+        min={summandRange[0] * summands.length}
+        max={summandRange[1] * summands.length}
+        value={sum ?? 0}
+        valueLabelDisplay={sum !== null && !processing ? "on" : "off"}
         disabled
       />
-
     </Paper>
   )
 }
