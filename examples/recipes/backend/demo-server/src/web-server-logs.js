@@ -1,6 +1,7 @@
 const { Pool } = require('pg');
 const { v4: uuidv4 } = require('uuid');
 const cron = require('cron');
+const { checkTableExists } = require('./pg-utils');
 const {
   runOnInterval,
   generateWebServerLog
@@ -21,20 +22,6 @@ async function startGeneratingWebServerLogs(pgPool) {
 
   let numLogsInserted = 0;
   let lastLoggedTime = Date.now();
-
-  const checkLogsTableExists = async () => {
-    try {
-      const result = await pgPool.query(
-        `SELECT EXISTS (
-          SELECT 1 FROM information_schema.tables
-          WHERE table_name = 'logs'
-        );`
-      );
-      return result?.rows[0]?.exists ?? false;
-    } catch (err) {
-      return false;
-    }
-  };
 
   const insertWebServerLog = async () => {
     try {
@@ -66,7 +53,7 @@ async function startGeneratingWebServerLogs(pgPool) {
   }
 
   // wait for table to be created before attempting to generate logs
-  while (!(await checkLogsTableExists())) {
+  while (!(await checkTableExists(pgPool, 'logs'))) {
     console.warn('Waiting for "logs" table to be created...')
     await new Promise(res => setTimeout(res, WAIT_INTERVAL_FOR_TABLE_MS));
   }
