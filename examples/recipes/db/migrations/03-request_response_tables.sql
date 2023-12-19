@@ -12,6 +12,7 @@
 -- Create a requests table.
 CREATE TABLE IF NOT EXISTS requests (
   id UUID PRIMARY KEY NOT NULL,
+  timestamp TIMESTAMPTZ NOT NULL,
   path TEXT NOT NULL,
   method TEXT NOT NULL,
   data JSONB,
@@ -23,6 +24,7 @@ CREATE TABLE IF NOT EXISTS requests (
 -- Create a responses table referencing requests.
 CREATE TABLE IF NOT EXISTS responses (
   id UUID PRIMARY KEY NOT NULL,
+  timestamp TIMESTAMPTZ NOT NULL,
   request_id UUID NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
   status_code INTEGER NOT NULL,
   data JSONB

@@ -38,8 +38,14 @@ async function startListeningToPgRequests(pgPool, apiPort) {
       console.log(`Received response: ${response.status} - ${JSON.stringify(response.data)}`)
 
       // Insert the API response into the 'responses' table
-      const query = 'INSERT INTO responses (id, request_id, status_code, data) VALUES ($1, $2, $3, $4)';
-      const values = [uuidv4(), payload.id, response.status, JSON.stringify(response.data)];
+      const query = 'INSERT INTO responses (id, timestamp, request_id, status_code, data) VALUES ($1, $2, $3, $4, $5)';
+      const values = [
+        uuidv4(),
+        (new Date()).toISOString(),
+        payload.id,
+        response.status,
+        JSON.stringify(response.data)
+      ];
       await pgClient.query(query, values);
     } catch (err) {
       console.error('Failed to process PG notification with error:', err);

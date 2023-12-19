@@ -44,6 +44,7 @@ export function useElectricFetch<ResultType>({
     db.requests.create({
       data: {
         id: newRequestId,
+        timestamp: new Date(),
         path: path,
         method: method,
         data: data,
