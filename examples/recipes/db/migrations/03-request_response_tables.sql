@@ -44,9 +44,11 @@ ALTER TABLE responses ENABLE ELECTRIC;
 CREATE OR REPLACE FUNCTION process_request()
 RETURNS TRIGGER AS $$
 BEGIN
-  NEW.processing := true;
-  PERFORM pg_notify('api_trigger', row_to_json(NEW)::TEXT);
-  RETURN NEW;
+  IF NEW.processing = false AND NEW.cancelled = false THEN
+    UPDATE public.requests SET "processing" = 'true' WHERE "id" = NEW.id;
+    PERFORM pg_notify('api_trigger', row_to_json(NEW)::TEXT);
+  END IF;
+  RETURN NULL;
 END
 $$ LANGUAGE plpgsql;
 
@@ -54,14 +56,14 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION finish_processing_request()
 RETURNS TRIGGER AS $$
 BEGIN
-  UPDATE requests SET "processing" = 'false' WHERE "id" = NEW.request_id;
-  RETURN NEW;
+  UPDATE public.requests SET "processing" = 'false' WHERE "id" = NEW.request_id;
+  RETURN NULL;
 END
 $$ LANGUAGE plpgsql;
 
 -- Create a trigger to execute the function on INSERT into "requests" table
 CREATE TRIGGER "process_request_trigger"
-BEFORE INSERT ON requests
+AFTER INSERT ON requests
 FOR EACH ROW
 EXECUTE FUNCTION process_request();
 
