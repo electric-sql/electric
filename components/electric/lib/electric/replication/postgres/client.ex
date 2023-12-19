@@ -6,18 +6,21 @@ defmodule Electric.Replication.Postgres.Client do
   doesn't support connecting via a unix socket.
   """
   alias Electric.Postgres.Extension
+  alias Electric.Replication.Connectors
+
   require Logger
 
   @type connection :: pid
   @type publication :: String.t()
 
-  @spec connect(:epgsql.connect_opts()) ::
+  @spec connect(Connectors.connection_opts()) ::
           {:ok, connection :: pid()} | {:error, reason :: :epgsql.connect_error()}
   def connect(conn_opts) do
-    :epgsql.connect(conn_opts)
+    %{ip_addr: ip_addr, username: username, password: password} = conn_opts
+    :epgsql.connect(ip_addr, username, password, conn_opts)
   end
 
-  @spec with_conn(:epgsql.connect_opts(), fun()) :: term() | {:error, term()}
+  @spec with_conn(Connectors.connection_opts(), fun()) :: term() | {:error, term()}
   def with_conn(conn_opts, fun) do
     # Best effort capture exit message, expect trap_exit to be set
     wait_exit = fn conn, res ->

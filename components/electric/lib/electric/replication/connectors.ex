@@ -32,7 +32,10 @@ defmodule Electric.Replication.Connectors do
           username: charlist(),
           password: charlist(),
           replication: charlist(),
-          ssl: boolean()
+          ssl: boolean(),
+          ipv6: boolean(),
+          ip_addr: :inet.ip_address(),
+          tcp_opts: [:gen_tcp.connect_option()]
         }
 
   @type proxy_listen_opts() :: ThousandIsland.options()
