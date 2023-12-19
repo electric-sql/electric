@@ -29,10 +29,13 @@ export function useElectricFetch<ResultType>({
   const [requestId, setRequestId] = useState('')
 
   const cancelRequest = useCallback(
-    (requestIdToCancel: string) => db.requests.update({
-      data: { cancelled: true },
-      where: { id: requestIdToCancel }
-    }),
+    (requestIdToCancel: string) => {
+      setRequestId('')
+      db.requests.update({
+        data: { cancelled: true },
+        where: { id: requestIdToCancel }
+      })
+    },
     [db.requests]
   )
 
