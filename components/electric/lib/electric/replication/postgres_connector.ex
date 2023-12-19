@@ -22,7 +22,7 @@ defmodule Electric.Replication.PostgresConnector do
     Supervisor.init(children, strategy: :one_for_all)
   end
 
-  @spec start_children(Connectors.config()) :: Supervisor.on_start_child()
+  @spec start_children(Connectors.config()) :: {:ok, pid} | :error
   def start_children(connector_config) do
     origin = Connectors.origin(connector_config)
     connector = name(origin)

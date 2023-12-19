@@ -1,6 +1,10 @@
 defmodule Electric.Errors do
   @margin "▓ "
 
+  @type error_kind :: :init | :conn | :dbconf
+
+  @spec print_fatal_error(error_kind, String.t()) :: no_return
+  @spec print_fatal_error(error_kind, String.t(), String.t() | nil) :: no_return
   def print_fatal_error(error_kind, message, extra \\ nil) do
     print_error(error_kind, message, extra)
 
