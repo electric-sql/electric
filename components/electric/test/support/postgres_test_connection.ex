@@ -1,10 +1,11 @@
 defmodule Electric.Postgres.TestConnection do
   import ExUnit.Callbacks
   import ExUnit.Assertions
-  require Electric.Postgres.Extension
-  alias Electric.Replication.PostgresConnectorMng
-  alias Electric.Replication.PostgresConnector
+
+  alias Electric.Replication.{Postgres.Client, PostgresConnector, PostgresConnectorMng}
   alias Electric.Postgres.Extension
+
+  require Electric.Postgres.Extension
 
   @conf_arg_map %{database: "dbname"}
 
@@ -67,10 +68,10 @@ defmodule Electric.Postgres.TestConnection do
     setup_fun.(conn)
 
     on_exit(fn ->
-      {:ok, conn} = :epgsql.connect(pg_config)
+      {:ok, conn} = Client.connect(pg_config)
       teardown_fun.(conn)
       terminate_all_connections(conn, db_name)
-      :epgsql.close(conn)
+      Client.close(conn)
       dropdb(db_name, config)
     end)
 
@@ -123,16 +124,14 @@ defmodule Electric.Postgres.TestConnection do
   def config do
     [
       host: System.get_env("PG_HOST", "localhost"),
-      port: System.get_env("PG_PORT", "54321"),
+      port: System.get_env("PG_PORT", "54321") |> String.to_integer(),
       database: System.get_env("PG_DB", "electric"),
       username: System.get_env("PG_USERNAME", "postgres"),
       password: System.get_env("PGPASSWORD", "password")
     ]
-    |> Keyword.update!(:port, &String.to_integer/1)
-    |> Enum.reject(fn {_, v} -> is_nil(v) end)
     |> Enum.map(fn
-      {k, v} when is_integer(v) -> {k, v}
-      {k, v} -> {k, to_charlist(v)}
+      {k, v} when is_binary(v) -> {k, String.to_charlist(v)}
+      other -> other
     end)
   end
 
@@ -226,7 +225,7 @@ defmodule Electric.Postgres.TestConnection do
   def childspec(config, child_id \\ :epgsql) do
     %{
       id: child_id,
-      start: {:epgsql, :connect, [Electric.Utils.epgsql_config(config)]}
+      start: {Client, :connect, [config]}
     }
   end
 

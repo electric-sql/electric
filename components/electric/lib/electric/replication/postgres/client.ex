@@ -13,14 +13,12 @@ defmodule Electric.Replication.Postgres.Client do
 
   @spec connect(:epgsql.connect_opts()) ::
           {:ok, connection :: pid()} | {:error, reason :: :epgsql.connect_error()}
-  def connect(%{} = config) do
-    config
-    |> Electric.Utils.epgsql_config()
-    |> :epgsql.connect()
+  def connect(conn_opts) do
+    :epgsql.connect(conn_opts)
   end
 
   @spec with_conn(:epgsql.connect_opts(), fun()) :: term() | {:error, term()}
-  def with_conn(%{username: username, password: password} = config, fun) do
+  def with_conn(conn_opts, fun) do
     # Best effort capture exit message, expect trap_exit to be set
     wait_exit = fn conn, res ->
       receive do
@@ -30,15 +28,13 @@ defmodule Electric.Replication.Postgres.Client do
       end
     end
 
-    {:ok, ip_addr} = resolve_host_to_addr(config)
-
-    ip_config = Map.put(config, :ip_addr, :inet.ntoa(ip_addr))
-    sanitized_config = Map.put(ip_config, :password, ~c"******")
-    Logger.info("connect: #{inspect(sanitized_config)}")
+    Logger.info("#{inspect(__MODULE__)}.with_conn(#{inspect(sanitize_conn_opts(conn_opts))})")
 
     {:ok, conn} = :epgsql_sock.start_link()
 
-    case :epgsql.connect(conn, ip_addr, username, password, Electric.Utils.epgsql_config(config)) do
+    %{ip_addr: ip_addr, username: username, password: password} = conn_opts
+
+    case :epgsql.connect(conn, ip_addr, username, password, conn_opts) do
       {:ok, ^conn} ->
         try do
           fun.(conn)
@@ -55,6 +51,15 @@ defmodule Electric.Replication.Postgres.Client do
         close(conn)
         wait_exit.(conn, error)
     end
+  end
+
+  @doc """
+  Format the connection opts for output, hiding the password, etc.
+  """
+  def sanitize_conn_opts(conn_opts) do
+    conn_opts
+    |> Map.put(:password, ~c"******")
+    |> Map.update!(:ip_addr, &:inet.ntoa/1)
   end
 
   @doc """
@@ -162,10 +167,9 @@ defmodule Electric.Replication.Postgres.Client do
       "#{__MODULE__} start_replication: slot: '#{slot}', publication: '#{publication}'"
     )
 
+    slot = String.to_charlist(slot)
     opts = ~c"proto_version '1', publication_names '#{publication}', messages"
-
-    conn
-    |> :epgsql.start_replication(:erlang.binary_to_list(slot), handler, [], ~c"0/0", opts)
+    :epgsql.start_replication(conn, slot, handler, [], ~c"0/0", opts)
   end
 
   @doc """
@@ -250,21 +254,6 @@ defmodule Electric.Replication.Postgres.Client do
          {:ok, _, [{long}]} <- :epgsql.squery(conn, "SELECT VERSION()"),
          {:ok, _, _, [{cluster_id}]} <- Extension.save_and_get_cluster_id(conn) do
       {:ok, {short, long, cluster_id}}
-    end
-  end
-
-  # Here we perform a DNS lookup for an IPv6 IP address, followed by a lookup for an IPv4 address in case the
-  # first one fails.
-  #
-  # This is done in order to obviate the need for specifying the exact protocol a given database is reachable, which is
-  # one less thing to configure. We keep the option of setting DATABASE_USE_IPV6=false to disable IPv6 lookups.
-  defp resolve_host_to_addr(%{host: host, ipv6: false}) do
-    :inet.getaddr(host, :inet)
-  end
-
-  defp resolve_host_to_addr(%{host: host, ipv6: true}) do
-    with {:error, :nxdomain} <- :inet.getaddr(host, :inet6) do
-      :inet.getaddr(host, :inet)
     end
   end
 end

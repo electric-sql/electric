@@ -75,6 +75,8 @@ defmodule Electric.Replication.PostgresConnectorMng do
     Logger.metadata(origin: origin)
     Process.flag(:trap_exit, true)
 
+    connector_config = preflight_connector_config(connector_config)
+
     state =
       reset_state(%State{
         origin: origin,
@@ -250,4 +252,39 @@ defmodule Electric.Replication.PostgresConnectorMng do
   end
 
   defp maybe_create_subscription(_conn, :direct_writes, _repl_opts), do: :ok
+
+  defp preflight_connector_config(connector_config) do
+    {:ok, ip_addr} =
+      connector_config
+      |> Connectors.get_connection_opts()
+      |> resolve_host_to_addr()
+
+    update_in(connector_config, [:connection], fn conn_opts ->
+      conn_opts
+      |> Keyword.put(:nulls, [nil, :null, :undefined])
+      |> Keyword.put(:ip_addr, ip_addr)
+      |> maybe_add_inet6(ip_addr)
+    end)
+  end
+
+  defp maybe_add_inet6(conn_opts, {_, _, _, _, _, _, _, _}),
+    do: Keyword.put(conn_opts, :tcp_opts, [:inet6])
+
+  defp maybe_add_inet6(conn_opts, _), do: conn_opts
+
+  # Perform a DNS lookup for an IPv6 IP address, followed by a lookup for an IPv4 address in case the first one fails.
+  #
+  # This is done in order to obviate the need for specifying the exact protocol a given database is reachable over,
+  # which is one less thing to configure.
+  #
+  # IPv6 lookups can still be disabled by setting DATABASE_USE_IPV6=false.
+  defp resolve_host_to_addr(%{host: host, ipv6: true}) do
+    with {:error, :nxdomain} <- :inet.getaddr(host, :inet6) do
+      :inet.getaddr(host, :inet)
+    end
+  end
+
+  defp resolve_host_to_addr(%{host: host, ipv6: false}) do
+    :inet.getaddr(host, :inet)
+  end
 end
