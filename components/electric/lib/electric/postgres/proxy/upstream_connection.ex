@@ -53,25 +53,24 @@ defmodule Electric.Postgres.Proxy.UpstreamConnection do
 
   @impl GenServer
   def handle_continue({:connect, params}, state) do
-    host = Map.get(params, :host, "localhost")
-    port = Map.get(params, :port, 5432)
+    host = params[:ip_addr] || params[:host] || ~c"localhost"
+    port = params[:port] || 5432
+    tcp_opts = [active: true] ++ List.wrap(params[:tcp_opts])
 
-    extra_options =
-      case Map.get(params, :ipv6) do
-        true -> [:inet6]
-        _ -> []
-      end
+    Logger.debug(
+      "Connecting to upstream PG cluster: #{inspect(host)}:#{port} with options: #{inspect(tcp_opts)}"
+    )
 
-    Logger.debug("Connecting to upstream server: #{inspect(host)}:#{port}")
-
-    {:ok, conn} = :gen_tcp.connect(host, port, [active: true] ++ extra_options, 1000)
+    {:ok, conn} = :gen_tcp.connect(host, port, tcp_opts, 1000)
     {:noreply, %{state | conn: conn}, {:continue, {:authenticate, params}}}
   end
 
   def handle_continue({:authenticate, params}, state) do
     %{username: user, database: database} = params
 
-    Logger.debug("Authenticating to upstream database: #{user}@#{database}")
+    Logger.debug(
+      "Authenticating to upstream database #{inspect(database)} as role #{inspect(user)}"
+    )
 
     msg = %M.StartupMessage{
       params: %{
