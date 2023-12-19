@@ -26,16 +26,17 @@ defmodule Electric.Postgres.Proxy.UpstreamConnection do
 
   @impl GenServer
   def init(args) do
-    {:ok, parent} = Keyword.fetch(args, :parent)
-    {:ok, conn_config} = Keyword.fetch(args, :conn_config)
-    {:ok, session_id} = Keyword.fetch(args, :session_id)
+    parent = Keyword.fetch!(args, :parent)
+    conn_config = Keyword.fetch!(args, :conn_config)
+    session_id = Keyword.fetch!(args, :session_id)
 
-    connection = Connectors.get_connection_opts(conn_config, replication: false)
+    name = name(session_id)
+    Electric.reg(name)
 
-    Electric.reg(name(session_id))
     Logger.metadata(proxy_session_id: session_id)
 
     decoder = PgProtocol.Decoder.backend()
+    connection = Connectors.get_connection_opts(conn_config)
 
     {:ok,
      %{
