@@ -87,14 +87,14 @@ end
 auth_mode = env!("AUTH_MODE", :string, default_auth_mode)
 
 auth_opts = [
-  alg: env!("AUTH_JWT_ALG", :string, nil),
-  key: env!("AUTH_JWT_KEY", :string, nil),
-  namespace: env!("AUTH_JWT_NAMESPACE", :string, nil),
-  iss: env!("AUTH_JWT_ISS", :string, nil),
-  aud: env!("AUTH_JWT_AUD", :string, nil)
+  alg: {"AUTH_JWT_ALG", env!("AUTH_JWT_ALG", :string, nil)},
+  key: {"AUTH_JWT_KEY", env!("AUTH_JWT_KEY", :string, nil)},
+  namespace: {"AUTH_JWT_NAMESPACE", env!("AUTH_JWT_NAMESPACE", :string, nil)},
+  iss: {"AUTH_JWT_ISS", env!("AUTH_JWT_ISS", :string, nil)},
+  aud: {"AUTH_JWT_AUD", env!("AUTH_JWT_AUD", :string, nil)}
 ]
 
-auth_provider_config = Electric.Satellite.Auth.build_provider!(auth_mode, auth_opts)
+{auth_provider, auth_errors} = Electric.Config.validate_auth_config(auth_mode, auth_opts)
 
 database_url_config =
   env!("DATABASE_URL", :string, nil)
@@ -116,20 +116,20 @@ pg_proxy_password_config =
   env!("PG_PROXY_PASSWORD", :string, nil)
   |> Electric.Config.parse_pg_proxy_password()
 
+potential_errors =
+  auth_errors ++
+    [
+      {"DATABASE_URL", database_url_config},
+      {"ELECTRIC_WRITE_TO_PG_MODE", write_to_pg_mode_config},
+      {"LOGICAL_PUBLISHER_HOST", logical_publisher_host_config},
+      {"LOG_LEVEL", log_level_config},
+      {"PG_PROXY_PASSWORD", pg_proxy_password_config}
+    ]
+
 errors =
-  [
-    {"AUTH_MODE", auth_provider_config},
-    {"DATABASE_URL", database_url_config},
-    {"ELECTRIC_WRITE_TO_PG_MODE", write_to_pg_mode_config},
-    {"LOGICAL_PUBLISHER_HOST", logical_publisher_host_config},
-    {"LOG_LEVEL", log_level_config},
-    {"PG_PROXY_PASSWORD", pg_proxy_password_config}
-  ]
-  |> Enum.reject(fn
-    {_, {:ok, _}} -> true
-    _ -> false
-  end)
-  |> Enum.map(fn {key, {:error, str}} -> "  * #{key} " <> str end)
+  for {varname, {:error, str}} <- potential_errors do
+    "  * #{varname} " <> str
+  end
 
 if errors != [] do
   Electric.Errors.print_fatal_error(
@@ -152,8 +152,7 @@ end
 {:ok, log_level} = log_level_config
 config :logger, level: log_level
 
-{:ok, provider} = auth_provider_config
-config :electric, Electric.Satellite.Auth, provider: provider
+config :electric, Electric.Satellite.Auth, provider: auth_provider
 
 pg_server_port = env!("LOGICAL_PUBLISHER_PORT", :integer, default_pg_server_port)
 listen_on_ipv6? = env!("ELECTRIC_USE_IPV6", :boolean, default_listen_on_ipv6)

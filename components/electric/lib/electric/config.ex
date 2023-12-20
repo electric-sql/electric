@@ -1,6 +1,24 @@
 defmodule Electric.Config do
   @type maybe_string :: binary | nil
 
+  @spec validate_auth_config(binary, keyword) ::
+          {Electric.Satellite.Auth.provider() | nil, [{binary, {:error, binary}}]}
+  def validate_auth_config(auth_mode, auth_opts) do
+    auth_mode_opts = for {key, {_, val}} <- auth_opts, do: {key, val}
+
+    case Electric.Satellite.Auth.build_provider(auth_mode, auth_mode_opts) do
+      {:ok, provider} ->
+        {provider, []}
+
+      {:error, :invalid_auth_mode} ->
+        {nil, [{"AUTH_MODE", {:error, "has invalid value: #{inspect(auth_mode)}"}}]}
+
+      {:error, key, reason} ->
+        {varname, _} = Keyword.fetch!(auth_opts, key)
+        {nil, [{varname, {:error, reason}}]}
+    end
+  end
+
   @spec parse_database_url(maybe_string, :dev | :test | :prod) ::
           {:ok, keyword | nil} | {:error, binary}
   def parse_database_url(val, config_env) do
