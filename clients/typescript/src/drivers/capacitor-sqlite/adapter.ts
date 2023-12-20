@@ -21,7 +21,6 @@ export class DatabaseAdapter extends GenericDatabaseAdapter {
       wrapInTransaction
     )
 
-    // TODO: `result.values!` is typed as `any[]`. Is this an array of objects (i.e. `Row[]`) or is it something else, e.g. an array of arrays?
     return result.values ?? []
   }
 
