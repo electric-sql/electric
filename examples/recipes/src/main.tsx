@@ -15,6 +15,7 @@ import theme from './theme.ts';
 import { ActivityEventsExample } from './activity_events/ActivityEventsExample.tsx';
 import { LogViewerExample } from './log_viewer/LogViewerExample.tsx';
 import { RequestResponseExample } from './request_response/RequestResponseExample.tsx';
+import { MonitoringMetricsExample } from './monitoring_metrics/MonitoringMetricsExample.tsx';
 
 
 const router = createBrowserRouter([
@@ -33,6 +34,10 @@ const router = createBrowserRouter([
   {
     path: "/request-response",
     element: <RequestResponseExample />
+  },
+  {
+    path: "/monitoring",
+    element: <MonitoringMetricsExample />
   },
 ]);
 

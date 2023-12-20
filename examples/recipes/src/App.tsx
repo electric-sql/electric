@@ -20,6 +20,9 @@ function App() {
         <Link component={RouterLink} to="/request-response" underline="hover">
           Request/Response Pattern
         </Link>
+        <Link component={RouterLink} to="/monitoring" underline="hover">
+          Monitoring Metrics
+        </Link>
       </Box>
     </>
   )
