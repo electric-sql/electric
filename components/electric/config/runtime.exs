@@ -71,6 +71,25 @@ config :logger, :console,
     :proxy_session_id
   ]
 
+###
+# Auth
+###
+
+auth_mode = env!("AUTH_MODE", :string, default_auth_mode)
+
+auth_opts = [
+  alg: env!("AUTH_JWT_ALG", :string, nil),
+  key: env!("AUTH_JWT_KEY", :string, nil),
+  namespace: env!("AUTH_JWT_NAMESPACE", :string, nil),
+  iss: env!("AUTH_JWT_ISS", :string, nil),
+  aud: env!("AUTH_JWT_AUD", :string, nil)
+]
+
+config :electric, Electric.Satellite.Auth,
+  provider: Electric.Satellite.Auth.build_provider!(auth_mode, auth_opts)
+
+###
+
 pg_server_port = env!("LOGICAL_PUBLISHER_PORT", :integer, default_pg_server_port)
 listen_on_ipv6? = env!("ELECTRIC_USE_IPV6", :boolean, default_listen_on_ipv6)
 
@@ -201,11 +220,6 @@ telemetry =
 
 config :electric, :telemetry, telemetry
 
-if config_env() == :prod do
-  auth_provider =
-    System.get_env("AUTH_MODE", default_auth_mode) |> Electric.Satellite.Auth.build_provider!()
-
-  config :electric, Electric.Satellite.Auth, provider: auth_provider
-else
+if config_env() in [:dev, :test] do
   Code.require_file("runtime.#{config_env()}.exs", __DIR__)
 end
