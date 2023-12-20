@@ -8,7 +8,7 @@ use env_logger::Env;
 
 use pg_embed::pg_enums::PgAuthMethod;
 use pg_embed::pg_errors::{PgEmbedError, PgEmbedErrorType};
-use pg_embed::pg_fetch::{PgFetchSettings, PG_V15};
+use pg_embed::pg_fetch::{PgFetchSettings, PostgresVersion, PG_V15};
 use pg_embed::postgres::{PgEmbed, PgSettings};
 use sqlx::postgres::PgRow;
 use sqlx::{Column, Row, ValueRef};
@@ -16,6 +16,7 @@ use sqlx::{Connection, PgConnection};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration;
+use pgvector::Vector;
 
 pub async fn tauri_pg_setup(
     port: u16,
@@ -39,7 +40,8 @@ pub async fn tauri_pg_setup(
         migration_dir,
     };
     let fetch_settings = PgFetchSettings {
-        version: PG_V15,
+        // version: PG_V15,
+        version: PostgresVersion("15.4.0"),
         // custom_cache_dir: Some(PathBuf::from("./resources/pg-embed/")),
         // custom_cache_dir: None,
         ..Default::default()
@@ -65,16 +67,44 @@ pub async fn tauri_pg_init_database(database_dir: &str) -> PgEmbed {
     };
 
     let mut conn = tauri_pg_connect(&pg, "test").await;
+    let _ = sqlx::query(
+        "
+    -- Check if the main schema exists
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'main') THEN
+    -- Create the main schema
+    CREATE SCHEMA main;
+  END IF;
+END $$;
+",
+    )
+    .execute(&mut conn)
+    .await
+    .unwrap();
+
+    let _ = sqlx::query(
+        "
+-- Set the main schema as the default schema for all users
+ALTER DATABASE test SET search_path = main, pg_catalog;
+    ",
+    )
+    .execute(&mut conn)
+    .await
+    .unwrap();
+
+    // Enable pgvector
+    // let _ = sqlx::query("CREATE EXTENSION vector;").execute(&mut conn).await.unwrap();
 
     // TODO: When
-    let _ = sqlx::query("ALTER SCHEMA public RENAME TO main;")
-        .execute(&mut conn)
-        .await
-        .unwrap();
-    let _ = sqlx::query("ALTER DATABASE test SET search_path TO main;")
-        .execute(&mut conn)
-        .await
-        .unwrap();
+    // let _ = sqlx::query("ALTER SCHEMA public RENAME TO main;")
+    //     .execute(&mut conn)
+    //     .await
+    //     .unwrap();
+    // let _ = sqlx::query("ALTER DATABASE test SET search_path TO main;")
+    //     .execute(&mut conn)
+    //     .await
+    //     .unwrap();
 
     pg.migrate(db_name).await.unwrap();
 
@@ -91,6 +121,13 @@ pub async fn tauri_pg_connect(pg: &PgEmbed, db_name: &str) -> PgConnection {
 pub fn row_to_json(row: PgRow) -> HashMap<String, String> {
     let mut result = HashMap::new();
     for col in row.columns() {
+        if col.type_info().oid().unwrap().0 == 16434 {
+            let value: Vector = row.try_get(col.ordinal()).unwrap();
+            let value = format!("{:?}", value.to_vec());
+            result.insert(col.name().to_string(), value);
+            continue;
+        }
+
         let value = row.try_get_raw(col.ordinal()).unwrap();
         let value = match value.is_null() {
             true => "NULL".to_string(),

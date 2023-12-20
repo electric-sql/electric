@@ -1436,7 +1436,6 @@ export class SatelliteProcess implements Satellite {
       relations[`${tableName}`] = relation
     }
 
-    console.log("VVVV", relations)
     return Promise.resolve(relations)
   }
 

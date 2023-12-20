@@ -1,5 +1,5 @@
 import { ReactComponent as MenuIcon } from '../assets/icons/menu.svg'
-import { useState, useContext } from 'react'
+import React, { useState, useContext } from 'react'
 import { BsSortUp, BsPlus, BsX, BsSearch as SearchIcon } from 'react-icons/bs'
 import debounce from 'lodash.debounce'
 import { useLiveQuery } from 'electric-sql/react'
@@ -14,7 +14,9 @@ interface Props {
   issues: Issue[]
   hideSort?: boolean
   showSearch?: boolean
-  title?: string
+  title?: string,
+  searchType?: string,
+  setSearchType?: any
 }
 
 export default function ({
@@ -22,12 +24,15 @@ export default function ({
   hideSort,
   showSearch,
   title = 'All issues',
+  searchType = 'BasicSearch',
+  setSearchType
 }: Props) {
   const { db } = useElectric()!
   const [filterState, setFilterState] = useFilterState()
   const [showViewOption, setShowViewOption] = useState(false)
   const { showMenu, setShowMenu } = useContext(MenuContext)!
   const [searchQuery, setSearchQuery] = useState('')
+
 
   // We don't yet have a DAL for counts, so we use raw SQL
   const totalIssuesCount: number =
@@ -62,6 +67,10 @@ export default function ({
     } else if (eqStatuses(['todo', 'in_progress'])) {
       title = 'Active'
     }
+  }
+
+  const onSearchTypeChange = (e) => {
+    setSearchType(e.target.value)
   }
 
   return (
@@ -155,15 +164,53 @@ export default function ({
       )}
 
       {showSearch && (
-        <div className="flex items-center justify-between flex-shrink-0 pl-2 pr-6 border-b border-gray-200 lg:pl-9 py-2">
-          <SearchIcon className="w-3.5 h-3.5 ms-3 absolute" />
-          <input
-            type="search"
-            className="w-full bg-gray-100 border-0 rounded px-2 py-1.5 ps-9"
-            value={searchQuery}
-            onChange={(e) => handleSearch(e.target.value)}
-          />
-        </div>
+        <>
+          <div className="flex items-center justify-between flex-shrink-0 pl-2 pr-6 border-b border-gray-200 lg:pl-9 py-2">
+            <SearchIcon className="w-3.5 h-3.5 ms-3 absolute" />
+            <input
+              type="search"
+              className="w-full bg-gray-100 border-0 rounded px-2 py-1.5 ps-9"
+              value={searchQuery}
+              onChange={(e) => handleSearch(e.target.value)}
+            />
+          </div>
+          <div className="flex justify-start flex-shrink-0 pl-2 pr-6 border-b border-gray-200 lg:pl-9 py-2">
+            <div>Select type of search:</div>
+            <div style={{padding: 20}}>
+              <label htmlFor='basicSearch'>Basic Search</label>
+              <input
+                type="radio"
+                name="basicSearch"
+                value="basicSearch"
+                id="basicSearch"
+                checked={searchType === 'basicSearch'}
+                onChange={onSearchTypeChange}
+              />
+            </div>
+            <div style={{padding: 20}}>
+              <label htmlFor='vectorSearch'>Vector Search</label>
+              <input
+                type="radio"
+                name="vectorSearch"
+                value="vectorSearch"
+                id="vectorSearch"
+                checked={searchType === 'vectorSearch'}
+                onChange={onSearchTypeChange}
+              />
+            </div>
+            <div style={{padding: 20}}>
+              <label htmlFor='chat'>Chat</label>
+              <input
+                type="radio"
+                name="chat"
+                value="chat"
+                id="chat"
+                checked={searchType === 'chat'}
+                onChange={onSearchTypeChange}
+              />
+            </div>
+          </div>
+        </>
       )}
 
       <ViewOptionMenu

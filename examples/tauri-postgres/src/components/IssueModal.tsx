@@ -16,6 +16,7 @@ import StatusMenu from './contextmenu/StatusMenu'
 
 import { Priority, Status, PriorityDisplay } from '../types/issue'
 import { showInfo, showWarning } from '../utils/notification'
+import { embedIssue } from '../pages/List/VectorSearch'
 
 interface Props {
   isOpen: boolean
@@ -55,6 +56,7 @@ function IssueModal({ isOpen, onDismiss }: Props) {
         modified: date,
         created: date,
         kanbanorder: kanbanorder,
+        embeddings: await embedIssue(title + description)
       },
     })
 
