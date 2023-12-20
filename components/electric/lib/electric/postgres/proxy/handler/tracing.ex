@@ -9,10 +9,10 @@ defmodule Electric.Postgres.Proxy.Handler.Tracing do
     if tracing_enabled?(config) do
       {label, colour} =
         case {action, side} do
-          {:send, :client} -> {"[#{session_id}] 🠞 #{side} ", :green}
-          {:recv, :client} -> {"[#{session_id}] 🠜 #{side} ", :green}
-          {:send, :server} -> {"[#{session_id}] #{side} 🠜 ", :yellow}
-          {:recv, :server} -> {"[#{session_id}] #{side} 🠞 ", :yellow}
+          {:send, :client} -> {"[#{session_id}] -▶ #{side} ", :green}
+          {:recv, :client} -> {"[#{session_id}] ◀- #{side} ", :green}
+          {:send, :server} -> {"[#{session_id}] #{side} ◀- ", :yellow}
+          {:recv, :server} -> {"[#{session_id}] #{side} -▶ ", :yellow}
         end
 
       IO.puts(
