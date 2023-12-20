@@ -1,41 +1,15 @@
 import Config
 import Dotenvy
 
-### Static configuration
+############################
+### Static configuration ###
+############################
 
 config :ssl, protocol_version: [:"tlsv1.3", :"tlsv1.2"]
 
-config :electric, Electric.Postgres.CachedWal.Api, adapter: Electric.Postgres.CachedWal.EtsBacked
-
-### User configuration
-
-default_log_level = "info"
-default_auth_mode = "secure"
-default_http_server_port = 5133
-default_pg_server_port = 5433
-default_pg_proxy_port = "65432"
-default_listen_on_ipv6 = true
-default_database_require_ssl = true
-default_database_use_ipv6 = true
-default_write_to_pg_mode = "logical_replication"
-default_proxy_tracing_enable = false
-
-###
-
-if config_env() in [:dev, :test] do
-  source!([".env.#{config_env()}", ".env.#{config_env()}.local", System.get_env()])
-end
-
-###
-# Logger
-###
-
-log_level = env!("LOG_LEVEL", :string, default_log_level) |> String.to_existing_atom()
-
 config :logger,
   handle_otp_reports: true,
-  handle_sasl_reports: false,
-  level: log_level
+  handle_sasl_reports: false
 
 config :logger, :console,
   format: "$time $metadata[$level] $message\n",
@@ -77,8 +51,37 @@ config :logger, :console,
     :proxy_session_id
   ]
 
+config :electric, Electric.Postgres.CachedWal.Api, adapter: Electric.Postgres.CachedWal.EtsBacked
+
+config :electric, Electric.Replication.Postgres,
+  pg_client: Electric.Replication.Postgres.Client,
+  producer: Electric.Replication.Postgres.LogicalReplicationProducer
+
+config :electric, Electric.Postgres.Proxy.Handler.Tracing, colour: true
+
+config :electric, :telemetry_url, "https://checkpoint.electric-sql.com"
+
+##########################
+### User configuration ###
+##########################
+
+default_log_level = "info"
+default_auth_mode = "secure"
+default_http_server_port = 5133
+default_pg_server_port = 5433
+default_pg_proxy_port = "65432"
+default_listen_on_ipv6 = true
+default_database_require_ssl = true
+default_database_use_ipv6 = true
+default_write_to_pg_mode = "logical_replication"
+default_proxy_tracing_enable = false
+
+if config_env() in [:dev, :test] do
+  source!([".env.#{config_env()}", ".env.#{config_env()}.local", System.get_env()])
+end
+
 ###
-# Auth
+# Required options
 ###
 
 auth_mode = env!("AUTH_MODE", :string, default_auth_mode)
@@ -91,19 +94,70 @@ auth_opts = [
   aud: env!("AUTH_JWT_AUD", :string, nil)
 ]
 
-config :electric, Electric.Satellite.Auth,
-  provider: Electric.Satellite.Auth.build_provider!(auth_mode, auth_opts)
+auth_provider_config = Electric.Satellite.Auth.build_provider!(auth_mode, auth_opts)
+
+database_url_config =
+  env!("DATABASE_URL", :string, nil)
+  |> Electric.Config.parse_database_url(config_env())
+
+write_to_pg_mode_config =
+  env!("ELECTRIC_WRITE_TO_PG_MODE", :string, default_write_to_pg_mode)
+  |> Electric.Config.parse_write_to_pg_mode()
+
+logical_publisher_host_config =
+  env!("LOGICAL_PUBLISHER_HOST", :string, nil)
+  |> Electric.Config.parse_logical_publisher_host(write_to_pg_mode_config)
+
+log_level_config =
+  env!("LOG_LEVEL", :string, default_log_level)
+  |> Electric.Config.parse_log_level()
+
+pg_proxy_password_config =
+  env!("PG_PROXY_PASSWORD", :string, nil)
+  |> Electric.Config.parse_pg_proxy_password()
+
+errors =
+  [
+    {"AUTH_MODE", auth_provider_config},
+    {"DATABASE_URL", database_url_config},
+    {"ELECTRIC_WRITE_TO_PG_MODE", write_to_pg_mode_config},
+    {"LOGICAL_PUBLISHER_HOST", logical_publisher_host_config},
+    {"LOG_LEVEL", log_level_config},
+    {"PG_PROXY_PASSWORD", pg_proxy_password_config}
+  ]
+  |> Enum.reject(fn
+    {_, {:ok, _}} -> true
+    _ -> false
+  end)
+  |> Enum.map(fn {key, {:error, str}} -> "  * #{key} " <> str end)
+
+if errors != [] do
+  Electric.Errors.print_fatal_error(
+    :conf,
+    """
+    The following required configuration options have invalid or missing values:
+
+    #{Enum.join(errors, "\n\n")}
+    """,
+    """
+    Please review the official configuration reference at
+    https://electric-sql.com/docs/api/service#configuration-options
+    and double-check your values.
+    """
+  )
+end
 
 ###
 
+{:ok, log_level} = log_level_config
+config :logger, level: log_level
+
+{:ok, provider} = auth_provider_config
+config :electric, Electric.Satellite.Auth, provider: provider
+
 pg_server_port = env!("LOGICAL_PUBLISHER_PORT", :integer, default_pg_server_port)
 listen_on_ipv6? = env!("ELECTRIC_USE_IPV6", :boolean, default_listen_on_ipv6)
-
-write_to_pg_mode =
-  case env!("ELECTRIC_WRITE_TO_PG_MODE", :string, default_write_to_pg_mode) do
-    "logical_replication" -> :logical_replication
-    "direct_writes" -> :direct_writes
-  end
+{:ok, write_to_pg_mode} = write_to_pg_mode_config
 
 config :electric,
   # Used in telemetry, and to identify the server to the client
@@ -112,12 +166,6 @@ config :electric,
   pg_server_port: pg_server_port,
   listen_on_ipv6?: listen_on_ipv6?,
   write_to_pg_mode: write_to_pg_mode
-
-config :electric, Electric.Replication.Postgres,
-  pg_client: Electric.Replication.Postgres.Client,
-  producer: Electric.Replication.Postgres.LogicalReplicationProducer
-
-config :electric, :telemetry_url, "https://checkpoint.electric-sql.com"
 
 # disable all ddlx commands apart from `ENABLE`
 # override these using the `ELECTRIC_FEATURES` environment variable, e.g.
@@ -135,85 +183,83 @@ config :electric, Electric.Features,
   proxy_ddlx_assign: false,
   proxy_ddlx_unassign: false
 
-require_ssl? = env!("DATABASE_REQUIRE_SSL", :boolean, default_database_require_ssl)
+{:ok, conn_params} = database_url_config
 
-# Always try connecting with SSL first.
-#
-# When require_ssl?=true, :epgsql will try to connect using SSL and fail if the server does not accept encrypted
-# connections.
-#
-# When require_ssl?=false, :epgsql will try to connect using SSL first, then fallback to an unencrypted connection
-# if that fails.
-use_ssl? =
-  if require_ssl? do
-    :required
-  else
-    true
-  end
+connector_config =
+  if conn_params do
+    require_ssl? = env!("DATABASE_REQUIRE_SSL", :boolean, default_database_require_ssl)
 
-use_ipv6? = env!("DATABASE_USE_IPV6", :boolean, default_database_use_ipv6)
+    # Always try connecting with SSL first.
+    #
+    # When require_ssl?=true, :epgsql will try to connect using SSL and fail if the server does not accept encrypted
+    # connections.
+    #
+    # When require_ssl?=false, :epgsql will try to connect using SSL first, then fallback to an unencrypted connection
+    # if that fails.
+    use_ssl? =
+      if require_ssl? do
+        :required
+      else
+        true
+      end
 
-database_url = env!("DATABASE_URL", :string, nil)
+    use_ipv6? = env!("DATABASE_USE_IPV6", :boolean, default_database_use_ipv6)
 
-postgresql_connection =
-  if database_url do
-    database_url
-    |> Electric.Utils.parse_postgresql_uri()
-    |> Keyword.put(:ssl, use_ssl?)
-    |> Keyword.put(:ipv6, use_ipv6?)
-    |> Keyword.put(:replication, "database")
-    |> Keyword.update(:timeout, 5_000, &String.to_integer/1)
-  end
+    conn_params =
+      conn_params
+      |> Keyword.put(:ssl, use_ssl?)
+      |> Keyword.put(:ipv6, use_ipv6?)
+      |> Keyword.put(:replication, "database")
+      |> Keyword.update(:timeout, 5_000, &String.to_integer/1)
 
-pg_server_host = env!("LOGICAL_PUBLISHER_HOST", :string, nil)
+    {:ok, pg_server_host} = logical_publisher_host_config
 
-{use_http_tunnel?, proxy_port_str} =
-  case String.downcase(env!("PG_PROXY_PORT", :string, default_pg_proxy_port)) do
-    "http" -> {true, default_pg_proxy_port}
-    "http:" <> port_str -> {true, port_str}
-    port_str -> {false, port_str}
-  end
+    {use_http_tunnel?, proxy_port_str} =
+      case String.downcase(env!("PG_PROXY_PORT", :string, default_pg_proxy_port)) do
+        "http" -> {true, default_pg_proxy_port}
+        "http:" <> port_str -> {true, port_str}
+        port_str -> {false, port_str}
+      end
 
-proxy_port = String.to_integer(proxy_port_str)
+    proxy_port = String.to_integer(proxy_port_str)
 
-proxy_password = env!("PG_PROXY_PASSWORD", :string, nil)
+    proxy_listener_opts =
+      if listen_on_ipv6? do
+        [transport_options: [:inet6]]
+      else
+        []
+      end
 
-proxy_listener_opts =
-  if listen_on_ipv6? do
-    [transport_options: [:inet6]]
-  else
-    []
-  end
+    {:ok, proxy_password} = pg_proxy_password_config
 
-if postgresql_connection do
-  config :electric, Electric.Replication.Connectors,
-    postgres_1: [
-      producer: Electric.Replication.Postgres.LogicalReplicationProducer,
-      connection: postgresql_connection,
-      replication: [
-        electric_connection: [
-          host: pg_server_host,
-          port: pg_server_port,
-          dbname: "electric",
-          connect_timeout: postgresql_connection[:timeout]
+    [
+      postgres_1: [
+        producer: Electric.Replication.Postgres.LogicalReplicationProducer,
+        connection: conn_params,
+        replication: [
+          electric_connection: [
+            host: pg_server_host,
+            port: pg_server_port,
+            dbname: "electric",
+            connect_timeout: conn_params[:timeout]
+          ]
+        ],
+        proxy: [
+          # listen opts are ThousandIsland.options()
+          # https://hexdocs.pm/thousand_island/ThousandIsland.html#t:options/0
+          listen: [port: proxy_port] ++ proxy_listener_opts,
+          use_http_tunnel?: use_http_tunnel?,
+          password: proxy_password,
+          log_level: log_level
         ]
-      ],
-      proxy: [
-        # listen opts are ThousandIsland.options()
-        # https://hexdocs.pm/thousand_island/ThousandIsland.html#t:options/0
-        listen: [port: proxy_port] ++ proxy_listener_opts,
-        use_http_tunnel?: use_http_tunnel?,
-        password: proxy_password,
-        log_level: log_level
       ]
     ]
-end
+  end
+
+config :electric, Electric.Replication.Connectors, List.wrap(connector_config)
 
 enable_proxy_tracing? = env!("PROXY_TRACING_ENABLE", :boolean, default_proxy_tracing_enable)
-
-config :electric, Electric.Postgres.Proxy.Handler.Tracing,
-  enable: enable_proxy_tracing?,
-  colour: true
+config :electric, Electric.Postgres.Proxy.Handler.Tracing, enable: enable_proxy_tracing?
 
 # This is intentionally an atom and not a boolean - we expect to add `:extended` state
 telemetry =

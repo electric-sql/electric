@@ -282,14 +282,15 @@ defmodule Electric.Utils do
 
     :ok = assert_no_query_params(query_params)
 
-    [
-      host: host,
-      port: port,
-      database: database,
-      username: username,
-      password: password
-    ]
-    |> Enum.reject(fn {_key, val} -> is_nil(val) end)
+    {:ok,
+     [
+       host: host,
+       port: port,
+       database: database,
+       username: username,
+       password: password
+     ]
+     |> Enum.reject(fn {_key, val} -> is_nil(val) end)}
   end
 
   defp assert_no_query_params(params) when map_size(params) == 0, do: :ok

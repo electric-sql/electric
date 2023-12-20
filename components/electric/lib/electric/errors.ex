@@ -1,7 +1,7 @@
 defmodule Electric.Errors do
   @margin "▓ "
 
-  @type error_kind :: :init | :conn | :dbconf
+  @type error_kind :: :init | :conn | :conf | :dbconf
 
   @spec print_fatal_error(error_kind, String.t()) :: no_return
   @spec print_fatal_error(error_kind, String.t(), String.t() | nil) :: no_return
@@ -61,6 +61,14 @@ defmodule Electric.Errors do
     ┌────────────────────┐
     │  CONNECTION ERROR  │
     ┕━━━━━━━━━━━━━━━━━━━━┙
+    """
+  end
+
+  defp format_header(:conf) do
+    """
+    ┌───────────────────────┐
+    │  CONFIGURATION ERROR  │
+    ┕━━━━━━━━━━━━━━━━━━━━━━━┙
     """
   end
 
