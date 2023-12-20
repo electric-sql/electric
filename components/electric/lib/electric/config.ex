@@ -66,142 +66,137 @@ defmodule Electric.Config do
   ## Examples
 
       iex> parse_postgresql_uri("postgresql://postgres:password@example.com/app-db")
-      [
+      {:ok, [
         host: "example.com",
         port: 5432,
         database: "app-db",
         username: "postgres",
         password: "password",
-      ]
+      ]}
 
       iex> parse_postgresql_uri("postgresql://electric@192.168.111.33:81/__shadow")
-      [
+      {:ok, [
         host: "192.168.111.33",
         port: 81,
         database: "__shadow",
         username: "electric"
-      ]
+      ]}
 
       iex> parse_postgresql_uri("postgresql://pg@[2001:db8::1234]:4321")
-      [
+      {:ok, [
         host: "2001:db8::1234",
         port: 4321,
         database: "pg",
         username: "pg"
-      ]
+      ]}
 
       iex> parse_postgresql_uri("postgresql://user@localhost:5433/")
-      [
+      {:ok, [
         host: "localhost",
         port: 5433,
         database: "user",
         username: "user"
-      ]
+      ]}
+
+      iex> parse_postgresql_uri("postgrex://localhost")
+      {:error, "has invalid URL scheme: \\"postgrex\\""}
 
       iex> parse_postgresql_uri("postgresql://localhost")
-      ** (RuntimeError) Invalid or missing username in DATABASE_URL
+      {:error, "has invalid or missing username"}
 
       iex> parse_postgresql_uri("postgresql://:@localhost")
-      ** (RuntimeError) Invalid or missing username in DATABASE_URL
+      {:error, "has invalid or missing username"}
 
       iex> parse_postgresql_uri("postgresql://:password@localhost")
-      ** (RuntimeError) Invalid or missing username in DATABASE_URL
+      {:error, "has invalid or missing username"}
 
       iex> parse_postgresql_uri("postgresql://user:password")
-      ** (RuntimeError) Invalid or missing username in DATABASE_URL
+      {:error, "has invalid or missing username"}
 
       iex> parse_postgresql_uri("postgresql://user:password@")
-      ** (RuntimeError) Missing host in DATABASE_URL
+      {:error, "missing host"}
 
       iex> parse_postgresql_uri("postgresql://user@localhost:5433/mydb?options=-c%20synchronous_commit%3Doff")
-      ** (RuntimeError) Electric does not support any query options in DATABASE_URL.
+      {:error, "has unsupported query string. Please remove all URL query options"}
 
       iex> parse_postgresql_uri("postgresql://electric@localhost/db?replication=database")
-      ** (RuntimeError) Electric does not support the "replication" option. It opens both a replication connection and regular connections to Postgres as needed.
+      {:error, "has unsupported \\"replication\\" query option. Electric opens both a replication connection and regular connections to Postgres as needed"}
 
       iex> parse_postgresql_uri("postgresql://electric@localhost/db?replication=off")
-      ** (RuntimeError) Electric does not support the "replication" option. It opens both a replication connection and regular connections to Postgres as needed.
+      {:error, "has unsupported \\"replication\\" query option. Electric opens both a replication connection and regular connections to Postgres as needed"}
 
       iex> parse_postgresql_uri("postgres://super_user@localhost:7801/postgres?sslmode=yesplease")
-      ** (RuntimeError) Electric does not support the "sslmode" option. Use the DATABASE_REQUIRE_SSL configuration option instead.
+      {:error, "has unsupported \\"sslmode\\" query option. Use the DATABASE_REQUIRE_SSL configuration option instead"}
   """
-  @spec parse_postgresql_uri(binary) :: {:ok, keyword}
+  @spec parse_postgresql_uri(binary) :: {:ok, keyword} | {:error, binary}
   def parse_postgresql_uri(uri_str) do
     %URI{scheme: scheme, host: host, port: port, path: path, userinfo: userinfo, query: query} =
       URI.parse(uri_str)
 
-    :ok = assert_valid_scheme!(scheme)
+    with :ok <- validate_url_scheme(scheme),
+         :ok <- validate_url_host(host),
+         {:ok, {username, password}} <- parse_url_userinfo(userinfo),
+         :ok <- validate_url_query(query) do
+      conn_params =
+        [
+          host: host,
+          port: port || 5432,
+          database: parse_database(path, username),
+          username: username,
+          password: password
+        ]
+        |> Enum.reject(fn {_key, val} -> is_nil(val) end)
 
-    :ok = assert_valid_host!(host)
-    port = port || 5432
-
-    {username, password} = parse_userinfo!(userinfo)
-
-    database = parse_database(path, username)
-
-    query_params =
-      if query do
-        URI.decode_query(query)
-      else
-        %{}
-      end
-
-    :ok = assert_no_query_params(query_params)
-
-    {:ok,
-     [
-       host: host,
-       port: port,
-       database: database,
-       username: username,
-       password: password
-     ]
-     |> Enum.reject(fn {_key, val} -> is_nil(val) end)}
-  end
-
-  defp assert_no_query_params(params) when map_size(params) == 0, do: :ok
-
-  defp assert_no_query_params(%{"sslmode" => _}) do
-    raise "Electric does not support the \"sslmode\" option. Use the DATABASE_REQUIRE_SSL configuration option instead."
-  end
-
-  defp assert_no_query_params(%{"replication" => _}) do
-    raise "Electric does not support the \"replication\" option. It opens both a replication connection and regular connections to Postgres as needed."
-  end
-
-  defp assert_no_query_params(_) do
-    raise "Electric does not support any query options in DATABASE_URL."
-  end
-
-  defp assert_valid_scheme!(scheme) when scheme in ["postgres", "postgresql"], do: :ok
-
-  defp assert_valid_scheme!(scheme) do
-    raise "Invalid scheme in DATABASE_URL: #{inspect(scheme)}"
-  end
-
-  defp assert_valid_host!(str) do
-    if is_binary(str) and String.trim(str) != "" do
-      :ok
-    else
-      raise "Missing host in DATABASE_URL"
+      {:ok, conn_params}
     end
   end
 
-  defp parse_userinfo!(str) do
-    try do
-      true = is_binary(str)
+  defp validate_url_scheme(scheme) when scheme in ["postgres", "postgresql"], do: :ok
+  defp validate_url_scheme(scheme), do: {:error, "has invalid URL scheme: #{inspect(scheme)}"}
 
-      {username, password} =
-        case String.split(str, ":") do
-          [username] -> {username, nil}
-          [username, password] -> {username, password}
-        end
+  defp validate_url_host(str) do
+    if is_binary(str) and String.trim(str) != "" do
+      :ok
+    else
+      {:error, "missing host"}
+    end
+  end
 
-      false = String.trim(username) == ""
+  defp parse_url_userinfo(str) do
+    with false <- is_nil(str),
+         {:ok, {username, password}} <- split_userinfo(str),
+         false <- String.trim(username) == "" do
+      {:ok, {username, password}}
+    else
+      _ -> {:error, "has invalid or missing username"}
+    end
+  end
 
-      {username, password}
-    rescue
-      _ -> raise "Invalid or missing username in DATABASE_URL"
+  defp split_userinfo(str) do
+    case String.split(str, ":") do
+      [username] -> {:ok, {username, nil}}
+      [username, password] -> {:ok, {username, password}}
+      _ -> :error
+    end
+  end
+
+  defp validate_url_query(nil), do: :ok
+
+  defp validate_url_query(query_str) do
+    case URI.decode_query(query_str) do
+      empty when map_size(empty) == 0 ->
+        :ok
+
+      %{"sslmode" => _} ->
+        {:error,
+         "has unsupported \"sslmode\" query option. Use the DATABASE_REQUIRE_SSL configuration option instead"}
+
+      %{"replication" => _} ->
+        {:error,
+         "has unsupported \"replication\" query option. Electric opens both a replication connection and regular connections to Postgres as needed"}
+
+      _ ->
+        {:error, "has unsupported query string. Please remove all URL query options"}
     end
   end
 
