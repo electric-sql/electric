@@ -12,4 +12,4 @@ COPY . .
 
 EXPOSE ${DEMO_API_PORT}
 
-CMD ["node", "app.js"]
+CMD ["npm", "run", "start"]
