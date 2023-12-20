@@ -1,6 +1,5 @@
 defmodule Electric.Postgres.Proxy.Injector.Shadow do
-  # need a struct in order to implement the Operation protocol
-  defstruct []
+  defstruct [:database]
 
   alias Electric.Postgres.Proxy.{
     Injector,
@@ -48,6 +47,10 @@ defmodule Electric.Postgres.Proxy.Injector.Shadow do
 
       def recv_server(%{resp: []}, %M.ReadyForQuery{} = msg, state, send) do
         {nil, state, Send.client(send, msg)}
+      end
+
+      def recv_server(op, msg, state, send) do
+        {op, state, Send.client(send, msg)}
       end
 
       defp send_electric_resps(%{resp: resp} = op, send) do
@@ -111,6 +114,14 @@ defmodule Electric.Postgres.Proxy.Injector.Shadow do
 
   defimpl Operation do
     use Operation.Impl
+
+    # For shadow connections, we want to honour the database from the connection params.
+    #
+    # Normally we ignore the db param in the startup message and always connect to the
+    # configured upstream database.
+    def upstream_connection(shadow, conn_config) do
+      put_in(conn_config, [:connection, :database], shadow.database)
+    end
 
     def recv_client(shadow, msgs, state) do
       chunks = Injector.Electric.group_messages(msgs)

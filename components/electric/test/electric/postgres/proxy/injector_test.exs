@@ -94,7 +94,13 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
     test "prisma shadow database mode" do
       opts = Keyword.put(Proxy.default_handler_config()[:injector], :loader, MockSchemaLoader)
 
-      assert {:ok, {[%Injector.Shadow{}], %Injector.State{}}} =
+      assert {:ok,
+              {[
+                 %Injector.Shadow{
+                   database: "prisma_migrate_shadow_db_cb1834f9-acad-49ec-965f-97579e3688a8"
+                 }
+               ],
+               %Injector.State{}}} =
                Injector.new(opts,
                  username: "fake",
                  database: "prisma_migrate_shadow_db_cb1834f9-acad-49ec-965f-97579e3688a8"

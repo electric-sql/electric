@@ -232,7 +232,7 @@ defmodule Electric.Postgres.Proxy.Handler do
 
     {:ok, loader_conn} = loader_module.connect(conn_config, loader_opts)
 
-    {:ok, injector} =
+    {:ok, {stack, _state} = injector} =
       state.injector_opts
       |> Keyword.merge(loader: {loader_module, loader_conn})
       |> Injector.new(
@@ -241,11 +241,17 @@ defmodule Electric.Postgres.Proxy.Handler do
         database: state.database
       )
 
+    # allow the injector to configure the upstream connection.  required in order for prisma's
+    # connections to the shadow db to ignore the default upstream database and actually connect
+    # to this ephemeral db
+    upstream_conn_config =
+      Injector.Operation.upstream_connection(stack, state.conn_config)
+
     {:ok, pid} =
       UpstreamConnection.start_link(
         parent: self(),
         session_id: state.session_id,
-        conn_config: state.conn_config
+        conn_config: upstream_conn_config
       )
 
     :ok = downstream([%M.AuthenticationOk{}], socket, state)

@@ -56,9 +56,9 @@ defmodule Electric.Postgres.Proxy.Injector do
 
   defp per_database_injector(connection) do
     case Keyword.get(connection, :database) do
-      "prisma_migrate_shadow_db" <> _ ->
-        Logger.debug("Connection to prisma shadow db: using transparent injector")
-        {Injector.Transparent, []}
+      "prisma_migrate_shadow_db" <> _ = database ->
+        Logger.debug("Connection to prisma shadow db: using Shadow injector")
+        {Injector.Shadow, [database: database]}
 
       _ ->
         nil

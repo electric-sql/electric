@@ -142,6 +142,10 @@ defmodule Electric.Postgres.Proxy.Injector.Electric do
   end
 
   defimpl Operation do
+    def upstream_connection(_electric, conn_config) do
+      conn_config
+    end
+
     def activate(electric, state, send) do
       {electric, state, send}
     end
