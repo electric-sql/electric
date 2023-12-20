@@ -21,6 +21,12 @@ default_write_to_pg_mode = "logical_replication"
 default_proxy_tracing_enable = false
 
 ###
+
+if config_env() == :dev do
+  source!(["#{config_env()}.env", System.get_env()])
+end
+
+###
 # Logger
 ###
 
