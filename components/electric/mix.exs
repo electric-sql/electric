@@ -69,7 +69,8 @@ defmodule Electric.MixProject do
       {:pg_protocol, github: "electric-sql/pg_protocol"},
       {:nimble_parsec, "~> 1.3"},
       {:postgrex, "~> 0.17", only: [:test]},
-      {:ecto_sql, "~> 3.10", only: [:test]}
+      {:ecto_sql, "~> 3.10", only: [:test]},
+      {:dotenvy, "~> 0.8"}
     ]
   end
 
