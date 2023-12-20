@@ -11,7 +11,10 @@ defmodule Electric.Config do
         {provider, []}
 
       {:error, :invalid_auth_mode} ->
-        {nil, [{"AUTH_MODE", {:error, "has invalid value: #{inspect(auth_mode)}"}}]}
+        error_str =
+          "has invalid value: #{inspect(auth_mode)}. Must be one of [\"secure\", \"insecure\"]"
+
+        {nil, [{"AUTH_MODE", {:error, error_str}}]}
 
       {:error, key, reason} ->
         {varname, _} = Keyword.fetch!(auth_opts, key)
@@ -41,7 +44,8 @@ defmodule Electric.Config do
     if String.trim(str) == "" do
       {:error, "erroneously set to an empty value"}
     else
-      {:error, "has invalid value: #{inspect(str)}"}
+      {:error,
+       "has invalid value: #{inspect(str)}. Must be one of #{inspect(~w[direct_writes logical_replication])}"}
     end
   end
 
@@ -59,14 +63,16 @@ defmodule Electric.Config do
     end
   end
 
-  @spec parse_log_level(binary) :: {:ok, Logger.level()} | {:error, binary}
+  @log_levels ~w[emergency alert critical error warning warn notice info debug]
+  @public_log_levels ~w[error warning info debug]
 
-  def parse_log_level(str)
-      when str in ~w[emergency alert critical error warning warn notice info debug],
-      do: {:ok, String.to_existing_atom(str)}
+  @spec parse_log_level(binary) :: {:ok, Logger.level()} | {:error, binary}
+  def parse_log_level(str) when str in @log_levels do
+    {:ok, String.to_existing_atom(str)}
+  end
 
   def parse_log_level(str) do
-    {:error, "has invalid value: #{inspect(str)}"}
+    {:error, "has invalid value: #{inspect(str)}. Must be one of #{inspect(@public_log_levels)}"}
   end
 
   @spec parse_pg_proxy_password(maybe_string) :: {:ok, maybe_string} | {:error, binary}
