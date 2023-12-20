@@ -71,9 +71,22 @@ export async function getMigrationNames(
  * @param migrationsFolder Folder where migrations are stored.
  * @returns An array of migrations.
  */
-export async function loadMigrations(
+async function loadMigrations(
   migrationsFolder: string
 ): Promise<Migration[]> {
+  const migrationMetaDatas = await loadMigrationsMetaData(migrationsFolder)
+  return migrationMetaDatas.map(makeMigration)
+}
+
+
+/**
+ * Loads the meta data of all migrations that are present in the provided migrations folder.
+ * @param migrationsFolder Folder where migrations are stored.
+ * @returns An array of migrations meta data.
+ */
+export async function loadMigrationsMetaData(
+  migrationsFolder: string
+): Promise<MetaData[]> {
   const dirNames = await getMigrationNames(migrationsFolder)
   const migrationPaths = dirNames.map((dirName) =>
     path.join(migrationsFolder, dirName, 'metadata.json')
@@ -81,7 +94,7 @@ export async function loadMigrations(
   const migrationMetaDatas = await Promise.all(
     migrationPaths.map(readMetadataFile)
   )
-  return migrationMetaDatas.map(makeMigration)
+  return migrationMetaDatas
 }
 
 /**

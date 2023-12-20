@@ -23,7 +23,7 @@ export class WebSocketNode extends EventEmitter implements Socket {
 
     this.socket.on('open', () => this.emit('open'))
     this.socket.on('message', (data) => this.emit('message', data))
-    this.socket.on('error', (_unusedError) =>
+    this.socket.on('error', (_unusedError) => 
       this.emit(
         'error',
         new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket error')

@@ -73,6 +73,7 @@ export interface Satellite {
     shapeDefinitions: ClientShapeDefinition[]
   ): Promise<ShapeSubscription>
   unsubscribe(shapeUuid: string): Promise<void>
+  mutexSnapshot(): Promise<Date>
 }
 
 export interface Client {

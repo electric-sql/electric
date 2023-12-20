@@ -109,6 +109,9 @@
       ],
       "util": [
         "./dist/util/index.d.ts"
+      ],
+      "cli/migrations": [
+        "./dist/cli/migrations/index.d.ts"
       ]
     }
   },
