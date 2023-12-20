@@ -7,7 +7,13 @@
 
 import Config
 
+### Static configuration
+
 config :ssl, protocol_version: [:"tlsv1.3", :"tlsv1.2"]
+
+config :electric, Electric.Postgres.CachedWal.Api, adapter: Electric.Postgres.CachedWal.EtsBacked
+
+### User configuration
 
 default_log_level = "info"
 default_auth_mode = "secure"
