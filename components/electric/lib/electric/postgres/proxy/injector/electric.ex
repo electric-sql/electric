@@ -111,10 +111,17 @@ defmodule Electric.Postgres.Proxy.Injector.Electric do
   def group_messages(msgs) do
     {current, final} =
       Enum.reduce(msgs, {[], []}, fn
-        %M.Query{} = msg, {[], f} -> {[], [{:simple, [msg]} | f]}
-        %M.Query{} = msg, {c, f} -> {[], [{:simple, [msg]}, {:extended, Enum.reverse(c)} | f]}
-        %M.Sync{} = msg, {c, f} -> {[], [{:extended, Enum.reverse([msg | c])} | f]}
-        m, {c, f} -> {[m | c], f}
+        %M.Query{} = msg, {[], f} ->
+          {[], [{:simple, [msg]} | f]}
+
+        %M.Query{} = msg, {c, f} ->
+          {[], [{:simple, [msg]}, {:extended, Enum.reverse(c)} | f]}
+
+        %type{} = msg, {c, f} when type in [M.Sync, M.Flush] ->
+          {[], [{:extended, Enum.reverse([msg | c])} | f]}
+
+        m, {c, f} ->
+          {[m | c], f}
       end)
 
     case {current, final} do
