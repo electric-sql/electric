@@ -69,8 +69,7 @@ defmodule Electric.Postgres.Proxy.UpstreamConnection do
   end
 
   def handle_continue({:authenticate, params}, state) do
-    user = Map.fetch!(params, :username)
-    database = Map.fetch!(params, :database)
+    %{username: user, database: database} = params
 
     Logger.debug("Authenticating to upstream database: #{user}@#{database}")
 
