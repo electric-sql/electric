@@ -31,6 +31,6 @@ export async function startGeneratingWebServerLogs (pgPool: Pool): Promise<void>
       generateWebServerLog()
     ]),
     rowGenerationFrequencyMs: 250,
-    rowGenerationLoggingFrequencyMs: 200,
+    rowGenerationFrequencyVariationMs: 200,
   })
 }
