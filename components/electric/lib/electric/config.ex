@@ -1,6 +1,30 @@
 defmodule Electric.Config do
   @type maybe_string :: binary | nil
 
+  @spec format_required_config_error(list) :: maybe_string
+  def format_required_config_error(potential_errors) when is_list(potential_errors) do
+    errors =
+      for {varname, {:error, str}} <- potential_errors do
+        "  * #{varname} " <> str
+      end
+
+    if errors != [] do
+      Electric.Errors.format_error(
+        :conf,
+        """
+        The following required configuration options have invalid or missing values:
+
+        #{Enum.join(errors, "\n\n")}
+        """,
+        """
+        Please review the official configuration reference at
+        https://electric-sql.com/docs/api/service#configuration-options
+        and double-check your values.
+        """
+      )
+    end
+  end
+
   @spec validate_auth_config(binary, keyword) ::
           {Electric.Satellite.Auth.provider() | nil, [{binary, {:error, binary}}]}
   def validate_auth_config(auth_mode, auth_opts) do

@@ -3,10 +3,11 @@ defmodule Electric.Errors do
 
   @type error_kind :: :init | :conn | :conf | :dbconf
 
+  @spec print_fatal_error(iodata) :: no_return
   @spec print_fatal_error(error_kind, String.t()) :: no_return
-  @spec print_fatal_error(error_kind, String.t(), String.t() | nil) :: no_return
-  def print_fatal_error(error_kind, message, extra \\ nil) do
-    print_error(error_kind, message, extra)
+  @spec print_fatal_error(error_kind, String.t(), String.t()) :: no_return
+  def print_fatal_error(error_iodata) when is_binary(error_iodata) or is_list(error_iodata) do
+    IO.puts(error_iodata)
 
     """
 
@@ -18,6 +19,13 @@ defmodule Electric.Errors do
     System.halt(1)
   end
 
+  def print_fatal_error(error_kind, message, extra \\ nil) do
+    format_error(error_kind, message, extra)
+    |> print_fatal_error()
+  end
+
+  @spec print_error(error_kind, String.t()) :: :ok
+  @spec print_error(error_kind, String.t(), String.t() | nil) :: :ok
   def print_error(error_kind, message, extra \\ nil) do
     format_error(error_kind, message, extra)
     |> IO.puts()
@@ -36,6 +44,8 @@ defmodule Electric.Errors do
   ▓ Visit https://electric-sql.com/docs/usage/installation/postgres
   ▓ to learn more about Electric's requirements for Postgres.
   """
+  @spec format_error(error_kind, String.t()) :: iolist
+  @spec format_error(error_kind, String.t(), String.t() | nil) :: iolist
   def format_error(error_kind, message, extra \\ nil) do
     [format_header(error_kind), "", message]
     |> append_extra(extra)

@@ -131,25 +131,8 @@ potential_errors =
       {"PG_PROXY_PORT", pg_proxy_port_config}
     ]
 
-errors =
-  for {varname, {:error, str}} <- potential_errors do
-    "  * #{varname} " <> str
-  end
-
-if errors != [] do
-  Electric.Errors.print_fatal_error(
-    :conf,
-    """
-    The following required configuration options have invalid or missing values:
-
-    #{Enum.join(errors, "\n\n")}
-    """,
-    """
-    Please review the official configuration reference at
-    https://electric-sql.com/docs/api/service#configuration-options
-    and double-check your values.
-    """
-  )
+if error = Electric.Config.format_required_config_error(potential_errors) do
+  Electric.Errors.print_fatal_error(error)
 end
 
 ###
