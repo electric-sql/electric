@@ -42,3 +42,14 @@ test('parse a query with join', (t) => {
     new QualifiedTablename('main', 'b'),
   ])
 })
+
+test('parse tablenames from windowed query (SQLite version >3.25)', (t) => {
+  const query = `
+    SELECT timestamp, value, 
+    avg(value) OVER (ORDER BY timestamp ROWS BETWEEN 3 PRECEDING AND 3 FOLLOWING) as moving_average
+    FROM monitoring ORDER BY timestamp
+  `
+  const results = parseTableNames(query, 'main')
+
+  t.deepEqual(results, [new QualifiedTablename('main', 'monitoring')])
+})
