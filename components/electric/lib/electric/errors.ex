@@ -1,7 +1,22 @@
 defmodule Electric.Errors do
   @margin "▓ "
 
-  @type error_kind :: :init | :conn | :conf | :dbconf
+  @type error_kind :: atom
+
+  def failed_to_start_child_error(error_kind, child_id, reason) do
+    format_error(
+      error_kind,
+      """
+      Failed to start child #{inspect(child_id)}:
+        #{inspect(reason)}
+      """,
+      """
+      Please file a new issue on GitHub[1], including the contents of this error.
+
+      [1]: https://github.com/electric-sql/electric/issues
+      """
+    )
+  end
 
   @spec print_fatal_error(iodata) :: no_return
   @spec print_fatal_error(error_kind, String.t()) :: no_return
@@ -87,6 +102,17 @@ defmodule Electric.Errors do
     ┌────────────────────────────────┐
     │  DATABASE CONFIGURATION ERROR  │
     ┕━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┙
+    """
+  end
+
+  defp format_header(module_alias) do
+    module_line = "  MODULE ERROR: " <> inspect(module_alias) <> "  "
+    n = byte_size(module_line)
+
+    """
+    ┌#{String.duplicate("─", n)}┐
+    │#{module_line}│
+    ┕#{String.duplicate("━", n)}┙
     """
   end
 
