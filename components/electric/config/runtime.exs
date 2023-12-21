@@ -69,7 +69,7 @@ default_log_level = "info"
 default_auth_mode = "secure"
 default_http_server_port = 5133
 default_pg_server_port = 5433
-default_pg_proxy_port = "65432"
+default_pg_proxy_port = 65432
 default_listen_on_ipv6 = true
 default_database_require_ssl = true
 default_database_use_ipv6 = true
@@ -116,6 +116,10 @@ pg_proxy_password_config =
   env!("PG_PROXY_PASSWORD", :string, nil)
   |> Electric.Config.parse_pg_proxy_password()
 
+{use_http_tunnel?, pg_proxy_port_config} =
+  env!("PG_PROXY_PORT", :string, nil)
+  |> Electric.Config.parse_pg_proxy_port(default_pg_proxy_port)
+
 potential_errors =
   auth_errors ++
     [
@@ -123,7 +127,8 @@ potential_errors =
       {"ELECTRIC_WRITE_TO_PG_MODE", write_to_pg_mode_config},
       {"LOGICAL_PUBLISHER_HOST", logical_publisher_host_config},
       {"LOG_LEVEL", log_level_config},
-      {"PG_PROXY_PASSWORD", pg_proxy_password_config}
+      {"PG_PROXY_PASSWORD", pg_proxy_password_config},
+      {"PG_PROXY_PORT", pg_proxy_port_config}
     ]
 
 errors =
@@ -213,14 +218,7 @@ connector_config =
 
     {:ok, pg_server_host} = logical_publisher_host_config
 
-    {use_http_tunnel?, proxy_port_str} =
-      case String.downcase(env!("PG_PROXY_PORT", :string, default_pg_proxy_port)) do
-        "http" -> {true, default_pg_proxy_port}
-        "http:" <> port_str -> {true, port_str}
-        port_str -> {false, port_str}
-      end
-
-    proxy_port = String.to_integer(proxy_port_str)
+    {:ok, proxy_port} = pg_proxy_port_config
 
     proxy_listener_opts =
       if listen_on_ipv6? do

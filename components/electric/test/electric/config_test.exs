@@ -62,4 +62,26 @@ defmodule Electric.ConfigTest do
                )
     end
   end
+
+  describe "parse_pg_proxy_port" do
+    test "uses default value if no value is set" do
+      port = :rand.uniform(65535)
+      assert {false, {:ok, port}} == parse_pg_proxy_port(nil, port)
+    end
+
+    test "validates valid port numbers" do
+      port = :rand.uniform(65535)
+      assert {false, {:ok, port}} == parse_pg_proxy_port(to_string(port), 1)
+    end
+
+    test "validates the http prefix" do
+      port = :rand.uniform(65536)
+      assert {true, {:ok, port}} == parse_pg_proxy_port("http", port)
+      assert {true, {:ok, 12345}} == parse_pg_proxy_port("hTTp:12345", port)
+    end
+
+    test "complains about invalid port numbers" do
+      assert {false, {:error, "has invalid value: \"foo\""}} == parse_pg_proxy_port("foo", 1)
+    end
+  end
 end

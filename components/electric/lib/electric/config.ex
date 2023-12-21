@@ -84,6 +84,25 @@ defmodule Electric.Config do
     end
   end
 
+  @spec parse_pg_proxy_port(maybe_string, pos_integer) ::
+          {boolean, {:ok, pos_integer} | {:error, binary}}
+  def parse_pg_proxy_port(nil, default_port), do: {false, {:ok, default_port}}
+
+  def parse_pg_proxy_port(str, default_port) do
+    case String.downcase(str) do
+      "http" -> {true, {:ok, default_port}}
+      "http:" <> port_str -> {true, parse_integer(port_str)}
+      port_str -> {false, parse_integer(port_str)}
+    end
+  end
+
+  defp parse_integer(str) do
+    case Integer.parse(str) do
+      {int, ""} when int > 0 -> {:ok, int}
+      _ -> {:error, "has invalid value: #{inspect(str)}"}
+    end
+  end
+
   @doc """
   Parse a PostgreSQL URI into a keyword list.
 
