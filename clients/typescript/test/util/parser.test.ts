@@ -2,6 +2,7 @@ import test from 'ava'
 
 import { isPotentiallyDangerous, parseTableNames } from '../../src/util/parser'
 import { QualifiedTablename } from '../../src/util/tablename'
+import parserCases from './parser.test.fixtures.json'
 
 test('selects are not dangerous', (t) => {
   const stmt = 'select foo from bar'
@@ -43,6 +44,52 @@ test('parse a query with join', (t) => {
   ])
 })
 
+test('parse tablenames from nested query', (t) => {
+  const query = `
+    SELECT
+      users.id,
+      users.username,
+      orders.order_number,
+      products.product_name
+    FROM
+      users
+      JOIN orders ON users.id = orders.user_id
+      JOIN (
+        SELECT
+          user_id,
+          product_name
+        FROM
+          order_details
+          JOIN products ON order_details.product_id = products.id
+        WHERE
+          order_details.quantity > 5
+      ) AS nested_table ON users.id = nested_table.user_id
+    WHERE
+      users.status = 'active';
+  `
+  const results = parseTableNames(query, 'main')
+
+  t.deepEqual(results, [
+    new QualifiedTablename('main', 'order_details'),
+    new QualifiedTablename('main', 'orders'),
+    new QualifiedTablename('main', 'products'),
+    new QualifiedTablename('main', 'users'),
+  ])
+})
+
+for (let i = 0; i < parserCases.testCases.length; i++) {
+  const testCase = parserCases.testCases[i]
+  test(`parse tablenames from query ${
+    testCase.name ?? testCase.query
+  }`, (t) => {
+    const results = parseTableNames(testCase.query, 'main')
+    const expectedResults = testCase.expectedResults.map(
+      (r) => new QualifiedTablename(r.namespace ?? 'main', r.tablename)
+    )
+    t.deepEqual(results, expectedResults)
+  })
+}
+
 test('parse tablenames from windowed query (SQLite version >3.25)', (t) => {
   const query = `
     SELECT timestamp, value, 
@@ -50,6 +97,5 @@ test('parse tablenames from windowed query (SQLite version >3.25)', (t) => {
     FROM monitoring ORDER BY timestamp
   `
   const results = parseTableNames(query, 'main')
-
   t.deepEqual(results, [new QualifiedTablename('main', 'monitoring')])
 })
