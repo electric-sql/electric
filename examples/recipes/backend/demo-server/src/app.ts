@@ -3,6 +3,7 @@ import { startGeneratingWebServerLogs } from './web-server-logs'
 import { startListeningToPgRequests } from './pg-request-listener'
 import { setupApi } from './api-setup'
 import { waitForPostgresConnection } from './pg-utils'
+import { startGeneratingMonitoringMetrics } from './monitoring-metrics'
 
 const API_PORT = parseInt(process.env.DEMO_APP_PORT ?? '3123')
 const pgPool = new Pool({
@@ -19,6 +20,7 @@ async function main (): Promise<void> {
   await waitForPostgresConnection(pgPool)
   void startListeningToPgRequests(pgPool, API_PORT)
   void startGeneratingWebServerLogs(pgPool)
+  void startGeneratingMonitoringMetrics(pgPool)
 }
 
 void main()
