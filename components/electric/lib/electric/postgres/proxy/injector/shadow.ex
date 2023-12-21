@@ -179,16 +179,6 @@ defmodule Electric.Postgres.Proxy.Injector.Shadow do
 
           {[%Simple{msgs: msgs, resp: types}], {shadow, state}}
 
-        # case validate_query(analysis) do
-        #   {:ok, analysis} ->
-        #     {[%Operation.Simple{stmts: analysis, tx?: Electric.requires_tx?(analysis)}],
-        #
-        # {electric, state}}
-
-        #   {:error, analysis} ->
-        #     {[%Operation.SyntaxError{error: analysis, msg: msg}], {electric, state}}
-        # end
-
         {:error, error} ->
           {[%Operation.SyntaxError{error: error, msg: msg}], {shadow, state}}
       end
