@@ -1,4 +1,4 @@
-lockfileVersion: '6.1'
+lockfileVersion: '6.0'
 
 settings:
   autoInstallPeers: true
@@ -107,9 +107,6 @@ importers:
       react-native-uuid:
         specifier: ^2.0.1
         version: 2.0.1
-      sqlite-parser:
-        specifier: ^1.0.1
-        version: 1.0.1
       squel:
         specifier: ^5.13.0
         version: 5.13.0
@@ -119,9 +116,6 @@ importers:
       uuid:
         specifier: ^9.0.0
         version: 9.0.0
-      walkjs:
-        specifier: ^3.2.4
-        version: 3.2.4
       ws:
         specifier: ^8.8.1
         version: 8.13.0
@@ -12651,12 +12645,6 @@ packages:
     resolution: {integrity: sha512-3HD8pSkZL+5YvYUI8nlvNILs61ALqq34xgmF+BHpqxe68yZIJ1H+sIVIODvni25+CcxHUxDyrTJUL0lE/m7afw==}
     dev: false
 
-  /sqlite-parser@1.0.1:
-    resolution: {integrity: sha512-/es+YmgQG+VFbwAQD0Nd0Mdzgky8rW3M85zcy2+Vtk3Sj5ydaMl/lopWPehsjsByGw/swVuXSBeMJFh47doRUw==}
-    engines: {node: '>=4'}
-    hasBin: true
-    dev: false
-
   /squel@5.13.0:
     resolution: {integrity: sha512-Fzd8zqbuqNwzodO3yO6MkX8qiDoVBuwqAaa3eKNz4idhBf24IQHbatBhLUiHAGGl962eGvPVRxzRuFWZlSf49w==}
     engines: {node: '>= 0.12.0'}
@@ -13568,6 +13556,7 @@ packages:
     resolution: {integrity: sha512-1FXk9E2Hm+QzZQ7z+McJiHL4NW1F2EzMu9Nq9i3zAaGqibafqYwCVU6WyWAuyQRRzOlxou8xZSyXLEN8oKj24g==}
     engines: {node: '>=4.2.0'}
     hasBin: true
+    dev: true
 
   /typescript@5.1.3:
     resolution: {integrity: sha512-XH627E9vkeqhlZFQuL+UsyAXEnibT0kWR2FWONlr4sTjvxyJYnyefgrkyECLzM5NenmKzRAy2rR/OlYLA1HkZw==}
@@ -13944,12 +13933,6 @@ packages:
     resolution: {integrity: sha512-ts/8E8l5b7kY0vlWLewOkDXMmPdLcVV4GmOQLyxuSswIJsweeFZtAsMF7k1Nszz+TYBQrlYRmzOnr398y1JemQ==}
     dependencies:
       makeerror: 1.0.12
-    dev: false
-
-  /walkjs@3.2.4:
-    resolution: {integrity: sha512-pBwB51XwCQr6YdfL2cD7xY/oAir9mNF0OrReFYxs3BC1Ft4tDdXGJOUVODthqYkomh3siIbbm/i6bg0pbGUM6g==}
-    dependencies:
-      typescript: 4.9.5
     dev: false
 
   /wcwidth@1.0.1:
