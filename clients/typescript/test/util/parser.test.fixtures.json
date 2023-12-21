@@ -39,6 +39,16 @@
         { "namespace": null, "tablename": "products" },
         { "namespace": null, "tablename": "users" }
       ]
+    },
+    {
+      "name": "nested query with multiple namespaces and tables",
+      "query": "SELECT\n  staff.id,\n  staff.full_name,\n  divisions.division_name,\n  projects.project_title\nFROM\n  corp.staff\n  JOIN company.divisions ON staff.division_id = divisions.id\n  LEFT JOIN (\n    SELECT\n      employee_id,\n      project_title\n    FROM\n      corp.employee_projects\n      JOIN company.projects ON employee_projects.project_id = projects.id\n    WHERE\n      projects.status = 'active'\n  ) AS active_projects ON staff.id = active_projects.employee_id\nWHERE\n  staff.salary > 60000;",
+      "expectedResults": [
+        {"namespace": "company", "tablename": "divisions"},
+        {"namespace": "company", "tablename": "projects"},
+        {"namespace": "corp", "tablename": "employee_projects"},
+        {"namespace": "corp", "tablename": "staff"}
+      ]
     }
   ]
 }
