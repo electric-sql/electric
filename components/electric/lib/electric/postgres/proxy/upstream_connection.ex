@@ -33,7 +33,7 @@ defmodule Electric.Postgres.Proxy.UpstreamConnection do
     connection = Connectors.get_connection_opts(conn_config, replication: false)
 
     Electric.reg(name(session_id))
-    Logger.metadata(session_id: session_id)
+    Logger.metadata(proxy_session_id: session_id)
 
     decoder = PgProtocol.Decoder.backend()
 
@@ -62,15 +62,21 @@ defmodule Electric.Postgres.Proxy.UpstreamConnection do
         _ -> []
       end
 
+    Logger.debug("Connecting to upstream server: #{inspect(host)}:#{port}")
+
     {:ok, conn} = :gen_tcp.connect(host, port, [active: true] ++ extra_options, 1000)
     {:noreply, %{state | conn: conn}, {:continue, {:authenticate, params}}}
   end
 
   def handle_continue({:authenticate, params}, state) do
+    %{username: user, database: database} = params
+
+    Logger.debug("Authenticating to upstream database: #{user}@#{database}")
+
     msg = %M.StartupMessage{
       params: %{
-        "user" => Map.fetch!(params, :username),
-        "database" => Map.fetch!(params, :database),
+        "user" => user,
+        "database" => database,
         "client_encoding" => "UTF-8",
         "application_name" => "electric"
       }

@@ -60,10 +60,14 @@ defprotocol Electric.Postgres.Proxy.Injector.Operation do
   """
 
   alias Electric.Postgres.Proxy.Injector.{Send, State}
+  alias Electric.Replication.Connectors
 
   @type op_stack() :: nil | t() | [t()]
   @type op() :: nil | t()
   @type result() :: {op(), State.t(), Send.t()}
+
+  @spec upstream_connection(t(), Connectors.config()) :: Connectors.config()
+  def upstream_connection(op, conn_config)
 
   @doc """
   Given a set of messages from the client returns an updated operation stack.
@@ -129,6 +133,10 @@ defmodule Operation.Impl do
     quote do
       import Injector.Operation.Impl
 
+      def upstream_connection(_op, conn_config) do
+        conn_config
+      end
+
       # no-op
       def recv_client(op, msgs, state) do
         {op, state}
@@ -168,7 +176,8 @@ defmodule Operation.Impl do
         {nil, state, send}
       end
 
-      defoverridable recv_client: 3,
+      defoverridable upstream_connection: 2,
+                     recv_client: 3,
                      activate: 3,
                      recv_server: 4,
                      send_client: 3,
@@ -264,6 +273,10 @@ end
 
 defimpl Operation, for: List do
   use Operation.Impl
+
+  def upstream_connection([op | _rest], conn_config) do
+    Operation.upstream_connection(op, conn_config)
+  end
 
   def recv_client([], _msgs, _state) do
     raise "empty command stack!"

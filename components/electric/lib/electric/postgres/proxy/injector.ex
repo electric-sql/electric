@@ -30,16 +30,18 @@ defmodule Electric.Postgres.Proxy.Injector do
 
       capture_mode_opts = Keyword.get(opts, :capture_mode, [])
 
-      default = Keyword.get(capture_mode_opts, :default, @default_mode)
-      per_user = Keyword.get(capture_mode_opts, :per_user, %{})
+      default_injector = Keyword.get(capture_mode_opts, :default, @default_mode)
 
       session_id = Keyword.get(connection, :session_id, 0)
 
-      mode = Map.get(per_user, connection[:username], default)
+      mode =
+        per_database_injector(connection) ||
+          per_user_injector(capture_mode_opts, connection) ||
+          default_injector
 
       capture =
         mode
-        |> default_capture_mode()
+        |> configure_capture_mode()
         |> initialise_capture_mode(connection)
 
       Logger.info("Initialising injector in capture mode #{inspect(capture || "default")}")
@@ -52,15 +54,26 @@ defmodule Electric.Postgres.Proxy.Injector do
     end
   end
 
-  defp default_capture_mode(nil) do
-    @default_mode
+  defp per_database_injector(connection) do
+    case Keyword.get(connection, :database) do
+      "prisma_migrate_shadow_db" <> _ = database ->
+        Logger.debug("Connection to prisma shadow db: using Shadow injector")
+        {Injector.Shadow, [database: database]}
+
+      _ ->
+        nil
+    end
   end
 
-  defp default_capture_mode(module) when is_atom(module) do
+  defp per_user_injector(opts, connection) do
+    get_in(opts, [:per_user, connection[:username]])
+  end
+
+  defp configure_capture_mode(module) when is_atom(module) do
     {module, []}
   end
 
-  defp default_capture_mode({module, params})
+  defp configure_capture_mode({module, params})
        when is_atom(module) and (is_list(params) or is_map(params)) do
     {module, params}
   end
