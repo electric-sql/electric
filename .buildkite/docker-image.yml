@@ -25,4 +25,4 @@ steps:
       - export ELECTRIC_IMAGE_NAME="${DOCKERHUB_REPO}/${IMAGE_NAME}"
       - cd ./components/electric
       - export ELECTRIC_VERSION=$(make --silent print_version_from_git)
-      - echo $ELECTRIC_IMAGE_NAME $ELECTRIC_VERSION
+      - make docker-build-ci-crossplatform
