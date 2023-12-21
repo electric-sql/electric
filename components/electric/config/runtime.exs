@@ -213,7 +213,7 @@ enable_proxy_tracing? = env!("PROXY_TRACING_ENABLE", :boolean, default_proxy_tra
 
 config :electric, Electric.Postgres.Proxy.Handler.Tracing,
   enable: enable_proxy_tracing?,
-  colour: false
+  colour: true
 
 # This is intentionally an atom and not a boolean - we expect to add `:extended` state
 telemetry =
@@ -227,5 +227,9 @@ telemetry =
 config :electric, :telemetry, telemetry
 
 if config_env() in [:dev, :test] do
-  Code.require_file("runtime.#{config_env()}.exs", __DIR__)
+  path = Path.expand("runtime.#{config_env()}.exs", __DIR__)
+
+  if File.exists?(path) do
+    Code.require_file(path)
+  end
 end

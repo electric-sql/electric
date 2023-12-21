@@ -7,3 +7,5 @@ import Config
 #   handle_sasl_reports: true
 
 config :electric, disable_listeners: true
+
+config :electric, Electric.Postgres.Proxy.Handler.Tracing, colour: false
