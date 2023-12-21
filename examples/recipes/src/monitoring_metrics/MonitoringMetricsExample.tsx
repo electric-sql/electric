@@ -2,6 +2,7 @@ import { Box, Container } from "@mui/material"
 import { NavigationBar } from "../components/NavigationBar"
 import { useEffect } from "react"
 import { useElectric } from "../electric/ElectricWrapper"
+import { MonitoringChart } from "./MonitoringChart"
 
 export const MonitoringMetricsExample = () => {
   const { db } = useElectric()!
@@ -22,6 +23,7 @@ export const MonitoringMetricsExample = () => {
     <Box>
       <NavigationBar title="Monitoring Metrics" />
       <Container maxWidth="md" sx={{ py: 4 }}>
+        <MonitoringChart />
       </Container>
     </Box>
   )

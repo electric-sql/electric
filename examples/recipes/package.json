@@ -28,6 +28,7 @@
     "@fontsource/roboto": "^5.0.8",
     "@mui/icons-material": "^5.14.19",
     "@mui/material": "^5.14.20",
+    "@mui/x-charts": "^6.18.3",
     "electric-sql": "^0.8.2",
     "eslint-plugin-react": "^7.33.2",
     "react": "^18.2.0",
