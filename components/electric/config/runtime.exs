@@ -23,7 +23,7 @@ default_proxy_tracing_enable = false
 ###
 
 if config_env() in [:dev, :test] do
-  source!(["#{config_env()}.env", "#{config_env()}.env.local", System.get_env()])
+  source!([".env.#{config_env()}", ".env.#{config_env()}.local", System.get_env()])
 end
 
 ###
