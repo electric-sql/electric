@@ -60,6 +60,7 @@ defprotocol Electric.Postgres.Proxy.Injector.Operation do
   """
 
   alias Electric.Postgres.Proxy.Injector.{Send, State}
+  alias Electric.Replication.Connectors
 
   @type op_stack() :: nil | t() | [t()]
   @type op() :: nil | t()
