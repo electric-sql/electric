@@ -50,7 +50,7 @@ defmodule Electric.Plug.SatelliteWebsocketPlug do
 
   defp check_if_valid_upgrade(%Plug.Conn{} = conn) do
     with {:error, reason} <- Bandit.WebSocket.UpgradeValidation.validate_upgrade(conn) do
-      Logger.debug("Clients WebSocket connection failed with reason: #{reason}")
+      Logger.debug("Client WebSocket connection failed with reason: #{reason}")
       {:error, 400, "Bad request"}
     end
   end
