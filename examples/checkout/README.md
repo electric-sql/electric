@@ -76,6 +76,12 @@ npm run client:generate
 # or `npm run client:watch`` to re-generate whenever the DB schema changes
 ```
 
+Load the stores catalog into the database:
+
+```shell
+npm run db:load-data
+```
+
 Start your app:
 
 ```sh
@@ -124,6 +130,12 @@ Edit the `./.env` file and set `ELECTRIC_SUPABASE_URL`,  `ELECTRIC_SUPABASE_ANON
 
 Edit the `./db/migrations/02-create_process_item_trigger.sql` file so that the `"Authorization":"Bearer xxxx"` "Bearer Token" value is that of the `service_roll` API key you retrieved above.
 
+Also, edit the URL of the edge function so that the hostname is the "Project URL" you retrieved above. Leave the `/v1/process` after the hostname in place. The resulting URL should looks like:
+
+```
+'https://qwertyuiopasdfghjklz.supabase.co/functions/v1/process'
+```
+
 ### 8. Deploy the Edge Function
 
 To deploy the "process" edge function from `./supabase/function/process` run this command with the "Project reference id" you retrieved above.
@@ -147,6 +159,12 @@ To apply the migrations to the database, run:
 
 ```sh
 node ./db/migrate.js
+```
+
+Load the stores catalog into the database:
+
+```shell
+npm run db:load-data
 ```
 
 Generate your [type-safe client](https://electric-sql.com/docs/usage/data-access/client):

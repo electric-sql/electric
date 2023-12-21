@@ -6,7 +6,7 @@ name: checkout-hosted-supabase
 
 services:
   electric:
-    container_name: electric
+    container_name: electric-checkout-demo
     image: electricsql/electric:0.8
     init: true
     environment:
