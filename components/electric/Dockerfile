@@ -22,7 +22,6 @@ COPY Makefile /app/
 
 COPY mix.* /app/
 RUN mix deps.get
-COPY config/config.exs /app/config/
 RUN mix deps.compile
 
 COPY lib /app/lib/
