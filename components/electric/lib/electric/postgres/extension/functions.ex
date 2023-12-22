@@ -9,14 +9,14 @@ defmodule Electric.Postgres.Extension.Functions do
 
   require EEx
 
-  sql_files =
-    "functions/**/*.sql.eex"
-    |> Path.expand(__DIR__)
-    |> Path.wildcard()
+  @template_dir "priv/sql_function_templates"
+
+  template_dir_path = Application.app_dir(:electric, @template_dir)
+  sql_template_paths = Path.wildcard(template_dir_path <> "/**/*.sql.eex")
 
   function_paths =
-    for path <- sql_files do
-      relpath = Path.relative_to(path, Path.expand("./functions", __DIR__))
+    for path <- sql_template_paths do
+      relpath = Path.relative_to(path, template_dir_path)
       name = path |> Path.basename(".sql.eex") |> String.to_atom()
       {relpath, name}
     end
@@ -64,7 +64,7 @@ defmodule Electric.Postgres.Extension.Functions do
   end
 
   defp eval_template(relpath) do
-    Path.join([Path.expand(__DIR__), "functions", relpath])
+    Path.join(Application.app_dir(:electric, @template_dir), relpath)
     |> EEx.compile_file()
     |> Code.eval_quoted([], __ENV__)
     |> elem(0)
