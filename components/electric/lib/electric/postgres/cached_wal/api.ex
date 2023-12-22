@@ -33,8 +33,8 @@ defmodule Electric.Postgres.CachedWal.Api do
 
   @callback telemetry_stats() :: stats() | nil
 
-  @default_adapter Application.compile_env!(:electric, [__MODULE__, :adapter])
-  def default_module(), do: @default_adapter
+  def default_module,
+    do: Application.fetch_env!(:electric, __MODULE__) |> Keyword.fetch!(:adapter)
 
   @doc """
   Check if the given LSN falls into the caching window maintained by the cached WAL implementation.
@@ -43,7 +43,7 @@ defmodule Electric.Postgres.CachedWal.Api do
   guarantee data consistency via the replication stream alone.
   """
   @spec lsn_in_cached_window?(module(), wal_pos) :: boolean
-  def lsn_in_cached_window?(module \\ @default_adapter, lsn) do
+  def lsn_in_cached_window?(module \\ default_module(), lsn) do
     module.lsn_in_cached_window?(lsn)
   end
 
@@ -53,7 +53,7 @@ defmodule Electric.Postgres.CachedWal.Api do
   Returns nil if the cached WAL hasn't processed any non-empty transactions yet.
   """
   @spec get_current_position(module()) :: wal_pos | nil
-  def get_current_position(module \\ @default_adapter) do
+  def get_current_position(module \\ default_module()) do
     module.get_current_position()
   end
 
@@ -67,7 +67,7 @@ defmodule Electric.Postgres.CachedWal.Api do
   """
   @spec next_segment(module(), wal_pos()) ::
           {:ok, segment(), new_position :: wal_pos()} | :latest | {:error, :lsn_too_old}
-  def next_segment(module \\ @default_adapter, wal_pos) do
+  def next_segment(module \\ default_module(), wal_pos) do
     module.next_segment(wal_pos)
   end
 
@@ -79,7 +79,7 @@ defmodule Electric.Postgres.CachedWal.Api do
   as soon as a new segment becomes available in the cache.
   """
   @spec request_notification(module(), wal_pos()) :: {:ok, await_ref()} | {:error, term()}
-  def request_notification(module \\ @default_adapter, wal_pos) do
+  def request_notification(module \\ default_module(), wal_pos) do
     module.request_notification(wal_pos)
   end
 
@@ -87,22 +87,22 @@ defmodule Electric.Postgres.CachedWal.Api do
   Cancel a notification request issued previously by `request_notification/2`.
   """
   @spec cancel_notification_request(module(), await_ref()) :: :ok
-  def cancel_notification_request(module \\ @default_adapter, await_ref) do
+  def cancel_notification_request(module \\ default_module(), await_ref) do
     module.cancel_notification_request(await_ref)
   end
 
   @spec parse_wal_position(module(), binary()) :: {:ok, wal_pos()} | :error
-  def parse_wal_position(module \\ @default_adapter, bin) do
+  def parse_wal_position(module \\ default_module(), bin) do
     module.parse_wal_position(bin)
   end
 
   @spec serialize_wal_position(module(), wal_pos()) :: binary()
-  def serialize_wal_position(module \\ @default_adapter, wal_pos) do
+  def serialize_wal_position(module \\ default_module(), wal_pos) do
     module.serialize_wal_position(wal_pos)
   end
 
   @spec emit_telemetry_stats(module()) :: :ok
-  def emit_telemetry_stats(module \\ @default_adapter, event) do
+  def emit_telemetry_stats(module \\ default_module(), event) do
     case module.telemetry_stats() do
       nil -> :ok
       stats -> Metrics.non_span_event(event, stats)

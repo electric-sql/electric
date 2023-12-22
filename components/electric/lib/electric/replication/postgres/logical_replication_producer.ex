@@ -82,12 +82,10 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     publication = repl_opts.publication
     slot = repl_opts.slot
 
-    Logger.debug("#{__MODULE__} init:: publication: '#{publication}', slot: '#{slot}'")
-    Logger.info("Starting replication from #{origin}")
+    Logger.debug("#{__MODULE__}.init: publication: '#{publication}', slot: '#{slot}'")
 
-    Logger.info(
-      "Connection settings: #{conn_opts |> Map.put(:password, ~c"******") |> inspect()}"
-    )
+    Logger.info("Starting replication from #{origin}")
+    Logger.info("#{inspect(__MODULE__)}.init(#{inspect(Client.sanitize_conn_opts(conn_opts))})")
 
     with {:ok, conn} <- Client.connect(conn_opts),
          {:ok, _} <- Client.create_slot(conn, slot),

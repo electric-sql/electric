@@ -404,7 +404,7 @@ defmodule Electric.Postgres.Extension.SchemaCache do
 
   @impl GenServer
   def handle_continue({:close, conn}, state) do
-    :ok = :epgsql.close(conn)
+    :ok = Electric.Replication.Postgres.Client.close(conn)
     {:noreply, state}
   end
 

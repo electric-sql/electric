@@ -25,8 +25,8 @@ defmodule Electric.Replication.Postgres.Writer do
   def init(opts) do
     conn_config = Keyword.fetch!(opts, :conn_config)
     origin = Connectors.origin(conn_config)
-
-    :gproc.reg(name(origin))
+    name = name(origin)
+    Electric.reg(name)
 
     Logger.metadata(origin: origin)
 
@@ -76,8 +76,8 @@ defmodule Electric.Replication.Postgres.Writer do
   # Private functions
   ###
 
-  defp name(name) do
-    {:n, :l, {__MODULE__, name}}
+  defp name(origin) do
+    Electric.name(__MODULE__, origin)
   end
 
   defp send_transaction(tx, _pos, state) do

@@ -14,15 +14,15 @@ defmodule Electric.Postgres.Proxy.EctoTest do
     port = 9931
     loader = {SchemaLoader.Epgsql, []}
 
-    conn_config = [
+    connector_config = [
       origin: "my_origin",
-      connection: context.pg_config,
+      connection: context.conn_opts,
       proxy: [password: "password", listen: [port: port]]
     ]
 
     {:ok, _proxy} =
       start_supervised({Electric.Postgres.Proxy,
-       conn_config: conn_config,
+       connector_config: connector_config,
        handler_config: [
          loader: loader
          # injector: [capture_mode: Electric.Postgres.Proxy.Injector.Capture.Transparent]

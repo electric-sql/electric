@@ -23,7 +23,7 @@ defmodule Electric.Postgres.Proxy.Handler do
               injector_opts: [],
               injector: nil,
               loader: nil,
-              conn_config: nil,
+              connector_config: nil,
               connection: nil,
               decoder: nil,
               session_id: nil,
@@ -40,7 +40,7 @@ defmodule Electric.Postgres.Proxy.Handler do
     @type t() :: %__MODULE__{
             authenticated?: boolean(),
             authentication: nil | auth_type(),
-            conn_config: Connectors.config(),
+            connector_config: Connectors.config(),
             connection: nil | pid(),
             database: nil | String.t(),
             decoder: PgProtocol.Decoder.t(),
@@ -54,13 +54,13 @@ defmodule Electric.Postgres.Proxy.Handler do
           }
   end
 
-  @spec initial_state(Electric.Replication.Connectors.config(), options()) :: S.t()
-  def initial_state(conn_config, proxy_opts) do
+  @spec initial_state(Connectors.config(), options()) :: S.t()
+  def initial_state(connector_config, proxy_opts) do
     {loader, loader_opts} = Keyword.get(proxy_opts, :loader, {SchemaCache, []})
-    password = conn_config |> get_in([:proxy, :password]) |> validate_password()
+    password = connector_config |> get_in([:proxy, :password]) |> validate_password()
 
     %S{
-      conn_config: conn_config,
+      connector_config: connector_config,
       loader: {loader, loader_opts},
       decoder: PgProtocol.Decoder.frontend(),
       injector_opts: Keyword.get(proxy_opts, :injector, []),
@@ -228,11 +228,11 @@ defmodule Electric.Postgres.Proxy.Handler do
   defp authenticated(socket, state) do
     Logger.debug("Starting upstream connection: #{inspect(state.upstream)}")
 
-    %{loader: {loader_module, loader_opts}, conn_config: conn_config} = state
+    %{loader: {loader_module, loader_opts}, connector_config: connector_config} = state
 
-    {:ok, loader_conn} = loader_module.connect(conn_config, loader_opts)
+    {:ok, loader_conn} = loader_module.connect(connector_config, loader_opts)
 
-    {:ok, injector} =
+    {:ok, {stack, _state} = injector} =
       state.injector_opts
       |> Keyword.merge(loader: {loader_module, loader_conn})
       |> Injector.new(
@@ -241,11 +241,16 @@ defmodule Electric.Postgres.Proxy.Handler do
         database: state.database
       )
 
+    # allow the injector to configure the upstream connection.  required in order for prisma's
+    # connections to the shadow db to ignore the default upstream database and actually connect
+    # to this ephemeral db
+    proxy_connector_config = Injector.Operation.upstream_connection(stack, connector_config)
+
     {:ok, pid} =
       UpstreamConnection.start_link(
         parent: self(),
         session_id: state.session_id,
-        conn_config: state.conn_config
+        connector_config: proxy_connector_config
       )
 
     :ok = downstream([%M.AuthenticationOk{}], socket, state)
@@ -254,7 +259,7 @@ defmodule Electric.Postgres.Proxy.Handler do
   end
 
   defp authentication_failed(username, socket, state) do
-    # This response is wrong somehow -- psql doesn't respond in the way 
+    # This response is wrong somehow -- psql doesn't respond in the way
     # it does when you enter the wrong password against a real db
     # Docs say that options are the various auth messages or an ErrorResponse
     # so maybe it's something about my ErrorResponse that's wrong?

@@ -48,7 +48,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
     plug =
       {Electric.Plug.SatelliteWebsocketPlug,
        auth_provider: Auth.provider(),
-       pg_connector_opts: [origin: "fake_origin"],
+       connector_config: [origin: "fake_origin"],
        subscription_data_fun: ctx.subscription_data_fun}
 
     start_link_supervised!({Bandit, port: port, plug: plug})

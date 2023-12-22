@@ -20,11 +20,18 @@ Supabase is an open source Firebase alternative. It provides a Postgres database
 5. [Verifying Electric initialisation](#5-verifying-electric-initialisation)
 6. [Electrifying tables](#6-electrifying-tables)
 
+Using other Supabase tools with Electric:
+
+- [Supabase Auth](#supabase-auth)
+- [Supabase Edge Functions](#supabase-edge-functions)
+
 ### 1. Setting up a Supabase Postgres
 
 If you don't yet have a Supabase account visit [supabase.com](https://supabase.com) and create one.
 
 Log in to your Supabase dashboard and click "New Project". In the form enter a name for the database, and a password that will be used to connect to it. Make a note of this password and save it somewhere secure.
+
+![New Project](./supabase/new-project.png)
 
 Select an AWS region for your database to be hosted in. To reduce latency, we recommend that this is close to, or ideally in same region as, your Electric sync service.
 
@@ -38,6 +45,8 @@ All Supabase Postgres instances come with logical replication enabled and the pe
 
 Go to "Project Settings" (look for the gear icon at the bottom of the icon menu on the left hand side of the page) and open the "Database" section. Under the heading "Connection string" select the `URI` tab. Copy the connection string shown and save it somewhere.
 
+![Connection Details](./supabase/connection-details.png)
+
 You will use this as the value for the `DATABASE_URL` in your [Electric sync service configuration](../../api/service.md).
 
 :::caution
@@ -48,13 +57,15 @@ Do not use the "Connection Pool" connection string displayed a little further do
 
 Now open the "API" section of the project settings. Scroll down to the "JWT settings". Reveal and copy the "JWT Secret" value. Save it somewhere secure.
 
+![JWT Key](./supabase/jwt-key.png)
+
 You will use this as the value for `AUTH_JWT_KEY` in your [Electric sync service configuration](../../api/service.md).
 
 ### 4. Configuring Electric to connect to Supabase
 
 Run your [Electric sync service](../../api/service), either locally or [via one of the other deployment options](./index.md), with the following [configuration options](../../api/service.md#configuration-options):
 
-- set `AUTH_JWT_ALG` to `HS512` to enable secure auth mode with the right signing algorithm
+- set `AUTH_JWT_ALG` to `HS256` to enable secure auth mode with the right signing algorithm
 - set `AUTH_JWT_KEY` to the "JWT Secret" value you retrieved in step 3 above
 - set `DATABASE_URL` to the connection string you retrieved in step 2 above
 - set `ELECTRIC_WRITE_TO_PG_MODE` to `direct_writes`
@@ -64,7 +75,7 @@ Depending on how you run Electric these could be passed as arguments to Docker, 
 
 ```shell
 docker run \
-    -e "AUTH_JWT_ALG=HS512" \
+    -e "AUTH_JWT_ALG=HS256" \
     -e "AUTH_JWT_KEY=..." \
     -e "DATABASE_URL=..." \
     -e "ELECTRIC_WRITE_TO_PG_MODE=direct_writes" \
@@ -77,9 +88,15 @@ docker run \
 
 This will start Electric and connect it to your Supabase database. Logs will be printed to the terminal allowing you to see any errors that may occur.
 
+:::info
+Supabase support was enabled in Electric v0.8, you should ensure that docker pulls at least that version. You can specifically use 0.8 by using the tagged version: `electricsql/electric:0.8`.
+:::
+
 ### 5. Verifying Electric initialisation
 
 You can verify that Electric has initialised your database sucessfully using the Supabase dashboard. Select your project, then go to the "Table Editor" on the navigation menu. You should see a left-hand side menu listing any tables in your database with a "Schema" menu above.
+
+![Verifying Electric Schema](./supabase/schema.png)
 
 Click this menu, and check that there is now an `electric` schema in your Postgres database. This confirms that the sync service has successfully initialised your database.
 
@@ -106,7 +123,7 @@ ELECTRIC ENABLE
 This will opt the `items` table in your public schema in to sync via Electric.
 
 :::caution
-Electric does not yet support permissions. Electrified tables are exposed to the public Internet.
+The permissions system for Electric is still in development. Electrified tables are exposed to the public Internet. [See our roadmap for details](/docs/reference/roadmap).
 :::
 
 :::caution
@@ -157,48 +174,10 @@ const conn = await ElectricDatabase.init('myApp.db', '')
 const electric = await electrify(conn, schema, config)
 ```
 
-You can see an example of this pattern in our [Checkout Example](https://github.com/electric-sql/electric/blob/main/examples/checkout/)
+You can see an example of this pattern in our [Checkout Example](../../examples/checkout.md).
 
 ### Supabase Edge Functions
 
-Many apps need to run code on the server when users take actions; a great way to do this with local-first apps built with Electric is using [event sourcing](../event-sourcing). Using a combination of a Postgres trigger and a [Supabase Edge Function](https://supabase.com/docs/guides/functions), you can run server side code when your database records are synced to the server. These triggers can run on various events within the database, such as inserting, updating and deleting rows in a database.
+Many apps need to run code on the server in response to user actions. For example, to handle [secure transactions](/blog/2023/12/15/secure-transactions-with-local-first).
 
-First, you need to ensure that the `pg_net` extension is enabled for your project - this is an extension that enables you to call an Edge Function url via SQL. In the dashboard go to "Database" -> "Extensions" and search for `pg_net`, and ensure it is toggled on.
-
-To create an Edge Function for your app, follow the instructions in the [Supabase Auth documentation](https://supabase.com/docs/guides/functions).
-
-Finally, you need to configure a trigger to call the Edge Function. Supabase has great documentation on [Postgres Triggers](https://supabase.com/docs/guides/database/postgres/triggers).
-
-The "AFTER INSERT" trigger in the example below will be called whenever a new row in "my_table" is synced to the server. It then uses the `pg_net` extension to call an Edge Function at its URL. The Edge Function is passed a JSON body with the `id` of the new row inserted; it can use this to retrieve the row using the Supabase Client API and process it.
-
-```sql
--- Drop any previous version of the trigger and function
-DROP TRIGGER IF EXISTS "my_edge_function_trigger" ON "public"."my_table";
-DROP FUNCTION IF EXISTS call_my_edge_function_trigger();
-
--- The function called by the trigger
-CREATE FUNCTION call_my_edge_function_trigger() RETURNS trigger AS $$
-BEGIN
-  PERFORM net.http_post(
-    'https://YOUR-SUPABASE-HOST.supabase.co/functions/v1/my_edge_function',
-    ('{"id": "' || new.id || '"}')::jsonb,
-    '{}'::jsonb,
-    '{"Content-type":"application/json","Authorization":"YOUR-SERVICE-ROLL-KEY"}'::jsonb
-  );
-  RETURN NULL;
-END;
-$$ LANGUAGE plpgsql;
-
--- Configure the function to be called by an "AFTER INSERT" trigger
-CREATE TRIGGER "my_edge_function_trigger" AFTER INSERT
-ON "public"."my_table" FOR EACH ROW
-EXECUTE FUNCTION call_my_edge_function_trigger();
-
--- This next line is required to ensure that triggers on the table are called
--- as a result of the Electric sync
-ALTER TABLE "public"."my_table" ENABLE ALWAYS TRIGGER my_edge_function_trigger;
-```
-
-This code can either be run directly against your Postgres via the Supabase console, or you can include it in your database migrations.
-
-You can see an example of this pattern in our [Checkout Example](https://github.com/electric-sql/electric/blob/main/examples/checkout/).
+A great way to do this with Supabase is to use a combination of Postgres triggers and Edge Functions. This pattern is documented in the [Supabase event sourcing guide](../event-sourcing/supabase.md).

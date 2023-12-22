@@ -18,6 +18,10 @@ defmodule Electric.Postgres.Proxy.Injector.Transparent do
   end
 
   defimpl Operation do
+    def upstream_connection(_transparent, connector_config) do
+      connector_config
+    end
+
     def activate(transparent, state, send) do
       {transparent, state, send}
     end

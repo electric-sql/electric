@@ -111,10 +111,17 @@ defmodule Electric.Postgres.Proxy.Injector.Electric do
   def group_messages(msgs) do
     {current, final} =
       Enum.reduce(msgs, {[], []}, fn
-        %M.Query{} = msg, {[], f} -> {[], [{:simple, [msg]} | f]}
-        %M.Query{} = msg, {c, f} -> {[], [{:simple, [msg]}, {:extended, Enum.reverse(c)} | f]}
-        %M.Sync{} = msg, {c, f} -> {[], [{:extended, Enum.reverse([msg | c])} | f]}
-        m, {c, f} -> {[m | c], f}
+        %M.Query{} = msg, {[], f} ->
+          {[], [{:simple, [msg]} | f]}
+
+        %M.Query{} = msg, {c, f} ->
+          {[], [{:simple, [msg]}, {:extended, Enum.reverse(c)} | f]}
+
+        %type{} = msg, {c, f} when type in [M.Sync, M.Flush] ->
+          {[], [{:extended, Enum.reverse([msg | c])} | f]}
+
+        m, {c, f} ->
+          {[m | c], f}
       end)
 
     case {current, final} do
@@ -135,6 +142,10 @@ defmodule Electric.Postgres.Proxy.Injector.Electric do
   end
 
   defimpl Operation do
+    def upstream_connection(_electric, connector_config) do
+      connector_config
+    end
+
     def activate(electric, state, send) do
       {electric, state, send}
     end
@@ -271,7 +282,7 @@ defmodule Electric.Postgres.Proxy.Injector.Electric do
       end
     end
 
-    # handle message groups with the full [parse, [describe], bind, execute] sequence included in 
+    # handle message groups with the full [parse, [describe], bind, execute] sequence included in
     # a single packet (as opposed to a [parse, describe, {sync, flush}], [bind, execute, sync]
     # sequence which is split over two packets, with a sync/flush between)
     defp bind_execute(bind, msgs, state) do
