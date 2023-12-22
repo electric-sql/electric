@@ -37,24 +37,17 @@ defmodule Electric.Plug.ProxyWebsocketPlug do
   end
 
   defp upgrade_to_websocket(conn, websocket_opts) do
-    with {:ok, conn} <- check_if_valid_upgrade(conn) do
-      conn
-      |> upgrade_adapter(
-        :websocket,
-        {Electric.Postgres.Proxy.WebsocketServer, websocket_opts, []}
-      )
-    else
-      {:error, code, body} ->
-        Logger.debug("Clients WebSocket connection failed with reason: #{body}")
-        send_resp(conn, code, body)
-    end
-  end
+    case Bandit.WebSocket.UpgradeValidation.validate_upgrade(conn) do
+      :ok ->
+        upgrade_adapter(
+          conn,
+          :websocket,
+          {Electric.Postgres.Proxy.WebsocketServer, websocket_opts, []}
+        )
 
-  defp check_if_valid_upgrade(%Plug.Conn{} = conn) do
-    if Bandit.WebSocket.Handshake.valid_upgrade?(conn) do
-      {:ok, conn}
-    else
-      {:error, 400, "Bad request"}
+      {:error, reason} ->
+        Logger.debug("Client WebSocket connection failed with reason: #{reason}")
+        send_resp(conn, 400, "Bad request")
     end
   end
 end

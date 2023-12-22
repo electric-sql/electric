@@ -142,9 +142,17 @@ defmodule Electric.Replication.Postgres.Client do
            conn,
            ~s|CREATE_REPLICATION_SLOT "#{slot_name}" LOGICAL pgoutput NOEXPORT_SNAPSHOT|
          ) do
-      {:ok, _, _} -> {:ok, slot_name}
+      {:ok, _, _} ->
+        {:ok, slot_name}
+
       # TODO: Verify that the subscription references the correct publication
-      {:error, {_, _, _, :duplicate_object, _, _}} -> {:ok, slot_name}
+      {:error, {:error, :error, _pg_error_code, :duplicate_object, _, _}} ->
+        {:ok, slot_name}
+
+      {:error,
+       {:error, :error, _pg_error_code, :object_not_in_prerequisite_state,
+        "logical decoding requires wal_level >= logical", _c_stacktrace}} ->
+        {:error, :wal_level_not_logical}
     end
   end
 

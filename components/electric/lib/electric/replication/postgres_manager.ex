@@ -114,8 +114,19 @@ defmodule Electric.Replication.PostgresConnectorMng do
         state = fallback_to_nossl(state)
         {:noreply, state, {:continue, :init}}
 
-      error ->
+      {:error, reason} = error ->
         Logger.error("Initialization of Postgres state failed with reason: #{inspect(error)}.")
+
+        Electric.Errors.print_error(
+          :conn,
+          """
+          Failed to initialize Postgres state:
+            #{inspect(error, pretty: true, width: 120)}
+
+          """,
+          extra_error_description(reason)
+        )
+
         {:noreply, schedule_retry(:init, state)}
     end
   end
@@ -129,17 +140,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
         state = %State{state | status: :subscribing, pg_connector_sup_monitor: ref}
         {:noreply, state, {:continue, :subscribe}}
 
-      {:error,
-       {{:shutdown,
-         {:failed_to_start_child, :postgres_producer,
-          {:bad_return_value,
-           {:error,
-            {:error, :error, "55006", :object_in_use, "replication slot" <> _ = msg,
-             _c_stacktrace}}}}}, _supervisor_spec}} ->
-        Logger.error(
-          "Initialization of replication connection to Postgres failed with reason: #{msg}. Another instance of Electric appears to be connected to this database."
-        )
-
+      :error ->
         {:noreply, schedule_retry(:establish_repl_conn, state)}
     end
   end
@@ -313,5 +314,41 @@ defmodule Electric.Replication.PostgresConnectorMng do
       | connector_config: connector_config,
         conn_opts: Connectors.get_connection_opts(connector_config)
     }
+  end
+
+  defp extra_error_description(:invalid_authorization_specification) do
+    """
+    The database appears to have been configured to only accept connections
+    encrypted with SSL. Make sure you configure Electric with
+    DATABASE_REQUIRE_SSL=true.
+    """
+  end
+
+  defp extra_error_description(reason)
+       when reason in [:ssl_not_available, {:ssl_negotiation_failed, :closed}] do
+    """
+    The database appears to have been configured to reject connections
+    encrypted with SSL. Double-check your database configuration or
+    restart Electric with DATABASE_REQUIRE_SSL=false.
+    """
+  end
+
+  defp extra_error_description(%MatchError{
+         term: {:error, {:error, :error, _code, :insufficient_privilege, _msg, _c_stacktrace}}
+       }) do
+    """
+    The Postgres role used by Electric does not have sufficient privileges.
+
+    Electric needs to be able to create and manage its internal schema and to open a replication connection
+    to the database. Make sure that the role included in DATABASE_URL has the CREATE ON DATABASE privilege
+    and the REPLICATION role attribute.
+    """
+  end
+
+  defp extra_error_description(_) do
+    """
+    Double-check the value of DATABASE_URL and make sure your database
+    is running and can be reached using the connection URL in DATABASE_URL.
+    """
   end
 end
