@@ -11,7 +11,7 @@ export const MonitoringChart = () => {
 
   // The size of the time window to show data for
   const [ viewWindowSeconds, setViewWindowSeconds ] = useState(60)
-  
+
   // The size of the "buckets" for which the data will be aggregated
   const [ aggregationWindowSeconds, setAggregationWindowSeconds ] = useState(5)
 
@@ -33,7 +33,7 @@ export const MonitoringChart = () => {
       MAX(value) as value_max,
       MIN(value) as value_min
     FROM monitoring
-    WHERE strftime('%s', timestamp) > ${oldestTimeToShowSeconds}
+    WHERE CAST (strftime('%s', timestamp) AS INT) > ${oldestTimeToShowSeconds}
     GROUP BY strftime('%s', timestamp) / ${aggregationWindowSeconds}
     ORDER BY timestamp ASC
     `
@@ -46,17 +46,20 @@ export const MonitoringChart = () => {
     // use a buffer of at least 10sec in front of the data being shown
     // to avoid the time range changing too often
     const viewBufferSeconds = Math.max((viewWindowSeconds * 0.10), 10)
+
     const updateOldestTimeToShow = () => {
       const steppedTimeSeconds =
         Math.floor((Date.now() / 1000) / viewBufferSeconds) * viewBufferSeconds
-      const bufferedStartTimeSeconds = steppedTimeSeconds - viewBufferSeconds
+      const bufferedStartTimeSeconds = steppedTimeSeconds - viewWindowSeconds
       setOldestTimeToShowSeconds(bufferedStartTimeSeconds)
     }
+
     updateOldestTimeToShow()
     const interval = setInterval(updateOldestTimeToShow, 1000)
     return () => clearInterval(interval)
-
   }, [viewWindowSeconds])
+
+
   return (
     <MonitoringChartView
       dataset={timeSeries.map((ts) => ({ ...ts, timestamp: new Date(ts.timestamp)}))}
@@ -132,7 +135,7 @@ const MonitoringLineChartView = ({
           dataKey: timestampKey,
           scaleType: 'time',
           tickMinStep: 10 * 1000,
-          tickNumber: 10,
+          tickNumber: 8,
           label: 'Time',
         },
       ]}
