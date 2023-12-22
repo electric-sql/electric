@@ -7,6 +7,8 @@
 
 import Config
 
+config :ssl, protocol_version: [:"tlsv1.3", :"tlsv1.2"]
+
 default_log_level = "info"
 default_auth_mode = "secure"
 default_http_server_port = "5133"
