@@ -464,7 +464,7 @@ async function executeShellCommand(
  * Fetches the migrations from the provided endpoint,
  * unzips them and writes them to the `writeTo` location.
  */
-export async function fetchMigrations(
+async function fetchMigrations(
   endpoint: string,
   writeTo: string,
   tmpFolder: string
