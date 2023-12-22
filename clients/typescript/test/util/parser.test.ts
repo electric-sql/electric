@@ -16,6 +16,19 @@ test('inserts are dangerous', (t) => {
   t.true(isPotentiallyDangerous(stmt))
 })
 
+test('drops are dangerous', (t) => {
+  const stmt = 'drop table if exists foo'
+
+  t.true(isPotentiallyDangerous(stmt))
+})
+
+test('creates are dangerous', (t) => {
+  const stmt =
+    'create TABLE if NOT exists Foo("foo" int PRIMARY KEY, "bar" varchar)'
+
+  t.true(isPotentiallyDangerous(stmt))
+})
+
 test('parse tablenames from simple query', (t) => {
   const query = 'select * from laundry;'
   const results = parseTableNames(query, 'main')

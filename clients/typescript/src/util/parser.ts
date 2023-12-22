@@ -20,7 +20,6 @@ const dangerousKeywordsExp = new RegExp(
   dangerousKeywords.map((keyword) => `\\b${keyword}\\b`).join('|'),
   'imu'
 )
-const tableNameExp = /(?:FROM|JOIN)\s+([a-zA-Z_][a-zA-Z0-9_$.]*)/gi
 
 // XXX ideally this could be schema aware to know about dangerous
 // stored functions. But it's not the end of the world if we miss
@@ -43,7 +42,7 @@ export const parseTableNames = (
   // block modern queries (e.g. windowed queries).
   // For the sake of parsing table names, this seems to do the
   // trick, and with enough test coverage it should be fine
-  tableNameExp.lastIndex = 0
+  const tableNameExp = /(?:FROM|JOIN)\s+([a-zA-Z_][a-zA-Z0-9_$.]*)/gi
   const tableMatches = []
   let match
   while ((match = tableNameExp.exec(sqlQuery)) !== null) {
