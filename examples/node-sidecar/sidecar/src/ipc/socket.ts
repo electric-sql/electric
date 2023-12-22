@@ -1,18 +1,26 @@
 import * as net from 'net'
 import { Server } from './server'
 
-// TODO: make this configurable
-const SERVER_PORT = 8123
-
 /**
  * This class implements Inter-Process Communication (IPC) between the sidecar and the client applications.
- * To this end, it starts a WebSocket server and listens for messages from the client applications.
+ * To this end, it starts a TCP server and listens for messages from the client applications.
  * It also sends messages to the client applications to notify them about data changes.
+ * 
+ * This TCP server implements the following protocol:
+ *   Supported incoming messages:
+ *     "potential data change" - the server invokes the `onPotentialDataChangeCb` when this message is received.
+ *                               That callback is registered by the sidecar to perform a snapshot of the oplog on potential changes.
+ *   Messages sent to IPC clients:
+ *     "data changed" - the server sends this message to all clients when the `notifyDataChanged` method is called.
+ *                      That method is called by the sidecar when it receives a "data changed" message from Electric.
+ *                      Note that it does not yet contain more information about which data changed.
  */
 export class SocketServerIPC implements Server {
   private sockets: net.Socket[] = []
   private server: net.Server | undefined
   private onPotentialDataChangeCb: (() => void | Promise<void>) | undefined
+
+  constructor(private port: number) {}
 
   async start(): Promise<void> {
     this.server = net.createServer((socket) => {
@@ -26,7 +34,7 @@ export class SocketServerIPC implements Server {
       socket.on('close', () => { 
         this.sockets = this.sockets.filter((s) => s !== socket)
       })
-    }).listen(SERVER_PORT)
+    }).listen(this.port)
   }
 
   stop(): Promise<void> {

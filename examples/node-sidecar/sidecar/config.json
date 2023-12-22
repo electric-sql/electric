@@ -1,0 +1,11 @@
+{
+  "service": "http://localhost:5133",
+  "databaseFile": "../apps/node/electric-sidecar-node-example.db",
+  "ipc": {
+    "port": 8230
+  },
+  "auth": {
+    "token": "eyJhbGciOiJub25lIn0.eyJ1c2VyX2lkIjoiMjNkZjVhZDItMTZmYi00MmU3LTg1YWUtMjI3MTFiZGQxOGU5In0."
+  },
+  "sync": ["items"]
+}

@@ -393,9 +393,9 @@ detect-libc@^2.0.0:
   resolved "https://registry.npmjs.org/detect-libc/-/detect-libc-2.0.2.tgz"
   integrity sha512-UX6sGumvvqSaXgdKGUsgZWqcUyIXZ/vZTrlRT/iobiKhGL0zL4d3osHj3uqllWJK+i+sixDS/3COVEOFbupFyw==
 
-"electric-sql@file:../../../clients/typescript/electric-sql-0.8.2-sidecar12.tgz":
+"electric-sql@file:../../../clients/typescript/electric-sql-0.8.2-sc2.tgz":
   version "0.8.2"
-  resolved "file:../../../clients/typescript/electric-sql-0.8.2-sidecar12.tgz#5209ac491325839cfe79889899fc180faf1bc59f"
+  resolved "file:../../../clients/typescript/electric-sql-0.8.2-sc2.tgz#0a140a87393970a266cf8bb09d110098853346d0"
   dependencies:
     "@electric-sql/prisma-generator" "workspace:*"
     "@prisma/client" "4.12.0"
@@ -1499,4 +1499,9 @@ yauzl@^2.4.2:
 zod@^3.20.2, zod@^3.21.1:
   version "3.22.4"
   resolved "https://registry.npmjs.org/zod/-/zod-3.22.4.tgz"
+  integrity sha512-iC+8Io04lddc+mVqQ9AZ7OQ2MrUKGN+oIQyq1vemgt46jwCwLfhq7/pwnBnNXXXZb8VTVLKwp9EDkx+ryxIWmg==
+
+zod@latest:
+  version "3.22.4"
+  resolved "https://registry.yarnpkg.com/zod/-/zod-3.22.4.tgz#f31c3a9386f61b1f228af56faa9255e845cf3fff"
   integrity sha512-iC+8Io04lddc+mVqQ9AZ7OQ2MrUKGN+oIQyq1vemgt46jwCwLfhq7/pwnBnNXXXZb8VTVLKwp9EDkx+ryxIWmg==

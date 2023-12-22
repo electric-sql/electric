@@ -1,21 +1,29 @@
 import * as net from 'net'
 import { Client } from "./client.js"
 
-const SERVER_PORT = 8123
-
 /*
  * This class implements Inter-Process Communication (IPC) between this client application and the sidecar.
  * To this end, it connects to the sidecar via a TCP socket.
+ * 
+ * This TCP client implements the protocol prescribed by the sidecar's TCP server:
+ *   Messages sent to the sidecar:
+ *     "potential data change" - notifies the sidecar of a potential data change
+ *   Messages received from the sidecar:
+ *     "data changed" - invokes the `onDataChangeCb` when this message is received.
+ *                      That callback is registered by the client application
+ *                      to re-read the data from the DB and refresh the application state.
  */
 export class SocketIPC implements Client {
   private socket: net.Socket | undefined
   private onDataChangeCb: (() => void | Promise<void>) | undefined
 
+  constructor(private port: number) {}
+
   /**
    * Opens a TCP socket to the sidecar.
    */
   async start(): Promise<void> {
-    this.socket = net.createConnection(SERVER_PORT, 'localhost', () => {
+    this.socket = net.createConnection(this.port, 'localhost', () => {
       this.socket?.on('data', (data) => {
         const msg = data.toString()
         if (msg === 'data changed') {
