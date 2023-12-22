@@ -13,8 +13,7 @@
   },
   "dependencies": {
     "better-sqlite3": "^9.2.2",
-    "electric-sql": "file:/Users/kevin/Documents/Electric/development/electric/clients/typescript/electric-sql-0.8.2-sidecar12.tgz",
-    "node": "^21.2.0"
+    "electric-sql": "^0.8.2"
   },
   "devDependencies": {
     "@electric-sql/prisma-generator": "^1.1.2",

@@ -1,6 +1,6 @@
 import { argv } from 'process'
 import { SideCar } from './sidecar.js'
-import { authToken } from './auth.js'
+import { authToken } from './util/auth.js'
 import { Server } from './ipc/server.js'
 import { SocketServerIPC } from './ipc/socket.js'
 

@@ -26,6 +26,7 @@ Start the sidecar:
 ```sh
 git clone https://github.com/electric-sql/electric
 cd electric/examples/node-sidecar/sidecar
+yarn # install dependencies
 yarn start <path-to-db-file> # e.g. yarn start ../clients/node/electric.db
 ```
 

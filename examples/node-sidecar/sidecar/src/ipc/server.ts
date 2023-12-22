@@ -19,4 +19,6 @@ export interface Server {
    * Notifies clients of actual data changes.
    */
   notifyDataChanged(): Promise<void>
+
+  // TODO: we should also support the other events such as connectivity and auth state changes
 }
