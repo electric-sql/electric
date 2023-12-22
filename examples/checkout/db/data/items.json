@@ -1,0 +1,30 @@
+[
+  {
+    "id": "a609b2e3-bf5d-4f9a-9d61-d2e79375562a",
+    "slug": "hoodie",
+    "name": "Hoodie",
+    "price": 3999,
+    "description": "Hooded sweatshirt with a front pouch pocket and drawstrings at hood."
+  },
+  {
+    "id": "36707f79-ba37-41d9-95c1-cbc8d5e1d952",
+    "slug": "t-shirt",
+    "name": "T-Shirt",
+    "price": 1999,
+    "description": "Relaxed fit t-shirt with a crew neck and short sleeves."
+  },
+  {
+    "id": "da2e84f6-bce5-4e90-820b-9fc97f58c2ff",
+    "slug": "jacket",
+    "name": "Jacket",
+    "price": 4999,
+    "description": "Zip-up sweatshirt jacket, with cadet collar and two front pockets."
+  },
+  {
+    "id": "65ad9ebb-ae89-4a83-963f-2c40bba70754",
+    "slug": "polo",
+    "name": "Polo",
+    "price": 2999,
+    "description": "Classic fit polo shirt with three-button placket and flat knit collar."
+  }
+]

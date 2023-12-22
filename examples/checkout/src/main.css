@@ -1,0 +1,14 @@
+ion-card.item {
+  margin: 0.5em;
+  box-shadow: none;
+  border-radius: 0;
+}
+
+ion-card.item ion-card-content,
+ion-card.item ion-card-header {
+  padding: 5px 0;
+}
+
+ion-card.item ion-button {
+  margin: 5px 0;
+}
