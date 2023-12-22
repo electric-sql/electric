@@ -1,4 +1,3 @@
-
 CREATE OR REPLACE FUNCTION <%= schema() %>.current_transaction_id(
     OUT txid <%= txid_type() %>,
     OUT txts <%= txts_type() %>

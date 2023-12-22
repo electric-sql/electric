@@ -1,4 +1,3 @@
-
 CREATE OR REPLACE PROCEDURE <%= schema() %>.capture_ddl(_query text DEFAULT NULL) SECURITY DEFINER AS
 $function$
 BEGIN

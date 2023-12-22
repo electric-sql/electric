@@ -1,4 +1,3 @@
-
 CREATE OR REPLACE FUNCTION <%= schema() %>.__resolve_table_from_names(
     name1 text,
     name2 text,

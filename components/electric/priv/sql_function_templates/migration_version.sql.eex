@@ -1,4 +1,3 @@
-
 CREATE OR REPLACE PROCEDURE <%= schema() %>.migration_version(_version text) SECURITY DEFINER AS $function$
 BEGIN
     -- this is the user-facing api, so the priority of the version is set to the highest possible value
