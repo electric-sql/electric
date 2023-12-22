@@ -232,41 +232,32 @@ defmodule Electric.Utils do
         username: "user"
       ]
 
+      iex> parse_postgresql_uri("postgresql://localhost")
+      ** (RuntimeError) Invalid or missing username in DATABASE_URL
+
+      iex> parse_postgresql_uri("postgresql://:@localhost")
+      ** (RuntimeError) Invalid or missing username in DATABASE_URL
+
+      iex> parse_postgresql_uri("postgresql://:password@localhost")
+      ** (RuntimeError) Invalid or missing username in DATABASE_URL
+
+      iex> parse_postgresql_uri("postgresql://user:password")
+      ** (RuntimeError) Invalid or missing username in DATABASE_URL
+
+      iex> parse_postgresql_uri("postgresql://user:password@")
+      ** (RuntimeError) Missing host in DATABASE_URL
+
       iex> parse_postgresql_uri("postgresql://user@localhost:5433/mydb?options=-c%20synchronous_commit%3Doff")
-      [
-        host: "localhost",
-        port: 5433,
-        database: "mydb",
-        username: "user"
-      ]
+      ** (RuntimeError) Electric does not support any query options in DATABASE_URL.
 
       iex> parse_postgresql_uri("postgresql://electric@localhost/db?replication=database")
-      [
-        host: "localhost",
-        port: 5432,
-        database: "db",
-        username: "electric",
-        replication: "database"
-      ]
+      ** (RuntimeError) Electric does not support the "replication" option. It opens both a replication connection and regular connections to Postgres as needed.
 
       iex> parse_postgresql_uri("postgresql://electric@localhost/db?replication=off")
-      [
-        host: "localhost",
-        port: 5432,
-        database: "db",
-        username: "electric"
-      ]
-
-  For the `sslmode` keyword, any value but "disable" will result in enabling SSL.
+      ** (RuntimeError) Electric does not support the "replication" option. It opens both a replication connection and regular connections to Postgres as needed.
 
       iex> parse_postgresql_uri("postgres://super_user@localhost:7801/postgres?sslmode=yesplease")
-      [
-        host: "localhost",
-        port: 7801,
-        database: "postgres",
-        username: "super_user",
-        ssl: true
-      ]
+      ** (RuntimeError) Electric does not support the "sslmode" option. Use the DATABASE_REQUIRE_SSL configuration option instead.
   """
   @spec parse_postgresql_uri(binary) :: keyword
   def parse_postgresql_uri(uri_str) do
@@ -289,6 +280,8 @@ defmodule Electric.Utils do
         %{}
       end
 
+    :ok = assert_no_query_params(query_params)
+
     [
       host: host,
       port: port,
@@ -296,9 +289,21 @@ defmodule Electric.Utils do
       username: username,
       password: password
     ]
-    |> add_replication_param(query_params["replication"])
-    |> add_ssl_param(query_params["sslmode"])
     |> Enum.reject(fn {_key, val} -> is_nil(val) end)
+  end
+
+  defp assert_no_query_params(params) when map_size(params) == 0, do: :ok
+
+  defp assert_no_query_params(%{"sslmode" => _}) do
+    raise "Electric does not support the \"sslmode\" option. Use the DATABASE_REQUIRE_SSL configuration option instead."
+  end
+
+  defp assert_no_query_params(%{"replication" => _}) do
+    raise "Electric does not support the \"replication\" option. It opens both a replication connection and regular connections to Postgres as needed."
+  end
+
+  defp assert_no_query_params(_) do
+    raise "Electric does not support any query options in DATABASE_URL."
   end
 
   defp assert_valid_scheme!(scheme) when scheme in ["postgres", "postgresql"], do: :ok
@@ -329,33 +334,13 @@ defmodule Electric.Utils do
 
       {username, password}
     rescue
-      _ -> raise "Invalid username or password in DATABASE_URL: #{inspect(str)}"
+      _ -> raise "Invalid or missing username in DATABASE_URL"
     end
   end
 
   defp parse_database(nil, username), do: username
   defp parse_database("/", username), do: username
   defp parse_database("/" <> dbname, _username), do: dbname
-
-  defp add_replication_param(params, nil), do: params
-
-  defp add_replication_param(params, str) when is_binary(str) do
-    case String.downcase(str) do
-      off when off in ~w[false off no 0] -> params
-      "database" -> params ++ [replication: "database"]
-      other -> raise "Unsupported replication mode in DATABASE_URL: #{inspect(other)}"
-    end
-  end
-
-  defp add_ssl_param(params, nil), do: params
-
-  defp add_ssl_param(params, str) when is_binary(str) do
-    if String.downcase(str) == "disable" or String.trim(str) == "" do
-      params
-    else
-      params ++ [ssl: true]
-    end
-  end
 
   @doc """
   Output a 2-tuple relation (table) reference as pg-style `"schema"."table"`.
