@@ -1,20 +1,25 @@
 import { Box, MenuItem, Paper, Select, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material"
 import { LineChart, LineSeriesType } from "@mui/x-charts"
 import { useElectric } from "../electric/ElectricWrapper"
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLiveQuery } from "electric-sql/react";
 
 
 export const MonitoringChart = () => {
+  // Oldest time to show data for in Unix time
+  const [ oldestTimeToShowSeconds, setOldestTimeToShowSeconds ] = useState(0)
+
+  // The size of the time window to show data for
   const [ viewWindowSeconds, setViewWindowSeconds ] = useState(60)
+  
+  // The size of the "buckets" for which the data will be aggregated
   const [ aggregationWindowSeconds, setAggregationWindowSeconds ] = useState(5)
+
   const { db } = useElectric()!;
 
-  const viewBufferSeconds = Math.max((viewWindowSeconds * 0.10), 10)
-  const startTimeSeconds =
-    Math.round((Date.now() / 1000) / viewBufferSeconds) * viewBufferSeconds - 
-    viewWindowSeconds
-  
+  // perform an aggregation on the timestamps by dividing the Unix Epoch
+  // format by [aggregationWindowSeconds] and grouping by that amount, and
+  // only show data older than [oldestTimeToShowSeconds]
   const { results: timeSeries = [] } =  useLiveQuery<{
     timestamp: string,
     value_avg: number,
@@ -28,42 +33,88 @@ export const MonitoringChart = () => {
       MAX(value) as value_max,
       MIN(value) as value_min
     FROM monitoring
-    WHERE CAST (strftime('%s', timestamp) AS INT) > ${startTimeSeconds}
+    WHERE strftime('%s', timestamp) > ${oldestTimeToShowSeconds}
     GROUP BY strftime('%s', timestamp) / ${aggregationWindowSeconds}
     ORDER BY timestamp ASC
     `
   }))
 
+  
+  // update oldest time to show every second or so, or when the
+  // view window changes
+  useEffect(() => {
+    // use a buffer of at least 10sec in front of the data being shown
+    // to avoid the time range changing too often
+    const viewBufferSeconds = Math.max((viewWindowSeconds * 0.10), 10)
+    const updateOldestTimeToShow = () => {
+      const steppedTimeSeconds =
+        Math.floor((Date.now() / 1000) / viewBufferSeconds) * viewBufferSeconds
+      const bufferedStartTimeSeconds = steppedTimeSeconds - viewBufferSeconds
+      setOldestTimeToShowSeconds(bufferedStartTimeSeconds)
+    }
+    updateOldestTimeToShow()
+    const interval = setInterval(updateOldestTimeToShow, 1000)
+    return () => clearInterval(interval)
+
+  }, [viewWindowSeconds])
+  return (
+    <MonitoringChartView
+      dataset={timeSeries.map((ts) => ({ ...ts, timestamp: new Date(ts.timestamp)}))}
+      dataKeyConfig={{
+        'value_avg': { label: 'Average' },
+        'value_min': { label: 'Minimum' },
+        'value_max': { label: 'Maximum' }
+      }}
+      timestampKey="timestamp"
+      aggregationWindowSeconds={aggregationWindowSeconds}
+      onAggregationWindowSecondsChanged={setAggregationWindowSeconds}
+      viewWindowSeconds={viewWindowSeconds}
+      onViewWindowSecondsChanged={setViewWindowSeconds}
+    />
+  )
+}
+
+interface MonitoringChartViewProps extends
+  MonitoringLineChartViewProps,
+  MonitoringChartControlViewProps {}
+
+const MonitoringChartView = ({
+  dataset,
+  dataKeyConfig,
+  timestampKey = 'timestamp',
+  aggregationWindowSeconds,
+  onAggregationWindowSecondsChanged,
+  viewWindowSeconds,
+  onViewWindowSecondsChanged,
+}: MonitoringChartViewProps) => {
   return (
     <Paper sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', p: 2 }}>
       <MonitoringChartControlView
         aggregationWindowSeconds={aggregationWindowSeconds}
-        onAggregationWindowSecondsChanged={setAggregationWindowSeconds}
+        onAggregationWindowSecondsChanged={onAggregationWindowSecondsChanged}
         viewWindowSeconds={viewWindowSeconds}
-        onViewWindowSecondsChanged={setViewWindowSeconds}
+        onViewWindowSecondsChanged={onViewWindowSecondsChanged}
       />
       <MonitoringLineChartView
-        dataset={timeSeries.map((ts) => ({ ...ts, timestamp: new Date(ts.timestamp)}))}
-        dataKeyConfig={{
-          'value_avg': { label: 'Average' },
-          'value_min': { label: 'Minimum' },
-          'value_max': { label: 'Maximum' }
-        }}
-        timestampKey="timestamp"
+        dataset={dataset}
+        dataKeyConfig={dataKeyConfig}
+        timestampKey={timestampKey}
       />
     </Paper>
   )
+}
+
+interface MonitoringLineChartViewProps {
+  dataset: Record<string, number | Date>[],
+  dataKeyConfig: Record<string, Omit<LineSeriesType, 'type'>>,
+  timestampKey?: string
 }
 
 const MonitoringLineChartView = ({
   dataset = [],
   dataKeyConfig = {},
   timestampKey = 'timestamp',
-} : {
-  dataset: Record<string, number | Date>[],
-  dataKeyConfig: Record<string, Omit<LineSeriesType, 'type'>>,
-  timestampKey?: string,
-}) => {
+} : MonitoringLineChartViewProps) => {
   return (
     <LineChart
       height={400}
@@ -114,19 +165,19 @@ const MonitoringLineChartView = ({
   )
 }
 
+interface MonitoringChartControlViewProps {
+  aggregationWindowSeconds: number,
+  onAggregationWindowSecondsChanged: (val: number) => void,
+  viewWindowSeconds: number,
+  onViewWindowSecondsChanged: (val: number) => void
+}
 
 const MonitoringChartControlView = ({
   aggregationWindowSeconds,
   onAggregationWindowSecondsChanged,
   viewWindowSeconds,
   onViewWindowSecondsChanged,
-} : {
-  aggregationWindowSeconds: number,
-  onAggregationWindowSecondsChanged: (val: number) => void,
-  viewWindowSeconds: number,
-  onViewWindowSecondsChanged: (val: number) => void,
-
-}) => {
+} : MonitoringChartControlViewProps) => {
   return (
     <Box sx={{
       display: 'flex', flexDirection: 'row',
