@@ -113,6 +113,42 @@ model Model {
 }
 `
 
+// tries and fails to generate client, returns `true` if failed
+const failedGenerate = async (debug = false): Promise<boolean> => {
+  let migrationFailed = false
+  const origConsoleError = console.error
+  try {
+    // silence error for test
+    console.error = (_) => {
+      // no-op
+    }
+    await generate({
+      ...defaultOptions,
+      // prevent process.exit call to perform test
+      exitOnError: false,
+      // if set to true, temporary folder is retained on failure
+      debug: debug,
+    })
+  } catch (e) {
+    migrationFailed = true
+  } finally {
+    console.error = origConsoleError
+  }
+
+  return migrationFailed
+}
+
+// finds temporary migraitons folder, if it exists
+const findMigrationFolder = async (): Promise<string | null> => {
+  const files = await fs.readdirSync('./')
+  for (const file of files) {
+    if (file.startsWith('.electric_migrations_tmp')) {
+      return file
+    }
+  }
+  return null
+}
+
 test('migrator correctly capitalises model names', (t) => {
   const newSchema = doCapitaliseTableNames(
     lowerCasePrismaSchema.split(/\r?\n/)
@@ -120,54 +156,28 @@ test('migrator correctly capitalises model names', (t) => {
   t.assert(newSchema === expectedPrismaSchema)
 })
 
-// NOTE(msfstef): running two tests in one as it requires sequential order
-test('migrator should always delete temporary folder (except for debug)', async (t) => {
-  // tries to generate client, returns `true` if failed
-  const failedGenerate = async (debug = false) => {
-    // silence error for test
-    const origConsoleError = console.error
-    console.error = (_) => {
-      // no-op
-    }
-    let migrationFailed = false
-    try {
-      await generate({
-        ...defaultOptions,
-        // prevent process.exit call to perform test
-        exitOnError: false,
-        // if set to true, temporary folder is retained on failure
-        debug: debug,
-      })
-    } catch (e) {
-      migrationFailed = true
-    }
-    console.error = origConsoleError
-    return migrationFailed
+test.serial(
+  'migrator should clean up temporary folders on failure',
+  async (t) => {
+    // should fail generaton
+    t.assert(await failedGenerate(false))
+
+    // should clean up temporary folders
+    t.assert((await findMigrationFolder()) === null)
   }
+)
 
-  const findMigrationFolder = async (): Promise<string | null> => {
-    const files = await fs.readdirSync('./')
-    for (const file of files) {
-      if (file.startsWith('.electric_migrations_tmp')) {
-        return file
-      }
-    }
-    return null
+test.serial(
+  'migrator should retain temporary folder on falure in debug mode',
+  async (t) => {
+    // should fail generaton in debug mode
+    t.assert(await failedGenerate(true))
+
+    // should retain temporary migrations folder
+    const debugMigrationFolder = await findMigrationFolder()
+    t.assert(debugMigrationFolder !== null)
+
+    // clean-up folder after test
+    await fs.rmdirSync(debugMigrationFolder as string, { recursive: true })
   }
-
-  await failedGenerate(false)
-
-  // should fail generaton
-  t.assert(await failedGenerate(false))
-
-  // should have cleaned up temporary folders
-  t.assert((await findMigrationFolder()) === null)
-
-  // should fail generaton in debug mode
-  t.assert(await failedGenerate(true))
-
-  // should have retained migration folder
-  const debugMigrationFolder = await findMigrationFolder()
-  t.assert(debugMigrationFolder !== null)
-  await fs.rmdirSync(debugMigrationFolder as string, { recursive: true })
-})
+)
