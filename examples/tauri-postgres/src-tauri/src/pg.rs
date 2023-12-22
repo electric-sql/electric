@@ -8,17 +8,16 @@ use env_logger::Env;
 
 use pg_embed::pg_enums::PgAuthMethod;
 use pg_embed::pg_errors::{PgEmbedError, PgEmbedErrorType};
-use pg_embed::pg_fetch::{PgFetchSettings, PostgresVersion, PG_V15};
+use pg_embed::pg_fetch::{PgFetchSettings, PostgresVersion};
 use pg_embed::postgres::{PgEmbed, PgSettings};
+use pgvector::Vector;
 use sqlx::postgres::PgRow;
-use sqlx::{Column, Row, ValueRef};
-use sqlx::{Connection, PgConnection};
+use sqlx::{Column, Row, ValueRef, Connection, PgConnection};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration;
-use pgvector::Vector;
 
-pub async fn tauri_pg_setup(
+pub async fn pg_setup(
     port: u16,
     database_dir: PathBuf,
     persistent: bool,
@@ -40,8 +39,7 @@ pub async fn tauri_pg_setup(
         migration_dir,
     };
     let fetch_settings = PgFetchSettings {
-        // version: PG_V15,
-        version: PostgresVersion("15.4.0"),
+        version: PostgresVersion("15.4.0"), // version: PG_V15,
         // custom_cache_dir: Some(PathBuf::from("./resources/pg-embed/")),
         // custom_cache_dir: None,
         ..Default::default()
@@ -51,10 +49,10 @@ pub async fn tauri_pg_setup(
     Ok(pg)
 }
 
-pub async fn tauri_pg_init_database(database_dir: &str) -> PgEmbed {
+pub async fn pg_init(database_dir: &str) -> PgEmbed {
     // let database_dir = PathBuf::from("../resources/data_test/db");
     let database_dir = PathBuf::from(database_dir);
-    let mut pg: PgEmbed = tauri_pg_setup(33333, database_dir, true, None)
+    let mut pg: PgEmbed = pg_setup(33333, database_dir, true, None)
         .await
         .unwrap();
 
@@ -66,18 +64,18 @@ pub async fn tauri_pg_init_database(database_dir: &str) -> PgEmbed {
             .expect("create_database should not fail here");
     };
 
-    let mut conn = tauri_pg_connect(&pg, "test").await;
+    let mut conn = pg_connect(&pg, "test").await;
     let _ = sqlx::query(
         "
-    -- Check if the main schema exists
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'main') THEN
-    -- Create the main schema
-    CREATE SCHEMA main;
-  END IF;
-END $$;
-",
+            -- Check if the main schema exists
+            DO $$
+            BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'main') THEN
+                -- Create the main schema
+                CREATE SCHEMA main;
+            END IF;
+            END $$;
+        ",
     )
     .execute(&mut conn)
     .await
@@ -85,61 +83,25 @@ END $$;
 
     let _ = sqlx::query(
         "
--- Set the main schema as the default schema for all users
-ALTER DATABASE test SET search_path = main, pg_catalog;
-    ",
+            -- Set the main schema as the default schema for all users
+            ALTER DATABASE test SET search_path = main, pg_catalog;
+        ",
     )
     .execute(&mut conn)
     .await
     .unwrap();
-
-    // Enable pgvector
-    // let _ = sqlx::query("CREATE EXTENSION vector;").execute(&mut conn).await.unwrap();
-
-    // TODO: When
-    // let _ = sqlx::query("ALTER SCHEMA public RENAME TO main;")
-    //     .execute(&mut conn)
-    //     .await
-    //     .unwrap();
-    // let _ = sqlx::query("ALTER DATABASE test SET search_path TO main;")
-    //     .execute(&mut conn)
-    //     .await
-    //     .unwrap();
-
     pg.migrate(db_name).await.unwrap();
 
     pg
 }
 
-pub async fn tauri_pg_connect(pg: &PgEmbed, db_name: &str) -> PgConnection {
+pub async fn pg_connect(pg: &PgEmbed, db_name: &str) -> PgConnection {
     PgConnection::connect(pg.full_db_uri(db_name).as_str())
         .await
         .unwrap()
 }
 
-// https://stackoverflow.com/a/72904564
-pub fn row_to_json(row: PgRow) -> HashMap<String, String> {
-    let mut result = HashMap::new();
-    for col in row.columns() {
-        if col.type_info().oid().unwrap().0 == 16434 {
-            let value: Vector = row.try_get(col.ordinal()).unwrap();
-            let value = format!("{:?}", value.to_vec());
-            result.insert(col.name().to_string(), value);
-            continue;
-        }
-
-        let value = row.try_get_raw(col.ordinal()).unwrap();
-        let value = match value.is_null() {
-            true => "NULL".to_string(),
-            false => value.as_str().unwrap().to_string(),
-        };
-        result.insert(col.name().to_string(), value);
-    }
-
-    result
-}
-
-pub async fn tauri_pg_query(conn: &mut PgConnection, line: &str) -> String {
+pub async fn pg_query(conn: &mut PgConnection, line: &str) -> String {
     let rows = match sqlx::query(line)
         .fetch_all(&mut *conn)
         .await
@@ -161,4 +123,45 @@ pub async fn tauri_pg_query(conn: &mut PgConnection, line: &str) -> String {
     }
 
     result
+}
+
+// https://stackoverflow.com/a/72904564
+pub fn row_to_json(row: PgRow) -> HashMap<String, String> {
+    let mut result = HashMap::new();
+    for col in row.columns() {
+        // 16434 == vector type, treat it separately
+        if col.type_info().oid().unwrap().0 == 16434 {
+            let value: Vector = row.try_get(col.ordinal()).unwrap();
+            let value = format!("{:?}", value.to_vec());
+            result.insert(col.name().to_string(), value);
+            continue;
+        }
+
+        let value = row.try_get_raw(col.ordinal()).unwrap();
+        let value = match value.is_null() {
+            true => "NULL".to_string(),
+            false => value.as_str().unwrap().to_string(),
+        };
+        result.insert(col.name().to_string(), value);
+    }
+
+    result
+}
+
+//TODO: This has to be removed after the elixir has been migrated to postgres as well
+pub fn replace_question_marks(input: &str) -> String {
+    let mut output = String::new();
+    let mut counter = 1;
+
+    for c in input.chars() {
+        if c == '?' {
+            output.push('$');
+            output.push_str(&counter.to_string());
+            counter += 1;
+        } else {
+            output.push(c);
+        }
+    }
+
+    output
 }

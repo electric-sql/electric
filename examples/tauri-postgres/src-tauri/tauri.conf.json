@@ -38,7 +38,7 @@
         "providerShortName": null,
         "signingIdentity": null
       },
-      "resources": [],
+      "resources": ["./target/release/libonnxruntime.so"],
       "shortDescription": "",
       "targets": "all",
       "windows": {

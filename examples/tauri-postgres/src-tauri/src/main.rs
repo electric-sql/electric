@@ -1,21 +1,13 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-
+// Third part utils
 use dirs::home_dir;
-use embeddings::embed_issue;
 use futures::stream::StreamExt;
 use ollama_rs::Ollama;
 use serde::{Deserialize, Serialize};
 use serde_json::Number;
 use sqlx::{postgres::PgArguments, Arguments};
 use sqlx::{Either, PgConnection};
-
-mod tauri_postgres;
-use crate::tauri_postgres::row_to_json;
-
-mod embeddings;
-mod chat;
-mod utils;
 
 // General
 use pg_embed::postgres::PgEmbed;
@@ -24,23 +16,29 @@ use pg_embed::postgres::PgEmbed;
 use tauri::async_runtime::block_on;
 use tauri::Manager;
 use tauri::{State, WindowEvent};
+use tauri::async_runtime::Mutex as AsyncMutex;
 
 // Tauri plug-ins
 use tauri_plugin_log::LogTarget;
 
 // This package
-use tauri_postgres::{tauri_pg_connect, tauri_pg_init_database, tauri_pg_query};
+mod pg;
+mod embeddings;
+mod chat;
+mod utils;
+
+use chat::chat;
+use crate::embeddings::{create_embedding_model, embed_query, format_embeddings, embed_issue};
+use pg::{pg_connect, pg_init, pg_query, replace_question_marks, row_to_json};
 
 // Postgres console
 use portable_pty::{native_pty_system, CommandBuilder, PtyPair, PtySize};
-use std::fs::create_dir;
 use std::{
     io::{BufRead, BufReader, Write},
     sync::{Arc, Mutex},
     thread::{self, sleep},
     time::Duration,
 };
-use tauri::async_runtime::Mutex as AsyncMutex;
 
 /**
  * Structures
@@ -86,7 +84,7 @@ struct DbConnection {
 }
 
 /// App state for the terminal window. TODO: rename to something more sensible
-struct AppState {
+struct TerminalState {
     pty_pair: Arc<AsyncMutex<PtyPair>>,
     writer: Arc<AsyncMutex<Box<dyn Write + Send>>>,
 }
@@ -96,12 +94,12 @@ struct AppState {
  ******************/
 // Terminal commands
 #[tauri::command]
-async fn async_write_to_pty(data: &str, state: State<'_, AppState>) -> Result<(), ()> {
+async fn async_write_to_pty(data: &str, state: State<'_, TerminalState>) -> Result<(), ()> {
     write!(state.writer.lock().await, "{}", data).map_err(|_| ())
 }
 
 #[tauri::command]
-async fn async_resize_pty(rows: u16, cols: u16, state: State<'_, AppState>) -> Result<(), ()> {
+async fn async_resize_pty(rows: u16, cols: u16, state: State<'_, TerminalState>) -> Result<(), ()> {
     state
         .pty_pair
         .lock()
@@ -150,29 +148,11 @@ fn send_recv_postgres_terminal(connection: State<DbConnection>, data: &str) -> S
             Some(conn) => {
                 // let conn = tauri_pg_connect(pg, "test").await;
 
-                tauri_pg_query(conn, data).await
+                pg_query(conn, data).await
             }
             _ => "".to_string(),
         }
     })
-}
-
-//TODO: This has to be removed after the elixir has been migrated to postgres as well
-fn replace_question_marks(input: &str) -> String {
-    let mut output = String::new();
-    let mut counter = 1;
-
-    for c in input.chars() {
-        if c == '?' {
-            output.push('$');
-            output.push_str(&counter.to_string());
-            counter += 1;
-        } else {
-            output.push(c);
-        }
-    }
-
-    output
 }
 
 async fn tauri_exec(
@@ -268,7 +248,7 @@ async fn tauri_exec(
 fn tauri_init_command(connection: State<DbConnection>, name: &str) -> Result<(), String> {
     // Start the postgres when we receive this call
     block_on(async {
-        let pg = tauri_pg_init_database(
+        let pg = pg_init(
             format!(
                 "{}/db/{}",
                 home_dir().unwrap().into_os_string().into_string().unwrap(),
@@ -277,7 +257,7 @@ fn tauri_init_command(connection: State<DbConnection>, name: &str) -> Result<(),
             .as_str(),
         )
         .await;
-        let conn = tauri_pg_connect(&pg, "test").await;
+        let conn = pg_connect(&pg, "test").await;
 
         *connection.db.lock().unwrap() = Some(pg);
         *connection.conn.lock().unwrap() = Some(conn);
@@ -301,8 +281,6 @@ pub async fn vector_search_database(
     conn: &mut PgConnection,
     query: &str,
 ) -> String {
-    use embeddings::{create_embedding_model, embed_query};
-
     let model = create_embedding_model();
     let embedded_query = embed_query(query, model);
 
@@ -323,13 +301,12 @@ pub async fn vector_search_database(
         result.push_str(serde_json::to_string(&row_column).unwrap().as_str());
     }
     println!("{}", result);
-    return result;
+
+    result
 }
 
 #[tauri::command(rename_all = "snake_case")]
 fn tauri_embed_issue(text: &str) -> String {
-    use embeddings::{create_embedding_model, format_embeddings};
-
     block_on(async {
         let model = create_embedding_model();
 
@@ -348,13 +325,11 @@ fn tauri_vector_search(connection: State<DbConnection>, query: &str) -> String {
         }
     });
 
-    return ret;
+    ret
 }
-
 
 #[tauri::command(rename_all = "snake_case")]
 fn tauri_chat(connection: State<DbConnection>, question: &str, context: &str) -> String {
-    use chat::chat;
     block_on(async {
         if let Some(llama) = connection.llama.lock().unwrap().as_mut() {
             chat(llama, question.to_string(), context.to_string()).await
@@ -424,6 +399,10 @@ fn main() {
             conn: Default::default(),
             llama: Default::default(),
         })
+        .manage(TerminalState {
+            pty_pair: Arc::new(AsyncMutex::new(pty_pair)),
+            writer: Arc::new(AsyncMutex::new(_writer))
+        })
         .setup(|app| {
             // terminal
             tauri::WindowBuilder::new(
@@ -472,8 +451,8 @@ mod tests {
     #[tokio::test]
     /// Sanity test for postgres. Launch it, give some commands and stop it.
     async fn test_postgres() {
-        let mut pg = tauri_pg_init_database("/home/iib/db/data").await; // TODO: this should use tauri_pg_setup
-        let _conn = tauri_pg_connect(&pg, "test").await;
+        let mut pg = pg_init("/home/iib/db/data").await; // TODO: this should use tauri_pg_setup
+        let _conn = pg_connect(&pg, "test").await;
 
         pg.stop_db().await.unwrap();
 
@@ -483,10 +462,10 @@ mod tests {
     #[tokio::test]
     /// Postgres test database creation, querying and destructuring
     async fn test_postgres_database_create() {
-        let mut pg = tauri_pg_init_database("/home/iib/db/data").await; // TODO: this should use tauri_pg_setup
+        let mut pg = pg_init("/home/iib/db/data").await; // TODO: this should use tauri_pg_setup
                                                                         // let mut pg = tauri_pg_setup(54321, PathBuf::from_str("/home/iib/db/data").unwrap(), false, None).await.unwrap();
 
-        let mut conn = tauri_pg_connect(&pg, "test").await;
+        let mut conn = pg_connect(&pg, "test").await;
 
         let _ = sqlx::query("CREATE TABLE IF NOT EXISTS testing (id BIGSERIAL PRIMARY KEY, description TEXT NOT NULL, done BOOLEAN NOT NULL DEFAULT FALSE)")
       .execute(&mut conn)
@@ -544,8 +523,8 @@ mod tests {
     #[tokio::test]
     /// Postgres test database creation, querying and destructuring
     async fn test_tauri_exec() {
-        let mut pg = tauri_pg_init_database("/home/iib/db/data").await; // TODO: this should use tauri_pg_setup
-        let mut conn = tauri_pg_connect(&pg, "test").await;
+        let mut pg = pg_init("/home/iib/db/data").await; // TODO: this should use tauri_pg_setup
+        let mut conn = pg_connect(&pg, "test").await;
 
         let keys0 = vec![];
         let values0 = vec![];
@@ -632,8 +611,8 @@ mod tests {
     #[tokio::test]
     /// Postgres test database creation, querying and destructuring
     async fn test_get_modified_rows() {
-        let mut pg = tauri_pg_init_database("/home/iib/db/data").await; // TODO: this should use tauri_pg_setup
-        let mut conn = tauri_pg_connect(&pg, "test").await;
+        let mut pg = pg_init("/home/iib/db/data").await; // TODO: this should use tauri_pg_setup
+        let mut conn = pg_connect(&pg, "test").await;
         let empty_bind_params = BindParams {
             keys: vec![],
             values: vec![],
@@ -742,8 +721,6 @@ mod tests {
             let example: Example = serde_wasm_bindgen::from_value(val)?;
             Ok(())
         }
-
-        ()
     }
 
     #[tokio::test]
@@ -754,8 +731,8 @@ mod tests {
             values: vec![],
         };
 
-        let mut pg = tauri_pg_init_database("/home/iib/db/data").await; // TODO: this should use tauri_pg_setup
-        let mut conn = tauri_pg_connect(&pg, "test").await;
+        let mut pg = pg_init("/home/iib/db/data").await; // TODO: this should use tauri_pg_setup
+        let mut conn = pg_connect(&pg, "test").await;
 
         let mut tx = conn.begin().await.unwrap();
 
@@ -774,9 +751,7 @@ mod tests {
     /// Postgres test database creation, querying and destructuring
     async fn test_ollama() {
         use ollama_rs::{
-            generation::completion::{
-                request::GenerationRequest, GenerationContext, GenerationResponseStream,
-            },
+            generation::completion::request::GenerationRequest,
             Ollama,
         };
         // By default it will connect to localhost:11434
@@ -795,8 +770,8 @@ mod tests {
     #[tokio::test]
     /// Test pg-embed version
     async fn test_pg_embed_version() {
-        let mut pg = tauri_pg_init_database("/home/iib/db/data").await; // TODO: this should use tauri_pg_setup
-        let mut conn = tauri_pg_connect(&pg, "test").await;
+        let mut pg = pg_init("/home/iib/db/data").await; // TODO: this should use tauri_pg_setup
+        let mut conn = pg_connect(&pg, "test").await;
 
         let stop = pg.stop_db().await;
         stop.unwrap();
@@ -868,8 +843,8 @@ mod tests {
             values: vec![],
         };
 
-        let mut pg = tauri_pg_init_database("/Users/iib/db/data").await; // TODO: this should use tauri_pg_setup
-        let mut conn = tauri_pg_connect(&pg, "test").await;
+        let mut pg = pg_init("/Users/iib/db/data").await; // TODO: this should use tauri_pg_setup
+        let mut conn = pg_connect(&pg, "test").await;
 
         tauri_exec(
             &mut pg,
@@ -889,7 +864,6 @@ mod tests {
         tauri_exec(&mut pg, &mut conn, "INSERT INTO items VALUES (1, 'computer', '[-0.0051577436,-0.0066702785,-0.0077790986,0.008313146,-0.001982919,-0.006856959,-0.004155598,0.0051456233,-0.0028699716,-0.0037507515,0.0016218971,-0.002777102,-0.0015848217,0.0010748045,-0.0029788115,0.008521762,0.003912073,-0.0099617615,0.006261422,-0.00675622,0.00076965673,0.0044055167,-0.0051048603,-0.002111284,0.008097835,-0.004245028,-0.007638484,0.009260607,-0.0021561245,-0.004720806,0.008573295,0.0042845854,0.0043260953,0.009287216,-0.008455541,0.00525685,0.002039945,0.004189499,0.0016983944,0.0044654333,0.004487596,0.006106299,-0.0032030295,-0.0045770598,-0.00042664065,0.0025344712,-0.0032641168,0.006059481,0.0041553397,0.007766852,0.0025700203,0.008119046,-0.0013876136,0.008080279,0.003718098,-0.008049667,-0.0039347596,-0.0024725979,0.004894468,-0.0008724129,-0.0028317324,0.007835987,0.009325614,-0.0016153983,-0.0051607513,-0.0047031273,-0.0048474614,-0.009605621,0.0013724195,-0.0042261453,0.0025274444,0.0056161173,-0.004067089,-0.009599375,0.0015471478,-0.0067020725,0.0024959005,-0.0037817324,0.0070804814,0.000640407,0.0035619752,-0.002739931,-0.0017110452,0.0076550203,0.0014080878,-0.0058521517,-0.007836777,0.0012330461,0.0064565097,0.005557967,-0.008979663,0.008594665,0.004048156,0.0074717794,0.009749171,-0.0072917016,-0.009042594,0.0058376994,0.009393946,0.003507946]');", empty_bind_params.clone()).await;
         tauri_exec(&mut pg, &mut conn, "INSERT INTO items VALUES (2, 'system', '[-0.00053622725,0.00023643136,0.0051033497,0.009009273,-0.0093029495,-0.007116809,0.0064588725,0.008972988,-0.005015428,-0.0037633716,0.0073805046,-0.0015334714,-0.0045366134,0.006554052,-0.0048601604,-0.0018160177,0.0028765798,0.0009918738,-0.008285215,-0.009448818,0.007311766,0.005070262,0.0067576934,0.00076286553,0.0063508903,-0.0034053659,-0.0009464014,0.0057685734,-0.0075216377,-0.0039361035,-0.007511582,-0.00093004224,0.009538119,-0.007319167,-0.0023337686,-0.0019377411,0.008077437,-0.005930896,4.516244e-05,-0.004753734,-0.009603551,0.005007293,-0.008759585,-0.0043918253,-3.5099984e-05,-0.00029618145,-0.00766124,0.009614743,0.004982058,0.009233143,-0.008157917,0.004495798,-0.004137076,0.0008245361,0.00849862,-0.0044621765,0.0045175003,-0.00678696,-0.0035484887,0.009398508,-0.0015776526,0.00032137157,-0.00414063,-0.007682688,-0.0015080082,0.0024697948,-0.00088802696,0.0055336617,-0.002742977,0.0022600652,0.0054557943,0.008345953,-0.0014537406,-0.009208143,0.0043705525,0.00057178497,0.007441908,-0.00081328274,-0.0026384138,-0.008753009,-0.0008565569,0.002826563,0.005401429,0.0070526563,-0.0057031214,0.0018588197,0.0060888636,-0.004798051,-0.0031072604,0.0067976294,0.0016314756,0.00018991709,0.0034736372,0.00021777749,0.009618826,0.005060604,-0.00891739,-0.0070415605,0.0009014559,0.006392534]');", empty_bind_params.clone()).await;
         tauri_exec(&mut pg, &mut conn, "INSERT INTO items VALUES (3, 'user', '[-0.008243976,0.0092982175,-0.00019883178,-0.001966224,0.0046026125,-0.004098241,0.002741841,0.00694249,0.0060647577,-0.0075134244,0.009384548,0.004671078,0.0039670253,-0.006244334,0.008460378,-0.0021475316,0.008827321,-0.005365455,-0.008128209,0.006822414,0.001671247,-0.0021977755,0.009513901,0.009493717,-0.00977354,0.0025048363,0.006155136,0.0038749226,0.0020231074,0.0004297551,0.0006755149,-0.003819734,-0.0071387477,-0.0020857744,0.003922672,0.008821388,0.009260761,-0.0059755677,-0.009403811,0.009766435,0.0034311758,0.0051681376,0.006281367,-0.0028049033,0.007322583,0.0028303766,0.0028700498,-0.0023791513,-0.0031282043,-0.0023682013,0.0042768745,7.808367e-05,-0.009586265,-0.009664092,-0.0061474317,-0.00013067652,0.0019958965,0.0094319945,0.0055869417,-0.0042908685,0.0002766642,0.0049665086,0.007701729,-0.0011444706,0.0043214113,-0.0058156233,-0.000806561,0.008097469,-0.0023595393,-0.009665874,0.0057808654,-0.003927708,-0.0012244319,0.009979865,-0.0022559795,-0.0047581927,-0.0053285286,0.006979481,-0.0057078465,0.0021146915,-0.0052546123,0.006121486,0.004357949,0.0026095302,-0.001491907,-0.0027474174,0.008991138,0.0052170185,-0.0021602784,-0.009469213,-0.007428286,-0.0010614037,-0.0007941263,-0.0025604777,0.00968557,-0.0004605082,0.005872903,-0.0074473293,-0.0025033513,-0.005550342]');", empty_bind_params.clone()).await;
-
         tauri_exec(&mut pg, &mut conn, "SELECT name FROM items WHERE id != 1 ORDER BY embedding <-> (SELECT embedding FROM items WHERE id = 1) LIMIT 1;", empty_bind_params.clone()).await;
 
         let stop = pg.stop_db().await;

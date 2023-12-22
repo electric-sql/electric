@@ -1,23 +1,19 @@
 use ollama_rs::{
-    generation::completion::{
-        request::GenerationRequest, GenerationContext, GenerationResponseStream,
-    },
+    generation::completion::request::GenerationRequest,
     Ollama,
 };
 
 /// Create embeddings for a github issue
 pub async fn basic() {
     // By default it will connect to localhost:11434
-    let llama = start_ollama();
-    // let response = chat(llama, "Why is the sky blue?".to_string(), "".to_string()).await;
+    let mut llama = start_ollama();
+    let response = chat(&mut llama, "Why is the sky blue?".to_string(), "".to_string()).await;
 
-    // eprintln!("{}", response);
+    eprintln!("{}", response);
 }
 
 pub fn start_ollama() -> Ollama {
-    let ollama = Ollama::default();
-
-    return ollama;
+    Ollama::default()
 }
 
 pub async fn chat(llama: &mut Ollama, question: String, context: String) -> String {
