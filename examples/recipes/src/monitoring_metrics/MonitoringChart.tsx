@@ -7,7 +7,7 @@ import { useLiveQuery } from "electric-sql/react";
 
 export const MonitoringChart = () => {
   const [ viewWindowSeconds, setViewWindowSeconds ] = useState(60)
-  const [ aggregationWindowSeconds, setAggregationWindowSeconds ] = useState(20)
+  const [ aggregationWindowSeconds, setAggregationWindowSeconds ] = useState(5)
   const { db } = useElectric()!;
 
   const viewBufferSeconds = Math.max((viewWindowSeconds * 0.10), 10)
@@ -97,8 +97,8 @@ const MonitoringLineChartView = ({
           valueFormatter: (v) => `${v?.toLocaleString(
             'en-US', 
             {
-              minimumSignificantDigits: 3,
-              maximumSignificantDigits: 3
+              minimumSignificantDigits: 2,
+              maximumSignificantDigits: 2
             }
           )}%`,
           curve: 'stepBefore',
@@ -142,6 +142,7 @@ const MonitoringChartControlView = ({
           size="small"
           onChange={(e) => onAggregationWindowSecondsChanged(e.target.value as number)}
         >
+          <MenuItem value={1}>1 sec</MenuItem>
           <MenuItem value={5}>5 sec</MenuItem>
           <MenuItem value={20}>20 sec</MenuItem>
           <MenuItem value={60}>60 sec</MenuItem>
@@ -162,10 +163,10 @@ const MonitoringChartControlView = ({
             null
           }
         >
-          <ToggleButton value={30}>30 sec</ToggleButton>
-          <ToggleButton value={60}>1 min</ToggleButton>
+          <ToggleButton value={1 * 60}>1 min</ToggleButton>
           <ToggleButton value={5 * 60}>5 min</ToggleButton>
           <ToggleButton value={10 * 60}>10 min</ToggleButton>
+          <ToggleButton value={30 * 60}>30 min</ToggleButton>
         </ToggleButtonGroup>
       </Box>
     </Box>
