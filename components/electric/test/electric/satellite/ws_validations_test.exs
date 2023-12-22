@@ -21,7 +21,7 @@ defmodule Electric.Satellite.WsValidationsTest do
 
     plug =
       {Electric.Plug.SatelliteWebsocketPlug,
-       auth_provider: Auth.provider(), pg_connector_opts: ctx.pg_connector_opts}
+       auth_provider: Auth.provider(), connector_config: ctx.connector_config}
 
     start_link_supervised!({Bandit, port: port, plug: plug})
 

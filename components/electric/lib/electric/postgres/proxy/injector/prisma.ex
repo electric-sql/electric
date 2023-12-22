@@ -22,8 +22,8 @@ defmodule Electric.Postgres.Proxy.Injector.Prisma do
   defimpl Operation do
     alias Electric.Postgres.Extension.SchemaLoader
 
-    def upstream_connection(_prisma, conn_config) do
-      conn_config
+    def upstream_connection(_prisma, connector_config) do
+      connector_config
     end
 
     def activate(prisma, state, send) do

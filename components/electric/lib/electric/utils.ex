@@ -194,21 +194,6 @@ defmodule Electric.Utils do
   defp c(?f), do: ?f
   defp c(_), do: throw(:error)
 
-  def epgsql_config(config) do
-    config
-    |> Map.new()
-    |> Map.put(:nulls, [nil, :null, :undefined])
-    |> maybe_add_inet6()
-  end
-
-  defp maybe_add_inet6(config) do
-    with %{ipv6: true} <- config do
-      config
-      |> Map.delete(:ipv6)
-      |> Map.put(:tcp_opts, [:inet6])
-    end
-  end
-
   @doc """
   Parse a PostgreSQL URI into a keyword list.
 

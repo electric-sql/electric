@@ -22,8 +22,8 @@ defmodule Electric.Plug.ProxyWebsocketPlug do
   def init(handler_opts), do: handler_opts
 
   def call(conn, handler_opts) do
-    conn_config = conn_config()
-    proxy_config = Connectors.get_proxy_opts(conn_config)
+    connector_config = Electric.Replication.PostgresConnector.connector_config()
+    proxy_config = Connectors.get_proxy_opts(connector_config)
 
     if proxy_config.use_http_tunnel? do
       upgrade_to_websocket(conn, Keyword.put_new(handler_opts, :proxy_config, proxy_config))
@@ -57,6 +57,4 @@ defmodule Electric.Plug.ProxyWebsocketPlug do
       {:error, 400, "Bad request"}
     end
   end
-
-  defp conn_config, do: Electric.Application.pg_connection_opts()
 end

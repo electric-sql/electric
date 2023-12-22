@@ -6,21 +6,24 @@ defmodule Electric.Replication.Postgres.Client do
   doesn't support connecting via a unix socket.
   """
   alias Electric.Postgres.Extension
+  alias Electric.Replication.Connectors
+
   require Logger
 
   @type connection :: pid
   @type publication :: String.t()
 
-  @spec connect(:epgsql.connect_opts()) ::
+  @spec connect(Connectors.connection_opts()) ::
           {:ok, connection :: pid()} | {:error, reason :: :epgsql.connect_error()}
-  def connect(%{} = config) do
-    config
-    |> Electric.Utils.epgsql_config()
-    |> :epgsql.connect()
+  def connect(conn_opts) do
+    {%{ip_addr: ip_addr}, %{username: username, password: password} = epgsql_conn_opts} =
+      Connectors.pop_extraneous_conn_opts(conn_opts)
+
+    :epgsql.connect(ip_addr, username, password, epgsql_conn_opts)
   end
 
-  @spec with_conn(:epgsql.connect_opts(), fun()) :: term() | {:error, term()}
-  def with_conn(%{host: host, username: username, password: password} = config, fun) do
+  @spec with_conn(Connectors.connection_opts(), fun()) :: term() | {:error, term()}
+  def with_conn(conn_opts, fun) do
     # Best effort capture exit message, expect trap_exit to be set
     wait_exit = fn conn, res ->
       receive do
@@ -30,11 +33,14 @@ defmodule Electric.Replication.Postgres.Client do
       end
     end
 
-    Logger.info("connect: #{inspect(Map.drop(config, [:password]))}")
+    Logger.info("#{inspect(__MODULE__)}.with_conn(#{inspect(sanitize_conn_opts(conn_opts))})")
 
     {:ok, conn} = :epgsql_sock.start_link()
 
-    case :epgsql.connect(conn, host, username, password, Electric.Utils.epgsql_config(config)) do
+    {%{ip_addr: ip_addr}, %{username: username, password: password} = epgsql_conn_opts} =
+      Connectors.pop_extraneous_conn_opts(conn_opts)
+
+    case :epgsql.connect(conn, ip_addr, username, password, epgsql_conn_opts) do
       {:ok, ^conn} ->
         try do
           fun.(conn)
@@ -51,6 +57,15 @@ defmodule Electric.Replication.Postgres.Client do
         close(conn)
         wait_exit.(conn, error)
     end
+  end
+
+  @doc """
+  Format the connection opts for output, hiding the password, etc.
+  """
+  def sanitize_conn_opts(conn_opts) do
+    conn_opts
+    |> Map.put(:password, ~c"******")
+    |> Map.update!(:ip_addr, &:inet.ntoa/1)
   end
 
   @doc """
@@ -158,10 +173,9 @@ defmodule Electric.Replication.Postgres.Client do
       "#{__MODULE__} start_replication: slot: '#{slot}', publication: '#{publication}'"
     )
 
+    slot = String.to_charlist(slot)
     opts = ~c"proto_version '1', publication_names '#{publication}', messages"
-
-    conn
-    |> :epgsql.start_replication(:erlang.binary_to_list(slot), handler, [], ~c"0/0", opts)
+    :epgsql.start_replication(conn, slot, handler, [], ~c"0/0", opts)
   end
 
   @doc """
