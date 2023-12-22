@@ -165,6 +165,15 @@ defmodule Electric.Config do
         username: "user"
       ]}
 
+      iex> parse_postgresql_uri("postgresql://user%2Btesting%40gmail.com:weird%2Fpassword@localhost:5433/my%2Bdb%2Bname")
+      {:ok, [
+        host: "localhost",
+        port: 5433,
+        database: "my+db+name",
+        username: "user+testing@gmail.com",
+        password: "weird/password"
+      ]}
+
       iex> parse_postgresql_uri("postgrex://localhost")
       {:error, "has invalid URL scheme: \\"postgrex\\""}
 
@@ -208,9 +217,9 @@ defmodule Electric.Config do
         [
           host: host,
           port: port || 5432,
-          database: parse_database(path, username),
-          username: username,
-          password: password
+          database: parse_database(path, username) |> URI.decode(),
+          username: URI.decode(username),
+          password: if(password, do: URI.decode(password))
         ]
         |> Enum.reject(fn {_key, val} -> is_nil(val) end)
 
