@@ -148,6 +148,15 @@ defmodule Electric.Postgres.Proxy.UpstreamConnection do
     notify_parent(%{state | authenticated: true}, :authenticated)
   end
 
+  defp handle_backend_msg(
+         %M.AuthenticationCleartextPassword{},
+         %{authenticated: false, transport_module: :ssl} = state
+       ) do
+    response = %M.PasswordMessage{password: state.conn_opts[:password]}
+
+    upstream(response, state)
+  end
+
   defp handle_backend_msg(%M.AuthenticationSASL{} = msg, %{authenticated: false} = state) do
     {sasl_mechanism, response} = SASL.initial_response(msg)
 
