@@ -46,7 +46,9 @@ defmodule Electric.Postgres.Proxy.UpstreamConnection do
        conn: nil,
        pending: [],
        decoder: decoder,
-       conn_opts: conn_opts
+       conn_opts: conn_opts,
+       ssl_handshake: false,
+       transport_module: :gen_tcp
      }, {:continue, {:connect, conn_opts}}}
   end
 
@@ -61,7 +63,14 @@ defmodule Electric.Postgres.Proxy.UpstreamConnection do
     )
 
     {:ok, conn} = :gen_tcp.connect(host, port, tcp_opts, 1000)
-    {:noreply, %{state | conn: conn}, {:continue, {:authenticate, conn_opts}}}
+    state = %{state | conn: conn}
+
+    if conn_opts[:ssl] do
+      msg = %M.SSLRequest{}
+      {:noreply, upstream(msg, %{state | ssl_handshake: true})}
+    else
+      {:noreply, state, {:continue, {:authenticate, conn_opts}}}
+    end
   end
 
   def handle_continue({:authenticate, conn_opts}, state) do
@@ -84,7 +93,24 @@ defmodule Electric.Postgres.Proxy.UpstreamConnection do
   end
 
   @impl GenServer
-  def handle_info({:tcp, _conn, data}, state) do
+  def handle_info({:tcp, conn, data}, %{ssl_handshake: true} = state) do
+    # After we have initiated an SSL handshake, the server will send us a single byte in response, either S or N.
+    # We process the response and then proceed with the regular authentication flow.
+    state =
+      case IO.iodata_to_binary(data) do
+        "S" ->
+          Logger.debug("Upgrading upstream connection to use SSL")
+          {:ok, conn} = :ssl.connect(conn, [])
+          %{state | conn: conn, transport_module: :ssl}
+
+        "N" ->
+          state
+      end
+
+    {:noreply, %{state | ssl_handshake: false}, {:continue, {:authenticate, state.conn_opts}}}
+  end
+
+  def handle_info({proto, _conn, data}, state) when proto in [:tcp, :ssl] do
     {:ok, decoder, msgs} = PgProtocol.decode(state.decoder, data)
 
     state = handle_backend_msgs(msgs, %{state | decoder: decoder})
@@ -97,9 +123,9 @@ defmodule Electric.Postgres.Proxy.UpstreamConnection do
     {:noreply, state}
   end
 
-  def handle_info({:tcp_closed, _conn}, state) do
+  def handle_info({closed_event, _conn}, state) when closed_event in [:tcp_closed, :ssl_closed] do
     Logger.debug("Upstream connection closed")
-    {:stop, :normal, %{state | conn: nil}}
+    {:stop, :normal, reset_conn(state)}
   end
 
   @impl GenServer
@@ -110,8 +136,8 @@ defmodule Electric.Postgres.Proxy.UpstreamConnection do
   @impl GenServer
   def handle_call(:disconnect, _from, state) do
     state = upstream(%M.Terminate{}, state)
-    :ok = :gen_tcp.close(state.conn)
-    {:stop, :normal, :ok, %{state | conn: nil}}
+    :ok = tcp_close(state)
+    {:stop, :normal, :ok, reset_conn(state)}
   end
 
   defp handle_backend_msgs(msgs, state) do
@@ -151,12 +177,24 @@ defmodule Electric.Postgres.Proxy.UpstreamConnection do
   end
 
   defp upstream(msg, state) do
-    :ok = :gen_tcp.send(state.conn, PgProtocol.encode(msg))
+    :ok = tcp_send(state, PgProtocol.encode(msg))
     state
   end
 
   defp notify_parent(state, tag) do
     send(state.parent, {__MODULE__, tag})
     state
+  end
+
+  defp tcp_send(%{conn: conn, transport_module: transport}, data) do
+    transport.send(conn, data)
+  end
+
+  defp tcp_close(%{conn: conn, transport_module: transport}) do
+    transport.close(conn)
+  end
+
+  defp reset_conn(state) do
+    %{state | conn: nil, transport_module: :gen_tcp}
   end
 end
