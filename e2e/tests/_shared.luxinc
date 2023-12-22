@@ -47,9 +47,9 @@
 [macro client_session user_id session_id]
     [invoke log "user ${user_id}: session ${session_id}: start"]
     [local client_id=client_${user_id}_${session_id}]
-    !auth_config = Electric.Satellite.Auth.Secure.build_config!( \
-                     alg: "HS256", key: "integration-tests-signing-key-example" \
-                   )
+    !{:ok, auth_config} = Electric.Satellite.Auth.Secure.build_config( \
+                            alg: "HS256", key: "integration-tests-signing-key-example" \
+                          )
     ?$eprompt
     """!{:ok, conn} = TestWsClient.connect(
                         auth: %{auth_config: auth_config, user_id: "$user_id"},
@@ -67,9 +67,9 @@
 [macro client_session_continue user_id session_id position subscription_ids]
     [invoke log "user ${user_id}: session ${session_id}: start"]
     [local client_id=client_${user_id}_${session_id}]
-    !auth_config = Electric.Satellite.Auth.Secure.build_config!( \
-                     alg: "HS256", key: "integration-tests-signing-key-example" \
-                   )
+    !{:ok, auth_config} = Electric.Satellite.Auth.Secure.build_config( \
+                            alg: "HS256", key: "integration-tests-signing-key-example" \
+                          )
     ?$eprompt
     """!{:ok, conn} = TestWsClient.connect(
                         auth: %{auth_config: auth_config, user_id: "$user_id"},

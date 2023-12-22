@@ -131,4 +131,9 @@ defmodule Electric.Replication.PostgresConnector do
       "Another instance of Electric or a different application is already listening on the same port."
     )
   end
+
+  defp log_child_error(child_id, reason, _connector_config) do
+    Electric.Errors.failed_to_start_child_error(__MODULE__, child_id, reason)
+    |> Electric.Errors.print_fatal_error()
+  end
 end
