@@ -9,7 +9,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
   defmodule ConnectionPool do
     @moduledoc false
 
-    alias Electric.Replication.Connectors
+    alias Electric.Replication.{Connectors, Postgres.Client}
 
     require Logger
 
@@ -27,8 +27,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
           :error ->
             conn_config
             |> Connectors.get_connection_opts()
-            |> Electric.Utils.epgsql_config()
-            |> :epgsql.connect()
+            |> Client.connect()
         end
 
       {:ok, conn, conn_config}
@@ -48,7 +47,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
     @impl NimblePool
     def terminate_worker(_reason, conn, pool_state) do
       Logger.debug("Terminating idle db connection #{inspect(conn)}")
-      :epgsql.close(conn)
+      Client.close(conn)
       {:ok, pool_state}
     end
 

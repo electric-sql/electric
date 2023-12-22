@@ -54,7 +54,7 @@ defmodule Electric.Satellite.WebsocketServer do
      schedule_ping(%State{
        last_msg_time: :erlang.timestamp(),
        auth_provider: Keyword.fetch!(opts, :auth_provider),
-       pg_connector_opts: Keyword.fetch!(opts, :pg_connector_opts),
+       connector_config: Keyword.fetch!(opts, :connector_config),
        subscription_data_fun: Keyword.fetch!(opts, :subscription_data_fun),
        telemetry: %Telemetry{
          connection_span:
@@ -174,7 +174,8 @@ defmodule Electric.Satellite.WebsocketServer do
     _ = maybe_pause(lsn)
 
     %SatInStartReplicationReq{schema_version: schema_version} = msg
-    migrations = InitialSync.migrations_since(schema_version, state.pg_connector_opts, lsn)
+    origin = Electric.Replication.Connectors.origin(state.connector_config)
+    migrations = InitialSync.migrations_since(schema_version, origin, lsn)
 
     {msgs, state} =
       migrations
@@ -499,7 +500,7 @@ defmodule Electric.Satellite.WebsocketServer do
     defp maybe_pause(_), do: :ok
 
     def fetch_last_acked_client_lsn(state) do
-      state.pg_connector_opts
+      state.connector_config
       |> Electric.Replication.Connectors.get_connection_opts()
       |> Electric.Replication.Postgres.Client.with_conn(fn conn ->
         Electric.Postgres.Extension.fetch_last_acked_client_lsn(conn, state.client_id)

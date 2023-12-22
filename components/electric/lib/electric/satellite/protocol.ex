@@ -218,7 +218,7 @@ defmodule Electric.Satellite.Protocol do
               in_rep: %InRep{},
               out_rep: %OutRep{},
               auth_provider: nil,
-              pg_connector_opts: [],
+              connector_config: [],
               subscriptions: %{},
               subscription_data_fun: nil,
               telemetry: nil
@@ -231,7 +231,7 @@ defmodule Electric.Satellite.Protocol do
             in_rep: InRep.t(),
             out_rep: OutRep.t(),
             auth_provider: Electric.Satellite.Auth.provider(),
-            pg_connector_opts: Keyword.t(),
+            connector_config: Keyword.t(),
             subscriptions: map(),
             subscription_data_fun: fun(),
             telemetry: Telemetry.t() | nil
@@ -407,7 +407,7 @@ defmodule Electric.Satellite.Protocol do
          }, state}
 
       true ->
-        case Shapes.validate_requests(requests, Connectors.origin(state.pg_connector_opts)) do
+        case Shapes.validate_requests(requests, Connectors.origin(state.connector_config)) do
           {:ok, requests} ->
             query_subscription_data(id, requests, state)
 
@@ -566,7 +566,7 @@ defmodule Electric.Satellite.Protocol do
 
           case WriteValidation.validate_transactions!(
                  complete,
-                 {SchemaCache, Connectors.origin(state.pg_connector_opts)}
+                 {SchemaCache, Connectors.origin(state.connector_config)}
                ) do
             {:ok, accepted} ->
               {nil, send_transactions(accepted, incomplete, state)}
@@ -910,7 +910,6 @@ defmodule Electric.Satellite.Protocol do
 
     # I'm dereferencing these here because calling this in Task implies copying over entire `state` just for two fields.
     fun = state.subscription_data_fun
-    opts = state.pg_connector_opts
     span = state.telemetry.subscription_spans[id]
 
     Task.start(fn ->
@@ -918,7 +917,7 @@ defmodule Electric.Satellite.Protocol do
       # Please see documentation on that function for context on the next `receive` block.
       fun.({id, requests, context},
         reply_to: {ref, parent},
-        connection: opts,
+        connection: state.connector_config,
         telemetry_span: span
       )
     end)

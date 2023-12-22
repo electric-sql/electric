@@ -2,6 +2,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
   use ExUnit.Case, async: true
 
   alias PgProtocol.Message, as: M
+  alias Electric.Postgres.Proxy
   alias Electric.Postgres.Proxy.Injector
   alias Electric.Postgres.Proxy.TestScenario
   alias Electric.Postgres.Extension.SchemaLoader
@@ -88,6 +89,22 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
 
       assert {:ok, {[%FakeCapture{database: "important", version: :fake}], %Injector.State{}}} =
                Injector.new(opts, username: "fake", database: "important")
+    end
+
+    test "prisma shadow database mode" do
+      opts = Keyword.put(Proxy.default_handler_config()[:injector], :loader, MockSchemaLoader)
+
+      assert {:ok,
+              {[
+                 %Injector.Shadow{
+                   database: "prisma_migrate_shadow_db_cb1834f9-acad-49ec-965f-97579e3688a8"
+                 }
+               ],
+               %Injector.State{}}} =
+               Injector.new(opts,
+                 username: "fake",
+                 database: "prisma_migrate_shadow_db_cb1834f9-acad-49ec-965f-97579e3688a8"
+               )
     end
   end
 
