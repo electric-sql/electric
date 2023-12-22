@@ -98,6 +98,7 @@ defmodule Electric.Postgres.Proxy.UpstreamConnection do
   end
 
   def handle_info({:tcp_closed, _conn}, state) do
+    Logger.debug("Upstream connection closed")
     {:stop, :normal, %{state | conn: nil}}
   end
 
