@@ -44,7 +44,7 @@ BEGIN
           VALUES
             (_schema, _table, _oid);
 
-        EXECUTE format('<%= publication_sql() %>;', _schema, _table);
+        EXECUTE format('<%= add_table_to_publication_sql("%I.%I") %>;', _schema, _table);
 
         -- We want to disable any possible hooks from `CREATE TABLE` statements
         PERFORM set_config('<%= schema() %>.is_in_event_trigger', 'true', true);
@@ -52,7 +52,7 @@ BEGIN
         PERFORM set_config('<%= schema() %>.is_in_event_trigger', '', true);
 
         EXECUTE format(
-            '<%= publication_sql()  %>;',
+            '<%= add_table_to_publication_sql("%I.%I")  %>;',
             '<%= schema() %>',
             ('shadow__' || _schema || '__' || _table)::name
         );

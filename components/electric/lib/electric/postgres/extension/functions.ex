@@ -3,7 +3,9 @@ defmodule Electric.Postgres.Extension.Functions do
   This module organizes SQL functions that are to be defined in Electric's internal database schema.
   """
 
-  import Electric.Postgres.Extension
+  # Import all functions from the Extension module to make them available for calling inside SQL function templates when
+  # those templates are being evaludated by EEx.
+  import Electric.Postgres.Extension, warn: false
 
   require EEx
 
@@ -14,16 +16,12 @@ defmodule Electric.Postgres.Extension.Functions do
 
   function_paths =
     for path <- sql_files do
-      @external_resource path
-
-      fpath = Path.relative_to(path, Path.expand("./functions", __DIR__))
+      relpath = Path.relative_to(path, Path.expand("./functions", __DIR__))
       name = path |> Path.basename(".sql.eex") |> String.to_atom()
-      _ = EEx.function_from_file(:def, name, path, [])
-
-      {fpath, name}
+      {relpath, name}
     end
 
-  function_names = for {_fpath, name} <- function_paths, do: name
+  function_names = for {_relpath, name} <- function_paths, do: name
 
   fn_name_type =
     Enum.reduce(function_names, fn name, code ->
@@ -33,14 +31,14 @@ defmodule Electric.Postgres.Extension.Functions do
     end)
 
   @typep name :: unquote(fn_name_type)
-  @typep sql :: String.t()
-  @type function_list :: [{binary, sql}]
+  @typep sql :: binary
+  @type function_list :: [{Path.t(), sql}]
 
   @function_paths function_paths
   @function_names function_names
 
   @doc """
-  Get a list of `{name, SQL}` pairs where the the SQL code contains the definition of a function (or multiple functions).
+  Get a list of `{name, SQL}` pairs where the SQL code contains the definition of a function (or multiple functions).
 
   Every function in the list is defined as `CREATE OR REPLACE FUNCTION`.
   """
@@ -48,8 +46,8 @@ defmodule Electric.Postgres.Extension.Functions do
   # here. See VAX-1016 for details.
   @spec list :: function_list
   def list do
-    for {path, name} <- @function_paths do
-      {path, by_name(name)}
+    for {relpath, _name} <- @function_paths do
+      {relpath, eval_template(relpath)}
     end
   end
 
@@ -61,8 +59,14 @@ defmodule Electric.Postgres.Extension.Functions do
   """
   @spec by_name(name) :: sql
   def by_name(name) when name in @function_names do
-    apply(__MODULE__, name, [])
+    {relpath, ^name} = List.keyfind(@function_paths, name, 1)
+    eval_template(relpath)
   end
 
-  defp publication_sql, do: add_table_to_publication_sql("%I.%I")
+  defp eval_template(relpath) do
+    Path.join([Path.expand(__DIR__), "functions", relpath])
+    |> EEx.compile_file()
+    |> Code.eval_quoted([], __ENV__)
+    |> elem(0)
+  end
 end
