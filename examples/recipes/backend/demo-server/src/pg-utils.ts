@@ -66,7 +66,7 @@ export async function startGeneratingData ({
   pgPool: Pool,
   tableName: string,
   rowGenerationQuery: string,
-  valueGenerator: () => any[],
+  valueGenerator: () => Promise<any[]> | any[],
   timestampColumn?: string,
   minutesToRetain?: number,
   rowGenerationFrequencyMs?: number,
@@ -84,7 +84,7 @@ export async function startGeneratingData ({
 
   const insertRow = async (): Promise<void> => {
     try {
-      await pgPool.query(rowGenerationQuery, valueGenerator())
+      await pgPool.query(rowGenerationQuery, await Promise.resolve(valueGenerator()))
       numRowsInserted++
       if (Date.now() - lastLoggedTime > rowGenerationLoggingFrequencyMs) {
         console.log(`${tag()} - Inserted ${numRowsInserted} new rows`)
