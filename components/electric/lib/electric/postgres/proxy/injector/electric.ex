@@ -142,8 +142,8 @@ defmodule Electric.Postgres.Proxy.Injector.Electric do
   end
 
   defimpl Operation do
-    def upstream_connection(_electric, conn_config) do
-      conn_config
+    def upstream_connection(_electric, connector_config) do
+      connector_config
     end
 
     def activate(electric, state, send) do
@@ -282,7 +282,7 @@ defmodule Electric.Postgres.Proxy.Injector.Electric do
       end
     end
 
-    # handle message groups with the full [parse, [describe], bind, execute] sequence included in 
+    # handle message groups with the full [parse, [describe], bind, execute] sequence included in
     # a single packet (as opposed to a [parse, describe, {sync, flush}], [bind, execute, sync]
     # sequence which is split over two packets, with a sync/flush between)
     defp bind_execute(bind, msgs, state) do

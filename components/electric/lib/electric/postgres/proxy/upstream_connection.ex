@@ -27,7 +27,7 @@ defmodule Electric.Postgres.Proxy.UpstreamConnection do
   @impl GenServer
   def init(args) do
     parent = Keyword.fetch!(args, :parent)
-    conn_config = Keyword.fetch!(args, :conn_config)
+    connector_config = Keyword.fetch!(args, :connector_config)
     session_id = Keyword.fetch!(args, :session_id)
 
     name = name(session_id)
@@ -36,7 +36,7 @@ defmodule Electric.Postgres.Proxy.UpstreamConnection do
     Logger.metadata(proxy_session_id: session_id)
 
     decoder = PgProtocol.Decoder.backend()
-    connection = Connectors.get_connection_opts(conn_config)
+    conn_opts = Connectors.get_connection_opts(connector_config)
 
     {:ok,
      %{
@@ -46,28 +46,26 @@ defmodule Electric.Postgres.Proxy.UpstreamConnection do
        conn: nil,
        pending: [],
        decoder: decoder,
-       session_id: session_id,
-       conn_config: conn_config,
-       connection: connection
-     }, {:continue, {:connect, connection}}}
+       conn_opts: conn_opts
+     }, {:continue, {:connect, conn_opts}}}
   end
 
   @impl GenServer
-  def handle_continue({:connect, params}, state) do
-    host = params[:ip_addr] || params[:host] || ~c"localhost"
-    port = params[:port] || 5432
-    tcp_opts = [active: true] ++ List.wrap(params[:tcp_opts])
+  def handle_continue({:connect, conn_opts}, state) do
+    host = conn_opts[:ip_addr] || conn_opts[:host] || ~c"localhost"
+    port = conn_opts[:port] || 5432
+    tcp_opts = [active: true] ++ List.wrap(conn_opts[:tcp_opts])
 
     Logger.debug(
-      "Connecting to upstream PG cluster: #{inspect(host)}:#{port} with options: #{inspect(tcp_opts)}"
+      "Connecting to upstream PG cluster #{inspect(host)}:#{port} with options #{inspect(tcp_opts)}"
     )
 
     {:ok, conn} = :gen_tcp.connect(host, port, tcp_opts, 1000)
-    {:noreply, %{state | conn: conn}, {:continue, {:authenticate, params}}}
+    {:noreply, %{state | conn: conn}, {:continue, {:authenticate, conn_opts}}}
   end
 
-  def handle_continue({:authenticate, params}, state) do
-    %{username: user, database: database} = params
+  def handle_continue({:authenticate, conn_opts}, state) do
+    %{username: user, database: database} = conn_opts
 
     Logger.debug(
       "Authenticating to upstream database #{inspect(database)} as role #{inspect(user)}"
@@ -130,13 +128,13 @@ defmodule Electric.Postgres.Proxy.UpstreamConnection do
   end
 
   defp handle_backend_msg(%M.AuthenticationSASLContinue{} = msg, %{authenticated: false} = state) do
-    {sasl_mechanism, response} = SASL.client_final_response(state.sasl, msg, state.connection)
+    {sasl_mechanism, response} = SASL.client_final_response(state.sasl, msg, state.conn_opts)
 
     upstream(response, %{state | sasl: sasl_mechanism})
   end
 
   defp handle_backend_msg(%M.AuthenticationSASLFinal{} = msg, %{authenticated: false} = state) do
-    :ok = SASL.verify_server(state.sasl, msg, state.connection)
+    :ok = SASL.verify_server(state.sasl, msg, state.conn_opts)
 
     # upstream(response, %{state | sasl: nil})
     %{state | sasl: nil}

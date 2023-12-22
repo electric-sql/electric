@@ -119,8 +119,8 @@ defmodule Electric.Postgres.Proxy.Injector.Shadow do
     #
     # Normally we ignore the db param in the startup message and always connect to the
     # configured upstream database.
-    def upstream_connection(shadow, conn_config) do
-      put_in(conn_config, [:connection, :database], shadow.database)
+    def upstream_connection(shadow, connector_config) do
+      put_in(connector_config, [:connection, :database], shadow.database)
     end
 
     def recv_client(shadow, msgs, state) do
