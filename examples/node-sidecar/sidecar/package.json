@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "better-sqlite3": "^9.2.2",
-    "electric-sql": "^0.8.3"
+    "electric-sql": "^0.8.2"
   },
   "devDependencies": {
     "@electric-sql/prisma-generator": "^1.1.2",

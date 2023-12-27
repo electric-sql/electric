@@ -101,10 +101,6 @@ export class MockSatelliteProcess implements Satellite {
   async stop(): Promise<void> {
     await sleepAsync(50)
   }
-
-  async mutexSnapshot(): Promise<Date> {
-    return new Date()
-  }
 }
 
 export class MockRegistry extends BaseRegistry {

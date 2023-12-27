@@ -1,13 +1,11 @@
 import Database from 'better-sqlite3'
 import { electrify } from 'electric-sql/node'
-import { ShapeManager } from 'electric-sql/client/model'
 import { DbSchema, ElectricClient } from 'electric-sql/client/model'
 import { Server } from './ipc/server.js'
-import { HydratedConfig, Shape } from './util/config.js'
+import { HydratedConfig } from './util/config.js'
 
 export class SideCar {
   private electric?: ElectricClient<any>
-  private shapeManager?: ShapeManager
   
   constructor(private config: HydratedConfig, private ipc: Server) {}
 
@@ -23,9 +21,6 @@ export class SideCar {
     const schema = new DbSchema({}, []) // empty DB schema, we won't use the client anyway
     this.electric = await electrify(conn, schema, config)
 
-    const shapeManager = new ShapeManager(this.electric.satellite)
-    this.shapeManager = shapeManager
-
     // Sync shapes
     await this.syncShapes()
 
@@ -34,7 +29,7 @@ export class SideCar {
 
     // Perform snapshot on potential data change
     await this.ipc.onPotentialDataChange(
-      this.performSnapshot.bind(this)
+      this.potentiallyChanged.bind(this)
     )
 
     // Notify clients of actual data changes
@@ -52,20 +47,23 @@ export class SideCar {
     )
   }
 
-  async performSnapshot(): Promise<void> {
-    await this.electric?.satellite.mutexSnapshot()
+  private async potentiallyChanged(): Promise<void> {
+    await this.electric?.notifier.potentiallyChanged()
   }
 
-  async syncShapes(): Promise<void> {
-    if (!this.shapeManager) {
-      throw new Error("Shape manager not initialized")
-    }
-
+  private async syncShapes(): Promise<void> {
+    // Convert the shape to the format expected by the Satellite process
     const { sync: tables } = this.config
+    const shapeDef = {
+      selects: tables.map((tbl) => ({ tablename: tbl })),
+    }
+    
     const joinedNames = tables.join(', ')
     console.log(`Syncing tables ${joinedNames}...`)
-    const { synced } = await this.shapeManager.sync({ tables })
+
+    const { synced } = await this.electric!.satellite.subscribe([shapeDef])
     await synced
+    
     console.log(`Synced tables ${joinedNames}`)
   }
 }

@@ -2,7 +2,7 @@
 # yarn lockfile v1
 
 
-"@electric-sql/prisma-generator@^1.1.2", "@electric-sql/prisma-generator@workspace:*":
+"@electric-sql/prisma-generator@1.1.2", "@electric-sql/prisma-generator@^1.1.2":
   version "1.1.2"
   resolved "https://registry.yarnpkg.com/@electric-sql/prisma-generator/-/prisma-generator-1.1.2.tgz#2038cf597d73167f05c98b08c95544804580cbfe"
   integrity sha512-8vlWEQHw3r+1W97TGTowPdAhQL58Ltk0bTyJ43LMhwHR0J3F+AFGE65ceKF1XezXrt1KXx3w48SdNBGwHOamWg==
@@ -393,11 +393,12 @@ detect-libc@^2.0.0:
   resolved "https://registry.npmjs.org/detect-libc/-/detect-libc-2.0.2.tgz"
   integrity sha512-UX6sGumvvqSaXgdKGUsgZWqcUyIXZ/vZTrlRT/iobiKhGL0zL4d3osHj3uqllWJK+i+sixDS/3COVEOFbupFyw==
 
-"electric-sql@file:../../../clients/typescript/electric-sql-0.8.2-sc2.tgz":
+electric-sql@^0.8.2:
   version "0.8.2"
-  resolved "file:../../../clients/typescript/electric-sql-0.8.2-sc2.tgz#0a140a87393970a266cf8bb09d110098853346d0"
+  resolved "https://registry.yarnpkg.com/electric-sql/-/electric-sql-0.8.2.tgz#5331f1f083eb87d92647c94162afe8afdec0a2f8"
+  integrity sha512-oy9w9CKJbQKGgaHz7xK1ZgQWEtfVWCeNLI4FSp5Ut7Ww+xf1Qbm0RusqER33yolJuinsb3AhGdUXrfCeMCKQhQ==
   dependencies:
-    "@electric-sql/prisma-generator" "workspace:*"
+    "@electric-sql/prisma-generator" "1.1.2"
     "@prisma/client" "4.12.0"
     async-mutex "^0.4.0"
     base-64 "^1.0.0"

@@ -194,7 +194,7 @@ export class SatelliteProcess implements Satellite {
   /**
    * Perform a snapshot while taking out a mutex to avoid concurrent calls.
    */
-  async mutexSnapshot(): Promise<Date> {
+  private async mutexSnapshot() {
     const release = await this.snapshotMutex.acquire()
     try {
       return await this._performSnapshot()
