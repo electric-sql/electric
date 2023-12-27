@@ -13,6 +13,7 @@ import { makePsqlCommand } from './docker-commands/command-psql'
 import { makeConfigurePortsCommand } from './configure/command-configure-ports'
 import { makeShowConfigCommand } from './configure/command-show-config'
 import { makeWithConfigCommand } from './configure/command-with-config'
+import { makeProxyTunnelCommand } from './tunnel/command-proxy-tunnel'
 
 async function main() {
   const program = new Command()
@@ -32,6 +33,7 @@ async function main() {
     makeConfigurePortsCommand,
     makeShowConfigCommand,
     makeWithConfigCommand,
+    makeProxyTunnelCommand,
   ].forEach((cmd) => program.addCommand(cmd()))
 
   await program.parseAsync(process.argv)

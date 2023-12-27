@@ -1,17 +1,37 @@
+import { Command } from 'commander'
 import net from 'net'
 import { WebSocket, createWebSocketStream } from 'ws'
+import { addOptionGroupToCommand, getConfig } from '../config'
+import { parsePort } from '../utils'
 
-export interface TunnelOptions {
+export function makeProxyTunnelCommand() {
+  const command = new Command('proxy-tunnel')
+  command.description(
+    'Open a tunnel to the Electric Postgres Proxy and binds it to a local port'
+  )
+
+  addOptionGroupToCommand(command, 'tunnel')
+
+  command
+    .option('--local-port <port>', 'Local port to bind the tunnel to', '65432')
+    .action(async (opts) => {
+      const config = getConfig(opts)
+      const localPort = parsePort(opts.localPort)
+      proxyTunnel({
+        serviceUrl: config.SERVICE,
+        localPort,
+      })
+    })
+
+  return command
+}
+
+export interface ProxyTunnelOptions {
   serviceUrl: string
   localPort: number
 }
 
-export const defaultOptions: TunnelOptions = {
-  serviceUrl: 'ws://localhost:5133',
-  localPort: 65432,
-}
-
-export function tunnel({ serviceUrl, localPort }: TunnelOptions) {
+export function proxyTunnel({ serviceUrl, localPort }: ProxyTunnelOptions) {
   const server = net.createServer((clientSocket) => {
     log('New connection!')
 

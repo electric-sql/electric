@@ -18,7 +18,7 @@ export const configOptions = {
     doc: dedent`
       URL of the Electric service.
     `,
-    groups: ['client'],
+    groups: ['client', 'tunnel'],
     shortForm: 's',
     defaultVal: () => {
       const host = getConfigValue('SERVICE_HOST')
