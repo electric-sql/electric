@@ -51,8 +51,8 @@ function replace(filePath, outFilePath, options) {
   const code = fs.readFileSync(filePath).toString()
   let logging = false
   const newCode = code.replace(
-    /(import|export) (.+?) from ('[^\n']+'|"[^\n"]+")(;|\n)/gs,
-    (found, action, imported, from, end) => {
+    /(^|\n)(import|export) (.+?) from ('[^\n']+'|"[^\n"]+")(;|\n)/gs,
+    (found, start, action, imported, from, end) => {
       const importPath = from.slice(1, -1)
       const resolvedPath = resolveImportPath(filePath, importPath, options)
 
@@ -62,7 +62,7 @@ function replace(filePath, outFilePath, options) {
           console.log(filePath)
         }
         console.log('\t', importPath, resolvedPath)
-        return `${action} ${imported} from '${resolvedPath}'${end}`
+        return `${start}${action} ${imported} from '${resolvedPath}'${end}`
       }
 
       return found
