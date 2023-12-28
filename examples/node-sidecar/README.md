@@ -19,9 +19,36 @@ The sidecar runs Electric in a NodeJS process to which applications can connect.
 The sidecar notifies the applications of incoming changes.
 Similarly, applications notify the sidecar of potential changes that need to be synced with Electric.
 
+## Installing dependencies
+
+Install the sidecar's dependencies:
+```sh
+cd sidecar
+yarn
+```
+
+Also install the application's dependencies:
+```sh
+cd apps/node
+yarn
+```
+
 ## Quickstart
 
-You can run the application and the sidecar with the following command:
+Before you can run the application, you need to start Postgres and the Electric sync service:
+```sh
+cd apps/node
+yarn backend:start # or backend:up to run in the background
+```
+
+Open another terminal to migrate the Postgres database and generate an Electric client for the application:
+```sh
+cd apps/node
+yarn db:migrate
+yarn client:generate
+```
+
+Now, you can run the application and the sidecar with the following command:
 ```sh
 node run.js
 ```
