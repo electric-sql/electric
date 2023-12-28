@@ -63,6 +63,7 @@ import {
   RelationCallback,
   OutboundStartedCallback,
   TransactionCallback,
+  SocketCloseReason,
 } from '../util/types'
 import {
   base64,
@@ -74,7 +75,7 @@ import {
 import { Client } from '.'
 import { SatelliteClientOpts, satelliteClientDefaults } from './config'
 import Log from 'loglevel'
-import { AuthState } from '../auth'
+import { AuthCredentials } from '../auth'
 import isequal from 'lodash.isequal'
 import {
   SUBSCRIPTION_DELIVERED,
@@ -237,14 +238,14 @@ export class SatelliteClient implements Client {
           }
           this.emitter.enqueueEmit('error', error)
         })
-        this.socket.onClose(() => {
+        this.socket.onClose((ev: SocketCloseReason) => {
           this.disconnect()
           if (this.emitter.listenerCount('error') === 0) {
             Log.error(`socket closed but no listener is attached`)
           }
           this.emitter.enqueueEmit(
             'error',
-            new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket closed')
+            new SatelliteError(ev, 'socket closed')
           )
         })
 
@@ -347,7 +348,7 @@ export class SatelliteClient implements Client {
       .then(this.handleStopResp.bind(this))
   }
 
-  authenticate({ clientId, token }: AuthState): Promise<AuthResponse> {
+  authenticate({ clientId, token }: AuthCredentials): Promise<AuthResponse> {
     const request = SatAuthReq.fromPartial({
       id: clientId,
       token: token,

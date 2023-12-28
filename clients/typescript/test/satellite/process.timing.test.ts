@@ -3,6 +3,7 @@ import { sleepAsync } from '../../src/util/timer'
 
 import { satelliteDefaults } from '../../src/satellite/config'
 import { makeContext, clean, ContextType } from './common'
+import { AuthStatus } from '../../src/auth'
 
 // Speed up the intervals for testing.
 const opts = Object.assign({}, satelliteDefaults, {
@@ -18,7 +19,10 @@ test('throttled snapshot respects window', async (t) => {
   const { adapter, notifier, runMigrations, satellite, authState } = t.context
   await runMigrations()
 
-  await satellite._setAuthState(authState)
+  await satellite._setAuthState({
+    ...authState,
+    status: AuthStatus.AUTHENTICATED,
+  })
 
   await satellite._throttledSnapshot()
 

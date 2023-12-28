@@ -53,6 +53,7 @@ export enum SatelliteErrorCode {
   AUTH_ERROR,
   AUTH_FAILED,
   AUTH_REQUIRED,
+  AUTH_EXPIRED,
 
   // server errors
   INVALID_REQUEST,
@@ -83,6 +84,10 @@ export enum SatelliteErrorCode {
   SHAPE_DELIVERY_ERROR,
   SHAPE_SIZE_LIMIT_EXCEEDED,
 }
+
+export type SocketCloseReason =
+  | SatelliteErrorCode.AUTH_EXPIRED
+  | SatelliteErrorCode.SOCKET_ERROR
 
 export type AuthResponse = {
   serverId?: string

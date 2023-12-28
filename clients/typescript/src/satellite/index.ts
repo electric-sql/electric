@@ -1,4 +1,4 @@
-import { AuthConfig, AuthState } from '../auth/index'
+import { AuthConfig, AuthCredentials } from '../auth/index'
 import { InternalElectricConfig } from '../config/index'
 import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
@@ -77,7 +77,7 @@ export interface Client {
   connect(): Promise<void>
   disconnect(): void
   shutdown(): void
-  authenticate(authState: AuthState): Promise<AuthResponse>
+  authenticate(authState: AuthCredentials): Promise<AuthResponse>
   isConnected(): boolean
   startReplication(
     lsn?: LSN,
