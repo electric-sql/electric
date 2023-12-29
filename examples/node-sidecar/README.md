@@ -41,8 +41,7 @@ cd apps/node
 yarn backend:start # or backend:up to run in the background
 ```
 
-Open another terminal to migrate the Postgres database and generate an Electric client for the application:
-
+Open another terminal to migrate the Postgres database and generate an Electric client for the application: 
 ```sh
 cd apps/node
 yarn db:migrate
