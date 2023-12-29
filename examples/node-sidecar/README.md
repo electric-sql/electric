@@ -42,18 +42,37 @@ yarn backend:start # or backend:up to run in the background
 ```
 
 Open another terminal to migrate the Postgres database and generate an Electric client for the application:
+
 ```sh
 cd apps/node
 yarn db:migrate
 yarn client:generate
 ```
 
-Now, you can run the application and the sidecar with the following command:
+Now, you can run the application and the sidecar with the following command (from the root folder):
 ```sh
 node run.js
 ```
 
 We configured the sidecar to listen on port 8230 (which should be free) and use the default connection URL for Electric. If that port is not free or you need to change the connection URL for Electric you can follow the configuration steps below.
+
+You now have an interactive shell application that is communicating with electric through the sidecar over a TCP socket. You can implement the same pattern in other languages, by implementing the IPC socket protocol (see ```sidecar/src/ipc/socket.ts```).
+
+Go ahead and add some items to the database. Check that the added items have been written to the database, by connecting to the Postgres database using `psql`:
+
+```sh
+cd apps/node
+yarn db:psql
+```
+
+Now add some new record to the `items` table directly on Postgres and see it reactively appear on the node application.
+
+When you're done, you can tear down Postgres and the Electric sync service:
+
+```sh
+cd apps/node
+yarn backend:down # or backend:up to run in the background
+```
 
 ## Sidecar configuration
 
