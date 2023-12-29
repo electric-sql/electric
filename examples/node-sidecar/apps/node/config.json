@@ -1,0 +1,6 @@
+{
+  "databaseFile": "./electric-sidecar-node-example.db",
+  "ipc": {
+    "port": 8230
+  }
+}

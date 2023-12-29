@@ -1,0 +1,41 @@
+{
+  "name": "electric-sql-wa-sqlite-example",
+  "version": "0.7.0",
+  "author": "ElectricSQL",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "backend:start": "node ./backend/startCompose.cjs",
+    "backend:stop": "docker compose --env-file backend/compose/.envrc -f backend/compose/docker-compose.yaml stop",
+    "backend:up": "yarn backend:start --detach",
+    "backend:down": "docker compose --env-file backend/compose/.envrc -f backend/compose/docker-compose.yaml down --volumes",
+    "client:generate": "yarn electric:check && npx electric-sql generate --service http://localhost:5133 --proxy postgresql://prisma:proxy_password@localhost:65432/electric",
+    "client:watch": "yarn client:generate --watch",
+    "db:migrate": "node ./db/migrate.cjs",
+    "db:psql": "node ./db/connect.cjs",
+    "ports:configure": "node ./change-ports.cjs",
+    "electric:start": "node ./backend/startElectric.cjs",
+    "electric:check": "node ./check-electric-is-running.cjs",
+    "build": "npx tsc",
+    "start": "yarn electric:check && npm run build && node dist/index.js"
+  },
+  "engines": {
+    "node": ">=16.11.0"
+  },
+  "dependencies": {
+    "better-sqlite3": "^9.2.2",
+    "electric-sql": "^0.8.2"
+  },
+  "devDependencies": {
+    "@databases/pg-migrations": "^5.0.2",
+    "@electric-sql/prisma-generator": "^1.1.0",
+    "@prisma/client": "4.8.1",
+    "@types/better-sqlite3": "^7.6.8",
+    "@types/node": ">=16.11.0",
+    "fs-extra": "^10.0.0",
+    "prisma": "4.8.1",
+    "shelljs": "^0.8.5",
+    "tcp-port-used": "^1.0.2",
+    "typescript": "^4.4.3"
+  }
+}

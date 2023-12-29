@@ -1,0 +1,1 @@
+const __ELECTRIC_URL_ = 'ws://localhost:5133' // our scripts only use the port to check that Electric is running
