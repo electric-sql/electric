@@ -21,7 +21,7 @@ interface EditorProps {
   placeholder?: string
 }
 
-const Editor = ({
+const MarkdownEditor = ({
   value,
   onChange,
   className = '',
@@ -79,4 +79,4 @@ const Editor = ({
   )
 }
 
-export default Editor
+export default MarkdownEditor

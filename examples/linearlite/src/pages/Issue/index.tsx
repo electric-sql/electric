@@ -10,7 +10,8 @@ import StatusIcon from '../../components/StatusIcon'
 import Avatar from '../../components/Avatar'
 import { useElectric } from '../../electric'
 import { PriorityDisplay, StatusDisplay } from '../../types/issue'
-import Editor from '../../components/editor/Editor'
+import YdocEditor from '../../components/editor/YdocEditor'
+import { useElectricYDoc } from '../../utils/y-electricsql/react'
 import DeleteModal from './DeleteModal'
 import Comments from './Comments'
 import debounce from 'lodash.debounce'
@@ -20,19 +21,24 @@ const debounceTime = 500
 function IssuePage() {
   const navigate = useNavigate()
   const { id } = useParams()
-  const { db } = useElectric()!
+  const electricClient = useElectric()!
+  const db = electricClient.db
   const { results: issue } = useLiveQuery(
     db.issue.liveUnique({
       where: { id: id },
     })
   )
 
+  const { ydoc, loaded: ydocLoaded, error: _ydocError } = useElectricYDoc(
+    electricClient,
+    issue?.ydoc_id
+  )
+  // TODO: handle ydocError
+
   const [showDeleteModal, setShowDeleteModal] = useState(false)
 
   const [dirtyTitle, setDirtyTitle] = useState<string | null>(null)
   const titleIsDirty = useRef(false)
-  const [dirtyDescription, setDirtyDescription] = useState<string | null>(null)
-  const descriptionIsDirty = useRef(false)
 
   if (issue === undefined) {
     return <div className="p-8 w-full text-center">Loading...</div>
@@ -45,10 +51,6 @@ function IssuePage() {
   if (dirtyTitle === issue.title) {
     setDirtyTitle(null)
     titleIsDirty.current = false
-  }
-  if (dirtyDescription === issue.description) {
-    setDirtyDescription(null)
-    descriptionIsDirty.current = false
   }
 
   const handleStatusChange = (status: string) => {
@@ -94,30 +96,6 @@ function IssuePage() {
     titleIsDirty.current = true
     // We debounce the title change so that we don't spam the db with updates
     handleTitleChangeDebounced(title)
-  }
-
-  const handleDescriptionChangeDebounced = debounce(
-    async (description: string) => {
-      await db.issue.update({
-        data: {
-          description: description,
-          modified: new Date(),
-        },
-        where: {
-          id: issue.id,
-        },
-      })
-      // We can't set descriptionIsDirty.current = false here because we haven't yet received
-      // the updated issue from the db
-    },
-    debounceTime
-  )
-
-  const handleDescriptionChange = (description: string) => {
-    setDirtyDescription(description)
-    descriptionIsDirty.current = true
-    // We debounce the description change so that we don't spam the db with updates
-    handleDescriptionChangeDebounced(description)
   }
 
   const handleDelete = () => {
@@ -240,16 +218,14 @@ function IssuePage() {
               onChange={(e) => handleTitleChange(e.target.value)}
             />
 
-            <Editor
-              className="prose w-full max-w-full mt-2 font-normal appearance-none min-h-12 p-3 text-md rounded editor"
-              value={
-                descriptionIsDirty.current
-                  ? dirtyDescription || ''
-                  : issue.description || ''
-              }
-              onChange={(val) => handleDescriptionChange(val)}
-              placeholder="Add description..."
-            />
+            {(ydoc && ydocLoaded) && (
+              <YdocEditor
+                className="prose w-full max-w-full mt-2 font-normal appearance-none min-h-12 p-3 text-md rounded editor"
+                ydoc={ydoc}
+                field="description"
+                placeholder="Add description..."
+              />
+            )}
             <div className="border-t border-gray-200 mt-3 p-3">
               <h2 className="text-md mb-3">Comments</h2>
               <Comments issue={issue} />

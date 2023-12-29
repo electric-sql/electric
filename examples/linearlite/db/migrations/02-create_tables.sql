@@ -2,14 +2,16 @@
 CREATE TABLE IF NOT EXISTS "issue" (
     "id" UUID NOT NULL,
     "title" TEXT NOT NULL,    
-    "description" TEXT NOT NULL,
+    -- "description" TEXT NOT NULL,
     "priority" TEXT NOT NULL,
     "status" TEXT NOT NULL,
     "modified" TIMESTAMPTZ NOT NULL,
     "created" TIMESTAMPTZ NOT NULL,
     "kanbanorder" TEXT NOT NULL,
     "username" TEXT NOT NULL,
-    CONSTRAINT "issue_pkey" PRIMARY KEY ("id")
+    "ydoc_id" UUID NULL,
+    CONSTRAINT "issue_pkey" PRIMARY KEY ("id"),
+    FOREIGN KEY (ydoc_id) REFERENCES ydoc(id)
 );
 
 -- CREATE TABLE IF NOT EXISTS "user" (

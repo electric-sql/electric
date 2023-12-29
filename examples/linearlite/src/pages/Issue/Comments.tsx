@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useElectric, type Issue } from '../../electric'
-import Editor from '../../components/editor/Editor'
+import MarkdownEditor from '../../components/editor/MarkdownEditor'
 import Avatar from '../../components/Avatar'
 import { formatDate } from '../../utils/date'
 import { showWarning } from '../../utils/notification'
@@ -74,7 +74,7 @@ function Comments({ issue }: CommentsProps) {
   return (
     <>
       {commentList()}
-      <Editor
+      <MarkdownEditor
         className="prose w-full max-w-full mt-2 font-normal appearance-none min-h-12 p-3 text-md shadow-sm rounded border border-gray-200 editor"
         value={newCommentBody}
         onChange={(val) => setNewCommentBody(val)}

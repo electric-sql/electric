@@ -47,6 +47,11 @@ const App = () => {
         const { synced } = await client.db.issue.sync({
           include: {
             comment: true,
+            ydoc: {
+              include: {
+                ydoc_update: true,
+              },
+            }
           },
         })
         await synced
