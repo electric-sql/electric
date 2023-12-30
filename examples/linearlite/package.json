@@ -40,6 +40,7 @@
     "@tauri-apps/api": "^2.0.0-beta.0",
     "@tauri-apps/plugin-shell": "^2.0.0-beta.0",
     "@tiptap/extension-collaboration": "^2.1.13",
+    "@tiptap/extension-collaboration-cursor": "^2.1.13",
     "@tiptap/extension-placeholder": "^2.1.13",
     "@tiptap/extension-table": "^2.1.13",
     "@tiptap/extension-table-cell": "^2.1.13",
@@ -69,6 +70,7 @@
     "vite-plugin-svgr": "^3.2.0",
     "wa-sqlite": "github:rhashimoto/wa-sqlite#semver:^0.9.8",
     "y-prosemirror": "^1.0.20",
+    "y-webrtc": "^10.3.0",
     "yjs": "^13.6.10",
     "zod": "^3.22.2"
   },

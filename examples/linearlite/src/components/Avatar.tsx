@@ -1,5 +1,6 @@
 import { MouseEventHandler } from 'react'
 import classnames from 'classnames'
+import { userColor } from '../utils'
 import AvatarImg from '../assets/icons/avatar.svg'
 
 interface Props {
@@ -8,18 +9,6 @@ interface Props {
   name?: string
   avatarUrl?: string
   onClick?: MouseEventHandler | undefined
-}
-
-//bg-blue-500
-
-function stringToHslColor(str: string, s: number, l: number) {
-  var hash = 0
-  for (var i = 0; i < str.length; i++) {
-    hash = str.charCodeAt(i) + ((hash << 5) - hash)
-  }
-
-  var h = hash % 360
-  return 'hsl(' + h + ', ' + s + '%, ' + l + '%)'
 }
 
 function getAcronym(name: string) {
@@ -45,7 +34,7 @@ function Avatar({ online, showOffline, name, onClick, avatarUrl }: Props) {
     avatar = (
       <div
         className="flex items-center justify-center w-4.5 text-xxs h-4.5 text-white rounded-full"
-        style={{ backgroundColor: stringToHslColor(name, 50, 50) }}
+        style={{ backgroundColor: userColor(name) }}
       >
         {getAcronym(name)}
       </div>

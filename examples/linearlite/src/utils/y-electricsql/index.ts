@@ -8,7 +8,8 @@ interface ydocUpdateQueryRow {
   data: string
 }
 
-const DEFAULT_STORE_TIMEOUT = 100
+const DEFAULT_STORE_TIMEOUT = 1000
+const DEFAULT_CHECKPOINT_BYTES = 100_000
 
 export interface ElectricSQLPersistanceOptions {
   /**
@@ -21,6 +22,12 @@ export interface ElectricSQLPersistanceOptions {
    * The Yjs document (optional)
    */
   ydoc?: Y.Doc
+
+  /**
+   * The checkpoint size in bytes.
+   * Default: 100_000 bytes
+   */
+  checkpointBytes?: number
 }
 
 export class ElectricSQLPersistance extends ObservableV2<{
@@ -35,6 +42,9 @@ export class ElectricSQLPersistance extends ObservableV2<{
   #ydocUnsubscribe?: () => void
   #loadedUpdateIds: Set<string>
   #pendingUpdates: Uint8Array[]
+  #checkpointBytes: number
+  #savedBytes: number
+  #webrtcSecret?: string
 
   constructor(
     public electricClient: ElectricClient<DbSchema<any>>,
@@ -48,6 +58,9 @@ export class ElectricSQLPersistance extends ObservableV2<{
     this.#loaded = false
     this.#loadedUpdateIds = new Set()
     this.#pendingUpdates = []
+
+    this.#checkpointBytes = options?.checkpointBytes ?? DEFAULT_CHECKPOINT_BYTES
+    this.#savedBytes = 0
 
     this.#init()
   }
@@ -65,6 +78,7 @@ export class ElectricSQLPersistance extends ObservableV2<{
         ])
         return
       }
+      this.#webrtcSecret = rows[0].webrtc_secret as string | undefined
     } catch (err) {
       this.emit('error', [err as Error])
       return
@@ -77,7 +91,6 @@ export class ElectricSQLPersistance extends ObservableV2<{
             (change) => change.qualifiedTablename.tablename === 'ydoc_update'
           )
         ) {
-          console.log('New ydoc_update')
           this.#loadNewUpdates()
         }
       })
@@ -125,7 +138,11 @@ export class ElectricSQLPersistance extends ObservableV2<{
     _doc: Y.Doc,
     transaction: Y.Transaction
   ) {
-    if (origin == ElectricSQLPersistance && !transaction.local) return // Skip updates from remote revs
+    // Skip updates from remote revs, these are any that originate from this
+    // persistance provider or are market as not local.
+    // Essentially, we only want to store updates that originate from edits that
+    // the user directly made to the document.
+    if (origin == ElectricSQLPersistance || !transaction.local) return
     this.#pendingUpdates.push(update)
     if (!this.#storeTimeoutId) {
       this.#storeTimeoutId = setTimeout(() => {
@@ -135,7 +152,7 @@ export class ElectricSQLPersistance extends ObservableV2<{
     }
   }
 
-  async storePendingUpdates() {
+  async storePendingUpdates(checkpointing = false) {
     if (this.#storeTimeoutId) {
       clearTimeout(this.#storeTimeoutId)
       this.#storeTimeoutId = null
@@ -145,10 +162,15 @@ export class ElectricSQLPersistance extends ObservableV2<{
     const updateId = uuid()
     this.#loadedUpdateIds.add(updateId) // Add to loaded updates so we don't load it
     const updateBase64 = await bytesToBase64(update)
+    this.#savedBytes += updateBase64.length
     await this.electricClient.db.raw({
       sql: `INSERT INTO "ydoc_update" ("id", "ydoc_id", "data") VALUES (?, ?, ?)`,
       args: [updateId, this.ydocId, updateBase64],
     })
+    if (!checkpointing && this.#savedBytes > this.#checkpointBytes) {
+      this.#savedBytes = 0
+      await this.checkpoint()
+    }
   }
 
   /**
@@ -161,14 +183,14 @@ export class ElectricSQLPersistance extends ObservableV2<{
    *   Maybe add a `checkpoint` column to the inserted row?
    */
   async checkpoint() {
-    await this.storePendingUpdates()
+    await this.storePendingUpdates(true)
     // Get all updates and merge them into one update
     const updates = (await this.electricClient.db.raw({
       sql: `SELECT "id", "data" FROM "ydoc_update" WHERE "ydoc_id" = ?`,
       args: [this.ydocId],
     })) as unknown as ydocUpdateQueryRow[]
 
-    const updatesData = [];
+    const updatesData = []
     for (const update of updates) {
       updatesData.push(await base64ToBytes(update.data))
     }
@@ -207,6 +229,10 @@ export class ElectricSQLPersistance extends ObservableV2<{
   get loaded() {
     return this.#loaded
   }
+
+  get webrtcSecret() {
+    return this.#webrtcSecret
+  }
 }
 
 export async function saveNewElectricYDoc(
@@ -217,8 +243,8 @@ export async function saveNewElectricYDoc(
   const updateBase64 = await bytesToBase64(Y.encodeStateAsUpdateV2(ydoc))
   await electricClient.adapter.runInTransaction(
     {
-      sql: `INSERT INTO ydoc ("id") VALUES (?);`,
-      args: [ydocId],
+      sql: `INSERT INTO ydoc ("id", "webrtc_secret") VALUES (?, ?);`,
+      args: [ydocId, generateRandomString(64)],
     },
     {
       sql: `INSERT INTO ydoc_update ("id", "ydoc_id", "data") VALUES (?, ?, ?);`,
@@ -228,8 +254,20 @@ export async function saveNewElectricYDoc(
   return ydocId
 }
 
+const generateRandomString = (length: number): string => {
+  const printableAscii =
+    ' !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~'
+  return Array.from({ length }, () => {
+    return printableAscii.charAt(
+      Math.floor(Math.random() * printableAscii.length)
+    )
+  }).join('')
+}
+
+// Below are temporary functions to convert between base64 and bytes
+// once we have a way to store binary data in the database, we can remove these.
+
 async function base64ToBytes(base64string: string) {
-  console.log(base64string)
   // convert the base64 string to a Blob:
   const blob = await fetch(
     `data:application/octet-stream;base64,${base64string}`

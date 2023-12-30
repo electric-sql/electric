@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import {
   useEditor,
   EditorContent,
@@ -12,14 +13,16 @@ import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
 import TableRow from '@tiptap/extension-table-row'
 import Collaboration from '@tiptap/extension-collaboration'
+import CollaborationCursor from '@tiptap/extension-collaboration-cursor'
 import EditorMenu from './EditorMenu'
-import { useMemo } from 'react'
+import { userColor } from '../../utils'
 
 interface EditorProps {
   ydoc: Y.Doc
   field: string
   className?: string
   placeholder?: string
+  collaborationProvider?: any
 }
 
 const YdocEditor = ({
@@ -27,6 +30,7 @@ const YdocEditor = ({
   field = 'document',
   className = '',
   placeholder,
+  collaborationProvider,
 }: EditorProps) => {
   const editorProps = {
     attributes: {
@@ -47,6 +51,19 @@ const YdocEditor = ({
         document: ydoc,
         field,
       }),
+      // Register the collaboration cursor extension
+      ...(collaborationProvider
+        ? [
+            CollaborationCursor.configure({
+              provider: collaborationProvider,
+              user: {
+                // TODO: get user info from auth
+                name: 'testuser',
+                color: userColor('testuser'),
+              },
+            }),
+          ]
+        : []),
       ...(placeholder
         ? [
             Placeholder.configure({

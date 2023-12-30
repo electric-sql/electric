@@ -11,12 +11,24 @@ import Avatar from '../../components/Avatar'
 import { useElectric } from '../../electric'
 import { PriorityDisplay, StatusDisplay } from '../../types/issue'
 import YdocEditor from '../../components/editor/YdocEditor'
-import { useElectricYDoc } from '../../utils/y-electricsql/react'
+import {
+  useElectricYDoc,
+  UseElectricYDocOptions,
+} from '../../utils/y-electricsql/react'
 import DeleteModal from './DeleteModal'
 import Comments from './Comments'
 import debounce from 'lodash.debounce'
 
 const debounceTime = 500
+
+const electricYDocOptions: UseElectricYDocOptions = {
+  webrtc: {
+    // Enable webrtc for collaboration
+    // Use a local signaling server
+    // run it with `npx PORT=4444 npx y-webrtc-signaling`
+    signaling: ['ws://localhost:4444'],
+  },
+}
 
 function IssuePage() {
   const navigate = useNavigate()
@@ -29,10 +41,12 @@ function IssuePage() {
     })
   )
 
-  const { ydoc, loaded: ydocLoaded, error: _ydocError } = useElectricYDoc(
-    electricClient,
-    issue?.ydoc_id
-  )
+  const {
+    ydoc,
+    loaded: ydocLoaded,
+    error: _ydocError,
+    webrtcProvider,
+  } = useElectricYDoc(electricClient, issue?.ydoc_id, electricYDocOptions)
   // TODO: handle ydocError
 
   const [showDeleteModal, setShowDeleteModal] = useState(false)
@@ -218,12 +232,13 @@ function IssuePage() {
               onChange={(e) => handleTitleChange(e.target.value)}
             />
 
-            {(ydoc && ydocLoaded) && (
+            {ydoc && ydocLoaded && (
               <YdocEditor
                 className="prose w-full max-w-full mt-2 font-normal appearance-none min-h-12 p-3 text-md rounded editor"
                 ydoc={ydoc}
                 field="description"
                 placeholder="Add description..."
+                collaborationProvider={webrtcProvider}
               />
             )}
             <div className="border-t border-gray-200 mt-3 p-3">

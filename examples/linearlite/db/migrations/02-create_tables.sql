@@ -2,7 +2,7 @@
 CREATE TABLE IF NOT EXISTS "issue" (
     "id" UUID NOT NULL,
     "title" TEXT NOT NULL,    
-    -- "description" TEXT NOT NULL,
+    "description" TEXT NOT NULL,
     "priority" TEXT NOT NULL,
     "status" TEXT NOT NULL,
     "modified" TIMESTAMPTZ NOT NULL,

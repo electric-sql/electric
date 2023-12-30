@@ -1,5 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import * as Y from 'yjs'
+import {
+  WebrtcProvider,
+  type ProviderOptions as WebrtcProviderOptions,
+} from 'y-webrtc'
 import { DbSchema, ElectricClient } from 'electric-sql/client/model'
 import {
   ElectricSQLPersistance,
@@ -8,15 +12,21 @@ import {
 
 export * from './index'
 
+export interface UseElectricYDocOptions extends ElectricSQLPersistanceOptions {
+  roomName?: string // Used for webrtc, defaults to ydocId
+  webrtc?: boolean | WebrtcProviderOptions
+}
+
 export function useElectricYDoc(
   electricClient: ElectricClient<DbSchema<any>>,
   ydocId?: string | null,
-  options?: ElectricSQLPersistanceOptions
+  options?: UseElectricYDocOptions
 ) {
   const [ydoc, setYdoc] = useState<Y.Doc | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const persistance = useRef<ElectricSQLPersistance | null>(null)
+  const webrtcProvider = useRef<WebrtcProvider | null>(null)
 
   useEffect(() => {
     if (!ydocId) return
@@ -31,6 +41,18 @@ export function useElectricYDoc(
       if (ignore) return
       setLoaded(true)
       setYdoc(persistance.current?.ydoc!)
+
+      if (options?.webrtc) {
+        webrtcProvider.current = new WebrtcProvider(
+          options?.roomName || ydocId,
+          persistance.current!.ydoc,
+          options?.webrtc === true
+            ? {
+                password: persistance.current!.webrtcSecret,
+              }
+            : options?.webrtc
+        )
+      }
     }
 
     const onError = (err: Error) => {
@@ -45,6 +67,10 @@ export function useElectricYDoc(
       ignore = true
       setLoaded(false)
       setError(null)
+      if (webrtcProvider.current) {
+        webrtcProvider.current?.disconnect()
+        webrtcProvider.current?.destroy()
+      }
       persistance.current?.off('loaded', onLoaded)
       persistance.current?.off('error', onError)
       persistance.current?.destroy()
@@ -57,5 +83,6 @@ export function useElectricYDoc(
     persistance: persistance.current,
     loaded,
     error,
+    webrtcProvider: webrtcProvider.current,
   }
 }
