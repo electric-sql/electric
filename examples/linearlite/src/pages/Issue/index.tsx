@@ -11,15 +11,13 @@ import Avatar from '../../components/Avatar'
 import { useElectric } from '../../electric'
 import { PriorityDisplay, StatusDisplay } from '../../types/issue'
 import YdocEditor from '../../components/editor/YdocEditor'
+import YdocTextInput from '../../components/editor/YdocTextInput'
 import {
   useElectricYDoc,
   UseElectricYDocOptions,
 } from '../../utils/y-electricsql/react'
 import DeleteModal from './DeleteModal'
 import Comments from './Comments'
-import debounce from 'lodash.debounce'
-
-const debounceTime = 500
 
 const electricYDocOptions: UseElectricYDocOptions = {
   webrtc: {
@@ -89,27 +87,6 @@ function IssuePage() {
         id: issue.id,
       },
     })
-  }
-
-  const handleTitleChangeDebounced = debounce(async (title: string) => {
-    await db.issue.update({
-      data: {
-        title: title,
-        modified: new Date(),
-      },
-      where: {
-        id: issue.id,
-      },
-    })
-    // We can't set titleIsDirty.current = false here because we haven't yet received
-    // the updated issue from the db
-  }, debounceTime)
-
-  const handleTitleChange = (title: string) => {
-    setDirtyTitle(title)
-    titleIsDirty.current = true
-    // We debounce the title change so that we don't spam the db with updates
-    handleTitleChangeDebounced(title)
   }
 
   const handleDelete = () => {
@@ -225,12 +202,15 @@ function IssuePage() {
             </div>
           </div>
           <div className="flex flex-col md:flex-[3_0_0] md:p-3 border-gray-200 md:border-r min-h-0 min-w-0 overflow-auto">
-            <input
-              className="w-full px-3 py-1 text-lg font-semibold placeholder-gray-400 border-transparent rounded "
-              placeholder="Issue title"
-              value={titleIsDirty.current ? dirtyTitle! : issue.title}
-              onChange={(e) => handleTitleChange(e.target.value)}
-            />
+            {ydoc && ydocLoaded && (
+              <YdocTextInput
+                className="w-full px-3 py-1 text-lg font-semibold placeholder-gray-400 border-transparent rounded"
+                ydoc={ydoc}
+                field="title"
+                placeholder="Issue title"
+                collaborationProvider={webrtcProvider}
+              />
+            )}
 
             {ydoc && ydocLoaded && (
               <YdocEditor

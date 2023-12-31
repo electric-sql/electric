@@ -65,8 +65,15 @@ export function useElectricYDoc(
 
     return () => {
       ignore = true
+
+      // There may be pending updates that need to be stored
+      persistance.current?.storePendingUpdates()
+
+      // Reset state
       setLoaded(false)
       setError(null)
+
+      // Cleanup
       if (webrtcProvider.current) {
         webrtcProvider.current?.disconnect()
         webrtcProvider.current?.destroy()

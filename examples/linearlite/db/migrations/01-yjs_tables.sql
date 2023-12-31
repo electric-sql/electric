@@ -2,6 +2,7 @@ CREATE TABLE IF NOT EXISTS "ydoc" (
     "id" UUID NOT NULL,
     "type" TEXT NOT NULL, -- Type of the document, used to hook into materializer
     "webrtc_secret" TEXT NOT NULL, -- Secret used for WebRTC awareness encryption
+    "last_materialized" TEXT NOT NULL, -- Hash og update ids from last materialization
     CONSTRAINT "ydoc_pkey" PRIMARY KEY ("id")
 );
 ALTER TABLE ydoc ENABLE ELECTRIC;

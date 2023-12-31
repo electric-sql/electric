@@ -7,6 +7,8 @@ import 'react-toastify/dist/ReactToastify.css'
 import List from './pages/List'
 import Issue from './pages/Issue'
 import LeftMenu from './components/LeftMenu'
+import { YDocMaterializer } from './utils/y-electricsql/materializer'
+import { extractTextFromXmlFragment } from './utils/y-electricsql/utils'
 
 import { ElectricProvider, initElectric, dbName, DEBUG } from './electric'
 import { Electric } from './generated/client'
@@ -44,6 +46,27 @@ const App = () => {
       try {
         const client = await initElectric()
         setElectric(client)
+
+        const materializer = new YDocMaterializer(client)
+        materializer.addMaterializer('issue', async ({ ydocId, ydoc }) => {
+          console.log('Materilize', ydocId)
+          const description = ydoc.getXmlFragment('description')
+          const descriptionText = description
+            ? extractTextFromXmlFragment(description)
+            : ''
+          const title = ydoc.getXmlFragment('title')
+          const titleText = title ? extractTextFromXmlFragment(title) : ''
+          client.db.issue.updateMany({
+            where: {
+              ydoc_id: ydocId,
+            },
+            data: {
+              description: descriptionText,
+              title: titleText,
+            },
+          })
+        })
+
         const { synced } = await client.db.issue.sync({
           include: {
             comment: true,
@@ -51,7 +74,7 @@ const App = () => {
               include: {
                 ydoc_update: true,
               },
-            }
+            },
           },
         })
         await synced

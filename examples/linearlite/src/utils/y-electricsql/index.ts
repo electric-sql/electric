@@ -237,14 +237,15 @@ export class ElectricSQLPersistance extends ObservableV2<{
 
 export async function saveNewElectricYDoc(
   electricClient: ElectricClient<DbSchema<any>>,
-  ydoc: Y.Doc
+  ydoc: Y.Doc,
+  type: string
 ) {
   const ydocId = ydoc.guid
   const updateBase64 = await bytesToBase64(Y.encodeStateAsUpdateV2(ydoc))
   await electricClient.adapter.runInTransaction(
     {
-      sql: `INSERT INTO ydoc ("id", "webrtc_secret") VALUES (?, ?);`,
-      args: [ydocId, generateRandomString(64)],
+      sql: `INSERT INTO ydoc ("id", "type", "webrtc_secret", "last_materialized") VALUES (?, ?, ?, ?);`,
+      args: [ydocId, type, generateRandomString(64), ''],
     },
     {
       sql: `INSERT INTO ydoc_update ("id", "ydoc_id", "data") VALUES (?, ?, ?);`,
@@ -267,7 +268,7 @@ const generateRandomString = (length: number): string => {
 // Below are temporary functions to convert between base64 and bytes
 // once we have a way to store binary data in the database, we can remove these.
 
-async function base64ToBytes(base64string: string) {
+export async function base64ToBytes(base64string: string) {
   // convert the base64 string to a Blob:
   const blob = await fetch(
     `data:application/octet-stream;base64,${base64string}`
@@ -276,7 +277,7 @@ async function base64ToBytes(base64string: string) {
   return new Uint8Array(await blob.arrayBuffer())
 }
 
-async function bytesToBase64(bytes: Uint8Array) {
+export async function bytesToBase64(bytes: Uint8Array) {
   // From: https://stackoverflow.com/a/66046176
   // use a FileReader to generate a base64 data URI:
   const base64url: string = await new Promise((resolve) => {

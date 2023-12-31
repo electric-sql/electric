@@ -4,6 +4,7 @@ import { generateKeyBetween } from 'fractional-indexing'
 import * as Y from 'yjs'
 import { useElectric } from '../electric'
 import { saveNewElectricYDoc } from '../utils/y-electricsql'
+import { extractTextFromXmlFragment } from '../utils/y-electricsql/utils'
 
 import { BsChevronRight as ChevronRight } from 'react-icons/bs'
 import { ReactComponent as CloseIcon } from '../assets/icons/close.svg'
@@ -11,6 +12,7 @@ import { ReactComponent as ElectricIcon } from '../assets/images/icon.inverse.sv
 
 import Modal from '../components/Modal'
 import YdocEditor from './editor/YdocEditor'
+import YdocTextInput from './editor/YdocTextInput'
 import PriorityIcon from './PriorityIcon'
 import StatusIcon from './StatusIcon'
 import PriorityMenu from './contextmenu/PriorityMenu'
@@ -26,13 +28,20 @@ interface Props {
 
 function IssueModal({ isOpen, onDismiss }: Props) {
   const ref = useRef<HTMLInputElement>(null)
-  const [title, setTitle] = useState('')
   const [priority, setPriority] = useState(Priority.NONE)
   const [status, setStatus] = useState(Status.BACKLOG)
   const electricClient = useElectric()!
   const ydoc = useRef(new Y.Doc())
 
   const handleSubmit = async () => {
+    const title = extractTextFromXmlFragment(
+      ydoc.current.getXmlFragment('title')
+    )
+    const description = extractTextFromXmlFragment(
+      ydoc.current.getXmlFragment('description')
+    )
+    console.log(title, description)
+
     if (title === '') {
       showWarning('Please enter a title before submitting', 'Title required')
       return
@@ -47,13 +56,18 @@ function IssueModal({ isOpen, onDismiss }: Props) {
 
     // Save the new YDoc to the database
     // returns the uuid of the new YDoc which is used as the ydoc_id in the issue table
-    const ydocId = await saveNewElectricYDoc(electricClient, ydoc.current)
+    const ydocId = await saveNewElectricYDoc(
+      electricClient,
+      ydoc.current,
+      'issue'
+    )
 
     const date = new Date()
     await electricClient.db.issue.create({
       data: {
         id: uuidv4(),
         title: title,
+        description: description,
         username: 'testuser',
         priority: priority,
         status: status,
@@ -76,7 +90,6 @@ function IssueModal({ isOpen, onDismiss }: Props) {
 
   const reset = () => {
     setTimeout(() => {
-      setTitle('')
       setPriority(Priority.NONE)
       setStatus(Status.BACKLOG)
       ydoc.current = new Y.Doc()
@@ -126,13 +139,14 @@ function IssueModal({ isOpen, onDismiss }: Props) {
               setStatus(st)
             }}
           />
-          <input
-            className="w-full ml-1.5 text-lg font-semibold placeholder-gray-400 border-none h-7 focus:border-none focus:outline-none focus:ring-0"
-            placeholder="Issue title"
-            value={title}
-            ref={ref}
-            onChange={(e) => setTitle(e.target.value)}
-          />
+          <div className="w-full">
+            <YdocTextInput
+              className="w-full ml-1.5 text-lg font-semibold placeholder-gray-400 border-none h-7 focus:border-none focus:outline-none focus:ring-0"
+              ydoc={ydoc.current}
+              field="title"
+              placeholder="Issue title"
+            />
+          </div>
         </div>
 
         {/* Issue description editor */}
