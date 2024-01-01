@@ -27,31 +27,20 @@ export class YDocMaterializer {
   }
 
   async #processDataChanges(changes: ChangeNotification) {
-    // TODO: would be nice if the ChangeNotification has a way to get the
-    // oplog rows directly, instead of having to query for them
-    const changedYDocIds = new Set<string>()
-    const rowids = changes.changes
+    const changedYDocIds = changes.changes
       .filter(
         (change) =>
-          change.rowids && change.qualifiedTablename.tablename === 'ydoc_update'
+          change.recordChanges &&
+          change.qualifiedTablename.tablename === 'ydoc_update'
       )
-      .reduce((rowids, change) => {
-        change.rowids?.map((rowid) => rowids.add(rowid))
-        return rowids
-      }, new Set<number>())
-    console.log(rowids)
-    if (rowids.size > 0) {
-      const ops = await this.#electricClient.adapter.query({
-        // TODO: get the oplog table name from the config?
-        sql: `SELECT rowid, * FROM main._electric_oplog WHERE rowid IN (${Array.from(
-          rowids
-        ).join(', ')})`,
-      })
-      ops.forEach((op) => {
-        const newRow = JSON.parse(op.newRow as string)
-        changedYDocIds.add(newRow.ydoc_id)
-      })
-    }
+      .reduce((ids, change) => {
+        change.recordChanges?.forEach((recordChange) => {
+          if (recordChange.record) {
+            ids.add(recordChange.record['ydoc_id'] as string)
+          }
+        })
+        return ids
+      }, new Set<string>())
     changedYDocIds.forEach((ydocId) => this.#processYDocChanges(ydocId))
   }
 
@@ -117,10 +106,10 @@ export class YDocMaterializer {
         })
       )
     )
-    // await this.#electricClient.adapter.query({
-    //   sql: `UPDATE ydoc SET last_materialized = ? WHERE id = ?`,
-    //   args: [updatesHash, ydocId],
-    // })
+    await this.#electricClient.adapter.query({
+      sql: `UPDATE ydoc SET last_materialized = ? WHERE id = ?`,
+      args: [updatesHash, ydocId],
+    })
   }
 
   addMaterializer(docType: string, callback: MaterializeCallback) {

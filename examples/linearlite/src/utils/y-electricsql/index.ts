@@ -152,7 +152,7 @@ export class ElectricSQLPersistance extends ObservableV2<{
     }
   }
 
-  async storePendingUpdates(checkpointing = false) {
+  async storePendingUpdates() {
     if (this.#storeTimeoutId) {
       clearTimeout(this.#storeTimeoutId)
       this.#storeTimeoutId = null
@@ -167,9 +167,13 @@ export class ElectricSQLPersistance extends ObservableV2<{
       sql: `INSERT INTO "ydoc_update" ("id", "ydoc_id", "data") VALUES (?, ?, ?)`,
       args: [updateId, this.ydocId, updateBase64],
     })
-    if (!checkpointing && this.#savedBytes > this.#checkpointBytes) {
+    
+    // TODO: run materializer if there is one for this doc type
+    // Ideally in the same transaction as the update
+
+    if (this.#savedBytes > this.#checkpointBytes) {
       this.#savedBytes = 0
-      await this.checkpoint()
+      await this.checkpoint(false)
     }
   }
 
@@ -182,8 +186,10 @@ export class ElectricSQLPersistance extends ObservableV2<{
    *   so they can reset their `loadedUpdateIds`.
    *   Maybe add a `checkpoint` column to the inserted row?
    */
-  async checkpoint() {
-    await this.storePendingUpdates(true)
+  async checkpoint(storePendingUpdates = true) {
+    if (storePendingUpdates) {  
+      await this.storePendingUpdates()
+    }
     // Get all updates and merge them into one update
     const updates = (await this.electricClient.db.raw({
       sql: `SELECT "id", "data" FROM "ydoc_update" WHERE "ydoc_id" = ?`,
