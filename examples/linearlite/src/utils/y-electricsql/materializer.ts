@@ -2,7 +2,7 @@ import * as Y from 'yjs'
 import { murmurHash } from 'ohash'
 import { DbSchema, ElectricClient } from 'electric-sql/client/model'
 import { ChangeNotification } from 'electric-sql/notifiers'
-import { base64ToBytes } from './index'
+import { base64ToBytes } from './utils'
 
 export interface MaterializeCallbackOptions {
   docType: string

@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'electric-sql/react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { BsTrash3 as DeleteIcon } from 'react-icons/bs'
 import { BsXLg as CloseIcon } from 'react-icons/bs'
 import PriorityMenu from '../../components/contextmenu/PriorityMenu'
