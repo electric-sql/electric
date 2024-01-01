@@ -11,6 +11,7 @@ import {
   Change,
   ChangeCallback,
   ChangeNotification,
+  ChangeOrigin,
   ConnectivityStateChangeCallback,
   ConnectivityStateChangeNotification,
   Notification,
@@ -117,13 +118,17 @@ export class EventNotifier implements Notifier {
 
     dbNames.forEach(emitPotentialChange)
   }
-  actuallyChanged(dbName: DbName, changes: Change[]): void {
+  actuallyChanged(
+    dbName: DbName,
+    changes: Change[],
+    origin: ChangeOrigin
+  ): void {
     Log.info('actually changed notifier')
     if (!this._hasDbName(dbName)) {
       return
     }
 
-    this._emitActualChange(dbName, changes)
+    this._emitActualChange(dbName, changes, origin)
   }
 
   subscribeToPotentialDataChanges(
@@ -219,8 +224,13 @@ export class EventNotifier implements Notifier {
 
     return notification
   }
-  _emitActualChange(dbName: DbName, changes: Change[]): ChangeNotification {
+  _emitActualChange(
+    dbName: DbName,
+    changes: Change[],
+    origin: ChangeOrigin
+  ): ChangeNotification {
     const notification = {
+      origin: origin,
       dbName: dbName,
       changes: changes,
     }

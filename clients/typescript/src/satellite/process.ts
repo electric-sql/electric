@@ -10,6 +10,7 @@ import { Migrator } from '../migrators/index'
 import {
   AuthStateNotification,
   Change,
+  ChangeOrigin,
   ConnectivityStateChangeNotification,
   Notifier,
   UnsubscribeFunction,
@@ -491,7 +492,11 @@ export class SatelliteProcess implements Satellite {
 
     const groupedChanges = new Map<
       string,
-      { columns: string[]; records: InitialDataChange['record'][] }
+      {
+        columns: string[]
+        records: InitialDataChange['record'][]
+        dataChanges: InitialDataChange[]
+      }
     >()
 
     const allArgsForShadowInsert: Record<
@@ -502,12 +507,16 @@ export class SatelliteProcess implements Satellite {
     // Group all changes by table name to be able to insert them all together
     for (const op of changes) {
       const tableName = new QualifiedTablename('main', op.relation.table)
-      if (groupedChanges.has(tableName.toString())) {
-        groupedChanges.get(tableName.toString())?.records.push(op.record)
+      const tableNameString = tableName.toString()
+      if (groupedChanges.has(tableNameString)) {
+        const changeGroup = groupedChanges.get(tableNameString)!
+        changeGroup.records.push(op.record)
+        changeGroup.dataChanges.push(op)
       } else {
-        groupedChanges.set(tableName.toString(), {
+        groupedChanges.set(tableNameString, {
           columns: op.relation.columns.map((x) => x.name),
           records: [op.record],
+          dataChanges: [op],
         })
       }
 
@@ -569,11 +578,32 @@ export class SatelliteProcess implements Satellite {
       // We're explicitly not specifying rowids in these changes for now,
       // because nobody uses them and we don't have the machinery to to a
       // `RETURNING` clause in the middle of `runInTransaction`.
-      const notificationChanges: Change[] = changes.map((x) => ({
-        qualifiedTablename: new QualifiedTablename('main', x.relation.table),
-        rowids: [],
-      }))
-      this.notifier.actuallyChanged(this.dbName, notificationChanges)
+      const notificationChanges: Change[] = []
+      groupedChanges.forEach(({ dataChanges }) => {
+        const tableName = new QualifiedTablename(
+          'main',
+          dataChanges[0].relation.table
+        )
+        const primaryKeyColNames = dataChanges[0].relation.columns
+          .filter((col) => col.primaryKey)
+          .map((col) => col.name)
+        notificationChanges.push({
+          qualifiedTablename: tableName,
+          rowids: [],
+          recordChanges: dataChanges.map((change) => {
+            return {
+              primaryKey: Object.fromEntries(
+                primaryKeyColNames.map((col_name) => {
+                  return [col_name, change.record[col_name]]
+                })
+              ),
+              type: 'INITIAL',
+              record: change.record,
+            }
+          }),
+        })
+      })
+      this.notifier.actuallyChanged(this.dbName, notificationChanges, 'initial')
     } catch (e) {
       this._handleSubscriptionError(
         new SatelliteError(
@@ -1021,7 +1051,7 @@ export class SatelliteProcess implements Satellite {
         }
       )) as OplogEntry[]
 
-      if (oplogEntries.length > 0) this._notifyChanges(oplogEntries)
+      if (oplogEntries.length > 0) this._notifyChanges(oplogEntries, 'local')
 
       if (this.client.isConnected()) {
         const enqueued = this.client.getLastSentLsn()
@@ -1041,7 +1071,10 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  async _notifyChanges(results: OplogEntry[]): Promise<void> {
+  async _notifyChanges(
+    results: OplogEntry[],
+    origin: ChangeOrigin
+  ): Promise<void> {
     Log.info('notify changes')
     const acc: ChangeAccumulator = {}
 
@@ -1057,12 +1090,27 @@ export class SatelliteProcess implements Satellite {
         if (change.rowids === undefined) {
           change.rowids = []
         }
+        if (change.recordChanges === undefined) {
+          change.recordChanges = []
+        }
 
         change.rowids.push(entry.rowid)
+        change.recordChanges.push({
+          primaryKey: JSON.parse(entry.primaryKey),
+          type: entry.optype,
+          record: entry.newRow ? JSON.parse(entry.newRow) : undefined,
+        })
       } else {
         acc[key] = {
           qualifiedTablename: qt,
           rowids: [entry.rowid],
+          recordChanges: [
+            {
+              primaryKey: JSON.parse(entry.primaryKey),
+              type: entry.optype,
+              record: entry.newRow ? JSON.parse(entry.newRow) : undefined,
+            },
+          ],
         }
       }
 
@@ -1070,7 +1118,7 @@ export class SatelliteProcess implements Satellite {
     }
 
     const changes = Object.values(results.reduce(reduceFn, acc))
-    this.notifier.actuallyChanged(this.dbName, changes)
+    this.notifier.actuallyChanged(this.dbName, changes, origin)
   }
 
   async _replicateSnapshotChanges(results: OplogEntry[]): Promise<void> {
@@ -1337,7 +1385,7 @@ export class SatelliteProcess implements Satellite {
       await this.adapter.runInTransaction(...allStatements)
     }
 
-    await this._notifyChanges(opLogEntries)
+    await this._notifyChanges(opLogEntries, 'remote')
   }
 
   private async maybeGarbageCollect(

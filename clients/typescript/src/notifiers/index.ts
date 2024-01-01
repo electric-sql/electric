@@ -1,6 +1,12 @@
 import { AuthState } from '../auth/index'
 import { QualifiedTablename } from '../util/tablename'
-import { ConnectivityState, DbName, RowId } from '../util/types'
+import {
+  ConnectivityState,
+  DbName,
+  RowId,
+  DataChangeType,
+  Record,
+} from '../util/types'
 
 export { EventNotifier } from './event'
 export { MockNotifier } from './mock'
@@ -9,11 +15,20 @@ export interface AuthStateNotification {
   authState: AuthState
 }
 
+export type RecordChange = {
+  primaryKey: Record
+  type: `${DataChangeType}` | 'INITIAL'
+  record?: Record
+  oldRecord?: Record
+}
 export interface Change {
   qualifiedTablename: QualifiedTablename
-  rowids?: RowId[]
+  rowids?: RowId[] // rowid of each oplog entry for the changes - availiable only for local changes
+  recordChanges?: RecordChange[]
 }
+export type ChangeOrigin = 'local' | 'remote' | 'initial'
 export interface ChangeNotification {
+  origin: ChangeOrigin
   dbName: DbName
   changes: Change[]
 }
@@ -98,7 +113,7 @@ export interface Notifier {
   // When Satellite detects actual data changes in the oplog for a given
   // database, it replicates it and calls  `actuallyChanged` with the list
   // of changes.
-  actuallyChanged(dbName: DbName, changes: Change[]): void
+  actuallyChanged(dbName: DbName, changes: Change[], origin: ChangeOrigin): void
 
   // Reactive hooks then subscribe to "data has actually changed" notifications,
   // using the info to trigger re-queries, if the changes affect databases and
