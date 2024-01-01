@@ -2,6 +2,7 @@ import * as Y from 'yjs'
 import { ObservableV2 } from 'lib0/observable.js'
 import { DbSchema, ElectricClient } from 'electric-sql/client/model'
 import { uuid } from 'electric-sql/util'
+import { materializeYdoc } from './materializer'
 
 interface ydocUpdateQueryRow {
   id: string
@@ -45,6 +46,7 @@ export class ElectricSQLPersistance extends ObservableV2<{
   #checkpointBytes: number
   #savedBytes: number
   #webrtcSecret?: string
+  #type?: string
 
   constructor(
     public electricClient: ElectricClient<DbSchema<any>>,
@@ -69,7 +71,7 @@ export class ElectricSQLPersistance extends ObservableV2<{
     // Check if ydoc exists
     try {
       const rows = await this.electricClient.db.raw({
-        sql: `SELECT id FROM ydoc WHERE id = ?`,
+        sql: `SELECT id, webrtc_secret, type FROM ydoc WHERE id = ?`,
         args: [this.ydocId],
       })
       if (rows.length !== 1) {
@@ -79,6 +81,7 @@ export class ElectricSQLPersistance extends ObservableV2<{
         return
       }
       this.#webrtcSecret = rows[0].webrtc_secret as string | undefined
+      this.#type = rows[0].type as string | undefined
     } catch (err) {
       this.emit('error', [err as Error])
       return
@@ -167,14 +170,11 @@ export class ElectricSQLPersistance extends ObservableV2<{
       sql: `INSERT INTO "ydoc_update" ("id", "ydoc_id", "data") VALUES (?, ?, ?)`,
       args: [updateId, this.ydocId, updateBase64],
     })
-    
-    // TODO: run materializer if there is one for this doc type
-    // Ideally in the same transaction as the update
-
     if (this.#savedBytes > this.#checkpointBytes) {
       this.#savedBytes = 0
       await this.checkpoint(false)
     }
+    await materializeYdoc(this.electricClient, this.ydocId, this.type!)
   }
 
   /**
@@ -238,6 +238,10 @@ export class ElectricSQLPersistance extends ObservableV2<{
 
   get webrtcSecret() {
     return this.#webrtcSecret
+  }
+
+  get type() {
+    return this.#type
   }
 }
 

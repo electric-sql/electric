@@ -49,20 +49,10 @@ function IssuePage() {
 
   const [showDeleteModal, setShowDeleteModal] = useState(false)
 
-  const [dirtyTitle, setDirtyTitle] = useState<string | null>(null)
-  const titleIsDirty = useRef(false)
-
   if (issue === undefined) {
     return <div className="p-8 w-full text-center">Loading...</div>
   } else if (issue === null) {
     return <div className="p-8 w-full text-center">Issue not found</div>
-  }
-
-  // We check if the dirty title or description is the same as the actual title or
-  // description, and if so, we can switch back to the non-dirty version
-  if (dirtyTitle === issue.title) {
-    setDirtyTitle(null)
-    titleIsDirty.current = false
   }
 
   const handleStatusChange = (status: string) => {

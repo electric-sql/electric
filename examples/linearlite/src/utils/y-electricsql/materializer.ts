@@ -24,6 +24,11 @@ export class YDocMaterializer {
       electricClient.notifier.subscribeToDataChanges(async (changes) => {
         await this.#processDataChanges(changes)
       })
+    // Add this materializer to the list of materializers for this client
+    materializers.set(electricClient, [
+      ...(materializers.get(electricClient) || []),
+      this,
+    ])
   }
 
   async #processDataChanges(changes: ChangeNotification) {
@@ -69,11 +74,11 @@ export class YDocMaterializer {
     const updatesHash = murmurHash(updateIds).toString()
 
     if (lastMaterializedHash !== updatesHash) {
-      await this.#constrictAndMaterializeYDoc(ydocId, type, updatesHash)
+      await this._constrictAndMaterializeYDoc(ydocId, type, updatesHash)
     }
   }
 
-  async #constrictAndMaterializeYDoc(
+  async _constrictAndMaterializeYDoc(
     ydocId: string,
     docType: string,
     updatesHash?: string
@@ -120,5 +125,20 @@ export class YDocMaterializer {
 
   dispose() {
     this.#unsubscribeToDataChanges?.()
+  }
+}
+
+const materializers = new WeakMap<
+  ElectricClient<DbSchema<any>>,
+  YDocMaterializer[]
+>()
+
+export function materializeYdoc(
+  electricClient: ElectricClient<DbSchema<any>>,
+  ydocId: string,
+  docType: string,
+) {
+  for (const materializer of materializers.get(electricClient) || []) {
+    materializer._constrictAndMaterializeYDoc(ydocId, docType)
   }
 }
