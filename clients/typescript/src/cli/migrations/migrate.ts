@@ -216,9 +216,7 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
   } catch (e: any) {
     generationFailed = true
     console.error('generate command failed: ' + e)
-
-    // Rethrow error - finally statement still runs
-    if (!opts.exitOnError) throw e
+    throw e
   } finally {
     // Delete our temporary directory unless
     // generation failed in debug mode
