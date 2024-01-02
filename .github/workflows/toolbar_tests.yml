@@ -11,7 +11,7 @@ on:
 
 defaults:
   run:
-    working-directory: toolbar
+    working-directory: components/toolbar
 
 jobs:
   verify_formatting:
