@@ -203,6 +203,28 @@ defmodule Electric.Satellite.WebsocketServerTest do
       end)
     end
 
+    test "Socket is closed when JWT expires", ctx do
+      server_id = ctx.server_id
+
+      {:ok, pid} = MockClient.connect(port: ctx.port)
+
+      # create a token that expires in 1 second from now
+      exp = System.os_time(:second) + 1
+      token = Auth.Secure.create_token(ctx.user_id, expiry: exp)
+
+      # authenticate
+      assert {:ok, %SatAuthResp{id: ^server_id}} =
+               MockClient.make_rpc_call(pid, "authenticate", %SatAuthReq{
+                 id: ctx.client_id,
+                 token: token
+               })
+
+      # check that the socket is closed
+      # specify a timeout of 1.5 seconds
+      # which allows the JWT to expire
+      assert_receive({^pid, :server_close, 4000, "JWT-expired"}, 1500)
+    end
+
     test "cluster/app id mismatch is detected", ctx do
       invalid_token = Auth.Secure.create_token(ctx.user_id, issuer: "some-other-cluster-id")
 

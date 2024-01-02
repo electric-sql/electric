@@ -158,7 +158,9 @@ defmodule Electric.Satellite.Auth.SecureTest do
         {:ok, token, _} = Joken.encode_and_sign(claims, signer)
 
         {:ok, config} = build_config(alg: alg, key: key, namespace: @namespace)
-        assert {alg, {:ok, %Auth{user_id: "12345"}}} == {alg, validate_token(token, config)}
+
+        assert {alg, {:ok, %Auth{user_id: "12345"}, claims["exp"]}} ==
+                 {alg, validate_token(token, config)}
       end
     end
 
@@ -173,7 +175,9 @@ defmodule Electric.Satellite.Auth.SecureTest do
         {:ok, token, _} = Joken.encode_and_sign(claims, signer)
 
         {:ok, config} = build_config(alg: alg, key: public_key, namespace: @namespace)
-        assert {alg, {:ok, %Auth{user_id: "12345"}}} == {alg, validate_token(token, config)}
+
+        assert {alg, {:ok, %Auth{user_id: "12345"}, claims["exp"]}} ==
+                 {alg, validate_token(token, config)}
       end
     end
 
@@ -192,7 +196,9 @@ defmodule Electric.Satellite.Auth.SecureTest do
         {:ok, token, _} = Joken.encode_and_sign(claims, signer)
 
         {:ok, config} = build_config(alg: alg, key: public_key, namespace: @namespace)
-        assert {alg, {:ok, %Auth{user_id: "12345"}}} == {alg, validate_token(token, config)}
+
+        assert {alg, {:ok, %Auth{user_id: "12345"}, claims["exp"]}} ==
+                 {alg, validate_token(token, config)}
       end
     end
 
@@ -226,15 +232,30 @@ defmodule Electric.Satellite.Auth.SecureTest do
 
   describe "validate_token(<signed token>)" do
     test "successfully extracts the namespaced user_id claim" do
+      clms = claims(%{"custom_namespace" => %{"user_id" => "000"}})
+      token = signed_token(clms)
+
+      assert {:ok, %Auth{user_id: "000"}, clms["exp"]} ==
+               validate_token(token, config(namespace: "custom_namespace"))
+
+      clms = claims(%{"user_id" => "111"})
+      token = signed_token(clms)
+
+      assert {:ok, %Auth{user_id: "111"}, clms["exp"]} ==
+               validate_token(token, config(namespace: ""))
+    end
+
+    test "successfully extracts the namespaced exp claim" do
+      exp = DateTime.to_unix(~U[2123-05-01 00:00:00Z])
       token = signed_token(claims(%{"custom_namespace" => %{"user_id" => "000"}}))
 
-      assert {:ok, %Auth{user_id: "000"}} ==
+      assert {:ok, %Auth{user_id: "000"}, exp} ==
                validate_token(token, config(namespace: "custom_namespace"))
 
       ###
 
       token = signed_token(claims(%{"user_id" => "111"}))
-      assert {:ok, %Auth{user_id: "111"}} == validate_token(token, config(namespace: ""))
+      assert {:ok, %Auth{user_id: "111"}, exp} == validate_token(token, config(namespace: ""))
     end
 
     test "verifies that user_id is present and is not empty" do

@@ -19,7 +19,8 @@ defmodule Electric.Satellite.Auth do
         }
 
   @type provider() :: {module, map}
-  @type validation_result() :: {:ok, t()} | {:error, %Electric.Satellite.Auth.TokenError{}}
+  @type validation_result() ::
+          {:ok, t(), non_neg_integer()} | {:error, %Electric.Satellite.Auth.TokenError{}}
 
   @doc "Validates the given token against the configuration provided"
   @callback validate_token(token :: binary, config :: map) :: validation_result()

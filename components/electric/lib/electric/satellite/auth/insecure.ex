@@ -53,8 +53,9 @@ defmodule Electric.Satellite.Auth.Insecure do
   def validate_token(token, config) do
     with {:ok, claims} <- JWTUtil.peek_claims(token),
          {:ok, _claims} <- Joken.validate(config.joken_config, claims),
-         {:ok, user_id} <- JWTUtil.fetch_user_id(claims, config.namespace) do
-      {:ok, %Auth{user_id: user_id}}
+         {:ok, user_id} <- JWTUtil.fetch_user_id(claims, config.namespace),
+         exp <- JWTUtil.fetch_exp(claims, config.namespace) do
+      {:ok, %Auth{user_id: user_id}, exp}
     else
       {:error, reason} -> {:error, JWTUtil.translate_error_reason(reason)}
     end

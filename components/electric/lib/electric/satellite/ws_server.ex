@@ -159,6 +159,11 @@ defmodule Electric.Satellite.WebsocketServer do
     end
   end
 
+  def handle_info(:jwt_expired, state) do
+    Logger.info("JWT token expired, disconnecting")
+    {:stop, :normal, {4000, "JWT-expired"}, %{state | expiration_timer: nil}}
+  end
+
   # While processing the SatInStartReplicationReq message, Protocol has determined that a new
   # client has connected which needs to perform the initial sync of migrations and the current database state before
   # subscribing to the replication stream.

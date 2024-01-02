@@ -8,6 +8,7 @@ defmodule Electric.Satellite.Protocol do
   use Pathex
 
   import Electric.Postgres.Extension, only: [is_migration_relation: 1]
+  import Joken, only: [current_time: 0]
 
   alias Electric.Postgres.CachedWal
 
@@ -216,6 +217,7 @@ defmodule Electric.Satellite.Protocol do
               auth: nil,
               last_msg_time: nil,
               client_id: nil,
+              expiration_timer: nil,
               in_rep: %InRep{},
               out_rep: %OutRep{},
               auth_provider: nil,
@@ -229,6 +231,7 @@ defmodule Electric.Satellite.Protocol do
             auth: nil | Electric.Satellite.Auth.t(),
             last_msg_time: :erlang.timestamp() | nil | :ping_sent,
             client_id: String.t() | nil,
+            expiration_timer: reference() | nil,
             in_rep: InRep.t(),
             out_rep: OutRep.t(),
             auth_provider: Electric.Satellite.Auth.provider(),
@@ -267,17 +270,30 @@ defmodule Electric.Satellite.Protocol do
     # succeed as well
     reg_name = Electric.Satellite.WebsocketServer.reg_name(client_id)
 
-    with {:ok, auth} <- Electric.Satellite.Auth.validate_token(token, state.auth_provider),
+    with {:ok, auth, expires_at} <-
+           Electric.Satellite.Auth.validate_token(token, state.auth_provider),
          true <- Electric.safe_reg(reg_name, 1000),
          :ok <- ClientManager.register_client(client_id, reg_name) do
       Logger.metadata(user_id: auth.user_id)
+      Logger.metadata(expires_at: expires_at)
       Logger.info("Successfully authenticated the client")
       Metrics.satellite_connection_event(%{authorized_connection: 1})
+
+      # create a timer that will close the socket when the token expires
+      delta = expires_at - current_time()
+      delta_in_ms = delta * 1000
+      timer = Process.send_after(self(), :jwt_expired, delta_in_ms)
 
       {
         :reply,
         %SatAuthResp{id: Electric.instance_id()},
-        %State{state | auth: auth, auth_passed: true, client_id: client_id}
+        %State{
+          state
+          | auth: auth,
+            auth_passed: true,
+            client_id: client_id,
+            expiration_timer: timer
+        }
       }
     else
       {:error, %SatErrorResp{}} = error ->
