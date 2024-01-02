@@ -7,7 +7,7 @@ on:
   pull_request:
     paths:
       - 'pnpm-lock.yaml'
-      - 'toolbar/**'
+      - 'components/toolbar/**'
 
 defaults:
   run:
