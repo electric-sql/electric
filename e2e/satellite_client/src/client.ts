@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { schema, Electric, ColorType as Color } from './generated/client'
 export { JsonNull } from './generated/client'
 import { globalRegistry } from 'electric-sql/satellite'
+import { AuthStatus } from 'electric-sql/auth'
 
 setLogLevel('DEBUG')
 
@@ -22,7 +23,8 @@ export const electrify_db = async (
   db: any,
   host: string,
   port: number,
-  migrations: any
+  migrations: any,
+  exp?: string
 ): Promise<Electric> => {
   const config: ElectricConfig = {
     url: `electric://${host}:${port}`,
@@ -37,6 +39,14 @@ export const electrify_db = async (
   result.notifier.subscribeToConnectivityStateChanges((x) => console.log("Connectivity state changed", x))
 
   return result
+}
+
+export const subscribe_to_auth_status = (electric: Electric) => {
+  electric.notifier.subscribeToAuthStateChanges((x) => {
+    if (x.authState.status === AuthStatus.EXPIRED) {
+      console.log('New auth status: ' + AuthStatus.EXPIRED)
+    }
+  })
 }
 
 export const set_subscribers = (db: Electric) => {

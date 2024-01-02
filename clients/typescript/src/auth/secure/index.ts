@@ -25,13 +25,14 @@ export function secureAuthToken(
 }
 
 export function mockSecureAuthToken(
+  exp?: string,
   iss?: string,
   key?: string
 ): Promise<string> {
   const mockIss = iss ?? 'dev.electric-sql.com'
   const mockKey = key ?? 'integration-tests-signing-key-example'
 
-  return secureAuthToken({ sub: 'test-user' }, mockIss, mockKey)
+  return secureAuthToken({ sub: 'test-user' }, mockIss, mockKey, undefined, exp)
 }
 
 export function decodeToken(token: string): JWTPayload & { sub: string } {
