@@ -101,6 +101,15 @@ export class YDocMaterializer {
         .join(':')
       updatesHash = murmurHash(updateIds).toString()
     }
+
+    // Having this before the callbacks is a hack to prevent multiple materializations
+    // from multiple clients at the same time.
+    // We need transactions to fix this properly.
+    await this.#electricClient.adapter.query({
+      sql: `UPDATE ydoc SET last_materialized = ? WHERE id = ?`,
+      args: [updatesHash, ydocId],
+    })
+    
     const callbacks = this.#materializeCallbacks.get(docType) || []
     await Promise.all(
       callbacks.map((callback) =>
@@ -111,10 +120,6 @@ export class YDocMaterializer {
         })
       )
     )
-    await this.#electricClient.adapter.query({
-      sql: `UPDATE ydoc SET last_materialized = ? WHERE id = ?`,
-      args: [updatesHash, ydocId],
-    })
   }
 
   addMaterializer(docType: string, callback: MaterializeCallback) {
@@ -136,7 +141,7 @@ const materializers = new WeakMap<
 export function materializeYdoc(
   electricClient: ElectricClient<DbSchema<any>>,
   ydocId: string,
-  docType: string,
+  docType: string
 ) {
   for (const materializer of materializers.get(electricClient) || []) {
     materializer._constrictAndMaterializeYDoc(ydocId, docType)

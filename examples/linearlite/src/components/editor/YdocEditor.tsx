@@ -14,8 +14,11 @@ import TableHeader from '@tiptap/extension-table-header'
 import TableRow from '@tiptap/extension-table-row'
 import Collaboration from '@tiptap/extension-collaboration'
 import CollaborationCursor from '@tiptap/extension-collaboration-cursor'
+import Mention from '@tiptap/extension-mention'
 import EditorMenu from './EditorMenu'
 import { userColor } from '../../utils'
+import { mentionConfig } from './suggestion'
+import { useElectric } from '../../electric'
 
 interface EditorProps {
   ydoc: Y.Doc
@@ -38,10 +41,15 @@ const YdocEditor = ({
     },
   }
 
+  const electricClient = useElectric()!
+
   const extensions: Extensions = useMemo(() => {
     return [
       StarterKit.configure({
         history: false, // collaboration extension handles history
+        heading: {
+          levels: [2, 3, 4],
+        }
       }),
       Table,
       TableRow,
@@ -51,6 +59,7 @@ const YdocEditor = ({
         document: ydoc,
         field,
       }),
+      Mention.configure(mentionConfig(electricClient)),
       // Register the collaboration cursor extension
       ...(collaborationProvider
         ? [

@@ -38,6 +38,21 @@ function IssuePage() {
       where: { id: id },
     })
   )
+  const { results: relatedIssues } = useLiveQuery(
+    db.related_issue.liveMany({
+      where: {
+        issue_id_2: id,
+      },
+      include: {
+        issue_related_issue_issue_id_1Toissue: {
+          select: {
+            id: true,
+            title: true,
+          },
+        }
+      },
+    })
+  )
 
   const {
     ydoc,
@@ -102,7 +117,7 @@ function IssuePage() {
 
   const shortId = () => {
     if (issue.id.includes('-')) {
-      return issue.id.slice(issue.id.length - 8)
+      return issue.id.slice(0, 8)
     } else {
       return issue.id
     }
@@ -187,6 +202,22 @@ function IssuePage() {
                     }
                     onSelect={handlePriorityChange}
                   />
+                </div>
+              </div>
+              <div className="flex flex-1 mb-3 mr-5 md-mr-0">
+                <div className="flex flex-[2_0_0] mr-2 md-mr-0 items-center">
+                  Related
+                </div>
+                <div className="flex flex-[3_0_0]">
+                  <button className="inline-flex items-center h-6 ps-1.5 pe-2 text-gray-500border-none rounded hover:bg-gray-100">
+                    {
+                      relatedIssues?.map((relatedIssue, index) => (
+                        <span key={index} className="h-6 ps-1.5 pe-2 text-gray-500border-none rounded hover:bg-gray-100">
+                          <span className="me-1">{relatedIssue.issue_related_issue_issue_id_1Toissue?.id.slice(0, 8)}</span>
+                        </span>
+                      ))
+                    }
+                  </button>
                 </div>
               </div>
             </div>
