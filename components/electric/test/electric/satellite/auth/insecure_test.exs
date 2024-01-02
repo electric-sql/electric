@@ -44,12 +44,12 @@ defmodule Electric.Satellite.Auth.InsecureTest do
       claims = %{"custom_namespace" => %{"user_id" => "000"}}
       token = unsigned_token(claims)
 
-      assert {:ok, %Auth{user_id: "000"}} ==
+      assert {:ok, %Auth{user_id: "000"}, nil} ==
                validate_token(token, config(namespace: "custom_namespace"))
 
       claims = %{"user_id" => "111"}
       token = unsigned_token(claims)
-      assert {:ok, %Auth{user_id: "111"}} == validate_token(token, config(namespace: ""))
+      assert {:ok, %Auth{user_id: "111"}, nil} == validate_token(token, config(namespace: ""))
     end
 
     test "validates the iat claim" do
@@ -127,12 +127,12 @@ defmodule Electric.Satellite.Auth.InsecureTest do
       claims = %{"custom_namespace" => %{"user_id" => "000"}}
       token = signed_token(claims)
 
-      assert {:ok, %Auth{user_id: "000"}} ==
+      assert {:ok, %Auth{user_id: "000"}, nil} ==
                validate_token(token, config(namespace: "custom_namespace"))
 
       claims = %{"user_id" => "111"}
       token = signed_token(claims)
-      assert {:ok, %Auth{user_id: "111"}} == validate_token(token, config(namespace: ""))
+      assert {:ok, %Auth{user_id: "111"}, nil} == validate_token(token, config(namespace: ""))
     end
 
     test "validates the iat claim" do

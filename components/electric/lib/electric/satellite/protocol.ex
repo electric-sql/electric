@@ -8,6 +8,7 @@ defmodule Electric.Satellite.Protocol do
   use Pathex
 
   import Electric.Postgres.Extension, only: [is_migration_relation: 1]
+  import Joken, only: [current_time: 0]
 
   alias Electric.Postgres.CachedWal
 
@@ -269,10 +270,12 @@ defmodule Electric.Satellite.Protocol do
     # succeed as well
     reg_name = Electric.Satellite.WebsocketServer.reg_name(client_id)
 
-    with {:ok, auth} <- Electric.Satellite.Auth.validate_token(token, state.auth_provider),
+    with {:ok, auth, expires_at} <-
+           Electric.Satellite.Auth.validate_token(token, state.auth_provider),
          true <- Electric.safe_reg(reg_name, 1000),
          :ok <- ClientManager.register_client(client_id, reg_name) do
       Logger.metadata(user_id: auth.user_id)
+      Logger.metadata(expires_at: expires_at)
       Logger.info("Successfully authenticated the client")
       Metrics.satellite_connection_event(%{authorized_connection: 1})
 
