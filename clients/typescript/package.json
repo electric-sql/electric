@@ -121,8 +121,9 @@
   },
   "scripts": {
     "post-version-bump": "node -p \"'export const LIB_VERSION = \\'' + require('./package.json').version + '\\''\" > src/version/index.ts",
-    "dev": "rm -rf dist && mkdir dist && concurrently \"tsup --watch\" \"tsc -p tsconfig.build.json --watch\" \"nodemon --watch ./dist  --delay 250ms ./scripts/fix-imports.js\"",
-    "build": "rm -rf dist && concurrently \"tsup\" \"tsc -p tsconfig.build.json\" && node scripts/fix-imports.js",
+    "dev": "rm -rf dist && npm run build:copy-docker && mkdir dist && concurrently \"tsup --watch\" \"tsc -p tsconfig.build.json --watch\" \"nodemon --watch ./dist  --delay 250ms ./scripts/fix-imports.js\"",
+    "build": "rm -rf dist && npm run build:copy-docker && concurrently \"tsup\" \"tsc -p tsconfig.build.json\" && node scripts/fix-imports.js",
+    "build:copy-docker": "mkdir -p ./dist/cli/docker-commands/docker && cp -r ./src/cli/docker-commands/docker/ ./dist/cli/docker-commands/docker/",
     "test": "ava",
     "typecheck": "tsc -p tsconfig.json",
     "posttest": "npm run typecheck",
