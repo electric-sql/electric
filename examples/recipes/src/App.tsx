@@ -17,11 +17,14 @@ function App() {
         <Link component={RouterLink} to="/log-viewer" underline="hover">
           Log Viewer
         </Link>
+        <Link component={RouterLink} to="/monitoring" underline="hover">
+          Monitoring Metrics
+        </Link>
         <Link component={RouterLink} to="/request-response" underline="hover">
           Request/Response Pattern
         </Link>
-        <Link component={RouterLink} to="/monitoring" underline="hover">
-          Monitoring Metrics
+        <Link component={RouterLink} to="/background-jobs" underline="hover">
+          Background Jobs
         </Link>
       </Box>
     </>

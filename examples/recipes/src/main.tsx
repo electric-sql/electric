@@ -14,8 +14,9 @@ import theme from './theme.ts';
 
 import { ActivityEventsExample } from './activity_events/ActivityEventsExample.tsx';
 import { LogViewerExample } from './log_viewer/LogViewerExample.tsx';
-import { RequestResponseExample } from './request_response/RequestResponseExample.tsx';
 import { MonitoringMetricsExample } from './monitoring_metrics/MonitoringMetricsExample.tsx';
+import { RequestResponseExample } from './request_response/RequestResponseExample.tsx';
+import { BackgroundJobsExample } from './background_jobs/BackgroundJobsExample.tsx';
 
 
 const router = createBrowserRouter([
@@ -32,12 +33,16 @@ const router = createBrowserRouter([
     element: <LogViewerExample />
   },
   {
+    path: "/monitoring",
+    element: <MonitoringMetricsExample />
+  },
+  {
     path: "/request-response",
     element: <RequestResponseExample />
   },
   {
-    path: "/monitoring",
-    element: <MonitoringMetricsExample />
+    path: "/background-jobs",
+    element: <BackgroundJobsExample />
   },
 ]);
 
