@@ -24,27 +24,17 @@ CREATE TABLE IF NOT EXISTS background_jobs (
 ALTER TABLE background_jobs ENABLE ELECTRIC;
 
 
-/* Set up a trigger that will notify the appropriate API and perform
- * the work required to process the submitted job. The API should then
- * update the table accordingly with the processing status
+/* Set up a trigger that will notify the appropriate service and perform
+ * the work required to process the submitted job. The service should then
+ * update the table accordingly with the progress and finally the result
  */
 
--- When a job is submitted, notify the appropriate API to process it
+-- When a job is submitted, notify the appropriate service to process it
 CREATE OR REPLACE FUNCTION process_job()
 RETURNS TRIGGER AS $$
-DECLARE
-    new_progress REAL;
 BEGIN
   IF NEW.completed = false AND NEW.cancelled = false THEN
-    PERFORM pg_sleep(1);
-    new_progress := GREATEST(0, LEAST(1, NEW.progress + random()));
-    UPDATE public.background_jobs SET "progress" = new_progress WHERE "id" = NEW.id;
-    IF new_progress == 1 THEN
-      UPDATE public.background_jobs
-      SET "completed" = true,
-          "result" = '{"message": "success"}'::JSONB
-      WHERE "id" = NEW.id;
-    END IF;
+    PERFORM pg_notify('process_background_job', row_to_json(NEW)::TEXT);
   END IF;
   RETURN NULL;
 END
@@ -57,12 +47,5 @@ AFTER INSERT ON background_jobs
 FOR EACH ROW
 EXECUTE FUNCTION process_job();
 
--- Create a trigger to keep executing the processing function as progress changes
-CREATE TRIGGER "keep_processing_job_trigger"
-AFTER UPDATE OF progress ON background_jobs
-FOR EACH ROW
-EXECUTE FUNCTION process_job();
-
 -- Enable the triggers on the tables
 ALTER TABLE background_jobs ENABLE ALWAYS TRIGGER process_job_trigger;
-ALTER TABLE background_jobs ENABLE ALWAYS TRIGGER keep_processing_job_trigger;
