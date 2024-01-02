@@ -5,4 +5,4 @@ packages:
   - 'examples/_testing'
   - 'generator'
   - 'components/electric'
-  - 'toolbar'
+  - 'components/toolbar'
