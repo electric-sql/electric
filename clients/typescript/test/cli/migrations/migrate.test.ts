@@ -168,7 +168,7 @@ test.serial(
 )
 
 test.serial(
-  'migrator should retain temporary folder on falure in debug mode',
+  'migrator should retain temporary folder on failure in debug mode',
   async (t) => {
     // should fail generaton in debug mode
     t.assert(await failedGenerate(true))
