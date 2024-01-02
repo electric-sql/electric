@@ -40,6 +40,13 @@ test('generate accepts watch flag with polling interval', (t) => {
   })
 })
 
+test('generate accepts debug flag', (t) => {
+  const opts = parseGenerateArgs(['--debug'])
+  t.deepEqual(opts, {
+    debug: true,
+  })
+})
+
 test('generate accepts several flags', (t) => {
   const url = 'http://localhost:5133'
   const path = './src'

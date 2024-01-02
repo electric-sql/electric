@@ -35,6 +35,8 @@ export const defaultOptions = {
   out: path.join(appRoot, 'src/generated/client'),
   watch: false,
   pollingInterval: 1000, // in ms
+  debug: false, // set to `true` to retain failed migration folder for debugging
+  exitOnError: true,
 }
 
 export type GeneratorOptions = typeof defaultOptions
@@ -171,6 +173,7 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
   // Create a unique temporary folder in which to save
   // intermediate files without risking collisions
   const tmpFolder = await fs.mkdtemp('.electric_migrations_tmp_')
+  let generationFailed = false
 
   try {
     const migrationsPath = path.join(tmpFolder, 'migrations')
@@ -211,11 +214,18 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
     await buildMigrations(migrationsFolder, migrationsFile)
     console.log('Successfully built migrations')
   } catch (e: any) {
+    generationFailed = true
     console.error('generate command failed: ' + e)
-    process.exit(1)
+    throw e
   } finally {
-    // Delete our temporary directory
-    await fs.rm(tmpFolder, { recursive: true })
+    // Delete our temporary directory unless
+    // generation failed in debug mode
+    if (!generationFailed || !opts.debug) {
+      await fs.rm(tmpFolder, { recursive: true })
+    }
+
+    // In case of process exit, make sure to run after folder removal
+    if (generationFailed && opts.exitOnError) process.exit(1)
   }
 }
 

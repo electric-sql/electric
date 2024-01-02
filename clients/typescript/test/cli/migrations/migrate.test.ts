@@ -1,5 +1,10 @@
 import test from 'ava'
-import { doCapitaliseTableNames } from '../../../src/cli/migrations/migrate'
+import fs from 'fs'
+import {
+  defaultOptions,
+  doCapitaliseTableNames,
+  generate,
+} from '../../../src/cli/migrations/migrate'
 
 const lowerCasePrismaSchema = `
 datasource db {
@@ -108,9 +113,71 @@ model Model {
 }
 `
 
+// tries and fails to generate client, returns `true` if failed
+const failedGenerate = async (debug = false): Promise<boolean> => {
+  let migrationFailed = false
+  const origConsoleError = console.error
+  try {
+    // silence error for test
+    console.error = (_) => {
+      // no-op
+    }
+    await generate({
+      ...defaultOptions,
+      // prevent process.exit call to perform test
+      exitOnError: false,
+      // if set to true, temporary folder is retained on failure
+      debug: debug,
+    })
+  } catch (e) {
+    migrationFailed = true
+  } finally {
+    console.error = origConsoleError
+  }
+
+  return migrationFailed
+}
+
+// finds temporary migraitons folder, if it exists
+const findMigrationFolder = async (): Promise<string | null> => {
+  const files = await fs.readdirSync('./')
+  for (const file of files) {
+    if (file.startsWith('.electric_migrations_tmp')) {
+      return file
+    }
+  }
+  return null
+}
+
 test('migrator correctly capitalises model names', (t) => {
   const newSchema = doCapitaliseTableNames(
     lowerCasePrismaSchema.split(/\r?\n/)
   ).join('\n')
   t.assert(newSchema === expectedPrismaSchema)
 })
+
+test.serial(
+  'migrator should clean up temporary folders on failure',
+  async (t) => {
+    // should fail generaton
+    t.assert(await failedGenerate(false))
+
+    // should clean up temporary folders
+    t.assert((await findMigrationFolder()) === null)
+  }
+)
+
+test.serial(
+  'migrator should retain temporary folder on failure in debug mode',
+  async (t) => {
+    // should fail generaton in debug mode
+    t.assert(await failedGenerate(true))
+
+    // should retain temporary migrations folder
+    const debugMigrationFolder = await findMigrationFolder()
+    t.assert(debugMigrationFolder !== null)
+
+    // clean-up folder after test
+    await fs.rmdirSync(debugMigrationFolder as string, { recursive: true })
+  }
+)
