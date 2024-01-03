@@ -1,0 +1,14 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+generator electric {
+  provider      = "/Users/alexandruonaci/projects/electric/examples/linearlite/node_modules/@electric-sql/prisma-generator/dist/bin.js"
+  output        = "/Users/alexandruonaci/projects/electric/examples/linearlite/src/generated/client"
+  relationModel = "false"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = "postgresql://prisma:proxy_password@localhost:65432/electric"
+}
