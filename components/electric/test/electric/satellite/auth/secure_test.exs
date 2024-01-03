@@ -245,21 +245,6 @@ defmodule Electric.Satellite.Auth.SecureTest do
                validate_token(token, config(namespace: ""))
     end
 
-    test "successfully extracts the namespaced exp claim" do
-      exp = DateTime.to_unix(~U[2123-05-01 00:00:00Z])
-      token = signed_token(claims(%{"custom_namespace" => %{"user_id" => "000"}}))
-
-      assert {:ok, %Auth{user_id: "000", expires_at: exp}} ==
-               validate_token(token, config(namespace: "custom_namespace"))
-
-      ###
-
-      token = signed_token(claims(%{"user_id" => "111"}))
-
-      assert {:ok, %Auth{user_id: "111", expires_at: exp}} ==
-               validate_token(token, config(namespace: ""))
-    end
-
     test "verifies that user_id is present and is not empty" do
       for claims <- [
             %{@namespace => %{}},
