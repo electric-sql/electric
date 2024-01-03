@@ -38,7 +38,7 @@ export const parseTableNames = (
 ): QualifiedTablename[] => {
   // NOTE(msfstef): using an SQLite parser to create an AST and
   // walk down it to find tablenames is a cleaner solution, but
-  // there are no up-to-date parser I could find that would not
+  // there are no up-to-date parsers I could find that would not
   // block modern queries (e.g. windowed queries).
   // For the sake of parsing table names, this seems to do the
   // trick, and with enough test coverage it should be fine
