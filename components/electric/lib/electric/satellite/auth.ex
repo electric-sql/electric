@@ -16,7 +16,7 @@ defmodule Electric.Satellite.Auth do
 
   @type t() :: %__MODULE__{
           user_id: user_id(),
-          expires_at: pos_integer
+          expires_at: non_neg_integer | nil
         }
 
   @type provider() :: {module, map}
