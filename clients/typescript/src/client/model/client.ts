@@ -40,7 +40,7 @@ interface RawQueries {
   /**
    * Executes a raw SQL query without protecting against incompatible
    * modifications to the store.
-   * 
+   *
    * [WARNING]: might break data replication!
    * @param sql - A raw SQL query and its bind parameters.
    * @returns The rows that result from the query.

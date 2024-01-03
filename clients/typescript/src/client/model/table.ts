@@ -1546,7 +1546,10 @@ export class Table<
   }
 }
 
-export function unsafeRaw(adapter: DatabaseAdapter, sql: Statement): Promise<Row[]> {
+export function unsafeRaw(
+  adapter: DatabaseAdapter,
+  sql: Statement
+): Promise<Row[]> {
   return adapter.query(sql)
 }
 
