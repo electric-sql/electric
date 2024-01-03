@@ -51,7 +51,7 @@ export const BackgroundJobs = ({
     <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       <Button
         variant="contained"
-        sx={{ mixBlendMode: 2 }}
+        sx={{ my: 2 }}
         onClick={onSubmitJob}
       >
         Submit new job
