@@ -16,7 +16,7 @@ defmodule Mix.Tasks.Electric.Gen.TokenTest do
       assert %{"token" => token, "expiry" => expiry} = token_info
       assert {:ok, datetime, 0} = DateTime.from_iso8601(expiry)
       exp = DateTime.to_unix(datetime)
-      assert {:ok, %Auth{user_id: ^user_id}, ^exp} = Auth.Secure.validate_token(token)
+      assert {:ok, %Auth{user_id: ^user_id, expires_at: ^exp}} = Auth.Secure.validate_token(token)
       assert_in_delta(DateTime.diff(datetime, DateTime.utc_now()), ttl, @ttl_delta)
     end
   end
@@ -31,7 +31,10 @@ defmodule Mix.Tasks.Electric.Gen.TokenTest do
         assert [user_id, token, expiry] = String.split(line, ",")
         assert {:ok, datetime, 0} = DateTime.from_iso8601(expiry)
         exp = DateTime.to_unix(datetime)
-        assert {:ok, %Auth{user_id: ^user_id}, ^exp} = Auth.Secure.validate_token(token)
+
+        assert {:ok, %Auth{user_id: ^user_id, expires_at: ^exp}} =
+                 Auth.Secure.validate_token(token)
+
         assert_in_delta(DateTime.diff(datetime, DateTime.utc_now()), ttl, @ttl_delta)
         user_id
       end
