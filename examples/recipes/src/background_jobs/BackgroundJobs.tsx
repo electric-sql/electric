@@ -1,29 +1,32 @@
 import {
-  Button,
-  CircularProgress,
-  List, ListItem,
-  Paper,
-  Typography,
-  Collapse,
-  Box,
+  Paper, Button,
+  CircularProgress, Collapse,
+  Table, TableHead, TableBody, TableRow, TableCell, TableContainer,
 } from "@mui/material"
+import { Cancel, Check, HorizontalRule } from "@mui/icons-material";
 import { useElectric } from "../electric/ElectricWrapper"
 import { useLiveQuery } from "electric-sql/react"
 import { useCallback } from "react";
 import { genUUID } from "electric-sql/util";
 
-export const BackgroundJobs = () => {
+export const BackgroundJobs = ({
+  numJobsToShow = 10
+} : {
+  numJobsToShow?: number
+}) => {
   const { db } = useElectric()!
 
+  // Select [numJobsToShow] most recently submitted jobs to show - which
+  // will contain progress info, completion status, and any results as well
   const { results: jobs = [] } = useLiveQuery(db.background_jobs.liveMany({
     orderBy: {
       timestamp: 'desc',
     },
-    take: 10,
+    take: numJobsToShow,
   }))
 
-  const onSubmitJob = useCallback(() => {
-    db.background_jobs.create({
+  const onSubmitJob = useCallback(
+    () => db.background_jobs.create({
       data: {
         id: genUUID(),
         timestamp: new Date(),
@@ -31,24 +34,73 @@ export const BackgroundJobs = () => {
         completed: false,
         progress: 0
       }
-    })
-  }, [db.background_jobs])
+    }),
+    [db.background_jobs]
+  )
+  
+  const onCancelJob = useCallback(
+    (jobId: string) => db.background_jobs.update({
+      data: { cancelled: true },
+      where: { id: jobId }
+    }),
+    [db.background_jobs]
+  )
   
 
   return (
-    <Paper sx={{ p: 2 }}>
-      <Button onClick={onSubmitJob}>
+    <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <Button
+        variant="contained"
+        sx={{ mixBlendMode: 2 }}
+        onClick={onSubmitJob}
+      >
         Submit new job
       </Button>
-      <List>
-        {
-          jobs.map((job) => (
-            <ListItem key={job.id} sx={{ display: 'flex', justifyContent: 'space-between'}}>
-              <Typography>
+      <BackgroundJobsTableView jobs={jobs} onCancelJob={onCancelJob} />
+    </Paper>
+  )
+};
+
+interface Job {
+  id: string,
+  timestamp: Date,
+  progress: number,
+  result?: unknown,
+  completed: boolean,
+  cancelled: boolean
+}
+
+const BackgroundJobsTableView = ({
+  jobs,
+  onCancelJob
+} : {
+  jobs: Job[],
+  onCancelJob: (jobId: string) => void
+}) => {
+
+  return (
+    <TableContainer>
+      <Table align="center">
+        <TableHead>
+          <TableRow>
+            <TableCell align="left">Job ID</TableCell>
+            <TableCell align="left">Submitted At</TableCell>
+            <TableCell align="right">Progress</TableCell>
+            <TableCell align="right">Result</TableCell>
+            <TableCell align="right"/>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {jobs.map((job) => (
+            <TableRow key={job.id}>
+              <TableCell align="left">
                 {job.id.slice(0,6)}
-              </Typography>
-              <Box>
-                <Collapse in={!job.completed}>
+              </TableCell>
+              <TableCell align="left">
+                {job.timestamp.toLocaleString()}
+              </TableCell>
+              <TableCell align="right">
+                <Collapse in={!job.completed && !job.cancelled}>
                   {(job.progress * 100).toLocaleString(undefined, { maximumSignificantDigits: 2 }) + '%'}
                   <CircularProgress
                     variant="determinate"
@@ -57,14 +109,35 @@ export const BackgroundJobs = () => {
                     value={job.progress * 100} />
                   
                 </Collapse>
-                <Collapse in={job.completed}>
-                  {JSON.stringify(job.result)}
+                <Collapse in={job.completed || job.cancelled}>
+                  { job.completed ? 
+                    <Check color="primary" sx={{ height: '1rem' }} />
+                    :
+                    <HorizontalRule sx={{ height: '1rem' }} />
+                  }
                 </Collapse>
-              </Box>
-            </ListItem>
-          ))
-        }
-      </List>
-    </Paper>
+              </TableCell>
+              <TableCell align="right">
+                <Collapse in={job.completed || job.cancelled}>
+                  {job.completed ? 
+                    JSON.stringify(job.result) :
+                    'cancelled'
+                  }
+                </Collapse>
+              </TableCell>
+
+              <TableCell align="right">
+                <Button
+                  color="secondary"
+                  disabled={job.cancelled || job.completed}
+                  onClick={() => onCancelJob(job.id)}>
+                  <Cancel sx={{ height: '1rem' }} />
+                </Button>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </TableContainer>
   )
-};
+}
