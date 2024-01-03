@@ -16,6 +16,18 @@ test('inserts are dangerous', (t) => {
   t.true(isPotentiallyDangerous(stmt))
 })
 
+test('deletes are dangerous', (t) => {
+  const stmt = 'DELETE FROM Foo WHERE key="foo"'
+
+  t.true(isPotentiallyDangerous(stmt))
+})
+
+test('updates are dangerous', (t) => {
+  const stmt = 'UPDATE Foo SET bar="test" WHERE key="foo"'
+
+  t.true(isPotentiallyDangerous(stmt))
+})
+
 test('drops are dangerous', (t) => {
   const stmt = 'drop table if exists foo'
 

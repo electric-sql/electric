@@ -1147,6 +1147,21 @@ test('raw update query throws error for unsupported unsafe queries', async (t) =
   )
 })
 
+test('raw delete query throws error for unsupported unsafe queries', async (t) => {
+  await t.throwsAsync(
+    async () => {
+      await electric.db.raw({
+        sql: 'DELETE FROM user WHERE id = 1;',
+      })
+    },
+    {
+      instanceOf: InvalidArgumentError,
+      message:
+        'Cannot use queries that might alter the store - please use read-only queries',
+    }
+  )
+})
+
 test('raw drop table query throws error for unsupported unsafe queries', async (t) => {
   await t.throwsAsync(
     async () => {
