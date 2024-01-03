@@ -15,7 +15,7 @@ export const BackgroundJobs = ({
   numJobsToShow?: number
 }) => {
   const { db } = useElectric()!
-
+  
   // Select [numJobsToShow] most recently submitted jobs to show - which
   // will contain progress info, completion status, and any results as well
   const { results: jobs = [] } = useLiveQuery(db.background_jobs.liveMany({

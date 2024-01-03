@@ -13,10 +13,14 @@ export async function startProcessingBackgroundJobs (pgPool: Pool): Promise<void
   // Handle notifications
   pgClient.on('notification', (notification: Notification) => {
     const payload = JSON.parse(notification.payload ?? '{}') as { id?: string }
-    const jobId = payload.id
-    console.log(`Received job to process with ID: ${jobId}`)
+    console.log(`Received job to process with ID: ${payload.id}`)
 
-    const processJob = async (): Promise<void> => {
+    const processJob = async (jobId: string): Promise<void> => {
+      // wait some time between 500ms and 2000ms to
+      // emulate some arbitrary processing workflow
+      await wait(Math.max(500, Math.random() * 2000))
+
+
       // retrieve job data
       const jobInfo = (await pgClient.query(
         `SELECT cancelled, progress FROM background_jobs WHERE id = $1`,
@@ -37,10 +41,7 @@ export async function startProcessingBackgroundJobs (pgPool: Pool): Promise<void
           'UPDATE background_jobs SET progress = $1 WHERE id = $2',
           [newProgress, jobId]
         )
-
-        // wait some time between 500ms and 2000ms
-        await wait(Math.max(500, Math.random() * 2000))
-        return processJob();
+        return processJob(jobId);
       }
 
       // if job is complete, set completion flag and result
@@ -50,6 +51,6 @@ export async function startProcessingBackgroundJobs (pgPool: Pool): Promise<void
       )
     }
 
-    processJob().catch(console.error);
+    processJob(payload.id!).catch(console.error);
   })
 }
