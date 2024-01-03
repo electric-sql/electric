@@ -16,12 +16,15 @@ defmodule Electric.Satellite.Auth do
 
   @type t() :: %__MODULE__{
           user_id: user_id(),
+<<<<<<< HEAD
           expires_at: non_neg_integer | nil
+=======
+          expires_at: pos_integer
+>>>>>>> 024b62a6 (Add expires_at key to the Auth struct)
         }
 
   @type provider() :: {module, map}
-  @type validation_result() ::
-          {:ok, t(), non_neg_integer()} | {:error, %Electric.Satellite.Auth.TokenError{}}
+  @type validation_result() :: {:ok, t()} | {:error, %Electric.Satellite.Auth.TokenError{}}
 
   @doc "Validates the given token against the configuration provided"
   @callback validate_token(token :: binary, config :: map) :: validation_result()
