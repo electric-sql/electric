@@ -1206,5 +1206,3 @@ test('liveRaw insert query throws error for unsupported unsafe queries', async (
     }
   )
 })
-
-// TODO: check why we broke some of the regular tests
