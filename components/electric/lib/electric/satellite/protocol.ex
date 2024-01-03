@@ -270,17 +270,15 @@ defmodule Electric.Satellite.Protocol do
     # succeed as well
     reg_name = Electric.Satellite.WebsocketServer.reg_name(client_id)
 
-    with {:ok, auth, expires_at} <-
-           Electric.Satellite.Auth.validate_token(token, state.auth_provider),
+    with {:ok, auth} <- Electric.Satellite.Auth.validate_token(token, state.auth_provider),
          true <- Electric.safe_reg(reg_name, 1000),
          :ok <- ClientManager.register_client(client_id, reg_name) do
       Logger.metadata(user_id: auth.user_id)
-      Logger.metadata(expires_at: expires_at)
       Logger.info("Successfully authenticated the client")
       Metrics.satellite_connection_event(%{authorized_connection: 1})
 
       # create a timer that will close the socket when the token expires
-      delta = expires_at - current_time()
+      delta = auth.expires_at - current_time()
       delta_in_ms = delta * 1000
       timer = Process.send_after(self(), :jwt_expired, delta_in_ms)
 

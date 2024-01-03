@@ -159,7 +159,7 @@ defmodule Electric.Satellite.Auth.SecureTest do
 
         {:ok, config} = build_config(alg: alg, key: key, namespace: @namespace)
 
-        assert {alg, {:ok, %Auth{user_id: "12345"}, claims["exp"]}} ==
+        assert {alg, {:ok, %Auth{user_id: "12345", expires_at: claims["exp"]}}} ==
                  {alg, validate_token(token, config)}
       end
     end
@@ -176,7 +176,7 @@ defmodule Electric.Satellite.Auth.SecureTest do
 
         {:ok, config} = build_config(alg: alg, key: public_key, namespace: @namespace)
 
-        assert {alg, {:ok, %Auth{user_id: "12345"}, claims["exp"]}} ==
+        assert {alg, {:ok, %Auth{user_id: "12345", expires_at: claims["exp"]}}} ==
                  {alg, validate_token(token, config)}
       end
     end
@@ -197,7 +197,7 @@ defmodule Electric.Satellite.Auth.SecureTest do
 
         {:ok, config} = build_config(alg: alg, key: public_key, namespace: @namespace)
 
-        assert {alg, {:ok, %Auth{user_id: "12345"}, claims["exp"]}} ==
+        assert {alg, {:ok, %Auth{user_id: "12345", expires_at: claims["exp"]}}} ==
                  {alg, validate_token(token, config)}
       end
     end
@@ -235,13 +235,13 @@ defmodule Electric.Satellite.Auth.SecureTest do
       clms = claims(%{"custom_namespace" => %{"user_id" => "000"}})
       token = signed_token(clms)
 
-      assert {:ok, %Auth{user_id: "000"}, clms["exp"]} ==
+      assert {:ok, %Auth{user_id: "000", expires_at: clms["exp"]}} ==
                validate_token(token, config(namespace: "custom_namespace"))
 
       clms = claims(%{"user_id" => "111"})
       token = signed_token(clms)
 
-      assert {:ok, %Auth{user_id: "111"}, clms["exp"]} ==
+      assert {:ok, %Auth{user_id: "111", expires_at: clms["exp"]}} ==
                validate_token(token, config(namespace: ""))
     end
 
@@ -249,13 +249,15 @@ defmodule Electric.Satellite.Auth.SecureTest do
       exp = DateTime.to_unix(~U[2123-05-01 00:00:00Z])
       token = signed_token(claims(%{"custom_namespace" => %{"user_id" => "000"}}))
 
-      assert {:ok, %Auth{user_id: "000"}, exp} ==
+      assert {:ok, %Auth{user_id: "000", expires_at: exp}} ==
                validate_token(token, config(namespace: "custom_namespace"))
 
       ###
 
       token = signed_token(claims(%{"user_id" => "111"}))
-      assert {:ok, %Auth{user_id: "111"}, exp} == validate_token(token, config(namespace: ""))
+
+      assert {:ok, %Auth{user_id: "111", expires_at: exp}} ==
+               validate_token(token, config(namespace: ""))
     end
 
     test "verifies that user_id is present and is not empty" do
