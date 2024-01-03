@@ -1546,6 +1546,10 @@ export class Table<
   }
 }
 
+export function unsafeRaw(adapter: DatabaseAdapter, sql: Statement): Promise<Row[]> {
+  return adapter.query(sql)
+}
+
 export function raw(adapter: DatabaseAdapter, sql: Statement): Promise<Row[]> {
   // only allow safe queries from the client
   if (isPotentiallyDangerous(sql.sql)) {
@@ -1555,7 +1559,7 @@ export function raw(adapter: DatabaseAdapter, sql: Statement): Promise<Row[]> {
     )
   }
 
-  return adapter.query(sql)
+  return unsafeRaw(adapter, sql)
 }
 
 export function liveRaw(

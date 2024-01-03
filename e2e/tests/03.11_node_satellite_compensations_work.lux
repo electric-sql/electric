@@ -27,7 +27,7 @@
     [invoke node_await_table "other_items"]
     [invoke node_sync_table "other_items"]
     ??[proto] recv: #SatSubsDataEnd
-    !await db.db.raw({sql: "UPDATE _electric_meta SET value = 1 WHERE key = 'compensations' RETURNING *"})
+    !await db.db.unsafeRaw({sql: "UPDATE _electric_meta SET value = 1 WHERE key = 'compensations' RETURNING *"})
     ?$node
 
     """!await db.db.items.create({
