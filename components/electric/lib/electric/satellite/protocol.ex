@@ -8,7 +8,6 @@ defmodule Electric.Satellite.Protocol do
   use Pathex
 
   import Electric.Postgres.Extension, only: [is_migration_relation: 1]
-  import Joken, only: [current_time: 0]
 
   alias Electric.Postgres.CachedWal
 
@@ -277,10 +276,7 @@ defmodule Electric.Satellite.Protocol do
       Logger.info("Successfully authenticated the client")
       Metrics.satellite_connection_event(%{authorized_connection: 1})
 
-      # create a timer that will close the socket when the token expires
-      delta = auth.expires_at - current_time()
-      delta_in_ms = delta * 1000
-      timer = Process.send_after(self(), :jwt_expired, delta_in_ms)
+      timer = schedule_auth_expiration(auth.expires_at)
 
       {
         :reply,
@@ -1067,4 +1063,12 @@ defmodule Electric.Satellite.Protocol do
   end
 
   defp rpc_encode(%module{} = message), do: IO.iodata_to_binary(module.encode!(message))
+
+  # No expiration set on the auth state
+  defp schedule_auth_expiration(nil), do: nil
+
+  defp schedule_auth_expiration(exp_time) do
+    delta_ms = 1000 * (exp_time - Joken.current_time())
+    Process.send_after(self(), :jwt_expired, delta_ms)
+  end
 end
