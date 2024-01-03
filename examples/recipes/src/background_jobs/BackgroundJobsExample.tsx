@@ -3,6 +3,7 @@ import { NavigationBar } from "../components/NavigationBar"
 import { useEffect } from "react"
 import { useElectric } from "../electric/ElectricWrapper"
 import { BackgroundJobs } from "./BackgroundJobs"
+import { ConnectivityToggle } from "../components/ConnectivityToggle"
 
 export const BackgroundJobsExample = () => {
   const { db } = useElectric()!
@@ -21,7 +22,9 @@ export const BackgroundJobsExample = () => {
 
   return (
     <Box>
-      <NavigationBar title="Background Jobs" />
+      <NavigationBar title="Background Jobs" items={[
+        <ConnectivityToggle key="connectivity" />
+      ]}/>
       <Container maxWidth="md" sx={{ py: 4 }}>
         <BackgroundJobs />
       </Container>
