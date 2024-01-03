@@ -50,6 +50,6 @@ export async function startProcessingBackgroundJobs (pgPool: Pool): Promise<void
       )
     }
 
-    processJob();
+    processJob().catch(console.error);
   })
 }
