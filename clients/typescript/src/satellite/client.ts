@@ -75,7 +75,6 @@ import {
 import { Client } from '.'
 import { SatelliteClientOpts, satelliteClientDefaults } from './config'
 import Log from 'loglevel'
-import { AuthCredentials } from '../auth'
 import isequal from 'lodash.isequal'
 import {
   SUBSCRIPTION_DELIVERED,
@@ -93,6 +92,7 @@ import { Mutex } from 'async-mutex'
 import { DbSchema } from '../client/model'
 import { PgBasicType, PgDateType, PgType } from '../client/conversions/types'
 import { AsyncEventEmitter } from '../util'
+import { AuthState } from '../auth'
 
 type IncomingHandler = (msg: any) => void
 
@@ -348,7 +348,7 @@ export class SatelliteClient implements Client {
       .then(this.handleStopResp.bind(this))
   }
 
-  authenticate({ clientId, token }: AuthCredentials): Promise<AuthResponse> {
+  authenticate({ clientId, token }: AuthState): Promise<AuthResponse> {
     const request = SatAuthReq.fromPartial({
       id: clientId,
       token: token,

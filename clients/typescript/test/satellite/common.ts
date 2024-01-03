@@ -220,7 +220,7 @@ export type ContextType<Extra = {}> = {
   runMigrations: () => Promise<void>
   tableInfo: TableInfo
   timestamp: number
-  authState: AuthCredentials
+  authState: AuthState
 } & Extra
 
 export const makeContext = async (

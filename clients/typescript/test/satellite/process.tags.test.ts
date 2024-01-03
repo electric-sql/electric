@@ -21,7 +21,6 @@ import {
   relations,
   ContextType,
 } from './common'
-import { AuthStatus } from '../../src/auth'
 
 const test = anyTest as TestFn<ContextType>
 test.beforeEach(makeContext)
@@ -31,10 +30,7 @@ test('basic rules for setting tags', async (t) => {
   const { adapter, runMigrations, satellite, authState } = t.context
   await runMigrations()
 
-  await satellite._setAuthState({
-    ...authState,
-    status: AuthStatus.AUTHENTICATED,
-  })
+  await satellite._setAuthState(authState)
   const clientId = satellite._authState?.clientId ?? 'test_client'
 
   await adapter.run({
@@ -86,10 +82,7 @@ test('basic rules for setting tags', async (t) => {
 test('TX1=INSERT, TX2=DELETE, TX3=INSERT, ack TX1', async (t) => {
   const { adapter, runMigrations, satellite, tableInfo, authState } = t.context
   await runMigrations()
-  await satellite._setAuthState({
-    ...authState,
-    status: AuthStatus.AUTHENTICATED,
-  })
+  await satellite._setAuthState(authState)
 
   const clientId = satellite._authState?.clientId ?? 'test_id'
 
@@ -194,10 +187,7 @@ test('TX1=INSERT, TX2=DELETE, TX3=INSERT, ack TX1', async (t) => {
 test('remote tx (INSERT) concurrently with local tx (INSERT -> DELETE)', async (t) => {
   const { adapter, runMigrations, satellite, tableInfo, authState } = t.context
   await runMigrations()
-  await satellite._setAuthState({
-    ...authState,
-    status: AuthStatus.AUTHENTICATED,
-  })
+  await satellite._setAuthState(authState)
 
   const stmts: Statement[] = []
 
@@ -304,10 +294,7 @@ test('remote tx (INSERT) concurrently with local tx (INSERT -> DELETE)', async (
 test('remote tx (INSERT) concurrently with 2 local txses (INSERT -> DELETE)', async (t) => {
   const { adapter, runMigrations, satellite, tableInfo, authState } = t.context
   await runMigrations()
-  await satellite._setAuthState({
-    ...authState,
-    status: AuthStatus.AUTHENTICATED,
-  })
+  await satellite._setAuthState(authState)
 
   let stmts: Statement[] = []
 
@@ -417,10 +404,7 @@ test('remote tx (INSERT) concurrently with 2 local txses (INSERT -> DELETE)', as
 test('remote tx (INSERT) concurrently with local tx (INSERT -> UPDATE)', async (t) => {
   const { adapter, runMigrations, satellite, tableInfo, authState } = t.context
   await runMigrations()
-  await satellite._setAuthState({
-    ...authState,
-    status: AuthStatus.AUTHENTICATED,
-  })
+  await satellite._setAuthState(authState)
   const clientId = satellite._authState?.clientId ?? 'test_id'
   let stmts: Statement[] = []
 
@@ -548,10 +532,7 @@ test('origin tx (INSERT) concurrently with local txses (INSERT -> DELETE)', asyn
   //
   const { adapter, runMigrations, satellite, tableInfo, authState } = t.context
   await runMigrations()
-  await satellite._setAuthState({
-    ...authState,
-    status: AuthStatus.AUTHENTICATED,
-  })
+  await satellite._setAuthState(authState)
   const clientId = satellite._authState?.clientId ?? 'test_id'
 
   let stmts: Statement[] = []
@@ -647,10 +628,7 @@ test('origin tx (INSERT) concurrently with local txses (INSERT -> DELETE)', asyn
 test('local (INSERT -> UPDATE -> DELETE) with remote equivalent', async (t) => {
   const { runMigrations, satellite, tableInfo, authState, adapter } = t.context
   await runMigrations()
-  await satellite._setAuthState({
-    ...authState,
-    status: AuthStatus.AUTHENTICATED,
-  })
+  await satellite._setAuthState(authState)
   const clientId = satellite._authState?.clientId ?? 'test_id'
   let txDate1 = new Date().getTime()
 

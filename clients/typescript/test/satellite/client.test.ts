@@ -1,7 +1,7 @@
 import anyTest, { TestFn } from 'ava'
 import Long from 'long'
 import * as Proto from '../../src/_generated/protocol/satellite'
-import { AuthCredentials } from '../../src/auth'
+import { AuthState } from '../../src/auth'
 import {
   deserializeRow,
   SatelliteClient,
@@ -20,7 +20,7 @@ import { PgBasicType } from '../../src/client/conversions/types'
 import { HKT } from '../../src/client/util/hkt'
 import { AUTH_EXPIRED_CLOSE_EVENT } from '../../src/sockets'
 
-interface Context extends AuthCredentials {
+interface Context extends AuthState {
   server: SatelliteWSServerStub
   client: SatelliteClient
   clientId: string
