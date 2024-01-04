@@ -22,7 +22,6 @@ const electric = await electrify(
   },
   { registry: new MockRegistry() }
 )
-
 const tbl = electric.db.DataTypes
 
 // Sync all shapes such that we don't get warnings on every query

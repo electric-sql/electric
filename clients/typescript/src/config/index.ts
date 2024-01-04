@@ -1,4 +1,4 @@
-import { AuthConfig } from '../auth/index'
+import { AuthConfig } from '../auth'
 import {
   ConnectionBackoffOptions as ConnectionBackOffOptions,
   satelliteDefaults,

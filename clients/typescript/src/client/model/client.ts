@@ -5,7 +5,12 @@ import { Row, Statement } from '../../util'
 import { LiveResult, LiveResultContext } from './model'
 import { Notifier } from '../../notifiers'
 import { DatabaseAdapter } from '../../electric/adapter'
-import { GlobalRegistry, Registry, Satellite } from '../../satellite'
+import {
+  ConnectionWrapper,
+  GlobalRegistry,
+  Registry,
+  Satellite,
+} from '../../satellite'
 import { ShapeManager } from './shapes'
 
 export type ClientTables<DB extends DbSchema<any>> = {
@@ -69,6 +74,15 @@ export class ElectricClient<
   ) {
     super(dbName, adapter, notifier, registry)
     this.satellite = satellite
+  }
+
+  /**
+   * Connects to the Electric sync service.
+   * This method is idempotent, it is safe to call it multiple times.
+   */
+  async connect(): Promise<ConnectionWrapper> {
+    const connectionPromise = this.satellite.connectWithBackoff()
+    return { connectionPromise }
   }
 
   // Builds the DAL namespace from a `dbDescription` object

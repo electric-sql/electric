@@ -71,7 +71,7 @@ export async function initTestable<
   const socketFactory = opts?.socketFactory || MockSocket
   const registry = opts?.registry || new MockRegistry()
 
-  const dal = await electrify(
+  const client = await electrify(
     dbName,
     dbDescription,
     adapter,
@@ -83,5 +83,8 @@ export async function initTestable<
       registry: registry,
     }
   )
-  return [db, notifier, dal]
+
+  await client.connect()
+
+  return [db, notifier, client]
 }
