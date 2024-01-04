@@ -16,7 +16,7 @@ ElectricSQL has three main components. Your Postgres database, the Electric sync
 [![Overview of deployment components](../deployment/_images/overview.png)](../deployment/concepts.md)
 
 </div>
-<div className="block sm:hidden">
+<div className="block relative sm:hidden w-96 max-w-full">
 
 [![Overview of deployment components](../deployment/_images/overview.sm.png)](../deployment/concepts.md)
 

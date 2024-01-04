@@ -101,7 +101,7 @@ postgresql://${user}:${password}@example.com:65432/electric
 
 Where `user` and `password` are the credentials to use to connect to your Postgres and `electric` is a default database name used for the proxy connection. When the connection is proxied onto your Postgres, Electric will use the host, port and dbname configured in the `DATABASE_URL` used to connect Electric to Postgres.
 
-::: note
+:::note
 Some migrations tooling requires special handling by the Migrations proxy. See the specific [backend integration docs](../integrations/backend/index.md) for more information.
 :::
 
