@@ -288,7 +288,16 @@ export const mockElectricClient = async (
   registry.satellites[dbName] = satellite
 
   // @ts-ignore Mock Electric client that does not contain the DAL
-  return new ElectricClient({}, dbName, adapter, notifier, satellite, registry)
+  const electric = new ElectricClient(
+    {},
+    dbName,
+    adapter,
+    notifier,
+    satellite,
+    registry
+  )
+  await electric.connect()
+  return electric
 }
 
 export const clean = async (t: ExecutionContext<{ dbName: string }>) => {

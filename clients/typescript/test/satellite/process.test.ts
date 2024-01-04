@@ -49,6 +49,7 @@ import {
 } from '../../src/satellite/shapes/types'
 import { mergeEntries } from '../../src/satellite/merge'
 import { MockSubscriptionsManager } from '../../src/satellite/shapes/manager'
+import { AuthState } from '../../src/auth'
 
 const parentRecord = {
   id: 1,
@@ -59,6 +60,15 @@ const parentRecord = {
 const childRecord = {
   id: 1,
   parent: 1,
+}
+
+const startSatellite = async (
+  satellite: SatelliteProcess,
+  authState: AuthState
+) => {
+  await satellite.start(authState)
+  const connectionPromise = satellite.connectWithBackoff()
+  return { connectionPromise }
 }
 
 const test = anyTest as TestFn<ContextType>
@@ -97,12 +107,12 @@ test('load metadata', async (t) => {
 test('set persistent client id', async (t) => {
   const { satellite, authState } = t.context
 
-  await satellite.start(authState)
+  await startSatellite(satellite, authState)
   const clientId1 = satellite._authState!.clientId
   t.truthy(clientId1)
   await satellite.stop()
 
-  await satellite.start(authState)
+  await startSatellite(satellite, authState)
 
   const clientId2 = satellite._authState!.clientId
   t.truthy(clientId2)
@@ -205,7 +215,7 @@ test('starting and stopping the process works', async (t) => {
 
   await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
 
-  const conn = await satellite.start(authState)
+  const conn = await startSatellite(satellite, authState)
   await conn.connectionPromise
 
   await sleepAsync(opts.pollingInterval)
@@ -226,7 +236,7 @@ test('starting and stopping the process works', async (t) => {
   // no txn notified
   t.is(notifier.notifications.length, 4)
 
-  const conn1 = await satellite.start(authState)
+  const conn1 = await startSatellite(satellite, authState)
   await conn1.connectionPromise
   await sleepAsync(opts.pollingInterval)
 
@@ -1211,7 +1221,7 @@ test('get transactions from opLogEntries', async (t) => {
 test('handling connectivity state change stops queueing operations', async (t) => {
   const { runMigrations, satellite, adapter, authState } = t.context
   await runMigrations()
-  await satellite.start(authState)
+  await startSatellite(satellite, authState)
 
   adapter.run({
     sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', 1)`,
@@ -1246,7 +1256,7 @@ test('garbage collection is triggered when transaction from the same origin is r
   const { satellite } = t.context
   const { runMigrations, adapter, authState } = t.context
   await runMigrations()
-  await satellite.start(authState)
+  await startSatellite(satellite, authState)
 
   adapter.run({
     sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', 1);`,
@@ -1283,7 +1293,7 @@ test('clear database on BEHIND_WINDOW', async (t) => {
   const base64lsn = base64.fromBytes(numberToBytes(MOCK_BEHIND_WINDOW_LSN))
   await satellite._setMeta('lsn', base64lsn)
   try {
-    const conn = await satellite.start(authState)
+    const conn = await startSatellite(satellite, authState)
     await conn.connectionPromise
     const lsnAfter = await satellite._getMeta('lsn')
     t.not(lsnAfter, base64lsn)
@@ -1303,7 +1313,7 @@ test('throw other replication errors', async (t) => {
   const base64lsn = base64.fromBytes(numberToBytes(MOCK_INTERNAL_ERROR))
   await satellite._setMeta('lsn', base64lsn)
 
-  const conn = await satellite.start(authState)
+  const conn = await startSatellite(satellite, authState)
   return Promise.all(
     [satellite['initializing']?.waitOn(), conn.connectionPromise].map((p) =>
       p?.catch((e: SatelliteError) => {
@@ -1326,7 +1336,7 @@ test('apply shape data and persist subscription', async (t) => {
   client.setRelations(relations)
   client.setRelationData(tablename, parentRecord)
 
-  const conn = await satellite.start(authState)
+  const conn = await startSatellite(satellite, authState)
   await conn.connectionPromise
 
   const shapeDef: ClientShapeDefinition = {
@@ -1379,7 +1389,7 @@ test('(regression) shape subscription succeeds even if subscription data is deli
   client.setRelations(relations)
   client.setRelationData(tablename, parentRecord)
 
-  const conn = await satellite.start(authState)
+  const conn = await startSatellite(satellite, authState)
   await conn.connectionPromise
 
   const shapeDef: ClientShapeDefinition = {
@@ -1411,7 +1421,7 @@ test('multiple subscriptions for the same shape are deduplicated', async (t) => 
   client.setRelations(relations)
   client.setRelationData(tablename, parentRecord)
 
-  const conn = await satellite.start(authState)
+  const conn = await startSatellite(satellite, authState)
   await conn.connectionPromise
 
   const shapeDef: ClientShapeDefinition = {
@@ -1453,7 +1463,7 @@ test('applied shape data will be acted upon correctly', async (t) => {
   client.setRelations(relations)
   client.setRelationData(tablename, parentRecord)
 
-  const conn = await satellite.start(authState)
+  const conn = await startSatellite(satellite, authState)
   await conn.connectionPromise
 
   const shapeDef: ClientShapeDefinition = {
@@ -1505,7 +1515,7 @@ test('a subscription that failed to apply because of FK constraint triggers GC',
   client.setRelations(relations)
   client.setRelationData(tablename, childRecord)
 
-  const conn = await satellite.start(authState)
+  const conn = await startSatellite(satellite, authState)
   await conn.connectionPromise
 
   const shapeDef1: ClientShapeDefinition = {
@@ -1539,7 +1549,7 @@ test('a second successful subscription', async (t) => {
   client.setRelationData('parent', parentRecord)
   client.setRelationData(tablename, childRecord)
 
-  const conn = await satellite.start(authState)
+  const conn = await startSatellite(satellite, authState)
   await conn.connectionPromise
 
   const shapeDef1: ClientShapeDefinition = {
@@ -1585,7 +1595,7 @@ test('a single subscribe with multiple tables with FKs', async (t) => {
   client.setRelationData('parent', parentRecord)
   client.setRelationData('child', childRecord)
 
-  const conn = await satellite.start(authState)
+  const conn = await startSatellite(satellite, authState)
   await conn.connectionPromise
 
   const shapeDef1: ClientShapeDefinition = {
@@ -1639,7 +1649,7 @@ test.serial('a shape delivery that triggers garbage collection', async (t) => {
   client.setRelationData(tablename, parentRecord)
   client.setRelationData('another', {})
 
-  const conn = await satellite.start(authState)
+  const conn = await startSatellite(satellite, authState)
   await conn.connectionPromise
 
   const shapeDef1: ClientShapeDefinition = {
@@ -1690,7 +1700,7 @@ test('a subscription request failure does not clear the manager state', async (t
   client.setRelations(relations)
   client.setRelationData(tablename, parentRecord)
 
-  const conn = await satellite.start(authState)
+  const conn = await startSatellite(satellite, authState)
   await conn.connectionPromise
 
   const shapeDef1: ClientShapeDefinition = {
@@ -1757,7 +1767,7 @@ test('unsubscribing all subscriptions does not trigger FK violations', async (t)
 
 test("Garbage collecting the subscription doesn't generate oplog entries", async (t) => {
   const { adapter, runMigrations, satellite, authState } = t.context
-  await satellite.start(authState)
+  await startSatellite(satellite, authState)
   await runMigrations()
   await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
   const ts = await satellite._performSnapshot()
@@ -1785,7 +1795,7 @@ test('snapshots: generated oplog entries have the correct tags', async (t) => {
   client.setRelations(relations)
   client.setRelationData(tablename, parentRecord)
 
-  const conn = await satellite.start(authState)
+  const conn = await startSatellite(satellite, authState)
   await conn.connectionPromise
 
   const shapeDef: ClientShapeDefinition = {
@@ -1896,7 +1906,7 @@ test.serial('connection backoff success', async (t) => {
   satellite['_connectRetryHandler'] = retry
 
   await Promise.all(
-    [satellite._connectWithBackoff(), satellite['initializing']?.waitOn()].map(
+    [satellite.connectWithBackoff(), satellite['initializing']?.waitOn()].map(
       (p) => p?.catch(() => t.pass())
     )
   )

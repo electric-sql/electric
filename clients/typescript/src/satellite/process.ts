@@ -40,7 +40,7 @@ import {
   isDataChange,
 } from '../util/types'
 import { SatelliteOpts } from './config'
-import { Client, ConnectionWrapper, Satellite } from './index'
+import { Client, Satellite } from './index'
 import {
   OPTYPES,
   OplogEntry,
@@ -203,7 +203,7 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  async start(authConfig: AuthConfig): Promise<ConnectionWrapper> {
+  async start(authConfig: AuthConfig): Promise<void> {
     if (this.opts.debug) {
       await this.logSQLiteVersion()
     }
@@ -282,9 +282,6 @@ export class SatelliteProcess implements Satellite {
     if (subscriptionsState) {
       this.subscriptions.setState(subscriptionsState)
     }
-
-    const connectionPromise = this._connectWithBackoff()
-    return { connectionPromise }
   }
 
   private async logSQLiteVersion(): Promise<void> {
@@ -294,7 +291,7 @@ export class SatelliteProcess implements Satellite {
     Log.info(`Using SQLite version: ${sqliteVersionRow[0]['version']}`)
   }
 
-  async _setAuthState(authState: AuthState): Promise<void> {
+  _setAuthState(authState: AuthState): void {
     this._authState = authState
   }
 
@@ -663,7 +660,7 @@ export class SatelliteProcess implements Satellite {
     }
 
     Log.warn('Client disconnected with a non fatal error, reconnecting')
-    return this._connectWithBackoff()
+    return this.connectWithBackoff()
   }
 
   async _handleConnectivityStateChange(
@@ -673,7 +670,7 @@ export class SatelliteProcess implements Satellite {
     switch (status) {
       case 'available': {
         Log.warn(`checking network availability and reconnecting`)
-        return this._connectWithBackoff()
+        return this.connectWithBackoff()
       }
       case 'disconnected': {
         this.client.disconnect()
@@ -688,7 +685,18 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  async _connectWithBackoff(): Promise<void> {
+  async connectWithBackoff(): Promise<void> {
+    if (this.client.isConnected()) {
+      // we're already connected
+      return
+    }
+
+    if (this.initializing && !this.initializing.finished()) {
+      // we're already trying to connect to Electric
+      // return the promise that resolves when the connection is established
+      return this.initializing.waitOn()
+    }
+
     if (!this.initializing || this.initializing?.finished()) {
       this.initializing = getWaiter()
     }

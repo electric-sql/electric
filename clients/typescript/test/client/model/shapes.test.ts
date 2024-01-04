@@ -11,6 +11,7 @@ import { randomValue } from '../../../src/util'
 import { ElectricClient } from '../../../src/client/model/client'
 import { cleanAndStopSatellite } from '../../satellite/common'
 import { satelliteDefaults } from '../../../src/satellite/config'
+import { AuthConfig } from '../../../src/auth'
 
 const test = testAny as TestFn<ContextType>
 
@@ -245,9 +246,18 @@ const profile = {
   userId: 1,
 }
 
+const startSatellite = async (
+  satellite: SatelliteProcess,
+  config: AuthConfig
+) => {
+  await satellite.start(config)
+  await satellite.connectWithBackoff()
+}
+
 test.serial('promise resolves when subscription starts loading', async (t) => {
   const { satellite, client } = t.context as ContextType
   await satellite.start(config.auth)
+  await satellite.connectWithBackoff()
 
   client.setRelations(relations)
   client.setRelationData('Post', post)
@@ -264,7 +274,7 @@ test.serial(
   'synced promise resolves when subscription is fulfilled',
   async (t) => {
     const { satellite, client } = t.context as ContextType
-    await satellite.start(config.auth)
+    await startSatellite(satellite, config.auth)
 
     // We can request a subscription
     client.setRelations(relations)
@@ -292,7 +302,7 @@ test.serial(
 
 test.serial('promise is rejected on failed subscription request', async (t) => {
   const { satellite } = t.context as ContextType
-  await satellite.start(config.auth)
+  await startSatellite(satellite, config.auth)
 
   const { Items } = t.context as ContextType
   try {
@@ -305,7 +315,7 @@ test.serial('promise is rejected on failed subscription request', async (t) => {
 
 test.serial('synced promise is rejected on invalid shape', async (t) => {
   const { satellite, User } = t.context as ContextType
-  await satellite.start(config.auth)
+  await startSatellite(satellite, config.auth)
 
   let loadingPromResolved = false
 
