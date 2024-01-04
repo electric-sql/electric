@@ -19,6 +19,14 @@ The sidecar runs Electric in a NodeJS process to which applications can connect.
 The sidecar notifies the applications of incoming changes.
 Similarly, applications notify the sidecar of potential changes that need to be synced with Electric.
 
+## Pre-reqs
+
+You need [NodeJS >= 16.11 and Docker Compose v2](https://electric-sql.com/docs/usage/installation/prereqs). Install `yarn` if you don't have it already:
+
+```shell
+npm -g install yarn
+```
+
 ## Installing dependencies
 
 Install the sidecar's dependencies:
