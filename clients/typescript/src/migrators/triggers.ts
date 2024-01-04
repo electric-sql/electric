@@ -143,7 +143,16 @@ function generateCompensationTriggers(table: Table): Statement[] {
     const fkTableNamespace = 'main' // currently, Electric always uses the 'main' namespace
     const fkTableName = foreignKey.table
     const fkTablePK = foreignKey.parentKey // primary key of the table pointed at by the FK.
-    const joinedFkPKs = joinColsForJSON([fkTablePK], columnTypes)
+
+    // This table's `childKey` points to the parent's table `parentKey`.
+    // `joinColsForJSON` looks up the type of the `parentKey` column in the provided `colTypes` object.
+    // However, `columnTypes` contains the types of the columns of this table
+    // so we need to pass an object containing the column type of the parent key.
+    // We can construct that object because the type of the parent key must be the same
+    // as the type of the child key that is pointing to it.
+    const joinedFkPKs = joinColsForJSON([fkTablePK], {
+      [fkTablePK]: columnTypes[foreignKey.childKey],
+    })
 
     return [
       dedent`-- Triggers for foreign key compensations
