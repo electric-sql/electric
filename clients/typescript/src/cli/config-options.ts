@@ -1,13 +1,9 @@
+import path from 'path'
 import { defaultDbUrlPart, getConfigValue } from './config'
 import { dedent, getAppName, buildDatabaseURL } from './utils'
 import { LIB_VERSION } from '../version'
 
 const minorVersion = LIB_VERSION.split('.').slice(0, 2).join('.')
-
-/*
-To do:
-- when using WITH_POSTGRES, set the default DATABASE_URL to the postgres container
-*/
 
 // Name will be prefixed with ELECTRIC_ as environment variables.
 export const configOptions = {
@@ -15,9 +11,7 @@ export const configOptions = {
   SERVICE: {
     valueType: String,
     valueTypeName: 'url',
-    doc: dedent`
-      URL of the Electric service.
-    `,
+    doc: 'URL of the Electric service.',
     groups: ['client', 'tunnel'],
     shortForm: 's',
     defaultVal: () => {
@@ -30,9 +24,7 @@ export const configOptions = {
   PROXY: {
     valueType: String,
     valueTypeName: 'url',
-    doc: dedent`
-      URL of the Electric service's PostgreSQL proxy.
-    `,
+    doc: "URL of the Electric service's PostgreSQL proxy.",
     groups: ['client', 'proxy'],
     shortForm: 'p',
     defaultVal: () => {
@@ -49,35 +41,27 @@ export const configOptions = {
     valueType: String,
     valueTypeName: 'path',
     shortForm: 'o',
-    doc: dedent`
-      Path to the directory where the generated client code will be written.
-    `,
+    doc: 'Path to the directory where the generated client code will be written.',
     groups: ['client'],
-    defaultVal: './src/generated/client',
+    defaultVal: path.join('.', 'src', 'generated', 'client'),
   },
   SERVICE_HOST: {
     valueType: String,
     valueTypeName: 'hostname',
-    doc: dedent`
-      Hostname the Electric service is running on.
-    `,
+    doc: 'Hostname the Electric service is running on.',
     groups: ['client', 'proxy'],
     defaultVal: 'localhost',
   },
 
   // *** Postgres database connection options ***
   WITH_POSTGRES: {
-    doc: dedent`
-      Start a PostgreSQL database along with Electric.
-    `,
+    doc: 'Start a PostgreSQL database along with Electric.',
     valueType: Boolean,
     defaultVal: false,
     groups: ['database', 'electric'],
   },
   DATABASE_URL: {
-    doc: dedent`
-      PostgreSQL connection URL for the database.
-    `,
+    doc: 'PostgreSQL connection URL for the database.',
     valueType: String,
     valueTypeName: 'url',
     shortForm: 'db',
@@ -94,41 +78,31 @@ export const configOptions = {
     groups: ['database', 'electric'],
   },
   DATABASE_HOST: {
-    doc: dedent`
-      Hostname of the database server.
-    `,
+    doc: 'Hostname of the database server.',
     valueType: String,
     defaultVal: () => defaultDbUrlPart('host', 'localhost'),
     groups: ['database'],
   },
   DATABASE_PORT: {
-    doc: dedent`
-      Port number of the database server.
-    `,
+    doc: 'Port number of the database server.',
     valueType: Number,
     defaultVal: () => defaultDbUrlPart('port', 5432),
     groups: ['database'],
   },
   DATABASE_USER: {
-    doc: dedent`
-      Username to connect to the database with.
-    `,
+    doc: 'Username to connect to the database with.',
     valueType: String,
     defaultVal: () => defaultDbUrlPart('user', 'postgres'),
     groups: ['database'],
   },
   DATABASE_PASSWORD: {
-    doc: dedent`
-      Password to connect to the database with.
-    `,
+    doc: 'Password to connect to the database with.',
     valueType: String,
     defaultVal: () => defaultDbUrlPart('password', 'db_password'),
     groups: ['database'],
   },
   DATABASE_NAME: {
-    doc: dedent`
-      Name of the database to connect to.
-    `,
+    doc: 'Name of the database to connect to.',
     valueType: String,
     defaultVal: () => defaultDbUrlPart('dbName', getAppName() ?? 'electric'),
     groups: ['database', 'client', 'proxy'],
@@ -138,9 +112,7 @@ export const configOptions = {
   DATABASE_REQUIRE_SSL: {
     defaultVal: false,
     valueType: Boolean,
-    doc: dedent`
-      Require SSL for the connection to the database.
-    `,
+    doc: 'Require SSL for the connection to the database.',
     groups: ['electric'],
   },
   DATABASE_USE_IPV6: {
@@ -165,9 +137,7 @@ export const configOptions = {
   LOGICAL_PUBLISHER_HOST: {
     valueType: String,
     valueTypeName: 'url',
-    doc: dedent`
-      Host of this electric instance for the reverse connection from Postgres.
-    `,
+    doc: 'Host of this electric instance for the reverse connection from Postgres.',
     groups: ['electric'],
   },
   LOGICAL_PUBLISHER_PORT: {
@@ -254,27 +224,21 @@ export const configOptions = {
     valueType: String,
     defaultVal: 'enabled',
     valueTypeName: 'enabled | disabled',
-    doc: dedent`
-      Set to "disable" to disable sending telemetry data to Electric.
-    `,
+    doc: 'Set to "disable" to disable sending telemetry data to Electric.',
     groups: ['electric'],
   },
   POSTGRESQL_IMAGE: {
     valueType: String,
     valueTypeName: 'image',
     defaultVal: 'postgres:14-alpine',
-    doc: dedent`
-      The Docker image to use for the PostgreSQL database.
-    `,
+    doc: 'The Docker image to use for the PostgreSQL database.',
     groups: ['electric'],
   },
   ELECTRIC_IMAGE: {
     valueType: String,
     valueTypeName: 'image',
     defaultVal: `electricsql/electric:${minorVersion}`, // Latest minor version of this library
-    doc: dedent`
-      The Docker image to use for Electric.
-    `,
+    doc: 'The Docker image to use for Electric.',
     groups: ['electric'],
   },
 } as const

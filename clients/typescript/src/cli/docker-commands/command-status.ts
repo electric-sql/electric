@@ -2,17 +2,11 @@ import { Command } from 'commander'
 import { dockerCompose } from './docker-utils'
 
 export function makeStatusCommand() {
-  const command = new Command('status')
-  command
+  return new Command('status')
     .description(
       'Show status of the ElectricSQL sync service docker containers'
     )
-
-    .action(async () => {
-      status()
-    })
-
-  return command
+    .action(status)
 }
 
 export function status() {

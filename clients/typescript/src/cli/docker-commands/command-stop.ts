@@ -6,8 +6,7 @@ type StopCommandArgs = {
 }
 
 export function makeStopCommand() {
-  const command = new Command('stop')
-  command
+  return new Command('stop')
     .description(
       'Stop the ElectricSQL sync service, and any optional PostgreSQL'
     )
@@ -15,7 +14,6 @@ export function makeStopCommand() {
     .action(async (opts: StopCommandArgs) => {
       stop(opts)
     })
-  return command
 }
 
 export function stop(opts: StopCommandArgs) {

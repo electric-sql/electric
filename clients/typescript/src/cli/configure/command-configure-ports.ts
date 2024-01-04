@@ -5,15 +5,9 @@ import portUsed from 'tcp-port-used'
 import prompts from 'prompts'
 
 export function makeConfigurePortsCommand() {
-  const command = new Command('configure-ports')
-  command
+  return new Command('configure-ports')
     .description('Configure the ports used by the ElectricSQL sync service')
-
-    .action(async () => {
-      configurePorts()
-    })
-
-  return command
+    .action(configurePorts)
 }
 
 export async function configurePorts() {
@@ -64,25 +58,32 @@ function writeEnvLocal(port: number, proxyPort: number) {
     ? fs.readFileSync('.env.local', 'utf-8').split('\n')
     : []
   const serviceUrl = `http://localhost:${port}`
-  const newLines = lines.map((line) => {
-    if (line.startsWith('ELECTRIC_HTTP_PORT=')) {
-      return `ELECTRIC_HTTP_PORT=${port}`
-    } else if (line.startsWith('ELECTRIC_PG_PROXY_PORT=')) {
-      return `ELECTRIC_PG_PROXY_PORT=${proxyPort}`
-    } else if (line.startsWith('ELECTRIC_SERVICE=')) {
-      return `ELECTRIC_SERVICE=${serviceUrl}`
+
+  const toWrite = {
+    ELECTRIC_HTTP_PORT: port,
+    ELECTRIC_PG_PROXY_PORT: proxyPort,
+    ELECTRIC_SERVICE: serviceUrl,
+  }
+  const newLines = []
+  for (const line of lines) {
+    if (line.includes('=')) {
+      const key = line.split('=')[0]
+      if (
+        Object.keys(toWrite).includes(key) &&
+        toWrite[key as keyof typeof toWrite]
+      ) {
+        newLines.push(`${key}=${toWrite[key as keyof typeof toWrite]}`)
+        delete toWrite[key as keyof typeof toWrite]
+      } else {
+        newLines.push(line)
+      }
     } else {
-      return line
+      newLines.push(line)
     }
-  })
-  if (!newLines.find((line) => line.startsWith('ELECTRIC_HTTP_PORT='))) {
-    newLines.push(`ELECTRIC_HTTP_PORT=${port}`)
   }
-  if (!newLines.find((line) => line.startsWith('ELECTRIC_PG_PROXY_PORT='))) {
-    newLines.push(`ELECTRIC_PG_PROXY_PORT=${proxyPort}`)
-  }
-  if (!newLines.find((line) => line.startsWith('ELECTRIC_SERVICE='))) {
-    newLines.push(`ELECTRIC_SERVICE=${serviceUrl}`)
-  }
+  newLines.push(
+    ...Object.entries(toWrite).map(([key, value]) => `${key}=${value}`)
+  )
+
   fs.writeFileSync('.env.local', newLines.join('\n'))
 }

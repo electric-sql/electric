@@ -56,14 +56,10 @@ export function getConfigValue<K extends ConfigOptionName>(
   const envName = name.startsWith('ELECTRIC_') ? name : `ELECTRIC_${name}`
   const envVal = process.env[envName]
   if (configOptions[name].valueType === Boolean) {
-    if (
-      !envVal ||
-      ['f', 'false', '0', '', 'no'].includes(envVal?.toLocaleLowerCase())
-    ) {
-      return false as ConfigOptionValue<K>
-    } else {
-      return true as ConfigOptionValue<K>
-    }
+    return (!!envVal &&
+      !['f', 'false', '0', '', 'no'].includes(
+        envVal?.toLocaleLowerCase()
+      )) as ConfigOptionValue<K>
   }
   if (envVal !== undefined) {
     if (configOptions[name].valueType === Number) {
@@ -110,7 +106,7 @@ export type GetConfigOptionsForGroup<G extends Group> = Partial<
 >
 
 /**
- * Get the current configuration for Electric from environment variables and and
+ * Get the current configuration for Electric from environment variables and
  * any passed options.
  * @param options Object containing options to override the environment variables
  * @returns The current configuration
@@ -119,7 +115,7 @@ export function getConfig(options?: GetConfigOptions): Config {
   return Object.fromEntries(
     Object.keys(configOptions).map((name) => [
       name,
-      getConfigValue(name as ConfigOptionName, options || {}),
+      getConfigValue(name as ConfigOptionName, options ?? {}),
     ])
   ) as Config
 }
@@ -134,7 +130,9 @@ export function envFromConfig(config: Config) {
 }
 
 function snakeToCamel(s: string) {
-  return s.toLocaleLowerCase().replace(/(_\w)/g, (m) => m[1].toUpperCase())
+  return s
+    .toLocaleLowerCase()
+    .replace(/(_+\w)/g, (m) => m.slice(-1).toUpperCase())
 }
 
 export function addOptionToCommand(
@@ -161,8 +159,10 @@ export function addOptionToCommand(
       flags += ` <${opt.valueTypeName}>`
     } else if (opt.valueType === Number) {
       flags += ` <number>`
-    } else {
+    } else if (opt.valueType === String) {
       flags += ` <string>`
+    } else {
+      throw new Error(`Unknown value type: ${opt.valueType}`)
     }
   }
   let doc = `${opt.doc}\nEnv var: ${localName}`

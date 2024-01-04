@@ -301,14 +301,14 @@ async function createPrismaSchema(folder: string, opts: GeneratorOptions) {
   })
   const schema = dedent`
     generator electric {
-      provider      = "${escapePathForString(generatorPath)}"
+      provider      = "node ${escapePathForString(generatorPath)}"
       output        = "${escapePathForString(output)}"
       relationModel = "false"
     }
 
     generator client {
       provider = "prisma-client-js"
-      output   = "${output}"
+      output   = "${escapePathForString(output)}"
     }
 
     datasource db {

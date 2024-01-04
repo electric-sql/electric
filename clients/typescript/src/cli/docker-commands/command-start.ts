@@ -31,7 +31,6 @@ export function makeStartCommand() {
     const startOptions = {
       detach: opts.detach,
       withPostgres: !!config.WITH_POSTGRES,
-      pgPort: opts.WITH_POSTGRES ? opts.DATABASE_PORT : undefined,
       config: config,
     }
     start(startOptions)
@@ -44,7 +43,6 @@ interface StartSettings {
   detach?: boolean
   exitOnDetached?: boolean
   withPostgres?: boolean
-  pgPort?: number
   config: Config
 }
 

@@ -3,17 +3,12 @@ import { spawnSync } from 'child_process'
 import { getConfig, envFromConfig, ConfigOptionName, Config } from '../config'
 
 export function makeWithConfigCommand() {
-  const command = new Command('with-config')
-  command
+  return new Command('with-config')
     .description('Run a command with config arguments substituted')
-
     .arguments('<command>')
-
     .action(async (command) => {
       withConfig(command)
     })
-
-  return command
 }
 
 export function withConfig(command: string, config?: Config) {
@@ -23,7 +18,7 @@ export function withConfig(command: string, config?: Config) {
   const cmd = command
     .replace(re, (match, envVar) => {
       const value = envVar.startsWith('ELECTRIC_')
-        ? _config[envVar.slice('ELECTRIC_'.length) as ConfigOptionName] ||
+        ? _config[envVar.slice('ELECTRIC_'.length) as ConfigOptionName] ??
           env[envVar]
         : env[envVar]
       if (value === undefined) {
