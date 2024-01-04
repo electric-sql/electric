@@ -3,6 +3,7 @@ import { NavigationBar } from "../components/NavigationBar"
 import { useEffect } from "react"
 import { useElectric } from "../electric/ElectricWrapper"
 import { ConnectivityToggle } from "../components/ConnectivityToggle"
+import { ChatRoom } from "./ChatRoom"
 
 export const ChatRoomExample = () => {
   const { db } = useElectric()!
@@ -25,7 +26,7 @@ export const ChatRoomExample = () => {
         <ConnectivityToggle key="connectivity" />
       ]}/>
       <Container maxWidth="md" sx={{ py: 4 }}>
-        
+        <ChatRoom username="Stefanos" />
       </Container>
     </Box>
   )
