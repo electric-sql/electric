@@ -1,6 +1,3 @@
-import sqliteParser from 'sqlite-parser'
-import { WalkBuilder } from 'walkjs'
-
 import { QualifiedTablename } from './tablename'
 import { DbNamespace } from './types'
 
@@ -39,63 +36,29 @@ export const parseTableNames = (
   sqlQuery: string,
   defaultNamespace: DbNamespace = 'main'
 ): QualifiedTablename[] => {
-  const ast = sqliteParser(sqlQuery)
-  if (ast.type !== 'statement') {
-    throw 'Invalid SQL statement'
-  }
-  if (ast.statement.length !== 1) {
-    throw 'Query must be a single SQL statement.'
-  }
-
-  const statement = ast.statement[0]
-  if (statement.type !== 'statement' || statement.variant !== 'select') {
-    throw 'Query must be a valid SELECT statement.'
+  // NOTE(msfstef): using an SQLite parser to create an AST and
+  // walk down it to find tablenames is a cleaner solution, but
+  // there are no up-to-date parsers I could find that would not
+  // block modern queries (e.g. windowed queries).
+  // For the sake of parsing table names, this seems to do the
+  // trick, and with enough test coverage it should be fine
+  const tableNameExp = /(?:FROM|JOIN)\s+([a-zA-Z_][a-zA-Z0-9_$.]*)/gi
+  const tableMatches = []
+  let match
+  while ((match = tableNameExp.exec(sqlQuery)) !== null) {
+    tableMatches.push(match[1])
   }
 
   const results: QualifiedTablename[] = []
-  const resultSet: Set<string> = new Set()
-
-  new WalkBuilder()
-    .withSimpleCallback((node) => {
-      const result = _ensureQualified(
-        node.val.name,
-        defaultNamespace
-      ).toLowerCase()
-
-      resultSet.add(result)
-    })
-    .withGlobalFilter(_isTableIdentifier)
-    .walk(statement.from)
-
-  Array.from(resultSet)
+  Array.from(tableMatches)
+    .map((tn) => _ensureQualified(tn, defaultNamespace))
     .sort()
     .forEach((value: string) => {
       const [namespace, tablename] = value.split('.')
-
       results.push(new QualifiedTablename(namespace, tablename))
     })
 
   return results
-}
-
-const _isTableIdentifier = (node: any): boolean => {
-  if (node.nodeType !== 'object') {
-    return false
-  }
-
-  const { val } = node
-  if (!Object.prototype.hasOwnProperty.call(val, 'variant')) {
-    return false
-  }
-  if (!Object.prototype.hasOwnProperty.call(val, 'type')) {
-    return false
-  }
-
-  if (val.type !== 'identifier' || val.variant !== 'table') {
-    return false
-  }
-
-  return true
 }
 
 const _ensureQualified = (
