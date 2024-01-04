@@ -26,6 +26,9 @@ function App() {
         <Link component={RouterLink} to="/background-jobs" underline="hover">
           Background Jobs
         </Link>
+        <Link component={RouterLink} to="/chat-room" underline="hover">
+          Chat Room
+        </Link>
       </Box>
     </>
   )

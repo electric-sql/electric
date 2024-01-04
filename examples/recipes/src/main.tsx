@@ -17,6 +17,7 @@ import { LogViewerExample } from './log_viewer/LogViewerExample.tsx';
 import { MonitoringMetricsExample } from './monitoring_metrics/MonitoringMetricsExample.tsx';
 import { RequestResponseExample } from './request_response/RequestResponseExample.tsx';
 import { BackgroundJobsExample } from './background_jobs/BackgroundJobsExample.tsx';
+import { ChatRoomExample } from './chat_room/ChatRoomExample.tsx';
 
 
 const router = createBrowserRouter([
@@ -43,6 +44,10 @@ const router = createBrowserRouter([
   {
     path: "/background-jobs",
     element: <BackgroundJobsExample />
+  },
+  {
+    path: "/chat-room",
+    element: <ChatRoomExample />
   },
 ]);
 
