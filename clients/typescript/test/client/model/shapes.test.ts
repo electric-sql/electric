@@ -12,6 +12,7 @@ import { ElectricClient } from '../../../src/client/model/client'
 import { cleanAndStopSatellite } from '../../satellite/common'
 import { satelliteDefaults } from '../../../src/satellite/config'
 import { insecureAuthToken } from '../../../src/auth'
+import { AuthConfig } from '../../../src/auth'
 
 const test = testAny as TestFn<ContextType>
 

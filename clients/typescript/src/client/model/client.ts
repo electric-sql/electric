@@ -5,7 +5,12 @@ import { Row, Statement } from '../../util'
 import { LiveResult, LiveResultContext } from './model'
 import { Notifier } from '../../notifiers'
 import { DatabaseAdapter } from '../../electric/adapter'
-import { GlobalRegistry, Registry, Satellite } from '../../satellite'
+import {
+  ConnectionWrapper,
+  GlobalRegistry,
+  Registry,
+  Satellite,
+} from '../../satellite'
 import { ShapeManager } from './shapes'
 
 export type ClientTables<DB extends DbSchema<any>> = {

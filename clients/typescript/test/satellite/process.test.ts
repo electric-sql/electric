@@ -1279,10 +1279,10 @@ test('handling connectivity state change stops queueing operations', async (t) =
 })
 
 test('notifies about JWT expiration', async (t) => {
-  const { satellite, authState, runMigrations, client, notifier, dbName } =
+  const { satellite, authState, runMigrations, client, notifier, dbName, token } =
     t.context
   await runMigrations()
-  await satellite.start(authState)
+  await startSatellite(satellite, authState, token)
 
   // give some time for Satellite to start
   // (needed because connecting and starting replication are async)
