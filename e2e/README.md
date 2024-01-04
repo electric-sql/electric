@@ -5,7 +5,7 @@ Tests dependencies:
 - [Docker Compose](https://docs.docker.com/compose/install/)
 
 
-You will also need an Electric Docker image, specified by the environment variables ```ELECTRIC_IMAGE_NAME``` and ```ELECTRIC_IMAGE_TAG```, which defaults to the image ```electric:local-build``` that can be built using:
+You will also need an Electric Docker image, specified by the environment variables `ELECTRIC_IMAGE_NAME` and `ELECTRIC_IMAGE_TAG`, which defaults to the image `electric:local-build` that can be built using:
 ```sh
 cd ../components/electric
 make docker-build
