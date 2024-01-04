@@ -1,0 +1,54 @@
+{
+  "testCases": [
+    {
+      "query": "SELECT * FROM main.employees WHERE department_id = 3;",
+      "expectedResults": [{ "namespace": "main", "tablename": "employees" }]
+    },
+    {
+      "query": "select\n\n * from\n\nemployees\n\nWHERE department_id = 3;",
+      "expectedResults": [{ "namespace": null, "tablename": "employees" }]
+    },
+    {
+      "query": "SELECT customers.name, orders.order_date FROM customers JOIN main.orders ON customers.id = main.orders.customer_id WHERE main.orders.total_amount > 1000;",
+      "expectedResults": [
+        { "namespace": null, "tablename": "customers" },
+        { "namespace": "main", "tablename": "orders" }
+      ]
+    },
+    {
+      "query": "SELECT suppliers.supplier_name, products.product_name FROM suppliers JOIN main.products ON suppliers.supplier_id = main.products.supplier_id WHERE suppliers.country = 'USA';",
+      "expectedResults": [
+        { "namespace": "main", "tablename": "products" },
+        { "namespace": null, "tablename": "suppliers" }
+      ]
+    },
+    {
+      "name": "separate namespace join query",
+      "query": "SELECT db.employees.name, pb.departments.department_name FROM db.employees JOIN pb.departments ON db.employees.department_id = pb.departments.id WHERE db.employees.salary > 50000;",
+      "expectedResults": [
+        { "namespace": "db", "tablename": "employees" },
+        { "namespace": "pb", "tablename": "departments" }
+      ]
+    },
+    {
+      "name": "nested query",
+      "query": "SELECT\n  users.id,\n  users.username,\n  orders.order_number,\n  products.product_name\nFROM\n  users\n  JOIN orders ON users.id = orders.user_id\n  JOIN (\n    SELECT\n      user_id,\n      product_name\n    FROM\n      order_details\n      JOIN main.products ON order_details.product_id = main.products.id\n    WHERE\n      order_details.quantity > 5\n  ) AS nested_table ON users.id = nested_table.user_id\nWHERE\n  users.status = 'active';",
+      "expectedResults": [
+        { "namespace": null, "tablename": "order_details" },
+        { "namespace": null, "tablename": "orders" },
+        { "namespace": null, "tablename": "products" },
+        { "namespace": null, "tablename": "users" }
+      ]
+    },
+    {
+      "name": "nested query with multiple namespaces and tables",
+      "query": "SELECT\n  staff.id,\n  staff.full_name,\n  divisions.division_name,\n  projects.project_title\nFROM\n  corp.staff\n  JOIN company.divisions ON staff.division_id = divisions.id\n  LEFT JOIN (\n    SELECT\n      employee_id,\n      project_title\n    FROM\n      corp.employee_projects\n      JOIN company.projects ON employee_projects.project_id = projects.id\n    WHERE\n      projects.status = 'active'\n  ) AS active_projects ON staff.id = active_projects.employee_id\nWHERE\n  staff.salary > 60000;",
+      "expectedResults": [
+        { "namespace": "company", "tablename": "divisions" },
+        { "namespace": "company", "tablename": "projects" },
+        { "namespace": "corp", "tablename": "employee_projects" },
+        { "namespace": "corp", "tablename": "staff" }
+      ]
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 import { ElectricNamespace } from '../../electric/namespace'
 import { DbSchema, TableSchema } from './schema'
-import { liveRaw, raw, Table } from './table'
+import { liveRaw, raw, unsafeExec, Table } from './table'
 import { Row, Statement } from '../../util'
 import { LiveResult, LiveResultContext } from './model'
 import { Notifier } from '../../notifiers'
@@ -38,13 +38,22 @@ export type ClientTables<DB extends DbSchema<any>> = {
 
 interface RawQueries {
   /**
-   * Executes a raw SQL query.
+   * Executes a raw SQL query without protecting against modifications
+   * to the store that are incompatible with the replication mechanism
+   *
+   * [WARNING]: might break data replication, use with care!
+   * @param sql - A raw SQL query and its bind parameters.
+   * @returns The rows that result from the query.
+   */
+  unsafeExec(sql: Statement): Promise<Row[]>
+  /**
+   * Executes a read-only raw SQL query.
    * @param sql - A raw SQL query and its bind parameters.
    * @returns The rows that result from the query.
    */
   raw(sql: Statement): Promise<Row[]>
   /**
-   * A raw SQL query that can be used with {@link useLiveQuery}.
+   * A read-only raw SQL query that can be used with {@link useLiveQuery}.
    * Same as {@link RawQueries#raw} but wraps the result in a {@link LiveResult} object.
    * @param sql - A raw SQL query and its bind parameters.
    */
@@ -107,6 +116,7 @@ export class ElectricClient<
 
     const db: ClientTables<DB> & RawQueries = {
       ...dal,
+      unsafeExec: unsafeExec.bind(null, adapter),
       raw: raw.bind(null, adapter),
       liveRaw: liveRaw.bind(null, adapter),
     }
