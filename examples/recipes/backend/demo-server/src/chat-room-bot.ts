@@ -17,8 +17,8 @@ export async function startGeneratingChatLogBotMessages (pgPool: Pool): Promise<
       `${faker.person.firstName()} [BOT]`,
       faker.lorem.sentence()
     ]),
-    rowGenerationFrequencyMs: 10 * 1000,
-    rowGenerationFrequencyVariationMs: 5 * 1000,
+    rowGenerationFrequencyMs: 20 * 1000,
+    rowGenerationFrequencyVariationMs: 10 * 1000,
     minutesToRetain: 24 * 60,
   })
 }
