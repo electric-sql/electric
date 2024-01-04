@@ -32,7 +32,10 @@ function resolveImportPath(sourceFile, importPath, options) {
       for (let i = 0; i < possiblePath.length; i++) {
         let entry = possiblePath[i]
         if (fs.existsSync(entry)) {
-          const resolved = path.relative(root, entry.replace(/\.ts$/, '.js'))
+          const resolved = path
+            .relative(root, entry.replace(/\.ts$/, '.js'))
+            .split(path.sep)
+            .join(path.posix.sep)
 
           if (!resolved.startsWith('.')) {
             return './' + resolved
