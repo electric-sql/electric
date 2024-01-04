@@ -8,6 +8,7 @@ defmodule Electric.MixProject do
       elixir: "~> 1.12",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
+      compilers: [:yecc] ++ Mix.compilers(),
       deps: deps(),
       test_coverage: [tool: ExCoveralls],
       preferred_cli_env: [
