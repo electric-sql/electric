@@ -3,7 +3,7 @@ export PROJECT_ROOT=$(shell git rev-parse --show-toplevel)
 mkfile_path := $(abspath $(lastword $(MAKEFILE_LIST)))
 export E2E_ROOT := $(dir $(mkfile_path))
 
-LUX=${E2E_ROOT}/lux/bin/lux
+LUX=${E2E_ROOT}lux/bin/lux
 DOCKER_REGISTRY  = europe-docker.pkg.dev/vaxine/vaxine-io
 DOCKER_REGISTRY2 = europe-docker.pkg.dev/vaxine/ci
 export BUILDER_IMAGE=${DOCKER_REGISTRY2}/electric-builder:latest
