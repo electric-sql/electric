@@ -76,7 +76,7 @@ This last one, writes changes to Postgres, can be done in two ways:
 
 Direct writes mode works out of the box and is the easiest mode to configure, with no additional network connectivity required. Logical replication mode requires exposing a TCP host and port to Postgres, so that Postgres can establish a logical replication subscription. This can be configured using the `LOGICAL_PUBLISHER_HOST` and `LOGICAL_PUBLISHER_PORT` env vars.
 
-See <DocPageLink page="api/service" /> for more information.
+See <DocPageLink path="api/service" /> for more information.
 
 ### 2. Migrations <-> Proxy
 
@@ -167,7 +167,7 @@ const init = async () => {
 }
 ```
 
-See the configuration docs at <DocPageLink path="api/clients/typescript.md#configuration" /> for more details.
+See the configuration docs at <DocPageLink path="api/clients/typescript#configuration" /> for more details.
 
 ## Next steps
 
