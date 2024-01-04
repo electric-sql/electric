@@ -1,8 +1,13 @@
-import { Avatar, Box, Button, Collapse, Divider, List, ListItem, ListItemIcon, ListItemText, Paper, TextField, Typography } from "@mui/material"
+import {
+  Avatar, Box, Button, Collapse, Divider,
+  List, ListItem, ListItemIcon, ListItemText,
+  Paper, TextField, Typography
+} from "@mui/material"
 import { useElectric } from "../electric/ElectricWrapper"
 import { useLiveQuery } from "electric-sql/react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { genUUID } from "electric-sql/util"
+import { stringAvatar } from "./utilities"
 
 const MINUTE = 60 * 1000
 
@@ -76,9 +81,7 @@ const ChatRoomView = ({
   onMessageSent: (message: string) => void,
   onOlderMessagesRequested?: () => void
 }) => {
-  const [ typedMessage, setTypedMessage ] = useState('')
   const listRef = useRef<HTMLUListElement>(null)
-
   const lastMessageId = messages[0]?.id;
 
   useEffect(() => {
@@ -90,10 +93,6 @@ const ChatRoomView = ({
     }
   }, [lastMessageId])
 
-  const handleMessageSent = () => {
-    onMessageSent(typedMessage)
-    setTypedMessage('')
-  }
 
   return (
     <Paper sx={{ p: 2 }}>
@@ -105,9 +104,8 @@ const ChatRoomView = ({
         }}>
         {messages.map((message) => (
           <ListItem key={message.id}>
-
             <ListItemIcon>
-              <Avatar>{message.username[0]}</Avatar>
+              <Avatar {...stringAvatar(message.username)} />
             </ListItemIcon>
             <ListItemText
               primary={message.username}
@@ -138,30 +136,47 @@ const ChatRoomView = ({
 
       <Divider color="white" sx={{ my: 2 }} />
 
-      <Box sx={{ display: 'flex' }}>
-        <TextField
-          label="Type your message"
-          variant="outlined"
-          color="secondary"
-          fullWidth
-          value={typedMessage}
-          onKeyDown={(evt) => {
-            if (evt.key === 'Enter') {
-              evt.preventDefault()
-              handleMessageSent()
-            }
-          }}
-          onChange={(e) => setTypedMessage(e.target.value)}
-        />
-        <Button
-          variant="contained"
-          color="primary"
-          sx={{ ml: 2, minWidth: 100 }}
-          onClick={handleMessageSent}
-        >
-          Send
-        </Button>
-      </Box>
+      <ChatRoomInputView onMessageSent={onMessageSent} />
     </Paper>
+  )
+}
+
+const ChatRoomInputView = ({
+  onMessageSent
+} : {
+  onMessageSent: (messsage: string) => void
+}) => {
+
+  const [ typedMessage, setTypedMessage ] = useState('')
+  const handleMessageSent = () => {
+    onMessageSent(typedMessage)
+    setTypedMessage('')
+  }
+
+  return (
+    <Box sx={{ display: 'flex' }}>
+      <TextField
+        label="Type your message"
+        variant="outlined"
+        color="secondary"
+        fullWidth
+        value={typedMessage}
+        onKeyDown={(evt) => {
+          if (evt.key === 'Enter') {
+            evt.preventDefault()
+            handleMessageSent()
+          }
+        }}
+        onChange={(e) => setTypedMessage(e.target.value)}
+      />
+      <Button
+        variant="contained"
+        color="primary"
+        sx={{ ml: 2, minWidth: 100 }}
+        onClick={handleMessageSent}
+      >
+        Send
+      </Button>
+    </Box>
   )
 }
