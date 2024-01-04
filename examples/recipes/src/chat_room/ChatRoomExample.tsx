@@ -1,11 +1,13 @@
 import { Box, Container } from "@mui/material"
 import { NavigationBar } from "../components/NavigationBar"
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useElectric } from "../electric/ElectricWrapper"
 import { ConnectivityToggle } from "../components/ConnectivityToggle"
 import { ChatRoom } from "./ChatRoom"
+import { generateAndPersistRandomName } from "./utilities"
 
 export const ChatRoomExample = () => {
+  const [ username ] = useState(generateAndPersistRandomName())
   const { db } = useElectric()!
   useEffect(() => {
     const syncItems = async () => {
@@ -26,7 +28,7 @@ export const ChatRoomExample = () => {
         <ConnectivityToggle key="connectivity" />
       ]}/>
       <Container maxWidth="md" sx={{ py: 4 }}>
-        <ChatRoom username="Stefanos" />
+        <ChatRoom username={username} />
       </Container>
     </Box>
   )
