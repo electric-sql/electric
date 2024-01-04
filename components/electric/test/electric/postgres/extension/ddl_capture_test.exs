@@ -269,4 +269,32 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
 
     assert {:ok, [_ddl1, _ddl2]} = Extension.ddl_history(conn)
   end
+
+  test_tx "enum types are captured", fn conn ->
+    sql1 = "CREATE TYPE colors AS ENUM ('red', 'turqoise', 'energizing yello');"
+    sql2 = "CREATE TYPE states AS ENUM ('foo', 'bar');"
+
+    sql3 = """
+        CREATE TABLE funny_table (
+          id uuid PRIMARY KEY,
+          s states,
+          c colors NOT NULL
+        );
+    """
+
+    sql4 = "CALL electric.electrify('funny_table');"
+
+    for sql <- [sql1, sql2, sql3, sql4] do
+      {:ok, [], []} = :epgsql.squery(conn, sql)
+    end
+
+    assert {:ok, [%{"id" => 1, "query" => query}]} = Extension.ddl_history(conn)
+    stmts = String.split(query, "\n\n\n", trim: true)
+
+    assert [
+             "CREATE TABLE funny_table (" <> _,
+             "CREATE TYPE colors AS ENUM (\n 'red',\n 'turqoise',\n 'energizing yello'\n);",
+             "CREATE TYPE states AS ENUM (\n 'foo',\n 'bar'\n);"
+           ] = Enum.sort(stmts)
+  end
 end
