@@ -1546,7 +1546,7 @@ export class Table<
   }
 }
 
-export function unsafeRaw(
+export function unsafeExec(
   adapter: DatabaseAdapter,
   sql: Statement
 ): Promise<Row[]> {
@@ -1562,7 +1562,7 @@ export function raw(adapter: DatabaseAdapter, sql: Statement): Promise<Row[]> {
     )
   }
 
-  return unsafeRaw(adapter, sql)
+  return unsafeExec(adapter, sql)
 }
 
 export function liveRaw(

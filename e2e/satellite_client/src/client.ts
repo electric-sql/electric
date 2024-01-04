@@ -305,7 +305,7 @@ export const insert_extended_into = async (electric: Electric, table: string, va
   const placeHolders = Array(columns.length).fill("?")
   const args = Object.values(values)
   
-  await electric.db.unsafeRaw({
+  await electric.db.unsafeExec({
     sql: `INSERT INTO ${table} (${columnNames}) VALUES (${placeHolders}) RETURNING *;`,
     args: args,
   })
