@@ -5,6 +5,7 @@ import { setupApi } from './api-setup'
 import { waitForPostgresConnection } from './pg-utils'
 import { startGeneratingMonitoringMetrics } from './monitoring-metrics'
 import { startProcessingBackgroundJobs } from './background-job-service'
+import { startGeneratingChatLogBotMessages } from './chat-room-bot'
 
 const API_PORT = parseInt(process.env.DEMO_APP_PORT ?? '3123')
 const pgPool = new Pool({
@@ -23,6 +24,7 @@ async function main (): Promise<void> {
   void startGeneratingWebServerLogs(pgPool)
   void startGeneratingMonitoringMetrics(pgPool)
   void startProcessingBackgroundJobs(pgPool)
+  void startGeneratingChatLogBotMessages(pgPool)
 }
 
 void main()

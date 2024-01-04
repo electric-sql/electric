@@ -98,7 +98,7 @@ const ChatRoomView = ({
   return (
     <Paper sx={{ p: 2 }}>
       <List ref={listRef} sx={{
-        maxHeight: '400px',
+        maxHeight: '70vh',
         overflowY: 'auto',
         display: 'flex',
         flexDirection: 'column-reverse'
