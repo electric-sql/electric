@@ -7,7 +7,7 @@ sidebar_position: 50
 
 # Supabase Edge Functions
 
-[Supabase](../deployment/supabase.md) has native integration for event sourcing. This uses a combination of a Postgres triggers and [Supabase Edge Functions](https://supabase.com/docs/guides/functions).
+[Supabase](../../deployment/supabase.md) has native integration for event sourcing. This uses a combination of a Postgres triggers and [Supabase Edge Functions](https://supabase.com/docs/guides/functions).
 
 Triggers can be setup to run on various events within the database, such as inserting, updating and deleting rows in a database. Supabase makes it easy to call a server-side edge function from a trigger.
 

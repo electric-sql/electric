@@ -23,7 +23,7 @@ This includes, for example:
 
 - [Supabase](https://supabase.com/) who provide managed Postgres hosting with logical replication and a suite of other backend-as-a-service tools, including auth and edge functions.
 
-  See <DocPageLink path="integrations/deployment/supabase" /> for more information about using Electric with Supabase.
+  See <DocPageLink path="deployment/supabase" /> for more information about using Electric with Supabase.
 
 There's a [long list of Postgres hosting providers here](https://www.postgresql.org/support/professional_hosting/).
 
