@@ -11,21 +11,19 @@ ElectricSQL requires a [PostgreSQL](https://www.postgresql.org/download) databas
 
 ElectricSQL works with standard Postgres [version >= 14.0](https://www.postgresql.org/support/versioning/) with [logical&nbsp;replication](https://www.postgresql.org/docs/current/logical-replication.html) enabled. Note that you don't need to install any extensions or run any unsafe code.
 
+:::info
+Specifically, right now, ElectricSQL works with a single database in a single Postgres installation with tables in the public schema.
+:::
+
 ## Hosting
 
-Many managed hosting providers support logical replication (either out of the box or as an option to enable).
-
-This includes, for example:
+Many managed hosting providers support logical replication (either out of the box or as an option to enable). This includes, for example:
 
 - [AWS RDS](https://repost.aws/knowledge-center/rds-postgresql-use-logical-replication) and [Aurora](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/AuroraPostgreSQL.Replication.Logical.html) (including Aurora Serverless v2)
-
 - [Crunchy Data](https://www.crunchydata.com) who have a free tier and logical replication enabled by default
-
 - [Supabase](https://supabase.com/) who provide managed Postgres hosting with logical replication and a suite of other backend-as-a-service tools, including auth and edge functions.
 
-  See <DocPageLink path="deployment/supabase" /> for more information about using Electric with Supabase.
-
-There's a [long list of Postgres hosting providers here](https://www.postgresql.org/support/professional_hosting/).
+See the <DocPageLink path="deployment" /> section for more information about compatible Postgres hosts. There's also a [long list of Postgres hosting providers here](https://www.postgresql.org/support/professional_hosting/).
 
 ### Self-host / run locally
 
