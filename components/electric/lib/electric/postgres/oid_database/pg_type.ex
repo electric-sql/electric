@@ -25,19 +25,30 @@ defmodule Electric.Postgres.OidDatabase.PgType do
             is_array: boolean
           )
 
-  @spec kind(binary) :: kind
-  def kind("b"), do: :BASE
-  def kind("c"), do: :COMPOSITE
-  def kind("d"), do: :DOMAIN
-  def kind("e"), do: :ENUM
-  def kind("p"), do: :PSEUDO
-  def kind("r"), do: :RANGE
-  def kind("m"), do: :MULTIRANGE
+  type_kind_mapping = [
+    {"b", :BASE},
+    {"c", :COMPOSITE},
+    {"d", :DOMAIN},
+    {"e", :ENUM},
+    {"p", :PSEUDO},
+    {"r", :RANGE},
+    {"m", :MULTIRANGE}
+  ]
+
+  @spec decode_kind(binary) :: kind
+  for {typtype, kind} <- type_kind_mapping do
+    def decode_kind(unquote(typtype)), do: unquote(kind)
+  end
+
+  @spec encode_kind(kind) :: binary
+  for {typtype, kind} <- type_kind_mapping do
+    def encode_kind(unquote(kind)), do: unquote(typtype)
+  end
 
   def pg_type_from_tuple(pg_type() = type), do: type
 
   def pg_type_from_tuple({namespace, name, oid, array_oid, element_oid, len, typtype}) do
-    kind = kind(typtype)
+    kind = decode_kind(typtype)
 
     pg_type(
       namespace: namespace,
@@ -45,7 +56,7 @@ defmodule Electric.Postgres.OidDatabase.PgType do
       oid: String.to_integer(oid),
       array_oid: String.to_integer(array_oid),
       element_oid: String.to_integer(element_oid),
-      length: String.to_integer(len),
+      length: len,
       kind: kind,
       is_array: array_oid == "0"
     )
@@ -58,6 +69,8 @@ defmodule Electric.Postgres.OidDatabase.PgType do
   # convert domain types to atoms for now.
   defp type_name("electric", name, :DOMAIN), do: String.to_atom("electric." <> name)
 
-  # User-defined and other custom types get schema-qualified names as strings.
+  # User-defined and other custom types are strings containing a schema-qualified name or a plain name, if the type's
+  # schema is "public".
+  defp type_name("public", name, _kind), do: name
   defp type_name(namespace, name, _kind), do: namespace <> "." <> name
 end

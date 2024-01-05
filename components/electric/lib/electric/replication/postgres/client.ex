@@ -90,20 +90,21 @@ defmodule Electric.Replication.Postgres.Client do
       typarray,
       typelem,
       typlen,
-      typtype
+      typtype::text
     FROM
       pg_type t
     JOIN
       pg_namespace ON pg_namespace.oid = typnamespace
     WHERE
-      typtype IN ('b', 'd', 'e')
+      typtype = ANY($1::char[])
       AND nspname IN ('pg_catalog', 'electric', 'public')
     ORDER BY
       t.oid
   """
 
-  def query_oids(conn) do
-    {:ok, _, type_data} = squery(conn, @types_query)
+  def query_oids(conn, kinds \\ [:BASE, :DOMAIN, :ENUM]) do
+    typtypes = Enum.map(kinds, &Electric.Postgres.OidDatabase.PgType.encode_kind/1)
+    {:ok, _, type_data} = :epgsql.equery(conn, @types_query, [typtypes])
     {:ok, type_data}
   end
 

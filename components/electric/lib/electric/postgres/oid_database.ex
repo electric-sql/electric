@@ -13,6 +13,19 @@ defmodule Electric.Postgres.OidDatabase do
     GenServer.start_link(__MODULE__, [], name: __MODULE__)
   end
 
+  def update_oids(conn, kinds \\ nil) do
+    res =
+      if kinds do
+        Electric.Replication.Postgres.Client.query_oids(conn, kinds)
+      else
+        Electric.Replication.Postgres.Client.query_oids(conn)
+      end
+
+    with {:ok, oids} <- res do
+      save_oids(__MODULE__, oids)
+    end
+  end
+
   def save_oids(server \\ __MODULE__, values) do
     GenServer.call(server, {:save_oids, Enum.map(values, &pg_type_from_tuple/1)})
   end

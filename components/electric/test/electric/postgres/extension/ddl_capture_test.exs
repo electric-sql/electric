@@ -63,21 +63,22 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
   end
 
   test_tx "DROP INDEX on electrified table is captured", fn conn ->
-    # this loader instance is used by the proxy injector
-    loader = MockSchemaLoader.agent_id(__MODULE__.Loader)
-
     sql1 = "CREATE TABLE buttercup (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text)"
     sql2 = "CREATE TABLE daisy (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY, value text)"
     sql3 = "ALTER TABLE buttercup ENABLE ELECTRIC"
     sql4 = "CREATE INDEX buttercup_value_idx ON buttercup (value)"
     sql5 = "DROP INDEX buttercup_value_idx"
 
+    # this loader instance is used by the proxy injector
+    loader = MockSchemaLoader.agent_id(__MODULE__.Loader)
+    state = %{loader: loader}
+
     # we have to setup the loader with knowledge of the electrified table
     # and the attached index, otherwise (since we're running in a tx via the proxy)
     # the default schema loader (backed by schemaloader.epgsql) therefore
     # can't lookup schema information
-    {:ok, ^loader, _schema} = MigrationConsumer.apply_migration("001", [sql1], loader)
-    {:ok, ^loader, _schema} = MigrationConsumer.apply_migration("002", [sql4], loader)
+    {:ok, ^loader, _schema} = MigrationConsumer.apply_migration("001", [sql1], state)
+    {:ok, ^loader, _schema} = MigrationConsumer.apply_migration("002", [sql4], state)
 
     for sql <- [sql1, sql2, sql3, sql4, sql5] do
       {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
