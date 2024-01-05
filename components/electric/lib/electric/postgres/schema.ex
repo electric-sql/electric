@@ -1,6 +1,4 @@
 defmodule Electric.Postgres.Schema do
-  defstruct tables: [], indexes: [], triggers: [], views: []
-
   alias Electric.Postgres.Schema.Proto
   alias Electric.Postgres.Replication
   alias PgQuery, as: Pg
