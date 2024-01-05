@@ -86,6 +86,9 @@ defmodule Electric.Postgres.Schema.Update do
   end
 
   defp do_update(%Pg.CreateStmt{} = action, schema, opts) do
+    %{relation: name} = action
+    Logger.info("CREATE TABLE #{name.relname} (...)")
+
     table = AST.create(action, opts)
 
     schema = %{schema | tables: schema.tables ++ [table]}
