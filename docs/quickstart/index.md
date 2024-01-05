@@ -135,7 +135,7 @@ Either using the [Prisma-inspired client](../usage/data-access/queries.md) or if
 
 ```tsx
 const { results } = useLiveQuery(
-  db.liveRaw({
+  db.liveRawQuery({
     sql: 'SELECT * FROM items where foo = ?',
     args: ['bar']
   })
