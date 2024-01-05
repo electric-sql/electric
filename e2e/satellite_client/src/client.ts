@@ -67,15 +67,15 @@ export const syncTable = async (electric: Electric, table: string) => {
 }
 
 export const get_tables = (electric: Electric) => {
-  return electric.db.raw({ sql: `SELECT name FROM sqlite_master WHERE type='table';` })
+  return electric.db.rawQuery({ sql: `SELECT name FROM sqlite_master WHERE type='table';` })
 }
 
 export const get_columns = (electric: Electric, table: string) => {
-  return electric.db.raw({ sql: `SELECT * FROM pragma_table_info(?);`, args: [table] })
+  return electric.db.rawQuery({ sql: `SELECT * FROM pragma_table_info(?);`, args: [table] })
 }
 
 export const get_rows = (electric: Electric, table: string) => {
-  return electric.db.raw({sql: `SELECT * FROM ${table};`})
+  return electric.db.rawQuery({sql: `SELECT * FROM ${table};`})
 }
 
 export const get_timestamps = (electric: Electric) => {
@@ -224,7 +224,7 @@ export const write_float = (electric: Electric, id: string, f4: number, f8: numb
 }
 
 export const get_json_raw = async (electric: Electric, id: string) => {
-  const res = await electric.db.raw({
+  const res = await electric.db.rawQuery({
     sql: `SELECT js FROM jsons WHERE id = ?;`,
     args: [id]
   }) as unknown as Array<{ js: string }>
@@ -232,7 +232,7 @@ export const get_json_raw = async (electric: Electric, id: string) => {
 }
 
 export const get_jsonb_raw = async (electric: Electric, id: string) => {
-  const res = await electric.db.raw({
+  const res = await electric.db.rawQuery({
     sql: `SELECT jsb FROM jsons WHERE id = ?;`,
     args: [id]
   }) as unknown as Array<{ jsb: string }>
@@ -276,7 +276,7 @@ export const write_json = async (electric: Electric, id: string, js: any, jsb: a
 }
 
 export const get_item_columns = (electric: Electric, table: string, column: string) => {
-  return electric.db.raw({ sql: `SELECT ${column} FROM ${table};` })
+  return electric.db.rawQuery({ sql: `SELECT ${column} FROM ${table};` })
 }
 
 export const insert_item = async (electric: Electric, keys: [string]) => {
