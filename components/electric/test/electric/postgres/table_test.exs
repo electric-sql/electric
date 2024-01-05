@@ -1038,7 +1038,7 @@ defmodule Electric.Postgres.TableTest do
         ]
       }
 
-      assert table_info = Schema.table_info(table)
+      assert table_info = Schema.single_table_info(table, %{enums: []})
 
       assert table_info == %Table{
                schema: "public",

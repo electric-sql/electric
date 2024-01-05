@@ -566,6 +566,14 @@ defmodule Electric.Satellite.Serialization do
     uuid
   end
 
+  def decode_column_value!(val, {:enum, typename, values}) do
+    if val in values do
+      val
+    else
+      raise "Unexpected value #{inspect(val)} for enum type #{typename}"
+    end
+  end
+
   defp decode_float_value!(val, type) do
     with {num, ""} <- Float.parse(val),
          :ok = assert_float_in_range(num, type) do

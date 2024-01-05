@@ -101,4 +101,10 @@ defmodule Electric.Postgres.Extension.SchemaCache.Global do
       SchemaCache.replicated_relations(pid)
     end)
   end
+
+  def enums() do
+    with_instance(fn pid ->
+      SchemaCache.enums(pid)
+    end)
+  end
 end

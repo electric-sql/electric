@@ -195,6 +195,10 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     end
   end
 
+  def enums(origin) do
+    call(origin, :enums)
+  end
+
   defp call(name, msg) when is_binary(name) do
     call(name(name), msg)
   end
@@ -404,6 +408,10 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   def handle_call({:internal_relation, relation}, _from, state) do
     state = load_internal_schema(state)
     {:reply, Schema.table_info(state.internal_schema, relation), state}
+  end
+
+  def handle_call(:enums, _from, state) do
+    load_and_reply(state, fn schema_version -> schema_version.schema.enums end)
   end
 
   @impl GenServer
