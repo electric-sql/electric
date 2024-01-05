@@ -1,7 +1,7 @@
 import { faker } from "@faker-js/faker"
 import { v4 as uuidv4 } from 'uuid'
 import { type Pool } from 'pg'
-import { checkTableExists } from "./pg-utils"
+import { waitForTable } from "./pg-utils"
 
 
 const YEAR_MS = 365.25 * 24 * 60 * 60 * 1000
@@ -61,8 +61,8 @@ export async function batchInsertOrders(
 ) {
   // wait for tables to exist
   await Promise.all([
-    checkTableExists(pgPool, 'commerce_orders'),
-    checkTableExists(pgPool, 'commerce_line_items')
+    waitForTable(pgPool, 'commerce_orders'),
+    waitForTable(pgPool, 'commerce_line_items')
   ])
 
   const client = await pgPool.connect();

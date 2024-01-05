@@ -43,6 +43,22 @@ export const checkTableExists = async (
   }
 }
 
+/**
+ * Resolves once the specified table exists - polls for its
+ * existence every [waitIntervalMs] millisecons
+ */
+export const waitForTable = async (
+  pgPool: Pool,
+  tableName: string,
+  waitIntervalMs: number = 2000
+): Promise<void> => {
+  // wait for table to be created before attempting to generate logs
+  while (!(await checkTableExists(pgPool, tableName))) {
+    console.warn(`Waiting for "${tableName}" table to be created...`)
+    await wait(waitIntervalMs);
+  }
+}
+
 
 
 /**
@@ -111,10 +127,7 @@ export async function startGeneratingData ({
   }
 
   // wait for table to be created before attempting to generate logs
-  while (!(await checkTableExists(pgPool, tableName))) {
-    console.warn(`Waiting for "${tableName}" table to be created...`)
-    await wait(waitForTableIntervalMs);
-  }
+  waitForTable(pgPool, tableName, waitForTableIntervalMs)
 
   // generate rows with a given frequency +- a variation
   runOnInterval(
