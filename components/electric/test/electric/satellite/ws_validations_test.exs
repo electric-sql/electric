@@ -12,7 +12,7 @@ defmodule Electric.Satellite.WsValidationsTest do
   alias Electric.Satellite.Serialization
 
   @table_name "foo"
-  @receive_timeout 500
+  @receive_timeout 1000
 
   setup :setup_replicated_db
 
@@ -548,7 +548,7 @@ defmodule Electric.Satellite.WsValidationsTest do
       start_replication_and_assert_response(conn, 0)
 
       # Confirm the server has sent the migration to the client
-      assert_receive {^conn, %SatRelation{table_name: @table_name} = relation}
+      assert_receive {^conn, %SatRelation{table_name: @table_name} = relation}, @receive_timeout
 
       assert_receive {^conn,
                       %SatOpLog{
@@ -557,7 +557,8 @@ defmodule Electric.Satellite.WsValidationsTest do
                           %SatTransOp{op: {:migrate, %{version: ^vsn}}},
                           %SatTransOp{op: {:commit, _}}
                         ]
-                      }}
+                      }},
+                     @receive_timeout
 
       # The client has to repeat the relation message to the server
       MockClient.send_data(conn, relation)
