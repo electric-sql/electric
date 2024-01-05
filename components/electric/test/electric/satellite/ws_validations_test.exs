@@ -498,6 +498,50 @@ defmodule Electric.Satellite.WsValidationsTest do
     end)
   end
 
+  test "validates enum values", ctx do
+    vsn = "2023092001"
+
+    :ok =
+      migrate(
+        ctx.db,
+        vsn,
+        "CREATE TYPE public.coffee AS ENUM ('espresso', 'latte', 'black with milk'); CREATE TABLE public.foo (id TEXT PRIMARY KEY, cup_of coffee)",
+        electrify: "public.foo"
+      )
+
+    valid_records = [
+      %{"id" => "1", "cup_of" => "espresso"},
+      %{"id" => "2", "cup_of" => "latte"},
+      %{"id" => "3", "cup_of" => "black with milk"},
+      %{"id" => "4", "cup_of" => nil}
+    ]
+
+    within_replication_context(ctx, vsn, fn conn ->
+      Enum.each(valid_records, fn record ->
+        tx_op_log = serialize_trans(record)
+        MockClient.send_data(conn, tx_op_log)
+      end)
+
+      refute_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
+    end)
+
+    invalid_records = [
+      %{"id" => "10", "cup_of" => "e"},
+      %{"id" => "11", "cup_of" => "l"},
+      %{"id" => "12", "cup_of" => "(espresso)"},
+      %{"id" => "13", "cup_of" => "'latte'"},
+      %{"id" => "14", "cup_of" => "ESPRESSO"}
+    ]
+
+    Enum.each(invalid_records, fn record ->
+      within_replication_context(ctx, vsn, fn conn ->
+        tx_op_log = serialize_trans(record)
+        MockClient.send_data(conn, tx_op_log)
+        assert_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
+      end)
+    end)
+  end
+
   defp within_replication_context(ctx, vsn, expectation_fn) do
     with_connect(ctx.conn_opts, fn conn ->
       # Replication start ceremony
