@@ -65,7 +65,7 @@ interface RawQueries {
    * @deprecated
    * For safe, read-only SQL queries, use the `rawQuery` API
    * For unsafe, store-modifying queries, use the `unsafeExec` API
-   * 
+   *
    * Executes a raw SQL query.
    * @param sql - A raw SQL query and its bind parameters.
    * @returns The rows that result from the query.
@@ -75,7 +75,7 @@ interface RawQueries {
   /**
    * @deprecated
    * Use `liveRawQuery` instead for reactive read-only SQL queries.
-   * 
+   *
    * A read-only raw SQL query that can be used with {@link useLiveQuery}.
    * Same as {@link RawQueries#raw} but wraps the result in a {@link LiveResult} object.
    * @param sql - A raw SQL query and its bind parameters.

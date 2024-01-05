@@ -1120,7 +1120,7 @@ test.serial(
 test('raw insert query throws error for unsupported unsafe queries', async (t) => {
   await t.throwsAsync(
     async () => {
-      await electric.db.raw({
+      await electric.db.rawQuery({
         sql: "INSERT INTO user (id, name) VALUES (1, 'John Doe')",
       })
     },
@@ -1135,7 +1135,7 @@ test('raw insert query throws error for unsupported unsafe queries', async (t) =
 test('raw update query throws error for unsupported unsafe queries', async (t) => {
   await t.throwsAsync(
     async () => {
-      await electric.db.raw({
+      await electric.db.rawQuery({
         sql: "UPDATE user SET name = 'New Name' WHERE id = 1;",
       })
     },
@@ -1150,7 +1150,7 @@ test('raw update query throws error for unsupported unsafe queries', async (t) =
 test('raw delete query throws error for unsupported unsafe queries', async (t) => {
   await t.throwsAsync(
     async () => {
-      await electric.db.raw({
+      await electric.db.rawQuery({
         sql: 'DELETE FROM user WHERE id = 1;',
       })
     },
@@ -1165,7 +1165,7 @@ test('raw delete query throws error for unsupported unsafe queries', async (t) =
 test('raw drop table query throws error for unsupported unsafe queries', async (t) => {
   await t.throwsAsync(
     async () => {
-      await electric.db.raw({
+      await electric.db.rawQuery({
         sql: 'DROP TABLE IF EXISTS User',
       })
     },
@@ -1180,7 +1180,7 @@ test('raw drop table query throws error for unsupported unsafe queries', async (
 test('raw create table query throws error for unsupported unsafe queries', async (t) => {
   await t.throwsAsync(
     async () => {
-      await electric.db.raw({
+      await electric.db.rawQuery({
         sql: "CREATE TABLE IF NOT EXISTS User('id' int PRIMARY KEY, 'name' varchar);",
       })
     },
@@ -1195,7 +1195,7 @@ test('raw create table query throws error for unsupported unsafe queries', async
 test('liveRaw insert query throws error for unsupported unsafe queries', async (t) => {
   await t.throwsAsync(
     async () => {
-      await electric.db.liveRaw({
+      await electric.db.liveRawQuery({
         sql: "INSERT INTO user (id, name) VALUES (1, 'John Doe')",
       })()
     },

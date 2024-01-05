@@ -1553,7 +1553,10 @@ export function unsafeExec(
   return adapter.query(sql)
 }
 
-export function rawQuery(adapter: DatabaseAdapter, sql: Statement): Promise<Row[]> {
+export function rawQuery(
+  adapter: DatabaseAdapter,
+  sql: Statement
+): Promise<Row[]> {
   // only allow safe queries from the client
   if (isPotentiallyDangerous(sql.sql)) {
     throw new InvalidArgumentError(
