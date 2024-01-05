@@ -1,6 +1,6 @@
 import { ElectricNamespace } from '../../electric/namespace'
 import { DbSchema, TableSchema } from './schema'
-import { unsafeExec, Table, query, liveQuery } from './table'
+import { unsafeExec, Table, rawQuery, liveRawQuery } from './table'
 import { Row, Statement } from '../../util'
 import { LiveResult, LiveResultContext } from './model'
 import { Notifier } from '../../notifiers'
@@ -52,18 +52,18 @@ interface RawQueries {
    * @param sql - A raw SQL query and its bind parameters.
    * @returns The rows that result from the query.
    */
-  query(sql: Statement): Promise<Row[]>
+  rawQuery(sql: Statement): Promise<Row[]>
 
   /**
    * A read-only raw SQL query that can be used with {@link useLiveQuery}.
    * Same as {@link RawQueries#raw} but wraps the result in a {@link LiveResult} object.
    * @param sql - A raw SQL query and its bind parameters.
    */
-  liveQuery(sql: Statement): LiveResultContext<any>
+  liveRawQuery(sql: Statement): LiveResultContext<any>
 
   /**
    * @deprecated
-   * For safe, read-only SQL queries, use the `query` API
+   * For safe, read-only SQL queries, use the `rawQuery` API
    * For unsafe, store-modifying queries, use the `unsafeExec` API
    * 
    * Executes a raw SQL query.
@@ -74,7 +74,7 @@ interface RawQueries {
 
   /**
    * @deprecated
-   * Use `liveQuery` instead for reactive read-only SQL queries.
+   * Use `liveRawQuery` instead for reactive read-only SQL queries.
    * 
    * A read-only raw SQL query that can be used with {@link useLiveQuery}.
    * Same as {@link RawQueries#raw} but wraps the result in a {@link LiveResult} object.
@@ -140,10 +140,10 @@ export class ElectricClient<
     const db: ClientTables<DB> & RawQueries = {
       ...dal,
       unsafeExec: unsafeExec.bind(null, adapter),
-      query: query.bind(null, adapter),
-      liveQuery: liveQuery.bind(null, adapter),
+      rawQuery: rawQuery.bind(null, adapter),
+      liveRawQuery: liveRawQuery.bind(null, adapter),
       raw: unsafeExec.bind(null, adapter),
-      liveRaw: liveQuery.bind(null, adapter),
+      liveRaw: liveRawQuery.bind(null, adapter),
     }
 
     return new ElectricClient(
