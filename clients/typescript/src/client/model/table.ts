@@ -1553,7 +1553,7 @@ export function unsafeExec(
   return adapter.query(sql)
 }
 
-export function raw(adapter: DatabaseAdapter, sql: Statement): Promise<Row[]> {
+export function query(adapter: DatabaseAdapter, sql: Statement): Promise<Row[]> {
   // only allow safe queries from the client
   if (isPotentiallyDangerous(sql.sql)) {
     throw new InvalidArgumentError(
@@ -1565,7 +1565,7 @@ export function raw(adapter: DatabaseAdapter, sql: Statement): Promise<Row[]> {
   return unsafeExec(adapter, sql)
 }
 
-export function liveRaw(
+export function liveQuery(
   adapter: DatabaseAdapter,
   sql: Statement
 ): LiveResultContext<Row[]> {
@@ -1574,7 +1574,7 @@ export function liveRaw(
     // because this is a raw query so
     // we cannot trust that it queries this table
     const tablenames = parseTableNames(sql.sql)
-    const res = await raw(adapter, sql)
+    const res = await query(adapter, sql)
     return new LiveResult(res, tablenames)
   })
   result.sourceQuery = sql
