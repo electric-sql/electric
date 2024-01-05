@@ -1,6 +1,9 @@
 syntax = "proto3";
 
-message Schema { repeated Table tables = 1; }
+message Schema {
+  repeated Table tables = 1;
+  repeated Enum enums = 2;
+}
 
 message RangeVar {
   string name = 1;
@@ -205,4 +208,9 @@ message Expression {
     BoolExpr bool_expr = 8;
     NullTest null_test = 9;
   }
+}
+
+message Enum {
+  RangeVar name = 1;
+  repeated string values = 2;
 }
