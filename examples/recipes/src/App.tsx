@@ -2,6 +2,16 @@ import { Box, Link, useTheme } from '@mui/material'
 import { Link as RouterLink } from 'react-router-dom';
 import { ElectricLogo } from './components/ElectricLogo';
 
+const links = [
+  { path: '/activity-events', text: 'Activity Events'},
+  { path: '/log-viewer', text: 'Log Viewer' },
+  { path: '/monitoring', text: 'Monitoring Metrics' },
+  { path: '/request-response', text: 'Request/Response Pattern' },
+  { path: '/background-jobs', text: 'Background Jobs' },
+  { path: '/chat-room', text: 'Chat Room' },
+  { path: '/commerce-analytics', text: 'Commerce Analytics' }
+];
+
 function App() {
   const theme = useTheme();
   return (
@@ -11,27 +21,13 @@ function App() {
           <ElectricLogo size={132} fill={theme.palette.primary.main}/>
         </Link>
         <h1>Electric SQL Recipes</h1>
-        <Link component={RouterLink} to="/activity-events" underline="hover">
-          Actvity Events
-        </Link>
-        <Link component={RouterLink} to="/log-viewer" underline="hover">
-          Log Viewer
-        </Link>
-        <Link component={RouterLink} to="/monitoring" underline="hover">
-          Monitoring Metrics
-        </Link>
-        <Link component={RouterLink} to="/request-response" underline="hover">
-          Request/Response Pattern
-        </Link>
-        <Link component={RouterLink} to="/background-jobs" underline="hover">
-          Background Jobs
-        </Link>
-        <Link component={RouterLink} to="/chat-room" underline="hover">
-          Chat Room
-        </Link>
-        <Link component={RouterLink} to="/commerce-analytics" underline="hover">
-          Commerce Analytics
-        </Link>
+        {
+          links.map((linkData, idx) => (
+            <Link key={idx} component={RouterLink} to={linkData.path} underline="hover">
+              {linkData.text}
+            </Link>
+          ))
+        }
       </Box>
     </>
   )
