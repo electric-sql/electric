@@ -19,7 +19,7 @@ export const CommerceAnalyticsExample = () => {
     }
 
     syncItems()
-  }, [db.background_jobs])
+  }, [db.commerce_orders])
 
 
   return (
