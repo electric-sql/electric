@@ -1,6 +1,6 @@
 import { ElectricNamespace } from '../../electric/namespace'
 import { DbSchema, TableSchema } from './schema'
-import { unsafeExec, Table, rawQuery, liveRawQuery } from './table'
+import { rawQuery, liveRawQuery, unsafeExec, Table } from './table'
 import { Row, Statement } from '../../util'
 import { LiveResult, LiveResultContext } from './model'
 import { Notifier } from '../../notifiers'

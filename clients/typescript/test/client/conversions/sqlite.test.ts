@@ -53,7 +53,7 @@ test.serial('date is converted correctly to SQLite', async (t) => {
     },
   })
 
-  const rawRes = await electric.db.raw({
+  const rawRes = await electric.db.rawQuery({
     sql: 'SELECT date FROM DataTypes WHERE id = ?',
     args: [1],
   })
@@ -71,7 +71,7 @@ test.serial('time is converted correctly to SQLite', async (t) => {
     },
   })
 
-  const rawRes = await electric.db.raw({
+  const rawRes = await electric.db.rawQuery({
     sql: 'SELECT time FROM DataTypes WHERE id = ?',
     args: [1],
   })
@@ -95,13 +95,13 @@ test.serial('timetz is converted correctly to SQLite', async (t) => {
     ],
   })
 
-  const rawRes1 = await electric.db.raw({
+  const rawRes1 = await electric.db.rawQuery({
     sql: 'SELECT timetz FROM DataTypes WHERE id = ?',
     args: [1],
   })
   t.is(rawRes1[0].timetz, '16:28:35.421') // time must have been converted to UTC time
 
-  const rawRes2 = await electric.db.raw({
+  const rawRes2 = await electric.db.rawQuery({
     sql: 'SELECT timetz FROM DataTypes WHERE id = ?',
     args: [2],
   })
@@ -117,7 +117,7 @@ test.serial('timestamp is converted correctly to SQLite', async (t) => {
     },
   })
 
-  const rawRes = await electric.db.raw({
+  const rawRes = await electric.db.rawQuery({
     sql: 'SELECT timestamp FROM DataTypes WHERE id = ?',
     args: [1],
   })
@@ -140,13 +140,13 @@ test.serial('timestamptz is converted correctly to SQLite', async (t) => {
     ],
   })
 
-  const rawRes1 = await electric.db.raw({
+  const rawRes1 = await electric.db.rawQuery({
     sql: 'SELECT timestamptz FROM DataTypes WHERE id = ?',
     args: [1],
   })
   t.is(rawRes1[0].timestamptz, '2023-08-07 16:28:35.421Z') // timestamp must have been converted to UTC timestamp
 
-  const rawRes2 = await electric.db.raw({
+  const rawRes2 = await electric.db.rawQuery({
     sql: 'SELECT timestamptz FROM DataTypes WHERE id = ?',
     args: [2],
   })
@@ -167,7 +167,7 @@ test.serial('booleans are converted correctly to SQLite', async (t) => {
     ],
   })
 
-  const rawRes = await electric.db.raw({
+  const rawRes = await electric.db.rawQuery({
     sql: 'SELECT id, bool FROM DataTypes ORDER BY id ASC',
     args: [],
   })
@@ -204,7 +204,7 @@ test.serial('floats are converted correctly to SQLite', async (t) => {
     ],
   })
 
-  const rawRes = await electric.db.raw({
+  const rawRes = await electric.db.rawQuery({
     sql: 'SELECT id, float4, float8 FROM DataTypes ORDER BY id ASC',
     args: [],
   })
@@ -233,7 +233,7 @@ test.serial('BigInts are converted correctly to SQLite', async (t) => {
     },
   })
 
-  const rawRes = await electric.db.raw({
+  const rawRes = await electric.db.rawQuery({
     sql: 'SELECT id, cast(int8 as TEXT) AS int8 FROM DataTypes WHERE id = ?',
     args: [1],
   })
@@ -253,7 +253,7 @@ test.serial('json is converted correctly to SQLite', async (t) => {
     },
   })
 
-  const rawRes = await electric.db.raw({
+  const rawRes = await electric.db.rawQuery({
     sql: 'SELECT json FROM DataTypes WHERE id = ?',
     args: [1],
   })
@@ -269,7 +269,7 @@ test.serial('json is converted correctly to SQLite', async (t) => {
     },
   })
 
-  const rawRes2 = await electric.db.raw({
+  const rawRes2 = await electric.db.rawQuery({
     sql: 'SELECT json FROM DataTypes WHERE id = ?',
     args: [2],
   })
@@ -283,7 +283,7 @@ test.serial('json is converted correctly to SQLite', async (t) => {
     },
   })
 
-  const rawRes3 = await electric.db.raw({
+  const rawRes3 = await electric.db.rawQuery({
     sql: 'SELECT json FROM DataTypes WHERE id = ?',
     args: [3],
   })
@@ -297,7 +297,7 @@ test.serial('json is converted correctly to SQLite', async (t) => {
     },
   })
 
-  const rawRes4 = await electric.db.raw({
+  const rawRes4 = await electric.db.rawQuery({
     sql: 'SELECT json FROM DataTypes WHERE id = ?',
     args: [4],
   })
@@ -312,7 +312,7 @@ test.serial('json is converted correctly to SQLite', async (t) => {
     },
   })
 
-  const rawRes5 = await electric.db.raw({
+  const rawRes5 = await electric.db.rawQuery({
     sql: 'SELECT json FROM DataTypes WHERE id = ?',
     args: [5],
   })
