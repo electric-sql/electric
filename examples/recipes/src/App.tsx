@@ -29,6 +29,9 @@ function App() {
         <Link component={RouterLink} to="/chat-room" underline="hover">
           Chat Room
         </Link>
+        <Link component={RouterLink} to="/commerce-analytics" underline="hover">
+          Commerce Analytics
+        </Link>
       </Box>
     </>
   )
