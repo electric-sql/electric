@@ -36,6 +36,7 @@ Other local-first projects:
 - [CASE](https://case.app).
 - [Concordant](https://concordant.io)
 - [CRStore](https://github.com/Azarattum/CRStore)
+- [DefraDB](https://source.network/defra-db)
 - [DXOS](https://dxos.org)
 - [EweserDB](https://github.com/eweser/eweser-db)
 - [Fireproof](https://fireproof.storage)
@@ -96,6 +97,7 @@ Other local-first projects:
 - [Declarative Dataflow](https://github.com/comnik/declarative-dataflow)
 - [Electric Clojure](https://github.com/hyperfiddle/electric)
 - [SOLID](https://solidproject.org)
+- [Source](https://source.network)
 
 ## Other areas
 
