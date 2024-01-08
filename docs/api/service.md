@@ -218,8 +218,6 @@ ALTER DEFAULT PRIVILEGES
     TO electric;
 ```
 
-XXX @alco -- is the information above correct?
-
 ## Migrations proxy
 
 Electric exposes a [Migrations proxy](../usage/data-modelling/migrations.md#migrations-proxy) as a TCP service. This must be secured using `PG_PROXY_PASSWORD` and is exposed on `PG_PROXY_PORT`.
