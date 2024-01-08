@@ -127,7 +127,7 @@ export async function startGeneratingData ({
   }
 
   // wait for table to be created before attempting to generate logs
-  waitForTable(pgPool, tableName, waitForTableIntervalMs)
+  await waitForTable(pgPool, tableName, waitForTableIntervalMs)
 
   // generate rows with a given frequency +- a variation
   runOnInterval(
