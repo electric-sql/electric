@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION <%= @schema %>.__generate_electrified_sql(table_oid regclass)
+CREATE OR REPLACE FUNCTION <%= @schema %>.generate_electrified_sql(table_oid regclass)
 RETURNS text
 SECURITY DEFINER
 AS $function$
