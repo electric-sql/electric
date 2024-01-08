@@ -12,7 +12,8 @@ ifeq ($(CI), true)
     TIMEOUT_MULTIPLIER = 2000
 endif
 
-LUX=${E2E_ROOT}lux/bin/lux --multiplier ${TIMEOUT_MULTIPLIER}
+LUX_PATH=${E2E_ROOT}lux/bin/lux
+LUX=${LUX_PATH} --multiplier ${TIMEOUT_MULTIPLIER}
 
 DOCKER_REGISTRY  = europe-docker.pkg.dev/vaxine/vaxine-io
 DOCKER_REGISTRY2 = europe-docker.pkg.dev/vaxine/ci
@@ -46,7 +47,7 @@ else
 endif
 
 
-lux: ${LUX}
+lux: ${LUX_PATH}
 
 ${LUX}:
 	git clone https://github.com/hawk/lux.git
