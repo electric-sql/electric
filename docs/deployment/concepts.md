@@ -19,7 +19,7 @@ The following section describes these components and their requirements in turn.
 
 ElectricSQL works on top of a Postgres database. Postgres is the source of durability in the system. It's the source of the shared DDL schema and the DDLX rules.
 
-The requirements for Postgres are detailed on the [installation page](../usage/installation/postgres.md). You need logical replication enabled and a db user with sufficient privileges. This deployment section has a [list of compatible managed Postgres hosts](../top-level-listings/deployment.md#deployment-options).
+The requirements for Postgres are detailed on the [installation page](../usage/installation/postgres.md). You need logical replication enabled and a db user with sufficient privileges.
 
 ### Electric
 
@@ -36,11 +36,11 @@ These are discussed in the [Connections](#connections) section below.
 
 Together, Postgres and Electric form the backend of your application, typically running in the cloud. The front-end of your application is a local app that you develop using the [`electric-sql` client library](../api/clients/typescript.md). This can be a [web app](../integrations/drivers/web/wa-sqlite.md) running in the browser, or a [mobile](../integrations/drivers/mobile/expo.md) or desktop app.
 
-Whatever your target environment, your app code typically needs to be built, bundled and deployed to a server. This usually involves generating the [type safe client](../usage/installation/client.md) as part of your build process, which requires connecting to the Electric sync service, as [discussed below](#3-generator---electric).
+Whatever your target environment, your app code typically needs to be built, bundled and deployed. This usually involves generating the [type safe client](../usage/installation/client.md) as part of your build process, which requires connecting to the Electric sync service, as [discussed below](#3-generator---electric).
 
 ### Generator
 
-The generator is a CLI command built into the `electric-sql` Typescript library. It provides an `npx electric-sql generate` command that you call in development and during your build process to generate a [type safe client library](../usage/installation/client.md).
+The generator is built into the [`electric-sql` Typescript library](../usage/installation/client.md) and is invoked as the [`npx electric-sql generate` command](../api/cli.md#generate) that you call in development and during your build process to generate a [type safe client library](../usage/installation/client.md).
 
 The generator needs to be able to connect to the Electric sync service and outputs a Typescript module that's imported and bundled into your app.
 
