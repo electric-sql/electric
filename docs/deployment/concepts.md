@@ -99,10 +99,14 @@ The port exposed is configured using the `PG_PROXY_PORT` environment variable. F
 postgresql://${user}:${password}@example.com:65432/electric
 ```
 
-Where `user` and `password` are the credentials to use to connect to your Postgres and `electric` is a default database name used for the proxy connection. When the connection is proxied onto your Postgres, Electric will use the host, port and dbname configured in the `DATABASE_URL` used to connect Electric to Postgres.
+Technically speaking, user  and password must be the PG_PROXY_PASSWORD.
+
+Where `user` is used to choose the operation mode of the proxy and `password` must be the PG_PROXY_PASSWORD. When the connection is then proxied onto your Postgres, Electric will use the `DATABASE_URL` to Postgres.
 
 :::note
-Some migrations tooling requires special handling by the Migrations proxy. See the specific [backend integration docs](../integrations/backend/index.md) for more information.
+Some migrations tooling requires special handling by the Migrations proxy.
+
+See the specific [backend integration docs](../integrations/backend/index.md) for more information.
 :::
 
 #### 2.2 Using a Proxy tunnel
