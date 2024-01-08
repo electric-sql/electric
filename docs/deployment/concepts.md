@@ -56,7 +56,7 @@ Having introduced the components of an ElectricSQL deployment above, we now disc
 
 1. [Electric <-> Postgres](#1-electric---postgres) &mdash; the Electric sync service needs to connect to Postgres
 2. [Migrations <-> Proxy](#2-migrations---proxy) &mdash; your migrations tooling needs to connect to the Migrations proxy
-3. [Generator <-> Electric](#3-generator---electric) &mdash; the Generator needs to connect to the Electric sync service
+3. [Generator <-> Electric](#3-generator---electric) &mdash; the Generator needs to connect to both the Electric sync service and the Migrations proxy
 4. [App <-> Electric](#4-app---electric) &mdash; your local-first app needs to connect to the Electric sync service
 
 ### 1. Electric <-> Postgres
