@@ -550,6 +550,19 @@ defmodule Electric.Postgres.ExtensionTest do
                        """
                        |> String.trim()
             end
+
+    test_tx "rejects tables with missing primary key", fn conn ->
+      assert [
+               {:ok, [], []},
+               {:error, {:error, :error, _, :raise_exception, error_msg, _}}
+             ] =
+               :epgsql.squery(conn, """
+               CREATE TABLE public.t1 (id TEXT, val INTEGER);
+               CALL electric.electrify('public.t1');
+               """)
+
+      assert error_msg == "Cannot electrify public.t1 because it doesn't have a PRIMARY KEY."
+    end
   end
 
   defp migration_history(conn, after_version \\ nil) do
