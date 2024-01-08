@@ -14,10 +14,8 @@
     [newshell pg_1]
         [invoke start_psql pg_1 5432]
         -$fail_pattern
-        [timeout 2]
 
     [newshell electric]
-        [timeout 5]
         !make start_electric_1
         -$fail_pattern
         ??Successfully initialized Postgres connector "postgres_1"
@@ -34,7 +32,6 @@
     [newshell proxy_1]
         [invoke start_proxy pg_1 electric_1]
         -$fail_pattern
-        [timeout 2]
 
 [endmacro]
 
