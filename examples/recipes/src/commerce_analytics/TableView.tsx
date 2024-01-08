@@ -99,11 +99,6 @@ export const TableView = ({
                   onClick={() => toggleSorting(column.field)}
                 >
                   {column.headerName}
-                  {/* {orderBy === column.field ? (
-                    <Box component="span" sx={visuallyHidden}>
-                      {order === 'desc' ? 'sorted descending' : 'sorted ascending'}
-                    </Box>
-                  ) : null} */}
                 </TableSortLabel>
               </TableCell>
             ))}
@@ -121,7 +116,7 @@ export const TableView = ({
                     overflow: 'hidden'
                   }}
                   component="th" scope="row">
-                  {(column.format ?? ((v: any) => '' + v))
+                  {(column.format ?? ((v: any) => v !== null ? '' + v : ''))
                     (row[column.field])
                   }
                 </TableCell>
