@@ -24,9 +24,10 @@ COPY mix.* /app/
 RUN mix deps.get
 RUN mix deps.compile
 
-COPY lib /app/lib/
-COPY src /app/src/
 COPY config/*runtime.exs /app/config/
+COPY lib /app/lib/
+COPY priv /app/priv
+COPY src /app/src/
 
 ARG ELECTRIC_VERSION=local
 ARG MAKE_RELEASE_TASK=release

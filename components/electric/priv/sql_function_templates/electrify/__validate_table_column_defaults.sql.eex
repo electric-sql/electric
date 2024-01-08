@@ -1,0 +1,27 @@
+-- This function validates each column of the table that's being electrified
+-- and aborts electrification if any column has DEFAULT expression.
+
+CREATE OR REPLACE PROCEDURE <%= schema() %>.__validate_table_column_defaults(table_name text)
+SECURITY DEFINER AS $function$
+DECLARE
+    _col_name text;
+    _col_has_default boolean;
+    _invalid_cols text[];
+BEGIN
+    FOR _col_name, _col_has_default IN
+        SELECT attname, atthasdef
+            FROM pg_attribute
+            WHERE attrelid = table_name::regclass AND attnum > 0 AND NOT attisdropped
+            ORDER BY attnum
+    LOOP
+        IF _col_has_default THEN
+            _invalid_cols = array_append(_invalid_cols, format('%I', _col_name));
+        END IF;
+    END LOOP;
+
+    IF _invalid_cols IS NOT NULL THEN
+        RAISE EXCEPTION E'Cannot electrify "%" because some of its columns have DEFAULT expression which is not currently supported by Electric:\n  %',
+                        table_name, array_to_string(_invalid_cols, E'\n  ');
+    END IF;
+END;
+$function$ LANGUAGE PLPGSQL;

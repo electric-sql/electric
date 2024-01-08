@@ -1,0 +1,10 @@
+CREATE OR REPLACE PROCEDURE <%= schema() %>.assign_migration_version(_version text, _priority int) SECURITY DEFINER AS $function$
+BEGIN
+    -- if there's already a version for this tx, then overwrite it only if the priority of
+    -- this version is > the existing one;
+    INSERT INTO <%= version_table() %> AS v (version, priority) VALUES (_version, _priority::int2)
+      ON CONFLICT (txid, txts) DO
+        UPDATE SET version = EXCLUDED.version, priority = EXCLUDED.priority
+          WHERE EXCLUDED.priority > v.priority;
+END;
+$function$ LANGUAGE PLPGSQL;

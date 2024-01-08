@@ -1,0 +1,7 @@
+CREATE OR REPLACE PROCEDURE <%= schema() %>.enable(table_name text) SECURITY DEFINER AS
+$$
+  BEGIN
+    CALL <%= schema() %>.electrify(table_name);
+  END;
+$$ LANGUAGE plpgsql;
+

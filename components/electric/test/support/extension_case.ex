@@ -50,6 +50,7 @@ defmodule Electric.Extension.Case.Helpers do
       |> Enum.map(&apply(&1, :version, []))
 
     ExUnit.Assertions.assert({:ok, ^expected_versions} = Extension.migrate(conn))
+    ExUnit.Assertions.assert(:ok = Extension.define_functions(conn))
 
     {:ok, oid} = Electric.Replication.Postgres.Client.query_oids(conn)
     Electric.Postgres.OidDatabase.save_oids(oid)
