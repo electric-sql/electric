@@ -8,6 +8,8 @@ defmodule Electric.Postgres.ShadowTableTransformation do
       is_extension_relation: 1
     ]
 
+  import Electric.Utils, only: [parse_pg_array: 1]
+
   alias Electric.Replication.Changes
   alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.Changes.DeletedRecord
@@ -326,36 +328,6 @@ defmodule Electric.Postgres.ShadowTableTransformation do
     |> Enum.map(&split_satellite_tag/1)
     |> Enum.map(&serialize_tag_to_pg(&1, nil_origin))
     |> serialize_pg_array()
-  end
-
-  @split_array_on_unquoted_comma ~r/((?<=,)|^)([^",]+|"((\\{2})*|(.*?[^\\](\\{2})*))")(?<comma>,)/
-
-  @doc ~S"""
-  Parse a postgres string-serialized array into a list of strings, unwrapping the escapes
-
-  ## Examples
-
-      iex> ~s|{"(\\"2023-06-15 11:18:05.372698+00\\",)"}| |> parse_pg_array()
-      [~s|("2023-06-15 11:18:05.372698+00",)|]
-
-      iex> ~s|{"(\\"2023-06-15 11:18:05.372698+00\\",)","(\\"2023-06-15 11:18:05.372698+00\\",)"}| |> parse_pg_array()
-      [~s|("2023-06-15 11:18:05.372698+00",)|, ~s|("2023-06-15 11:18:05.372698+00",)|]
-  """
-  def parse_pg_array(array) when is_binary(array) do
-    array
-    |> String.slice(1..-2//1)
-    |> then(&Regex.split(@split_array_on_unquoted_comma, &1, on: [:comma]))
-    |> Enum.map(fn
-      ~s|"| <> _ = quoted_string ->
-        quoted_string |> String.slice(1..-2//1) |> String.replace(~S|\"|, ~S|"|)
-
-      unquoted_string ->
-        unquoted_string
-    end)
-    |> case do
-      [""] -> []
-      arr -> arr
-    end
   end
 
   @doc ~S"""
