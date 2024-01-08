@@ -152,21 +152,24 @@ defmodule Electric.Utils do
 
   Code taken from Ecto: https://github.com/elixir-ecto/ecto/blob/v3.10.2/lib/ecto/uuid.ex#L25
   """
-  @spec validate_uuid(binary()) :: {:ok, String.t()} | :error
-  def validate_uuid(
+  @spec validate_uuid!(binary) :: String.t()
+  def validate_uuid!(
         <<a1, a2, a3, a4, a5, a6, a7, a8, ?-, b1, b2, b3, b4, ?-, c1, c2, c3, c4, ?-, d1, d2, d3,
           d4, ?-, e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12>>
       ) do
     <<c(a1), c(a2), c(a3), c(a4), c(a5), c(a6), c(a7), c(a8), ?-, c(b1), c(b2), c(b3), c(b4), ?-,
       c(c1), c(c2), c(c3), c(c4), ?-, c(d1), c(d2), c(d3), c(d4), ?-, c(e1), c(e2), c(e3), c(e4),
       c(e5), c(e6), c(e7), c(e8), c(e9), c(e10), c(e11), c(e12)>>
-  catch
-    :error -> :error
-  else
-    hex_uuid -> {:ok, hex_uuid}
   end
 
-  def validate_uuid(_), do: :error
+  @spec validate_uuid(binary) :: {:ok, String.t()} | :error
+  def validate_uuid(uuid) do
+    try do
+      {:ok, validate_uuid!(uuid)}
+    rescue
+      FunctionClauseError -> :error
+    end
+  end
 
   @compile {:inline, c: 1}
 
@@ -192,7 +195,6 @@ defmodule Electric.Utils do
   defp c(?d), do: ?d
   defp c(?e), do: ?e
   defp c(?f), do: ?f
-  defp c(_), do: throw(:error)
 
   @doc """
   Output a 2-tuple relation (table) reference as pg-style `"schema"."table"`.
