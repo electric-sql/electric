@@ -117,7 +117,7 @@ If your application host doesn't support exposing multiple ports, or doesn't sup
 
 This works by running a CLI command provided by the `electric-sql` library to expose a TCP port on your local network. You then connect your migrations tooling to this local service and it connects to Electric using a TCP-over-HTTP tunnel:
 
-For example to expose a tunnel to the Migrations proxy using the Electric sync service HTTP port, where the sync service is running on host `example.com`, port `5133`:
+For example, to expose a tunnel to the Migrations proxy using the Electric sync service HTTP port, where the sync service is running on host `example.com`, port `5133`:
 
 ```shell
 npx electric-sql proxy-tunnel \
