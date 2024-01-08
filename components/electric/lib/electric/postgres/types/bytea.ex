@@ -1,4 +1,4 @@
-defmodule Electric.Postgres.Bytea do
+defmodule Electric.Postgres.Types.Bytea do
   @moduledoc """
   Utility module that implements encoding and decoding between Postgres'
   Hex encoding of BYTEA values and Elixir's raw binaries.
