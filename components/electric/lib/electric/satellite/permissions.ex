@@ -8,7 +8,7 @@ defmodule Electric.Satellite.Permissions do
 
   require Logger
 
-  defstruct [:source, :roles, :auth]
+  defstruct [:source, :roles, :auth, :scopes]
 
   @type relation() :: Electric.Postgres.relation()
   @type privilege() :: :INSERT | :UPDATE | :DELETE | :SELECT
@@ -40,11 +40,19 @@ defmodule Electric.Satellite.Permissions do
       )
       |> Map.new(&classify_roles/1)
 
-    %__MODULE__{source: %{grants: grants, roles: roles}, roles: role_grants, auth: auth}
+    scopes = compile_scopes(roles)
+
+    %__MODULE__{
+      source: %{grants: grants, roles: roles},
+      roles: role_grants,
+      auth: auth,
+      scopes: scopes
+    }
   end
 
   defp build_roles(roles, auth) do
     roles
+    |> Enum.map(&Role.new/1)
     |> add_authenticated(auth)
     |> add_anyone()
   end
@@ -69,13 +77,20 @@ defmodule Electric.Satellite.Permissions do
   end
 
   defp compile_grants({role, grants}) do
-    {Role.new(role), Enum.map(grants, &Grant.new/1)}
+    {role, Enum.map(grants, &Grant.new/1)}
+  end
+
+  defp compile_scopes(roles) do
+    roles
+    |> Stream.filter(&Role.has_scope?/1)
+    |> Stream.map(&elem(&1.scope, 0))
+    |> Enum.uniq()
   end
 
   @spec write_allowed(t(), Scope.t(), Changes.change()) :: :ok | {:error, String.t()}
   def write_allowed(%__MODULE__{} = perms, scope_resolv, change) do
     change
-    |> expand_change(scope_resolv)
+    |> expand_change(perms, scope_resolv)
     |> verify_all_changes(perms, scope_resolv)
   end
 
@@ -84,21 +99,23 @@ defmodule Electric.Satellite.Permissions do
     Enum.filter(changes, &validate_read(&1, perms.roles, scope_resolv))
   end
 
-  defp expand_change(change, scope_resolv) when is_update(change) do
-    case Scope.modifies_fk?(scope_resolv, change) do
-      {:ok, false} ->
-        [change]
-
-      {:ok, true} ->
-        # expand an update that modifies a foreign key into the original update plus a
-        # pseudo-insert into the scope defined by the updated foreign key
-        insert = %Changes.NewRecord{relation: change.relation, record: change.record}
-        [change, insert]
+  defp expand_change(change, perms, scope_resolv) when is_update(change) do
+    if modifies_scope_fk?(change, perms, scope_resolv) do
+      # expand an update that modifies a foreign key into the original update plus a
+      # pseudo-insert into the scope defined by the updated foreign key
+      insert = %Changes.NewRecord{relation: change.relation, record: change.record}
+      [change, insert]
+    else
+      [change]
     end
   end
 
-  defp expand_change(change, _scope_resolv) do
+  defp expand_change(change, _perms, _scope_resolv) do
     [change]
+  end
+
+  defp modifies_scope_fk?(change, perms, scope_resolv) do
+    Enum.any?(perms.scopes, &Scope.modifies_fk?(scope_resolv, &1, change))
   end
 
   defp verify_all_changes(changes, perms, scope_resolv) do
@@ -194,6 +211,7 @@ defmodule Electric.Satellite.Permissions do
         #   - then reject roles that don't match the {table, pk_id}
         # an {:error, _} response here means the change doesn't belong in the scope -- transient
         # runtime errors raise
+
         case Scope.scope_id!(scope_resolv, scope_table, change) do
           {:ok, id} -> scope_id == id
           {:error, _reason} -> false

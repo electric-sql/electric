@@ -131,22 +131,40 @@ defmodule Electric.Satellite.PermissionsTest do
     end
 
     test "modifies_fk?/2", cxt do
-      assert {:ok, true} =
-               Scope.modifies_fk?(
-                 cxt.tree,
-                 Chgs.update(@issues, %{"project_id" => "1"}, %{"project_id" => "2"})
-               )
+      assert Scope.modifies_fk?(
+               cxt.tree,
+               @projects,
+               Chgs.update(@issues, %{"project_id" => "1"}, %{"project_id" => "2"})
+             )
 
-      assert {:ok, false} =
-               Scope.modifies_fk?(
-                 cxt.tree,
-                 Chgs.update(@issues, %{"project_id" => "1"}, %{"comment" => "something"})
-               )
+      refute Scope.modifies_fk?(
+               cxt.tree,
+               @projects,
+               Chgs.update(@issues, %{"project_id" => "1"}, %{"comment" => "something"})
+             )
+
+      assert Scope.modifies_fk?(
+               cxt.tree,
+               @comments,
+               Chgs.update(@reactions, %{"comment_id" => "1"}, %{"comment_id" => "2"})
+             )
+
+      refute Scope.modifies_fk?(
+               cxt.tree,
+               @comments,
+               Chgs.update(@reactions, %{"comment_id" => "1"}, %{"comment" => "changed"})
+             )
+
+      refute Scope.modifies_fk?(
+               cxt.tree,
+               @regions,
+               Chgs.update(@reactions, %{"comment_id" => "1"}, %{"comment_id" => "2"})
+             )
     end
   end
 
   describe "write_allowed/3" do
-    test "scoped role, change out of scope", cxt do
+    test "scoped role, scoped grant", cxt do
       perms =
         Perms.build(
           ~s[GRANT ALL ON #{table(@comments)} TO (projects, 'editor')],
@@ -169,6 +187,16 @@ defmodule Electric.Satellite.PermissionsTest do
                  cxt.tree,
                  # issue i3 belongs to project p2
                  Chgs.insert(@comments, %{"id" => "c100", "issue_id" => "i3"})
+               )
+
+      assert :ok =
+               Permissions.write_allowed(
+                 perms,
+                 cxt.tree,
+                 # issue i3 belongs to project p2
+                 Chgs.update(@comments, %{"id" => "c4", "issue_id" => "i3"}, %{
+                   "comment" => "changed"
+                 })
                )
     end
 

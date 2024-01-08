@@ -169,7 +169,7 @@ defmodule ElectricTest.PermissionsHelpers do
     # for the new record case, we need to find the parent table we're adding a child of
     # in order to find its place in the tree
     def scope_id!({graph, fks}, {_, _} = root, %Changes.NewRecord{} = change) do
-      with {:ok, parent, parent_id} <- fk_for_change(fks, change) do
+      with {:ok, parent, parent_id} <- fk_for_change(fks, root, change) do
         scope_root_id(graph, root, parent, parent_id)
       end
     end
@@ -181,9 +181,14 @@ defmodule ElectricTest.PermissionsHelpers do
     end
 
     @impl Electric.Satellite.Permissions.Scope
-    def modifies_fk?({_graph, fks}, update) do
-      {:ok, _parent, fk} = relation_fk(fks, update)
-      {:ok, MapSet.member?(update.changed_columns, fk)}
+    def modifies_fk?({_graph, fks}, {_, _} = root, update) do
+      case relation_fk(fks, root, update) do
+        {:ok, _parent, fk} ->
+          MapSet.member?(update.changed_columns, fk)
+
+        :error ->
+          false
+      end
     end
 
     defp scope_root_id(graph, root, table, id) do
@@ -208,27 +213,37 @@ defmodule ElectricTest.PermissionsHelpers do
       end
     end
 
-    defp relation_fk(fks, %{relation: relation}) do
-      %Graph.Edge{v2: parent, label: fk} =
-        Graph.get_shortest_path(fks, relation, @root)
-        |> Enum.chunk_every(2, 1, :discard)
-        |> Enum.take(1)
-        |> Enum.map(fn [a, b] -> Graph.edges(fks, a, b) |> hd() end)
-        |> hd()
+    defp relation_fk(fks, root, %{relation: relation}) do
+      case Graph.get_shortest_path(fks, relation, root) do
+        nil ->
+          :error
 
-      {:ok, parent, fk}
+        [_ | _] = path ->
+          %Graph.Edge{v2: parent, label: fk} =
+            path
+            |> Enum.chunk_every(2, 1, :discard)
+            |> Enum.take(1)
+            |> Enum.map(fn [a, b] -> Graph.edges(fks, a, b) |> hd() end)
+            |> hd()
+
+          {:ok, parent, fk}
+      end
     end
 
     # there's probably a better way to do this
-    defp fk_for_change(fks, %{record: record} = change) do
-      {:ok, parent, fk} = relation_fk(fks, change)
+    defp fk_for_change(fks, root, %{record: record} = change) do
+      case relation_fk(fks, root, change) do
+        {:ok, parent, fk} ->
+          case Map.fetch(record, fk) do
+            {:ok, id} ->
+              {:ok, parent, id}
 
-      case Map.fetch(record, fk) do
-        {:ok, id} ->
-          {:ok, parent, id}
+            :error ->
+              {:error, "record does not have a foreign key"}
+          end
 
         :error ->
-          {:error, "record does not have a foreign key"}
+          {:error, "record does not exist in the scope #{inspect(root)}"}
       end
     end
 
