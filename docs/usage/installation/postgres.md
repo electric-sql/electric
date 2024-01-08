@@ -9,7 +9,7 @@ ElectricSQL requires a [PostgreSQL](https://www.postgresql.org/download) databas
 
 ## Compatibility
 
-ElectricSQL works with standard Postgres [version >= 14.0](https://www.postgresql.org/support/versioning/) with [logical&nbsp;replication](https://www.postgresql.org/docs/current/logical-replication.html) enabled. Note that you don't need to install any extensions or run any unsafe code.
+ElectricSQL works with standard Postgres [version >= 14.0](https://www.postgresql.org/support/versioning/) with [logical&nbsp;replication](https://www.postgresql.org/docs/current/logical-replication.html) enabled. You don't need to install any extensions or run any unsafe code.
 
 :::info
 Specifically, right now, ElectricSQL works with a single database in a single Postgres installation with tables in the public schema.
@@ -62,64 +62,6 @@ Verify the wal_level is logical:
 psql -U postgres -c 'show wal_level'
 ```
 
-## Permissions
+## Database user
 
-The [Electric sync service](./service.md) currently needs to connect to Postgres as a database user with `LOGIN` and `SUPERUSER` permissions.
-
-For example:
-
-```sql
-CREATE ROLE electric
-  WITH LOGIN
-       PASSWORD '...'
-       SUPERUSER;
-```
-
-Note that we are working to remove the `SUPERUSER` requirement.
-
-<details>
-  <summary>
-    More details on future permissions
-  </summary>
-  <div>
-
-In future, the permissions required will be a minimum of:
-
-- `LOGIN`
-- `REPLICATION`
-
-And then either `ALL` on the database and public schema or at a minimum:
-
-- `CONNECT`, `CREATE` and `TEMPORARY` on the database
-- `CREATE`, `EXECUTE on ALL` and `USAGE` on the `public` schema
-
-Plus `ALTER DEFAULT PRIVILEGES` to grant the same permissions on any new tables in the public schema.
-
-For example, to create an `electric` user with the necessary permissions:
-
-```sql
-CREATE ROLE electric
-  WITH LOGIN
-    PASSWORD '...'
-    REPLICATION;
-
-GRANT ALL
-  ON DATABASE '...'
-  TO electric;
-
-GRANT ALL
-  ON ALL TABLES
-  IN SCHEMA public
-  TO electric;
-
-ALTER DEFAULT PRIVILEGES
-  IN SCHEMA public
-  GRANT ALL
-    ON TABLES
-    TO electric;
-```
-
-This will remove the need for `SUPERUSER`, which will increase the compatibility with hosting providers such as [Cloud SQL](https://cloud.google.com/sql) and [AlloyDB](https://cloud.google.com/alloydb) that won't grant superuser (or a reduced version like [`rds_superuser`](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Appendix.PostgreSQL.CommonDBATasks.Roles.html#Appendix.PostgreSQL.CommonDBATasks.Roles.rds_superuser)).
-
-  </div>
-</details>
+The [Electric sync service](./service.md) connects to Postgres as a database user. This user needs certain permissions. The exact permissions required depend on how you run the [Sync service](./service.md) and are documented on <DocPageLink path="api/service#database-user-permissions" />.
