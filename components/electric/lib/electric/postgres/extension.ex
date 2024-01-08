@@ -3,7 +3,7 @@ defmodule Electric.Postgres.Extension do
   Manages our pseudo-extension code
   """
 
-  alias Electric.Postgres.{Schema, Schema.Proto, Extension.Functions, Extension.Migration}
+  alias Electric.Postgres.{Schema, Schema.Proto, Extension.Functions, Extension.Migration, Types}
   alias Electric.Replication.Postgres.Client
   alias Electric.Utils
 
@@ -228,7 +228,7 @@ defmodule Electric.Postgres.Extension do
         version: version,
         txid: String.to_integer(txid_str),
         txts: txts,
-        timestamp: decode_epgsql_timestamp(timestamp),
+        timestamp: Types.DateTime.from_epgsql(timestamp),
         schema: Proto.Schema.json_decode!(schema_json),
         stmts: stmts
       }
@@ -511,16 +511,6 @@ defmodule Electric.Postgres.Extension do
   end
 
   defp known_shadow_column?(_), do: false
-
-  defp decode_epgsql_timestamp({date, {h, m, frac_sec}}) do
-    sec = trunc(frac_sec)
-    microsec = trunc((frac_sec - sec) * 1_000_000)
-    DateTime.from_naive!(NaiveDateTime.from_erl!({date, {h, m, sec}}, {microsec, 6}), "Etc/UTC")
-  end
-
-  def encode_epgsql_timestamp(%DateTime{} = dt) do
-    dt |> DateTime.to_naive() |> NaiveDateTime.to_erl()
-  end
 
   @doc """
   Perform a mostly no-op update to a transaction marker query to make sure

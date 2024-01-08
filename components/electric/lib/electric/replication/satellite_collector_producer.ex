@@ -137,7 +137,7 @@ defmodule Electric.Replication.SatelliteCollectorProducer do
         relation: Extension.acked_client_lsn_relation(),
         record: %{
           "client_id" => tx.origin,
-          "lsn" => Electric.Postgres.Bytea.to_postgres_hex(tx.lsn)
+          "lsn" => Electric.Postgres.Types.Bytea.to_postgres_hex(tx.lsn)
         }
       }
 

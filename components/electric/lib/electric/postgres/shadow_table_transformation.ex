@@ -8,8 +8,7 @@ defmodule Electric.Postgres.ShadowTableTransformation do
       is_extension_relation: 1
     ]
 
-  import Electric.Utils, only: [parse_pg_array: 1]
-
+  alias Electric.Postgres.Types
   alias Electric.Replication.Changes
   alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.Changes.DeletedRecord
@@ -66,7 +65,13 @@ defmodule Electric.Postgres.ShadowTableTransformation do
   def split_change_into_main_and_shadow(change, relations, tag, origin)
 
   def split_change_into_main_and_shadow(change, relations, {_, _} = tag, origin),
-    do: split_change_into_main_and_shadow(change, relations, serialize_tag_to_pg(tag), origin)
+    do:
+      split_change_into_main_and_shadow(
+        change,
+        relations,
+        Types.ElectricTag.serialize(tag),
+        origin
+      )
 
   def split_change_into_main_and_shadow(change, relations, tag, origin) do
     main_table_info = relations[change.relation]
@@ -87,7 +92,7 @@ defmodule Electric.Postgres.ShadowTableTransformation do
         "_is_a_delete_operation" =>
           if(is_struct(change, Changes.DeletedRecord), do: "t", else: "f"),
         "_observed_tags" => convert_tag_list_satellite_to_pg(change.tags, origin),
-        "_modified_columns_bit_mask" => serialize_pg_array(modified_bitmask)
+        "_modified_columns_bit_mask" => Types.Array.serialize(modified_bitmask)
       })
 
     [
@@ -165,7 +170,7 @@ defmodule Electric.Postgres.ShadowTableTransformation do
     {timestamp, origin} =
       case Enum.find(shadow, &(not is_struct(&1, DeletedRecord))) do
         nil -> {tx.commit_timestamp, tx.origin}
-        %{record: %{"_tag" => tag}} -> parse_pg_electric_tag(tag, tx.origin)
+        %{record: %{"_tag" => tag}} -> Types.ElectricTag.parse(tag, tx.origin)
       end
 
     %{
@@ -245,58 +250,6 @@ defmodule Electric.Postgres.ShadowTableTransformation do
   def add_shadow_relations([relation | tail], acc),
     do: add_shadow_relations(tail, [relation, shadow_of(relation) | acc])
 
-  @doc """
-  Parse a postgres string-serialized electric.tag value into an origin & a timestamp.
-
-  If the origin in the tuple is empty, returns `default_origin` instead (`nil` by default)
-
-  ## Examples
-
-      iex> ~s|("2023-06-15 11:18:05.372698+00",)| |> parse_pg_electric_tag()
-      {~U[2023-06-15 11:18:05.372698Z], nil}
-
-      iex> ~s|("2023-06-15 11:18:05.372698+00",test)| |> parse_pg_electric_tag()
-      {~U[2023-06-15 11:18:05.372698Z], "test"}
-
-      iex> ~s|("2023-06-15 11:18:05.372698+00",)| |> parse_pg_electric_tag("default")
-      {~U[2023-06-15 11:18:05.372698Z], "default"}
-  """
-  def parse_pg_electric_tag(tag, default_origin \\ nil) when is_binary(tag) do
-    [ts, origin] =
-      tag
-      |> String.slice(1..-2//1)
-      |> String.split(",", parts: 2)
-      |> Enum.map(&String.trim(&1, ~s|"|))
-      |> Enum.map(&String.replace(&1, ~S|\"|, ~S|"|))
-
-    {:ok, ts, _} = DateTime.from_iso8601(ts)
-
-    {ts, if(origin == "", do: default_origin, else: origin)}
-  end
-
-  @doc """
-  Serialize an origin-timestamp pair into a postgres string-serialized electric.tag value
-
-  If the origin matches `nil_origin` (second argument), then `null` PG value will be used in place
-
-  ## Examples
-
-      iex> {~U[2023-06-15 11:18:05.372698Z], nil} |> serialize_tag_to_pg()
-      ~s|("2023-06-15T11:18:05.372698Z",)|
-
-      iex> {~U[2023-06-15 11:18:05.372698Z], "test"} |> serialize_tag_to_pg()
-      ~s|("2023-06-15T11:18:05.372698Z","test")|
-
-      iex> {~U[2023-06-15 11:18:05.372698Z], "default"} |> serialize_tag_to_pg("default")
-      ~s|("2023-06-15T11:18:05.372698Z",)|
-  """
-  def serialize_tag_to_pg({timestamp, origin}, nil_origin \\ nil) do
-    origin =
-      if origin == nil_origin, do: nil, else: ~s|"#{String.replace(origin, ~S|"|, ~S|\"|)}"|
-
-    ~s|("#{DateTime.to_iso8601(timestamp)}",#{origin})|
-  end
-
   @doc ~S"""
   Parse a PG array of electric tags and serialize them as Satellite-formatted tags.
 
@@ -310,8 +263,8 @@ defmodule Electric.Postgres.ShadowTableTransformation do
   """
   def convert_tag_list_pg_to_satellite(array, default_origin \\ nil) when is_binary(array) do
     array
-    |> parse_pg_array()
-    |> Enum.map(&parse_pg_electric_tag(&1, default_origin))
+    |> Types.Array.parse()
+    |> Enum.map(&Types.ElectricTag.parse(&1, default_origin))
     |> Enum.map(&pg_electric_tag_to_satellite_tag/1)
   end
 
@@ -326,32 +279,8 @@ defmodule Electric.Postgres.ShadowTableTransformation do
   def convert_tag_list_satellite_to_pg(array, nil_origin \\ nil) do
     array
     |> Enum.map(&split_satellite_tag/1)
-    |> Enum.map(&serialize_tag_to_pg(&1, nil_origin))
-    |> serialize_pg_array()
-  end
-
-  @doc ~S"""
-  Serialize a list of strings into a postgres string-serialized array into a list of strings, wrapping the contents
-
-  ## Examples
-
-      iex> [~s|("2023-06-15 11:18:05.372698+00",)|] |> serialize_pg_array()
-      ~s|{"(\\"2023-06-15 11:18:05.372698+00\\",)"}|
-
-      iex> [~s|("2023-06-15 11:18:05.372698+00",)|, ~s|("2023-06-15 11:18:05.372698+00",)|] |> serialize_pg_array()
-      ~s|{"(\\"2023-06-15 11:18:05.372698+00\\",)","(\\"2023-06-15 11:18:05.372698+00\\",)"}|
-
-      iex> str = ~s|{"(\\"2023-06-15 11:18:05.372698+00\\",)","(\\"2023-06-15 11:18:05.372698+00\\",)"}|
-      iex> str |> parse_pg_array |> serialize_pg_array
-      str
-  """
-  def serialize_pg_array(array) when is_list(array) do
-    array
-    |> Enum.map_join(",", fn
-      nil -> "null"
-      val when is_binary(val) -> ~s|"| <> String.replace(val, ~s|"|, ~S|\"|) <> ~s|"|
-    end)
-    |> then(&"{#{&1}}")
+    |> Enum.map(&Types.ElectricTag.serialize(&1, nil_origin))
+    |> Types.Array.serialize()
   end
 
   def split_satellite_tag(tag) do
