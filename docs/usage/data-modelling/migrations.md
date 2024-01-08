@@ -224,7 +224,7 @@ You can either route all DDL access to your Postgres via the Migrations proxy, o
 
 ### Configuring and connecting to the migrations proxy
 
-The [Electric sync service](../../api/service.md) connects to a Postgres database at [`DATABASE_URL`](../../api/service.md#database_url) and, [by default](#using-the-proxy-tunnel), exposes the migrations proxy as a TCP service on `PG_PROXY_PORT`, secured by `PG_PROXY_PASSWORD`. Instead of connecting your migrations tooling (or any interactive session applying migrations) to Postgres directly, connect to the Electric sync service instead.
+The [Electric sync service](../../api/service.md) connects to a Postgres database at [`DATABASE_URL`](../../api/service.md#database_url) and, by default, exposes the migrations proxy as a TCP service on `PG_PROXY_PORT`, secured by `PG_PROXY_PASSWORD`. Instead of connecting your migrations tooling (or any interactive session applying migrations) to Postgres directly, connect to the Electric sync service instead.
 
 [![Connecting to the migrations proxy over a TCP port](../../deployment/_images/tcp-port.png)](../../deployment/_images/tcp-port.jpg)
 
