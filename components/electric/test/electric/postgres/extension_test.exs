@@ -105,7 +105,7 @@ defmodule Electric.Postgres.ExtensionTest do
     tx(&migrate/1, cxt)
   end
 
-  test_tx("we can retrieve and set the current schema json", fn conn ->
+  test_tx "we can retrieve and set the current schema json", fn conn ->
     assert {:ok, nil, %Schema.Proto.Schema{tables: []}} = Extension.current_schema(conn)
     schema = Schema.new()
     version = "20230405171534_1"
@@ -137,9 +137,9 @@ defmodule Electric.Postgres.ExtensionTest do
              ])
 
     assert {:ok, ^version, ^schema} = Extension.current_schema(conn)
-  end)
+  end
 
-  test_tx("we can retrieve the schema for a given version", fn conn ->
+  test_tx "we can retrieve the schema for a given version", fn conn ->
     assert {:ok, nil, %Schema.Proto.Schema{tables: []}} = Extension.current_schema(conn)
     schema = Schema.new()
     version = "20230405171534_1"
@@ -173,9 +173,9 @@ defmodule Electric.Postgres.ExtensionTest do
 
     assert {:ok, ^version, ^schema} = Extension.current_schema(conn)
     assert {:ok, ^version, ^schema} = Extension.schema_version(conn, version)
-  end)
+  end
 
-  test_tx("we can retrieve the sql of applied migrations", fn conn ->
+  test_tx "we can retrieve the sql of applied migrations", fn conn ->
     migrations = [
       {"0001",
        [
@@ -207,9 +207,9 @@ defmodule Electric.Postgres.ExtensionTest do
 
     [_m1, _m2, m3, m4] = migrations
     assert [m3, m4] == migration_history(conn, "0002")
-  end)
+  end
 
-  test_tx("logical replication ddl is not captured", fn conn ->
+  test_tx "logical replication ddl is not captured", fn conn ->
     sql1 = "CREATE PUBLICATION all_tables FOR ALL TABLES;"
 
     sql2 =
@@ -223,12 +223,12 @@ defmodule Electric.Postgres.ExtensionTest do
     end
 
     assert {:ok, []} = Extension.ddl_history(conn)
-  end)
+  end
 
-  describe "electrification" do
+  describe "table electrification" do
     alias Electric.Postgres.SQLGenerator
 
-    test_tx("can generate the ddl to create any index", fn conn ->
+    test_tx "can generate the ddl to create any index", fn conn ->
       assert {:ok, agent} = SQLGenerator.SchemaAgent.start_link()
 
       namespace = "something"
@@ -277,10 +277,10 @@ defmodule Electric.Postgres.ExtensionTest do
         %{} = new_index = Enum.find(new_table.indexes, &(&1.name == index.name))
         assert new_index == index
       end
-    end)
+    end
 
     @tag timeout: 30_000
-    test_tx("can generate the ddl to create any table", fn conn ->
+    test_tx "can generate the ddl to create any table", fn conn ->
       assert {:ok, agent} = SQLGenerator.SchemaAgent.start_link()
 
       namespace = "something"
@@ -321,9 +321,9 @@ defmodule Electric.Postgres.ExtensionTest do
         assert {:ok, new_table} = Schema.fetch_table(new_schema, table.name)
         assert new_table == table
       end
-    end)
+    end
 
-    test_tx("generated ddl includes defaults and constraints", fn conn ->
+    test_tx "includes defaults and constraints in the generated ddl", fn conn ->
       create_parent_table = """
       CREATE TABLE public.parent (
         id uuid PRIMARY KEY NOT NULL
@@ -361,9 +361,9 @@ defmodule Electric.Postgres.ExtensionTest do
 
 
              """
-    end)
+    end
 
-    test_tx("generated ddl includes indexes", fn conn ->
+    test_tx "includes indexes in the generated ddl", fn conn ->
       create_table = """
       CREATE TABLE public.something (
         id uuid PRIMARY KEY NOT NULL,
@@ -398,9 +398,9 @@ defmodule Electric.Postgres.ExtensionTest do
              CREATE UNIQUE INDEX something_val1_uniq_idx ON public.something USING btree (val1);
 
              """
-    end)
+    end
 
-    test_tx("table electrification creates shadow tables", fn conn ->
+    test_tx "creates shadow tables", fn conn ->
       sql1 = "CREATE TABLE public.buttercup (id int4 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
       sql2 = "CREATE TABLE public.daisy (id int4 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
       sql3 = "CALL electric.electrify('buttercup')"
@@ -420,9 +420,9 @@ defmodule Electric.Postgres.ExtensionTest do
                  conn,
                  "SELECT 1 FROM pg_class JOIN pg_namespace ON relnamespace = pg_namespace.oid WHERE relname = 'shadow__public__daisy' AND nspname = 'electric'"
                )
-    end)
+    end
 
-    test_tx("table electrification successfully validates column types", fn conn ->
+    test_tx "successfully validates column types", fn conn ->
       assert [{:ok, [], []}, {:ok, [], []}, {:ok, [], []}] ==
                :epgsql.squery(conn, """
                CREATE TYPE shapes AS ENUM ('circle', 'square', 'diamond');
@@ -453,9 +453,9 @@ defmodule Electric.Postgres.ExtensionTest do
 
                CALL electric.electrify('public.t1');
                """)
-    end)
+    end
 
-    test_tx("table electrification rejects invalid column types", fn conn ->
+    test_tx "rejects invalid column types", fn conn ->
       assert [
                {:ok, [], []},
                {:error, {:error, :error, _, :raise_exception, error_msg, _}}
@@ -480,25 +480,9 @@ defmodule Electric.Postgres.ExtensionTest do
                  created_at time with time zone
                """
                |> String.trim()
-    end)
+    end
 
-    test_tx("electrified?/3", fn conn ->
-      sql1 = "CREATE TABLE public.buttercup (id int4 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
-      sql2 = "CREATE TABLE public.daisy (id int4 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
-      sql3 = "CALL electric.electrify('buttercup')"
-
-      for sql <- [sql1, sql2, sql3] do
-        {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
-      end
-
-      assert {:ok, true} = Extension.electrified?(conn, "buttercup")
-      assert {:ok, true} = Extension.electrified?(conn, "public", "buttercup")
-
-      assert {:ok, false} = Extension.electrified?(conn, "daisy")
-      assert {:ok, false} = Extension.electrified?(conn, "public", "daisy")
-    end)
-
-    test_tx("table electrification rejects default column expressions", fn conn ->
+    test_tx "rejects default column expressions", fn conn ->
       assert [
                {:ok, [], []},
                {:error, {:error, :error, _, :raise_exception, error_msg, _}}
@@ -521,9 +505,9 @@ defmodule Electric.Postgres.ExtensionTest do
                  "Ts"
                """
                |> String.trim()
-    end)
+    end
 
-    test_tx "table electrification rejects columns with CHECK, UNIQUE or EXCLUDE constraints",
+    test_tx "rejects columns with CHECK, UNIQUE or EXCLUDE constraints",
             fn conn ->
               assert [
                        {:ok, [], []},
@@ -563,6 +547,22 @@ defmodule Electric.Postgres.ExtensionTest do
 
       assert error_msg == "Cannot electrify public.t1 because it doesn't have a PRIMARY KEY."
     end
+  end
+
+  test_tx "electrified?/3", fn conn ->
+    sql1 = "CREATE TABLE public.buttercup (id int4 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
+    sql2 = "CREATE TABLE public.daisy (id int4 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
+    sql3 = "CALL electric.electrify('buttercup')"
+
+    for sql <- [sql1, sql2, sql3] do
+      {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
+    end
+
+    assert {:ok, true} = Extension.electrified?(conn, "buttercup")
+    assert {:ok, true} = Extension.electrified?(conn, "public", "buttercup")
+
+    assert {:ok, false} = Extension.electrified?(conn, "daisy")
+    assert {:ok, false} = Extension.electrified?(conn, "public", "daisy")
   end
 
   defp migration_history(conn, after_version \\ nil) do
