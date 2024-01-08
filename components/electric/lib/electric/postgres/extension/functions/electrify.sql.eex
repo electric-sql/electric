@@ -32,7 +32,7 @@ BEGIN
         CALL <%= @schema %>.__validate_table_column_defaults(_quoted_name);
 
         -- insert the required ddl into the migrations table
-        SELECT <%= @schema %>.ddlgen_create(_oid) INTO _create_sql;
+        SELECT <%= @schema %>.generate_electrified_sql(_oid) INTO _create_sql;
 
         RAISE DEBUG '%', _create_sql;
 

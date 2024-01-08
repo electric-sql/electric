@@ -86,6 +86,9 @@ defmodule Electric.Postgres.Schema.Update do
   end
 
   defp do_update(%Pg.CreateStmt{} = action, schema, opts) do
+    %{relation: name} = action
+    Logger.info("CREATE TABLE #{name.relname} (...)")
+
     table = AST.create(action, opts)
 
     schema = %{schema | tables: schema.tables ++ [table]}
@@ -369,6 +372,23 @@ defmodule Electric.Postgres.Schema.Update do
         end,
         false
       )
+
+    {[], schema}
+  end
+
+  defp do_update(%PgQuery.CreateEnumStmt{} = action, schema, opts) do
+    name =
+      case AST.map(action.type_name, opts) do
+        [schema, name] -> %Proto.RangeVar{schema: schema, name: name}
+        [name] -> %Proto.RangeVar{schema: opts.default_schema, name: name}
+      end
+
+    values = AST.map(action.vals)
+
+    Logger.info("CREATE ENUM #{name} WITH VALUES #{inspect(values)}")
+
+    enum = %Proto.Enum{name: name, values: values}
+    schema = %{schema | enums: schema.enums ++ [enum]}
 
     {[], schema}
   end

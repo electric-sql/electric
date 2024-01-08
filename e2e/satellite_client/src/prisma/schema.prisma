@@ -79,3 +79,14 @@ model Jsons {
   jsb Json?
   @@map("jsons")
 }
+
+model Enums {
+  id String @id
+  c  Color?
+}
+
+enum Color {
+  RED
+  GREEN
+  BLUE
+}
