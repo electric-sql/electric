@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION <%= @schema %>.generate_electrified_sql(table_oid regclass)
+CREATE OR REPLACE FUNCTION <%= schema() %>.generate_electrified_sql(table_oid regclass)
 RETURNS text
 SECURITY DEFINER
 AS $function$
@@ -14,11 +14,11 @@ BEGIN
             WHERE attrelid = table_oid AND attnum > 0 AND NOT attisdropped AND typtype = 'e'
             ORDER BY attnum
     LOOP
-        SELECT <%= @schema %>.ddlgen_create(_col_type) INTO _ddlgen_sql;
+        SELECT <%= schema() %>.ddlgen_create(_col_type) INTO _ddlgen_sql;
         _result_sql := _result_sql || _ddlgen_sql;
     END LOOP;
 
-    SELECT <%= @schema %>.ddlgen_create(table_oid) INTO _ddlgen_sql;
+    SELECT <%= schema() %>.ddlgen_create(table_oid) INTO _ddlgen_sql;
     _result_sql := _result_sql || _ddlgen_sql;
 
     RETURN _result_sql;
