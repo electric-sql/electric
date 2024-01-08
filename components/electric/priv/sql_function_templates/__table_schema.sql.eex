@@ -1,0 +1,11 @@
+CREATE OR REPLACE FUNCTION <%= schema() %>.__table_schema(table_oid oid) RETURNS name SECURITY DEFINER AS $function$
+DECLARE
+   _schema name;
+BEGIN
+    SELECT pn.nspname INTO _schema
+        FROM pg_class pc
+        INNER JOIN pg_namespace pn ON pc.relnamespace = pn.oid
+        WHERE pc.oid = table_oid;
+    RETURN _schema;
+END;
+$function$ LANGUAGE PLPGSQL;

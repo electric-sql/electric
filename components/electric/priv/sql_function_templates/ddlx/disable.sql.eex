@@ -1,0 +1,6 @@
+CREATE OR REPLACE PROCEDURE <%= schema() %>.disable(table_name text) SECURITY DEFINER AS
+$$
+  BEGIN
+  END;
+$$ LANGUAGE plpgsql;
+

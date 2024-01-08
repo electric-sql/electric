@@ -1,0 +1,12 @@
+CREATE OR REPLACE FUNCTION <%= schema() %>.tx_has_assigned_version() RETURNS bool SECURITY DEFINER AS $function$
+DECLARE
+    _txid <%= txid_type() %>;
+    _txts <%= txts_type() %>;
+    _version text;
+BEGIN
+    SELECT txid, txts INTO _txid, _txts FROM <%= schema() %>.current_transaction_id();
+    SELECT version INTO _version FROM <%= version_table() %> WHERE txid = _txid AND txts = _txts;
+    RAISE DEBUG 'transaction %/% has version: %', _txid, _txts, _version;
+    RETURN _version IS NOT NULL;
+END;
+$function$ LANGUAGE PLPGSQL;

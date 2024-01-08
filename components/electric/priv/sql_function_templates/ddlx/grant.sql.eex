@@ -1,0 +1,24 @@
+CREATE OR REPLACE PROCEDURE <%= schema() %>.grant(
+    privilege_name text,
+    on_table_name text,
+    role_name text,
+    columns text[],
+    scope_name text,
+    using_path text,
+    check_fn text
+) SECURITY DEFINER AS $$
+
+  DECLARE
+    col TEXT;
+
+  BEGIN
+    FOREACH col IN ARRAY columns
+    LOOP
+      INSERT INTO <%= grants_table() %> ( privilege, on_table, role , column_name, scope, using_path, check_fn)
+      VALUES (privilege_name, on_table_name, role_name, col, scope_name, using_path, check_fn)
+        ON CONFLICT ON CONSTRAINT grants_pkey DO UPDATE SET
+        (using_path, check_fn) = (EXCLUDED.using_path, EXCLUDED.check_fn);
+    END LOOP;
+  END;
+$$ LANGUAGE plpgsql;
+
