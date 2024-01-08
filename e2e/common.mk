@@ -35,6 +35,14 @@ else
 	export ELECTRIC_CLIENT_IMAGE=${ELECTRIC_CLIENT_IMAGE_NAME}:${ELECTRIC_IMAGE_TAG}
 endif
 
+# Any timeouts in the tests, specified in seconds,
+# are multiplied by this to convert to milliseconds.
+# If in CI, double all timeouts to reduce flakiness
+TIMEOUT_MULTIPLIER = 1000
+ifeq ($(CI), true)
+    TIMEOUT_MULTIPLIER = 2000
+endif
+
 lux: ${LUX}
 
 ${LUX}:
@@ -123,7 +131,7 @@ docker-make:
 		make ${MK_TARGET}
 
 single_test:
-	${LUX} --progress doc ${TEST}
+	${LUX} --multiplier ${TIMEOUT_MULTIPLIER} --progress doc ${TEST}
 
 single_test_debug:
 	${LUX} --debug ${TEST}
