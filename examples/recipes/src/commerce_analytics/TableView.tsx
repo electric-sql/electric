@@ -17,11 +17,12 @@ export interface PaginationState {
 export type ColumnDef = {
   field: string,
   headerName: string,
+  type: 'date' | 'number' | 'text',
   format?: (val: any) => string,
   width?: number
 }
 
-export function TableView({
+export const TableView = ({
   columns,
   rows,
   totalNumberOfRows,
@@ -33,7 +34,7 @@ export function TableView({
   totalNumberOfRows?: number,
   pagination: PaginationState,
   onPaginationChange: (pagination: PaginationState) => void,
-}) {
+}) => {
   // Avoid a layout jump when reaching the last page with empty rows.
   const emptyRows = pagination.pageSize - rows.length;
   return (

@@ -30,10 +30,12 @@
     "@mui/material": "^5.14.20",
     "@mui/system": "^5.15.3",
     "@mui/x-charts": "^6.18.3",
+    "@react-querybuilder/material": "^6.5.4",
     "electric-sql": "^0.8.2",
     "eslint-plugin-react": "^7.33.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-querybuilder": "^6.5.4",
     "react-router-dom": "^6.20.1",
     "wa-sqlite": "rhashimoto/wa-sqlite#semver:^0.9.8"
   },
