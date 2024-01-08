@@ -489,9 +489,12 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.TypeV4_8 do
     ]
   end
 
-  # we don't support custom types
-  def data_rows([_nspname], _schema_version, _config) do
-    []
+  def data_rows([nspname_array], schema_version, _config) do
+    namespaces = Electric.Postgres.Proxy.Prisma.Query.parse_name_array(nspname_array)
+
+    for %{name: name} = enum <- schema_version.schema.enums, name.schema in namespaces do
+      [name.name, enum.values, name.schema]
+    end
   end
 end
 
@@ -530,9 +533,13 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.TypeV5_2 do
     ]
   end
 
-  # we don't support custom types
-  def data_rows([_nspname], _schema_version, _config) do
-    []
+  def data_rows([nspname_array], schema_version, config) do
+    Electric.Postgres.Proxy.Prisma.Query.TypeV4_8.data_rows(
+      [nspname_array],
+      schema_version,
+      config
+    )
+    |> Enum.map(fn [name, value, namespace] -> [name, value, namespace, nil] end)
   end
 end
 
