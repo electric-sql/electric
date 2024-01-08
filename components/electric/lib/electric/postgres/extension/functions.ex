@@ -64,9 +64,13 @@ defmodule Electric.Postgres.Extension.Functions do
   end
 
   defp eval_template(relpath) do
+    # This hack is necessary to get a meaningful error when EEx fails to evaluate the template.
+    # Without it, errors will say that it is lib/electric/postgres/extension/functions.ex that failed to compile.
+    env = %{__ENV__ | file: relpath}
+
     Path.join(Application.app_dir(:electric, @template_dir), relpath)
-    |> EEx.compile_file()
-    |> Code.eval_quoted([], __ENV__)
+    |> EEx.compile_file(file: relpath)
+    |> Code.eval_quoted([], env)
     |> elem(0)
   end
 end
