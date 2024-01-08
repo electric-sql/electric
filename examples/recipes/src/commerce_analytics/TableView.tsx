@@ -3,14 +3,20 @@ import {
   Box, Paper,
   Table, TableBody, TableCell,
   TableContainer, TableFooter,
-  TableHead, TablePagination, TableRow
+  TableHead, TablePagination, TableRow, TableSortLabel
 } from "@mui/material"
 import TablePaginationActions from "@mui/material/TablePagination/TablePaginationActions";
+import { useCallback, useMemo } from "react";
 
 
 export interface PaginationState {
   pageIndex: number,
   pageSize: number
+}
+
+export interface SortingState {
+  field: string,
+  order?: 'asc' | 'desc'
 }
 
 
@@ -26,25 +32,79 @@ export const TableView = ({
   columns,
   rows,
   totalNumberOfRows,
+  sorting = [],
+  onSortingChange,
   pagination,
   onPaginationChange,
 } : {
   columns: ColumnDef[],
   rows: Record<string, any>[],
   totalNumberOfRows?: number,
+  sorting?: SortingState[],
+  onSortingChange?: (sorting: SortingState[]) => void,
   pagination: PaginationState,
   onPaginationChange: (pagination: PaginationState) => void,
 }) => {
   // Avoid a layout jump when reaching the last page with empty rows.
   const emptyRows = pagination.pageSize - rows.length;
+
+  const sortMap = useMemo(() => sorting.reduce(
+    (sortMap, sortState, idx) => ({
+      ...sortMap,
+      [sortState.field]: { ...sortState, index: idx }
+    }),
+    {} as Record<string, SortingState & {index: number}>
+  ), [sorting])
+
+  const toggleSorting = useCallback((field: string) => {
+    const sortState = sortMap[field]
+    const index = sortState?.index ?? Infinity
+    let newSortOrder;
+    switch (sortState?.order) {
+      case 'desc':
+        newSortOrder = undefined
+        break
+      case 'asc':
+        newSortOrder = 'desc'
+        break
+      default:
+        newSortOrder = 'asc'
+    }
+    onSortingChange?.([
+      ...sorting.slice(0, index),
+      ...(
+        !!newSortOrder ?
+          [{ field, order: newSortOrder } as SortingState]
+          :
+          []
+      ),
+      ...sorting.slice(index + 1)
+    ])
+  }, [sorting])
+
   return (
     <TableContainer>
       <Table sx={{ whiteSpace: 'nowrap' }}>
         <TableHead>
           <TableRow>
             {columns.map((column) => (
-              <TableCell key={column.field} sx={{ width: column.width }}>
-                {column.headerName}
+              <TableCell
+                key={column.field}
+                sx={{ width: column.width }}
+                sortDirection={sortMap[column.field]?.order}
+              >
+                <TableSortLabel
+                  active={!!sortMap[column.field]?.order}
+                  direction={sortMap[column.field]?.order}
+                  onClick={() => toggleSorting(column.field)}
+                >
+                  {column.headerName}
+                  {/* {orderBy === column.field ? (
+                    <Box component="span" sx={visuallyHidden}>
+                      {order === 'desc' ? 'sorted descending' : 'sorted ascending'}
+                    </Box>
+                  ) : null} */}
+                </TableSortLabel>
               </TableCell>
             ))}
           </TableRow>
