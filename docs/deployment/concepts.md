@@ -48,7 +48,7 @@ The generator needs to be able to connect to the Electric sync service and outpu
 
 The [migrations proxy](../usage/data-modelling/migrations.md#migrations-proxy) is a TCP service exposed by the Electric sync service. It supports the Postgres connection protocol and proxies interactive Postgres sessions applying migrations to your Postgres database.
 
-Some application hosting services do not support external TCP ports. In this case, you can [use a proxy tunnel](#use-a-proxy-tunnel) to connect to the migrations proxy via the Electric sync service HTTP port.
+Some application hosting services do not support external TCP ports. In this case, you can [use a proxy tunnel](#22-using-a-proxy-tunnel) to connect to the migrations proxy via the Electric sync service HTTP port.
 
 ## Connections
 
@@ -84,8 +84,8 @@ Your migrations tooling should apply DDL migrations to Postgres via the [Migrati
 
 There are two ways to connect to it:
 
-1. [as a TCP service](#2-1-as-a-tcp-service)
-2. [using a Proxy tunnel](#2-2-using-a-proxy-tunnel)
+1. [as a TCP service](#21-as-a-tcp-service)
+2. [using a Proxy tunnel](#22-using-a-proxy-tunnel)
 
 #### 2.1 As a TCP service
 
