@@ -172,7 +172,7 @@ defmodule Electric.Replication.Postgres.Writer do
   defp encode_value("f", :bool), do: "false"
 
   defp encode_value(bin, :bytea),
-    do: bin |> Electric.Postgres.Bytea.to_postgres_hex() |> quote_string()
+    do: bin |> Electric.Postgres.Types.Bytea.to_postgres_hex() |> quote_string()
 
   defp encode_value(val, float_type) when float_type in [:float4, :float8] do
     case Float.parse(val) do
