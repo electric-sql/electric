@@ -29,7 +29,7 @@ BEGIN
         RAISE EXCEPTION E'Cannot electrify % because it doesn''t have a PRIMARY KEY.', table_name;
     END IF;
 
-    IF _invalid_cols IS NOT NULL THEN
+    IF _invalid_cols IS NOT NULL AND <%= schema() %>.__constraint_validation_enabled() THEN
         RAISE EXCEPTION E'Cannot electrify % because some of its columns have CHECK, UNIQUE, EXCLUDE or user-defined constraints which are not currently supported by Electric:\n  %',
                         table_name, array_to_string(_invalid_cols, E'\n  ');
     END IF;
