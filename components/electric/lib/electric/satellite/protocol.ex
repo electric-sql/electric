@@ -18,6 +18,7 @@ defmodule Electric.Satellite.Protocol do
 
   alias Electric.Replication.Changes.Transaction
   alias Electric.Postgres.Extension.SchemaCache
+  alias Electric.Postgres.Schema
   alias Electric.Replication.Changes
   alias Electric.Replication.Shapes
   alias Electric.Replication.Shapes.ShapeRequest
@@ -533,10 +534,20 @@ defmodule Electric.Satellite.Protocol do
     %{columns: columns} = SchemaCache.Global.relation!({msg.schema_name, msg.table_name})
     relation_columns = Map.new(columns, &{&1.name, &1.type})
 
+    enums = SchemaCache.Global.enums()
+
     columns =
-      Enum.map(msg.columns, fn %SatRelationColumn{name: name} = col ->
-        %{name: name, type: Map.fetch!(relation_columns, name), nullable?: col.is_nullable}
-      end)
+      for %SatRelationColumn{name: name} = col <- msg.columns do
+        typename = Map.fetch!(relation_columns, name)
+
+        type =
+          case Schema.lookup_enum_values(enums, typename) do
+            nil -> typename
+            values -> {:enum, typename, values}
+          end
+
+        %{name: name, type: type, nullable?: col.is_nullable}
+      end
 
     relations =
       Map.put(in_rep.relations, msg.relation_id, %{

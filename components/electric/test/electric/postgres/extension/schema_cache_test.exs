@@ -140,6 +140,7 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
     conn_config = [
       origin: cxt.origin,
       __connection__: conn,
+      connection: [],
       replication: []
     ]
 

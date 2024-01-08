@@ -59,11 +59,8 @@
     [invoke wait-for "await client.get_jsonb(db, '${id}')" "${id}" 10 $node]
 [endmacro]
 
-[macro node_write_float id f4_value f8_value]
-    # Can write valid floats to the DB
-    !await client.write_float(db, '${id}', ${f4_value}, ${f8_value})
-    ??{ id: '${id}',
-    ??$node
+[macro node_await_get_enum id]
+    [invoke wait-for "await client.get_enum(db, '${id}')" "${id}" 10 $node]
 [endmacro]
 
 [macro node_get_uuid id]
@@ -105,6 +102,26 @@
 [macro node_get_jsonb id expected_jsonb]
     !await client.get_jsonb(db, '${id}')
     ??{ id: '${id}', jsb: ${expected_jsonb} }
+    ??$node
+[endmacro]
+
+[macro node_get_enum id expected_enum]
+    !await client.get_enum(db, '${id}')
+    ??{ id: '${id}', c: ${expected_enum} }
+    ??$node
+[endmacro]
+
+[macro node_write_float id f4_value f8_value]
+    # Can write valid floats to the DB
+    !await client.write_float(db, '${id}', ${f4_value}, ${f8_value})
+    ??{ id: '${id}',
+    ??$node
+[endmacro]
+
+[macro node_write_enum id value]
+    # Can write valid enums to the DB
+    !await client.write_enum(db, '${id}', ${value})
+    ??{ id: '${id}', c: ${value} }
     ??$node
 [endmacro]
 

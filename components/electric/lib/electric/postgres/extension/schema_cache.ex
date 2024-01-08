@@ -16,6 +16,8 @@ defmodule Electric.Postgres.Extension.SchemaCache do
 
   use GenServer
 
+  import Electric.Postgres.Extension, only: [is_extension_relation: 1]
+
   alias Electric.Replication.Connectors
   alias Electric.Postgres.Extension.SchemaLoader
   alias Electric.Postgres.Schema
@@ -108,19 +110,21 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     call(origin, {:known_migration_version?, version})
   end
 
+  # SchemaCache.internal_schema() is not used anywhere in the codebase.
+  #
+  # SchemaLoader.internal_schema() is used in this module to actually load the internal schema from the database. But
+  # since SchemaCache also implements the SchemaLoader behaviour, we're forced to have this noop definition here.
   @impl SchemaLoader
-  def internal_schema(origin) do
-    call(origin, :internal_schema)
+  def internal_schema(_origin) do
+    raise "Not implemented"
+  end
+
+  def replicated_relations(origin) do
+    call(origin, :replicated_relations)
   end
 
   def electrified_tables(origin) do
     call(origin, :electrified_tables)
-  end
-
-  def replicated_internal_tables(origin) do
-    origin
-    |> internal_schema()
-    |> Schema.table_info()
   end
 
   @impl SchemaLoader
@@ -189,6 +193,10 @@ defmodule Electric.Postgres.Extension.SchemaCache do
         raise ArgumentError,
           message: "unknown internal relation #{inspect(relation)}: #{inspect(error)}"
     end
+  end
+
+  def enums(origin) do
+    call(origin, :enums)
   end
 
   defp call(name, msg) when is_binary(name) do
@@ -298,21 +306,32 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     {:reply, SchemaLoader.known_migration_version?(state.backend, version), state}
   end
 
-  def handle_call(:internal_schema, _from, state) do
-    state = load_internal_schema(state)
-    {:reply, state.internal_schema, state}
+  def handle_call(:replicated_relations, _from, state) do
+    state
+    |> load_internal_schema()
+    |> load_and_reply(fn %{schema: schema} = _schema_version,
+                         %{internal_schema: internal_schema} ->
+      {:ok,
+       Stream.concat(schema.tables, internal_schema.tables)
+       |> Enum.map(fn %{name: name} -> {name.schema, name.name} end)}
+    end)
   end
 
   def handle_call(:electrified_tables, _from, state) do
     load_and_reply(state, fn schema_version ->
-      {:ok, Schema.table_info(schema_version.schema)}
+      {:ok,
+       schema_version.schema
+       |> Map.update!(:tables, fn tables ->
+         Enum.reject(tables, &is_extension_relation({&1.name.schema, &1.name.name}))
+       end)
+       |> Schema.table_info()}
     end)
   end
 
   def handle_call({:table_electrified?, sname, tname}, _from, state) do
     # delegate this call directly to the extension metadata tables to avoid race conditions
     # that can happen between an 'electrify table' call and the receipt of the
-    # migration via the replication stream - it's important that this function 
+    # migration via the replication stream - it's important that this function
     # be consistent with the state of the db, not our slightly laggy view on it
     {:reply, SchemaLoader.table_electrified?(state.backend, {sname, tname}), state}
   end
@@ -391,6 +410,10 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     {:reply, Schema.table_info(state.internal_schema, relation), state}
   end
 
+  def handle_call(:enums, _from, state) do
+    load_and_reply(state, fn schema_version -> schema_version.schema.enums end)
+  end
+
   @impl GenServer
   # refresh subscription Task process done
   def handle_info({ref, :ok}, %{refresh_task: %{ref: ref}} = state) when is_reference(ref) do
@@ -444,10 +467,16 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     end
   end
 
-  defp load_and_reply(state, process) when is_function(process, 1) do
+  defp load_and_reply(state, process) do
     {result, state} =
       with {{:ok, schema_version}, state} <- current_schema(state) do
-        {process.(schema_version), state}
+        response =
+          cond do
+            is_function(process, 1) -> process.(schema_version)
+            is_function(process, 2) -> process.(schema_version, state)
+          end
+
+        {response, state}
       else
         error -> {error, state}
       end

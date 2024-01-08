@@ -4,21 +4,23 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
   """
   use GenStage
 
-  alias Electric.Telemetry.Metrics
-  alias Electric.Replication.Connectors
-
-  alias Electric.Replication.Changes.{NewRecord, Transaction}
+  import Electric.Postgres.Extension, only: [is_ddl_relation: 1, is_extension_relation: 1]
 
   alias Electric.Postgres.{
     Extension,
     Extension.SchemaLoader,
     Extension.SchemaCache,
+    OidDatabase,
     Schema
   }
 
-  require Logger
+  alias Electric.Replication.Changes.{NewRecord, Transaction}
+  alias Electric.Replication.Connectors
+  alias Electric.Replication.Postgres.Client
 
-  import Electric.Postgres.Extension, only: [is_ddl_relation: 1, is_extension_relation: 1]
+  alias Electric.Telemetry.Metrics
+
+  require Logger
 
   @spec name(Connectors.config()) :: Electric.reg_name()
   def name(conn_config) when is_list(conn_config) do
@@ -67,7 +69,8 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
       producer: producer,
       loader: loader,
       opts: opts,
-      refresh_subscription: refresh_sub?
+      refresh_subscription: refresh_sub?,
+      conn_opts: Connectors.get_connection_opts(conn_config)
     }
 
     {:producer_consumer, state}
@@ -149,7 +152,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
   end
 
   defp perform_migration({version, stmts}, state) do
-    {:ok, loader, schema_version} = apply_migration(version, stmts, state.loader)
+    {:ok, loader, schema_version} = apply_migration(version, stmts, state)
 
     Metrics.non_span_event(
       [:postgres, :migration],
@@ -205,14 +208,16 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
   Apply a migration, composed of a version and a list of DDL statements, to a schema
   using the given implementation of SchemaLoader.
   """
-  @spec apply_migration(String.t(), [String.t()], SchemaLoader.t()) ::
+  @spec apply_migration(String.t(), [String.t()], map) ::
           {:ok, SchemaLoader.t(), SchemaLoader.Version.t()} | {:error, term()}
-  def apply_migration(version, stmts, loader) when is_list(stmts) do
-    {:ok, schema_version} = SchemaLoader.load(loader)
+  def apply_migration(version, stmts, %{loader: loader} = state) when is_list(stmts) do
+    {:ok, %{schema: schema} = schema_version} = SchemaLoader.load(loader)
 
     Logger.info("Migrating version #{schema_version.version || "<nil>"} -> #{version}")
 
     oid_loader = &SchemaLoader.relation_oid(loader, &1, &2, &3)
+
+    old_enums = schema.enums
 
     schema =
       Enum.reduce(stmts, schema_version.schema, fn stmt, schema ->
@@ -224,6 +229,11 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
     Logger.info("Saving schema version #{version} /#{inspect(loader)}/")
 
     {:ok, loader, schema_version} = SchemaLoader.save(loader, version, schema, stmts)
+
+    if schema.enums != old_enums do
+      Client.with_conn(state.conn_opts, fn conn -> OidDatabase.update_oids(conn, [:ENUM]) end)
+    end
+
     {:ok, loader, schema_version}
   end
 end
