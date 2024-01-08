@@ -21,6 +21,7 @@
 [endmacro]
 
 [macro setup_client_with_migrations satellite_number electric port migrations]
+    [timeout 5]
     [invoke start_satellite $satellite_number]
     -$fail_pattern
     ??$node
