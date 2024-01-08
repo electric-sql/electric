@@ -49,6 +49,10 @@
   },
   "exports": {
     "./package.json": "./package.json",
+    "./angular": {
+      "import": "./dist/frameworks/angular/esm2022/index.js",
+      "require": "./dist/frameworks/angular/fesm2022/index.js"
+    },
     "./browser": "./dist/drivers/wa-sqlite/index.js",
     "./cordova": "./dist/drivers/cordova-sqlite-storage/index.js",
     "./capacitor": "./dist/drivers/capacitor-sqlite/index.js",
@@ -65,6 +69,9 @@
   },
   "typesVersions": {
     "*": {
+      "angular": [
+        "./dist/frameworks/angular/index.d.ts"
+      ],
       "browser": [
         "./dist/drivers/wa-sqlite/index.d.ts"
       ],
@@ -117,6 +124,7 @@
     "dev": "tsmodule dev",
     "build": "rm -rf ./dist && tsc && tsmodule build",
     "build-dev": "rm -rf ./dist && tsc && tsmodule build --dev",
+    "build-angular": "pnpm --dir ./src/frameworks/angular && pnpm build",
     "test": "ava",
     "typecheck": "tsc -p tsconfig.tests.json",
     "posttest": "npm run typecheck",
@@ -178,13 +186,6 @@
     "zod": "^3.20.2"
   },
   "devDependencies": {
-    "@analogjs/vite-plugin-angular": "^0.2.18",
-    "@angular/common": "^17.0.2",
-    "@angular/compiler": "^17.0.2",
-    "@angular/compiler-cli": "^17.0.2",
-    "@angular/core": "^17.0.2",
-    "@angular/platform-browser": "^17.0.2",
-    "@angular/platform-browser-dynamic": "^17.0.2",
     "@ikscodes/browser-env": "^1.0.0",
     "@prisma/client": "^4.12.0",
     "@testing-library/react": "^13.4.0",
@@ -216,7 +217,6 @@
     "husky": "^8.0.3",
     "lint-staged": "^13.1.0",
     "memorystorage": "^0.12.0",
-    "ng-packagr": "^17.0.0",
     "prettier": "2.8.2",
     "prisma": "^4.8.1",
     "react": "^18.2.0",

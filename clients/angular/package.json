@@ -1,0 +1,34 @@
+{
+  "name": "@electric-sql/angular",
+  "version": "0.0.1",
+  "description": "Angular adapter for ElectricSQL",
+  "author": "Electric DB Limited",
+  "scripts": {
+    "clean": "rimraf ./build && rimraf ./coverage",
+    "test:eslint": "eslint --ext .ts,.tsx ./src",
+    "test:types": "tsc",
+    "test:lib": "vitest run --coverage",
+    "test:lib:dev": "vitest watch --coverage",
+    "build": "ng-packagr -p ng-package.json -c tsconfig.build.json"
+  },
+  "dependencies": {
+    "tslib": "^2.6.2",
+    "electric-sql": "workspace:*"
+  },
+  "devDependencies": {
+    "@analogjs/vite-plugin-angular": "^0.2.29",
+    "@angular/common": "^17.0.8",
+    "@angular/compiler": "^17.0.8",
+    "@angular/compiler-cli": "^17.0.8",
+    "@angular/core": "^17.0.8",
+    "@angular/platform-browser": "^17.0.8",
+    "@angular/platform-browser-dynamic": "^17.0.8",
+    "ng-packagr": "^17.0.3",
+    "ngxtension": "^1.6.0",
+    "typescript": "~5.2",
+    "zone.js": "^0.14.2"
+  },
+  "peerDependencies": {
+    "@angular/core": "^17"
+  }
+}
