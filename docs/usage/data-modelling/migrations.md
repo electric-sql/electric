@@ -250,7 +250,7 @@ See <DocPageLink path="api/service#migrations-proxy" /> for more information abo
 
 Your framework of choice will need to be configured in order to pass migrations (and _only_ migrations) through the proxy rather than directly to the underlying Postgres database.
 
-This typically involves using a different database connection string for migrations, often by running your migrations command with a different `DATABASE_URL` that connects to the migrations proxy. However, as each framework has different requirements for this, we provide framework specific example code for this is provided in <DocPageLink path="integrations/backend" />.
+This typically involves using a different database connection string for migrations, often by running your migrations command with a different `DATABASE_URL` that connects to the migrations proxy. However, as each framework has different requirements, we provide framework-specific example code for this in <DocPageLink path="integrations/backend" />.
 
 :::caution Work in progress
 If your framework of choice hasn't been documented yet, please feel free to [raise a feature request](https://github.com/electric-sql/electric/discussions/categories/feature-requests) or to [let us know on Discord](https://discord.electric-sql.com). We'll be happy to help you get up and running and ideally to work together to update the documentation.
