@@ -28,6 +28,9 @@ test('serialize/deserialize row data', async (t) => {
       { name: 'bool1', type: 'BOOL', isNullable: true },
       { name: 'bool2', type: 'BOOL', isNullable: true },
       { name: 'bool3', type: 'BOOL', isNullable: true },
+      // bundled migrations contain type 'TEXT' for enums
+      { name: 'enum1', type: 'TEXT', isNullable: true },
+      { name: 'enum2', type: 'TEXT', isNullable: true },
     ],
   }
 
@@ -46,6 +49,9 @@ test('serialize/deserialize row data', async (t) => {
           ['bool1', PgBasicType.PG_BOOL],
           ['bool2', PgBasicType.PG_BOOL],
           ['bool3', PgBasicType.PG_BOOL],
+          // enum types are transformed to text type by our generator
+          ['enum1', PgBasicType.PG_TEXT],
+          ['enum2', PgBasicType.PG_TEXT],
         ]),
         relations: [],
       } as unknown as TableSchema<
@@ -76,12 +82,28 @@ test('serialize/deserialize row data', async (t) => {
     bool1: 1,
     bool2: 0,
     bool3: null,
+    enum1: 'red',
+    enum2: null,
   }
 
   const s_row = serializeRow(record, rel, dbDescription)
   t.deepEqual(
     s_row.values.map((bytes) => new TextDecoder().decode(bytes)),
-    ['Hello', 'World!', '', '1', '-30', '1', '-30.3', '5e+234', 't', 'f', '']
+    [
+      'Hello',
+      'World!',
+      '',
+      '1',
+      '-30',
+      '1',
+      '-30.3',
+      '5e+234',
+      't',
+      'f',
+      '',
+      'red',
+      '',
+    ]
   )
 
   const d_row = deserializeRow(s_row, rel, dbDescription)
@@ -100,6 +122,8 @@ test('serialize/deserialize row data', async (t) => {
     bool1: null,
     bool2: null,
     bool3: null,
+    enum1: 'red',
+    enum2: null,
   }
 
   const s_row2 = serializeRow(record2, rel, dbDescription)
@@ -116,6 +140,8 @@ test('serialize/deserialize row data', async (t) => {
       '-Infinity',
       '',
       '',
+      '',
+      'red',
       '',
     ]
   )
@@ -282,17 +308,23 @@ test('Use incoming Relation types if not found in the schema', async (t) => {
     schema: 'schema',
     table: 'new_table',
     tableType: SatRelation_RelationType.TABLE,
-    columns: [{ name: 'value', type: 'INTEGER', isNullable: true }],
+    columns: [
+      { name: 'value', type: 'INTEGER', isNullable: true },
+      { name: 'color', type: 'COLOR', isNullable: true }, // at runtime, incoming SatRelation messages contain the name of the enum type
+    ],
   }
 
-  const satOpRow = serializeRow(
-    { value: 6 },
-    newTableRelation,
-    testDbDescription
-  )
+  const row = {
+    value: 6,
+    color: 'red',
+  }
 
-  // Encoded values ["6"]
-  t.deepEqual(satOpRow.values, [new Uint8Array(['6'.charCodeAt(0)])])
+  const satOpRow = serializeRow(row, newTableRelation, testDbDescription)
+
+  t.deepEqual(
+    satOpRow.values.map((bytes) => new TextDecoder().decode(bytes)),
+    ['6', 'red']
+  )
 
   const deserializedRow = deserializeRow(
     satOpRow,
@@ -300,5 +332,5 @@ test('Use incoming Relation types if not found in the schema', async (t) => {
     testDbDescription
   )
 
-  t.deepEqual(deserializedRow, { value: 6 })
+  t.deepEqual(deserializedRow, row)
 })
