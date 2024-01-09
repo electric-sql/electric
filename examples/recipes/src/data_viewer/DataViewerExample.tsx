@@ -10,11 +10,9 @@ export const DataViewerExample = () => {
     const syncItems = async () => {
       // Resolves when the shape subscription has been established.
       const shape = await db.commerce_orders.sync()
-      console.log('syncing')
 
       // Resolves when the data has been synced into the local database.
       await shape.synced
-      console.log('synced')
     }
 
     syncItems()
