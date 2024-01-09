@@ -10,20 +10,16 @@ export const LoadingView = ({
   loading: boolean 
 }) => {
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: '100%'
-      }}
-    >
+    <Box height="100%">
       { loading &&
         <Box sx={{
-            position: 'absolute',
+            position: 'fixed',
+            left: 0, right: 0,
+            top: 0, bottom: 0,
             display: 'flex',
             flexDirection: 'column',
-            alignItems: 'center'
+            alignItems: 'center',
+            justifyContent: 'center',
           }}>
           <CircularProgress  />
           <Typography variant="h4" sx={{ my: 2 }}>
@@ -31,6 +27,7 @@ export const LoadingView = ({
           </Typography>
         </Box>
       }
+      
       <Fade in={!loading}>
         {children}
       </Fade>

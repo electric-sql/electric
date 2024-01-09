@@ -5,9 +5,11 @@ import { useElectric } from "../electric/ElectricWrapper"
 import { ConnectivityToggle } from "../components/ConnectivityToggle"
 import { ChatRoom } from "./ChatRoom"
 import { generateAndPersistRandomName } from "./utilities"
+import { LoadingView } from "../components/LoadingView"
 
 export const ChatRoomExample = () => {
   const [ username ] = useState(generateAndPersistRandomName())
+  const [ synced, setSynced ] = useState(false)
   const { db } = useElectric()!
   useEffect(() => {
     const syncItems = async () => {
@@ -16,6 +18,7 @@ export const ChatRoomExample = () => {
 
       // Resolves when the data has been synced into the local database.
       await shape.synced
+      setSynced(true)
     }
 
     syncItems()
@@ -27,9 +30,11 @@ export const ChatRoomExample = () => {
       <NavigationBar title="Chat Room" items={[
         <ConnectivityToggle key="connectivity" />
       ]}/>
-      <Container maxWidth="md" sx={{ py: 4 }}>
-        <ChatRoom username={username} />
-      </Container>
+      <LoadingView loading={!synced}>
+        <Container maxWidth="md" sx={{ py: 4 }}>
+          <ChatRoom username={username} />
+        </Container>
+      </LoadingView>
     </Box>
   )
 }

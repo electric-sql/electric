@@ -4,7 +4,7 @@ import { ElectricLogo } from './ElectricLogo'
 
 
 export const NavigationBar = ({ title, items = [] } : { title: string, items?: ReactElement[] }) => (
-    <Box sx={{ flexGrow: 1, mb: 2 }}>
+    <Box sx={{ flexGrow: 0, mb: 2 }}>
       <AppBar position="static" color="primary">
         <Toolbar>
           <IconButton

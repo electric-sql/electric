@@ -1,10 +1,12 @@
 import { Box, Container } from "@mui/material"
 import { NavigationBar } from "../components/NavigationBar"
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useElectric } from "../electric/ElectricWrapper"
 import { MonitoringChart } from "./MonitoringChart"
+import { LoadingView } from "../components/LoadingView"
 
 export const MonitoringMetricsExample = () => {
+  const [ synced, setSynced ] = useState(false)
   const { db } = useElectric()!
 
   useEffect(() => {
@@ -14,6 +16,7 @@ export const MonitoringMetricsExample = () => {
 
       // Resolves when the data has been synced into the local database.
       await shape.synced
+      setSynced(true)
     }
 
     syncItems()
@@ -22,9 +25,11 @@ export const MonitoringMetricsExample = () => {
   return (
     <Box>
       <NavigationBar title="Monitoring Metrics" />
-      <Container maxWidth="md" sx={{ py: 4 }}>
-        <MonitoringChart />
-      </Container>
+      <LoadingView loading={!synced}>
+        <Container maxWidth="md" sx={{ py: 4 }}>
+          <MonitoringChart />
+        </Container>
+      </LoadingView>
     </Box>
   )
 }
