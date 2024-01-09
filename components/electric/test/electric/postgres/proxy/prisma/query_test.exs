@@ -83,8 +83,11 @@ defmodule Electric.Postgres.Proxy.Prisma.QueryTest do
   end
 
   test "TypeV5_2", cxt do
-    [["oses", ["linux", "macos", "windows"], "public", nil]] =
-      Query.TypeV5_2.data_rows([@public], cxt.schema, config())
+    assert [
+             ["oses", "linux", "public", nil],
+             ["oses", "macos", "public", nil],
+             ["oses", "windows", "public", nil]
+           ] == Query.TypeV5_2.data_rows([@public], cxt.schema, config())
   end
 
   test "ColumnV5_2", cxt do

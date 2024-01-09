@@ -492,8 +492,10 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.TypeV4_8 do
   def data_rows([nspname_array], schema_version, _config) do
     namespaces = Electric.Postgres.Proxy.Prisma.Query.parse_name_array(nspname_array)
 
-    for %{name: name} = enum <- schema_version.schema.enums, name.schema in namespaces do
-      [name.name, enum.values, name.schema]
+    for %{name: %{name: name, schema: schema}} = enum <- schema_version.schema.enums,
+        schema in namespaces,
+        value <- enum.values do
+      [name, value, schema]
     end
   end
 end
