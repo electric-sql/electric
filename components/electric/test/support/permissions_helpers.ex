@@ -73,14 +73,6 @@ defmodule ElectricTest.PermissionsHelpers do
     end
   end
 
-  defmodule Table do
-    alias Electric.Satellite.SatPerms, as: P
-
-    def relation({schema, name}) do
-      %P.Table{schema: schema, name: name}
-    end
-  end
-
   defmodule Chgs do
     alias Electric.Replication.Changes
 
@@ -106,22 +98,6 @@ defmodule ElectricTest.PermissionsHelpers do
     end
   end
 
-  defmodule Grants do
-    alias Electric.Satellite.SatPerms, as: P
-
-    def authenticated do
-      %P.RoleName{role: {:predefined, :AUTHENTICATED}}
-    end
-
-    def anyone do
-      %P.RoleName{role: {:predefined, :ANYONE}}
-    end
-
-    def role(role) when is_binary(role) do
-      %P.RoleName{role: {:application, role}}
-    end
-  end
-
   defmodule Roles do
     alias Electric.Satellite.SatPerms, as: P
 
@@ -133,25 +109,13 @@ defmodule ElectricTest.PermissionsHelpers do
       %P.Role{
         assign_id: attrs[:assign_id],
         role: role_name,
-        scope: %P.Scope{table: Table.relation(table), id: id}
+        scope: %P.Scope{table: relation(table), id: id}
       }
     end
-  end
 
-  defmodule Privs do
-    def all do
-      [
-        :SELECT,
-        :INSERT,
-        :UPDATE,
-        :DELETE
-      ]
+    defp relation({schema, name}) do
+      %P.Table{schema: schema, name: name}
     end
-
-    def delete(), do: [:DELETE]
-    def insert(), do: [:INSERT]
-    def select(), do: [:SELECT]
-    def update(), do: [:UPDATE]
   end
 
   defmodule Tree do
