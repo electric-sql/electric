@@ -106,4 +106,18 @@ defmodule Electric.Satellite.Auth.JWTUtil do
       Jason.DecodeError -> {:error, :token_malformed}
     end
   end
+
+  def gen_timestamp(add_seconds \\ 0) do
+    now() + add_seconds
+  end
+
+  def past_timestamp?(ts) do
+    ts - Electric.max_clock_drift_seconds() <= now()
+  end
+
+  def future_timestamp?(ts) do
+    ts + Electric.max_clock_drift_seconds() >= now()
+  end
+
+  defp now, do: Joken.current_time()
 end

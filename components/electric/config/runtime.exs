@@ -59,7 +59,9 @@ config :electric, Electric.Replication.Postgres,
 
 config :electric, Electric.Postgres.Proxy.Handler.Tracing, colour: true
 
-config :electric, :telemetry_url, "https://checkpoint.electric-sql.com"
+config :electric,
+  max_clock_drift_seconds: 2,
+  telemetry_url: "https://checkpoint.electric-sql.com"
 
 ##########################
 ### User configuration ###
