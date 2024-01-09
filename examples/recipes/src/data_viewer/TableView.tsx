@@ -135,8 +135,8 @@ export const TableView = ({
         <TableFooter>
           <TableRow>
             <TablePagination
-              rowsPerPageOptions={[10, 20, 50, 100]}
-              colSpan={0}
+              rowsPerPageOptions={[5, 10, 20, 50, 100]}
+              colSpan={1}
               count={totalNumberOfRows ?? rows.length}
               rowsPerPage={pagination.pageSize}
               page={pagination.pageIndex}
