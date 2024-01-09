@@ -3,6 +3,7 @@ import { QueryBuilderMaterial } from '@react-querybuilder/material';
 import { useEffect, useMemo, useState } from "react";
 import { ColumnDef } from "./TableView";
 import 'react-querybuilder/dist/query-builder.css';
+import { Box, Divider, Typography } from '@mui/material';
 
 
 export const QueryBuilder = ({
@@ -24,12 +25,18 @@ export const QueryBuilder = ({
   }, [ query ])
   
   return (
-    <QueryBuilderMaterial>
-      <ReactQueryBuilder
-        fields={fields}
-        query={query}
-        controlClassnames={{ queryBuilder: 'queryBuilder-branches' }}
-        onQueryChange={(q) => setQuery(q)} />
-    </QueryBuilderMaterial>
+    <Box>
+      <Typography variant="h5">
+        Filter
+      </Typography>
+      <Divider sx={{ my: 1 }} />
+      <QueryBuilderMaterial>
+        <ReactQueryBuilder
+          fields={fields}
+          query={query}
+          controlClassnames={{ queryBuilder: 'queryBuilder-branches' }}
+          onQueryChange={(q) => setQuery(q)} />
+      </QueryBuilderMaterial>
+    </Box>
   )
 }

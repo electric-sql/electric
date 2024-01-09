@@ -51,3 +51,17 @@ export const columns : ColumnDef[] = [
     width: 80
   },
 ];
+
+export const aggregateColumns = columns
+      .filter((c) => {
+        switch(c.field) {
+          case 'country':
+          case 'product':
+          case 'promo_code':
+          case 'price_currency':
+            return true
+          default:
+            return false
+        }
+      })
+      .sort((a, b) => a.headerName.localeCompare(b.headerName))

@@ -1,6 +1,5 @@
 
 import {
-  Box, Paper,
   Table, TableBody, TableCell,
   TableContainer, TableFooter,
   TableHead, TablePagination, TableRow, TableSortLabel
