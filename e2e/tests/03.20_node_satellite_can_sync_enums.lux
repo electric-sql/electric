@@ -39,7 +39,7 @@
     [invoke node_get_enum "row3" null]
 
 [shell pg_1]
-    [invoke wait-for "SELECT * FROM public.enums;" "row1" 10 $psql]
+    [invoke wait-for "SELECT * FROM public.enums;" "row2" 10 $psql]
 
     !SELECT * FROM public.enums;
     ??row1 | RED

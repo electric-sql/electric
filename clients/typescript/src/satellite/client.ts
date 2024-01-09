@@ -1130,6 +1130,7 @@ function deserializeColumnData(
     case PgDateType.PG_TIMETZ:
       return typeDecoder.timetz(column)
     default:
+      // also covers user-defined enumeration types
       return typeDecoder.text(column)
   }
 }

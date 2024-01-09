@@ -41,3 +41,10 @@ CREATE TABLE public.pointy2 (
 );
 
 
+CREATE TYPE oses AS ENUM ('linux', 'macos', 'windows');
+
+CREATE TABLE public.manuals (
+  id text PRIMARY KEY,
+  os oses NOT NULL,
+  manual_url text NOT NULL
+);
