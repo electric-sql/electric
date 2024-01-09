@@ -96,12 +96,12 @@ If you can expose a TCP port to your Electric instance, you can connect to the p
 The port exposed is configured using the `PG_PROXY_PORT` environment variable. For example, if your Electric service is running on `example.com` with `PG_PROXY_PORT=65432`, then you can connect using:
 
 ```
-postgresql://${user}:${password}@example.com:65432/electric
+postgresql://${user}:${password}@example.com:65432
 ```
 
-Technically speaking, user  and password must be the PG_PROXY_PASSWORD.
+Where `password` is the value set for `PG_PROXY_PASSWORD`. The `user` is normally `postgres` but can also be set to a predefined value to switch the proxy to a different operation mode for the duration of the connection.
 
-Where `user` is used to choose the operation mode of the proxy and `password` must be the PG_PROXY_PASSWORD. When the connection is then proxied onto your Postgres, Electric will use the `DATABASE_URL` to Postgres.
+When a client connects to the proxy, Electric establishes an upstream connection to Postgres using `DATABASE_URL`.
 
 :::note
 Some migrations tooling requires special handling by the Migrations proxy.
