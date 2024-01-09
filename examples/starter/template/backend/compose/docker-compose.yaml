@@ -35,6 +35,7 @@ services:
     init: true
     environment:
       DATABASE_URL: postgresql://postgres:pg_password@postgres:5432/${APP_NAME:-electric}
+      DATABASE_REQUIRE_SSL: false
       PG_PROXY_PASSWORD: proxy_password
       LOGICAL_PUBLISHER_HOST: electric
       AUTH_MODE: insecure
