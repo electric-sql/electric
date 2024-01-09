@@ -34,6 +34,9 @@ app = "electric-on-fly-test-app"
 [env]
   AUTH_MODE = "insecure"
   DATABASE_URL = "postgresql://..."
+  # When using Fly Postgres, uncomment the below. Fly Postgres does not
+  # support encrypted connections when connecting over its private 6PN network.
+  #DATABASE_REQUIRE_SSL = "false"
   ELECTRIC_WRITE_TO_PG_MODE = "direct_writes"
   PG_PROXY_PASSWORD = "proxy_password"
 

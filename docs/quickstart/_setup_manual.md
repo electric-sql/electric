@@ -22,6 +22,7 @@ Run the Electric sync service using Docker, for example:
 docker pull electricsql/electric:latest
 docker run \
     -e "DATABASE_URL=postgresql://..." \
+    -e "DATABASE_REQUIRE_SSL=false \
     -e "LOGICAL_PUBLISHER_HOST=..." \
     -e "PG_PROXY_PASSWORD=..." \
     -e "AUTH_MODE=insecure" \

@@ -74,6 +74,7 @@ services:
       - pg
     environment:
       DATABASE_URL: postgresql://postgres:pg_password@pg/postgres
+      DATABASE_REQUIRE_SSL: false
       LOGICAL_PUBLISHER_HOST: electric
       PG_PROXY_PASSWORD: proxy_password
       AUTH_MODE: insecure
