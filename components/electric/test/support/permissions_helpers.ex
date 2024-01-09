@@ -15,9 +15,40 @@ defmodule ElectricTest.PermissionsHelpers do
 
   defmodule Perms do
     alias Electric.Satellite.SatPerms, as: P
+    alias Electric.Satellite.Permissions
 
-    def build(ddlx, roles, auth \\ Auth.user()) do
-      Electric.Satellite.Permissions.build(to_grants(ddlx), roles, auth)
+    defmodule Transient do
+      @name __MODULE__.Transient
+
+      def name, do: @name
+
+      def child_spec(_init_arg) do
+        default = %{
+          id: @name,
+          start: {Permissions.Transient, :start_link, [[name: @name]]}
+        }
+
+        Supervisor.child_spec(default, [])
+      end
+    end
+
+    def new(ddlx, roles, attrs \\ []) do
+      auth = Keyword.get(attrs, :auth, Auth.user())
+
+      Permissions.new(
+        to_grants(ddlx),
+        roles,
+        Keyword.merge(attrs, auth: auth, transient_lut: Transient.name())
+      )
+    end
+
+    def transient(attrs) do
+      Permissions.Transient.new(attrs)
+    end
+
+    def add_transient(perms, attrs) do
+      Permissions.Transient.update([transient(attrs)], Transient.name())
+      perms
     end
 
     defp to_grants(ddlx) do
@@ -32,6 +63,16 @@ defmodule ElectricTest.PermissionsHelpers do
     end
   end
 
+  defmodule LSN do
+    def new(lsn) when is_integer(lsn) do
+      Electric.Postgres.Lsn.from_integer(lsn)
+    end
+
+    def new(nil) do
+      nil
+    end
+  end
+
   defmodule Table do
     alias Electric.Satellite.SatPerms, as: P
 
@@ -43,6 +84,11 @@ defmodule ElectricTest.PermissionsHelpers do
   defmodule Chgs do
     alias Electric.Replication.Changes
 
+    def tx(changes, attrs \\ []) do
+      %Changes.Transaction{changes: changes}
+      |> put_attrs(attrs)
+    end
+
     def insert(table, record) do
       %Changes.NewRecord{relation: table, record: record}
     end
@@ -53,6 +99,10 @@ defmodule ElectricTest.PermissionsHelpers do
         old_record: old_record,
         record: Map.merge(old_record, changes)
       )
+    end
+
+    defp put_attrs(tx, attrs) do
+      Map.put(tx, :lsn, LSN.new(attrs[:lsn]))
     end
   end
 
@@ -79,8 +129,9 @@ defmodule ElectricTest.PermissionsHelpers do
       %P.Role{role: role_name}
     end
 
-    def role(role_name, table, id) do
+    def role(role_name, table, id, attrs \\ []) do
       %P.Role{
+        assign_id: attrs[:assign_id],
         role: role_name,
         scope: %P.Scope{table: Table.relation(table), id: id}
       }
@@ -97,6 +148,7 @@ defmodule ElectricTest.PermissionsHelpers do
       ]
     end
 
+    def delete(), do: [:DELETE]
     def insert(), do: [:INSERT]
     def select(), do: [:SELECT]
     def update(), do: [:UPDATE]

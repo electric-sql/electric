@@ -4,6 +4,7 @@ defmodule Electric.Satellite.PermissionsTest do
   alias ElectricTest.PermissionsHelpers.{
     Auth,
     Chgs,
+    LSN,
     Perms,
     Roles,
     Tree
@@ -22,6 +23,14 @@ defmodule Electric.Satellite.PermissionsTest do
 
   def table(relation) do
     Electric.Utils.inspect_relation(relation)
+  end
+
+  def perms_build(cxt, grants, roles, attrs \\ []) do
+    Perms.new(
+      grants,
+      roles,
+      Keyword.merge(attrs, scope_resolver: cxt.tree)
+    )
   end
 
   setup do
@@ -67,6 +76,8 @@ defmodule Electric.Satellite.PermissionsTest do
            ]}
         ]
       )
+
+    {:ok, _} = start_supervised(Perms.Transient)
 
     {:ok, tree: tree}
   end
@@ -166,7 +177,8 @@ defmodule Electric.Satellite.PermissionsTest do
   describe "write_allowed/3" do
     test "scoped role, scoped grant", cxt do
       perms =
-        Perms.build(
+        perms_build(
+          cxt,
           ~s[GRANT ALL ON #{table(@comments)} TO (projects, 'editor')],
           [
             Roles.role("editor", @projects, "p2")
@@ -176,33 +188,37 @@ defmodule Electric.Satellite.PermissionsTest do
       assert {:error, _} =
                Permissions.write_allowed(
                  perms,
-                 cxt.tree,
                  # issue i1 belongs to project p1
-                 Chgs.insert(@comments, %{"id" => "c100", "issue_id" => "i1"})
+                 Chgs.tx([
+                   Chgs.insert(@comments, %{"id" => "c100", "issue_id" => "i1"})
+                 ])
                )
 
       assert :ok =
                Permissions.write_allowed(
                  perms,
-                 cxt.tree,
                  # issue i3 belongs to project p2
-                 Chgs.insert(@comments, %{"id" => "c100", "issue_id" => "i3"})
+                 Chgs.tx([
+                   Chgs.insert(@comments, %{"id" => "c100", "issue_id" => "i3"})
+                 ])
                )
 
       assert :ok =
                Permissions.write_allowed(
                  perms,
-                 cxt.tree,
                  # issue i3 belongs to project p2
-                 Chgs.update(@comments, %{"id" => "c4", "issue_id" => "i3"}, %{
-                   "comment" => "changed"
-                 })
+                 Chgs.tx([
+                   Chgs.update(@comments, %{"id" => "c4", "issue_id" => "i3"}, %{
+                     "comment" => "changed"
+                   })
+                 ])
                )
     end
 
     test "unscoped role, scoped grant", cxt do
       perms =
-        Perms.build(
+        perms_build(
+          cxt,
           ~s[GRANT ALL ON #{table(@comments)} TO (projects, 'editor')],
           [
             Roles.role("editor")
@@ -212,15 +228,17 @@ defmodule Electric.Satellite.PermissionsTest do
       assert {:error, _} =
                Permissions.write_allowed(
                  perms,
-                 cxt.tree,
                  # issue i1 belongs to project p1
-                 Chgs.insert(@comments, %{"id" => "c100", "issue_id" => "i1"})
+                 Chgs.tx([
+                   Chgs.insert(@comments, %{"id" => "c100", "issue_id" => "i1"})
+                 ])
                )
     end
 
     test "scoped role, unscoped grant", cxt do
       perms =
-        Perms.build(
+        perms_build(
+          cxt,
           ~s[GRANT ALL ON #{table(@comments)} TO 'editor'],
           [
             # we have an editor role within project p2
@@ -231,23 +249,26 @@ defmodule Electric.Satellite.PermissionsTest do
       assert {:error, _} =
                Permissions.write_allowed(
                  perms,
-                 cxt.tree,
                  # issue i1 belongs to project p1
-                 Chgs.insert(@comments, %{"id" => "c100", "issue_id" => "i1"})
+                 Chgs.tx([
+                   Chgs.insert(@comments, %{"id" => "c100", "issue_id" => "i1"})
+                 ])
                )
 
       assert :ok =
                Permissions.write_allowed(
                  perms,
-                 cxt.tree,
                  # issue i3 belongs to project p2
-                 Chgs.insert(@comments, %{"id" => "c100", "issue_id" => "i3"})
+                 Chgs.tx([
+                   Chgs.insert(@comments, %{"id" => "c100", "issue_id" => "i3"})
+                 ])
                )
     end
 
     test "grant for different table", cxt do
       perms =
-        Perms.build(
+        perms_build(
+          cxt,
           [
             ~s[GRANT SELECT ON #{table(@comments)} TO 'editor'],
             ~s[GRANT ALL ON #{table(@reactions)} TO 'editor']
@@ -260,21 +281,24 @@ defmodule Electric.Satellite.PermissionsTest do
       assert {:error, _} =
                Permissions.write_allowed(
                  perms,
-                 cxt.tree,
-                 Chgs.insert(@comments, %{"id" => "c100", "issue_id" => "i1"})
+                 Chgs.tx([
+                   Chgs.insert(@comments, %{"id" => "c100", "issue_id" => "i1"})
+                 ])
                )
 
       assert :ok =
                Permissions.write_allowed(
                  perms,
-                 cxt.tree,
-                 Chgs.insert(@reactions, %{"id" => "r100"})
+                 Chgs.tx([
+                   Chgs.insert(@reactions, %{"id" => "r100"})
+                 ])
                )
     end
 
     test "unscoped role, unscoped grant", cxt do
       perms =
-        Perms.build(
+        perms_build(
+          cxt,
           ~s[GRANT UPDATE ON #{table(@comments)} TO 'editor'],
           [
             Roles.role("editor")
@@ -284,23 +308,30 @@ defmodule Electric.Satellite.PermissionsTest do
       assert :ok =
                Permissions.write_allowed(
                  perms,
-                 cxt.tree,
-                 Chgs.update(@comments, %{"id" => "c100", "issue_id" => "i1", "text" => "old"}, %{
-                   "text" => "changed"
-                 })
+                 Chgs.tx([
+                   Chgs.update(
+                     @comments,
+                     %{"id" => "c100", "issue_id" => "i1", "text" => "old"},
+                     %{
+                       "text" => "changed"
+                     }
+                   )
+                 ])
                )
 
       assert {:error, _} =
                Permissions.write_allowed(
                  perms,
-                 cxt.tree,
-                 Chgs.insert(@comments, %{"id" => "c100", "issue_id" => "i1"})
+                 Chgs.tx([
+                   Chgs.insert(@comments, %{"id" => "c100", "issue_id" => "i1"})
+                 ])
                )
     end
 
     test "scoped role, change outside of scope", cxt do
       perms =
-        Perms.build(
+        perms_build(
+          cxt,
           [
             ~s[GRANT UPDATE ON #{table(@comments)} TO 'editor'],
             ~s[GRANT ALL ON #{table(@regions)} TO 'admin']
@@ -314,16 +345,18 @@ defmodule Electric.Satellite.PermissionsTest do
       assert :ok =
                Permissions.write_allowed(
                  perms,
-                 cxt.tree,
-                 Chgs.update(@regions, %{"id" => "r1", "name" => "region"}, %{
-                   "name" => "updated region"
-                 })
+                 Chgs.tx([
+                   Chgs.update(@regions, %{"id" => "r1", "name" => "region"}, %{
+                     "name" => "updated region"
+                   })
+                 ])
                )
     end
 
     test "AUTHENTICATED w/user_id", cxt do
       perms =
-        Perms.build(
+        perms_build(
+          cxt,
           ~s[GRANT ALL ON #{table(@comments)} TO AUTHENTICATED],
           []
         )
@@ -331,14 +364,16 @@ defmodule Electric.Satellite.PermissionsTest do
       assert :ok =
                Permissions.write_allowed(
                  perms,
-                 cxt.tree,
-                 Chgs.insert(@comments, %{"id" => "c10"})
+                 Chgs.tx([
+                   Chgs.insert(@comments, %{"id" => "c10"})
+                 ])
                )
     end
 
     test "AUTHENTICATED w/o permission", cxt do
       perms =
-        Perms.build(
+        perms_build(
+          cxt,
           ~s[GRANT SELECT ON #{table(@comments)} TO AUTHENTICATED],
           []
         )
@@ -346,42 +381,52 @@ defmodule Electric.Satellite.PermissionsTest do
       assert {:error, _} =
                Permissions.write_allowed(
                  perms,
-                 cxt.tree,
-                 Chgs.insert(@comments, %{"id" => "c10"})
+                 Chgs.tx([
+                   Chgs.insert(@comments, %{"id" => "c10"})
+                 ])
                )
     end
 
     test "AUTHENTICATED w/o user_id", cxt do
       perms =
-        Perms.build(~s[GRANT ALL ON #{table(@comments)} TO AUTHENTICATED], [], Auth.nobody())
+        perms_build(
+          cxt,
+          ~s[GRANT ALL ON #{table(@comments)} TO AUTHENTICATED],
+          [],
+          auth: Auth.nobody()
+        )
 
       assert {:error, _} =
                Permissions.write_allowed(
                  perms,
-                 cxt.tree,
-                 Chgs.insert(@comments, %{"id" => "c10"})
+                 Chgs.tx([
+                   Chgs.insert(@comments, %{"id" => "c10"})
+                 ])
                )
     end
 
     test "ANYONE w/o user_id", cxt do
       perms =
-        Perms.build(
+        perms_build(
+          cxt,
           ~s[GRANT ALL ON #{table(@comments)} TO ANYONE],
           [],
-          Auth.nobody()
+          auth: Auth.nobody()
         )
 
       assert :ok =
                Permissions.write_allowed(
                  perms,
-                 cxt.tree,
-                 Chgs.insert(@comments, %{"id" => "c10"})
+                 Chgs.tx([
+                   Chgs.insert(@comments, %{"id" => "c10"})
+                 ])
                )
     end
 
     test "protected columns", cxt do
       perms =
-        Perms.build(
+        perms_build(
+          cxt,
           [
             ~s[GRANT INSERT (id, text) ON #{table(@comments)} TO 'editor'],
             ~s[GRANT UPDATE (text) ON #{table(@comments)} TO 'editor']
@@ -394,42 +439,47 @@ defmodule Electric.Satellite.PermissionsTest do
       assert :ok =
                Permissions.write_allowed(
                  perms,
-                 cxt.tree,
-                 Chgs.insert(@comments, %{"id" => "c10", "text" => "something"})
+                 Chgs.tx([
+                   Chgs.insert(@comments, %{"id" => "c10", "text" => "something"})
+                 ])
                )
 
       assert {:error, _} =
                Permissions.write_allowed(
                  perms,
-                 cxt.tree,
-                 Chgs.insert(@comments, %{
-                   "id" => "c10",
-                   "text" => "something",
-                   "owner" => "invalid"
-                 })
+                 Chgs.tx([
+                   Chgs.insert(@comments, %{
+                     "id" => "c10",
+                     "text" => "something",
+                     "owner" => "invalid"
+                   })
+                 ])
                )
 
       assert :ok =
                Permissions.write_allowed(
                  perms,
-                 cxt.tree,
-                 Chgs.update(@comments, %{"id" => "c10"}, %{"text" => "updated"})
+                 Chgs.tx([
+                   Chgs.update(@comments, %{"id" => "c10"}, %{"text" => "updated"})
+                 ])
                )
 
       assert {:error, _} =
                Permissions.write_allowed(
                  perms,
-                 cxt.tree,
-                 Chgs.update(@comments, %{"id" => "c10"}, %{
-                   "text" => "updated",
-                   "owner" => "changed"
-                 })
+                 Chgs.tx([
+                   Chgs.update(@comments, %{"id" => "c10"}, %{
+                     "text" => "updated",
+                     "owner" => "changed"
+                   })
+                 ])
                )
     end
 
     test "moves between auth scopes", cxt do
       perms =
-        Perms.build(
+        perms_build(
+          cxt,
           [
             ~s[GRANT ALL ON #{table(@issues)} TO 'editor'],
             ~s[GRANT UPDATE, SELECT ON #{table(@issues)} TO 'reader']
@@ -445,16 +495,104 @@ defmodule Electric.Satellite.PermissionsTest do
       assert :ok =
                Permissions.write_allowed(
                  perms,
-                 cxt.tree,
-                 Chgs.update(@issues, %{"id" => "i1"}, %{"project_id" => "p3"})
+                 Chgs.tx([
+                   Chgs.update(@issues, %{"id" => "i1"}, %{"project_id" => "p3"})
+                 ])
                )
 
       # attempt to move an issue into a project we don't have write access to
       assert {:error, _} =
                Permissions.write_allowed(
                  perms,
-                 cxt.tree,
-                 Chgs.update(@issues, %{"id" => "i1"}, %{"project_id" => "p2"})
+                 Chgs.tx([
+                   Chgs.update(@issues, %{"id" => "i1"}, %{"project_id" => "p2"})
+                 ])
+               )
+    end
+  end
+
+  describe "transient permissions" do
+    setup(cxt) do
+      perms =
+        perms_build(
+          cxt,
+          [
+            ~s[GRANT ALL ON #{table(@issues)} TO 'editor'],
+            ~s[GRANT SELECT ON #{table(@issues)} TO 'reader']
+          ],
+          [
+            Roles.role("editor", @projects, "p1", assign_id: "assign-01"),
+            # read-only role on project p2
+            Roles.role("reader", @projects, "p2", assign_id: "assign-01"),
+            Roles.role("editor", @projects, "p3", assign_id: "assign-01")
+          ]
+        )
+
+      assert {:error, _} =
+               Permissions.write_allowed(
+                 perms,
+                 Chgs.tx([
+                   Chgs.update(@issues, %{"id" => "i3"}, %{"description" => "changed"})
+                 ])
+               )
+
+      {:ok, perms: perms}
+    end
+
+    test "valid tdp", cxt do
+      lsn = 99
+
+      assert :ok =
+               cxt.perms
+               |> Perms.add_transient(
+                 assign_id: "assign-01",
+                 target_relation: @issues,
+                 target_id: "i3",
+                 scope_id: "p1",
+                 valid_to: LSN.new(lsn + 1)
+               )
+               |> Permissions.write_allowed(
+                 Chgs.tx([Chgs.update(@issues, %{"id" => "i3"}, %{"description" => "changed"})],
+                   lsn: lsn
+                 )
+               )
+    end
+
+    test "tdp out of scope", cxt do
+      lsn = 99
+
+      assert {:error, _} =
+               cxt.perms
+               |> Perms.add_transient(
+                 assign_id: "assign-01",
+                 target_relation: @issues,
+                 target_id: "i4",
+                 scope_id: "p1",
+                 valid_to: LSN.new(lsn + 1)
+               )
+               |> Permissions.write_allowed(
+                 Chgs.tx([Chgs.update(@issues, %{"id" => "i3"}, %{"description" => "changed"})],
+                   lsn: lsn
+                 )
+               )
+    end
+
+    test "expired tdp", cxt do
+      lsn = 99
+
+      assert {:error, _} =
+               cxt.perms
+               |> Perms.add_transient(
+                 assign_id: "assign-01",
+                 target_relation: @issues,
+                 target_id: "i3",
+                 scope_id: "p1",
+                 valid_to: LSN.new(lsn)
+               )
+               |> Permissions.write_allowed(
+                 Chgs.tx([Chgs.update(@issues, %{"id" => "i3"}, %{"description" => "changed"})],
+                   lsn: lsn + 1
+                 )
                )
     end
   end
@@ -462,7 +600,8 @@ defmodule Electric.Satellite.PermissionsTest do
   describe "filter_read/3" do
     test "removes changes we don't have permissions to see", cxt do
       perms =
-        Perms.build(
+        perms_build(
+          cxt,
           [
             ~s[GRANT ALL ON #{table(@issues)} TO 'editor'],
             ~s[GRANT ALL ON #{table(@comments)} TO 'editor'],
@@ -489,7 +628,9 @@ defmodule Electric.Satellite.PermissionsTest do
         Chgs.insert(@workspaces, %{"id" => "w100"})
       ]
 
-      assert Permissions.filter_read(perms, cxt.tree, changes) == [
+      filtered_tx = Permissions.filter_read(perms, Chgs.tx(changes))
+
+      assert filtered_tx.changes == [
                Chgs.update(@issues, %{"id" => "i1"}, %{"text" => "updated"}),
                Chgs.insert(@issues, %{"id" => "i100", "project_id" => "p1"}),
                Chgs.insert(@issues, %{"id" => "i101", "project_id" => "p2"}),

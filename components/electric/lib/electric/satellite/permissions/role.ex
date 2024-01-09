@@ -17,6 +17,7 @@ defmodule Electric.Satellite.Permissions.Role do
 
   @type relation() :: Electric.Postgres.relation()
   @type predefined() :: Authenticated.t() | Anyone.t()
+  @type scope_id() :: Electric.Postgres.pk()
   @type t() ::
           predefined()
           | %__MODULE__{
@@ -24,7 +25,7 @@ defmodule Electric.Satellite.Permissions.Role do
               role: String.t(),
               user_id: binary(),
               assign_id: binary(),
-              scope: {relation(), binary()},
+              scope: {relation(), scope_id()},
               source: %SatPerms.Role{}
             }
 

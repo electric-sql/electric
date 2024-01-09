@@ -2,13 +2,13 @@ defmodule Electric.Satellite.Permissions do
   use Electric.Satellite.Protobuf
 
   alias Electric.Replication.Changes
-  alias Electric.Satellite.Permissions.{Grant, Role, Scope}
+  alias Electric.Satellite.Permissions.{Grant, Role, Scope, Transient}
   alias Electric.Satellite.Auth
   alias Electric.Satellite.SatPerms
 
   require Logger
 
-  defstruct [:source, :roles, :auth, :scopes]
+  defstruct [:source, :roles, :auth, :scopes, :scope_resolver, transient_lut: Transient]
 
   @type relation() :: Electric.Postgres.relation()
   @type privilege() :: :INSERT | :UPDATE | :DELETE | :SELECT
@@ -19,13 +19,18 @@ defmodule Electric.Satellite.Permissions do
   @type t() :: %__MODULE__{
           source: %{grants: [%SatPerms.Grant{}], roles: [%SatPerms.Role{}]},
           roles: compiled_role(),
-          auth: Auth.t()
+          auth: Auth.t(),
+          transient_lut: atom(),
+          scope_resolver: Scope.t()
         }
 
   defguardp is_update(change) when is_struct(change, Changes.UpdatedRecord)
 
-  @spec build([%SatPerms.Grant{}], [%SatPerms.Role{}], Auth.t()) :: t()
-  def build(grants, roles, auth) do
+  @spec new([%SatPerms.Grant{}], [%SatPerms.Role{}], Auth.t()) :: t()
+  def new(grants, roles, attrs \\ []) do
+    {:ok, auth} = Keyword.fetch(attrs, :auth)
+    {:ok, scope_resolv} = Keyword.fetch(attrs, :scope_resolver)
+
     roles = build_roles(roles, auth)
 
     role_grants =
@@ -42,12 +47,16 @@ defmodule Electric.Satellite.Permissions do
 
     scopes = compile_scopes(roles)
 
-    %__MODULE__{
-      source: %{grants: grants, roles: roles},
-      roles: role_grants,
-      auth: auth,
-      scopes: scopes
-    }
+    struct(
+      %__MODULE__{
+        source: %{grants: grants, roles: roles},
+        roles: role_grants,
+        auth: auth,
+        scopes: scopes,
+        scope_resolver: scope_resolv
+      },
+      Keyword.take(attrs, [:transient_lut])
+    )
   end
 
   defp build_roles(roles, auth) do
@@ -63,8 +72,11 @@ defmodule Electric.Satellite.Permissions do
   # given `{table, privilege}` and makes that test efficient.
   defp classify_roles({grant_perm, grant_roles}) do
     case Enum.split_with(grant_roles, fn {_grant, role} -> Role.has_scope?(role) end) do
-      {scoped, [] = _unscoped} -> {grant_perm, %{global?: false, unscoped: [], scoped: scoped}}
-      {scoped, unscoped} -> {grant_perm, %{global?: true, unscoped: unscoped, scoped: scoped}}
+      {scoped, [] = _unscoped} ->
+        {grant_perm, %{global?: false, unscoped: [], scoped: scoped}}
+
+      {scoped, unscoped} ->
+        {grant_perm, %{global?: true, unscoped: unscoped, scoped: scoped}}
     end
   end
 
@@ -87,20 +99,20 @@ defmodule Electric.Satellite.Permissions do
     |> Enum.uniq()
   end
 
-  @spec write_allowed(t(), Scope.t(), Changes.change()) :: :ok | {:error, String.t()}
-  def write_allowed(%__MODULE__{} = perms, scope_resolv, change) do
-    change
-    |> expand_change(perms, scope_resolv)
-    |> verify_all_changes(perms, scope_resolv)
+  @spec write_allowed(t(), Changes.Transaction.t()) :: :ok | {:error, String.t()}
+  def write_allowed(%__MODULE__{} = perms, tx) do
+    tx.changes
+    |> Enum.flat_map(&expand_change(&1, perms))
+    |> verify_all_changes(perms, tx.lsn)
   end
 
-  @spec filter_read(t(), Scope.t(), [Changes.change()]) :: [Changes.change()]
-  def filter_read(%__MODULE__{} = perms, scope_resolv, changes) do
-    Enum.filter(changes, &validate_read(&1, perms.roles, scope_resolv))
+  @spec filter_read(t(), [Changes.change()]) :: [Changes.change()]
+  def filter_read(%__MODULE__{} = perms, %{changes: changes} = tx) do
+    %{tx | changes: Enum.filter(changes, &validate_read(&1, perms, tx.lsn))}
   end
 
-  defp expand_change(change, perms, scope_resolv) when is_update(change) do
-    if modifies_scope_fk?(change, perms, scope_resolv) do
+  defp expand_change(change, perms) when is_update(change) do
+    if modifies_scope_fk?(change, perms) do
       # expand an update that modifies a foreign key into the original update plus a
       # pseudo-insert into the scope defined by the updated foreign key
       insert = %Changes.NewRecord{relation: change.relation, record: change.record}
@@ -110,28 +122,28 @@ defmodule Electric.Satellite.Permissions do
     end
   end
 
-  defp expand_change(change, _perms, _scope_resolv) do
+  defp expand_change(change, _perms) do
     [change]
   end
 
-  defp modifies_scope_fk?(change, perms, scope_resolv) do
-    Enum.any?(perms.scopes, &Scope.modifies_fk?(scope_resolv, &1, change))
+  defp modifies_scope_fk?(change, perms) do
+    Enum.any?(perms.scopes, &Scope.modifies_fk?(perms.scope_resolver, &1, change))
   end
 
-  defp verify_all_changes(changes, perms, scope_resolv) do
+  defp verify_all_changes(changes, perms, lsn) do
     Enum.reduce_while(changes, :ok, fn change, :ok ->
-      case change_is_allowed(change, perms, scope_resolv) do
+      case change_is_allowed(change, perms, lsn) do
         :ok -> {:cont, :ok}
         {:error, _} = error -> {:halt, error}
       end
     end)
   end
 
-  defp change_is_allowed(change, perms, scope_resolv) do
+  defp change_is_allowed(change, perms, lsn) do
     action = required_permission(change)
 
     with {:ok, grant_roles} <- Map.fetch(perms.roles, action),
-         {:ok, role, _grant} <- grant_for_permission(grant_roles, scope_resolv, change) do
+         {:ok, role} <- grant_for_permission(grant_roles, perms, change, lsn) do
       Logger.debug("role #{inspect(role)} grants permission for #{inspect(change)}")
       :ok
     else
@@ -140,10 +152,10 @@ defmodule Electric.Satellite.Permissions do
     end
   end
 
-  defp validate_read(change, roles, scope_resolv) do
-    if grant_roles = Map.get(roles, {change.relation, :SELECT}) do
-      case grant_for_permission(grant_roles, scope_resolv, change) do
-        {:ok, _role, _grant} ->
+  defp validate_read(change, perms, lsn) do
+    if grant_roles = Map.get(perms.roles, {change.relation, :SELECT}) do
+      case grant_for_permission(grant_roles, perms, change, lsn) do
+        {:ok, _role} ->
           true
 
         _ ->
@@ -152,18 +164,33 @@ defmodule Electric.Satellite.Permissions do
     end
   end
 
-  defp grant_for_permission(%{global?: true, unscoped: grant_roles}, _scope_resolv, change) do
-    with {grant, role} <- grant_giving_permission(grant_roles, change) do
-      {:ok, role, grant}
+  defp grant_for_permission(%{global?: true, unscoped: grant_roles}, _perms, change, _lsn) do
+    grant_giving_permission(grant_roles, change)
+  end
+
+  defp grant_for_permission(%{global?: false, scoped: grant_roles}, perms, change, lsn) do
+    # find roles that are valid for the scope of the change
+    valid_grant_roles = roles_for_change(grant_roles, perms.scope_resolver, change)
+
+    case grant_giving_permission(valid_grant_roles, change) do
+      {:ok, role} ->
+        {:ok, role}
+
+      nil ->
+        transient_permission_for_change(grant_roles, perms, change, lsn)
     end
   end
 
-  defp grant_for_permission(%{global?: false, scoped: grant_roles}, scope_resolv, change) do
-    # find roles that are valid for the scope of the change
-    valid_grant_roles = roles_for_change(grant_roles, scope_resolv, change)
+  defp transient_permission_for_change(grant_roles, perms, change, lsn) do
+    roles = Enum.map(grant_roles, &elem(&1, 1))
+    transient_perms = Transient.for_roles(roles, lsn, perms.transient_lut)
 
-    with {grant, role} <- grant_giving_permission(valid_grant_roles, change) do
-      {:ok, role, grant}
+    if perm =
+         Enum.find(
+           transient_perms,
+           &change_in_scope?(perms.scope_resolver, &1.target_relation, &1.target_id, change)
+         ) do
+      {:ok, Enum.find(roles, &(&1.assign_id == perm.assign_id))}
     end
   end
 
@@ -173,6 +200,10 @@ defmodule Electric.Satellite.Permissions do
     |> Enum.find(fn {grant, _role} ->
       # now ensure that change is compatible with grant conditions
       change_matches_columns?(grant, change) && change_passes_check?(grant, change)
+    end)
+    |> then(fn
+      nil -> nil
+      {_grant, role} -> {:ok, role}
     end)
   end
 
@@ -209,14 +240,18 @@ defmodule Electric.Satellite.Permissions do
         # filter out roles whose scope doesn't match
         #   - lookup their root id from the change
         #   - then reject roles that don't match the {table, pk_id}
-        # an {:error, _} response here means the change doesn't belong in the scope -- transient
-        # runtime errors raise
 
-        case Scope.scope_id!(scope_resolv, scope_table, change) do
-          {:ok, id} -> scope_id == id
-          {:error, _reason} -> false
-        end
+        change_in_scope?(scope_resolv, scope_table, scope_id, change)
     end)
+  end
+
+  defp change_in_scope?(scope_resolver, scope_relation, scope_id, change) do
+    case Scope.scope_id!(scope_resolver, scope_relation, change) do
+      {:ok, id} -> scope_id == id
+      # an {:error, _} response here means the change doesn't belong in the scope -- transient
+      # runtime errors raise
+      {:error, _reason} -> false
+    end
   end
 
   defp add_anyone(roles) do
