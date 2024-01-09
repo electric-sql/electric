@@ -137,6 +137,7 @@ As a result, you must make sure (in terms of networking / firewalls) not only th
 import LogicalPublisherHost from './_LOGICAL_PUBLISHER_HOST.md'
 import LogicalPublisherPort from './_LOGICAL_PUBLISHER_PORT.md'
 
+#### LOGICAL_PUBLISHER_HOST
 
 <EnvVarConfig
     name="LOGICAL_PUBLISHER_HOST"
@@ -144,6 +145,8 @@ import LogicalPublisherPort from './_LOGICAL_PUBLISHER_PORT.md'
     example="example.com">
   <LogicalPublisherHost />
 </EnvVarConfig>
+
+#### LOGICAL_PUBLISHER_PORT
 
 <EnvVarConfig
     name="LOGICAL_PUBLISHER_PORT"
