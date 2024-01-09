@@ -116,7 +116,7 @@ end
 
 defmodule Electric.Postgres.Proxy.Prisma.Query.NamespaceVersionV5_2 do
   @moduledoc """
-  SELECT 
+  SELECT
     EXISTS(SELECT 1 FROM pg_namespace WHERE nspname = $1),
     version(),
     current_setting('server_version_num')::integer as numeric_version;
@@ -312,7 +312,7 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ConstraintV5_2 do
     AND contype NOT IN ('p', 'u', 'f')
   ORDER BY namespace, table_name, constr.contype, constraint_name;
 
-  Lists: 
+  Lists:
 
   - check constraints
   - constraint trigger
@@ -569,11 +569,11 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ColumnV4_8 do
        FROM pg_class
        JOIN pg_namespace on pg_namespace.oid = pg_class.relnamespace
        AND pg_namespace.nspname = ANY ( $1 )
-      ) as oid on oid.oid = att.attrelid 
+      ) as oid on oid.oid = att.attrelid
         AND relname = info.table_name
         AND namespace = info.table_schema
   LEFT OUTER JOIN pg_attrdef attdef ON attdef.adrelid = att.attrelid AND attdef.adnum = att.attnum AND table_schema = namespace
-  WHERE table_schema = ANY ( $1 ) 
+  WHERE table_schema = ANY ( $1 )
   ORDER BY namespace, table_name, ordinal_position;
   """
   @behaviour Electric.Postgres.Proxy.Prisma.Query
@@ -1048,9 +1048,9 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.ForeignKeyV4_8 do
       conname         AS constraint_name,
       child,
       parent,
-      table_name, 
+      table_name,
       namespace
-  FROM (SELECT 
+  FROM (SELECT
               ns.nspname AS \"namespace\",
               unnest(con1.conkey)                AS \"parent\",
               unnest(con1.confkey)                AS \"child\",
@@ -1349,7 +1349,7 @@ defmodule Electric.Postgres.Proxy.Prisma.Query.IndexV4_8 do
   @moduledoc """
   WITH rawindex AS (
       SELECT
-          indrelid, 
+          indrelid,
           indexrelid,
           indisunique,
           indisprimary,
