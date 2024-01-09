@@ -26,7 +26,7 @@ defmodule Electric.Satellite.Permissions do
 
   defguardp is_update(change) when is_struct(change, Changes.UpdatedRecord)
 
-  @spec new([%SatPerms.Grant{}], [%SatPerms.Role{}], Auth.t()) :: t()
+  @spec new([%SatPerms.Grant{}], [%SatPerms.Role{}], Keyword.t()) :: t()
   def new(grants, roles, attrs \\ []) do
     {:ok, auth} = Keyword.fetch(attrs, :auth)
     {:ok, scope_resolv} = Keyword.fetch(attrs, :scope_resolver)
@@ -100,14 +100,14 @@ defmodule Electric.Satellite.Permissions do
   end
 
   @spec write_allowed(t(), Changes.Transaction.t()) :: :ok | {:error, String.t()}
-  def write_allowed(%__MODULE__{} = perms, tx) do
+  def write_allowed(%__MODULE__{} = perms, %Changes.Transaction{} = tx) do
     tx.changes
     |> Enum.flat_map(&expand_change(&1, perms))
     |> verify_all_changes(perms, tx.lsn)
   end
 
-  @spec filter_read(t(), [Changes.change()]) :: [Changes.change()]
-  def filter_read(%__MODULE__{} = perms, %{changes: changes} = tx) do
+  @spec filter_read(t(), Changes.Transaction.t()) :: Changes.Transaction.t()
+  def filter_read(%__MODULE__{} = perms, %Changes.Transaction{changes: changes} = tx) do
     %{tx | changes: Enum.filter(changes, &validate_read(&1, perms, tx.lsn))}
   end
 
