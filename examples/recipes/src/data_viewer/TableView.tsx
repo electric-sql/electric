@@ -90,7 +90,10 @@ export const TableView = ({
             {columns.map((column) => (
               <TableCell
                 key={column.field}
-                sx={{ width: column.width }}
+                sx={{
+                  width: column.width,
+                  textAlign: column.type == 'number' ? 'right' : null
+                }}
                 sortDirection={sortMap[column.field]?.order}
               >
                 <TableSortLabel
@@ -113,7 +116,8 @@ export const TableView = ({
                     minWidth: column.width,
                     maxWidth: column.width,
                     textOverflow: 'ellipsis',
-                    overflow: 'hidden'
+                    overflow: 'hidden',
+                    textAlign: column.type == 'number' ? 'right' : null
                   }}
                   component="th" scope="row">
                   {(column.format ?? ((v: any) => v !== null ? '' + v : ''))

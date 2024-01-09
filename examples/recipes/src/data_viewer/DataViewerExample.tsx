@@ -24,7 +24,7 @@ export const DataViewerExample = () => {
   return (
     <Box>
       <NavigationBar title="Data Viewer" />
-      <Container sx={{ py: 4 }}>
+      <Container maxWidth="xl" sx={{ py: 4 }}>
         <DataViewer />
       </Container>
     </Box>

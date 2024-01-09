@@ -5,7 +5,7 @@ export const columns : ColumnDef[] = [
     field: 'order_id',
     headerName: 'Order ID',
     type: 'text',
-    width: 140,
+    width: 300,
   },
   {
     field: 'timestamp',
@@ -18,7 +18,7 @@ export const columns : ColumnDef[] = [
     field: 'price_amount',
     headerName: 'Price',
     type: 'number',
-    width: 110
+    width: 80
   },
   {
     field: 'price_currency',
@@ -30,13 +30,13 @@ export const columns : ColumnDef[] = [
     field: 'promo_code',
     headerName: 'Promo Code',
     type: 'text',
-    width: 120
+    width: 80
   },
   {
     field: 'customer_full_name',
     headerName: 'Customer',
     type: 'text',
-    width: 150
+    width: 180
   },
   {
     field: 'country',
@@ -48,6 +48,6 @@ export const columns : ColumnDef[] = [
     field: 'product',
     headerName: 'Product',
     type: 'text',
-    width: 150
+    width: 80
   },
 ];

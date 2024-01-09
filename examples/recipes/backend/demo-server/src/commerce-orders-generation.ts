@@ -22,7 +22,7 @@ function generateOrder(orderId: string) {
       from: Date.now() - YEAR_MS,
       to: Date.now()
     }).toISOString(),
-    Math.round(parseFloat(faker.commerce.price()) * 100),
+    parseFloat(faker.commerce.price()),
     faker.finance.currencyCode(),
     maybeGeneratePromoCode(),
     faker.person.fullName(),
