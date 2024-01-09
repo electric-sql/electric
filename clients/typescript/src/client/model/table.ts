@@ -60,7 +60,7 @@ export class Table<
       GetPayload
     >
 {
-  private _builder: Builder
+  public _builder: Builder
   private _executor: Executor
   private _shapeManager: IShapeManager
   private _qualifiedTableName: QualifiedTablename
