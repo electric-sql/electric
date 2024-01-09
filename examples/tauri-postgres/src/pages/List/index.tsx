@@ -21,7 +21,7 @@ function List({ showSearch = false }) {
       const embedding = await embedIssue(filterState.query ?? "");
       let results = await
         db.raw({
-          sql: `SELECT * FROM issue INNER JOIN document ON document.issue_id = issue.id ORDER BY document.embeddings <=> '${embedding}';`
+          sql: `SELECT issue.id, title, priority, status, modified, created, kanbanorder, username FROM issue INNER JOIN document ON document.issue_id = issue.id ORDER BY document.embeddings <=> '${embedding}';`
         })
       for (const result of results) {
         new_issues.push(result as Issue);
@@ -46,6 +46,16 @@ function List({ showSearch = false }) {
   const { db } = useElectric()!
   const { results } = useLiveQuery(
     db.issue.liveMany({
+      select: {
+        id: true,
+        title: true,
+        priority: true,
+        status: true,
+        modified: true,
+        created: true,
+        kanbanorder: true,
+        username: true,
+      },
       orderBy: { [filterState.orderBy]: filterState.orderDirection },
       where: filterStateToWhere(filterState),
     })

@@ -26,9 +26,9 @@ CREATE TABLE  IF NOT EXISTS "comment" (
     "username" TEXT NOT NULL,
     "issue_id" TEXT NOT NULL,
     "created_at" TEXT NOT NULL,
-    CONSTRAINT "comment_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "comment_pkey" PRIMARY KEY ("id")
     -- FOREIGN KEY (username) REFERENCES "user"(username),
-    FOREIGN KEY (issue_id) REFERENCES issue(id)
+    -- FOREIGN KEY (issue_id) REFERENCES issue(id) -- Disable for the tauri demo
 );
 
 -- ⚡

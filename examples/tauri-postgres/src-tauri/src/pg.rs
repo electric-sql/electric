@@ -39,7 +39,7 @@ pub async fn pg_setup(
         migration_dir,
     };
     let fetch_settings = PgFetchSettings {
-        version: PostgresVersion("15.4.0"), // version: PG_V15,
+        version: PostgresVersion("15.5.1"), // version: PG_V15,
         // custom_cache_dir: Some(PathBuf::from("./resources/pg-embed/")),
         // custom_cache_dir: None,
         ..Default::default()

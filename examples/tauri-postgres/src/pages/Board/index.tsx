@@ -9,6 +9,16 @@ function Board() {
   const { db } = useElectric()!
   const { results } = useLiveQuery(
     db.issue.liveMany({
+      select: {
+        id: true,
+        title: true,
+        priority: true,
+        status: true,
+        modified: true,
+        created: true,
+        kanbanorder: true,
+        username: true,
+      },
       orderBy: {
         kanbanorder: 'asc',
       },

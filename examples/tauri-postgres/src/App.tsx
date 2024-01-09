@@ -44,12 +44,10 @@ const App = () => {
       try {
         const client = await initElectric()
         setElectric(client)
-        const { synced } = await client.db.issue.sync({
-          include: {
-            comment: true,
-          },
-        })
-        await synced
+        const { synced: syncedIssues } = await client.db.issue.sync()
+        const { synced: syncedComments } = await client.db.comment.sync()
+        await syncedIssues
+        await syncedComments
         const timeToSync = performance.now()
         if (DEBUG) {
           console.log(`Synced in ${timeToSync}ms from page load`)

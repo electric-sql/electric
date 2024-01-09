@@ -23,6 +23,17 @@ function IssuePage() {
   const { db } = useElectric()!
   const { results: issue } = useLiveQuery(
     db.issue.liveUnique({
+      select: {
+        id: true,
+        title: true,
+        priority: true,
+        status: true,
+        modified: true,
+        created: true,
+        kanbanorder: true,
+        username: true,
+        description: true,
+      },
       where: { id: id },
     })
   )
