@@ -60,6 +60,18 @@ config :electric, Electric.Replication.Postgres,
 config :electric, Electric.Postgres.Proxy.Handler.Tracing, colour: true
 
 config :electric,
+  # The default acceptable clock drift is set to 2 seconds based on the following mental model:
+  #
+  #   - assume there's a server that generates JWTs and its internal clock has +1 second drift from UTC
+  #
+  #   - assume that Electric runs on a server that has -1 second clock drift from UTC
+  #
+  #   - when a new auth token is generated and is immediately sent to Electric, the latter will
+  #     see its `iat` date being 2 seconds in the future (minus network and processing latencies)
+  #
+  #   - JWT timestamp validation has 1-second resolution. So we pick 1 second as the upper bound for clock drift on
+  #     servers that regularly synchronize their clocks via NTP
+  #
   max_clock_drift_seconds: 2,
   telemetry_url: "https://checkpoint.electric-sql.com"
 
