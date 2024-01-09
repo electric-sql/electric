@@ -6,7 +6,7 @@ import { waitForPostgresConnection } from './pg-utils'
 import { startGeneratingMonitoringMetrics } from './monitoring-metrics'
 import { startProcessingBackgroundJobs } from './background-job-service'
 import { startGeneratingChatLogBotMessages } from './chat-room-bot'
-import { batchInsertOrders } from './commerce-analytics-data-generation'
+import { batchInsertOrders } from './commerce-orders-generation'
 
 const API_PORT = parseInt(process.env.DEMO_APP_PORT ?? '3123')
 const pgPool = new Pool({

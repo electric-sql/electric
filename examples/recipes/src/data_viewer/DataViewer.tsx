@@ -6,7 +6,7 @@ import { PaginationState, SortingState, TableView } from "./TableView";
 import { columns } from "./commerce_orders_columns";
 import { QueryBuilder } from "./QueryBuilder";
 
-export const CommerceAnalytics = () => {
+export const DataViewer = () => {
   // Keep pagination state to only load necessary data
   const [ pagination, setPagination ] = useState<PaginationState>({
     pageIndex: 0,

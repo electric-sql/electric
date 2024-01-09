@@ -9,7 +9,7 @@ const links = [
   { path: '/request-response', text: 'Request/Response Pattern' },
   { path: '/background-jobs', text: 'Background Jobs' },
   { path: '/chat-room', text: 'Chat Room' },
-  { path: '/commerce-analytics', text: 'Commerce Analytics' }
+  { path: '/data-viewer', text: 'Data Viewer' }
 ];
 
 function App() {

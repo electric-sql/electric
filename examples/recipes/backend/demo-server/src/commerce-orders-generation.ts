@@ -15,11 +15,6 @@ function maybeGeneratePromoCode(): string | null {
   return faker.helpers.arrayElement(PROMO_CODES)
 }
 
-function maybeGenerateCity(): string | null {
-  if (Math.random() < 0.8) return null
-  return faker.location.city()
-}
-
 function generateOrder(orderId: string) {
   return [
     orderId,
@@ -32,24 +27,8 @@ function generateOrder(orderId: string) {
     maybeGeneratePromoCode(),
     faker.person.fullName(),
     faker.location.country(),
-    maybeGenerateCity()
+    faker.commerce.product(),
   ]
-}
-
-function generateLineItems(orderId: string) {
-  return faker.helpers.multiple(
-    () => (
-      [
-        uuidv4(),
-        orderId,
-        faker.commerce.product(),
-        faker.number.int({ min: 1, max: 3})
-      ]
-    ),
-    {
-      count: faker.number.int({ min: 1, max: 3 })
-    }
-  )
 }
 
 /**
@@ -59,23 +38,18 @@ export async function batchInsertOrders(
   pgPool: Pool,
   numOrders: number = 10000
 ) {
-  // wait for tables to exist
-  await Promise.all([
-    waitForTable(pgPool, 'commerce_orders'),
-    waitForTable(pgPool, 'commerce_line_items')
-  ])
+  // wait for table to exist
+  await waitForTable(pgPool, 'commerce_orders');
 
   const client = await pgPool.connect();
 
   try {
     console.log(`Generating ${numOrders} random commerce orders.`)
-    // Generate orders and line items
+    // Generate orders
     const orders = []
-    const lineItems = []
     for (let i = 0; i < numOrders; i++) {
       const orderId = uuidv4()
       orders.push(generateOrder(orderId))
-      lineItems.push(...generateLineItems(orderId))
     }
 
     // Start a transaction
@@ -83,25 +57,17 @@ export async function batchInsertOrders(
 
     // Insert orders
     const insertOrderQuery = `
-      INSERT INTO commerce_orders(order_id, timestamp, price_amount_cents, price_currency, promo_code, customer_full_name, country, city)
+      INSERT INTO commerce_orders(order_id, timestamp, price_amount, price_currency, promo_code, customer_full_name, country, product)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8);`
 
-    // Insert line items
-    const insertLineItemQuery = `
-    INSERT INTO commerce_line_items(line_item_id, order_id, product_name, quantity)
-    VALUES ($1, $2, $3, $4);`
-
     // NOTE(msfstef): definitely not the best way to do this but it'll do
-    console.log(`Inserting ${orders.length} orders and ${lineItems.length} associated line items.`)
-    await Promise.all([
-      ...orders.map((o) => client.query(insertOrderQuery, o)),
-      ...lineItems.map((li) => client.query(insertLineItemQuery, li))
-    ])
+    console.log(`Inserting ${orders.length} orders.`)
+    await Promise.all(orders.map((o) => client.query(insertOrderQuery, o)))
 
     // Commit the transaction
     await client.query('COMMIT');
 
-    console.log(`Successfully inserted ${numOrders} orders and associated line items.`);
+    console.log(`Successfully inserted ${numOrders} orders.`);
   } catch (error) {
     // Rollback the transaction in case of any error
     console.log(`Failed to generate and insert orders - rolling back transaction.`)

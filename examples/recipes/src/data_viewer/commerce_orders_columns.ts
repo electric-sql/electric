@@ -15,10 +15,9 @@ export const columns : ColumnDef[] = [
     width: 200,
   },
   {
-    field: 'price_amount_cents',
+    field: 'price_amount',
     headerName: 'Price',
     type: 'number',
-    format: (val) => isNaN(val) ? '' : ((val as number) / 100).toLocaleString(),
     width: 110
   },
   {
@@ -46,8 +45,8 @@ export const columns : ColumnDef[] = [
     width: 150
   },
   {
-    field: 'city',
-    headerName: 'City',
+    field: 'product',
+    headerName: 'Product',
     type: 'text',
     width: 150
   },

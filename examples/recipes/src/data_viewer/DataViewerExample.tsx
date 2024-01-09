@@ -2,21 +2,19 @@ import { Box, Container } from "@mui/material"
 import { NavigationBar } from "../components/NavigationBar"
 import { useEffect } from "react"
 import { useElectric } from "../electric/ElectricWrapper"
-import { CommerceAnalytics } from "./CommerceAnalytics"
+import { DataViewer } from "./DataViewer"
 
-export const CommerceAnalyticsExample = () => {
+export const DataViewerExample = () => {
   const { db } = useElectric()!
   useEffect(() => {
     const syncItems = async () => {
       // Resolves when the shape subscription has been established.
-      const shape = await db.commerce_orders.sync({
-        // include: {
-        //   commerce_line_items: true
-        // }
-      })
+      const shape = await db.commerce_orders.sync()
+      console.log('syncing')
 
       // Resolves when the data has been synced into the local database.
       await shape.synced
+      console.log('synced')
     }
 
     syncItems()
@@ -25,9 +23,9 @@ export const CommerceAnalyticsExample = () => {
 
   return (
     <Box>
-      <NavigationBar title="Analytics" />
+      <NavigationBar title="Data Viewer" />
       <Container sx={{ py: 4 }}>
-        <CommerceAnalytics />
+        <DataViewer />
       </Container>
     </Box>
   )

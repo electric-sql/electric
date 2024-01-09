@@ -18,7 +18,7 @@ import { MonitoringMetricsExample } from './monitoring_metrics/MonitoringMetrics
 import { RequestResponseExample } from './request_response/RequestResponseExample.tsx';
 import { BackgroundJobsExample } from './background_jobs/BackgroundJobsExample.tsx';
 import { ChatRoomExample } from './chat_room/ChatRoomExample.tsx';
-import { CommerceAnalyticsExample } from './commerce_analytics/CommerceAnalyticsExample.tsx';
+import { DataViewerExample } from './data_viewer/DataViewerExample.tsx';
 
 
 const router = createBrowserRouter([
@@ -51,8 +51,8 @@ const router = createBrowserRouter([
     element: <ChatRoomExample />
   },
   {
-    path: "/commerce-analytics",
-    element: <CommerceAnalyticsExample />
+    path: "/data-viewer",
+    element: <DataViewerExample />
   },
 ]);
 
