@@ -12,7 +12,7 @@ Bringing it all together and coming back to a high level, what kind of apps does
 
 ## Postgres to local-first
 
-ElectricSQL is designed to support relational applications which match a particular pattern. This pattern has a central, Postgres-based, backend application as a control plane or management system. You can then then expose multiple local-first apps and interfaces on top of this, much as you would with traditional API-based architectures.
+ElectricSQL is designed to support relational applications which match a particular pattern. This pattern has a central, Postgres-based, backend application as a control plane or management system. You can then expose multiple local-first apps and interfaces on top of this, much as you would with traditional API-based architectures.
 
 In this architecture, ElectricSQL replaces traditional APIs and state transfer protocols, like REST and GraphQL. You still define your data model [using your existing web framework](../usage/data-modelling/migrations.md), like Prisma, Phoenix or Rails -- any framework that handles migrations and works with Postgres.
 
