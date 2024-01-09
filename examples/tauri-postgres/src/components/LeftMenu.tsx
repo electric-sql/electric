@@ -8,6 +8,7 @@ import { memo, RefObject, useRef, useState, useContext } from 'react'
 import { useConnectivityState } from 'electric-sql/react'
 import { BsPencilSquare as AddIcon } from 'react-icons/bs'
 import { BsSearch as SearchIcon } from 'react-icons/bs'
+import { BsChat as ChatIcon } from 'react-icons/bs'
 import { BsFillGrid3X3GapFill as BoardIcon } from 'react-icons/bs'
 import { BsCollectionFill as IssuesIcon } from 'react-icons/bs'
 import { MdKeyboardArrowDown as ExpandMore } from 'react-icons/md'
@@ -96,9 +97,15 @@ function LeftMenu() {
             </button>
             <Link
               to="/search"
-              className="inline-flex ms-2 items-center px-2 py-2 mt-3 bg-white border border-gray-300 rounded hover:bg-gray-100 h-7"
+              className="inline-flex ms-1 items-center px-2 py-2 mt-3 bg-white border border-gray-300 rounded hover:bg-gray-100 h-7"
             >
               <SearchIcon className="w-3.5 h-3.5" />
+            </Link>
+            <Link
+              to="/chat"
+              className="inline-flex ms-1 items-center px-2 py-2 mt-3 bg-white border border-gray-300 rounded hover:bg-gray-100 h-7"
+            >
+              <ChatIcon className="w-3.5 h-3.5" />
             </Link>
           </div>
         </div>

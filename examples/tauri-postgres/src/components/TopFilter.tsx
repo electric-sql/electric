@@ -9,6 +9,7 @@ import { MenuContext } from '../App'
 import FilterMenu from './contextmenu/FilterMenu'
 import { useFilterState } from '../utils/filterState'
 import { PriorityDisplay, StatusDisplay } from '../types/issue'
+import Select from './Select'
 
 interface Props {
   issues: Issue[]
@@ -24,8 +25,6 @@ export default function ({
   hideSort,
   showSearch,
   title = 'All issues',
-  searchType = 'BasicSearch',
-  setSearchType
 }: Props) {
   const { db } = useElectric()!
   const [filterState, setFilterState] = useFilterState()
@@ -67,10 +66,6 @@ export default function ({
     } else if (eqStatuses(['todo', 'in_progress'])) {
       title = 'Active'
     }
-  }
-
-  const onSearchTypeChange = (e) => {
-    setSearchType(e.target.value)
   }
 
   return (
@@ -173,42 +168,23 @@ export default function ({
               value={searchQuery}
               onChange={(e) => handleSearch(e.target.value)}
             />
-          </div>
-          <div className="flex justify-start flex-shrink-0 pl-2 pr-6 border-b border-gray-200 lg:pl-9 py-2">
-            <div>Select type of search:</div>
-            <div style={{padding: 20}}>
-              <label htmlFor='basicSearch'>Basic Search</label>
-              <input
-                type="radio"
-                name="basicSearch"
-                value="basicSearch"
-                id="basicSearch"
-                checked={searchType === 'basicSearch'}
-                onChange={onSearchTypeChange}
-              />
-            </div>
-            <div style={{padding: 20}}>
-              <label htmlFor='vectorSearch'>Vector Search</label>
-              <input
-                type="radio"
-                name="vectorSearch"
-                value="vectorSearch"
-                id="vectorSearch"
-                checked={searchType === 'vectorSearch'}
-                onChange={onSearchTypeChange}
-              />
-            </div>
-            <div style={{padding: 20}}>
-              <label htmlFor='chat'>Chat</label>
-              <input
-                type="radio"
-                name="chat"
-                value="chat"
-                id="chat"
-                checked={searchType === 'chat'}
-                onChange={onSearchTypeChange}
-              />
-            </div>
+            <select
+              value={filterState.searchType ?? 'basic'}
+              onChange={(e) => {
+                setFilterState({
+                  ...filterState,
+                  searchType: e.target.value as 'basic' | 'vector',
+                })
+              }}
+              className={`
+                form-select text-sm focus:ring-transparent text-gray-800 
+               bg-gray-100 rounded pr-4.5 bg-right pl-2 py-0 appearance-none 
+                focus:outline-none border-none ml-2`}
+              style={{ height: 36 }}
+            >
+              <option value="basic">Basic</option>
+              <option value="vector">Vector</option>
+            </select>
           </div>
         </>
       )}

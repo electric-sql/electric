@@ -10,7 +10,6 @@ export type { Issue } from './generated/client'
 export const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
 
 const discriminator = 'linearlite'
-const distPath = '/'
 
 // import.meta.env is a special object that Vite provides for accessing
 // environment variables at build time and runtime.
