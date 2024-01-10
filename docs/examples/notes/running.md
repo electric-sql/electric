@@ -39,7 +39,7 @@ npm run start
 
 ## Running your own Postgres
 
-`npm un backend:start` uses Docker Compose to start a connected Postgres and Electric. To run the Electric sync service on top of an *existing* Postgres instead, make sure that:
+`npm run backend:start` uses Docker Compose to start a connected Postgres and Electric. To run the Electric sync service on top of an *existing* Postgres instead, make sure that:
 
 - your Postgres is up and running and configured with `wal_level = 'logical'`
 - you don't already have a publication called `electric_publication`
