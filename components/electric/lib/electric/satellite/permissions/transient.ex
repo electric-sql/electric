@@ -23,7 +23,7 @@ defmodule Electric.Satellite.Permissions.Transient do
   @spec for_roles([Permissions.Role.t()], atom()) :: [t()]
   def for_roles(roles, lsn, name \\ __MODULE__) do
     roles
-    |> Stream.flat_map(&filter_for_role/1)
+    |> Stream.map(&filter_for_role/1)
     |> Stream.flat_map(&apply_filter(&1, name))
     |> Enum.filter(&filter_expired(&1, lsn))
   end
@@ -43,11 +43,11 @@ defmodule Electric.Satellite.Permissions.Transient do
   end
 
   defp filter_for_role(%Permissions.Role{assign_id: assign_id, scope: {_, scope_id}} = _role) do
-    [{assign_id, scope_id, :"$1"}]
+    {assign_id, scope_id, :"$1"}
   end
 
-  defp apply_filter(match, table) do
-    table
+  defp apply_filter(match, name) do
+    name
     |> :ets.match(match)
     |> Stream.map(fn [m] -> m end)
   end

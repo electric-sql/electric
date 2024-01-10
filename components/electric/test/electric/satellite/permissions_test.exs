@@ -353,6 +353,36 @@ defmodule Electric.Satellite.PermissionsTest do
                )
     end
 
+    test "overlapping global and scoped perms", cxt do
+      # Test that even though the global perm doesn't grant
+      # the required permissions, the scoped perms are checked
+      # as well. The rule is that if *any* grant gives the perm
+      # then we have it, so we need to check every applicable grant
+      # until we run out of get permission.
+      perms =
+        perms_build(
+          cxt,
+          [
+            ~s[GRANT UPDATE (description) ON #{table(@issues)} TO (projects, 'editor')],
+            ~s[GRANT UPDATE (title) ON #{table(@issues)} TO 'editor']
+          ],
+          [
+            Roles.role("editor", @projects, "p1"),
+            Roles.role("editor")
+          ]
+        )
+
+      assert :ok =
+               Permissions.write_allowed(
+                 perms,
+                 Chgs.tx([
+                   Chgs.update(@issues, %{"id" => "i1"}, %{
+                     "description" => "updated"
+                   })
+                 ])
+               )
+    end
+
     test "AUTHENTICATED w/user_id", cxt do
       perms =
         perms_build(
