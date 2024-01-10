@@ -65,6 +65,21 @@ defmodule Electric.Postgres.Proxy.QueryAnalyser.Impl do
     end
   end
 
+  def check_column_constraints(%PgQuery.ColumnDef{constraints: constraints}) do
+    Enum.find_value(constraints, :ok, &validate_column_constraint/1)
+  end
+
+  # This function clause mirrors the __validate_table_column_defaults() SQL procedure.
+  #
+  # It is important that this implementation and the one in __validate_table_column_defaults() behave the same to
+  # ensure consistent handling of columns both when a table is first electrified and when a new column is added to an
+  # already electrified table.
+  defp validate_column_constraint(%PgQuery.Node{
+         node: {:constraint, %PgQuery.Constraint{contype: :CONSTR_DEFAULT}}
+       }) do
+    {:error, :unsupported_default_clause}
+  end
+
   def sql_table(%{table: {schema, table}}) do
     ~s["#{schema}"."#{table}"]
   end
@@ -179,10 +194,10 @@ defimpl QueryAnalyser, for: PgQuery.AlterTableStmt do
   defp analyse_alter_table_cmd(%{subtype: :AT_AddColumn} = cmd, analysis) do
     column_def = unwrap_node(cmd.def)
 
-    case check_column_type(column_def) do
-      :ok ->
-        {:cont, %{analysis | capture?: true}}
-
+    with :ok <- check_column_type(column_def),
+         :ok <- check_column_constraints(column_def) do
+      {:cont, %{analysis | capture?: true}}
+    else
       {:error, {:invalid_type, type}} ->
         {:halt,
          %{
@@ -190,7 +205,18 @@ defimpl QueryAnalyser, for: PgQuery.AlterTableStmt do
            | allowed?: false,
              error: %{
                code: "EX001",
-               message: ~s[Cannot electrify column of type #{inspect(type)}]
+               message: "Cannot electrify column of type " <> inspect(type)
+             }
+         }}
+
+      {:error, :unsupported_default_clause} ->
+        {:halt,
+         %{
+           analysis
+           | allowed?: false,
+             error: %{
+               code: "EX002",
+               message: "Cannot electrify column with DEFAULT clause"
              }
          }}
     end

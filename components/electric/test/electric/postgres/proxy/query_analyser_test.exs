@@ -245,6 +245,24 @@ defmodule Electric.Postgres.Proxy.QueryAnalyserTest do
       end)
     end
 
+    test "ALTER TABLE .. ADD COLUMN: default clause", cxt do
+      query = "ALTER TABLE public.truths ADD COLUMN with_default text DEFAULT ''"
+
+      assert [
+               %QueryAnalysis{
+                 action: {:alter, "table"},
+                 table: {"public", "truths"},
+                 electrified?: true,
+                 tx?: true,
+                 allowed?: false,
+                 ast: %{},
+                 source: %M.Query{query: ^query},
+                 sql: ^query,
+                 error: %{message: "Cannot electrify column with DEFAULT clause"}
+               }
+             ] = analyse(query, cxt)
+    end
+
     test "ALTER TABLE .. DROP COLUMN", cxt do
       assert [
                %QueryAnalysis{
