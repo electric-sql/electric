@@ -51,6 +51,7 @@ import EnvVarConfig from '@site/src/components/EnvVarConfig'
 import DatabaseRequireSsl from './_DATABASE_REQUIRE_SSL.md'
 import DatabaseUrl from './_DATABASE_URL.md'
 import DatabaseUseIpv6 from './_DATABASE_USE_IPV6.md'
+import ElectricUseIpv6 from './_ELECTRIC_USE_IPV6.md'
 import HttpPort from './_HTTP_PORT.md'
 
 
@@ -81,6 +82,15 @@ Configure how Electric connects to Postgres and exposes its HTTP/WebSocket API.
     defaultValue="true"
     example="false">
   <DatabaseUseIpv6 />
+</EnvVarConfig>
+
+### ELECTRIC_USE_IPv6
+
+<EnvVarConfig
+    name="ELECTRIC_USE_IPV6"
+    defaultValue="true"
+    example="false">
+  <ElectricUseIpv6 />
 </EnvVarConfig>
 
 ### HTTP_PORT
