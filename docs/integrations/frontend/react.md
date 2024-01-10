@@ -219,7 +219,7 @@ The live query is re-run:
 1. when any of the data in any of the tables it depends on changes
 2. when any of the query parameters change
 
-By default, `useLiveQuery` detects query parameter changes by comparing an [ohash](https://github.com/unjs/ohash) of the whole query paramter object. So in this case, an hash of the `{where: {status: ...}}` object.
+By default, `useLiveQuery` detects query parameter changes by comparing an [ohash](https://github.com/unjs/ohash) of the whole query parameter object. So in this case, an hash of the `{where: {status: ...}}` object.
 
 ```tsx
 const Component = () => {
