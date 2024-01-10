@@ -128,7 +128,7 @@ Postgres |                                       | Electric
 :::caution Caution
 In logical replication mode:
 
-1. the [database user](#database-user-permissions) that Electric connects to Postgres as must have [`SUPERUSER` status](https://www.postgresql.org/docs/16/role-attributes.html#ROLE-ATTRIBUTES)
+1. the [database user](#database-user-permissions) that Electric connects to Postgres as must have [`SUPERUSER` role attribute](https://www.postgresql.org/docs/16/role-attributes.html#ROLE-ATTRIBUTES)
 2. Postgres must be able to connect to Electric (i.e.: must be able to establish an outbound TCP connection) on the host and port that you configure
 
 As a result, you must make sure (in terms of networking / firewalls) not only that Postgres is reachable from Electric but also that Electric is reachable from Postgres. And Electric must know its own address, in order to provide it to Postgres when setting up the logical replication publication that allows writes to be replicated into Postgres.
@@ -181,7 +181,7 @@ The `userspec` section of this connection string specifies the database user tha
 
 ### Permissions for logical replication mode
 
-In [logical replication mode](#logical-replication-mode), the database user must have [`LOGIN` and `SUPERUSER`](https://www.postgresql.org/docs/16/role-attributes.html#ROLE-ATTRIBUTES). You can create a user with these permissions using, e.g.:
+In [logical replication mode](#logical-replication-mode), the database user must have [`LOGIN` and `SUPERUSER` role attributes](https://www.postgresql.org/docs/16/role-attributes.html#ROLE-ATTRIBUTES). You can create a user with these attributes using, e.g.:
 
 ```sql
 CREATE ROLE electric
