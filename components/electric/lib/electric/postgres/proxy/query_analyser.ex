@@ -34,18 +34,7 @@ defmodule Electric.Postgres.Proxy.QueryAnalysis do
 end
 
 defmodule Electric.Postgres.Proxy.QueryAnalyser.Impl do
-  alias Electric.Postgres.Extension.SchemaLoader
-
   def unwrap_node(%PgQuery.Node{node: {_type, node}}), do: node
-
-  def is_electrified?(nil, _loader) do
-    false
-  end
-
-  def is_electrified?({_sname, _tname} = table, loader) do
-    {:ok, electrified?} = SchemaLoader.table_electrified?(loader, table)
-    electrified?
-  end
 
   @valid_types for t <- Electric.Postgres.supported_types(), do: to_string(t)
 
