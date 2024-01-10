@@ -78,8 +78,8 @@ Configure how Electric connects to Postgres and exposes its HTTP/WebSocket API.
 
 <EnvVarConfig
     name="DATABASE_USE_IPV6"
-    defaultValue="false"
-    example="true">
+    defaultValue="true"
+    example="false">
   <DatabaseUseIpv6 />
 </EnvVarConfig>
 
