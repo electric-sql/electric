@@ -12,7 +12,6 @@ defmodule Electric.Satellite.Auth.Insecure do
 
   @behaviour Electric.Satellite.Auth
 
-  import Joken, only: [current_time: 0]
   alias Electric.Satellite.Auth
   alias Electric.Satellite.Auth.JWTUtil
 
@@ -30,9 +29,9 @@ defmodule Electric.Satellite.Auth.Insecure do
   def build_config(opts) do
     token_config =
       %{}
-      |> Joken.Config.add_claim("iat", nil, &(&1 < current_time()))
-      |> Joken.Config.add_claim("nbf", nil, &(&1 < current_time()))
-      |> Joken.Config.add_claim("exp", nil, &(&1 > current_time()))
+      |> Joken.Config.add_claim("iat", nil, &JWTUtil.past_timestamp?/1)
+      |> Joken.Config.add_claim("nbf", nil, &JWTUtil.past_timestamp?/1)
+      |> Joken.Config.add_claim("exp", nil, &JWTUtil.future_timestamp?/1)
 
     %{namespace: opts[:namespace], joken_config: token_config}
   end
