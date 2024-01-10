@@ -1,4 +1,4 @@
-The starter template has set you up with a simple data model defined in `./db/migrations`. To evolve the schema you can add additional files and run `yarn db:migrate` again, e.g.:
+The starter template has set you up with a simple data model defined in `./db/migrations`. To evolve the schema you can add additional files and run `npm run db:migrate` again, e.g.:
 
 ```shell
 echo '
@@ -12,5 +12,5 @@ echo '
   ALTER TABLE accounts ENABLE ELECTRIC;
 ' > db/migrations/02-create_foo_table.sql
 
-yarn db:migrate
+npm run db:migrate
 ```

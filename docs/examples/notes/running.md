@@ -8,38 +8,38 @@ Source code for the example applications is in [electric-sql/electric/examples](
 Install dependencies:
 
 ```shell
-yarn
+npm install
 ```
 
 Run the backend services ([Postgres](../../usage/installation/postgres.md) + [Electric](../../usage/installation/service.md)):
 
 ```shell
-yarn backend:start
+npm run backend:start
 ```
 
 Apply database [migrations](../../usage/data-modelling/migrations.md):
 
 ```shell
-yarn db:migrate
+npm run db:migrate
 ```
 
 Use the database schema to generate your [type-safe Client](../../usage/data-access/client.md):
 
 ```shell
-yarn client:generate
+npm run client:generate
 ```
 
-(Or `yarn client:watch` to monitor for database schema changes and auto-generate the client whenever the schema changes.)
+(Or `npm run client:watch` to monitor for database schema changes and auto-generate the client whenever the schema changes.)
 
 Start the app:
 
 ```shell
-yarn start
+npm run start
 ```
 
 ## Running your own Postgres
 
-`yarn backend:start` uses Docker Compose to start a connected Postgres and Electric. To run the Electric sync service on top of an *existing* Postgres instead, make sure that:
+`npm un backend:start` uses Docker Compose to start a connected Postgres and Electric. To run the Electric sync service on top of an *existing* Postgres instead, make sure that:
 
 - your Postgres is up and running and configured with `wal_level = 'logical'`
 - you don't already have a publication called `electric_publication`

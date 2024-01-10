@@ -9,7 +9,7 @@ ElectricSQL supports [Node.js](https://nodejs.org) server application using the 
 Add `better-sqlite3` as a dependency to your app, e.g.:
 
 ```shell
-yarn add better-sqlite3
+npm install better-sqlite3
 ```
 
 ## Usage
