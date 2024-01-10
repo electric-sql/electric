@@ -171,7 +171,7 @@ defmodule Electric.Satellite.PermissionsTest do
     end
   end
 
-  describe "write_allowed/3" do
+  describe "validate_write/3" do
     test "scoped role, scoped grant", cxt do
       perms =
         perms_build(
@@ -183,7 +183,7 @@ defmodule Electric.Satellite.PermissionsTest do
         )
 
       assert {:error, _} =
-               Permissions.write_allowed(
+               Permissions.validate_write(
                  perms,
                  # issue i1 belongs to project p1
                  Chgs.tx([
@@ -192,7 +192,7 @@ defmodule Electric.Satellite.PermissionsTest do
                )
 
       assert :ok =
-               Permissions.write_allowed(
+               Permissions.validate_write(
                  perms,
                  # issue i3 belongs to project p2
                  Chgs.tx([
@@ -201,7 +201,7 @@ defmodule Electric.Satellite.PermissionsTest do
                )
 
       assert :ok =
-               Permissions.write_allowed(
+               Permissions.validate_write(
                  perms,
                  # issue i3 belongs to project p2
                  Chgs.tx([
@@ -223,7 +223,7 @@ defmodule Electric.Satellite.PermissionsTest do
         )
 
       assert {:error, _} =
-               Permissions.write_allowed(
+               Permissions.validate_write(
                  perms,
                  # issue i1 belongs to project p1
                  Chgs.tx([
@@ -244,7 +244,7 @@ defmodule Electric.Satellite.PermissionsTest do
         )
 
       assert {:error, _} =
-               Permissions.write_allowed(
+               Permissions.validate_write(
                  perms,
                  # issue i1 belongs to project p1
                  Chgs.tx([
@@ -253,7 +253,7 @@ defmodule Electric.Satellite.PermissionsTest do
                )
 
       assert :ok =
-               Permissions.write_allowed(
+               Permissions.validate_write(
                  perms,
                  # issue i3 belongs to project p2
                  Chgs.tx([
@@ -276,7 +276,7 @@ defmodule Electric.Satellite.PermissionsTest do
         )
 
       assert {:error, _} =
-               Permissions.write_allowed(
+               Permissions.validate_write(
                  perms,
                  Chgs.tx([
                    Chgs.insert(@comments, %{"id" => "c100", "issue_id" => "i1"})
@@ -284,7 +284,7 @@ defmodule Electric.Satellite.PermissionsTest do
                )
 
       assert :ok =
-               Permissions.write_allowed(
+               Permissions.validate_write(
                  perms,
                  Chgs.tx([
                    Chgs.insert(@reactions, %{"id" => "r100"})
@@ -303,7 +303,7 @@ defmodule Electric.Satellite.PermissionsTest do
         )
 
       assert :ok =
-               Permissions.write_allowed(
+               Permissions.validate_write(
                  perms,
                  Chgs.tx([
                    Chgs.update(
@@ -317,7 +317,7 @@ defmodule Electric.Satellite.PermissionsTest do
                )
 
       assert {:error, _} =
-               Permissions.write_allowed(
+               Permissions.validate_write(
                  perms,
                  Chgs.tx([
                    Chgs.insert(@comments, %{"id" => "c100", "issue_id" => "i1"})
@@ -340,7 +340,7 @@ defmodule Electric.Satellite.PermissionsTest do
         )
 
       assert :ok =
-               Permissions.write_allowed(
+               Permissions.validate_write(
                  perms,
                  Chgs.tx([
                    Chgs.update(@regions, %{"id" => "r1", "name" => "region"}, %{
@@ -370,7 +370,7 @@ defmodule Electric.Satellite.PermissionsTest do
         )
 
       assert :ok =
-               Permissions.write_allowed(
+               Permissions.validate_write(
                  perms,
                  Chgs.tx([
                    Chgs.update(@issues, %{"id" => "i1"}, %{
@@ -389,7 +389,7 @@ defmodule Electric.Satellite.PermissionsTest do
         )
 
       assert :ok =
-               Permissions.write_allowed(
+               Permissions.validate_write(
                  perms,
                  Chgs.tx([
                    Chgs.insert(@comments, %{"id" => "c10"})
@@ -406,7 +406,7 @@ defmodule Electric.Satellite.PermissionsTest do
         )
 
       assert {:error, _} =
-               Permissions.write_allowed(
+               Permissions.validate_write(
                  perms,
                  Chgs.tx([
                    Chgs.insert(@comments, %{"id" => "c10"})
@@ -424,7 +424,7 @@ defmodule Electric.Satellite.PermissionsTest do
         )
 
       assert {:error, _} =
-               Permissions.write_allowed(
+               Permissions.validate_write(
                  perms,
                  Chgs.tx([
                    Chgs.insert(@comments, %{"id" => "c10"})
@@ -442,7 +442,7 @@ defmodule Electric.Satellite.PermissionsTest do
         )
 
       assert :ok =
-               Permissions.write_allowed(
+               Permissions.validate_write(
                  perms,
                  Chgs.tx([
                    Chgs.insert(@comments, %{"id" => "c10"})
@@ -464,7 +464,7 @@ defmodule Electric.Satellite.PermissionsTest do
         )
 
       assert :ok =
-               Permissions.write_allowed(
+               Permissions.validate_write(
                  perms,
                  Chgs.tx([
                    Chgs.insert(@comments, %{"id" => "c10", "text" => "something"})
@@ -472,7 +472,7 @@ defmodule Electric.Satellite.PermissionsTest do
                )
 
       assert {:error, _} =
-               Permissions.write_allowed(
+               Permissions.validate_write(
                  perms,
                  Chgs.tx([
                    Chgs.insert(@comments, %{
@@ -484,7 +484,7 @@ defmodule Electric.Satellite.PermissionsTest do
                )
 
       assert :ok =
-               Permissions.write_allowed(
+               Permissions.validate_write(
                  perms,
                  Chgs.tx([
                    Chgs.update(@comments, %{"id" => "c10"}, %{"text" => "updated"})
@@ -492,7 +492,7 @@ defmodule Electric.Satellite.PermissionsTest do
                )
 
       assert {:error, _} =
-               Permissions.write_allowed(
+               Permissions.validate_write(
                  perms,
                  Chgs.tx([
                    Chgs.update(@comments, %{"id" => "c10"}, %{
@@ -520,7 +520,7 @@ defmodule Electric.Satellite.PermissionsTest do
         )
 
       assert :ok =
-               Permissions.write_allowed(
+               Permissions.validate_write(
                  perms,
                  Chgs.tx([
                    Chgs.update(@issues, %{"id" => "i1"}, %{"project_id" => "p3"})
@@ -529,7 +529,7 @@ defmodule Electric.Satellite.PermissionsTest do
 
       # attempt to move an issue into a project we don't have write access to
       assert {:error, _} =
-               Permissions.write_allowed(
+               Permissions.validate_write(
                  perms,
                  Chgs.tx([
                    Chgs.update(@issues, %{"id" => "i1"}, %{"project_id" => "p2"})
@@ -556,7 +556,7 @@ defmodule Electric.Satellite.PermissionsTest do
         )
 
       assert {:error, _} =
-               Permissions.write_allowed(
+               Permissions.validate_write(
                  perms,
                  Chgs.tx([
                    Chgs.update(@issues, %{"id" => "i3"}, %{"description" => "changed"})
@@ -578,7 +578,7 @@ defmodule Electric.Satellite.PermissionsTest do
                  scope_id: "p1",
                  valid_to: LSN.new(lsn + 1)
                )
-               |> Permissions.write_allowed(
+               |> Permissions.validate_write(
                  Chgs.tx([Chgs.update(@issues, %{"id" => "i3"}, %{"description" => "changed"})],
                    lsn: lsn
                  )
@@ -597,7 +597,7 @@ defmodule Electric.Satellite.PermissionsTest do
                  scope_id: "p1",
                  valid_to: LSN.new(lsn + 1)
                )
-               |> Permissions.write_allowed(
+               |> Permissions.validate_write(
                  Chgs.tx([Chgs.update(@issues, %{"id" => "i3"}, %{"description" => "changed"})],
                    lsn: lsn
                  )
@@ -616,7 +616,7 @@ defmodule Electric.Satellite.PermissionsTest do
                  scope_id: "p1",
                  valid_to: LSN.new(lsn)
                )
-               |> Permissions.write_allowed(
+               |> Permissions.validate_write(
                  Chgs.tx([Chgs.update(@issues, %{"id" => "i3"}, %{"description" => "changed"})],
                    lsn: lsn + 1
                  )
@@ -665,5 +665,29 @@ defmodule Electric.Satellite.PermissionsTest do
                Chgs.insert(@workspaces, %{"id" => "w100"})
              ]
     end
+  end
+
+  test "ignores column limits in grants", cxt do
+    perms =
+      perms_build(
+        cxt,
+        [
+          ~s[GRANT READ (id, title) ON #{table(@issues)} TO 'editor']
+        ],
+        [
+          Roles.role("editor")
+        ]
+      )
+
+    # none of these changes would pass a write validation
+    changes = [
+      Chgs.update(@issues, %{"id" => "i1"}, %{"text" => "updated"}),
+      Chgs.insert(@issues, %{"id" => "i100", "project_id" => "p1"}),
+      Chgs.update(@issues, %{"id" => "i3"}, %{"colour" => "red"})
+    ]
+
+    filtered_tx = Permissions.filter_read(perms, Chgs.tx(changes))
+
+    assert filtered_tx.changes == changes
   end
 end

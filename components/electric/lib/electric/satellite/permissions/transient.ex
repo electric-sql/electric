@@ -1,7 +1,7 @@
 defmodule Electric.Satellite.Permissions.Transient do
   use GenServer
 
-  alias Electric.Satellite.Permissions
+  alias Electric.Satellite.{Permissions, Permissions.RoleGrant}
   alias Electric.Postgres.Lsn
 
   defstruct [:id, :assign_id, :scope_id, :target_relation, :target_id, :valid_to]
@@ -31,9 +31,17 @@ defmodule Electric.Satellite.Permissions.Transient do
     GenServer.call(name, :table_ref)
   end
 
-  @spec for_roles([Permissions.Role.t()], lut()) :: [t()]
-  def for_roles(roles, lsn, table \\ __MODULE__) do
-    roles
+  @doc """
+  Find transient permissions that belong to the given roles.
+
+  The roles are passed as either a list of bare `#{Permissions.Role}` structs
+  or wrapped within some container object to be extracted by the `mapper_fun/1`
+
+  This way we can associate
+  """
+  @spec for_roles([RoleGrant.t()], Permissions.lsn(), lut()) :: [{RoleGrant.t(), t()}]
+  def for_roles(role_grants, lsn, table) do
+    role_grants
     |> Stream.map(&filter_for_role/1)
     |> Stream.flat_map(&apply_filter(&1, table_ref!(table)))
     |> Enum.filter(&filter_expired(&1, lsn))
@@ -49,21 +57,22 @@ defmodule Electric.Satellite.Permissions.Transient do
   end
 
   defp entry_for_permission(%__MODULE__{} = permission) do
-    %{assign_id: assign_id, scope_id: scope_id} = permission
-    {assign_id, scope_id, permission}
+    {permission.assign_id, permission.scope_id, permission}
   end
 
-  defp filter_for_role(%Permissions.Role{assign_id: assign_id, scope: {_, scope_id}} = _role) do
-    {assign_id, scope_id, :"$1"}
+  defp filter_for_role(%{role: %Permissions.Role{} = role} = role_grant) do
+    %{assign_id: assign_id, scope: {_, scope_id}} = role
+    {role_grant, {assign_id, scope_id, :"$1"}}
   end
 
-  defp apply_filter(match, name) do
+  defp apply_filter({role_grant, match}, name) do
+    # :ets.match/2 returns a list of lists
     name
     |> :ets.match(match)
-    |> Stream.map(fn [m] -> m end)
+    |> Stream.map(fn m -> {role_grant, hd(m)} end)
   end
 
-  defp filter_expired(%__MODULE__{valid_to: expires_lsn}, change_lsn) do
+  defp filter_expired({_role_grant, %__MODULE__{valid_to: expires_lsn}}, change_lsn) do
     Lsn.compare(expires_lsn, change_lsn) in [:gt, :eq]
   end
 

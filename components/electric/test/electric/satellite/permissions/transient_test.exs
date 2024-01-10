@@ -1,7 +1,7 @@
 defmodule Electric.Satellite.Permissions.TransientTest do
   use ExUnit.Case, async: true
 
-  alias Electric.Satellite.Permissions.{Role, Transient}
+  alias Electric.Satellite.Permissions.{Role, RoleGrant, Transient}
 
   alias ElectricTest.PermissionsHelpers.{
     LSN,
@@ -63,7 +63,7 @@ defmodule Electric.Satellite.Permissions.TransientTest do
 
       :ok = Transient.update(valid_perms ++ invalid_perms, cxt.name)
 
-      roles =
+      role_grants =
         [
           Roles.role("editor", @projects, "p1", assign_id: "assign-01"),
           Roles.role("editor", @projects, "p2", assign_id: "assign-01"),
@@ -72,11 +72,16 @@ defmodule Electric.Satellite.Permissions.TransientTest do
           Roles.role("reader", @projects, "p2", assign_id: "assign-02"),
           Roles.role("reader", @projects, "p3", assign_id: "assign-02")
         ]
-        |> Enum.map(&Role.new/1)
+        |> Enum.map(&%RoleGrant{role: Role.new(&1)})
 
       lsn = LSN.new(100)
 
-      assert Transient.for_roles(roles, lsn, cxt.name) == valid_perms
+      perms = Transient.for_roles(role_grants, lsn, cxt.name)
+
+      for {{role_grant, perm}, expected_perm} <- Enum.zip(perms, valid_perms) do
+        assert perm == expected_perm
+        assert match?(%RoleGrant{}, role_grant)
+      end
     end
 
     test "excludes expired perms", cxt do
@@ -109,7 +114,7 @@ defmodule Electric.Satellite.Permissions.TransientTest do
 
       :ok = Transient.update(valid_perms ++ invalid_perms, cxt.name)
 
-      roles =
+      role_grants =
         [
           Roles.role("editor", @projects, "p1", assign_id: "assign-01"),
           Roles.role("editor", @projects, "p2", assign_id: "assign-01"),
@@ -118,11 +123,16 @@ defmodule Electric.Satellite.Permissions.TransientTest do
           Roles.role("reader", @projects, "p2", assign_id: "assign-02"),
           Roles.role("reader", @projects, "p3", assign_id: "assign-02")
         ]
-        |> Enum.map(&Role.new/1)
+        |> Enum.map(&%RoleGrant{role: Role.new(&1)})
 
       lsn = LSN.new(100)
 
-      assert Transient.for_roles(roles, lsn, cxt.name) == valid_perms
+      perms = Transient.for_roles(role_grants, lsn, cxt.name)
+
+      for {{role_grant, perm}, expected_perm} <- Enum.zip(perms, valid_perms) do
+        assert perm == expected_perm
+        assert match?(%RoleGrant{}, role_grant)
+      end
     end
   end
 end
