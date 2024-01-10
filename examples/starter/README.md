@@ -1,5 +1,5 @@
 
-# ElectricSQL Starter App
+# ElectricSQL Starter
 
 This is a starter app template. You can use it to generate an ElectricSQL application. The app is setup to match the example code you can see in the [Quickstart](https://electric-sql.com/docs/quickstart).
 
