@@ -51,10 +51,16 @@ All arguments are optional. The principal ones are described below:
 | Argument or Env var  | Value        | Description                              |
 |----------------------|--------------|------------------------------------------|
 | <span className="no-wrap">`--service`</span><br/><span className="no-wrap">`-s`</span><br/>`ELECTRIC_SERVICE` |`<url>` | Provides the url to connect to the [Electric sync service](./service.md).<br /> Defaults to `http://localhost:5133`. |
-| <span className="no-wrap">`--proxy`</span><br/><span className="no-wrap">`-p`</span><br/>`ELECTRIC_PROXY` | `<url>` | <p>Provides the url to connect to Electric's database proxy.<br /> Defaults to <span class="break-all">`postgresql://prisma:proxy_password@localhost:65432/electric`</span>.</p> <div class="theme-admonition theme-admonition-caution alert alert--warning admonition_node_modules-@docusaurus-theme-classic-lib-theme-Admonition-styles-module"><div class="admonitionHeading_node_modules-@docusaurus-theme-classic-lib-theme-Admonition-styles-module"><span class="admonitionIcon_node_modules-@docusaurus-theme-classic-lib-theme-Admonition-styles-module"><svg viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8.893 1.5c-.183-.31-.52-.5-.887-.5s-.703.19-.886.5L.138 13.499a.98.98 0 0 0 0 1.001c.193.31.53.501.886.501h13.964c.367 0 .704-.19.877-.5a1.03 1.03 0 0 0 .01-1.002L8.893 1.5zm.133 11.497H6.987v-2.003h2.039v2.003zm0-3.004H6.987V5.987h2.039v4.006z"></path></svg></span>caution</div><div class="admonitionContent_node_modules-@docusaurus-theme-classic-lib-theme-Admonition-styles-module"><p>Note that the username in the proxy URL <strong>must</strong> be <code>prisma</code>.</p><p>This is to activate the proxy mode that uses Prisma tooling for schema introspection. It does not mean that your Postgres database actually needs a <code>prisma</code> user.</p></div></div> |
+| <span className="no-wrap">`--proxy`</span><br/><span className="no-wrap">`-p`</span><br/>`ELECTRIC_PROXY` | `<url>` | Provides the url to connect to Electric's database proxy.<br /> Defaults to <span class="break-all">`postgresql://prisma:proxy_password@localhost:65432/electric`</span>. |
 | <span className="no-wrap">`--client-path`</span><br /><span className="no-wrap">`-o`</span><br />`ELECTRIC_CLIENT_PATH` | `<path>` | Specifies the output location for the generated client.<br /> Defaults to `./src/generated/client` |
 | <span className="no-wrap">`--watch`</span><br /><span className="no-wrap">`-w`</span> | `<pollingInterval>` | Run the generator in watch mode. Accepts an optional polling interval (in milliseconds) which defines how often to poll Electric for database migrations.<br /> The default polling interval is 1000ms. |
 | <span className="no-wrap">`--with-migrations`</span> | `<command>` | Specify a command to run migrations against a blank postgres in order to create a client. [See details below](#generate---with-migrations) |
+
+:::caution
+Note that the username in the `--proxy` URL **must** be `prisma`.
+
+This is to activate the proxy mode that uses Prisma tooling for schema introspection. It does not mean that your Postgres database actually needs a `prisma` user.
+:::
 
 For a full list of arguments run `npx electric-sql help generate` or see the [environment variables](#environment-variables) below.
 
