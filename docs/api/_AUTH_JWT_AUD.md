@@ -1,0 +1,1 @@
+Specify the "audience" that will be matched against the aud claim extracted from JWT auth tokens. This can be used to ensure that only tokens for a specific application are used to authenticate your client.
