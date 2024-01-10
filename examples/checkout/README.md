@@ -186,7 +186,7 @@ npm run dev
 
 For more information see the:
 
-- [Electric with Supabase documentation](https://electric-sql.com/docs/integrations/deployment/supabase)
+- [Electric with Supabase documentation](https://electric-sql.com/docs/deployment/supabase)
 - [Documentation](https://electric-sql.com/docs)
 - [Quickstart](https://electric-sql.com/docs/quickstart)
 - [Usage guide](https://electric-sql.com/docs/usage)

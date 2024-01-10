@@ -208,6 +208,12 @@ This proxy server serves various purposes:
 
 Migrations not passed through the proxy endpoint will not be captured by Electric and will cause problems as Electric's view of the Postgres schema will be out of sync with the actual table schema.
 
+:::info
+Normal DML access to your Postgres **does not** need to be routed via the Migrations proxy. If your app has a backend, it should connect and interact with your database directly and Electric will happily pick up on the changes.
+
+You can either route all DDL access to your Postgres via the Migrations proxy, or just the subset of DDL that impacts Electrified tables and/or uses DDLX statements. Trying to change an electrified table or use a DDLX statement without going through the proxy will raise an error.
+:::
+
 ### Configuring and connecting to the migrations proxy
 
 There are two environment variables that configure the proxy in Electric:

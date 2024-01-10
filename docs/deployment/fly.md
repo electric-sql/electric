@@ -7,7 +7,7 @@ sidebar_position: 40
 
 You can deploy ElectricSQL to [Fly.io](https://fly.io).
 
-The app config needs to include an `http_service` with internal port `5133` and a TCP service for Electric's [migrations proxy](../../usage/data-modelling/migrations#migrations-proxy) that listens on port `65432` by default.
+The app config needs to include an `http_service` with internal port `5133` and a TCP service for Electric's [migrations proxy](../usage/data-modelling/migrations#migrations-proxy) that listens on port `65432` by default.
 
 The environment variables used by Electric are described in <DocPageLink path="api/service" />.
 
@@ -132,7 +132,7 @@ Connection to Postgres is up!
 
 ## Preparing the client app
 
-Let's see how to set up a client app to connect to the Electric sync service we've just deployed. Clone the source code repository to your machine and navigate to the basic example, as explained on [this page](../../examples/basic#source-code).
+Let's see how to set up a client app to connect to the Electric sync service we've just deployed. Clone the source code repository to your machine and navigate to the basic example, as explained on [this page](../examples/basic#source-code).
 
 ### Apply migrations
 
@@ -157,7 +157,7 @@ Applied 01-create_items_table.sql
 
 ### Generate a type-safe client
 
-Now that the database has one electrified table, we can [generate a type-safe client](../../usage/data-access/client.md) from it. Use the same database connection URL as in the previous step but change the username to `prisma` (this is required for the schema introspection to work correctly).
+Now that the database has one electrified table, we can [generate a type-safe client](../usage/data-access/client.md) from it. Use the same database connection URL as in the previous step but change the username to `prisma` (this is required for the schema introspection to work correctly).
 
 ```shell
 $ npx electric-sql generate

@@ -5,7 +5,7 @@ description: >-
 sidebar_position: 50
 ---
 
-To run the [Electric sync service](../../api/service.md) in [Kubernetes](https://kubernetes.io) deploy the [Docker image](./docker.md) within a [Pod](https://kubernetes.io/docs/concepts/workloads/controllers/pod), usually via a [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment).
+To run the [Electric sync service](../api/service.md) in [Kubernetes](https://kubernetes.io) deploy the [Docker image](./docker.md) within a [Pod](https://kubernetes.io/docs/concepts/workloads/controllers/pod), usually via a [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment).
 
 The container image needs ports `5133`, `5433` and `65432` exposed and the environment variables described in <DocPageLink path="api/service" /> configured.
 
