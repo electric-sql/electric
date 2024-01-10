@@ -19,8 +19,15 @@ defmodule Electric.Satellite.Permissions do
   @type attr() :: {:auth, Auth.t()} | {:scope_resolver, Scope.t()} | {:transient_lut, atom()}
   @type attrs() :: [attr()]
 
+  @type empty() :: %__MODULE__{
+          source: nil,
+          roles: nil,
+          auth: Auth.t(),
+          transient_lut: atom(),
+          scope_resolver: Scope.t()
+        }
   @type t() :: %__MODULE__{
-          source: %{grants: [%SatPerms.Grant{}], roles: [%SatPerms.Role{}]},
+          source: %{grants: [%SatPerms.Grant{}], roles: [%SatPerms.Role{}]} | nil,
           roles: compiled_role(),
           auth: Auth.t(),
           transient_lut: atom(),
@@ -28,6 +35,17 @@ defmodule Electric.Satellite.Permissions do
         }
 
   defguardp is_update(change) when is_struct(change, Changes.UpdatedRecord)
+
+  @doc """
+  Configure a new empty permissions configuration with the given auth token, scope resvolver and
+  (optionally) a transient permissions lookup table name.
+
+  Use `update/3` to add actual role and grant information.
+  """
+  @spec new(Auth.t(), Scope.t(), Transient.lut()) :: empty()
+  def new(%Auth{} = auth, {_, _} = scope_resolver, transient_lut \\ Transient) do
+    %__MODULE__{auth: auth, scope_resolver: scope_resolver, transient_lut: transient_lut}
+  end
 
   @doc """
   Build a permissions struct that can be used to filter changes from the replication stream.
@@ -48,45 +66,28 @@ defmodule Electric.Satellite.Permissions do
 
   We then can validate that a change falls within the scope of scoped roles
   """
-  @spec new([%SatPerms.Grant{}], [%SatPerms.Role{}], attrs()) :: t()
-  def new(grants, roles, attrs \\ []) do
-    with {:auth, {:ok, auth}} <- fetch(attrs, :auth),
-         {:scope_resolver, {:ok, scope_resolv}} <- fetch(attrs, :scope_resolver) do
-      roles = build_roles(roles, auth)
+  @spec update(t(), [%SatPerms.Grant{}], [%SatPerms.Role{}]) :: t()
+  def update(%__MODULE__{} = perms, grants, roles) do
+    compiled_roles = build_roles(roles, perms.auth)
 
-      #
-      role_grants =
-        roles
-        |> Stream.map(&{&1, Role.matching_grants(&1, grants)})
-        |> Stream.map(&compile_grants/1)
-        |> Stream.reject(fn {_role, grants} -> Enum.empty?(grants) end)
-        |> Stream.flat_map(&invert_role_lookup/1)
-        |> Enum.group_by(
-          fn {grant_perm, _role} -> grant_perm end,
-          fn {_, grant_role} -> grant_role end
-        )
-        |> Map.new(&classify_roles/1)
-
-      scopes = compile_scopes(roles)
-
-      struct(
-        %__MODULE__{
-          source: %{grants: grants, roles: roles},
-          roles: role_grants,
-          auth: auth,
-          scopes: scopes,
-          scope_resolver: scope_resolv
-        },
-        Keyword.take(attrs, [:transient_lut])
+    role_grants =
+      compiled_roles
+      |> Stream.map(&{&1, Role.matching_grants(&1, grants)})
+      |> Stream.map(&compile_grants/1)
+      |> Stream.reject(fn {_role, grants} -> Enum.empty?(grants) end)
+      |> Stream.flat_map(&invert_role_lookup/1)
+      |> Enum.group_by(
+        fn {grant_perm, _role} -> grant_perm end,
+        fn {_, grant_role} -> grant_role end
       )
-    else
-      {option, :error} ->
-        raise ArgumentError, message: "#{inspect(option)} is a required option"
-    end
-  end
+      |> Map.new(&classify_roles/1)
 
-  defp fetch(attrs, key) do
-    {key, Keyword.fetch(attrs, key)}
+    %{
+      perms
+      | source: %{grants: grants, roles: roles},
+        roles: role_grants,
+        scopes: compile_scopes(compiled_roles)
+    }
   end
 
   defp build_roles(roles, auth) do

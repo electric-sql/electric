@@ -6,6 +6,7 @@ defmodule Electric.Satellite.Permissions.Transient do
 
   defstruct [:id, :assign_id, :scope_id, :target_relation, :target_id, :valid_to]
 
+  @type lut() :: atom()
   @type relation() :: Electric.Postgres.relation()
   @type t() :: %__MODULE__{
           id: binary(),

@@ -26,11 +26,8 @@ defmodule Electric.Satellite.PermissionsTest do
   end
 
   def perms_build(cxt, grants, roles, attrs \\ []) do
-    Perms.new(
-      grants,
-      roles,
-      Keyword.merge(attrs, scope_resolver: cxt.tree)
-    )
+    Perms.new(cxt.tree, attrs)
+    |> Perms.update(grants, roles)
   end
 
   setup do

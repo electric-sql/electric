@@ -32,13 +32,21 @@ defmodule ElectricTest.PermissionsHelpers do
       end
     end
 
-    def new(ddlx, roles, attrs \\ []) do
+    def new(scope_resolver, attrs \\ []) do
       auth = Keyword.get(attrs, :auth, Auth.user())
 
       Permissions.new(
+        auth,
+        scope_resolver,
+        Transient.name()
+      )
+    end
+
+    def update(perms, ddlx, roles) do
+      Permissions.update(
+        perms,
         to_grants(ddlx),
-        roles,
-        Keyword.merge(attrs, auth: auth, transient_lut: Transient.name())
+        roles
       )
     end
 
