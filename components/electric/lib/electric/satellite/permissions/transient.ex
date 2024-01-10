@@ -6,7 +6,8 @@ defmodule Electric.Satellite.Permissions.Transient do
 
   defstruct [:id, :assign_id, :scope_id, :target_relation, :target_id, :valid_to]
 
-  @type lut() :: atom()
+  @type tid() :: :ets.tid()
+  @type lut() :: atom() | tid()
   @type relation() :: Electric.Postgres.relation()
   @type t() :: %__MODULE__{
           id: binary(),
@@ -21,19 +22,28 @@ defmodule Electric.Satellite.Permissions.Transient do
     struct(__MODULE__, attrs)
   end
 
-  @spec for_roles([Permissions.Role.t()], atom()) :: [t()]
-  def for_roles(roles, lsn, name \\ __MODULE__) do
+  @spec table_ref!(lut()) :: tid()
+  def table_ref!(ref) when is_reference(ref) do
+    ref
+  end
+
+  def table_ref!(name) when is_atom(name) do
+    GenServer.call(name, :table_ref)
+  end
+
+  @spec for_roles([Permissions.Role.t()], lut()) :: [t()]
+  def for_roles(roles, lsn, table \\ __MODULE__) do
     roles
     |> Stream.map(&filter_for_role/1)
-    |> Stream.flat_map(&apply_filter(&1, name))
+    |> Stream.flat_map(&apply_filter(&1, table_ref!(table)))
     |> Enum.filter(&filter_expired(&1, lsn))
   end
 
-  @spec update([t()], atom) :: :ok
-  def update(permissions, name \\ __MODULE__) do
+  @spec update([t()], lut()) :: :ok
+  def update(permissions, table \\ __MODULE__) do
     permissions
     |> Enum.map(&entry_for_permission/1)
-    |> then(&:ets.insert(name, &1))
+    |> then(&:ets.insert(table_ref!(table), &1))
 
     :ok
   end
@@ -62,9 +72,15 @@ defmodule Electric.Satellite.Permissions.Transient do
     GenServer.start_link(__MODULE__, name, name: name)
   end
 
+  @impl GenServer
   def init(name) do
-    table = :ets.new(name, [:bag, :public, :named_table, read_concurrency: true])
+    table = :ets.new(name, [:bag, :public, read_concurrency: true])
     # TODO: boot and load all existing transient permissions
     {:ok, table}
+  end
+
+  @impl GenServer
+  def handle_call(:table_ref, _from, table) do
+    {:reply, table, table}
   end
 end

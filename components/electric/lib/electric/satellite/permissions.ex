@@ -23,14 +23,14 @@ defmodule Electric.Satellite.Permissions do
           source: nil,
           roles: nil,
           auth: Auth.t(),
-          transient_lut: atom(),
+          transient_lut: Transient.lut(),
           scope_resolver: Scope.t()
         }
   @type t() :: %__MODULE__{
           source: %{grants: [%SatPerms.Grant{}], roles: [%SatPerms.Role{}]} | nil,
           roles: compiled_role(),
           auth: Auth.t(),
-          transient_lut: atom(),
+          transient_lut: Transient.lut(),
           scope_resolver: Scope.t()
         }
 
@@ -43,8 +43,12 @@ defmodule Electric.Satellite.Permissions do
   Use `update/3` to add actual role and grant information.
   """
   @spec new(Auth.t(), Scope.t(), Transient.lut()) :: empty()
-  def new(%Auth{} = auth, {_, _} = scope_resolver, transient_lut \\ Transient) do
-    %__MODULE__{auth: auth, scope_resolver: scope_resolver, transient_lut: transient_lut}
+  def new(%Auth{} = auth, {_, _} = scope_resolver, transient_lut_name \\ Transient) do
+    %__MODULE__{
+      auth: auth,
+      scope_resolver: scope_resolver,
+      transient_lut: Transient.table_ref!(transient_lut_name)
+    }
   end
 
   @doc """
