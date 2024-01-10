@@ -22,7 +22,7 @@ The Electric client library comes with a CLI providing a number of helpful comma
 
 These commands are all executed in the form `npx electric-sql [command-name]` from within a project where you have installed the [client library](../usage/installation/client).
 
-All commands accept both arguments or environment variables for configuration, and the CLI uses [dotenv-flow](https://www.npmjs.com/package/dotenv-flow) to load environment variables from `.env` files. See a [full list of environment variables](#environment-variables).
+All commands accept both arguments or environment variables for configuration, and the CLI uses [dotenv-flow](https://www.npmjs.com/package/dotenv-flow) to load environment variables from `.env` files. When a command line argument is provided it takes precedence over the environment variable. See a [full list of environment variables](#environment-variables).
 
 ## Commands
 
@@ -63,6 +63,34 @@ This is to activate the proxy mode that uses Prisma tooling for schema introspec
 :::
 
 For a full list of arguments run `npx electric-sql help generate` or see the [environment variables](#environment-variables) below.
+
+#### Local-only-first mode  
+
+Normally, when you develop or deploy apps with Electric, you want to run the backend services (Postgres and Electric) in order to sync data. As a result, it's natural that the `generate` command expects you to be running the backend services during your build step.  
+
+However, it's also quite common in development or with an early version of an app, not to need data sync enabled yet. Either because you're just working on the interface or because your app starts off local-only and you plan to enable sync later. This makes the overhead of running (and potentially deploying) the backend services quite high, given that you're running them just to support the generate command in your build step.  
+
+As a result, we provide a special `--with-migrations` mode for the generate command that allows you to generate the type safe client just from your migrations, without having to run the backend services yourself. Specifically what the `--with-migrations` option does is it tells the generate command to spin up a temporary Postgres and Electric itself, apply your migrations from scratch, generate the type safe client and then tear Electric and Postgres down. All of which happens automatically in the background for you.  
+
+We call this approach "local-only-first", in the sense that it allows you to develop local-only and then progressively enable sync later on, as and when you want to.  
+
+The `--with-migrations` command that takes the same argument form as the [`with-config`](#with-config) command. With this you can run:
+
+```shell
+npx electric-sql generate --with-migrations "npx pg-migrations apply --database {{ELECTRIC_PROXY}} --directory ./db/migrations"
+```
+
+In essence this is the equivalent of:
+
+```shell
+npx electric-sql start
+npx electric-sql with-config "npx pg-migrations apply --database {{ELECTRIC_PROXY}} --directory ./db/migrations"
+npx electric-sql generate
+npx electric-sql stop --remove
+```
+
+As you can see from the steps above, the backend is started, your migrations are applied, the type-safe client is generated and then everything is torn down and cleaned up for you. Allowing you to develop local-only-first and then run the backend services only when you actually want to enable sync.  
+
 
 #### `generate --with-migrations`
 
