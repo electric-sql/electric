@@ -49,13 +49,19 @@ defmodule Electric.Postgres.Proxy.QueryAnalyser.Impl do
 
   @valid_types for t <- Electric.Postgres.supported_types(), do: to_string(t)
 
-  def check_column_type(%PgQuery.ColumnDef{} = coldef) do
-    %{name: type} = Electric.Postgres.Schema.AST.map(coldef.type_name)
+  # This implementation mirrors the __validate_table_column_types() SQL procedure, with the exception of enum support
+  # (current limitation).
+  #
+  # It is important that this implementation and the one in __validate_table_column_types() behave the same to
+  # ensure consistent handling of columns both when a table is first electrified and when a new column is added to an
+  # already electrified table.
+  def check_column_type(%PgQuery.ColumnDef{type_name: coltype}) do
+    proto_type = Electric.Postgres.Schema.AST.map(coltype)
 
-    if type in @valid_types do
+    if proto_type.name in @valid_types and proto_type.size == [] and proto_type.array == [] do
       :ok
     else
-      {:error, {:invalid_type, type}}
+      {:error, {:invalid_type, Electric.Postgres.Dialect.Postgresql.map_type(proto_type)}}
     end
   end
 
