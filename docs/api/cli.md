@@ -55,6 +55,7 @@ All arguments are optional. The principal ones are described below:
 | <span className="no-wrap">`--client-path`</span><br /><span className="no-wrap">`-o`</span><br />`ELECTRIC_CLIENT_PATH` | `<path>` | Specifies the output location for the generated client.<br /> Defaults to `./src/generated/client` |
 | <span className="no-wrap">`--watch`</span><br /><span className="no-wrap">`-w`</span> | `<pollingInterval>` | Run the generator in watch mode. Accepts an optional polling interval (in milliseconds) which defines how often to poll Electric for database migrations.<br /> The default polling interval is 1000ms. |
 | <span className="no-wrap">`--with-migrations`</span> | `<command>` | Specify a command to run migrations against a blank postgres in order to create a client. [See details below](#generate---with-migrations) |
+| <span className="no-wrap">`--module-resolution`</span> | `<command>` | The module resolution used for the project. The generated client will be compatible with this resolution scheme. |
 
 :::caution
 Note that the username in the `--proxy` URL **must** be `prisma`.
@@ -512,5 +513,20 @@ const electric = await electrify(conn, schema, {
   The Docker image to use for the PostgreSQL database.
 
   Used by the [`start`](#start) command.
+
+</EnvVarConfig>
+
+#### `ELECTRIC_MODULE_RESOLUTION`
+
+<EnvVarConfig
+    name="ELECTRIC_MODULE_RESOLUTION"
+    defaultValue="node"
+    example="nodenext"
+>
+  The module resolution used for the project. The generated client will be compatible with this resolution scheme.
+  
+  If you are using `nodenext` as your `tsconfig.json` `moduleResolution` then settings this to `nodenext` also will ensure that the generated client is compatible with your TypeScript configuration.
+
+  Used by the [`generate`](#generate) command.
 
 </EnvVarConfig>
