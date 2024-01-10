@@ -1,6 +1,11 @@
--- This procedure checks whether the table that's being electrified
--- has a primary key and any other contraints.
--- If there are any CHECK or UNIQUE constraints, electrification is aborted.
+-- Check whether the table that's being electrified has a primary key and any other contraints.
+-- Electrification is abort if there are any unsupported constraints: CHECK, UNIQUE, GENERATED, etc.
+--
+-- This implementation mirrors the Electric.Postgres.Proxy.QueryAnalyser.Impl.validate_column_constraint() function.
+--
+-- It is important that this implementation and the one in validate_column_constraint() behave the same to
+-- ensure consistent handling of columns both when a table is first electrified and when a new column is added to an
+-- already electrified table.
 
 CREATE OR REPLACE PROCEDURE <%= schema() %>.__validate_table_constraints(table_oid regclass)
 SECURITY DEFINER AS $function$
