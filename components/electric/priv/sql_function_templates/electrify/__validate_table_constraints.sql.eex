@@ -15,8 +15,9 @@ BEGIN
                          FROM pg_attribute
                          WHERE attnum = ANY(pg_constraint.conkey)
                                AND attrelid = pg_constraint.conrelid)
-            FROM pg_constraint
-            WHERE conrelid = table_name::regclass
+        FROM pg_constraint
+        WHERE conrelid = table_oid
+        ORDER BY contype
     LOOP
         IF _con_type = 'p' THEN
             _has_primary_key = true;
