@@ -1,5 +1,5 @@
-/* This is an example of an SQL DDL migration. It creates an `items` table and
- * then calls an `electric.electrify` procedure to expose the table to the
+/* This is an example of an SQL DDL migration. It creates tables and
+ * then calls an `electric.electrify` procedure to expose the tables to the
  * ElectricSQL replication machinery.
  *
  * Note that these statements are applied directly to the *Postgres* database.
