@@ -15,7 +15,7 @@
     # We shouldn't see a value from an un-electrified table
     -bad sentinel value
     # But we should see a transaction with one change
-    ?component=CachedWal.EtsBacked \[debug\] Saving transaction \d+ at \d+/[0-9A-E]+ with changes \[%Electric.Replication.Changes.NewRecord\{
+    ?component=CachedWal.EtsBacked \[debug\] Saving transaction \d+ at \d+/[0-9A-F]+ with changes \[%Electric.Replication.Changes.NewRecord\{
     ?+relation: \{"public", "entries"\}
     # We also see that the `tags` field has been correctly-ish filled (i.e. not empty and has correct origin)
     ?+tags: \["postgres_1@\d+"\]\}\]
