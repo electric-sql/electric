@@ -31,6 +31,9 @@ defmodule Electric.Satellite.Permissions do
 
   ## Validating writes
 
+  At a high level the permissions resolution is find roles that apply to a change then check that
+  the grants for that role allow the change.
+
   The `validate_write/2` function takes a `Permissions` struct and a transaction and verifies that
   all the writes in the transaction are allowed according to the current permissions rules.
 
@@ -44,7 +47,7 @@ defmodule Electric.Satellite.Permissions do
   The `assigned_roles()` table is retrieved from the `Permissions.roles` attribute for the
   given change. This allows for quick verification that the user has some kind of permission to
   perform the action. If the `assigned_roles()` for a change is `nil` then we know immediately
-  that the user does not have the right to make the given change.
+  that the user does not have the right to make the given change and can bail immediately.
 
   If the `assigned_roles()` table has any unscoped grants then we can jump to verifying that at
   least one of the grant rules allows for the change (see "Verifying Grants").
@@ -131,7 +134,7 @@ defmodule Electric.Satellite.Permissions do
   @type privilege() :: :INSERT | :UPDATE | :DELETE | :SELECT
   @type table_permission() :: {relation(), privilege()}
   @type assigned_roles() :: %{unscoped: [RoleGrant.t()], scoped: [RoleGrant.t()]}
-  @type compiled_role() :: %{table_permission() => assigned_roles()}
+  @type role_lookup() :: %{table_permission() => assigned_roles()}
 
   @type empty() :: %__MODULE__{
           auth: Auth.t(),
@@ -139,8 +142,8 @@ defmodule Electric.Satellite.Permissions do
           scope_resolver: Scope.t()
         }
   @type t() :: %__MODULE__{
+          roles: role_lookup(),
           source: %{grants: [%SatPerms.Grant{}], roles: [%SatPerms.Role{}]} | nil,
-          roles: compiled_role(),
           auth: Auth.t(),
           transient_lut: Transient.lut(),
           scope_resolver: Scope.t()
@@ -286,7 +289,7 @@ defmodule Electric.Satellite.Permissions do
 
         %{role: role, grant: grant} = _role_grant ->
           Logger.debug(
-            "role #{inspect(role)} grants #{inspect(grant)} permission for #{inspect(change)}"
+            "role #{inspect(role)} grant #{inspect(grant)} gives permission for #{inspect(change)}"
           )
 
           {:cont, :ok}
