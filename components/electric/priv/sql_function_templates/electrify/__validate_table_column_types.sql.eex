@@ -1,5 +1,11 @@
--- This procedure validates the type of each column of the table that's being electrified
--- to check if the type is supported by Electric.
+-- Validate the type of each column of the table that's being electrified,
+-- to check if it is supported by Electric.
+--
+-- This implementation mirrors the Electric.Postgres.Proxy.QueryAnalyser.Impl.check_column_type() function.
+--
+-- It is important that this implementation and the one in check_column_type() behave the same to
+-- ensure consistent handling of columns both when a table is first electrified and when a new column is added to an
+-- already electrified table.
 
 <%
   valid_column_types =

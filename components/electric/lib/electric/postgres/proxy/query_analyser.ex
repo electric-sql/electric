@@ -34,28 +34,51 @@ defmodule Electric.Postgres.Proxy.QueryAnalysis do
 end
 
 defmodule Electric.Postgres.Proxy.QueryAnalyser.Impl do
-  alias Electric.Postgres.Extension.SchemaLoader
-
   def unwrap_node(%PgQuery.Node{node: {_type, node}}), do: node
-
-  def is_electrified?(nil, _loader) do
-    false
-  end
-
-  def is_electrified?({_sname, _tname} = table, loader) do
-    {:ok, electrified?} = SchemaLoader.table_electrified?(loader, table)
-    electrified?
-  end
 
   @valid_types for t <- Electric.Postgres.supported_types(), do: to_string(t)
 
-  def check_column_type(%PgQuery.ColumnDef{} = coldef) do
-    %{name: type} = Electric.Postgres.Schema.AST.map(coldef.type_name)
+  # This implementation mirrors the __validate_table_column_types() SQL procedure, with the exception of enum support
+  # (current limitation).
+  #
+  # It is important that this implementation and the one in __validate_table_column_types() behave the same to
+  # ensure consistent handling of columns both when a table is first electrified and when a new column is added to an
+  # already electrified table.
+  def check_column_type(%PgQuery.ColumnDef{type_name: coltype}) do
+    proto_type = Electric.Postgres.Schema.AST.map(coltype)
 
-    if type in @valid_types do
+    if proto_type.name in @valid_types and proto_type.size == [] and proto_type.array == [] do
       :ok
     else
-      {:error, {:invalid_type, type}}
+      {:error, {:invalid_type, Electric.Postgres.Dialect.Postgresql.map_type(proto_type)}}
+    end
+  end
+
+  def check_column_constraints(%PgQuery.ColumnDef{constraints: constraints}) do
+    Enum.find_value(constraints, :ok, &validate_column_constraint/1)
+  end
+
+  # This function clause mirrors the __validate_table_column_defaults() SQL procedure.
+  #
+  # It is important that this implementation and the one in __validate_table_column_defaults() behave the same to
+  # ensure consistent handling of columns both when a table is first electrified and when a new column is added to an
+  # already electrified table.
+  defp validate_column_constraint(%PgQuery.Node{
+         node: {:constraint, %PgQuery.Constraint{contype: :CONSTR_DEFAULT}}
+       }) do
+    {:error, :unsupported_default_clause}
+  end
+
+  # This function clause mirrors the __validate_table_constraints() SQL procedure.
+  #
+  # It is important that this implementation and the one in __validate_table_constraints() behave the same to
+  # ensure consistent handling of columns both when a table is first electrified and when a new column is added to an
+  # already electrified table.
+  defp validate_column_constraint(%PgQuery.Node{
+         node: {:constraint, %PgQuery.Constraint{contype: constraint}}
+       }) do
+    if constraint not in [:CONSTR_FOREIGN, :CONSTR_NOTNULL, :CONSTR_NULL] do
+      {:error, {:unsupported_constraint, constraint}}
     end
   end
 
@@ -173,10 +196,10 @@ defimpl QueryAnalyser, for: PgQuery.AlterTableStmt do
   defp analyse_alter_table_cmd(%{subtype: :AT_AddColumn} = cmd, analysis) do
     column_def = unwrap_node(cmd.def)
 
-    case check_column_type(column_def) do
-      :ok ->
-        {:cont, %{analysis | capture?: true}}
-
+    with :ok <- check_column_type(column_def),
+         :ok <- check_column_constraints(column_def) do
+      {:cont, %{analysis | capture?: true}}
+    else
       {:error, {:invalid_type, type}} ->
         {:halt,
          %{
@@ -184,7 +207,29 @@ defimpl QueryAnalyser, for: PgQuery.AlterTableStmt do
            | allowed?: false,
              error: %{
                code: "EX001",
-               message: ~s[Cannot electrify column of type #{inspect(type)}]
+               message: "Cannot electrify column of type " <> inspect(type)
+             }
+         }}
+
+      {:error, :unsupported_default_clause} ->
+        {:halt,
+         %{
+           analysis
+           | allowed?: false,
+             error: %{
+               code: "EX002",
+               message: "Cannot electrify column with DEFAULT clause"
+             }
+         }}
+
+      {:error, {:unsupported_constraint, constraint}} ->
+        {:halt,
+         %{
+           analysis
+           | allowed?: false,
+             error: %{
+               code: "EX003",
+               message: "Cannot electrify column with #{format_constraint(constraint)} constraint"
              }
          }}
     end
@@ -226,6 +271,13 @@ defimpl QueryAnalyser, for: PgQuery.AlterTableStmt do
       message: ~s[Cannot alter column "#{name}" of electrified table #{sql_table(analysis)}]
     }
   end
+
+  defp format_constraint(:CONSTR_CHECK), do: "CHECK"
+  defp format_constraint(:CONSTR_GENERATED), do: "GENERATED"
+  defp format_constraint(:CONSTR_IDENTITY), do: "GENERATED"
+  defp format_constraint(:CONSTR_PRIMARY), do: "PRIMARY KEY"
+  defp format_constraint(:CONSTR_UNIQUE), do: "UNIQUE"
+  defp format_constraint(other), do: to_string(other)
 end
 
 defimpl QueryAnalyser, for: PgQuery.TransactionStmt do
