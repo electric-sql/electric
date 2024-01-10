@@ -129,9 +129,9 @@ defmodule Electric.Satellite.Permissions do
   @type mode() :: :read | :write
   @type relation() :: Electric.Postgres.relation()
   @type privilege() :: :INSERT | :UPDATE | :DELETE | :SELECT
-  @type grant_permission() :: {relation(), privilege()}
+  @type table_permission() :: {relation(), privilege()}
   @type assigned_roles() :: %{unscoped: [RoleGrant.t()], scoped: [RoleGrant.t()]}
-  @type compiled_role() :: %{grant_permission() => assigned_roles()}
+  @type compiled_role() :: %{table_permission() => assigned_roles()}
 
   @type empty() :: %__MODULE__{
           auth: Auth.t(),
