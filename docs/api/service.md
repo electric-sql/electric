@@ -185,7 +185,7 @@ In future, we may deprecate logical replication and consolidate on direct writes
 
 ## Database user permissions
 
-The Electric sync service connects to Postgres using the [`DATABASE_URL`](#database_url) connection string, in the format `postgresql://[userspec@][hostspec][/dbname][?paramspec]`.
+The Electric sync service connects to Postgres using the [`DATABASE_URL`](#database_url) connection string, in the format `postgresql://[userspec@][hostspec][/dbname]`.
 
 The `userspec` section of this connection string specifies the database user that Electric connects to Postgres as. This user must have the following permissions.
 
