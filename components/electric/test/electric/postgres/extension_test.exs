@@ -473,7 +473,7 @@ defmodule Electric.Postgres.ExtensionTest do
 
       assert error_msg ==
                """
-               Cannot electrify public.t1 because some of its columns have types not supported by Electric:
+               Cannot electrify t1 because some of its columns have types not supported by Electric:
                  c1 character(1)
                  c2 character(11)
                  "C3" character varying(11)
@@ -500,7 +500,7 @@ defmodule Electric.Postgres.ExtensionTest do
 
       assert error_msg ==
                """
-               Cannot electrify public.t1 because some of its columns have DEFAULT expressions which are not currently supported by Electric:
+               Cannot electrify t1 because some of its columns have DEFAULT expressions which are not currently supported by Electric:
                  t1
                  "Ts"
                """
@@ -527,7 +527,7 @@ defmodule Electric.Postgres.ExtensionTest do
 
               assert error_msg ==
                        """
-                       Cannot electrify public.t1 because some of its columns have CHECK, UNIQUE, EXCLUDE or user-defined constraints which are not currently supported by Electric:
+                       Cannot electrify t1 because some of its columns have CHECK, UNIQUE, EXCLUDE or user-defined constraints which are not currently supported by Electric:
                          "Ts"
                          t1
                          uu
@@ -545,7 +545,7 @@ defmodule Electric.Postgres.ExtensionTest do
                CALL electric.electrify('public.t1');
                """)
 
-      assert error_msg == "Cannot electrify public.t1 because it doesn't have a PRIMARY KEY."
+      assert error_msg == "Cannot electrify t1 because it doesn't have a PRIMARY KEY."
     end
   end
 

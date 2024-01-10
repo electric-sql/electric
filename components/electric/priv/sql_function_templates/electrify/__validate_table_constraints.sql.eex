@@ -2,7 +2,7 @@
 -- has a primary key and any other contraints.
 -- If there are any CHECK or UNIQUE constraints, electrification is aborted.
 
-CREATE OR REPLACE PROCEDURE <%= schema() %>.__validate_table_constraints(table_name text)
+CREATE OR REPLACE PROCEDURE <%= schema() %>.__validate_table_constraints(table_oid regclass)
 SECURITY DEFINER AS $function$
 DECLARE
     _con_type char;
@@ -26,12 +26,12 @@ BEGIN
     END LOOP;
 
     IF NOT _has_primary_key THEN
-        RAISE EXCEPTION E'Cannot electrify % because it doesn''t have a PRIMARY KEY.', table_name;
+        RAISE EXCEPTION E'Cannot electrify % because it doesn''t have a PRIMARY KEY.', table_oid::regclass;
     END IF;
 
     IF _invalid_cols IS NOT NULL AND <%= schema() %>.__constraint_validation_enabled() THEN
         RAISE EXCEPTION E'Cannot electrify % because some of its columns have CHECK, UNIQUE, EXCLUDE or user-defined constraints which are not currently supported by Electric:\n  %',
-                        table_name, array_to_string(_invalid_cols, E'\n  ');
+                        table_oid::regclass, array_to_string(_invalid_cols, E'\n  ');
     END IF;
 END;
 $function$ LANGUAGE PLPGSQL;

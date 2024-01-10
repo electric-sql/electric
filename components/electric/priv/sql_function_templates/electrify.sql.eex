@@ -5,31 +5,27 @@ CREATE OR REPLACE PROCEDURE <%= schema() %>.electrify(
 DECLARE
     _schema name;
     _table text;
-    _quoted_name text;
     _oid regclass;
     _create_sql text;
 BEGIN
     SELECT
-        table_name, schema_name, table_oid
+        schema_name, table_name, table_oid
     INTO
-        _table, _schema, _oid
+        _schema, _table, _oid
     FROM <%= schema() %>.__resolve_table_from_names(name1, name2);
 
-    _quoted_name := format('%I.%I', _schema, _table);
-    _oid := (SELECT _quoted_name::regclass);
-
     IF NOT EXISTS (SELECT pc.oid FROM pg_class pc WHERE pc.oid = _oid AND pc.relkind = 'r') THEN
-        RAISE EXCEPTION '% is not an ordinary table', _quoted_name;
+        RAISE EXCEPTION '%I.%I is not an ordinary table', _schema, _table;
     END IF;
 
     IF NOT EXISTS (
         SELECT oid FROM <%= electrified_tracking_table() %> WHERE schema_name = _schema AND table_name = _table LIMIT 1
         ) THEN
-        RAISE NOTICE 'Electrify table %', _quoted_name;
+        RAISE NOTICE 'Electrify table %I.%I', _schema, _table;
 
-        CALL <%= schema() %>.__validate_table_column_types(_quoted_name);
-        CALL <%= schema() %>.__validate_table_column_defaults(_quoted_name);
-        CALL <%= schema() %>.__validate_table_constraints(_quoted_name);
+        CALL <%= schema() %>.__validate_table_column_types(_oid);
+        CALL <%= schema() %>.__validate_table_column_defaults(_oid);
+        CALL <%= schema() %>.__validate_table_constraints(_oid);
 
         -- insert the required ddl into the migrations table
         SELECT <%= schema() %>.generate_electrified_sql(_oid) INTO _create_sql;
