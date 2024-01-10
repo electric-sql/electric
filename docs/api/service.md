@@ -36,7 +36,7 @@ For a longer form description of how to successfully deploy the sync service and
 :::
 
 :::caution A note on ports
-Your configuration options affect the number and type of ports that need to be exposed. You must always expose the [`HTTP_PORT`](#http-port). Your [write-to-PG mode](#write-to-pg-mode) and [migrations proxy](#migrations-proxy) config then determines whether you need to expose up-to two TCP ports: the [`LOGICAL_PUBLISHER_PORT`](#logical-publisher-port) and [`PG_PROXY_PORT`](#pg-proxy-port) respectively.
+Your configuration options affect the number and type of ports that need to be exposed. You must always expose the [`HTTP_PORT`](#http-port). Your [write-to-PG mode](#write-to-pg-mode) and [migrations proxy](#migrations-proxy) config then determines whether you need to expose up-to two TCP ports: the [`LOGICAL_PUBLISHER_PORT`](#logical_publisher_port) and [`PG_PROXY_PORT`](#pg_proxy_port) respectively.
 
 In development using Docker you usually want to map all the necessary ports to your host network (`-p 5133:5133` and `-p 5433:5433` in the example above).
 
