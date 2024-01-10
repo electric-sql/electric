@@ -253,6 +253,14 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
     console.log('Building migrations...')
     await buildMigrations(migrationsFolder, migrationsFile)
     console.log('Successfully built migrations')
+
+    if (
+      ['nodenext', 'node16'].includes(
+        config.MODULE_RESOLUTION.toLocaleLowerCase()
+      )
+    ) {
+      await rewriteImportsForNodeNext(config.CLIENT_PATH)
+    }
   } catch (e: any) {
     generationFailed = true
     console.error('generate command failed: ' + e)
@@ -667,4 +675,13 @@ async function keepOnlyPrismaTypings(prismaDir: string): Promise<void> {
     }
   })
   await Promise.all(proms)
+}
+
+async function rewriteImportsForNodeNext(clientDir: string): Promise<void> {
+  const file = path.join(clientDir, 'index.ts')
+  const content = await fs.readFile(file, 'utf8')
+  const newContent = content
+    .replace("from './migrations';", "from './migrations.js';")
+    .replace("from './prismaClient';", "from './prismaClient.js';")
+  await fs.writeFile(file, newContent)
 }

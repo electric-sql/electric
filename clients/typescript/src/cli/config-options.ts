@@ -52,6 +52,16 @@ export const configOptions = {
     groups: ['client', 'proxy'],
     defaultVal: 'localhost',
   },
+  MODULE_RESOLUTION: {
+    valueType: String,
+    valueTypeName: 'string',
+    doc: dedent`
+      The module resolution used for the project. The generated client will be 
+      compatible with this resolution.
+    `,
+    groups: ['client'],
+    defaultVal: 'node',
+  },
 
   // *** Postgres database connection options ***
   WITH_POSTGRES: {
