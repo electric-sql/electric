@@ -80,6 +80,19 @@ defmodule Electric.Postgres.Proxy.QueryAnalyser.Impl do
     {:error, :unsupported_default_clause}
   end
 
+  # This function clause mirrors the __validate_table_constraints() SQL procedure.
+  #
+  # It is important that this implementation and the one in __validate_table_constraints() behave the same to
+  # ensure consistent handling of columns both when a table is first electrified and when a new column is added to an
+  # already electrified table.
+  defp validate_column_constraint(%PgQuery.Node{
+         node: {:constraint, %PgQuery.Constraint{contype: constraint}}
+       }) do
+    if constraint not in [:CONSTR_FOREIGN, :CONSTR_NOTNULL, :CONSTR_NULL] do
+      {:error, {:unsupported_constraint, constraint}}
+    end
+  end
+
   def sql_table(%{table: {schema, table}}) do
     ~s["#{schema}"."#{table}"]
   end
@@ -219,6 +232,17 @@ defimpl QueryAnalyser, for: PgQuery.AlterTableStmt do
                message: "Cannot electrify column with DEFAULT clause"
              }
          }}
+
+      {:error, {:unsupported_constraint, constraint}} ->
+        {:halt,
+         %{
+           analysis
+           | allowed?: false,
+             error: %{
+               code: "EX003",
+               message: "Cannot electrify column with #{format_constraint(constraint)} constraint"
+             }
+         }}
     end
   end
 
@@ -258,6 +282,13 @@ defimpl QueryAnalyser, for: PgQuery.AlterTableStmt do
       message: ~s[Cannot alter column "#{name}" of electrified table #{sql_table(analysis)}]
     }
   end
+
+  defp format_constraint(:CONSTR_CHECK), do: "CHECK"
+  defp format_constraint(:CONSTR_GENERATED), do: "GENERATED"
+  defp format_constraint(:CONSTR_IDENTITY), do: "GENERATED"
+  defp format_constraint(:CONSTR_PRIMARY), do: "PRIMARY KEY"
+  defp format_constraint(:CONSTR_UNIQUE), do: "UNIQUE"
+  defp format_constraint(other), do: to_string(other)
 end
 
 defimpl QueryAnalyser, for: PgQuery.TransactionStmt do
