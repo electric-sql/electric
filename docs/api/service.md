@@ -170,7 +170,7 @@ Originally (prior to v0.8) all writes to Postgres were made using logical replic
 
 In [version 0.8](/blog/2023/12/13/electricsql-v0.8-released#from-superuser-to-supabase), Electric added direct writes mode to reduce the database user permissions required and increase compatibility with Postgres hosting providers.
 
-In future, we may depreciate logical replication and consolidate on direct writes. However, logical replication may have performance advantages and, for now, we've kept both modes available while direct writes mode gains maturity and we learn more about the operational characteristics of both modes.
+In future, we may deprecate logical replication and consolidate on direct writes. However, logical replication may have performance advantages and, for now, we've kept both modes available while direct writes mode gains maturity and we learn more about the operational characteristics of both modes.
 :::
 
 ## Database user permissions
