@@ -201,21 +201,57 @@ defmodule Electric.Satellite.Auth.SecureTest do
     end
 
     test "validates the iat claim" do
-      token = signed_token(claims(%{"iat" => DateTime.to_unix(~U[2123-05-01 00:00:00Z])}))
+      # To account for clock drift between Electric and a 3rd-party that generates JWTs, we allow for iat to be slightly
+      # in the future.
+      soon = DateTime.utc_now() |> DateTime.add(1, :second) |> DateTime.to_unix()
+
+      token =
+        claims(%{"iat" => soon, @namespace => %{"user_id" => "12345"}})
+        |> signed_token()
+
+      assert {:ok, %Auth{user_id: "12345"}} == validate_token(token, config([]))
+
+      # but not too far off
+      far_future = DateTime.utc_now() |> DateTime.add(5, :second) |> DateTime.to_unix()
+      token = signed_token(claims(%{"iat" => far_future}))
 
       assert {:error, %Auth.TokenError{message: ~S'Invalid "iat" claim value: ' <> _}} =
                validate_token(token, config([]))
     end
 
     test "validates the nbf claim" do
-      token = signed_token(claims(%{"nbf" => DateTime.to_unix(~U[2123-05-01 00:00:00Z])}))
+      # To account for clock drift between Electric and a 3rd-party that generates JWTs, we allow for nbf to be slightly
+      # in the future.
+      soon = DateTime.utc_now() |> DateTime.add(1, :second) |> DateTime.to_unix()
+
+      token =
+        claims(%{"nbf" => soon, @namespace => %{"user_id" => "12345"}})
+        |> signed_token()
+
+      assert {:ok, %Auth{user_id: "12345"}} == validate_token(token, config([]))
+
+      # but not too far off
+      far_future = DateTime.utc_now() |> DateTime.add(5, :second) |> DateTime.to_unix()
+      token = signed_token(claims(%{"nbf" => far_future}))
 
       assert {:error, %Auth.TokenError{message: "Token is not yet valid"}} ==
                validate_token(token, config([]))
     end
 
     test "validates the exp claim" do
-      token = signed_token(claims(%{"exp" => DateTime.to_unix(~U[2023-05-01 00:00:00Z])}))
+      # To account for clock drift between Electric and a 3rd-party that generates JWTs, we allow for exp to be slightly
+      # in the past.
+      just_now = DateTime.utc_now() |> DateTime.add(-1, :second) |> DateTime.to_unix()
+
+      token =
+        claims(%{"nbf" => just_now, @namespace => %{"user_id" => "12345"}})
+        |> signed_token()
+
+      assert {:ok, %Auth{user_id: "12345"}} == validate_token(token, config([]))
+
+      # but not too far off
+      long_past = DateTime.utc_now() |> DateTime.add(-5, :second) |> DateTime.to_unix()
+      token = signed_token(claims(%{"exp" => long_past}))
 
       assert {:error, %Auth.TokenError{message: "Expired token"}} ==
                validate_token(token, config([]))
