@@ -40,7 +40,7 @@ Your configuration options affect the number and type of ports that need to be e
 
 In development using Docker you usually want to map all the necessary ports to your host network (`-p 5133:5133` and `-p 5433:5433` in the example above).
 
-In production you must make sure your hosting infrastructure exposes the necessary ports and protocols. If not, you can use the workarounds provided in the form of [direct writes mode](#direct-writes-mode) and the [proxy tunnel](#proxy-tunnel).
+In production you must make sure your hosting infrastructure exposes the necessary ports and protocols. If not, you can use the workarounds provided in the form of [direct writes mode](#direct-writes-mode) and the [proxy tunnel](#migrations-proxy).
 
 Again, see <DocPageLink path="deployment/concepts" /> for more information.
 :::
