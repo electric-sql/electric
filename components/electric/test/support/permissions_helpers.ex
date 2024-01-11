@@ -192,13 +192,17 @@ defmodule ElectricTest.PermissionsHelpers do
     @impl Electric.Satellite.Permissions.Scope
     # for the new record case, we need to find the parent table we're adding a child of
     # in order to find its place in the tree
-    def scope_id!({graph, fks}, {_, _} = root, %Changes.NewRecord{} = change) do
-      with {:ok, parent, parent_id} <- fk_for_change(fks, root, change) do
-        scope_root_id(graph, root, parent, parent_id)
+    def scope_id({graph, fks}, {_, _} = root, %Changes.NewRecord{} = change) do
+      case fk_for_change(fks, root, change) do
+        {:ok, parent, parent_id} ->
+          scope_root_id(graph, root, parent, parent_id)
+
+        _error ->
+          nil
       end
     end
 
-    def scope_id!({graph, _fks}, {_, _} = root, change) do
+    def scope_id({graph, _fks}, {_, _} = root, change) do
       {table, id} = relation_id(change)
 
       scope_root_id(graph, root, table, id)
@@ -218,22 +222,17 @@ defmodule ElectricTest.PermissionsHelpers do
     defp scope_root_id(graph, root, table, id) do
       case path(graph, table, id) do
         nil ->
-          {:error, "record #{inspect(table)} id: #{inspect(id)} does not exist"}
+          nil
 
         # we're already at the root of the tree
         [{^root, ^id} | _path] ->
-          {:ok, id}
+          id
 
         [{^table, ^id} | path] ->
-          error = {:error, "#{inspect(table)} not in scope #{inspect(root)}"}
-
-          with {:ok, root_id} <-
-                 Enum.find_value(path, error, fn
-                   {^root, id} -> {:ok, id}
-                   _ -> false
-                 end) do
-            {:ok, root_id}
-          end
+          Enum.find_value(path, fn
+            {^root, id} -> id
+            _ -> false
+          end)
       end
     end
 

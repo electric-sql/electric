@@ -451,12 +451,8 @@ defmodule Electric.Satellite.Permissions do
   end
 
   defp change_in_scope?(scope_resolver, scope_relation, scope_id, change) do
-    case Scope.scope_id!(scope_resolver, scope_relation, change) do
-      {:ok, id} -> scope_id == id
-      # an {:error, _} response here means the change doesn't belong in the scope -- transient
-      # runtime errors raise
-      {:error, _reason} -> false
-    end
+    id = Scope.scope_id(scope_resolver, scope_relation, change)
+    id && id == scope_id
   end
 
   defp required_permission(%change{relation: relation}) do

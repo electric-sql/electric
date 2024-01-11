@@ -80,62 +80,58 @@ defmodule Electric.Satellite.PermissionsTest do
   end
 
   describe "PermissionsHelpers.Tree" do
-    test "scope_id!/3", cxt do
-      {:ok, "p1"} =
-        Scope.scope_id!(cxt.tree, @projects, %Changes.NewRecord{
-          relation: @reactions,
-          record: %{"id" => "r100", "comment_id" => "c2"}
-        })
+    test "scope_id/3", cxt do
+      assert "p1" =
+               Scope.scope_id(cxt.tree, @projects, %Changes.NewRecord{
+                 relation: @reactions,
+                 record: %{"id" => "r100", "comment_id" => "c2"}
+               })
 
-      {:ok, "p1"} =
-        Scope.scope_id!(cxt.tree, @projects, %Changes.UpdatedRecord{
-          relation: @reactions,
-          record: %{"id" => "r4"}
-        })
+      assert "p1" =
+               Scope.scope_id(cxt.tree, @projects, %Changes.UpdatedRecord{
+                 relation: @reactions,
+                 record: %{"id" => "r4"}
+               })
 
-      {:ok, "p2"} =
-        Scope.scope_id!(cxt.tree, @projects, %Changes.DeletedRecord{
-          relation: @comments,
-          old_record: %{"id" => "c4"}
-        })
+      assert "p2" =
+               Scope.scope_id(cxt.tree, @projects, %Changes.DeletedRecord{
+                 relation: @comments,
+                 old_record: %{"id" => "c4"}
+               })
     end
 
-    test "scope_id!/3 with invalid records", cxt do
-      {:error, _} =
-        Scope.scope_id!(cxt.tree, @projects, %Changes.NewRecord{
-          relation: @reactions,
-          # invalid fk
-          record: %{"id" => "r100", "comment_id" => "c100"}
-        })
+    test "scope_id/3 with invalid records", cxt do
+      refute Scope.scope_id(cxt.tree, @projects, %Changes.NewRecord{
+               relation: @reactions,
+               # invalid fk
+               record: %{"id" => "r100", "comment_id" => "c100"}
+             })
 
-      {:error, _} =
-        Scope.scope_id!(cxt.tree, @projects, %Changes.NewRecord{
-          relation: @reactions,
-          # no fk
-          record: %{"id" => "r100"}
-        })
+      refute Scope.scope_id(cxt.tree, @projects, %Changes.NewRecord{
+               relation: @reactions,
+               # no fk
+               record: %{"id" => "r100"}
+             })
     end
 
-    test "scope_id!/3 with record out of scope", cxt do
-      {:error, _} =
-        Scope.scope_id!(cxt.tree, @projects, %Changes.NewRecord{
-          relation: @offices,
-          record: %{"id" => "o100", "region_id" => "r1"}
-        })
+    test "scope_id/3 with record out of scope", cxt do
+      refute Scope.scope_id(cxt.tree, @projects, %Changes.NewRecord{
+               relation: @offices,
+               record: %{"id" => "o100", "region_id" => "r1"}
+             })
 
-      {:error, _} =
-        Scope.scope_id!(cxt.tree, @projects, %Changes.NewRecord{
-          relation: @regions,
-          record: %{"id" => "r100"}
-        })
+      refute Scope.scope_id(cxt.tree, @projects, %Changes.NewRecord{
+               relation: @regions,
+               record: %{"id" => "r100"}
+             })
     end
 
-    test "scope_id!/3 at root of scope", cxt do
-      {:ok, "p1"} =
-        Scope.scope_id!(cxt.tree, @projects, %Changes.NewRecord{
-          relation: @issues,
-          record: %{"id" => "i100", "project_id" => "p1"}
-        })
+    test "scope_id/3 at root of scope", cxt do
+      assert "p1" =
+               Scope.scope_id(cxt.tree, @projects, %Changes.NewRecord{
+                 relation: @issues,
+                 record: %{"id" => "i100", "project_id" => "p1"}
+               })
     end
 
     test "modifies_fk?/2", cxt do
