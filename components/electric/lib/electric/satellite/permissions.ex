@@ -202,13 +202,6 @@ defmodule Electric.Satellite.Permissions do
     }
   end
 
-  defp build_roles(roles, auth) do
-    roles
-    |> Enum.map(&Role.new/1)
-    |> add_authenticated(auth)
-    |> add_anyone()
-  end
-
   # For every `{table, privilege}` tuple we have a set of roles that the current user has.
   # If any of those roles are global, then it's equvilent to saying that the user can perform
   # `privilege` on `table` no matter what the scope. This function analyses the roles for a
@@ -238,6 +231,25 @@ defmodule Electric.Satellite.Permissions do
     |> Stream.filter(&Role.has_scope?/1)
     |> Stream.map(&elem(&1.scope, 0))
     |> Enum.uniq()
+  end
+
+  defp build_roles(roles, auth) do
+    roles
+    |> Enum.map(&Role.new/1)
+    |> add_authenticated(auth)
+    |> add_anyone()
+  end
+
+  defp add_anyone(roles) do
+    [%Role.Anyone{} | roles]
+  end
+
+  defp add_authenticated(roles, %Auth{user_id: nil}) do
+    roles
+  end
+
+  defp add_authenticated(roles, %Auth{user_id: user_id}) do
+    [%Role.Authenticated{user_id: user_id} | roles]
   end
 
   @spec filter_read(t(), Changes.Transaction.t()) :: Changes.Transaction.t()
@@ -317,28 +329,33 @@ defmodule Electric.Satellite.Permissions do
   @spec role_grant_for_change(assigned_roles(), t(), change(), lsn(), mode()) ::
           RoleGrant.t() | nil
   defp role_grant_for_change(grants, perms, change, lsn, mode) do
-    %{scoped: scoped_role_grants, unscoped: unscoped_role_grants} = grants
+    %{unscoped: unscoped_role_grants, scoped: scoped_role_grants} = grants
 
-    validate_change_against_grants(unscoped_role_grants, change, mode) ||
-      match_scoped_role_to_change(scoped_role_grants, perms, change, lsn, mode)
+    Stream.concat([
+      unscoped_role_grants,
+      scoped_role_grants(scoped_role_grants, perms, change, lsn),
+      transient_role_grants(scoped_role_grants, perms, change, lsn)
+    ])
+    |> find_grant_allowing_change(change, mode)
   end
 
-  @spec match_scoped_role_to_change([RoleGrant.t()], t(), change(), lsn(), mode()) ::
-          RoleGrant.t() | nil
-  defp match_scoped_role_to_change(role_grants, perms, change, lsn, mode) do
-    # find roles that are valid for the scope of the change
-    role_grants_in_scope = role_grants_in_scope(role_grants, perms.scope_resolver, change)
+  defp scoped_role_grants(role_grants, perms, change, _lsn) do
+    %{scope_resolver: scope_resolv} = perms
 
-    validate_change_against_grants(role_grants_in_scope, change, mode) ||
-      transient_permission_for_change(role_grants, perms, change, lsn, mode)
+    Stream.filter(role_grants, fn
+      %{role: %{scope: {scope_table, scope_id}}} ->
+        # filter out roles whose scope doesn't match
+        #   - lookup their root id from the change
+        #   - then reject roles that don't match the {table, pk_id}
+
+        change_in_scope?(scope_resolv, scope_table, scope_id, change)
+    end)
   end
 
-  @spec transient_permission_for_change([RoleGrant.t()], t(), change(), lsn(), mode()) ::
-          RoleGrant.t() | nil
-  defp transient_permission_for_change(role_grants, perms, change, lsn, mode) do
+  defp transient_role_grants(role_grants, perms, change, lsn) do
     role_grants
     |> Transient.for_roles(lsn, perms.transient_lut)
-    |> Enum.flat_map(fn {role_grant, %Transient{target_relation: relation, target_id: id} = tdp} ->
+    |> Stream.flat_map(fn {role_grant, %Transient{target_relation: relation, target_id: id} = tdp} ->
       if change_in_scope?(perms.scope_resolver, relation, id, change) do
         Logger.debug(fn ->
           "Using transient permission #{inspect(tdp)} for #{inspect(change)}"
@@ -349,12 +366,10 @@ defmodule Electric.Satellite.Permissions do
         []
       end
     end)
-    |> validate_change_against_grants(change, mode)
   end
 
-  @spec validate_change_against_grants([RoleGrant.t()], change(), mode()) ::
-          RoleGrant.t() | nil
-  defp validate_change_against_grants(role_grants, change, :write) do
+  @spec find_grant_allowing_change(Enum.t(), change(), :write) :: RoleGrant.t() | nil
+  defp find_grant_allowing_change(role_grants, change, :write) do
     role_grants
     |> Enum.find(fn %{grant: grant} ->
       # ensure that change is compatible with grant conditions
@@ -363,11 +378,13 @@ defmodule Electric.Satellite.Permissions do
     end)
   end
 
-  defp validate_change_against_grants(role_grants, change, :read) do
-    role_grants
-    |> Enum.find(fn %{grant: grant} ->
-      change_passes_check?(grant, change)
-    end)
+  @spec find_grant_allowing_change([RoleGrant.t()], change(), :read) ::
+          RoleGrant.t() | nil
+  defp find_grant_allowing_change(role_grants, change, :read) do
+    Enum.find(
+      role_grants,
+      fn %{grant: grant} -> change_passes_check?(grant, change) end
+    )
   end
 
   defp change_matches_columns?(grant, %Changes.NewRecord{} = insert) do
@@ -391,23 +408,6 @@ defmodule Electric.Satellite.Permissions do
     true
   end
 
-  # find roles that apply for the given change. use the precompiled
-  # permissions to quickly filter any roles that don't have the required
-  # privilege.
-  #
-  # this only runs against scoped-only roles because if we found a global role
-  # we won't even get here
-  defp role_grants_in_scope(role_grants, scope_resolv, change) do
-    Enum.filter(role_grants, fn
-      %{role: %{scope: {scope_table, scope_id}}} ->
-        # filter out roles whose scope doesn't match
-        #   - lookup their root id from the change
-        #   - then reject roles that don't match the {table, pk_id}
-
-        change_in_scope?(scope_resolv, scope_table, scope_id, change)
-    end)
-  end
-
   defp change_in_scope?(scope_resolver, scope_relation, scope_id, change) do
     case Scope.scope_id!(scope_resolver, scope_relation, change) do
       {:ok, id} -> scope_id == id
@@ -415,18 +415,6 @@ defmodule Electric.Satellite.Permissions do
       # runtime errors raise
       {:error, _reason} -> false
     end
-  end
-
-  defp add_anyone(roles) do
-    [%Role.Anyone{} | roles]
-  end
-
-  defp add_authenticated(roles, %Auth{user_id: nil}) do
-    roles
-  end
-
-  defp add_authenticated(roles, %Auth{user_id: user_id}) do
-    [%Role.Authenticated{user_id: user_id} | roles]
   end
 
   defp required_permission(%change{relation: relation}) do

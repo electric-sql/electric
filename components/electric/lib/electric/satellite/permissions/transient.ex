@@ -31,22 +31,6 @@ defmodule Electric.Satellite.Permissions.Transient do
     GenServer.call(name, :table_ref)
   end
 
-  @doc """
-  Find transient permissions that belong to the given roles.
-
-  The roles are passed as either a list of bare `#{Permissions.Role}` structs
-  or wrapped within some container object to be extracted by the `mapper_fun/1`
-
-  This way we can associate
-  """
-  @spec for_roles([RoleGrant.t()], Permissions.lsn(), lut()) :: [{RoleGrant.t(), t()}]
-  def for_roles(role_grants, lsn, table) do
-    role_grants
-    |> Stream.map(&filter_for_role/1)
-    |> Stream.flat_map(&apply_filter(&1, table_ref!(table)))
-    |> Enum.filter(&filter_expired(&1, lsn))
-  end
-
   @spec update([t()], lut()) :: :ok
   def update(permissions, table \\ __MODULE__) do
     permissions
@@ -60,15 +44,25 @@ defmodule Electric.Satellite.Permissions.Transient do
     {permission.assign_id, permission.scope_id, permission}
   end
 
-  defp filter_for_role(%{role: %Permissions.Role{} = role} = role_grant) do
-    %{assign_id: assign_id, scope: {_, scope_id}} = role
-    {role_grant, {assign_id, scope_id, :"$1"}}
+  @doc """
+  Find transient permissions that belong to the given roles.
+
+  Returns a stream so that the search can be lazily executed and halts when the perms system finds
+  a valid grant.
+  """
+  @spec for_roles([RoleGrant.t()], Permissions.lsn(), lut()) :: Enum.t()
+  def for_roles(role_grants, lsn, table) do
+    role_grants
+    |> Stream.flat_map(&transient_for_roles(&1, table_ref!(table)))
+    |> Stream.filter(&filter_expired(&1, lsn))
   end
 
-  defp apply_filter({role_grant, match}, name) do
-    # :ets.match/2 returns a list of lists
+  defp transient_for_roles(%{role: %Permissions.Role{} = role} = role_grant, name) do
+    %{assign_id: assign_id, scope: {_, scope_id}} = role
+
     name
-    |> :ets.match(match)
+    |> :ets.match({assign_id, scope_id, :"$1"})
+    # :ets.match/2 returns a list of lists but since we only return '$1' we only want the first
     |> Stream.map(fn m -> {role_grant, hd(m)} end)
   end
 
