@@ -45,7 +45,7 @@
     "dist"
   ],
   "bin": {
-    "electric-sql": "dist/cli/index.js"
+    "electric-sql": "dist/cli/main.js"
   },
   "exports": {
     "./browser": "./dist/drivers/wa-sqlite/index.js",
@@ -121,8 +121,9 @@
   },
   "scripts": {
     "post-version-bump": "node -p \"'export const LIB_VERSION = \\'' + require('./package.json').version + '\\''\" > src/version/index.ts",
-    "dev": "rm -rf dist && mkdir dist && concurrently \"tsup --watch\" \"tsc -p tsconfig.build.json --watch\" \"nodemon --watch ./dist  --delay 250ms ./scripts/fix-imports.js\"",
-    "build": "rm -rf dist && concurrently \"tsup\" \"tsc -p tsconfig.build.json\" && node scripts/fix-imports.js",
+    "dev": "shx rm -rf dist && npm run build:copy-docker && mkdir dist && concurrently \"tsup --watch\" \"tsc -p tsconfig.build.json --watch\" \"nodemon --watch ./dist  --delay 250ms ./scripts/fix-imports.js\"",
+    "build": "shx rm -rf dist && npm run build:copy-docker && concurrently \"tsup\" \"tsc -p tsconfig.build.json\" && node scripts/fix-imports.js",
+    "build:copy-docker": "shx mkdir -p ./dist/cli/docker-commands/docker && shx cp -r ./src/cli/docker-commands/docker ./dist/cli/docker-commands",
     "test": "ava",
     "typecheck": "tsc -p tsconfig.json",
     "posttest": "npm run typecheck",
@@ -140,8 +141,10 @@
     "async-mutex": "^0.4.0",
     "base-64": "^1.0.0",
     "better-sqlite3": "^8.4.0",
+    "commander": "^11.1.0",
     "cross-fetch": "^3.1.5",
     "decompress": "^4.2.1",
+    "dotenv-flow": "^4.1.0",
     "events": "^3.3.0",
     "exponential-backoff": "^3.1.0",
     "fastestsmallesttextencoderdecoder": "^1.0.22",
@@ -160,9 +163,11 @@
     "object.hasown": "^1.1.2",
     "ohash": "^1.1.2",
     "prisma": "4.8.1",
+    "prompts": "^2.4.2",
     "protobufjs": "^7.1.1",
     "react-native-uuid": "^2.0.1",
     "squel": "^5.13.0",
+    "tcp-port-used": "^1.0.2",
     "ts-dedent": "^2.2.0",
     "uuid": "^9.0.0",
     "ws": "^8.8.1",
@@ -185,9 +190,11 @@
     "@types/lodash.pick": "^4.4.7",
     "@types/lodash.throttle": "^4.1.7",
     "@types/node": "^18.8.4",
+    "@types/prompts": "^2.4.9",
     "@types/react": "^18.0.18",
     "@types/react-native-sqlite-storage": "^6.0.0",
     "@types/react-native-uuid": "^2.0.0",
+    "@types/tcp-port-used": "^1.0.2",
     "@types/uuid": "^9.0.1",
     "@types/ws": "^8.5.3",
     "@typescript-eslint/eslint-plugin": "^5.34.0",
@@ -205,6 +212,7 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "release-it": "^15.5.0",
+    "shx": "^0.3.4",
     "ts-proto": "^1.125.0",
     "tsup": "^8.0.1",
     "tsx": "^4.1.1",

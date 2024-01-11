@@ -1,0 +1,36 @@
+version: '3.8'
+
+configs:
+  postgres_config:
+    file: './postgres.conf'
+
+volumes:
+  pg_data:
+
+services:
+  postgres:
+    profiles: ['with-postgres']
+    image: '${POSTGRESQL_IMAGE:-postgres:14-alpine}'
+    environment:
+      POSTGRES_DB: ${APP_NAME:-electric}
+      POSTGRES_USER: ${DATABASE_USER:-postgres}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-db_password}
+    command:
+      - -c
+      - config_file=/etc/postgresql.conf
+    configs:
+      - source: postgres_config
+        target: /etc/postgresql.conf
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DATABASE_USER:-postgres}']
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    ports:
+      - ${DATABASE_PORT:-5432}:5432
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+  electric:
+    extends:
+      file: compose-base.yaml
+      service: ${COMPOSE_ELECTRIC_SERVICE:-electric-no-postgres}

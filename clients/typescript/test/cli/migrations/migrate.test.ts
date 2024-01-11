@@ -1,10 +1,10 @@
 import test from 'ava'
 import fs from 'fs'
 import {
-  defaultOptions,
   doCapitaliseTableNames,
   generate,
 } from '../../../src/cli/migrations/migrate'
+import { getConfig } from '../../../src/cli/config'
 
 const lowerCasePrismaSchema = `
 datasource db {
@@ -123,7 +123,9 @@ const failedGenerate = async (debug = false): Promise<boolean> => {
       // no-op
     }
     await generate({
-      ...defaultOptions,
+      config: getConfig({
+        SERVICE_HOST: 'does-not-exist', // Use a non-existent host to force failure
+      }),
       // prevent process.exit call to perform test
       exitOnError: false,
       // if set to true, temporary folder is retained on failure
