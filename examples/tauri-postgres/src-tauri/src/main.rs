@@ -1,5 +1,6 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 // Third part utils
 use dirs::home_dir;
 use futures::stream::StreamExt;
@@ -78,9 +79,9 @@ struct QueryResult {
  *****************/
 /// This is the global connection to Postgres
 struct DbConnection {
-    db: Mutex<Option<PgEmbed>>,
-    conn: Mutex<Option<PgConnection>>,
-    llama: Mutex<Option<Ollama>>,
+    db: Arc<AsyncMutex<Option<PgEmbed>>>,
+    conn: Arc<AsyncMutex<Option<PgConnection>>>,
+    llama: Arc<AsyncMutex<Option<Ollama>>>,
 }
 
 /// App state for the terminal window. TODO: rename to something more sensible
@@ -114,45 +115,39 @@ async fn async_resize_pty(rows: u16, cols: u16, state: State<'_, TerminalState>)
 }
 
 #[tauri::command(rename_all = "snake_case")]
-fn tauri_exec_command(
-    connection: State<DbConnection>,
+async fn tauri_exec_command(
+    connection: State<'_, DbConnection>,
     sql: &str,
     bind_params: BindParams,
-) -> QueryResult {
-    block_on(async {
-        if let Some(pg) = connection.db.lock().unwrap().as_mut() {
-            if let Some(conn) = connection.conn.lock().unwrap().as_mut() {
-                tauri_exec(pg, conn, sql, bind_params).await
-            } else {
-                println!("tauri_exec_command: Connection unsuccessful");
-                QueryResult {
-                    rows_modified: 0,
-                    result: "".to_string(),
-                }
-            }
+) -> Result<QueryResult, QueryResult> {
+    if let Some(pg) = connection.db.lock().await.as_mut() {
+        if let Some(conn) = connection.conn.lock().await.as_mut() {
+            Ok(tauri_exec(pg, conn, sql, bind_params).await)
         } else {
-            QueryResult {
+            println!("tauri_exec_command: Connection unsuccessful");
+            Err(QueryResult {
                 rows_modified: 0,
                 result: "".to_string(),
-            }
+            })
         }
-    })
+    } else {
+        Err(QueryResult {
+            rows_modified: 0,
+            result: "".to_string(),
+        })
+    }
 }
 
 #[tauri::command]
-fn send_recv_postgres_terminal(connection: State<DbConnection>, data: &str) -> String {
+async fn send_recv_postgres_terminal(connection: State<'_, DbConnection>, data: &str) -> Result<String, String> {
     println!("From the terminal, {}", data);
 
-    block_on(async {
-        match connection.conn.lock().unwrap().as_mut() {
-            Some(conn) => {
-                // let conn = tauri_pg_connect(pg, "test").await;
-
-                pg_query(conn, data).await
-            }
-            _ => "".to_string(),
+    match connection.conn.lock().await.as_mut() {
+        Some(conn) => {
+            Ok(pg_query(conn, data).await)
         }
-    })
+        _ => Err("".to_string()),
+    }
 }
 
 async fn tauri_exec(
@@ -245,42 +240,40 @@ async fn tauri_exec(
 }
 
 #[tauri::command(rename_all = "snake_case")]
-fn tauri_init_command(connection: State<DbConnection>, name: &str) -> Result<(), String> {
+async fn tauri_init_command(connection: State<'_, DbConnection>, name: &str) -> Result<(), String> {
     // Start the postgres when we receive this call
-    block_on(async {
-        let pg = pg_init(
-            format!(
-                "{}/db/{}",
-                home_dir().unwrap().into_os_string().into_string().unwrap(),
-                name
-            )
-            .as_str(),
+    let pg = pg_init(
+        format!(
+            "{}/db/{}",
+            home_dir().unwrap().into_os_string().into_string().unwrap(),
+            name
         )
-        .await;
-        let conn = pg_connect(&pg, "test").await;
+        .as_str(),
+    )
+    .await;
+    let conn = pg_connect(&pg, "test").await;
 
-        *connection.db.lock().unwrap() = Some(pg);
-        *connection.conn.lock().unwrap() = Some(conn);
-        *connection.llama.lock().unwrap() = Some(Ollama::default());
-    });
+    *connection.db.lock().await = Some(pg);
+    *connection.conn.lock().await = Some(conn);
+    *connection.llama.lock().await = Some(Ollama::default());
 
     Ok(())
 }
 
 #[tauri::command(rename_all = "snake_case")]
-fn tauri_stop_postgres(connection: State<DbConnection>) {
+fn tauri_stop_postgres(connection: State<'_, DbConnection>) {
     block_on(async {
-        if let Some(pg) = connection.db.lock().unwrap().as_mut() {
-            pg.stop_db().await.unwrap()
+        if let Some(pg) = connection.db.lock().await.as_mut() {
+            let _ = pg.stop_db().await;
         }
-    });
+    })
 }
 
-pub async fn vector_search_database(
+pub async fn vector_search(
     _pg: &mut PgEmbed,
     conn: &mut PgConnection,
     query: &str,
-) -> String {
+) -> Result<String, String> {
     let model = create_embedding_model();
     let embedded_query = embed_query(query, model);
 
@@ -293,6 +286,7 @@ pub async fn vector_search_database(
     )
     .fetch_all(conn)
     .await
+    .map_err(|e| e.to_string())
     .unwrap();
 
     let mut result = String::new();
@@ -300,43 +294,39 @@ pub async fn vector_search_database(
         let row_column = row_to_json(row);
         result.push_str(serde_json::to_string(&row_column).unwrap().as_str());
     }
-    println!("{}", result);
+    println!("IS THIS DOING THE RIGHT THING? {}", result);
 
-    result
+    Ok(result)
 }
 
 #[tauri::command(rename_all = "snake_case")]
-fn tauri_embed_issue(text: &str) -> String {
-    block_on(async {
-        let model = create_embedding_model();
+async fn tauri_embed_issue(text: &str) -> Result<String, ()> {
+    let model = create_embedding_model();
 
-        format_embeddings(embed_issue(text, model))
-    })
+    Ok(format_embeddings(embed_issue(text, model)))
 }
 
 #[tauri::command(rename_all = "snake_case")]
-fn tauri_vector_search(connection: State<DbConnection>, query: &str) -> String {
+async fn tauri_vector_search(connection: State<'_, DbConnection>, query: &str) -> Result<String, String> {
     let mut ret = "failed".to_string();
-    block_on(async {
-        if let Some(pg) = connection.db.lock().unwrap().as_mut() {
-            if let Some(conn) = connection.conn.lock().unwrap().as_mut() {
-                ret = vector_search_database(pg, conn, query).await;
-            }
-        }
-    });
 
-    ret
+    if let Some(pg) = connection.db.lock().await.as_mut() {
+        if let Some(conn) = connection.conn.lock().await.as_mut() {
+            ret = vector_search(pg, conn, query).await.unwrap();
+            return Ok(ret);
+        }
+    }
+
+    Err(ret)
 }
 
 #[tauri::command(rename_all = "snake_case")]
-fn tauri_chat(connection: State<DbConnection>, question: &str, context: &str) -> String {
-    block_on(async {
-        if let Some(llama) = connection.llama.lock().unwrap().as_mut() {
-            chat(llama, question.to_string(), context.to_string()).await
-        } else {
-            "Llama was not able to answer".to_string()
-        }
-    })
+async fn tauri_chat(connection: State<'_, DbConnection>, question: &str, context: &str) -> Result<String, String> {
+    if let Some(llama) = connection.llama.lock().await.as_mut() {
+        Ok(chat(llama, question.to_string(), context.to_string()).await)
+    } else {
+        Err("Llama was not able to answer".to_string())
+    }
 }
 
 fn main() {
@@ -428,12 +418,12 @@ fn main() {
         .on_window_event(move |event| match event.event() {
             WindowEvent::Destroyed => {
                 let db_connection: State<DbConnection> = event.window().state();
-                let mut db = db_connection.db.lock().unwrap();
-                if let Some(mut connection) = db.take() {
-                    block_on(async {
+                block_on(async {
+                    let mut db = db_connection.db.lock().await;
+                    if let Some(mut connection) = db.take() {
                         connection.stop_db().await.unwrap();
-                    })
-                }
+                    }
+                })
             }
             _ => {}
         })
