@@ -323,7 +323,7 @@ test('load migration from meta data', async (t) => {
   )
 
   // Check that the DB is initialized with the stars table
-  const tables = await electric.db.raw({
+  const tables = await electric.db.rawQuery({
     sql: `SELECT name FROM sqlite_master WHERE type='table' AND name='stars';`,
   })
 
@@ -331,7 +331,7 @@ test('load migration from meta data', async (t) => {
   t.assert(starIdx >= 0) // must exist
 
   const columns = await electric.db
-    .raw({
+    .rawQuery({
       sql: `PRAGMA table_info(stars);`,
     })
     .then((columns) => columns.map((column) => column.name))

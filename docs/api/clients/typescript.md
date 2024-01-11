@@ -132,8 +132,9 @@ export type ClientTables<DB> = {
 }
 
 interface RawQueries {
-  raw(sql: Statement): Promise<Row[]>
-  liveRaw(sql: Statement): LiveResultContext<any>
+  rawQuery(sql: Statement): Promise<Row[]>
+  liveRawQuery(sql: Statement): LiveResultContext<any>
+  unsafeExec(sql: Statement): Promise<Row[]>
 }
 
 type Statement = {
@@ -145,8 +146,8 @@ type Statement = {
 
 The Electric client above defines a property for every table in our data model: `electric.db.users`, `electric.db.projects`, etc.
 The API of these tables is explained below when we discuss the [supported queries](#queries).
-In addition, one can execute raw SQL queries using the `electric.db.raw` and `electric.db.liveRaw` escape patches.
-Raw queries should be used with caution as they are unchecked and may cause the sync service to stop if they are ill-formed.
+In addition, one can execute raw read-only SQL queries using the `electric.db.rawQuery` and `electric.db.liveRawQuery` escape patches.
+It is also possible to execute raw queries that can modify the store using `electric.db.unsafeExec`, but it should be used with caution as the changes are unchecked and may cause the sync service to stop if they are ill-formed.
 Therefore, only use raw queries for features that are not supported by our regular API.
 
 ## Configuration

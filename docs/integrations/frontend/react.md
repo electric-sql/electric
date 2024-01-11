@@ -100,7 +100,7 @@ const ExampleComponent = () => {
   const [ value, setValue ] = useState()
 
   const generate = async () => {
-    const { newValue } = await db.raw({
+    const { newValue } = await db.rawQuery({
       sql: 'select random() as newValue'
     })
 
@@ -140,7 +140,7 @@ const Component = () => {
 
   // Use the raw SQL API.
   const { results: countResults } = useLiveQuery(
-    db.liveRaw({
+    db.liveRawQuery({
       sql: 'select count(*) from items'
     })
   )

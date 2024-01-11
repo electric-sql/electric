@@ -357,7 +357,7 @@ test.serial('findUnique query', async (t) => {
 })
 
 test.serial('raw query', async (t) => {
-  const res = await electricDb.raw({
+  const res = await electricDb.rawQuery({
     sql: 'SELECT * FROM Post WHERE id = ?',
     args: [post2.id],
   })

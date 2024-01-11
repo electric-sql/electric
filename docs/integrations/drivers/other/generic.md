@@ -30,7 +30,7 @@ export interface DatabaseAdapter {
 
   // Get the tables potentially used by an SQL statement.
   // This supports reactivity for raw SQL use via the
-  // `db.liveRaw` function.
+  // `db.liveRawQuery` function.
   tableNames(statement: Statement): QualifiedTablename[]
 }
 ```
