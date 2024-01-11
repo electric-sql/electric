@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  electric-no-postgres:
+    image: '${ELECTRIC_IMAGE:-electricsql/electric:latest}'
+    init: true
+    ports:
+      - ${HTTP_PORT:-5133}:${HTTP_PORT:-5133}
+      - ${PG_PROXY_PORT:-65432}:${PG_PROXY_PORT:-65432}
+    environment:
+      DATABASE_REQUIRE_SSL: ${DATABASE_REQUIRE_SSL:-}
+      DATABASE_URL: ${DATABASE_URL:-}
+      DATABASE_USE_IPV6: ${DATABASE_USE_IPV6:-}
+      ELECTRIC_USE_IPV6: ${ELECTRIC_USE_IPV6:-}
+      HTTP_PORT: ${HTTP_PORT:-5133}
+      LOGICAL_PUBLISHER_HOST: ${LOGICAL_PUBLISHER_HOST:-}
+      LOGICAL_PUBLISHER_PORT: ${LOGICAL_PUBLISHER_PORT:-5433}
+      PG_PROXY_PASSWORD: ${PG_PROXY_PASSWORD:-proxy_password}
+      PG_PROXY_PORT: ${PG_PROXY_PORT:-65432}
+      AUTH_MODE: ${AUTH_MODE:-insecure}
+      AUTH_JWT_ALG: ${AUTH_JWT_ALG:-}
+      AUTH_JWT_AUD: ${AUTH_JWT_AUD:-}
+      AUTH_JWT_ISS: ${AUTH_JWT_ISS:-}
+      AUTH_JWT_KEY: ${AUTH_JWT_KEY:-}
+      AUTH_JWT_NAMESPACE: ${AUTH_JWT_NAMESPACE:-}
+
+  electric-with-postgres:
+    extends:
+      service: electric-no-postgres
+    depends_on:
+      - postgres

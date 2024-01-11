@@ -1,10 +1,10 @@
 import test from 'ava'
 import fs from 'fs'
 import {
-  defaultOptions,
   doCapitaliseTableNames,
   generate,
 } from '../../../src/cli/migrations/migrate'
+import { getConfig } from '../../../src/cli/config'
 
 const lowerCasePrismaSchema = `
 datasource db {
@@ -128,12 +128,12 @@ const failedGenerate = async (debug = false): Promise<boolean> => {
       // no-op
     }
     await generate({
-      ...defaultOptions,
       // point to invalid ports so that it does not find an electric service
       // or migrations proxy and fails
-      service: 'http://localhost:999999',
-      proxy: 'postgresql://prisma:proxy_password@localhost:999999/electric',
-
+      config: getConfig({
+        SERVICE_HOST: 'does-not-exist', // Use a non-existent host to force failure
+        PG_PROXY_PORT: 999999
+      }),
       // prevent process.exit call to perform test
       exitOnError: false,
 
