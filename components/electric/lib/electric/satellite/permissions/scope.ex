@@ -19,7 +19,7 @@ defmodule Electric.Satellite.Permissions.Scope do
   @callback scope_id(state(), root :: relation(), Changes.change()) :: id() | nil
 
   @doc """
-  Determines if the given update modifies a foreign key that affects the scope rooted on the
+  Determines if the given update modifies a foreign key that affects the row's scope based on the
   `root` relation.
   """
   @callback modifies_fk?(state(), root :: relation(), Changes.UpdatedRecord.t()) :: boolean()
