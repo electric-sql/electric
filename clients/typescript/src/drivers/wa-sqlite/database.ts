@@ -83,13 +83,19 @@ export class ElectricDatabase {
   }
 
   // Creates and opens a DB backed by an IndexedDB filesystem
-  static async init(dbName: string, sqliteDistPath: string) {
+  static async init(
+    dbName: string,
+    locateSqliteDist?: string | ((path: string) => string)
+  ) {
     // Initialize SQLite
-    const SQLiteAsyncModule = await SQLiteAsyncESMFactory({
-      locateFile: (path: string) => {
-        return sqliteDistPath + path
-      },
-    })
+    const locateFile =
+      typeof locateSqliteDist === 'string'
+        ? (path: string) => {
+            return locateSqliteDist + path
+          }
+        : locateSqliteDist
+
+    const SQLiteAsyncModule = await SQLiteAsyncESMFactory({ locateFile })
 
     // Build API objects for the module
     const sqlite3 = SQLite.Factory(SQLiteAsyncModule)
