@@ -15,7 +15,6 @@ The Electric client library comes with a CLI providing a number of helpful comma
 - [`stop`](#stop) - Stop the development Electric sync service, and any optional PostgreSQL
 - [`status`](#status) - Show status of the development Electric sync service docker containers
 - [`psql`](#psql) - Connect with psql to the Migration proxy
-- [`configure-ports`](#configure-ports) - Configure the ports used by the Electric sync service
 - [`show-config`](#show-config) - Show the current configuration
 - [`with-config`](#with-config) - Run a sub command with config arguments substituted
 - [`help`](#help) - Display help for a command
@@ -55,7 +54,7 @@ All arguments are optional. The principal ones are described below:
 | <span className="no-wrap">`--client-path`</span><br /><span className="no-wrap">`-o`</span><br />`ELECTRIC_CLIENT_PATH` | `<path>` | Specifies the output location for the generated client.<br /> Defaults to `./src/generated/client` |
 | <span className="no-wrap">`--watch`</span><br /><span className="no-wrap">`-w`</span> | `<pollingInterval>` | Run the generator in watch mode. Accepts an optional polling interval (in milliseconds) which defines how often to poll Electric for database migrations.<br /> The default polling interval is 1000ms. |
 | <span className="no-wrap">`--with-migrations`</span> | `<command>` | Specify a command to run migrations against a blank postgres in order to create a client. [See details below](#generate---with-migrations) |
-| <span className="no-wrap">`--module-resolution`</span> | `<command>` | The module resolution used for the project. The generated client will be compatible with this resolution scheme. |
+| <span className="no-wrap">`--module-resolution`</span> | `<command>` | The module resolution used for the project. The generated client will be compatible with this resolution scheme, [see notes below](#electric_module_resolution). |
 
 :::caution
 Note that the username in the `--proxy` URL **must** be `prisma`.
@@ -235,16 +234,6 @@ The `psql` command accepts a number of arguments for specifying the Migrations p
 | <span className="no-wrap">`--proxy`</span><br /><span className="no-wrap">`-p`</span><br />`ELECTRIC_PROXY` | `<url>` | URL of the Electric service's PostgreSQL proxy.
 
 For a full list of arguments run `npx electric-sql help psql` or see the [environment variables](#environment-variables) below.
-
-### `configure-ports`
-
-Configure the ports used by the Electric sync service.
-
-This starts an interactive session where you are asked to specify the ports you would like to use. These are then written to your `.env.local` file, and used for the other commands.
-
-```shell
-npx electric-sql configure-ports
-```
 
 ### `show-config`
 
