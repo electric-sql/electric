@@ -111,7 +111,7 @@ test('useLiveQuery returns query results', async (t) => {
   const { dal, adapter } = t.context
 
   const query = 'select i from bars'
-  const liveQuery = dal.db.liveRaw({
+  const liveQuery = dal.db.liveRawQuery({
     sql: query,
   })
 
@@ -146,7 +146,7 @@ test('useLiveQuery re-runs query when data changes', async (t) => {
   const { dal, notifier } = t.context
 
   const query = 'select foo from bars'
-  const liveQuery = dal.db.liveRaw({
+  const liveQuery = dal.db.liveRawQuery({
     sql: query,
   })
 
@@ -184,7 +184,7 @@ test('useLiveQuery re-runs query when *aliased* data changes', async (t) => {
   }
 
   const query = 'select foo from baz.bars'
-  const liveQuery = dal.db.liveRaw({
+  const liveQuery = dal.db.liveRawQuery({
     sql: query,
   })
 
@@ -212,7 +212,7 @@ test('useLiveQuery never sets results if unmounted immediately', async (t) => {
   const { dal } = t.context
 
   const query = 'select foo from bars'
-  const liveQuery = dal.db.liveRaw({
+  const liveQuery = dal.db.liveRawQuery({
     sql: query,
   })
 
@@ -233,7 +233,7 @@ test('useLiveQuery unsubscribes to data changes when unmounted', async (t) => {
   const { dal, notifier } = t.context
 
   const query = 'select foo from bars'
-  const liveQuery = dal.db.liveRaw({
+  const liveQuery = dal.db.liveRawQuery({
     sql: query,
   })
 
@@ -268,7 +268,7 @@ test('useLiveQuery ignores results if unmounted whilst re-querying', async (t) =
   const { dal, notifier } = t.context
 
   const query = 'select foo from bars'
-  const liveQuery = dal.db.liveRaw({
+  const liveQuery = dal.db.liveRawQuery({
     sql: query,
   })
   const slowLiveQuery = async () => {
