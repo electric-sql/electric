@@ -53,6 +53,7 @@ import DatabaseUrl from './_DATABASE_URL.md'
 import DatabaseUseIpv6 from './_DATABASE_USE_IPV6.md'
 import ElectricUseIpv6 from './_ELECTRIC_USE_IPV6.md'
 import HttpPort from './_HTTP_PORT.md'
+import LogLevel from './_LOG_LEVEL.md'
 
 
 Configure how Electric connects to Postgres and exposes its HTTP/WebSocket API.
@@ -100,6 +101,15 @@ Configure how Electric connects to Postgres and exposes its HTTP/WebSocket API.
     defaultValue="5133"
     example="8080">
   <HttpPort />
+</EnvVarConfig>
+
+### LOG_LEVEL
+
+<EnvVarConfig
+    name="LOG_LEVEL"
+    defaultValue="info"
+    example="debug">
+  <LogLevel />
 </EnvVarConfig>
 
 ## Write-to-PG mode
