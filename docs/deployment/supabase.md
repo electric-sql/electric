@@ -63,7 +63,7 @@ You will use this as the value for `AUTH_JWT_KEY` in your [Electric sync service
 
 ### 4. Configuring Electric to connect to Supabase
 
-Run your [Electric sync service](../api/service), either locally or [via one of the other deployment options](../top-level-listings/deployment.md), with the following [configuration options](../api/service.md#configuration-options):
+Run your [Electric sync service](../api/service), either locally or [via one of the other deployment options](../top-level-listings/deployment.md), with the following [configuration options](../api/service.md):
 
 - set `AUTH_JWT_ALG` to `HS256` to enable secure auth mode with the right signing algorithm
 - set `AUTH_JWT_KEY` to the "JWT Secret" value you retrieved in step 3 above
