@@ -1,4 +1,11 @@
 defmodule Electric.Satellite.Permissions.Scope do
+  @moduledoc """
+  Defines a simple behaviour that allows the permissions system to find a record's position within
+  a DAG.
+
+  The DAG is defined by scope roots in DDLX `ASSIGN` statements and the foreign key relations
+  within the db tables.
+  """
   alias Electric.Replication.Changes
 
   @type state() :: term()
@@ -21,6 +28,8 @@ defmodule Electric.Satellite.Permissions.Scope do
   @doc """
   Determines if the given update modifies a foreign key that affects the row's scope based on the
   `root` relation.
+
+  That is, does this update move the row from one scope to another?
   """
   @callback modifies_fk?(state(), root :: relation(), Changes.UpdatedRecord.t()) :: boolean()
 
