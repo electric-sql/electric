@@ -1,5 +1,9 @@
 import path from 'path'
-import { defaultDbUrlPart, getConfigValue } from './config'
+import {
+  defaultDbUrlPart,
+  defaultServiceUrlPart,
+  getConfigValue,
+} from './config'
 import { dedent, getAppName, buildDatabaseURL } from './utils'
 import { LIB_VERSION } from '../version'
 
@@ -50,7 +54,7 @@ export const configOptions = {
     valueTypeName: 'hostname',
     doc: 'Hostname the Electric service is running on.',
     groups: ['client', 'proxy'],
-    defaultVal: 'localhost',
+    defaultVal: () => defaultServiceUrlPart('host', 'localhost'),
   },
   MODULE_RESOLUTION: {
     valueType: String,
@@ -158,7 +162,7 @@ export const configOptions = {
     groups: ['electric'],
   },
   HTTP_PORT: {
-    defaultVal: '5133',
+    defaultVal: () => defaultServiceUrlPart('port', 5133),
     valueType: Number,
     valueTypeName: 'port',
     doc: dedent`

@@ -1,5 +1,5 @@
 import type { Command } from 'commander'
-import { extractDatabaseURL } from './utils'
+import { extractDatabaseURL, extractServiceURL } from './utils'
 import { configOptions } from './config-options'
 
 export interface AnyConfigOption {
@@ -31,7 +31,22 @@ export function defaultDbUrlPart<T>(
   const url = process.env.ELECTRIC_DATABASE_URL
   if (url) {
     const parsed = extractDatabaseURL(url)
-    if (parsed) {
+    if (parsed && parsed[part] !== undefined) {
+      return parsed[part] as T
+    }
+  }
+  return defaultValue
+}
+
+export function defaultServiceUrlPart<T>(
+  part: keyof ReturnType<typeof extractServiceURL>,
+  defaultValue: T
+): T {
+  const url = process.env.ELECTRIC_SERVICE
+  if (url) {
+    const parsed = extractServiceURL(url)
+    console.log(parsed)
+    if (parsed && parsed[part] !== undefined) {
       return parsed[part] as T
     }
   }

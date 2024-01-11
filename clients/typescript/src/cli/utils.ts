@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import url from 'url'
 import { InvalidArgumentError } from 'commander'
 
 export const appRoot = path.resolve() // path where the user ran `npx electric`
@@ -107,5 +108,16 @@ export function extractDatabaseURL(url: string) {
     host: match[4],
     port: parseInt(match[5]),
     dbName: match[6],
+  }
+}
+
+export function extractServiceURL(serviceUrl: string) {
+  const parsed = url.parse(serviceUrl)
+  if (!parsed.hostname) {
+    throw new Error(`Invalid service URL: ${serviceUrl}`)
+  }
+  return {
+    host: parsed.hostname,
+    port: parsed.port ? parseInt(parsed.port) : undefined,
   }
 }
