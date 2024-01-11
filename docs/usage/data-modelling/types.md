@@ -56,3 +56,11 @@ Electric defaults to a Last-Writer-Wins strategy. For JSON this is across the wh
 
 In future we plan to support more fine grained merge strategies for JSON data.
 :::
+
+:::caution Enum type caveats
+We don't yet support modifying an enum type (i.e. `ALTER TYPE .. ADD VALUE`) if it's used by a column in an electrified table.
+
+It's not yet possible to alter an electrified table and add a new column of an enum type to it.
+
+Both limitations will be removed in a future release.
+:::
