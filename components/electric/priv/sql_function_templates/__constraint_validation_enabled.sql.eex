@@ -1,0 +1,13 @@
+CREATE OR REPLACE FUNCTION <%= schema() %>.__constraint_validation_enabled()
+RETURNS boolean
+SECURITY DEFINER
+AS $$
+DECLARE
+  _disable_validation boolean;
+BEGIN
+  SELECT current_setting('electric.disable_constraint_validation') INTO _disable_validation;
+  RETURN NOT coalesce(_disable_validation, false);
+EXCEPTION WHEN undefined_object THEN
+  RETURN true;
+END;
+$$ LANGUAGE PLPGSQL;

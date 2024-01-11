@@ -23,7 +23,7 @@ If you'd prefer to understand a bit more about the system before jumping into co
 
 ## Setup
 
-Get setup quickly using the `create-electric-app` starter app. Or install, run and integrate the components yourself.
+Get setup quickly using the `create-electric-app` starter template. Or install, run and integrate the components yourself.
 
 <Tabs groupId="setup" queryString>
   <TabItem value="generator" label="Use the starter">
@@ -40,6 +40,8 @@ The next section goes over the basics of using ElectricSQL. It's a quick summary
 
 ### Define your schema
 
+ElectricSQL works on top of Postgres. You define and evolve the Postgres database schema using your normal migrations tooling.
+
 <Tabs groupId="setup">
   <TabItem value="generator" label="Generator" attributes={{className: 'hidden'}}>
     <div className="-mt-4">
@@ -52,6 +54,8 @@ The next section goes over the basics of using ElectricSQL. It's a quick summary
     </div>
   </TabItem>
 </Tabs>
+
+See <DocPageLink path="usage/data-modelling/migrations" /> and <DocPageLink path="integrations/backend" /> for more information.
 
 ### Expose data
 

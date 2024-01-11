@@ -5,9 +5,13 @@ description: >-
 sidebar_position: 20
 ---
 
-The Electric sync service is an Elixir application that manages [active-active replication](/docs/intro/active-active) between your Postgres database and your [local apps](/docs/intro/local-first). This page documents all of the configuration options supported by the service.
+The Electric sync service is an Elixir application that manages [active-active replication](/docs/intro/active-active) between your Postgres database and your [local apps](/docs/intro/local-first).
 
-The standard way to start Electric sync service is using the official Docker image which can be run either from the command line or via Docker Compose. In both cases, the configuration options are passed to the service as environment variables as in the following example:
+[![Components and connections](../deployment/_images/components-and-connections.png)](../deployment/_images/components-and-connections.jpg)
+
+The main way to run the sync service is using the [official Docker image](https://hub.docker.com/r/electricsql/electric). See <DocPageLink path="usage/installation/service" /> for more instructions.
+
+Configuration options are passed as environment variables, e.g.:
 
 ```shell
 docker run \
@@ -21,86 +25,325 @@ docker run \
     electricsql/electric
 ```
 
-For detailed installation and running instructions see <DocPageLink path="usage/installation/service" />.
+This page documents all the configuration options, including the:
 
-## Configuration options
+- [core config](#core-config) of `DATABASE_URL`, `HTTP_PORT`, etc.
+- [write-to-PG mode](#write-to-pg-mode) with associated networking and [database&nbsp;user&nbsp;permissions](#database-user-permissions)
+- [migrations proxy](#migrations-proxy), [authentication](#authentication) and [telemetry](#telemetry)
 
-The Electric application is configured using environment variables.
-
-### Core config
-
-Everything in the table below that doesn't have a default value is required to run the sync service.
-
-| Variable                                           | Description                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `DATABASE_URL`                                     | PostgreSQL connection URL for the database.                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `DATABASE_REQUIRE_SSL`<p>&nbsp;&nbsp;(`false`)</p> | Set to `yes` or `true` to require SSL for the connection to the database. Alternatively configure SSL for the connection by adding `sslmode=require` to [the `DATABASE_URL` parameters](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-PARAMKEYWORDS). Values set in the `DATABASE_URL` will have precedence.                                                                                                                        |
-| `DATABASE_USE_IPV6`<p>&nbsp;&nbsp;(`false`)</p>    | Set to `yes` or `true` if your database is only accessible over IPv6. This is the case with Fly Postgres, for example.                                                                                                                                                                                                                                                                                                                                 |
-| `ELECTRIC_USE_IPV6`<p>&nbsp;&nbsp;(`true`)</p>     | Set to `false` to force Electric to only listen on IPv4 interfaces. By default, Electric will accept inbound connections over both IPv6 and IPv4 when running on Linux. On Windows and some BSD systems inbound connections over IPv4 will not be accepted unless this option is disabled.                                                                                                                                                             |
-| `HTTP_PORT`<p>&nbsp;&nbsp;(`5133`)</p>             | Port for HTTP connections. Includes client websocket connections on `/ws`, and other functions on `/api`.                                                                                                                                                                                                                                                                                                                                              |
-| `PG_PROXY_PORT`<p>&nbsp;&nbsp;(`65432`)</p>        | <p>Port number for connections to the [Postgres migrations proxy](../usage/data-modelling/migrations#migrations-proxy).</p><p>If you have Electric deployed behind a restrictive firewall that only allows HTTP/HTTPS connections, you can add the `http:` prefix to the port number. This will enable the tunelling mode in which the migrations proxy will accept WebSocket connections from the proxy tunnel (`npx electric-sql proxy-tunnel`).</p> |
-| `PG_PROXY_PASSWORD`                                | Password to use when connecting to the Postgres proxy via `psql` or any other Postgres client.                                                                                                                                                                                                                                                                                                                                                         |
-
-### Write-to-PG mode
-
-Electric writes data to Postgres using one of two modes: logical replication or direct writes. Which mode you choose to use affects your networking config and the database user permissions required.
-
-:::note
-Logical replication was the only mode available prior to v0.8, when we introduced the new direct writes mode.
+:::info
+For a longer form description of how to successfully deploy the sync service and what needs to connect where, see <DocPageLink path="deployment/concepts" />.
 :::
 
-| Variable                                                              | Description                                                                                                                                                    |
-| --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ELECTRIC_WRITE_TO_PG_MODE`<p>&nbsp;&nbsp;(`logical_replication`)</p> | <p>The mode to use when syncing client updates to Postgres.</p><p>Allowed values: `logical_replication`, `direct_writes`.</p>                                  |
-| `LOGICAL_PUBLISHER_HOST`                                              | Host of this electric instance for the reverse connection from Postgres. It has to be accessible from the Postgres instance that is running at `DATABASE_URL`. |
-| `LOGICAL_PUBLISHER_PORT`<p>&nbsp;&nbsp;(`5433`)</p>                   | Port number to use for reverse connections from Postgres.                                                                                                      |
+:::caution A note on ports
+Your configuration options affect the number and type of ports that need to be exposed. You must always expose the [`HTTP_PORT`](#http_port). Your [write-to-PG mode](#write-to-pg-mode) and [migrations proxy](#migrations-proxy) config then determines whether you need to expose up-to two TCP ports: the [`LOGICAL_PUBLISHER_PORT`](#logical_publisher_port) and [`PG_PROXY_PORT`](#pg_proxy_port) respectively.
 
-#### Logical replication mode
+In development using Docker you usually want to map all the necessary ports to your host network (`-p 5133:5133` and `-p 5433:5433` in the example above).
 
-The default `logical_replication` write mode works by creating a subscription in Postgres which causes the latter to establish a reverse replication connection to Electric. This requires the role Electric uses when connecting to Postgres to have superuser privileges.
+In production you must make sure your hosting infrastructure exposes the necessary ports and protocols. If not, you can use the workarounds provided in the form of [direct writes mode](#direct-writes-mode) and the [proxy tunnel](#migrations-proxy).
 
-When Electric is launched in this mode, it also needs `LOGICAL_PUBLISHER_HOST` and `LOGICAL_PUBLISHER_PORT` variables to be set, as those provide the connection info used by the database to start replicating from Electric.
+Again, see <DocPageLink path="deployment/concepts" /> for more information.
+:::
 
-**Networking requirements**
+## Core config
 
-It's important to note that Postgres and Electric (running in `logical_replication` write mode) must be able to connect to each other. Specifically:
+import EnvVarConfig from '@site/src/components/EnvVarConfig'
+import DatabaseRequireSsl from './_DATABASE_REQUIRE_SSL.md'
+import DatabaseUrl from './_DATABASE_URL.md'
+import DatabaseUseIpv6 from './_DATABASE_USE_IPV6.md'
+import HttpPort from './_HTTP_PORT.md'
 
-1. the Electric sync service connects to Postgres using the `DATABASE_URL` environment variable
-2. Postgres connects to Electric to consume a logical replication publication using the `LOGICAL_PUBLISHER_HOST` and `LOGICAL_PUBLISHER_PORT` environment variables
+
+Configure how Electric connects to Postgres and exposes its HTTP/WebSocket API.
+
+### DATABASE_URL
+
+<EnvVarConfig
+    name="DATABASE_URL"
+    required={true}
+    example="postgresql://user:password@example.com:54321/electric">
+  <DatabaseUrl />
+</EnvVarConfig>
+
+### DATABASE_REQUIRE_SSL
+
+<EnvVarConfig
+    name="DATABASE_REQUIRE_SSL"
+    defaultValue="true"
+    example="false">
+  <DatabaseRequireSsl />
+</EnvVarConfig>
+
+### DATABASE_USE_IPV6
+
+<EnvVarConfig
+    name="DATABASE_USE_IPV6"
+    defaultValue="false"
+    example="true">
+  <DatabaseUseIpv6 />
+</EnvVarConfig>
+
+### HTTP_PORT
+
+<EnvVarConfig
+    name="HTTP_PORT"
+    defaultValue="5133"
+    example="8080">
+  <HttpPort />
+</EnvVarConfig>
+
+## Write-to-PG mode
+
+Electric writes data to Postgres using one of two modes:
+
+1. [logical replication](#logical-replication-mode)
+2. [direct writes](#direct-writes-mode)
+
+:::caution
+The mode you choose affects your networking config and [database user permissions](#database-user-permissions).
+:::
+
+import ElectricWriteToPgMode from './_ELECTRIC_WRITE_TO_PG_MODE.md'
+
+
+<EnvVarConfig
+    name="ELECTRIC_WRITE_TO_PG_MODE"
+    defaultValue="logical_replication"
+    example="direct_writes">
+  <ElectricWriteToPgMode />
+</EnvVarConfig>
+
+### Logical replication mode
+
+In `logical_replication` mode, Electric exposes a logical replication publisher service over TCP that speaks the [Logical Streaming Replication Protocol](https://www.postgresql.org/docs/current/protocol-logical-replication.html).
+
+Postgres connects to Electric on `LOGICAL_PUBLISHER_HOST:LOGICAL_PUBLISHER_PORT` and establishes a logical replication subscription to this publisher service. Writes are then streamed in and applied using the logical replication subscription.
 
 ```
-         |<--------DATABASE_URL----------|
-Postgres |                               | Electric
-         |-----LOGICAL_PUBLISHER_HOST--->|
+         | <----------- DATABASE_URL ----------- |
+Postgres |                                       | Electric
+         | ---- LOGICAL_PUBLISHER_HOST:PORT ---> |
 ```
+
+:::caution Caution
+In logical replication mode:
+
+1. the [database user](#database-user-permissions) that Electric connects to Postgres as must have the [`SUPERUSER` role attribute](https://www.postgresql.org/docs/16/role-attributes.html#ROLE-ATTRIBUTES)
+2. Postgres must be able to connect to Electric (i.e.: must be able to establish an outbound TCP connection) on the host and port that you configure
 
 As a result, you must make sure (in terms of networking / firewalls) not only that Postgres is reachable from Electric but also that Electric is reachable from Postgres. And Electric must know its own address, in order to provide it to Postgres when setting up the logical replication publication that allows writes to be replicated into Postgres.
+:::
 
-#### Direct writes mode
+import LogicalPublisherHost from './_LOGICAL_PUBLISHER_HOST.md'
+import LogicalPublisherPort from './_LOGICAL_PUBLISHER_PORT.md'
 
-The `direct_writes` mode works by establishing a regular connection to Postgres and applying client updates as DML statements. When launched in this mode, Electric does not require any elevated privileges from its Postgres role beyond the `REPLICATION` role attribute. Moreover, the `LOGICAL_PUBLISHER_HOST` and `LOGICAL_PUBLISHER_PORT` options are not used by this mode.
+#### LOGICAL_PUBLISHER_HOST
 
-### Authentication
+<EnvVarConfig
+    name="LOGICAL_PUBLISHER_HOST"
+    required={true}
+    example="example.com">
+  <LogicalPublisherHost />
+</EnvVarConfig>
 
-When `AUTH_MODE=secure` (the default), the `AUTH_JWT_ALG` and `AUTH_JWT_KEY` options are also required.
+#### LOGICAL_PUBLISHER_PORT
 
-When `AUTH_MODE=insecure`, all other authentication options can be omitted.
+<EnvVarConfig
+    name="LOGICAL_PUBLISHER_PORT"
+    defaultValue="5433"
+    example="65433">
+  <LogicalPublisherPort />
+</EnvVarConfig>
 
-| Variable                                 | Description                                                                                                                                                                                                                                                                                                                                                                       |
-| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AUTH_MODE`<p>&nbsp;&nbsp;(`secure`)</p> | <p>Authentication mode to use to authenticate clients.</p><p>[Secure authentication](/docs/usage/auth/secure) is assumed by default and is <strong>strongly recommended</strong> for production use.</p><p>The other option is [Insecure authentication](/docs/usage/auth/insecure) which should only be used in development.</p>                                                 |
-| `AUTH_JWT_ALG`                           | <p>The algorithm to use for JWT verification. Electric supports the following algorithms:</p><ul><li>`HS256, HS384, HS512:` HMAC-based cryptographic signature that relies on the SHA-2 family of hash functions.</li><li>`RS256, RS384, RS512:` RSA-based algorithms for digital signature.</li><li>`ES256, ES384, ES512:` ECC-based algorithms for digital signature.</li></ul> |
-| `AUTH_JWT_KEY`                           | The key to use for JWT verification. Must be appropriate for the chosen signature algorithm. For `RS*` and `ES*` algorithms, the key must be in PEM format.                                                                                                                                                                                                                       |
-| `AUTH_JWT_NAMESPACE`                     | <p>This is an optional setting that specifies the location inside the token of custom claims that are specific to Electric.</p><p>Currently, only the `sub` custom claim (formely `user_id`) is required.</p>                                                                                                                                                                     |
-| `AUTH_JWT_ISS`                           | <p>This optional setting allows you to specificy the "issuer" that will be matched against the `iss` claim extracted from auth tokens.</p><p>This can be used to ensure that only tokens created by the expected party are used to authenticate your client.</p>                                                                                                                  |
-| `AUTH_JWT_AUD`                           | <p>This optional setting allows you to specificy the "audience" that will be matched against the aud claim extracted from auth tokens.</p><p>This can be used to ensure that only tokens for a specific application are used to authenticate your client.</p>                                                                                                                     |
+### Direct writes mode
 
-### Telemetry
+In `direct_writes` mode, Electric writes data to Postgres using a standard interactive client connection. This avoids the need for Postgres to be able to connect to Electric and reduces the permissions required for the database user that Electric connects to Postgres as.
+
+```
+Postgres | <----------- DATABASE_URL ----------- | Electric
+```
+
+No additional configuration is required for direct writes mode. The `LOGICAL_PUBLISHER_HOST` and `LOGICAL_PUBLISHER_PORT` variables are not required and are ignored.
+
+:::info Why are there two modes?
+Originally (prior to v0.8) all writes to Postgres were made using logical replication.
+
+In [version 0.8](/blog/2023/12/13/electricsql-v0.8-released#from-superuser-to-supabase), Electric added direct writes mode to reduce the database user permissions required and increase compatibility with Postgres hosting providers.
+
+In future, we may deprecate logical replication and consolidate on direct writes. However, logical replication may have performance advantages and, for now, we've kept both modes available while direct writes mode gains maturity and we learn more about the operational characteristics of both modes.
+:::
+
+## Database user permissions
+
+The Electric sync service connects to Postgres using the [`DATABASE_URL`](#database_url) connection string, in the format `postgresql://[userspec@][hostspec][/dbname][?paramspec]`.
+
+The `userspec` section of this connection string specifies the database user that Electric connects to Postgres as. This user must have the following permissions.
+
+### Permissions for logical replication mode
+
+In [logical replication mode](#logical-replication-mode), the database user must have the [`LOGIN` and `SUPERUSER` role attributes](https://www.postgresql.org/docs/16/role-attributes.html#ROLE-ATTRIBUTES). You can create a user with these permissions using, e.g.:
+
+```sql
+CREATE ROLE electric
+  WITH LOGIN
+       PASSWORD '...'
+       SUPERUSER;
+```
+
+### Permissions for direct writes mode
+
+In [direct writes mode](#direct-writes-mode), the database user must have `LOGIN`, `REPLICATION` and then either `ALL` on the database and public schema or at a minimum:
+
+- `CONNECT`, `CREATE` and `TEMPORARY` on the database
+- `CREATE`, `EXECUTE on ALL` and `USAGE` on the `public` schema
+
+Plus `ALTER DEFAULT PRIVILEGES` to grant the same permissions on any new tables in the public schema. For example, to create a user with the necessary permissions:
+
+```sql
+CREATE ROLE electric
+  WITH LOGIN
+    PASSWORD '...'
+    REPLICATION;
+
+GRANT ALL
+  ON DATABASE '...'
+  TO electric;
+
+GRANT ALL
+  ON ALL TABLES
+  IN SCHEMA public
+  TO electric;
+
+ALTER DEFAULT PRIVILEGES
+  IN SCHEMA public
+  GRANT ALL
+    ON TABLES
+    TO electric;
+```
+
+## Migrations proxy
+
+Electric exposes a [Migrations proxy](../usage/data-modelling/migrations.md#migrations-proxy) as a TCP service. This must be secured using `PG_PROXY_PASSWORD` and is exposed on `PG_PROXY_PORT`.
+
+[![Connecting to the migrations proxy over a TCP port](../deployment/_images/tcp-port.png)](../deployment/_images/tcp-port.jpg)
+
+The `PG_PROXY_PORT` supports a special `http` value that allows you to connect to the migrations proxy over a TCP-over-HTTP tunnel. This enables the use of the [Proxy Tunnel](./cli.md#proxy-tunnel). This is a CLI command that tunnels the Migrations proxy connection over the [`HTTP_PORT`](#http_port).
+
+[![Connecting to the migrations proxy using a Proxy tunnel](../deployment/_images/proxy-tunnel.png)](../deployment/_images/proxy-tunnel.jpg)
+
+import PgProxyPassword from './_PG_PROXY_PASSWORD.md'
+import PgProxyPort from './_PG_PROXY_PORT.md'
+
+
+### PG_PROXY_PASSWORD
+
+<EnvVarConfig
+    name="PG_PROXY_PASSWORD"
+    required={true}
+    example="b3aed739144e859a">
+  <PgProxyPassword />
+</EnvVarConfig>
+
+### PG_PROXY_PORT
+
+<EnvVarConfig
+    name="PG_PROXY_PORT"
+    defaultValue="65432"
+    example="http:65432">
+  <PgProxyPort />
+</EnvVarConfig>
+
+## Authentication
+
+Electric provides two authentication modes:
+
+1. [secure](#secure-mode) (the default)
+2. [insecure](#insecure-mode)
+
+In secure more, `AUTH_JWT_ALG` and `AUTH_JWT_KEY` are required. In insecure mode, all other authentication variables can be omitted.
+
+import AuthMode from './_AUTH_MODE.md'
+import AuthJwtNamespace from './_AUTH_JWT_NAMESPACE.md'
+
+
+### AUTH_MODE
+
+<EnvVarConfig
+    name="AUTH_MODE"
+    defaultValue="secure"
+    example="insecure">
+  <AuthMode />
+</EnvVarConfig>
+
+### AUTH_JWT_NAMESPACE
+
+<EnvVarConfig
+    name="AUTH_JWT_NAMESPACE"
+    optional={true}
+    example="example">
+  <AuthJwtNamespace />
+</EnvVarConfig>
+
+### Secure mode
+
+In secure mode, Electric authenticates its replication connections by obtaining a JWT from each client and verifying its validity before allowing data streaming in either direction.
+
+See <DocPageLink path="usage/auth/secure" />
+
+import AuthJwtAlg from './_AUTH_JWT_ALG.md'
+import AuthJwtKey from './_AUTH_JWT_KEY.md'
+import AuthJwtIss from './_AUTH_JWT_ISS.md'
+import AuthJwtAud from './_AUTH_JWT_AUD.md'
+
+
+<EnvVarConfig
+    name="AUTH_JWT_ALG"
+    required={true}
+    example="HS512">
+  <AuthJwtAlg />
+</EnvVarConfig>
+
+<EnvVarConfig
+    name="AUTH_JWT_KEY"
+    required={true}
+    example="8e4f0...4bec3">
+  <AuthJwtKey />
+</EnvVarConfig>
+
+<EnvVarConfig
+    name="AUTH_JWT_ISS"
+    optional={true}
+    example="example.com">
+  <AuthJwtIss />
+</EnvVarConfig>
+
+<EnvVarConfig
+    name="AUTH_JWT_AUD"
+    optional={true}
+    example="example.com">
+  <AuthJwtAud />
+</EnvVarConfig>
+
+### Insecure mode
+
+Insecure mode is designed for development or testing. It supports unsigned JWTs that can be generated anywhere, including on the client, as well as signed JWTs which are accepted with no signature verification.
+
+All other authentication variables (aside from `AUTH_MODE`) can be omitted.
+
+See <DocPageLink path="usage/auth/insecure" /> for more information.
+
+## Telemetry
 
 By default, ElectricSQL collects aggregated, anonymous usage data and sends them to our telemetry service. See <DocPageLink path="reference/telemetry" /> for more information.
 
-It's extremely helpful to leave telemetry enabled if you can.
+### ELECTRIC_TELEMETRY
 
-| Variable                                           | Description                                                                                      |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `ELECTRIC_TELEMETRY`<p>&nbsp;&nbsp;(`enabled`)</p> | <p>Telemetry mode. Telemetry is enabled by default. Set to `disabled` to disable collection.</p> |
+import ElectricTelemetry from './_ELECTRIC_TELEMETRY.md'
+
+
+<EnvVarConfig
+    name="ELECTRIC_TELEMETRY"
+    defaultValue="enabled"
+    example="disabled">
+  <ElectricTelemetry />
+</EnvVarConfig>

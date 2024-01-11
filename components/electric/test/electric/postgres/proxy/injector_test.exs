@@ -186,7 +186,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
 
         @tag non_electrified_migration: true
         test "alter non-electrified table does not inject", cxt do
-          query = ~s[ALTER TABLE "underwear" ADD COLUMN "dirty" bool DEFAULT false]
+          query = ~s[ALTER TABLE "underwear" ADD COLUMN "dirty" bool]
 
           cxt.scenario.assert_non_electrified_migration(cxt.injector, cxt.framework, query)
         end
@@ -440,7 +440,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
       CREATE TABLE something (id uuid PRIMARY KEY, value text);
       ALTER TABLE something ENABLE ELECTRIC;
       CREATE TABLE ignoreme (id uuid PRIMARY KEY);
-      ALTER TABLE something ADD amount int4 DEFAULT 0, ADD colour varchar;
+      ALTER TABLE something ADD amount int4, ADD colour varchar;
       """
 
       {:ok, command} = DDLX.parse("ALTER TABLE something ENABLE ELECTRIC")
@@ -481,14 +481,13 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
         server: [query("CREATE TABLE ignoreme (id uuid PRIMARY KEY)")]
       )
       |> server(complete_ready("CREATE TABLE"),
-        server: [query("ALTER TABLE something ADD amount int4 DEFAULT 0, ADD colour varchar")]
+        server: [query("ALTER TABLE something ADD amount int4, ADD colour varchar")]
       )
       |> server(complete_ready("ALTER TABLE"),
         server: [
-          capture_ddl_query("ALTER TABLE something ADD amount int4 DEFAULT 0, ADD colour varchar")
+          capture_ddl_query("ALTER TABLE something ADD amount int4, ADD colour varchar")
         ],
-        client:
-          capture_notice("ALTER TABLE something ADD amount int4 DEFAULT 0, ADD colour varchar")
+        client: capture_notice("ALTER TABLE something ADD amount int4, ADD colour varchar")
       )
       |> server(capture_ddl_complete(),
         server: [

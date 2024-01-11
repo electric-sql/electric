@@ -11,10 +11,7 @@ export function secureAuthToken(
 ): Promise<string> {
   const algorithm = alg ?? 'HS256'
   const expiration = exp ?? '2h'
-
-  const nowInSecs = Math.floor(Date.now() / 1000)
-  // Subtract 1 second to account for clock precision when validating the token
-  const iat = nowInSecs - 1
+  const iat = Math.floor(Date.now() / 1000)
 
   const encodedKey = new TextEncoder().encode(key)
 

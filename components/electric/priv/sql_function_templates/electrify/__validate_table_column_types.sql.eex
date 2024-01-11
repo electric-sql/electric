@@ -1,5 +1,11 @@
--- This function validates the type of each column of the table that's being electrified,
--- to check if the type is supported by Electric.
+-- Validate the type of each column of the table that's being electrified,
+-- to check if it is supported by Electric.
+--
+-- This implementation mirrors the Electric.Postgres.Proxy.QueryAnalyser.Impl.check_column_type() function.
+--
+-- It is important that this implementation and the one in check_column_type() behave the same to
+-- ensure consistent handling of columns both when a table is first electrified and when a new column is added to an
+-- already electrified table.
 
 <%
   valid_column_types =
@@ -8,7 +14,7 @@
     |> Enum.join(",")
 %>
 
-CREATE OR REPLACE PROCEDURE <%= schema() %>.__validate_table_column_types(table_name text)
+CREATE OR REPLACE PROCEDURE <%= schema() %>.__validate_table_column_types(table_oid regclass)
 SECURITY DEFINER AS $function$
 DECLARE
     _col_name text;
@@ -22,7 +28,7 @@ BEGIN
         SELECT attname, typname, atttypmod, format_type(atttypid, atttypmod), typtype = 'e'
             FROM pg_attribute
             JOIN pg_type on atttypid = pg_type.oid
-            WHERE attrelid = table_name::regclass AND attnum > 0 AND NOT attisdropped
+            WHERE attrelid = table_oid AND attnum > 0 AND NOT attisdropped
             ORDER BY attnum
     LOOP
         IF (_col_type NOT IN (<%= valid_column_types %>)
@@ -35,8 +41,8 @@ BEGIN
     END LOOP;
 
     IF _invalid_cols IS NOT NULL THEN
-        RAISE EXCEPTION E'Cannot electrify "%" because some of its columns have types not supported by Electric:\n  %',
-                        table_name, array_to_string(_invalid_cols, E'\n  ');
+        RAISE EXCEPTION E'Cannot electrify % because some of its columns have types not supported by Electric:\n  %',
+                        table_oid::regclass, array_to_string(_invalid_cols, E'\n  ');
     END IF;
 END;
 $function$ LANGUAGE PLPGSQL;

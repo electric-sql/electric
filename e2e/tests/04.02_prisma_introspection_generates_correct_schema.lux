@@ -17,6 +17,8 @@
 [shell proxy_1]
     [invoke log "run migration $migration_version_1 on postgres"]
     """!
+    SET electric.disable_constraint_validation = true;
+
     BEGIN;
       CALL electric.migration_version('$migration_version_1');
       CREATE TABLE public.with_constraint (

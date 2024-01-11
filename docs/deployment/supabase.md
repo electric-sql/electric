@@ -47,7 +47,7 @@ Go to "Project Settings" (look for the gear icon at the bottom of the icon menu 
 
 ![Connection Details](./supabase/connection-details.png)
 
-You will use this as the value for the `DATABASE_URL` in your [Electric sync service configuration](../../api/service.md).
+You will use this as the value for the `DATABASE_URL` in your [Electric sync service configuration](../api/service.md).
 
 :::caution
 Do not use the "Connection Pool" connection string displayed a little further down the screen. This will prevent the sync service from operating (because it connects via PgBouncer, which does not support logical replication).
@@ -59,11 +59,11 @@ Now open the "API" section of the project settings. Scroll down to the "JWT sett
 
 ![JWT Key](./supabase/jwt-key.png)
 
-You will use this as the value for `AUTH_JWT_KEY` in your [Electric sync service configuration](../../api/service.md).
+You will use this as the value for `AUTH_JWT_KEY` in your [Electric sync service configuration](../api/service.md).
 
 ### 4. Configuring Electric to connect to Supabase
 
-Run your [Electric sync service](../../api/service), either locally or [via one of the other deployment options](./index.md), with the following [configuration options](../../api/service.md#configuration-options):
+Run your [Electric sync service](../api/service), either locally or [via one of the other deployment options](../top-level-listings/deployment.md), with the following [configuration options](../api/service.md#configuration-options):
 
 - set `AUTH_JWT_ALG` to `HS256` to enable secure auth mode with the right signing algorithm
 - set `AUTH_JWT_KEY` to the "JWT Secret" value you retrieved in step 3 above
@@ -102,12 +102,12 @@ Click this menu, and check that there is now an `electric` schema in your Postgr
 
 ### 6. Electrifying tables
 
-Electric works by [electrifying](../../usage/data-modelling/electrification.md) tables to opt them in to the Electric sync machinery. To do this, you will need to apply [DDLX statements](../../api/ddlx.md) via the Electric [migrations proxy](../../usage/data-modelling/migrations.md#migrations-proxy). Specifically, you need to:
+Electric works by [electrifying](../usage/data-modelling/electrification.md) tables to opt them in to the Electric sync machinery. To do this, you will need to apply [DDLX statements](../api/ddlx.md) via the Electric [migrations proxy](../usage/data-modelling/migrations.md#migrations-proxy). Specifically, you need to:
 
 1. connect to the Electric sync service using the `PG_PROXY_PORT` and the `PG_PROXY_PASSWORD` you configured above (either directly using psql, or by configuring the correct connection string for your migrations tooling)
 2. then use the `ALTER TABLE <name> ENABLE ELECTRIC` syntax to electrify tables
 
-For full details on how to run migrations see our [migrations documentation](../../usage/data-modelling/migrations.md). However, for example, to connect via psql to the sync service running on localhost:
+For full details on how to run migrations see our [migrations documentation](../usage/data-modelling/migrations.md). However, for example, to connect via psql to the sync service running on localhost:
 
 ```shell
 PGPASSWORD=${PG_PROXY_PASSWORD} psql -U postgres -h localhost -p 65432 electric
@@ -138,7 +138,7 @@ Supabase provides a suite of tools that pair well with Electric when building lo
 
 ### Supabase Auth
 
-[Supabase Auth](https://supabase.com/docs/guides/auth) works as an authentication solution for Electric. Authenticate using Supabase following the instructions in the [Supabase Auth documentation](https://supabase.com/docs/guides/auth). Use the JWT returned by Supabase Auth as the [auth token for the Electric replication connection](../../usage/auth/token.md).
+[Supabase Auth](https://supabase.com/docs/guides/auth) works as an authentication solution for Electric. Authenticate using Supabase following the instructions in the [Supabase Auth documentation](https://supabase.com/docs/guides/auth). Use the JWT returned by Supabase Auth as the [auth token for the Electric replication connection](../usage/auth/token.md).
 
 #### Configuring Electric to work with Supabase Auth
 
@@ -174,10 +174,10 @@ const conn = await ElectricDatabase.init('myApp.db', '')
 const electric = await electrify(conn, schema, config)
 ```
 
-You can see an example of this pattern in our [Checkout Example](../../examples/checkout.md).
+You can see an example of this pattern in our [Checkout Example](../examples/checkout.md).
 
 ### Supabase Edge Functions
 
 Many apps need to run code on the server in response to user actions. For example, to handle [secure transactions](/blog/2023/12/15/secure-transactions-with-local-first).
 
-A great way to do this with Supabase is to use a combination of Postgres triggers and Edge Functions. This pattern is documented in the [Supabase event sourcing guide](../event-sourcing/supabase.md).
+A great way to do this with Supabase is to use a combination of Postgres triggers and Edge Functions. This pattern is documented in the [Supabase event sourcing guide](../integrations/event-sourcing/supabase.md).

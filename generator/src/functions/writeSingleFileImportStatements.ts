@@ -10,7 +10,7 @@ export const writeSingleFileImportStatements: WriteStatements = (
 ) => {
   writeImport('{ z }', 'zod')
 
-  writeImport(`type { Prisma }`, `./prismaClient.js`)
+  writeImport(`type { Prisma }`, `./prismaClient`)
 
   if (dmmf.customImports) {
     dmmf.customImports.forEach((statement) => {
@@ -23,5 +23,5 @@ export const writeSingleFileImportStatements: WriteStatements = (
     'electric-sql/client/model'
   )
 
-  writeImport(`migrations`, './migrations.js')
+  writeImport(`migrations`, './migrations')
 }

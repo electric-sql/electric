@@ -1,8 +1,0 @@
-customProps:
-  description: >-
-    Deploy onto your infra and hosting platform of choice.
-  hide_overview: true
-  icon: /img/icons/self-host.svg
-link:
-  type: doc
-  id: integrations/deployment/index

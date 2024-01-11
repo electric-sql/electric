@@ -13,8 +13,6 @@ defmodule Electric.Satellite.Auth.Secure do
 
   @behaviour Electric.Satellite.Auth
 
-  import Joken, only: [current_time: 0]
-
   alias Electric.Satellite.Auth
   alias Electric.Satellite.Auth.JWTUtil
 
@@ -60,9 +58,8 @@ defmodule Electric.Satellite.Auth.Secure do
 
       token_config =
         %{}
-        # Subtracting one second from generated "iat" and "nbf" claims is necessary for tests to pass.
-        |> Joken.Config.add_claim("iat", fn -> current_time() - 1 end, &(&1 < current_time()))
-        |> Joken.Config.add_claim("nbf", fn -> current_time() - 1 end, &(&1 < current_time()))
+        |> Joken.Config.add_claim("iat", &JWTUtil.gen_timestamp/0, &JWTUtil.past_timestamp?/1)
+        |> Joken.Config.add_claim("nbf", &JWTUtil.gen_timestamp/0, &JWTUtil.past_timestamp?/1)
         |> add_exp_claim(in: @token_max_age)
         |> maybe_add_claim("iss", opts[:iss])
         |> maybe_add_claim("aud", opts[:aud])
@@ -119,17 +116,18 @@ defmodule Electric.Satellite.Auth.Secure do
   defp prepare_key(raw_key, "RS" <> _), do: %{"pem" => raw_key}
   defp prepare_key(raw_key, "ES" <> _), do: %{"pem" => raw_key}
 
-  defp add_exp_claim(token_config, in: seconds),
-    do:
-      Joken.Config.add_claim(
-        token_config,
-        "exp",
-        fn -> current_time() + seconds end,
-        &(&1 > current_time())
-      )
+  defp add_exp_claim(token_config, in: seconds) do
+    Joken.Config.add_claim(
+      token_config,
+      "exp",
+      fn -> JWTUtil.gen_timestamp(seconds) end,
+      &JWTUtil.future_timestamp?/1
+    )
+  end
 
-  defp add_exp_claim(token_config, at: unix_time),
-    do: Joken.Config.add_claim(token_config, "exp", fn -> unix_time end, &(&1 > current_time()))
+  defp add_exp_claim(token_config, at: unix_time) do
+    Joken.Config.add_claim(token_config, "exp", fn -> unix_time end, &JWTUtil.future_timestamp?/1)
+  end
 
   defp maybe_add_claim(token_config, _claim, nil), do: token_config
 
