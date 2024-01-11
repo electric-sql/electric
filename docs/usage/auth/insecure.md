@@ -8,7 +8,7 @@ sidebar_position: 40
 Insecure mode is designed for development or testing. It supports unsigned JWTs that can be generated anywhere, including on the client, as well as signed JWTs which are accepted with no signature verification.
 
 :::warning
-Insure mode is convienient to use in development and testing. However, you must switch to [Secure mode](./secure.md) before moving into production.
+Insecure mode is convenient to use in development and testing. However, you must switch to [Secure mode](./secure.md) before moving into production.
 :::
 
 ## Example
