@@ -88,11 +88,11 @@ defmodule Electric.DDLX.Command.Grant do
     }
   end
 
-  defp pb_role("__authenticated__") do
+  defp pb_role("__electric__.__authenticated__") do
     %P.RoleName{role: {:predefined, :AUTHENTICATED}}
   end
 
-  defp pb_role("__anyone__") do
+  defp pb_role("__electric__.__anyone__") do
     %P.RoleName{role: {:predefined, :ANYONE}}
   end
 

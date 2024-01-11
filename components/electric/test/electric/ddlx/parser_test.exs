@@ -529,7 +529,7 @@ defmodule Electric.DDLX.ParserTest do
                column_names: ["*"],
                on_table: {"thing", "köln_en$ts"},
                privileges: ["select", "insert", "update", "delete"],
-               role: "__anyone__",
+               role: "__electric__.__anyone__",
                scope: "__global__",
                using_path: nil
              }
@@ -544,7 +544,7 @@ defmodule Electric.DDLX.ParserTest do
                column_names: ["*"],
                on_table: {"thing", "köln_en$ts"},
                privileges: ["select", "insert", "update", "delete"],
-               role: "__authenticated__",
+               role: "__electric__.__authenticated__",
                scope: "__global__",
                using_path: nil
              }
