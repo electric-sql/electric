@@ -256,7 +256,7 @@ defmodule Electric.Satellite.Permissions do
     {grant_perm, %{scoped: scoped, unscoped: unscoped}}
   end
 
-  # expand the grants into a list of `{{relation, privilege}, [%RoleGrant{}]}`
+  # expand the grants into a list of `{{relation, privilege}, %RoleGrant{}}`
   # so that we can create a LUT of table and required privilege to role
   defp invert_role_lookup({role, grants}) do
     Stream.flat_map(grants, fn grant ->
