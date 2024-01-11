@@ -10,7 +10,6 @@ import { makeStartCommand } from './docker-commands/command-start'
 import { makeStopCommand } from './docker-commands/command-stop'
 import { makeStatusCommand } from './docker-commands/command-status'
 import { makePsqlCommand } from './docker-commands/command-psql'
-import { makeConfigurePortsCommand } from './configure/command-configure-ports'
 import { makeShowConfigCommand } from './configure/command-show-config'
 import { makeWithConfigCommand } from './configure/command-with-config'
 import { makeProxyTunnelCommand } from './tunnel/command-proxy-tunnel'
@@ -30,7 +29,6 @@ async function main() {
     makeStopCommand,
     makeStatusCommand,
     makePsqlCommand,
-    makeConfigurePortsCommand,
     makeShowConfigCommand,
     makeWithConfigCommand,
     makeProxyTunnelCommand,

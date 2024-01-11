@@ -113,7 +113,8 @@ export function start(options: StartSettings) {
           dedent`
             Failed to start the Electric backend. Check the output from 'docker compose' above.
             If the error message mentions a port already being allocated or address being already in use,
-            execute 'npx electric-sql configure-ports' to run Electric on another port.
+            please change the configuration to an alternative port via the ELECTRIC_HTTP_PORT or
+            ELECTRIC_PG_PROXY_PORT environment variables.
           `
         )
         process.exit(code ?? 1)
