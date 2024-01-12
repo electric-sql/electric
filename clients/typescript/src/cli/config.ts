@@ -156,7 +156,7 @@ export function addOptionToCommand(
 ) {
   let argName = optionName.toLocaleLowerCase().replace(/_/g, '-')
   if (argName.startsWith('electric-')) {
-    argName = optionName.slice('electric-'.length)
+    argName = argName.slice('electric-'.length)
   }
   let localName: string = optionName
   if (!optionName.startsWith('ELECTRIC_')) {
