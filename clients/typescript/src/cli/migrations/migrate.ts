@@ -70,7 +70,7 @@ export async function generate(options: GeneratorOptions) {
       withConfig(opts.withMigrations, opts.config)
     }
     console.log('Service URL: ' + opts.config.SERVICE)
-    console.log('Proxy URL: ' + opts.config.PROXY)
+    console.log('Proxy URL: ' + buildProxyUrlForIntrospection(opts.config))
     // Generate the client
     if (opts.watch) {
       watchMigrations(opts)
@@ -290,6 +290,16 @@ function escapePathForString(inputPath: string): string {
     : inputPath
 }
 
+function buildProxyUrlForIntrospection(config: Config) {
+  return buildDatabaseURL({
+    user: 'prisma', // We use the "prisma" user to put the proxy into introspection mode
+    password: config.PG_PROXY_PASSWORD,
+    host: config.SERVICE_HOST,
+    port: config.PG_PROXY_PORT,
+    dbName: config.DATABASE_NAME,
+  })
+}
+
 /**
  * Creates a fresh Prisma schema in the provided folder.
  * The Prisma schema is initialised with a generator and a datasource.
@@ -300,13 +310,8 @@ async function createPrismaSchema(folder: string, opts: GeneratorOptions) {
   const prismaSchemaFile = path.join(prismaDir, 'schema.prisma')
   await fs.mkdir(prismaDir)
   const output = path.resolve(config.CLIENT_PATH)
-  const proxyUrl = buildDatabaseURL({
-    user: 'prisma', // We use the "prisma" user to put the proxy into introspection mode
-    password: config.PG_PROXY_PASSWORD,
-    host: config.SERVICE_HOST,
-    port: config.PG_PROXY_PORT,
-    dbName: config.DATABASE_NAME,
-  })
+  const proxyUrl = buildProxyUrlForIntrospection(config)
+
   const schema = dedent`
     generator electric {
       provider      = "node ${escapePathForString(generatorPath)}"
