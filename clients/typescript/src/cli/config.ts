@@ -45,7 +45,6 @@ export function defaultServiceUrlPart<T>(
   const url = process.env.ELECTRIC_SERVICE
   if (url) {
     const parsed = extractServiceURL(url)
-    console.log(parsed)
     if (parsed && parsed[part] !== undefined) {
       return parsed[part] as T
     }
