@@ -10,7 +10,7 @@ sidebar_position: 30
 The Electric client library comes with a CLI providing a number of helpful commands for building Electric apps:
 
 - [`generate`](#generate) - The type-safe client generator; this command builds the client library for your applications to use.
-- [`proxy-tunnel`](#proxy-tunnel) - A tool to enable you to connect to the Electric migrations proxy when it's deployed behind an restrictive firewall, or with a hosting provider, that only allows incoming HTTP connections.
+- [`proxy-tunnel`](#proxy-tunnel) - A tool to enable you to connect to the Electric migrations proxy when it's deployed behind a restrictive firewall, or with a hosting provider that only allows incoming HTTP connections.
 - [`start`](#start) - Start an Electric sync service for development, along with an optional PostgreSQL
 - [`stop`](#stop) - Stop the development Electric sync service, and any optional PostgreSQL
 - [`status`](#status) - Show status of the development Electric sync service docker containers
@@ -21,7 +21,7 @@ The Electric client library comes with a CLI providing a number of helpful comma
 
 These commands are all executed in the form `npx electric-sql [command-name]` from within a project where you have installed the [client library](../usage/installation/client).
 
-All commands accept both arguments or environment variables for configuration, and the CLI uses [dotenv-flow](https://www.npmjs.com/package/dotenv-flow) to load environment variables from `.env` files. When a command line argument is provided it takes precedence over the environment variable. See a [full list of environment variables](#environment-variables).
+All commands accept both arguments and environment variables for configuration, and the CLI uses [dotenv-flow](https://www.npmjs.com/package/dotenv-flow) to load environment variables from `.env` files. When a command line argument is provided, it takes precedence over the environment variable. See the [full list of environment variables](#environment-variables).
 
 ## Commands
 
