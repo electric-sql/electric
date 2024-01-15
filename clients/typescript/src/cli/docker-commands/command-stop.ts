@@ -1,7 +1,9 @@
 import { Command } from 'commander'
 import { dockerCompose } from './docker-utils'
+import { getConfig, Config } from '../config'
 
 type StopCommandArgs = {
+  config: Config
   remove?: boolean
 }
 
@@ -12,20 +14,24 @@ export function makeStopCommand() {
     )
     .option('-r --remove', 'Also remove the containers and volumes')
     .action(async (opts: StopCommandArgs) => {
-      stop(opts)
+      stop({
+        config: getConfig(),
+        remove: opts.remove,
+      })
     })
 }
 
 export function stop(opts: StopCommandArgs) {
+  const config = opts.config
   return new Promise<void>((resolve) => {
     const env = {
       COMPOSE_PROFILES: 'with-postgres', // Stop any PostgreSQL containers too
     }
     let proc
     if (opts.remove) {
-      proc = dockerCompose('down', ['--volumes'], env)
+      proc = dockerCompose('down', ['--volumes'], config.CONTAINER_NAME, env)
     } else {
-      proc = dockerCompose('stop', [], env)
+      proc = dockerCompose('stop', [], config.CONTAINER_NAME, env)
     }
     proc.on('close', (code) => {
       if (code !== 0) {

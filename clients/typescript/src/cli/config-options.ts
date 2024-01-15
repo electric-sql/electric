@@ -18,9 +18,9 @@ export const configOptions = {
     doc: 'URL of the Electric service.',
     groups: ['client', 'tunnel'],
     shortForm: 's',
-    defaultVal: () => {
-      const host = getConfigValue('SERVICE_HOST')
-      const port = getConfigValue('HTTP_PORT')
+    defaultVal: (options: any) => {
+      const host = getConfigValue('SERVICE_HOST', options)
+      const port = getConfigValue('HTTP_PORT', options)
       return `http://${host}:${port}`
     },
     constructedDefault: 'http://{ELECTRIC_SERVICE_HOST}:{ELECTRIC_HTTP_PORT}',
@@ -31,15 +31,15 @@ export const configOptions = {
     doc: "URL of the Electric service's PostgreSQL proxy.",
     groups: ['client', 'proxy'],
     shortForm: 'p',
-    defaultVal: () => {
-      const host = getConfigValue('SERVICE_HOST')
-      const port = getConfigValue('PG_PROXY_PORT')
-      const password = getConfigValue('PG_PROXY_PASSWORD')
-      const dbName = getConfigValue('DATABASE_NAME')
+    defaultVal: (options: any) => {
+      const host = getConfigValue('PG_PROXY_HOST', options)
+      const port = getConfigValue('PG_PROXY_PORT', options)
+      const password = getConfigValue('PG_PROXY_PASSWORD', options)
+      const dbName = getConfigValue('DATABASE_NAME', options)
       return `postgresql://postgres:${password}@${host}:${port}/${dbName}`
     },
     constructedDefault:
-      'postgresql://postgres:{ELECTRIC_PG_PROXY_PASSWORD}@{ELECTRIC_SERVICE_HOST}:{ELECTRIC_PG_PROXY_PORT}/{ELECTRIC_DATABASE_NAME}',
+      'postgresql://postgres:{ELECTRIC_PG_PROXY_PASSWORD}@{PG_PROXY_HOST}:{ELECTRIC_PG_PROXY_PORT}/{ELECTRIC_DATABASE_NAME}',
   },
   CLIENT_PATH: {
     valueType: String,
@@ -55,6 +55,13 @@ export const configOptions = {
     doc: 'Hostname the Electric service is running on.',
     groups: ['client', 'proxy'],
     defaultVal: () => defaultServiceUrlPart('host', 'localhost'),
+  },
+  PG_PROXY_HOST: {
+    valueType: String,
+    valueTypeName: 'hostname',
+    doc: 'Port number for connections to the Postgres migration proxy.',
+    groups: ['client', 'proxy'],
+    defaultVal: (options: any) => getConfigValue('SERVICE_HOST', options),
   },
   MODULE_RESOLUTION: {
     valueType: String,
@@ -79,12 +86,12 @@ export const configOptions = {
     valueType: String,
     valueTypeName: 'url',
     shortForm: 'db',
-    defaultVal: () => {
-      const host = getConfigValue('DATABASE_HOST')
-      const port = getConfigValue('DATABASE_PORT')
-      const user = getConfigValue('DATABASE_USER')
-      const password = getConfigValue('DATABASE_PASSWORD')
-      const dbName = getConfigValue('DATABASE_NAME')
+    defaultVal: (options: any) => {
+      const host = getConfigValue('DATABASE_HOST', options)
+      const port = getConfigValue('DATABASE_PORT', options)
+      const user = getConfigValue('DATABASE_USER', options)
+      const password = getConfigValue('DATABASE_PASSWORD', options)
+      const dbName = getConfigValue('DATABASE_NAME', options)
       return buildDatabaseURL({ host, port, user, password, dbName })
     },
     constructedDefault:
@@ -253,6 +260,13 @@ export const configOptions = {
     valueTypeName: 'image',
     defaultVal: `electricsql/electric:${minorVersion}`, // Latest minor version of this library
     doc: 'The Docker image to use for Electric.',
+    groups: ['electric'],
+  },
+  CONTAINER_NAME: {
+    valueType: String,
+    valueTypeName: 'name',
+    defaultVal: (): string => getAppName() ?? 'electric',
+    doc: 'The name to use for the Docker container.',
     groups: ['electric'],
   },
 } as const

@@ -149,6 +149,7 @@
     "exponential-backoff": "^3.1.0",
     "fastestsmallesttextencoderdecoder": "^1.0.22",
     "frame-stream": "^3.0.1",
+    "get-port": "^7.0.0",
     "jose": "^4.14.4",
     "lodash.flow": "^3.5.0",
     "lodash.groupby": "^4.6.0",
