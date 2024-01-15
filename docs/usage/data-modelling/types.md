@@ -58,6 +58,8 @@ In future we plan to support more fine grained merge strategies for JSON data.
 :::
 
 :::caution Enum type caveats
+Each enum label (aka enum value) must match the regular expression `^[a-zA-Z][a-zA-Z0-9_]*$`. In other words, it should look like a valid identifier.
+
 We don't yet support modifying an enum type (i.e. `ALTER TYPE .. ADD VALUE`) if it's used by a column in an electrified table.
 
 It's not yet possible to alter an electrified table and add a new column of an enum type to it.
