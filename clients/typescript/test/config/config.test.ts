@@ -1,5 +1,9 @@
 import test from 'ava'
 import { hydrateConfig } from '../../src/config'
+import { LoggedMsg, setupLoggerMock } from '../support/log-mock'
+
+let log: Array<LoggedMsg> = []
+setupLoggerMock(test, () => log)
 
 test('hydrateConfig adds expected defaults', (t) => {
   const hydrated = hydrateConfig({
@@ -99,21 +103,11 @@ test('hydrateConfig checks for auth token', (t) => {
   )
 })
 
-test('hydrateConfig checks for valid service url', (t) => {
-  const errorReasons = {
-    'postgresql://somehost.com': 'Invalid url protocol.',
-    'https://user@somehost.com': 'Username and password are not supported.',
-    'https://user:pass@somehost.com':
-      'Username and password are not supported.',
-    // No reason, but it returns an invalid url error as well
-    'https://somehost.com:wrongport': '',
-  }
+test('hydrateConfig throws for invalid service url', (t) => {
+  const urls = ['', 'https://somehost.com:wrongport', 'abc']
 
-  Object.entries(errorReasons).forEach(([url, reason]) => {
-    let expectedErrorMsg = "Invalid 'url' in the configuration."
-    if (reason) {
-      expectedErrorMsg = expectedErrorMsg + ' ' + reason
-    }
+  urls.forEach((url) => {
+    const expectedErrorMsg = "Invalid 'url' in the configuration."
 
     t.throws(
       () => {
@@ -128,5 +122,36 @@ test('hydrateConfig checks for valid service url', (t) => {
         message: expectedErrorMsg,
       }
     )
+  })
+})
+
+test('hydrateConfig warns unexpected service urls', (t) => {
+  const warnReasons = {
+    'postgresql://somehost.com': ['Unsupported URL protocol.'],
+    'https://user@somehost.com': ['Username and password are not supported.'],
+    'custom://user:pass@somehost.com': [
+      'Unsupported URL protocol.',
+      'Username and password are not supported.',
+    ],
+  }
+
+  Object.entries(warnReasons).forEach(([url, reasons]) => {
+    // Cleanup logs between urls
+    log = []
+
+    let expectedWarningMsg = "Unexpected 'url' in the configuration."
+    if (reasons.length > 0) {
+      expectedWarningMsg += ` ${reasons.join(' ')}`
+    }
+    expectedWarningMsg += " An URL like 'http(s)://<host>:<port>' is expected."
+
+    hydrateConfig({
+      auth: {
+        token: 'test-token',
+      },
+      url,
+    })
+
+    t.deepEqual(log, [expectedWarningMsg])
   })
 })

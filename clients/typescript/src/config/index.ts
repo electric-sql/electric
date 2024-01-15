@@ -1,3 +1,4 @@
+import Log from 'loglevel'
 import { AuthConfig } from '../auth/index'
 import {
   ConnectionBackoffOptions as ConnectionBackOffOptions,
@@ -120,14 +121,16 @@ function parseServiceUrl(inputUrl?: string): {
     throwInvalidServiceUrlError()
   }
 
-  const validProtocols = ['http:', 'https:', 'ws:', 'wss:', 'electric:']
+  const warnings: string[] = []
 
-  if (!validProtocols.includes(url.protocol)) {
-    throwInvalidServiceUrlError('Invalid url protocol.')
+  const expectedProtocols = ['http:', 'https:', 'ws:', 'wss:', 'electric:']
+
+  if (!expectedProtocols.includes(url.protocol)) {
+    warnings.push('Unsupported URL protocol.')
   }
 
   if (url.username || url.password) {
-    throwInvalidServiceUrlError('Username and password are not supported.')
+    warnings.push('Username and password are not supported.')
   }
 
   const isSecureProtocol = url.protocol === 'https:' || url.protocol === 'wss:'
@@ -136,6 +139,10 @@ function parseServiceUrl(inputUrl?: string): {
   const defaultPort = sslEnabled ? 443 : 80
   const portInt = parseInt(url.port, 10)
   const port = Number.isNaN(portInt) ? defaultPort : portInt
+
+  if (warnings.length > 0) {
+    warnUnexpectedServiceUrl(warnings)
+  }
 
   return { hostname: url.hostname, port, ssl: sslEnabled }
 }
@@ -146,4 +153,15 @@ function throwInvalidServiceUrlError(reason?: string): never {
     msg += ` ${reason}`
   }
   throw new Error(msg)
+}
+
+function warnUnexpectedServiceUrl(reasons: string[]): void {
+  let msg = "Unexpected 'url' in the configuration."
+
+  if (reasons.length > 0) {
+    msg += ` ${reasons.join(' ')}`
+  }
+
+  msg += " An URL like 'http(s)://<host>:<port>' is expected."
+  Log.warn(msg)
 }
