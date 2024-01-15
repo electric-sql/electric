@@ -5,6 +5,10 @@ import { LoggedMsg, setupLoggerMock } from '../support/log-mock'
 let log: Array<LoggedMsg> = []
 setupLoggerMock(test, () => log)
 
+const validAuth = {
+  token: 'test-token',
+}
+
 test('hydrateConfig adds expected defaults', (t) => {
   const hydrated = hydrateConfig({
     auth: {
@@ -66,9 +70,7 @@ test('hydrateConfig port inference', (t) => {
   Object.entries(expectations).forEach(([protocol, expect]) => {
     const url = `${protocol}://1.1.1.1`
     const config = hydrateConfig({
-      auth: {
-        token: 'test-token',
-      },
+      auth: validAuth,
       url,
     })
 
@@ -79,9 +81,7 @@ test('hydrateConfig port inference', (t) => {
 
 test('hydrateConfig ssl', (t) => {
   const hydrated = hydrateConfig({
-    auth: {
-      token: 'test-token',
-    },
+    auth: validAuth,
     url: 'http://1.1.1.1?ssl=true',
   })
 
@@ -112,9 +112,7 @@ test('hydrateConfig throws for invalid service url', (t) => {
     t.throws(
       () => {
         hydrateConfig({
-          auth: {
-            token: 'test-token',
-          },
+          auth: validAuth,
           url,
         })
       },
@@ -146,9 +144,7 @@ test('hydrateConfig warns unexpected service urls', (t) => {
     expectedWarningMsg += " An URL like 'http(s)://<host>:<port>' is expected."
 
     hydrateConfig({
-      auth: {
-        token: 'test-token',
-      },
+      auth: validAuth,
       url,
     })
 
