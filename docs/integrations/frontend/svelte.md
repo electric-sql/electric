@@ -2,17 +2,15 @@
 title: Svelte
 description: >-
   Cybernetically enhanced web apps.
-sidebar_position: 30
+sidebar_position: 40
 ---
 
 :::caution Work in progress
-Svelte support is not yet implemented.
+Svelte support is still early stage and is not yet part of the official library.
 
-[Let us know on Discord](https://discord.electric-sql/com) if you're interested in helping to develop Svelte support.
+[Let us know on Discord](https://discord.electric-sql.com) if you're interested in helping to build out our Svelte support.
 :::
 
-### Implementation notes
+## Community bindings
 
-The [svelte/store](https://svelte.dev/docs/svelte-store) interface should be useful, for example, using [writable](https://svelte.dev/docs/svelte-store#writable) to store query results. There's a trivial example of a hook-like API [here](https://svelte.dev/repl/7580c4426c1947d8aa3d149a05bdc895?version=4.1.2).
-
-See the [existing React integration](https://github.com/electric-sql/electric/tree/main/clients/typescript/src/frameworks/react) for reference / what needs to be ported.
+See the [svelte-electric-app](https://github.com/conorbergin/svelte-electric-app) bindings by Conor Bergin.
