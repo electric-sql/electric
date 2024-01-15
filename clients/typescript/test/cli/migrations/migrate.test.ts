@@ -132,7 +132,7 @@ const failedGenerate = async (debug = false): Promise<boolean> => {
       // or migrations proxy and fails
       config: getConfig({
         SERVICE_HOST: 'does-not-exist', // Use a non-existent host to force failure
-        PG_PROXY_PORT: 999999
+        PG_PROXY_PORT: 999999,
       }),
 
       // prevent process.exit call to perform test
