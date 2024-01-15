@@ -8,7 +8,7 @@ export const appRoot = path.resolve() // path where the user ran `npx electric`
 /**
  * Get the name of the current project.
  */
-export function getAppName() {
+export function getAppName(): string | undefined {
   const packageJsonPath = path.join(appRoot, 'package.json')
   return JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')).name
 }

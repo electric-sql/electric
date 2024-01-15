@@ -7,7 +7,11 @@ export interface AnyConfigOption {
   valueType: typeof String | typeof Number | typeof Boolean
   valueTypeName?: string
   shortForm?: string
-  defaultVal?: string | number | boolean | (() => string | number | boolean)
+  defaultVal?:
+    | string
+    | number
+    | boolean
+    | ((options: any) => string | number | boolean)
   constructedDefault?: string
   groups?: Readonly<string[]>
 }
@@ -86,9 +90,9 @@ export function getConfigValue<K extends ConfigOptionName>(
   // Finally, check if the option has a default value
   const defaultVal = (configOptions[name] as AnyConfigOption).defaultVal as
     | ConfigOptionValue<K>
-    | (() => ConfigOptionValue<K>)
+    | ((options: any) => ConfigOptionValue<K>)
   if (typeof defaultVal === 'function') {
-    return defaultVal()
+    return defaultVal(options)
   }
   return defaultVal
 }

@@ -59,6 +59,9 @@ importers:
       frame-stream:
         specifier: ^3.0.1
         version: 3.0.1
+      get-port:
+        specifier: ^7.0.0
+        version: 7.0.0
       jose:
         specifier: ^4.14.4
         version: 4.14.4
@@ -8585,6 +8588,11 @@ packages:
     resolution: {integrity: sha512-x5UJKlgeUiNT8nyo/AcnwLnZuZNcSjSw0kogRB+Whd1fjjFq4B1hySFxSFWWSn4mIBzg3sRNUDFYc4g5gjPoLg==}
     engines: {node: '>=4'}
     dev: true
+
+  /get-port@7.0.0:
+    resolution: {integrity: sha512-mDHFgApoQd+azgMdwylJrv2DX47ywGq1i5VFJE7fZ0dttNq3iQMfsU4IvEgBHojA3KqEudyu7Vq+oN8kNaNkWw==}
+    engines: {node: '>=16'}
+    dev: false
 
   /get-stream@2.3.1:
     resolution: {integrity: sha512-AUGhbbemXxrZJRD5cDvKtQxLuYaIbNtDTK8YqupCI393Q2KSTreEsLUN3ZxAWFGiKTzL6nKuzfcIvieflUX9qA==}

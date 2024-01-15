@@ -1,17 +1,18 @@
-import path from 'path'
-import * as z from 'zod'
-import * as fs from 'fs/promises'
 import { createWriteStream } from 'fs'
+import { dedent } from 'ts-dedent'
+import { exec } from 'child_process'
+import * as fs from 'fs/promises'
+import * as z from 'zod'
+import decompress from 'decompress'
+import getPort from 'get-port'
 import http from 'node:http'
 import https from 'node:https'
-import decompress from 'decompress'
-import { buildMigrations, getMigrationNames } from './builder'
-import { exec } from 'child_process'
-import { dedent } from 'ts-dedent'
-import { findAndReplaceInFile } from '../util'
 import Module from 'node:module'
-import type { Config } from '../config'
+import path from 'path'
 import { buildDatabaseURL } from '../utils'
+import { buildMigrations, getMigrationNames } from './builder'
+import { findAndReplaceInFile } from '../util'
+import { getConfig, type Config } from '../config'
 import { start } from '../docker-commands/command-start'
 import { stop } from '../docker-commands/command-stop'
 import { withConfig } from '../configure/command-with-config'
@@ -44,10 +45,11 @@ export interface GeneratorOptions {
 }
 
 export async function generate(options: GeneratorOptions) {
-  const opts = {
+  let opts = {
     exitOnError: true,
     ...options,
   }
+  let config = opts.config
   if (opts.watch && opts.withMigrations) {
     console.error(
       'Cannot use --watch and --with-migrations at the same time. Please choose one.'
@@ -59,8 +61,18 @@ export async function generate(options: GeneratorOptions) {
     if (opts.withMigrations) {
       // Start new ElectricSQL and PostgreSQL containers
       console.log('Starting ElectricSQL and PostgreSQL containers...')
+      // Remove the ELECTRIC_SERVICE and ELECTRIC_PROXY env vars
+      delete process.env.ELECTRIC_SERVICE
+      delete process.env.ELECTRIC_PROXY
+      config = getConfig({
+        ...config,
+        SERVICE: undefined,
+        PROXY: undefined,
+        ...(await withMigrationsConfig(config.CONTAINER_NAME)),
+      })
+      opts.config = config
       await start({
-        config: opts.config,
+        config,
         withPostgres: true,
         detach: true,
         exitOnDetached: false,
@@ -83,6 +95,7 @@ export async function generate(options: GeneratorOptions) {
       console.log('Stopping ElectricSQL and PostgreSQL containers...')
       await stop({
         remove: true,
+        config,
       })
       console.log('Done')
     }
@@ -311,7 +324,6 @@ async function createPrismaSchema(folder: string, opts: GeneratorOptions) {
   await fs.mkdir(prismaDir)
   const output = path.resolve(config.CLIENT_PATH)
   const proxyUrl = buildProxyUrlForIntrospection(config)
-
   const schema = dedent`
     generator electric {
       provider      = "node ${escapePathForString(generatorPath)}"
@@ -689,4 +701,19 @@ async function rewriteImportsForNodeNext(clientDir: string): Promise<void> {
     .replace("from './migrations';", "from './migrations.js';")
     .replace("from './prismaClient';", "from './prismaClient.js';")
   await fs.writeFile(file, newContent)
+}
+
+async function withMigrationsConfig(containerName: string) {
+  return {
+    HTTP_PORT: await getPort(),
+    PG_PROXY_PORT: await getPort(),
+    DATABASE_PORT: await getPort(),
+    SERVICE_HOST: 'localhost',
+    PG_PROXY_HOST: 'localhost',
+    DATABASE_REQUIRE_SSL: false,
+    // Random container name to avoid collisions
+    CONTAINER_NAME: `${containerName}-migrations-${Math.random()
+      .toString(36)
+      .slice(6)}`,
+  }
 }
