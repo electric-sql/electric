@@ -31,7 +31,7 @@ mod embeddings;
 mod chat;
 mod utils;
 
-use chat::{chat, async_chat};
+use chat::chat;
 use crate::embeddings::{create_embedding_model, embed_query, format_embeddings, embed_issue};
 use pg::{pg_connect, pg_init, pg_query, replace_question_marks, row_to_json};
 
@@ -99,10 +99,10 @@ struct TerminalState {
  * Tauri commands *
  ******************/
 // Terminal commands
-#[tauri::command]
-async fn tauri_async_chat(connection: State<'_, DbConnection>, question: &str, context: &str) -> Result<(), ()> {
-    async_chat(writer, llama, question, context)
-}
+// #[tauri::command]
+// async fn tauri_async_chat(connection: State<'_, DbConnection>, question: &str, context: &str) -> Result<(), ()> {
+//     async_chat(writer, llama, question, context)
+// }
 
 
 #[tauri::command]
@@ -253,8 +253,11 @@ async fn tauri_exec(
 #[tauri::command(rename_all = "snake_case")]
 async fn tauri_init_command(connection: State<'_, DbConnection>, name: &str) -> Result<(), String> {
     // Start the postgres when we receive this call
-    let pg_port_guard = connection.pg_port.lock().unwrap();
-    let pg_port = pg_port_guard.as_ref().unwrap();
+    let pg_port;
+    {
+        let pg_port_guard = connection.pg_port.lock().unwrap();
+        pg_port = *pg_port_guard.as_ref().unwrap();
+    }
 
     let pg = pg_init(
         format!(
@@ -263,7 +266,7 @@ async fn tauri_init_command(connection: State<'_, DbConnection>, name: &str) -> 
             name
         )
         .as_str(),
-        *pg_port,
+        pg_port,
     )
     .await;
     let conn = pg_connect(&pg, "test").await;
@@ -451,7 +454,7 @@ fn main() {
             async_write_to_pty,
             async_resize_pty,
             send_recv_postgres_terminal,
-            tauri_async_chat
+            // tauri_async_chat
         ])
         .on_window_event(move |event| match event.event() {
             WindowEvent::Destroyed => {
