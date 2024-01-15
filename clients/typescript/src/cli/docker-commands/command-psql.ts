@@ -4,7 +4,7 @@ import {
   getConfig,
   GetConfigOptionsForGroup,
 } from '../config'
-import { buildDatabaseURL } from '../utils'
+import { buildDatabaseURL, parsePgProxyPort } from '../utils'
 import { dockerCompose } from './docker-utils'
 
 export function makePsqlCommand() {
@@ -32,7 +32,7 @@ export function psql(
     user: config.DATABASE_USER,
     password: config.PG_PROXY_PASSWORD,
     host: 'electric',
-    port: config.PG_PROXY_PORT,
+    port: parsePgProxyPort(config.PG_PROXY_PORT).port,
     dbName: config.DATABASE_NAME,
   })
   dockerCompose(

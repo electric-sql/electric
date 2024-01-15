@@ -4,7 +4,7 @@ import {
   defaultServiceUrlPart,
   getConfigValue,
 } from './config'
-import { dedent, getAppName, buildDatabaseURL } from './utils'
+import { dedent, getAppName, buildDatabaseURL, parsePgProxyPort } from './utils'
 import { LIB_VERSION } from '../version'
 
 const minorVersion = LIB_VERSION.split('.').slice(0, 2).join('.')
@@ -33,7 +33,9 @@ export const configOptions = {
     shortForm: 'p',
     defaultVal: (options: any) => {
       const host = getConfigValue('PG_PROXY_HOST', options)
-      const port = getConfigValue('PG_PROXY_PORT', options)
+      const port = parsePgProxyPort(
+        getConfigValue('PG_PROXY_PORT', options)
+      ).port
       const user = 'postgres'
       const password = getConfigValue('PG_PROXY_PASSWORD', options)
       const dbName = getConfigValue('DATABASE_NAME', options)
@@ -183,7 +185,7 @@ export const configOptions = {
   },
   PG_PROXY_PORT: {
     defaultVal: '65432',
-    valueType: Number,
+    valueType: String,
     valueTypeName: 'port',
     doc: 'Port number for connections to the Postgres migration proxy.',
     groups: ['electric', 'client', 'proxy'],

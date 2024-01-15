@@ -9,7 +9,7 @@ import http from 'node:http'
 import https from 'node:https'
 import Module from 'node:module'
 import path from 'path'
-import { buildDatabaseURL } from '../utils'
+import { buildDatabaseURL, parsePgProxyPort } from '../utils'
 import { buildMigrations, getMigrationNames } from './builder'
 import { findAndReplaceInFile } from '../util'
 import { getConfig, type Config } from '../config'
@@ -308,7 +308,7 @@ function buildProxyUrlForIntrospection(config: Config) {
     user: 'prisma', // We use the "prisma" user to put the proxy into introspection mode
     password: config.PG_PROXY_PASSWORD,
     host: config.SERVICE_HOST,
-    port: config.PG_PROXY_PORT,
+    port: parsePgProxyPort(config.PG_PROXY_PORT).port,
     dbName: config.DATABASE_NAME,
   })
 }
@@ -706,7 +706,7 @@ async function rewriteImportsForNodeNext(clientDir: string): Promise<void> {
 async function withMigrationsConfig(containerName: string) {
   return {
     HTTP_PORT: await getPort(),
-    PG_PROXY_PORT: await getPort(),
+    PG_PROXY_PORT: (await getPort()).toString(),
     DATABASE_PORT: await getPort(),
     SERVICE_HOST: 'localhost',
     PG_PROXY_HOST: 'localhost',
