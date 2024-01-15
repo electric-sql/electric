@@ -113,7 +113,12 @@ model Model {
 }
 `
 
-// tries and fails to generate client, returns `true` if failed
+/**
+ * Tries to generate client while pointing to addresses that do not
+ * have a sync service or migrations proxy running, which should always fail.
+ *
+ * Returns `true` if failed so the failure can be asserted
+ */
 const failedGenerate = async (debug = false): Promise<boolean> => {
   let migrationFailed = false
   const origConsoleError = console.error
@@ -123,11 +128,15 @@ const failedGenerate = async (debug = false): Promise<boolean> => {
       // no-op
     }
     await generate({
+      // point to invalid ports so that it does not find an electric service
+      // or migrations proxy and fails
       config: getConfig({
         SERVICE_HOST: 'does-not-exist', // Use a non-existent host to force failure
+        PG_PROXY_PORT: 999999,
       }),
       // prevent process.exit call to perform test
       exitOnError: false,
+
       // if set to true, temporary folder is retained on failure
       debug: debug,
     })
@@ -161,7 +170,8 @@ test('migrator correctly capitalises model names', (t) => {
 test.serial(
   'migrator should clean up temporary folders on failure',
   async (t) => {
-    // should fail generaton
+    // should fail generaton - if not, ensure the generation
+    // command is not pointing to a running electric service
     t.assert(await failedGenerate(false))
 
     // should clean up temporary folders
@@ -172,7 +182,8 @@ test.serial(
 test.serial(
   'migrator should retain temporary folder on failure in debug mode',
   async (t) => {
-    // should fail generaton in debug mode
+    // should fail generaton in debug mode - if not, ensure the generation
+    // command is not pointing to a running electric service
     t.assert(await failedGenerate(true))
 
     // should retain temporary migrations folder
