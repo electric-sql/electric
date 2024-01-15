@@ -32,7 +32,7 @@ To preserve referential integrity Electric prevents [updates to a table's primar
 :::
 
 :::caution
-When adding a new foreign key column with `ALTER TABLE ... ADD COLUMN` to an electrified table, all active shape subscriptions that include that table need to be updated to also include the table referenced by the new column. This means that the client code has to be updated together with the schema change to ensure that subscriptions keep syncing data to and from the client.
+Electric currently does not allow adding a new foreign key column with `ALTER TABLE ... ADD COLUMN` to an electrified table. This limitation will be removed in a future release.
 :::
 
 ### Not-null constraints
