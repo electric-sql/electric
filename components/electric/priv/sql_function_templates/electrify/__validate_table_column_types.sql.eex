@@ -18,31 +18,58 @@ CREATE OR REPLACE PROCEDURE <%= schema() %>.__validate_table_column_types(table_
 SECURITY DEFINER AS $function$
 DECLARE
     _col_name text;
-    _col_type text;
+    _col_typname text;
     _col_typmod int;
     _col_type_pretty text;
-    _is_enum boolean;
+    _enum_oid regtype;
+    _invalid_enum_vals text[];
     _invalid_cols text[];
 BEGIN
-    FOR _col_name, _col_type, _col_typmod, _col_type_pretty, _is_enum IN
-        SELECT attname, typname, atttypmod, format_type(atttypid, atttypmod), typtype = 'e'
-            FROM pg_attribute
-            JOIN pg_type on atttypid = pg_type.oid
-            WHERE attrelid = table_oid AND attnum > 0 AND NOT attisdropped
-            ORDER BY attnum
+    FOR _col_name, _col_typname, _col_typmod, _col_type_pretty, _enum_oid IN
+        SELECT
+            attname,
+            typname,
+            atttypmod,
+            format_type(atttypid, atttypmod),
+            (CASE WHEN typtype = 'e' THEN atttypid END)
+        FROM pg_attribute
+        JOIN pg_type ON atttypid = pg_type.oid
+        WHERE attrelid = table_oid AND attnum > 0 AND NOT attisdropped
+        ORDER BY attnum
     LOOP
-        IF (_col_type NOT IN (<%= valid_column_types %>)
-              -- We only support unsized varchar type
-              OR ('varchar' IN (<%= valid_column_types %>) AND _col_type = 'varchar' AND _col_typmod <> -1))
-           AND NOT _is_enum
+        IF _enum_oid IS NOT NULL THEN
+            SELECT array_agg(format('%L', enumlabel) ORDER BY enumsortorder)
+            INTO _invalid_enum_vals
+            FROM pg_enum
+            WHERE enumtypid = _enum_oid AND enumlabel !~* '^[a-z][a-z_0-9]*$';
+
+            IF _invalid_enum_vals != '{}' THEN
+                _invalid_cols =
+                    array_append(_invalid_cols,
+                                 format('%I %s (enum type %s contains unsupported values %s)',
+                                        _col_name,
+                                        _col_type_pretty,
+                                        _col_type_pretty,
+                                        array_to_string(_invalid_enum_vals, ', ')));
+            END IF;
+        ELSIF (
+            _col_typname NOT IN (<%= valid_column_types %>)
+            -- We only support unsized varchar type
+            OR (
+                'varchar' IN (<%= valid_column_types %>)
+                AND _col_typname = 'varchar'
+                AND _col_typmod <> -1
+            )
+        )
         THEN
             _invalid_cols = array_append(_invalid_cols, format('%I %s', _col_name, _col_type_pretty));
         END IF;
     END LOOP;
 
     IF _invalid_cols IS NOT NULL THEN
-        RAISE EXCEPTION E'Cannot electrify % because some of its columns have types not supported by Electric:\n  %',
-                        table_oid::regclass, array_to_string(_invalid_cols, E'\n  ');
+        RAISE EXCEPTION
+            E'Cannot electrify % because some of its columns have types not supported by Electric:\n  %',
+            table_oid::regclass, array_to_string(_invalid_cols, E'\n  ');
     END IF;
 END;
 $function$ LANGUAGE PLPGSQL;

@@ -505,14 +505,14 @@ defmodule Electric.Satellite.WsValidationsTest do
       migrate(
         ctx.db,
         vsn,
-        "CREATE TYPE public.coffee AS ENUM ('espresso', 'latte', 'black with milk'); CREATE TABLE public.foo (id TEXT PRIMARY KEY, cup_of coffee)",
+        "CREATE TYPE public.coffee AS ENUM ('espresso', 'latte', 'Black_with_milk'); CREATE TABLE public.foo (id TEXT PRIMARY KEY, cup_of coffee)",
         electrify: "public.foo"
       )
 
     valid_records = [
       %{"id" => "1", "cup_of" => "espresso"},
       %{"id" => "2", "cup_of" => "latte"},
-      %{"id" => "3", "cup_of" => "black with milk"},
+      %{"id" => "3", "cup_of" => "Black_with_milk"},
       %{"id" => "4", "cup_of" => nil}
     ]
 

@@ -458,15 +458,19 @@ defmodule Electric.Postgres.ExtensionTest do
     test_tx "rejects invalid column types", fn conn ->
       assert [
                {:ok, [], []},
+               {:ok, [], []},
                {:error, {:error, :error, _, :raise_exception, error_msg, _}}
              ] =
                :epgsql.squery(conn, """
+               CREATE TYPE badenum AS ENUM ('1circle', '_square', 'hello world');
+
                CREATE TABLE public.t1 (
                  id UUID PRIMARY KEY,
                  c1 CHARACTER,
                  c2 CHARACTER(11),
                  "C3" VARCHAR(11),
-                 created_at TIMETZ
+                 created_at TIMETZ,
+                 e badenum
                );
                CALL electric.electrify('public.t1');
                """)
@@ -478,6 +482,7 @@ defmodule Electric.Postgres.ExtensionTest do
                  c2 character(11)
                  "C3" character varying(11)
                  created_at time with time zone
+                 e badenum (enum type badenum contains unsupported values '1circle', '_square', 'hello world')
                """
                |> String.trim()
     end
