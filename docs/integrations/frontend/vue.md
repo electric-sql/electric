@@ -8,7 +8,7 @@ sidebar_position: 50
 :::caution Work in progress
 Vue support is still early stage and is not yet part of the official library.
 
-[Let us know on Discord](https://discord.electric-sql/com) if you're interested in helping to build out our Vue support.
+[Let us know on Discord](https://discord.electric-sql.com) if you're interested in helping to build out our Vue support.
 :::
 
 ## Community bindings
