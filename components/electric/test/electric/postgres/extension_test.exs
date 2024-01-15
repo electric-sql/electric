@@ -478,11 +478,15 @@ defmodule Electric.Postgres.ExtensionTest do
       assert error_msg ==
                """
                Cannot electrify t1 because some of its columns have types not supported by Electric:
-                 c1 character(1)
-                 c2 character(11)
-                 "C3" character varying(11)
-                 created_at time with time zone
-                 e badenum (enum type badenum contains unsupported values '1circle', '_square', 'hello world')
+
+                   c1 character(1)
+                   c2 character(11)
+                   "C3" character varying(11)
+                   created_at time with time zone
+                   e badenum (enum type badenum contains unsupported values '1circle', '_square', 'hello world')
+
+               See https://electric-sql.com/docs/usage/data-modelling/types#supported-data-types
+               to learn more about data type support in Electric.
                """
                |> String.trim()
     end

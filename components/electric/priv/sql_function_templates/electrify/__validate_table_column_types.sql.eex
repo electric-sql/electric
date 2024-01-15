@@ -68,8 +68,10 @@ BEGIN
 
     IF _invalid_cols IS NOT NULL THEN
         RAISE EXCEPTION
-            E'Cannot electrify % because some of its columns have types not supported by Electric:\n  %',
-            table_oid::regclass, array_to_string(_invalid_cols, E'\n  ');
+            E'Cannot electrify % because some of its columns have types not supported by Electric:\n\n    %'
+             '\n\nSee https://electric-sql.com/docs/usage/data-modelling/types#supported-data-types'
+             '\nto learn more about data type support in Electric.',
+            table_oid::regclass, array_to_string(_invalid_cols, E'\n    ');
     END IF;
 END;
 $function$ LANGUAGE PLPGSQL;
