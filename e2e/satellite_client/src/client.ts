@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { schema, Electric, ColorType as Color } from './generated/client'
 export { JsonNull } from './generated/client'
 import { globalRegistry } from 'electric-sql/satellite'
+import { DbSchema, ElectricClient } from 'electric-sql/client/model'
 
 setLogLevel('DEBUG')
 
@@ -34,6 +35,7 @@ export const electrify_db = async (
   console.log(`(in electrify_db) config: ${JSON.stringify(config)}`)
   schema.migrations = migrations
   const result = await electrify(db, schema, config)
+  await result.connect() // connect to Electric
 
   result.notifier.subscribeToConnectivityStateChanges((x) => console.log("Connectivity state changed", x))
 
