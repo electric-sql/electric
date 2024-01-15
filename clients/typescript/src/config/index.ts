@@ -71,19 +71,12 @@ export const hydrateConfig = (config: ElectricConfig): HydratedConfig => {
   }
 
   const debug = config.debug ?? false
-  const url = new URL(config.url ?? 'http://localhost:5133')
-
-  const isSecureProtocol = url.protocol === 'https:' || url.protocol === 'wss:'
-  const sslEnabled = isSecureProtocol || url.searchParams.get('ssl') === 'true'
-
-  const defaultPort = sslEnabled ? 443 : 80
-  const portInt = parseInt(url.port, 10)
-  const port = Number.isNaN(portInt) ? defaultPort : portInt
+  const parsedServiceUrl = parseServiceUrl(config.url)
 
   const replication = {
-    host: url.hostname,
-    port: port,
-    ssl: sslEnabled,
+    host: parsedServiceUrl.hostname,
+    port: parsedServiceUrl.port,
+    ssl: parsedServiceUrl.ssl,
     timeout: config.timeout ?? 3000,
   }
 
@@ -113,4 +106,44 @@ export const hydrateConfig = (config: ElectricConfig): HydratedConfig => {
     debug,
     connectionBackOffOptions,
   }
+}
+
+function parseServiceUrl(inputUrl?: string): {
+  hostname: string
+  port: number
+  ssl: boolean
+} {
+  let url: URL
+  try {
+    url = new URL(inputUrl ?? 'http://localhost:5133')
+  } catch (e) {
+    throwInvalidServiceUrlError()
+  }
+
+  const validProtocols = ['http:', 'https:', 'ws:', 'wss:', 'electric:']
+
+  if (!validProtocols.includes(url.protocol)) {
+    throwInvalidServiceUrlError('Invalid url protocol.')
+  }
+
+  if (url.username || url.password) {
+    throwInvalidServiceUrlError('Username and password are not supported.')
+  }
+
+  const isSecureProtocol = url.protocol === 'https:' || url.protocol === 'wss:'
+  const sslEnabled = isSecureProtocol || url.searchParams.get('ssl') === 'true'
+
+  const defaultPort = sslEnabled ? 443 : 80
+  const portInt = parseInt(url.port, 10)
+  const port = Number.isNaN(portInt) ? defaultPort : portInt
+
+  return { hostname: url.hostname, port, ssl: sslEnabled }
+}
+
+function throwInvalidServiceUrlError(reason?: string): never {
+  let msg = "Invalid 'url' in the configuration."
+  if (reason) {
+    msg += ` ${reason}`
+  }
+  throw new Error(msg)
 }
