@@ -40,8 +40,6 @@ defmodule Electric.Satellite.Permissions.Grant do
 
   defp make_role(%{role: {_, role}}), do: role
 
-  # defp make_privileges(privileges), do: Privileges.new(privileges)
-
   # no columns specified so defaults to all
   defp make_columns(nil), do: :all
   defp make_columns(["*"]), do: :all
