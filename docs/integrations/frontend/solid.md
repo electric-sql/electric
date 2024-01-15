@@ -2,15 +2,15 @@
 title: SolidJS
 description: >-
   Simple and performant reactivity for building user interfaces.
-sidebar_position: 20
+sidebar_position: 30
 ---
 
 :::caution Work in progress
-SolidJS support is not yet implemented.
+SolidJS support is still early stage and is not yet part of the official library.
 
-[Let us know on Discord](https://discord.electric-sql/com) if you're interested in helping to develop SolidJS support. 
+[Let us know on Discord](https://discord.electric-sql/com) if you're interested in helping to build out our SolidJS support.
 :::
 
-### Implementation notes
+## Community bindings
 
-[Solid's reactivity model](https://www.solidjs.com/guides/reactivity) should map fairly directly to the [existing React integration](https://github.com/electric-sql/electric/tree/main/clients/typescript/src/frameworks/react) with signals replacing state. There's also a [store interface](https://www.solidjs.com/docs/latest/api#createstore) that may be helpful.
+See the [solid-electric-app](https://github.com/conorbergin/solid-electric-app) bindings by Conor Bergin.
