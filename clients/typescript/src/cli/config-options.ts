@@ -34,9 +34,11 @@ export const configOptions = {
     defaultVal: (options: any) => {
       const host = getConfigValue('PG_PROXY_HOST', options)
       const port = getConfigValue('PG_PROXY_PORT', options)
+      const user = 'postgres'
       const password = getConfigValue('PG_PROXY_PASSWORD', options)
       const dbName = getConfigValue('DATABASE_NAME', options)
-      return `postgresql://postgres:${password}@${host}:${port}/${dbName}`
+      const ssl = getConfigValue('DATABASE_REQUIRE_SSL', options)
+      return buildDatabaseURL({ host, port, user, password, dbName, ssl })
     },
     constructedDefault:
       'postgresql://postgres:{ELECTRIC_PG_PROXY_PASSWORD}@{PG_PROXY_HOST}:{ELECTRIC_PG_PROXY_PORT}/{ELECTRIC_DATABASE_NAME}',
@@ -92,7 +94,8 @@ export const configOptions = {
       const user = getConfigValue('DATABASE_USER', options)
       const password = getConfigValue('DATABASE_PASSWORD', options)
       const dbName = getConfigValue('DATABASE_NAME', options)
-      return buildDatabaseURL({ host, port, user, password, dbName })
+      const ssl = getConfigValue('DATABASE_REQUIRE_SSL', options)
+      return buildDatabaseURL({ host, port, user, password, dbName, ssl })
     },
     constructedDefault:
       'postgresql://{ELECTRIC_DATABASE_USER}:{ELECTRIC_DATABASE_PASSWORD}@{ELECTRIC_DATABASE_HOST}:{ELECTRIC_DATABASE_PORT}/{ELECTRIC_DATABASE_NAME}',
