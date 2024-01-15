@@ -45,7 +45,7 @@ export interface GeneratorOptions {
 }
 
 export async function generate(options: GeneratorOptions) {
-  let opts = {
+  const opts = {
     exitOnError: true,
     ...options,
   }
