@@ -19,11 +19,9 @@
 
 # ElectricSQL
 
-Sync for modern apps. From the inventors of CRDTs.
+## Local-first Postgres
 
-## What is ElectricSQL?
-
-ElectricSQL is a local-first sync layer for web and mobile apps. Use it to build reactive, realtime, local-first apps directly on Postgres.
+ElectricSQL is an open source system for building local-first software. Use it to build fast, collaborative, resilient apps — with standard Postgres and SQLite.
 
 ## Getting started
 

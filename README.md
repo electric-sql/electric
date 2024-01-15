@@ -39,8 +39,6 @@
 
 # ElectricSQL
 
-Sync for modern apps. From the inventors of CRDTs.
-
 ## Quick links
 
 - [Website](https://electric-sql.com)
@@ -48,9 +46,9 @@ Sync for modern apps. From the inventors of CRDTs.
 - [Introduction](https://electric-sql.com/docs/intro/local-first)
 - [Quickstart](https://electric-sql.com/docs/quickstart)
 
-## What is ElectricSQL?
+## Local-first Postgres
 
-ElectricSQL is a local-first software platform that makes it easy to develop high-quality, modern apps with instant reactivity, realtime multi-user collaboration and conflict-free offline support.
+ElectricSQL is an open source system for building local-first software. Use it to build fast, collaborative, resilient apps — with standard Postgres and SQLite.
 
 [Local-first](https://www.inkandswitch.com/local-first/) is a new development paradigm where your app code talks directly to an embedded local database and data syncs in the background via active-active database replication. Because the app code talks directly to a local database, apps feel instant. Because data syncs in the background via active-active replication it naturally supports multi-user collaboration and conflict-free offline.
 
