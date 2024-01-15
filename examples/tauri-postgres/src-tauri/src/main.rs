@@ -4,7 +4,10 @@
 // Third part utils
 use dirs::home_dir;
 use futures::stream::StreamExt;
-use ollama_rs::Ollama;
+use ollama_rs::{
+    generation::completion::request::GenerationRequest,
+    Ollama,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Number;
 use sqlx::{postgres::PgArguments, Arguments};
@@ -28,14 +31,14 @@ mod embeddings;
 mod chat;
 mod utils;
 
-use chat::chat;
+use chat::{chat, async_chat};
 use crate::embeddings::{create_embedding_model, embed_query, format_embeddings, embed_issue};
 use pg::{pg_connect, pg_init, pg_query, replace_question_marks, row_to_json};
 
 // Postgres console
 use portable_pty::{native_pty_system, CommandBuilder, PtyPair, PtySize};
 use std::{
-    io::{BufRead, BufReader, Write},
+    io::{BufRead, BufReader, BufWriter, Write},
     sync::{Arc, Mutex},
     thread::{self, sleep},
     time::Duration,
@@ -82,9 +85,11 @@ struct DbConnection {
     db: Arc<AsyncMutex<Option<PgEmbed>>>,
     conn: Arc<AsyncMutex<Option<PgConnection>>>,
     llama: Arc<AsyncMutex<Option<Ollama>>>,
+    pg_port: Mutex<Option<u16>>,
+    writer: Arc<AsyncMutex<Box<dyn Write + Send>>>,
 }
 
-/// App state for the terminal window. TODO: rename to something more sensible
+/// App state for the terminal window
 struct TerminalState {
     pty_pair: Arc<AsyncMutex<PtyPair>>,
     writer: Arc<AsyncMutex<Box<dyn Write + Send>>>,
@@ -94,6 +99,12 @@ struct TerminalState {
  * Tauri commands *
  ******************/
 // Terminal commands
+#[tauri::command]
+async fn tauri_async_chat(connection: State<'_, DbConnection>, question: &str, context: &str) -> Result<(), ()> {
+    async_chat(writer, llama, question, context)
+}
+
+
 #[tauri::command]
 async fn async_write_to_pty(data: &str, state: State<'_, TerminalState>) -> Result<(), ()> {
     write!(state.writer.lock().await, "{}", data).map_err(|_| ())
@@ -242,6 +253,9 @@ async fn tauri_exec(
 #[tauri::command(rename_all = "snake_case")]
 async fn tauri_init_command(connection: State<'_, DbConnection>, name: &str) -> Result<(), String> {
     // Start the postgres when we receive this call
+    let pg_port_guard = connection.pg_port.lock().unwrap();
+    let pg_port = pg_port_guard.as_ref().unwrap();
+
     let pg = pg_init(
         format!(
             "{}/db/{}",
@@ -249,6 +263,7 @@ async fn tauri_init_command(connection: State<'_, DbConnection>, name: &str) -> 
             name
         )
         .as_str(),
+        *pg_port,
     )
     .await;
     let conn = pg_connect(&pg, "test").await;
@@ -329,7 +344,18 @@ async fn tauri_chat(connection: State<'_, DbConnection>, question: &str, context
     }
 }
 
+use std::env;
+
 fn main() {
+    let args: Vec<String> = env::args().collect();
+    let pg_port;
+    if args.len() < 2 {
+        pg_port = 33333;
+    } else {
+        pg_port = args[1].parse::<u16>().unwrap();
+    }
+    eprintln!("{:?}", args);
+
     let _log = tauri_plugin_log::Builder::default()
         .targets([
             LogTarget::Folder(utils::app_root()),
@@ -365,6 +391,15 @@ fn main() {
 
     let reader = Arc::new(Mutex::new(Some(BufReader::new(reader))));
 
+    let writer2 = native_pty_system().openpty(PtySize {
+        rows: 24,
+        cols: 80,
+        pixel_width: 0,
+        pixel_height: 0,
+    }).unwrap().master.take_writer().unwrap();
+
+    let writer2 = Arc::new(AsyncMutex::new(writer2));
+
     tauri::Builder::default()
         .on_page_load(move |window, _| {
             let window = window.clone();
@@ -388,22 +423,24 @@ fn main() {
             db: Default::default(),
             conn: Default::default(),
             llama: Default::default(),
+            pg_port: Mutex::new(Some(pg_port)),
+            writer: writer2,
         })
         .manage(TerminalState {
             pty_pair: Arc::new(AsyncMutex::new(pty_pair)),
             writer: Arc::new(AsyncMutex::new(_writer))
         })
-        .setup(|app| {
-            // terminal
-            tauri::WindowBuilder::new(
-                app,
-                "postgresterminal", /* must be unique */
-                tauri::WindowUrl::App("debug.html".into()),
-            )
-            .build()?;
+        // .setup(|app| {
+        //     // terminal
+        //     tauri::WindowBuilder::new(
+        //         app,
+        //         "postgresterminal", /* must be unique */
+        //         tauri::WindowUrl::App("debug.html".into()),
+        //     )
+        //     .build()?;
 
-            Ok(())
-        })
+        //     Ok(())
+        // })
         .invoke_handler(tauri::generate_handler![
             tauri_init_command,
             tauri_exec_command,
@@ -413,7 +450,8 @@ fn main() {
             tauri_chat,
             async_write_to_pty,
             async_resize_pty,
-            send_recv_postgres_terminal
+            send_recv_postgres_terminal,
+            tauri_async_chat
         ])
         .on_window_event(move |event| match event.event() {
             WindowEvent::Destroyed => {
@@ -441,7 +479,7 @@ mod tests {
     #[tokio::test]
     /// Sanity test for postgres. Launch it, give some commands and stop it.
     async fn test_postgres() {
-        let mut pg = pg_init("/home/iib/db/data").await; // TODO: this should use tauri_pg_setup
+        let mut pg = pg_init("/home/iib/db/data", 33333).await; // TODO: this should use tauri_pg_setup
         let _conn = pg_connect(&pg, "test").await;
 
         pg.stop_db().await.unwrap();
@@ -452,7 +490,7 @@ mod tests {
     #[tokio::test]
     /// Postgres test database creation, querying and destructuring
     async fn test_postgres_database_create() {
-        let mut pg = pg_init("/home/iib/db/data").await; // TODO: this should use tauri_pg_setup
+        let mut pg = pg_init("/home/iib/db/data", 33333).await; // TODO: this should use tauri_pg_setup
                                                                         // let mut pg = tauri_pg_setup(54321, PathBuf::from_str("/home/iib/db/data").unwrap(), false, None).await.unwrap();
 
         let mut conn = pg_connect(&pg, "test").await;
@@ -513,7 +551,7 @@ mod tests {
     #[tokio::test]
     /// Postgres test database creation, querying and destructuring
     async fn test_tauri_exec() {
-        let mut pg = pg_init("/home/iib/db/data").await; // TODO: this should use tauri_pg_setup
+        let mut pg = pg_init("/home/iib/db/data", 33333).await; // TODO: this should use tauri_pg_setup
         let mut conn = pg_connect(&pg, "test").await;
 
         let keys0 = vec![];
@@ -601,7 +639,7 @@ mod tests {
     #[tokio::test]
     /// Postgres test database creation, querying and destructuring
     async fn test_get_modified_rows() {
-        let mut pg = pg_init("/home/iib/db/data").await; // TODO: this should use tauri_pg_setup
+        let mut pg = pg_init("/home/iib/db/data", 33333).await; // TODO: this should use tauri_pg_setup
         let mut conn = pg_connect(&pg, "test").await;
         let empty_bind_params = BindParams {
             keys: vec![],
@@ -721,7 +759,7 @@ mod tests {
             values: vec![],
         };
 
-        let mut pg = pg_init("/home/iib/db/data").await; // TODO: this should use tauri_pg_setup
+        let mut pg = pg_init("/home/iib/db/data", 33333).await; // TODO: this should use tauri_pg_setup
         let mut conn = pg_connect(&pg, "test").await;
 
         let mut tx = conn.begin().await.unwrap();
@@ -760,7 +798,7 @@ mod tests {
     #[tokio::test]
     /// Test pg-embed version
     async fn test_pg_embed_version() {
-        let mut pg = pg_init("/home/iib/db/data").await; // TODO: this should use tauri_pg_setup
+        let mut pg = pg_init("/home/iib/db/data", 33333).await; // TODO: this should use tauri_pg_setup
         let mut conn = pg_connect(&pg, "test").await;
 
         let stop = pg.stop_db().await;
@@ -833,7 +871,7 @@ mod tests {
             values: vec![],
         };
 
-        let mut pg = pg_init("/Users/iib/db/data").await; // TODO: this should use tauri_pg_setup
+        let mut pg = pg_init("/Users/iib/db/data", 33333).await; // TODO: this should use tauri_pg_setup
         let mut conn = pg_connect(&pg, "test").await;
 
         tauri_exec(

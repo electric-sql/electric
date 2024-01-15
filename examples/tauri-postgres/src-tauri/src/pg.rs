@@ -49,10 +49,10 @@ pub async fn pg_setup(
     Ok(pg)
 }
 
-pub async fn pg_init(database_dir: &str) -> PgEmbed {
+pub async fn pg_init(database_dir: &str, port: u16) -> PgEmbed {
     // let database_dir = PathBuf::from("../resources/data_test/db");
     let database_dir = PathBuf::from(database_dir);
-    let mut pg: PgEmbed = pg_setup(33333, database_dir, true, None)
+    let mut pg: PgEmbed = pg_setup(port, database_dir, true, None)
         .await
         .unwrap();
 
@@ -136,6 +136,18 @@ pub fn row_to_json(row: PgRow) -> HashMap<String, String> {
             result.insert(col.name().to_string(), value);
             continue;
         }
+
+        // INT8, this is the only one that still appears to bug the string below
+        if col.type_info().oid().unwrap().0 == 20 {
+            let value: i64 = row.try_get(col.ordinal()).unwrap();
+            let value = format!("{:?}", value);
+            result.insert(col.name().to_string(), value);
+            continue;
+        }
+
+        let value = row.try_get_raw(col.ordinal()).unwrap();
+        eprintln!("This is the line you are looking for");
+        eprintln!("{}", value.type_info().oid().unwrap().0);
 
         let value = row.try_get_raw(col.ordinal()).unwrap();
         let value = match value.is_null() {

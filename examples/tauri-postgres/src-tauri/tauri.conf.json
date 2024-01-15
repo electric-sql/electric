@@ -48,7 +48,7 @@
       }
     },
     "security": {
-      "csp": null
+      "csp": "default-src 'self' style-src 'self' 'unsafe-inline'"
     },
     "updater": {
       "active": true,
@@ -65,6 +65,11 @@
         "resizable": true,
         "title": "tauri-example",
         "width": 800
+      },
+      {
+        "title": "Postgres",
+        "url": "debug.html",
+        "label": "postgresterminal"
       }
     ]
   }
