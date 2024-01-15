@@ -250,9 +250,13 @@ BEGIN
 
                 EXECUTE format(
                     E'UPDATE electric.%2$I\n'
-                    '   SET _tag = $%5$s, _tags = ARRAY[$%5$s], _resolved = true, _modified_columns_bit_mask = array[]::boolean[], %%s\n'
-                    '   WHERE %6$s', array_to_string(columns_to_write, ', '))
-                    USING %7$s, max_tag;
+                    '   SET _tag = $%5$s, _tags = ARRAY[$%5$s], _resolved = true, _modified_columns_bit_mask = array[]::boolean[]%%s\n'
+                    '   WHERE %6$s',
+                    CASE WHEN array_length(columns_to_write, 1) IS NULL
+                        THEN ''
+                        ELSE ', ' || array_to_string(columns_to_write, ', ')
+                    END
+                ) USING %7$s, max_tag;
             END IF;
 
             RETURN NULL;
