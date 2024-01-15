@@ -131,6 +131,7 @@ test('hydrateConfig warns unexpected service urls', (t) => {
       'Unsupported URL protocol.',
       'Username and password are not supported.',
     ],
+    'http://somehost.com:1234/some/path': ['An URL path is not supported.'],
   }
 
   Object.entries(warnReasons).forEach(([url, reasons]) => {

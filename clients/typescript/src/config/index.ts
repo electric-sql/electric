@@ -133,6 +133,10 @@ function parseServiceUrl(inputUrl?: string): {
     warnings.push('Username and password are not supported.')
   }
 
+  if (url.pathname !== '/' && url.pathname !== '') {
+    warnings.push('An URL path is not supported.')
+  }
+
   const isSecureProtocol = url.protocol === 'https:' || url.protocol === 'wss:'
   const sslEnabled = isSecureProtocol || url.searchParams.get('ssl') === 'true'
 
