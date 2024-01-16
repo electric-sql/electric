@@ -77,7 +77,7 @@ defmodule Electric.Postgres.Proxy.QueryAnalyser.Impl do
   defp validate_column_constraint(%PgQuery.Node{
          node: {:constraint, %PgQuery.Constraint{contype: constraint}}
        }) do
-    if constraint not in [:CONSTR_FOREIGN, :CONSTR_NOTNULL, :CONSTR_NULL] do
+    if constraint not in [:CONSTR_NOTNULL, :CONSTR_NULL] do
       {:error, {:unsupported_constraint, constraint}}
     end
   end
@@ -274,6 +274,7 @@ defimpl QueryAnalyser, for: PgQuery.AlterTableStmt do
 
   defp format_constraint(:CONSTR_CHECK), do: "CHECK"
   defp format_constraint(:CONSTR_GENERATED), do: "GENERATED"
+  defp format_constraint(:CONSTR_FOREIGN), do: "FOREIGN KEY"
   defp format_constraint(:CONSTR_IDENTITY), do: "GENERATED"
   defp format_constraint(:CONSTR_PRIMARY), do: "PRIMARY KEY"
   defp format_constraint(:CONSTR_UNIQUE), do: "UNIQUE"
