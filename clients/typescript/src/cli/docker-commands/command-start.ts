@@ -1,5 +1,5 @@
 import { Command } from 'commander'
-import { dedent, getAppName } from '../utils'
+import { dedent, parsePgProxyPort } from '../utils'
 import { addOptionGroupToCommand, getConfig, Config } from '../config'
 import { dockerCompose } from './docker-utils'
 
@@ -55,9 +55,13 @@ export function start(options: StartSettings) {
         options.withPostgres ? ' with PostgreSQL' : ''
       }`
     )
-    const appName = getAppName() ?? 'electric'
 
     const env = configToEnv(options.config)
+    // PG_PROXY_PORT can have a 'http:' prefix, which we need to remove
+    // for port mapping to work.
+    env.PG_PROXY_PORT_PARSED = parsePgProxyPort(
+      env.PG_PROXY_PORT
+    ).port.toString()
 
     const dockerConfig = {
       ...env,
@@ -67,7 +71,9 @@ export function start(options: StartSettings) {
             COMPOSE_ELECTRIC_SERVICE: 'electric-with-postgres',
             DATABASE_URL: `postgresql://postgres:${
               env?.DATABASE_PASSWORD ?? 'pg_password'
-            }@postgres:${env?.DATABASE_PORT ?? '5432'}/${appName}`,
+            }@postgres:${env?.DATABASE_PORT ?? '5432'}/${
+              options.config.DATABASE_NAME
+            }`,
             LOGICAL_PUBLISHER_HOST: 'electric',
           }
         : {}),
@@ -77,6 +83,7 @@ export function start(options: StartSettings) {
     const proc = dockerCompose(
       'up',
       [...(options.detach ? ['--detach'] : [])],
+      options.config.CONTAINER_NAME,
       dockerConfig
     )
 
@@ -88,7 +95,7 @@ export function start(options: StartSettings) {
           const start = Date.now()
           const timeout = 10 * 1000 // 10 seconds
           while (Date.now() - start < timeout) {
-            if (await checkPostgres(env)) {
+            if (await checkPostgres(options.config.CONTAINER_NAME, env)) {
               console.log('PostgreSQL is ready')
               if (exitOnDetached) {
                 process.exit(0)
@@ -123,10 +130,22 @@ export function start(options: StartSettings) {
   })
 }
 
-function checkPostgres(env: { [key: string]: string }) {
+function checkPostgres(containerName: string, env: { [key: string]: string }) {
   return new Promise((resolve, reject) => {
     try {
-      const proc = dockerCompose('exec', ['postgres', 'pg_isready'], env)
+      const proc = dockerCompose(
+        'exec',
+        [
+          'postgres',
+          'pg_isready',
+          '-U',
+          `${env.DATABASE_USER}`,
+          '-p',
+          `${env.DATABASE_PORT}`,
+        ],
+        containerName,
+        env
+      )
       proc.on('close', (code) => {
         resolve(code === 0)
       })

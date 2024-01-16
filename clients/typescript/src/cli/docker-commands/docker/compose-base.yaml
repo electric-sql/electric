@@ -6,7 +6,7 @@ services:
     init: true
     ports:
       - ${HTTP_PORT:-5133}:${HTTP_PORT:-5133}
-      - ${PG_PROXY_PORT:-65432}:${PG_PROXY_PORT:-65432}
+      - ${PG_PROXY_PORT_PARSED:-65432}:${PG_PROXY_PORT_PARSED:-65432}
     environment:
       DATABASE_REQUIRE_SSL: ${DATABASE_REQUIRE_SSL:-}
       DATABASE_URL: ${DATABASE_URL:-}

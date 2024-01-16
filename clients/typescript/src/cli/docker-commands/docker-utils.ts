@@ -1,7 +1,6 @@
 import { spawn } from 'child_process'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { getAppName } from '../utils'
 
 const composeFile = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -12,9 +11,9 @@ const composeFile = path.join(
 export function dockerCompose(
   command: string,
   userArgs: string[] = [],
+  containerName?: string,
   env: { [key: string]: string } = {}
 ) {
-  const appName = getAppName() ?? 'electric'
   const args = [
     'compose',
     '--ansi',
@@ -28,8 +27,7 @@ export function dockerCompose(
     stdio: 'inherit',
     env: {
       ...process.env,
-      APP_NAME: appName,
-      COMPOSE_PROJECT_NAME: appName,
+      ...(containerName ? { COMPOSE_PROJECT_NAME: containerName } : {}),
       ...env,
     },
   })

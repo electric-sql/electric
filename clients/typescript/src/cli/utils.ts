@@ -8,7 +8,7 @@ export const appRoot = path.resolve() // path where the user ran `npx electric`
 /**
  * Get the name of the current project.
  */
-export function getAppName() {
+export function getAppName(): string | undefined {
   const packageJsonPath = path.join(appRoot, 'package.json')
   return JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')).name
 }
@@ -86,12 +86,17 @@ export function buildDatabaseURL(opts: {
   host: string
   port: number
   dbName: string
+  ssl?: boolean
 }) {
   let url = 'postgresql://' + opts.user
   if (opts.password) {
     url += ':' + opts.password
   }
   url += '@' + opts.host + ':' + opts.port + '/' + opts.dbName
+
+  if (opts.ssl === false) {
+    url += '?sslmode=disable'
+  }
   return url
 }
 
@@ -119,5 +124,19 @@ export function extractServiceURL(serviceUrl: string) {
   return {
     host: parsed.hostname,
     port: parsed.port ? parseInt(parsed.port) : undefined,
+  }
+}
+
+export function parsePgProxyPort(str: string) {
+  if (str.includes(':')) {
+    const [prefix, port] = str.split(':')
+    return {
+      http: prefix.toLocaleLowerCase() === 'http',
+      port: parsePort(port),
+    }
+  } else if (str.toLocaleLowerCase() === 'http') {
+    return { http: true, port: 65432 }
+  } else {
+    return { http: false, port: parsePort(str) }
   }
 }

@@ -12,21 +12,27 @@ services:
     profiles: ['with-postgres']
     image: '${POSTGRESQL_IMAGE:-postgres:14-alpine}'
     environment:
-      POSTGRES_DB: ${APP_NAME:-electric}
+      POSTGRES_DB: ${DATABASE_NAME:-electric}
       POSTGRES_USER: ${DATABASE_USER:-postgres}
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-db_password}
     command:
       - -c
       - config_file=/etc/postgresql.conf
+      - -p
+      - ${DATABASE_PORT:-5432}
     configs:
       - source: postgres_config
         target: /etc/postgresql.conf
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${DATABASE_USER:-postgres}']
+      test:
+        [
+          'CMD-SHELL',
+          'pg_isready -U ${DATABASE_USER:-postgres} -p ${DATABASE_PORT:-5432}',
+        ]
     extra_hosts:
       - 'host.docker.internal:host-gateway'
     ports:
-      - ${DATABASE_PORT:-5432}:5432
+      - ${DATABASE_PORT:-5432}:${DATABASE_PORT:-5432}
     volumes:
       - pg_data:/var/lib/postgresql/data
 

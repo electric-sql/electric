@@ -2,12 +2,18 @@ import type { Command } from 'commander'
 import { extractDatabaseURL, extractServiceURL } from './utils'
 import { configOptions } from './config-options'
 
+export type ConfigMap = Record<string, string | number | boolean>
+
 export interface AnyConfigOption {
   doc: string
   valueType: typeof String | typeof Number | typeof Boolean
   valueTypeName?: string
   shortForm?: string
-  defaultVal?: string | number | boolean | (() => string | number | boolean)
+  defaultVal?:
+    | string
+    | number
+    | boolean
+    | ((options: ConfigMap) => string | number | boolean)
   constructedDefault?: string
   groups?: Readonly<string[]>
 }
@@ -45,7 +51,6 @@ export function defaultServiceUrlPart<T>(
   const url = process.env.ELECTRIC_SERVICE
   if (url) {
     const parsed = extractServiceURL(url)
-    console.log(parsed)
     if (parsed && parsed[part] !== undefined) {
       return parsed[part] as T
     }
@@ -87,9 +92,9 @@ export function getConfigValue<K extends ConfigOptionName>(
   // Finally, check if the option has a default value
   const defaultVal = (configOptions[name] as AnyConfigOption).defaultVal as
     | ConfigOptionValue<K>
-    | (() => ConfigOptionValue<K>)
+    | ((options: ConfigMap) => ConfigOptionValue<K>)
   if (typeof defaultVal === 'function') {
-    return defaultVal()
+    return defaultVal(options)
   }
   return defaultVal
 }
