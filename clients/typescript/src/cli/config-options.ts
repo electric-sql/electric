@@ -44,7 +44,7 @@ export const configOptions = {
       return buildDatabaseURL({ host, port, user, password, dbName, ssl })
     },
     constructedDefault:
-      'postgresql://postgres:{ELECTRIC_PG_PROXY_PASSWORD}@{PG_PROXY_HOST}:{ELECTRIC_PG_PROXY_PORT}/{ELECTRIC_DATABASE_NAME}',
+      'postgresql://postgres:{ELECTRIC_PG_PROXY_PASSWORD}@{ELECTRIC_PG_PROXY_HOST}:{ELECTRIC_PG_PROXY_PORT}/{ELECTRIC_DATABASE_NAME}',
   },
   CLIENT_PATH: {
     valueType: String,
