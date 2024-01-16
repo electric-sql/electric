@@ -13,9 +13,13 @@ Make sure you have a DigitalOcean account with billing activated before you foll
 
 App Platform is a Platform-as-a-Service (PaaS) offering that allows developers to publish code directly to DigitalOcean servers without worrying about the underlying infrastructure.
 
-### Deploying Electric
+### Postgres with logical replication
 
-Before deploying Electric, make sure you have a Postgres database with logical replication enabled hosted somewhere where Electric will be able to connect to it. Retrieve your database's connection URI with password included and use it as the value of the `DATABASE_URL` variable when customizing the app.
+Before deploying Electric, you'll need a Postgres database (with logical replication enabled) hosted somewhere Electric can connect to. DigitalOcean offers [Managed PostgreSQL](https://docs.digitalocean.com/products/databases/postgresql/) which would be the easiest way to get started with Electric and a hosted Postgres at the same time, if you don't have one yet. Create a new database cluster and wait for it to become ready before proceeding to the next section.
+
+Alternatively, many other managed database providers support logical replication, see <DocPageLink path="usage/installation/postgres#hosting" /> for some options. If you choose not to use DigitalOcean's Managed PostgreSQL, retrieve your database's connection URI with password included from your provider and use it as the value of the `DATABASE_URL` variable when setting up the app.
+
+### Deploying Electric
 
 Click on the "Deploy to DO" button below to be taken to DigitalOcean's Create App wizard.
 
@@ -25,21 +29,39 @@ Click on the "Deploy to DO" button below to be taken to DigitalOcean's Create Ap
 
 </div>
 
+You may need to log in or create a new account first. Once signed in, you should see the *Resources* page of the Create App wizard.
+
 ![Create App: Resources](./digital-ocean/create-app/resources.png)
 
 Click on the "Edit Plan" button, pick the Basic plan and the Basic instance size. That will be enough to get started.
 
 ![Create App: Edit Plan](./digital-ocean/create-app/edit-plan.png)
 
-Go to the next page and click on the Edit link next to the `electric` service.
+:::info Configuring Managed PostgreSQL
+If you have set up a [Managed PostgreSQL cluster on DigitalOcean](https://docs.digitalocean.com/products/databases/postgresql/) for use with Electric, click on the "Add Resource (Optional)" label, pick the "Database" option and click on the "Add" button.
+
+![Create App: Database Resource](./digital-ocean/create-app/resources-db.png)
+
+Pick your database cluster, name and user from the dropdowns, then click on the "Attach Database" button.
+
+![Create App: Configure Database](./digital-ocean/create-app/resources-db-configure.png)
+:::
+
+Back on the *Resources* page, click on the "Next" button to go to the *Environment Variables* page and click on the "Edit" link next to the `electric` service.
 
 ![Create App: Environment](./digital-ocean/create-app/environment.png)
 
-Fill in the values for `DATABASE_URL` and `PG_PROXY_PASSWORD`. Make sure you pick a strong proxy password as the proxy effectively makes it possible to connect to your database over the public Internet in this particular deployment scenario.
+Fill in the value for `PG_PROXY_PASSWORD`. Make sure you pick a strong proxy password as the proxy effectively makes it possible to connect to your database over the public Internet in this particular deployment scenario.
 
 ![Create App: Edit Environment](./digital-ocean/create-app/env-vars.png)
 
-You can leave the `AUTH_MODE` insecure for now but remember to switch to the secure mode and add a secret signing key before making your app available to users.
+:::info DATABASE_URL
+If you have set up a [Managed PostgreSQL cluster on DigitalOcean](https://docs.digitalocean.com/products/databases/postgresql/) for use with Electric, it will automatically create a `DATABASE_URL` variable for you as shown in the above screenshot.
+
+However, if you want to use a 3rd-party database provider, add the `DATABASE_URL` variable yourself before proceeding to the next step.
+:::
+
+You can leave the `AUTH_MODE` insecure for now but remember to switch to the secure mode and add a [secret signing key](/docs/usage/auth/secure) before making your app available to users.
 
 Click "Save" and go the next page.
 
@@ -47,11 +69,11 @@ Click "Save" and go the next page.
 
 Here you can pick a different region for the app. We recommend choosing the same (or the closest) region to the one where your database is running.
 
-Finally, go to the Review page and click on the "Create Resources" button at the bottom.
+Finally, go to the *Review* page and click on the "Create Resources" button at the bottom.
 
 ![Create App: Review](./digital-ocean/create-app/review.png)
 
-You'll be taken to the new app's Settings tab. Click on the Activity tab to see the deployment status and logs. It should only take a minute before the app goes live.
+You'll be taken to the new app's *Settings* tab. Click on the *Activity* tab to see the deployment status and logs. It should only take a minute before the app goes live.
 
 ![Create App: Activity](./digital-ocean/create-app/activity.png)
 
