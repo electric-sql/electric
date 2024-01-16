@@ -386,7 +386,9 @@ async fn start_chat(
 
     let model = "llama2:latest".to_string();
 
-    let generation_request = GenerationRequest::new(model, question.to_string());
+    let prompt = format!("{} Answer based on this context: {}", question, context);
+
+    let generation_request = GenerationRequest::new(model, prompt);
     let mut stream = llama2.generate_stream(generation_request).await.unwrap();
     while let Some(result) = stream.next().await {
         let async_proc_input_tx = state.inner.lock().await;
