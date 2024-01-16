@@ -25,7 +25,7 @@ All commands accept both arguments and environment variables for configuration, 
 
 ## Commands
 
-### `generate`
+### generate
 
 To interface with your database from within a JavaScript or TypeScript application you need an Electric client (see <DocPageLink path="usage/data-access/client" /> for context). To generate an Electric client, make sure that your database and the Electric sync service are up and running.
 Then, from within the root folder of your application run:
@@ -42,7 +42,7 @@ Note that you can use an optional `--watch` flag to automatically re-generate th
 The `generate` command accepts a number of arguments:
 
 ```shell
-npx electric-sql generate [--service <url>] [--proxy <url>] [--out <path>] [--watch [<pollingInterval>]]
+npx electric-sql generate [options]
 ```
 
 All arguments are optional. The principal ones are described below:
@@ -53,7 +53,7 @@ All arguments are optional. The principal ones are described below:
 | <span className="no-wrap">`--proxy`</span><br/><span className="no-wrap">`-p`</span><br/>`ELECTRIC_PROXY` | `<url>` | Provides the url to connect to Electric's database proxy.<br /> Defaults to <span class="break-all">`postgresql://postgres:proxy_password@localhost:65432/electric`</span>. |
 | <span className="no-wrap">`--client-path`</span><br /><span className="no-wrap">`-o`</span><br />`ELECTRIC_CLIENT_PATH` | `<path>` | Specifies the output location for the generated client.<br /> Defaults to `./src/generated/client` |
 | <span className="no-wrap">`--watch`</span><br /><span className="no-wrap">`-w`</span> | `<pollingInterval>` | Run the generator in watch mode. Accepts an optional polling interval (in milliseconds) which defines how often to poll Electric for database migrations.<br /> The default polling interval is 1000ms. |
-| <span className="no-wrap">`--with-migrations`</span> | `<command>` | Specify a command to run migrations against a blank postgres in order to create a client. [See details below](#local-only-first-mode) |
+| <span className="no-wrap">`--with-migrations`</span> | `<command>` | Specify a command to run migrations against an ephemeral postgres in order to create a client. [See details below](#local-only-first-mode) |
 | <span className="no-wrap">`--module-resolution`</span> | `<command>` | The module resolution used for the project. The generated client will be compatible with this resolution scheme, [see notes below](#electric_module_resolution). |
 
 For a full list of arguments run `npx electric-sql help generate` or see the [environment variables](#environment-variables) below.
@@ -85,7 +85,7 @@ npx electric-sql stop --remove
 
 As you can see from the steps above, the backend is started, your migrations are applied, the type-safe client is generated and then everything is torn down and cleaned up for you. Allowing you to develop local-only-first and then run the backend services only when you actually want to enable sync.  
 
-### `proxy-tunnel`
+### proxy-tunnel
 
 Some hosting providers only allow HTTP connections, which poses a challenge for deploying Electric to their platforms since it uses a separate port for connections to the [migrations proxy](../usage/data-modelling/migrations#migrations-proxy). In order to enable connecting to run migrations and use the generate command in these setups, you can enable a special "Proxy Tunnel" that tunnels the Postgres Proxy TCP connection over a Websocket to the Electric sync service. This is enabled on the sync service by setting the environment variable `PG_PROXY_PORT=http`.
 
@@ -124,13 +124,13 @@ All arguments are optional and are described below:
 | <span className="no-wrap">`--service`</span><br/>`ELECTRIC_SERVICE` | `<url>` | Provides the url to connect to the Electric sync service. If not provided it uses the url set in the `ELECTRIC_URL` environment variable. If that variable is not set, it resorts to the default url which is `http://localhost:5133`. |
 | <span className="no-wrap">`--local-port`</span> | `<port>` | The local port to bind to; this will be forwarded to the Electric sync service, and defaults to `65432`. |
 
-### `start`
+### start
 
 Starts an Electric sync service (using Docker) for development, along with an optional Postgres database.
 
 By default it will launch a sync service that is compatible with the client version you have installed.
 
-All [environment variables for configuring the Electric sync service](./service.md#configuration-options)  are passed through to the service if they are found prefixed with `ELECTRIC_`.
+All [environment variables for configuring the Electric sync service](./service.md), when prefixed with `ELECTRIC_`, are passed through to the sync service started with the `start` command.
 
 To start an Electric sync service, along with Postgres, fully configured for development run:
 
@@ -152,7 +152,7 @@ All arguments are optional. The principal ones are described below:
 |----------------------|--------------|------------------------------------------|
 | <span className="no-wrap">`--with-postgres`</span> |  | Start a Postgres database along with Electric.
 | <span className="no-wrap">`--detach`</span> |  | Run in the background instead of printing logs to the console.
-| <span className="no-wrap">`--database-url`</span><br/><span className="no-wrap">`-db`</span><br/>`ELECTRIC_DATABASE_URL` | `<url>` | PostgreSQL connection URL for the database. |
+| <span className="no-wrap">`--database-url`</span><br/><span className="no-wrap">`-db`</span><br/>`ELECTRIC_DATABASE_URL` | `<url>` | PostgreSQL connection URL for the database you want Electric to connect to. Mutually exclusive with `--with-postgres`. |
 | <span className="no-wrap">`--http-port`</span><br />`ELECTRIC_HTTP_PORT` | `<port>` | The local port to run the sync service on. Defaults to 5133 |
 | <span className="no-wrap">`--pg-proxy-port`</span><br />`ELECTRIC_PG_PROXY_PORT` | `<port>` | The local port to bind the Postgres Proxy port to. Defaults to 65432 |
 | <span className="no-wrap">`--image`</span><br />`ELECTRIC_IMAGE` | `<image>` | The Docker image to use for Electric. |
@@ -160,7 +160,7 @@ All arguments are optional. The principal ones are described below:
 
 For a full list of arguments run `npx electric-sql help start` or see the [environment variables](#environment-variables) below.
 
-### `stop`
+### stop
 
 Stop the development Electric sync service that was started with the [`start`](#start) command, and any optional PostgreSQL.
 
@@ -170,13 +170,13 @@ npx electric-sql stop [--remove]
 
 #### Options
 
-The `start` command accepts a single argument:
+The `stop` command accepts a single argument:
 
 | Argument             | Description                              |
 |----------------------|------------------------------------------|
-| <span className="no-wrap">`--remove`</span> | Remove the containers and volumes from Docker.
+| <span className="no-wrap">`--remove`</span> | Remove the Docker containers and volumes previously created by `start`.
 
-### `status`
+### status
 
 Show status of the Electric sync service docker containers that were started with the [`start`](#start) command.
 
@@ -184,9 +184,11 @@ Show status of the Electric sync service docker containers that were started wit
 npx electric-sql status
 ```
 
-### `psql`
+### psql
 
-Start an interactive PSQL session with Postgres, connecting via the Electric [Migrations proxy](../usage/data-modelling/migrations.md#migrations-proxy).
+Start an interactive PSQL session with the Postgres that was started with the `start --with-postgres` command, connecting via the Electric [Migrations proxy](../usage/data-modelling/migrations.md#migrations-proxy).
+
+This uses the `psql` installed in the Postgres container started with `start --with-postgres` command, and only supports connecting to that Postgres.
 
 ```shell
 npx electric-sql psql [--proxy <url>]
@@ -194,15 +196,13 @@ npx electric-sql psql [--proxy <url>]
 
 #### Options
 
-The `psql` command accepts a number of arguments for specifying the Migrations proxy to connect to, the main one being:
-
 | Argument or Env var  | Value        | Description                              |
 |----------------------|--------------|------------------------------------------|
 | <span className="no-wrap">`--proxy`</span><br /><span className="no-wrap">`-p`</span><br />`ELECTRIC_PROXY` | `<url>` | URL of the Electric service's PostgreSQL proxy.
 
 For a full list of arguments run `npx electric-sql help psql` or see the [environment variables](#environment-variables) below.
 
-### `show-config`
+### show-config
 
 Print out the full configuration that the CLI is using based on any env variable, or `.env` files.
 
@@ -210,11 +210,11 @@ Print out the full configuration that the CLI is using based on any env variable
 npx electric-sql show-config
 ```
 
-### `with-config`
+### with-config
 
 This command allows you to run a subcommand substituting arguments configured with Electric environment variables. It also makes all Electric configuration environment variables available to the subcommand.
 
-One of the main use cases for this command is running migrations against your Electric Postgres Proxy using the configuration specified locally. 
+One of the main use cases for this command is running migrations against your Migration proxy using the configuration specified locally. 
 
 It takes a single string argument, which is the command to run in string form, and substitutes configuration values inside double braces:
 
@@ -235,13 +235,13 @@ We have this configured as a "script" in our `package.json` for each example:
 {
   //...
   "scripts": {
-    "db:migrate": "npx electric-sql with-config \"npx pg-migrations apply --database {{ELECTRIC_PROXY}} --directory ./db/migrations\"",
+    "db:migrate": "npx electric-sql with-config 'npx pg-migrations apply --database {{ELECTRIC_PROXY}} --directory ./db/migrations'",
     // ...
   }
 }
 ```
 
-### `help`
+### help
 
 Display the help for a command.
 
@@ -251,16 +251,213 @@ npx electric-sql help <command>
 
 ## Environment Variables
 
-In addition to those specified below, all standard Electric sync service environment variables are available for setting prefixed with `ELECTRIC_`. These are then passed though to the sync service started with the [`start`](#start) command. See a [full list of environment variables here](./service.md#configuration-options).
+In addition to those specified below, all standard Electric sync service environment variables are available for setting prefixed with `ELECTRIC_`. These are then passed though to the sync service started with the [`start`](#start) command. See a [full list of environment variables here](./service.md).
 
 import EnvVarConfig from '@site/src/components/EnvVarConfig'
 
-#### `ELECTRIC_SERVICE`
+#### ELECTRIC_CLIENT_PATH
+
+<EnvVarConfig
+    name="ELECTRIC_CLIENT_PATH"
+    defaultValue="./src/generated/client"
+    example="./src/electricClient"
+>
+  Path to the directory where the generated client code will be written.
+
+  Used by the [`generate`](#generate) command.
+</EnvVarConfig>
+
+#### ELECTRIC_CONTAINER_NAME
+
+<EnvVarConfig
+    name="ELECTRIC_CONTAINER_NAME"
+    defaultValue="electric"
+    example="nodenext"
+>
+  This sets the name of the Docker containers when using the start command.
+
+  It defaults to the `name` in your `packages.json` and falls back to `electric` otherwise.
+
+  Used by the [`start`](#start) command.
+
+</EnvVarConfig>
+
+#### ELECTRIC_DATABASE_HOST
+
+<EnvVarConfig
+    name="ELECTRIC_DATABASE_HOST"
+    defaultValue="localhost"
+    example="electric.myhost.com"
+>
+  Hostname of the database server.
+
+  Used by the [`start`](#start) command.
+</EnvVarConfig>
+
+#### ELECTRIC_DATABASE_NAME
+
+<EnvVarConfig
+    name="ELECTRIC_DATABASE_NAME"
+    defaultValue="electric"
+    example="db_password"
+>
+  Name of the database to connect to.
+
+  Used by the [`start`](#start) and [`psql`](#psql) commands.
+
+  Defaults to the project name (i.e. `"name": "my-project-name"`) specified in your `package.json` file, falls back to `electric`.
+</EnvVarConfig>
+
+#### ELECTRIC_DATABASE_PASSWORD
+
+<EnvVarConfig
+    name="ELECTRIC_DATABASE_PASSWORD"
+    defaultValue="db_password"
+    example="db_password"
+>
+  Password to connect to the database with.
+
+  Used by the [`start`](#start) command.
+</EnvVarConfig>
+
+#### ELECTRIC_DATABASE_PORT
+
+<EnvVarConfig
+    name="ELECTRIC_DATABASE_PORT"
+    defaultValue="5432"
+    example="5433"
+>
+  Port number of the database server.
+
+  Used by the [`start`](#start) command.
+</EnvVarConfig>
+
+#### ELECTRIC_DATABASE_URL
+
+<EnvVarConfig
+    name="ELECTRIC_DATABASE_URL"
+    defaultValue="postgresql://{ELECTRIC_DATABASE_USER}:{ELECTRIC_DATABASE_PASSWORD}@{ELECTRIC_DATABASE_HOST}:{ELECTRIC_DATABASE_PORT}/{ELECTRIC_DATABASE_NAME}"
+    example="postgresql://postgres:db_password@electric.myhost.com:5432/electric-sql"
+>
+  PostgreSQL connection URL for the database.
+
+  Used by the [`start`](#start) command.
+
+  With all defaults, it evaluates to:
+  `postgresql://postgres:db_password@localhost:5432/electric-sql`
+</EnvVarConfig>
+
+#### ELECTRIC_DATABASE_USER
+
+<EnvVarConfig
+    name="ELECTRIC_DATABASE_USER"
+    defaultValue="postgres"
+    example="my_db_user"
+>
+  Username to connect to the database with.
+
+  Used by the [`start`](#start) command.
+</EnvVarConfig>
+
+#### ELECTRIC_HTTP_PORT
+
+<EnvVarConfig
+    name="ELECTRIC_HTTP_PORT"
+    defaultValue="5133"
+    example="5144"
+>
+  Port for HTTP connections.
+
+  Used by the [`start`](#start) command along with connecting to the sync service from your project client.
+</EnvVarConfig>
+
+#### ELECTRIC_IMAGE
+
+<EnvVarConfig
+    name="ELECTRIC_PG_PROXY_PASSWORD"
+    defaultValue="electricsql/electric:{version-tag}"
+    example="electricsql/electric:0.8"
+>
+  The Docker image to use for Electric.
+
+  Used by the [`start`](#start) command.
+
+  Defaults to the matching minor version for the installed Electric client, so if you are using `electric-sql@0.8.2` the docker image tagged `electricsql/electric:0.8` (the latest in the `0.8.n` range) will be used.
+</EnvVarConfig>
+
+#### ELECTRIC_MODULE_RESOLUTION
+
+<EnvVarConfig
+    name="ELECTRIC_MODULE_RESOLUTION"
+    defaultValue="node"
+    example="nodenext"
+>
+  The module resolution used for the project. The generated client will be compatible with this resolution scheme.
+  
+  If you are using `nodenext` as your `tsconfig.json` `moduleResolution` then settings this to `nodenext` also will ensure that the generated client is compatible with your TypeScript configuration.
+
+  Used by the [`generate`](#generate) command.
+
+</EnvVarConfig>
+
+#### ELECTRIC_PG_PROXY_PASSWORD
+
+<EnvVarConfig
+    name="ELECTRIC_PG_PROXY_PASSWORD"
+    defaultValue="proxy_password"
+    example="my_password"
+>
+  Password to use when connecting to the Postgres proxy via psql or any other Postgres client.
+
+  Used by the [`start`](#start) and [`psql`](#psql) commands.
+</EnvVarConfig>
+
+#### ELECTRIC_PG_PROXY_PORT
+
+<EnvVarConfig
+    name="ELECTRIC_PG_PROXY_PORT"
+    defaultValue="65432"
+    example="65433"
+>
+  Port number for connections to the Postgres migration proxy.
+
+  Used by the [`start`](#start) and [`psql`](#psql) commands.
+</EnvVarConfig>
+
+#### ELECTRIC_POSTGRESQL_IMAGE
+
+<EnvVarConfig
+    name="ELECTRIC_PG_PROXY_PASSWORD"
+    defaultValue="postgres:14-alpine"
+    example="postgres:16"
+>
+  The Docker image to use for the PostgreSQL database.
+
+  Used by the [`start`](#start) command.
+
+</EnvVarConfig>
+
+#### ELECTRIC_PROXY
+
+<EnvVarConfig
+    name="ELECTRIC_PROXY"
+    defaultValue="postgresql://postgres:{ELECTRIC_PG_PROXY_PASSWORD}@{ELECTRIC_SERVICE_HOST}:{ELECTRIC_PG_PROXY_PORT}/{ELECTRIC_DATABASE_NAME}"
+    example="postgresql://postgres:proxy_password@electric.mydomain.com:65432/electric"
+>
+  URL of the Electric service's PostgreSQL proxy.
+
+  Used by the [`generate`](#generate) and [`psql`](#psql) commands.
+
+  With all defaults, it evaluates to:
+  `postgresql://postgres:proxy_password@localhost:65432/electric`
+</EnvVarConfig>
+
+#### ELECTRIC_SERVICE
 
 <EnvVarConfig
     name="ELECTRIC_SERVICE"
     defaultValue="http://{ELECTRIC_SERVICE_HOST}:{ELECTRIC_HTTP_PORT}"
-    example="http://electric.mydomain.com"
+    example="https://electric.mydomain.com"
 >
   URL of the Electric service.
 
@@ -281,34 +478,7 @@ const electric = await electrify(conn, schema, {
 })
 ```
 
-#### `ELECTRIC_PROXY`
-
-<EnvVarConfig
-    name="ELECTRIC_PROXY"
-    defaultValue="postgresql://postgres:{ELECTRIC_PG_PROXY_PASSWORD}@{ELECTRIC_SERVICE_HOST}:{ELECTRIC_PG_PROXY_PORT}/{ELECTRIC_DATABASE_NAME}"
-    example="postgresql://postgres:proxy_password@electric.mydomain.com:65432/electric"
->
-  URL of the Electric service's PostgreSQL proxy.
-
-  Used by the [`generate`](#generate) and [`psql`](#psql) commands.
-
-  With all defaults, it evaluates to:
-  `postgresql://postgres:proxy_password@localhost:65432/electric`
-</EnvVarConfig>
-
-#### `ELECTRIC_CLIENT_PATH`
-
-<EnvVarConfig
-    name="ELECTRIC_CLIENT_PATH"
-    defaultValue="./src/generated/client"
-    example="./src/electricClient"
->
-  Path to the directory where the generated client code will be written.
-
-  Used by the [`generate`](#generate) command.
-</EnvVarConfig>
-
-#### `ELECTRIC_SERVICE_HOST`
+#### ELECTRIC_SERVICE_HOST
 
 <EnvVarConfig
     name="ELECTRIC_SERVICE_HOST"
@@ -320,7 +490,7 @@ const electric = await electrify(conn, schema, {
   Used by the [`generate`](#generate) and [`psql`](#psql) commands.
 </EnvVarConfig>
 
-#### `ELECTRIC_WITH_POSTGRES`
+#### ELECTRIC_WITH_POSTGRES
 
 <EnvVarConfig
     name="ELECTRIC_WITH_POSTGRES"
@@ -330,174 +500,4 @@ const electric = await electrify(conn, schema, {
   Start a PostgreSQL database along with Electric.
 
   Used by the [`start`](#start) command.
-</EnvVarConfig>
-
-#### `ELECTRIC_DATABASE_URL`
-
-<EnvVarConfig
-    name="ELECTRIC_DATABASE_URL"
-    defaultValue="postgresql://{ELECTRIC_DATABASE_USER}:{ELECTRIC_DATABASE_PASSWORD}@{ELECTRIC_DATABASE_HOST}:{ELECTRIC_DATABASE_PORT}/{ELECTRIC_DATABASE_NAME}"
-    example="postgresql://postgres:db_password@electric.myhost.com:5432/electric-sql"
->
-  PostgreSQL connection URL for the database.
-
-  Used by the [`start`](#start) command.
-
-  With all defaults, it evaluates to:
-  `postgresql://postgres:db_password@localhost:5432/electric-sql`
-</EnvVarConfig>
-
-#### `ELECTRIC_DATABASE_HOST`
-
-<EnvVarConfig
-    name="ELECTRIC_DATABASE_HOST"
-    defaultValue="localhost"
-    example="electric.myhost.com"
->
-  Hostname of the database server.
-
-  Used by the [`start`](#start) command.
-</EnvVarConfig>
-
-#### `ELECTRIC_DATABASE_PORT`
-
-<EnvVarConfig
-    name="ELECTRIC_DATABASE_PORT"
-    defaultValue="5432"
-    example="5433"
->
-  Port number of the database server.
-
-  Used by the [`start`](#start) command.
-</EnvVarConfig>
-
-#### `ELECTRIC_DATABASE_USER`
-
-<EnvVarConfig
-    name="ELECTRIC_DATABASE_USER"
-    defaultValue="postgres"
-    example="my_db_user"
->
-  Username to connect to the database with.
-
-  Used by the [`start`](#start) command.
-</EnvVarConfig>
-
-#### `ELECTRIC_DATABASE_PASSWORD`
-
-<EnvVarConfig
-    name="ELECTRIC_DATABASE_PASSWORD"
-    defaultValue="db_password"
-    example="db_password"
->
-  Password to connect to the database with.
-
-  Used by the [`start`](#start) command.
-</EnvVarConfig>
-
-#### `ELECTRIC_DATABASE_NAME`
-
-<EnvVarConfig
-    name="ELECTRIC_DATABASE_NAME"
-    defaultValue="electric"
-    example="db_password"
->
-  Name of the database to connect to.
-
-  Used by the [`start`](#start) and [`psql`](#psql) commands.
-
-  Defaults to the project name (i.e. `"name": "my-project-name"`) specified in your `package.json` file, falls back to `electric`.
-</EnvVarConfig>
-
-#### `ELECTRIC_HTTP_PORT`
-
-<EnvVarConfig
-    name="ELECTRIC_HTTP_PORT"
-    defaultValue="5133"
-    example="5144"
->
-  Port for HTTP connections.
-
-  Used by the [`start`](#start) command along with connecting to the sync service from your project client.
-</EnvVarConfig>
-
-#### `ELECTRIC_PG_PROXY_PORT`
-
-<EnvVarConfig
-    name="ELECTRIC_PG_PROXY_PORT"
-    defaultValue="65432"
-    example="65433"
->
-  Port number for connections to the Postgres migration proxy.
-
-  Used by the [`start`](#start) and [`psql`](#psql) commands.
-</EnvVarConfig>
-
-#### `ELECTRIC_PG_PROXY_PASSWORD`
-
-<EnvVarConfig
-    name="ELECTRIC_PG_PROXY_PASSWORD"
-    defaultValue="proxy_password"
-    example="my_password"
->
-  Password to use when connecting to the Postgres proxy via psql or any other Postgres client.
-
-  Used by the [`start`](#start) and [`psql`](#psql) commands.
-</EnvVarConfig>
-
-#### `ELECTRIC_IMAGE`
-
-<EnvVarConfig
-    name="ELECTRIC_PG_PROXY_PASSWORD"
-    defaultValue="electricsql/electric:{version-tag}"
-    example="electricsql/electric:0.8"
->
-  The Docker image to use for Electric.
-
-  Used by the [`start`](#start) command.
-
-  Defaults to the matching minor version for the installed Electric client, so if you are using `electric-sql@0.8.2` the docker image tagged `electricsql/electric:0.8` (the latest in the `0.8.n` range) will be used.
-</EnvVarConfig>
-
-#### `ELECTRIC_POSTGRESQL_IMAGE`
-
-<EnvVarConfig
-    name="ELECTRIC_PG_PROXY_PASSWORD"
-    defaultValue="postgres:14-alpine"
-    example="postgres:16"
->
-  The Docker image to use for the PostgreSQL database.
-
-  Used by the [`start`](#start) command.
-
-</EnvVarConfig>
-
-#### `ELECTRIC_MODULE_RESOLUTION`
-
-<EnvVarConfig
-    name="ELECTRIC_MODULE_RESOLUTION"
-    defaultValue="node"
-    example="nodenext"
->
-  The module resolution used for the project. The generated client will be compatible with this resolution scheme.
-  
-  If you are using `nodenext` as your `tsconfig.json` `moduleResolution` then settings this to `nodenext` also will ensure that the generated client is compatible with your TypeScript configuration.
-
-  Used by the [`generate`](#generate) command.
-
-</EnvVarConfig>
-
-#### `ELECTRIC_CONTAINER_NAME`
-
-<EnvVarConfig
-    name="ELECTRIC_CONTAINER_NAME"
-    defaultValue="electric"
-    example="nodenext"
->
-  This sets the name of the Docker containers when using the start command.
-
-  It defaults to the `name` in your `packages.json` and falls back to `electric` otherwise.
-
-  Used by the [`start`](#start) command.
-
 </EnvVarConfig>
