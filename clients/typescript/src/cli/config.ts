@@ -2,6 +2,8 @@ import type { Command } from 'commander'
 import { extractDatabaseURL, extractServiceURL } from './utils'
 import { configOptions } from './config-options'
 
+export type ConfigMap = Record<string, string | number | boolean>
+
 export interface AnyConfigOption {
   doc: string
   valueType: typeof String | typeof Number | typeof Boolean
@@ -11,7 +13,7 @@ export interface AnyConfigOption {
     | string
     | number
     | boolean
-    | ((options: any) => string | number | boolean)
+    | ((options: ConfigMap) => string | number | boolean)
   constructedDefault?: string
   groups?: Readonly<string[]>
 }
@@ -90,7 +92,7 @@ export function getConfigValue<K extends ConfigOptionName>(
   // Finally, check if the option has a default value
   const defaultVal = (configOptions[name] as AnyConfigOption).defaultVal as
     | ConfigOptionValue<K>
-    | ((options: any) => ConfigOptionValue<K>)
+    | ((options: ConfigMap) => ConfigOptionValue<K>)
   if (typeof defaultVal === 'function') {
     return defaultVal(options)
   }

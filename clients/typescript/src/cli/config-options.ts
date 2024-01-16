@@ -3,6 +3,7 @@ import {
   defaultDbUrlPart,
   defaultServiceUrlPart,
   getConfigValue,
+  type ConfigMap,
 } from './config'
 import { dedent, getAppName, buildDatabaseURL, parsePgProxyPort } from './utils'
 import { LIB_VERSION } from '../version'
@@ -18,7 +19,7 @@ export const configOptions = {
     doc: 'URL of the Electric service.',
     groups: ['client', 'tunnel'],
     shortForm: 's',
-    defaultVal: (options: any) => {
+    defaultVal: (options: ConfigMap) => {
       const host = getConfigValue('SERVICE_HOST', options)
       const port = getConfigValue('HTTP_PORT', options)
       return `http://${host}:${port}`
@@ -31,7 +32,7 @@ export const configOptions = {
     doc: "URL of the Electric service's PostgreSQL proxy.",
     groups: ['client', 'proxy'],
     shortForm: 'p',
-    defaultVal: (options: any) => {
+    defaultVal: (options: ConfigMap) => {
       const host = getConfigValue('PG_PROXY_HOST', options)
       const port = parsePgProxyPort(
         getConfigValue('PG_PROXY_PORT', options)
@@ -65,7 +66,7 @@ export const configOptions = {
     valueTypeName: 'hostname',
     doc: 'Port number for connections to the Postgres migration proxy.',
     groups: ['client', 'proxy'],
-    defaultVal: (options: any) => getConfigValue('SERVICE_HOST', options),
+    defaultVal: (options: ConfigMap) => getConfigValue('SERVICE_HOST', options),
   },
   MODULE_RESOLUTION: {
     valueType: String,
@@ -90,7 +91,7 @@ export const configOptions = {
     valueType: String,
     valueTypeName: 'url',
     shortForm: 'db',
-    defaultVal: (options: any) => {
+    defaultVal: (options: ConfigMap) => {
       const host = getConfigValue('DATABASE_HOST', options)
       const port = getConfigValue('DATABASE_PORT', options)
       const user = getConfigValue('DATABASE_USER', options)
