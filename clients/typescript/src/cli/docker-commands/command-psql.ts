@@ -20,11 +20,7 @@ export function makePsqlCommand() {
   return command
 }
 
-export function psql(
-  opts: GetConfigOptionsForGroup<'proxy'> & GetConfigOptionsForGroup<'electric'>
-) {
-  // TODO: Do we want a version of this that works without the postgres container
-  // using a local psql client if available?
+export function psql(opts: GetConfigOptionsForGroup<'proxy' | 'electric'>) {
   const config = getConfig(opts)
   // As we are connecting to the proxy from within the docker network, we have to
   // use the container name instead of localhost.
