@@ -307,7 +307,7 @@ function buildProxyUrlForIntrospection(config: Config) {
   return buildDatabaseURL({
     user: 'prisma', // We use the "prisma" user to put the proxy into introspection mode
     password: config.PG_PROXY_PASSWORD,
-    host: config.SERVICE_HOST,
+    host: config.PG_PROXY_HOST,
     port: parsePgProxyPort(config.PG_PROXY_PORT).port,
     dbName: config.DATABASE_NAME,
   })
