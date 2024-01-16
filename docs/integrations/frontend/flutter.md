@@ -13,4 +13,6 @@ See the #dart-client channel [on Discord](https://discord.electric-sql.com) for 
 
 ## Community bindings
 
-See the [electric_dart](httpshttps://github.com/SkillDevs/electric_dart) package developed by the team at [@SkillDevs](https://github.com/SkillDevs).
+See the [electric_dart](https://github.com/SkillDevs/electric_dart) package developed by the team at [@SkillDevs](https://github.com/SkillDevs).
+
+`pub.dev` package: [electricsql](https://pub.dev/packages/electricsql)
