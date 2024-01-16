@@ -45,6 +45,8 @@ use std::{
     time::Duration,
 };
 
+use tokio::sync::mpsc;
+
 /**
  * Structures
  *
@@ -96,18 +98,14 @@ struct TerminalState {
     writer: Arc<AsyncMutex<Box<dyn Write + Send>>>,
 }
 
+struct AsyncProcInputTx {
+    inner: AsyncMutex<mpsc::Sender<String>>,
+}
+
 /******************
  * Tauri commands *
  ******************/
 // Terminal commands
-// #[tauri::command]
-// async fn tauri_async_chat(connection: State<'_, DbConnection>, question: &str, context: &str) -> Result<String, ()> {
-//     let llama = connection.llama.lock().await.as_mut().unwrap();
-//     let writer = connection.writer.lock().await.as_mut();
-
-//     async_chat(writer, llama, question.to_string(), context.to_string()).await
-// }
-
 #[tauri::command]
 async fn async_write_to_pty(data: &str, state: State<'_, TerminalState>) -> Result<(), ()> {
     write!(state.writer.lock().await, "{}", data).map_err(|_| ())
@@ -359,9 +357,8 @@ async fn tauri_async_chat(connection: State<'_, DbConnection>, question: &str, c
     let writer = temp2.as_mut();
 
     let model = "llama2:latest".to_string();
-    let prompt = "Why is the sky blue?".to_string();
 
-    let generation_request = GenerationRequest::new(model, prompt);
+    let generation_request = GenerationRequest::new(model, question.to_string());
     let mut stream = llama2.generate_stream(generation_request).await.unwrap();
     while let Some(result) = stream.next().await {
         match result {
@@ -380,15 +377,52 @@ async fn tauri_async_chat(connection: State<'_, DbConnection>, question: &str, c
 
 use std::env;
 
+fn rs2js<R: tauri::Runtime>(message: String, manager: &impl Manager<R>) {
+    eprintln!("rs2js");
+    eprintln!("{}", message);
+    manager
+        .emit_all("rs2js", format!("rs: {}", message))
+        .unwrap();
+}
+
+#[tauri::command]
+async fn js2rs(
+    message: String,
+    state: tauri::State<'_, AsyncProcInputTx>,
+) -> Result<(), String> {
+    eprintln!("js2rs");
+    eprintln!("{}", message);
+    let async_proc_input_tx = state.inner.lock().await;
+    async_proc_input_tx
+        .send(message)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+async fn async_process_model(
+    mut input_rx: mpsc::Receiver<String>,
+    output_tx: mpsc::Sender<String>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    while let Some(input) = input_rx.recv().await {
+        let output = input;
+        output_tx.send(output).await?;
+    }
+
+    Ok(())
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
-    let pg_port;
-    if args.len() < 2 {
-        pg_port = 33333;
+    let pg_port = if args.len() < 2 {
+        33333
     } else {
-        pg_port = args[1].parse::<u16>().unwrap();
-    }
+        args[1].parse::<u16>().unwrap()
+    };
     eprintln!("{:?}", args);
+
+    tauri::async_runtime::set(tokio::runtime::Handle::current());
+    let (async_proc_input_tx, async_proc_input_rx) = mpsc::channel(1);
+    let (async_proc_output_tx, mut async_proc_output_rx) = mpsc::channel(1);
 
     let _log = tauri_plugin_log::Builder::default()
         .targets([
@@ -464,6 +498,9 @@ fn main() {
             pty_pair: Arc::new(AsyncMutex::new(pty_pair)),
             writer: Arc::new(AsyncMutex::new(_writer))
         })
+        .manage(AsyncProcInputTx {
+            inner: AsyncMutex::new(async_proc_input_tx),
+        })
         // .setup(|app| {
         //     // terminal
         //     tauri::WindowBuilder::new(
@@ -475,6 +512,25 @@ fn main() {
 
         //     Ok(())
         // })
+        .setup(|app| {
+            tauri::async_runtime::spawn(async move {
+                async_process_model(
+                    async_proc_input_rx,
+                    async_proc_output_tx,
+                ).await
+            });
+
+            let app_handle = app.handle();
+            tauri::async_runtime::spawn(async move {
+                loop {
+                    if let Some(output) = async_proc_output_rx.recv().await {
+                        rs2js(output, &app_handle);
+                    }
+                }
+            });
+
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             tauri_init_command,
             tauri_exec_command,
@@ -486,6 +542,7 @@ fn main() {
             async_resize_pty,
             send_recv_postgres_terminal,
             tauri_async_chat,
+            js2rs,
         ])
         .on_window_event(move |event| match event.event() {
             WindowEvent::Destroyed => {
