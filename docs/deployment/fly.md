@@ -11,15 +11,37 @@ The app config needs to include an `http_service` with internal port `5133` and 
 
 The environment variables used by Electric are described in <DocPageLink path="api/service" />.
 
+## Postgres with logical replication
+
+Before deploying Electric, you'll need a Postgres database (with logical replication enabled) hosted somewhere Electric can connect to. See the next section if you intend to use Fly Postgres with Electric.
+
+Alternatively, many other managed database providers support logical replication, see <DocPageLink path="usage/installation/postgres#hosting" /> for some options. Retrieve your database's connection URI with password included from your provider and use it as the value of the `DATABASE_URL` variable when setting up the app.
+
+### Fly Postgres
+
+If you have an instance of [Fly Postgres](https://fly.io/docs/postgres/) that you want Electric to connect to, make sure it's configured with `wal_level=logical`:
+
+```shell
+$ fly pg -a <pg app name> config update --wal-level logical
+
+NAME     	VALUE  	TARGET VALUE	RESTART REQUIRED
+wal-level	replica	logical     	true
+
+// highlight-next-line
+? Are you sure you want to apply these changes? Yes
+Performing update...
+Update complete!
+Please note that some of your changes will require a cluster restart
+before they will be applied.
+// highlight-next-line
+? Restart cluster now? Yes
+Identifying cluster role(s)
+  Machine 148ed127a03de8: primary
+Restarting machine 148ed127a03de8
+  Waiting for 148ed127a03de8 to become healthy (started, 1/3)
+```
+
 ## Deploying Electric
-
-As a quick example, let's create a new Fly app to run Electric and connect it to a third-party database such as [Supabase](./supabase.md).
-
-### Postgres with logical replication
-
-Before deploying Electric, make sure you have a Postgres database hosted somewhere where Electric will be able to connect to it and that it has logical replication enabled. Many managed hosting providers support logical replication, see <DocPageLink path="usage/installation/postgres#hosting" /> for some options.
-
-Retrieve your database's connection URI with password included and use it as the value of the `DATABASE_URL` variable in the next step.
 
 ### Configure your Fly app
 
