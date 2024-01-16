@@ -32,13 +32,14 @@ mod chat;
 mod utils;
 
 use chat::chat;
+// use chat::async_chat;
 use crate::embeddings::{create_embedding_model, embed_query, format_embeddings, embed_issue};
 use pg::{pg_connect, pg_init, pg_query, replace_question_marks, row_to_json};
 
 // Postgres console
 use portable_pty::{native_pty_system, CommandBuilder, PtyPair, PtySize};
 use std::{
-    io::{BufRead, BufReader, BufWriter, Write},
+    io::{BufRead, BufReader, Write},
     sync::{Arc, Mutex},
     thread::{self, sleep},
     time::Duration,
@@ -100,10 +101,12 @@ struct TerminalState {
  ******************/
 // Terminal commands
 // #[tauri::command]
-// async fn tauri_async_chat(connection: State<'_, DbConnection>, question: &str, context: &str) -> Result<(), ()> {
-//     async_chat(writer, llama, question, context)
-// }
+// async fn tauri_async_chat(connection: State<'_, DbConnection>, question: &str, context: &str) -> Result<String, ()> {
+//     let llama = connection.llama.lock().await.as_mut().unwrap();
+//     let writer = connection.writer.lock().await.as_mut();
 
+//     async_chat(writer, llama, question.to_string(), context.to_string()).await
+// }
 
 #[tauri::command]
 async fn async_write_to_pty(data: &str, state: State<'_, TerminalState>) -> Result<(), ()> {
@@ -347,6 +350,34 @@ async fn tauri_chat(connection: State<'_, DbConnection>, question: &str, context
     }
 }
 
+#[tauri::command(rename_all = "snake_case")]
+async fn tauri_async_chat(connection: State<'_, DbConnection>, question: &str, context: &str) -> Result<(), ()> {
+    let mut temp = connection.llama.lock().await;
+    let llama2 = temp.as_mut().unwrap();
+
+    let mut temp2 = connection.writer.lock().await;
+    let writer = temp2.as_mut();
+
+    let model = "llama2:latest".to_string();
+    let prompt = "Why is the sky blue?".to_string();
+
+    let generation_request = GenerationRequest::new(model, prompt);
+    let mut stream = llama2.generate_stream(generation_request).await.unwrap();
+    while let Some(result) = stream.next().await {
+        match result {
+            Ok(response) => {
+                let content = response.response;
+                write!(writer, "{}", content).unwrap(); // yield content here!
+            }
+            Err(err) => {
+                panic!("STILL TESTING THIS");
+            }
+        }
+    }
+
+    Ok(())
+}
+
 use std::env;
 
 fn main() {
@@ -454,7 +485,7 @@ fn main() {
             async_write_to_pty,
             async_resize_pty,
             send_recv_postgres_terminal,
-            // tauri_async_chat
+            tauri_async_chat,
         ])
         .on_window_event(move |event| match event.event() {
             WindowEvent::Destroyed => {

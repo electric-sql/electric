@@ -28,8 +28,7 @@ pgvector = { version = "0.3", features = ["sqlx"] }
 
 env_logger = "0.10.0"
 pg-embed = { git = "https://github.com/faokunega/pg-embed", default-features = true, features = ["rt_tokio", "rt_tokio_migrate"] }
-
-ollama-rs = { git = "https://github.com/pepperoni21/ollama-rs", features = ["stream"] }
+ollama-rs = { path = "crates/ollama-rs", features = ["stream"] }
 ort = { version = "1.16.3" }
 
 # TODO: Can maybe remove?
@@ -41,6 +40,7 @@ wasm-bindgen = "0.2.87"
 ndarray = "0.15.6"
 fastembed = "1.9.0"
 dirs = "5.0.1"
+async-openai = "0.18.0"
 # tauri-bindgen-host = { git = "https://github.com/tauri-apps/tauri-bindgen" }
 
 [features]
