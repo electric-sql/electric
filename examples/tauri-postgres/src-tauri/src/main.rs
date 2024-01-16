@@ -375,7 +375,7 @@ async fn start_chat(
     let writer = temp.as_mut();
 
     // reset the flag, because we answer a new question
-    *state.flag.lock().await = true;
+    // *state.flag.lock().await = true;
 
     let model = "llama2:latest".to_string();
 

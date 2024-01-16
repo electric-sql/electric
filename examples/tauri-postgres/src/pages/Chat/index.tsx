@@ -45,7 +45,8 @@ function Chat() {
       unListenChatToken = await listen("chatToken", (event) => {
         if (ignore) return;
         console.log("chatToken received", event);
-        setAnswer([...answer, event.payload as string]);
+        // setAnswer([...answer, event.payload as string]);
+        setAnswer((answer) => [...answer, event.payload as string]);
       });
       unListenChatFinished = await listen("chatFinished", (event) => {
         if (ignore) return;
