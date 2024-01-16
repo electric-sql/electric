@@ -34,6 +34,6 @@ export function psql(opts: GetConfigOptionsForGroup<'proxy' | 'electric'>) {
   dockerCompose(
     'exec',
     ['-it', 'postgres', 'psql', containerDbUrl],
-    opts.CONTAINER_NAME
+    config.CONTAINER_NAME
   )
 }

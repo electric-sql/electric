@@ -1,5 +1,5 @@
 import { Command } from 'commander'
-import { dedent } from '../utils'
+import { dedent, parsePgProxyPort } from '../utils'
 import { addOptionGroupToCommand, getConfig, Config } from '../config'
 import { dockerCompose } from './docker-utils'
 
@@ -57,6 +57,11 @@ export function start(options: StartSettings) {
     )
 
     const env = configToEnv(options.config)
+    // PG_PROXY_PORT can have a 'http:' prefix, which we need to remove
+    // for port mapping to work.
+    env.PG_PROXY_PORT_PARSED = parsePgProxyPort(
+      env.PG_PROXY_PORT
+    ).port.toString()
 
     const dockerConfig = {
       ...env,

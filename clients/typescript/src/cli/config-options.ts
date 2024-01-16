@@ -97,8 +97,7 @@ export const configOptions = {
       const user = getConfigValue('DATABASE_USER', options)
       const password = getConfigValue('DATABASE_PASSWORD', options)
       const dbName = getConfigValue('DATABASE_NAME', options)
-      const ssl = getConfigValue('DATABASE_REQUIRE_SSL', options)
-      return buildDatabaseURL({ host, port, user, password, dbName, ssl })
+      return buildDatabaseURL({ host, port, user, password, dbName })
     },
     constructedDefault:
       'postgresql://{ELECTRIC_DATABASE_USER}:{ELECTRIC_DATABASE_PASSWORD}@{ELECTRIC_DATABASE_HOST}:{ELECTRIC_DATABASE_PORT}/{ELECTRIC_DATABASE_NAME}',
