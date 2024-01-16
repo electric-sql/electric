@@ -45,7 +45,6 @@ function Chat() {
       unListenChatToken = await listen("chatToken", (event) => {
         if (ignore) return;
         console.log("chatToken received", event);
-        // setAnswer([...answer, event.payload as string]);
         setAnswer((answer) => [...answer, event.payload as string]);
       });
       unListenChatFinished = await listen("chatFinished", (event) => {
@@ -72,7 +71,7 @@ function Chat() {
     };
   }, []);
 
-  const answerText = answer.join(" ") + (working ? "..." : "");
+  const answerText = answer.join("") + (working ? "..." : "");
   const paragraphs = answerText.split("\n");
 
   return (

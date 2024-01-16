@@ -358,12 +358,19 @@ fn chat_token<R: tauri::Runtime>(message: String, manager: &impl Manager<R>) {
         .unwrap();
 }
 
+fn chat_finished<R: tauri::Runtime>(manager: &impl Manager<R>) {
+    manager
+        .emit_all("chatFinished", ())
+        .unwrap();
+}
+
 #[tauri::command(rename_all = "snake_case")]
 async fn start_chat(
     question: String,
     context: String,
     state: tauri::State<'_, AsyncProcInputTx>,
-    connection: tauri::State<'_, DbConnection>
+    connection: tauri::State<'_, DbConnection>,
+    app_handle: tauri::AppHandle
 ) -> Result<(), String> {
     eprintln!("js2rs");
     eprintln!("{}", question);
@@ -375,7 +382,7 @@ async fn start_chat(
     let writer = temp.as_mut();
 
     // reset the flag, because we answer a new question
-    // *state.flag.lock().await = true;
+    *state.flag.lock().await = false;
 
     let model = "llama2:latest".to_string();
 
@@ -401,6 +408,8 @@ async fn start_chat(
             }
         }
     }
+
+    chat_finished(&app_handle);
 
     Ok(())
 }
