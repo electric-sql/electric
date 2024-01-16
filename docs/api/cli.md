@@ -50,17 +50,11 @@ All arguments are optional. The principal ones are described below:
 | Argument or Env var  | Value        | Description                              |
 |----------------------|--------------|------------------------------------------|
 | <span className="no-wrap">`--service`</span><br/><span className="no-wrap">`-s`</span><br/>`ELECTRIC_SERVICE` |`<url>` | Provides the url to connect to the [Electric sync service](./service.md).<br /> Defaults to `http://localhost:5133`. |
-| <span className="no-wrap">`--proxy`</span><br/><span className="no-wrap">`-p`</span><br/>`ELECTRIC_PROXY` | `<url>` | Provides the url to connect to Electric's database proxy.<br /> Defaults to <span class="break-all">`postgresql://prisma:proxy_password@localhost:65432/electric`</span>. |
+| <span className="no-wrap">`--proxy`</span><br/><span className="no-wrap">`-p`</span><br/>`ELECTRIC_PROXY` | `<url>` | Provides the url to connect to Electric's database proxy.<br /> Defaults to <span class="break-all">`postgresql://postgres:proxy_password@localhost:65432/electric`</span>. |
 | <span className="no-wrap">`--client-path`</span><br /><span className="no-wrap">`-o`</span><br />`ELECTRIC_CLIENT_PATH` | `<path>` | Specifies the output location for the generated client.<br /> Defaults to `./src/generated/client` |
 | <span className="no-wrap">`--watch`</span><br /><span className="no-wrap">`-w`</span> | `<pollingInterval>` | Run the generator in watch mode. Accepts an optional polling interval (in milliseconds) which defines how often to poll Electric for database migrations.<br /> The default polling interval is 1000ms. |
-| <span className="no-wrap">`--with-migrations`</span> | `<command>` | Specify a command to run migrations against a blank postgres in order to create a client. [See details below](#generate---with-migrations) |
+| <span className="no-wrap">`--with-migrations`</span> | `<command>` | Specify a command to run migrations against a blank postgres in order to create a client. [See details below](#local-only-first-mode) |
 | <span className="no-wrap">`--module-resolution`</span> | `<command>` | The module resolution used for the project. The generated client will be compatible with this resolution scheme, [see notes below](#electric_module_resolution). |
-
-:::caution
-Note that the username in the `--proxy` URL **must** be `prisma`.
-
-This is to activate the proxy mode that uses Prisma tooling for schema introspection. It does not mean that your Postgres database actually needs a `prisma` user.
-:::
 
 For a full list of arguments run `npx electric-sql help generate` or see the [environment variables](#environment-variables) below.
 
@@ -91,33 +85,6 @@ npx electric-sql stop --remove
 
 As you can see from the steps above, the backend is started, your migrations are applied, the type-safe client is generated and then everything is torn down and cleaned up for you. Allowing you to develop local-only-first and then run the backend services only when you actually want to enable sync.  
 
-
-#### `generate --with-migrations`
-
-Normally the `generate` command expects to be run against an Electric and Postgres where you already have a full schema installed. However you may want to work in a *"local only first"* way, generating a client directly from either SQL migrations or using a migration tool such as Prisma, without having to continually run a Postgres server and Electric sync service.
-
-The [`generate`](#generate) command takes an optional `--with-migrations` command that takes the same argument form as the [`with-config`](#with-config) command. With this you can run:
-
-```shell
-npx electric-sql generate --with-migrations "npx pg-migrations apply --database {{ELECTRIC_PROXY}} --directory ./db/migrations"
-```
-
-This will perform these tasks, allowing you to generate a client directly from a set of migrations:
-
-1. Start new Electric and PostgreSQL containers
-2. Run the provided migrations command
-3. Generate the client
-4. Stop and remove the containers
-
-In essence this is the equivalent of:
-
-```shell
-npx electric-sql start
-npx electric-sql with-config "npx pg-migrations apply --database {{ELECTRIC_PROXY}} --directory ./db/migrations"
-npx electric-sql generate
-npx electric-sql stop --remove
-```
-
 ### `proxy-tunnel`
 
 Some hosting providers only allow HTTP connections, which poses a challenge for deploying Electric to their platforms since it uses a separate port for connections to the [migrations proxy](../usage/data-modelling/migrations#migrations-proxy). In order to enable connecting to run migrations and use the generate command in these setups, you can enable a special "Proxy Tunnel" that tunnels the Postgres Proxy TCP connection over a Websocket to the Electric sync service. This is enabled on the sync service by setting the environment variable `PG_PROXY_PORT=http`.
@@ -139,7 +106,7 @@ npx pg-migrations apply --database postgres://postgres:proxy_password@localhost:
 To then use the `generate` command to create your client:
 
 ```shell
-npx electric-sql generate --service http://my.electric.host:5133 --proxy postgresql://prisma:proxy_password@localhost:65431/electric
+npx electric-sql generate --service http://my.electric.host:5133 --proxy postgresql://postgres:proxy_password@localhost:65431/electric
 ```
 
 #### Options
@@ -517,5 +484,20 @@ const electric = await electrify(conn, schema, {
   If you are using `nodenext` as your `tsconfig.json` `moduleResolution` then settings this to `nodenext` also will ensure that the generated client is compatible with your TypeScript configuration.
 
   Used by the [`generate`](#generate) command.
+
+</EnvVarConfig>
+
+#### `ELECTRIC_CONTAINER_NAME`
+
+<EnvVarConfig
+    name="ELECTRIC_CONTAINER_NAME"
+    defaultValue="electric"
+    example="nodenext"
+>
+  This sets the name of the Docker containers when using the start command.
+
+  It defaults to the `name` in your `packages.json` and falls back to `electric` otherwise.
+
+  Used by the [`start`](#start) command.
 
 </EnvVarConfig>
