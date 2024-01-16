@@ -1,9 +1,13 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 // Third part utils
 use dirs::home_dir;
 use futures::stream::StreamExt;
-use ollama_rs::Ollama;
+use ollama_rs::{
+    generation::completion::request::GenerationRequest,
+    Ollama,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Number;
 use sqlx::{postgres::PgArguments, Arguments};
@@ -28,6 +32,7 @@ mod chat;
 mod utils;
 
 use chat::chat;
+// use chat::async_chat;
 use crate::embeddings::{create_embedding_model, embed_query, format_embeddings, embed_issue};
 use pg::{pg_connect, pg_init, pg_query, replace_question_marks, row_to_json};
 
@@ -39,6 +44,8 @@ use std::{
     thread::{self, sleep},
     time::Duration,
 };
+
+use tokio::sync::mpsc;
 
 /**
  * Structures
@@ -78,15 +85,21 @@ struct QueryResult {
  *****************/
 /// This is the global connection to Postgres
 struct DbConnection {
-    db: Mutex<Option<PgEmbed>>,
-    conn: Mutex<Option<PgConnection>>,
-    llama: Mutex<Option<Ollama>>,
+    db: Arc<AsyncMutex<Option<PgEmbed>>>,
+    conn: Arc<AsyncMutex<Option<PgConnection>>>,
+    llama: Arc<AsyncMutex<Option<Ollama>>>,
+    pg_port: Mutex<Option<u16>>,
+    writer: Arc<AsyncMutex<Box<dyn Write + Send>>>,
 }
 
-/// App state for the terminal window. TODO: rename to something more sensible
+/// App state for the terminal window
 struct TerminalState {
     pty_pair: Arc<AsyncMutex<PtyPair>>,
     writer: Arc<AsyncMutex<Box<dyn Write + Send>>>,
+}
+
+struct AsyncProcInputTx {
+    inner: AsyncMutex<mpsc::Sender<String>>,
 }
 
 /******************
@@ -114,45 +127,39 @@ async fn async_resize_pty(rows: u16, cols: u16, state: State<'_, TerminalState>)
 }
 
 #[tauri::command(rename_all = "snake_case")]
-fn tauri_exec_command(
-    connection: State<DbConnection>,
+async fn tauri_exec_command(
+    connection: State<'_, DbConnection>,
     sql: &str,
     bind_params: BindParams,
-) -> QueryResult {
-    block_on(async {
-        if let Some(pg) = connection.db.lock().unwrap().as_mut() {
-            if let Some(conn) = connection.conn.lock().unwrap().as_mut() {
-                tauri_exec(pg, conn, sql, bind_params).await
-            } else {
-                println!("tauri_exec_command: Connection unsuccessful");
-                QueryResult {
-                    rows_modified: 0,
-                    result: "".to_string(),
-                }
-            }
+) -> Result<QueryResult, QueryResult> {
+    if let Some(pg) = connection.db.lock().await.as_mut() {
+        if let Some(conn) = connection.conn.lock().await.as_mut() {
+            Ok(tauri_exec(pg, conn, sql, bind_params).await)
         } else {
-            QueryResult {
+            println!("tauri_exec_command: Connection unsuccessful");
+            Err(QueryResult {
                 rows_modified: 0,
                 result: "".to_string(),
-            }
+            })
         }
-    })
+    } else {
+        Err(QueryResult {
+            rows_modified: 0,
+            result: "".to_string(),
+        })
+    }
 }
 
 #[tauri::command]
-fn send_recv_postgres_terminal(connection: State<DbConnection>, data: &str) -> String {
+async fn send_recv_postgres_terminal(connection: State<'_, DbConnection>, data: &str) -> Result<String, String> {
     println!("From the terminal, {}", data);
 
-    block_on(async {
-        match connection.conn.lock().unwrap().as_mut() {
-            Some(conn) => {
-                // let conn = tauri_pg_connect(pg, "test").await;
-
-                pg_query(conn, data).await
-            }
-            _ => "".to_string(),
+    match connection.conn.lock().await.as_mut() {
+        Some(conn) => {
+            Ok(pg_query(conn, data).await)
         }
-    })
+        _ => Err("".to_string()),
+    }
 }
 
 async fn tauri_exec(
@@ -245,42 +252,47 @@ async fn tauri_exec(
 }
 
 #[tauri::command(rename_all = "snake_case")]
-fn tauri_init_command(connection: State<DbConnection>, name: &str) -> Result<(), String> {
+async fn tauri_init_command(connection: State<'_, DbConnection>, name: &str) -> Result<(), String> {
     // Start the postgres when we receive this call
-    block_on(async {
-        let pg = pg_init(
-            format!(
-                "{}/db/{}",
-                home_dir().unwrap().into_os_string().into_string().unwrap(),
-                name
-            )
-            .as_str(),
-        )
-        .await;
-        let conn = pg_connect(&pg, "test").await;
+    let pg_port;
+    {
+        let pg_port_guard = connection.pg_port.lock().unwrap();
+        pg_port = *pg_port_guard.as_ref().unwrap();
+    }
 
-        *connection.db.lock().unwrap() = Some(pg);
-        *connection.conn.lock().unwrap() = Some(conn);
-        *connection.llama.lock().unwrap() = Some(Ollama::default());
-    });
+    let pg = pg_init(
+        format!(
+            "{}/db/{}",
+            home_dir().unwrap().into_os_string().into_string().unwrap(),
+            name
+        )
+        .as_str(),
+        pg_port,
+    )
+    .await;
+    let conn = pg_connect(&pg, "test").await;
+
+    *connection.db.lock().await = Some(pg);
+    *connection.conn.lock().await = Some(conn);
+    *connection.llama.lock().await = Some(Ollama::default());
 
     Ok(())
 }
 
 #[tauri::command(rename_all = "snake_case")]
-fn tauri_stop_postgres(connection: State<DbConnection>) {
+fn tauri_stop_postgres(connection: State<'_, DbConnection>) {
     block_on(async {
-        if let Some(pg) = connection.db.lock().unwrap().as_mut() {
-            pg.stop_db().await.unwrap()
+        if let Some(pg) = connection.db.lock().await.as_mut() {
+            let _ = pg.stop_db().await;
         }
-    });
+    })
 }
 
-pub async fn vector_search_database(
+pub async fn vector_search(
     _pg: &mut PgEmbed,
     conn: &mut PgConnection,
     query: &str,
-) -> String {
+) -> Result<String, String> {
     let model = create_embedding_model();
     let embedded_query = embed_query(query, model);
 
@@ -293,6 +305,7 @@ pub async fn vector_search_database(
     )
     .fetch_all(conn)
     .await
+    .map_err(|e| e.to_string())
     .unwrap();
 
     let mut result = String::new();
@@ -300,46 +313,117 @@ pub async fn vector_search_database(
         let row_column = row_to_json(row);
         result.push_str(serde_json::to_string(&row_column).unwrap().as_str());
     }
-    println!("{}", result);
+    println!("IS THIS DOING THE RIGHT THING? {}", result);
 
-    result
+    Ok(result)
 }
 
 #[tauri::command(rename_all = "snake_case")]
-fn tauri_embed_issue(text: &str) -> String {
-    block_on(async {
-        let model = create_embedding_model();
+async fn tauri_embed_issue(text: &str) -> Result<String, ()> {
+    let model = create_embedding_model();
 
-        format_embeddings(embed_issue(text, model))
-    })
+    Ok(format_embeddings(embed_issue(text, model)))
 }
 
 #[tauri::command(rename_all = "snake_case")]
-fn tauri_vector_search(connection: State<DbConnection>, query: &str) -> String {
+async fn tauri_vector_search(connection: State<'_, DbConnection>, query: &str) -> Result<String, String> {
     let mut ret = "failed".to_string();
-    block_on(async {
-        if let Some(pg) = connection.db.lock().unwrap().as_mut() {
-            if let Some(conn) = connection.conn.lock().unwrap().as_mut() {
-                ret = vector_search_database(pg, conn, query).await;
+
+    if let Some(pg) = connection.db.lock().await.as_mut() {
+        if let Some(conn) = connection.conn.lock().await.as_mut() {
+            ret = vector_search(pg, conn, query).await.unwrap();
+            return Ok(ret);
+        }
+    }
+
+    Err(ret)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+async fn tauri_chat(connection: State<'_, DbConnection>, question: &str, context: &str) -> Result<String, String> {
+    if let Some(llama) = connection.llama.lock().await.as_mut() {
+        Ok(chat(llama, question.to_string(), context.to_string()).await)
+    } else {
+        Err("Llama was not able to answer".to_string())
+    }
+}
+
+#[tauri::command(rename_all = "snake_case")]
+async fn tauri_async_chat(connection: State<'_, DbConnection>, question: &str, context: &str) -> Result<(), ()> {
+    let mut temp = connection.llama.lock().await;
+    let llama2 = temp.as_mut().unwrap();
+
+    let mut temp2 = connection.writer.lock().await;
+    let writer = temp2.as_mut();
+
+    let model = "llama2:latest".to_string();
+
+    let generation_request = GenerationRequest::new(model, question.to_string());
+    let mut stream = llama2.generate_stream(generation_request).await.unwrap();
+    while let Some(result) = stream.next().await {
+        match result {
+            Ok(response) => {
+                let content = response.response;
+                write!(writer, "{}", content).unwrap(); // yield content here!
+            }
+            Err(err) => {
+                panic!("STILL TESTING THIS");
             }
         }
-    });
+    }
 
-    ret
+    Ok(())
 }
 
-#[tauri::command(rename_all = "snake_case")]
-fn tauri_chat(connection: State<DbConnection>, question: &str, context: &str) -> String {
-    block_on(async {
-        if let Some(llama) = connection.llama.lock().unwrap().as_mut() {
-            chat(llama, question.to_string(), context.to_string()).await
-        } else {
-            "Llama was not able to answer".to_string()
-        }
-    })
+use std::env;
+
+fn rs2js<R: tauri::Runtime>(message: String, manager: &impl Manager<R>) {
+    eprintln!("rs2js");
+    eprintln!("{}", message);
+    manager
+        .emit_all("rs2js", format!("rs: {}", message))
+        .unwrap();
+}
+
+#[tauri::command]
+async fn js2rs(
+    message: String,
+    state: tauri::State<'_, AsyncProcInputTx>,
+) -> Result<(), String> {
+    eprintln!("js2rs");
+    eprintln!("{}", message);
+    let async_proc_input_tx = state.inner.lock().await;
+    async_proc_input_tx
+        .send(message)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+async fn async_process_model(
+    mut input_rx: mpsc::Receiver<String>,
+    output_tx: mpsc::Sender<String>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    while let Some(input) = input_rx.recv().await {
+        let output = input;
+        output_tx.send(output).await?;
+    }
+
+    Ok(())
 }
 
 fn main() {
+    let args: Vec<String> = env::args().collect();
+    let pg_port = if args.len() < 2 {
+        33333
+    } else {
+        args[1].parse::<u16>().unwrap()
+    };
+    eprintln!("{:?}", args);
+
+    tauri::async_runtime::set(tokio::runtime::Handle::current());
+    let (async_proc_input_tx, async_proc_input_rx) = mpsc::channel(1);
+    let (async_proc_output_tx, mut async_proc_output_rx) = mpsc::channel(1);
+
     let _log = tauri_plugin_log::Builder::default()
         .targets([
             LogTarget::Folder(utils::app_root()),
@@ -375,6 +459,15 @@ fn main() {
 
     let reader = Arc::new(Mutex::new(Some(BufReader::new(reader))));
 
+    let writer2 = native_pty_system().openpty(PtySize {
+        rows: 24,
+        cols: 80,
+        pixel_width: 0,
+        pixel_height: 0,
+    }).unwrap().master.take_writer().unwrap();
+
+    let writer2 = Arc::new(AsyncMutex::new(writer2));
+
     tauri::Builder::default()
         .on_page_load(move |window, _| {
             let window = window.clone();
@@ -398,19 +491,43 @@ fn main() {
             db: Default::default(),
             conn: Default::default(),
             llama: Default::default(),
+            pg_port: Mutex::new(Some(pg_port)),
+            writer: writer2,
         })
         .manage(TerminalState {
             pty_pair: Arc::new(AsyncMutex::new(pty_pair)),
             writer: Arc::new(AsyncMutex::new(_writer))
         })
+        .manage(AsyncProcInputTx {
+            inner: AsyncMutex::new(async_proc_input_tx),
+        })
+        // .setup(|app| {
+        //     // terminal
+        //     tauri::WindowBuilder::new(
+        //         app,
+        //         "postgresterminal", /* must be unique */
+        //         tauri::WindowUrl::App("debug.html".into()),
+        //     )
+        //     .build()?;
+
+        //     Ok(())
+        // })
         .setup(|app| {
-            // terminal
-            tauri::WindowBuilder::new(
-                app,
-                "postgresterminal", /* must be unique */
-                tauri::WindowUrl::App("debug.html".into()),
-            )
-            .build()?;
+            tauri::async_runtime::spawn(async move {
+                async_process_model(
+                    async_proc_input_rx,
+                    async_proc_output_tx,
+                ).await
+            });
+
+            let app_handle = app.handle();
+            tauri::async_runtime::spawn(async move {
+                loop {
+                    if let Some(output) = async_proc_output_rx.recv().await {
+                        rs2js(output, &app_handle);
+                    }
+                }
+            });
 
             Ok(())
         })
@@ -423,17 +540,19 @@ fn main() {
             tauri_chat,
             async_write_to_pty,
             async_resize_pty,
-            send_recv_postgres_terminal
+            send_recv_postgres_terminal,
+            tauri_async_chat,
+            js2rs,
         ])
         .on_window_event(move |event| match event.event() {
             WindowEvent::Destroyed => {
                 let db_connection: State<DbConnection> = event.window().state();
-                let mut db = db_connection.db.lock().unwrap();
-                if let Some(mut connection) = db.take() {
-                    block_on(async {
+                block_on(async {
+                    let mut db = db_connection.db.lock().await;
+                    if let Some(mut connection) = db.take() {
                         connection.stop_db().await.unwrap();
-                    })
-                }
+                    }
+                })
             }
             _ => {}
         })
@@ -451,7 +570,7 @@ mod tests {
     #[tokio::test]
     /// Sanity test for postgres. Launch it, give some commands and stop it.
     async fn test_postgres() {
-        let mut pg = pg_init("/home/iib/db/data").await; // TODO: this should use tauri_pg_setup
+        let mut pg = pg_init("/home/iib/db/data", 33333).await; // TODO: this should use tauri_pg_setup
         let _conn = pg_connect(&pg, "test").await;
 
         pg.stop_db().await.unwrap();
@@ -462,7 +581,7 @@ mod tests {
     #[tokio::test]
     /// Postgres test database creation, querying and destructuring
     async fn test_postgres_database_create() {
-        let mut pg = pg_init("/home/iib/db/data").await; // TODO: this should use tauri_pg_setup
+        let mut pg = pg_init("/home/iib/db/data", 33333).await; // TODO: this should use tauri_pg_setup
                                                                         // let mut pg = tauri_pg_setup(54321, PathBuf::from_str("/home/iib/db/data").unwrap(), false, None).await.unwrap();
 
         let mut conn = pg_connect(&pg, "test").await;
@@ -523,7 +642,7 @@ mod tests {
     #[tokio::test]
     /// Postgres test database creation, querying and destructuring
     async fn test_tauri_exec() {
-        let mut pg = pg_init("/home/iib/db/data").await; // TODO: this should use tauri_pg_setup
+        let mut pg = pg_init("/home/iib/db/data", 33333).await; // TODO: this should use tauri_pg_setup
         let mut conn = pg_connect(&pg, "test").await;
 
         let keys0 = vec![];
@@ -611,7 +730,7 @@ mod tests {
     #[tokio::test]
     /// Postgres test database creation, querying and destructuring
     async fn test_get_modified_rows() {
-        let mut pg = pg_init("/home/iib/db/data").await; // TODO: this should use tauri_pg_setup
+        let mut pg = pg_init("/home/iib/db/data", 33333).await; // TODO: this should use tauri_pg_setup
         let mut conn = pg_connect(&pg, "test").await;
         let empty_bind_params = BindParams {
             keys: vec![],
@@ -731,7 +850,7 @@ mod tests {
             values: vec![],
         };
 
-        let mut pg = pg_init("/home/iib/db/data").await; // TODO: this should use tauri_pg_setup
+        let mut pg = pg_init("/home/iib/db/data", 33333).await; // TODO: this should use tauri_pg_setup
         let mut conn = pg_connect(&pg, "test").await;
 
         let mut tx = conn.begin().await.unwrap();
@@ -770,7 +889,7 @@ mod tests {
     #[tokio::test]
     /// Test pg-embed version
     async fn test_pg_embed_version() {
-        let mut pg = pg_init("/home/iib/db/data").await; // TODO: this should use tauri_pg_setup
+        let mut pg = pg_init("/home/iib/db/data", 33333).await; // TODO: this should use tauri_pg_setup
         let mut conn = pg_connect(&pg, "test").await;
 
         let stop = pg.stop_db().await;
@@ -843,7 +962,7 @@ mod tests {
             values: vec![],
         };
 
-        let mut pg = pg_init("/Users/iib/db/data").await; // TODO: this should use tauri_pg_setup
+        let mut pg = pg_init("/Users/iib/db/data", 33333).await; // TODO: this should use tauri_pg_setup
         let mut conn = pg_connect(&pg, "test").await;
 
         tauri_exec(

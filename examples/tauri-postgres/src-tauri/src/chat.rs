@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use ollama_rs::{
     generation::completion::request::GenerationRequest,
     Ollama,
@@ -30,4 +32,20 @@ pub async fn chat(llama: &mut Ollama, question: String, context: String) -> Stri
         .unwrap();
 
     res.response
+}
+
+pub async fn async_chat(writer: Box<dyn Write + Send>, llama: &mut Ollama, question: String, context: String) -> Result<String, ()> {
+    let model = "llama2:latest".to_string();
+    let mut prompt = question.to_string();
+    if !context.is_empty() {
+        prompt.push_str("\n\nAnswer based on this context: ");
+        prompt.push_str(&context);
+    }
+
+    let res = llama
+        .generate(GenerationRequest::new(model, prompt))
+        .await
+        .unwrap();
+
+    Ok(res.response)
 }
