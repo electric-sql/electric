@@ -788,11 +788,10 @@ export class SatelliteProcess implements Satellite {
     if (!this._authState) {
       throw new Error(`trying to connect before authentication`)
     }
-    const authState = this._authState
 
     try {
       await this.client.connect()
-      await this._authenticate(authState)
+      await this.authenticate(this._authState.token)
     } catch (error: any) {
       Log.debug(
         `server returned an error while establishing connection: ${error.message}`
@@ -802,14 +801,19 @@ export class SatelliteProcess implements Satellite {
   }
 
   /**
-   * Authenticates with the Electric sync service using the provided auth state.
+   * Authenticates with the Electric sync service using the provided token.
    * @returns A promise that resolves to void if authentication succeeded. Otherwise, rejects with the reason for the error.
    */
-  private async _authenticate(authState: AuthState): Promise<void> {
+  async authenticate(token: string): Promise<void> {
+    const authState = {
+      clientId: this._authState!.clientId,
+      token,
+    }
     const authResp = await this.client.authenticate(authState)
     if (authResp.error) {
       throw authResp.error
     }
+    this._setAuthState(authState)
   }
 
   private _disconnect(reason?: string): void {

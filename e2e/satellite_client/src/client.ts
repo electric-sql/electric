@@ -36,9 +36,29 @@ export const electrify_db = async (
   const token = await mockSecureAuthToken()
   await result.connect(token) // connect to Electric
 
-  result.notifier.subscribeToConnectivityStateChanges((x) => console.log("Connectivity state changed:\n", JSON.stringify(x)))
+  result.notifier.subscribeToConnectivityStateChanges((x) => console.log("Connectivity state changed: ", x.connectivityState.status))
 
   return result
+}
+
+export const renew_token = async (electric: Electric, exp: string) => {
+  const token = await mockSecureAuthToken(exp)
+  electric.renew(token)
+}
+
+export const check_token_expiration = (electric: Electric, minimalTime: number) => {
+  const start = Date.now()
+  electric.notifier.subscribeToConnectivityStateChanges((x) => {
+    if (x.connectivityState.status === 'disconnected' && x.connectivityState.error === 'JWT expired') {
+      const delta = Date.now() - start
+      if (delta >= minimalTime) {
+        console.log(`JWT expired after ${delta} ms`)
+      }
+      else {
+        console.log(`JWT expired too early, after only ${delta} ms`)
+      }
+    }
+  })
 }
 
 export const set_subscribers = (db: Electric) => {

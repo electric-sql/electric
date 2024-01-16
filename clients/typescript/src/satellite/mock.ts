@@ -106,6 +106,10 @@ export class MockSatelliteProcess implements Satellite {
     await this.connect()
   }
 
+  authenticate(_token: string): Promise<void> {
+    return Promise.resolve()
+  }
+
   async stop(): Promise<void> {
     await sleepAsync(50)
   }

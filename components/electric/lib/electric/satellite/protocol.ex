@@ -313,6 +313,44 @@ defmodule Electric.Satellite.Protocol do
   def handle_rpc_request(_, state) when not auth_passed?(state),
     do: {:error, %SatErrorResp{error_type: :AUTH_REQUIRED}}
 
+  def handle_rpc_request(%SatAuthReq{id: client_id, token: token}, state)
+      when auth_passed?(state) and client_id === state.client_id and token != "" do
+    # Request to renew auth token
+    with {:ok, auth} <- Electric.Satellite.Auth.validate_token(token, state.auth_provider) do
+      if auth.user_id != state.auth.user_id do
+        # cannot change user ID on renewal
+        Logger.warning("Client authentication failed: can't change user ID on renewal")
+        {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
+      else
+        Logger.info("Successfully renewed the token")
+        # cancel the old expiration timer
+        cancel_auth_expiration(state.expiration_timer)
+        timer = schedule_auth_expiration(auth.expires_at)
+
+        {
+          :reply,
+          %SatAuthResp{id: Electric.instance_id()},
+          %State{
+            state
+            | auth: auth,
+              expiration_timer: timer
+          }
+        }
+      end
+    else
+      {:error, %Electric.Satellite.Auth.TokenError{message: message}} ->
+        Logger.warning("Client authentication failed: #{message}")
+        {:error, %SatErrorResp{error_type: :AUTH_REQUIRED}}
+
+      {:error, reason} ->
+        Logger.error("Client authentication failed: #{inspect(reason)}")
+        {:error, %SatErrorResp{error_type: :AUTH_REQUIRED}}
+    end
+  end
+
+  def handle_rpc_request(%SatAuthReq{}, state) when auth_passed?(state),
+    do: {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
+
   # Satellite client request replication
   def handle_rpc_request(
         %SatInStartReplicationReq{lsn: client_lsn, options: opts} = msg,
@@ -1070,5 +1108,9 @@ defmodule Electric.Satellite.Protocol do
   defp schedule_auth_expiration(exp_time) do
     delta_ms = 1000 * (exp_time - Joken.current_time())
     Process.send_after(self(), :jwt_expired, delta_ms)
+  end
+
+  defp cancel_auth_expiration(timer) do
+    Process.cancel_timer(timer)
   end
 end

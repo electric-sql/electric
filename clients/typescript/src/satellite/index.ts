@@ -67,6 +67,7 @@ export interface Satellite {
   stop(shutdown?: boolean): Promise<void>
   setToken(token: string): void
   connectWithBackoff(): Promise<void>
+  authenticate(token: string): Promise<void>
   subscribe(
     shapeDefinitions: ClientShapeDefinition[]
   ): Promise<ShapeSubscription>

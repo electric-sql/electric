@@ -225,6 +225,101 @@ defmodule Electric.Satellite.WebsocketServerTest do
       assert_receive({^pid, :server_close, 4000, "JWT-expired"}, 1500)
     end
 
+    test "Auth can be renewed", ctx do
+      server_id = ctx.server_id
+
+      {:ok, pid} = MockClient.connect(port: ctx.port)
+
+      # create a token that expires in 1 second from now
+      exp = System.os_time(:second) + 1
+      token = Auth.Secure.create_token(ctx.user_id, expiry: exp)
+
+      # authenticate
+      assert {:ok, %SatAuthResp{id: ^server_id}} =
+               MockClient.make_rpc_call(pid, "authenticate", %SatAuthReq{
+                 id: ctx.client_id,
+                 token: token
+               })
+
+      # renew the token
+      new_exp = System.os_time(:second) + 3
+      renewed_token = Auth.Secure.create_token(ctx.user_id, expiry: new_exp)
+
+      assert {:ok, %SatAuthResp{id: ^server_id}} =
+               MockClient.make_rpc_call(pid, "authenticate", %SatAuthReq{
+                 id: ctx.client_id,
+                 token: renewed_token
+               })
+
+      # We will renew the token with an expiration in 3 seconds from now
+      # so the JWT should not expire in the coming 3 seconds
+      # (we use 2.9 seconds to account for the time elapse between the renewal and now)
+      refute_receive({^pid, :server_close, 4000, "JWT-expired"}, 2900)
+
+      # specify a timeout of 3.5 seconds
+      # which allows the JWT to expire
+      # and check that the socket is closed
+      assert_receive({^pid, :server_close, 4000, "JWT-expired"}, 3500)
+    end
+
+    test "Auth can't be renewed with invalid client ID", ctx do
+      server_id = ctx.server_id
+
+      {:ok, pid} = MockClient.connect(port: ctx.port)
+
+      # create a token that expires in 5 seconds from now
+      exp = System.os_time(:second) + 5
+      token = Auth.Secure.create_token(ctx.user_id, expiry: exp)
+
+      # authenticate
+      assert {:ok, %SatAuthResp{id: ^server_id}} =
+               MockClient.make_rpc_call(pid, "authenticate", %SatAuthReq{
+                 id: ctx.client_id,
+                 token: token
+               })
+
+      # Renew the token with a different client ID
+      new_exp = System.os_time(:second) + 8
+      invalid_token = Auth.Secure.create_token(ctx.user_id, expiry: new_exp)
+
+      # Check that renewal fails
+      assert {:error, %SatErrorResp{error_type: :INVALID_REQUEST}} =
+               MockClient.make_rpc_call(pid, "authenticate", %SatAuthReq{
+                 id: "another" <> ctx.client_id,
+                 token: invalid_token
+               })
+    end
+
+    test "Auth can't be renewed with invalid user ID", ctx do
+      server_id = ctx.server_id
+
+      {:ok, pid} = MockClient.connect(port: ctx.port)
+
+      # create a token that expires in 5 seconds from now
+      exp = System.os_time(:second) + 5
+      token = Auth.Secure.create_token(ctx.user_id, expiry: exp)
+
+      # authenticate
+      assert {:ok, %SatAuthResp{id: ^server_id}} =
+               MockClient.make_rpc_call(pid, "authenticate", %SatAuthReq{
+                 id: ctx.client_id,
+                 token: token
+               })
+
+      # Renew the token with a different user ID
+      new_exp = System.os_time(:second) + 8
+      # must be different from ctx.user_id
+      invalid_user_id = "a5408365-7bf4-48b1-afe2-cb8171631d9a"
+      invalid_token = Auth.Secure.create_token(invalid_user_id, expiry: new_exp)
+
+      # Check that renewal fails
+      assert {:error, %SatErrorResp{error_type: :INVALID_REQUEST}} =
+               MockClient.make_rpc_call(pid, "authenticate", %SatAuthReq{
+                 id: ctx.client_id,
+                 token: invalid_token
+               })
+    end
+
     test "cluster/app id mismatch is detected", ctx do
       invalid_token = Auth.Secure.create_token(ctx.user_id, issuer: "some-other-cluster-id")
 

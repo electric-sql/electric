@@ -1,0 +1,25 @@
+[doc NodeJS Satellite can authenticate, renew its token and is informed when its token expires]
+[include _shared.luxinc]
+[include _satellite_macros.luxinc]
+
+[invoke setup]
+
+[invoke start_satellite 1]
+
+[shell satellite_1]
+    ??$node
+    -JWT expired too early
+    # Set failure pattern to fail if JWT expires
+    # Set expiration time for the JWT to 2 seconds from now
+    !exp="2s"
+    [invoke connect_to_electric electric_1 5133 "[]"]
+    #?New auth status: EXPIRED
+    ?Connectivity state changed: connected
+    !await client.renew_token(db, "5s")
+    ??$node
+    !client.check_token_expiration(db, 4000)
+    ??$node
+    ??JWT expired after
+
+[cleanup]
+    [invoke teardown]
