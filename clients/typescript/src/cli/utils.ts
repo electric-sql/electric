@@ -130,8 +130,11 @@ export function extractServiceURL(serviceUrl: string) {
 export function parsePgProxyPort(str: string) {
   if (str.includes(':')) {
     const [prefix, port] = str.split(':')
-    return { http: prefix === 'http', port: parsePort(port) }
-  } else if (str === 'http') {
+    return {
+      http: prefix.toLocaleLowerCase() === 'http',
+      port: parsePort(port),
+    }
+  } else if (str.toLocaleLowerCase() === 'http') {
     return { http: true, port: 65432 }
   } else {
     return { http: false, port: parsePort(str) }
