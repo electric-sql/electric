@@ -4,7 +4,7 @@ import IssueList from "./IssueList";
 import { Issue, useElectric } from "../../electric";
 import { useLiveQuery } from "electric-sql/react";
 import { useFilterState, filterStateToWhere } from "../../utils/filterState";
-import { embedIssue } from "./VectorSearch";
+import { embedIssue } from "../../utils/vectorSearch";
 
 function List({ showSearch = false }) {
   const [filterState] = useFilterState();

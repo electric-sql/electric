@@ -16,7 +16,7 @@ import StatusMenu from './contextmenu/StatusMenu'
 
 import { Priority, Status, PriorityDisplay } from '../types/issue'
 import { showInfo, showWarning } from '../utils/notification'
-import { embedIssue } from '../pages/List/VectorSearch'
+import { embedIssue } from '../utils/vectorSearch'
 
 interface Props {
   isOpen: boolean
