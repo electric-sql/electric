@@ -25,6 +25,7 @@ import {
 import { QualifiedTablename } from '../util/tablename'
 import {
   ConnectivityState,
+  ConnectivityStatus,
   DataChange,
   DbName,
   LSN,
@@ -654,7 +655,12 @@ export class SatelliteProcess implements Satellite {
   }
 
   async _handleOrThrowClientError(error: SatelliteError): Promise<void> {
-    this._disconnect()
+    if (error.code === SatelliteErrorCode.AUTH_EXPIRED) {
+      this._disconnect('JWT expired')
+      return // don't try to reconnect automatically since the JWT expired
+    }
+
+    this._disconnect(error.message)
 
     if (isThrowable(error)) {
       throw error
@@ -667,9 +673,9 @@ export class SatelliteProcess implements Satellite {
     return this.connectWithBackoff()
   }
 
-  async _handleConnectivityStateChange(
-    status: ConnectivityState
-  ): Promise<void> {
+  async _handleConnectivityStateChange({
+    status,
+  }: ConnectivityState): Promise<void> {
     Log.debug(`Connectivity state changed: ${status}`)
     switch (status) {
       case 'available': {
@@ -748,7 +754,7 @@ export class SatelliteProcess implements Satellite {
             SatelliteErrorCode.CONNECTION_FAILED_AFTER_RETRY,
             `Failed to connect to server after exhausting retry policy. Last error thrown by server: ${e.message}`
           )
-      this._disconnect()
+      this._disconnect(error.message)
       this.initializing?.reject(error)
       throw error
     })
@@ -802,9 +808,9 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  private _disconnect(): void {
+  private _disconnect(reason?: string): void {
     this.client.disconnect()
-    this._notifyConnectivityState('disconnected')
+    this._notifyConnectivityState('disconnected', reason)
   }
 
   async _startReplication(): Promise<void> {
@@ -848,8 +854,14 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  private _notifyConnectivityState(connectivityState: ConnectivityState): void {
-    this.connectivityState = connectivityState
+  private _notifyConnectivityState(
+    connectivityStatus: ConnectivityStatus,
+    error?: string
+  ): void {
+    this.connectivityState = {
+      status: connectivityStatus,
+      error,
+    }
     this.notifier.connectivityStateChanged(this.dbName, this.connectivityState)
   }
 

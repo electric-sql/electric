@@ -36,17 +36,9 @@ export const electrify_db = async (
   const token = await mockSecureAuthToken()
   await result.connect(token) // connect to Electric
 
-  result.notifier.subscribeToConnectivityStateChanges((x) => console.log("Connectivity state changed", x))
+  result.notifier.subscribeToConnectivityStateChanges((x) => console.log("Connectivity state changed:\n", JSON.stringify(x)))
 
   return result
-}
-
-export const subscribe_to_auth_status = (electric: Electric) => {
-  electric.notifier.subscribeToAuthStateChanges((x) => {
-    if (x.authState.status === AuthStatus.EXPIRED) {
-      console.log('New auth status: ' + AuthStatus.EXPIRED)
-    }
-  })
 }
 
 export const set_subscribers = (db: Electric) => {

@@ -199,4 +199,8 @@ export type IncomingTransactionCallback = (
 ) => void
 export type OutboundStartedCallback = () => void
 
-export type ConnectivityState = 'available' | 'connected' | 'disconnected'
+export type ConnectivityStatus = 'available' | 'connected' | 'disconnected'
+export type ConnectivityState = {
+  status: ConnectivityStatus
+  error?: string // reason for `disconnected` status
+}
