@@ -420,7 +420,7 @@ fn main() {
     };
     eprintln!("{:?}", args);
 
-    tauri::async_runtime::set(tokio::runtime::Handle::current());
+    // tauri::async_runtime::set(tokio::runtime::Handle::current());
     let (async_proc_input_tx, async_proc_input_rx) = mpsc::channel(1);
     let (async_proc_output_tx, mut async_proc_output_rx) = mpsc::channel(1);
 
