@@ -27,13 +27,13 @@ function Chat() {
       .map((issue: any) => `${issue.title}\n${issue.description}`)
       .join("\n\n\n");
     console.log("startChat", { question: question, context: context ?? "" });
-    invoke("startChat", { question: question, context: context ?? "" });
+    invoke("start_chat", { question: question, context: context ?? "" });
   };
 
   const stopChat = async () => {
     setWorking(false);
     console.log("stopChat");
-    invoke("stopChat");
+    invoke("stop_chat");
   };
 
   useEffect(() => {
