@@ -12,8 +12,10 @@
     !exp="5s"
     [invoke connect_to_electric electric_1 5133 "[]"]
     # Subscribe to auth status changes
-    !client.subscribe_to_auth_status(db)
-    ?New auth status: EXPIRED
+    #!client.subscribe_to_auth_status(db)
+    #?New auth status: EXPIRED
+    ?Connectivity state changed:
+    ?"status":"disconnected","error":"JWT expired"
 
 [cleanup]
   [invoke teardown]
