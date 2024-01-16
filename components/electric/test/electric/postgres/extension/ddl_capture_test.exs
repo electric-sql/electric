@@ -272,7 +272,7 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
   end
 
   test_tx "enum types are captured", fn conn ->
-    sql1 = "CREATE TYPE colors AS ENUM ('red', 'turqoise', 'energizing yello');"
+    sql1 = "CREATE TYPE colors AS ENUM ('red', 'turqoise', 'energizing_yellow');"
     sql2 = "CREATE TYPE states AS ENUM ('foo', 'bar');"
 
     sql3 = """
@@ -294,7 +294,7 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
 
     assert [
              "CREATE TABLE funny_table (" <> _,
-             "CREATE TYPE colors AS ENUM (\n 'red',\n 'turqoise',\n 'energizing yello'\n);",
+             "CREATE TYPE colors AS ENUM (\n 'red',\n 'turqoise',\n 'energizing_yellow'\n);",
              "CREATE TYPE states AS ENUM (\n 'foo',\n 'bar'\n);"
            ] = Enum.sort(stmts)
   end
