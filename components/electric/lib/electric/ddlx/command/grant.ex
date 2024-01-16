@@ -55,22 +55,24 @@ defmodule Electric.DDLX.Command.Grant do
 
   defp validate_scope_information(params, opts) do
     with {:ok, role_name} <- fetch_attr(params, :role_name),
-         {:ok, attrs} <- split_role_def(role_name, opts) do
-      attrs =
-        if !attrs[:scope] do
-          with {:ok, scope_table_name} <- fetch_attr(params, :scope_table_name) do
-            {:ok, scope_schema_name} =
-              fetch_attr(params, :scope_schema_name, default_schema(opts))
-
-            Keyword.put(attrs, :scope, {scope_schema_name, scope_table_name})
-          else
-            _ -> attrs
-          end
-        else
-          attrs
-        end
-
+         {:ok, attrs} <- split_role_def(role_name, opts),
+         attrs = maybe_add_scope(attrs, params, opts) do
       {:ok, attrs}
+    end
+  end
+
+  defp maybe_add_scope(attrs, params, opts) do
+    if !attrs[:scope] do
+      with {:ok, scope_table_name} <- fetch_attr(params, :scope_table_name) do
+        {:ok, scope_schema_name} =
+          fetch_attr(params, :scope_schema_name, default_schema(opts))
+
+        Keyword.put(attrs, :scope, {scope_schema_name, scope_table_name})
+      else
+        _ -> attrs
+      end
+    else
+      attrs
     end
   end
 

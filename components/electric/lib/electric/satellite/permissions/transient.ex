@@ -7,7 +7,7 @@ defmodule Electric.Satellite.Permissions.Transient do
   defstruct [:id, :assign_id, :scope_id, :target_relation, :target_id, :valid_to]
 
   @type tid() :: :ets.tid()
-  @type lut() :: atom() | tid()
+  @type lut() :: atom()
   @type relation() :: Electric.Postgres.relation()
   @type t() :: %__MODULE__{
           id: binary(),
@@ -22,20 +22,11 @@ defmodule Electric.Satellite.Permissions.Transient do
     struct(__MODULE__, attrs)
   end
 
-  @spec table_ref!(lut()) :: tid()
-  def table_ref!(ref) when is_reference(ref) do
-    ref
-  end
-
-  def table_ref!(name) when is_atom(name) do
-    GenServer.call(name, :table_ref)
-  end
-
   @spec update([t()], lut()) :: :ok
   def update(permissions, table \\ __MODULE__) do
     permissions
     |> Enum.map(&entry_for_permission/1)
-    |> then(&:ets.insert(table_ref!(table), &1))
+    |> then(&:ets.insert(table, &1))
 
     :ok
   end
@@ -53,17 +44,17 @@ defmodule Electric.Satellite.Permissions.Transient do
   @spec for_roles([RoleGrant.t()], Permissions.lsn(), lut()) :: Enum.t()
   def for_roles(role_grants, lsn, table) do
     role_grants
-    |> Stream.flat_map(&transient_for_roles(&1, table_ref!(table)))
+    |> Stream.flat_map(&transient_for_roles(&1, table))
     |> Stream.filter(&filter_expired(&1, lsn))
   end
 
-  defp transient_for_roles(%{role: %Permissions.Role{} = role} = role_grant, name) do
+  defp transient_for_roles(%{role: %Permissions.Role{} = role} = role_grant, table) do
     %{assign_id: assign_id, scope: {_, scope_id}} = role
 
-    name
+    table
     |> :ets.match({assign_id, scope_id, :"$1"})
     # :ets.match/2 returns a list of lists but since we only return '$1' we only want the first
-    |> Stream.map(fn m -> {role_grant, hd(m)} end)
+    |> Stream.map(fn [transient] -> {role_grant, transient} end)
   end
 
   defp filter_expired({_role_grant, %__MODULE__{valid_to: expires_lsn}}, change_lsn) do
@@ -77,13 +68,8 @@ defmodule Electric.Satellite.Permissions.Transient do
 
   @impl GenServer
   def init(name) do
-    table = :ets.new(name, [:bag, :public, read_concurrency: true])
+    table = :ets.new(name, [:bag, :public, :named_table, read_concurrency: true])
     # TODO: boot and load all existing transient permissions
     {:ok, table}
-  end
-
-  @impl GenServer
-  def handle_call(:table_ref, _from, table) do
-    {:reply, table, table}
   end
 end
