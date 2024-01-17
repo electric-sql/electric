@@ -1,5 +1,23 @@
 # @core/electric
 
+## 0.9.0
+
+### Minor Changes
+
+- df56221b: Reject electrification of tables that have no PRIMARY KEY or include unsupported constraints. Only PRIMARY KEY and FOREIGN KEY constraints are currently supported.
+- 3a7fb38b: Validate table column types and constraints for new columns that are added to electrified tables with ALTER TABLE ... ADD COLUMN.
+- afa4f839: Reject ALTER TABLE ... ADD COLUMN statements that try to add a new foreign key to an already electrified table.
+
+### Patch Changes
+
+- 07499d3e: Format some known errors in an easy-to-read way, including more context and information about resolution in the error messages.
+- 4fe5c7f6: [VAX-1040] [VAX-1041] [VAX-1042] Add support for user-defined enum types in electrified tables.
+- 2ac82759: Validate config values and print all missing or invalid config options at Electirc startup.
+- d386fd98: Try connecting to the database over IPv6 and IPv4, in that order, and use the first option that works. This obviates the need for the DATABASE_USE_IPV6 configuration setting in most cases.
+- e8bb9a8f: Enforce the use of SSL for database connections by default.
+- 82202278: [VAX-1449] Add the notion of "clock drift" to Electric and use it when validating timestamps in auth tokens. Among other things, this fixes the issue where an auth token is used to authenticate with Electric before even a second passes after it was generated.
+- 743c5d07: Configure the sync service using dev.env and test.env files in development and testing.
+
 ## 0.8.1
 
 ### Patch Changes
