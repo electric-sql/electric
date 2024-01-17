@@ -74,6 +74,8 @@ import { backOff } from 'exponential-backoff'
 import { chunkBy } from '../util'
 import { isFatal, isOutOfSyncError, isThrowable, wrapFatalError } from './error'
 import { inferRelationsFromSQLite } from '../util/relations'
+import { decodeToken } from '../auth/secure'
+import { InvalidArgumentError } from '../client/validation/errors/invalidArgumentError'
 
 type ChangeAccumulator = {
   [key: string]: Change
@@ -203,7 +205,7 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  async start(authConfig: AuthConfig): Promise<void> {
+  async start(authConfig?: AuthConfig): Promise<void> {
     if (this.opts.debug) {
       await this.logSQLiteVersion()
     }
@@ -216,10 +218,10 @@ export class SatelliteProcess implements Satellite {
     }
 
     const clientId =
-      authConfig.clientId && authConfig.clientId !== ''
+      authConfig?.clientId && authConfig.clientId !== ''
         ? authConfig.clientId
         : await this._getClientId()
-    await this._setAuthState({ clientId: clientId, token: authConfig.token })
+    await this._setAuthState({ clientId: clientId }) //, token: authConfig.token })
 
     const notifierSubscriptions = Object.entries({
       _authStateSubscription: this._unsubscribeFromAuthState,
@@ -683,6 +685,28 @@ export class SatelliteProcess implements Satellite {
         throw new Error(`unexpected connectivity state: ${status}`)
       }
     }
+  }
+
+  /**
+   * Sets the JWT token.
+   * @param token The JWT token.
+   */
+  setToken(token: string): void {
+    const { sub } = decodeToken(token)
+    const userId: string | undefined = this._authState?.userId
+    if (typeof userId !== 'undefined' && sub !== userId) {
+      // We must check that the new token is still using the same user ID.
+      // We can't accept a re-connection that changes the user ID because the Satellite process is statefull.
+      // To change user ID the user must re-electrify the database.
+      throw new InvalidArgumentError(
+        `Can't change user ID when reconnecting. Previously connected with user ID '${userId}' but trying to reconnect with user ID '${sub}'`
+      )
+    }
+    this._setAuthState({
+      ...this._authState!,
+      userId: sub,
+      token,
+    })
   }
 
   async connectWithBackoff(): Promise<void> {

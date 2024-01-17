@@ -30,7 +30,7 @@ export type { Database }
 export const electrify = async <T extends Database, DB extends DbSchema<any>>(
   db: T,
   dbDescription: DB,
-  config: ElectricConfig,
+  config: ElectricConfig = {},
   opts?: ElectrifyOptions
 ): Promise<ElectricClient<DB>> => {
   const dbName: DbName = db._name
