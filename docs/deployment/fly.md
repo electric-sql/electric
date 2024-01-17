@@ -84,6 +84,12 @@ app = "electric-on-fly-test-app"
     handlers = ["pg_tls"]
 ```
 
+:::info Secrets and environment variables
+[Secrets](https://fly.io/docs/reference/secrets/) allow sensitive values, such as credentials, to be passed securely to your Fly app. The secret is encrypted and stored in a vault. It is made available to the app as an environment variable.
+
+We're not using secrets in this example to keep things short and simple. As soon as you're ready to take your Fly app from development to production, make sure to replace the `DATABASE_URL`, `PG_PROXY_PASSWORD` and `AUTH_JWT_KEY` (this latter one is required in the [secure authentication mode](/docs/usage/auth/secure)) environment variables with secrets.
+:::
+
 ### Deploy!
 
 In your terminal, navigate to the directory where `fly.toml` is located and run `fly launch --copy-config --ha=false`:
