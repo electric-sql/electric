@@ -1,6 +1,5 @@
 import {
   useContext,
-  useRef,
   useEffect,
   useState,
   useCallback,
@@ -19,6 +18,11 @@ export interface ResultData<T> {
   error?: unknown
   results?: T
   updatedAt?: Date
+}
+
+interface QueryResult<T> {
+  result: ResultData<T>
+  tablenames?: QualifiedTablename[]
 }
 
 function successResult<T>(results: T): ResultData<T> {
@@ -121,53 +125,58 @@ function useLiveQueryWithQueryUpdates<Res>(
   runQueryDependencies: DependencyList
 ): ResultData<Res> {
   const electric = useContext(ElectricContext)
-
-  const tablenames = useRef<QualifiedTablename[]>([])
   const [resultData, setResultData] = useState<ResultData<Res>>({})
 
   // Store the `runQuery` function as a callback, optionally
   // provide way to prevent state updates for handling dangling
   // async calls
-  const runLiveQuery = useCallback(
-    ({
-      shouldUpdateState = () => true,
-    }: {
-      shouldUpdateState?: () => boolean
-    }) => {
-      runQuery()
-        .then((res) => {
-          if (!shouldUpdateState()) return
-          tablenames.current = res.tablenames
-          setResultData(successResult(res.result))
-        })
-        .catch((err) => {
-          if (!shouldUpdateState()) return
-          setResultData(errorResult(err))
-        })
-    },
-    runQueryDependencies
-  )
+  const runLiveQuery = useCallback(async (): Promise<QueryResult<Res>> => {
+    try {
+      const res = await runQuery()
+      return {
+        result: successResult(res.result),
+        tablenames: res.tablenames,
+      }
+    } catch (err) {
+      return {
+        result: errorResult(err),
+        tablenames: undefined,
+      }
+    }
+  }, runQueryDependencies)
 
   // Runs initial query, storing affected tablenames, and subscribes to
   // any subsequent changes to the affected tables for rerunning the query
   const subscribeToDataChanges = useCallback(
     (notifier: Notifier) => {
       let cancelled = false
-      const shouldUpdateState = () => !cancelled
+      let relevantTablenames: QualifiedTablename[] | undefined
+
+      // utility to conditionally update the results and affected tablenames
+      // if change subscription is still active
+      const updateState = ({ result, tablenames }: QueryResult<Res>) => {
+        if (cancelled) return
+        relevantTablenames = tablenames
+        setResultData(result)
+      }
 
       const handleChange = (notification: ChangeNotification): void => {
         // Reduces the `ChangeNotification` to an array of namespaced tablenames,
         // in a way that supports both the main namespace for the primary database
         // and aliases for any attached databases.
         const changedTablenames = notifier.alias(notification)
-        if (hasIntersection(tablenames.current, changedTablenames)) {
-          runLiveQuery({ shouldUpdateState })
+        if (
+          relevantTablenames &&
+          hasIntersection(relevantTablenames, changedTablenames)
+        ) {
+          runLiveQuery().then(updateState)
         }
       }
 
-      tablenames.current = []
-      runLiveQuery({ shouldUpdateState })
+      // run initial query to populate results and affected tablenames
+      runLiveQuery().then(updateState)
       const unsubscribe = notifier?.subscribeToDataChanges(handleChange)
+
       return () => {
         cancelled = true
         unsubscribe?.()
