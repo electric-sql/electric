@@ -188,7 +188,8 @@ defmodule Electric.Satellite.Permissions do
           source: %{grants: [%SatPerms.Grant{}], roles: [%SatPerms.Role{}]} | nil,
           auth: Auth.t(),
           transient_lut: Transient.lut(),
-          scope_resolver: Scope.t()
+          scope_resolver: Scope.t(),
+          scopes: [Role.scope()]
         }
 
   @doc """
