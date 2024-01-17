@@ -89,32 +89,16 @@ export function start(options: StartSettings) {
 
     proc.on('close', async (code) => {
       if (code === 0) {
-        if (options.withPostgres && options.detach) {
-          console.log('Waiting for PostgreSQL to be ready...')
-          // Await the postgres container to be ready
-          const start = Date.now()
-          const timeout = 10 * 1000 // 10 seconds
-          while (Date.now() - start < timeout) {
-            if (await checkPostgres(options.config.CONTAINER_NAME, env)) {
-              console.log('PostgreSQL is ready')
-              if (exitOnDetached) {
-                process.exit(0)
-              }
-              resolve()
-              return
-            }
-            await new Promise((resolve) => setTimeout(resolve, 500))
+        if (options.detach) {
+          if (options.withPostgres) {
+            await waitForPostgres(options.config.CONTAINER_NAME, dockerConfig)
           }
-          console.error(
-            dedent`
-              Timed out waiting for PostgreSQL to be ready.
-              Check the output from 'docker compose' above.
-            `
-          )
-          process.exit(1)
-        } else {
-          resolve()
+          await waitForElectric(options.config.SERVICE)
         }
+        if (exitOnDetached) {
+          process.exit(0)
+        }
+        resolve()
       } else {
         console.error(
           dedent`
@@ -153,6 +137,54 @@ function checkPostgres(containerName: string, env: { [key: string]: string }) {
       reject(e)
     }
   })
+}
+
+async function waitForPostgres(containerName: string, env: any) {
+  console.log('Waiting for PostgreSQL to be ready...')
+  // Await the postgres container to be ready
+  const start = Date.now()
+  const timeout = 10 * 1000 // 10 seconds
+  while (Date.now() - start < timeout) {
+    if (await checkPostgres(containerName, env)) {
+      console.log('PostgreSQL is ready')
+      return
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500))
+  }
+  console.error(
+    dedent`
+      Timed out waiting for PostgreSQL to be ready.
+      Check the output from 'docker compose' above.
+    `
+  )
+  process.exit(1)
+}
+
+async function waitForElectric(serviceUrl: string) {
+  console.log('Waiting for Electric to be ready...')
+  const statusUrl = `${serviceUrl}/api/status`
+  // Status endpoint returns 200 when ready
+  const start = Date.now()
+  const timeout = 10 * 1000 // 10 seconds
+  while (Date.now() - start < timeout) {
+    try {
+      const res = await fetch(statusUrl)
+      if (res.ok) {
+        console.log('Electric is ready')
+        return
+      }
+    } catch (e) {
+      // ignore
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500))
+  }
+  console.error(
+    dedent`
+      Timed out waiting for Electric to be ready.
+      Check the output from 'docker compose' above.
+    `
+  )
+  process.exit(1)
 }
 
 function configToEnv(config: Config) {
