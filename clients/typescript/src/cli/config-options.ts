@@ -64,7 +64,12 @@ export const configOptions = {
   PG_PROXY_HOST: {
     valueType: String,
     valueTypeName: 'hostname',
-    doc: 'Port number for connections to the Postgres migration proxy.',
+    doc: dedent`
+      Hostname the Migration Proxy is running on. This is usually the same as, 
+      and defaults to, SERVICE_HOST.
+
+      If using the proxy-tunnel, this should be the hostname of the tunnel.
+    `,
     groups: ['client', 'proxy'],
     defaultVal: (options: ConfigMap) => getConfigValue('SERVICE_HOST', options),
   },
