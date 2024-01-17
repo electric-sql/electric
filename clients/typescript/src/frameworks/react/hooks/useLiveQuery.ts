@@ -9,10 +9,7 @@ import {
 } from 'react'
 import { hash } from 'ohash'
 
-import {
-  ChangeNotification,
-  UnsubscribeFunction,
-} from '../../../notifiers/index'
+import { ChangeNotification, Notifier } from '../../../notifiers/index'
 import { QualifiedTablename, hasIntersection } from '../../../util/tablename'
 
 import { ElectricContext } from '../provider'
@@ -125,90 +122,71 @@ function useLiveQueryWithQueryUpdates<Res>(
 ): ResultData<Res> {
   const electric = useContext(ElectricContext)
 
-  const unsubscribeDataChanges = useRef<UnsubscribeFunction>()
-  const tablenames = useRef<QualifiedTablename[]>()
-  const tablenamesKey = useRef<string>()
+  const tablenames = useRef<QualifiedTablename[]>([])
   const [resultData, setResultData] = useState<ResultData<Res>>({})
 
-  // The effect below is run only after the initial render
-  // because of the empty array of dependencies
-  useEffect(() => {
-    let ignore = false
-
-    // Do an initial run of the query to fetch the table names
-    const runInitialQuery = async () => {
-      try {
-        const res = await runQuery()
-
-        if (!ignore) {
-          tablenamesKey.current = JSON.stringify(res.tablenames)
+  // Store the `runQuery` function as a callback, optionally
+  // provide way to prevent state updates for handling dangling
+  // async calls
+  const runLiveQuery = useCallback(
+    ({
+      shouldUpdateState = () => true,
+    }: {
+      shouldUpdateState?: () => boolean
+    }) => {
+      runQuery()
+        .then((res) => {
+          if (!shouldUpdateState()) return
           tablenames.current = res.tablenames
           setResultData(successResult(res.result))
+        })
+        .catch((err) => {
+          if (!shouldUpdateState()) return
+          setResultData(errorResult(err))
+        })
+    },
+    runQueryDependencies
+  )
+
+  // Runs initial query, storing affected tablenames, and subscribes to
+  // any subsequent changes to the affected tables for rerunning the query
+  const subscribeToDataChanges = useCallback(
+    (notifier: Notifier) => {
+      let cancelled = false
+      const shouldUpdateState = () => !cancelled
+
+      const handleChange = (notification: ChangeNotification): void => {
+        // Reduces the `ChangeNotification` to an array of namespaced tablenames,
+        // in a way that supports both the main namespace for the primary database
+        // and aliases for any attached databases.
+        const changedTablenames = notifier.alias(notification)
+        if (hasIntersection(tablenames.current, changedTablenames)) {
+          runLiveQuery({ shouldUpdateState })
         }
-      } catch (err) {
-        if (!ignore) setResultData(errorResult(err))
       }
-    }
 
-    runInitialQuery()
+      tablenames.current = []
+      runLiveQuery({ shouldUpdateState })
+      const unsubscribe = notifier?.subscribeToDataChanges(handleChange)
+      return () => {
+        cancelled = true
+        unsubscribe?.()
+      }
+    },
+    [runLiveQuery]
+  )
 
-    return () => {
-      ignore = true
-    }
-  }, runQueryDependencies)
-
-  // Store the `runQuery` function as a callback
-  const runLiveQuery = useCallback(async () => {
-    try {
-      const res = await runQuery()
-      setResultData(successResult(res.result))
-    } catch (err) {
-      setResultData(errorResult(err))
-    }
-  }, runQueryDependencies)
-
-  // Once we have electric, we then establish the data change
-  // notification subscription, comparing the tablenames used by the
+  // Once we have electric, we then run the query and establish the data
+  // change notification subscription, comparing the tablenames used by the
   // query with the changed tablenames in the data change notification
   // to determine whether to re-query or not.
   //
   // If we do need to re-query, then we use the saved function to reuse the query
   useEffect(() => {
-    if (
-      electric === undefined ||
-      tablenamesKey.current === undefined ||
-      tablenames.current === undefined
-    ) {
-      return
-    }
-
-    let ignore = false
-    const notifier = electric.notifier
-    const handleChange = (notification: ChangeNotification): void => {
-      // Reduces the `ChangeNotification` to an array of namespaced tablenames,
-      // in a way that supports both the main namespace for the primary database
-      // and aliases for any attached databases.
-      const changedTablenames = notifier.alias(notification)
-
-      if (tablenames.current) {
-        if (hasIntersection(tablenames.current, changedTablenames)) {
-          if (!ignore) runLiveQuery()
-        }
-      }
-    }
-
-    const unsubscribe = notifier.subscribeToDataChanges(handleChange)
-    if (unsubscribeDataChanges.current !== undefined) {
-      unsubscribeDataChanges.current()
-    }
-
-    unsubscribeDataChanges.current = unsubscribe
-
-    return () => {
-      ignore = true
-      unsubscribe()
-    }
-  }, [electric, tablenamesKey.current, tablenames.current, runLiveQuery])
+    if (electric?.notifier == undefined) return
+    const unsubscribe = subscribeToDataChanges(electric?.notifier)
+    return unsubscribe
+  }, [electric?.notifier, subscribeToDataChanges])
 
   return resultData
 }
