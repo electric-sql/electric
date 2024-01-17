@@ -61,6 +61,10 @@ If you have set up a [Managed PostgreSQL cluster on DigitalOcean](https://docs.d
 However, if you want to use a 3rd-party database provider, add the `DATABASE_URL` variable yourself before proceeding to the next step.
 :::
 
+:::caution Encrypted Environment Variables
+DigitalOcean recommends encrypting environment variables if they contain secrets that you don't want to be viewable in the environment editor. Be careful with that, though. If you check the "Encrypt" checkbox next to a variable, you won't be able to edit it afterwards; you'll have to delete it first, then create it again with a new value.
+:::
+
 You can leave the `AUTH_MODE` insecure for now but remember to switch to the secure mode and add a [secret signing key](/docs/usage/auth/secure) before making your app available to users.
 
 Click "Save" and go the next page.
