@@ -230,7 +230,7 @@ defmodule Electric.Satellite.Protocol do
             auth: nil | Electric.Satellite.Auth.t(),
             last_msg_time: :erlang.timestamp() | nil | :ping_sent,
             client_id: String.t() | nil,
-            expiration_timer: reference() | nil,
+            expiration_timer: {reference(), reference()} | nil,
             in_rep: InRep.t(),
             out_rep: OutRep.t(),
             auth_provider: Electric.Satellite.Auth.provider(),
@@ -276,19 +276,11 @@ defmodule Electric.Satellite.Protocol do
       Logger.info("Successfully authenticated the client")
       Metrics.satellite_connection_event(%{authorized_connection: 1})
 
-      timer = schedule_auth_expiration(auth.expires_at)
+      state =
+        %State{state | auth: auth, auth_passed: true, client_id: client_id}
+        |> schedule_auth_expiration(auth.expires_at)
 
-      {
-        :reply,
-        %SatAuthResp{id: Electric.instance_id()},
-        %State{
-          state
-          | auth: auth,
-            auth_passed: true,
-            client_id: client_id,
-            expiration_timer: timer
-        }
-      }
+      {:reply, %SatAuthResp{id: Electric.instance_id()}, state}
     else
       {:error, %SatErrorResp{}} = error ->
         error
@@ -323,19 +315,12 @@ defmodule Electric.Satellite.Protocol do
         {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
       else
         Logger.info("Successfully renewed the token")
-        # cancel the old expiration timer
-        cancel_auth_expiration(state.expiration_timer)
-        timer = schedule_auth_expiration(auth.expires_at)
+        # cancel the old expiration timer and schedule a new one
+        state =
+          %State{state | auth: auth}
+          |> reschedule_auth_expiration(auth.expires_at)
 
-        {
-          :reply,
-          %SatAuthResp{id: Electric.instance_id()},
-          %State{
-            state
-            | auth: auth,
-              expiration_timer: timer
-          }
-        }
+        {:reply, %SatAuthResp{id: Electric.instance_id()}, state}
       end
     else
       {:error, %Electric.Satellite.Auth.TokenError{message: message}} ->
@@ -1103,14 +1088,19 @@ defmodule Electric.Satellite.Protocol do
   defp rpc_encode(%module{} = message), do: IO.iodata_to_binary(module.encode!(message))
 
   # No expiration set on the auth state
-  defp schedule_auth_expiration(nil), do: nil
+  defp schedule_auth_expiration(state, nil), do: state
 
-  defp schedule_auth_expiration(exp_time) do
+  defp schedule_auth_expiration(state, exp_time) do
+    ref = make_ref()
     delta_ms = 1000 * (exp_time - Joken.current_time())
-    Process.send_after(self(), :jwt_expired, delta_ms)
+    timer = Process.send_after(self(), {:jwt_expired, ref}, delta_ms)
+    %State{state | expiration_timer: {timer, ref}}
   end
 
-  defp cancel_auth_expiration(timer) do
-    Process.cancel_timer(timer)
+  defp reschedule_auth_expiration(%{expiration_timer: old_timer} = state, exp_time) do
+    with {timer, _ref} <- old_timer, do: Process.cancel_timer(timer, async: true)
+
+    %State{state | expiration_timer: nil}
+    |> schedule_auth_expiration(exp_time)
   end
 end

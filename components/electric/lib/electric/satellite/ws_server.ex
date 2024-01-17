@@ -159,9 +159,17 @@ defmodule Electric.Satellite.WebsocketServer do
     end
   end
 
-  def handle_info(:jwt_expired, state) do
-    Logger.info("JWT token expired, disconnecting")
-    {:stop, :normal, {4000, "JWT-expired"}, %{state | expiration_timer: nil}}
+  def handle_info({:jwt_expired, ref}, %{expiration_timer: {_timer, ref}} = state) do
+    Logger.warning("JWT token expired, disconnecting")
+    {:stop, :normal, {4000, "JWT-expired"}, state}
+  end
+
+  def handle_info({:jwt_expired, ref}, state) do
+    Logger.warning(
+      "Received JWT expiration message #{inspect(ref)} for an already cancelled timer"
+    )
+
+    {:noreply, state}
   end
 
   # While processing the SatInStartReplicationReq message, Protocol has determined that a new
