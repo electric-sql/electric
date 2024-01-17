@@ -5,7 +5,11 @@ import {
 } from '../satellite/config'
 
 export interface ElectricConfig {
-  auth: AuthConfig
+  /**
+   * Optional authentication configuration.
+   * If not provided, a client ID is generated.
+   */
+  auth?: AuthConfig
   /**
    * Optional URL string to connect to the Electric sync service.
    *
@@ -65,10 +69,7 @@ export type InternalElectricConfig = {
 }
 
 export const hydrateConfig = (config: ElectricConfig): HydratedConfig => {
-  const auth = config.auth
-  if (!auth || !auth.token) {
-    throw new Error('Invalid configuration. Missing authentication token.')
-  }
+  const auth = config.auth ?? {}
 
   const debug = config.debug ?? false
   const url = new URL(config.url ?? 'http://localhost:5133')

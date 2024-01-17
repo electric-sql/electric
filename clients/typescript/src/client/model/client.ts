@@ -5,12 +5,8 @@ import { Row, Statement } from '../../util'
 import { LiveResult, LiveResultContext } from './model'
 import { Notifier } from '../../notifiers'
 import { DatabaseAdapter } from '../../electric/adapter'
-import {
-  ConnectionWrapper,
-  GlobalRegistry,
-  Registry,
-  Satellite,
-} from '../../satellite'
+import type { ConnectionWrapper } from '../../satellite'
+import { GlobalRegistry, Registry, Satellite } from '../../satellite'
 import { ShapeManager } from './shapes'
 
 export type ClientTables<DB extends DbSchema<any>> = {
@@ -79,8 +75,10 @@ export class ElectricClient<
   /**
    * Connects to the Electric sync service.
    * This method is idempotent, it is safe to call it multiple times.
+   * @param token - The JWT token to use to connect to the Electric sync service.
    */
-  async connect(): Promise<ConnectionWrapper> {
+  async connect(token: string): Promise<ConnectionWrapper> {
+    this.satellite.setToken(token)
     const connectionPromise = this.satellite.connectWithBackoff()
     return { connectionPromise }
   }

@@ -53,7 +53,7 @@ export interface Registry {
 }
 
 export type ConnectionWrapper = {
-  connectionPromise: Promise<void | Error>
+  connectionPromise: Promise<void>
 }
 
 // `Satellite` is the main process handling ElectricSQL replication,
@@ -69,6 +69,7 @@ export interface Satellite {
 
   start(authConfig: AuthConfig): Promise<void>
   stop(shutdown?: boolean): Promise<void>
+  setToken(token: string): void
   connectWithBackoff(): Promise<void>
   subscribe(
     shapeDefinitions: ClientShapeDefinition[]

@@ -48,7 +48,7 @@ import {
   SubscriptionData,
 } from '../../src/satellite/shapes/types'
 import { mergeEntries } from '../../src/satellite/merge'
-import { AuthState } from '../../src/auth'
+import { AuthState, insecureAuthToken } from '../../src/auth'
 
 const parentRecord = {
   id: 1,
@@ -66,6 +66,7 @@ const startSatellite = async (
   authState: AuthState
 ) => {
   await satellite.start(authState)
+  satellite.setToken(insecureAuthToken({ sub: 'test-user' }))
   const connectionPromise = satellite.connectWithBackoff()
   return { connectionPromise }
 }
@@ -116,6 +117,19 @@ test('set persistent client id', async (t) => {
   const clientId2 = satellite._authState!.clientId
   t.truthy(clientId2)
   t.assert(clientId1 === clientId2)
+})
+
+test('cannot update user id', async (t) => {
+  const { satellite, authState } = t.context
+
+  await startSatellite(satellite, authState)
+  const error = t.throws(() => {
+    satellite.setToken(insecureAuthToken({ sub: 'test-user2' }))
+  })
+  t.is(
+    error?.message,
+    "Can't change user ID when reconnecting. Previously connected with user ID 'test-user' but trying to reconnect with user ID 'test-user2'"
+  )
 })
 
 test('cannot UPDATE primary key', async (t) => {

@@ -1,4 +1,4 @@
-import { AuthConfig, AuthState } from '../auth/index'
+import { AuthState } from '../auth/index'
 import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
 import { Notifier } from '../notifiers/index'
@@ -95,9 +95,7 @@ export class MockSatelliteProcess implements Satellite {
     await sleepAsync(50)
   }
 
-  async auth(_authConfig: AuthConfig): Promise<void> {
-    await sleepAsync(50)
-  }
+  setToken(_token: string): void {}
 
   async connect(): Promise<void> {
     await sleepAsync(50)
