@@ -35,7 +35,6 @@ abstract class DatabaseAdapter
 
   /**
    * Runs a single SQL query against the DB.
-   * The query should be read-only.
    * @param stmt The SQL statement to execute
    * @returns The rows read by the query.
    */
@@ -91,7 +90,6 @@ abstract class DatabaseAdapter
     })
   }
 
-  // This `query` function does not enforce that the query is read-only
   query(stmt: Statement): Promise<Row[]> {
     // Also uses the mutex to avoid running this query while a transaction is executing.
     // Because that would make the query part of the transaction which was not the intention.
