@@ -221,6 +221,7 @@ export type ContextType<Extra = {}> = {
   tableInfo: TableInfo
   timestamp: number
   authState: AuthState
+  token: string
 } & Extra
 
 export const makeContext = async (
@@ -251,6 +252,7 @@ export const makeContext = async (
   }
 
   const authState = { clientId: '' }
+  const token = insecureAuthToken({ sub: 'test-user' })
 
   t.context = {
     dbName,
@@ -262,6 +264,7 @@ export const makeContext = async (
     tableInfo,
     timestamp,
     authState,
+    token,
   }
 }
 

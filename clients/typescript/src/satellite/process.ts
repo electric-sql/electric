@@ -785,13 +785,13 @@ export class SatelliteProcess implements Satellite {
   private async _connect(): Promise<void> {
     Log.info(`connecting to electric server`)
 
-    if (!this._authState) {
+    if (!this._authState || !this._authState.token) {
       throw new Error(`trying to connect before authentication`)
     }
 
     try {
       await this.client.connect()
-      await this.authenticate(this._authState.token)
+      await this.authenticate(this._authState!.token!)
     } catch (error: any) {
       Log.debug(
         `server returned an error while establishing connection: ${error.message}`
