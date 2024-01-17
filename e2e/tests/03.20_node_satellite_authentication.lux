@@ -8,8 +8,9 @@
 
 [shell satellite_1]
     ??$node
+    # Set a failure pattern so that the test will fail if JWT expires
+    # before we want it to
     -JWT expired too early
-    # Set failure pattern to fail if JWT expires
     # Set expiration time for the JWT to 2 seconds from now
     !exp="2s"
     [invoke connect_to_electric electric_1 5133 "[]"]
