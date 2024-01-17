@@ -76,6 +76,8 @@ import { isFatal, isOutOfSyncError, isThrowable, wrapFatalError } from './error'
 import { inferRelationsFromSQLite } from '../util/relations'
 import { decodeToken } from '../auth/secure'
 import { InvalidArgumentError } from '../client/validation/errors/invalidArgumentError'
+import { decodeToken } from '../auth/secure'
+import { InvalidArgumentError } from '../client/validation/errors/invalidArgumentError'
 
 type ChangeAccumulator = {
   [key: string]: Change
