@@ -47,3 +47,11 @@ export function decodeToken(token: string): JWTPayload & { sub: string } {
   }
   return decoded as JWTPayload & { sub: string }
 }
+
+export function decodeToken(token: string): JWTPayload & { sub: string } {
+  const decoded = decodeJwt(token)
+  if (typeof decoded.sub === 'undefined') {
+    throw new InvalidArgumentError('Token does not contain a sub claim')
+  }
+  return decoded as JWTPayload & { sub: string }
+}
