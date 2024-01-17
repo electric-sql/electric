@@ -1,9 +1,8 @@
-import { Box, Container, Divider } from "@mui/material"
+import { Box, Container } from "@mui/material"
 import { NavigationBar } from "../components/NavigationBar"
 import { useEffect, useState } from "react"
 import { useElectric } from "../electric/ElectricWrapper"
-import { Calculator } from "./Calculator"
-import { CalculatorAuditLog } from "./CalculatorAuditLog"
+import { RequestResponse } from "./RequestResponse"
 import { ConnectivityToggle } from "../components/ConnectivityToggle"
 import { LoadingView } from "../components/LoadingView"
 
@@ -35,9 +34,7 @@ export const RequestResponseExample = () => {
       ]}/>
       <LoadingView loading={!synced}>
         <Container maxWidth="md" sx={{ py: 4 }}>
-          <Calculator />
-          <Divider sx={{ my: 2 }} />
-          <CalculatorAuditLog />
+          <RequestResponse />
         </Container>
       </LoadingView>
     </Box>

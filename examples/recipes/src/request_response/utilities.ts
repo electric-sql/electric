@@ -3,7 +3,13 @@ import { useElectric } from "../electric/ElectricWrapper";
 import { useLiveQuery } from "electric-sql/react";
 import { useCallback, useEffect, useState } from "react";
 
-type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'
+export enum HttpMethod {
+  GET='GET',
+  POST='POST',
+  PUT='PUT',
+  DELETE='DELETE',
+  PATCH='PATCH'
+}
 
 interface ElectricFetchParams {
   path: string,
