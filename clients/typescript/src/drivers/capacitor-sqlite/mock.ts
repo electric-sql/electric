@@ -1,4 +1,4 @@
-import { capSQLiteChanges } from '@capacitor-community/sqlite'
+import { DBSQLiteValues, capSQLiteChanges } from '@capacitor-community/sqlite'
 import { DbName } from '../../util/types'
 import { Database } from './database'
 
@@ -13,11 +13,16 @@ export class MockDatabase implements Database {
     return this.resolveIfNotFail({
       changes: {
         changes: 0,
-        values: [
-          { textColumn: 'text1', numberColumn: 1 },
-          { textColumn: 'text2', numberColumn: 2 },
-        ],
       },
+    })
+  }
+
+  query(): Promise<DBSQLiteValues> {
+    return this.resolveIfNotFail({
+      values: [
+        { textColumn: 'text1', numberColumn: 1 },
+        { textColumn: 'text2', numberColumn: 2 },
+      ],
     })
   }
 

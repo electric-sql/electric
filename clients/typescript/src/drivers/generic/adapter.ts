@@ -5,7 +5,6 @@ import {
   Transaction as Tx,
 } from '../../electric/adapter'
 import { Row, Statement } from '../../util'
-import { isInsertUpdateOrDeleteStatement } from '../../util/statements'
 import { Mutex } from 'async-mutex'
 import { AnyDatabase } from '..'
 
@@ -28,14 +27,18 @@ abstract class DatabaseAdapter
   }
 
   /**
-   * @param statement A SQL statement to execute against the DB.
+   * Runs a single SQL statement against the DB.
+   * @param stmt The SQL statement to execute
+   * @returns The number of rows modified by this statement.
    */
-  abstract exec(statement: Statement): Promise<Row[]>
+  abstract _run(stmt: Statement): Promise<RunResult>
 
   /**
-   * @returns The number of rows modified by the last insert/update/delete query.
+   * Runs a single SQL query against the DB.
+   * @param stmt The SQL statement to execute
+   * @returns The rows read by the query.
    */
-  abstract getRowsModified(): number
+  abstract _query(stmt: Statement): Promise<Row[]>
 
   /**
    * @param statements A list of SQL statements to execute against the DB.
@@ -48,7 +51,7 @@ abstract class DatabaseAdapter
     const release = await this.txMutex.acquire()
 
     try {
-      await this.exec({ sql: 'BEGIN' })
+      await this._run({ sql: 'BEGIN' })
     } catch (e) {
       release()
       throw e
@@ -66,7 +69,7 @@ abstract class DatabaseAdapter
       f(tx, (res) => {
         // Commit the transaction when the user sets the result.
         // This assumes that the user does not execute any more queries after setting the result.
-        this.exec({ sql: 'COMMIT' })
+        this._run({ sql: 'COMMIT' })
           .then(() => {
             release()
             resolve(res)
@@ -83,32 +86,16 @@ abstract class DatabaseAdapter
     // Also uses the mutex to avoid running this query while a transaction is executing.
     // Because that would make the query part of the transaction which was not the intention.
     return this.txMutex.runExclusive(() => {
-      return this._runUncoordinated(stmt)
+      return this._run(stmt)
     })
   }
 
-  // Do not use this uncoordinated version directly!
-  // It is only meant to be used within transactions.
-  async _runUncoordinated(stmt: Statement): Promise<RunResult> {
-    await this.exec(stmt)
-    return {
-      rowsAffected: this.getRowsModified(),
-    }
-  }
-
-  // This `query` function does not enforce that the query is read-only
   query(stmt: Statement): Promise<Row[]> {
     // Also uses the mutex to avoid running this query while a transaction is executing.
     // Because that would make the query part of the transaction which was not the intention.
     return this.txMutex.runExclusive(() => {
-      return this._queryUncoordinated(stmt)
+      return this._query(stmt)
     })
-  }
-
-  // Do not use this uncoordinated version directly!
-  // It is only meant to be used within transactions.
-  async _queryUncoordinated(stmt: Statement): Promise<Row[]> {
-    return await this.exec(stmt)
   }
 }
 
@@ -147,25 +134,22 @@ export abstract class SerialDatabaseAdapter
     let open = false
     let rowsAffected = 0
     try {
-      await this.exec({ sql: 'BEGIN' })
+      await this._run({ sql: 'BEGIN' })
       open = true
       for (const stmt of statements) {
-        await this.exec(stmt)
-        if (isInsertUpdateOrDeleteStatement(stmt.sql)) {
-          // Fetch the number of rows affected by the last insert, update, or delete
-          rowsAffected += this.getRowsModified()
-        }
+        const { rowsAffected: rowsModified } = await this._run(stmt)
+        rowsAffected += rowsModified
       }
       return {
         rowsAffected: rowsAffected,
       }
     } catch (error) {
-      await this.exec({ sql: 'ROLLBACK' })
+      await this._run({ sql: 'ROLLBACK' })
       open = false
       throw error // rejects the promise with the reason for the rollback
     } finally {
       if (open) {
-        await this.exec({ sql: 'COMMIT' })
+        await this._run({ sql: 'COMMIT' })
       }
       release()
     }
@@ -185,7 +169,7 @@ class Transaction implements Tx {
     }
 
     this.adapter
-      ._runUncoordinated({ sql: 'ROLLBACK' })
+      ._run({ sql: 'ROLLBACK' })
       .then(() => {
         invokeErrorCallbackAndSignalFailure()
       })
@@ -211,8 +195,8 @@ class Transaction implements Tx {
     successCallback?: (tx: Transaction, result: RunResult) => void,
     errorCallback?: (error: any) => void
   ): void {
-    // uses _runUncoordinated because we're in a transaction that already acquired the lock
-    const prom = this.adapter._runUncoordinated(statement)
+    // uses _run because we're in a transaction that already acquired the lock
+    const prom = this.adapter._run(statement)
     this.invokeCallback(prom, successCallback, errorCallback)
   }
 
@@ -221,8 +205,8 @@ class Transaction implements Tx {
     successCallback: (tx: Transaction, res: Row[]) => void,
     errorCallback?: (error: any) => void
   ): void {
-    // uses _queryUncoordinated because we're in a transaction that already acquired the lock
-    const prom = this.adapter._queryUncoordinated(statement)
+    // uses _query because we're in a transaction that already acquired the lock
+    const prom = this.adapter._query(statement)
     this.invokeCallback(prom, successCallback, errorCallback)
   }
 }
