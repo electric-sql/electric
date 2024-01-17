@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/tauri";
+import { BsXLg as CloseIcon } from "react-icons/bs";
+import { useNavigate } from "react-router-dom";
 import { embedIssue } from "../../utils/vectorSearch";
 import { Issue, useElectric } from "../../electric";
 import classNames from "classnames";
@@ -9,7 +11,9 @@ function Chat() {
   const [question, setQuestion] = useState<string>("");
   const [answer, setAnswer] = useState<string[]>([]);
   const [working, setWorking] = useState<boolean>(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const { db } = useElectric()!;
+  const navigate = useNavigate();
 
   const doChat = async () => {
     setWorking(true);
@@ -46,11 +50,13 @@ function Chat() {
         if (ignore) return;
         console.log("chatToken received", event);
         setAnswer((answer) => [...answer, event.payload as string]);
+        scrollDown();
       });
       unListenChatFinished = await listen("chatFinished", (event) => {
         if (ignore) return;
         console.log("chatFinished received", event);
         setWorking(false);
+        scrollDown();
       });
       if (ignore) {
         unListenChatToken?.();
@@ -71,15 +77,45 @@ function Chat() {
     };
   }, []);
 
+  const handleClose = () => {
+    if (window.history.length > 2) {
+      navigate(-1);
+    }
+    navigate("/");
+  };
+
+  const scrollDown = () => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }
+
   const answerText = answer.join("") + (working ? "..." : "");
   const paragraphs = answerText.split("\n");
 
   return (
-    <div className="flex flex-col flex-grow items-center">
-      <div className="h-full p-5 max-w-prose min-w-prose prose w-full">
-        {paragraphs.map((paragraph, i) => (
-          <p key={i}>{paragraph}</p>
-        ))}
+    <div className="flex flex-col flex-grow items-center max-h-full">
+      <div className="flex flex-col w-full">
+        <div className="flex flex-shrink-0 pr-6 border-b border-gray-200 h-14 pl-3 md:pl-5 lg:pl-9">
+          <div className="flex items-center ms-auto">
+            <button
+              className="ms-auto p-2 rounded hover:bg-gray-100"
+              onClick={handleClose}
+            >
+              <CloseIcon size={14} />
+            </button>
+          </div>
+        </div>
+      </div>
+      <div 
+        className="flex flex-col flex-grow items-center h-full w-full overflow-y-auto"
+        ref={scrollRef}
+      >
+        <div className="h-full p-5 max-w-prose min-w-prose prose w-full">
+          {paragraphs.map((paragraph, i) => (
+            <p key={i}>{paragraph}</p>
+          ))}
+        </div>
       </div>
       <div className="w-full flex items-center justify-between flex-shrink-0 pl-6 pr-6 border-t border-gray-200 py-2">
         <input
