@@ -82,10 +82,6 @@ defmodule Electric.Postgres.Proxy.QueryAnalyser.Impl do
     end
   end
 
-  def sql_table(%{table: {schema, table}}) do
-    ~s["#{schema}"."#{table}"]
-  end
-
   def column_map(%PgQuery.InsertStmt{} = ast) do
     cols =
       ast.cols
@@ -147,6 +143,7 @@ end
 
 defimpl QueryAnalyser, for: PgQuery.AlterTableStmt do
   import QueryAnalyser.Impl
+  alias Electric.Postgres.Proxy.Errors
 
   @allowed_subtypes [
     :AT_EnableAlwaysTrig,
@@ -205,10 +202,7 @@ defimpl QueryAnalyser, for: PgQuery.AlterTableStmt do
          %{
            analysis
            | allowed?: false,
-             error: %{
-               code: "EX001",
-               message: "Cannot electrify column of type " <> inspect(type)
-             }
+             error: Errors.cannot_electrify_column_type(type)
          }}
 
       {:error, :unsupported_default_clause} ->
@@ -216,10 +210,7 @@ defimpl QueryAnalyser, for: PgQuery.AlterTableStmt do
          %{
            analysis
            | allowed?: false,
-             error: %{
-               code: "EX002",
-               message: "Cannot electrify column with DEFAULT clause"
-             }
+             error: Errors.cannot_electrify_column_default()
          }}
 
       {:error, {:unsupported_constraint, constraint}} ->
@@ -227,10 +218,7 @@ defimpl QueryAnalyser, for: PgQuery.AlterTableStmt do
          %{
            analysis
            | allowed?: false,
-             error: %{
-               code: "EX003",
-               message: "Cannot electrify column with #{format_constraint(constraint)} constraint"
-             }
+             error: Errors.cannot_electrify_constraint(constraint)
          }}
     end
   end
@@ -240,11 +228,7 @@ defimpl QueryAnalyser, for: PgQuery.AlterTableStmt do
      %{
        analysis
        | allowed?: false,
-         error: %{
-           code: "EX002",
-           message:
-             ~s[Cannot drop column "#{cmd.name}" of electrified table #{sql_table(analysis)}]
-         }
+         error: Errors.cannot_drop_electrified_column(cmd.name, analysis)
      }}
   end
 
@@ -258,27 +242,12 @@ defimpl QueryAnalyser, for: PgQuery.AlterTableStmt do
   end
 
   defp error_for(%{subtype: :AT_AlterColumnType, name: name}, analysis) do
-    %{
-      code: "EX003",
-      message:
-        ~s[Cannot change type of column "#{name}" of electrified table #{sql_table(analysis)}]
-    }
+    Errors.cannot_change_column_type(name, analysis)
   end
 
   defp error_for(%{name: name}, analysis) do
-    %{
-      code: "EX004",
-      message: ~s[Cannot alter column "#{name}" of electrified table #{sql_table(analysis)}]
-    }
+    Errors.cannot_alter_column(name, analysis)
   end
-
-  defp format_constraint(:CONSTR_CHECK), do: "CHECK"
-  defp format_constraint(:CONSTR_GENERATED), do: "GENERATED"
-  defp format_constraint(:CONSTR_FOREIGN), do: "FOREIGN KEY"
-  defp format_constraint(:CONSTR_IDENTITY), do: "GENERATED"
-  defp format_constraint(:CONSTR_PRIMARY), do: "PRIMARY KEY"
-  defp format_constraint(:CONSTR_UNIQUE), do: "UNIQUE"
-  defp format_constraint(other), do: to_string(other)
 end
 
 defimpl QueryAnalyser, for: PgQuery.TransactionStmt do
@@ -321,6 +290,8 @@ end
 defimpl QueryAnalyser, for: PgQuery.RenameStmt do
   import QueryAnalyser.Impl
 
+  alias Electric.Postgres.Proxy.Errors
+
   def analyse(stmt, %QueryAnalysis{electrified?: false} = analysis, _state) do
     %{analysis | action: action(stmt), tx?: true}
   end
@@ -356,38 +327,26 @@ defimpl QueryAnalyser, for: PgQuery.RenameStmt do
   end
 
   defp error(%{rename_type: :OBJECT_COLUMN} = stmt, analysis) do
-    %{
-      code: "EX005",
-      message:
-        ~s[Cannot rename column "#{stmt.subname}" of electrified table #{sql_table(analysis)}]
-    }
+    Errors.cannot_rename_column(stmt.subname, analysis)
   end
 
   defp error(%{rename_type: :OBJECT_TABCONSTRAINT} = stmt, analysis) do
-    %{
-      code: "EX006",
-      message:
-        ~s[Cannot rename constraint "#{stmt.subname}" of electrified table #{sql_table(analysis)}]
-    }
+    Errors.cannot_rename_constraint(stmt.subname, analysis)
   end
 
   defp error(%{rename_type: :OBJECT_TABLE}, analysis) do
-    %{
-      code: "EX006",
-      message: ~s[Cannot rename electrified table #{sql_table(analysis)}]
-    }
+    Errors.cannot_rename_table(analysis)
   end
 
   defp error(_stmt, analysis) do
-    %{
-      code: "EX007",
-      message: ~s[Cannot rename property of electrified table #{sql_table(analysis)}]
-    }
+    Errors.cannot_rename_table_property(analysis)
   end
 end
 
 defimpl QueryAnalyser, for: PgQuery.DropStmt do
   import QueryAnalyser.Impl
+
+  alias Electric.Postgres.Proxy.Errors
 
   def analyse(stmt, %QueryAnalysis{electrified?: false} = analysis, _state) do
     %{analysis | action: action(stmt), tx?: tx?(stmt)}
@@ -434,10 +393,7 @@ defimpl QueryAnalyser, for: PgQuery.DropStmt do
   defp error(%{remove_type: :OBJECT_INDEX}, _analysis), do: nil
 
   defp error(%{remove_type: :OBJECT_TABLE}, analysis) do
-    %{
-      code: "EX008",
-      message: ~s[Cannot drop electrified table #{sql_table(analysis)}]
-    }
+    Errors.cannot_drop_electrified_table(analysis)
   end
 end
 
@@ -597,6 +553,7 @@ end
 
 defimpl QueryAnalyser, for: PgQuery.CallStmt do
   alias Electric.Postgres.NameParser
+  alias Electric.Postgres.Proxy.Errors
   alias Electric.Postgres.Proxy.Parser
   alias Electric.DDLX
 
@@ -622,13 +579,7 @@ defimpl QueryAnalyser, for: PgQuery.CallStmt do
           %{
             analysis
             | allowed?: false,
-              error: %{
-                message: "#{DDLX.Command.tag(command)} is currently unsupported",
-                detail:
-                  "We are working on implementing access controls -- when these features are completed then this command will work",
-                query: analysis.sql,
-                code: "EX900"
-              }
+              error: Errors.access_control_not_supported(command, analysis.sql)
           }
         end
 
