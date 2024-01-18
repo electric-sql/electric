@@ -1,5 +1,6 @@
 ---
 "@core/electric": patch
+"create-electric-app": patch
 ---
 
 [VAX-1543] Add support for the sslmode query option in DATABASE_URL.
