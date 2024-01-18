@@ -1,5 +1,11 @@
 # create-electric-app
 
+## 0.2.4
+
+### Patch Changes
+
+- 208dc52a: Update the create-electric-app starter to use Vite and our new CLI
+
 ## 0.2.3
 
 ### Patch Changes
