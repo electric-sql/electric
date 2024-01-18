@@ -4,7 +4,11 @@
 
 [invoke setup]
 
+[shell proxy_1]
+    [invoke migrate_items_table 20230504114018]
+
 [invoke start_satellite 1]
+[invoke setup_client 2 "electric_1" 5133]
 
 [shell satellite_1]
     ??$node
@@ -14,23 +18,107 @@
     # Set expiration time for the JWT to 2 seconds from now
     !exp="2s"
     [invoke connect_to_electric electric_1 5133 "[]"]
-    ?Connectivity state changed: connected
+    # Wait for the items table migration and sync the table
+    ??[rpc] recv: #SatInStartReplicationResp
+    ??Connectivity state changed: connected
+    [invoke node_await_table "items"]
+    [invoke node_sync_table "items"]
+
+[shell satellite_2]
+    ??[rpc] recv: #SatInStartReplicationResp
+    [invoke node_await_table "items"]
+    [invoke node_sync_table "items"]
+
+[invoke log "PG & Satellites migrated and ready"]
+
+[invoke test_sync "Hello from Satellite 1" "Hello from Satellite 2" "Hello from PG"]
+
+[invoke log "Satellites and PG are in sync"]
+
+[shell satellite_1]
     # Check that we can renew the token
     !await client.renew_token(db, "5s")
     ??$node
     # Token should expire after > 4 seconds
+    # will log a message when the token expires
     !client.check_token_expiration(db, 4000)
     ??$node
+
+[invoke log "Renewed token for Satellite 1"]
+
+[invoke test_sync "Satellite 1 renewed its token" "Hello renewed Satellite 1 from Satellite 2" "Oh! Hey there from PG"]
+
+[invoke log "Renewed Satellite 1 still syncs"]
+
+[shell satellite_1]
     ??JWT expired after
+
+[invoke log "Satellite 1 token expired, executing some writes while expired"]
+
+# Write to the DB, test sync later after reconnect
+[global sat1_msg_expired=Satellite 1 expired]
+[global sat2_msg_expired=Satellite 2 for Satellite 1, did you expire?]
+[global pg_msg_expired=PG for Satellite 1, you still there?]
+[invoke write $sat1_msg_expired $sat2_msg_expired $pg_msg_expired]
+
+[shell satellite_1]
     # Check that we can reconnect
     !await client.reconnect(db, "3s")
     ??$node
+    # Token should expire after > 2 seconds
+    # Will log a message when the token expires
+    !client.check_token_expiration(db, 2000)
     # Check that client is connected again
     ?Connectivity state changed: connected
-    # Token should expire after > 2 seconds
-    !client.check_token_expiration(db, 2000)
-    ??$node
+
+[invoke log "Satellite 1 reconnected, checking sync"]
+
+[invoke read $sat1_msg_expired $sat2_msg_expired $pg_msg_expired]
+
+[shell satellite_1]
+    # Wait for expiration of the token
     ??JWT expired after
+
+[macro write sat1_msg sat2_msg pg_msg]
+    [shell satellite_1]
+        [invoke log "Insert data into satellite_1"]
+        [invoke node_await_insert "['$sat1_msg']"]
+    
+    [shell satellite_2]
+        [invoke log "Insert data into satellite_2"]
+        [invoke node_await_insert "['$sat2_msg']"]
+
+    [shell pg_1]
+        [invoke log "Insert a row on PG side"]
+        !INSERT INTO public.items (id, content) VALUES (gen_random_uuid(), '$pg_msg');
+        ?$psql
+[endmacro]
+
+[macro read sat1_msg sat2_msg pg_msg]
+    [shell pg_1]
+        [invoke log "Verify that pg has received data from both Satellites"]
+        [invoke wait-for "SELECT * FROM public.items;" "$sat1_msg" 15 $psql]
+        [invoke wait-for "SELECT * FROM public.items;" "$sat2_msg" 15 $psql]
+    
+    [invoke log "Verify that satellite inserts reached each other"]
+    [shell satellite_1]
+        [invoke wait-for "await client.get_items(db)" "$sat2_msg" 15 $node]
+    
+    [shell satellite_2]
+        [invoke wait-for "await client.get_items(db)" "$sat1_msg" 15 $node]
+    
+    [invoke log "Verify that pg insert has reached both Satellites"]
+    [shell satellite_1]
+        [invoke wait-for "await client.get_items(db)" "$pg_msg" 15 $node]
+    
+    [shell satellite_2]
+        [invoke wait-for "await client.get_items(db)" "$pg_msg" 15 $node]
+[endmacro]
+
+[macro test_sync sat1_msg sat2_msg pg_msg]
+    [invoke write "$sat1_msg" "$sat2_msg" "$pg_msg"]
+    [invoke read "$sat1_msg" "$sat2_msg" "$pg_msg"]
+[endmacro]
 
 [cleanup]
     [invoke teardown]
