@@ -1,4 +1,5 @@
 import { Command } from 'commander'
+import { getConfig, Config } from '../config'
 import { dockerCompose } from './docker-utils'
 
 export function makeStatusCommand() {
@@ -6,9 +7,12 @@ export function makeStatusCommand() {
     .description(
       'Show status of the ElectricSQL sync service docker containers'
     )
-    .action(status)
+    .action(async () => {
+      const config = getConfig()
+      status({ config })
+    })
 }
 
-export function status() {
-  dockerCompose('ps', [])
+export function status({ config }: { config: Config }) {
+  dockerCompose('ps', [], config.CONTAINER_NAME)
 }
