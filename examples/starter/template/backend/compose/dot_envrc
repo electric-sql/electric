@@ -1,1 +1,0 @@
-export POSTGRESQL_IMAGE=postgres:14-alpine
