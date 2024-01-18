@@ -127,7 +127,7 @@ defmodule Electric.Config do
     end
   end
 
-  @doc """
+  @doc ~S"""
   Parse a PostgreSQL URI into a keyword list.
 
   ## Examples
@@ -174,8 +174,29 @@ defmodule Electric.Config do
         password: "weird/password"
       ]}
 
+      iex> parse_postgresql_uri("postgres://super_user@localhost:7801/postgres?sslmode=disable")
+      {:ok, [
+        host: "localhost",
+        port: 7801,
+        database: "postgres",
+        username: "super_user",
+        sslmode: :disable
+      ]}
+
+      iex> parse_postgresql_uri("postgres://super_user@localhost:7801/postgres?sslmode=require")
+      {:ok, [
+        host: "localhost",
+        port: 7801,
+        database: "postgres",
+        username: "super_user",
+        sslmode: :require
+      ]}
+
+      iex> parse_postgresql_uri("postgres://super_user@localhost:7801/postgres?sslmode=yesplease")
+      {:error, "has invalid \"sslmode\" value: \"yesplease\""}
+
       iex> parse_postgresql_uri("postgrex://localhost")
-      {:error, "has invalid URL scheme: \\"postgrex\\""}
+      {:error, "has invalid URL scheme: \"postgrex\""}
 
       iex> parse_postgresql_uri("postgresql://localhost")
       {:error, "has invalid or missing username"}
@@ -192,17 +213,14 @@ defmodule Electric.Config do
       iex> parse_postgresql_uri("postgresql://user:password@")
       {:error, "missing host"}
 
-      iex> parse_postgresql_uri("postgresql://user@localhost:5433/mydb?options=-c%20synchronous_commit%3Doff")
-      {:error, "has unsupported query string. Please remove all URL query options"}
+      iex> parse_postgresql_uri("postgresql://user@localhost:5433/mydb?opts=-c%20synchronous_commit%3Doff&foo=bar")
+      {:error, "has unsupported query options: \"foo\", \"opts\""}
 
       iex> parse_postgresql_uri("postgresql://electric@localhost/db?replication=database")
-      {:error, "has unsupported \\"replication\\" query option. Electric opens both a replication connection and regular connections to Postgres as needed"}
+      {:error, "has unsupported \"replication\" query option. Electric opens both a replication connection and regular connections to Postgres as needed"}
 
       iex> parse_postgresql_uri("postgresql://electric@localhost/db?replication=off")
-      {:error, "has unsupported \\"replication\\" query option. Electric opens both a replication connection and regular connections to Postgres as needed"}
-
-      iex> parse_postgresql_uri("postgres://super_user@localhost:7801/postgres?sslmode=yesplease")
-      {:error, "has unsupported \\"sslmode\\" query option. Use the DATABASE_REQUIRE_SSL configuration option instead"}
+      {:error, "has unsupported \"replication\" query option. Electric opens both a replication connection and regular connections to Postgres as needed"}
   """
   @spec parse_postgresql_uri(binary) :: {:ok, keyword} | {:error, binary}
   def parse_postgresql_uri(uri_str) do
@@ -212,16 +230,18 @@ defmodule Electric.Config do
     with :ok <- validate_url_scheme(scheme),
          :ok <- validate_url_host(host),
          {:ok, {username, password}} <- parse_url_userinfo(userinfo),
-         :ok <- validate_url_query(query) do
+         {:ok, options} <- parse_url_query(query) do
       conn_params =
-        [
-          host: host,
-          port: port || 5432,
-          database: parse_database(path, username) |> URI.decode(),
-          username: URI.decode(username),
-          password: if(password, do: URI.decode(password))
-        ]
-        |> Enum.reject(fn {_key, val} -> is_nil(val) end)
+        Enum.reject(
+          [
+            host: host,
+            port: port || 5432,
+            database: parse_database(path, username) |> URI.decode(),
+            username: URI.decode(username),
+            password: if(password, do: URI.decode(password))
+          ] ++ options,
+          fn {_key, val} -> is_nil(val) end
+        )
 
       {:ok, conn_params}
     end
@@ -256,23 +276,31 @@ defmodule Electric.Config do
     end
   end
 
-  defp validate_url_query(nil), do: :ok
+  defp parse_url_query(nil), do: {:ok, []}
 
-  defp validate_url_query(query_str) do
+  defp parse_url_query(query_str) do
     case URI.decode_query(query_str) do
       empty when map_size(empty) == 0 ->
-        :ok
+        {:ok, []}
 
-      %{"sslmode" => _} ->
+      %{"sslmode" => sslmode} when sslmode in ~w[disable allow prefer require] ->
+        {:ok, sslmode: String.to_existing_atom(sslmode)}
+
+      %{"sslmode" => sslmode} when sslmode in ~w[verify-ca verify-full] ->
         {:error,
-         "has unsupported \"sslmode\" query option. Use the DATABASE_REQUIRE_SSL configuration option instead"}
+         "has unsupported \"sslmode\" value #{inspect(sslmode)}. Consider using the DATABASE_REQUIRE_SSL configuration option"}
+
+      %{"sslmode" => sslmode} ->
+        {:error, "has invalid \"sslmode\" value: #{inspect(sslmode)}"}
 
       %{"replication" => _} ->
         {:error,
          "has unsupported \"replication\" query option. Electric opens both a replication connection and regular connections to Postgres as needed"}
 
-      _ ->
-        {:error, "has unsupported query string. Please remove all URL query options"}
+      map ->
+        {:error,
+         "has unsupported query options: " <>
+           (map |> Map.keys() |> Enum.sort() |> Enum.map_join(", ", &inspect/1))}
     end
   end
 
