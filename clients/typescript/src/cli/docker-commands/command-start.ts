@@ -33,7 +33,7 @@ export function makeStartCommand() {
       withPostgres: !!config.WITH_POSTGRES,
       config: config,
     }
-    start(startOptions)
+    return start(startOptions)
   })
 
   return command
@@ -46,7 +46,15 @@ interface StartSettings {
   config: Config
 }
 
-export function start(options: StartSettings) {
+export async function start(options: StartSettings) {
+  console.log('Pulling latest docker images...')
+  try {
+    await pullImages()
+  } catch (e) {
+    console.warn(
+      'Failed to pull the latest docker images, attempting to start anyway.'
+    )
+  }
   return new Promise<void>((resolve) => {
     const exitOnDetached = options.exitOnDetached ?? true
 
@@ -109,6 +117,19 @@ export function start(options: StartSettings) {
           `
         )
         process.exit(code ?? 1)
+      }
+    })
+  })
+}
+
+function pullImages() {
+  const proc = dockerCompose('pull', [])
+  return new Promise<void>((resolve, reject) => {
+    proc.on('close', (code) => {
+      if (code === 0) {
+        resolve()
+      } else {
+        reject()
       }
     })
   })
