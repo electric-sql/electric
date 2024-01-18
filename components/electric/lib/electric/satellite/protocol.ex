@@ -325,11 +325,11 @@ defmodule Electric.Satellite.Protocol do
     else
       {:error, %Electric.Satellite.Auth.TokenError{message: message}} ->
         Logger.warning("Client authentication failed: #{message}")
-        {:error, %SatErrorResp{error_type: :AUTH_REQUIRED}}
+        {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
 
       {:error, reason} ->
         Logger.error("Client authentication failed: #{inspect(reason)}")
-        {:error, %SatErrorResp{error_type: :AUTH_REQUIRED}}
+        {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
     end
   end
 
