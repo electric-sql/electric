@@ -79,7 +79,13 @@ export async function generate(options: GeneratorOptions) {
       })
       // Run the provided migrations command
       console.log('Running migrations...')
-      withConfig(opts.withMigrations, opts.config)
+      const ret = withConfig(opts.withMigrations, opts.config)
+      if (ret.status !== 0) {
+        console.log(
+          'Failed to run migrations, --with-migrations command exited with error'
+        )
+        process.exit(1)
+      }
     }
     console.log('Service URL: ' + opts.config.SERVICE)
     console.log(
