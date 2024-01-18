@@ -358,6 +358,12 @@ importers:
       '@types/tcp-port-used':
         specifier: ^1.0.2
         version: 1.0.2
+      prettier:
+        specifier: 2.8.2
+        version: 2.8.2
+      shx:
+        specifier: ^0.3.4
+        version: 0.3.4
       typescript:
         specifier: ^5.1.3
         version: 5.1.3
