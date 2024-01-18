@@ -82,7 +82,7 @@ npx electric-sql proxy-tunnel \
     --local-port 8000
 ```
 
-Electric can work alongside any tooling you use to manage database migrations with. See the <DocPageLink path="integrations/backend" /> section of the docs for an overview of the most popular frameworks. In this demo we'll use `@databases/pg-migrations` as it's already included in the basic example. Make sure you have installed all of the dependencies by running `yarn` once.
+Electric can work alongside any tooling you use to manage database migrations with. See the <DocPageLink path="integrations/backend" /> section of the docs for an overview of the most popular frameworks. In this demo we'll use `@databases/pg-migrations` as it's already included in the basic example. Make sure you have installed all of the dependencies by running `npm install` once.
 
 Before running the following commands, export an environment variable `PG_PROXY_PASSWORD` on your local using the same value as the one configured for the DigitalOcean app:
 
@@ -305,7 +305,7 @@ Let's see how to set up a client app to connect to the Electric sync service we'
 
 #### Apply migrations
 
-Electric can work alongside any tooling you use to manage database migrations with. See the <DocPageLink path="integrations/backend" /> section of the docs for an overview of the most popular frameworks. In this demo we'll use `@databases/pg-migrations` as it's already included in the basic example. Make sure you have installed all of the dependencies by running `yarn` once.
+Electric can work alongside any tooling you use to manage database migrations with. See the <DocPageLink path="integrations/backend" /> section of the docs for an overview of the most popular frameworks. In this demo we'll use `@databases/pg-migrations` as it's already included in the basic example. Make sure you have installed all of the dependencies by running `npm install` once.
 
 Export an environment variable `PG_PROXY_PASSWORD` on your local machine before running the commands below, use the same value as the one configured for the DigitalOcean app:
 

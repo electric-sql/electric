@@ -15,8 +15,7 @@ Install the [`electric-sql`](https://www.npmjs.com/package/electric-sql) library
 Install the published [TypeScript client](https://www.npmjs.com/package/electric-sql) and [generator](https://www.npmjs.com/package/@electric-sql/prisma-generator):
 
 ```shell
-yarn add electric-sql
-yarn add @electric-sql/prisma-generator
+npm install electric-sql
 ```
 
 ### GitHub
@@ -28,7 +27,7 @@ The source code is in the [clients/typescript](https://github.com/electric-sql/e
 Install, for example, using [GitPkg](https://gitpkg.vercel.app):
 
 ```shell
-yarn add 'https://gitpkg.now.sh/electric-sql/electric/clients/typescript?main'
+npm install 'https://gitpkg.now.sh/electric-sql/electric/clients/typescript?main'
 ```
 
 Or in development you can also use [Yalc](https://github.com/wclr/yalc):
