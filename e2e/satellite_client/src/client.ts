@@ -9,6 +9,7 @@ import { schema, Electric, ColorType as Color } from './generated/client'
 export { JsonNull } from './generated/client'
 import { globalRegistry } from 'electric-sql/satellite'
 import { AuthStatus } from 'electric-sql/auth'
+import { SatelliteErrorCode } from 'electric-sql/util'
 
 setLogLevel('DEBUG')
 
@@ -55,7 +56,7 @@ export const reconnect = async (electric: Electric, exp: string) => {
 export const check_token_expiration = (electric: Electric, minimalTime: number) => {
   const start = Date.now()
   const unsubscribe = electric.notifier.subscribeToConnectivityStateChanges((x) => {
-    if (x.connectivityState.status === 'disconnected' && x.connectivityState.error === 'JWT expired') {
+    if (x.connectivityState.status === 'disconnected' && x.connectivityState.reason?.code === SatelliteErrorCode.AUTH_EXPIRED) {
       const delta = Date.now() - start
       if (delta >= minimalTime) {
         console.log(`JWT expired after ${delta} ms`)

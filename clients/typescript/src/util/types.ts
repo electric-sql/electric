@@ -202,5 +202,5 @@ export type OutboundStartedCallback = () => void
 export type ConnectivityStatus = 'available' | 'connected' | 'disconnected'
 export type ConnectivityState = {
   status: ConnectivityStatus
-  error?: string // reason for `disconnected` status
+  reason?: SatelliteError // reason for `disconnected` status
 }

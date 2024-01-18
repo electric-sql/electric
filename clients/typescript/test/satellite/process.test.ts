@@ -1291,7 +1291,10 @@ test('notifies about JWT expiration', async (t) => {
     (notification: ConnectivityStateChangeNotification) => {
       t.is(notification.dbName, dbName)
       t.is(notification.connectivityState.status, 'disconnected')
-      t.is(notification.connectivityState.error, 'JWT expired')
+      t.is(
+        notification.connectivityState.reason?.code,
+        SatelliteErrorCode.AUTH_EXPIRED
+      )
     }
   )
 

@@ -68,7 +68,6 @@
 [shell satellite_1]
     # Check that we can reconnect
     !await client.reconnect(db, "2h")
-    ??$node
     # Check that client is connected again
     ?Connectivity state changed: connected
 

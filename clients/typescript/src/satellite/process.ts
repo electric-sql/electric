@@ -77,8 +77,6 @@ import { isFatal, isOutOfSyncError, isThrowable, wrapFatalError } from './error'
 import { inferRelationsFromSQLite } from '../util/relations'
 import { decodeToken } from '../auth/secure'
 import { InvalidArgumentError } from '../client/validation/errors/invalidArgumentError'
-import { decodeToken } from '../auth/secure'
-import { InvalidArgumentError } from '../client/validation/errors/invalidArgumentError'
 
 type ChangeAccumulator = {
   [key: string]: Change
@@ -660,11 +658,16 @@ export class SatelliteProcess implements Satellite {
 
   async _handleOrThrowClientError(error: SatelliteError): Promise<void> {
     if (error.code === SatelliteErrorCode.AUTH_EXPIRED) {
-      Log.warn('JWT expired')
-      return this._disconnect('JWT expired')
+      Log.warn('Connection closed by Electric because the JWT expired.')
+      return this._disconnect(
+        new SatelliteError(
+          error.code,
+          'Connection closed by Electric because the JWT expired.'
+        )
+      )
     }
 
-    this._disconnect(error.message)
+    this._disconnect(error)
 
     if (isThrowable(error)) {
       throw error
@@ -816,9 +819,9 @@ export class SatelliteProcess implements Satellite {
     this._setAuthState(authState)
   }
 
-  private _disconnect(reason?: string): void {
+  private _disconnect(error?: SatelliteError): void {
     this.client.disconnect()
-    this._notifyConnectivityState('disconnected', reason)
+    this._notifyConnectivityState('disconnected', error)
   }
 
   async _startReplication(): Promise<void> {
@@ -864,11 +867,11 @@ export class SatelliteProcess implements Satellite {
 
   private _notifyConnectivityState(
     connectivityStatus: ConnectivityStatus,
-    error?: string
+    error?: SatelliteError
   ): void {
     this.connectivityState = {
       status: connectivityStatus,
-      error,
+      reason: error,
     }
     this.notifier.connectivityStateChanged(this.dbName, this.connectivityState)
   }
