@@ -165,22 +165,24 @@ Connection to Postgres is up!
 
 Let's see how to set up a client app to connect to the Electric sync service we've just deployed. Clone the source code repository to your machine and navigate to the basic example, as explained on [this page](../examples/basic#source-code).
 
+Open `examples/web-wa-sqlite/.env` and replace the URL on the `ELECTRIC_SERVICE=http://localhost:5133` line with your Fly app's URL:
+
+```
+ELECTRIC_SERVICE=https://electric-on-fly-test-app.fly.dev/
+```
+
 ### Apply migrations
 
-Electric can work alongside any tooling you use to manage database migrations with. See the <DocPageLink path="integrations/backend" /> section of the docs for an overview of the most popular frameworks.
+You may use your preferred tool to manage database migrations. See the <DocPageLink path="integrations/backend" /> section of the docs for an overview of the most popular frameworks. In this demo we'll use `@databases/pg-migrations` as it's already included in the basic example. Make sure you have installed all of the dependencies for the example app by running `npm install` once.
 
-In this demo we'll use `@databases/pg-migrations` as it's already included in the basic example. Make sure you have installed all of the dependencies by running `npm install` once.
-
-:::note
-Electric requires database migrations to be applied via the migrations proxy, so instead of using the connection URL from `DATABASE_URL`, we build a custom one that includes the configured `PG_PROXY_PASSWORD` and the domain name of the deployed Electric sync service.
-:::
-
-Run `npx pg-migrations apply` to apply the migration included in the example to your database:
+Run `npm run db:migrate` to apply the included migration to your database:
 
 ```shell
-$ npx pg-migrations apply \
-      --directory db/migrations \
-      --database postgresql://postgres:proxy_password@electric-on-fly-test-app.fly.dev:65432/postgres
+$ npm run db:migrate
+
+> electric-sql-wa-sqlite-example@0.9.0 db:migrate
+> npx electric-sql with-config "npx pg-migrations apply --database {{ELECTRIC_PROXY}} --directory ./db/migrations"
+
 Applying 01-create_items_table.sql
 Applied 01-create_items_table.sql
 1 migrations applied
@@ -188,13 +190,14 @@ Applied 01-create_items_table.sql
 
 ### Generate a type-safe client
 
-Now that the database has one electrified table, we can [generate a type-safe client](../usage/data-access/client.md) from it. Use the same database connection URL as in the previous step but change the username to `prisma` (this is required for the schema introspection to work correctly).
+Now that the database has one electrified table, we can [generate a type-safe client](../usage/data-access/client.md) from it:
 
 ```shell
-$ npx electric-sql generate
-      --service https://electric-on-fly-test-app.fly.dev
-      --proxy postgresql://prisma:proxy_password@electric-on-fly-test-app.fly.dev:65432/postgres
+$ npm run client:generate
+
 Generating Electric client...
+Service URL: https://electric-on-fly-test-app.fly.dev/
+Proxy URL: postgresql://prisma:********@electric-on-fly-test-app.fly.dev:65432
 Successfully generated Electric client at: ./src/generated/client
 Building migrations...
 Successfully built migrations
@@ -202,15 +205,18 @@ Successfully built migrations
 
 ### Start the app!
 
-Now you should have everything ready to start the web app and have it connected to the Electric sync service deployed on Fly.
+Now you should have everything ready to start the web app and have it connect to the Electric sync service running on Fly:
 
 ```shell
-$ ELECTRIC_URL='wss://electric-on-fly-test-app.fly.dev' \
-  SERVE=true \
-  npm run build
+$ npm run dev
 
-> electric-sql-wa-sqlite-example@0.7.0 build
-> node copy-wasm-files.js && node builder.js
+> electric-sql-wa-sqlite-example@0.9.0 dev
+> vite
 
-Your app is running at http://localhost:3001
+
+  VITE v4.5.0  ready in 181 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: use --host to expose
+  ➜  press h to show help
 ```
