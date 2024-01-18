@@ -221,7 +221,7 @@ export class SatelliteProcess implements Satellite {
       authConfig?.clientId && authConfig.clientId !== ''
         ? authConfig.clientId
         : await this._getClientId()
-    await this._setAuthState({ clientId: clientId }) //, token: authConfig.token })
+    this._setAuthState({ clientId: clientId })
 
     const notifierSubscriptions = Object.entries({
       _authStateSubscription: this._unsubscribeFromAuthState,

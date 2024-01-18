@@ -52,10 +52,6 @@ export interface Registry {
   stopAll(): Promise<void>
 }
 
-export type ConnectionWrapper = {
-  connectionPromise: Promise<void>
-}
-
 // `Satellite` is the main process handling ElectricSQL replication,
 // processing the opslog and notifying when there are data changes.
 export interface Satellite {

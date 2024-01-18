@@ -5,7 +5,6 @@ import { Row, Statement } from '../../util'
 import { LiveResult, LiveResultContext } from './model'
 import { Notifier } from '../../notifiers'
 import { DatabaseAdapter } from '../../electric/adapter'
-import type { ConnectionWrapper } from '../../satellite'
 import { GlobalRegistry, Registry, Satellite } from '../../satellite'
 import { ShapeManager } from './shapes'
 
@@ -109,10 +108,9 @@ export class ElectricClient<
    * This method is idempotent, it is safe to call it multiple times.
    * @param token - The JWT token to use to connect to the Electric sync service.
    */
-  async connect(token: string): Promise<ConnectionWrapper> {
+  async connect(token: string): Promise<void> {
     this.satellite.setToken(token)
-    const connectionPromise = this.satellite.connectWithBackoff()
-    return { connectionPromise }
+    await this.satellite.connectWithBackoff()
   }
 
   // Builds the DAL namespace from a `dbDescription` object
