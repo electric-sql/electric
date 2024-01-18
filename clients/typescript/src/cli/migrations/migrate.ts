@@ -82,7 +82,10 @@ export async function generate(options: GeneratorOptions) {
       withConfig(opts.withMigrations, opts.config)
     }
     console.log('Service URL: ' + opts.config.SERVICE)
-    console.log('Proxy URL: ' + buildProxyUrlForIntrospection(opts.config))
+    console.log(
+      'Proxy URL: ' +
+        stripPasswordFromUrl(buildProxyUrlForIntrospection(opts.config))
+    )
     // Generate the client
     if (opts.watch) {
       watchMigrations(opts)
@@ -716,4 +719,12 @@ async function withMigrationsConfig(containerName: string) {
       .toString(36)
       .slice(6)}`,
   }
+}
+
+function stripPasswordFromUrl(url: string): string {
+  const parsed = new URL(url)
+  if (parsed.password) {
+    parsed.password = '********'
+  }
+  return parsed.toString()
 }
