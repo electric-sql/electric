@@ -15,8 +15,8 @@
     # Set a failure pattern so that the test will fail if JWT expires
     # before we want it to
     -JWT expired too early
-    # Set expiration time for the JWT to 2 seconds from now
-    !exp="2s"
+    # Set expiration time for the JWT to 10 seconds from now
+    !exp="10s"
     [invoke connect_to_electric electric_1 5133 "[]"]
     # Wait for the items table migration and sync the table
     ??[rpc] recv: #SatInStartReplicationResp
@@ -37,11 +37,7 @@
 
 [shell satellite_1]
     # Check that we can renew the token
-    !await client.renew_token(db, "5s")
-    ??$node
-    # Token should expire after > 4 seconds
-    # will log a message when the token expires
-    !client.check_token_expiration(db, 4000)
+    !await client.renew_token(db, "2h")
     ??$node
 
 [invoke log "Renewed token for Satellite 1"]
@@ -51,6 +47,14 @@
 [invoke log "Renewed Satellite 1 still syncs"]
 
 [shell satellite_1]
+    # Shorten the token's expiration to let it expire
+    # now that everything synced
+    !await client.renew_token(db, "4s")
+    ??$node
+    # Token should expire after > 3 seconds
+    # will log a message when the token expires
+    !client.check_token_expiration(db, 3000)
+    ??$node
     ??JWT expired after
 
 [invoke log "Satellite 1 token expired, executing some writes while expired"]
@@ -63,11 +67,8 @@
 
 [shell satellite_1]
     # Check that we can reconnect
-    !await client.reconnect(db, "3s")
+    !await client.reconnect(db, "2h")
     ??$node
-    # Token should expire after > 2 seconds
-    # Will log a message when the token expires
-    !client.check_token_expiration(db, 2000)
     # Check that client is connected again
     ?Connectivity state changed: connected
 
@@ -76,6 +77,13 @@
 [invoke read $sat1_msg_expired $sat2_msg_expired $pg_msg_expired]
 
 [shell satellite_1]
+    # Shorten the token's expiration to let it expire
+    # now that everything synced
+    !await client.renew_token(db, "3s")
+    ??$node
+    # Token should expire after > 2 seconds
+    !client.check_token_expiration(db, 2000)
+    ??$node
     # Wait for expiration of the token
     ??JWT expired after
 
