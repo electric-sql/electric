@@ -56,13 +56,15 @@ app = "electric-on-fly-test-app"
 [env]
   AUTH_MODE = "insecure"
   DATABASE_URL = "postgresql://..."
-  # When using Fly Postgres, uncomment the below. Fly Postgres does not
-  # support encrypted connections when connecting over its private 6PN network.
+  # When using Fly Postgres, uncomment the config line below.
+  # Fly Postgres does not support encrypted connections
+  # inside its private 6PN network.
   #DATABASE_REQUIRE_SSL = "false"
   ELECTRIC_WRITE_TO_PG_MODE = "direct_writes"
   PG_PROXY_PASSWORD = "proxy_password"
 
-# The main Internet-facing service of Electric to which clients will be connecting.
+# The main Internet-facing service of Electric
+# to which clients will be connecting.
 [http_service]
   internal_port = 5133
   force_https = true
@@ -74,7 +76,8 @@ app = "electric-on-fly-test-app"
     method = "GET"
     path = "/api/status"
 
-# Service definition for the migrations proxy that should be accessible on a separate TCP port.
+# Service definition for the migrations proxy that runs
+# on a separate TCP port.
 [[services]]
   protocol = "tcp"
   internal_port = 65432
