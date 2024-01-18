@@ -31,6 +31,10 @@ This works even when making writes locally in an offline database. See [Introduc
 To preserve referential integrity Electric prevents [updates to a table's primary keys](./validation.md#immutable-primary-keys).
 :::
 
+:::caution
+Electric currently does not allow adding a new foreign key column with `ALTER TABLE ... ADD COLUMN` to an electrified table. This limitation will be removed in a future release.
+:::
+
 ### Not-null constraints
 
 ElectricSQL supports [not-null constraints](https://www.postgresql.org/docs/current/ddl-constraints.html#id-1.5.4.6.6) as long as the constraint is defined when creating the column.

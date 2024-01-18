@@ -34,6 +34,7 @@ services:
     init: true
     environment:
       DATABASE_URL: "postgresql://postgres:password@postgres:5432/beer-stars"
+      DATABASE_REQUIRE_SSL: false
       ELECTRIC_HOST: "electric"
       LOGICAL_PUBLISHER_HOST: "electric"
       AUTH_MODE: "insecure"

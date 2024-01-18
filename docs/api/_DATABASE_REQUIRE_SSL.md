@@ -1,3 +1,3 @@
-Set to `false` to not require SSL for the Postgres database connection.
+Set to `false` to enable Electric to fallback to using unencrypted connections in case the database is not configured to work with SSL.
 
-Note that you can also configure the database connection's SSL mode using the `sslmode` [`DATABASE_URL` parameter](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-PARAMKEYWORDS). Values set in the `DATABASE_URL` have precedence.
+Be mindful of changing this default, more often than not it's a bad idea to use unencrypted database connections because all data flowing between your database and Electric may get intercepted by an unauthorized party.

@@ -51,7 +51,9 @@ import EnvVarConfig from '@site/src/components/EnvVarConfig'
 import DatabaseRequireSsl from './_DATABASE_REQUIRE_SSL.md'
 import DatabaseUrl from './_DATABASE_URL.md'
 import DatabaseUseIpv6 from './_DATABASE_USE_IPV6.md'
+import ElectricUseIpv6 from './_ELECTRIC_USE_IPV6.md'
 import HttpPort from './_HTTP_PORT.md'
+import LogLevel from './_LOG_LEVEL.md'
 
 
 Configure how Electric connects to Postgres and exposes its HTTP/WebSocket API.
@@ -78,9 +80,18 @@ Configure how Electric connects to Postgres and exposes its HTTP/WebSocket API.
 
 <EnvVarConfig
     name="DATABASE_USE_IPV6"
-    defaultValue="false"
-    example="true">
+    defaultValue="true"
+    example="false">
   <DatabaseUseIpv6 />
+</EnvVarConfig>
+
+### ELECTRIC_USE_IPv6
+
+<EnvVarConfig
+    name="ELECTRIC_USE_IPV6"
+    defaultValue="true"
+    example="false">
+  <ElectricUseIpv6 />
 </EnvVarConfig>
 
 ### HTTP_PORT
@@ -90,6 +101,15 @@ Configure how Electric connects to Postgres and exposes its HTTP/WebSocket API.
     defaultValue="5133"
     example="8080">
   <HttpPort />
+</EnvVarConfig>
+
+### LOG_LEVEL
+
+<EnvVarConfig
+    name="LOG_LEVEL"
+    defaultValue="info"
+    example="debug">
+  <LogLevel />
 </EnvVarConfig>
 
 ## Write-to-PG mode
@@ -175,7 +195,7 @@ In future, we may deprecate logical replication and consolidate on direct writes
 
 ## Database user permissions
 
-The Electric sync service connects to Postgres using the [`DATABASE_URL`](#database_url) connection string, in the format `postgresql://[userspec@][hostspec][/dbname][?paramspec]`.
+The Electric sync service connects to Postgres using the [`DATABASE_URL`](#database_url) connection string, in the format `postgresql://[userspec@][hostspec][/dbname]`.
 
 The `userspec` section of this connection string specifies the database user that Electric connects to Postgres as. This user must have the following permissions.
 

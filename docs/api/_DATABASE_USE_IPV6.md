@@ -1,1 +1,1 @@
-Set to `true` if your database is only accessible over IPv6.
+Set to `false` to stop Electric from trying to connect to the database over IPv6. By default, it will try to resolve the hostname from `DATABASE_URL` to an IPv6 address, falling back to IPv4 in case that fails.

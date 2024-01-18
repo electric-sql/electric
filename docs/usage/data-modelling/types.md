@@ -47,6 +47,7 @@ We are actively working on building out data type support. If you need a type we
 **Other**:
 
 - `boolean`
+- `enum` (any user-defined [enumerated type](https://www.postgresql.org/docs/current/datatype-enum.html))
 - `jsonb`
 - `uuid`
 
@@ -54,4 +55,14 @@ We are actively working on building out data type support. If you need a type we
 Electric defaults to a Last-Writer-Wins strategy. For JSON this is across the whole document - updating one attribute in the document counts as the document as a whole being updated. This means that conflicting updates from multiple clients are not merged together, the full state of the last writer will be stored.
 
 In future we plan to support more fine grained merge strategies for JSON data.
+:::
+
+:::caution Enum type caveats
+Each enum label (aka enum value) must match the regular expression `^[a-zA-Z][a-zA-Z0-9_]*$`. In other words, it should look like a valid identifier.
+
+We don't yet support modifying an enum type (i.e. `ALTER TYPE .. ADD VALUE`) if it's used by a column in an electrified table.
+
+It's not yet possible to alter an electrified table and add a new column of an enum type to it.
+
+Both limitations will be removed in a future release.
 :::

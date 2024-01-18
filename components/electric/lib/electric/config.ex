@@ -18,7 +18,7 @@ defmodule Electric.Config do
         """,
         """
         Please review the official configuration reference at
-        https://electric-sql.com/docs/api/service#configuration-options
+        https://electric-sql.com/docs/api/service
         and double-check your values.
         """
       )
