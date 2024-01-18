@@ -347,7 +347,7 @@ export class SatelliteProcess implements Satellite {
     this._stop(shutdown)
   }
 
-  private async _stop(shutdown?: boolean, reason?: string): Promise<void> {
+  private async _stop(shutdown?: boolean): Promise<void> {
     // Stop snapshotting and polling for changes.
     this._throttledSnapshot.cancel()
 
@@ -372,7 +372,7 @@ export class SatelliteProcess implements Satellite {
       }
     })
 
-    this._disconnect(reason)
+    this._disconnect()
 
     if (shutdown) {
       this.client.shutdown()
@@ -661,7 +661,7 @@ export class SatelliteProcess implements Satellite {
   async _handleOrThrowClientError(error: SatelliteError): Promise<void> {
     if (error.code === SatelliteErrorCode.AUTH_EXPIRED) {
       Log.warn('JWT expired')
-      return await this._stop(true, 'JWT expired')
+      return this._disconnect('JWT expired')
     }
 
     this._disconnect(error.message)

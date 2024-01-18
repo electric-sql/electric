@@ -14,11 +14,21 @@
     # Set expiration time for the JWT to 2 seconds from now
     !exp="2s"
     [invoke connect_to_electric electric_1 5133 "[]"]
-    #?New auth status: EXPIRED
     ?Connectivity state changed: connected
+    # Check that we can renew the token
     !await client.renew_token(db, "5s")
     ??$node
+    # Token should expire after > 4 seconds
     !client.check_token_expiration(db, 4000)
+    ??$node
+    ??JWT expired after
+    # Check that we can reconnect
+    !await client.reconnect(db, "3s")
+    ??$node
+    # Check that client is connected again
+    ?Connectivity state changed: connected
+    # Token should expire after > 2 seconds
+    !client.check_token_expiration(db, 2000)
     ??$node
     ??JWT expired after
 
