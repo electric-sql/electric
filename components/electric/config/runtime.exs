@@ -188,10 +188,26 @@ config :electric, Electric.Features,
 
 connector_config =
   if conn_params do
-    require_ssl? = env!("DATABASE_REQUIRE_SSL", :boolean, default_database_require_ssl)
+    require_ssl_config = env!("DATABASE_REQUIRE_SSL", :boolean, nil)
 
-    # Always try connecting with SSL first.
+    # In Electric, we only support two ways of using SSL when connecting to the database:
     #
+    #   1. It is either required, in which case a failure to establish a secure connection to the
+    #      database will be treated as a fatal error.
+    #
+    #   2. Or it is not required, in which case Electric will still try connecting with SSL first
+    #      and will only fallback to using unencrypted connection if that fails.
+    #
+    # When DATABASE_REQUIRE_SSL is set by the user, the sslmode query option in DATABASE_URL is ignored.
+    require_ssl? =
+      case {require_ssl_config, conn_params[:sslmode]} do
+        {nil, :require} -> true
+        {nil, _} -> false
+        {nil, nil} -> default_database_require_ssl
+        {true, _} -> true
+        {false, _} -> false
+      end
+
     # When require_ssl?=true, :epgsql will try to connect using SSL and fail if the server does not accept encrypted
     # connections.
     #
