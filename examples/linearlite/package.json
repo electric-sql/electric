@@ -8,7 +8,7 @@
     "backend:stop": "docker compose --env-file backend/compose/.envrc -f backend/compose/docker-compose.yaml stop",
     "backend:up": "node ./backend/startCompose.cjs --detach",
     "backend:down": "docker compose --env-file backend/compose/.envrc -f backend/compose/docker-compose.yaml down --volumes",
-    "client:generate": "npm run electric:check && npx electric-sql generate --service http://localhost:5133 --proxy postgresql://prisma:proxy_password@localhost:65432/electric",
+    "client:generate": "npm run electric:check && npx electric-sql generate --service http://localhost:5133 --proxy postgresql://electric-generator:proxy_password@localhost:65432/electric",
     "client:watch": "npm run client:generate --watch",
     "db:migrate": "node ./db/migrate.cjs",
     "db:psql": "node ./db/connect.cjs",

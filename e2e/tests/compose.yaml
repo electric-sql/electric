@@ -61,7 +61,7 @@ services:
     environment:
       PG_PROXY_PASSWORD:
       PG_PROXY_PORT:
-      INTROSPECTION_URL: "postgresql://prisma:${PG_PROXY_PASSWORD}@electric_1:${PG_PROXY_PORT}/postgres"
+      INTROSPECTION_URL: "postgresql://electric-generator:${PG_PROXY_PASSWORD}@electric_1:${PG_PROXY_PORT}/postgres"
       PROXY_URL: "postgresql://postgres:${PG_PROXY_PASSWORD}@electric_1:${PG_PROXY_PORT}/postgres"
     volumes:
       - ../prisma_example/prisma:/app/prisma

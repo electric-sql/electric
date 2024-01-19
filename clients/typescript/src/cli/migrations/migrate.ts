@@ -314,7 +314,7 @@ function escapePathForString(inputPath: string): string {
 
 function buildProxyUrlForIntrospection(config: Config) {
   return buildDatabaseURL({
-    user: 'prisma', // We use the "prisma" user to put the proxy into introspection mode
+    user: 'electric-generator', // We use the "electric-generator" user to put the proxy into introspection mode
     password: config.PG_PROXY_PASSWORD,
     host: config.PG_PROXY_HOST,
     port: parsePgProxyPort(config.PG_PROXY_PORT).port,

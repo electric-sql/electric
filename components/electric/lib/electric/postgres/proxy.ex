@@ -84,7 +84,7 @@ defmodule Electric.Postgres.Proxy do
   2. `Electric.Postgres.Proxy.Injector.Prisma` which should be used when
      generating the client models. This returns introspection information based
      on the current electrified schema information. Activate this mode by using
-     the username `prisma` in your db connection settings.
+     the username `electric-generator` in your db connection settings.
 
   3. `Electric.Postgres.Proxy.Injector.Transparent` which is a
      debug/development only mode which just allows for introspection of the
@@ -145,7 +145,7 @@ defmodule Electric.Postgres.Proxy do
         capture_mode: [
           default: Injector.Electric,
           per_user: %{
-            "prisma" => Injector.Prisma,
+            "electric-generator" => Injector.Prisma,
             "transparent" => Injector.Transparent
           }
         ]
