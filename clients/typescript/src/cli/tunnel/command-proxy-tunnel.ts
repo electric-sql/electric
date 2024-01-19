@@ -18,7 +18,7 @@ export function makeProxyTunnelCommand() {
       const config = getConfig(opts)
       const localPort = parsePort(opts.localPort)
       proxyTunnel({
-        serviceUrl: config.SERVICE,
+        serviceUrl: mapHttpToWebSocketInUrl(config.SERVICE),
         localPort,
       })
     })
@@ -73,4 +73,24 @@ export function proxyTunnel({ serviceUrl, localPort }: ProxyTunnelOptions) {
 function log(...args: any[]) {
   const timestamp = new Date().toISOString()
   console.log(timestamp, ...args)
+}
+
+function mapHttpToWebSocketInUrl(urlString: string) {
+  let url = new URL(urlString)
+  switch (url.protocol) {
+    case 'https:': {
+      url.protocol = 'wss:'
+      break
+    }
+    case 'http:': {
+      url.protocol = 'ws:'
+      break
+    }
+    case 'wss:':
+    case 'ws:':
+      break
+    default:
+      throw ("Invalid URL scheme in ELECTRIC_SERVICE: " + urlString)
+  }
+  return url.toString()
 }
