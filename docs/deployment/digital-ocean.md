@@ -88,73 +88,16 @@ $ curl -i https://electric-sync-service-4ha5b.ondigitalocean.app/api/status
 Connection to Postgres is up!
 ```
 
+Proceed to the [Running the basic example app](#running-the-basic-example-app) section below.
+
+:::info
 If you see errors in the logs, there's likely a problem with some of the environment variables. To update the environment, go to the Settings tab, click on the `electric` component at the top and then click on the Edit link in the "Environment Variables" row.
 
 ![Create App: Component Settings](./digital-ocean/create-app/component-settings.png)
 
 Saving your changes to Environment Variables will trigger a new deployment for the app. Once that finishes, check Deploy logs and Runtime logs to see if there are any more issues remaining.
+:::
 
-### Running the basic example app
-
-Let's see how to set up a client app to connect to the Electric sync service we've just deployed. Clone the source code repository to your machine and navigate to the basic example, as explained on [this page](../examples/basic#source-code).
-
-#### Apply migrations
-
-Apps running on DigitalOcean's App Platform can only accept HTTP/HTTPS connections. In order to connect to the migrations proxy that runs inside Electric, we need to start a local server that will tunnel TCP traffic over HTTP between a local Postgres client and the migrations proxy:
-
-```shell
-npx electric-sql proxy-tunnel \
-    --service https://electric-sync-service-4ha5b.ondigitalocean.app \
-    --local-port 8000
-```
-
-Electric can work alongside any tooling you use to manage database migrations with. See the <DocPageLink path="integrations/backend" /> section of the docs for an overview of the most popular frameworks. In this demo we'll use `@databases/pg-migrations` as it's already included in the basic example. Make sure you have installed all of the dependencies by running `npm install` once.
-
-Before running the following commands, export an environment variable `PG_PROXY_PASSWORD` on your local using the same value as the one configured for the DigitalOcean app:
-
-```shell
-export PG_PROXY_PASSWORD=...
-```
-
-Run `npx pg-migrations apply` to apply the migration included in the example to your database via the proxy tunnel:
-
-```shell
-$ npx pg-migrations apply \
-      --directory db/migrations \
-      --database postgresql://postgres:$PG_PROXY_PASSWORD@localhost:8000/postgres
-Applying 01-create_items_table.sql
-Applied 01-create_items_table.sql
-1 migrations applied
-```
-
-#### Generate a type-safe client
-
-Now that the database has one electrified table, we can [generate a type-safe client](../usage/data-access/client.md) from it. Use the same database connection URL as in the previous step but change the username to `prisma` (this is required for the schema introspection to work correctly).
-
-```shell
-$ npx electric-sql generate
-      --service https://electric-sync-service-4ha5b.ondigitalocean.app
-      --proxy postgresql://prisma:$PG_PROXY_PASSWORD@localhost:8000/postgres
-Generating Electric client...
-Successfully generated Electric client at: ./src/generated/client
-Building migrations...
-Successfully built migrations
-```
-
-#### Start the app!
-
-Now you should have everything ready to start the web app and have it connected to the Electric sync service running as a DigitalOcean app:
-
-```shell
-$ ELECTRIC_URL='wss://electric-sync-service-4ha5b.ondigitalocean.app' \
-  SERVE=true \
-  npm run build
-
-> electric-sql-wa-sqlite-example@0.7.0 build
-> node copy-wasm-files.js && node builder.js
-
-Your app is running at http://localhost:3001
-```
 
 ## Running Electric on a Droplet
 
@@ -315,66 +258,72 @@ $ curl http://167.99.132.206/api/status
 Connection to Postgres is up!
 ```
 
-Unlike the DigitalOcean app we deployed above which could only listen on standard HTTP/HTTPS ports, a Droplet is just a virtual server that may have any number of ports open. This allows us to connect to the Electric proxy directly without having to run a local tunnel:
 
-```shell
-$ psql postgresql://postgres:******@167.99.132.206:65432/postgres
-psql (15.4, server 15.1 (Ubuntu 15.1-1.pgdg20.04+1))
-Type "help" for help.
-
-[167] postgres:postgres=>
-```
-
-### Running the basic example app
+## Running the basic example app
 
 Let's see how to set up a client app to connect to the Electric sync service we've just deployed. Clone the source code repository to your machine and navigate to the basic example, as explained on [this page](../examples/basic#source-code).
 
-#### Apply migrations
+### Initial setup
 
-Electric can work alongside any tooling you use to manage database migrations with. See the <DocPageLink path="integrations/backend" /> section of the docs for an overview of the most popular frameworks. In this demo we'll use `@databases/pg-migrations` as it's already included in the basic example. Make sure you have installed all of the dependencies by running `npm install` once.
+As the first step, we need to make a few edits to the stock example app so that it knows about our deployed Electric instance. Choose the appropriate tab below depending on how you have Electric deployed:
 
-Export an environment variable `PG_PROXY_PASSWORD` on your local machine before running the commands below, use the same value as the one configured for the DigitalOcean app:
+import ElectricApp from './digital-ocean/_electric_app.md';
+import ElectricDroplet from './digital-ocean/_electric_droplet.md';
+
+<Tabs groupId="digital-ocean-basic-example" queryString>
+  <TabItem value="generator" label="DigitalOcean App">
+    <ElectricApp />
+  </TabItem>
+  <TabItem value="manual" label="Running on Droplet">
+    <ElectricDroplet />
+  </TabItem>
+</Tabs>
+
+### Apply migrations
+
+You may use your preferred tool to manage database migrations. See the <DocPageLink path="integrations/backend" /> section of the docs for an overview of the most popular frameworks. In this demo we'll use `@databases/pg-migrations` as it's already included in the basic example.
+
+Run `npm run db:migrate` to apply the included migration to your database:
 
 ```shell
-export PG_PROXY_PASSWORD=...
-```
+$ npm run db:migrate
 
-Run `npx pg-migrations apply` to apply the migration included in the example to your database via the migrations proxy:
+> electric-sql-wa-sqlite-example@0.9.0 db:migrate
+> npx electric-sql with-config "npx pg-migrations apply --database {{ELECTRIC_PROXY}} --directory ./db/migrations"
 
-```shell
-$ npx pg-migrations apply \
-      --directory db/migrations \
-      --database postgresql://postgres:$PG_PROXY_PASSWORD@167.99.132.206:65432/postgres
 Applying 01-create_items_table.sql
 Applied 01-create_items_table.sql
 1 migrations applied
 ```
 
-#### Generate a type-safe client
+### Generate a type-safe client
 
-Now that the database has one electrified table, we can [generate a type-safe client](../usage/data-access/client.md) from it. Use the same database connection URL as in the previous step but change the username to `prisma` (this is required for the schema introspection to work correctly).
+Now that the database has one electrified table, we can [generate a type-safe client](../usage/data-access/client.md) from it:
 
 ```shell
-$ npx electric-sql generate \
-      --service http://167.99.132.206 \
-      --proxy postgresql://prisma:$PG_PROXY_PASSWORD@@167.99.132.206:65432/postgres
+$ npm run client:generate
+
 Generating Electric client...
+Service URL: https://electric-sync-service-4ha5b.ondigitalocean.app/
+Proxy URL: postgresql://prisma:********@localhost:65432
 Successfully generated Electric client at: ./src/generated/client
 Building migrations...
 Successfully built migrations
 ```
 
-#### Start the app!
+### Start the app!
 
-Now you should have everything ready to start the web app and have it connected to the Electric sync service running on a DigitalOcean Droplet:
+Now you should have everything ready to start the web app and have it connect to the Electric sync service running as a DigitalOcean app:
 
 ```shell
-$ ELECTRIC_URL='ws://167.99.132.206' \
-  SERVE=true \
-  npm run build
+$ npm run dev
 
-> electric-sql-wa-sqlite-example@0.7.0 build
-> node copy-wasm-files.js && node builder.js
+> electric-sql-wa-sqlite-example@0.9.0 dev
+> vite
 
-Your app is running at http://localhost:3001
+  VITE v4.5.0  ready in 181 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: use --host to expose
+  ➜  press h to show help
 ```
