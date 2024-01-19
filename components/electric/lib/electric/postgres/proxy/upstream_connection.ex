@@ -157,6 +157,17 @@ defmodule Electric.Postgres.Proxy.UpstreamConnection do
     upstream(response, state)
   end
 
+  defp handle_backend_msg(
+         %M.AuthenticationMD5Password{salt: salt},
+         %{authenticated: false, conn_opts: conn_opts} = state
+       ) do
+    userspec_digest = md5_hex_digest([conn_opts[:password], conn_opts[:username]])
+    salted_digest = md5_hex_digest([userspec_digest, salt])
+    response = %M.PasswordMessage{password: "md5" <> salted_digest}
+
+    upstream(response, state)
+  end
+
   defp handle_backend_msg(%M.AuthenticationSASL{} = msg, %{authenticated: false} = state) do
     {sasl_mechanism, response} = SASL.initial_response(msg)
 
@@ -206,4 +217,17 @@ defmodule Electric.Postgres.Proxy.UpstreamConnection do
   defp reset_conn(state) do
     %{state | conn: nil, transport_module: :gen_tcp}
   end
+
+  defp md5_hex_digest(iodata) do
+    :crypto.hash(:md5, iodata) |> bin_to_hex()
+  end
+
+  defp bin_to_hex(""), do: ""
+
+  defp bin_to_hex(<<hi::4, lo::4>> <> rest) do
+    <<hex_char(hi), hex_char(lo)>> <> bin_to_hex(rest)
+  end
+
+  defp hex_char(num) when num in 0..9, do: ?0 + num
+  defp hex_char(num) when num in 10..15, do: ?a + num - 10
 end
