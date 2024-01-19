@@ -187,6 +187,15 @@ defmodule Electric.Postgres.Proxy.UpstreamConnection do
     %{state | sasl: nil}
   end
 
+  defp handle_backend_msg(%msg_type{} = msg, _state)
+       when msg_type in [M.AuthenticationKerberosV5, M.AuthenticationGSS, M.AuthenticationSSPI] do
+    error_msg = "Proxy's upstream connection requested unsupported authentication method:"
+    error_val = inspect(msg, pretty: true)
+
+    Electric.Errors.print_error(:not_implemented, error_msg <> "\n\n    " <> error_val)
+    exit(error_msg <> " " <> error_val)
+  end
+
   defp handle_backend_msg(msg, state) do
     %{state | pending: [msg | state.pending]}
   end

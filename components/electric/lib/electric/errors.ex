@@ -105,6 +105,14 @@ defmodule Electric.Errors do
     """
   end
 
+  defp format_header(:not_implemented) do
+    """
+    ┌─────────────────────────┐
+    │  NOT IMPLEMENTED ERROR  │
+    ┕━━━━━━━━━━━━━━━━━━━━━━━━━┙
+    """
+  end
+
   defp format_header(module_alias) do
     module_line = "  MODULE ERROR: " <> inspect(module_alias) <> "  "
     n = byte_size(module_line)
