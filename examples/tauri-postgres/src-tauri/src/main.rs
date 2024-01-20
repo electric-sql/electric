@@ -31,10 +31,9 @@ mod embeddings;
 mod chat;
 mod utils;
 
-use chat::chat;
 // use chat::async_chat;
 use crate::embeddings::{create_embedding_model, embed_query, format_embeddings, embed_issue};
-use pg::{pg_connect, pg_init, pg_query, replace_question_marks, row_to_json};
+use pg::{pg_connect, pg_init, pg_query, patch, row_to_json};
 
 // Postgres console
 use portable_pty::{native_pty_system, CommandBuilder, PtyPair, PtySize};
@@ -90,7 +89,6 @@ struct DbConnection {
     conn: Arc<AsyncMutex<Option<PgConnection>>>,
     llama: Arc<AsyncMutex<Option<Ollama>>>,
     pg_port: Mutex<Option<u16>>,
-    writer: Arc<AsyncMutex<Box<dyn Write + Send>>>,
 }
 
 /// App state for the terminal window
@@ -100,7 +98,10 @@ struct TerminalState {
 }
 
 struct AsyncProcInputTx {
+    // This is how we communicate with the streaming chat
     inner: AsyncMutex<mpsc::Sender<String>>,
+
+    // Whether we should stop the chat or not
     flag: AsyncMutex<bool>,
 }
 
@@ -170,7 +171,7 @@ async fn tauri_exec(
     sql: &str,
     bind_params: BindParams,
 ) -> QueryResult {
-    let sql2 = replace_question_marks(sql);
+    let sql2 = patch(sql);
     println!("tauri_exec input\n{}\n{:?}", sql2, bind_params);
 
     let mut args = PgArguments::default();
@@ -341,15 +342,6 @@ async fn tauri_vector_search(connection: State<'_, DbConnection>, query: &str) -
     Err(ret)
 }
 
-#[tauri::command(rename_all = "snake_case")]
-async fn tauri_chat(connection: State<'_, DbConnection>, question: &str, context: &str) -> Result<String, String> {
-    if let Some(llama) = connection.llama.lock().await.as_mut() {
-        Ok(chat(llama, question.to_string(), context.to_string()).await)
-    } else {
-        Err("Llama was not able to answer".to_string())
-    }
-}
-
 fn chat_token<R: tauri::Runtime>(message: String, manager: &impl Manager<R>) {
     eprintln!("rs2js");
     eprintln!("{}", message);
@@ -372,27 +364,22 @@ async fn start_chat(
     connection: tauri::State<'_, DbConnection>,
     app_handle: tauri::AppHandle
 ) -> Result<(), String> {
-    eprintln!("js2rs");
     eprintln!("{}", question);
-
-    let mut temp = connection.llama.lock().await;
-    let llama2 = temp.as_mut().unwrap();
-
-    let mut temp = connection.writer.lock().await;
-    let writer = temp.as_mut();
 
     // reset the flag, because we answer a new question
     *state.flag.lock().await = false;
 
-    let model = "llama2:latest".to_string();
+    let mut temp = connection.llama.lock().await;
+    let llama2 = temp.as_mut().unwrap();
 
+    let model = "llama2:latest".to_string();
     let prompt = format!("{} Answer based on this context: {}", question, context);
 
     let generation_request = GenerationRequest::new(model, prompt);
     let mut stream = llama2.generate_stream(generation_request).await.unwrap();
     while let Some(result) = stream.next().await {
         let async_proc_input_tx = state.inner.lock().await;
-        let flag = state.flag.lock().await.clone();
+        let flag = *state.flag.lock().await;
 
         if flag {
             break;
@@ -400,13 +387,13 @@ async fn start_chat(
 
         match result {
             Ok(response) => {
-                async_proc_input_tx
+                let _ = async_proc_input_tx
                     .send(response.response)
                     .await
                     .map_err(|e| e.to_string());
             }
             Err(err) => {
-                panic!("STILL TESTING THIS");
+                panic!("{:?}", err);
             }
         }
     }
@@ -437,16 +424,25 @@ async fn async_process_model(
     Ok(())
 }
 
-fn main() {
-    let args: Vec<String> = env::args().collect();
-    let pg_port = if args.len() < 2 {
-        33333
-    } else {
-        args[1].parse::<u16>().unwrap()
-    };
-    eprintln!("{:?}", args);
+const DEFAULT_PG_PORT: u16 = 33333;
 
-    // tauri::async_runtime::set(tokio::runtime::Handle::current());
+fn main() {
+    // pg_port is either ELECTRIC_TAURI_PG_PORT, either the first argument, or the DEFAULT_PG_PORT(33333)
+    let pg_port = match env::var("ELECTRIC_TAURI_PG_PORT") {
+        Ok(value) => value.parse::<u16>().unwrap(),
+        Err(_) => {
+            let args: Vec<String> = env::args().collect();
+
+            if args.len() >= 2 {
+                DEFAULT_PG_PORT
+            } else {
+                args[1].parse::<u16>().unwrap()
+            }
+        },
+    };
+
+    eprintln!("pg_port is: {}", pg_port);
+
     let (async_proc_input_tx, async_proc_input_rx) = mpsc::channel(1);
     let (async_proc_output_tx, mut async_proc_output_rx) = mpsc::channel(1);
 
@@ -485,15 +481,6 @@ fn main() {
 
     let reader = Arc::new(Mutex::new(Some(BufReader::new(reader))));
 
-    let writer2 = native_pty_system().openpty(PtySize {
-        rows: 24,
-        cols: 80,
-        pixel_width: 0,
-        pixel_height: 0,
-    }).unwrap().master.take_writer().unwrap();
-
-    let writer2 = Arc::new(AsyncMutex::new(writer2));
-
     tauri::Builder::default()
         .on_page_load(move |window, _| {
             let window = window.clone();
@@ -518,7 +505,6 @@ fn main() {
             conn: Default::default(),
             llama: Default::default(),
             pg_port: Mutex::new(Some(pg_port)),
-            writer: writer2,
         })
         .manage(TerminalState {
             pty_pair: Arc::new(AsyncMutex::new(pty_pair)),
@@ -528,17 +514,6 @@ fn main() {
             inner: AsyncMutex::new(async_proc_input_tx),
             flag: AsyncMutex::new(false),
         })
-        // .setup(|app| {
-        //     // terminal
-        //     tauri::WindowBuilder::new(
-        //         app,
-        //         "postgresterminal", /* must be unique */
-        //         tauri::WindowUrl::App("debug.html".into()),
-        //     )
-        //     .build()?;
-
-        //     Ok(())
-        // })
         .setup(|app| {
             tauri::async_runtime::spawn(async move {
                 async_process_model(
@@ -564,7 +539,6 @@ fn main() {
             tauri_stop_postgres,
             tauri_vector_search,
             tauri_embed_issue,
-            tauri_chat,
             async_write_to_pty,
             async_resize_pty,
             send_recv_postgres_terminal,
@@ -572,6 +546,7 @@ fn main() {
             stop_chat,
         ])
         .on_window_event(move |event| match event.event() {
+            // When we click X, stop postgres gracefully first
             WindowEvent::Destroyed => {
                 let db_connection: State<DbConnection> = event.window().state();
                 block_on(async {

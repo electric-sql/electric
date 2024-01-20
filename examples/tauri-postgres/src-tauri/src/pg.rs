@@ -1,6 +1,6 @@
 //!
 //! This file should contain the entire integration with Postgres (through pg-embed),
-//! leaving main.rs to do tauri stuff and utils.rs to do Rust stuff.
+//! leaving main.rs to do tauri stuff.
 //!
 
 // For displaying postgres logs in the console
@@ -138,16 +138,13 @@ pub fn row_to_json(row: PgRow) -> HashMap<String, String> {
         }
 
         // INT8, this is the only one that still appears to bug the string below
+        // Note: INT8 in Postgres means i64 in Rust
         if col.type_info().oid().unwrap().0 == 20 {
             let value: i64 = row.try_get(col.ordinal()).unwrap();
             let value = format!("{:?}", value);
             result.insert(col.name().to_string(), value);
             continue;
         }
-
-        let value = row.try_get_raw(col.ordinal()).unwrap();
-        eprintln!("This is the line you are looking for");
-        eprintln!("{}", value.type_info().oid().unwrap().0);
 
         let value = row.try_get_raw(col.ordinal()).unwrap();
         let value = match value.is_null() {
@@ -161,7 +158,10 @@ pub fn row_to_json(row: PgRow) -> HashMap<String, String> {
 }
 
 //TODO: This has to be removed after the elixir has been migrated to postgres as well
-pub fn replace_question_marks(input: &str) -> String {
+// Applies all the necessary patches so that the queries work with Postgres
+pub fn patch(input: &str) -> String {
+
+    // Replace the sqlite '?' placeholder with the '$n' expected by Postgres
     let mut output = String::new();
     let mut counter = 1;
 
