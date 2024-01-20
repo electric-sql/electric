@@ -17,10 +17,14 @@ export function makeProxyTunnelCommand() {
     .action(async (opts) => {
       const config = getConfig(opts)
       const localPort = parsePort(opts.localPort)
-      proxyTunnel({
-        serviceUrl: mapHttpToWebSocketInUrl(config.SERVICE),
-        localPort,
-      })
+
+      try {
+        const serviceUrl = mapHttpToWebSocketInUrl(config.SERVICE)
+        proxyTunnel({ serviceUrl, localPort })
+      } catch (error) {
+        console.error(error)
+        process.exit(1)
+      }
     })
 
   return command
@@ -90,7 +94,7 @@ function mapHttpToWebSocketInUrl(urlString: string) {
     case 'ws:':
       break
     default:
-      throw ("Invalid URL scheme in ELECTRIC_SERVICE: " + urlString)
+      throw `Invalid URL scheme ${url.protocol} in ELECTRIC_SERVICE`
   }
   return url.toString()
 }
