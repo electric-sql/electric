@@ -67,8 +67,8 @@ export const RequestResponse = () => {
   // )
 
   return (
-    <Box>
-      <Paper>
+    <Box display="flex" flexDirection="column" alignItems="center">
+      <Paper sx={{ p: 2, mb: 3, minWidth: 800}}>
         <RequestFormView
           methods={Object.values(HttpMethod)}
           paths={paths}

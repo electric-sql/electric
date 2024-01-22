@@ -34,23 +34,27 @@ const columns : ColumnDef[] = [
   {
     title: 'Path',
     accessorKey: 'path',
+    width: 150,
   },
   {
     title: 'Method',
     accessorKey: 'method',
+    width: 90,
   },
   {
     title: 'Payload',
     accessorKey: 'payload',
+    width: 150,
   },
   {
     title: 'Status Code',
-    width: 120,
+    width: 100,
     accessorKey: 'responseStatus',
   },
   {
     title: 'Response Data',
     accessorKey: 'responseData',
+    width: 300,
   },
   {
     title: '',
@@ -94,6 +98,8 @@ export const RequestAuditLogView = ({ rows } : { rows: RequestResponseRow[] }) =
                       minWidth: column.width,
                       maxWidth: column.width,
                       whiteSpace: 'nowrap',
+                      overflowX: 'hidden',
+                      textOverflow: 'ellipsis',
                     }}>
                     {
                     column.render?.(row) ??
