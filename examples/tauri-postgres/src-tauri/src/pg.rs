@@ -130,7 +130,9 @@ pub fn row_to_json(row: PgRow) -> HashMap<String, String> {
     let mut result = HashMap::new();
     for col in row.columns() {
         let col_type = col.type_info().oid().unwrap().0;
+        let col_kind = col.type_info().kind();
         eprintln!("pg type we try to serialize to string {}", col_type);
+        eprintln!("pg kind we try to serialize to string {:?}", col_kind);
         // 16434 == vector type, treat it separately
         if col_type == 16434 {
             let value: Vector = row.try_get(col.ordinal()).unwrap();

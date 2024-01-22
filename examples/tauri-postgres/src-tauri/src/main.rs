@@ -411,6 +411,15 @@ async fn stop_chat(state: tauri::State<'_, AsyncProcInputTx>) -> Result<(), Stri
     Ok(())
 }
 
+#[tauri::command(rename_all = "snake_case")]
+async fn open_postgres(app_handle: tauri::AppHandle) {
+  let postgres_terminal = tauri::WindowBuilder::new(
+    &app_handle,
+    "Postgres Terminal", /* the unique window label */
+    tauri::WindowUrl::App("debug.html".parse().unwrap())
+  ).build().unwrap();
+}
+
 async fn async_process_model(
     mut input_rx: mpsc::Receiver<String>,
     output_tx: mpsc::Sender<String>,
@@ -537,6 +546,7 @@ fn main() {
             send_recv_postgres_terminal,
             start_chat,
             stop_chat,
+            open_postgres,
         ])
         .on_window_event(move |event| match event.event() {
             // When we click X, stop postgres gracefully first
