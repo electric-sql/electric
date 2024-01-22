@@ -35,9 +35,9 @@ export const electrify_db = async (
   schema.migrations = migrations
   const result = await electrify(db, schema, config)
   const token = await mockSecureAuthToken(exp)
+  
+  result.notifier.subscribeToConnectivityStateChanges((x) => console.log(`Connectivity state changed: ${x.connectivityState.status}`))
   await result.connect(token) // connect to Electric
-
-  result.notifier.subscribeToConnectivityStateChanges((x) => console.log("Connectivity state changed: ", x.connectivityState.status))
 
   return result
 }
