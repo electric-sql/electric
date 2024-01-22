@@ -27,9 +27,8 @@ export async function startListeningToPgRequests (pgPool: Pool, apiPort: number)
       try {
         // Make an API request using the information from the notification payload
         response = await axios({
-          method: payload.method,
-          url: `http://localhost:${apiPort}${payload.path}`,
-          data: JSON.parse(payload.data ?? '')
+          method: 'GET',
+          url: `http://localhost:${apiPort}/random-result`,
         })
       } catch (err: any) {
         response = {
