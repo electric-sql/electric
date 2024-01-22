@@ -192,7 +192,7 @@ function useLiveQueryWithQueryUpdates<Res>(
   //
   // If we do need to re-query, then we use the saved function to reuse the query
   useEffect(() => {
-    if (electric?.notifier == undefined) return
+    if (electric?.notifier === undefined) return
     const unsubscribe = subscribeToDataChanges(electric?.notifier)
     return unsubscribe
   }, [electric?.notifier, subscribeToDataChanges])
