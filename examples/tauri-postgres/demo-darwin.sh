@@ -69,3 +69,4 @@ install_ollama
 install_postgres
 git_clone
 build_the_app
+run_the_demo
