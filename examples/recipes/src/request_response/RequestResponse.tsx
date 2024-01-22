@@ -12,6 +12,8 @@ import { RequestAuditLogView } from "./RequestAuditLogView"
 const paths = [
   '/health',
   '/user/activities',
+  '/payments',
+  '/contacts/new'
 ]
 
 export const RequestResponse = () => {
@@ -57,14 +59,6 @@ export const RequestResponse = () => {
         10;
     `
   }))
-
-  // const cancelRequest = useCallback(
-  //   (requestId: string) => db.requests.update({
-  //     data: { cancelled: true },
-  //     where: {id: requestId }
-  //   }),
-  //   [db.requests]
-  // )
 
   return (
     <Box display="flex" flexDirection="column" alignItems="center">
