@@ -80,7 +80,7 @@ function log(...args: any[]) {
 }
 
 function mapHttpToWebSocketInUrl(urlString: string) {
-  let url = new URL(urlString)
+  const url = new URL(urlString)
   switch (url.protocol) {
     case 'https:': {
       url.protocol = 'wss:'
