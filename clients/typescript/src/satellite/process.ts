@@ -11,7 +11,6 @@ import {
   AuthStateNotification,
   Change,
   ChangeOrigin,
-  ConnectivityStateChangeNotification,
   Notifier,
   UnsubscribeFunction,
 } from '../notifiers/index'
@@ -246,17 +245,6 @@ export class SatelliteProcess implements Satellite {
     this._unsubscribeFromAuthState =
       this.notifier.subscribeToAuthStateChanges(authStateHandler)
 
-    // Monitor connectivity state changes.
-    const connectivityStateHandler = ({
-      connectivityState,
-    }: ConnectivityStateChangeNotification) => {
-      this._handleConnectivityStateChange(connectivityState)
-    }
-    this._unsubscribeFromConnectivityChanges =
-      this.notifier.subscribeToConnectivityStateChanges(
-        connectivityStateHandler
-      )
-
     // Request a snapshot whenever the data in our database potentially changes.
     this._unsubscribeFromPotentialDataChanges =
       this.notifier.subscribeToPotentialDataChanges(this._throttledSnapshot)
@@ -371,7 +359,7 @@ export class SatelliteProcess implements Satellite {
       }
     })
 
-    this._disconnect()
+    this.disconnect()
 
     if (shutdown) {
       this.client.shutdown()
@@ -614,7 +602,7 @@ export class SatelliteProcess implements Satellite {
     keepSubscribedShapes: boolean
   }): Promise<void> {
     Log.warn(`resetting client state`)
-    this._disconnect()
+    this.disconnect()
     const subscriptionIds = this.subscriptions.getFulfilledSubscriptions()
 
     if (opts?.keepSubscribedShapes) {
@@ -685,7 +673,7 @@ export class SatelliteProcess implements Satellite {
   async _handleOrThrowClientError(error: SatelliteError): Promise<void> {
     if (error.code === SatelliteErrorCode.AUTH_EXPIRED) {
       Log.warn('Connection closed by Electric because the JWT expired.')
-      return this._disconnect(
+      return this.disconnect(
         new SatelliteError(
           error.code,
           'Connection closed by Electric because the JWT expired.'
@@ -693,7 +681,7 @@ export class SatelliteProcess implements Satellite {
       )
     }
 
-    this._disconnect(error)
+    this.disconnect(error)
 
     if (isThrowable(error)) {
       throw error
@@ -704,28 +692,6 @@ export class SatelliteProcess implements Satellite {
 
     Log.warn('Client disconnected with a non fatal error, reconnecting')
     return this.connectWithBackoff()
-  }
-
-  async _handleConnectivityStateChange({
-    status,
-  }: ConnectivityState): Promise<void> {
-    Log.debug(`Connectivity state changed: ${status}`)
-    switch (status) {
-      case 'available': {
-        Log.warn(`checking network availability and reconnecting`)
-        return this.connectWithBackoff()
-      }
-      case 'disconnected': {
-        this.client.disconnect()
-        return
-      }
-      case 'connected': {
-        return
-      }
-      default: {
-        throw new Error(`unexpected connectivity state: ${status}`)
-      }
-    }
   }
 
   /**
@@ -748,6 +714,13 @@ export class SatelliteProcess implements Satellite {
       userId: sub,
       token,
     })
+  }
+
+  /**
+   * @returns True if a JWT token has been set previously. False otherwise.
+   */
+  hasToken(): boolean {
+    return this._authState?.token !== undefined
   }
 
   async connectWithBackoff(): Promise<void> {
@@ -787,7 +760,7 @@ export class SatelliteProcess implements Satellite {
             SatelliteErrorCode.CONNECTION_FAILED_AFTER_RETRY,
             `Failed to connect to server after exhausting retry policy. Last error thrown by server: ${e.message}`
           )
-      this._disconnect(error.message)
+      this.disconnect(error.message)
       this.initializing?.reject(error)
       throw error
     })
@@ -845,7 +818,7 @@ export class SatelliteProcess implements Satellite {
     this._setAuthState(authState)
   }
 
-  private _disconnect(error?: SatelliteError): void {
+  disconnect(error?: SatelliteError): void {
     this.client.disconnect()
     this._notifyConnectivityState('disconnected', error)
   }

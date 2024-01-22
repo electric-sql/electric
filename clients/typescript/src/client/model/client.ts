@@ -108,10 +108,32 @@ export class ElectricClient<
    * Connects to the Electric sync service.
    * This method is idempotent, it is safe to call it multiple times.
    * @param token - The JWT token to use to connect to the Electric sync service.
+   *                This token is required on first connection but can be left out when reconnecting
+   *                in which case the last seen token is reused.
    */
-  async connect(token: string): Promise<void> {
-    this.satellite.setToken(token)
+  async connect(token?: string): Promise<void> {
+    if (token === undefined && !this.satellite.hasToken()) {
+      throw new Error('A token is required the first time you connect.')
+    }
+    if (token !== undefined) {
+      this.satellite.setToken(token)
+    }
     await this.satellite.connectWithBackoff()
+  }
+
+  disconnect(): void {
+    this.satellite.disconnect()
+  }
+
+  /**
+   * Renews the auth token before it expires.
+   * Renewing is only possible while the existing auth token is still valid.
+   * The token's sub claim must be the same as the one used to first authenticate.
+   * @param token - The renewed JWT.
+   * @throws If renewal fails.
+   */
+  async renew(token: string): Promise<void> {
+    await this.satellite.authenticate(token)
   }
 
   // Builds the DAL namespace from a `dbDescription` object

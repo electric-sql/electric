@@ -1239,7 +1239,7 @@ test('get transactions from opLogEntries', async (t) => {
   t.deepEqual(opLog, expected)
 })
 
-test('handling connectivity state change stops queueing operations', async (t) => {
+test('disconnect stops queueing operations', async (t) => {
   const { runMigrations, satellite, adapter, authState, token } = t.context
   await runMigrations()
   const { connectionPromise } = await startSatellite(
@@ -1259,7 +1259,7 @@ test('handling connectivity state change stops queueing operations', async (t) =
   const sentLsn = satellite.client.getLastSentLsn()
   t.deepEqual(sentLsn, numberToBytes(1))
 
-  await satellite._handleConnectivityStateChange({ status: 'disconnected' })
+  satellite.disconnect()
 
   adapter.run({
     sql: `INSERT INTO parent(id, value, other) VALUES (2, 'local', 1)`,
@@ -1272,7 +1272,7 @@ test('handling connectivity state change stops queueing operations', async (t) =
   t.deepEqual(lsn1, sentLsn)
 
   // Once connectivity is restored, we will immediately run a snapshot to send pending rows
-  await satellite._handleConnectivityStateChange({ status: 'available' })
+  await satellite.connectWithBackoff()
   await sleepAsync(200) // Wait for snapshot to run
   const lsn2 = satellite.client.getLastSentLsn()
   t.deepEqual(lsn2, numberToBytes(2))

@@ -64,6 +64,7 @@ export class MockSatelliteProcess implements Satellite {
   notifier: Notifier
   socketFactory: SocketFactory
   opts: SatelliteOpts
+  token: string | undefined
 
   constructor(
     dbName: DbName,
@@ -96,7 +97,13 @@ export class MockSatelliteProcess implements Satellite {
     await sleepAsync(50)
   }
 
-  setToken(_token: string): void {}
+  setToken(token: string): void {
+    this.token = token
+  }
+
+  hasToken() {
+    return this.token !== undefined
+  }
 
   async connect(): Promise<void> {
     await sleepAsync(50)
@@ -105,6 +112,8 @@ export class MockSatelliteProcess implements Satellite {
   async connectWithBackoff(): Promise<void> {
     await this.connect()
   }
+
+  disconnect(): void {}
 
   authenticate(_token: string): Promise<void> {
     return Promise.resolve()

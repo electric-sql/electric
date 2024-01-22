@@ -120,12 +120,10 @@ export interface Notifier {
   subscribeToDataChanges(callback: ChangeCallback): UnsubscribeFunction
 
   // Notification for network connectivity state changes.
-  // A connectivity change s can be triggered manually,
-  // or automatically in consequence of internal client events.
-  // 'available': network is, or has become, available
+  // A connectivity change is automatically triggered in consequence of internal client events.
   // 'connected': connection to Electric established
-  // 'disconnected': Electric is unreachable, or network is unavailable
-  // 'error': disconnected with an error (TODO: add error info)
+  // 'disconnected': Electric is unreachable, or network is unavailable.
+  //                 A reason for the disconnection can be provided.
   connectivityStateChanged(dbName: string, state: ConnectivityState): void
 
   subscribeToConnectivityStateChanges(

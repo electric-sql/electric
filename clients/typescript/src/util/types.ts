@@ -199,7 +199,7 @@ export type IncomingTransactionCallback = (
 ) => void
 export type OutboundStartedCallback = () => void
 
-export type ConnectivityStatus = 'available' | 'connected' | 'disconnected'
+export type ConnectivityStatus = 'connected' | 'disconnected'
 export type ConnectivityState = {
   status: ConnectivityStatus
   reason?: SatelliteError // reason for `disconnected` status

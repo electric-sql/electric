@@ -325,10 +325,8 @@ test('useConnectivityState defaults to disconnected', async (t) => {
 
   const { result } = renderHook(() => useConnectivityState(), { wrapper })
 
-  await waitFor(() =>
-    assert(result.current.connectivityState.status === 'disconnected')
-  )
-  t.is(result.current.connectivityState.status, 'disconnected')
+  await waitFor(() => assert(result.current.status === 'disconnected'))
+  t.is(result.current.status, 'disconnected')
 })
 
 test('useConnectivityState handles connectivity events', async (t) => {
@@ -342,10 +340,8 @@ test('useConnectivityState handles connectivity events', async (t) => {
 
   notifier.connectivityStateChanged('test.db', { status: 'connected' })
 
-  await waitFor(() =>
-    assert(result.current.connectivityState.status === 'connected')
-  )
-  t.is(result.current.connectivityState.status, 'connected')
+  await waitFor(() => assert(result.current.status === 'connected'))
+  t.is(result.current.status, 'connected')
 })
 
 test('useConnectivityState ignores connectivity events after unmounting', async (t) => {
@@ -360,12 +356,12 @@ test('useConnectivityState ignores connectivity events after unmounting', async 
   const { result, unmount } = renderHook(() => useConnectivityState(), {
     wrapper,
   })
-  t.is(result.current.connectivityState.status, 'disconnected')
+  t.is(result.current.status, 'disconnected')
 
   unmount()
 
   notifier.connectivityStateChanged('test.db', { status: 'connected' })
 
   await sleepAsync(1000)
-  t.is(result.current.connectivityState.status, 'disconnected')
+  t.is(result.current.status, 'disconnected')
 })
