@@ -38,15 +38,15 @@ export const RequestResponse = () => {
   const { results: requests = [] } = useLiveQuery(db.liveRaw({
     sql: `
     SELECT
-        r.timestamp AS request_timestamp,
-        r.path AS request_path,
-        r.method AS request_method,
-        r.data AS request_data,
-        r.processing AS request_processing,
-        r.cancelled AS request_cancelled,
-        rs.timestamp AS response_timestamp,
-        rs.status_code AS response_status_code,
-        rs.data AS response_data
+        r.timestamp AS requestTime,
+        r.path AS path,
+        r.method AS method,
+        r.data AS payload,
+        r.processing AS processing,
+        r.cancelled AS cancelled,
+        rs.timestamp AS responseTime,
+        rs.status_code AS responseStatus,
+        rs.data AS responseData
     FROM
         requests r
     LEFT JOIN
@@ -77,8 +77,7 @@ export const RequestResponse = () => {
       </Paper>
       <Paper>
         <RequestAuditLogView
-          header={[]}
-          rows={requests.map((r: object) => Object.values(r))}
+          rows={requests}
         />
       </Paper>
     </Box>

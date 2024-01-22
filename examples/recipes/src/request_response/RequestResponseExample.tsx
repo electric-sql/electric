@@ -33,7 +33,7 @@ export const RequestResponseExample = () => {
         <ConnectivityToggle key="connectivity" />
       ]}/>
       <LoadingView loading={!synced}>
-        <Container maxWidth="md" sx={{ py: 4 }}>
+        <Container sx={{ py: 4 }}>
           <RequestResponse />
         </Container>
       </LoadingView>
