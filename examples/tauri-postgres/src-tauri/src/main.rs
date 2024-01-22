@@ -28,7 +28,6 @@ use tauri_plugin_log::LogTarget;
 // This package
 mod pg;
 mod embeddings;
-mod chat;
 mod utils;
 
 // use chat::async_chat;
@@ -172,7 +171,7 @@ async fn tauri_exec(
     bind_params: BindParams,
 ) -> QueryResult {
     let sql2 = patch(sql);
-    println!("tauri_exec input\n{}\n{:?}", sql2, bind_params);
+    // println!("tauri_exec input\n{}\n{:?}", sql2, bind_params);
 
     let mut args = PgArguments::default();
 
@@ -227,10 +226,10 @@ async fn tauri_exec(
             result: String::new(),
         };
 
-        println!(
-            "tauri_exec output error\n{}\n{:?}",
-            result.result, result.rows_modified
-        );
+        // println!(
+            // "tauri_exec output error\n{}\n{:?}",
+            // result.result, result.rows_modified
+        // );
 
         return result;
     }
@@ -243,10 +242,10 @@ async fn tauri_exec(
     }
     result.push_str(serde_json::to_string(&array_rows).unwrap().as_str());
 
-    println!(
-        "tauri_exec output\n{}\n{:?}",
-        result, accumulate_rows_modified
-    );
+    // println!(
+        // "tauri_exec output\n{}\n{:?}",
+        // result, accumulate_rows_modified
+    // );
 
     QueryResult {
         rows_modified: accumulate_rows_modified,
