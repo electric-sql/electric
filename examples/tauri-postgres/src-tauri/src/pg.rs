@@ -129,8 +129,10 @@ pub async fn pg_query(conn: &mut PgConnection, line: &str) -> String {
 pub fn row_to_json(row: PgRow) -> HashMap<String, String> {
     let mut result = HashMap::new();
     for col in row.columns() {
+        let col_type = col.type_info().oid().unwrap().0;
+        eprintln!("pg type we try to serialize to string {}", col_type);
         // 16434 == vector type, treat it separately
-        if col.type_info().oid().unwrap().0 == 16434 {
+        if col_type == 16434 {
             let value: Vector = row.try_get(col.ordinal()).unwrap();
             let value = format!("{:?}", value.to_vec());
             result.insert(col.name().to_string(), value);
@@ -139,7 +141,7 @@ pub fn row_to_json(row: PgRow) -> HashMap<String, String> {
 
         // INT8, this is the only one that still appears to bug the string below
         // Note: INT8 in Postgres means i64 in Rust
-        if col.type_info().oid().unwrap().0 == 20 {
+        if col_type == 20 {
             let value: i64 = row.try_get(col.ordinal()).unwrap();
             let value = format!("{:?}", value);
             result.insert(col.name().to_string(), value);
