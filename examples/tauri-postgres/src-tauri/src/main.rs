@@ -430,14 +430,8 @@ fn main() {
     let pg_port = match env::var("ELECTRIC_TAURI_PG_PORT") {
         Ok(value) => value.parse::<u16>().unwrap(),
         Err(_) => {
-            let args: Vec<String> = env::args().collect();
-
-            if args.len() >= 2 {
-                DEFAULT_PG_PORT
-            } else {
-                args[1].parse::<u16>().unwrap()
-            }
-        },
+            DEFAULT_PG_PORT
+        }
     };
 
     eprintln!("pg_port is: {}", pg_port);
