@@ -21,15 +21,15 @@ const newMigrations = [
           "issue_id" TEXT NOT NULL,
           "embeddings" vector(768),
           UNIQUE (issue_id),
-          FOREIGN KEY (issue_id) REFERENCES issue(id)
+          FOREIGN KEY (issue_id) REFERENCES issue(id) ON DELETE CASCADE
         );
       `,
       `
-        CREATE OR REPLACE FUNCTION function_copy_embeddings() RETURNS TRIGGER AS 
+        CREATE OR REPLACE FUNCTION function_copy_embeddings() RETURNS TRIGGER AS
         $$
         BEGIN
           IF NEW.embeddings IS NOT NULL
-          THEN 
+          THEN
             INSERT INTO document(issue_id,embeddings)
             VALUES (new.id, new.embeddings::vector)
             ON CONFLICT (issue_id) DO
@@ -42,7 +42,7 @@ const newMigrations = [
       `,
       `
         CREATE TRIGGER trig_copy_embeddings
-        AFTER INSERT ON issue 
+        AFTER INSERT ON issue
           FOR EACH ROW EXECUTE PROCEDURE function_copy_embeddings();
       `,
     ],
