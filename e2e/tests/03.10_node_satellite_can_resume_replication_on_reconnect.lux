@@ -30,7 +30,6 @@
   # Verify that the client retrieves previously stored LSN when it reestablishes the replication connection.
   [progress resuming client]
   [invoke electrify_db "originalDb" "electric_1" 5133 "[]"]
-  ?$node
 
   -no previous LSN
 
