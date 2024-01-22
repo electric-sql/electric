@@ -12,7 +12,7 @@ import { AnyDatabase } from '..'
  * A generic database adapter.
  * Uses a mutex to ensure that transactions are not interleaved.
  * Concrete adapters extending this class must implement the
- * `exec`, `getRowsModified`, and `runInTransaction` methods.
+ * `_run`, `_query`, and `runInTransaction` methods.
  */
 abstract class DatabaseAdapter
   extends TableNameImpl
