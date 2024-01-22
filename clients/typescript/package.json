@@ -52,6 +52,7 @@
     "./cordova": "./dist/drivers/cordova-sqlite-storage/index.js",
     "./capacitor": "./dist/drivers/capacitor-sqlite/index.js",
     "./expo": "./dist/drivers/expo-sqlite/index.js",
+    "./expo-next": "./dist/drivers/expo-sqlite-next/index.js",
     "./generic": "./dist/drivers/generic/index.js",
     "./node": "./dist/drivers/better-sqlite3/index.js",
     "./react": "./dist/frameworks/react/index.js",
@@ -77,6 +78,9 @@
       ],
       "expo": [
         "./dist/drivers/expo-sqlite/index.d.ts"
+      ],
+      "expo-next": [
+        "./dist/drivers/expo-sqlite-next/index.d.ts"
       ],
       "generic": [
         "./dist/drivers/generic/index.d.ts"
@@ -203,7 +207,7 @@
     "ava": "^4.3.1",
     "concurrently": "^8.2.2",
     "eslint": "^8.22.0",
-    "expo-sqlite": "^11.7.0",
+    "expo-sqlite": "^13.0.0",
     "glob": "^10.3.10",
     "husky": "^8.0.3",
     "lint-staged": "^13.1.0",
@@ -225,7 +229,7 @@
   "peerDependencies": {
     "@capacitor-community/sqlite": ">= 5.4.1",
     "cordova-sqlite-storage": ">= 5.0.0",
-    "expo-sqlite": ">= 11.7.0",
+    "expo-sqlite": ">= 13.0.0",
     "react": ">= 16.8.0",
     "react-dom": ">= 16.8.0",
     "react-native": ">= 0.68.0",
