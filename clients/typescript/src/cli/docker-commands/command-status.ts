@@ -7,7 +7,7 @@ export function makeStatusCommand() {
     .description(
       'Show status of the ElectricSQL sync service docker containers'
     )
-    .action(async () => {
+    .action(() => {
       const config = getConfig()
       status({ config })
     })
