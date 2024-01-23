@@ -274,7 +274,8 @@ defmodule Electric.Replication.Postgres.TcpServer do
   defp initialize_connection(socket, %State{} = state, _settings) do
     Messaging.error(:fatal,
       code: "08004",
-      message: "Electric mesh allows connection only in `replication=database` mode"
+      message:
+        "Electric requires connections from Postgres to include the `replication=database` option"
     )
     |> tcp_send(socket)
 
