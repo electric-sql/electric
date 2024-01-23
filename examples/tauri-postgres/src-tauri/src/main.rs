@@ -8,6 +8,7 @@ use ollama_rs::{
     generation::completion::request::GenerationRequest,
     Ollama,
 };
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Number;
 use sqlx::{postgres::PgArguments, Arguments};
@@ -16,6 +17,7 @@ use sqlx::{Either, PgConnection};
 // General
 use pg_embed::postgres::PgEmbed;
 
+use tauri::api::process::{Command, CommandEvent};
 // Tauri
 use tauri::async_runtime::block_on;
 use tauri::Manager;
@@ -36,6 +38,8 @@ use pg::{pg_connect, pg_init, pg_query, patch, row_to_json};
 
 // Postgres console
 use portable_pty::{native_pty_system, CommandBuilder, PtyPair, PtySize};
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::{
     io::{BufRead, BufReader, Write},
     sync::{Arc, Mutex},
@@ -88,6 +92,7 @@ struct DbConnection {
     conn: Arc<AsyncMutex<Option<PgConnection>>>,
     llama: Arc<AsyncMutex<Option<Ollama>>>,
     pg_port: Mutex<Option<u16>>,
+    ollama_port: Mutex<Option<u16>>,
 }
 
 /// App state for the terminal window
@@ -274,9 +279,16 @@ async fn tauri_init_command(connection: State<'_, DbConnection>, name: &str) -> 
     .await;
     let conn = pg_connect(&pg, "test").await;
 
+
+    let ollama_port;
+    {
+        let ollama_port_guard = connection.ollama_port.lock().unwrap();
+        ollama_port = *ollama_port_guard.as_ref().unwrap();
+    }
+
     *connection.db.lock().await = Some(pg);
     *connection.conn.lock().await = Some(conn);
-    *connection.llama.lock().await = Some(Ollama::default());
+    *connection.llama.lock().await = Some(Ollama::new("http://127.0.0.1".to_string(), ollama_port));
 
     Ok(())
 }
@@ -434,6 +446,13 @@ async fn async_process_model(
 
 const DEFAULT_PG_PORT: u16 = 33333;
 
+fn extract_ollama_port(line: String) -> Option<String> {
+    let re = Regex::new(r"Listening on 127.0.0.1:(\d+)").unwrap();
+    re.captures(line.as_str())
+      .and_then(|caps| caps.get(1))
+      .map(|match_| match_.as_str().to_string())
+}
+
 fn main() {
     // pg_port is either ELECTRIC_TAURI_PG_PORT, either the first argument, or the DEFAULT_PG_PORT(33333)
     let pg_port = match env::var("ELECTRIC_TAURI_PG_PORT") {
@@ -483,6 +502,46 @@ fn main() {
 
     let reader = Arc::new(Mutex::new(Some(BufReader::new(reader))));
 
+    let mut ollama_port: u16 = 0;
+
+    // Setup ollama
+    eprintln!("Starting Ollama");
+    let host = "127.0.0.1:0".to_string();
+    let mut envs: HashMap<String, String> = HashMap::new();
+    envs.insert("OLLAMA_HOST".to_string(), host);
+
+    let (mut rx, mut child) = Command::new_sidecar("ollama-darwin")
+        .expect("failed to create `ollama-darwin` binary command")
+        .envs(envs)
+        .args(["serve"])
+        .spawn()
+        .expect("Failed to spawn ollama-darwin");
+
+    while let Some(event) = rx.blocking_recv() {
+        if let CommandEvent::Stderr(line) = event {
+            match extract_ollama_port(line.clone()) {
+                Some(port) => {
+                    ollama_port = port.parse::<u16>().unwrap();
+                    break;
+                },
+                None => eprintln!("Cannot tell ollama port from this log line"),
+            }
+            eprintln!("{}", line);
+        }
+    }
+
+    eprintln!("The ollama_port is definitely {:?}", ollama_port);
+
+    // keep the program running
+    tauri::async_runtime::spawn(async move {
+        // read events such as stdout
+        while let Some(event) = rx.recv().await {
+            if let CommandEvent::Stderr(line) = event {
+                eprintln!("{}", line);
+            }
+        }
+    });
+
     tauri::Builder::default()
         .on_page_load(move |window, _| {
             let window = window.clone();
@@ -501,12 +560,14 @@ fn main() {
                     }
                 }
             });
+
         })
         .manage(DbConnection {
             db: Default::default(),
             conn: Default::default(),
             llama: Default::default(),
             pg_port: Mutex::new(Some(pg_port)),
+            ollama_port: Mutex::new(Some(ollama_port)),
         })
         .manage(TerminalState {
             pty_pair: Arc::new(AsyncMutex::new(pty_pair)),
@@ -517,6 +578,15 @@ fn main() {
             flag: AsyncMutex::new(false),
         })
         .setup(|app| {
+            // Setup ort
+            #[cfg(target_os = "macos")]
+            let resource_path = app.path_resolver()
+                .resolve_resource("libonnxruntime.dylib")
+                .expect("failed to resolve the dymanic library for onnx");
+
+            env::set_var("ORT_DYLIB_PATH", resource_path);
+
+            // Setup the async chat
             tauri::async_runtime::spawn(async move {
                 async_process_model(
                     async_proc_input_rx,

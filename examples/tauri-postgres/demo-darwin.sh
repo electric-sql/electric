@@ -23,15 +23,12 @@ git_clone() {
 # Install ollama
 install_ollama() {
     echo "Installing ollama"
-    wget https://ollama.ai/download/Ollama-darwin.zip -O ollama.zip
-    unzip ollama.zip
-
-    # Check installation
-    Ollama.app/Contents/Resources/ollama -h
+    wget https://github.com/jmorganca/ollama/releases/download/v0.1.20/ollama-darwin
+    chmod +x ollama-darwin
 }
 
 start_ollama() {
-    nohup Ollama.app/Contents/Resources/ollama serve 2>/dev/null 1>&2 &
+    nohup ollama-darwin serve 2>/dev/null 1>&2 &
     disown
 }
 
