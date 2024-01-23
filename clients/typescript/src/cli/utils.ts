@@ -127,8 +127,10 @@ export function extractServiceURL(serviceUrl: string) {
   }
 }
 
-export function parsePgProxyPort(str: string) {
-  if (str.includes(':')) {
+export function parsePgProxyPort(str: string | number) {
+  if (typeof str === 'number') {
+    return { http: false, port: str }
+  } else if (str.includes(':')) {
     const [prefix, port] = str.split(':')
     return {
       http: prefix.toLocaleLowerCase() === 'http',

@@ -1,7 +1,8 @@
 import path from 'path'
 import {
-  defaultDbUrlPart,
-  defaultServiceUrlPart,
+  inferDbUrlPart,
+  inferProxyUrlPart,
+  inferServiceUrlPart,
   getConfigValue,
   type ConfigMap,
 } from './config'
@@ -59,7 +60,8 @@ export const configOptions = {
     valueTypeName: 'hostname',
     doc: 'Hostname the Electric service is running on.',
     groups: ['client', 'proxy'],
-    defaultVal: () => defaultServiceUrlPart('host', 'localhost'),
+    inferVal: (options: ConfigMap) => inferServiceUrlPart('host', options),
+    defaultVal: 'localhost',
   },
   PG_PROXY_HOST: {
     valueType: String,
@@ -71,6 +73,7 @@ export const configOptions = {
       If using the proxy-tunnel, this should be the hostname of the tunnel.
     `,
     groups: ['client', 'proxy'],
+    inferVal: (options: ConfigMap) => inferProxyUrlPart('host', options),
     defaultVal: (options: ConfigMap) => getConfigValue('SERVICE_HOST', options),
   },
   MODULE_RESOLUTION: {
@@ -111,31 +114,36 @@ export const configOptions = {
   DATABASE_HOST: {
     doc: 'Hostname of the database server.',
     valueType: String,
-    defaultVal: () => defaultDbUrlPart('host', 'localhost'),
+    inferVal: (options: ConfigMap) => inferDbUrlPart('host', options),
+    defaultVal: 'localhost',
     groups: ['database'],
   },
   DATABASE_PORT: {
     doc: 'Port number of the database server.',
     valueType: Number,
-    defaultVal: () => defaultDbUrlPart('port', 5432),
+    inferVal: (options: ConfigMap) => inferDbUrlPart('port', options),
+    defaultVal: 5432,
     groups: ['database'],
   },
   DATABASE_USER: {
     doc: 'Username to connect to the database with.',
     valueType: String,
-    defaultVal: () => defaultDbUrlPart('user', 'postgres'),
+    inferVal: (options: ConfigMap) => inferDbUrlPart('user', options),
+    defaultVal: 'postgres',
     groups: ['database'],
   },
   DATABASE_PASSWORD: {
     doc: 'Password to connect to the database with.',
     valueType: String,
-    defaultVal: () => defaultDbUrlPart('password', 'db_password'),
+    inferVal: (options: ConfigMap) => inferDbUrlPart('password', options),
+    defaultVal: 'db_password',
     groups: ['database'],
   },
   DATABASE_NAME: {
     doc: 'Name of the database to connect to.',
     valueType: String,
-    defaultVal: () => defaultDbUrlPart('dbName', getAppName() ?? 'electric'),
+    inferVal: (options: ConfigMap) => inferDbUrlPart('dbName', options),
+    defaultVal: () => getAppName() ?? 'electric',
     groups: ['database', 'client', 'proxy'],
   },
 
@@ -179,7 +187,8 @@ export const configOptions = {
     groups: ['electric'],
   },
   HTTP_PORT: {
-    defaultVal: () => defaultServiceUrlPart('port', 5133),
+    inferVal: (options: ConfigMap) => inferServiceUrlPart('port', options),
+    defaultVal: '5133',
     valueType: Number,
     valueTypeName: 'port',
     doc: dedent`
@@ -189,6 +198,7 @@ export const configOptions = {
     groups: ['electric', 'client'],
   },
   PG_PROXY_PORT: {
+    inferVal: (options: ConfigMap) => inferProxyUrlPart('port', options),
     defaultVal: '65432',
     valueType: String,
     valueTypeName: 'port',
@@ -196,6 +206,7 @@ export const configOptions = {
     groups: ['electric', 'client', 'proxy'],
   },
   PG_PROXY_PASSWORD: {
+    inferVal: (options: ConfigMap) => inferProxyUrlPart('password', options),
     defaultVal: 'proxy_password',
     valueType: String,
     valueTypeName: 'password',
