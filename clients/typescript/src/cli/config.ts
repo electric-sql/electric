@@ -9,6 +9,7 @@ export interface AnyConfigOption {
   valueType: typeof String | typeof Number | typeof Boolean
   valueTypeName?: string
   shortForm?: string
+  inferVal?: (options: ConfigMap) => string | number | boolean | undefined
   defaultVal?:
     | string
     | number
@@ -25,35 +26,53 @@ export type ConfigOptionName = keyof ConfigOptions
 type ConfigOption<T extends ConfigOptionName> = ConfigOptions[T]
 
 type ConfigOptionValue<T extends ConfigOptionName> = ConfigOption<T> extends {
+  inferVal: undefined
   defaultVal: undefined
 }
   ? ReturnType<ConfigOption<T>['valueType']> | undefined
   : ReturnType<ConfigOption<T>['valueType']>
 
-export function defaultDbUrlPart<T>(
-  part: keyof ReturnType<typeof extractDatabaseURL>,
-  defaultValue: T
-): T {
-  const url = process.env.ELECTRIC_DATABASE_URL
+export function inferDbUrlPart<
+  K extends keyof ReturnType<typeof extractDatabaseURL>
+>(
+  part: K,
+  options: any = {},
+  defaultValue?: ReturnType<typeof extractDatabaseURL>[K]
+): ReturnType<typeof extractDatabaseURL>[K] | undefined {
+  const url =
+    options.databaseUrl ||
+    options.DATABASE_URL ||
+    process.env.ELECTRIC_DATABASE_URL
   if (url) {
-    const parsed = extractDatabaseURL(url)
-    if (parsed && parsed[part] !== undefined) {
-      return parsed[part] as T
-    }
+    return extractDatabaseURL(url)?.[part] ?? defaultValue
   }
   return defaultValue
 }
 
-export function defaultServiceUrlPart<T>(
-  part: keyof ReturnType<typeof extractServiceURL>,
-  defaultValue: T
-): T {
-  const url = process.env.ELECTRIC_SERVICE
+export function inferProxyUrlPart<
+  K extends keyof ReturnType<typeof extractDatabaseURL>
+>(
+  part: K,
+  options: any = {},
+  defaultValue?: ReturnType<typeof extractDatabaseURL>[K]
+): ReturnType<typeof extractDatabaseURL>[K] | undefined {
+  const url = options.proxy || options.PROXY || process.env.ELECTRIC_PROXY
   if (url) {
-    const parsed = extractServiceURL(url)
-    if (parsed && parsed[part] !== undefined) {
-      return parsed[part] as T
-    }
+    return extractDatabaseURL(url)?.[part] ?? defaultValue
+  }
+  return defaultValue
+}
+
+export function inferServiceUrlPart<
+  K extends keyof ReturnType<typeof extractServiceURL>
+>(
+  part: K,
+  options: any = {},
+  defaultValue?: ReturnType<typeof extractServiceURL>[K]
+): ReturnType<typeof extractServiceURL>[K] | undefined {
+  const url = options.service || options.SERVICE || process.env.ELECTRIC_SERVICE
+  if (url) {
+    return extractServiceURL(url)?.[part] ?? defaultValue
   }
   return defaultValue
 }
@@ -69,6 +88,18 @@ export function getConfigValue<K extends ConfigOptionName>(
       return options[optName] as ConfigOptionValue<K>
     } else if (options[name] !== undefined) {
       return options[name] as ConfigOptionValue<K>
+    }
+  }
+
+  // Then check if the option has an method to infer a value from other options.
+  // If we get a value from this method, use it.
+  const inferVal = (configOptions[name] as AnyConfigOption).inferVal as (
+    options: ConfigMap
+  ) => ConfigOptionValue<K> | undefined
+  if (inferVal) {
+    const val = inferVal(options)
+    if (val !== undefined) {
+      return val
     }
   }
 
