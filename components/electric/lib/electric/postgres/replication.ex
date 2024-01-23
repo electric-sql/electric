@@ -175,10 +175,18 @@ defmodule Electric.Postgres.Replication do
   end
 
   defp replication_msg_table_col(%Proto.Column{} = column, dialect) do
+    has_not_null_constraint? =
+      Enum.find_value(
+        column.constraints,
+        false,
+        &match?(%Proto.Constraint{constraint: {:not_null, _}}, &1)
+      )
+
     %SatOpMigrate.Column{
       name: column.name,
       pg_type: replication_msg_table_col_type(column.type),
-      sqlite_type: Dialect.type_name(column.type, dialect)
+      sqlite_type: Dialect.type_name(column.type, dialect),
+      is_nullable: not has_not_null_constraint?
     }
   end
 

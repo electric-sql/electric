@@ -462,6 +462,7 @@ export interface SatOpMigrate_Column {
   name: string;
   sqliteType: string;
   pgType: SatOpMigrate_PgColumnType | undefined;
+  isNullable: boolean;
 }
 
 export interface SatOpMigrate_ForeignKey {
@@ -2940,7 +2941,13 @@ export const SatOpMigrate_PgColumnType = {
 messageTypeRegistry.set(SatOpMigrate_PgColumnType.$type, SatOpMigrate_PgColumnType);
 
 function createBaseSatOpMigrate_Column(): SatOpMigrate_Column {
-  return { $type: "Electric.Satellite.SatOpMigrate.Column", name: "", sqliteType: "", pgType: undefined };
+  return {
+    $type: "Electric.Satellite.SatOpMigrate.Column",
+    name: "",
+    sqliteType: "",
+    pgType: undefined,
+    isNullable: false,
+  };
 }
 
 export const SatOpMigrate_Column = {
@@ -2955,6 +2962,9 @@ export const SatOpMigrate_Column = {
     }
     if (message.pgType !== undefined) {
       SatOpMigrate_PgColumnType.encode(message.pgType, writer.uint32(26).fork()).ldelim();
+    }
+    if (message.isNullable === true) {
+      writer.uint32(32).bool(message.isNullable);
     }
     return writer;
   },
@@ -2987,6 +2997,13 @@ export const SatOpMigrate_Column = {
 
           message.pgType = SatOpMigrate_PgColumnType.decode(reader, reader.uint32());
           continue;
+        case 4:
+          if (tag !== 32) {
+            break;
+          }
+
+          message.isNullable = reader.bool();
+          continue;
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3007,6 +3024,7 @@ export const SatOpMigrate_Column = {
     message.pgType = (object.pgType !== undefined && object.pgType !== null)
       ? SatOpMigrate_PgColumnType.fromPartial(object.pgType)
       : undefined;
+    message.isNullable = object.isNullable ?? false;
     return message;
   },
 };

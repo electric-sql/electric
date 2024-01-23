@@ -407,6 +407,7 @@ message SatOpMigrate {
         string name = 1;
         string sqlite_type = 2;
         PgColumnType pg_type = 3;
+        bool is_nullable = 4;
     }
     message ForeignKey {
         // the columns in the child table that point to the parent

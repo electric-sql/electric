@@ -27,6 +27,8 @@ type PrismaModelField = {
   mappedName: string
   // The field's Prisma type which includes the native Prisma type and 0+ attributes
   prismaType: { name: string; attributes: string[] }
+  // Whether the column has NOT NULL constraint
+  isNullable: boolean
 }
 
 // Process table definitions in the migrations metadata and convert each table
@@ -98,6 +100,7 @@ function patchModelsWithBackReferences(models: PrismaModel[]) {
         sourceName: backReferenceName,
         mappedName: backReferenceName,
         prismaType: { name: model.mappedName + '[]', attributes: [] },
+        isNullable: false,
       })
     })
   })
@@ -124,10 +127,10 @@ function convertFKToPrismaModelField({
         )}, onDelete: NoAction, onUpdate: NoAction)`,
       ],
     },
+    isNullable: false, // TODO: look up nullability on fkCols
   }
 }
 
-// TODO: add NULL/NOT NULL flags
 function convertTableColumnToPrismaModelField(
   column: SatOpMigrate_Column,
   pks: string[]
@@ -140,6 +143,7 @@ function convertTableColumnToPrismaModelField(
     sourceName: column.name,
     mappedName: mapNameToPrisma(column.name),
     prismaType: fieldType,
+    isNullable: column.isNullable,
   }
 }
 
@@ -194,9 +198,10 @@ function formatModelField(field: PrismaModelField): string {
   if (field.sourceName != field.mappedName) {
     attributes.push(`@map(${quoteString(field.sourceName)})`)
   }
+  const nullabilitySuffix = field.isNullable ? '?' : ''
   return [
     field.mappedName,
-    field.prismaType.name,
+    field.prismaType.name + nullabilitySuffix,
     attributes.concat(field.prismaType.attributes).join('  '),
   ]
     .join('\t')

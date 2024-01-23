@@ -244,17 +244,20 @@ defmodule Electric.Postgres.ReplicationTest do
                  %SatOpMigrate.Column{
                    name: "id",
                    sqlite_type: "INTEGER",
-                   pg_type: %SatOpMigrate.PgColumnType{name: "int8"}
+                   pg_type: %SatOpMigrate.PgColumnType{name: "int8"},
+                   is_nullable: false
                  },
                  %SatOpMigrate.Column{
                    name: "value",
                    sqlite_type: "TEXT_JSON",
-                   pg_type: %SatOpMigrate.PgColumnType{name: "jsonb"}
+                   pg_type: %SatOpMigrate.PgColumnType{name: "jsonb"},
+                   is_nullable: true
                  },
                  %SatOpMigrate.Column{
                    name: "ts",
                    sqlite_type: "TEXT",
-                   pg_type: %SatOpMigrate.PgColumnType{name: "timestamp"}
+                   pg_type: %SatOpMigrate.PgColumnType{name: "timestamp"},
+                   is_nullable: true
                  }
                ],
                fks: [],

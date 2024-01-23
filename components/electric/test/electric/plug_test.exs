@@ -70,83 +70,59 @@ defmodule Electric.PlugTest do
 
       {:ok, file_list} = :zip.extract(body, [:memory])
 
-      assert file_list == [
+      assert [
                {~c"0001/migration.sql",
                 "CREATE TABLE \"a\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"a_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n\n\nCREATE TABLE \"b\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"b_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n\n\nCREATE INDEX \"a_idx\" ON \"a\" (\"value\" ASC);\n"},
-               {
-                 ~c"0001/metadata.json",
-                 "{\"format\":\"SatOpMigrate\",\"ops\":[\"GjIKAWESEgoCaWQSBFRFWFQaBgoEdXVpZBIVCgV2YWx1ZRIEVEVYVBoGCgR0ZXh0IgJpZAoEMDAwMRJ+EnxDUkVBVEUgVEFCTEUgImEiICgKICAiaWQiIFRFWFQgTk9UIE5VTEwsCiAgInZhbHVlIiBURVhUIE5PVCBOVUxMLAogIENPTlNUUkFJTlQgImFfcGtleSIgUFJJTUFSWSBLRVkgKCJpZCIpCikgV0lUSE9VVCBST1dJRDsK\",\"GjIKAWISEgoCaWQSBFRFWFQaBgoEdXVpZBIVCgV2YWx1ZRIEVEVYVBoGCgR0ZXh0IgJpZAoEMDAwMRJ+EnxDUkVBVEUgVEFCTEUgImIiICgKICAiaWQiIFRFWFQgTk9UIE5VTEwsCiAgInZhbHVlIiBURVhUIE5PVCBOVUxMLAogIENPTlNUUkFJTlQgImJfcGtleSIgUFJJTUFSWSBLRVkgKCJpZCIpCikgV0lUSE9VVCBST1dJRDsK\",\"CgQwMDAxEi8IARIrQ1JFQVRFIElOREVYICJhX2lkeCIgT04gImEiICgidmFsdWUiIEFTQyk7Cg==\"],\"protocol_version\":\"Electric.Satellite\",\"version\":\"0001\"}"
-               },
+               {~c"0001/metadata.json", json_0001},
                {~c"0002/migration.sql",
                 "CREATE TABLE \"c\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"c_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n"},
-               {
-                 ~c"0002/metadata.json",
-                 "{\"format\":\"SatOpMigrate\",\"ops\":[\"GjIKAWMSEgoCaWQSBFRFWFQaBgoEdXVpZBIVCgV2YWx1ZRIEVEVYVBoGCgR0ZXh0IgJpZAoEMDAwMhJ+EnxDUkVBVEUgVEFCTEUgImMiICgKICAiaWQiIFRFWFQgTk9UIE5VTEwsCiAgInZhbHVlIiBURVhUIE5PVCBOVUxMLAogIENPTlNUUkFJTlQgImNfcGtleSIgUFJJTUFSWSBLRVkgKCJpZCIpCikgV0lUSE9VVCBST1dJRDsK\"],\"protocol_version\":\"Electric.Satellite\",\"version\":\"0002\"}"
-               },
+               {~c"0002/metadata.json", json_0002},
                {~c"0003/migration.sql",
                 "CREATE TABLE \"d\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"d_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n\n\nALTER TABLE \"d\" ADD COLUMN \"is_valid\" INTEGER;\n"},
-               {
-                 ~c"0003/metadata.json",
-                 "{\"format\":\"SatOpMigrate\",\"ops\":[\"Gk8KAWQSEgoCaWQSBFRFWFQaBgoEdXVpZBIVCgV2YWx1ZRIEVEVYVBoGCgR0ZXh0EhsKCGlzX3ZhbGlkEgdJTlRFR0VSGgYKBGJvb2wiAmlkCgQwMDAzEn4SfENSRUFURSBUQUJMRSAiZCIgKAogICJpZCIgVEVYVCBOT1QgTlVMTCwKICAidmFsdWUiIFRFWFQgTk9UIE5VTEwsCiAgQ09OU1RSQUlOVCAiZF9wa2V5IiBQUklNQVJZIEtFWSAoImlkIikKKSBXSVRIT1VUIFJPV0lEOwo=\",\"Gk8KAWQSEgoCaWQSBFRFWFQaBgoEdXVpZBIVCgV2YWx1ZRIEVEVYVBoGCgR0ZXh0EhsKCGlzX3ZhbGlkEgdJTlRFR0VSGgYKBGJvb2wiAmlkCgQwMDAzEjMIBhIvQUxURVIgVEFCTEUgImQiIEFERCBDT0xVTU4gImlzX3ZhbGlkIiBJTlRFR0VSOwo=\"],\"protocol_version\":\"Electric.Satellite\",\"version\":\"0003\"}"
-               },
+               {~c"0003/metadata.json", json_0003},
                {~c"0004/migration.sql",
                 "CREATE TABLE \"e\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"e_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n"},
-               {
-                 ~c"0004/metadata.json",
-                 "{\"format\":\"SatOpMigrate\",\"ops\":[\"GjIKAWUSEgoCaWQSBFRFWFQaBgoEdXVpZBIVCgV2YWx1ZRIEVEVYVBoGCgR0ZXh0IgJpZAoEMDAwNBJ+EnxDUkVBVEUgVEFCTEUgImUiICgKICAiaWQiIFRFWFQgTk9UIE5VTEwsCiAgInZhbHVlIiBURVhUIE5PVCBOVUxMLAogIENPTlNUUkFJTlQgImVfcGtleSIgUFJJTUFSWSBLRVkgKCJpZCIpCikgV0lUSE9VVCBST1dJRDsK\"],\"protocol_version\":\"Electric.Satellite\",\"version\":\"0004\"}"
-               }
-             ]
+               {~c"0004/metadata.json", json_0004}
+             ] = file_list
 
-      assert {~c"0001/metadata.json", json} = List.keyfind(file_list, ~c"0001/metadata.json", 0)
+      assert %{
+               "format" => "SatOpMigrate",
+               "ops" => [op1, _op2, _op3],
+               "protocol_version" => "Electric.Satellite",
+               "version" => "0001"
+             } = Jason.decode!(json_0001)
 
-      assert {:ok,
-              %{
-                "format" => "SatOpMigrate",
-                "ops" => [op1, _op2, _op3],
-                "protocol_version" => "Electric.Satellite",
-                "version" => "0001"
-              }} = Jason.decode(json)
+      assert %SatOpMigrate{
+               stmts: [
+                 %SatOpMigrate.Stmt{
+                   type: :CREATE_TABLE,
+                   sql:
+                     "CREATE TABLE \"a\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"a_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n"
+                 }
+               ],
+               table: %SatOpMigrate.Table{
+                 name: "a",
+                 columns: [
+                   %SatOpMigrate.Column{
+                     name: "id",
+                     sqlite_type: "TEXT",
+                     pg_type: %SatOpMigrate.PgColumnType{name: "uuid"}
+                   },
+                   %SatOpMigrate.Column{
+                     name: "value",
+                     sqlite_type: "TEXT",
+                     pg_type: %SatOpMigrate.PgColumnType{name: "text"}
+                   }
+                 ],
+                 fks: [],
+                 pks: ["id"]
+               },
+               version: "0001"
+             } = op1 |> Base.decode64!() |> SatOpMigrate.decode!()
 
-      assert {:ok,
-              %SatOpMigrate{
-                stmts: [
-                  %SatOpMigrate.Stmt{
-                    type: :CREATE_TABLE,
-                    sql:
-                      "CREATE TABLE \"a\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"a_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n"
-                  }
-                ],
-                table: %SatOpMigrate.Table{
-                  name: "a",
-                  columns: [
-                    %SatOpMigrate.Column{
-                      name: "id",
-                      sqlite_type: "TEXT",
-                      pg_type: %SatOpMigrate.PgColumnType{name: "uuid"}
-                    },
-                    %SatOpMigrate.Column{
-                      name: "value",
-                      sqlite_type: "TEXT",
-                      pg_type: %SatOpMigrate.PgColumnType{name: "text"}
-                    }
-                  ],
-                  fks: [],
-                  pks: ["id"]
-                },
-                version: "0001"
-              }} = op1 |> Base.decode64!() |> SatOpMigrate.decode()
-
-      assert {~c"0002/metadata.json", json} = List.keyfind(file_list, ~c"0002/metadata.json", 0)
-
-      assert {:ok, %{"ops" => [_]}} = Jason.decode(json)
-
-      assert {~c"0003/metadata.json", json} = List.keyfind(file_list, ~c"0003/metadata.json", 0)
-
-      assert {:ok, %{"ops" => [_, _]}} = Jason.decode(json)
-
-      assert {~c"0004/metadata.json", json} = List.keyfind(file_list, ~c"0004/metadata.json", 0)
-
-      assert {:ok, %{"ops" => [_]}} = Jason.decode(json)
+      assert %{"ops" => [_], "version" => "0002"} = Jason.decode!(json_0002)
+      assert %{"ops" => [_, _], "version" => "0003"} = Jason.decode!(json_0003)
+      assert %{"ops" => [_], "version" => "0004"} = Jason.decode!(json_0004)
     end
 
     test_tx "can return migrations after a certain point", fn conn ->
@@ -163,20 +139,28 @@ defmodule Electric.PlugTest do
 
       {:ok, file_list} = :zip.extract(body, [:memory])
 
-      assert file_list == [
+      assert [
                {~c"0003/migration.sql",
                 "CREATE TABLE \"d\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"d_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n\n\nALTER TABLE \"d\" ADD COLUMN \"is_valid\" INTEGER;\n"},
-               {
-                 ~c"0003/metadata.json",
-                 "{\"format\":\"SatOpMigrate\",\"ops\":[\"Gk8KAWQSEgoCaWQSBFRFWFQaBgoEdXVpZBIVCgV2YWx1ZRIEVEVYVBoGCgR0ZXh0EhsKCGlzX3ZhbGlkEgdJTlRFR0VSGgYKBGJvb2wiAmlkCgQwMDAzEn4SfENSRUFURSBUQUJMRSAiZCIgKAogICJpZCIgVEVYVCBOT1QgTlVMTCwKICAidmFsdWUiIFRFWFQgTk9UIE5VTEwsCiAgQ09OU1RSQUlOVCAiZF9wa2V5IiBQUklNQVJZIEtFWSAoImlkIikKKSBXSVRIT1VUIFJPV0lEOwo=\",\"Gk8KAWQSEgoCaWQSBFRFWFQaBgoEdXVpZBIVCgV2YWx1ZRIEVEVYVBoGCgR0ZXh0EhsKCGlzX3ZhbGlkEgdJTlRFR0VSGgYKBGJvb2wiAmlkCgQwMDAzEjMIBhIvQUxURVIgVEFCTEUgImQiIEFERCBDT0xVTU4gImlzX3ZhbGlkIiBJTlRFR0VSOwo=\"],\"protocol_version\":\"Electric.Satellite\",\"version\":\"0003\"}"
-               },
+               {~c"0003/metadata.json", json_0003},
                {~c"0004/migration.sql",
                 "CREATE TABLE \"e\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"e_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n"},
-               {
-                 ~c"0004/metadata.json",
-                 "{\"format\":\"SatOpMigrate\",\"ops\":[\"GjIKAWUSEgoCaWQSBFRFWFQaBgoEdXVpZBIVCgV2YWx1ZRIEVEVYVBoGCgR0ZXh0IgJpZAoEMDAwNBJ+EnxDUkVBVEUgVEFCTEUgImUiICgKICAiaWQiIFRFWFQgTk9UIE5VTEwsCiAgInZhbHVlIiBURVhUIE5PVCBOVUxMLAogIENPTlNUUkFJTlQgImVfcGtleSIgUFJJTUFSWSBLRVkgKCJpZCIpCikgV0lUSE9VVCBST1dJRDsK\"],\"protocol_version\":\"Electric.Satellite\",\"version\":\"0004\"}"
-               }
-             ]
+               {~c"0004/metadata.json", json_0004}
+             ] = file_list
+
+      assert %{
+               "format" => "SatOpMigrate",
+               "ops" => [_create_table, _alter_table],
+               "protocol_version" => "Electric.Satellite",
+               "version" => "0003"
+             } = Jason.decode!(json_0003)
+
+      assert %{
+               "format" => "SatOpMigrate",
+               "ops" => [_create_table],
+               "protocol_version" => "Electric.Satellite",
+               "version" => "0004"
+             } = Jason.decode!(json_0004)
     end
 
     test "returns error if dialect missing", _cxt do
