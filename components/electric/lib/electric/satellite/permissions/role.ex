@@ -1,5 +1,6 @@
 defmodule Electric.Satellite.Permissions.Role do
   alias Electric.Satellite.SatPerms
+  alias Electric.Satellite.Permissions
 
   defmodule Anyone do
     defstruct []
@@ -17,8 +18,7 @@ defmodule Electric.Satellite.Permissions.Role do
 
   @type relation() :: Electric.Postgres.relation()
   @type predefined() :: Authenticated.t() | Anyone.t()
-  @type scope_id() :: Electric.Postgres.pk()
-  @type scope() :: {relation, scope_id()}
+  @type scope() :: Permissions.scope()
   @type t() ::
           predefined()
           | %__MODULE__{
