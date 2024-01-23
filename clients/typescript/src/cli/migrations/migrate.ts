@@ -9,8 +9,12 @@ import http from 'node:http'
 import https from 'node:https'
 import Module from 'node:module'
 import path from 'path'
-import { buildDatabaseURL, parsePgProxyPort } from '../utils'
-import { buildMigrations, getMigrationNames } from './builder'
+import { buildMigrations, getMigrationNames, loadMigrations } from './builder'
+import { MetaData } from '../../migrators'
+import {
+  migrationsToPrismaModels,
+  formatPrismaModel,
+} from './migration-to-prisma-models'
 import { findAndReplaceInFile } from '../util'
 import { getConfig, type Config } from '../config'
 import { start } from '../docker-commands/command-start'
@@ -88,7 +92,6 @@ export async function generate(options: GeneratorOptions) {
       }
     }
     console.log('Service URL: ' + opts.config.SERVICE)
-    console.log('Proxy URL: ' + stripPasswordFromUrl(opts.config.PROXY))
     // Generate the client
     if (opts.watch) {
       watchMigrations(opts)
@@ -247,10 +250,11 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
     // Fetch the migrations from Electric endpoint and write them into `tmpFolder`
     await fetchMigrations(migrationEndpoint, migrationsFolder, tmpFolder)
 
-    const prismaSchema = await createIntrospectionSchema(tmpFolder, opts)
+    const prismaSchema = await createIntrospectionSchema(tmpFolder)
+    const migrationsMetadata = await loadMigrations(migrationsFolder)
 
     // Introspect the created DB to update the Prisma schema
-    await introspectDB(prismaSchema)
+    await introspectDB(prismaSchema, migrationsMetadata)
 
     // Generate the Electric client from the given introspected schema
     await generateClient(prismaSchema, config.CLIENT_PATH)
@@ -260,7 +264,7 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
 
     // Build the migrations
     console.log('Building migrations...')
-    await buildMigrations(migrationsFolder, migrationsFile)
+    await buildMigrations(migrationsMetadata, migrationsFile)
     console.log('Successfully built migrations')
 
     if (
@@ -348,34 +352,21 @@ function escapePathForString(inputPath: string): string {
     : inputPath
 }
 
-function buildProxyUrlForIntrospection(config: Config) {
-  return buildDatabaseURL({
-    user: 'prisma', // We use the "prisma" user to put the proxy into introspection mode
-    password: config.PG_PROXY_PASSWORD,
-    host: config.PG_PROXY_HOST,
-    port: parsePgProxyPort(config.PG_PROXY_PORT).port,
-    dbName: config.DATABASE_NAME,
-  })
-}
-
 /**
  * Creates a fresh Prisma schema in the provided folder.
  * The Prisma schema is initialised with a generator and a datasource.
  */
-async function createIntrospectionSchema(
-  folder: string,
-  opts: GeneratorOptions
-) {
-  const config = opts.config
+async function createIntrospectionSchema(folder: string) {
   const prismaDir = path.join(folder, 'prisma')
   const prismaSchemaFile = path.join(prismaDir, 'schema.prisma')
   await fs.mkdir(prismaDir)
-  const proxyUrl = buildProxyUrlForIntrospection(config)
   const schema = dedent`
     datasource db {
       provider = "postgresql"
-      url      = "${proxyUrl}"
-    }`
+      url      = ""
+    }
+    
+    `
   await fs.writeFile(prismaSchemaFile, schema)
   return prismaSchemaFile
 }
@@ -533,11 +524,22 @@ export function doCapitaliseTableNames(lines: string[]): string[] {
   return lines
 }
 
-async function introspectDB(prismaSchema: string): Promise<void> {
-  await executeShellCommand(
-    `node ${prismaPath} db pull --schema="${prismaSchema}"`,
-    'Introspection script exited with error code: '
-  )
+async function introspectDB(
+  prismaSchema: string,
+  migrationsMetadata: MetaData[]
+): Promise<void> {
+  const stream = createWriteStream(prismaSchema, { flags: 'a' })
+
+  migrationsToPrismaModels(migrationsMetadata)
+    .map(formatPrismaModel)
+    .forEach((str) => stream.write(str))
+
+  stream.end()
+
+  return new Promise((resolve, reject) => {
+    stream.on('finish', () => resolve())
+    stream.on('error', reject)
+  })
 }
 
 /**
@@ -651,8 +653,8 @@ async function fetchMigrations(
     options.protocol == 'http:'
       ? http
       : options.protocol == 'https:'
-      ? https
-      : undefined
+        ? https
+        : undefined
 
   if (requestModule === undefined)
     throw new TypeError(
@@ -824,12 +826,4 @@ async function withMigrationsConfig(containerName: string) {
       .toString(36)
       .slice(6)}`,
   }
-}
-
-function stripPasswordFromUrl(url: string): string {
-  const parsed = new URL(url)
-  if (parsed.password) {
-    parsed.password = '********'
-  }
-  return parsed.toString()
 }
