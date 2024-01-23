@@ -199,7 +199,7 @@ export const configOptions = {
   },
   PG_PROXY_PORT: {
     inferVal: (options: ConfigMap) => inferProxyUrlPart('port', options),
-    defaultVal: 65432,
+    defaultVal: '65432',
     valueType: String,
     valueTypeName: 'port',
     doc: 'Port number for connections to the Postgres migration proxy.',
