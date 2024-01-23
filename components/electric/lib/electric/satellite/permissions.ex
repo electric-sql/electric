@@ -218,7 +218,7 @@ defmodule Electric.Satellite.Permissions do
         }
 
   @doc """
-  Configure a new empty permissions configuration with the given auth token, scope resvolver and
+  Configure a new empty permissions configuration with the given auth token, scope resolver and
   (optionally) a transient permissions lookup table name.
 
   Use `update/3` to add actual role and grant information.
@@ -324,6 +324,18 @@ defmodule Electric.Satellite.Permissions do
     [%Role.Authenticated{user_id: user_id} | roles]
   end
 
+  @doc """
+  Filters the `changes` in a transaction coming out from postgres to the satellite clients.
+
+  Removes any changes that the client doesn't have permissions to see and a list of
+  `%Permissions.MoveOut{}` structs representing changes in the current tx that were made
+  unreadable by the actions within that tx.
+
+  E.g. if a transaction contains an update the moves a row out of its previously visible scope
+  into a scope that the user doesn't have permissions to read, then this update will itself be
+  filtered out by the new permissions scope it represents but included in the list of move-out
+  messages.
+  """
   @spec filter_read(t(), tx()) :: {tx(), [move_out()]}
   def filter_read(%__MODULE__{} = perms, %Changes.Transaction{} = tx) do
     Read.filter_read(perms, tx)
