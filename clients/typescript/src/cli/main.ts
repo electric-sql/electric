@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
 import dotenvFlow from 'dotenv-flow'
-dotenvFlow.config()
+dotenvFlow.config({
+  silent: true
+})
 
 import { Command } from 'commander'
 import { LIB_VERSION } from '../version/index'
