@@ -25,6 +25,7 @@ install_ollama() {
     echo "Installing ollama"
     wget https://github.com/jmorganca/ollama/releases/download/v0.1.20/ollama-darwin
     chmod +x ollama-darwin
+    mv ollama-darwin src-tauri/ollama-darwin-aarch64-apple-darwin
 }
 
 start_ollama() {
