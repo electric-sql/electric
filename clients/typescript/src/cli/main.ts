@@ -2,7 +2,7 @@
 
 import dotenvFlow from 'dotenv-flow'
 dotenvFlow.config({
-  silent: true
+  silent: true,
 })
 
 import { Command } from 'commander'
