@@ -740,11 +740,7 @@ defmodule Electric.Satellite.PermissionsTest do
       assert filtered_tx.changes == changes
     end
 
-    # TODO: rows in multiple scopes... losing in one but retaining in another
     test "incorporates in-tx additions to scope", cxt do
-      # have perms on a project, then in a tx someone moves
-      # an issue into that project then updates a comment on that issue
-      # then adds a comment on that issue
       perms =
         perms_build(
           cxt,
@@ -806,7 +802,8 @@ defmodule Electric.Satellite.PermissionsTest do
       # 3. the row is moved from a scope we can see to a scope we can't see. this is the only
       #    version that doesn't involve a perms change.
       #
-      #    that's the case we're testing here.
+      # (3) is the case we're testing here. (1) and (2) involve a permissions change (losing a role)
+      # and will be covered by VAX-1563.
       #
       changes =
         [
