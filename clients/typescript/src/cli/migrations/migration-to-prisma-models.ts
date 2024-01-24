@@ -108,6 +108,31 @@ function patchModelsWithBackReferences(models: PrismaModel[]) {
   })
 }
 
+// TODO(alco): This function only works when fkCols and pkCols each
+// contains a single item. More investigation is needed to see how
+// Prisma maps composite foreign keys to Prisma relations.
+//
+// Related:
+//
+//     - https://stackoverflow.com/a/73124327
+//     - https://github.com/prisma/prisma/discussions/12547
+//     - https://www.prisma.io/docs/orm/prisma-schema/data-model/relations
+//     - https://www.prisma.io/docs/orm/prisma-schema/data-model/relations/many-to-many-relations
+//
+// An example of a composite foreign key:
+//
+//     CREATE TABLE test (
+//       id1 TEXT,
+//       id2 TEXT,
+//       PRIMARY KEY (id1, id2)
+//     );
+//
+//     CREATE TABLE test1 (
+//       id TEXT PRIMARY KEY,
+//       test_id1 TEXT,
+//       test_id2 TEXT,
+//       FOREIGN KEY (test_id1, test_id2) REFERENCES test (id1, id2)
+//     );
 function convertFKToPrismaModelField(
   { fkCols, pkTable, pkCols }: SatOpMigrate_ForeignKey,
   columns: SatOpMigrate_Column[]
@@ -210,6 +235,8 @@ function formatModelField(field: PrismaModelField): string {
     .trim()
 }
 
+// TODO(alco): We need to double-check all uses of this function to make sure
+// we correctly implement Prisma's name mangling behaviour.
 function mapNameToPrisma(str: string, capitalize = false): string {
   const tmp = str.replace(/^[^a-zA-Z0-9]/, '').replaceAll(/[^a-zA-Z0-9_]/g, '_')
   return capitalize ? tmp[0].toUpperCase() + tmp.slice(1) : tmp
