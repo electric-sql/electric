@@ -9,6 +9,8 @@ import { QualifiedTablename } from '../../util/tablename'
 import { HKT, Kind } from '../util/hkt'
 import { SyncInput } from '../input/syncInput'
 import { ShapeSubscription } from '../../satellite/process'
+import { UnsubscribeFunction } from '../../notifiers'
+import { LiveResultSubscribeFunction } from '../../util/subscribe'
 
 /**
  * Interface that is implemented by Electric clients.
@@ -188,6 +190,7 @@ export interface Model<
 
 export interface LiveResultContext<T> {
   (): Promise<LiveResult<T>>
+  subscribe: LiveResultSubscribeFunction<T>
   sourceQuery?: Record<string, any> | undefined
 }
 
@@ -200,4 +203,14 @@ export class LiveResult<T> {
   constructor(public result: T, public tablenames: QualifiedTablename[]) {}
 }
 
-// liveRawQuery
+/**
+ * A live result update wrapping either the `results` or any `error` from the query,
+ * as well as an `updatedAt` timestamp indicating the retrieval time of this result
+ */
+export class LiveResultUpdate<T> {
+  constructor(
+    public results?: T,
+    public error?: unknown,
+    public updatedAt?: Date
+  ) {}
+}

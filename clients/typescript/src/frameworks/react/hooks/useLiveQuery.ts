@@ -1,16 +1,11 @@
-import {
-  useContext,
-  useEffect,
-  useState,
-  useMemo,
-  DependencyList,
-} from 'react'
+import { useContext, useEffect, useState, useMemo, DependencyList } from 'react'
 import { hash } from 'ohash'
 
 import { ElectricContext } from '../provider'
-import { LiveResultContext } from '../../../client/model/model'
-import { ResultData, subscribeToQueryResults } from '../../generic'
-
+import {
+  LiveResultContext,
+  LiveResultUpdate,
+} from '../../../client/model/model'
 
 /**
  * Main reactive query hook for React applications. It needs to be
@@ -30,7 +25,9 @@ import { ResultData, subscribeToQueryResults } from '../../generic'
  * const { results } = useLiveQuery(db.items.liveMany({}))
  * ```
  */
-function useLiveQuery<Res>(runQuery: LiveResultContext<Res>): ResultData<Res>
+function useLiveQuery<Res>(
+  runQuery: LiveResultContext<Res>
+): LiveResultUpdate<Res>
 
 /**
  * Main reactive query hook for React applications. It needs to be
@@ -56,11 +53,11 @@ function useLiveQuery<Res>(runQuery: LiveResultContext<Res>): ResultData<Res>
 function useLiveQuery<Res>(
   runQueryFn: () => LiveResultContext<Res>,
   dependencies: DependencyList
-): ResultData<Res>
+): LiveResultUpdate<Res>
 function useLiveQuery<Res>(
   runQueryOrFn: LiveResultContext<Res> | (() => LiveResultContext<Res>),
   deps?: DependencyList
-): ResultData<Res> {
+): LiveResultUpdate<Res> {
   if (deps) {
     return useLiveQueryWithDependencies(
       runQueryOrFn as () => LiveResultContext<Res>,
@@ -74,7 +71,7 @@ function useLiveQuery<Res>(
 function useLiveQueryWithDependencies<Res>(
   runQueryFn: () => LiveResultContext<Res>,
   dependencies: DependencyList
-): ResultData<Res> {
+): LiveResultUpdate<Res> {
   const runQuery = useMemo(runQueryFn, dependencies)
 
   return useLiveQueryWithQueryUpdates(runQuery, [runQuery])
@@ -82,7 +79,7 @@ function useLiveQueryWithDependencies<Res>(
 
 function useLiveQueryWithQueryHash<Res>(
   runQuery: LiveResultContext<Res>
-): ResultData<Res> {
+): LiveResultUpdate<Res> {
   const queryHash = useMemo(
     () => hash(runQuery.sourceQuery),
     [runQuery.sourceQuery]
@@ -94,19 +91,15 @@ function useLiveQueryWithQueryHash<Res>(
 function useLiveQueryWithQueryUpdates<Res>(
   runQuery: LiveResultContext<Res>,
   runQueryDependencies: DependencyList
-): ResultData<Res> {
+): LiveResultUpdate<Res> {
   const electric = useContext(ElectricContext)
-  const [resultData, setResultData] = useState<ResultData<Res>>({})
+  const [resultData, setResultData] = useState<LiveResultUpdate<Res>>({})
 
   // Once we have electric, we subscribe to the query results and
   // update that subscription on any dependency change
   useEffect(() => {
     if (electric?.notifier === undefined) return
-    const unsubscribe = subscribeToQueryResults({
-      notifier: electric.notifier,
-      runQuery: runQuery,
-      onResultUpdate: setResultData
-    })
+    const unsubscribe = runQuery.subscribe(setResultData)
     return unsubscribe
   }, [electric?.notifier, ...runQueryDependencies])
 

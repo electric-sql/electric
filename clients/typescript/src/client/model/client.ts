@@ -141,9 +141,9 @@ export class ElectricClient<
       ...dal,
       unsafeExec: unsafeExec.bind(null, adapter),
       rawQuery: rawQuery.bind(null, adapter),
-      liveRawQuery: liveRawQuery.bind(null, adapter),
+      liveRawQuery: liveRawQuery.bind(null, adapter, notifier),
       raw: unsafeExec.bind(null, adapter),
-      liveRaw: liveRawQuery.bind(null, adapter),
+      liveRaw: liveRawQuery.bind(null, adapter, notifier),
     }
 
     return new ElectricClient(
