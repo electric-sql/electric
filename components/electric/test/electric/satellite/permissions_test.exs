@@ -581,15 +581,15 @@ defmodule Electric.Satellite.PermissionsTest do
           ]
         )
 
-      # assert :ok =
-      #          Permissions.validate_write(
-      #            perms,
-      #            Chgs.tx([
-      #              Chgs.update(@issues, %{"id" => "i1", "project_id" => "p1"}, %{
-      #                "project_id" => "p3"
-      #              })
-      #            ])
-      #          )
+      assert :ok =
+               Permissions.validate_write(
+                 perms,
+                 Chgs.tx([
+                   Chgs.update(@issues, %{"id" => "i1", "project_id" => "p1"}, %{
+                     "project_id" => "p3"
+                   })
+                 ])
+               )
 
       # attempt to move an issue into a project we don't have write access to
       assert {:error, _} =
