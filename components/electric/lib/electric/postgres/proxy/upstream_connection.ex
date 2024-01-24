@@ -157,6 +157,17 @@ defmodule Electric.Postgres.Proxy.UpstreamConnection do
     upstream(response, state)
   end
 
+  defp handle_backend_msg(
+         %M.AuthenticationMD5Password{salt: salt},
+         %{authenticated: false, conn_opts: conn_opts} = state
+       ) do
+    userspec_digest = md5_hex_digest([conn_opts[:password], conn_opts[:username]])
+    salted_digest = md5_hex_digest([userspec_digest, salt])
+    response = %M.PasswordMessage{password: "md5" <> salted_digest}
+
+    upstream(response, state)
+  end
+
   defp handle_backend_msg(%M.AuthenticationSASL{} = msg, %{authenticated: false} = state) do
     {sasl_mechanism, response} = SASL.initial_response(msg)
 
@@ -174,6 +185,15 @@ defmodule Electric.Postgres.Proxy.UpstreamConnection do
 
     # upstream(response, %{state | sasl: nil})
     %{state | sasl: nil}
+  end
+
+  defp handle_backend_msg(%msg_type{} = msg, _state)
+       when msg_type in [M.AuthenticationKerberosV5, M.AuthenticationGSS, M.AuthenticationSSPI] do
+    error_msg = "Proxy's upstream connection requested unsupported authentication method:"
+    error_val = inspect(msg, pretty: true)
+
+    Electric.Errors.print_error(:not_implemented, error_msg <> "\n\n    " <> error_val)
+    exit(error_msg <> " " <> error_val)
   end
 
   defp handle_backend_msg(msg, state) do
@@ -205,5 +225,9 @@ defmodule Electric.Postgres.Proxy.UpstreamConnection do
 
   defp reset_conn(state) do
     %{state | conn: nil, transport_module: :gen_tcp}
+  end
+
+  defp md5_hex_digest(iodata) do
+    :crypto.hash(:md5, iodata) |> Base.encode16(case: :lower)
   end
 end

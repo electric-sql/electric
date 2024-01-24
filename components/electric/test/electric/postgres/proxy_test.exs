@@ -100,8 +100,6 @@ defmodule Electric.Postgres.ProxyTest do
       # Verify that both upstream connections have shut down without errors.
       assert_receive {:DOWN, ^mon1, :process, ^pid1, :normal}
       assert_receive {:DOWN, ^mon2, :process, ^pid2, :normal}
-
-      Process.sleep(1000)
     end)
   end
 end
