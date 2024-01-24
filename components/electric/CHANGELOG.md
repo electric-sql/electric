@@ -1,5 +1,12 @@
 # @core/electric
 
+## 0.9.1
+
+### Patch Changes
+
+- 30179e87: [VAX-1553] Add support for AuthenticationMD5Password upstream auth method in the Migrations proxy. This fixes a connectivity issue between Electric and DigitalOcean Managed PostgreSQL.
+- dd27d6a1: [VAX-1543] Add support for the sslmode query option in DATABASE_URL.
+
 ## 0.9.0
 
 ### Minor Changes
