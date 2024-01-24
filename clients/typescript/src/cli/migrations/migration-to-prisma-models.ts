@@ -45,7 +45,9 @@ function convertMigrationToPrismaModels(migration: MetaData): PrismaModel[] {
     .map((op) => {
       const table = op.table!
       const name = table.name
-      const fkFields = table.fks.map(convertFKToPrismaModelField)
+      const fkFields = table.fks.map((fk) =>
+        convertFKToPrismaModelField(fk, table.columns)
+      )
 
       return {
         sourceName: name,
@@ -106,11 +108,13 @@ function patchModelsWithBackReferences(models: PrismaModel[]) {
   })
 }
 
-function convertFKToPrismaModelField({
-  fkCols,
-  pkTable,
-  pkCols,
-}: SatOpMigrate_ForeignKey) {
+function convertFKToPrismaModelField(
+  { fkCols, pkTable, pkCols }: SatOpMigrate_ForeignKey,
+  columns: SatOpMigrate_Column[]
+) {
+  const relationScalarColumn = columns.find(
+    (column) => column.name == fkCols[0]
+  )!
   const fieldName = mapNameToPrisma(pkTable)
   return {
     sourceName: fieldName,
@@ -119,15 +123,13 @@ function convertFKToPrismaModelField({
       name: mapNameToPrisma(pkTable, true),
       attributes: [
         `@relation(fields: ${formatListOfFields(
-          // TODO: Map these to Prisma names?
           fkCols
         )}, references: ${formatListOfFields(
-          // TODO: Map these to Prisma names?
           pkCols
         )}, onDelete: NoAction, onUpdate: NoAction)`,
       ],
     },
-    isNullable: false, // TODO: look up nullability on fkCols
+    isNullable: relationScalarColumn.isNullable,
   }
 }
 
@@ -214,7 +216,7 @@ function mapNameToPrisma(str: string, capitalize = false): string {
 }
 
 function formatListOfFields(list: string[]) {
-  return `[${list.join(', ')}]`
+  return `[${list.map((name) => mapNameToPrisma(name)).join(', ')}]`
 }
 
 function quoteString(str: string) {
