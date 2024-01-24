@@ -1,5 +1,19 @@
 # electric-sql
 
+## 0.9.1
+
+### Patch Changes
+
+- 6ad33249: Hide proxy password in generate command output Fixes VAX-1548
+- 3605f291: Correctly pass the CONTAINER_NAME to the cli "status" command
+- 356359a2: CLI - Split inferred values from default values (VAX-1569)
+- e5d7a6dc: Validate that the --with-migrations command successfully ran before generating client
+- 4f19a086: [VAX-1544] Map http(s) scheme in service URL to ws(s) when starting a proxy tunnel.
+- bac15160: CLI - Silent dot-env warning when there are no .env files
+- fb2eba1c: Fix redundant query calls in React live query hook implementation
+- 8a97cc9f: Updated docstring for generic database adapter.
+- 3a617982: Upgrade Prisma dependency to 5.2 in the client, Fixes VAX-1524
+
 ## 0.9.0
 
 ### Minor Changes

@@ -1,5 +1,11 @@
 # create-electric-app
 
+## 0.2.5
+
+### Patch Changes
+
+- af32de9a: Expose ELECTRIC\_ prefixed env vars to Vite build - Fix VAX-1549
+
 ## 0.2.4
 
 ### Patch Changes
