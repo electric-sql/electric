@@ -131,8 +131,8 @@ defmodule Electric.Satellite.Permissions do
   ### Special cases
 
   1. An update that moves a row between authentication scopes is treated like an update in the
-  original scope and an insert in the new scope. The user must have permission for both the update
-  and the (pseudo) insert for the change to be allowed.
+  original scope and an update in the new scope. The user must have permission for both the update
+  and the (pseudo) update for the change to be allowed.
 
   ## Filtering reads
 
