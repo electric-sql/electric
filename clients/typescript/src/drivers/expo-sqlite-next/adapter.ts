@@ -23,13 +23,11 @@ export class DatabaseAdapter
   }
 
   async run(statement: Statement): Promise<RunResult> {
-    await this.txMutex.waitForUnlock()
-    return this._run(statement)
+    return this.txMutex.runExclusive(() => this._run(statement))
   }
 
   async query(statement: Statement): Promise<Row[]> {
-    await this.txMutex.waitForUnlock()
-    return this._query(statement)
+    return this.txMutex.runExclusive(() => this._query(statement))
   }
 
   async _run(statement: Statement): Promise<RunResult> {
