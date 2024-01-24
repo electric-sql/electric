@@ -207,10 +207,8 @@ export class LiveResult<T> {
  * A live result update wrapping either the `results` or any `error` from the query,
  * as well as an `updatedAt` timestamp indicating the retrieval time of this result
  */
-export class LiveResultUpdate<T> {
-  constructor(
-    public results?: T,
-    public error?: unknown,
-    public updatedAt?: Date
-  ) {}
+export interface LiveResultUpdate<T> {
+  results?: T
+  error?: unknown
+  updatedAt?: Date
 }

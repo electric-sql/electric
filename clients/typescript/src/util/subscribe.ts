@@ -25,10 +25,10 @@ export function createQueryResultSubscribeFunction<T>(
         const res = await liveQuery()
         if (cancelled) return
         relevantTablenames ??= res.tablenames
-        handler(new LiveResultUpdate<T>(res.result, undefined, new Date()))
+        handler({ results: res.result, updatedAt: new Date() })
       } catch (err) {
         if (cancelled) return
-        handler(new LiveResultUpdate<T>(undefined, err, new Date()))
+        handler({ error: err, updatedAt: new Date() })
       }
     }
 
