@@ -839,17 +839,20 @@ defmodule Electric.Satellite.PermissionsTest do
                %MoveOut{
                  change: %Changes.UpdatedRecord{},
                  relation: @issues,
-                 id: "i1"
+                 id: "i1",
+                 scope_path: [_ | _]
                },
                %MoveOut{
                  change: %Changes.DeletedRecord{},
                  relation: @issues,
-                 id: "i2"
+                 id: "i2",
+                 scope_path: [_ | _]
                },
                %MoveOut{
                  change: %Changes.DeletedRecord{},
                  relation: @comments,
-                 id: "c5"
+                 id: "c5",
+                 scope_path: [_ | _]
                }
              ] = move_out
     end
