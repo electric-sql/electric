@@ -12,8 +12,8 @@ export class MockDatabase implements Database {
     source: string,
     ...params: SQLiteVariadicBindParams
   ): Promise<T[]>
-  getAllAsync(_source: unknown, _params?: unknown): Promise<any[]> {
-    return Promise.resolve([{ i: 0 }])
+  getAllAsync<T>(_source: string, _params?: unknown): Promise<T[]> {
+    return Promise.resolve([{ i: 0 } as T])
   }
 
   runAsync(source: string, params: SQLiteBindParams): Promise<SQLiteRunResult>
@@ -21,7 +21,7 @@ export class MockDatabase implements Database {
     source: string,
     ...params: SQLiteVariadicBindParams
   ): Promise<SQLiteRunResult>
-  runAsync(_source: unknown, _params?: unknown): Promise<SQLiteRunResult> {
+  runAsync(_source: string, _params?: unknown): Promise<SQLiteRunResult> {
     return Promise.resolve({
       lastInsertRowId: 0,
       changes: 0,
