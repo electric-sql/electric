@@ -9,7 +9,6 @@ import { QualifiedTablename } from '../../util/tablename'
 import { HKT, Kind } from '../util/hkt'
 import { SyncInput } from '../input/syncInput'
 import { ShapeSubscription } from '../../satellite/process'
-import { UnsubscribeFunction } from '../../notifiers'
 import { LiveResultSubscribeFunction } from '../../util/subscribe'
 
 /**
