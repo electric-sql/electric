@@ -1,5 +1,5 @@
 import { QualifiedTablename, hasIntersection } from '../../util'
-import { ChangeNotification, Notifier } from '../../notifiers'
+import { ChangeNotification, Notifier, UnsubscribeFunction } from '../../notifiers'
 import { LiveResultContext } from '../../client/model/model'
 
 export interface ResultData<T> {
@@ -12,8 +12,6 @@ interface QueryResult<T> {
   result: ResultData<T>
   tablenames?: QualifiedTablename[]
 }
-
-type UnsubscribeFn = () => void
 
 function successResult<T>(results: T): ResultData<T> {
   return {
@@ -63,7 +61,7 @@ export function subscribeToQueryResults<Res>({
   notifier: Notifier
   runQuery: LiveResultContext<Res>
   onResultUpdate: (result: ResultData<Res>) => void
-}) : UnsubscribeFn {
+}) : UnsubscribeFunction {
   let cancelled = false
   let relevantTablenames: QualifiedTablename[] | undefined
 
