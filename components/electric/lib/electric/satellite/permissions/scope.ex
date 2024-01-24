@@ -7,15 +7,19 @@ defmodule Electric.Satellite.Permissions.Scope do
   within the db tables.
   """
   alias Electric.Replication.Changes
+  alias Electric.Satellite.Permissions.ScopeMove
 
   @type state() :: term()
   @type relation() :: Electric.Postgres.relation()
+  @type scope_root() :: relation()
   @type t() :: {module(), state()}
   @type record() :: Changes.record()
+
   @type id() :: Electric.Postgres.pk()
   @type tx_fun() :: (Changes.Transaction.t(), state() -> Changes.Transaction.t())
   @type change() :: Changes.change()
   @type scope_path_information() :: term()
+  @type scope_result() :: {id(), scope_path_information()} | nil
 
   @doc """
   Returns the id of the root document of the tree based on the `root` table for the given change
@@ -28,19 +32,19 @@ defmodule Electric.Satellite.Permissions.Scope do
   If the lookup fails for some other reason, e.g. the backing store is offline or something, then
   this should raise.
   """
-  @callback scope_id(state(), root :: relation(), Changes.change()) ::
-              {id(), scope_path_information()} | nil
+  @callback scope_id(state(), scope_root(), relation(), record()) :: scope_result()
 
   @doc """
-  Returns the same information as for the `scope_id/3` callback, but takes `relation()` and
-  `record()` arguments.
+  Get the scope of the parent to this record, that is the scope of the record one level up* in the
+  tree.
 
-  Useful when the caller wants to control exactly which values it sends for the row
-  values, e.g. using the `old_record` values of an update, rather than the updated
-  values.
+  Needed when we're trying to get the scope of an update that represents something that doesn't
+  exist (yet) but is being inserted into the tree at a certain point represented by a fk on the
+  row.
+
+  * trees grow _down_, obviously
   """
-  @callback scope_id(state(), root :: relation(), relation(), record()) ::
-              {id(), scope_path_information()} | nil
+  @callback parent_scope_id(state(), scope_root(), relation(), record()) :: scope_result()
 
   @doc """
   Returns an updated scope state including the changes in the given transaction.
@@ -58,27 +62,53 @@ defmodule Electric.Satellite.Permissions.Scope do
 
   That is, does this update move the row from one scope to another?
   """
-  @callback modifies_fk?(state(), root :: relation(), Changes.UpdatedRecord.t()) :: boolean()
+  @callback modifies_fk?(state(), scope_root(), Changes.UpdatedRecord.t()) :: boolean()
 
   @behaviour __MODULE__
 
   defguardp is_relation(r) when is_tuple(r) and tuple_size(r) == 2
 
-  defguardp is_change(c)
-            when is_struct(c, Changes.NewRecord) or is_struct(c, Changes.DeletedRecord) or
-                   is_struct(c, Changes.UpdatedRecord)
-
   defguardp is_update(c) when is_struct(c, Changes.UpdatedRecord)
 
-  @impl __MODULE__
-  def scope_id({module, state}, root, change) when is_relation(root) and is_change(change) do
-    module.scope_id(state, root, change)
+  @doc """
+  `scope_id/3` is a wrapper around the #{__MODULE__} callback `scope_id/4` that provides some
+  logic for handling resolving scope ids for the various kinds of changes.
+
+  This is not part of the behaviour because there's no need for the implementations to have do
+  duplicate this logic, but provides the most useful API for the permissions checks.
+  """
+  # for the new record case, we need to find the parent table we're adding a child of
+  # in order to find its place in the tree
+  def scope_id({module, state}, root, %Changes.NewRecord{} = change) when is_relation(root) do
+    parent_scope_id({module, state}, root, change.relation, change.record)
+  end
+
+  # Similarly for our special ScopeMove update -- which is generated as a pseudo-change when a row
+  # is being moved between permissions scopes in `Permissions.expand_change/2`, we need to verify
+  # the scope of a row that doesn't exist in the tree, so instead we find the scope of the parent.
+  def scope_id({module, state}, root, %ScopeMove{} = change) when is_relation(root) do
+    parent_scope_id({module, state}, root, change.relation, change.record)
+  end
+
+  def scope_id({module, state}, root, %Changes.DeletedRecord{} = change) when is_relation(root) do
+    scope_id({module, state}, root, change.relation, change.old_record)
+  end
+
+  def scope_id({module, state}, root, %{relation: relation, record: record})
+      when is_relation(root) do
+    module.scope_id(state, root, relation, record)
   end
 
   @impl __MODULE__
   def scope_id({module, state}, root, relation, record)
       when is_relation(root) and is_relation(relation) do
     module.scope_id(state, root, relation, record)
+  end
+
+  @impl __MODULE__
+  def parent_scope_id({module, state}, root, relation, record)
+      when is_relation(root) and is_relation(relation) do
+    module.parent_scope_id(state, root, relation, record)
   end
 
   @impl __MODULE__

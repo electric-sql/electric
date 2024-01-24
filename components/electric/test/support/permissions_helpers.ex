@@ -172,15 +172,13 @@ defmodule ElectricTest.PermissionsHelpers do
     end
 
     defp fk_tree(fks) do
-      {_, graph} =
-        Enum.reduce(fks, {@root, Graph.new()}, &build_fk_tree/2)
+      {_, graph} = Enum.reduce(fks, {@root, Graph.new()}, &build_fk_tree/2)
 
       graph
     end
 
     defp data_tree(vs) do
-      {_, graph} =
-        Enum.reduce(vs, {@root, Graph.new()}, &build_data_tree/2)
+      {_, graph} = Enum.reduce(vs, {@root, Graph.new()}, &build_data_tree/2)
 
       graph
     end
@@ -214,33 +212,21 @@ defmodule ElectricTest.PermissionsHelpers do
     end
 
     @impl Electric.Satellite.Permissions.Scope
-    # for the new record case, we need to find the parent table we're adding a child of
-    # in order to find its place in the tree
-    def scope_id({graph, fks}, {_, _} = root, %Changes.NewRecord{} = change) do
-      case fk_for_change(fks, root, change) do
-        {:ok, parent, parent_id} ->
-          scope_root_id(graph, root, parent, parent_id)
-
-        _error ->
-          nil
-      end
-    end
-
-    def scope_id({graph, _fks}, {_, _} = root, change) do
-      {table, id} = relation_id(change)
-
-      scope_root_id(graph, root, table, id)
-    end
-
-    @impl Electric.Satellite.Permissions.Scope
     def scope_id({graph, _fks}, {_, _} = root, {_, _} = relation, record) do
       {table, id} = relation_id(relation, record)
       scope_root_id(graph, root, table, id)
     end
 
     @impl Electric.Satellite.Permissions.Scope
-    def modifies_fk?({_graph, fks}, {_, _} = root, update) do
-      case relation_fk(fks, root, update) do
+    def parent_scope_id({_graph, fks} = state, {_, _} = root, {_, _} = relation, record) do
+      with {parent_relation, parent_id} <- parent_id(fks, root, relation, record) do
+        scope_id(state, root, parent_relation, %{"id" => parent_id})
+      end
+    end
+
+    @impl Electric.Satellite.Permissions.Scope
+    def modifies_fk?({_graph, fks}, {_, _} = root, %Changes.UpdatedRecord{} = update) do
+      case relation_fk(fks, root, update.relation) do
         {:ok, _parent, fk} ->
           MapSet.member?(update.changed_columns, fk)
 
@@ -256,7 +242,6 @@ defmodule ElectricTest.PermissionsHelpers do
 
     @impl Electric.Satellite.Permissions.Scope
     def transaction_context({graph, fks}, %{changes: changes}) do
-      # updates can be ignored unless they modify a fk
       updated =
         Enum.reduce(changes, graph, fn
           %Changes.DeletedRecord{relation: relation, old_record: %{"id" => id}}, graph ->
@@ -280,8 +265,6 @@ defmodule ElectricTest.PermissionsHelpers do
             graph
             |> Graph.delete_edge(child, old_parent)
             |> Graph.add_edge(child, new_parent)
-
-            #   graph
         end)
 
       {updated, fks}
@@ -304,7 +287,7 @@ defmodule ElectricTest.PermissionsHelpers do
       end
     end
 
-    defp relation_fk(fks, root, %{relation: relation}) do
+    defp relation_fk(fks, root, relation) do
       case Graph.get_shortest_path(fks, relation, root) do
         nil ->
           :error
@@ -321,39 +304,19 @@ defmodule ElectricTest.PermissionsHelpers do
       end
     end
 
-    # there's probably a better way to do this
-    defp fk_for_change(fks, root, %{record: record} = change) do
-      case relation_fk(fks, root, change) do
-        {:ok, parent, fk} ->
-          case Map.fetch(record, fk) do
-            {:ok, id} ->
-              {:ok, parent, id}
-
-            :error ->
-              {:error, "record does not have a foreign key"}
-          end
-
-        :error ->
-          {:error, "record does not exist in the scope #{inspect(root)}"}
-      end
-    end
-
     defp parent_id(fks, root, relation, record) do
-      case relation_fk(fks, root, %{relation: relation}) do
+      case relation_fk(fks, root, relation) do
         {:ok, @root, nil} ->
           nil
 
         {:ok, parent_relation, fk} ->
-          {parent_relation, Map.fetch!(record, fk)}
+          if id = Map.get(record, fk, nil) do
+            {parent_relation, id}
+          end
+
+        :error ->
+          nil
       end
-    end
-
-    defp relation_id(%Changes.DeletedRecord{relation: relation, old_record: record}) do
-      relation_id(relation, record)
-    end
-
-    defp relation_id(%{relation: relation, record: record}) do
-      relation_id(relation, record)
     end
 
     defp relation_id(relation, %{"id" => id}) do
@@ -372,7 +335,8 @@ defmodule ElectricTest.PermissionsHelpers do
   end
 
   def perms_build({_, _} = tree, grants, roles, attrs) do
-    Perms.new(tree, attrs)
+    tree
+    |> Perms.new(attrs)
     |> Perms.update(grants, roles)
   end
 end

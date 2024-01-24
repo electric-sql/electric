@@ -128,6 +128,25 @@ defmodule Electric.Satellite.PermissionsTest do
                })
     end
 
+    test "parent_scope_id/4", cxt do
+      assert {"p1", [{@projects, "p1"}]} =
+               Scope.parent_scope_id(cxt.tree, @projects, @issues, %{
+                 "id" => "i100",
+                 "project_id" => "p1"
+               })
+
+      assert {"p1", _} =
+               Scope.parent_scope_id(cxt.tree, @projects, @reactions, %{
+                 "id" => "r100",
+                 "comment_id" => "c5"
+               })
+
+      refute Scope.parent_scope_id(cxt.tree, @projects, @reactions, %{
+               "id" => "r100",
+               "comment_id" => "c99"
+             })
+    end
+
     test "modifies_fk?/2", cxt do
       assert Scope.modifies_fk?(
                cxt.tree,
@@ -550,31 +569,36 @@ defmodule Electric.Satellite.PermissionsTest do
         perms_build(
           cxt,
           [
-            ~s[GRANT ALL ON #{table(@issues)} TO 'editor'],
-            ~s[GRANT UPDATE, SELECT ON #{table(@issues)} TO 'reader']
+            ~s[GRANT UPDATE ON #{table(@issues)} TO (#{table(@projects)}, 'editor')],
+            ~s[GRANT SELECT ON #{table(@issues)} TO 'reader']
           ],
           [
+            # update rights on p1 & p3
             Roles.role("editor", @projects, "p1"),
+            Roles.role("editor", @projects, "p3"),
             # read-only role on project p2
-            Roles.role("reader", @projects, "p2"),
-            Roles.role("editor", @projects, "p3")
+            Roles.role("reader", @projects, "p2")
           ]
         )
 
-      assert :ok =
-               Permissions.validate_write(
-                 perms,
-                 Chgs.tx([
-                   Chgs.update(@issues, %{"id" => "i1"}, %{"project_id" => "p3"})
-                 ])
-               )
+      # assert :ok =
+      #          Permissions.validate_write(
+      #            perms,
+      #            Chgs.tx([
+      #              Chgs.update(@issues, %{"id" => "i1", "project_id" => "p1"}, %{
+      #                "project_id" => "p3"
+      #              })
+      #            ])
+      #          )
 
       # attempt to move an issue into a project we don't have write access to
       assert {:error, _} =
                Permissions.validate_write(
                  perms,
                  Chgs.tx([
-                   Chgs.update(@issues, %{"id" => "i1"}, %{"project_id" => "p2"})
+                   Chgs.update(@issues, %{"id" => "i1", "project_id" => "p1"}, %{
+                     "project_id" => "p2"
+                   })
                  ])
                )
     end

@@ -169,6 +169,8 @@ defmodule Electric.Satellite.Permissions do
 
   defmodule RoleGrant do
     # links a role to its corresponding grant
+    @moduledoc false
+
     defstruct [:role, :grant]
 
     @type t() :: %__MODULE__{
@@ -178,7 +180,21 @@ defmodule Electric.Satellite.Permissions do
   end
 
   defmodule MoveOut do
+    # A message to the shapes system that the update encapsulated here has been moved out of the
+    # user's permissions tree and should be deleted from their device.
+    @moduledoc false
+
     defstruct [:change, :scope_path, :relation, :id]
+  end
+
+  defmodule ScopeMove do
+    # A pseudo-change that we can use to verify that a user has permissions to move a row from
+    # scope a to scope b. We create an instance of this struct with the updated row data, treat it
+    # as though it were an update and then verify that the user has the required permission.
+    # See `expand_change/2`, `required_permission/1` and `Scope.scope_id/3` for use.
+    @moduledoc false
+
+    defstruct [:relation, :record]
   end
 
   @type change() :: Changes.change()
@@ -353,16 +369,20 @@ defmodule Electric.Satellite.Permissions do
   @spec validate_write(t(), tx()) :: :ok | {:error, String.t()}
   def validate_write(%__MODULE__{} = perms, %Changes.Transaction{} = tx) do
     tx.changes
-    |> Enum.flat_map(&expand_change(&1, perms))
+    |> Stream.flat_map(&expand_change(&1, perms))
     |> verify_all_writes(perms, tx.lsn)
   end
 
   defp expand_change(%Changes.UpdatedRecord{} = change, perms) do
     if modifies_scope_fk?(change, perms) do
       # expand an update that modifies a foreign key into the original update plus a
-      # pseudo-insert into the scope defined by the updated foreign key
-      insert = %Changes.NewRecord{relation: change.relation, record: change.record}
-      [change, insert]
+      # pseudo-update into the scope defined by the updated foreign key
+      move = %ScopeMove{
+        relation: change.relation,
+        record: change.record
+      }
+
+      [change, move]
     else
       [change]
     end
@@ -502,6 +522,9 @@ defmodule Electric.Satellite.Permissions do
       Changes.NewRecord -> {relation, :INSERT}
       Changes.UpdatedRecord -> {relation, :UPDATE}
       Changes.DeletedRecord -> {relation, :DELETE}
+      # We treat moving a record between permissions scope as requiring UPDATE permissions on both
+      # the original and new permissions scopes.
+      ScopeMove -> {relation, :UPDATE}
     end
   end
 
