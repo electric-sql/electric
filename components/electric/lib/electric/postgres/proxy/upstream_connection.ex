@@ -228,15 +228,6 @@ defmodule Electric.Postgres.Proxy.UpstreamConnection do
   end
 
   defp md5_hex_digest(iodata) do
-    :crypto.hash(:md5, iodata) |> bin_to_hex()
+    :crypto.hash(:md5, iodata) |> Base.encode16(case: :lower)
   end
-
-  defp bin_to_hex(""), do: ""
-
-  defp bin_to_hex(<<hi::4, lo::4>> <> rest) do
-    <<hex_char(hi), hex_char(lo)>> <> bin_to_hex(rest)
-  end
-
-  defp hex_char(num) when num in 0..9, do: ?0 + num
-  defp hex_char(num) when num in 10..15, do: ?a + num - 10
 end
