@@ -10,10 +10,8 @@ defmodule Electric.Satellite.Permissions.Read do
 
     tx_tree = Scope.transaction_context(tree, tx)
 
-    read_perms = %{perms | scope_resolver: tx_tree}
-
     {readable_changes, excluded_changes} =
-      Enum.split_with(tx.changes, &Permissions.validate_read(&1, read_perms, tx.lsn))
+      Enum.split_with(tx.changes, &Permissions.validate_read(&1, perms, tx_tree, tx.lsn))
 
     scopes = Enum.map(scopes, &{&1, Map.get(scoped_roles, &1, [])})
 

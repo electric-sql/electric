@@ -241,13 +241,13 @@ defmodule ElectricTest.PermissionsHelpers do
     end
 
     @impl Electric.Satellite.Permissions.Scope
-    def transaction_context({graph, fks}, %{changes: changes}) do
+    def apply_change({graph, fks}, change) do
       updated =
-        Enum.reduce(changes, graph, fn
-          %Changes.DeletedRecord{relation: relation, old_record: %{"id" => id}}, graph ->
+        case change do
+          %Changes.DeletedRecord{relation: relation, old_record: %{"id" => id}} ->
             Graph.delete_vertex(graph, {relation, id})
 
-          %Changes.NewRecord{relation: relation, record: %{"id" => id} = record}, graph ->
+          %Changes.NewRecord{relation: relation, record: %{"id" => id} = record} ->
             case parent_id(fks, @root, relation, record) do
               nil ->
                 graph
@@ -256,7 +256,7 @@ defmodule ElectricTest.PermissionsHelpers do
                 Graph.add_edge(graph, {relation, id}, parent)
             end
 
-          %Changes.UpdatedRecord{} = change, graph ->
+          %Changes.UpdatedRecord{} = change ->
             %{relation: relation, old_record: old, record: %{"id" => id} = new} = change
             child = {relation, id}
             old_parent = parent_id(fks, @root, relation, old)
@@ -265,7 +265,7 @@ defmodule ElectricTest.PermissionsHelpers do
             graph
             |> Graph.delete_edge(child, old_parent)
             |> Graph.add_edge(child, new_parent)
-        end)
+        end
 
       {updated, fks}
     end

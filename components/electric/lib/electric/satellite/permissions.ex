@@ -356,9 +356,9 @@ defmodule Electric.Satellite.Permissions do
     Read.filter_read(perms, tx)
   end
 
-  def validate_read(change, perms, lsn) do
+  def validate_read(change, perms, scope_resolver, lsn) do
     if role_grants = Map.get(perms.roles, {change.relation, :SELECT}) do
-      role_grant_for_change(role_grants, perms, change, lsn, :read)
+      role_grant_for_change(role_grants, perms, scope_resolver, change, lsn, :read)
     end
   end
 
@@ -370,7 +370,7 @@ defmodule Electric.Satellite.Permissions do
   def validate_write(%__MODULE__{} = perms, %Changes.Transaction{} = tx) do
     tx.changes
     |> Stream.flat_map(&expand_change(&1, perms))
-    |> verify_all_writes(perms, tx.lsn)
+    |> validate_all_writes(perms, tx.lsn)
   end
 
   defp expand_change(%Changes.UpdatedRecord{} = change, perms) do
@@ -396,9 +396,15 @@ defmodule Electric.Satellite.Permissions do
     Enum.any?(perms.scopes, &Scope.modifies_fk?(perms.scope_resolver, &1, change))
   end
 
-  defp verify_all_writes(changes, perms, lsn) do
-    Enum.reduce_while(changes, :ok, fn change, :ok ->
-      case validate_write(change, perms, lsn) do
+  defp validate_all_writes(changes, perms, lsn) do
+    with {:ok, _tx_scope} <- validate_writes_with_scope(changes, perms, lsn) do
+      :ok
+    end
+  end
+
+  defp validate_writes_with_scope(changes, perms, lsn) do
+    Enum.reduce_while(changes, {:ok, perms.scope_resolver}, fn change, {:ok, scope_resolver} ->
+      case verify_write(change, perms, scope_resolver, lsn) do
         {:error, _} = error ->
           {:halt, error}
 
@@ -407,44 +413,44 @@ defmodule Electric.Satellite.Permissions do
             "role #{inspect(role)} grant #{inspect(grant)} gives permission for #{inspect(change)}"
           )
 
-          {:cont, :ok}
+          scope_resolver = Scope.apply_change(scope_resolver, change)
+
+          {:cont, {:ok, scope_resolver}}
       end
     end)
   end
 
-  @spec validate_write(change(), t(), lsn()) :: RoleGrant.t() | {:error, String.t()}
-  defp validate_write(change, perms, lsn) do
+  @spec verify_write(change(), t(), Scope.t(), lsn()) :: RoleGrant.t() | {:error, String.t()}
+  defp verify_write(change, perms, scope_resolve, lsn) do
     action = required_permission(change)
 
     role_grant =
       perms.roles
       |> Map.get(action)
-      |> role_grant_for_change(perms, change, lsn, :write)
+      |> role_grant_for_change(perms, scope_resolve, change, lsn, :write)
 
     role_grant || permission_error(action)
   end
 
-  @spec role_grant_for_change(nil, t(), change(), lsn(), mode()) :: nil
-  defp role_grant_for_change(nil, _perms, _change, _lsn, _mode) do
+  @spec role_grant_for_change(nil, t(), Scope.t(), change(), lsn(), mode()) :: nil
+  defp role_grant_for_change(nil, _perms, _scope, _change, _lsn, _mode) do
     nil
   end
 
-  @spec role_grant_for_change(assigned_roles(), t(), change(), lsn(), mode()) ::
+  @spec role_grant_for_change(assigned_roles(), t(), Scope.t(), change(), lsn(), mode()) ::
           RoleGrant.t() | nil
-  defp role_grant_for_change(grants, perms, change, lsn, mode) do
+  defp role_grant_for_change(grants, perms, scope_resolv, change, lsn, mode) do
     %{unscoped: unscoped_role_grants, scoped: scoped_role_grants} = grants
 
     Stream.concat([
       unscoped_role_grants,
-      scoped_role_grants(scoped_role_grants, perms, change, lsn),
-      transient_role_grants(scoped_role_grants, perms, change, lsn)
+      scoped_role_grants(scoped_role_grants, perms, scope_resolv, change, lsn),
+      transient_role_grants(scoped_role_grants, perms, scope_resolv, change, lsn)
     ])
     |> find_grant_allowing_change(change, mode)
   end
 
-  defp scoped_role_grants(role_grants, perms, change, _lsn) do
-    %{scope_resolver: scope_resolv} = perms
-
+  defp scoped_role_grants(role_grants, _perms, scope_resolv, change, _lsn) do
     Stream.filter(role_grants, fn
       %{role: %{scope: {scope_table, scope_id}}} ->
         # filter out roles whose scope doesn't match
@@ -455,11 +461,11 @@ defmodule Electric.Satellite.Permissions do
     end)
   end
 
-  defp transient_role_grants(role_grants, perms, change, lsn) do
+  defp transient_role_grants(role_grants, perms, scope_resolv, change, lsn) do
     role_grants
     |> Transient.for_roles(lsn, perms.transient_lut)
     |> Stream.flat_map(fn {role_grant, %Transient{target_relation: relation, target_id: id} = tdp} ->
-      if change_in_scope?(perms.scope_resolver, relation, id, change) do
+      if change_in_scope?(scope_resolv, relation, id, change) do
         Logger.debug(fn ->
           "Using transient permission #{inspect(tdp)} for #{inspect(change)}"
         end)

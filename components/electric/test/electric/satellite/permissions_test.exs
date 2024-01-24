@@ -602,6 +602,44 @@ defmodule Electric.Satellite.PermissionsTest do
                  ])
                )
     end
+
+    test "write in scope tree", cxt do
+      perms =
+        perms_build(
+          cxt,
+          [
+            ~s[GRANT ALL ON #{table(@issues)} TO (#{table(@projects)}, 'editor')],
+            ~s[GRANT ALL ON #{table(@comments)} TO (#{table(@projects)}, 'editor')],
+            ~s[GRANT ALL ON #{table(@reactions)} TO (#{table(@projects)}, 'editor')]
+          ],
+          [
+            Roles.role("editor", @projects, "p1")
+          ]
+        )
+
+      # a single tx that builds within a writable permissions scope
+      assert :ok =
+               Permissions.validate_write(
+                 perms,
+                 Chgs.tx([
+                   Chgs.insert(@issues, %{"id" => "i100", "project_id" => "p1"}),
+                   Chgs.insert(@comments, %{"id" => "c100", "issue_id" => "i100"}),
+                   Chgs.insert(@reactions, %{"id" => "r100", "comment_id" => "c100"})
+                 ])
+               )
+
+      # any failure should abort the tx
+      assert {:error, _} =
+               Permissions.validate_write(
+                 perms,
+                 Chgs.tx([
+                   Chgs.insert(@issues, %{"id" => "i100", "project_id" => "p1"}),
+                   # this insert lives outside our perms
+                   Chgs.insert(@comments, %{"id" => "c100", "issue_id" => "i3"}),
+                   Chgs.insert(@reactions, %{"id" => "r100", "comment_id" => "c100"})
+                 ])
+               )
+    end
   end
 
   describe "transient permissions" do

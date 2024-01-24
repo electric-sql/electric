@@ -46,10 +46,10 @@ defmodule Electric.Satellite.Permissions.Scope do
   """
   @callback parent_scope_id(state(), scope_root(), relation(), record()) :: scope_result()
 
-  @doc """
-  Returns an updated scope state including the changes in the given transaction.
-  """
-  @callback transaction_context(state(), Changes.Transaction.t()) :: state()
+  # @doc """
+  # Returns an updated (temporary) scope state including the given change.
+  # """
+  @callback apply_change(state(), change()) :: state()
 
   @doc """
   Returns the primary key value for the given record.
@@ -111,9 +111,17 @@ defmodule Electric.Satellite.Permissions.Scope do
     module.parent_scope_id(state, root, relation, record)
   end
 
+  def transaction_context({_module, _state} = impl, %Changes.Transaction{changes: changes}) do
+    Enum.reduce(changes, impl, &apply_change(&2, &1))
+  end
+
   @impl __MODULE__
-  def transaction_context({module, state}, %Changes.Transaction{} = tx) do
-    {module, module.transaction_context(state, tx)}
+  def apply_change({module, state}, %ScopeMove{} = _change) do
+    {module, state}
+  end
+
+  def apply_change({module, state}, change) do
+    {module, module.apply_change(state, change)}
   end
 
   @impl __MODULE__
