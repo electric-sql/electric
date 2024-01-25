@@ -11,9 +11,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [ubuntu-20.04]
+        platform: [macos-latest]
         # platform: [macos-latest, ubuntu-20.04, windows-latest]
-
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -37,7 +36,20 @@ jobs:
           version: 8
 
       - name: install frontend dependencies
-        run: cd ./generator/ && pnpm install --no-frozen-lockfile && pnpm build && cd .. && cd ./clients/typescript/ && pnpm install --no-frozen-lockfile && pnpm build && cd ../../ && cd ./examples/tauri-postgres/ && pnpm install --no-frozen-lockfile && pnpm backend:up && sleep 5 && pnpm db:migrate && sleep 5 && pnpm run client:generate && sleep 5 && bash patch.sh && pnpm install --no-frozen-lockfile # change this to npm or pnpm depending on which one you use
+        run: |
+          cd ./generator/
+          pnpm install --no-frozen-lockfile
+          pnpm build
+          cd ..
+          cd ./clients/typescript/
+          pnpm install --no-frozen-lockfile
+          pnpm build
+          cd ../../
+          cd ./examples/tauri-postgres/
+          pnpm install --no-frozen-lockfile
+          pnpm run tauri:build
+          pnpm install --no-frozen-lockfile # change this to npm or pnpm depending on which one you use
+          bash demo-darwin.sh
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

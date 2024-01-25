@@ -24,6 +24,19 @@ git_clone() {
     pnpm install && pnpm run tauri:package
 }
 
+# Clone the sources
+git_clone_third_parties() {
+    mkdir -p src-tauri/crates/ && cd src-tauri/crates/
+    git clone https://github.com/pepperoni21/ollama-rs # Solves a bug where in Cargo.toml `git` would still not work as expected
+    cd ollama-rs && git checkout f610472689ec113689ab06fb58304ec723c93111 && cd ..
+    git clone https://github.com/faokunega/pg-embed # We need to modify this in order to have a different location for postgres
+    cd pg-embed
+    git apply ../../../pg-embed.patch
+    cd ../../..
+    pnpm install && pnpm run tauri:package
+}
+
+
 # Install ollama
 # gives us src-tauri/ollama-darwin-aarch64-apple-darwin
 install_ollama() {
@@ -92,9 +105,10 @@ build_the_app() {
 #     echo "Not implemented"
 # }
 
-git_clone
+# git_clone
+git_clone_third_parties
 install_ollama
 install_postgres
 install_onnxruntime
-build_the_app
+# build_the_app
 # run_the_demo
