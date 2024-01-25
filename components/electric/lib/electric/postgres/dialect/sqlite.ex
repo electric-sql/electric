@@ -119,6 +119,25 @@ defmodule Electric.Postgres.Dialect.SQLite do
     ]) <> ";\n"
   end
 
+  # SQLite does not have an equivalent for enum types in Postgres.
+  # We pass the original statement through unchanged.
+  def to_sql(%Pg.CreateEnumStmt{} = stmt, _opts) do
+    name = Schema.AST.map(stmt.type_name)
+    values = Schema.AST.map(stmt.vals)
+
+    serialized_values =
+      values
+      |> Electric.Postgres.Types.Array.serialize(?')
+      |> String.slice(1..-2//1)
+
+    stmt([
+      "-- CREATE TYPE",
+      quote_name(name),
+      "AS ENUM",
+      paren(serialized_values)
+    ]) <> ";\n"
+  end
+
   defp alter_table_cmd(%Pg.Node{node: {_, cmd}}, table, opts) do
     alter_table_cmd(cmd, table, opts)
   end
