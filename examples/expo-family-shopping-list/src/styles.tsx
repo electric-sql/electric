@@ -26,7 +26,7 @@ export const styles = StyleSheet.create({
   items: {
     flex: 1,
     flexDirection: 'column',
-    alignItems: 'top',
+    alignItems: 'flex-start',
     height: '100%'
   },
   item: {

@@ -34,6 +34,7 @@
     "@databases/pg-migrations": "^5.0.2",
     "@tsconfig/react-native": "^2.0.2",
     "@types/react": "^18.0.18",
+    "@types/react-native-base64": "^0.2.2",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
     "typescript": "^5.1.3"
