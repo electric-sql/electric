@@ -42,7 +42,7 @@ defmodule Electric.Satellite.WsValidationsTest do
         electrify: "public.foo"
       )
 
-    within_replication_context(ctx, vsn, fn conn ->
+    within_replication_context(ctx, fn conn ->
       tx_op_log = serialize_trans(%{"id" => "1", "num" => "433", "t2" => "hello"})
       MockClient.send_data(conn, tx_op_log)
 
@@ -76,7 +76,7 @@ defmodule Electric.Satellite.WsValidationsTest do
     ]
 
     Enum.each(records, fn record ->
-      within_replication_context(ctx, vsn, fn conn ->
+      within_replication_context(ctx, fn conn ->
         tx_op_log = serialize_trans(record)
         MockClient.send_data(conn, tx_op_log)
         assert_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
@@ -101,7 +101,7 @@ defmodule Electric.Satellite.WsValidationsTest do
       %{"id" => "3", "b" => nil}
     ]
 
-    within_replication_context(ctx, vsn, fn conn ->
+    within_replication_context(ctx, fn conn ->
       Enum.each(valid_records, fn record ->
         tx_op_log = serialize_trans(record)
         MockClient.send_data(conn, tx_op_log)
@@ -122,7 +122,7 @@ defmodule Electric.Satellite.WsValidationsTest do
     ]
 
     Enum.each(invalid_records, fn record ->
-      within_replication_context(ctx, vsn, fn conn ->
+      within_replication_context(ctx, fn conn ->
         tx_op_log = serialize_trans(record)
         MockClient.send_data(conn, tx_op_log)
         assert_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
@@ -150,7 +150,7 @@ defmodule Electric.Satellite.WsValidationsTest do
       %{"id" => "6", "i8_1" => "-9223372036854775808", "i8_2" => "+9223372036854775807"}
     ]
 
-    within_replication_context(ctx, vsn, fn conn ->
+    within_replication_context(ctx, fn conn ->
       Enum.each(valid_records, fn record ->
         tx_op_log = serialize_trans(record)
         MockClient.send_data(conn, tx_op_log)
@@ -180,7 +180,7 @@ defmodule Electric.Satellite.WsValidationsTest do
     ]
 
     Enum.each(invalid_records, fn record ->
-      within_replication_context(ctx, vsn, fn conn ->
+      within_replication_context(ctx, fn conn ->
         tx_op_log = serialize_trans(record)
         MockClient.send_data(conn, tx_op_log)
         assert_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
@@ -218,7 +218,7 @@ defmodule Electric.Satellite.WsValidationsTest do
       %{"id" => "16", "f4" => "nan", "f8" => "nAn"}
     ]
 
-    within_replication_context(ctx, vsn, fn conn ->
+    within_replication_context(ctx, fn conn ->
       Enum.each(valid_records, fn record ->
         tx_op_log = serialize_trans(record)
         MockClient.send_data(conn, tx_op_log)
@@ -261,7 +261,7 @@ defmodule Electric.Satellite.WsValidationsTest do
     ]
 
     Enum.each(invalid_records, fn record ->
-      within_replication_context(ctx, vsn, fn conn ->
+      within_replication_context(ctx, fn conn ->
         tx_op_log = serialize_trans(record)
         MockClient.send_data(conn, tx_op_log)
         assert_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
@@ -283,7 +283,7 @@ defmodule Electric.Satellite.WsValidationsTest do
       %{"id" => Electric.Utils.uuid4()}
     ]
 
-    within_replication_context(ctx, vsn, fn conn ->
+    within_replication_context(ctx, fn conn ->
       Enum.each(valid_records, fn record ->
         tx_op_log = serialize_trans(record)
         MockClient.send_data(conn, tx_op_log)
@@ -301,7 +301,7 @@ defmodule Electric.Satellite.WsValidationsTest do
     ]
 
     Enum.each(invalid_records, fn record ->
-      within_replication_context(ctx, vsn, fn conn ->
+      within_replication_context(ctx, fn conn ->
         tx_op_log = serialize_trans(record)
         MockClient.send_data(conn, tx_op_log)
         assert_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
@@ -324,7 +324,7 @@ defmodule Electric.Satellite.WsValidationsTest do
       %{"id" => "4", "d" => "0001-01-01"}
     ]
 
-    within_replication_context(ctx, vsn, fn conn ->
+    within_replication_context(ctx, fn conn ->
       Enum.each(valid_records, fn record ->
         tx_op_log = serialize_trans(record)
         MockClient.send_data(conn, tx_op_log)
@@ -346,7 +346,7 @@ defmodule Electric.Satellite.WsValidationsTest do
     ]
 
     Enum.each(invalid_records, fn record ->
-      within_replication_context(ctx, vsn, fn conn ->
+      within_replication_context(ctx, fn conn ->
         tx_op_log = serialize_trans(record)
         MockClient.send_data(conn, tx_op_log)
         assert_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
@@ -369,7 +369,7 @@ defmodule Electric.Satellite.WsValidationsTest do
       %{"id" => "4", "t" => "11:11:11.11"}
     ]
 
-    within_replication_context(ctx, vsn, fn conn ->
+    within_replication_context(ctx, fn conn ->
       Enum.each(valid_records, fn record ->
         tx_op_log = serialize_trans(record)
         MockClient.send_data(conn, tx_op_log)
@@ -393,7 +393,7 @@ defmodule Electric.Satellite.WsValidationsTest do
     ]
 
     Enum.each(invalid_records, fn record ->
-      within_replication_context(ctx, vsn, fn conn ->
+      within_replication_context(ctx, fn conn ->
         tx_op_log = serialize_trans(record)
         MockClient.send_data(conn, tx_op_log)
         assert_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
@@ -417,7 +417,7 @@ defmodule Electric.Satellite.WsValidationsTest do
       %{"id" => "2", "t2" => "2023-08-07 00:00:00Z"}
     ]
 
-    within_replication_context(ctx, vsn, fn conn ->
+    within_replication_context(ctx, fn conn ->
       Enum.each(valid_records, fn record ->
         tx_op_log = serialize_trans(record)
         MockClient.send_data(conn, tx_op_log)
@@ -439,7 +439,7 @@ defmodule Electric.Satellite.WsValidationsTest do
     ]
 
     Enum.each(invalid_records, fn record ->
-      within_replication_context(ctx, vsn, fn conn ->
+      within_replication_context(ctx, fn conn ->
         tx_op_log = serialize_trans(record)
         MockClient.send_data(conn, tx_op_log)
         assert_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
@@ -468,7 +468,7 @@ defmodule Electric.Satellite.WsValidationsTest do
       %{"id" => "7", "jb" => ~s'[1, 2.0, 3e5, true, false, null, "", ["It\'s \u26a1"]]'}
     ]
 
-    within_replication_context(ctx, vsn, fn conn ->
+    within_replication_context(ctx, fn conn ->
       Enum.each(valid_records, fn record ->
         tx_op_log = serialize_trans(record)
         MockClient.send_data(conn, tx_op_log)
@@ -490,7 +490,7 @@ defmodule Electric.Satellite.WsValidationsTest do
     ]
 
     Enum.each(invalid_records, fn record ->
-      within_replication_context(ctx, vsn, fn conn ->
+      within_replication_context(ctx, fn conn ->
         tx_op_log = serialize_trans(record)
         MockClient.send_data(conn, tx_op_log)
         assert_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
@@ -545,7 +545,7 @@ defmodule Electric.Satellite.WsValidationsTest do
       %{"id" => "4", "cup_of" => nil}
     ]
 
-    within_replication_context(ctx, vsn, fn conn ->
+    within_replication_context(ctx, fn conn ->
       Enum.each(valid_records, fn record ->
         tx_op_log = serialize_trans(record)
         MockClient.send_data(conn, tx_op_log)
@@ -563,7 +563,7 @@ defmodule Electric.Satellite.WsValidationsTest do
     ]
 
     Enum.each(invalid_records, fn record ->
-      within_replication_context(ctx, vsn, fn conn ->
+      within_replication_context(ctx, fn conn ->
         tx_op_log = serialize_trans(record)
         MockClient.send_data(conn, tx_op_log)
         assert_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
@@ -571,7 +571,7 @@ defmodule Electric.Satellite.WsValidationsTest do
     end)
   end
 
-  defp within_replication_context(ctx, vsn, expectation_fn) do
+  defp within_replication_context(ctx, expectation_fn) do
     with_connect(ctx.conn_opts, fn conn ->
       # Replication start ceremony
       start_replication_and_assert_response(conn, 0)
@@ -579,15 +579,9 @@ defmodule Electric.Satellite.WsValidationsTest do
       # Confirm the server has sent the migration to the client
       assert_receive {^conn, %SatRelation{table_name: @table_name} = relation}, @receive_timeout
 
-      assert_receive {^conn,
-                      %SatOpLog{
-                        ops: [
-                          %SatTransOp{op: {:begin, %SatOpBegin{is_migration: true}}},
-                          %SatTransOp{op: {:migrate, %{version: ^vsn}}},
-                          %SatTransOp{op: {:commit, _}}
-                        ]
-                      }},
-                     @receive_timeout
+      assert_receive {^conn, %SatOpLog{ops: ops}}, @receive_timeout
+      assert %SatTransOp{op: {:begin, %SatOpBegin{is_migration: true}}} = List.first(ops)
+      assert %SatTransOp{op: {:commit, _}} = List.last(ops)
 
       # The client has to repeat the relation message to the server
       MockClient.send_data(conn, relation)

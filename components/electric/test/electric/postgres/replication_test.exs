@@ -129,8 +129,9 @@ defmodule Electric.Postgres.ReplicationTest do
       # there are lots of tests that validate the schema is being properly updated
       # assert Schema.table_names(schema) == [~s("public"."fish"), ~s("frog"), ~s("teeth"."front")]
       assert Schema.table_names(schema) == [~s("public"."fish")]
-      assert %SatOpMigrate{version: ^version} = msg
-      %{stmts: stmts, table: table} = msg
+
+      assert %SatOpMigrate{version: ^version, stmts: stmts, affected_entity: {:table, table}} =
+               msg
 
       assert stmts == [
                %SatOpMigrate.Stmt{
@@ -167,8 +168,9 @@ defmodule Electric.Postgres.ReplicationTest do
 
       assert {:ok, [msg], [{"teeth", "front"}]} = Replication.migrate(schema_version, stmt)
       assert Schema.table_names(schema) == [~s("public"."fish"), ~s("teeth"."front")]
-      assert %SatOpMigrate{version: ^version} = msg
-      %{stmts: stmts, table: table} = msg
+
+      assert %SatOpMigrate{version: ^version, stmts: stmts, affected_entity: {:table, table}} =
+               msg
 
       assert stmts == [
                %SatOpMigrate.Stmt{
@@ -223,9 +225,8 @@ defmodule Electric.Postgres.ReplicationTest do
 
       assert {:ok, [msg], [{"public", "fish"}]} = Replication.migrate(schema_version, stmt)
 
-      assert %SatOpMigrate{version: ^version} = msg
-
-      %{stmts: stmts, table: table} = msg
+      assert %SatOpMigrate{version: ^version, stmts: stmts, affected_entity: {:table, table}} =
+               msg
 
       assert stmts == [
                %SatOpMigrate.Stmt{
@@ -280,9 +281,9 @@ defmodule Electric.Postgres.ReplicationTest do
       version = "20230405134616"
       schema_version = SchemaLoader.Version.new(version, schema)
       assert {:ok, [msg], []} = Replication.migrate(schema_version, stmt)
-      assert %SatOpMigrate{version: ^version} = msg
 
-      %{stmts: stmts, table: table} = msg
+      assert %SatOpMigrate{version: ^version, stmts: stmts, affected_entity: nil} =
+               msg
 
       assert stmts == [
                %SatOpMigrate.Stmt{
@@ -290,8 +291,6 @@ defmodule Electric.Postgres.ReplicationTest do
                  type: :CREATE_INDEX
                }
              ]
-
-      assert is_nil(table)
     end
 
     test "pg-only ddl statements don't generate a message" do

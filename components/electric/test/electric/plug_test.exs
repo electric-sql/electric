@@ -100,23 +100,25 @@ defmodule Electric.PlugTest do
                      "CREATE TABLE \"a\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"a_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n"
                  }
                ],
-               table: %SatOpMigrate.Table{
-                 name: "a",
-                 columns: [
-                   %SatOpMigrate.Column{
-                     name: "id",
-                     sqlite_type: "TEXT",
-                     pg_type: %SatOpMigrate.PgColumnType{name: "uuid"}
-                   },
-                   %SatOpMigrate.Column{
-                     name: "value",
-                     sqlite_type: "TEXT",
-                     pg_type: %SatOpMigrate.PgColumnType{name: "text"}
-                   }
-                 ],
-                 fks: [],
-                 pks: ["id"]
-               },
+               affected_entity:
+                 {:table,
+                  %SatOpMigrate.Table{
+                    name: "a",
+                    columns: [
+                      %SatOpMigrate.Column{
+                        name: "id",
+                        sqlite_type: "TEXT",
+                        pg_type: %SatOpMigrate.PgColumnType{name: "uuid"}
+                      },
+                      %SatOpMigrate.Column{
+                        name: "value",
+                        sqlite_type: "TEXT",
+                        pg_type: %SatOpMigrate.PgColumnType{name: "text"}
+                      }
+                    ],
+                    fks: [],
+                    pks: ["id"]
+                  }},
                version: "0001"
              } = op1 |> Base.decode64!() |> SatOpMigrate.decode!()
 
