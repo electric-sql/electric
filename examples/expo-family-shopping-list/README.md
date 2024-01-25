@@ -32,7 +32,7 @@ cd electric/examples/expo-family-shopping-list
 Install the dependencies:
 
 ```sh
-npm expo install
+npx expo install
 ```
 
 ## Setup

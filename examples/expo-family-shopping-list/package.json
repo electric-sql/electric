@@ -20,13 +20,13 @@
   },
   "dependencies": {
     "electric-sql": "^0.9.0",
-    "expo": "~49.0.8",
-    "expo-sqlite": "~11.3.3",
-    "expo-status-bar": "~1.6.0",
+    "expo": "^50.0.0",
+    "expo-sqlite": "~13.2.2",
+    "expo-status-bar": "~1.11.1",
     "react": "^18.2.0",
-    "react-native": "0.72.6",
+    "react-native": "0.73.2",
     "react-native-base64": "^0.2.1",
-    "react-native-get-random-values": "~1.9.0",
+    "react-native-get-random-values": "~1.8.0",
     "react-native-url-polyfill": "^2.0.0"
   },
   "devDependencies": {
@@ -34,7 +34,6 @@
     "@databases/pg-migrations": "^5.0.2",
     "@tsconfig/react-native": "^2.0.2",
     "@types/react": "^18.0.18",
-    "@types/react-native": "^0.72.2",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
     "typescript": "^5.1.3"
