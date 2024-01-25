@@ -1,0 +1,42 @@
+{
+  "name": "electric-sql-expo-example",
+  "version": "0.7.0",
+  "author": "ElectricSQL",
+  "license": "Apache-2.0",
+  "main": "node_modules/expo/AppEntry.js",
+  "scripts": {
+    "backend:start": "npx electric-sql start --with-postgres",
+    "backend:stop": "npx electric-sql stop",
+    "backend:up": "npx electric-sql start --with-postgres --detach",
+    "backend:down": "npx electric-sql stop --remove",
+    "client:generate": "npx electric-sql generate",
+    "client:watch": "npx electric-sql generate --watch",
+    "db:migrate": "npx electric-sql with-config \"npx pg-migrations apply --database {{ELECTRIC_PROXY}} --directory ./db/migrations\"",
+    "db:psql": "npx electric-sql psql",
+    "electric:start": "npx electric-sql start",
+    "start": "expo start",
+    "start:android": "expo start --android",
+    "start:ios": "expo start --ios"
+  },
+  "dependencies": {
+    "electric-sql": "^0.9.0",
+    "expo": "~49.0.8",
+    "expo-sqlite": "~11.3.3",
+    "expo-status-bar": "~1.6.0",
+    "react": "^18.2.0",
+    "react-native": "0.72.6",
+    "react-native-base64": "^0.2.1",
+    "react-native-get-random-values": "~1.9.0",
+    "react-native-url-polyfill": "^2.0.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.12.9",
+    "@databases/pg-migrations": "^5.0.2",
+    "@tsconfig/react-native": "^2.0.2",
+    "@types/react": "^18.0.18",
+    "@types/react-native": "^0.72.2",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "typescript": "^5.1.3"
+  }
+}
