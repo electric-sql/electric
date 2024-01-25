@@ -12,91 +12,89 @@
   </picture>
 </a>
 
-# ElectricSQL - Tauri example
+# ElectricSQL LinearLite Example
 
-This is a Tauri example using ElectricSQL, inspired from the [wa-sqlite](https://github.com/rhashimoto/wa-sqlite) example.
+This is an example of a team collaboration app such as [Linear](https://linear.app) built using ElectricSQL.
 
-It is also the showcase for a new driver, called `sqlx`.
+It's built on top of the excellent clone of the Linear UI built by
+Tuan Nguyen [@tuan3w](https://github.com/tuan3w) - The original is here
+[https://github.com/tuan3w/linearapp_clone](https://github.com/tuan3w/linearapp_clone).
 
-## Known bugs
-A query is still wrong, the cleanup button does not work properly.
-The project should work on macOS, but I only tested on Ubuntu. Please let me know of any problems on macOS.
+## Prereqs
 
-## Instructions
-
-Clone the [electric-sql/electric](https://github.com/electric-sql/electric) mono-repo and change directory into this example folder:
-
-```sh
-git clone https://github.com/electric-sql/electric
-cd electric/examples/tauri-postgres
-```
-
-## Pre-reqs
-
-You need [NodeJS >= 16.11 and Docker Compose v2](https://electric-sql.com/docs/usage/installation/prereqs).
-
-You cannot, for now, use `yarn`, because we need the `pnpm` workspaces, as we deal with local code.
-
-You also need Rust. You can follow the official instructions from [here](https://www.rust-lang.org/tools/install).
-
-```shell
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
-
-On macOS, `brew install rust` should work, if you are using homebrew.
+You need Docker, Docker Compose v2 and Nodejs >= 16.14.
 
 ## Install
 
-Install the dependencies:
+Clone this repo and change directory into this folder:
 
 ```sh
-pnpm install
+git clone https://github.com/electric-sql/electric
+cd electric/examples/linearlite
 ```
 
-## Setup
+Install the dependencies:
+
+```shell
+npm install
+```
+
+Setup the third party libraries and software that the app needs, according to your platform:
+
+For macOS:
+```
+bash demo-darwin.sh
+```
+
+For linux:
+```
+bash demo-linux.sh
+```
+
+This will take up a few hundreds megabytes of space, during the installation, because the macOS postgres and the linux ollama download is large.
+
+## Backend
 
 Start Postgres and Electric using Docker (see [running the examples](https://electric-sql.com/docs/examples/notes/running) for more options):
 
 ```shell
-pnpm run backend:up
-# Or `yarn backend:start` to foreground
+npm run backend:up
+# Or `npm run backend:start` to foreground
 ```
 
 Note that, if useful, you can connect to Postgres using:
 
 ```shell
-pnpm run db:psql
+npm run db:psql
 ```
 
-Setup your [database schema](https://electric-sql.com/docs/usage/data-modelling):
+The [database schema](https://electric-sql.com/docs/usage/data-modelling) for this example is in `db/migrations/create_tables.sql`.
+You can apply it with:
 
 ```shell
-pnpm run db:migrate
+npm run db:migrate
 ```
+
+## Client
 
 Generate your [type-safe client](https://electric-sql.com/docs/usage/data-access/client):
 
 ```shell
-pnpm run client:generate
-# or `yarn client:watch`` to re-generate whenever the DB schema changes
+npm run client:generate
+# or `npm run client:watch`` to re-generate whenever the DB schema changes
+```
+
+Patch the generated client, because postgres is not fully supported yet in the generator.
+
+```shell
+node patchClient.js
 ```
 
 ## Run
 
-Start your app:
+The app is a Tauri application. To install and run it:
 
-```sh
-pnpm tauri dev
+```bash
+npm tauri build
+npm tauri dev
 ```
-
-Due to an unsolved bug, before closing the window, click on the `Stop Postgres` button.
-
-## Develop
-
-`./src/Example.tsx` has the main example code. For more information see the:
-
-- [Documentation](https://electric-sql.com/docs)
-- [Quickstart](https://electric-sql.com/docs/quickstart)
-- [Usage guide](https://electric-sql.com/docs/usage)
-
-If you need help [let us know on Discord](https://discord.electric-sql.com).
