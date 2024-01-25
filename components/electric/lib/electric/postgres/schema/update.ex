@@ -376,7 +376,7 @@ defmodule Electric.Postgres.Schema.Update do
     {[], schema}
   end
 
-  defp do_update(%PgQuery.CreateEnumStmt{} = action, schema, opts) do
+  defp do_update(%Pg.CreateEnumStmt{} = action, schema, opts) do
     name =
       case AST.map(action.type_name, opts) do
         [schema, name] -> %Proto.RangeVar{schema: schema, name: name}

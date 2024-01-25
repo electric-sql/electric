@@ -83,6 +83,10 @@ defmodule Electric.Postgres.Replication do
     :CREATE_INDEX
   end
 
+  def stmt_type(%Pg.CreateEnumStmt{}) do
+    :CREATE_ENUM_TYPE
+  end
+
   def stmt_type(%Pg.AlterTableStmt{cmds: [cmd]}) do
     case cmd do
       %{node: {:alter_table_cmd, %Pg.AlterTableCmd{subtype: :AT_AddColumn}}} ->
@@ -140,9 +144,29 @@ defmodule Electric.Postgres.Replication do
         }
       )
 
+    enum_type =
+      ast
+      |> Enum.filter(&match?(%Pg.CreateEnumStmt{}, &1))
+      |> Enum.map(fn enum_ast ->
+        name = AST.map(enum_ast.type_name)
+        values = AST.map(enum_ast.vals)
+        %SatOpMigrate.EnumType{name: Dialect.table_name(name, dialect), values: values}
+      end)
+      |> case do
+        [] -> nil
+        [enum] -> enum
+      end
+
+    affected_entity =
+      case {table, enum_type} do
+        {%SatOpMigrate.Table{}, nil} -> {:table, table}
+        {nil, %SatOpMigrate.EnumType{}} -> {:enum_type, enum_type}
+        {nil, nil} -> nil
+      end
+
     {%SatOpMigrate{
        version: SchemaLoader.Version.version(schema_version),
-       table: table,
+       affected_entity: affected_entity,
        stmts: stmts
      }, relations}
   end
@@ -161,6 +185,9 @@ defmodule Electric.Postgres.Replication do
       %Pg.AlterTableStmt{
         cmds: [%{node: {:alter_table_cmd, %Pg.AlterTableCmd{subtype: :AT_AddColumn}}}]
       } ->
+        true
+
+      %Pg.CreateEnumStmt{} ->
         true
 
       _else ->

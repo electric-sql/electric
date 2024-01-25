@@ -118,7 +118,11 @@ defmodule ElectricTest.SatelliteHelpers do
                     %SatOpLog{
                       ops: [
                         %{op: {:begin, %SatOpBegin{is_migration: true, lsn: lsn_str}}},
-                        %{op: {:migrate, %{version: ^version, table: %{name: ^table_name}}}},
+                        %{
+                          op:
+                            {:migrate,
+                             %{version: ^version, affected_entity: {:table, %{name: ^table_name}}}}
+                        },
                         %{op: {:commit, _}}
                       ]
                     }}
