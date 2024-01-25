@@ -18,7 +18,7 @@ This is a web application using ElectricSQL in the browser with [wa-sqlite](http
 
 ## Pre-reqs
 
-You need [NodeJS >= 16.11 and Docker Compose v2](https://electric-sql.com/docs/usage/installation/prereqs).
+You need [NodeJS ^18.0.0 | >= 20.0.0  and Docker Compose v2](https://electric-sql.com/docs/usage/installation/prereqs).
 
 ## Install
 
@@ -58,13 +58,19 @@ npm run client:generate
 
 ## Run
 
+Build the app:
+
+```sh
+npm run build
+```
+
 Start your app:
 
 ```sh
-npm run dev
+npm run tauri dev
 ```
 
-Open [localhost:3001](http://localhost:3001) in your web browser.
+The app should now open automatically.
 
 ## Develop
 
