@@ -1,6 +1,8 @@
 import { Transition } from '@headlessui/react'
 import { useConnectivityState } from 'electric-sql/react'
 import classnames from 'classnames'
+import { BsTerminal } from "react-icons/bs";
+import { invoke } from "@tauri-apps/api/tauri";
 import { useClickOutside } from '../hooks/useClickOutside'
 import Toggle from './Toggle'
 import { useRef } from 'react'
@@ -73,7 +75,16 @@ export default function ProfileMenu({
         >
           GitHub
         </a>
-        <div className="border-t flex items-center h-8 px-3">
+        <button
+          className="flex items-center h-8 px-3 hover:bg-gray-100 border-t"
+          onClick={() => invoke('open_postgres')}
+        >
+          <span className="me-auto">
+            Postgres Console
+          </span>
+          <BsTerminal size={16} />
+        </button>
+        <div className="flex items-center h-8 px-3">
           <span className="text-gray-500 me-auto">
             {connectivityStateDisplay}
           </span>

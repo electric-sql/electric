@@ -23,8 +23,9 @@ const DEBUG_ENV = import.meta.env.DEBUG
 const searchParams = new URLSearchParams(window.location.search)
 const debugParam = searchParams.get('debug')
 
-// DEBUG defaults to true in dev mode, false in prod mode
-export const DEBUG = debugParam ? debugParam === 'true' : DEV_MODE || DEBUG_ENV
+export const DEBUG = debugParam ? debugParam === 'true' : DEBUG_ENV === 'true'
+
+console.log('DEBUG', DEBUG)
 
 // We export dbName so that we can delete the database if the schema changes
 export let dbName: string

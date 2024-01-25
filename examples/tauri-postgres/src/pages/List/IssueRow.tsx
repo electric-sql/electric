@@ -66,6 +66,12 @@ function IssueRow({ issue, style }: Props) {
       </div>
       <div className="flex-wrap flex-shrink ml-3 overflow-hidden font-medium line-clamp-1 overflow-ellipsis">
         {issue.title.slice(0, 3000) || ''}
+        {issue.cosine_similarity && (
+          <span className="text-gray-300">
+            {' '}
+            {issue.cosine_similarity.toFixed(2)}
+          </span>
+        )}
       </div>
       <div className="flex-shrink-0 hidden w-15 ml-auto font-normal text-gray-500 sm:block whitespace-nowrap">
         {formatDate(issue.created)}

@@ -53,13 +53,18 @@ function List({ showSearch = false }) {
         sql = sql.replace(" id,", " issue.id AS id,");
         sql = sql.replace(
           " FROM issue",
-          ` FROM issue INNER JOIN document ON document.issue_id = issue.id `
+          `, (1 - (document.embeddings <=> '${embedding}'))::text AS cosine_similarity FROM issue INNER JOIN document ON document.issue_id = issue.id `
         );
         sql += ` ORDER BY document.embeddings <=> '${embedding}'`;
         sql += ` LIMIT 100;`;
 
-        const results = await db.raw({ sql, args: values });
+        let results = await db.raw({ sql, args: values });
         if (ignore) return;
+
+        results = results.map((result: any) => ({
+          ...result,
+          cosine_similarity: result.cosine_similarity ? parseFloat(result.cosine_similarity) : null,
+        }));
 
         setVectorResult(results as Issue[]);
       }
