@@ -2,7 +2,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 // Third part utils
-use dirs::{cache_dir, home_dir};
 use futures::stream::StreamExt;
 use ollama_rs::{generation::completion::request::GenerationRequest, Ollama};
 use regex::Regex;
@@ -35,7 +34,6 @@ use pg::{patch, pg_connect, pg_init, pg_query, row_to_json};
 
 // Postgres console
 use portable_pty::{native_pty_system, CommandBuilder, PtyPair, PtySize};
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::{
     io::{BufRead, BufReader, Write},
@@ -277,15 +275,11 @@ async fn tauri_init_command(
         .expect("failed to resolve pgdir");
 
     eprintln!("{:?}", resource_path_pgdir.to_str());
-    eprintln!("{:?}", resource_path_pgdir.to_str());
-    eprintln!("{:?}", resource_path_pgdir.to_str());
-    eprintln!("{:?}", resource_path_pgdir.to_str());
-    eprintln!("{:?}", resource_path_pgdir.to_str());
 
     let pg = pg_init(
         format!(
             "{}/db/{}",
-            home_dir().unwrap().into_os_string().into_string().unwrap(),
+            resource_path_pgdir.to_str().unwrap(),
             name
         )
         .as_str(),
@@ -522,7 +516,7 @@ fn main() {
     let mut envs: HashMap<String, String> = HashMap::new();
     envs.insert("OLLAMA_HOST".to_string(), host);
 
-    let (mut rx, mut child) = Command::new_sidecar("ollama-darwin")
+    let (mut rx, mut _child) = Command::new_sidecar("ollama-darwin")
         .expect("failed to create `ollama-darwin` binary command")
         .envs(envs)
         .args(["serve"])
