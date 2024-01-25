@@ -33,7 +33,7 @@ git_clone_third_parties() {
     cd pg-embed
     git apply ../../../pg-embed.patch
     cd ../../..
-    pnpm install && pnpm run tauri:package
+    # pnpm install && pnpm run tauri:package
 }
 
 
