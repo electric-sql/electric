@@ -399,6 +399,7 @@ message SatOpMigrate {
     enum Type {
         CREATE_TABLE = 0;
         CREATE_INDEX = 1;
+        CREATE_ENUM_TYPE = 2;
         ALTER_ADD_COLUMN = 6;
     }
     message Stmt {
@@ -440,17 +441,34 @@ message SatOpMigrate {
         repeated ForeignKey fks = 3;
         repeated string pks = 4;
     }
+    message EnumType {
+        string name = 1;
+        repeated string values = 2;
+    }
+
     // the migration version as specified by the developer and put into
     // the postgresql migration as an electric function call
     string version = 1;
-    // a list of sql ddl statements to apply, converted from the pg originals
+
+    // A list of SQL DDL statements to apply, translated from Postgres to SQLite dialect.
+    //
     // The migration machinery converts an `ALTER TABLE action1, action2, action3;`
     // query into a set of 3: `ALTER TABLE action1; ALTER TABLE action2,` etc
     // so we need to support 1+ statements for every migration event.
+    //
+    // There is an exception for enum types. Since SQLite does not have a matching concept,
+    // the original Postgres DDL statement `CREATE TYPE ... AS ENUM (...)` is included as is,
+    // without translation.
     repeated Stmt stmts = 2;
-    // The resulting table definition after applying these migrations
-    // (a DDL statement can only affect one table at a time).
-    optional Table table = 3;
+
+    oneof affected_entity {
+      // The resulting table definition after applying these migrations
+      // (a DDL statement can only affect one table at a time).
+      Table table = 3;
+
+      // This field is set if stmts includes a single item which is an enum type definition.
+      EnumType enum_type = 4;
+    }
 }
 
 // (Consumer) Request for new subscriptions
