@@ -46,7 +46,7 @@
         "providerShortName": null,
         "signingIdentity": null
       },
-      "resources": ["./libonnxruntime.dylib", "./vector.so", "./vector.control", "./vector--0.5.1.sql", "./pgdir/*"],
+      "resources": ["./libonnxruntime.dylib", "./pgdir/*"],
       "shortDescription": "",
       "targets": "all",
       "windows": {

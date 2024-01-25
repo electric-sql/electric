@@ -54,6 +54,7 @@ install_postgres() {
     # Get a full version of postgres
     wget https://get.enterprisedb.com/postgresql/postgresql-15.5-1-osx-binaries.zip
     unzip postgresql-15.5-1-osx-binaries.zip # The directory is called `pgsql`
+    rm postgresql-15.5-1-osx-binaries.zip
 
     git clone --branch v0.5.1 https://github.com/pgvector/pgvector.git
     cd pgvector
@@ -71,18 +72,28 @@ install_postgres() {
     rm -rf pgvector
 }
 
+# We also need to download the dynamic libraries for onnx
+install_onnxruntime() {
+    wget https://github.com/microsoft/onnxruntime/releases/download/v1.16.3/onnxruntime-osx-arm64-1.16.3.tgz
+    tar -xzvf onnxruntime-osx-arm64-1.16.3.tgz
+    rm onnxruntime-osx-arm64-1.16.3.tgz
+    cp onnxruntime-osx-arm64-1.16.3/lib/libonnxruntime.1.16.3.dylib src-tauri/libonnxruntime.dylib
+    rm -rf onnxruntime-osx-arm64-1.16.3
+}
+
 # Build the Tauri app
 build_the_app() {
     # We assume we are in the correct directory
     pnpm tauri build # This also installs the app
 }
 
-run_the_demo() {
-    echo "Not implemented"
-}
+# run_the_demo() {
+#     echo "Not implemented"
+# }
 
+git_clone
 install_ollama
 install_postgres
-git_clone
+install_onnxruntime
 build_the_app
-run_the_demo
+# run_the_demo
