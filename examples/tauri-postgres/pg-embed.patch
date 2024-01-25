@@ -21,18 +21,19 @@ index e1cb065..742d2bc 100644
              OperationSystem::Darwin | OperationSystem::Windows | OperationSystem::Linux => {
                  fetch_settings.operating_system.to_string()
 diff --git a/src/pg_fetch.rs b/src/pg_fetch.rs
-index 47604ec..230eda6 100644
+index 47604ec..82f9ca3 100644
 --- a/src/pg_fetch.rs
 +++ b/src/pg_fetch.rs
-@@ -8,6 +8,7 @@ use bytes::Bytes;
+@@ -7,7 +7,7 @@
+ use bytes::Bytes;
  use futures::TryFutureExt;
  use reqwest::Response;
- use std::future::Future;
+-use std::future::Future;
 +use std::path::PathBuf;
  
  use crate::pg_enums::{Architecture, OperationSystem};
  use crate::pg_errors::{PgEmbedError, PgEmbedErrorType};
-@@ -40,6 +41,8 @@ pub struct PgFetchSettings {
+@@ -40,6 +40,8 @@ pub struct PgFetchSettings {
      pub architecture: Architecture,
      /// The postgresql version
      pub version: PostgresVersion,
@@ -41,7 +42,7 @@ index 47604ec..230eda6 100644
  }
  
  impl Default for PgFetchSettings {
-@@ -49,6 +52,11 @@ impl Default for PgFetchSettings {
+@@ -49,6 +51,11 @@ impl Default for PgFetchSettings {
              operating_system: OperationSystem::default(),
              architecture: Architecture::default(),
              version: PG_V13,
