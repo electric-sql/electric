@@ -141,6 +141,9 @@ importers:
         specifier: ^3.20.2
         version: 3.21.4
     devDependencies:
+      '@tauri-apps/plugin-sql':
+        specifier: 2.0.0-alpha.5
+        version: 2.0.0-alpha.5
       '@testing-library/react':
         specifier: ^13.4.0
         version: 13.4.0(react-dom@18.2.0)(react@18.2.0)
@@ -4162,6 +4165,17 @@ packages:
     engines: {node: '>=14.16'}
     dependencies:
       defer-to-connect: 2.0.1
+    dev: true
+
+  /@tauri-apps/api@2.0.0-alpha.13:
+    resolution: {integrity: sha512-sGgCkFahF3OZAHoGN5Ozt9WK7wJlbVZSgWpPQKNag4nSOX1+Py6VDRTEWriiJHDiV+gg31CWHnNXRy6TFoZmdA==}
+    engines: {node: '>= 18', npm: '>= 6.6.0', yarn: '>= 1.19.1'}
+    dev: true
+
+  /@tauri-apps/plugin-sql@2.0.0-alpha.5:
+    resolution: {integrity: sha512-u4rJZM357zWP+WmE/W1t1iu0/INQ9uqO8+dOFWzLSGqg2zgYcohTeV66hZoeCTRTzsV3qrKI3suWueLu1YKT7A==}
+    dependencies:
+      '@tauri-apps/api': 2.0.0-alpha.13
     dev: true
 
   /@testing-library/dom@8.20.0:
