@@ -1,7 +1,7 @@
 import 'react-native-get-random-values'
 import 'react-native-url-polyfill/auto'
 
-import React, { type PropsWithChildren } from 'react'
+import React from 'react'
 import {
   SafeAreaView,
   ScrollView,
@@ -9,11 +9,9 @@ import {
   StyleSheet
 } from 'react-native'
 
-import { Colors, Header } from 'react-native/Libraries/NewAppScreen'
+import { Example } from '../Example'
 
-import { Example } from './src/Example'
-
-const App = () => {
+export default function App () {
   return (
     <SafeAreaView style={ styles.container }>
       <StatusBar barStyle={ 'light-content' } backgroundColor={ styles.container.backgroundColor } />
@@ -31,5 +29,3 @@ const styles = StyleSheet.create({
     flex: 1
   }
 })
-
-export default App
