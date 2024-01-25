@@ -425,11 +425,13 @@ async fn stop_chat(state: tauri::State<'_, AsyncProcInputTx>) -> Result<(), Stri
 
 #[tauri::command(rename_all = "snake_case")]
 async fn open_postgres(app_handle: tauri::AppHandle) {
-  let postgres_terminal = tauri::WindowBuilder::new(
-    &app_handle,
-    "Postgres Terminal", /* the unique window label */
-    tauri::WindowUrl::App("debug.html".parse().unwrap())
-  ).build().unwrap();
+    let postgres_terminal = tauri::WindowBuilder::new(
+        &app_handle,
+        "postgresterminal", /* the unique window label */
+        tauri::WindowUrl::App("debug.html".parse().unwrap()),
+    )
+    .build()
+    .unwrap();
 }
 
 async fn async_process_model(
