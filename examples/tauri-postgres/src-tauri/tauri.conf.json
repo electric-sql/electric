@@ -72,6 +72,7 @@
         "height": 600,
         "resizable": true,
         "title": "Linearlite",
+        "label": "main",
         "width": 800
       }
     ]

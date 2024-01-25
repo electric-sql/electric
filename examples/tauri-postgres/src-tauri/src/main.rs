@@ -611,6 +611,27 @@ fn main() {
                 }
             });
 
+            // Close postgres only when closing the main window
+            let main_window = app.get_window("main").unwrap();
+            main_window.on_window_event({
+                let main_window = main_window.clone();
+                move |event| match event {
+                    // When we click X, stop postgres gracefully first
+                    // BUG: this closes the connection regardless of which window is closed
+                    // so don't close the postgres terminal
+                    WindowEvent::Destroyed => {
+                        let db_connection: State<DbConnection> = main_window.state();
+                        block_on(async {
+                            let mut db = db_connection.db.lock().await;
+                            if let Some(mut connection) = db.take() {
+                                connection.stop_db().await.unwrap();
+                            }
+                        })
+                    }
+                    _ => {}
+                }
+            });
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -626,21 +647,6 @@ fn main() {
             stop_chat,
             open_postgres,
         ])
-        .on_window_event(move |event| match event.event() {
-            // When we click X, stop postgres gracefully first
-            // BUG: this closes the connection regardless of which window is closed
-            // so don't close the postgres terminal
-            WindowEvent::Destroyed => {
-                let db_connection: State<DbConnection> = event.window().state();
-                block_on(async {
-                    let mut db = db_connection.db.lock().await;
-                    if let Some(mut connection) = db.take() {
-                        connection.stop_db().await.unwrap();
-                    }
-                })
-            }
-            _ => {}
-        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
