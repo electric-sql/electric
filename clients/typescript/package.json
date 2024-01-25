@@ -59,6 +59,7 @@
     "./react-native": "./dist/drivers/react-native-sqlite-storage/index.js",
     "./vuejs": "./dist/frameworks/vuejs/index.js",
     "./wa-sqlite": "./dist/drivers/wa-sqlite/index.js",
+    "./tauri": "./dist/drivers/tauri-sqlite/index.js",
     "./config": "./dist/config/index.js",
     "./debug": "./dist/util/debug/index.js",
     "./client/model": "./dist/client/model/index.js",
@@ -100,6 +101,9 @@
       ],
       "wa-sqlite": [
         "./dist/drivers/wa-sqlite/index.d.ts"
+      ],
+      "tauri": [
+        "./dist/drivers/tauri-sqlite/index.d.ts"
       ],
       "config": [
         "./dist/config/index.d.ts"
@@ -185,6 +189,7 @@
   },
   "devDependencies": {
     "@electric-sql/prisma-generator": "workspace:*",
+    "@tauri-apps/plugin-sql": "2.0.0-alpha.5",
     "@testing-library/react": "^13.4.0",
     "@types/base-64": "^1.0.0",
     "@types/better-sqlite3": "7.6.3",
@@ -237,6 +242,7 @@
   },
   "peerDependencies": {
     "@capacitor-community/sqlite": ">= 5.4.1",
+    "@tauri-apps/plugin-sql": "2.0.0-alpha.5",
     "cordova-sqlite-storage": ">= 5.0.0",
     "expo-sqlite": ">= 13.0.0",
     "react": ">= 16.8.0",
