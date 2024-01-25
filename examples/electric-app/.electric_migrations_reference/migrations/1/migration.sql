@@ -20,6 +20,9 @@ CREATE TABLE "_weird_Name" (
 ) WITHOUT ROWID;
 
 
+-- CREATE TYPE "woods" AS ENUM ('birch','mahogany','spruce','pine','oak');
+
+
 CREATE TABLE "public.trees" (
   "id" TEXT NOT NULL,
   "wood" TEXT NOT NULL,

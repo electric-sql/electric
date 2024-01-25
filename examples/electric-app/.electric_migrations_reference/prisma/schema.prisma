@@ -11,35 +11,36 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = "postgresql://prisma:proxy_password@localhost:65432/electric-app"
+  url = ""
 }
 
 model Weird_Name {
-  id      String    @id
-  item    String?   @db.Uuid /// @zod.string.uuid()
-  foo_bar DateTime? @map("foo bar") @db.Timestamptz(6)
-  items   Items?    @relation(fields: [item], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id	String	@id
+  item	String?	@db.Uuid /// @zod.string.uuid()
+  foo_bar	DateTime?	@map("foo bar")  @db.Timestamptz(6)
+  items	Items?	@relation(fields: [item], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@map("_weird_Name")
 }
 
 model Items {
-  id         String       @id @db.Uuid /// @zod.string.uuid()
-  value      String
-  i          Int?         @db.SmallInt /// @zod.number.int().gte(-32768).lte(32767)
-  i8         BigInt?
-  r          Float?       @db.Real /// @zod.custom.use(z.number().or(z.nan()))
-  f          Float?       @db.Real /// @zod.custom.use(z.number().or(z.nan()))
-  Vc         String?      @db.VarChar
-  b_oo_lean  Boolean      @map("b-oo-lean")
-  weird_Name Weird_Name[]
+  id	String	@id  @db.Uuid /// @zod.string.uuid()
+  value	String
+  i	Int?	@db.SmallInt /// @zod.number.int().gte(-32768).lte(32767)
+  i8	BigInt?
+  r	Float?	@db.Real /// @zod.custom.use(z.number().or(z.nan()))
+  f	Float?	@db.Real /// @zod.custom.use(z.number().or(z.nan()))
+  Vc	String?	@db.VarChar
+  b_oo_lean	Boolean	@map("b-oo-lean")
+  weird_Name	Weird_Name[]
+
   @@map("items")
 }
 
 model Public_trees {
-  id                String  @id @db.Uuid /// @zod.string.uuid()
-  wood              woods
-  Knock_on___wood__ Boolean @map(" Knock on (-wood-)")
+  id	String	@id  @db.Uuid /// @zod.string.uuid()
+  wood	woods
+  Knock_on___wood__	Boolean	@map(" Knock on (-wood-)")
 
   @@map("public.trees")
 }
