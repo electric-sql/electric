@@ -16,6 +16,7 @@ git_clone() {
     cd ../examples/tauri-postgres/
     mkdir -p src-tauri/crates/ && cd src-tauri/crates/
     git clone https://github.com/pepperoni21/ollama-rs # Solves a bug where in Cargo.toml `git` would still not work as expected
+    cd ollama-rs && git checkout f610472689ec113689ab06fb58304ec723c93111 && cd ..
     git clone https://github.com/faokunega/pg-embed # We need to modify this in order to have a different location for postgres
     cd pg-embed
     git apply ../../../pg-embed.patch
