@@ -12,7 +12,7 @@ use pg_embed::pg_fetch::{PgFetchSettings, PostgresVersion};
 use pg_embed::postgres::{PgEmbed, PgSettings};
 use pgvector::Vector;
 use sqlx::postgres::PgRow;
-use sqlx::{Column, Row, ValueRef, Connection, PgConnection};
+use sqlx::{Column, Connection, PgConnection, Row, ValueRef};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -22,6 +22,7 @@ pub async fn pg_setup(
     database_dir: PathBuf,
     persistent: bool,
     migration_dir: Option<PathBuf>,
+    cache_dir: PathBuf,
 ) -> Result<PgEmbed, PgEmbedError> {
     let _ = env_logger::Builder::from_env(Env::default().default_filter_or("info"))
         .is_test(true)
@@ -42,6 +43,7 @@ pub async fn pg_setup(
         version: PostgresVersion("15.5.1"), // version: PG_V15,
         // custom_cache_dir: Some(PathBuf::from("./resources/pg-embed/")),
         // custom_cache_dir: None,
+        cache_dir: cache_dir,
         ..Default::default()
     };
     let mut pg = PgEmbed::new(pg_settings, fetch_settings).await?;
@@ -49,10 +51,10 @@ pub async fn pg_setup(
     Ok(pg)
 }
 
-pub async fn pg_init(database_dir: &str, port: u16) -> PgEmbed {
+pub async fn pg_init(database_dir: &str, port: u16, cache_dir: PathBuf) -> PgEmbed {
     // let database_dir = PathBuf::from("../resources/data_test/db");
     let database_dir = PathBuf::from(database_dir);
-    let mut pg: PgEmbed = pg_setup(port, database_dir, true, None)
+    let mut pg: PgEmbed = pg_setup(port, database_dir, true, None, cache_dir)
         .await
         .unwrap();
 
@@ -164,7 +166,6 @@ pub fn row_to_json(row: PgRow) -> HashMap<String, String> {
 //TODO: This has to be removed after the elixir has been migrated to postgres as well
 // Applies all the necessary patches so that the queries work with Postgres
 pub fn patch(input: &str) -> String {
-
     // Replace the sqlite '?' placeholder with the '$n' expected by Postgres
     let mut output = String::new();
     let mut counter = 1;

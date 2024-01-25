@@ -27,7 +27,8 @@ futures = { version = "0.3.28", default-features = false }
 pgvector = { version = "0.3", features = ["sqlx"] }
 
 env_logger = "0.10.0"
-pg-embed = { git = "https://github.com/faokunega/pg-embed", default-features = true, features = ["rt_tokio", "rt_tokio_migrate"] }
+#pg-embed = { git = "https://github.com/faokunega/pg-embed", default-features = true, features = ["rt_tokio", "rt_tokio_migrate"] }
+pg-embed = { path = "crates/pg-embed", default-features = true, features = ["rt_tokio", "rt_tokio_migrate"] }
 ollama-rs = { path = "crates/ollama-rs", features = ["stream"] }
 ort = { version = "1.16.3", features = [ "load-dynamic" ] }
 

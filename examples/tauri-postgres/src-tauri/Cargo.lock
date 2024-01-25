@@ -3038,7 +3038,6 @@ checksum = "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
 [[package]]
 name = "pg-embed"
 version = "0.7.2"
-source = "git+https://github.com/faokunega/pg-embed#72db5e053f0afac6eee51d3baa2fd5c90803e02d"
 dependencies = [
  "archiver-rs",
  "async-trait",

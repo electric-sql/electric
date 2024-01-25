@@ -2,12 +2,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 // Third part utils
-use dirs::home_dir;
+use dirs::{cache_dir, home_dir};
 use futures::stream::StreamExt;
-use ollama_rs::{
-    generation::completion::request::GenerationRequest,
-    Ollama,
-};
+use ollama_rs::{generation::completion::request::GenerationRequest, Ollama};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Number;
@@ -20,21 +17,21 @@ use pg_embed::postgres::PgEmbed;
 use tauri::api::process::{Command, CommandEvent};
 // Tauri
 use tauri::async_runtime::block_on;
+use tauri::async_runtime::Mutex as AsyncMutex;
 use tauri::Manager;
 use tauri::{State, WindowEvent};
-use tauri::async_runtime::Mutex as AsyncMutex;
 
 // Tauri plug-ins
 use tauri_plugin_log::LogTarget;
 
 // This package
-mod pg;
 mod embeddings;
+mod pg;
 mod utils;
 
 // use chat::async_chat;
-use crate::embeddings::{create_embedding_model, embed_query, format_embeddings, embed_issue};
-use pg::{pg_connect, pg_init, pg_query, patch, row_to_json};
+use crate::embeddings::{create_embedding_model, embed_issue, embed_query, format_embeddings};
+use pg::{patch, pg_connect, pg_init, pg_query, row_to_json};
 
 // Postgres console
 use portable_pty::{native_pty_system, CommandBuilder, PtyPair, PtySize};
@@ -47,8 +44,8 @@ use std::{
     time::Duration,
 };
 
-use tokio::sync::mpsc;
 use std::env;
+use tokio::sync::mpsc;
 
 /**
  * Structures
@@ -82,6 +79,8 @@ struct QueryResult {
     rows_modified: u64,
     result: String,
 }
+
+const DEFAULT_PG_PORT: u16 = 33333;
 
 /*****************
  * Tauri globals *
@@ -158,13 +157,14 @@ async fn tauri_exec_command(
 }
 
 #[tauri::command]
-async fn send_recv_postgres_terminal(connection: State<'_, DbConnection>, data: &str) -> Result<String, String> {
+async fn send_recv_postgres_terminal(
+    connection: State<'_, DbConnection>,
+    data: &str,
+) -> Result<String, String> {
     println!("From the terminal, {}", data);
 
     match connection.conn.lock().await.as_mut() {
-        Some(conn) => {
-            Ok(pg_query(conn, data).await)
-        }
+        Some(conn) => Ok(pg_query(conn, data).await),
         _ => Err("".to_string()),
     }
 }
@@ -232,8 +232,8 @@ async fn tauri_exec(
         };
 
         // println!(
-            // "tauri_exec output error\n{}\n{:?}",
-            // result.result, result.rows_modified
+        // "tauri_exec output error\n{}\n{:?}",
+        // result.result, result.rows_modified
         // );
 
         return result;
@@ -248,8 +248,8 @@ async fn tauri_exec(
     result.push_str(serde_json::to_string(&array_rows).unwrap().as_str());
 
     // println!(
-        // "tauri_exec output\n{}\n{:?}",
-        // result, accumulate_rows_modified
+    // "tauri_exec output\n{}\n{:?}",
+    // result, accumulate_rows_modified
     // );
 
     QueryResult {
@@ -259,13 +259,28 @@ async fn tauri_exec(
 }
 
 #[tauri::command(rename_all = "snake_case")]
-async fn tauri_init_command(connection: State<'_, DbConnection>, name: &str) -> Result<(), String> {
+async fn tauri_init_command(
+    connection: State<'_, DbConnection>,
+    app_handle: tauri::AppHandle,
+    name: &str,
+) -> Result<(), String> {
     // Start the postgres when we receive this call
     let pg_port;
     {
         let pg_port_guard = connection.pg_port.lock().unwrap();
         pg_port = *pg_port_guard.as_ref().unwrap();
     }
+
+    let resource_path_pgdir = app_handle
+        .path_resolver()
+        .resolve_resource("pgdir")
+        .expect("failed to resolve pgdir");
+
+    eprintln!("{:?}", resource_path_pgdir.to_str());
+    eprintln!("{:?}", resource_path_pgdir.to_str());
+    eprintln!("{:?}", resource_path_pgdir.to_str());
+    eprintln!("{:?}", resource_path_pgdir.to_str());
+    eprintln!("{:?}", resource_path_pgdir.to_str());
 
     let pg = pg_init(
         format!(
@@ -275,10 +290,10 @@ async fn tauri_init_command(connection: State<'_, DbConnection>, name: &str) -> 
         )
         .as_str(),
         pg_port,
+        resource_path_pgdir,
     )
     .await;
     let conn = pg_connect(&pg, "test").await;
-
 
     let ollama_port;
     {
@@ -340,7 +355,10 @@ async fn tauri_embed_issue(text: &str) -> Result<String, ()> {
 }
 
 #[tauri::command(rename_all = "snake_case")]
-async fn tauri_vector_search(connection: State<'_, DbConnection>, query: &str) -> Result<String, String> {
+async fn tauri_vector_search(
+    connection: State<'_, DbConnection>,
+    query: &str,
+) -> Result<String, String> {
     let mut ret = "failed".to_string();
 
     if let Some(pg) = connection.db.lock().await.as_mut() {
@@ -356,15 +374,11 @@ async fn tauri_vector_search(connection: State<'_, DbConnection>, query: &str) -
 fn chat_token<R: tauri::Runtime>(message: String, manager: &impl Manager<R>) {
     eprintln!("rs2js");
     eprintln!("{}", message);
-    manager
-        .emit_all("chatToken", message)
-        .unwrap();
+    manager.emit_all("chatToken", message).unwrap();
 }
 
 fn chat_finished<R: tauri::Runtime>(manager: &impl Manager<R>) {
-    manager
-        .emit_all("chatFinished", ())
-        .unwrap();
+    manager.emit_all("chatFinished", ()).unwrap();
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -373,7 +387,7 @@ async fn start_chat(
     context: String,
     state: tauri::State<'_, AsyncProcInputTx>,
     connection: tauri::State<'_, DbConnection>,
-    app_handle: tauri::AppHandle
+    app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
     eprintln!("{}", question);
 
@@ -425,7 +439,7 @@ async fn stop_chat(state: tauri::State<'_, AsyncProcInputTx>) -> Result<(), Stri
 
 #[tauri::command(rename_all = "snake_case")]
 async fn open_postgres(app_handle: tauri::AppHandle) {
-    let postgres_terminal = tauri::WindowBuilder::new(
+    let _ = tauri::WindowBuilder::new(
         &app_handle,
         "postgresterminal", /* the unique window label */
         tauri::WindowUrl::App("debug.html".parse().unwrap()),
@@ -446,22 +460,18 @@ async fn async_process_model(
     Ok(())
 }
 
-const DEFAULT_PG_PORT: u16 = 33333;
-
 fn extract_ollama_port(line: String) -> Option<String> {
     let re = Regex::new(r"Listening on 127.0.0.1:(\d+)").unwrap();
     re.captures(line.as_str())
-      .and_then(|caps| caps.get(1))
-      .map(|match_| match_.as_str().to_string())
+        .and_then(|caps| caps.get(1))
+        .map(|match_| match_.as_str().to_string())
 }
 
 fn main() {
     // pg_port is either ELECTRIC_TAURI_PG_PORT, either the first argument, or the DEFAULT_PG_PORT(33333)
     let pg_port = match env::var("ELECTRIC_TAURI_PG_PORT") {
         Ok(value) => value.parse::<u16>().unwrap(),
-        Err(_) => {
-            DEFAULT_PG_PORT
-        }
+        Err(_) => DEFAULT_PG_PORT,
     };
 
     eprintln!("pg_port is: {}", pg_port);
@@ -504,9 +514,9 @@ fn main() {
 
     let reader = Arc::new(Mutex::new(Some(BufReader::new(reader))));
 
+    // Setup ollama
     let mut ollama_port: u16 = 0;
 
-    // Setup ollama
     eprintln!("Starting Ollama");
     let host = "127.0.0.1:0".to_string();
     let mut envs: HashMap<String, String> = HashMap::new();
@@ -525,7 +535,7 @@ fn main() {
                 Some(port) => {
                     ollama_port = port.parse::<u16>().unwrap();
                     break;
-                },
+                }
                 None => eprintln!("Cannot tell ollama port from this log line"),
             }
             eprintln!("{}", line);
@@ -562,7 +572,6 @@ fn main() {
                     }
                 }
             });
-
         })
         .manage(DbConnection {
             db: Default::default(),
@@ -573,7 +582,7 @@ fn main() {
         })
         .manage(TerminalState {
             pty_pair: Arc::new(AsyncMutex::new(pty_pair)),
-            writer: Arc::new(AsyncMutex::new(_writer))
+            writer: Arc::new(AsyncMutex::new(_writer)),
         })
         .manage(AsyncProcInputTx {
             inner: AsyncMutex::new(async_proc_input_tx),
@@ -582,18 +591,21 @@ fn main() {
         .setup(|app| {
             // Setup ort
             #[cfg(target_os = "macos")]
-            let resource_path = app.path_resolver()
-                .resolve_resource("libonnxruntime.dylib")
+            let libonnxruntime_name = "libonnxruntime.dylib";
+            #[cfg(target_os = "linux")]
+            let libonnxruntime_name = "libonnxruntime.so";
+
+
+            let resource_path = app
+                .path_resolver()
+                .resolve_resource(libonnxruntime_name)
                 .expect("failed to resolve the dymanic library for onnx");
 
             env::set_var("ORT_DYLIB_PATH", resource_path);
 
             // Setup the async chat
             tauri::async_runtime::spawn(async move {
-                async_process_model(
-                    async_proc_input_rx,
-                    async_proc_output_tx,
-                ).await
+                async_process_model(async_proc_input_rx, async_proc_output_tx).await
             });
 
             let app_handle = app.handle();
@@ -622,6 +634,8 @@ fn main() {
         ])
         .on_window_event(move |event| match event.event() {
             // When we click X, stop postgres gracefully first
+            // BUG: this closes the connection regardless of which window is closed
+            // so don't close the postgres terminal
             WindowEvent::Destroyed => {
                 let db_connection: State<DbConnection> = event.window().state();
                 block_on(async {
@@ -643,11 +657,12 @@ mod tests {
     use pg_embed::pg_errors::{PgEmbedError, PgEmbedErrorType};
     use sqlx::Connection;
     use std::collections::HashMap;
+    use tauri::api::path::cache_dir;
 
     #[tokio::test]
     /// Sanity test for postgres. Launch it, give some commands and stop it.
     async fn test_postgres() {
-        let mut pg = pg_init("/home/iib/db/data", 33333).await; // TODO: this should use tauri_pg_setup
+        let mut pg = pg_init("/home/iib/db/data", 33333, cache_dir().unwrap()).await; // TODO: this should use tauri_pg_setup
         let _conn = pg_connect(&pg, "test").await;
 
         pg.stop_db().await.unwrap();
@@ -658,8 +673,8 @@ mod tests {
     #[tokio::test]
     /// Postgres test database creation, querying and destructuring
     async fn test_postgres_database_create() {
-        let mut pg = pg_init("/home/iib/db/data", 33333).await; // TODO: this should use tauri_pg_setup
-                                                                        // let mut pg = tauri_pg_setup(54321, PathBuf::from_str("/home/iib/db/data").unwrap(), false, None).await.unwrap();
+        let mut pg = pg_init("/home/iib/db/data", 33333, cache_dir().unwrap()).await; // TODO: this should use tauri_pg_setup
+                                                                                      // let mut pg = tauri_pg_setup(54321, PathBuf::from_str("/home/iib/db/data").unwrap(), false, None).await.unwrap();
 
         let mut conn = pg_connect(&pg, "test").await;
 
@@ -719,7 +734,7 @@ mod tests {
     #[tokio::test]
     /// Postgres test database creation, querying and destructuring
     async fn test_tauri_exec() {
-        let mut pg = pg_init("/home/iib/db/data", 33333).await; // TODO: this should use tauri_pg_setup
+        let mut pg = pg_init("/home/iib/db/data", 33333, cache_dir().unwrap()).await; // TODO: this should use tauri_pg_setup
         let mut conn = pg_connect(&pg, "test").await;
 
         let keys0 = vec![];
@@ -807,7 +822,7 @@ mod tests {
     #[tokio::test]
     /// Postgres test database creation, querying and destructuring
     async fn test_get_modified_rows() {
-        let mut pg = pg_init("/home/iib/db/data", 33333).await; // TODO: this should use tauri_pg_setup
+        let mut pg = pg_init("/home/iib/db/data", 33333, cache_dir().unwrap()).await; // TODO: this should use tauri_pg_setup
         let mut conn = pg_connect(&pg, "test").await;
         let empty_bind_params = BindParams {
             keys: vec![],
@@ -927,7 +942,7 @@ mod tests {
             values: vec![],
         };
 
-        let mut pg = pg_init("/home/iib/db/data", 33333).await; // TODO: this should use tauri_pg_setup
+        let mut pg = pg_init("/home/iib/db/data", 33333, cache_dir().unwrap()).await; // TODO: this should use tauri_pg_setup
         let mut conn = pg_connect(&pg, "test").await;
 
         let mut tx = conn.begin().await.unwrap();
@@ -946,10 +961,7 @@ mod tests {
     #[tokio::test]
     /// Postgres test database creation, querying and destructuring
     async fn test_ollama() {
-        use ollama_rs::{
-            generation::completion::request::GenerationRequest,
-            Ollama,
-        };
+        use ollama_rs::{generation::completion::request::GenerationRequest, Ollama};
         // By default it will connect to localhost:11434
         let ollama = Ollama::default();
 
@@ -966,7 +978,7 @@ mod tests {
     #[tokio::test]
     /// Test pg-embed version
     async fn test_pg_embed_version() {
-        let mut pg = pg_init("/home/iib/db/data", 33333).await; // TODO: this should use tauri_pg_setup
+        let mut pg = pg_init("/home/iib/db/data", 33333, cache_dir().unwrap()).await; // TODO: this should use tauri_pg_setup
         let mut conn = pg_connect(&pg, "test").await;
 
         let stop = pg.stop_db().await;
@@ -1039,7 +1051,7 @@ mod tests {
             values: vec![],
         };
 
-        let mut pg = pg_init("/Users/iib/db/data", 33333).await; // TODO: this should use tauri_pg_setup
+        let mut pg = pg_init("/Users/iib/db/data", 33333, cache_dir().unwrap()).await; // TODO: this should use tauri_pg_setup
         let mut conn = pg_connect(&pg, "test").await;
 
         tauri_exec(
