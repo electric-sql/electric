@@ -26,6 +26,7 @@ git_clone() {
 
 # Clone the sources
 git_clone_third_parties() {
+    # We are in root
     mkdir -p src-tauri/crates/ && cd src-tauri/crates/
     git clone https://github.com/pepperoni21/ollama-rs # Solves a bug where in Cargo.toml `git` would still not work as expected
     cd ollama-rs && git checkout f610472689ec113689ab06fb58304ec723c93111 && cd ..
@@ -50,6 +51,7 @@ install_ollama() {
 # Install postgres
 # gives us src-tauri/pgdir
 install_postgres() {
+    # We are in root
     echo "Installing postgres"
     # Create the directory where postgres will live as an external resource
     mkdir -p src-tauri/pgdir/
@@ -87,6 +89,7 @@ install_postgres() {
 
 # We also need to download the dynamic libraries for onnx
 install_onnxruntime() {
+    # We are in root
     wget https://github.com/microsoft/onnxruntime/releases/download/v1.16.3/onnxruntime-osx-arm64-1.16.3.tgz
     tar -xzvf onnxruntime-osx-arm64-1.16.3.tgz
     rm onnxruntime-osx-arm64-1.16.3.tgz
@@ -96,18 +99,12 @@ install_onnxruntime() {
 
 # Build the Tauri app
 build_the_app() {
-    # We assume we are in the correct directory
+    # We are in root
     pnpm tauri build # This also installs the app
 }
 
-# run_the_demo() {
-#     echo "Not implemented"
-# }
-
-# git_clone
 git_clone_third_parties
 install_ollama
 install_postgres
 install_onnxruntime
 # build_the_app
-# run_the_demo
