@@ -1,4 +1,4 @@
-import { createWriteStream } from 'fs'
+import { appendFileSync, createWriteStream } from 'fs'
 import { dedent } from 'ts-dedent'
 import { exec } from 'child_process'
 import * as fs from 'fs/promises'
@@ -11,10 +11,7 @@ import Module from 'node:module'
 import path from 'path'
 import { buildMigrations, getMigrationNames, loadMigrations } from './builder'
 import { MetaData } from '../../migrators'
-import {
-  migrationsToPrismaModels,
-  formatPrismaModel,
-} from './migration-to-prisma-models'
+import { migrationsToPrismaSchema } from './migration-to-prisma-models'
 import { findAndReplaceInFile } from '../util'
 import { getConfig, type Config } from '../config'
 import { start } from '../docker-commands/command-start'
@@ -254,7 +251,7 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
     const migrationsMetadata = await loadMigrations(migrationsFolder)
 
     // Introspect the created DB to update the Prisma schema
-    await introspectDB(prismaSchema, migrationsMetadata)
+    introspectDB(prismaSchema, migrationsMetadata)
 
     // Generate the Electric client from the given introspected schema
     await generateClient(prismaSchema, config.CLIENT_PATH)
@@ -524,22 +521,11 @@ export function doCapitaliseTableNames(lines: string[]): string[] {
   return lines
 }
 
-async function introspectDB(
-  prismaSchema: string,
-  migrationsMetadata: MetaData[]
-): Promise<void> {
-  const stream = createWriteStream(prismaSchema, { flags: 'a' })
-
-  migrationsToPrismaModels(migrationsMetadata)
-    .map(formatPrismaModel)
-    .forEach((str) => stream.write(str))
-
-  stream.end()
-
-  return new Promise((resolve, reject) => {
-    stream.on('finish', () => resolve())
-    stream.on('error', reject)
-  })
+function introspectDB(prismaSchema: string, migrationsMetadata: MetaData[]) {
+  appendFileSync(
+    prismaSchema,
+    '\n' + migrationsToPrismaSchema(migrationsMetadata)
+  )
 }
 
 /**

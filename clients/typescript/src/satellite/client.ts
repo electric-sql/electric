@@ -12,6 +12,7 @@ import {
   SatTransOp,
   SatOpRow,
   SatOpLog,
+  SatOpMigrate_Type,
   SatRelation,
   SatRelationColumn,
   SatSubsResp,
@@ -1150,15 +1151,24 @@ export class SatelliteClient implements Client {
         const tx = replication.transactions[lastTxnIdx]
         tx.migrationVersion = op.migrate.version
 
-        const stmts = op.migrate.stmts
-        stmts.forEach((stmt) => {
-          const change: SchemaChange = {
-            table: op.migrate!.table!,
-            migrationType: stmt.type,
-            sql: stmt.sql,
-          }
-          tx.changes.push(change)
-        })
+        // We cannot do anything with statements of type CREATE_ENUM_TYPE in SQLite, so we ignore them
+        // here.
+        op.migrate.stmts
+          .filter((stmt) =>
+            [
+              SatOpMigrate_Type.CREATE_TABLE,
+              SatOpMigrate_Type.CREATE_INDEX,
+              SatOpMigrate_Type.ALTER_ADD_COLUMN,
+            ].includes(stmt.type)
+          )
+          .forEach((stmt) => {
+            const change: SchemaChange = {
+              table: op.migrate!.table!,
+              migrationType: stmt.type,
+              sql: stmt.sql,
+            }
+            tx.changes.push(change)
+          })
       }
     })
   }

@@ -1,12 +1,20 @@
 import { dedent } from 'ts-dedent'
 import { MetaData } from '../../migrators'
 import {
+  SatOpMigrate_Table,
   SatOpMigrate_Column,
   SatOpMigrate_ForeignKey,
+  SatOpMigrate_EnumType,
 } from '../../_generated/protocol/satellite'
 
+// Local definition of a Prisma entity that can be either a model or an enum definition.
+type PrismaEntity = {
+  type: string
+  entity: PrismaModel | PrismaEnum
+}
+
 // Local definition of a Prisma model that is used
-// when formatting it for inclusion in the schema.prisma file.
+// when formatting tables for inclusion in the schema.prisma file.
 type PrismaModel = {
   // Table name in the database
   sourceName: string
@@ -31,35 +39,80 @@ type PrismaModelField = {
   isNullable: boolean
 }
 
-// Process table definitions in the migrations metadata and convert each table
-// to a Prisma model.
-export function migrationsToPrismaModels(migrationsMetadata: MetaData[]) {
-  const models = migrationsMetadata.flatMap(convertMigrationToPrismaModels)
-  patchModelsWithBackReferences(models)
-  return models
+// Local definition of a Prisma enum that is used
+// when formatting enums for inclusion in the schema.prisma file.
+type PrismaEnum = {
+  sourceName: string
+  mappedName: string
+  values: PrismaEnumValue[]
 }
 
-function convertMigrationToPrismaModels(migration: MetaData): PrismaModel[] {
-  return migration.ops
-    .filter((op) => op.table !== undefined)
-    .map((op) => {
-      const table = op.table!
-      const name = table.name
-      const fkFields = table.fks.map((fk) =>
-        convertFKToPrismaModelField(fk, table.columns)
-      )
+type PrismaEnumValue = {
+  sourceName: string
+  mappedName: string
+}
 
-      return {
-        sourceName: name,
-        mappedName: mapNameToPrisma(name, true),
-        fields: table.columns
-          .map((column) =>
-            convertTableColumnToPrismaModelField(column, table.pks)
-          )
-          .concat(fkFields),
-        references: table.fks.map(({ pkTable }) => pkTable),
+// Process table and enum definitions in the migrations metadata and format them
+// as Prisma definitions, all joined into a single result string.
+export function migrationsToPrismaSchema(migrationsMetadata: MetaData[]) {
+  return migrationsToPrismaEntities(migrationsMetadata)
+    .map(formatPrismaEntity)
+    .join('\n\n')
+}
+
+// Process table and enum definitions in the migrations metadata and convert each table
+// to a Prisma model and each enum to a Prisma enum.
+function migrationsToPrismaEntities(migrationsMetadata: MetaData[]) {
+  const entities = migrationsMetadata.flatMap(convertMigrationToPrismaEntities)
+  patchModelsWithBackReferences(entities)
+  return entities
+}
+
+function convertMigrationToPrismaEntities(migration: MetaData): PrismaEntity[] {
+  return migration.ops
+    .map((op) => {
+      if (op.table !== undefined) {
+        return {
+          type: 'PrismaModel',
+          entity: convertTableToPrismaModel(op.table),
+        }
+      } else if (op.enumType !== undefined) {
+        return { type: 'PrismaEnum', entity: convertEnumToPrisma(op.enumType) }
       }
+      return undefined
     })
+    .filter((entity) => entity !== undefined) as PrismaEntity[]
+}
+
+function convertTableToPrismaModel(table: SatOpMigrate_Table): PrismaModel {
+  const name = table.name
+  const fkFields = table.fks.map((fk) =>
+    convertFKToPrismaModelField(fk, table.columns)
+  )
+
+  return {
+    sourceName: name,
+    mappedName: mapNameToPrisma(name, true),
+    fields: table.columns
+      .map((column) => convertTableColumnToPrismaModelField(column, table.pks))
+      .concat(fkFields),
+    references: table.fks.map(({ pkTable }) => pkTable),
+  }
+}
+
+function convertEnumToPrisma(enumType: SatOpMigrate_EnumType): PrismaEnum {
+  return {
+    sourceName: enumType.name,
+    mappedName: mapNameToPrisma(enumType.name),
+    values: enumType.values.map(convertEnumValueToPrisma),
+  }
+}
+
+function convertEnumValueToPrisma(val: string): PrismaEnumValue {
+  return {
+    sourceName: val,
+    mappedName: mapNameToPrisma(val),
+  }
 }
 
 // Iterate over the models and fill in back references on those models that have
@@ -92,7 +145,10 @@ function convertMigrationToPrismaModels(migration: MetaData): PrismaModel[] {
 //
 //       @@map("subitems")
 //     }
-function patchModelsWithBackReferences(models: PrismaModel[]) {
+function patchModelsWithBackReferences(entities: PrismaEntity[]) {
+  const models = entities
+    .filter((entity) => entity.type == 'PrismaModel')
+    .map((entity) => entity.entity) as PrismaModel[]
   const modelsMap = new Map(models.map((model) => [model.sourceName, model]))
   models.forEach((model) => {
     model.references.forEach((tableName) => {
@@ -208,15 +264,23 @@ function mapPgTypeToPrisma(type: string) {
   return { name: type, attributes: [] }
 }
 
-export function formatPrismaModel(model: PrismaModel): string {
-  return dedent`
+function formatPrismaEntity(entity: PrismaEntity) {
+  switch (entity.type) {
+    case 'PrismaModel':
+      return formatPrismaModel(entity.entity as PrismaModel)
+    case 'PrismaEnum':
+      return formatPrismaEnum(entity.entity as PrismaEnum)
+  }
+  throw `Unexpected entity type: ${entity.type}`
+}
 
+function formatPrismaModel(model: PrismaModel): string {
+  return dedent`
   model ${model.mappedName} {
     ${model.fields.map(formatModelField).join('\n')}
 
     @@map(${quoteString(model.sourceName)})
   }
-
   `
 }
 
@@ -233,6 +297,14 @@ function formatModelField(field: PrismaModelField): string {
   ]
     .join('\t')
     .trim()
+}
+
+export function formatPrismaEnum(prismaEnum: PrismaEnum): string {
+  return dedent`
+  enum ${prismaEnum.mappedName} {
+    ${prismaEnum.values.map((val) => val.mappedName).join('\n')}
+  }
+  `
 }
 
 // TODO(alco): We need to double-check all uses of this function to make sure
