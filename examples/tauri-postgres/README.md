@@ -12,9 +12,9 @@
   </picture>
 </a>
 
-# ElectricSQL LinearLite Example
+# ElectricSQL Tauri Example
 
-This is an example of a team collaboration app such as [Linear](https://linear.app) built using ElectricSQL.
+This is an example of a team collaboration app such as [Linear](https://linear.app) built using ElectricSQL and Tauri.
 
 It's built on top of the excellent clone of the Linear UI built by
 Tuan Nguyen [@tuan3w](https://github.com/tuan3w) - The original is here
@@ -30,7 +30,7 @@ Clone this repo and change directory into this folder:
 
 ```sh
 git clone https://github.com/electric-sql/electric
-cd electric/examples/linearlite
+cd electric/examples/tauri-postgres
 ```
 
 Install the dependencies:
