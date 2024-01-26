@@ -151,9 +151,14 @@ defmodule Electric.Replication.Postgres.Client do
         {:ok, slot_name}
 
       {:error,
-       {:error, :error, _pg_error_code, :object_not_in_prerequisite_state,
+       {:error, :error, "55000", :object_not_in_prerequisite_state,
         "logical decoding requires wal_level >= logical", _c_stacktrace}} ->
         {:error, :wal_level_not_logical}
+
+      {:error,
+       {:error, :error, "42601", :syntax_error,
+        "syntax error at or near \"CREATE_REPLICATION_SLOT\"" = msg, _c_stacktrace}} ->
+        {:error, {:create_replication_slot_syntax_error, msg}}
     end
   end
 

@@ -119,6 +119,24 @@ defmodule Electric.Replication.PostgresConnector do
   end
 
   defp log_child_error(
+         :postgres_producer,
+         {:bad_return_value, {:error, {:create_replication_slot_syntax_error, msg}}},
+         _connector_config
+       ) do
+    Electric.Errors.print_fatal_error(
+      :conf,
+      """
+      Failed to establish replication connection to Postgres:
+        #{msg}
+      """,
+      """
+      Make sure the value of DATABASE_URL is a connection string that can be used
+      to connect to your database directly, not through a connection pool.
+      """
+    )
+  end
+
+  defp log_child_error(
          {ThousandIsland, _proxy},
          {:shutdown, {:failed_to_start_child, :listener, :eaddrinuse}},
          connector_config
