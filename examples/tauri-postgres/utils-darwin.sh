@@ -3,25 +3,20 @@
 # This script runs the demo using this tauri example
 # This script is necessary because there are many external tools that this demo depends on
 
-set -e
-
-# Clone the sources
-git_clone() {
+# Get the electric sources for this example
+get_electric() {
     git clone --depth 1 -b tauri-example-postgres git@github.com:electric-sql/electric.git
-    mkdir -p electric/examples/tauri-postgres/db/data/
+    cd electric/
+}
+
+# We need to have electric set up for local development, because we made a lot of changes to the sources
+build_electric() {
+    mkdir -p examples/tauri-postgres/db/data/
     #TODO: We need to get the issues.json with embeddings here.
     # ln -s $(PWD)/db/data/issues.json $(PWD)/electric/examples/tauri-postgres/db/data/issues.json
-    cd electric/clients/typescript && pnpm install && pnpm build
+    cd clients/typescript && pnpm install && pnpm build
     cd ../../generator/ && pnpm install && pnpm build
     cd ../examples/tauri-postgres/
-    mkdir -p src-tauri/crates/ && cd src-tauri/crates/
-    git clone https://github.com/pepperoni21/ollama-rs # Solves a bug where in Cargo.toml `git` would still not work as expected
-    cd ollama-rs && git checkout f610472689ec113689ab06fb58304ec723c93111 && cd ..
-    git clone https://github.com/faokunega/pg-embed # We need to modify this in order to have a different location for postgres
-    cd pg-embed
-    git apply ../../../pg-embed.patch
-    cd ../../..
-    pnpm install && pnpm run tauri:package
 }
 
 # Clone the sources
@@ -66,6 +61,8 @@ install_postgres() {
     rm -rf META-INF
     cd ../../ # root
 
+    # NOTE: The below steps are used just to build the three files the `pgvector` extension use.
+    # If we can get prebuilt binaries somehow, we can skip this large step altogether
     # Get a full version of postgres
     wget https://get.enterprisedb.com/postgresql/postgresql-15.5-1-osx-binaries.zip
     unzip postgresql-15.5-1-osx-binaries.zip # The directory is called `pgsql`
@@ -100,11 +97,12 @@ install_onnxruntime() {
 # Build the Tauri app
 build_the_app() {
     # We are in root
+    pnpm install && pnpm run tauri:package
     pnpm tauri build # This also installs the app
 }
 
-git_clone_third_parties
-install_ollama
-install_postgres
-install_onnxruntime
+# git_clone_third_parties
+# install_ollama
+# install_postgres
+# install_onnxruntime
 # build_the_app
