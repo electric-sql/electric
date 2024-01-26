@@ -3,6 +3,7 @@
 
 // Third part utils
 use futures::stream::StreamExt;
+use log::info;
 use ollama_rs::{generation::completion::request::GenerationRequest, Ollama};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -140,7 +141,7 @@ async fn tauri_exec_command(
         if let Some(conn) = connection.conn.lock().await.as_mut() {
             Ok(tauri_exec(pg, conn, sql, bind_params).await)
         } else {
-            println!("tauri_exec_command: Connection unsuccessful");
+            info!("tauri_exec_command: Connection unsuccessful");
             Err(QueryResult {
                 rows_modified: 0,
                 result: "".to_string(),
@@ -159,7 +160,7 @@ async fn send_recv_postgres_terminal(
     connection: State<'_, DbConnection>,
     data: &str,
 ) -> Result<String, String> {
-    println!("From the terminal, {}", data);
+    info!("From the terminal, {}", data);
 
     match connection.conn.lock().await.as_mut() {
         Some(conn) => Ok(pg_query(conn, data).await),
@@ -174,7 +175,7 @@ async fn tauri_exec(
     bind_params: BindParams,
 ) -> QueryResult {
     let sql2 = patch(sql);
-    // println!("tauri_exec input\n{}\n{:?}", sql2, bind_params);
+    // info!("tauri_exec input\n{}\n{:?}", sql2, bind_params);
 
     let mut args = PgArguments::default();
 
@@ -229,7 +230,7 @@ async fn tauri_exec(
             result: String::new(),
         };
 
-        // println!(
+        // info!(
         // "tauri_exec output error\n{}\n{:?}",
         // result.result, result.rows_modified
         // );
@@ -245,7 +246,7 @@ async fn tauri_exec(
     }
     result.push_str(serde_json::to_string(&array_rows).unwrap().as_str());
 
-    // println!(
+    // info!(
     // "tauri_exec output\n{}\n{:?}",
     // result, accumulate_rows_modified
     // );
@@ -274,7 +275,7 @@ async fn tauri_init_command(
         .resolve_resource("pgdir")
         .expect("failed to resolve pgdir");
 
-    eprintln!("{:?}", resource_path_pgdir.to_str());
+    info!("{:?}", resource_path_pgdir.to_str());
 
     let pg = pg_init(
         format!(
@@ -336,7 +337,7 @@ pub async fn vector_search(
         let row_column = row_to_json(row);
         result.push_str(serde_json::to_string(&row_column).unwrap().as_str());
     }
-    println!("IS THIS DOING THE RIGHT THING? {}", result);
+    info!("IS THIS DOING THE RIGHT THING? {}", result);
 
     Ok(result)
 }
@@ -366,8 +367,8 @@ async fn tauri_vector_search(
 }
 
 fn chat_token<R: tauri::Runtime>(message: String, manager: &impl Manager<R>) {
-    eprintln!("rs2js");
-    eprintln!("{}", message);
+    info!("rs2js");
+    info!("{}", message);
     manager.emit_all("chatToken", message).unwrap();
 }
 
@@ -383,7 +384,7 @@ async fn start_chat(
     connection: tauri::State<'_, DbConnection>,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    eprintln!("{}", question);
+    info!("{}", question);
 
     // reset the flag, because we answer a new question
     *state.flag.lock().await = false;
@@ -424,7 +425,7 @@ async fn start_chat(
 
 #[tauri::command(rename_all = "snake_case")]
 async fn stop_chat(state: tauri::State<'_, AsyncProcInputTx>) -> Result<(), String> {
-    eprintln!("stop_chat");
+    info!("stop_chat");
 
     *state.flag.lock().await = true;
 
@@ -468,12 +469,12 @@ fn main() {
         Err(_) => DEFAULT_PG_PORT,
     };
 
-    eprintln!("pg_port is: {}", pg_port);
+    info!("pg_port is: {}", pg_port);
 
     let (async_proc_input_tx, async_proc_input_rx) = mpsc::channel(1);
     let (async_proc_output_tx, mut async_proc_output_rx) = mpsc::channel(1);
 
-    let _log = tauri_plugin_log::Builder::default()
+    let log = tauri_plugin_log::Builder::default()
         .targets([
             LogTarget::Folder(utils::app_root()),
             LogTarget::Stdout,
@@ -511,7 +512,7 @@ fn main() {
     // Setup ollama
     let mut ollama_port: u16 = 0;
 
-    eprintln!("Starting Ollama");
+    info!("Starting Ollama");
     let host = "127.0.0.1:0".to_string();
     let mut envs: HashMap<String, String> = HashMap::new();
     envs.insert("OLLAMA_HOST".to_string(), host);
@@ -530,20 +531,20 @@ fn main() {
                     ollama_port = port.parse::<u16>().unwrap();
                     break;
                 }
-                None => eprintln!("Cannot tell ollama port from this log line"),
+                None => info!("Cannot tell ollama port from this log line"),
             }
-            eprintln!("{}", line);
+            info!("{}", line);
         }
     }
 
-    eprintln!("The ollama_port is definitely {:?}", ollama_port);
+    info!("The ollama_port is definitely {:?}", ollama_port);
 
     // keep the program running
     tauri::async_runtime::spawn(async move {
         // read events such as stdout
         while let Some(event) = rx.recv().await {
             if let CommandEvent::Stderr(line) = event {
-                eprintln!("{}", line);
+                info!("{}", line);
             }
         }
     });
@@ -582,6 +583,7 @@ fn main() {
             inner: AsyncMutex::new(async_proc_input_tx),
             flag: AsyncMutex::new(false),
         })
+        .plugin(log.build())
         .setup(|app| {
             // Setup ort
             #[cfg(target_os = "macos")]
@@ -724,7 +726,7 @@ mod tests {
             let row_column = row_to_json(row);
             result.push_str(serde_json::to_string(&row_column).unwrap().as_str());
         }
-        println!("{}", result);
+        info!("{}", result);
         let stop = pg.stop_db().await;
         stop.unwrap();
 
@@ -972,7 +974,7 @@ mod tests {
             .generate(GenerationRequest::new(model, prompt))
             .await
             .unwrap();
-        println!("{}", res.response);
+        info!("{}", res.response);
     }
 
     #[tokio::test]
@@ -1014,8 +1016,8 @@ mod tests {
         // Generate embeddings with the default batch size, 256
         let embeddings = model.embed(documents, None).unwrap();
 
-        println!("Embeddings length: {}", embeddings.len()); // -> Embeddings length: 4
-        println!("Embedding dimension: {}", embeddings[0].len()); // -> Embedding dimension: 768
+        info!("Embeddings length: {}", embeddings.len()); // -> Embeddings length: 4
+        info!("Embedding dimension: {}", embeddings[0].len()); // -> Embedding dimension: 768
 
         // Generate embeddings for the passages
         // The texts are prefixed with "passage" for better results
@@ -1028,8 +1030,8 @@ mod tests {
 
         let embeddings = model.passage_embed(passages, Some(1)).unwrap();
 
-        println!("Passage embeddings length: {}", embeddings.len()); // -> Embeddings length: 3
-        println!("Passage embedding dimension: {}", embeddings[0].len()); // -> Passage embedding dimension: 768
+        info!("Passage embeddings length: {}", embeddings.len()); // -> Embeddings length: 3
+        info!("Passage embedding dimension: {}", embeddings[0].len()); // -> Passage embedding dimension: 768
 
         // Generate embeddings for the query
         // The text is prefixed with "query" for better retrieval
@@ -1037,7 +1039,7 @@ mod tests {
 
         let query_embedding = model.query_embed(query).unwrap();
 
-        println!("Query embedding dimension: {}", query_embedding.len()); // -> Query embedding dimension: 768
+        info!("Query embedding dimension: {}", query_embedding.len()); // -> Query embedding dimension: 768
 
         assert!(true);
     }

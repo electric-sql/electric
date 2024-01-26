@@ -1,3 +1,6 @@
+// This has to be done very early
+import { attachConsole } from "tauri-plugin-log-api"; attachConsole();
+
 import 'animate.css/animate.min.css'
 import Board from './pages/Board'
 import { useEffect, useState, createContext } from 'react'
@@ -8,6 +11,8 @@ import List from './pages/List'
 import Issue from './pages/Issue'
 import Chat from './pages/Chat'
 import LeftMenu from './components/LeftMenu'
+
+
 
 import { ElectricProvider, initElectric, dbName, DEBUG } from './electric'
 import { Electric } from './generated/client'

@@ -6,6 +6,7 @@
 // For displaying postgres logs in the console
 use env_logger::Env;
 
+use log::info;
 use pg_embed::pg_enums::PgAuthMethod;
 use pg_embed::pg_errors::{PgEmbedError, PgEmbedErrorType};
 use pg_embed::pg_fetch::{PgFetchSettings, PostgresVersion};
@@ -24,9 +25,9 @@ pub async fn pg_setup(
     migration_dir: Option<PathBuf>,
     cache_dir: PathBuf,
 ) -> Result<PgEmbed, PgEmbedError> {
-    let _ = env_logger::Builder::from_env(Env::default().default_filter_or("info"))
-        .is_test(true)
-        .try_init();
+    // let _ = env_logger::Builder::from_env(Env::default().default_filter_or("info"))
+        // .is_test(true)
+        // .try_init();
     let pg_settings = PgSettings {
         database_dir,
         port,
@@ -133,8 +134,8 @@ pub fn row_to_json(row: PgRow) -> HashMap<String, String> {
     for col in row.columns() {
         let col_type = col.type_info().oid().unwrap().0;
         let col_kind = col.type_info().kind();
-        eprintln!("pg type we try to serialize to string {}", col_type);
-        eprintln!("pg kind we try to serialize to string {:?}", col_kind);
+        info!("pg type we try to serialize to string {}", col_type);
+        info!("pg kind we try to serialize to string {:?}", col_kind);
         // 16434 == vector type, treat it separately
         if col_type == 16434 {
             let value: Vector = row.try_get(col.ordinal()).unwrap();
