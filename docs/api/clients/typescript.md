@@ -147,7 +147,7 @@ ELECTRIC_URL=wss://my-app-domain.com npm run build
 To run your app in development with debug mode enabled:
 
 ```shell
-ELECTRIC_URL=http://localhost:5133 DEBUG_MODE=true npm run start
+ELECTRIC_URL=http://localhost:5133 DEBUG_MODE=true npm run dev
 ```
 
 ## Shapes
