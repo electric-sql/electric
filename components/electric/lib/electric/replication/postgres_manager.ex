@@ -276,6 +276,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
       conn_opts
       |> Keyword.put(:nulls, [nil, :null, :undefined])
       |> Keyword.put(:ip_addr, ip_addr)
+      |> maybe_put_sni()
       |> maybe_put_inet6(ip_addr)
     end)
   end
@@ -284,6 +285,15 @@ defmodule Electric.Replication.PostgresConnectorMng do
     do: Keyword.put(conn_opts, :tcp_opts, [:inet6])
 
   defp maybe_put_inet6(conn_opts, _), do: conn_opts
+
+  defp maybe_put_sni(conn_opts) do
+    if conn_opts[:ssl] do
+      sni_opt = {:server_name_indication, String.to_charlist(conn_opts[:host])}
+      update_in(conn_opts, [:ssl_opts], &[sni_opt | List.wrap(&1)])
+    else
+      conn_opts
+    end
+  end
 
   # Perform a DNS lookup for an IPv6 IP address, followed by a lookup for an IPv4 address in case the first one fails.
   #
