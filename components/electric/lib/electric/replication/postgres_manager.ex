@@ -276,14 +276,14 @@ defmodule Electric.Replication.PostgresConnectorMng do
       conn_opts
       |> Keyword.put(:nulls, [nil, :null, :undefined])
       |> Keyword.put(:ip_addr, ip_addr)
-      |> maybe_add_inet6(ip_addr)
+      |> maybe_put_inet6(ip_addr)
     end)
   end
 
-  defp maybe_add_inet6(conn_opts, {_, _, _, _, _, _, _, _}),
+  defp maybe_put_inet6(conn_opts, {_, _, _, _, _, _, _, _}),
     do: Keyword.put(conn_opts, :tcp_opts, [:inet6])
 
-  defp maybe_add_inet6(conn_opts, _), do: conn_opts
+  defp maybe_put_inet6(conn_opts, _), do: conn_opts
 
   # Perform a DNS lookup for an IPv6 IP address, followed by a lookup for an IPv4 address in case the first one fails.
   #
