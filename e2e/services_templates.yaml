@@ -10,7 +10,6 @@ services:
       PG_PROXY_PORT:
       ELECTRIC_FEATURES:
     init: true
-    privileged: true
 
   sysbench:
     image: "${SYSBENCH_IMAGE}"
@@ -36,7 +35,6 @@ services:
       - config_file=/etc/postgresql.conf
     cap_add:
       - SYS_PTRACE
-    privileged: true
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U electric"]
     extra_hosts:
@@ -53,9 +51,7 @@ services:
       NODE_REPL_HISTORY: ""
     tmpfs:
       - /var/lib/satellite/data
-    privileged: true
 
   elixir_client:
     image: ${ELECTRIC_CLIENT_IMAGE}
     command: start_iex
-    privileged: true
