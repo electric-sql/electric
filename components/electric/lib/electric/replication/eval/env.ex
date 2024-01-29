@@ -82,6 +82,8 @@ defmodule Electric.Replication.Eval.Env do
           known_basic_types: basic_type_registry()
         }
 
+  @struct_keys [:funcs, :explicit_casts, :implicit_casts, :known_basic_types, :operators]
+
   @type env_property ::
           {:funcs, funcs()}
           | {:operators, funcs()}
@@ -94,9 +96,7 @@ defmodule Electric.Replication.Eval.Env do
   """
   @spec new(list(env_property())) :: t()
   def new(additions \\ []) do
-    keys = [:funcs, :explicit_casts, :implicit_casts, :known_basic_types, :operators]
-
-    Enum.reduce(keys, %__MODULE__{}, fn key, struct ->
+    Enum.reduce(@struct_keys, %__MODULE__{}, fn key, struct ->
       Map.update!(struct, key, &Map.merge(&1, Keyword.get(additions, key, %{})))
     end)
   end
@@ -105,7 +105,6 @@ defmodule Electric.Replication.Eval.Env do
   Create a new empty environment, without any default functions or explicit casts
   """
   def empty(additions \\ []) do
-    keys = [:funcs, :explicit_casts, :implicit_casts, :known_basic_types, :operators]
     base = %__MODULE__{funcs: %{}, explicit_casts: %{}, operators: %{}}
 
     # Take explicit text parsing functions into "empty" state
@@ -116,7 +115,7 @@ defmodule Electric.Replication.Eval.Env do
 
     base = %{base | funcs: text_cast_functions}
 
-    Enum.reduce(keys, base, fn key, struct ->
+    Enum.reduce(@struct_keys, base, fn key, struct ->
       Map.update!(struct, key, &Map.merge(&1, Keyword.get(additions, key, %{})))
     end)
   end
