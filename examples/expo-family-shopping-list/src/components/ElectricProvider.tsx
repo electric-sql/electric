@@ -9,6 +9,7 @@ import { makeElectricContext } from 'electric-sql/react'
 import { authToken } from '../lib/auth'
 import { DEBUG_MODE, ELECTRIC_URL } from '../config'
 import { Electric, schema } from '../generated/client'
+import LoadingView from './LoadingView'
 
 const { ElectricProvider: ElectricProviderWrapper, useElectric } = makeElectricContext<Electric>()
 
@@ -28,13 +29,29 @@ export default function ElectricProvider ({ children } : { children: React.React
 
       const conn = SQLite.openDatabase('electric.db')
       const electric = await electrify(conn, schema, config)
+      
+      // TODO(msfstef): sync based on navigation route
+      // sync all data
+      const shape = await electric.db.shopping_list.sync({
+        include: {
+          family: true,
+          member: true,
+          shopping_list_item: {
+            include: {
+              image: true
+            }
+          }
+        }
+      })
+      await shape.synced
+
       setElectric(electric)
     }
     init()
   }, [])
 
   if (electric === undefined) {
-    return <Text>Loading...</Text>
+    return <LoadingView />
   }
 
   return (
