@@ -1,8 +1,65 @@
+diff --git a/Cargo.toml b/Cargo.toml
+index 63ae842..04daf1b 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -36,15 +36,16 @@ sqlx_tokio = { version = "0.6", features = [
+     "migrate",
+ ], package = "sqlx", optional = true }
+ zip = "0.6"
+-log = "0.4"
++log = { version = "0.4", deafult-features = false}
+ dirs = "5.0.1"
+ bytes = "1.0"
+ lazy_static = "1.4"
+ async-trait = "0.1"
++tracing = { version = "0.1.40", features = ["log"]}
++tracing-subscriber = "0.3.18"
+
+ [dev-dependencies]
+ serial_test = "2.0.0"
+-env_logger = "0.10"
+
+ [[test]]
+ name = "migration_tokio"
+@@ -59,4 +60,4 @@ required-features = ["rt_tokio"]
+ [[test]]
+ name = "postgres_tokio2"
+ path = "tests/postgres_tokio.rs"
+-required-features = ["rt_tokio_migrate"]
+\ No newline at end of file
++required-features = ["rt_tokio_migrate"]
+diff --git a/src/command_executor.rs b/src/command_executor.rs
+index 643b225..fce90f5 100644
+--- a/src/command_executor.rs
++++ b/src/command_executor.rs
+@@ -7,7 +7,8 @@ use std::marker;
+ use std::process::Stdio;
+
+ use async_trait::async_trait;
+-use log;
++// use log;
++use tracing;
+ use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader};
+ use tokio::process::Child;
+ use tokio::sync::mpsc::{Receiver, Sender};
+@@ -141,10 +142,10 @@ where
+         while let Some(data) = receiver.recv().await {
+             match data.log_type {
+                 LogType::Info => {
+-                    log::info!("{}", data.line);
++                    tracing::debug!("{}", data.line);
+                 }
+                 LogType::Error => {
+-                    log::error!("{}", data.line);
++                    tracing::debug!("{}", data.line);
+                 }
+             }
+         }
 diff --git a/src/pg_access.rs b/src/pg_access.rs
-index e1cb065..742d2bc 100644
+index e1cb065..e87621c 100644
 --- a/src/pg_access.rs
 +++ b/src/pg_access.rs
-@@ -103,11 +103,12 @@ impl PgAccess {
+@@ -103,28 +103,13 @@ impl PgAccess {
      /// Returns PathBuf(cache_directory) on success, an error otherwise
      ///
      async fn create_cache_dir_structure(fetch_settings: &PgFetchSettings) -> PgResult<PathBuf> {
@@ -11,15 +68,33 @@ index e1cb065..742d2bc 100644
 -            source: None,
 -            message: None,
 -        })?;
+-        let os_string = match fetch_settings.operating_system {
+-            OperationSystem::Darwin | OperationSystem::Windows | OperationSystem::Linux => {
+-                fetch_settings.operating_system.to_string()
+-            }
+-            OperationSystem::AlpineLinux => {
+-                format!("arch_{}", fetch_settings.operating_system.to_string())
+-            }
+-        };
+-        let pg_path = format!(
+-            "{}/{}/{}/{}",
+-            PG_EMBED_CACHE_DIR_NAME,
+-            os_string,
+-            fetch_settings.architecture.to_string(),
+-            fetch_settings.version.0
+-        );
+-        let mut cache_pg_embed = cache_dir.clone();
+-        cache_pg_embed.push(pg_path);
 +        // let cache_dir = dirs::cache_dir().ok_or_else(|| PgEmbedError {
 +        //     error_type: PgEmbedErrorType::InvalidPgUrl,
 +        //     source: None,
 +        //     message: None,
 +        // })?;
 +        let cache_dir = &fetch_settings.cache_dir;
-         let os_string = match fetch_settings.operating_system {
-             OperationSystem::Darwin | OperationSystem::Windows | OperationSystem::Linux => {
-                 fetch_settings.operating_system.to_string()
++        let cache_pg_embed = cache_dir.clone();
+         tokio::fs::create_dir_all(&cache_pg_embed)
+             .map_err(|e| PgEmbedError {
+                 error_type: PgEmbedErrorType::DirCreationError,
 diff --git a/src/pg_fetch.rs b/src/pg_fetch.rs
 index 47604ec..82f9ca3 100644
 --- a/src/pg_fetch.rs
@@ -30,7 +105,7 @@ index 47604ec..82f9ca3 100644
  use reqwest::Response;
 -use std::future::Future;
 +use std::path::PathBuf;
- 
+
  use crate::pg_enums::{Architecture, OperationSystem};
  use crate::pg_errors::{PgEmbedError, PgEmbedErrorType};
 @@ -40,6 +40,8 @@ pub struct PgFetchSettings {
@@ -40,7 +115,7 @@ index 47604ec..82f9ca3 100644
 +    /// The cache_dir you actually want
 +    pub cache_dir: PathBuf
  }
- 
+
  impl Default for PgFetchSettings {
 @@ -49,6 +51,11 @@ impl Default for PgFetchSettings {
              operating_system: OperationSystem::default(),
@@ -54,3 +129,26 @@ index 47604ec..82f9ca3 100644
          }
      }
  }
+diff --git a/src/postgres.rs b/src/postgres.rs
+index af2536c..bf7c444 100644
+--- a/src/postgres.rs
++++ b/src/postgres.rs
+@@ -11,7 +11,8 @@ use std::sync::Arc;
+ use std::time::Duration;
+
+ use futures::TryFutureExt;
+-use log::{error, info};
++use tracing::{error, info, debug};
++// use log::{error, info};
+ use tokio::sync::Mutex;
+
+ #[cfg(feature = "rt_tokio_migrate")]
+@@ -225,7 +226,7 @@ impl PgEmbed {
+     pub fn handle_process_io_sync(&self, mut process: std::process::Child) -> PgResult<()> {
+         let reader_out = std::io::BufReader::new(process.stdout.take().unwrap()).lines();
+         let reader_err = std::io::BufReader::new(process.stderr.take().unwrap()).lines();
+-        reader_out.for_each(|line| info!("{}", line.unwrap()));
++        reader_out.for_each(|line| debug!("{}", line.unwrap()));
+         reader_err.for_each(|line| error!("{}", line.unwrap()));
+         Ok(())
+     }
