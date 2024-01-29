@@ -9,4 +9,3 @@ git_clone_third_parties
 install_postgres
 install_ollama
 install_onnxruntime
-build_the_app

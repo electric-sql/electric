@@ -53,3 +53,5 @@ writeFileSync(
   migrationsFile,
   `export default ${JSON.stringify(newMigrations, null, 2)}`
 );
+
+console.log("Patched client migrations.")
