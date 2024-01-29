@@ -86,6 +86,8 @@ const subsErrorShapeReqErrorToSatError: Record<
     SatelliteErrorCode.DUPLICATE_TABLE_IN_SHAPE_DEFINITION,
   [Pb.SatSubsResp_SatSubsError_ShapeReqError_Code.INVALID_WHERE_CLAUSE]:
     SatelliteErrorCode.INVALID_WHERE_CLAUSE_IN_SHAPE_DEFINITION,
+  [Pb.SatSubsResp_SatSubsError_ShapeReqError_Code.INVALID_INCLUDE_TREE]:
+    SatelliteErrorCode.INVALID_INCLUDE_TREE_IN_SHAPE_DEFINITION,
 }
 
 const subsDataErrorToSatError: Record<
@@ -444,6 +446,10 @@ function opToString(op: Pb.SatTransOp): string {
     }, stmts: [${op.migrate.stmts
       .map((x) => x.sql.replaceAll('\n', '\\n'))
       .join('; ')}]}`
+  if (op.additionalBegin)
+    return `#AdditionalBegin{ref: ${op.additionalBegin.ref}}`
+  if (op.additionalCommit)
+    return `#AdditionalBegin{ref: ${op.additionalCommit.ref}}`
   return ''
 }
 

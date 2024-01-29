@@ -79,6 +79,7 @@ export enum SatelliteErrorCode {
   EMPTY_SHAPE_DEFINITION,
   DUPLICATE_TABLE_IN_SHAPE_DEFINITION,
   INVALID_WHERE_CLAUSE_IN_SHAPE_DEFINITION,
+  INVALID_INCLUDE_TREE_IN_SHAPE_DEFINITION,
 
   // shape data errors
   SHAPE_DELIVERY_ERROR,
@@ -121,6 +122,7 @@ export enum DataChangeType {
   UPDATE = 'UPDATE',
   DELETE = 'DELETE',
   COMPENSATION = 'COMPENSATION',
+  GONE = 'GONE',
 }
 
 export type Change = DataChange | SchemaChange
@@ -174,7 +176,7 @@ export type RelationColumn = {
   name: string
   type: string
   isNullable: boolean
-  primaryKey?: boolean
+  primaryKey?: number | false
 }
 
 export type RelationsCache = { [k: string]: Relation }

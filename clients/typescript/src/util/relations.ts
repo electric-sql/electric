@@ -17,7 +17,12 @@ export async function inferRelationsFromSQLite(
     const tableName = table.name
     const sql = 'SELECT * FROM pragma_table_info(?)'
     const args = [tableName]
-    const columnsForTable = await adapter.query({ sql, args })
+    const columnsForTable = (await adapter.query({ sql, args })) as {
+      name: string
+      type: string
+      notnull: number
+      pk: number
+    }[]
     if (columnsForTable.length == 0) {
       continue
     }
@@ -30,10 +35,10 @@ export async function inferRelationsFromSQLite(
     }
     for (const c of columnsForTable) {
       relation.columns.push({
-        name: c.name!.toString(),
-        type: c.type!.toString(),
-        isNullable: Boolean(!c.notnull!.valueOf()),
-        primaryKey: Boolean(c.pk!.valueOf()),
+        name: c.name.toString(),
+        type: c.type.toString(),
+        isNullable: Boolean(!c.notnull),
+        primaryKey: c.pk > 0 ? c.pk : undefined,
       })
     }
     relations[`${tableName}`] = relation

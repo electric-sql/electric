@@ -224,6 +224,9 @@ export interface SatTransOp {
   delete?: SatOpDelete | undefined;
   migrate?: SatOpMigrate | undefined;
   compensation?: SatOpCompensation | undefined;
+  gone?: SatOpGone | undefined;
+  additionalBegin?: SatOpAdditionalBegin | undefined;
+  additionalCommit?: SatOpAdditionalCommit | undefined;
 }
 
 /**
@@ -250,6 +253,22 @@ export interface SatOpBegin {
     | undefined;
   /** does this transaction contain ddl statements? */
   isMigration: boolean;
+  /**
+   * If not 0, a transient reference for additional data pseudo-transaction
+   * that will be sent at a later point in the stream. It may be shared by multiple transactions
+   * sent by the server at the same time, because this additional data will be queried at the same
+   * time. Duplicated on SatOpCommit.
+   */
+  additionalDataRef: Long;
+}
+
+/**
+ * (Producer) Replication message that indicates a transaction boundary for additional data that existed on the server
+ * but the client can now see
+ */
+export interface SatOpAdditionalBegin {
+  $type: "Electric.Satellite.SatOpAdditionalBegin";
+  ref: Long;
 }
 
 /**
@@ -261,6 +280,18 @@ export interface SatOpCommit {
   commitTimestamp: Long;
   transId: string;
   lsn: Uint8Array;
+  /**
+   * If not 0, a transient reference for additional data pseudo-transaction
+   * that will be sent at a later point in the stream. It may be shared by multiple transactions
+   * sent by the server at the same time, because this additional data will be queried at the same
+   * time. Duplicated on SatOpBegin.
+   */
+  additionalDataRef: Long;
+}
+
+export interface SatOpAdditionalCommit {
+  $type: "Electric.Satellite.SatOpAdditionalCommit";
+  ref: Long;
 }
 
 /**
@@ -314,6 +345,12 @@ export interface SatOpCompensation {
     | undefined;
   /** dependency information */
   tags: string[];
+}
+
+export interface SatOpGone {
+  $type: "Electric.Satellite.SatOpGone";
+  relationId: number;
+  pkData: SatOpRow | undefined;
 }
 
 /** Message that corresponds to the single row. */
@@ -474,7 +511,10 @@ export enum SatSubsResp_SatSubsError_ShapeReqError_Code {
   EMPTY_SHAPE_DEFINITION = 3,
   /** DUPLICATE_TABLE_IN_SHAPE_DEFINITION - Attempt to request the same table more than once in one shape */
   DUPLICATE_TABLE_IN_SHAPE_DEFINITION = 4,
+  /** INVALID_WHERE_CLAUSE - Malformed WHERE clause on a table */
   INVALID_WHERE_CLAUSE = 5,
+  /** INVALID_INCLUDE_TREE - Specified include tree does not match known schema */
+  INVALID_INCLUDE_TREE = 6,
   UNRECOGNIZED = -1,
 }
 
@@ -506,12 +546,19 @@ export interface SatShapeDef {
   selects: SatShapeDef_Select[];
 }
 
+export interface SatShapeDef_Relation {
+  $type: "Electric.Satellite.SatShapeDef.Relation";
+  foreignKey: string[];
+  select: SatShapeDef_Select | undefined;
+}
+
 /** Select structure */
 export interface SatShapeDef_Select {
   $type: "Electric.Satellite.SatShapeDef.Select";
   /** table name for this select */
   tablename: string;
   where: string;
+  include: SatShapeDef_Relation[];
 }
 
 /**
@@ -1550,6 +1597,9 @@ function createBaseSatTransOp(): SatTransOp {
     delete: undefined,
     migrate: undefined,
     compensation: undefined,
+    gone: undefined,
+    additionalBegin: undefined,
+    additionalCommit: undefined,
   };
 }
 
@@ -1577,6 +1627,15 @@ export const SatTransOp = {
     }
     if (message.compensation !== undefined) {
       SatOpCompensation.encode(message.compensation, writer.uint32(58).fork()).ldelim();
+    }
+    if (message.gone !== undefined) {
+      SatOpGone.encode(message.gone, writer.uint32(66).fork()).ldelim();
+    }
+    if (message.additionalBegin !== undefined) {
+      SatOpAdditionalBegin.encode(message.additionalBegin, writer.uint32(74).fork()).ldelim();
+    }
+    if (message.additionalCommit !== undefined) {
+      SatOpAdditionalCommit.encode(message.additionalCommit, writer.uint32(82).fork()).ldelim();
     }
     return writer;
   },
@@ -1637,6 +1696,27 @@ export const SatTransOp = {
 
           message.compensation = SatOpCompensation.decode(reader, reader.uint32());
           continue;
+        case 8:
+          if (tag !== 66) {
+            break;
+          }
+
+          message.gone = SatOpGone.decode(reader, reader.uint32());
+          continue;
+        case 9:
+          if (tag !== 74) {
+            break;
+          }
+
+          message.additionalBegin = SatOpAdditionalBegin.decode(reader, reader.uint32());
+          continue;
+        case 10:
+          if (tag !== 82) {
+            break;
+          }
+
+          message.additionalCommit = SatOpAdditionalCommit.decode(reader, reader.uint32());
+          continue;
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1673,6 +1753,13 @@ export const SatTransOp = {
     message.compensation = (object.compensation !== undefined && object.compensation !== null)
       ? SatOpCompensation.fromPartial(object.compensation)
       : undefined;
+    message.gone = (object.gone !== undefined && object.gone !== null) ? SatOpGone.fromPartial(object.gone) : undefined;
+    message.additionalBegin = (object.additionalBegin !== undefined && object.additionalBegin !== null)
+      ? SatOpAdditionalBegin.fromPartial(object.additionalBegin)
+      : undefined;
+    message.additionalCommit = (object.additionalCommit !== undefined && object.additionalCommit !== null)
+      ? SatOpAdditionalCommit.fromPartial(object.additionalCommit)
+      : undefined;
     return message;
   },
 };
@@ -1687,6 +1774,7 @@ function createBaseSatOpBegin(): SatOpBegin {
     lsn: new Uint8Array(),
     origin: undefined,
     isMigration: false,
+    additionalDataRef: Long.UZERO,
   };
 }
 
@@ -1708,6 +1796,9 @@ export const SatOpBegin = {
     }
     if (message.isMigration === true) {
       writer.uint32(40).bool(message.isMigration);
+    }
+    if (!message.additionalDataRef.isZero()) {
+      writer.uint32(48).uint64(message.additionalDataRef);
     }
     return writer;
   },
@@ -1754,6 +1845,13 @@ export const SatOpBegin = {
 
           message.isMigration = reader.bool();
           continue;
+        case 6:
+          if (tag !== 48) {
+            break;
+          }
+
+          message.additionalDataRef = reader.uint64() as Long;
+          continue;
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1776,14 +1874,73 @@ export const SatOpBegin = {
     message.lsn = object.lsn ?? new Uint8Array();
     message.origin = object.origin ?? undefined;
     message.isMigration = object.isMigration ?? false;
+    message.additionalDataRef = (object.additionalDataRef !== undefined && object.additionalDataRef !== null)
+      ? Long.fromValue(object.additionalDataRef)
+      : Long.UZERO;
     return message;
   },
 };
 
 messageTypeRegistry.set(SatOpBegin.$type, SatOpBegin);
 
+function createBaseSatOpAdditionalBegin(): SatOpAdditionalBegin {
+  return { $type: "Electric.Satellite.SatOpAdditionalBegin", ref: Long.UZERO };
+}
+
+export const SatOpAdditionalBegin = {
+  $type: "Electric.Satellite.SatOpAdditionalBegin" as const,
+
+  encode(message: SatOpAdditionalBegin, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (!message.ref.isZero()) {
+      writer.uint32(8).uint64(message.ref);
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatOpAdditionalBegin {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatOpAdditionalBegin();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 8) {
+            break;
+          }
+
+          message.ref = reader.uint64() as Long;
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatOpAdditionalBegin>, I>>(base?: I): SatOpAdditionalBegin {
+    return SatOpAdditionalBegin.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatOpAdditionalBegin>, I>>(object: I): SatOpAdditionalBegin {
+    const message = createBaseSatOpAdditionalBegin();
+    message.ref = (object.ref !== undefined && object.ref !== null) ? Long.fromValue(object.ref) : Long.UZERO;
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatOpAdditionalBegin.$type, SatOpAdditionalBegin);
+
 function createBaseSatOpCommit(): SatOpCommit {
-  return { $type: "Electric.Satellite.SatOpCommit", commitTimestamp: Long.UZERO, transId: "", lsn: new Uint8Array() };
+  return {
+    $type: "Electric.Satellite.SatOpCommit",
+    commitTimestamp: Long.UZERO,
+    transId: "",
+    lsn: new Uint8Array(),
+    additionalDataRef: Long.UZERO,
+  };
 }
 
 export const SatOpCommit = {
@@ -1798,6 +1955,9 @@ export const SatOpCommit = {
     }
     if (message.lsn.length !== 0) {
       writer.uint32(26).bytes(message.lsn);
+    }
+    if (!message.additionalDataRef.isZero()) {
+      writer.uint32(32).uint64(message.additionalDataRef);
     }
     return writer;
   },
@@ -1830,6 +1990,13 @@ export const SatOpCommit = {
 
           message.lsn = reader.bytes();
           continue;
+        case 4:
+          if (tag !== 32) {
+            break;
+          }
+
+          message.additionalDataRef = reader.uint64() as Long;
+          continue;
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1850,11 +2017,64 @@ export const SatOpCommit = {
       : Long.UZERO;
     message.transId = object.transId ?? "";
     message.lsn = object.lsn ?? new Uint8Array();
+    message.additionalDataRef = (object.additionalDataRef !== undefined && object.additionalDataRef !== null)
+      ? Long.fromValue(object.additionalDataRef)
+      : Long.UZERO;
     return message;
   },
 };
 
 messageTypeRegistry.set(SatOpCommit.$type, SatOpCommit);
+
+function createBaseSatOpAdditionalCommit(): SatOpAdditionalCommit {
+  return { $type: "Electric.Satellite.SatOpAdditionalCommit", ref: Long.UZERO };
+}
+
+export const SatOpAdditionalCommit = {
+  $type: "Electric.Satellite.SatOpAdditionalCommit" as const,
+
+  encode(message: SatOpAdditionalCommit, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (!message.ref.isZero()) {
+      writer.uint32(8).uint64(message.ref);
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatOpAdditionalCommit {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatOpAdditionalCommit();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 8) {
+            break;
+          }
+
+          message.ref = reader.uint64() as Long;
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatOpAdditionalCommit>, I>>(base?: I): SatOpAdditionalCommit {
+    return SatOpAdditionalCommit.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatOpAdditionalCommit>, I>>(object: I): SatOpAdditionalCommit {
+    const message = createBaseSatOpAdditionalCommit();
+    message.ref = (object.ref !== undefined && object.ref !== null) ? Long.fromValue(object.ref) : Long.UZERO;
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatOpAdditionalCommit.$type, SatOpAdditionalCommit);
 
 function createBaseSatOpInsert(): SatOpInsert {
   return { $type: "Electric.Satellite.SatOpInsert", relationId: 0, rowData: undefined, tags: [] };
@@ -2170,6 +2390,69 @@ export const SatOpCompensation = {
 };
 
 messageTypeRegistry.set(SatOpCompensation.$type, SatOpCompensation);
+
+function createBaseSatOpGone(): SatOpGone {
+  return { $type: "Electric.Satellite.SatOpGone", relationId: 0, pkData: undefined };
+}
+
+export const SatOpGone = {
+  $type: "Electric.Satellite.SatOpGone" as const,
+
+  encode(message: SatOpGone, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (message.relationId !== 0) {
+      writer.uint32(8).uint32(message.relationId);
+    }
+    if (message.pkData !== undefined) {
+      SatOpRow.encode(message.pkData, writer.uint32(18).fork()).ldelim();
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatOpGone {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatOpGone();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 8) {
+            break;
+          }
+
+          message.relationId = reader.uint32();
+          continue;
+        case 2:
+          if (tag !== 18) {
+            break;
+          }
+
+          message.pkData = SatOpRow.decode(reader, reader.uint32());
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatOpGone>, I>>(base?: I): SatOpGone {
+    return SatOpGone.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatOpGone>, I>>(object: I): SatOpGone {
+    const message = createBaseSatOpGone();
+    message.relationId = object.relationId ?? 0;
+    message.pkData = (object.pkData !== undefined && object.pkData !== null)
+      ? SatOpRow.fromPartial(object.pkData)
+      : undefined;
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatOpGone.$type, SatOpGone);
 
 function createBaseSatOpRow(): SatOpRow {
   return { $type: "Electric.Satellite.SatOpRow", nullsBitmask: new Uint8Array(), values: [] };
@@ -3167,8 +3450,71 @@ export const SatShapeDef = {
 
 messageTypeRegistry.set(SatShapeDef.$type, SatShapeDef);
 
+function createBaseSatShapeDef_Relation(): SatShapeDef_Relation {
+  return { $type: "Electric.Satellite.SatShapeDef.Relation", foreignKey: [], select: undefined };
+}
+
+export const SatShapeDef_Relation = {
+  $type: "Electric.Satellite.SatShapeDef.Relation" as const,
+
+  encode(message: SatShapeDef_Relation, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    for (const v of message.foreignKey) {
+      writer.uint32(10).string(v!);
+    }
+    if (message.select !== undefined) {
+      SatShapeDef_Select.encode(message.select, writer.uint32(18).fork()).ldelim();
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatShapeDef_Relation {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatShapeDef_Relation();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 10) {
+            break;
+          }
+
+          message.foreignKey.push(reader.string());
+          continue;
+        case 2:
+          if (tag !== 18) {
+            break;
+          }
+
+          message.select = SatShapeDef_Select.decode(reader, reader.uint32());
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatShapeDef_Relation>, I>>(base?: I): SatShapeDef_Relation {
+    return SatShapeDef_Relation.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatShapeDef_Relation>, I>>(object: I): SatShapeDef_Relation {
+    const message = createBaseSatShapeDef_Relation();
+    message.foreignKey = object.foreignKey?.map((e) => e) || [];
+    message.select = (object.select !== undefined && object.select !== null)
+      ? SatShapeDef_Select.fromPartial(object.select)
+      : undefined;
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatShapeDef_Relation.$type, SatShapeDef_Relation);
+
 function createBaseSatShapeDef_Select(): SatShapeDef_Select {
-  return { $type: "Electric.Satellite.SatShapeDef.Select", tablename: "", where: "" };
+  return { $type: "Electric.Satellite.SatShapeDef.Select", tablename: "", where: "", include: [] };
 }
 
 export const SatShapeDef_Select = {
@@ -3180,6 +3526,9 @@ export const SatShapeDef_Select = {
     }
     if (message.where !== "") {
       writer.uint32(18).string(message.where);
+    }
+    for (const v of message.include) {
+      SatShapeDef_Relation.encode(v!, writer.uint32(26).fork()).ldelim();
     }
     return writer;
   },
@@ -3205,6 +3554,13 @@ export const SatShapeDef_Select = {
 
           message.where = reader.string();
           continue;
+        case 3:
+          if (tag !== 26) {
+            break;
+          }
+
+          message.include.push(SatShapeDef_Relation.decode(reader, reader.uint32()));
+          continue;
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3222,6 +3578,7 @@ export const SatShapeDef_Select = {
     const message = createBaseSatShapeDef_Select();
     message.tablename = object.tablename ?? "";
     message.where = object.where ?? "";
+    message.include = object.include?.map((e) => SatShapeDef_Relation.fromPartial(e)) || [];
     return message;
   },
 };

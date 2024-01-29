@@ -580,6 +580,11 @@ export class SatelliteClient implements Client {
             },
           })
           break
+        case DataChangeType.GONE:
+          throw new SatelliteError(
+            SatelliteErrorCode.PROTOCOL_VIOLATION,
+            'Client is not expected to send GONE messages'
+          )
       }
       ops.push(changeOp)
     })
@@ -747,6 +752,11 @@ export class SatelliteClient implements Client {
       return
     }
 
+    /* TODO: This makes a generally incorrect assumption that PK columns come in order in the relation
+             It works in most cases, but we need actual PK order information on the protocol
+             for multi-col PKs to work */
+    let pkPosition = 1
+
     const relation = {
       id: message.relationId,
       schema: message.schemaName,
@@ -756,9 +766,9 @@ export class SatelliteClient implements Client {
         name: c.name,
         type: c.type,
         isNullable: c.isNullable,
-        primaryKey: c.primaryKey,
+        primaryKey: c.primaryKey ? pkPosition++ : undefined,
       })),
-    }
+    } satisfies Relation
 
     this.inbound.relations.set(relation.id, relation)
     this.emitter.enqueueEmit('relation', relation)
@@ -865,7 +875,7 @@ export class SatelliteClient implements Client {
     }
   }
 
-  private getRelation({ relationId }: {relationId: number}): Relation {
+  private getRelation({ relationId }: { relationId: number }): Relation {
     const rel = this.inbound.relations.get(relationId)
     if (!rel) {
       throw new SatelliteError(
@@ -951,6 +961,19 @@ export class SatelliteClient implements Client {
             this.dbDescription
           ),
           tags: op.delete.tags,
+        }
+
+        replication.transactions[lastTxnIdx].changes.push(change)
+      }
+
+      if (op.gone) {
+        const rel = this.getRelation(op.gone)
+
+        const change = {
+          relation: rel,
+          type: DataChangeType.GONE,
+          oldRecord: deserializeRow(op.gone.pkData, rel, this.dbDescription),
+          tags: [],
         }
 
         replication.transactions[lastTxnIdx].changes.push(change)
