@@ -5,7 +5,6 @@ defmodule Electric.Satellite.SubscriptionsTest do
   alias Satellite.ProtocolHelpers
   alias Electric.Replication.Postgres.Client
   alias Electric.Replication.Changes.Gone
-  alias Electric.Replication.Changes.DeletedRecord
   alias Electric.Replication.Changes.NewRecord
   use Electric.Satellite.Protobuf
   import Electric.Postgres.TestConnection
@@ -601,7 +600,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
                         %SatOpLog{
                           ops: [
                             %{op: {:begin, _}},
-                            %{op: {:delete, %{old_row_data: %{values: [_, "Jane New Doe"]}}}},
+                            %{op: {:gone, %{pk_data: %{values: [^jane_nobody_uuid, _]}}}},
                             %{op: {:commit, _}}
                           ]
                         }},
@@ -793,7 +792,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
             [jane_entry_id, comment_1_id]
           )
 
-        assert [%DeletedRecord{old_record: %{"id" => ^comment_1_id}}] =
+        assert [%Gone{pk: [^comment_1_id]}] =
                  receive_txn_changes(conn, rel_map)
 
         # One entry changing the author marks itself deleted, it's children GONE, but John Doe stays in the tree
@@ -805,7 +804,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
           )
 
         assert [
-                 %DeletedRecord{old_record: %{"id" => @entry_id}},
+                 %Gone{pk: [@entry_id]},
                  %Gone{pk: [^comment_2_id]},
                  %Gone{pk: [@jane_doe_id]}
                ] =
@@ -866,7 +865,9 @@ defmodule Electric.Satellite.SubscriptionsTest do
         end)
 
         assert [
-                 %DeletedRecord{old_record: %{"id" => @entry_id}},
+                 # UPDATE-converted
+                 %Gone{pk: [@entry_id]},
+                 # cascaded
                  %Gone{pk: [@john_doe_id]}
                ] = receive_txn_changes(conn, rel_map)
       end)

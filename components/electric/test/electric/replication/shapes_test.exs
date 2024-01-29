@@ -4,13 +4,13 @@ defmodule Electric.Replication.ShapesTest do
   use Electric.Satellite.Protobuf
   import ElectricTest.SetupHelpers
 
-  alias Electric.Replication.Shapes.ShapeRequest.Layer
-  alias Electric.Replication.Changes.DeletedRecord
+  alias Electric.Replication.Changes
+  alias Electric.Replication.Changes.Gone
   alias Electric.Replication.Changes.NewRecord
+  alias Electric.Replication.Eval
   alias Electric.Replication.Shapes
   alias Electric.Replication.Shapes.ShapeRequest
-  alias Electric.Replication.Changes
-  alias Electric.Replication.Eval
+  alias Electric.Replication.Shapes.ShapeRequest.Layer
 
   describe "process_transaction/2" do
     # @describetag skip: true
@@ -105,7 +105,7 @@ defmodule Electric.Replication.ShapesTest do
       assert {%{
                 changes: [
                   %NewRecord{record: %{"value" => "11"}},
-                  %DeletedRecord{old_record: %{"value" => "12"}}
+                  %Gone{pk: ["test2"]}
                 ]
               }, graph, _} = Shapes.process_transaction(tx, graph, [ctx.shape])
 

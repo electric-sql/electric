@@ -32,7 +32,7 @@ defmodule Electric.Replication.Shapes.ChangeProcessing.Reduction do
             :reduction,
             graph: Graph.t(),
             buffer: buffer(),
-            operations: %{optional(event()) => update_state() | nil},
+            operations: %{optional(event()) => {update_state(), [String.t(), ...]} | nil},
             passthrough_operations: [event()],
             operation_ids: %{row_id() => [event(), ...]},
             gone_nodes: MapSet.t(row_id()),
@@ -55,7 +55,10 @@ defmodule Electric.Replication.Shapes.ChangeProcessing.Reduction do
     {graph, changes, actions}
   end
 
-  defp unwrap_operation({%Changes.UpdatedRecord{} = change, target}),
+  defp unwrap_operation({%Changes.UpdatedRecord{} = change, {:deleted_record, pk}}),
+    do: %Changes.Gone{relation: change.relation, pk: pk}
+
+  defp unwrap_operation({%Changes.UpdatedRecord{} = change, {target, _}}),
     do: Changes.convert_update(change, to: target)
 
   defp unwrap_operation({change, nil}), do: change
@@ -74,7 +77,16 @@ defmodule Electric.Replication.Shapes.ChangeProcessing.Reduction do
         as: update_state
       )
       when update_state in [:new_record, :deleted_record, :updated_record] do
-    ops = Map.update(ops, event, update_state, &merge_update_states(&1, update_state))
+    {_, pk} = own_id
+
+    ops =
+      Map.update(
+        ops,
+        event,
+        {update_state, pk},
+        &{merge_update_states(elem(&1, 0), update_state), elem(&1, 1)}
+      )
+
     ids = Map.update(ids, own_id, [event], &[event | &1])
 
     reduction(state, operations: ops, operation_ids: ids)
