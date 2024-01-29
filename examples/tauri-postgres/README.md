@@ -35,6 +35,7 @@ git clone https://github.com/electric-sql/electric
 Build the Electric generator and client library:
 
 ```sh
+pnpm install
 cd clients/typescript && pnpm build
 cd ../../generator && pnpm build
 ```

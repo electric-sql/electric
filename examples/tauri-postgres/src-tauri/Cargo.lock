@@ -2981,6 +2981,8 @@ dependencies = [
  "sqlx 0.6.3",
  "thiserror",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
  "zip",
 ]
 
