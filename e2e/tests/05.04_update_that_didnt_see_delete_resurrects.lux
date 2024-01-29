@@ -11,7 +11,7 @@
     [invoke elixir_client_subscribe "entries"]
     !TestWsClient.send_data(conn, ProtocolHelpers.relation("public.entries"))
     ?:ok
-    ?$eprompt
+    ?rec \[\d+\]: %Electric.Satellite.SatSubsDataEnd\{\}
 
 [shell pg_1]
     !\pset tuples_only
