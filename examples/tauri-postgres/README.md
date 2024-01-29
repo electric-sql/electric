@@ -93,13 +93,6 @@ Generate your [type-safe client](https://electric-sql.com/docs/usage/data-access
 
 ```shell
 pnpm run client:generate
-# or `npm run client:watch`` to re-generate whenever the DB schema changes
-```
-
-Patch the generated client, because postgres is not fully supported yet in the generator.
-
-```shell
-node patchClient.js
 ```
 
 ## Run
