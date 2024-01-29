@@ -22,7 +22,7 @@ Tuan Nguyen [@tuan3w](https://github.com/tuan3w) - The original is here
 
 ## Prereqs
 
-You need Docker, Docker Compose v2 and Nodejs >= 16.14.
+You need Docker, Docker Compose v2, Nodejs >= 16.14 and pnpm.
 
 ## Install
 
@@ -30,25 +30,37 @@ Clone this repo and change directory into this folder:
 
 ```sh
 git clone https://github.com/electric-sql/electric
-cd electric/examples/tauri-postgres
+```
+
+Build the Electric generator and client library:
+
+```sh
+cd clients/typescript && pnpm build
+cd ../../generator && pnpm build
+```
+
+Change directory into this folder:
+
+```sh
+cd ../examples/tauri-postgres
 ```
 
 Install the dependencies:
 
 ```shell
-npm install
+pnpm install
 ```
 
 Setup the third party libraries and software that the app needs, according to your platform:
 
 For macOS:
 ```
-bash demo-darwin.sh
+bash install-darwin.sh
 ```
 
 For linux:
 ```
-bash demo-linux.sh
+bash install-linux.sh
 ```
 
 This will take up a few hundreds megabytes of space, during the installation, because the macOS postgres and the linux ollama download is large.
@@ -58,21 +70,21 @@ This will take up a few hundreds megabytes of space, during the installation, be
 Start Postgres and Electric using Docker (see [running the examples](https://electric-sql.com/docs/examples/notes/running) for more options):
 
 ```shell
-npm run backend:up
+pnpm run backend:up
 # Or `npm run backend:start` to foreground
 ```
 
 Note that, if useful, you can connect to Postgres using:
 
 ```shell
-npm run db:psql
+pnpm run db:psql
 ```
 
 The [database schema](https://electric-sql.com/docs/usage/data-modelling) for this example is in `db/migrations/create_tables.sql`.
 You can apply it with:
 
 ```shell
-npm run db:migrate
+pnpm run db:migrate
 ```
 
 ## Client
@@ -80,21 +92,19 @@ npm run db:migrate
 Generate your [type-safe client](https://electric-sql.com/docs/usage/data-access/client):
 
 ```shell
-npm run client:generate
-# or `npm run client:watch`` to re-generate whenever the DB schema changes
-```
-
-Patch the generated client, because postgres is not fully supported yet in the generator.
-
-```shell
-node patchClient.js
+pnpm run client:generate
 ```
 
 ## Run
 
-The app is a Tauri application. To install and run it:
+The app is a Tauri application. To run it:
 
 ```bash
-npm tauri build
-npm tauri dev
+pnpm tauri dev
+```
+
+and to build a distributable package:
+
+```bash
+pnpm tauri build
 ```
