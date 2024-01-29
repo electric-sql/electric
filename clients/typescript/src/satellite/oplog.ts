@@ -76,20 +76,22 @@ export interface PendingChanges {
   }
 }
 
-export type OpType = 'DELETE' | 'INSERT' | 'UPDATE'
+export type OpType = 'DELETE' | 'INSERT' | 'UPDATE' | 'GONE'
 
-export type ChangesOpType = 'DELETE' | 'UPSERT'
+export type ChangesOpType = 'DELETE' | 'UPSERT' | 'GONE'
 
 export const OPTYPES: {
   insert: 'INSERT'
   update: 'UPDATE'
   delete: 'DELETE'
   upsert: 'UPSERT'
+  gone: 'GONE'
 } = {
   insert: 'INSERT',
   update: 'UPDATE',
   delete: 'DELETE',
   upsert: 'UPSERT',
+  gone: 'GONE',
 }
 
 export interface ShadowEntry {
@@ -109,6 +111,8 @@ export const stringToOpType = (opTypeStr: string): OpType => {
       return OPTYPES.update
     case 'DELETE':
       return OPTYPES.delete
+    case 'GONE':
+      return OPTYPES.gone
   }
   throw new Error(`unexpected opType string: ${opTypeStr}`)
 }
@@ -174,7 +178,7 @@ export const remoteEntryToChanges = (
       string,
       string | number
     >,
-    optype: entry.optype === OPTYPES.delete ? OPTYPES.delete : OPTYPES.upsert,
+    optype: optypeToShadow(entry.optype),
     changes: {},
     // if it is a delete, then `newRow` is empty so the full row is the old row
     fullRow: entry.optype === OPTYPES.delete ? oldRow : newRow,
@@ -190,6 +194,18 @@ export const remoteEntryToChanges = (
   }
 
   return result
+}
+
+function optypeToShadow(optype: OpType): ChangesOpType {
+  switch (optype) {
+    case 'DELETE':
+      return 'DELETE'
+    case 'GONE':
+      return 'GONE'
+    case 'INSERT':
+    case 'UPDATE':
+      return 'UPSERT'
+  }
 }
 
 /**
@@ -479,6 +495,8 @@ export const primaryKeyToStr = <T extends Record<string, string | number>>(
 ): string => {
   // Sort the keys then insert them in order in a fresh object
   // cf. https://stackoverflow.com/questions/5467129/sort-javascript-object-by-key
+
+  // TODO: it probably makes more sense to sort the PK object by actual PK order
   const keys: Array<keyof T> = Object.keys(primaryKeyObj).sort()
   const sortedObj = keys.reduce((obj, key) => {
     obj[key] = primaryKeyObj[key]

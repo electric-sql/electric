@@ -1,5 +1,5 @@
 import { mkdir, rm as removeFile } from 'node:fs/promises'
-import { randomValue } from '../../src/util'
+import { RelationsCache, randomValue } from '../../src/util'
 import Database from 'better-sqlite3'
 import type { Database as SqliteDB } from 'better-sqlite3'
 import { DatabaseAdapter } from '../../src/drivers/better-sqlite3'
@@ -51,7 +51,7 @@ export const relations = {
         name: 'id',
         type: 'INTEGER',
         isNullable: false,
-        primaryKey: true,
+        primaryKey: 1,
       },
       {
         name: 'parent',
@@ -71,7 +71,7 @@ export const relations = {
         name: 'id',
         type: 'INTEGER',
         isNullable: false,
-        primaryKey: true,
+        primaryKey: 1,
       },
       {
         name: 'value',
@@ -97,7 +97,7 @@ export const relations = {
         name: 'id',
         type: 'INTEGER',
         isNullable: false,
-        primaryKey: true,
+        primaryKey: 1,
       },
     ],
   },
@@ -111,7 +111,7 @@ export const relations = {
         name: 'id',
         type: 'INTEGER',
         isNullable: false,
-        primaryKey: true,
+        primaryKey: 1,
       },
       {
         name: 'real',
@@ -143,7 +143,7 @@ export const relations = {
         name: 'id',
         type: 'REAL',
         isNullable: false,
-        primaryKey: true,
+        primaryKey: 1,
       },
       {
         name: 'name',
@@ -181,11 +181,11 @@ export const relations = {
         name: 'value',
         type: 'INT8',
         isNullable: false,
-        primaryKey: true,
+        primaryKey: 1,
       },
     ],
   },
-}
+} satisfies RelationsCache
 
 import migrations from '../support/migrations/migrations.js'
 import { ExecutionContext } from 'ava'

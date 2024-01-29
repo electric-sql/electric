@@ -7,7 +7,7 @@ import { SatelliteProcess } from '../../../src/satellite/process'
 import { MockRegistry, MockSatelliteClient } from '../../../src/satellite/mock'
 import { BundleMigrator } from '../../../src/migrators'
 import { MockNotifier } from '../../../src/notifiers'
-import { randomValue } from '../../../src/util'
+import { RelationsCache, randomValue } from '../../../src/util'
 import { ElectricClient } from '../../../src/client/model/client'
 import { cleanAndStopSatellite } from '../../satellite/common'
 import { satelliteDefaults } from '../../../src/satellite/config'
@@ -176,7 +176,7 @@ const relations = {
         name: 'id',
         type: 'INTEGER',
         isNullable: false,
-        primaryKey: true,
+        primaryKey: 1,
       },
       {
         name: 'title',
@@ -214,7 +214,7 @@ const relations = {
         name: 'id',
         type: 'INTEGER',
         isNullable: false,
-        primaryKey: true,
+        primaryKey: 1,
       },
       {
         name: 'bio',
@@ -230,7 +230,7 @@ const relations = {
       },
     ],
   },
-}
+} satisfies RelationsCache
 
 const post = {
   id: 1,
