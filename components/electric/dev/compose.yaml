@@ -16,6 +16,5 @@ services:
       - docker-entrypoint.sh
       - -c
       - config_file=/etc/postgresql.conf
-    privileged: true
     extra_hosts:
       - "host.docker.internal:host-gateway"
