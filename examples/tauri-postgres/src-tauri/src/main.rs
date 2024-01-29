@@ -3,7 +3,7 @@
 
 // Third part utils
 use futures::stream::StreamExt;
-use log::info;
+use log::{info, LevelFilter};
 use ollama_rs::{generation::completion::request::GenerationRequest, Ollama};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -36,6 +36,7 @@ use pg::{patch, pg_connect, pg_init, pg_query, row_to_json};
 // Postgres console
 use portable_pty::{native_pty_system, CommandBuilder, PtyPair, PtySize};
 use std::collections::HashMap;
+use std::path::Path;
 use std::{
     io::{BufRead, BufReader, Write},
     sync::{Arc, Mutex},
@@ -585,6 +586,9 @@ fn main() {
         })
         .plugin(log.build())
         .setup(|app| {
+            // The app does not work started from a graphical shell, because it starts in `/` by default
+            env::set_current_dir(dirs::home_dir().unwrap()).unwrap();
+
             // Setup ort
             #[cfg(target_os = "macos")]
             let libonnxruntime_name = "libonnxruntime.dylib";
