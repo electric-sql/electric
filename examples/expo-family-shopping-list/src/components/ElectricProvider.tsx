@@ -10,6 +10,7 @@ import { authToken } from '../lib/auth'
 import { DEBUG_MODE, ELECTRIC_URL } from '../config'
 import { Electric, schema } from '../generated/client'
 import LoadingView from './LoadingView'
+import { genUUID } from 'electric-sql/util'
 
 const { ElectricProvider: ElectricProviderWrapper, useElectric } = makeElectricContext<Electric>()
 
@@ -18,6 +19,7 @@ export { useElectric }
 export default function ElectricProvider ({ children } : { children: React.ReactNode }) {
   const [ electric, setElectric ] = useState<Electric>()
   useEffect(() => {
+    let isMounted = true
     const init = async () => {
       const config = {
         auth: {
@@ -27,8 +29,15 @@ export default function ElectricProvider ({ children } : { children: React.React
         url: ELECTRIC_URL
       }
 
-      const conn = SQLite.openDatabase('electric.db')
+
+      let conn = SQLite.openDatabase('electric.db')
+      await conn.closeAsync()
+      await conn.deleteAsync()
+      conn = SQLite.openDatabase('electric.db')
       const electric = await electrify(conn, schema, config)
+      if (!isMounted) {
+        return
+      }
       
       // TODO(msfstef): sync based on navigation route
       // sync all data
@@ -45,9 +54,22 @@ export default function ElectricProvider ({ children } : { children: React.React
       })
       await shape.synced
 
+      const family = await electric.db.family.findFirst()
+      if (!family) {
+        await electric.db.family.create({
+          data: {
+            family_id: genUUID(),
+            name: 'Default Family'
+          }
+        })
+      }
+
       setElectric(electric)
     }
     init()
+    return () => {
+      isMounted = false
+    }
   }, [])
 
   if (electric === undefined) {

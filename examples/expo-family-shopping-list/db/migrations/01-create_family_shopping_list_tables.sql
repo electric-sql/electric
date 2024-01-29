@@ -24,7 +24,8 @@ CREATE TABLE IF NOT EXISTS shopping_list (
         ON DELETE CASCADE,
     created_by UUID REFERENCES member(member_id),
     title VARCHAR NOT NULL,
-    created_at TIMESTAMPTZ
+    updated_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS shopping_list_item (
@@ -33,6 +34,8 @@ CREATE TABLE IF NOT EXISTS shopping_list_item (
         REFERENCES shopping_list(list_id)
         ON DELETE CASCADE,
     added_by UUID REFERENCES member(member_id),
+    updated_at TIMESTAMPTZ NOT NULL,
+    added_at TIMESTAMPTZ NOT NULL,
     name VARCHAR NOT NULL,
     quantity INTEGER NOT NULL,
     comment TEXT,
