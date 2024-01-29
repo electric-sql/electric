@@ -10,6 +10,7 @@ services:
       PG_PROXY_PORT:
       ELECTRIC_FEATURES:
     init: true
+    stop_signal: SIGINT  # use SIGINT as the more speedy alternative to SIGTERM
 
   sysbench:
     image: "${SYSBENCH_IMAGE}"

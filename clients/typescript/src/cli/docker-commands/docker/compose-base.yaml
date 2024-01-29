@@ -3,6 +3,7 @@ version: '3.8'
 services:
   electric-no-postgres:
     init: true
+    stop_signal: SIGINT # use SIGINT as the more speedy alternative to SIGTERM
 
   electric-with-postgres:
     extends:
