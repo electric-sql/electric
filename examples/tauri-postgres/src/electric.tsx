@@ -1,6 +1,6 @@
 import { LIB_VERSION } from 'electric-sql/version'
 import { makeElectricContext } from 'electric-sql/react'
-import { uniqueTabId, genUUID } from 'electric-sql/util'
+import { genUUID } from 'electric-sql/util'
 import { insecureAuthToken } from 'electric-sql/auth'
 import { electrify, ElectricDatabase } from 'electric-sql/sqlx'
 import { invoke } from '@tauri-apps/api'
@@ -31,9 +31,8 @@ console.log('DEBUG', DEBUG)
 export let dbName: string
 
 export const initElectric = async () => {
-  const { tabId } = uniqueTabId()
   const electricUrl = ELECTRIC_URL ?? 'ws://localhost:5133'
-  dbName = `${discriminator}-${LIB_VERSION}-${tabId}.db`
+  dbName = `${discriminator}-${LIB_VERSION}`
 
   const config = {
     auth: {
