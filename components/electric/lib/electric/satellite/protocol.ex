@@ -34,7 +34,7 @@ defmodule Electric.Satellite.Protocol do
 
   @type lsn() :: non_neg_integer
   @type deep_msg_list() :: PB.sq_pb_msg() | [deep_msg_list()]
-  @type actions() :: ShapeRequest.subquery_actions()
+  @type actions() :: Shapes.subquery_actions()
   @type outgoing() :: {deep_msg_list(), State.t()} | {:error, deep_msg_list(), State.t()}
   @type txn_processing() :: {deep_msg_list(), actions(), State.t()}
 
@@ -652,7 +652,7 @@ defmodule Electric.Satellite.Protocol do
   @spec move_in_data_received(
           non_neg_integer(),
           Graph.t(),
-          Querying.results(),
+          Shapes.Querying.results(),
           State.t()
         ) :: outgoing()
   def move_in_data_received(ref, _, changes, state) do
@@ -940,7 +940,7 @@ defmodule Electric.Satellite.Protocol do
     end
   end
 
-  @spec query_move_in_data(ShapeRequest.subquery_actions(), State.t()) ::
+  @spec query_move_in_data(Shapes.subquery_actions(), State.t()) ::
           {:ok, State.t()} | {:error, deep_msg_list()}
   defp query_move_in_data(actions, %State{} = state) do
     ref = make_ref()

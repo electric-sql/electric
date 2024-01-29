@@ -3,6 +3,7 @@ defmodule Electric.Replication.Shapes do
   Context to work with replication shapes.
   """
 
+  alias Electric.Replication.Shapes.ShapeRequest.Layer
   alias Electric.Replication.Changes
   alias Electric.Satellite.SatShapeReq
   alias Electric.Postgres.Extension.SchemaCache
