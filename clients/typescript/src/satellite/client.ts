@@ -874,6 +874,17 @@ export class SatelliteClient implements Client {
     }
   }
 
+  private getRelation({ relationId }: {relationId: number}): Relation {
+    const rel = this.inbound.relations.get(relationId)
+    if (!rel) {
+      throw new SatelliteError(
+        SatelliteErrorCode.PROTOCOL_VIOLATION,
+        `missing relation ${relationId} for incoming operation`
+      )
+    }
+    return rel
+  }
+
   private processOpLogMessage(opLogMessage: SatOpLog): void {
     const replication = this.inbound
     opLogMessage.ops.map((op) => {
@@ -907,14 +918,7 @@ export class SatelliteClient implements Client {
       }
 
       if (op.insert) {
-        const rid = op.insert.relationId
-        const rel = replication.relations.get(rid)
-        if (!rel) {
-          throw new SatelliteError(
-            SatelliteErrorCode.PROTOCOL_VIOLATION,
-            `missing relation ${op.insert.relationId} for incoming operation`
-          )
-        }
+        const rel = this.getRelation(op.insert)
 
         const change = {
           relation: rel,
@@ -927,14 +931,7 @@ export class SatelliteClient implements Client {
       }
 
       if (op.update) {
-        const rid = op.update.relationId
-        const rel = replication.relations.get(rid)
-        if (!rel) {
-          throw new SatelliteError(
-            SatelliteErrorCode.PROTOCOL_VIOLATION,
-            'missing relation for incoming operation'
-          )
-        }
+        const rel = this.getRelation(op.update)
 
         const change = {
           relation: rel,
@@ -952,14 +949,7 @@ export class SatelliteClient implements Client {
       }
 
       if (op.delete) {
-        const rid = op.delete.relationId
-        const rel = replication.relations.get(rid)
-        if (!rel) {
-          throw new SatelliteError(
-            SatelliteErrorCode.PROTOCOL_VIOLATION,
-            'missing relation for incoming operation'
-          )
-        }
+        const rel = this.getRelation(op.delete)
 
         const change = {
           relation: rel,
