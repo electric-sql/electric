@@ -665,7 +665,7 @@ defmodule Electric.Replication.Shapes.ChangeProcessingTest do
 
       assert graph == new_graph
       assert ChangeProcessing.row_in_graph?(new_graph, id, layer.key)
-      assert %{event => :updated_record} == operations
+      assert %{^event => {:updated_record, _}} = operations
     end
 
     test "single layer, first layer, stay-out" do
@@ -721,7 +721,7 @@ defmodule Electric.Replication.Shapes.ChangeProcessingTest do
       id = ChangeProcessing.id(event.record, layer.target_table, layer.target_pk)
 
       assert ChangeProcessing.row_in_graph?(new_graph, id, layer.key)
-      assert %{event => :new_record} == operations
+      assert %{^event => {:new_record, _}} = operations
       assert %{} == actions
     end
 
@@ -750,7 +750,7 @@ defmodule Electric.Replication.Shapes.ChangeProcessingTest do
       id = ChangeProcessing.id(event.record, layer.target_table, layer.target_pk)
 
       refute ChangeProcessing.row_in_graph?(new_graph, id, layer.key)
-      assert %{event => :deleted_record} == operations
+      assert %{^event => {:deleted_record, _}} = operations
       assert %{} == actions
     end
 
@@ -797,7 +797,7 @@ defmodule Electric.Replication.Shapes.ChangeProcessingTest do
       # Assertions
       assert graph == new_graph
       assert ChangeProcessing.row_in_graph?(new_graph, proj_id, l2.key)
-      assert %{event => :updated_record} == operations
+      assert %{^event => {:updated_record, _}} = operations
       assert %{} == actions
     end
 
@@ -860,7 +860,7 @@ defmodule Electric.Replication.Shapes.ChangeProcessingTest do
       # Assertions
       assert ChangeProcessing.row_in_graph?(new_graph, iss_id, l1.key)
       assert ChangeProcessing.row_in_graph?(new_graph, proj_id, l2.key)
-      assert %{e1 => :new_record, e2 => nil} == operations
+      assert %{^e1 => {:new_record, _}, ^e2 => nil} = operations
     end
 
     test "two layers, many-to-one, parent move-out cascades" do
@@ -906,7 +906,7 @@ defmodule Electric.Replication.Shapes.ChangeProcessingTest do
       # Assertions
       refute ChangeProcessing.row_in_graph?(new_graph, iss_id, l1.key)
       refute ChangeProcessing.row_in_graph?(new_graph, proj_id, l2.key)
-      assert %{e1 => :deleted_record} == operations
+      assert %{^e1 => {:deleted_record, _}} = operations
       assert MapSet.new([proj_id]) == gone
     end
 
@@ -957,7 +957,7 @@ defmodule Electric.Replication.Shapes.ChangeProcessingTest do
       # Assertions
       assert graph == new_graph
       assert ChangeProcessing.row_in_graph?(new_graph, iss_id, l2.key)
-      assert %{event => :updated_record} == operations
+      assert %{^event => {:updated_record, _}} = operations
       assert %{} == actions
     end
 
@@ -1000,7 +1000,7 @@ defmodule Electric.Replication.Shapes.ChangeProcessingTest do
 
       # Assertions
       assert ChangeProcessing.row_in_graph?(new_graph, iss_id, l2.key)
-      assert %{event => :new_record} == operations
+      assert %{^event => {:new_record, _}} = operations
       assert %{} == actions
     end
 
@@ -1060,7 +1060,7 @@ defmodule Electric.Replication.Shapes.ChangeProcessingTest do
       assert ChangeProcessing.row_in_graph?(new_graph, proj_id, l1.key)
       assert ChangeProcessing.row_in_graph?(new_graph, iss_id, l2.key)
 
-      assert %{e1 => :new_record, e2 => :new_record} == operations
+      assert %{^e1 => {:new_record, _}, ^e2 => {:new_record, _}} = operations
     end
 
     test "two layers, one-to-many, parent in graph, child moves out based on where clause" do
@@ -1104,7 +1104,7 @@ defmodule Electric.Replication.Shapes.ChangeProcessingTest do
 
       # Assertions
       refute ChangeProcessing.row_in_graph?(new_graph, iss_id, l2.key)
-      assert %{event => :deleted_record} == operations
+      assert %{^event => {:deleted_record, _}} = operations
       assert %{} == actions
     end
 
@@ -1160,7 +1160,7 @@ defmodule Electric.Replication.Shapes.ChangeProcessingTest do
 
       # Assertions
       assert ChangeProcessing.row_in_graph?(new_graph, iss_id, l2.key)
-      assert %{e1 => :updated_record, e2 => :deleted_record} == operations
+      assert %{^e1 => {:updated_record, _}, ^e2 => {:deleted_record, _}} = operations
       assert %{} == actions
     end
 
@@ -1210,7 +1210,7 @@ defmodule Electric.Replication.Shapes.ChangeProcessingTest do
       # Assertions
       refute ChangeProcessing.row_in_graph?(new_graph, iss_id, l2.key)
       refute Graph.has_vertex?(new_graph, proj2_id)
-      assert %{e1 => :deleted_record} == operations
+      assert %{^e1 => {:deleted_record, _}} = operations
       assert %{} == actions
     end
 
@@ -1251,7 +1251,7 @@ defmodule Electric.Replication.Shapes.ChangeProcessingTest do
       id = ChangeProcessing.id(event.record, layer.target_table, layer.target_pk)
 
       assert ChangeProcessing.row_in_graph?(new_graph, id, layer.key)
-      assert %{event => :new_record} == operations
+      assert %{^event => {:new_record, _}} = operations
       assert %{layer => [{id, event.record}]} == actions
     end
 
@@ -1312,7 +1312,7 @@ defmodule Electric.Replication.Shapes.ChangeProcessingTest do
       refute ChangeProcessing.row_in_graph?(new_graph, id1, l1.key)
       refute ChangeProcessing.row_in_graph?(new_graph, id2, l2.key)
       assert MapSet.member?(gone, id2)
-      assert %{e1 => :deleted_record} == operations
+      assert %{^e1 => {:deleted_record, _}} = operations
 
       # Processing, update first
       new_state = ChangeProcessing.process(e2, l2, base)
@@ -1324,7 +1324,7 @@ defmodule Electric.Replication.Shapes.ChangeProcessingTest do
       refute ChangeProcessing.row_in_graph?(new_graph, id1, l1.key)
       refute ChangeProcessing.row_in_graph?(new_graph, id2, l2.key)
       assert MapSet.member?(gone, id2)
-      assert %{e1 => :deleted_record} == operations
+      assert %{^e1 => {:deleted_record, _}} = operations
     end
 
     test "two layers, parent move-out supersedes the child insert regardless of order" do
@@ -1383,7 +1383,7 @@ defmodule Electric.Replication.Shapes.ChangeProcessingTest do
       refute ChangeProcessing.row_in_graph?(new_graph, id2, l2.key)
       # Never seen, cannot be GONE
       refute MapSet.member?(gone, id2)
-      assert %{e1 => :deleted_record} == operations
+      assert %{^e1 => {:deleted_record, _}} = operations
 
       # Processing, update first
       new_state = ChangeProcessing.process(e2, l2, base)
@@ -1396,7 +1396,7 @@ defmodule Electric.Replication.Shapes.ChangeProcessingTest do
       refute ChangeProcessing.row_in_graph?(new_graph, id2, l2.key)
       # Never seen, cannot be GONE
       refute MapSet.member?(gone, id2)
-      assert %{e1 => :deleted_record} == operations
+      assert %{^e1 => {:deleted_record, _}} = operations
     end
   end
 end
