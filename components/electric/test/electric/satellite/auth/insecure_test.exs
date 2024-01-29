@@ -91,11 +91,6 @@ defmodule Electric.Satellite.Auth.InsecureTest do
     end
 
     defp unsigned_token(claims, opts \\ []) do
-      # With yajwt it was possible to simply call
-      #
-      #     JWT.sign(claims, %{alg: "none"})
-      #
-      # But Joken does not support the "none" signing algorithm. Hence the manual encoding.
       header = encode_part(%{typ: "JWT", alg: "none"})
       payload = encode_part(claims)
 
