@@ -1,3 +1,8 @@
+BEGIN;
+
+-- Pin the migration version
+CALL electric.migration_version('20240129154650_919');
+
 -- Create the tables for the linearlite example
 CREATE TABLE IF NOT EXISTS "issue" (
     "id" TEXT NOT NULL,
@@ -69,3 +74,5 @@ CALL electric.electrify('comment');
 --      AFTER INSERT ON issue
 --      FOR EACH ROW
 --      EXECUTE PROCEDURE function_copy_embeddings();
+
+COMMIT;
