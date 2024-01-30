@@ -41,6 +41,8 @@ export default function EditMember () {
   return (
     <View style={{ gap: 12 }}>
       <TextInput 
+        mode="outlined"
+        autoFocus
         error={!name}
         label="Name"
         value={name}
