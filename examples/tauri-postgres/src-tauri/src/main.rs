@@ -1,9 +1,10 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use fastembed::FlagEmbedding;
 // Third part utils
 use futures::stream::StreamExt;
-use log::{info, LevelFilter};
+use log::info;
 use ollama_rs::{generation::completion::request::GenerationRequest, Ollama};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -14,6 +15,7 @@ use sqlx::{Either, PgConnection};
 // General
 use pg_embed::postgres::PgEmbed;
 
+use tauri::api::path::resource_dir;
 use tauri::api::process::{Command, CommandEvent};
 // Tauri
 use tauri::async_runtime::block_on;
@@ -36,7 +38,6 @@ use pg::{patch, pg_connect, pg_init, pg_query, row_to_json};
 // Postgres console
 use portable_pty::{native_pty_system, CommandBuilder, PtyPair, PtySize};
 use std::collections::HashMap;
-use std::path::Path;
 use std::{
     io::{BufRead, BufReader, Write},
     sync::{Arc, Mutex},
@@ -80,8 +81,6 @@ struct QueryResult {
     result: String,
 }
 
-const DEFAULT_PG_PORT: u16 = 33333;
-
 /*****************
  * Tauri globals *
  *****************/
@@ -92,6 +91,7 @@ struct DbConnection {
     llama: Arc<AsyncMutex<Option<Ollama>>>,
     pg_port: Mutex<Option<u16>>,
     ollama_port: Mutex<Option<u16>>,
+    flag_embedding: Arc<AsyncMutex<Option<FlagEmbedding>>>,
 }
 
 /// App state for the terminal window
@@ -286,7 +286,7 @@ async fn tauri_init_command(
         )
         .as_str(),
         pg_port,
-        resource_path_pgdir,
+        resource_path_pgdir.clone(),
     )
     .await;
     let conn = pg_connect(&pg, "test").await;
@@ -299,7 +299,15 @@ async fn tauri_init_command(
 
     *connection.db.lock().await = Some(pg);
     *connection.conn.lock().await = Some(conn);
+
+    app_handle.emit_all("downloading_ollama_model", "llama2").unwrap();
     *connection.llama.lock().await = Some(Ollama::new("http://127.0.0.1".to_string(), ollama_port));
+    app_handle.emit_all("downloaded_ollama_model", "llama2").unwrap();
+
+    app_handle.emit_all("downloading_fastembed_model", "bge-fast-en").unwrap();
+    *connection.flag_embedding.lock().await = Some(create_embedding_model(resource_path_pgdir));
+    app_handle.emit_all("downloaded_fastembed_model", "bge-fast-en").unwrap();
+
 
     Ok(())
 }
@@ -317,8 +325,8 @@ pub async fn vector_search(
     _pg: &mut PgEmbed,
     conn: &mut PgConnection,
     query: &str,
+    model: &FlagEmbedding
 ) -> Result<String, String> {
-    let model = create_embedding_model();
     let embedded_query = embed_query(query, model);
 
     let results = sqlx::query(
@@ -344,8 +352,11 @@ pub async fn vector_search(
 }
 
 #[tauri::command(rename_all = "snake_case")]
-async fn tauri_embed_issue(text: &str) -> Result<String, ()> {
-    let model = create_embedding_model();
+async fn tauri_embed_issue(text: &str, connection: State<'_, DbConnection>) -> Result<String, ()> {
+    let model_guard = connection.flag_embedding.lock().await;
+    let model = model_guard.as_ref().unwrap();
+
+    // let model = create_embedding_model();
 
     Ok(format_embeddings(embed_issue(text, model)))
 }
@@ -359,7 +370,9 @@ async fn tauri_vector_search(
 
     if let Some(pg) = connection.db.lock().await.as_mut() {
         if let Some(conn) = connection.conn.lock().await.as_mut() {
-            ret = vector_search(pg, conn, query).await.unwrap();
+            let model_guard = connection.flag_embedding.lock().await;
+            let model = model_guard.as_ref().unwrap();
+            ret = vector_search(pg, conn, query, model).await.unwrap();
             return Ok(ret);
         }
     }
@@ -479,9 +492,9 @@ fn main() {
         .targets([
             LogTarget::Folder(utils::app_root()),
             LogTarget::Stdout,
-            LogTarget::Webview,
+            // LogTarget::Webview,
         ])
-        .level(log::LevelFilter::Debug);
+        .level(log::LevelFilter::Info);
 
     // Setup the postgres terminal
     let pty_system = native_pty_system();
@@ -575,6 +588,7 @@ fn main() {
             llama: Default::default(),
             pg_port: Mutex::new(Some(pg_port)),
             ollama_port: Mutex::new(Some(ollama_port)),
+            flag_embedding: Default::default(),
         })
         .manage(TerminalState {
             pty_pair: Arc::new(AsyncMutex::new(pty_pair)),

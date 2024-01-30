@@ -1,11 +1,14 @@
+use std::path::PathBuf;
+
 use fastembed::{EmbeddingBase, EmbeddingModel, FlagEmbedding, InitOptions};
 
 /// Utility function for creating a model for all future functions
-pub fn create_embedding_model() -> FlagEmbedding {
+pub fn create_embedding_model(cache_dir: PathBuf) -> FlagEmbedding {
     // With custom InitOptions
     let model: FlagEmbedding = FlagEmbedding::try_new(InitOptions {
         model_name: EmbeddingModel::BGEBaseEN,
         show_download_message: true,
+        cache_dir,
         ..Default::default()
     })
     .unwrap();
@@ -14,7 +17,7 @@ pub fn create_embedding_model() -> FlagEmbedding {
 }
 
 /// Create embeddings for a github issue
-pub fn embed_issue(issue: &str, model: FlagEmbedding) -> Vec<f32> {
+pub fn embed_issue(issue: &str, model: &FlagEmbedding) -> Vec<f32> {
     let embeddings = model.passage_embed(vec![issue], None).unwrap();
 
     embeddings.get(0).unwrap().to_vec()
@@ -35,7 +38,7 @@ pub fn format_embeddings(embeddings: Vec<f32>) -> String {
 }
 
 /// Get the query embeddings for your query, which you can use to probe the database
-pub fn embed_query(query: &str, model: FlagEmbedding) -> String {
+pub fn embed_query(query: &str, model: &FlagEmbedding) -> String {
     let embeddings = model.query_embed(query).unwrap();
 
     let formatted_string = embeddings
