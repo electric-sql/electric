@@ -1,7 +1,8 @@
 import React, { useCallback } from 'react';
-import { List, Checkbox } from 'react-native-paper';
+import { List, Checkbox, IconButton } from 'react-native-paper';
 import { useLiveQuery } from 'electric-sql/react';
 import { useElectric } from './ElectricProvider';
+import { View } from 'react-native';
 
 
 const ShoppingListItemCard = ({ shoppingListItemId } : { shoppingListItemId: string }) => {
@@ -21,15 +22,24 @@ const ShoppingListItemCard = ({ shoppingListItemId } : { shoppingListItemId: str
     }
   }), [ item ])
 
+  const onDeleted = useCallback(() => db.shopping_list_item.delete({
+    where: {
+      item_id: item.item_id
+    }
+  }), [ item ])
+
   if (!item) return null
   return <List.Item
     title={item.name}
     description={`Last updated: ${item.updated_at.toLocaleString()}`}
-    right={(_) => 
-      <Checkbox.Android
-        status={item.completed ? 'checked' : 'unchecked'}
-        onPress={onChecked}
-      />
+    right={(_) =>
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <Checkbox.Android
+          status={item.completed ? 'checked' : 'unchecked'}
+          onPress={onChecked}
+        />
+        <IconButton icon="trash-can" onPress={onDeleted} />
+      </View>
     }
   />
 }
