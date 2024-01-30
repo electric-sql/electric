@@ -1,8 +1,6 @@
 import React, { useState } from 'react'
-import {
-  Button,
-  View
-} from 'react-native'
+import { View } from 'react-native'
+import { Button } from 'react-native-paper'
 import ShoppingListItemEditor, { ShoppingListItemProperties } from '../../../../../components/ShoppingListItemEditor'
 import { useElectric } from '../../../../../components/ElectricProvider'
 import { genUUID } from 'electric-sql/util'
@@ -30,9 +28,9 @@ export default function AddShoppingListItem () {
     router.back()
   }
   return (
-    <View>
+    <View style={{ gap: 12, padding: 12 }}>
       <ShoppingListItemEditor onChange={setProps} onSubmit={onCreate} />
-      <Button onPress={onCreate} title="Add" />
+      <Button mode="contained" onPress={onCreate}>Add</Button>
     </View>
   )
 }

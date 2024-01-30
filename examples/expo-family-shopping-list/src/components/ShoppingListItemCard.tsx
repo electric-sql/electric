@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { Card, Button, Checkbox, IconButton } from 'react-native-paper';
+import { Card, Checkbox, IconButton } from 'react-native-paper';
 import { useLiveQuery } from 'electric-sql/react';
 import { useElectric } from './ElectricProvider';
 import { View } from 'react-native';
@@ -30,19 +30,16 @@ const ShoppingListItemCard = ({ shoppingListItemId } : { shoppingListItemId: str
 
   if (!item) return null
   return (
-    <Card mode="elevated">
+    <Card mode="elevated" onPress={onChecked}>
       <Card.Title
         title={item.name}
         subtitle={`Last updated: ${item.updated_at.toLocaleString()}`}
-        right={(_) => (
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Checkbox.Android
-            status={item.completed ? 'checked' : 'unchecked'}
-            onPress={onChecked}
-          />
-          <IconButton icon="trash-can" onPress={onDeleted} />
-        </View>
-        )} />
+        left={(_) => <Checkbox.Android
+          status={item.completed ? 'checked' : 'unchecked'}
+          onPress={onChecked}
+        />}
+        right={(_) => <IconButton icon="trash-can" onPress={onDeleted} />}
+      />
     </Card>
   )
 }

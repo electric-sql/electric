@@ -17,9 +17,17 @@ export default function AppLayout() {
       />
       <Stack.Screen
         name="shopping_list/add"
+        options={{
+          title: 'Create shopping list',
+          presentation: "formSheet",
+        }}
       />
       <Stack.Screen
         name="shopping_list/[shopping_list_id]/item/add"
+        options={{
+          title: 'Add shopping list item',
+          presentation: "formSheet",
+        }}
       />
       <Stack.Screen
         name="shopping_list/[shopping_list_id]/item/[shopping_list_item_id]"

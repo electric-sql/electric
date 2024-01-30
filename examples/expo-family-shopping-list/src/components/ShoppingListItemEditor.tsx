@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { View, TextInput, Text, StyleSheet } from 'react-native';
+import { View } from 'react-native';
+import { TextInput } from 'react-native-paper';
+
 import { Shopping_list_item } from '../generated/client';
 
 
@@ -32,56 +34,43 @@ const ShoppingListItemEditor = ({
   }, [name, quantity, comment])
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Title</Text>
-      <View style={{ display: 'flex', flexDirection: 'row' }}>
+    <View style={{ gap: 12 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
         <TextInput
-          style={[styles.input, { flex: 1 }]}
+          autoFocus
+          style={{ flex: 1 }}
+          mode="outlined"
+          label="Name"
           onSubmitEditing={() => onSubmit?.(getProps())}
           placeholder="e.g. bin liner"
           value={name}
           onChangeText={setName}
         />
-        <TextInput 
-            style={styles.input}
-            keyboardType='numeric'
-            onChangeText={(text)=> {
-              if (/^\d+$/.test(text.toString())) { 
-                setQuantity(Number(text))
-              }
-            }}
-            value={quantity.toString()}
-            maxLength={2}
+        <TextInput
+          mode="outlined"
+          label="Quantity"
+          keyboardType='numeric'
+          style={{ maxWidth: 120 }}
+          onChangeText={(text)=> setQuantity(Number(text))}
+          readOnly
+          value={quantity.toString()}
+          left={<TextInput.Icon icon="minus" onPress={() => setQuantity((q) => Math.max(1, q - 1))} />}
+          right={<TextInput.Icon icon="plus" onPress={() => setQuantity((q) => q +1)}/>}
           />
       </View>
+          
       <TextInput
-        style={styles.input}
+        label="Comments"
+        style={{ minHeight: 100 }}
+        mode="outlined"
         onSubmitEditing={() => onSubmit?.(getProps())}
         placeholder="e.g. the ones with the lavender smell"
+        multiline
         value={comment}
         onChangeText={setComment}
       />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    margin: 12,
-  },
-  title: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 6
-  },
-  input: {
-    height: 40,
-    borderColor: 'gray',
-    borderWidth: 1,
-    paddingLeft: 10,
-    borderRadius: 5,
-    color: 'black', // Customize the input text color
-  },
-});
 
 export default ShoppingListItemEditor;
