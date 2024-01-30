@@ -41,7 +41,7 @@ export default function ShoppingListItems () {
       <FlatList
         data={shopping_list_items}
         renderItem={(item) => (
-          <Link href={`/shopping_list_item/${item.item.item_id}`} asChild>
+          <Link href={`/shopping_list/${shopping_list_id}/item/${item.item.item_id}`} asChild>
             <Pressable>
               <ShoppingListItemCard shoppingListItemId={item.item.item_id} />
             </Pressable>  
