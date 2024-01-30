@@ -28,7 +28,7 @@ export default function AddShoppingListItem () {
   }
   return (
     <View>
-      <ShoppingListEditor onChange={setProps} />
+      <ShoppingListEditor onChange={setProps} onSubmit={onCreate} />
       <Button onPress={onCreate} title="Create" />
     </View>
   )

@@ -1,35 +1,56 @@
-import React, { useState } from 'react';
-import { View, TextInput, Text } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, TextInput, Text, StyleSheet } from 'react-native';
+import { Shopping_list } from '../generated/client';
 
 
-export interface ShoppingListProperties {
-  title: string
-}
+export type ShoppingListProperties = Pick<Shopping_list, 'title'>
 
 const ShoppingListEditor = ({
   initialTitle,
   onChange,
+  onSubmit,
 } : {
   initialTitle?: string,
   onChange: (props : ShoppingListProperties) => void,
+  onSubmit?: (props: ShoppingListProperties) => void,
 }) => {
   const [ title, setTitle ] = useState(initialTitle ?? '')
 
-  const changeHandler = () => onChange({
-    title
-  })
-
-  const setTitleHandler = (val: string) => {
-    setTitle(val)
-    changeHandler();
-  }
+  useEffect(() => {
+    onChange({ title })
+  }, [title])
 
   return (
-    <View>
-      <Text>Title</Text>
-      <TextInput value={title} onChangeText={setTitleHandler}/>
+    <View style={styles.container}>
+      <Text style={styles.title}>Title</Text>
+      <TextInput
+        style={styles.input}
+        onSubmitEditing={() => onSubmit?.({ title })}
+        placeholder="Your shopping list's name"
+        value={title}
+        onChangeText={setTitle}
+      />
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    margin: 12,
+  },
+  title: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginBottom: 6
+  },
+  input: {
+    height: 40,
+    borderColor: 'gray',
+    borderWidth: 1,
+    paddingLeft: 10,
+    borderRadius: 5,
+    color: 'black', // Customize the input text color
+  },
+});
 
 export default ShoppingListEditor;
