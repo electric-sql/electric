@@ -1,57 +1,66 @@
 // This has to be done very early
-import { attachConsole } from "tauri-plugin-log-api"; attachConsole();
+import { attachConsole } from "tauri-plugin-log-api";
+attachConsole();
 
-import 'animate.css/animate.min.css'
-import Board from './pages/Board'
-import { useEffect, useState, createContext } from 'react'
-import { Route, Routes, BrowserRouter } from 'react-router-dom'
-import { cssTransition, ToastContainer } from 'react-toastify'
-import 'react-toastify/dist/ReactToastify.css'
-import List from './pages/List'
-import Issue from './pages/Issue'
-import Chat from './pages/Chat'
-import LeftMenu from './components/LeftMenu'
+import "animate.css/animate.min.css";
+import Board from "./pages/Board";
+import { useEffect, useState, createContext } from "react";
+import { Route, Routes, BrowserRouter } from "react-router-dom";
+import { cssTransition, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+import List from "./pages/List";
+import Issue from "./pages/Issue";
+import Chat from "./pages/Chat";
+import LeftMenu from "./components/LeftMenu";
+import { Spinner } from "./components/Spinner";
 
-
-
-import { ElectricProvider, initElectric, dbName, DEBUG } from './electric'
-import { Electric } from './generated/client'
+import { ElectricProvider, initElectric, dbName, DEBUG } from "./electric";
+import { Electric } from "./generated/client";
 
 interface MenuContextInterface {
-  showMenu: boolean
-  setShowMenu: (show: boolean) => void
+  showMenu: boolean;
+  setShowMenu: (show: boolean) => void;
 }
 
-export const MenuContext = createContext(null as MenuContextInterface | null)
+export const MenuContext = createContext(null as MenuContextInterface | null);
 
 const slideUp = cssTransition({
-  enter: 'animate__animated animate__slideInUp',
-  exit: 'animate__animated animate__slideOutDown',
-})
+  enter: "animate__animated animate__slideInUp",
+  exit: "animate__animated animate__slideOutDown",
+});
 
 const App = () => {
-  const [electric, setElectric] = useState<Electric>()
-  const [showMenu, setShowMenu] = useState(false)
+  const [electric, setElectric] = useState<Electric>();
+  const [showMenu, setShowMenu] = useState(false);
+  const [synced, setSynced] = useState(false);
 
   useEffect(() => {
     const init = async () => {
-      const client = await initElectric()
-      setElectric(client)
-      const { synced: syncedIssues } = await client.db.issue.sync()
-      const { synced: syncedComments } = await client.db.comment.sync()
-      await syncedIssues
-      await syncedComments
-      const timeToSync = performance.now()
+      const client = await initElectric();
+      setElectric(client);
+      const { synced: syncedIssues } = await client.db.issue.sync();
+      const { synced: syncedComments } = await client.db.comment.sync();
+      await syncedIssues;
+      await syncedComments;
+      const timeToSync = performance.now();
       if (DEBUG) {
-        console.log(`Synced in ${timeToSync}ms from page load`)
+        console.log(`Synced in ${timeToSync}ms from page load`);
       }
-    }
+      setSynced(true);
+    };
 
-    init()
-  }, [])
+    init();
+  }, []);
 
-  if (electric === undefined) {
-    return null
+  if (electric === undefined || !synced) {
+    return (
+      <div className="flex flex-col w-full h-screen justify-center items-center opacity-50">
+        <div className="text-lg font-semibold text-gray-400 mb-4">
+          Loading Workspace
+        </div>
+        <Spinner />
+      </div>
+    );
   }
 
   const router = (
@@ -62,7 +71,7 @@ const App = () => {
       <Route path="/issue/:id" element={<Issue />} />
       <Route path="/chat" element={<Chat />} />
     </Routes>
-  )
+  );
 
   return (
     <ElectricProvider db={electric}>
@@ -87,7 +96,7 @@ const App = () => {
         </BrowserRouter>
       </MenuContext.Provider>
     </ElectricProvider>
-  )
-}
+  );
+};
 
-export default App
+export default App;
