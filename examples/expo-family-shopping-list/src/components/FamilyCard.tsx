@@ -1,7 +1,8 @@
 import React, { useCallback, useState } from 'react';
-import { Card, IconButton, Portal, Dialog, Text, Button } from 'react-native-paper';
+import { Card, IconButton } from 'react-native-paper';
 import { useLiveQuery } from 'electric-sql/react';
 import { useElectric } from './ElectricProvider';
+import ConfirmationDialog from './ConfirmationDialog';
 
 
 const FamilyCard = ({
@@ -38,46 +39,32 @@ const FamilyCard = ({
 
   if (!membership) return null
   return (
-    <>
-      <Card mode="elevated" onPress={onPress}>
-        <Card.Title
-          title={membership.family.name}
-          subtitleNumberOfLines={2}
-          subtitle={`Joined on ${membership.created_at.toLocaleDateString()}`}
-          right={(_) =>
-            membership.user_id == membership.family.creator_user_id ?
-            null :
-            <IconButton
-              icon="account-remove" 
-              onPress={() => setExitDialogVisible(true)}
-              />
-          }
-        />
-      </Card>
-      <Portal>
-        <Dialog
-          visible={exitDialogVisible}
-          onDismiss={() => setExitDialogVisible(false)}>
-          <Dialog.Title>Leave family</Dialog.Title>
-          <Dialog.Content>
-            <Text variant="bodyMedium">
-              {`Are you sure you want to leave ${membership.family.name}?`}
-            </Text>
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setExitDialogVisible(false)}>
-              Cancel
-            </Button>
-            <Button onPress={() =>  {
-              onLeave()
-              setExitDialogVisible(false)
-            }}>
-              Leave
-            </Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
-    </>
+    <Card mode="elevated" onPress={onPress}>
+      <Card.Title
+        title={membership.family.name}
+        subtitleNumberOfLines={2}
+        subtitle={`Joined on ${membership.created_at.toLocaleDateString()}`}
+        right={(_) =>
+          membership.user_id == membership.family.creator_user_id ?
+          null :
+          <IconButton
+            icon="account-remove" 
+            onPress={() => setExitDialogVisible(true)}
+            />
+        }
+      />
+
+      <ConfirmationDialog
+        visible={exitDialogVisible}
+        title="Leave family"
+        body={`Are you sure you want to leave ${membership.family.name}?`}
+        onDismiss={() => setExitDialogVisible(false)}
+        onConfirm={() => {
+          onLeave()
+          setExitDialogVisible(false)
+        }}
+      />
+    </Card>
   )
 }
 
