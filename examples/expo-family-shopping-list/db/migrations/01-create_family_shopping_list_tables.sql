@@ -12,7 +12,9 @@ CREATE TABLE IF NOT EXISTS family (
 
 CREATE TABLE IF NOT EXISTS member (
     member_id UUID PRIMARY KEY,
-    family_id UUID REFERENCES family(family_id),
+    family_id UUID NOT NULL
+        REFERENCES family(family_id)
+        ON DELETE CASCADE,
     name TEXT NOT NULL,
     image_id UUID REFERENCES image(image_id)
 );
@@ -22,7 +24,6 @@ CREATE TABLE IF NOT EXISTS shopping_list (
     family_id UUID NOT NULL
         REFERENCES family(family_id)
         ON DELETE CASCADE,
-    created_by UUID REFERENCES member(member_id),
     title VARCHAR NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ NOT NULL
@@ -33,14 +34,13 @@ CREATE TABLE IF NOT EXISTS shopping_list_item (
     list_id UUID NOT NULL
         REFERENCES shopping_list(list_id)
         ON DELETE CASCADE,
-    added_by UUID REFERENCES member(member_id),
     updated_at TIMESTAMPTZ NOT NULL,
     added_at TIMESTAMPTZ NOT NULL,
     name VARCHAR NOT NULL,
     quantity INTEGER NOT NULL,
     comment TEXT,
     image_id UUID REFERENCES image(image_id),
-    completed BOOLEAN
+    completed BOOLEAN NOT NULL
 );
 
 ALTER TABLE image ENABLE ELECTRIC;

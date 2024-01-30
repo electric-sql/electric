@@ -1,46 +1,29 @@
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { Drawer } from 'expo-router/drawer';
+import { Stack } from 'expo-router';
 
 export default function AppLayout() {
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <Drawer>
-        <Drawer.Screen
-          name="index"
-          options={{
-            drawerLabel: 'Home',
-            title: 'Home',
-          }}
-        />
-        <Drawer.Screen
-          name="family"
-          options={{
-            drawerLabel: 'Family',
-            title: 'Family',
-          }}
-        />
-        <Drawer.Screen
-          name="profile"
-          options={{
-            drawerLabel: 'Profile',
-            title: 'Profile',
-          }}
-        />
-
-        {/* Hide sub-items in drawer */}
-        <Drawer.Screen
-          name="shopping_list"
-          options={{
-            drawerItemStyle: { display: 'none' }
-          }}
-        />
-        <Drawer.Screen
-          name="shopping_list_item"
-          options={{
-            drawerItemStyle: { display: 'none' }
-          }}
-        />
-      </Drawer>
-    </GestureHandlerRootView>
+    <Stack screenOptions={{
+      headerBackTitleVisible: false,
+    }}>
+      <Stack.Screen
+        name="(home)"
+        options={{
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="shopping_list/[shopping_list_id]"
+      />
+      <Stack.Screen
+        name="shopping_list/add"
+      />
+      <Stack.Screen
+        name="shopping_list_item/[shopping_list_item_id]"
+      />
+      <Stack.Screen
+        name="shopping_list_item/add"
+      />
+    </Stack>
   );
 }

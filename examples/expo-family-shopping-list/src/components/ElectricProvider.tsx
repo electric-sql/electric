@@ -41,19 +41,27 @@ export default function ElectricProvider ({ children } : { children: React.React
       
       // TODO(msfstef): sync based on navigation route
       // sync all data
-      const shape = await electric.db.shopping_list.sync({
+      const shape = await electric.db.member.sync({
         include: {
-          family: true,
-          member: true,
-          shopping_list_item: {
+          family: {
             include: {
-              image: true
+              image: true,
+              shopping_list: {
+                include: {
+                  shopping_list_item: {
+                    include: {
+                      image: true
+                    }
+                  }
+                }
+              }
             }
-          }
+          },
+          image: true,
         }
       })
       await shape.synced
-
+      
       const family = await electric.db.family.findFirst()
       if (!family) {
         await electric.db.family.create({
@@ -63,6 +71,17 @@ export default function ElectricProvider ({ children } : { children: React.React
           }
         })
       }
+
+      if (!await electric.db.member.findFirst()) {
+        await electric.db.member.create({
+          data: {
+            member_id: genUUID(),
+            family_id: (await electric.db.family.findFirst()).family_id,
+            name: 'Default Member'
+          }
+        })
+      }
+      
 
       setElectric(electric)
     }
