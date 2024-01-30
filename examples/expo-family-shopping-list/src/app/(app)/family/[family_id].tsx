@@ -26,26 +26,23 @@ export default function Family () {
 
   if (!family) return null
   return (
-    <>
+    <View style={{ flex: 1 }}>
       <Stack.Screen
         options={{
           headerTitle: family.name
         }}
       />
-      <View style={{ flex: 1 }}>
-        <List.Section>
-          <List.Subheader>Members</List.Subheader>
-          <FlatList
-            style={{ padding: 8 }}
-            data={family.member ?? []}
-            renderItem={(item) => <MemberCard memberId={item.item.member_id} />}
-            keyExtractor={(item) => item.member_id}
-            ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
-          />
-        </List.Section>
-      </View>
-
-    </>
+      <List.Section>
+        <List.Subheader>Members</List.Subheader>
+        <FlatList
+          style={{ padding: 8 }}
+          data={family.member ?? []}
+          renderItem={(item) => <MemberCard memberId={item.item.member_id} />}
+          keyExtractor={(item) => item.member_id}
+          ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+        />
+      </List.Section>
+    </View>
   )
 }
 

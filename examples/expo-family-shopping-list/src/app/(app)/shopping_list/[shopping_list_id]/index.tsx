@@ -1,4 +1,4 @@
-import { Link, Redirect, useLocalSearchParams } from 'expo-router';
+import { Link, Redirect, Stack, useLocalSearchParams } from 'expo-router';
 import React from 'react'
 import {
   Button,
@@ -20,7 +20,16 @@ export default function ShoppingListItems () {
   }
 
   const { db } = useElectric()!
-  const { results : shopping_list_items = [] } = useLiveQuery(db.shopping_list_item.liveMany({
+  const { results: { title } = {} } = useLiveQuery<{ title: string }>(db.shopping_list.liveUnique({
+    select: {
+      title: true,
+    },
+    where: {
+      list_id: shopping_list_id
+    }
+  }))
+
+  const { results: shopping_list_items = [] } = useLiveQuery(db.shopping_list_item.liveMany({
     select: {
       item_id: true,
     },
@@ -34,6 +43,9 @@ export default function ShoppingListItems () {
 
   return (
     <SafeAreaView style={{ flex: 1 }} edges={['bottom']}>
+      <Stack.Screen options={{
+        headerTitle: title
+      }} />
       <View style={{ flex: 1  }}>
         <List.Section style={{ flex: 1 }}>
           <List.Subheader>Items</List.Subheader>
