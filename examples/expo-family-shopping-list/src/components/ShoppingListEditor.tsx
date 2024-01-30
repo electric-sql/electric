@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, TextInput, Text, StyleSheet } from 'react-native';
+import { View } from 'react-native';
+import { TextInput } from 'react-native-paper';
 import { Shopping_list } from '../generated/client';
 
 
@@ -21,36 +22,18 @@ const ShoppingListEditor = ({
   }, [title])
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Title</Text>
+    <View>
       <TextInput
-        style={styles.input}
+        label="Title"
+        mode="outlined"
+        autoFocus
         onSubmitEditing={() => onSubmit?.({ title })}
-        placeholder="Your shopping list's name"
+        placeholder="Your shopping list's title"
         value={title}
         onChangeText={setTitle}
       />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    margin: 12,
-  },
-  title: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 6
-  },
-  input: {
-    height: 40,
-    borderColor: 'gray',
-    borderWidth: 1,
-    paddingLeft: 10,
-    borderRadius: 5,
-    color: 'black', // Customize the input text color
-  },
-});
 
 export default ShoppingListEditor;

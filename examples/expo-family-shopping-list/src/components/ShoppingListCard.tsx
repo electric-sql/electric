@@ -1,10 +1,16 @@
-import React from 'react';
-import { List } from 'react-native-paper';
+import React, { useCallback } from 'react';
+import { List, Card, IconButton } from 'react-native-paper';
 import { useLiveQuery } from 'electric-sql/react';
 import { useElectric } from './ElectricProvider';
 
 
-const ShoppingListCard = ({ shoppingListId } : { shoppingListId: string }) => {
+const ShoppingListCard = ({
+  shoppingListId,
+  onPress
+} : {
+  shoppingListId: string,
+  onPress?: () => void,
+}) => {
   const { db } = useElectric()!
   const { results: shoppingList } = useLiveQuery(db.shopping_list.liveUnique({
     include: {
@@ -20,12 +26,22 @@ const ShoppingListCard = ({ shoppingListId } : { shoppingListId: string }) => {
     }
   }))
 
-  if (!shoppingList) return null
+  const onDeleted = useCallback(() => db.shopping_list.delete({
+    where: {
+      list_id: shoppingListId
+    }
+  }), [ shoppingListId ])
 
-  return <List.Item
-    title={shoppingList.title}
-    description={`Last updated: ${shoppingList.updated_at.toLocaleString()}`}
-  />
+  if (!shoppingList) return null
+  return (
+    <Card mode="elevated" onPress={onPress}>
+      <Card.Title
+        title={shoppingList.title}
+        subtitle={`Last updated: ${shoppingList.updated_at.toLocaleString()}`}
+        right={(_) => <IconButton icon="trash-can" onPress={onDeleted} />}
+      />
+    </Card>
+  )
 }
 
 export default ShoppingListCard;

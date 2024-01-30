@@ -33,19 +33,16 @@ export default function ShoppingListItems () {
   }))
 
   return (
-    <SafeAreaView style={{ flex: 1 }} edges={['bottom', 'right', 'left']}>
-      <View style={{ flex: 1 }}>
+    <SafeAreaView style={{ flex: 1 }} edges={['bottom']}>
+      <View style={{ flex: 1  }}>
         <List.Section style={{ flex: 1 }}>
           <List.Subheader>Items</List.Subheader>
           <FlatList
+            style={{ padding: 8 }}
             data={shopping_list_items}
             ItemSeparatorComponent={() => <View style={{height: 20}} />}
             renderItem={(item) => (
-              <Link href={`/shopping_list/${shopping_list_id}/item/${item.item.item_id}`} asChild>
-                <Pressable>
-                  <ShoppingListItemCard shoppingListItemId={item.item.item_id} />
-                </Pressable>  
-              </Link>
+              <ShoppingListItemCard shoppingListItemId={item.item.item_id} />
             )}
             keyExtractor={(item) => item.item_id}
             />

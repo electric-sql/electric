@@ -20,6 +20,7 @@ export default function AppLayout() {
         options={{
           title: 'Create shopping list',
           presentation: "formSheet",
+          
         }}
       />
       <Stack.Screen
