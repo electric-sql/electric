@@ -202,7 +202,6 @@ export class SatelliteProcess implements Satellite {
   }
 
   async start(authConfig: AuthConfig): Promise<ConnectionWrapper> {
-    console.log("VVVV We are in start")
     await this.migrator.up()
 
     const isVerified = await this._verifyTableStructure()
@@ -885,11 +884,11 @@ export class SatelliteProcess implements Satellite {
     const q2: Statement = {
       sql: `
       UPDATE ${oplog}
-      SET "clearTags" = shadow.tags
-      FROM ${shadow} AS shadow
-      WHERE ${oplog}.namespace = shadow.namespace
-        AND ${oplog}.tablename = shadow.tablename
-        AND ${oplog}."primaryKey" = shadow."primaryKey"
+      SET "clearTags" = _electric_shadow.tags
+      FROM ${shadow}
+      WHERE ${oplog}.namespace = ${shadow}.namespace
+        AND ${oplog}.tablename = ${shadow}.tablename
+        AND ${shadow}."primaryKey"::jsonb @> ${oplog}."primaryKey"::jsonb AND ${shadow}."primaryKey"::jsonb <@ ${oplog}."primaryKey"::jsonb
         AND ${oplog}.timestamp = $1
             `,
       args: [timestamp.toISOString()],
@@ -915,14 +914,15 @@ export class SatelliteProcess implements Satellite {
       sql: `
       WITH _to_be_deleted (rowid) AS (
         SELECT shadow.rowid
-        FROM ${oplog} AS op
-        INNER JOIN ${shadow} AS shadow
-        ON shadow.namespace = op.namespace
-        AND shadow.tablename = op.tablename
-        AND shadow."primaryKey" = op."primaryKey"
-        WHERE op.timestamp = $1
-        AND op.optype = 'DELETE'
-        GROUP BY shadow.rowid
+        FROM ${oplog}
+        INNER JOIN ${shadow}
+        ON ${shadow}.namespace = ${oplog}.namespace
+        AND ${shadow}.tablename = ${oplog}.tablename
+        AND
+        ${shadow}."primaryKey"::jsonb @> ${oplog}."primaryKey"::jsonb AND ${shadow}."primaryKey"::jsonb <@ ${oplog}."primaryKey"::jsonb
+        WHERE ${oplog}.timestamp = $1
+        AND ${oplog}.optype = 'DELETE'
+        GROUP BY ${shadow}.rowid
       )
       DELETE FROM ${shadow}
       WHERE rowid IN (SELECT rowid FROM _to_be_deleted);`,
@@ -1251,7 +1251,6 @@ export class SatelliteProcess implements Satellite {
         version: transaction.migrationVersion,
       })
     } else {
-      console.log(JSON.stringify(allStatements))
       await this.adapter.runInTransaction(...allStatements)
     }
     await this._notifyChanges(opLogEntries)
@@ -1410,8 +1409,6 @@ export class SatelliteProcess implements Satellite {
       WHERE tc.table_name = $1;` // Gets all the columns
 
       const args = [tableName]
-      const columnsForTable = await this.adapter.query({ sql, args })
-      console.log(columnsForTable)
       const restColumnsForTable = await this.adapter.query({ sql: sql2, args })
       if (restColumnsForTable.length == 0) {
         continue
@@ -1501,10 +1498,12 @@ function _applyDeleteOperation(
     { where: [] as string[], values: [] as SqlValue[] }
   )
 
-  return {
+  let ret_val = {
     sql: `DELETE FROM ${tablenameStr} WHERE ${params.where.join(' AND ')}`,
     args: params.values,
   }
+
+  return ret_val
 }
 
 function _applyNonDeleteOperation(
