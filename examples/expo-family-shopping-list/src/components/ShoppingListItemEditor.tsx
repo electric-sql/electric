@@ -8,7 +8,7 @@ import { Shopping_list_item } from '../generated/client';
 export type ShoppingListItemProperties = Pick<Shopping_list_item, 'name' | 'quantity' | 'comment'>
 
 const ShoppingListItemEditor = ({
-  initialName = '',
+  initialName,
   initialQuantity = 1,
   onChange,
   onSubmit,
@@ -24,7 +24,7 @@ const ShoppingListItemEditor = ({
 
 
   const getProps = () => ({
-    name,
+    name: name ?? '',
     quantity,
     comment
   })
@@ -38,6 +38,7 @@ const ShoppingListItemEditor = ({
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
         <TextInput
           autoFocus
+          error={name?.length === 0}
           style={{ flex: 1 }}
           mode="outlined"
           label="Name"

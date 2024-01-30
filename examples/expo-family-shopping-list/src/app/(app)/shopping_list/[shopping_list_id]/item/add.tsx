@@ -13,6 +13,7 @@ export default function AddShoppingListItem () {
 
   const { db } = useElectric()!
   const onCreate = async () => {
+    if (!props?.name) return;
     await db.shopping_list_item.create({
       data: {
         item_id: genUUID(),
@@ -30,7 +31,13 @@ export default function AddShoppingListItem () {
   return (
     <View style={{ gap: 12 }}>
       <ShoppingListItemEditor onChange={setProps} onSubmit={onCreate} />
-      <Button mode="contained" onPress={onCreate}>Add</Button>
+      <Button
+        mode="contained"
+        disabled={!props?.name}
+        onPress={onCreate}
+      >
+        Add
+      </Button>
     </View>
   )
 }
