@@ -47,40 +47,27 @@ defmodule Electric.Satellite.Serialization do
 
     state = Enum.reduce(trans.changes, state, &serialize_change/2)
 
-    case state.ops do
-      [] ->
-        {
-          [],
-          state.new_relations,
-          state.known_relations
-        }
+    tx_begin = %SatOpBegin{
+      commit_timestamp: tm,
+      lsn: lsn,
+      origin: trans.origin,
+      is_migration: state.is_migration
+    }
 
-      [_ | _] = ops ->
-        tx_begin = %SatOpBegin{
-          commit_timestamp: tm,
-          lsn: lsn,
-          origin: trans.origin,
-          is_migration: state.is_migration
-        }
+    tx_commit = %SatOpCommit{
+      commit_timestamp: tm,
+      lsn: lsn,
+      additional_data_ref: trans.additional_data_ref
+    }
 
-        begin_op = %SatTransOp{op: {:begin, tx_begin}}
+    begin_op = %SatTransOp{op: {:begin, tx_begin}}
+    commit_op = %SatTransOp{op: {:commit, tx_commit}}
 
-        commit_op = %SatTransOp{
-          op:
-            {:commit,
-             %SatOpCommit{
-               commit_timestamp: tm,
-               lsn: lsn,
-               additional_data_ref: trans.additional_data_ref
-             }}
-        }
-
-        {
-          [%SatOpLog{ops: [begin_op | Enum.reverse([commit_op | ops])]}],
-          state.new_relations,
-          state.known_relations
-        }
-    end
+    {
+      [%SatOpLog{ops: [begin_op | Enum.reverse([commit_op | state.ops])]}],
+      state.new_relations,
+      state.known_relations
+    }
   end
 
   def serialize_move_in_data_as_tx(ref, changes, known_relations) do
