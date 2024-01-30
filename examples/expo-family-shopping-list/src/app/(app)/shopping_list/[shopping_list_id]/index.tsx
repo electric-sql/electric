@@ -7,11 +7,11 @@ import {
   Text,
   View
 } from 'react-native'
-import { useElectric } from '../../../components/ElectricProvider';
+import { useElectric } from '../../../../components/ElectricProvider';
 import { useLiveQuery } from 'electric-sql/react';
 import { genUUID } from 'electric-sql/util';
 import { TouchableOpacity } from 'react-native-gesture-handler';
-import ShoppingListItemCard from '../../../components/ShoppingListItemCard';
+import ShoppingListItemCard from '../../../../components/ShoppingListItemCard';
 
 export default function ShoppingListItems () {
   const { shopping_list_id } = useLocalSearchParams<{ shopping_list_id: string }>();
@@ -32,23 +32,12 @@ export default function ShoppingListItems () {
     }
   }))
 
-
-  const createItem = async () => db.shopping_list_item.create({
-    data: {
-      item_id: genUUID(),
-      list_id: shopping_list_id,
-      added_at: new Date(),
-      updated_at: new Date(),
-      name: 'New item',
-      quantity: 1,
-      completed: false
-    }
-  })
-
   return (
     <View>
       <Text>Shopping List ID: {shopping_list_id}</Text>
-      <Button onPress={createItem} title="Add item" />
+      <Link href={`shopping_list/${shopping_list_id}/item/add`} asChild>
+        <Button title="Add item" />
+      </Link>
       <FlatList
         data={shopping_list_items}
         renderItem={(item) => (

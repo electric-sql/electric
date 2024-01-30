@@ -13,16 +13,16 @@ export default function AppLayout() {
         }}
       />
       <Stack.Screen
-        name="shopping_list/[shopping_list_id]"
+        name="shopping_list/[shopping_list_id]/index"
       />
       <Stack.Screen
         name="shopping_list/add"
       />
       <Stack.Screen
-        name="shopping_list_item/[shopping_list_item_id]"
+        name="shopping_list/[shopping_list_id]/item/add"
       />
       <Stack.Screen
-        name="shopping_list_item/add"
+        name="shopping_list/[shopping_list_id]/item/[shopping_list_item_id]"
       />
     </Stack>
   );
