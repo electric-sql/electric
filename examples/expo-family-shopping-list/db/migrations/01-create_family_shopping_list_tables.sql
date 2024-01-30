@@ -6,7 +6,9 @@ CREATE TABLE IF NOT EXISTS image (
 
 CREATE TABLE IF NOT EXISTS family (
     family_id UUID PRIMARY KEY,
+    creator_user_id UUID NOT NULL,
     name VARCHAR NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
     image_id UUID REFERENCES image(image_id)
 );
 
@@ -15,7 +17,9 @@ CREATE TABLE IF NOT EXISTS member (
     family_id UUID NOT NULL
         REFERENCES family(family_id)
         ON DELETE CASCADE,
+    user_id UUID NOT NULL,
     name TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
     image_id UUID REFERENCES image(image_id)
 );
 

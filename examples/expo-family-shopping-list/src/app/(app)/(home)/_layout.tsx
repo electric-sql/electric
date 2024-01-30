@@ -13,10 +13,10 @@ export default function HomeLayout() {
           }}
         />
         <Drawer.Screen
-          name="family"
+          name="families"
           options={{
-            drawerLabel: 'Family',
-            title: 'Family',
+            drawerLabel: 'Families',
+            title: 'Families',
           }}
         />
         <Drawer.Screen

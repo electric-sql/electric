@@ -1,11 +1,10 @@
 import base64 from 'react-native-base64'
 
 import { TokenClaims } from 'electric-sql/auth'
-import { genUUID } from 'electric-sql/util'
 
 // This is just a demo. In a real app, the user ID would
 // usually come from somewhere else :)
-const dummyUserId = genUUID()
+export const dummyUserId = "40609783-9943-4035-8db0-fce39798e64e"
 
 // Generate an insecure authentication JWT.
 // See https://electric-sql.com/docs/usage/auth for more details.

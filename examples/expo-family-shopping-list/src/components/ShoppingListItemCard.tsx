@@ -2,7 +2,6 @@ import React, { useCallback } from 'react';
 import { Card, Checkbox, IconButton } from 'react-native-paper';
 import { useLiveQuery } from 'electric-sql/react';
 import { useElectric } from './ElectricProvider';
-import { View } from 'react-native';
 
 
 const ShoppingListItemCard = ({ shoppingListItemId } : { shoppingListItemId: string }) => {

@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { List, Card, IconButton } from 'react-native-paper';
+import { Card, IconButton } from 'react-native-paper';
 import { useLiveQuery } from 'electric-sql/react';
 import { useElectric } from './ElectricProvider';
 

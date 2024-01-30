@@ -1,38 +1,40 @@
-import { useLiveQuery } from 'electric-sql/react'
 import React from 'react'
-import { FlatList, View } from 'react-native'
+import { View, FlatList } from 'react-native'
 import { List, FAB } from 'react-native-paper'
 import { useElectric } from '../../../components/ElectricProvider'
-import ShoppingListCard from '../../../components/ShoppingListCard'
-import { Link } from 'expo-router'
+import { useLiveQuery } from 'electric-sql/react'
+import { dummyUserId } from '../../../lib/auth'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { Link } from 'expo-router'
+import FamilyCard from '../../../components/FamilyCard'
 
-export default function Home () {
+export default function FamilyHome () {
   const { db } = useElectric()!
-  const { results = [] } = useLiveQuery(db.shopping_list.liveMany({
+  const { results: memberships = [] } = useLiveQuery(db.member.liveMany({
     select: {
-      list_id: true
+      member_id: true,
+      family_id: true
     },
-    orderBy: {
-      updated_at: 'desc',
-    }
+    where: {
+      user_id: dummyUserId
+    },
   }))
 
   return (
     <SafeAreaView style={{ flex: 1 }} edges={['bottom']}>
       <View style={{ flex: 1 }}>
         <List.Section style={{ flex: 1 }}>
-          <List.Subheader>Shopping Lists</List.Subheader>
+          <List.Subheader>Your Families</List.Subheader>
           <FlatList
             style={{ padding: 8 }}
-            data={results}
+            data={memberships}
             renderItem={(item) => (
-              <Link href={`/shopping_list/${item.item.list_id}`} asChild>
-                <ShoppingListCard shoppingListId={item.item.list_id} />
+              <Link href={`/family/${item.item.family_id}`} asChild>
+                <FamilyCard memberId={item.item.member_id} />
               </Link>
             )}
             ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
-            keyExtractor={(item) => item.list_id}
+            keyExtractor={(item) => item.member_id}
             />
         </List.Section>
 
@@ -43,7 +45,7 @@ export default function Home () {
             right: 0,
             bottom: 0,
           }}
-          href="/shopping_list/add"
+          href="/family/add"
           asChild
         >
           <FAB icon="plus" />

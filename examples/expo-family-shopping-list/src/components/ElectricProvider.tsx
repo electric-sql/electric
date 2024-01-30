@@ -6,7 +6,7 @@ import * as SQLite from 'expo-sqlite'
 import { electrify } from 'electric-sql/expo'
 import { makeElectricContext } from 'electric-sql/react'
 
-import { authToken } from '../lib/auth'
+import { authToken, dummyUserId } from '../lib/auth'
 import { DEBUG_MODE, ELECTRIC_URL } from '../config'
 import { Electric, schema } from '../generated/client'
 import LoadingView from './LoadingView'
@@ -67,16 +67,20 @@ export default function ElectricProvider ({ children } : { children: React.React
         await electric.db.family.create({
           data: {
             family_id: genUUID(),
+            creator_user_id: dummyUserId,
+            created_at: new Date(),
             name: 'Default Family'
           }
         })
       }
 
-      if (!await electric.db.member.findFirst()) {
+      if (!await electric.db.member.findFirst({ where: { member_id: dummyUserId }})) {
         await electric.db.member.create({
           data: {
-            member_id: genUUID(),
+            member_id: dummyUserId,
             family_id: (await electric.db.family.findFirst()).family_id,
+            user_id: dummyUserId,
+            created_at: new Date(),
             name: 'Default Member'
           }
         })
