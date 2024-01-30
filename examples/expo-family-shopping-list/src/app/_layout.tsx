@@ -1,10 +1,13 @@
 import { Slot } from 'expo-router';
+import { PaperProvider } from 'react-native-paper';
 import ElectricProvider from '../components/ElectricProvider';
 
 export default function RootLayout() {
   return (
-    <ElectricProvider>
-      <Slot />
-    </ElectricProvider>
+    <PaperProvider>
+      <ElectricProvider>
+        <Slot />
+      </ElectricProvider>
+    </PaperProvider>
   )
 }

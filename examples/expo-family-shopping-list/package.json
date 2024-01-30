@@ -32,8 +32,9 @@
     "react-native-base64": "^0.2.1",
     "react-native-gesture-handler": "~2.14.0",
     "react-native-get-random-values": "~1.8.0",
+    "react-native-paper": "^5.12.3",
     "react-native-reanimated": "~3.6.2",
-    "react-native-safe-area-context": "4.8.2",
+    "react-native-safe-area-context": "^4.8.2",
     "react-native-screens": "~3.29.0",
     "react-native-url-polyfill": "^2.0.0"
   },

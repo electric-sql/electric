@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { List } from 'react-native-paper';
 import { useLiveQuery } from 'electric-sql/react';
 import { useElectric } from './ElectricProvider';
 
@@ -13,28 +13,11 @@ const ShoppingListItemCard = ({ shoppingListItemId } : { shoppingListItemId: str
   }))
 
   if (!item) return null
-  return (
-    <View style={styles.card}>
-      <Text style={styles.title}>{item.name}</Text>
-      <Text>Last Updated: {item.updated_at.toLocaleString()}</Text>
-    </View>
-  );
+  return <List.Item
+    title={item.name}
+    description={`Last updated: ${item.updated_at.toLocaleString()}`}
+  />
 }
-
-const styles = StyleSheet.create({
-  card: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 16,
-    margin: 8,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
-});
 
 
 export default ShoppingListItemCard;
