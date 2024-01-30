@@ -321,3 +321,42 @@ test.serial('synced promise is rejected on invalid shape', async (t) => {
     t.pass()
   }
 })
+
+test.serial('nested shape is constructed', async (t) => {
+  const { satellite, client } = t.context as ContextType
+  await satellite.start(config.auth)
+
+  client.setRelations(relations)
+
+  const { Post } = t.context as ContextType
+  const input = {
+    include: {
+      author: {
+        include: {
+          profile: true,
+        },
+      },
+    },
+  }
+  // @ts-ignore `computeShape` is a protected method
+  const shape = Post.computeShape(input)
+  t.deepEqual(shape, {
+    tablename: 'Post',
+    include: [
+      {
+        fk: ['authorId'],
+        select: {
+          tablename: 'User',
+          include: [
+            {
+              fk: ['userId'],
+              select: {
+                tablename: 'Profile',
+              },
+            },
+          ],
+        },
+      },
+    ],
+  })
+})
