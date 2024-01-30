@@ -31,7 +31,7 @@ export default function Family () {
     (m: Pick<Member, 'member_id'>) => m.member_id !== dummyUserId
   )
   return (
-    <View style={{ flex: 1, paddingHorizontal: 16 }}>
+    <View style={{ flex: 1 }}>
       <Stack.Screen
         options={{
           headerTitle: family.name
@@ -44,7 +44,7 @@ export default function Family () {
         <List.Subheader>Members</List.Subheader>
         { otherMembers.length > 0 ?
             <FlatList
-              style={{ padding: 8 }}
+              style={{ padding: 6 }}
               data={otherMembers}
               renderItem={(item) => <MemberCard memberId={item.item.member_id} />}
               keyExtractor={(item) => item.member_id}

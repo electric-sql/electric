@@ -39,7 +39,7 @@ export default function EditMember () {
 
   if (!member) return null
   return (
-    <View style={{ padding: 12, gap: 12 }}>
+    <View style={{ gap: 12 }}>
       <TextInput 
         error={!name}
         label="Name"

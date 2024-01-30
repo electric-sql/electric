@@ -3,7 +3,7 @@ import { Drawer } from 'expo-router/drawer';
 
 export default function HomeLayout() {
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1}}>
       <Drawer>
         <Drawer.Screen
           name="index"

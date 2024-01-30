@@ -20,11 +20,11 @@ export default function Home () {
 
   return (
     <SafeAreaView style={{ flex: 1 }} edges={['bottom']}>
-      <View style={{ flex: 1 }}>
+      <View style={{ flex: 1, paddingHorizontal: 16 }}>
         <List.Section style={{ flex: 1 }}>
           <List.Subheader>Shopping Lists</List.Subheader>
           <FlatList
-            style={{ padding: 8 }}
+            style={{ padding: 6 }}
             data={results}
             renderItem={(item) => (
               <Link href={`/shopping_list/${item.item.list_id}`} asChild>

@@ -28,7 +28,7 @@ export default function AddShoppingListItem () {
     router.back()
   }
   return (
-    <View style={{ gap: 12, padding: 12 }}>
+    <View style={{ gap: 12 }}>
       <ShoppingListItemEditor onChange={setProps} onSubmit={onCreate} />
       <Button mode="contained" onPress={onCreate}>Add</Button>
     </View>

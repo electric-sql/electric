@@ -50,7 +50,7 @@ export default function ShoppingListItems () {
         <List.Section style={{ flex: 1 }}>
           <List.Subheader>Items</List.Subheader>
           <FlatList
-            style={{ padding: 8 }}
+            style={{ padding: 6 }}
             data={shopping_list_items}
             ItemSeparatorComponent={() => <View style={{height: 20}} />}
             renderItem={(item) => (

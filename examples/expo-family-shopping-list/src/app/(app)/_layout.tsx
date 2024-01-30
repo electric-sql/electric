@@ -5,11 +5,17 @@ export default function AppLayout() {
   return (
     <Stack screenOptions={{
       headerBackTitleVisible: false,
+      contentStyle: {
+        paddingHorizontal: 16
+      }
     }}>
       <Stack.Screen
         name="(home)"
         options={{
           headerShown: false,
+          contentStyle: {
+            paddingHorizontal: 0
+          }
         }}
       />
       <Stack.Screen
@@ -19,7 +25,10 @@ export default function AppLayout() {
         name="shopping_list/add"
         options={{
           title: 'Create shopping list',
-          presentation: 'formSheet'
+          presentation: 'formSheet',
+          contentStyle: {
+            padding: 16
+          }
           
         }}
       />
@@ -27,7 +36,10 @@ export default function AppLayout() {
         name="shopping_list/[shopping_list_id]/item/add"
         options={{
           title: 'Add shopping list item',
-          presentation: 'formSheet'
+          presentation: 'formSheet',
+          contentStyle: {
+            padding: 16
+          }
         }}
       />
       <Stack.Screen
@@ -38,7 +50,10 @@ export default function AppLayout() {
         name="family/[family_id]/member/[member_id]/edit"
         options={{
           headerTitle: 'Edit member',
-          presentation: 'formSheet'
+          presentation: 'formSheet',
+          contentStyle: {
+            padding: 16
+          }
         }}
       />
     </Stack>
