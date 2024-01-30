@@ -54,7 +54,7 @@ defmodule Electric.Replication.Shapes.QueryingTest do
          INSERT INTO public.authored_entries (id, author_id, content) VALUES (gen_random_uuid(), '#{@john_doe_id}', 'First');
          INSERT INTO public.authored_entries (id, author_id, content) VALUES (gen_random_uuid(), '#{@john_doe_id}', 'Second');
          """
-    test "should return follow one-to-many relations when querying", %{
+    test "should follow one-to-many relations when querying", %{
       origin: origin,
       conn: conn,
       schema: schema
@@ -109,7 +109,7 @@ defmodule Electric.Replication.Shapes.QueryingTest do
          INSERT INTO public.comments (id, entry_id, content) VALUES (gen_random_uuid(), '#{@entry_id}', 'comment');
          INSERT INTO public.comments (id, entry_id, content) VALUES (gen_random_uuid(), '#{@entry_id}', 'second comment');
          """
-    test "should return follow one-to-many relations over multiple levels when querying", %{
+    test "should follow one-to-many relations over multiple levels when querying", %{
       origin: origin,
       conn: conn,
       schema: schema
