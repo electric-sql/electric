@@ -464,10 +464,10 @@ fn extract_ollama_port(line: String) -> Option<String> {
 }
 
 fn main() {
-    // pg_port is either ELECTRIC_TAURI_PG_PORT, either the first argument, or the DEFAULT_PG_PORT(33333)
+    // pg_port is either ELECTRIC_TAURI_PG_PORT, or the one chosen by portpicker (race conditions possible)
     let pg_port = match env::var("ELECTRIC_TAURI_PG_PORT") {
         Ok(value) => value.parse::<u16>().unwrap(),
-        Err(_) => DEFAULT_PG_PORT,
+        Err(_) => portpicker::pick_unused_port().unwrap(),
     };
 
     info!("pg_port is: {}", pg_port);
