@@ -420,6 +420,38 @@ defmodule Electric.Satellite.WebsocketServerTest do
       end)
     end
 
+    @tag subscription_data_fun: {:mock_data_function, data_delay_ms: 500}
+    @tag with_migrations: [@test_migration]
+    test "empty transactions that came from this client are propagated back", ctx do
+      with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->
+        start_replication_and_assert_response(conn, 1)
+
+        [{client_name, _client_pid}] = active_clients()
+        mocked_producer = Producer.name(client_name)
+
+        request = %SatSubsReq{
+          subscription_id: "00000000-0000-0000-0000-000000000000",
+          shape_requests: [
+            %SatShapeReq{
+              request_id: "fake_id",
+              shape_definition: %SatShapeDef{
+                selects: [%SatShapeDef.Select{tablename: @test_table}]
+              }
+            }
+          ]
+        }
+
+        assert {:ok, %SatSubsResp{subscription_id: sub_id, err: nil}} =
+                 MockClient.make_rpc_call(conn, "subscribe", request)
+
+        # No changes in the txn, but still should be sent
+        DownstreamProducerMock.produce(mocked_producer, build_events([], 1, ctx.client_id))
+        refute_receive {^conn, %SatOpLog{}}
+        assert {["fake_id"], []} = receive_subscription_data(conn, sub_id, expecting_lsn: "1")
+        assert_receive {^conn, %SatOpLog{ops: [_, _]}}
+      end)
+    end
+
     @tag subscription_data_fun: {:mock_data_function, insertion_point: 4}
     @tag with_migrations: [@test_migration]
     test "changes before the insertion point of a subscription are not sent if no prior subscriptions exist",
@@ -702,11 +734,12 @@ defmodule Electric.Satellite.WebsocketServerTest do
     end)
   end
 
-  defp build_events(changes, lsn) do
+  defp build_events(changes, lsn, origin \\ nil) do
     [
       {%Changes.Transaction{
          changes: List.wrap(changes),
          commit_timestamp: DateTime.utc_now(),
+         origin: origin,
          # The LSN here is faked and a number, so we're using the same monotonically growing value as xid to emulate PG
          xid: lsn
        }, lsn}

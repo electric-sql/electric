@@ -500,14 +500,14 @@ defmodule Electric.Satellite.Protocol do
   def handle_outgoing_txs(events, state, acc \\ {[], %{}})
 
   def handle_outgoing_txs([{tx, offset} | events], %State{} = state, {msgs_acc, actions_acc}) do
-    {filtered_tx, new_graph, actions} =
+    {%Transaction{} = filtered_tx, new_graph, actions} =
       tx
       |> maybe_strip_migration_ddl(state.out_rep.last_migration_xid_at_initial_sync)
       |> Changes.filter_changes_belonging_to_user(state.auth.user_id)
       |> Shapes.process_transaction(state.out_rep.sent_rows_graph, current_shapes(state))
 
     {out_rep, acc} =
-      if filtered_tx.changes != [] do
+      if filtered_tx.changes != [] or filtered_tx.origin == state.client_id do
         Telemetry.event(
           state,
           :transaction_send,

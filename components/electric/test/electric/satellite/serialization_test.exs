@@ -510,7 +510,7 @@ defmodule Electric.Satellite.SerializationTest do
 
       {oplog, [], %{}} = Serialization.serialize_trans(tx, 1, %{})
 
-      assert [] == oplog
+      assert [%{ops: [%{op: {:begin, _}}, %{op: {:commit, _}}]}] = oplog
     end
 
     test "writes to tables in electric schema are not serialized", cxt do
@@ -563,7 +563,7 @@ defmodule Electric.Satellite.SerializationTest do
 
       {oplog, [], %{}} = Serialization.serialize_trans(tx, 1, %{})
 
-      assert [] = oplog
+      assert [%{ops: [%{op: {:begin, _}}, %{op: {:commit, _}}]}] = oplog
     end
   end
 end
