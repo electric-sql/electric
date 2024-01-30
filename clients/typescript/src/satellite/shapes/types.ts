@@ -5,6 +5,8 @@ export const SUBSCRIPTION_DELIVERED = 'subscription_delivered'
 export const SUBSCRIPTION_ERROR = 'subscription_error'
 
 export type SubscriptionId = string
+export type TableName = string
+export type ColumnName = string
 
 export type SubscriptionDeliveredCallback = (data: SubscriptionData) => void
 export type SubscriptionErrorCallback = (
@@ -19,23 +21,25 @@ export type SubscribeResponse = {
 
 export type UnsubscribeResponse = Record<string, never>
 
-export type ClientShapeDefinition = {
-  selects: ShapeSelect[]
+export type Shape = {
+  tablename: TableName
+  include?: Array<Rel>
+}
+
+export type Rel = {
+  fk: Array<ColumnName> // allows composite FKs
+  select: Shape
 }
 
 export type ShapeRequest = {
   requestId: string
-  definition: ClientShapeDefinition
+  definition: Shape
 }
 export type ShapeDefinition = {
   uuid: string
-  definition: ClientShapeDefinition
+  definition: Shape
 }
 export type ShapeRequestOrDefinition = ShapeRequest | ShapeDefinition
-
-export type ShapeSelect = {
-  tablename: string
-}
 
 export type SubscriptionData = {
   subscriptionId: SubscriptionId

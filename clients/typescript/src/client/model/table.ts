@@ -49,6 +49,7 @@ import {
   transformUpdateMany,
   transformUpsert,
 } from '../conversions/input'
+import { Shape } from '../../satellite/shapes/types'
 
 type AnyTable = Table<any, any, any, any, any, any, any, any, any, HKT>
 
@@ -145,6 +146,53 @@ export class Table<
     this._tables = tables
   }
 
+  protected computeShape<T extends SyncInput<Include>>(i: T): Shape {
+    // Recursively go over the included fields
+    const include = i.include ?? {}
+    const includedFields = Object.keys(include)
+    const includedTables = includedFields.map((field: string) => {
+      // Fetch the table that is included
+      const relatedTableName = this._dbDescription.getRelatedTable(
+        this.tableName,
+        field
+      )
+      const fkk = this._dbDescription.getForeignKey(this.tableName, field)
+      const relatedTable = this._tables.get(relatedTableName)!
+
+      // And follow nested includes
+      const includedObj = (include as any)[field]
+      if (
+        typeof includedObj === 'object' &&
+        !Array.isArray(includedObj) &&
+        includedObj !== null
+      ) {
+        // There is a nested include, follow it
+        return {
+          fk: [fkk],
+          select: relatedTable.computeShape(includedObj),
+        }
+      } else if (typeof includedObj === 'boolean' && includedObj) {
+        return {
+          fk: [fkk],
+          select: {
+            tablename: relatedTableName,
+          },
+        }
+      } else {
+        throw new Error(
+          `Unexpected value in include tree for sync: ${JSON.stringify(
+            includedObj
+          )}`
+        )
+      }
+    })
+
+    return {
+      tablename: this.tableName,
+      include: includedTables,
+    }
+  }
+
   protected getIncludedTables<T extends SyncInput<Include>>(
     i: T
   ): Set<AnyTable> {
@@ -188,13 +236,7 @@ export class Table<
 
   sync<T extends SyncInput<Include>>(i?: T): Promise<ShapeSubscription> {
     const validatedInput = this.syncSchema.parse(i ?? {})
-    // Recursively go over the included fields
-    // and for each field store its table
-    const tables = Array.from(this.getIncludedTables(validatedInput)) // the tables the user wants to subscribe to
-    const tableNames = tables.map((tbl) => tbl.tableName)
-    const shape = {
-      tables: tableNames,
-    }
+    const shape = this.computeShape(validatedInput)
     return this._shapeManager.sync(shape)
   }
 

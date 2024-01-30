@@ -18,7 +18,7 @@ import {
   OutboundStartedCallback,
 } from '../util/types'
 import {
-  ClientShapeDefinition,
+  Shape,
   ShapeRequest,
   SubscribeResponse,
   SubscriptionDeliveredCallback,
@@ -69,9 +69,7 @@ export interface Satellite {
 
   start(authConfig: AuthConfig): Promise<ConnectionWrapper>
   stop(shutdown?: boolean): Promise<void>
-  subscribe(
-    shapeDefinitions: ClientShapeDefinition[]
-  ): Promise<ShapeSubscription>
+  subscribe(shapeDefinitions: Shape[]): Promise<ShapeSubscription>
   unsubscribe(shapeUuid: string): Promise<void>
 }
 

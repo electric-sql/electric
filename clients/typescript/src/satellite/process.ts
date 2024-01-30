@@ -62,11 +62,10 @@ import { mergeEntries } from './merge'
 import { SubscriptionsManager } from './shapes'
 import { InMemorySubscriptionsManager } from './shapes/manager'
 import {
-  ClientShapeDefinition,
+  Shape,
   InitialDataChange,
   ShapeDefinition,
   ShapeRequest,
-  ShapeSelect,
   SubscribeResponse,
   SubscriptionData,
 } from './shapes/types'
@@ -133,7 +132,7 @@ export class SatelliteProcess implements Satellite {
 
   relations: RelationsCache
 
-  previousShapeSubscriptions: ClientShapeDefinition[]
+  previousShapeSubscriptions: Shape[]
   subscriptions: SubscriptionsManager
   subscriptionNotifiers: Record<string, ReturnType<typeof emptyPromise<void>>>
   subscriptionIdGenerator: (...args: any) => string
@@ -306,8 +305,8 @@ export class SatelliteProcess implements Satellite {
     // reverts to off on commit/abort
     stmts.push({ sql: 'PRAGMA defer_foreign_keys = ON' })
     shapeDefs
-      .flatMap((def: ShapeDefinition) => def.definition.selects)
-      .map((select: ShapeSelect) => {
+      .flatMap((def: ShapeDefinition) => def.definition)
+      .map((select: Shape) => {
         tablenames.push('main.' + select.tablename)
         return 'main.' + select.tablename
       }) // We need "fully qualified" table names in the next calls
@@ -373,9 +372,7 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  async subscribe(
-    shapeDefinitions: ClientShapeDefinition[]
-  ): Promise<ShapeSubscription> {
+  async subscribe(shapeDefinitions: Shape[]): Promise<ShapeSubscription> {
     // Await for client to be ready before doing anything else
     await this.initializing?.waitOn()
 
@@ -588,7 +585,7 @@ export class SatelliteProcess implements Satellite {
     const subscriptionIds = this.subscriptions.getFulfilledSubscriptions()
 
     if (opts?.keepSubscribedShapes) {
-      const shapeDefs: ClientShapeDefinition[] = subscriptionIds
+      const shapeDefs: Shape[] = subscriptionIds
         .map((subId) => this.subscriptions.shapesForActiveSubscription(subId))
         .filter((s): s is ShapeDefinition[] => s !== undefined)
         .flatMap((s: ShapeDefinition[]) => s.map((i) => i.definition))

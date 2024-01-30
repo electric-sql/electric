@@ -15,7 +15,7 @@ const tbl = new Builder(
 )
 
 // Sync all shapes such that we don't get warnings on every query
-shapeManager.sync({ tables: ['Post'] })
+shapeManager.sync({ tablename: 'Post' })
 
 const post1 = {
   id: 'i1',

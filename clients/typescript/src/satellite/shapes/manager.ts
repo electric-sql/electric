@@ -2,7 +2,7 @@ import { SatelliteError, SatelliteErrorCode } from '../../util/types'
 
 import EventEmitter from 'events'
 import {
-  ClientShapeDefinition,
+  Shape,
   ShapeDefinition,
   ShapeRequest,
   ShapeRequestOrDefinition,
@@ -96,7 +96,7 @@ export class InMemorySubscriptionsManager
   }
 
   getDuplicatingSubscription(
-    shapes: ClientShapeDefinition[]
+    shapes: Shape[]
   ): null | { inFlight: string } | { fulfilled: string } {
     const subId = this.shapeRequestHashmap.get(computeClientDefsHash(shapes))
     if (subId) {
@@ -158,6 +158,6 @@ function computeRequestsHash(requests: ShapeRequestOrDefinition[]): string {
   return computeClientDefsHash(requests.map((x) => x.definition))
 }
 
-function computeClientDefsHash(requests: ClientShapeDefinition[]): string {
+function computeClientDefsHash(requests: Shape[]): string {
   return hash(requests)
 }

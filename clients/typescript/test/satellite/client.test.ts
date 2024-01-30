@@ -730,7 +730,7 @@ test.serial('subscription succesful', async (t) => {
   const shapeReq: ShapeRequest = {
     requestId: 'fake',
     definition: {
-      selects: [{ tablename: 'fake' }],
+      tablename: 'fake',
     },
   }
 
@@ -752,14 +752,14 @@ test.serial(
     const shapeReq1: ShapeRequest = {
       requestId: 'fake1',
       definition: {
-        selects: [{ tablename: 'fake1' }],
+        tablename: 'fake1',
       },
     }
 
     const shapeReq2: ShapeRequest = {
       requestId: 'fake2',
       definition: {
-        selects: [{ tablename: 'fake2' }],
+        tablename: 'fake2',
       },
     }
 
@@ -801,7 +801,7 @@ test.serial('listen to subscription events: error', async (t) => {
   const shapeReq: ShapeRequest = {
     requestId: 'fake',
     definition: {
-      selects: [{ tablename: 'fake' }],
+      tablename: 'fake',
     },
   }
 
@@ -839,7 +839,7 @@ test.serial('subscription incorrect protocol sequence', async (t) => {
   const shapeReq: ShapeRequest = {
     requestId,
     definition: {
-      selects: [{ tablename }],
+      tablename,
     },
   }
 
@@ -985,14 +985,14 @@ test.serial('subscription correct protocol sequence with data', async (t) => {
   const shapeReq1: ShapeRequest = {
     requestId: requestId1,
     definition: {
-      selects: [{ tablename }],
+      tablename,
     },
   }
 
   const shapeReq2: ShapeRequest = {
     requestId: requestId2,
     definition: {
-      selects: [{ tablename }],
+      tablename,
     },
   }
 

@@ -1,5 +1,5 @@
 import {
-  ClientShapeDefinition,
+  Shape,
   ShapeDefinition,
   ShapeRequest,
   SubscriptionData,
@@ -49,7 +49,7 @@ export interface SubscriptionsManager {
    * @param shapes Shapes for a potential request
    */
   getDuplicatingSubscription(
-    shapes: ClientShapeDefinition[]
+    shapes: Shape[]
   ): null | { inFlight: string } | { fulfilled: string }
 
   /**

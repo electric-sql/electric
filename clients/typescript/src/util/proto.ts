@@ -307,14 +307,11 @@ export function shapeRequestToSatShapeReq(
   const shapeReqs: Pb.SatShapeReq[] = []
   for (const sr of shapeRequests) {
     const requestId = sr.requestId
-    const selects = sr.definition.selects.map((s) => ({
-      tablename: s.tablename,
-    }))
-    const shapeDefinition = { selects }
-
     const req = Pb.SatShapeReq.fromPartial({
       requestId,
-      shapeDefinition,
+      shapeDefinition: {
+        selects: [sr.definition],
+      },
     })
     shapeReqs.push(req)
   }
