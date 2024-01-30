@@ -89,7 +89,7 @@ export const syncTable = async (electric: Electric, table: string) => {
     return await synced
   } else {
     const satellite = globalRegistry.satellites[dbName]
-    const { synced } = await satellite.subscribe([{selects: [{tablename: table}]}])
+    const { synced } = await satellite.subscribe([{tablename: table}])
     return await synced
   }
 }

@@ -774,7 +774,7 @@ test.serial('default and null test', async (t) => {
   })
 })
 
-test.serial('subscription succesful', async (t) => {
+test.serial.only('subscription succesful', async (t) => {
   await connectAndAuth(t.context)
   const { client, server } = t.context
   await startReplication(client, server)
@@ -782,7 +782,8 @@ test.serial('subscription succesful', async (t) => {
   const shapeReq: ShapeRequest = {
     requestId: 'fake',
     definition: {
-      selects: [{ tablename: 'fake' }],
+      tablename: 'fake',
+      include: [{ foreignKey: ['foreign_id'], select: { tablename: 'other' } }],
     },
   }
 
@@ -830,14 +831,14 @@ test.serial(
     const shapeReq1: ShapeRequest = {
       requestId: 'fake1',
       definition: {
-        selects: [{ tablename: 'fake1' }],
+        tablename: 'fake1',
       },
     }
 
     const shapeReq2: ShapeRequest = {
       requestId: 'fake2',
       definition: {
-        selects: [{ tablename: 'fake2' }],
+        tablename: 'fake2',
       },
     }
 
@@ -879,7 +880,7 @@ test.serial('listen to subscription events: error', async (t) => {
   const shapeReq: ShapeRequest = {
     requestId: 'fake',
     definition: {
-      selects: [{ tablename: 'fake' }],
+      tablename: 'fake',
     },
   }
 
@@ -917,7 +918,7 @@ test.serial('subscription incorrect protocol sequence', async (t) => {
   const shapeReq: ShapeRequest = {
     requestId,
     definition: {
-      selects: [{ tablename }],
+      tablename,
     },
   }
 
@@ -1063,14 +1064,14 @@ test.serial('subscription correct protocol sequence with data', async (t) => {
   const shapeReq1: ShapeRequest = {
     requestId: requestId1,
     definition: {
-      selects: [{ tablename }],
+      tablename,
     },
   }
 
   const shapeReq2: ShapeRequest = {
     requestId: requestId2,
     definition: {
-      selects: [{ tablename }],
+      tablename,
     },
   }
 

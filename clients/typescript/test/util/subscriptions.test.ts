@@ -32,11 +32,7 @@ test('some tests', (t) => {
 
   // the shape
   const definition = {
-    selects: [
-      {
-        tablename,
-      },
-    ],
+    tablename,
   }
 
   const shapeRequest = {

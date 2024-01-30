@@ -20,7 +20,7 @@ import {
   ReplicationStatus,
 } from '../util/types'
 import {
-  ClientShapeDefinition,
+  Shape,
   ShapeRequest,
   SubscribeResponse,
   SubscriptionDeliveredCallback,
@@ -73,9 +73,7 @@ export interface Satellite {
   disconnect(error?: SatelliteError): void
   clientDisconnect(): void
   authenticate(token: string): Promise<void>
-  subscribe(
-    shapeDefinitions: ClientShapeDefinition[]
-  ): Promise<ShapeSubscription>
+  subscribe(shapeDefinitions: Shape[]): Promise<ShapeSubscription>
   unsubscribe(shapeUuid: string): Promise<void>
 }
 
