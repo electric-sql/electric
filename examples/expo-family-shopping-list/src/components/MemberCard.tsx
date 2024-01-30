@@ -3,13 +3,17 @@ import { Card, Text, IconButton, Avatar } from 'react-native-paper';
 import { useLiveQuery } from 'electric-sql/react';
 import { useElectric } from './ElectricProvider';
 import ConfirmationDialog from './ConfirmationDialog';
+import { View } from 'react-native';
+import { Link } from 'expo-router';
 
 
 const MemberCard = ({
   memberId,
+  editable = false,
   onPress
 } : {
   memberId: string,
+  editable?: boolean,
   onPress?: () => void,
 }) => {
   const [ dialogVisible, setDialogVisible ] = useState(false)
@@ -50,11 +54,20 @@ const MemberCard = ({
             .join('')}
           />
         }
-        right={(_) => isFamilyCreator ?
-          <Text variant="labelSmall" style={{ marginRight: 12 }}>
-            Owner
-          </Text> :
-          <IconButton icon="account-remove" onPress={() => setDialogVisible(true)} />
+        right={(_) => 
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          { editable && 
+            <Link href={`/family/${member.family_id}/member/${memberId}/edit`} asChild>
+              <IconButton icon="pencil" />
+            </Link>
+          }
+          { isFamilyCreator ?
+            <Text variant="labelSmall" style={{ marginRight: 12 }}>
+              Owner
+            </Text> :
+            <IconButton icon="account-remove" onPress={() => setDialogVisible(true)} />
+          }
+          </View>
         }
       />
       <ConfirmationDialog

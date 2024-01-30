@@ -19,7 +19,7 @@ export default function AppLayout() {
         name="shopping_list/add"
         options={{
           title: 'Create shopping list',
-          presentation: "formSheet",
+          presentation: 'formSheet'
           
         }}
       />
@@ -27,11 +27,19 @@ export default function AppLayout() {
         name="shopping_list/[shopping_list_id]/item/add"
         options={{
           title: 'Add shopping list item',
-          presentation: "formSheet",
+          presentation: 'formSheet'
         }}
       />
       <Stack.Screen
         name="shopping_list/[shopping_list_id]/item/[shopping_list_item_id]"
+      />
+
+      <Stack.Screen
+        name="family/[family_id]/member/[member_id]/edit"
+        options={{
+          headerTitle: 'Edit member',
+          presentation: 'formSheet'
+        }}
       />
     </Stack>
   );

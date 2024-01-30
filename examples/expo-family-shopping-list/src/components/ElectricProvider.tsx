@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react'
-import { Text } from 'react-native'
 
 import * as SQLite from 'expo-sqlite'
 
@@ -30,10 +29,7 @@ export default function ElectricProvider ({ children } : { children: React.React
       }
 
 
-      let conn = SQLite.openDatabase('electric.db')
-      await conn.closeAsync()
-      await conn.deleteAsync()
-      conn = SQLite.openDatabase('electric.db')
+      const conn = SQLite.openDatabase('electric.db')
       const electric = await electrify(conn, schema, config)
       if (!isMounted) {
         return
@@ -63,10 +59,11 @@ export default function ElectricProvider ({ children } : { children: React.React
       await shape.synced
       
       const family = await electric.db.family.findFirst()
+      const familyId = family?.family_id ?? genUUID()
       if (!family) {
         await electric.db.family.create({
           data: {
-            family_id: genUUID(),
+            family_id: familyId,
             creator_user_id: dummyUserId,
             created_at: new Date(),
             name: 'Default Family'
@@ -78,7 +75,7 @@ export default function ElectricProvider ({ children } : { children: React.React
         await electric.db.member.create({
           data: {
             member_id: dummyUserId,
-            family_id: (await electric.db.family.findFirst()).family_id,
+            family_id: familyId,
             user_id: dummyUserId,
             created_at: new Date(),
             name: 'Default Member'
