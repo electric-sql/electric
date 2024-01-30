@@ -37,19 +37,6 @@ export default function FamilyHome () {
             keyExtractor={(item) => item.member_id}
             />
         </List.Section>
-
-        <Link
-          style={{
-            position: 'absolute',
-            margin: 16,
-            right: 0,
-            bottom: 0,
-          }}
-          href="/family/add"
-          asChild
-        >
-          <FAB icon="plus" />
-        </Link>
       </View>
     </SafeAreaView>
   )
