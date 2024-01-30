@@ -330,6 +330,13 @@ test.serial('nested shape is constructed', async (t) => {
 
   const { Post } = t.context as ContextType
   const input = {
+    where: {
+      OR: [{ id: 5 }, { id: 42 }],
+      NOT: [{ id: 1 }, { id: 2 }],
+      AND: [{ nbr: 6 }, { nbr: 7 }],
+      title: 'foo',
+      contents: 'bar',
+    },
     include: {
       author: {
         include: {
@@ -338,10 +345,13 @@ test.serial('nested shape is constructed', async (t) => {
       },
     },
   }
+
   // @ts-ignore `computeShape` is a protected method
   const shape = Post.computeShape(input)
   t.deepEqual(shape, {
     tablename: 'Post',
+    where:
+      "title = 'foo' AND contents = 'bar' AND nbr = 6 AND nbr = 7 AND ((id = 5) OR (id = 42)) AND NOT ((id = 1) OR (id = 2))",
     include: [
       {
         fk: ['authorId'],

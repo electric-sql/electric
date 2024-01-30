@@ -24,7 +24,7 @@ export interface Model<
   ScalarFieldEnum,
   GetPayload extends HKT
 > {
-  sync<T extends SyncInput<Include>>(i?: T): Promise<ShapeSubscription>
+  sync<T extends SyncInput<Include, Where>>(i?: T): Promise<ShapeSubscription>
 
   /**
    * Creates a unique record in the DB.

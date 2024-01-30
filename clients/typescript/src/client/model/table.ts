@@ -102,7 +102,7 @@ export class Table<
   >
   private deleteSchema: z.ZodType<DeleteInput<Select, WhereUnique, Include>>
   private deleteManySchema: z.ZodType<DeleteManyInput<Where>>
-  private syncSchema: z.ZodType<SyncInput<Include>>
+  private syncSchema: z.ZodType<SyncInput<Include, Where>>
 
   constructor(
     public tableName: string,
@@ -125,8 +125,9 @@ export class Table<
     this._qualifiedTableName = new QualifiedTablename('main', tableName)
     this._tables = new Map()
     this._schema = tableDescription.modelSchema
-    this.createSchema = //transformCreateSchema(
-      omitCountFromSelectAndIncludeSchema(tableDescription.createSchema) //, fields)
+    this.createSchema = omitCountFromSelectAndIncludeSchema(
+      tableDescription.createSchema
+    )
     this.createManySchema = tableDescription.createManySchema
     this.findUniqueSchema = tableDescription.findUniqueSchema
     this.findSchema = tableDescription.findSchema
@@ -137,8 +138,14 @@ export class Table<
     this.upsertSchema = tableDescription.upsertSchema
     this.deleteSchema = tableDescription.deleteSchema
     this.deleteManySchema = tableDescription.deleteManySchema
+
+    // TODO: The syncSchema currently allows too much
+    //       modify the `where` clause of the schema to allow only the fields
+    //       (no nested relation fields)
+    //       and also change the field types to expect the value type and no nested filter schema allowed
     this.syncSchema = (tableDescription.findSchema as z.AnyZodObject).pick({
       include: true,
+      where: true,
     })
   }
 
@@ -146,9 +153,10 @@ export class Table<
     this._tables = tables
   }
 
-  protected computeShape<T extends SyncInput<Include>>(i: T): Shape {
+  protected computeShape<T extends SyncInput<Include, Where>>(i: T): Shape {
     // Recursively go over the included fields
     const include = i.include ?? {}
+    const where = i.where ?? {}
     const includedFields = Object.keys(include)
     const includedTables = includedFields.map((field: string) => {
       // Fetch the table that is included
@@ -187,13 +195,15 @@ export class Table<
       }
     })
 
+    const whereClause = makeSqlWhereClause(where)
     return {
       tablename: this.tableName,
       include: includedTables,
+      ...(whereClause === '' ? {} : { where: whereClause }),
     }
   }
 
-  protected getIncludedTables<T extends SyncInput<Include>>(
+  protected getIncludedTables<T extends SyncInput<Include, unknown>>(
     i: T
   ): Set<AnyTable> {
     // Recursively go over the included fields
@@ -234,7 +244,7 @@ export class Table<
     return includedTables
   }
 
-  sync<T extends SyncInput<Include>>(i?: T): Promise<ShapeSubscription> {
+  sync<T extends SyncInput<Include, Where>>(i?: T): Promise<ShapeSubscription> {
     const validatedInput = this.syncSchema.parse(i ?? {})
     const shape = this.computeShape(validatedInput)
     return this._shapeManager.sync(shape)
@@ -1572,7 +1582,7 @@ export class Table<
 
   private makeLiveResult<T>(
     runner: () => Promise<T>,
-    i: SyncInput<Include>
+    i: SyncInput<Include, unknown>
   ): LiveResultContext<T> {
     const tables = [...this.getIncludedTables(i)].map(
       (x) => x._qualifiedTableName
@@ -1624,4 +1634,44 @@ export function liveRawQuery(
   })
   result.sourceQuery = sql
   return result
+}
+
+function makeSqlWhereClause(where: object): string {
+  // we wrap it in an array and then flatten it
+  // in case the user provided an object instead of an array of objects
+  const orConnectedObjects = [
+    (where as { OR?: object | object[] })['OR'] ?? [],
+  ].flat()
+  const orSqlClause =
+    orConnectedObjects.length === 0
+      ? ''
+      : '(' +
+        orConnectedObjects
+          .map((o) => `(${makeSqlWhereClause(o)})`)
+          .join(' OR ') +
+        ')'
+  const notConnector = [
+    (where as { NOT?: object | object[] })['NOT'] ?? [],
+  ].flat()
+  const notSqlClause =
+    notConnector.length === 0
+      ? ''
+      : 'NOT (' +
+        notConnector.map((o) => `(${makeSqlWhereClause(o)})`).join(' OR ') +
+        ')'
+  const andConnector = [
+    (where as { AND?: object | object[] })['AND'] ?? [],
+  ].flat()
+  const andSqlClause = andConnector.map(makeSqlWhereClause).join(' AND ')
+  const fieldSqlClause = Object.entries(where)
+    .filter(([key, _]) => !['AND', 'OR', 'NOT'].includes(key))
+    .map(([key, value]) => {
+      if (typeof value === 'string') {
+        return `${key} = '${value}'`
+      }
+      return `${key} = ${value}`
+    })
+    .join(' AND ')
+  const clauses = [fieldSqlClause, andSqlClause, orSqlClause, notSqlClause]
+  return clauses.filter((clause) => clause !== '').join(' AND ')
 }
