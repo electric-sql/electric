@@ -18,9 +18,11 @@ export default function AppLayout() {
           }
         }}
       />
+
       <Stack.Screen
         name="shopping_list/[shopping_list_id]/index"
       />
+
       <Stack.Screen
         name="shopping_list/add"
         options={{
@@ -29,7 +31,6 @@ export default function AppLayout() {
           contentStyle: {
             padding: 16
           }
-          
         }}
       />
       <Stack.Screen
@@ -42,10 +43,6 @@ export default function AppLayout() {
           }
         }}
       />
-      <Stack.Screen
-        name="shopping_list/[shopping_list_id]/item/[shopping_list_item_id]"
-      />
-
       <Stack.Screen
         name="family/[family_id]/member/[member_id]/edit"
         options={{
