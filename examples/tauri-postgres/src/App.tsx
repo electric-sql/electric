@@ -2,6 +2,7 @@
 import { attachConsole } from "tauri-plugin-log-api";
 attachConsole();
 
+import { listen } from "@tauri-apps/api/event";
 import "animate.css/animate.min.css";
 import Board from "./pages/Board";
 import { useEffect, useState, createContext } from "react";
@@ -33,6 +34,8 @@ const App = () => {
   const [electric, setElectric] = useState<Electric>();
   const [showMenu, setShowMenu] = useState(false);
   const [synced, setSynced] = useState(false);
+  const [ollamaDownloaded, setOllamaDownloaded] = useState(false);
+  const [fastembedDownloaded, setFastembedDownloaded] = useState(false);
 
   useEffect(() => {
     const init = async () => {
@@ -52,13 +55,72 @@ const App = () => {
     init();
   }, []);
 
-  if (electric === undefined || !synced) {
+  useEffect(() => {
+    let unListenOllamaDownloaded: null | (() => void) = null;
+    let unListenFastembedDownloaded: null | (() => void) = null;
+    let ignore = false;
+
+    const init = async () => {
+      unListenOllamaDownloaded = await listen(
+        "downloaded_ollama_model",
+        (event) => {
+          if (ignore) return;
+          setOllamaDownloaded(true);
+        }
+      );
+      unListenFastembedDownloaded = await listen(
+        "downloading_fastembed_model",
+        (event) => {
+          if (ignore) return;
+          setFastembedDownloaded(true);
+        }
+      );
+      if (ignore) {
+        unListenOllamaDownloaded?.();
+        unListenOllamaDownloaded = null;
+        unListenFastembedDownloaded?.();
+        unListenFastembedDownloaded = null;
+      }
+    };
+
+    init();
+
+    return () => {
+      ignore = true;
+      unListenOllamaDownloaded?.();
+      unListenOllamaDownloaded = null;
+      unListenFastembedDownloaded?.();
+      unListenFastembedDownloaded = null;
+    };
+  }, []);
+
+  if (
+    electric === undefined ||
+    !synced ||
+    !ollamaDownloaded ||
+    !fastembedDownloaded
+  ) {
     return (
-      <div className="flex flex-col w-full h-screen justify-center items-center opacity-50">
+      <div className="flex flex-col w-full h-screen mt-6 items-center opacity-50">
         <div className="text-lg font-semibold text-gray-400 mb-4">
           Loading Workspace
         </div>
         <Spinner />
+        <div className="flex flex-col items-center mt-4">
+          {!synced && (
+            <div className="text-sm text-gray-300 mb-1">Syncing Issues...</div>
+          )}
+          {!ollamaDownloaded && (
+            <div className="text-sm text-gray-300 mb-1">
+              Downloading Ollama Model...
+            </div>
+          )}
+          {!fastembedDownloaded && (
+            <div className="text-sm text-gray-300 mb-1">
+              Downloading FastEmbed Model...
+            </div>
+          )}
+        </div>
       </div>
     );
   }
