@@ -2,9 +2,10 @@ import createPool, { sql } from '@databases/pg'
 import fs from 'fs'
 import path from 'path'
 import * as url from 'url'
-import { DATABASE_URL } from './util.cjs'
 
 const dirname = url.fileURLToPath(new URL('.', import.meta.url))
+const DATABASE_URL =
+  process.env.ELECTRIC_DATABASE_URL || process.env.DATABASE_URL
 const DATA_DIR = process.env.DATA_DIR || path.resolve(dirname, 'data')
 const ISSUES_TO_LOAD = process.env.ISSUES_TO_LOAD || 112
 
