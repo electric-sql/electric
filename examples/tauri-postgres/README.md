@@ -1,24 +1,25 @@
-<a href="https://electric-sql.com">
-  <picture>
-    <source media="(prefers-color-scheme: dark)"
-        srcset="https://raw.githubusercontent.com/electric-sql/meta/main/identity/ElectricSQL-logo-light-trans.svg"
-    />
-    <source media="(prefers-color-scheme: light)"
-        srcset="https://raw.githubusercontent.com/electric-sql/meta/main/identity/ElectricSQL-logo-black.svg"
-    />
-    <img alt="ElectricSQL logo"
-        src="https://raw.githubusercontent.com/electric-sql/meta/main/identity/ElectricSQL-logo-black.svg"
-    />
-  </picture>
+<a href="https://electric-sql.com/blog/2024/01/25/local-first-ai-with-tauri-postgres-pgvector-llama">
+  ![](./public/header.jpg)
 </a>
 
-# ElectricSQL Tauri Example
+# ElectricSQL - Local AI in Tauri Example
 
-This is an example of a team collaboration app such as [Linear](https://linear.app) built using ElectricSQL and Tauri.
+This is an example of a local AI application, built using ElectricSQL, with Postgres, pgvector and llama2 running inside the backend of a Tauri app.
 
-It's built on top of the excellent clone of the Linear UI built by
-Tuan Nguyen [@tuan3w](https://github.com/tuan3w) - The original is here
-[https://github.com/tuan3w/linearapp_clone](https://github.com/tuan3w/linearapp_clone).
+It's designed to showcase an open source stack for running retrieval-augmented generation (RAG) inside a local desktop app &mdash; without leaking any prompt or context data to the cloud. With Electric as the sync layer controlling the shape of the knowledge base available to the AI on the local device.
+
+There are a number of notable features of the example to highlight:
+
+1. it embeds and runs Postgres inside the Rust backend of a Tauri app
+2. it demonstrates active-active sync between Postgres in the cloud and Postgres as embedded local database in the app (usually Electric syncs between Postgres in the cloud and SQLite in the app)
+
+3. it compiles Postgres with the [pgvector](https://github.com/pgvector/pgvector) extension and syncs vector embeddings; this effectively integrates a vector database into the relational data model and supports vector similarity search on the device; note that embeddings can be generated locally or in the cloud, to support purely local or hybrid architectures
+4. it compiles [fastembed-rs](https://github.com/Anush008/fastembed-rs) into the Tauri backend for local vectorisation
+5. it compiles https://ai.meta.com/llama/ using [Ollama](https://ollama.ai) into the Tauri backend, a highly capable local LLM model with as large context window that supports retrieval-augmented generation (RAG)
+
+The demo app itself is a varient of [Electric's LinearLite example](https://electric-sql.com/docs/examples/linear-lite). This is a [Linear](https://linear.app) clone, originally dervied from the excellent clone of the Linear UI built by Tuan Nguyen [@tuan3w](https://github.com/tuan3w). This demo extends LinearLite with vector search and a chat interface to ask questions about the issues, which are seeded with issues from the React project's GitHub Issues tracker.
+
+For more information, see the blog post write up here: [Local AI with Postgres, pgvector and llama2, inside a Tauri app with ElectricSQL](https://electric-sql.com/blog/2024/01/25/local-first-ai-with-tauri-postgres-pgvector-llama).
 
 ## Prereqs
 
@@ -52,15 +53,18 @@ Install the dependencies:
 pnpm install
 ```
 
-Setup the third party libraries and software that the app needs, according to your platform:
+## Additional dependencies
+
+The example supports compilation for macOS and Linux. We provide shell scripts to setup the third party libraries and software that the app needs, according to your platform:
 
 For macOS:
-```
+
+```shell
 bash install-darwin.sh
 ```
 
 For linux:
-```
+```shell
 bash install-linux.sh
 ```
 
@@ -68,7 +72,7 @@ This will take up a few hundreds megabytes of space, during the installation, be
 
 ## Backend
 
-Start Postgres and Electric using Docker (see [running the examples](https://electric-sql.com/docs/examples/notes/running) for more options):
+Start Postgres and Electric as normal using Docker (see [running the examples](https://electric-sql.com/docs/examples/notes/running) for more options):
 
 ```shell
 pnpm run backend:up
