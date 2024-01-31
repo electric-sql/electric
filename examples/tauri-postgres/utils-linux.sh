@@ -36,7 +36,7 @@ git_clone_third_parties() {
 # gives us src-tauri/ollama-darwin-aarch64-apple-darwin
 install_ollama() {
     echo "Installing ollama"
-    wget https://github.com/jmorganca/ollama/releases/download/v0.1.20/ollama-darwin
+    # wget https://github.com/jmorganca/ollama/releases/download/v0.1.20/ollama-darwin
     wget https://github.com/ollama/ollama/releases/download/v0.1.22/ollama-linux-amd64
     chmod +x ollama-linux-amd64
 
@@ -109,9 +109,3 @@ build_the_app() {
     pnpm install && pnpm run tauri:package
     pnpm tauri build # This also installs the app
 }
-
-# git_clone_third_parties
-# install_ollama
-# install_postgres
-# install_onnxruntime
-# build_the_app

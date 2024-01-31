@@ -531,12 +531,17 @@ fn main() {
     let mut envs: HashMap<String, String> = HashMap::new();
     envs.insert("OLLAMA_HOST".to_string(), host);
 
-    let (mut rx, mut _child) = Command::new_sidecar("ollama-darwin")
-        .expect("failed to create `ollama-darwin` binary command")
-        .envs(envs)
+    #[cfg(target_os = "macos")]
+    let ollama_name = "ollama-darwin";
+    #[cfg(target_os = "linux")]
+    let ollama_name = "ollama-linux";
+
+    let (mut rx, mut _child) = Command::new_sidecar(ollama_name)
+    .expect(format!("failed to create `{}` binary command", ollama_name).as_str())
+    .envs(envs)
         .args(["serve"])
         .spawn()
-        .expect("Failed to spawn ollama-darwin");
+        .expect(format!("Failed to spawn {}", ollama_name).as_str());
 
     while let Some(event) = rx.blocking_recv() {
         if let CommandEvent::Stderr(line) = event {
