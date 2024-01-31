@@ -6,6 +6,7 @@ import { useElectric } from '../../../components/ElectricProvider'
 import ShoppingListCard from '../../../components/ShoppingListCard'
 import { Link } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import FlatListSeparator from '../../../components/FlatListSeparator'
 
 export default function Home () {
   const { db } = useElectric()!
@@ -31,7 +32,7 @@ export default function Home () {
                 <ShoppingListCard shoppingListId={item.item.list_id} />
               </Link>
             )}
-            ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+            ItemSeparatorComponent={() => <FlatListSeparator />}
             keyExtractor={(item) => item.list_id}
             />
         </List.Section>

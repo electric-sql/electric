@@ -7,6 +7,7 @@ import { Redirect, Stack, useLocalSearchParams } from 'expo-router'
 import MemberCard from '../../../../components/MemberCard'
 import { dummyUserId } from '../../../../lib/auth'
 import { Member } from '../../../../generated/client'
+import FlatListSeparator from '../../../../components/FlatListSeparator'
 
 export default function Family () {
   const { family_id } = useLocalSearchParams<{ family_id?: string }>()
@@ -48,7 +49,7 @@ export default function Family () {
               data={otherMembers}
               renderItem={(item) => <MemberCard memberId={item.item.member_id} />}
               keyExtractor={(item) => item.member_id}
-              ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+              ItemSeparatorComponent={() => <FlatListSeparator />}
             />
             :
             <View style={{ flexDirection:'column', alignItems: 'center' }}>

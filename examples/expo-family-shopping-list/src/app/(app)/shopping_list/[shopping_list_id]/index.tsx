@@ -12,6 +12,7 @@ import { useLiveQuery } from 'electric-sql/react';
 import { FAB, List } from 'react-native-paper';
 import ShoppingListItemCard from '../../../../components/ShoppingListItemCard';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import FlatListSeparator from '../../../../components/FlatListSeparator';
 
 export default function ShoppingListItems () {
   const { shopping_list_id } = useLocalSearchParams<{ shopping_list_id: string }>();
@@ -52,7 +53,7 @@ export default function ShoppingListItems () {
           <FlatList
             style={{ padding: 6 }}
             data={shopping_list_items}
-            ItemSeparatorComponent={() => <View style={{height: 20}} />}
+            ItemSeparatorComponent={() => <FlatListSeparator />}
             renderItem={(item) => (
               <ShoppingListItemCard shoppingListItemId={item.item.item_id} />
             )}

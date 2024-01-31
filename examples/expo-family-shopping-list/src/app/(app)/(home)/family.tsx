@@ -7,6 +7,7 @@ import { dummyUserId } from '../../../lib/auth'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Link } from 'expo-router'
 import FamilyCard from '../../../components/FamilyCard'
+import FlatListSeparator from '../../../components/FlatListSeparator'
 
 export default function FamilyHome () {
   const { db } = useElectric()!
@@ -33,7 +34,7 @@ export default function FamilyHome () {
                   <FamilyCard memberId={item.item.member_id} />
                 </Link>
               )}
-              ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+              ItemSeparatorComponent={() => <FlatListSeparator />}
               keyExtractor={(item) => item.member_id}
               />
             :

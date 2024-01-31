@@ -6,7 +6,7 @@ import { genUUID } from 'electric-sql/util'
 import { router } from 'expo-router';
 
 
-export default function AddShoppingListItem () {
+export default function AddShoppingList() {
   const { db } = useElectric()!
   const onCreate = async (props: ShoppingListProperties) => {
     const newListId = genUUID()
