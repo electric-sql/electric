@@ -41,7 +41,7 @@ install_ollama() {
     chmod +x ollama-linux-amd64
 
     # Tauri needs this specific name
-    mv ollama-linux-amd64 src-tauri/ollama-linux-x86_64-unknown-linux-gnu
+    mv ollama-linux-amd64 src-tauri/ollama-x86_64-unknown-linux-gnu
 }
 
 # Install postgres

@@ -40,7 +40,7 @@ install_ollama() {
     chmod +x ollama-darwin
 
     # Tauri needs this specific name
-    mv ollama-darwin src-tauri/ollama-darwin-aarch64-apple-darwin
+    mv ollama-darwin src-tauri/ollama-aarch64-apple-darwin
 }
 
 # Install postgres

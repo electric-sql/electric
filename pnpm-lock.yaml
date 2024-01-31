@@ -1,4 +1,4 @@
-lockfileVersion: '6.0'
+lockfileVersion: '6.1'
 
 settings:
   autoInstallPeers: true
@@ -732,6 +732,73 @@ importers:
       vite:
         specifier: ^4.4.5
         version: 4.4.5(@types/node@20.5.9)
+
+  examples/tauri-postgres-from-wa-sqlite:
+    dependencies:
+      '@tauri-apps/api':
+        specifier: ^1.4.0
+        version: 1.4.0
+      electric-sql:
+        specifier: workspace:*
+        version: link:../../clients/typescript
+      react:
+        specifier: ^18.2.0
+        version: 18.2.0
+      react-dom:
+        specifier: ^18.2.0
+        version: 18.2.0(react@18.2.0)
+      wa-sqlite:
+        specifier: rhashimoto/wa-sqlite#master
+        version: github.com/rhashimoto/wa-sqlite/390744d41c61aa0bbd53d3c738abef5e23f71cc4
+      xterm:
+        specifier: ^5.1.0
+        version: 5.3.0
+      xterm-addon-fit:
+        specifier: ^0.7.0
+        version: 0.7.0(xterm@5.3.0)
+      xterm-readline:
+        specifier: ^1.1.1
+        version: 1.1.1(xterm@5.3.0)
+    devDependencies:
+      '@databases/pg':
+        specifier: ^5.4.1
+        version: 5.4.1
+      '@electric-sql/prisma-generator':
+        specifier: workspace:*
+        version: link:../../generator
+      '@prisma/client':
+        specifier: 4.8.1
+        version: 4.8.1(prisma@4.8.1)
+      '@tauri-apps/cli':
+        specifier: ^1.4.0
+        version: 1.5.5
+      '@types/node':
+        specifier: '>=16.11.0'
+        version: 16.18.34
+      '@types/react':
+        specifier: ^18.0.18
+        version: 18.2.15
+      '@types/react-dom':
+        specifier: ^18.0.11
+        version: 18.2.7
+      esbuild:
+        specifier: ^0.16.17
+        version: 0.16.17
+      esbuild-plugin-inline-image:
+        specifier: ^0.0.9
+        version: 0.0.9
+      fs-extra:
+        specifier: ^10.0.0
+        version: 10.0.0
+      prisma:
+        specifier: 4.8.1
+        version: 4.8.1
+      shelljs:
+        specifier: ^0.8.5
+        version: 0.8.5
+      typescript:
+        specifier: ^4.4.3
+        version: 4.9.5
 
   examples/web-wa-sqlite:
     dependencies:
@@ -4986,7 +5053,6 @@ packages:
     cpu: [arm64]
     os: [darwin]
     requiresBuild: true
-    dev: false
     optional: true
 
   /@tauri-apps/cli-darwin-x64@1.5.5:
@@ -4995,7 +5061,6 @@ packages:
     cpu: [x64]
     os: [darwin]
     requiresBuild: true
-    dev: false
     optional: true
 
   /@tauri-apps/cli-linux-arm-gnueabihf@1.5.5:
@@ -5004,7 +5069,6 @@ packages:
     cpu: [arm]
     os: [linux]
     requiresBuild: true
-    dev: false
     optional: true
 
   /@tauri-apps/cli-linux-arm64-gnu@1.5.5:
@@ -5013,7 +5077,6 @@ packages:
     cpu: [arm64]
     os: [linux]
     requiresBuild: true
-    dev: false
     optional: true
 
   /@tauri-apps/cli-linux-arm64-musl@1.5.5:
@@ -5022,7 +5085,6 @@ packages:
     cpu: [arm64]
     os: [linux]
     requiresBuild: true
-    dev: false
     optional: true
 
   /@tauri-apps/cli-linux-x64-gnu@1.5.5:
@@ -5031,7 +5093,6 @@ packages:
     cpu: [x64]
     os: [linux]
     requiresBuild: true
-    dev: false
     optional: true
 
   /@tauri-apps/cli-linux-x64-musl@1.5.5:
@@ -5040,7 +5101,6 @@ packages:
     cpu: [x64]
     os: [linux]
     requiresBuild: true
-    dev: false
     optional: true
 
   /@tauri-apps/cli-win32-arm64-msvc@1.5.5:
@@ -5049,7 +5109,6 @@ packages:
     cpu: [arm64]
     os: [win32]
     requiresBuild: true
-    dev: false
     optional: true
 
   /@tauri-apps/cli-win32-ia32-msvc@1.5.5:
@@ -5058,7 +5117,6 @@ packages:
     cpu: [ia32]
     os: [win32]
     requiresBuild: true
-    dev: false
     optional: true
 
   /@tauri-apps/cli-win32-x64-msvc@1.5.5:
@@ -5067,7 +5125,6 @@ packages:
     cpu: [x64]
     os: [win32]
     requiresBuild: true
-    dev: false
     optional: true
 
   /@tauri-apps/cli@1.5.5:
@@ -5085,7 +5142,6 @@ packages:
       '@tauri-apps/cli-win32-arm64-msvc': 1.5.5
       '@tauri-apps/cli-win32-ia32-msvc': 1.5.5
       '@tauri-apps/cli-win32-x64-msvc': 1.5.5
-    dev: false
 
   /@tauri-apps/tauri-inliner@1.14.1:
     resolution: {integrity: sha512-IXlPbWXpKNz0dz1fplPAetBBzKA8kUaOvrrpyJ0jvxMihI9vKHaKP4GDyF89XCi0edXKv2MM+MWaaPVcmy12Bg==}
@@ -20191,6 +20247,14 @@ packages:
   /xtend@4.0.2:
     resolution: {integrity: sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==}
     engines: {node: '>=0.4'}
+
+  /xterm-addon-fit@0.7.0(xterm@5.3.0):
+    resolution: {integrity: sha512-tQgHGoHqRTgeROPnvmtEJywLKoC/V9eNs4bLLz7iyJr1aW/QFzRwfd3MGiJ6odJd9xEfxcW36/xRU47JkD5NKQ==}
+    peerDependencies:
+      xterm: ^5.0.0
+    dependencies:
+      xterm: 5.3.0
+    dev: false
 
   /xterm-addon-fit@0.8.0(xterm@5.3.0):
     resolution: {integrity: sha512-yj3Np7XlvxxhYF/EJ7p3KHaMt6OdwQ+HDu573Vx1lRXsVxOcnVJs51RgjZOouIZOczTsskaS+CpXspK81/DLqw==}

@@ -5,14 +5,14 @@
         "all": false,
         "shell":{
           "scope": [
-            { "name": "./ollama-linux", "sidecar": true }
+            { "name": "./ollama", "sidecar": true }
           ],
           "sidecar": true
         }
       },
       "bundle": {
         "externalBin": [
-          "./ollama-linux"
+          "./ollama"
         ],
         "identifier": "electric-tauri-postgres",
         "resources": ["./libonnxruntime.so", "./pgdir/*"]

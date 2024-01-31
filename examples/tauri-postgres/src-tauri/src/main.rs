@@ -531,10 +531,7 @@ fn main() {
     let mut envs: HashMap<String, String> = HashMap::new();
     envs.insert("OLLAMA_HOST".to_string(), host);
 
-    #[cfg(target_os = "macos")]
-    let ollama_name = "ollama-darwin";
-    #[cfg(target_os = "linux")]
-    let ollama_name = "ollama-linux";
+    let ollama_name = "ollama";
 
     let (mut rx, mut _child) = Command::new_sidecar(ollama_name)
     .expect(format!("failed to create `{}` binary command", ollama_name).as_str())

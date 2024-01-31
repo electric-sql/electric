@@ -5,14 +5,14 @@
         "all": false,
         "shell":{
           "scope": [
-            { "name": "./ollama-darwin", "sidecar": true }
+            { "name": "./ollama", "sidecar": true }
           ],
           "sidecar": true
         }
       },
       "bundle": {
         "externalBin": [
-          "./ollama-darwin"
+          "./ollama"
         ],
         "identifier": "electric-tauri-postgres",
         "macOS": {
