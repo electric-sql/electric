@@ -24,7 +24,7 @@ function List({ showSearch = false }) {
       kanbanorder: true,
       username: true,
     },
-    ...(filterState.searchType !== "vector"
+    ...(!useVectorSearch
       ? {
           orderBy: { [filterState.orderBy]: filterState.orderDirection },
         }
