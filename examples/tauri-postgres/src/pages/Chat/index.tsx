@@ -26,12 +26,16 @@ function Chat() {
         SELECT title, description
         FROM issue INNER JOIN document ON document.issue_id = issue.id
         ORDER BY document.embeddings <=> '${embedding}'
-        LIMIT 5;
+        LIMIT 50;
       `,
     });
     const context = issues
-      .map((issue: any) => `${issue.title}\n${issue.description}`)
-      .join("\n\n\n");
+      .map(
+        (issue: any) =>
+          `# [${issue.title}](/issue/${issue.id})\n${issue.description}`
+      )
+      .join("\n---\n\n")
+      .slice(0, 4 * 4096 - (100 + question.length)); // 4096 token limit, tokens are ~4 bytes
     console.log("startChat", { question: question, context: context ?? "" });
     invoke("start_chat", { question: question, context: context ?? "" });
   };
@@ -117,7 +121,9 @@ function Chat() {
       >
         <div className="h-full p-5 max-w-prose min-w-prose prose w-full">
           {working && answer.length === 0 ? (
-            <div className="opacity-50"><Spinner /></div>
+            <div className="opacity-50">
+              <Spinner />
+            </div>
           ) : (
             <ReactMarkdown>{answerText}</ReactMarkdown>
           )}

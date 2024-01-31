@@ -27,7 +27,7 @@ export function useFilterState(): [
     .flat();
   const query = searchParams.get("query");
   const searchType =
-    (searchParams.get("searchType") as "basic" | "vector") ?? "basic";
+    (searchParams.get("searchType") as "basic" | "vector") ?? "vector";
 
   const state = {
     orderBy,
