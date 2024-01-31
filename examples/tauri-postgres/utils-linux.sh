@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# This script runs the demo using this tauri example on macOS
+# This script runs the demo using this tauri example on Linux
 # This script is necessary because there are many external tools that this demo depends on
 
 # Get the electric sources for this example
@@ -37,10 +37,11 @@ git_clone_third_parties() {
 install_ollama() {
     echo "Installing ollama"
     wget https://github.com/jmorganca/ollama/releases/download/v0.1.20/ollama-darwin
-    chmod +x ollama-darwin
+    wget https://github.com/ollama/ollama/releases/download/v0.1.22/ollama-linux-amd64
+    chmod +x ollama-linux-amd64
 
     # Tauri needs this specific name
-    mv ollama-darwin src-tauri/ollama-darwin-aarch64-apple-darwin
+    mv ollama-linux-amd64 src-tauri/ollama-linux-x86_64-unknown-linux-gnu
 }
 
 # Install postgres
@@ -52,28 +53,36 @@ install_postgres() {
     mkdir -p src-tauri/pgdir/
     cd src-tauri/pgdir/
 
-    wget https://repo1.maven.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-darwin-arm64v8/15.5.1/embedded-postgres-binaries-darwin-arm64v8-15.5.1.jar
-    unzip embedded-postgres-binaries-darwin-arm64v8-15.5.1.jar
-    tar -xzvf postgres-darwin-arm_64.txz
+    # wget https://repo1.maven.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-darwin-arm64v8/15.5.1/embedded-postgres-binaries-darwin-arm64v8-15.5.1.jar
+    wget https://repo1.maven.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-linux-amd64/15.5.1/embedded-postgres-binaries-linux-amd64-15.5.1.jar
+    # unzip embedded-postgres-binaries-darwin-arm64v8-15.5.1.jar
+    unzip embedded-postgres-binaries-linux-amd64-15.5.1.jar
+
+    # tar -xzvf postgres-darwin-arm_64.txz
+    tar -xvf postgres-linux-x86_64.txz
     # We now have the postgres distro here
-    rm postgres-darwin-arm_64.txz
-    rm embedded-postgres-binaries-darwin-arm64v8-15.5.1.jar
+    # rm postgres-darwin-arm_64.txz
+    rm postgres-linux-x86_64.txz
+    # rm embedded-postgres-binaries-darwin-arm64v8-15.5.1.jar
+    rm embedded-postgres-binaries-linux-amd64-15.5.1.jar
     rm -rf META-INF
     cd ../../ # root
 
-    # NOTE: The below steps are used just to build the three files the `pgvector` extension use.
-    # If we can get prebuilt binaries somehow, we can skip this large step altogether
-    # Get a full version of postgres
-    wget https://get.enterprisedb.com/postgresql/postgresql-15.5-1-osx-binaries.zip
-    unzip postgresql-15.5-1-osx-binaries.zip # The directory is called `pgsql`
-    rm postgresql-15.5-1-osx-binaries.zip
+    # TODO: get postgres15 on linux some way, so you can compile pgvector
+    # # NOTE: The below steps are used just to build the three files the `pgvector` extension use.
+    # # If we can get prebuilt binaries somehow, we can skip this large step altogether
+    # # Get a full version of postgres
+    # wget https://get.enterprisedb.com/postgresql/postgresql-15.5-1-osx-binaries.zip
+    # https://get.enterprisedb.com/postgresql/postgresql-15.5-1-linux-x64-binaries.tar.gz
+    # unzip postgresql-15.5-1-osx-binaries.zip # The directory is called `pgsql`
+    # rm postgresql-15.5-1-osx-binaries.zip
 
-    git clone --branch v0.5.1 https://github.com/pgvector/pgvector.git
-    cd pgvector
-    # Build pgvector with the downloaded postgres
-    PG_CONFIG=../pgsql/bin/pg_config make
-    # We don't need the downloaded postgres from this point
-    rm -rf ../pgsql/
+    # git clone --branch v0.5.1 https://github.com/pgvector/pgvector.git
+    # cd pgvector
+    # # Build pgvector with the downloaded postgres
+    # PG_CONFIG=../pgsql/bin/pg_config make
+    # # We don't need the downloaded postgres from this point
+    # rm -rf ../pgsql/
 
     # We need these files: TODO:
     mv sql/vector--0.5.1.sql ../src-tauri/pgdir/share/postgresql/extension/vector--0.5.1.sql
@@ -87,11 +96,11 @@ install_postgres() {
 # We also need to download the dynamic libraries for onnx
 install_onnxruntime() {
     # We are in root
-    wget https://github.com/microsoft/onnxruntime/releases/download/v1.16.3/onnxruntime-osx-arm64-1.16.3.tgz
-    tar -xzvf onnxruntime-osx-arm64-1.16.3.tgz
-    rm onnxruntime-osx-arm64-1.16.3.tgz
-    cp onnxruntime-osx-arm64-1.16.3/lib/libonnxruntime.1.16.3.dylib src-tauri/libonnxruntime.dylib
-    rm -rf onnxruntime-osx-arm64-1.16.3
+    wget https://github.com/microsoft/onnxruntime/releases/download/v1.16.3/onnxruntime-linux-x64-1.16.3.tgz
+    tar -xzvf onnxruntime-linux-x64-1.16.3.tgz
+    rm onnxruntime-linux-x64-1.16.3.tgz
+    cp onnxruntime-linux-x64-1.16.3/lib/libonnxruntime.so.1.16.3 src-tauri/libonnxruntime.so
+    rm -rf onnxruntime-linux-x64-1.16.3
 }
 
 # Build the Tauri app
