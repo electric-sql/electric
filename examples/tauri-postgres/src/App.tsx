@@ -3,6 +3,7 @@ import { attachConsole } from "tauri-plugin-log-api";
 attachConsole();
 
 import { listen } from "@tauri-apps/api/event";
+import { Command } from "@tauri-apps/api/shell";
 import "animate.css/animate.min.css";
 import Board from "./pages/Board";
 import { useEffect, useState, createContext } from "react";
@@ -34,8 +35,9 @@ const App = () => {
   const [electric, setElectric] = useState<Electric>();
   const [showMenu, setShowMenu] = useState(false);
   const [synced, setSynced] = useState(false);
-  const [ollamaDownloaded, setOllamaDownloaded] = useState(false);
-  const [fastembedDownloaded, setFastembedDownloaded] = useState(false);
+  const [ollamaLoaded, setOllamaLoaded] = useState(false);
+  const [llama2Downoaded, setLlama2Downoaded] = useState(false);
+  const [fastembedLoaded, setFastembedLoaded] = useState(false);
 
   useEffect(() => {
     const init = async () => {
@@ -56,30 +58,30 @@ const App = () => {
   }, []);
 
   useEffect(() => {
-    let unListenOllamaDownloaded: null | (() => void) = null;
-    let unListenFastembedDownloaded: null | (() => void) = null;
+    let unListenOllamaLoaded: null | (() => void) = null;
+    let unListenFastembedLoaded: null | (() => void) = null;
     let ignore = false;
 
     const init = async () => {
-      unListenOllamaDownloaded = await listen(
-        "downloaded_ollama_model",
+      unListenOllamaLoaded = await listen(
+        "loaded_ollama",
         (event) => {
           if (ignore) return;
-          setOllamaDownloaded(true);
+          setOllamaLoaded(true);
         }
       );
-      unListenFastembedDownloaded = await listen(
-        "downloading_fastembed_model",
+      unListenFastembedLoaded = await listen(
+        "loaded_fastembed",
         (event) => {
           if (ignore) return;
-          setFastembedDownloaded(true);
+          setFastembedLoaded(true);
         }
       );
       if (ignore) {
-        unListenOllamaDownloaded?.();
-        unListenOllamaDownloaded = null;
-        unListenFastembedDownloaded?.();
-        unListenFastembedDownloaded = null;
+        unListenOllamaLoaded?.();
+        unListenOllamaLoaded = null;
+        unListenFastembedLoaded?.();
+        unListenFastembedLoaded = null;
       }
     };
 
@@ -87,18 +89,36 @@ const App = () => {
 
     return () => {
       ignore = true;
-      unListenOllamaDownloaded?.();
-      unListenOllamaDownloaded = null;
-      unListenFastembedDownloaded?.();
-      unListenFastembedDownloaded = null;
+      unListenOllamaLoaded?.();
+      unListenOllamaLoaded = null;
+      unListenFastembedLoaded?.();
+      unListenFastembedLoaded = null;
     };
   }, []);
+
+  useEffect(() => {
+    if (!ollamaLoaded) return;
+    let ignore = false;
+    const init = async () => {
+      console.log("pulling llama2")
+      const command = Command.sidecar('ollama', ["pull", "llama2"])
+      await command.execute()
+      console.log("pulled llama2")
+      if (ignore) return;
+      setLlama2Downoaded(true)
+    }
+    init()
+    return () => {
+      ignore = true;
+    }
+  }, [ollamaLoaded])
 
   if (
     electric === undefined ||
     !synced ||
-    !ollamaDownloaded ||
-    !fastembedDownloaded
+    !ollamaLoaded ||
+    !fastembedLoaded ||
+    !llama2Downoaded
   ) {
     return (
       <div className="flex flex-col w-full h-screen mt-6 items-center opacity-50">
@@ -110,14 +130,19 @@ const App = () => {
           {!synced && (
             <div className="text-sm text-gray-300 mb-1">Syncing Issues...</div>
           )}
-          {!ollamaDownloaded && (
+          {!ollamaLoaded && (
             <div className="text-sm text-gray-300 mb-1">
-              Downloading Ollama Model...
+              Loading Ollama...
             </div>
           )}
-          {!fastembedDownloaded && (
+          {(ollamaLoaded && !llama2Downoaded) && (
             <div className="text-sm text-gray-300 mb-1">
-              Downloading FastEmbed Model...
+              Downloading Llama2...
+            </div>
+          )}
+          {!fastembedLoaded && (
+            <div className="text-sm text-gray-300 mb-1">
+              Loading FastEmbed...
             </div>
           )}
         </div>

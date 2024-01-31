@@ -300,13 +300,13 @@ async fn tauri_init_command(
     *connection.db.lock().await = Some(pg);
     *connection.conn.lock().await = Some(conn);
 
-    app_handle.emit_all("downloading_ollama_model", "llama2").unwrap();
+    app_handle.emit_all("loading_ollama", "llama2").unwrap();
     *connection.llama.lock().await = Some(Ollama::new("http://127.0.0.1".to_string(), ollama_port));
-    app_handle.emit_all("downloaded_ollama_model", "llama2").unwrap();
+    app_handle.emit_all("loaded_ollama", "llama2").unwrap();
 
-    app_handle.emit_all("downloading_fastembed_model", "bge-fast-en").unwrap();
+    app_handle.emit_all("loading_fastembed", "bge-fast-en").unwrap();
     *connection.flag_embedding.lock().await = Some(create_embedding_model(resource_path_pgdir));
-    app_handle.emit_all("downloaded_fastembed_model", "bge-fast-en").unwrap();
+    app_handle.emit_all("loaded_fastembed", "bge-fast-en").unwrap();
 
 
     Ok(())
