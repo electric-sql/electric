@@ -10,14 +10,20 @@ export default function AddShoppingList() {
   const { shopping_list_id } = useLocalSearchParams<{ shopping_list_id: string}>()
   if (!shopping_list_id) return <Redirect href='../' />
   const { db } = useElectric()!
-  const { results: { title } = {} } = useLiveQuery<{ title: string }>(db.shopping_list.liveUnique({
-    select: {
-      title: true
-    },
-    where: {
-      list_id: shopping_list_id
+  const { results: shoppingList } = useLiveQuery(
+    db.shopping_list.liveUnique({
+      include: {
+        family: {
+          select: {
+            name: true 
+          }
+        }
+      },
+      where: {
+        list_id: shopping_list_id
+      }
     }
-  }))
+  ))
 
   const onUpdate = async (props: ShoppingListProperties) => {
     await db.shopping_list.update({
@@ -32,12 +38,13 @@ export default function AddShoppingList() {
     router.back()
   }
 
-
-  if (!title) return null
+  if (!shoppingList) return null  
   return (
     <View>
       <ShoppingListEditor
-        initialTitle={title}
+        initialTitle={shoppingList.title}
+        familyIdOptions={[{ value: shoppingList.family_id!, label: shoppingList.family.name}]}
+        selectedFamilyId={shoppingList.family_id}
         onSubmit={onUpdate}
         submitText="Update"
       />

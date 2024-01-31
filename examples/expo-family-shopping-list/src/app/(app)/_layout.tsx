@@ -27,7 +27,7 @@ export default function AppLayout() {
         name="shopping_list/add"
         options={{
           title: 'Create shopping list',
-          presentation: 'formSheet',
+          presentation: 'card',
           contentStyle: {
             padding: 16
           }

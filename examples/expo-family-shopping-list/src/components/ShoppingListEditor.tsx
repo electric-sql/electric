@@ -1,23 +1,29 @@
-import React, { useEffect, useState } from 'react';
-import { View } from 'react-native';
-import { TextInput, Button } from 'react-native-paper';
-import { Shopping_list } from '../generated/client';
-
+import React, { useEffect, useState } from 'react'
+import { View } from 'react-native'
+import { TextInput, Button } from 'react-native-paper'
+import DropDown from 'react-native-paper-dropdown'
+import { Shopping_list } from '../generated/client'
 
 export type ShoppingListProperties = Pick<Shopping_list, 'title'>
 
 const ShoppingListEditor = ({
   initialTitle,
+  selectedFamilyId,
+  familyIdOptions = [],
   submitText,
   onChange,
   onSubmit,
 } : {
   initialTitle?: string,
+  selectedFamilyId?: string,
+  familyIdOptions?: {value: string, label: string}[],
   submitText: string,
   onChange?: (props : ShoppingListProperties) => void,
   onSubmit?: (props : ShoppingListProperties) => void,
 }) => {
+  const [ showFamilyDropdown, setShowFamilyDropdown ] = useState(false)
   const [ title, setTitle ] = useState(initialTitle)
+  const [ familyId, setFamilyId ] = useState(selectedFamilyId ?? familyIdOptions[0].value)
 
   useEffect(() => {
     onChange?.({ title: title ?? '' })
@@ -40,6 +46,18 @@ const ShoppingListEditor = ({
         value={title}
         onChangeText={setTitle}
       />
+      <View pointerEvents={familyIdOptions.length > 1 ? 'auto' : 'none'}>
+        <DropDown
+          label="Family"
+          mode="outlined"
+          visible={showFamilyDropdown}
+          showDropDown={() => setShowFamilyDropdown(true)}
+          onDismiss={() => setShowFamilyDropdown(false)}
+          value={familyId}
+          setValue={setFamilyId}
+          list={familyIdOptions}
+        />
+      </View>
       <Button mode="contained" disabled={!title} onPress={onSubmitFn}>
         {submitText}
       </Button>
