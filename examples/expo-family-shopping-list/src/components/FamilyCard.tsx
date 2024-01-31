@@ -3,6 +3,8 @@ import { Card, IconButton } from 'react-native-paper';
 import { useLiveQuery } from 'electric-sql/react';
 import { useElectric } from './ElectricProvider';
 import ConfirmationDialog from './ConfirmationDialog';
+import { View } from 'react-native';
+import { Link } from 'expo-router';
 
 
 const FamilyCard = forwardRef(({
@@ -45,12 +47,18 @@ const FamilyCard = forwardRef(({
         subtitleNumberOfLines={2}
         subtitle={`Joined on ${membership.created_at.toLocaleDateString()}`}
         right={(_) =>
-          membership.user_id == membership.family.creator_user_id ?
-          null :
-          <IconButton
-            icon="account-remove" 
-            onPress={() => setExitDialogVisible(true)}
-            />
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Link href={`/family/${membership.family_id}/edit`} asChild>
+              <IconButton icon="pencil" />
+            </Link>
+            {
+            membership.user_id != membership.family.creator_user_id &&
+              <IconButton
+                icon="account-remove" 
+                onPress={() => setExitDialogVisible(true)}
+              />
+            }
+          </View>
         }
       />
 

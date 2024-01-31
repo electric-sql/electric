@@ -54,6 +54,16 @@ export default function AppLayout() {
         }}
       />
       <Stack.Screen
+        name="family/[family_id]/edit"
+        options={{
+          headerTitle: 'Edit family',
+          presentation: 'formSheet',
+          contentStyle: {
+            padding: 16
+          }
+        }}
+      />
+      <Stack.Screen
         name="family/[family_id]/member/[member_id]/edit"
         options={{
           headerTitle: 'Edit member',

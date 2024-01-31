@@ -1,9 +1,9 @@
 import React from 'react'
 import { View, FlatList } from 'react-native'
-import { List, Text } from 'react-native-paper'
+import { List, Text, IconButton } from 'react-native-paper'
 import { useElectric } from '../../../../components/ElectricProvider'
 import { useLiveQuery } from 'electric-sql/react'
-import { Redirect, Stack, useLocalSearchParams } from 'expo-router'
+import { Link, Redirect, Stack, useLocalSearchParams } from 'expo-router'
 import MemberCard from '../../../../components/MemberCard'
 import { dummyUserId } from '../../../../lib/auth'
 import { Member } from '../../../../generated/client'
@@ -35,7 +35,12 @@ export default function Family () {
     <View style={{ flex: 1 }}>
       <Stack.Screen
         options={{
-          headerTitle: family.name
+          headerTitle: family.name,
+          headerRight: () => (
+            <Link href={`family/${family_id}/edit`} asChild>
+              <IconButton size={20} icon="pencil" />
+            </Link>
+          )
         }}
       />
       <List.Section>
