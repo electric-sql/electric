@@ -17,7 +17,8 @@
         "scope": [
           { "name": "ollama", "sidecar": true }
         ],
-        "sidecar": true
+        "sidecar": true,
+        "open": true
       }
     },
     "bundle": {
