@@ -11,25 +11,10 @@
     "version": "0.1.0"
   },
   "tauri": {
-    "allowlist": {
-      "all": false,
-      "shell":{
-        "scope": [
-          { "name": "./ollama-darwin", "sidecar": true }
-        ],
-        "sidecar": true
-      }
-    },
     "bundle": {
       "active": true,
       "category": "DeveloperTool",
       "copyright": "",
-      "deb": {
-        "depends": []
-      },
-      "externalBin": [
-        "./ollama-darwin"
-      ],
       "icon": [
         "icons/32x32.png",
         "icons/128x128.png",
@@ -39,21 +24,8 @@
       ],
       "identifier": "electric-tauri-postgres",
       "longDescription": "",
-      "macOS": {
-        "entitlements": null,
-        "exceptionDomain": "",
-        "frameworks": [],
-        "providerShortName": null,
-        "signingIdentity": null
-      },
-      "resources": ["./libonnxruntime.dylib", "./pgdir/*"],
       "shortDescription": "",
-      "targets": "all",
-      "windows": {
-        "certificateThumbprint": null,
-        "digestAlgorithm": "sha256",
-        "timestampUrl": ""
-      }
+      "targets": "all"
     },
     "updater": {
       "active": false,
