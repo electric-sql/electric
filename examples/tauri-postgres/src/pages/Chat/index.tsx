@@ -13,6 +13,7 @@ function Chat() {
   const [question, setQuestion] = useState<string>("");
   const [answer, setAnswer] = useState<string[]>([]);
   const [working, setWorking] = useState<boolean>(false);
+  const [issues, setIssues] = useState<Issue[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { db } = useElectric()!;
   const navigate = useNavigate();
@@ -29,6 +30,7 @@ function Chat() {
         LIMIT 50;
       `,
     });
+    setIssues(issues as Issue[]);
     const context = issues
       .map(
         (issue: any) =>
@@ -115,19 +117,49 @@ function Chat() {
           </div>
         </div>
       </div>
-      <div
-        className="flex flex-col flex-grow items-center h-full w-full overflow-y-auto"
-        ref={scrollRef}
-      >
-        <div className="h-full p-5 max-w-prose min-w-prose prose w-full">
-          {working && answer.length === 0 ? (
-            <div className="opacity-50">
-              <Spinner />
-            </div>
-          ) : (
-            <ReactMarkdown>{answerText}</ReactMarkdown>
-          )}
+      <div className="flex flex-row flex-grow items-center h-full w-full overflow-y-auto">
+        <div
+          className="flex flex-col flex-grow items-center h-full w-full overflow-y-auto"
+          ref={scrollRef}
+        >
+          <div className="h-full p-5 max-w-prose min-w-prose prose w-full">
+            {working && answer.length === 0 ? (
+              <div className="opacity-50">
+                <Spinner />
+              </div>
+            ) : (
+              <ReactMarkdown>{answerText}</ReactMarkdown>
+            )}
+          </div>
         </div>
+        {issues?.length && (
+          <div
+            className="flex flex-col flex-shrink-0 py-5 px-2 h-full border-l border-gray-200  overflow-y-auto  opacity-70"
+            style={{
+              minWidth: 200,
+              maxWidth: 200,
+            }}
+          >
+            <h4
+              className="text-gray-500 text-sm font-semibold mb-2"
+              style={{ lineHeight: 1.2 }}
+            >
+              Referenced Issues
+            </h4>
+            <div className="flex flex-col flex-grow">
+              {issues.map((issue, i) => (
+                <div className="flex flex-col mb-2 text-sm">
+                  <span
+                    onClick={() => navigate(`/issue/${issue.id}`)}
+                    className="cursor-pointer no-wrap overflow-hidden font-medium line-clamp-1 overflow-ellipsis"
+                  >
+                    {i + 1}. {issue.title}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
       <div className="w-full flex items-center justify-between flex-shrink-0 pl-6 pr-6 border-t border-gray-200 py-2">
         <input
