@@ -2,6 +2,8 @@ import React, { useCallback } from 'react';
 import { Card, IconButton } from 'react-native-paper';
 import { useLiveQuery } from 'electric-sql/react';
 import { useElectric } from './ElectricProvider';
+import { View } from 'react-native';
+import { Link } from 'expo-router';
 
 
 const ShoppingListCard = ({
@@ -38,7 +40,15 @@ const ShoppingListCard = ({
       <Card.Title
         title={shoppingList.title}
         subtitle={`Last updated: ${shoppingList.updated_at.toLocaleString()}`}
-        right={(_) => <IconButton icon="trash-can" onPress={onDeleted} />}
+        right={(_) => (
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Link href={`shopping_list/${shoppingListId}/edit`} asChild>
+              <IconButton icon="pencil" />
+            </Link>
+            <IconButton icon="trash-can" onPress={onDeleted} />
+          </View>
+          
+        )}
       />
     </Card>
   )

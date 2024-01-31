@@ -1,15 +1,9 @@
 import { Link, Redirect, Stack, useLocalSearchParams } from 'expo-router';
 import React from 'react'
-import {
-  Button,
-  FlatList,
-  Pressable,
-  Text,
-  View
-} from 'react-native'
+import { FlatList, View } from 'react-native'
 import { useElectric } from '../../../../components/ElectricProvider';
 import { useLiveQuery } from 'electric-sql/react';
-import { FAB, List } from 'react-native-paper';
+import { FAB, List, IconButton } from 'react-native-paper';
 import ShoppingListItemCard from '../../../../components/ShoppingListItemCard';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FlatListSeparator from '../../../../components/FlatListSeparator';
@@ -45,7 +39,12 @@ export default function ShoppingListItems () {
   return (
     <SafeAreaView style={{ flex: 1 }} edges={['bottom']}>
       <Stack.Screen options={{
-        headerTitle: title
+        headerTitle: title,
+        headerRight: () => (
+          <Link href={`shopping_list/${shopping_list_id}/edit`} asChild>
+            <IconButton size={20} icon="pencil" />
+          </Link>
+        )
       }} />
       <View style={{ flex: 1  }}>
         <List.Section style={{ flex: 1 }}>

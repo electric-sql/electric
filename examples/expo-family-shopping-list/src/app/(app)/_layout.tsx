@@ -34,6 +34,16 @@ export default function AppLayout() {
         }}
       />
       <Stack.Screen
+        name="shopping_list/[shopping_list_id]/edit"
+        options={{
+          title: 'Edit shopping list',
+          presentation: 'formSheet',
+          contentStyle: {
+            padding: 16
+          }
+        }}
+      />
+      <Stack.Screen
         name="shopping_list/[shopping_list_id]/item/add"
         options={{
           title: 'Add shopping list item',

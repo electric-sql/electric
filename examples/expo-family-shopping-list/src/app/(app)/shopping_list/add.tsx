@@ -14,7 +14,7 @@ export default function AddShoppingList() {
       data: {
         list_id: newListId,
         family_id: (await db.family.findFirst()).family_id,
-        title: props.title ?? 'Untitled',
+        title: props.title,
         updated_at: new Date(),
         created_at: new Date(),
       }
@@ -25,7 +25,7 @@ export default function AddShoppingList() {
   return (
     <View>
       <ShoppingListEditor
-        onSubmit={({title}) => onCreate({ title })}
+        onSubmit={onCreate}
         submitText="Create"
       />
     </View>
