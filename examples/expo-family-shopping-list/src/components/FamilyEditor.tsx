@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { View } from 'react-native'
 import { TextInput, Button } from 'react-native-paper'
-import DropDown from 'react-native-paper-dropdown'
-import { Family, Shopping_list } from '../generated/client'
+import { Family } from '../generated/client'
 
 export type FamilyProperties = Pick<Family, 'name'>
 

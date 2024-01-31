@@ -4,7 +4,6 @@ import { TextInput, Button } from 'react-native-paper';
 
 import { Shopping_list_item } from '../generated/client';
 
-
 export type ShoppingListItemProperties = Pick<Shopping_list_item, 'name' | 'quantity' | 'comment'>
 
 const ShoppingListItemEditor = ({

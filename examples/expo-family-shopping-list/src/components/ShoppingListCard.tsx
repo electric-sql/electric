@@ -5,7 +5,6 @@ import { useElectric } from './ElectricProvider';
 import { View } from 'react-native';
 import { Link } from 'expo-router';
 
-
 const ShoppingListCard = forwardRef(({
   shoppingListId,
   onPress

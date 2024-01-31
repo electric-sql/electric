@@ -3,7 +3,6 @@ import { Card, Checkbox, IconButton, Text } from 'react-native-paper';
 import { useLiveQuery } from 'electric-sql/react';
 import { useElectric } from './ElectricProvider';
 
-
 const ShoppingListItemCard = ({ shoppingListItemId } : { shoppingListItemId: string }) => {
   const { db } = useElectric()!
   const { results: item } = useLiveQuery(db.shopping_list_item.liveUnique({
