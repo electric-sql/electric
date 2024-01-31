@@ -56,14 +56,15 @@ import {
   Record,
   Relation,
   SchemaChange,
-  Transaction,
   StartReplicationResponse,
   StopReplicationResponse,
   ErrorCallback,
   RelationCallback,
   OutboundStartedCallback,
   TransactionCallback,
-  SocketCloseReason,
+  ServerTransaction,
+  InboundReplication,
+  SocketCloseReason
 } from '../util/types'
 import {
   base64,
@@ -93,6 +94,9 @@ import { DbSchema } from '../client/model'
 import { PgBasicType, PgDateType, PgType } from '../client/conversions/types'
 import { AsyncEventEmitter } from '../util'
 import { AuthState } from '../auth'
+import Long from 'long'
+
+const DEFAULT_ACK_PERIOD = 60000
 
 type IncomingHandler = (msg: any) => void
 
@@ -108,7 +112,10 @@ const subscriptionError = [
 type Events = {
   error: (error: SatelliteError) => void
   relation: (relation: Relation) => void
-  transaction: (transaction: Transaction, ackCb: () => void) => Promise<void>
+  transaction: (
+    transaction: ServerTransaction,
+    ackCb: () => void
+  ) => Promise<void>
   outbound_started: () => void
 }
 type EventEmitter = AsyncEventEmitter<Events>
@@ -121,7 +128,7 @@ export class SatelliteClient implements Client {
   private socketFactory: SocketFactory
   private socket?: Socket
 
-  private inbound: Replication<Transaction>
+  private inbound: InboundReplication
   private outbound: Replication<DataTransaction>
 
   // can only handle a single subscription at a time
@@ -151,6 +158,7 @@ export class SatelliteClient implements Client {
         SatShapeDataEnd: (msg) => this.handleShapeDataEnd(msg),
         SatRpcResponse: (msg) => this.rpcClient.handleResponse(msg),
         SatRpcRequest: (msg) => this.handleRpcRequest(msg),
+        SatOpLogAck: (msg) => void msg, // Server doesn't send that
       } satisfies HandlerMapping).map((e) => [getFullTypeName(e[0]), e[1]])
     )
 
@@ -169,7 +177,7 @@ export class SatelliteClient implements Client {
     this.opts = { ...satelliteClientDefaults, ...opts }
     this.socketFactory = socketFactory
 
-    this.inbound = this.resetReplication()
+    this.inbound = this.resetInboundReplication()
     this.outbound = this.resetReplication()
     this.dbDescription = dbDescription
 
@@ -196,6 +204,24 @@ export class SatelliteClient implements Client {
       relations: new Map(),
       last_lsn: last_lsn,
       transactions: [],
+    }
+  }
+
+  private resetInboundReplication(
+    last_lsn?: LSN,
+    isReplicating?: ReplicationStatus
+  ): InboundReplication {
+    return {
+      ...this.resetReplication(last_lsn, isReplicating),
+      lastTxId: undefined,
+      lastAckedTxId: undefined,
+      unackedTxs: 0,
+      maxUnackedTxs: 30,
+      ackPeriod: DEFAULT_ACK_PERIOD,
+      ackTimer: setTimeout(
+        () => this.maybeSendAck('timeout'),
+        DEFAULT_ACK_PERIOD
+      ),
     }
   }
 
@@ -263,7 +289,7 @@ export class SatelliteClient implements Client {
 
   disconnect() {
     this.outbound = this.resetReplication(this.outbound.last_lsn)
-    this.inbound = this.resetReplication(this.inbound.last_lsn)
+    this.inbound = this.resetInboundReplication(this.inbound.last_lsn)
 
     this.socketHandler = undefined
 
@@ -324,7 +350,7 @@ export class SatelliteClient implements Client {
     }
 
     // Then set the replication state
-    this.inbound = this.resetReplication(lsn, ReplicationStatus.STARTING)
+    this.inbound = this.resetInboundReplication(lsn, ReplicationStatus.STARTING)
 
     return this.delayIncomingMessages(
       async () => {
@@ -625,6 +651,7 @@ export class SatelliteClient implements Client {
         return { error: startReplicationErrorToSatelliteError(resp.err) }
       } else {
         this.inbound.isReplicating = ReplicationStatus.ACTIVE
+        this.inbound.maxUnackedTxs = resp.unackedWindowSize ?? 30
       }
     } else {
       return {
@@ -899,31 +926,34 @@ export class SatelliteClient implements Client {
     const replication = this.inbound
     opLogMessage.ops.map((op) => {
       if (op.begin) {
-        const transaction = {
+        const transaction: ServerTransaction = {
           commit_timestamp: op.begin.commitTimestamp,
           lsn: op.begin.lsn,
           changes: [],
           origin: op.begin.origin!,
+          id: op.begin.transactionId!,
         }
         replication.transactions.push(transaction)
       }
 
       const lastTxnIdx = replication.transactions.length - 1
       if (op.commit) {
-        const { commit_timestamp, lsn, changes, origin, migrationVersion } =
+        const { commit_timestamp, lsn, changes, origin, migrationVersion, id } =
           replication.transactions[lastTxnIdx]
-        const transaction: Transaction = {
+        const transaction: ServerTransaction = {
           commit_timestamp,
           lsn,
           changes,
           origin,
           migrationVersion,
+          id,
         }
-        this.emitter.enqueueEmit(
-          'transaction',
-          transaction,
-          () => (this.inbound.last_lsn = transaction.lsn)
-        )
+        this.emitter.enqueueEmit('transaction', transaction, () => {
+          this.inbound.last_lsn = transaction.lsn
+          this.inbound.lastTxId = transaction.id
+          this.inbound.unackedTxs++
+          this.maybeSendAck()
+        })
         replication.transactions.splice(lastTxnIdx)
       }
 
@@ -1038,6 +1068,40 @@ export class SatelliteClient implements Client {
 
   getLastSentLsn(): LSN {
     return this.outbound.last_lsn ?? DEFAULT_LOG_POS
+  }
+
+  private maybeSendAck(reason?: 'timeout') {
+    // Restart the timer regardless
+    if (reason === 'timeout')
+      this.inbound.ackTimer = setTimeout(
+        () => this.maybeSendAck('timeout'),
+        this.inbound.ackPeriod
+      )
+
+    // Cannot ack while offline
+    if (!this.socket || !this.isConnected()) return
+    // or when there's nothing to be ack'd
+    if (this.inbound.lastTxId === undefined) return
+    // Shouldn't ack the same message
+    if (this.inbound.lastAckedTxId?.eq(this.inbound.lastTxId)) return
+
+    const msg: SatPbMsg = {
+      $type: 'Electric.Satellite.SatOpLogAck',
+      ackTimestamp: Long.UZERO.add(new Date().getTime()),
+      lsn: this.inbound.last_lsn!,
+      transactionId: this.inbound.lastTxId,
+    }
+
+    // Send acks earlier rather than later to keep the stream continuous -
+    // definitely send at 70% of allowed lag.
+    const boundary = Math.floor(this.inbound.maxUnackedTxs * 0.7)
+
+    // Send the ack if we're over the boundary, or wait to ack until the timer runs
+    // out to avoid making more traffic than required
+    if (this.inbound.unackedTxs >= boundary || reason == 'timeout') {
+      this.sendMessage(msg)
+      this.inbound.lastAckedTxId = msg.transactionId
+    }
   }
 }
 

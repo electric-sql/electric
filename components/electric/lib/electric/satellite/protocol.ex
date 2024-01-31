@@ -440,6 +440,30 @@ defmodule Electric.Satellite.Protocol do
     {nil, state}
   end
 
+  def process_message(%SatOpLogAck{} = msg, %State{} = state) do
+    Logger.debug("Client acknowledged transactions up to #{msg.transaction_id} (lsn #{msg.lsn})")
+
+    case OutRep.ack_transactions(state.out_rep, msg.transaction_id) do
+      :error ->
+        %SatErrorResp{error_type: :INVALID_REQUEST, message: "Acknowledged unknown txn"}
+
+      {:ok, out_rep} ->
+        # continue if suspended; GC/checkpoint
+        state = %State{state | out_rep: out_rep}
+
+        if is_out_rep_suspended(state) do
+          # If we were suspended, we didn't ask for more txs from WAL cache. Let's do that!
+          GenStage.ask({out_rep.pid, out_rep.stage_sub}, 1)
+
+          state
+          |> unpause_and_send_pending_events()
+          |> perform_pending_actions()
+        else
+          {nil, %State{state | out_rep: out_rep}}
+        end
+    end
+  end
+
   def process_message(%SatErrorResp{}, %State{} = state) do
     {:stop, state}
   end
@@ -480,7 +504,8 @@ defmodule Electric.Satellite.Protocol do
     # client first, followed by the initial migrations.
     send(self(), {:perform_initial_sync_and_subscribe, msg})
 
-    {:reply, %SatInStartReplicationResp{}, Telemetry.start_replication_span(state, :initial_sync)}
+    {:reply, %SatInStartReplicationResp{unacked_window_size: state.out_rep.allowed_unacked_txs},
+     Telemetry.start_replication_span(state, :initial_sync)}
   end
 
   defp handle_start_replication_request(_msg, :initial_sync, _state) do
@@ -500,7 +525,9 @@ defmodule Electric.Satellite.Protocol do
             |> Telemetry.start_replication_span(subscriptions: length(msg.subscription_ids))
             |> subscribe_client_to_replication_stream(lsn)
 
-          {:reply, %SatInStartReplicationResp{}, state}
+          {:reply,
+           %SatInStartReplicationResp{unacked_window_size: state.out_rep.allowed_unacked_txs},
+           state}
 
         {:error, bad_id} ->
           {:error,
@@ -530,7 +557,8 @@ defmodule Electric.Satellite.Protocol do
   @spec handle_outgoing_txs([{Transaction.t(), term()}], State.t()) :: txn_processing()
   def handle_outgoing_txs(events, state, acc \\ {[], %{}})
 
-  def handle_outgoing_txs([{tx, offset} | events], %State{} = state, {msgs_acc, actions_acc}) do
+  def handle_outgoing_txs([{tx, offset} | events], %State{} = state, {msgs_acc, actions_acc})
+      when can_send_more_txs(state) do
     {%Transaction{} = filtered_tx, new_graph, actions} =
       tx
       |> maybe_strip_migration_ddl(state.out_rep.last_migration_xid_at_initial_sync)
@@ -551,9 +579,13 @@ defmodule Electric.Satellite.Protocol do
             do: %Transaction{filtered_tx | additional_data_ref: state.out_rep.move_in_next_ref},
             else: filtered_tx
 
-        {relations, transaction, out_rep} = handle_out_trans({filtered_tx, offset}, state)
+        {relations, transaction, out_rep} = handle_outgoing_tx({filtered_tx, offset}, state)
 
-        {%OutRep{out_rep | sent_rows_graph: new_graph},
+        out_rep =
+          %OutRep{out_rep | sent_rows_graph: new_graph}
+          |> OutRep.add_unacked_transaction(filtered_tx.xid)
+
+        {out_rep,
          {[msgs_acc, relations, transaction], Shapes.merge_actions(actions_acc, actions)}}
       else
         Logger.debug("Filtering transaction #{inspect(tx)} for user #{state.auth.user_id}")
@@ -563,6 +595,24 @@ defmodule Electric.Satellite.Protocol do
     out_rep = %OutRep{out_rep | last_seen_wal_pos: offset}
     state = %State{state | out_rep: out_rep}
     handle_outgoing_txs(events, state, acc)
+  end
+
+  def handle_outgoing_txs([_ | _] = events, state, {msgs_acc, actions_acc})
+      when not can_send_more_txs(state) do
+    # We didn't empty the pending list, but we reached the window size, let's suspend.
+    state =
+      state
+      |> State.set_outgoing_status(:suspended)
+      |> State.add_events_to_buffer(events)
+
+    Logger.info(
+      "Outgoing replication to the client is suspended because there are " <>
+        "#{state.out_rep.unacked_transaction_count} unacked transactions"
+    )
+
+    Logger.warning(inspect(events))
+
+    {msgs_acc, actions_acc, state}
   end
 
   def handle_outgoing_txs([], state, {msgs_acc, actions_acc}) do
@@ -588,13 +638,13 @@ defmodule Electric.Satellite.Protocol do
   defp maybe_strip_migration_ddl(tx, _), do: tx
 
   # The offset here comes from the producer
-  @spec handle_out_trans({Transaction.t(), any}, State.t()) ::
+  @spec handle_outgoing_tx({Transaction.t(), any}, State.t()) ::
           {[%SatRelation{}], [%SatOpLog{}], OutRep.t()}
-  defp handle_out_trans({trans, offset}, %State{out_rep: out_rep}) do
-    Logger.debug("trans: #{inspect(trans)} with offset #{inspect(offset)}")
+  defp handle_outgoing_tx({tx, offset}, %State{out_rep: out_rep}) do
+    Logger.debug("trans: #{inspect(tx)} with offset #{inspect(offset)}")
 
     {serialized_log, unknown_relations, known_relations} =
-      Serialization.serialize_trans(trans, offset, out_rep.relations)
+      Serialization.serialize_trans(tx, offset, out_rep.relations)
 
     if unknown_relations != [],
       do: Logger.debug("Sending previously unseen relations: #{inspect(unknown_relations)}")
@@ -713,29 +763,29 @@ defmodule Electric.Satellite.Protocol do
   def send_events_and_maybe_pause(events, %State{out_rep: out_rep} = state) do
     {{xmin, kind, ref}, _} = out_rep.pause_queue
 
-    case Enum.split_while(events, fn {tx, _} -> tx.xid < xmin end) do
-      {events, []} ->
-        # We haven't yet reached the pause point
-        handle_outgoing_txs(events, state)
+    {events, pending} = Enum.split_while(events, fn {tx, _} -> tx.xid < xmin end)
+    {msgs, actions, state} = handle_outgoing_txs(events, state)
 
-      {events, pending} ->
-        # We've reached the pause point, but we may have some messages we can send
-        {msgs, actions, state} = handle_outgoing_txs(events, state)
+    if is_out_rep_suspended(state) or pending == [] do
+      # If `handle_outgoing_txs` says we need to suspend because we've sent enough, then we store pending and suspend
+      # If there are no events left, then we're happy to just continue. `add_events_to_buffer` is no-op for an empty list.
+      {msgs, actions, State.add_events_to_buffer(state, pending)}
+    else
+      # We're not yet suspended and we reached a pause point!
+      state =
+        state.out_rep
+        |> OutRep.add_events_to_buffer(pending)
+        |> OutRep.set_status(:paused)
+        |> then(&%{state | out_rep: &1})
 
-        state =
-          state.out_rep
-          |> OutRep.add_events_to_buffer(pending)
-          |> OutRep.set_status(:paused)
-          |> then(&%{state | out_rep: &1})
+      case State.pop_pending_data(state, kind, ref) do
+        {data, state} ->
+          send_additional_data_and_unpause(msgs, {kind, ref}, data, state)
 
-        case State.pop_pending_data(state, kind, ref) do
-          {data, state} ->
-            send_additional_data_and_unpause(msgs, {kind, ref}, data, state)
-
-          :error ->
-            # Data isn't yet available, pause here and send what we can
-            {msgs, actions, state}
-        end
+        :error ->
+          # Data isn't yet available, pause here and send what we can
+          {msgs, actions, state}
+      end
     end
   end
 
@@ -746,7 +796,7 @@ defmodule Electric.Satellite.Protocol do
   acted upon with `perform_pending_actions` once entire batch is processed.
   """
   @spec unpause_and_send_pending_events(deep_msg_list(), actions(), State.t()) :: txn_processing()
-  def unpause_and_send_pending_events(msgs, actions \\ %{}, state) do
+  def unpause_and_send_pending_events(msgs \\ [], actions \\ %{}, state) do
     buffer = state.out_rep.outgoing_ops_buffer
 
     state =

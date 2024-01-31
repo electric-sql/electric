@@ -171,8 +171,8 @@ defmodule Satellite.ProtocolHelpers do
         do: commit_time,
         else: DateTime.to_unix(commit_time, :millisecond)
 
-    begin = {:begin, %SatOpBegin{commit_timestamp: commit_time, lsn: lsn, trans_id: ""}}
-    commit = {:commit, %SatOpCommit{commit_timestamp: commit_time, lsn: lsn, trans_id: ""}}
+    begin = {:begin, %SatOpBegin{commit_timestamp: commit_time, lsn: lsn}}
+    commit = {:commit, %SatOpCommit{commit_timestamp: commit_time, lsn: lsn}}
     ops = [begin] ++ List.wrap(op_or_ops) ++ [commit]
 
     ops =

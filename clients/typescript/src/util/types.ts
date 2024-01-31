@@ -114,6 +114,8 @@ export type Transaction = {
   migrationVersion?: string // the Postgres version number if this is a migration
 }
 
+export type ServerTransaction = Transaction & { id: Long }
+
 // A transaction whose changes are only DML statements
 // i.e. the transaction does not contain migrations
 export type DataTransaction = Omit<
@@ -168,6 +170,15 @@ export type Replication<TransactionType> = {
   relations: Map<number, Relation>
   last_lsn: LSN | undefined
   transactions: TransactionType[]
+}
+
+export interface InboundReplication extends Replication<ServerTransaction> {
+  lastTxId: Long | undefined
+  lastAckedTxId: Long | undefined
+  unackedTxs: number
+  maxUnackedTxs: number
+  ackTimer: ReturnType<typeof setTimeout>
+  ackPeriod: number
 }
 
 export type Relation = {

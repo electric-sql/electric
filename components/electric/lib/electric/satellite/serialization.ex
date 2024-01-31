@@ -51,6 +51,7 @@ defmodule Electric.Satellite.Serialization do
       commit_timestamp: tm,
       lsn: lsn,
       origin: trans.origin,
+      transaction_id: trans.xid,
       is_migration: state.is_migration
     }
 
@@ -393,6 +394,7 @@ defmodule Electric.Satellite.Serialization do
           origin: origin,
           origin_type: :satellite,
           changes: [],
+          xid: op.transaction_id,
           publication: "",
           commit_timestamp: dt,
           lsn: op.lsn,

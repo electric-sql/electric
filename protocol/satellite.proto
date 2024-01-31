@@ -139,26 +139,23 @@ message SatInStartReplicationReq {
 message SatInStartReplicationResp {
     // returned in case replication fails to start
     optional ReplicationError err = 1;
-
+    /** How many unacked transactions the producer is willing to send */
+    optional uint32 unacked_window_size = 2;
+    
     // Error returned by the Producer when replication fails to start
     message ReplicationError {
         // error code enum
         enum Code {
             // Required by the Protobuf spec.
             CODE_UNSPECIFIED = 0;
-
             // requested LSN is behind the current replication window
             BEHIND_WINDOW = 1;
-
             // e.g. jumping ahead of the subscriptions cursor
             INVALID_POSITION = 2;
-
             // requested subscription not found
             SUBSCRIPTION_NOT_FOUND = 3;
-
             // the replication request has malformed LSN
             MALFORMED_LSN = 4;
-
             // consumer requested replication at schema version that is
             // not known to the producer
             UNKNOWN_SCHEMA_VSN = 5;
@@ -220,6 +217,25 @@ message SatOpLog {
     repeated SatTransOp ops = 1;
 }
 
+/** 
+ * Acknowledgement message that the transaction with given LSN has been incorporated by the client.
+ * Sent by the consumer and used by the producer to regulate garbage collection & backpressure.
+ * Clients that don't send it after a certain number of transactions will be considered non-responsive
+ * and the producer may choose to pause sending further information to such a client.
+ *
+ * It's also important the the producer may deny connection requests from clients who try to connect with 
+ * LSN number less than the most recently acknowledged one, as the acknowledgement may have caused a
+ * cleanup of information for this client before this point in time.
+ */
+message SatOpLogAck {
+    /** Timestamp on the sending side */
+    uint64 ack_timestamp = 1;
+    /** LSN of the most recent incorporated transaction */
+    bytes lsn = 2;
+    /** Transaction ID of the most recent incorporated transaction */
+    uint64 transaction_id = 3;
+}
+
 // (Producer) Single operation, should be only send as part of the SatOplog
 // message
 message SatTransOp {
@@ -240,8 +256,9 @@ message SatTransOp {
 // (Producer) Replication message that indicates transaction boundaries
 // should be only send as payload in the SatTransOp message
 message SatOpBegin {
+    reserved 2;
+
     uint64 commit_timestamp = 1;
-    string trans_id = 2;
     // Lsn position that points to first data segment of transaction in the
     // WAL
     bytes lsn = 3;
@@ -252,12 +269,15 @@ message SatOpBegin {
     optional string origin = 4;
     // does this transaction contain ddl statements?
     bool is_migration = 5;
-    /** If not 0, a transient reference for additional data pseudo-transaction
-        that will be sent at a later point in the stream. It may be shared by multiple transactions
-        sent by the server at the same time, because this additional data will be queried at the same
-        time. Duplicated on SatOpCommit.
-        */
+    /** 
+     * If not 0, a transient reference for additional data pseudo-transaction
+     * that will be sent at a later point in the stream. It may be shared by multiple transactions
+     * sent by the server at the same time, because this additional data will be queried at the same
+     * time. Duplicated on SatOpCommit.
+     */
     uint64 additional_data_ref = 6;
+    /** Unique transaction ID, sent only by the server. No guarantees of monotonicity. */
+    optional uint64 transaction_id = 7;
 }
 
 // (Producer) Replication message that indicates a transaction boundary for additional data that existed on the server
@@ -270,8 +290,9 @@ message SatOpAdditionalBegin {
 // (Producer) Replication message that indicates transaction boundaries
 // should be only send as payload in the SatTransOp message
 message SatOpCommit {
+    reserved 2;
+
     uint64 commit_timestamp = 1;
-    string trans_id = 2;
     bytes lsn = 3;
     /** If not 0, a transient reference for additional data pseudo-transaction
         that will be sent at a later point in the stream. It may be shared by multiple transactions
@@ -279,6 +300,8 @@ message SatOpCommit {
         time. Duplicated on SatOpBegin.
         */
     uint64 additional_data_ref = 4;
+    /** Unique transaction ID, sent only by the server. No guarantees of monotonicity. */
+    optional uint64 transaction_id = 5;
 }
 
 message SatOpAdditionalCommit {

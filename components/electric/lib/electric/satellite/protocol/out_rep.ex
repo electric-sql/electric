@@ -7,6 +7,8 @@ defmodule Electric.Satellite.Protocol.OutRep do
   alias Electric.Utils
   alias Electric.Satellite.Protobuf, as: PB
 
+  @default_allowed_unacked_txs 30
+
   defstruct lsn: "",
             status: nil,
             pid: nil,
@@ -19,7 +21,10 @@ defmodule Electric.Satellite.Protocol.OutRep do
             move_in_data_to_send: %{},
             move_in_next_ref: 1,
             last_migration_xid_at_initial_sync: 0,
-            sent_rows_graph: Graph.new()
+            sent_rows_graph: Graph.new(),
+            allowed_unacked_txs: @default_allowed_unacked_txs,
+            unacked_transaction_count: 0,
+            unacked_transactions: []
 
   @typedoc """
   Insertion point for data coming from a subscription fulfillment.
@@ -42,7 +47,7 @@ defmodule Electric.Satellite.Protocol.OutRep do
   @type t() :: %__MODULE__{
           pid: pid() | nil,
           lsn: String.t(),
-          status: nil | :active | :paused,
+          status: nil | :active | :paused | :suspended,
           stage_sub: GenStage.subscription_tag() | nil,
           relations: %{Changes.relation() => PB.relation_id()},
           last_seen_wal_pos: non_neg_integer,
@@ -53,7 +58,11 @@ defmodule Electric.Satellite.Protocol.OutRep do
           move_in_data_to_send: %{optional(non_neg_integer()) => term()},
           move_in_next_ref: non_neg_integer(),
           last_migration_xid_at_initial_sync: non_neg_integer,
-          sent_rows_graph: Graph.t()
+          sent_rows_graph: Graph.t(),
+          allowed_unacked_txs: pos_integer(),
+          unacked_transaction_count: non_neg_integer(),
+          # This is stored reversed
+          unacked_transactions: maybe_improper_list()
         }
 
   @spec add_pause_point(t(), pause_point()) :: t()
@@ -144,6 +153,39 @@ defmodule Electric.Satellite.Protocol.OutRep do
     end
   end
 
+  @spec increment_move_in_ref(t()) :: t()
   def increment_move_in_ref(%__MODULE__{move_in_next_ref: ref} = out),
     do: %{out | move_in_next_ref: ref + 1}
+
+  @spec add_unacked_transaction(t(), non_neg_integer()) :: t()
+  def add_unacked_transaction(
+        %__MODULE__{unacked_transaction_count: count, unacked_transactions: txn_ids} = out,
+        txn_id
+      ) do
+    %__MODULE__{
+      out
+      | unacked_transaction_count: count + 1,
+        unacked_transactions: [txn_id | txn_ids]
+    }
+  end
+
+  @spec ack_transactions(t(), non_neg_integer()) :: :error | {:ok, t()}
+  def ack_transactions(
+        %__MODULE__{unacked_transaction_count: count, unacked_transactions: txn_ids} = out,
+        txn_id
+      ) do
+    case Utils.list_count_drop_while(Enum.reverse(txn_ids), &(&1 != txn_id)) do
+      # txn id that's not in the unacked list
+      {_, []} ->
+        :error
+
+      {dropped, [^txn_id | rest]} ->
+        {:ok,
+         %__MODULE__{
+           out
+           | unacked_transaction_count: count - dropped - 1,
+             unacked_transactions: Enum.reverse(rest)
+         }}
+    end
+  end
 end

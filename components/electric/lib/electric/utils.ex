@@ -192,6 +192,34 @@ defmodule Electric.Utils do
   defp flatten_map([head | tail], fun, acc), do: flatten_map(tail, fun, [fun.(head) | acc])
 
   @doc """
+  Drop elements from the head of the list while the predicate returns a truthy value.
+
+  Returns a tuple: count of dropped elements, and the remaining list.
+
+  ## Examples
+
+     iex> list_count_drop_while([1, 2, 3, 4], & &1 != 3)
+     {2, [3, 4]}
+
+     iex> list_count_drop_while([], & &1 < 3)
+     {0, []}
+
+     iex> list_count_drop_while([1, 2, -1], & &1 < 3)
+     {3, []}
+  """
+  def list_count_drop_while(list, fun), do: list_count_drop_while(list, fun, 0)
+
+  defp list_count_drop_while([], _, acc), do: {acc, []}
+
+  defp list_count_drop_while([head | tail] = list, fun, acc) do
+    if fun.(head) do
+      list_count_drop_while(tail, fun, acc + 1)
+    else
+      {acc, list}
+    end
+  end
+
+  @doc """
   Generate a random UUID v4.
 
   Code taken from Ecto: https://github.com/elixir-ecto/ecto/blob/v3.10.2/lib/ecto/uuid.ex#L174

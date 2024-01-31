@@ -36,12 +36,13 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
   setup ctx do
     ctx =
-      Map.update(
-        ctx,
+      ctx
+      |> Map.update(
         :subscription_data_fun,
         &mock_data_function/2,
         fn {name, opts} -> &apply(__MODULE__, name, [&1, &2, opts]) end
       )
+      |> Map.put_new(:allowed_unacked_txs, 30)
 
     port = 55133
 
@@ -49,7 +50,8 @@ defmodule Electric.Satellite.WebsocketServerTest do
       {Electric.Plug.SatelliteWebsocketPlug,
        auth_provider: Auth.provider(),
        connector_config: [origin: "fake_origin"],
-       subscription_data_fun: ctx.subscription_data_fun}
+       subscription_data_fun: ctx.subscription_data_fun,
+       allowed_unacked_txs: ctx.allowed_unacked_txs}
 
     start_link_supervised!({Bandit, port: port, plug: plug})
 
@@ -656,6 +658,63 @@ defmodule Electric.Satellite.WebsocketServerTest do
         DownstreamProducerMock.produce(mocked_producer, simple_transes(ctx.user_id, 10))
         refute_receive {^conn, %SatSubsDataBegin{}}
         refute_receive {^conn, %SatOpLog{}}
+      end)
+    end
+
+    @tag with_migrations: [@test_migration]
+    @tag allowed_unacked_txs: 2
+    test "replication stream is suspended until the client acks transactions", ctx do
+      with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->
+        start_replication_and_assert_response(conn, 1)
+
+        [{client_name, _client_pid}] = active_clients()
+        mocked_producer = Producer.name(client_name)
+
+        request = %SatSubsReq{
+          subscription_id: "00000000-0000-0000-0000-000000000000",
+          shape_requests: [
+            %SatShapeReq{
+              request_id: "fake_id",
+              shape_definition: %SatShapeDef{
+                selects: [%SatShapeDef.Select{tablename: @test_table}]
+              }
+            }
+          ]
+        }
+
+        assert {:ok, %SatSubsResp{subscription_id: sub_id, err: nil}} =
+                 MockClient.make_rpc_call(conn, "subscribe", request)
+
+        # The real data function would have made a magic write which we're emulating here
+        DownstreamProducerMock.produce(mocked_producer, build_events([], 1))
+        assert {["fake_id"], []} = receive_subscription_data(conn, sub_id)
+
+        :ok =
+          DownstreamProducerMock.produce(mocked_producer, simple_transes(ctx.user_id, 10))
+
+        # We've received 2 transactions at this point: migration and the first produced
+        # we shouldn't receive more until we ack
+        assert_receive {^conn,
+                        %SatOpLog{ops: [%{op: {:begin, %{lsn: lsn, transaction_id: id}}}, _, _]}}
+
+        refute_receive {^conn, %SatOpLog{ops: [_, _, _]}}
+
+        # After we ACK, we should get 2 more transactions
+        MockClient.send_data(conn, %SatOpLogAck{lsn: lsn, transaction_id: id})
+
+        assert_receive {^conn,
+                        %SatOpLog{ops: [%{op: {:begin, %{lsn: lsn, transaction_id: id}}}, _, _]}}
+
+        assert_receive {^conn, %SatOpLog{ops: [_, _, _]}}
+        refute_receive {^conn, %SatOpLog{ops: [_, _, _]}}
+
+        # If we ACK using a not-last transaction, we should receive just one more tx
+        MockClient.send_data(conn, %SatOpLogAck{lsn: lsn, transaction_id: id})
+
+        assert_receive {^conn,
+                        %SatOpLog{ops: [%{op: {:begin, %{lsn: lsn, transaction_id: id}}}, _, _]}}
+
+        refute_receive {^conn, %SatOpLog{ops: [_, _, _]}}
       end)
     end
   end

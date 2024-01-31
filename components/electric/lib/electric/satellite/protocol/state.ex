@@ -38,6 +38,8 @@ defmodule Electric.Satellite.Protocol.State do
   defguard is_out_rep_active(state) when state.out_rep.status == :active
   defguard is_out_rep_paused(state) when state.out_rep.status == :paused
 
+  defguard is_out_rep_suspended(state) when state.out_rep.status == :suspended
+
   defguard is_next_pending_subscription(state, subscription_id)
            when is_tuple(elem(state.out_rep.pause_queue, 0)) and
                   elem(elem(state.out_rep.pause_queue, 0), 1) == :subscription and
@@ -56,6 +58,9 @@ defmodule Electric.Satellite.Protocol.State do
 
   defguard no_pending_subscriptions(state)
            when is_nil(elem(state.out_rep.pause_queue, 0))
+
+  defguard can_send_more_txs(state)
+           when state.out_rep.unacked_transaction_count < state.out_rep.allowed_unacked_txs
 
   @spec merge_in_graph(t(), Graph.t()) :: t()
   def merge_in_graph(%__MODULE__{out_rep: out} = state, %Graph{} = graph),
@@ -83,5 +88,13 @@ defmodule Electric.Satellite.Protocol.State do
     with {data, out} <- OutRep.pop_pending_data(out, kind, ref) do
       {data, %__MODULE__{state | out_rep: out}}
     end
+  end
+
+  def add_events_to_buffer(%__MODULE__{out_rep: out} = state, events),
+    do: %__MODULE__{state | out_rep: OutRep.add_events_to_buffer(out, events)}
+
+  def set_outgoing_status(%__MODULE__{out_rep: out} = state, status)
+      when status in [:active, :paused, :suspended] do
+    %{state | out_rep: %OutRep{out | status: status}}
   end
 end

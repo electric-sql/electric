@@ -127,7 +127,11 @@ export enum SatInStartReplicationReq_Option {
 export interface SatInStartReplicationResp {
   $type: "Electric.Satellite.SatInStartReplicationResp";
   /** returned in case replication fails to start */
-  err?: SatInStartReplicationResp_ReplicationError | undefined;
+  err?:
+    | SatInStartReplicationResp_ReplicationError
+    | undefined;
+  /** How many unacked transactions the producer is willing to send */
+  unackedWindowSize?: number | undefined;
 }
 
 /** Error returned by the Producer when replication fails to start */
@@ -212,6 +216,26 @@ export interface SatOpLog {
 }
 
 /**
+ * Acknowledgement message that the transaction with given LSN has been incorporated by the client.
+ * Sent by the consumer and used by the producer to regulate garbage collection & backpressure.
+ * Clients that don't send it after a certain number of transactions will be considered non-responsive
+ * and the producer may choose to pause sending further information to such a client.
+ *
+ * It's also important the the producer may deny connection requests from clients who try to connect with
+ * LSN number less than the most recently acknowledged one, as the acknowledgement may have caused a
+ * cleanup of information for this client before this point in time.
+ */
+export interface SatOpLogAck {
+  $type: "Electric.Satellite.SatOpLogAck";
+  /** Timestamp on the sending side */
+  ackTimestamp: Long;
+  /** LSN of the most recent incorporated transaction */
+  lsn: Uint8Array;
+  /** Transaction ID of the most recent incorporated transaction */
+  transactionId: Long;
+}
+
+/**
  * (Producer) Single operation, should be only send as part of the SatOplog
  * message
  */
@@ -236,7 +260,6 @@ export interface SatTransOp {
 export interface SatOpBegin {
   $type: "Electric.Satellite.SatOpBegin";
   commitTimestamp: Long;
-  transId: string;
   /**
    * Lsn position that points to first data segment of transaction in the
    * WAL
@@ -260,6 +283,8 @@ export interface SatOpBegin {
    * time. Duplicated on SatOpCommit.
    */
   additionalDataRef: Long;
+  /** Unique transaction ID, sent only by the server. No guarantees of monotonicity. */
+  transactionId?: Long | undefined;
 }
 
 /**
@@ -278,7 +303,6 @@ export interface SatOpAdditionalBegin {
 export interface SatOpCommit {
   $type: "Electric.Satellite.SatOpCommit";
   commitTimestamp: Long;
-  transId: string;
   lsn: Uint8Array;
   /**
    * If not 0, a transient reference for additional data pseudo-transaction
@@ -287,6 +311,8 @@ export interface SatOpCommit {
    * time. Duplicated on SatOpBegin.
    */
   additionalDataRef: Long;
+  /** Unique transaction ID, sent only by the server. No guarantees of monotonicity. */
+  transactionId?: Long | undefined;
 }
 
 export interface SatOpAdditionalCommit {
@@ -1159,7 +1185,7 @@ export const SatInStartReplicationReq = {
 messageTypeRegistry.set(SatInStartReplicationReq.$type, SatInStartReplicationReq);
 
 function createBaseSatInStartReplicationResp(): SatInStartReplicationResp {
-  return { $type: "Electric.Satellite.SatInStartReplicationResp", err: undefined };
+  return { $type: "Electric.Satellite.SatInStartReplicationResp", err: undefined, unackedWindowSize: undefined };
 }
 
 export const SatInStartReplicationResp = {
@@ -1168,6 +1194,9 @@ export const SatInStartReplicationResp = {
   encode(message: SatInStartReplicationResp, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (message.err !== undefined) {
       SatInStartReplicationResp_ReplicationError.encode(message.err, writer.uint32(10).fork()).ldelim();
+    }
+    if (message.unackedWindowSize !== undefined) {
+      writer.uint32(16).uint32(message.unackedWindowSize);
     }
     return writer;
   },
@@ -1185,6 +1214,13 @@ export const SatInStartReplicationResp = {
           }
 
           message.err = SatInStartReplicationResp_ReplicationError.decode(reader, reader.uint32());
+          continue;
+        case 2:
+          if (tag !== 16) {
+            break;
+          }
+
+          message.unackedWindowSize = reader.uint32();
           continue;
       }
       if ((tag & 7) === 4 || tag === 0) {
@@ -1204,6 +1240,7 @@ export const SatInStartReplicationResp = {
     message.err = (object.err !== undefined && object.err !== null)
       ? SatInStartReplicationResp_ReplicationError.fromPartial(object.err)
       : undefined;
+    message.unackedWindowSize = object.unackedWindowSize ?? undefined;
     return message;
   },
 };
@@ -1587,6 +1624,87 @@ export const SatOpLog = {
 
 messageTypeRegistry.set(SatOpLog.$type, SatOpLog);
 
+function createBaseSatOpLogAck(): SatOpLogAck {
+  return {
+    $type: "Electric.Satellite.SatOpLogAck",
+    ackTimestamp: Long.UZERO,
+    lsn: new Uint8Array(),
+    transactionId: Long.UZERO,
+  };
+}
+
+export const SatOpLogAck = {
+  $type: "Electric.Satellite.SatOpLogAck" as const,
+
+  encode(message: SatOpLogAck, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (!message.ackTimestamp.isZero()) {
+      writer.uint32(8).uint64(message.ackTimestamp);
+    }
+    if (message.lsn.length !== 0) {
+      writer.uint32(18).bytes(message.lsn);
+    }
+    if (!message.transactionId.isZero()) {
+      writer.uint32(24).uint64(message.transactionId);
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatOpLogAck {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatOpLogAck();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 8) {
+            break;
+          }
+
+          message.ackTimestamp = reader.uint64() as Long;
+          continue;
+        case 2:
+          if (tag !== 18) {
+            break;
+          }
+
+          message.lsn = reader.bytes();
+          continue;
+        case 3:
+          if (tag !== 24) {
+            break;
+          }
+
+          message.transactionId = reader.uint64() as Long;
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatOpLogAck>, I>>(base?: I): SatOpLogAck {
+    return SatOpLogAck.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatOpLogAck>, I>>(object: I): SatOpLogAck {
+    const message = createBaseSatOpLogAck();
+    message.ackTimestamp = (object.ackTimestamp !== undefined && object.ackTimestamp !== null)
+      ? Long.fromValue(object.ackTimestamp)
+      : Long.UZERO;
+    message.lsn = object.lsn ?? new Uint8Array();
+    message.transactionId = (object.transactionId !== undefined && object.transactionId !== null)
+      ? Long.fromValue(object.transactionId)
+      : Long.UZERO;
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatOpLogAck.$type, SatOpLogAck);
+
 function createBaseSatTransOp(): SatTransOp {
   return {
     $type: "Electric.Satellite.SatTransOp",
@@ -1770,11 +1888,11 @@ function createBaseSatOpBegin(): SatOpBegin {
   return {
     $type: "Electric.Satellite.SatOpBegin",
     commitTimestamp: Long.UZERO,
-    transId: "",
     lsn: new Uint8Array(),
     origin: undefined,
     isMigration: false,
     additionalDataRef: Long.UZERO,
+    transactionId: undefined,
   };
 }
 
@@ -1784,9 +1902,6 @@ export const SatOpBegin = {
   encode(message: SatOpBegin, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (!message.commitTimestamp.isZero()) {
       writer.uint32(8).uint64(message.commitTimestamp);
-    }
-    if (message.transId !== "") {
-      writer.uint32(18).string(message.transId);
     }
     if (message.lsn.length !== 0) {
       writer.uint32(26).bytes(message.lsn);
@@ -1799,6 +1914,9 @@ export const SatOpBegin = {
     }
     if (!message.additionalDataRef.isZero()) {
       writer.uint32(48).uint64(message.additionalDataRef);
+    }
+    if (message.transactionId !== undefined) {
+      writer.uint32(56).uint64(message.transactionId);
     }
     return writer;
   },
@@ -1816,13 +1934,6 @@ export const SatOpBegin = {
           }
 
           message.commitTimestamp = reader.uint64() as Long;
-          continue;
-        case 2:
-          if (tag !== 18) {
-            break;
-          }
-
-          message.transId = reader.string();
           continue;
         case 3:
           if (tag !== 26) {
@@ -1852,6 +1963,13 @@ export const SatOpBegin = {
 
           message.additionalDataRef = reader.uint64() as Long;
           continue;
+        case 7:
+          if (tag !== 56) {
+            break;
+          }
+
+          message.transactionId = reader.uint64() as Long;
+          continue;
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1870,13 +1988,15 @@ export const SatOpBegin = {
     message.commitTimestamp = (object.commitTimestamp !== undefined && object.commitTimestamp !== null)
       ? Long.fromValue(object.commitTimestamp)
       : Long.UZERO;
-    message.transId = object.transId ?? "";
     message.lsn = object.lsn ?? new Uint8Array();
     message.origin = object.origin ?? undefined;
     message.isMigration = object.isMigration ?? false;
     message.additionalDataRef = (object.additionalDataRef !== undefined && object.additionalDataRef !== null)
       ? Long.fromValue(object.additionalDataRef)
       : Long.UZERO;
+    message.transactionId = (object.transactionId !== undefined && object.transactionId !== null)
+      ? Long.fromValue(object.transactionId)
+      : undefined;
     return message;
   },
 };
@@ -1937,9 +2057,9 @@ function createBaseSatOpCommit(): SatOpCommit {
   return {
     $type: "Electric.Satellite.SatOpCommit",
     commitTimestamp: Long.UZERO,
-    transId: "",
     lsn: new Uint8Array(),
     additionalDataRef: Long.UZERO,
+    transactionId: undefined,
   };
 }
 
@@ -1950,14 +2070,14 @@ export const SatOpCommit = {
     if (!message.commitTimestamp.isZero()) {
       writer.uint32(8).uint64(message.commitTimestamp);
     }
-    if (message.transId !== "") {
-      writer.uint32(18).string(message.transId);
-    }
     if (message.lsn.length !== 0) {
       writer.uint32(26).bytes(message.lsn);
     }
     if (!message.additionalDataRef.isZero()) {
       writer.uint32(32).uint64(message.additionalDataRef);
+    }
+    if (message.transactionId !== undefined) {
+      writer.uint32(40).uint64(message.transactionId);
     }
     return writer;
   },
@@ -1976,13 +2096,6 @@ export const SatOpCommit = {
 
           message.commitTimestamp = reader.uint64() as Long;
           continue;
-        case 2:
-          if (tag !== 18) {
-            break;
-          }
-
-          message.transId = reader.string();
-          continue;
         case 3:
           if (tag !== 26) {
             break;
@@ -1996,6 +2109,13 @@ export const SatOpCommit = {
           }
 
           message.additionalDataRef = reader.uint64() as Long;
+          continue;
+        case 5:
+          if (tag !== 40) {
+            break;
+          }
+
+          message.transactionId = reader.uint64() as Long;
           continue;
       }
       if ((tag & 7) === 4 || tag === 0) {
@@ -2015,11 +2135,13 @@ export const SatOpCommit = {
     message.commitTimestamp = (object.commitTimestamp !== undefined && object.commitTimestamp !== null)
       ? Long.fromValue(object.commitTimestamp)
       : Long.UZERO;
-    message.transId = object.transId ?? "";
     message.lsn = object.lsn ?? new Uint8Array();
     message.additionalDataRef = (object.additionalDataRef !== undefined && object.additionalDataRef !== null)
       ? Long.fromValue(object.additionalDataRef)
       : Long.UZERO;
+    message.transactionId = (object.transactionId !== undefined && object.transactionId !== null)
+      ? Long.fromValue(object.transactionId)
+      : undefined;
     return message;
   },
 };

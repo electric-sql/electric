@@ -57,6 +57,7 @@ defmodule Electric.Satellite.WebsocketServer do
        connector_config: Keyword.fetch!(opts, :connector_config),
        subscription_data_fun: Keyword.fetch!(opts, :subscription_data_fun),
        move_in_data_fun: Keyword.fetch!(opts, :move_in_data_fun),
+       out_rep: %OutRep{allowed_unacked_txs: Keyword.get(opts, :allowed_unacked_txs, 30)},
        telemetry: %Telemetry{
          connection_span:
            Metrics.start_span([:satellite, :connection], %{}, %{
@@ -137,6 +138,16 @@ defmodule Electric.Satellite.WebsocketServer do
   def handle_info({:"$gen_consumer", from, msg}, state) do
     Logger.debug("msg from producer: #{inspect(msg)}")
     handle_producer_msg(from, msg, state)
+  rescue
+    e ->
+      Logger.error("""
+      #{Exception.format(:error, e, __STACKTRACE__)}
+      While handling message from the producer:
+      #{String.replace(inspect(msg, pretty: true), ~r/^/m, "  ")}"
+      """)
+
+      {:stop, e, {1011, "Internal server error while sending data"},
+       binary_frame(%SatErrorResp{}), state}
   end
 
   def handle_info({:"$gen_producer", from, msg}, state) do
@@ -287,7 +298,17 @@ defmodule Electric.Satellite.WebsocketServer do
 
   defp handle_producer_msg(from, events, %State{} = state)
        when is_out_rep_paused(state) do
+    # Replication is paused, i.e. we're not sending transactions, but that's because we're
+    # either waiting for more transactions, or waiting for query data. In both cases
+    # we're happy to have transactions to send after.
     GenStage.ask(from, 1)
+    {:ok, %{state | out_rep: OutRep.add_events_to_buffer(state.out_rep, events)}}
+  end
+
+  defp handle_producer_msg(_from, events, %State{} = state)
+       when is_out_rep_suspended(state) do
+    # Replication is suspended, i.e. the client hasn't acknowledged enough sent
+    # transactions for us to send more.
     {:ok, %{state | out_rep: OutRep.add_events_to_buffer(state.out_rep, events)}}
   end
 
