@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
-import { TextInput } from 'react-native-paper';
+import { TextInput, Button } from 'react-native-paper';
 
 import { Shopping_list_item } from '../generated/client';
 
@@ -10,12 +10,14 @@ export type ShoppingListItemProperties = Pick<Shopping_list_item, 'name' | 'quan
 const ShoppingListItemEditor = ({
   initialName,
   initialQuantity = 1,
+  submitText,
   onChange,
   onSubmit,
 } : {
   initialName?: string,
   initialQuantity?: number,
-  onChange: (props : ShoppingListItemProperties) => void,
+  submitText: string,
+  onChange?: (props : ShoppingListItemProperties) => void,
   onSubmit?: (props: ShoppingListItemProperties) => void,
 }) => {
   const [ name, setName ] = useState(initialName)
@@ -30,19 +32,24 @@ const ShoppingListItemEditor = ({
   })
 
   useEffect(() => {
-    onChange(getProps())
+    onChange?.(getProps())
   }, [name, quantity, comment])
 
+  const onSubmitFn = () => {
+    if (!name) return
+    onSubmit?.(getProps())
+  }
+
   return (
-    <View style={{ gap: 12 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+    <View style={{ gap: 16 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
         <TextInput
           autoFocus
           error={name?.length === 0}
           style={{ flex: 1 }}
           mode="outlined"
           label="Name"
-          onSubmitEditing={() => onSubmit?.(getProps())}
+          onSubmitEditing={onSubmitFn}
           placeholder="e.g. bin liner"
           value={name}
           onChangeText={setName}
@@ -64,12 +71,20 @@ const ShoppingListItemEditor = ({
         label="Comments"
         style={{ minHeight: 100 }}
         mode="outlined"
-        onSubmitEditing={() => onSubmit?.(getProps())}
+        onSubmitEditing={onSubmitFn}
         placeholder="e.g. the ones with the lavender smell"
         multiline
         value={comment}
         onChangeText={setComment}
       />
+
+      <Button
+        mode="contained"
+        disabled={!name}
+        onPress={onSubmitFn}
+      >
+        {submitText}
+      </Button>
     </View>
   );
 }
