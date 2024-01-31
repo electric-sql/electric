@@ -1,17 +1,17 @@
-import React, { useCallback, useState } from 'react';
+import React, { forwardRef, useCallback, useState } from 'react';
 import { Card, IconButton } from 'react-native-paper';
 import { useLiveQuery } from 'electric-sql/react';
 import { useElectric } from './ElectricProvider';
 import ConfirmationDialog from './ConfirmationDialog';
 
 
-const FamilyCard = ({
+const FamilyCard = forwardRef(({
   memberId,
   onPress
 } : {
   memberId: string,
   onPress?: () => void,
-}) => {
+}, _) => {
   const [ exitDialogVisible, setExitDialogVisible ] = useState(false)
   const { db } = useElectric()!
   const { results: membership } = useLiveQuery(db.member.liveUnique({
@@ -66,6 +66,6 @@ const FamilyCard = ({
       />
     </Card>
   )
-}
+})
 
 export default FamilyCard

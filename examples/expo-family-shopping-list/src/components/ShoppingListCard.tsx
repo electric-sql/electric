@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { forwardRef, useCallback } from 'react';
 import { Card, IconButton } from 'react-native-paper';
 import { useLiveQuery } from 'electric-sql/react';
 import { useElectric } from './ElectricProvider';
@@ -6,13 +6,13 @@ import { View } from 'react-native';
 import { Link } from 'expo-router';
 
 
-const ShoppingListCard = ({
+const ShoppingListCard = forwardRef(({
   shoppingListId,
   onPress
 } : {
   shoppingListId: string,
   onPress?: () => void,
-}) => {
+}, _) => {
   const { db } = useElectric()!
   const { results: shoppingList } = useLiveQuery(db.shopping_list.liveUnique({
     include: {
@@ -52,6 +52,6 @@ const ShoppingListCard = ({
       />
     </Card>
   )
-}
+})
 
 export default ShoppingListCard;
