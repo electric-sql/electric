@@ -1035,6 +1035,97 @@ defmodule Electric.Satellite.SubscriptionsTest do
                  receive_txn_changes(conn, rel_map)
       end)
     end
+
+    test "Client reconnection restores the sent rows graph",
+         %{conn: pg_conn} = ctx do
+      sub_id = uuid4()
+
+      last_lsn =
+        MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
+          start_replication_and_assert_response(conn, ctx.electrified_count)
+          request_id = uuid4()
+
+          request =
+            ProtocolHelpers.subscription_request(sub_id, {request_id,
+             users: [
+               where: "this.id = '#{@john_doe_id}'",
+               include: [
+                 authored_entries: [
+                   over: "author_id",
+                   include: [
+                     # Note that we don't explicitly ask for the author of the comment,
+                     # but FK auto-filling will make sure we get it anyway
+                     comments: [over: "entry_id"]
+                   ]
+                 ]
+               ]
+             ]})
+
+          assert {:ok, %SatSubsResp{err: nil}} =
+                   MockClient.make_rpc_call(conn, "subscribe", request)
+
+          assert {[request_id], []} == receive_subscription_data(conn, sub_id)
+
+          Client.with_transaction(pg_conn, fn tx_conn ->
+            {:ok, 1} =
+              :epgsql.equery(
+                tx_conn,
+                "INSERT INTO public.users (id, name) VALUES ($1, $2)",
+                [@john_doe_id, "John Doe"]
+              )
+
+            {:ok, 1} =
+              :epgsql.equery(
+                tx_conn,
+                "INSERT INTO public.authored_entries (id, content, author_id) VALUES ($1, $2, $3)",
+                [@entry_id, "Entry", @john_doe_id]
+              )
+          end)
+
+          # We get the message of insertion for a table we have a subscription for
+          assert_receive {^conn,
+                          %SatOpLog{
+                            ops: [
+                              %{op: {:begin, _}},
+                              %{op: {:insert, %{row_data: %{values: [_, "John Doe"]}}}},
+                              %{op: {:insert, %{row_data: %{values: [_, "Entry", _]}}}},
+                              %{op: {:commit, %{lsn: lsn}}}
+                            ]
+                          }},
+                         1000
+
+          # and then disconnect, returning the lsn
+          lsn
+        end)
+
+      # Insert a row while client is disconnected that's in shape for this client
+      {:ok, 1} =
+        :epgsql.equery(
+          pg_conn,
+          "INSERT INTO public.comments (id, content, entry_id, author_id) VALUES ($1, $2, $3, $4)",
+          [uuid4(), "Comment 1", @entry_id, @john_doe_id]
+        )
+
+      MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
+        assert {:ok, _} =
+                 MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{
+                   lsn: last_lsn,
+                   subscription_ids: [sub_id]
+                 })
+
+        # Assert that we immediately receive the data that falls into the continued subscription
+        # and is part of the shape based on the graph information
+        assert_receive {^conn,
+                        %SatOpLog{
+                          ops: [
+                            %{op: {:begin, _}},
+                            %{op: {:insert, %{row_data: %{values: [_, "Comment 1", _, _]}}}},
+                            %{op: {:commit, _}}
+                          ]
+                        }},
+                       100
+      end)
+    end
   end
 
   defp active_clients() do

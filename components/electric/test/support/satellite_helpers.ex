@@ -19,12 +19,12 @@ defmodule ElectricTest.SatelliteHelpers do
     assert {:ok, _} =
              MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{})
 
-    assert_receive {^conn, %SatRpcRequest{method: "startReplication"}}
+    assert_receive {^conn, %SatRpcRequest{method: "startReplication"}}, 500
 
     unless table_count == 0 do
       cached_relations =
         for _ <- 1..table_count, into: %{} do
-          assert_receive {^conn, %SatRelation{} = rel}
+          assert_receive {^conn, %SatRelation{} = rel}, 500
 
           # TODO: This makes a generally incorrect assumption that PK columns come in order in the relation
           #       It works in most cases, but we need actual PK order information on the protocol

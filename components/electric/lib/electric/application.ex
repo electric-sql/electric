@@ -16,6 +16,7 @@ defmodule Electric.Application do
         Electric.Postgres.OidDatabase,
         Electric.Postgres.Proxy.SASL.SCRAMLockedCache,
         Electric.Satellite.SubscriptionManager,
+        Electric.Satellite.SentGraphManager,
         Electric.Satellite.ClientManager,
         Electric.Replication.Connectors
       ]

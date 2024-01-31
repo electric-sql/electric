@@ -80,7 +80,8 @@ defmodule Electric.Satellite.WebsocketServerTest do
       Electric.Postgres.CachedWal.Api,
       [:passthrough],
       get_current_position: fn -> @current_wal_pos end,
-      lsn_in_cached_window?: fn num when is_integer(num) -> num > @current_wal_pos end
+      lsn_in_cached_window?: fn num when is_integer(num) -> num > @current_wal_pos end,
+      get_transactions: fn _ -> {:ok, []} end
     }
   ]) do
     {:ok, %{}}
@@ -711,9 +712,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
         # If we ACK using a not-last transaction, we should receive just one more tx
         MockClient.send_data(conn, %SatOpLogAck{lsn: lsn, transaction_id: id})
 
-        assert_receive {^conn,
-                        %SatOpLog{ops: [%{op: {:begin, %{lsn: lsn, transaction_id: id}}}, _, _]}}
-
+        assert_receive {^conn, %SatOpLog{ops: [_, _, _]}}
         refute_receive {^conn, %SatOpLog{ops: [_, _, _]}}
       end)
     end

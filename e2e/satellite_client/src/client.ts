@@ -85,7 +85,7 @@ export const set_subscribers = (db: Electric) => {
 
 export const syncTable = async (electric: Electric, table: string) => {
   if (table === 'other_items') {
-    const { synced } = await electric.db.other_items.sync({ include: { items: true } })
+    const { synced } = await electric.db.other_items.sync()
     return await synced
   } else {
     const satellite = globalRegistry.satellites[dbName]
