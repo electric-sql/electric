@@ -11,7 +11,19 @@
     "version": "0.1.0"
   },
   "tauri": {
+    "allowlist": {
+      "all": false,
+      "shell":{
+        "scope": [
+          { "name": "./ollama", "sidecar": true }
+        ],
+        "sidecar": true
+      }
+    },
     "bundle": {
+      "externalBin": [
+        "./ollama"
+      ],
       "active": true,
       "category": "DeveloperTool",
       "copyright": "",

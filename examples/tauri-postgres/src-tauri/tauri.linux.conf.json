@@ -1,19 +1,7 @@
 {
     "$schema": "../node_modules/@tauri-apps/cli/schema.json",
     "tauri": {
-      "allowlist": {
-        "all": false,
-        "shell":{
-          "scope": [
-            { "name": "./ollama", "sidecar": true }
-          ],
-          "sidecar": true
-        }
-      },
       "bundle": {
-        "externalBin": [
-          "./ollama"
-        ],
         "identifier": "electric-tauri-postgres",
         "resources": ["./libonnxruntime.so", "./pgdir/*"]
       }
