@@ -39,7 +39,7 @@ export default function EditMember () {
 
   if (!member) return null
   return (
-    <View style={{ gap: 12 }}>
+    <View style={{ gap: 16 }}>
       <TextInput 
         mode="outlined"
         autoFocus
