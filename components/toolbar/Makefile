@@ -5,4 +5,5 @@ deps:
 build: deps
 	pnpm run build
 
-tests: CI=true pnpm run test
+tests:
+	CI=true pnpm run test
