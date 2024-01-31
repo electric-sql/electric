@@ -722,7 +722,7 @@ test.serial('default and null test', async (t) => {
   })
 })
 
-test.serial('subscription succesful', async (t) => {
+test.serial.only('subscription succesful', async (t) => {
   await connectAndAuth(t.context)
   const { client, server } = t.context
   await startReplication(client, server)
@@ -731,6 +731,7 @@ test.serial('subscription succesful', async (t) => {
     requestId: 'fake',
     definition: {
       tablename: 'fake',
+      include: [{ foreignKey: ['foreign_id'], select: { tablename: 'other' } }],
     },
   }
 

@@ -24,10 +24,11 @@ export type UnsubscribeResponse = Record<string, never>
 export type Shape = {
   tablename: TableName
   include?: Array<Rel>
+  where?: string
 }
 
 export type Rel = {
-  fk: Array<ColumnName> // allows composite FKs
+  foreignKey: Array<ColumnName> // allows composite FKs
   select: Shape
 }
 

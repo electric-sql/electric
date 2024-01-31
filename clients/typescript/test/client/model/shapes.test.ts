@@ -354,12 +354,12 @@ test.serial('nested shape is constructed', async (t) => {
       "title = 'foo' AND contents = 'bar' AND nbr = 6 AND nbr = 7 AND ((id = 5) OR (id = 42)) AND NOT ((id = 1) OR (id = 2))",
     include: [
       {
-        fk: ['authorId'],
+        foreignKey: ['authorId'],
         select: {
           tablename: 'User',
           include: [
             {
-              fk: ['userId'],
+              foreignKey: ['userId'],
               select: {
                 tablename: 'Profile',
               },

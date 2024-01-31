@@ -465,6 +465,8 @@ export class SatelliteClient implements Client {
       shapeRequests: shapeRequestToSatShapeReq(shapes),
     })
 
+    console.log(request.shapeRequests[0].shapeDefinition?.selects[0].include)
+
     this.subscriptionsDataCache.subscriptionRequest(request)
 
     return this.service

@@ -49,7 +49,7 @@ import {
   transformUpdateMany,
   transformUpsert,
 } from '../conversions/input'
-import { Shape } from '../../satellite/shapes/types'
+import { Rel, Shape } from '../../satellite/shapes/types'
 
 type AnyTable = Table<any, any, any, any, any, any, any, any, any, HKT>
 
@@ -158,7 +158,7 @@ export class Table<
     const include = i.include ?? {}
     const where = i.where ?? {}
     const includedFields = Object.keys(include)
-    const includedTables = includedFields.map((field: string) => {
+    const includedTables = includedFields.map((field: string): Rel => {
       // Fetch the table that is included
       const relatedTableName = this._dbDescription.getRelatedTable(
         this.tableName,
@@ -176,12 +176,12 @@ export class Table<
       ) {
         // There is a nested include, follow it
         return {
-          fk: [fkk],
+          foreignKey: [fkk],
           select: relatedTable.computeShape(includedObj),
         }
       } else if (typeof includedObj === 'boolean' && includedObj) {
         return {
-          fk: [fkk],
+          foreignKey: [fkk],
           select: {
             tablename: relatedTableName,
           },
