@@ -6,14 +6,14 @@ import { useState } from 'react'
 import ReactDOM from 'react-dom/client'
 
 import ToolbarTabs from './tabs'
-import { Interface } from './api/interface'
+import { ToolbarInterface } from './api/interface'
 import { Toolbar } from './api/toolbar'
 import { ElectricClient } from 'electric-sql/client/model'
 
 import { Registry, GlobalRegistry } from 'electric-sql/satellite'
 
 export type ToolbarProps = {
-  api: Interface
+  api: ToolbarInterface
 }
 
 function ElectricToolbar({ api }: ToolbarProps) {
@@ -22,7 +22,7 @@ function ElectricToolbar({ api }: ToolbarProps) {
   const [dbName, setDbName] = useState('')
 
   useEffect(() => {
-    let names = api.getSatelliteNames()
+    const names = api.getSatelliteNames()
     setDbNames(names)
     if (names.length > 0) {
       setDbName(names[0])
@@ -74,12 +74,12 @@ export function clientApi(registry: GlobalRegistry | Registry) {
 
 export function addToolbar(electric: ElectricClient<any>) {
   const toolbarApi = clientApi(electric.registry)
-  const toolbar_div = document.createElement('div')
-  toolbar_div.setAttribute('id', 'electric-toolbar')
-  toolbar_div.setAttribute('class', 'electric-toolbar')
-  document.body.appendChild(toolbar_div)
-  const toolbar_root = ReactDOM.createRoot(
+  const toolbarDiv = document.createElement('div')
+  toolbarDiv.setAttribute('id', 'electric-toolbar')
+  toolbarDiv.setAttribute('class', 'electric-toolbar')
+  document.body.appendChild(toolbarDiv)
+  const toolbarRoot = ReactDOM.createRoot(
     document.getElementById('electric-toolbar') as HTMLElement,
   )
-  toolbar_root.render(<ElectricToolbar api={toolbarApi} />)
+  toolbarRoot.render(<ElectricToolbar api={toolbarApi} />)
 }

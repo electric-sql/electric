@@ -1,6 +1,6 @@
 import { Row, Statement, ConnectivityState } from 'electric-sql/util'
 
-export interface Interface {
+export interface ToolbarInterface {
   getSatelliteNames(): string[]
   getSatelliteStatus(name: string): ConnectivityState | 'Not found'
   resetDB(dbName: string): Promise<void>

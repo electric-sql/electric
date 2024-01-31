@@ -3,14 +3,15 @@ import React, { useState } from 'react'
 import LocalDBTab from './tabs/LocalDBTab'
 import SQLTab from './tabs/SQLTab'
 import StatusTab from './tabs/StatusTab'
-import { Interface } from './api/interface'
+import { ToolbarInterface } from './api/interface'
+
+type TabName = 'status' | 'db' | 'sql'
 
 function TabItem(
   label: string,
-  name: 'status' | 'db' | 'sql',
+  name: TabName,
   handleClick: (
-    name: 'status' | 'db' | 'sql',
-    e: React.MouseEvent<HTMLLIElement>,
+    name: 'status' | 'db' | 'sql'
   ) => void,
   active: string,
 ): JSX.Element {
@@ -27,20 +28,14 @@ function TabItem(
 
 export type ToolbarTabsProps = {
   dbName: string
-  api: Interface
+  api: ToolbarInterface
 }
 
 export default function ToolbarTabs({
   dbName,
   api,
 }: ToolbarTabsProps): JSX.Element {
-  const [active, setActive] = useState<'status' | 'db' | 'sql'>('status')
-  function handleClick(
-    name: 'status' | 'db' | 'sql',
-    _e: React.MouseEvent<HTMLLIElement>,
-  ) {
-    setActive(name)
-  }
+  const [active, setActive] = useState<TabName>('status')
 
   function renderComp() {
     switch (active) {
@@ -56,9 +51,9 @@ export default function ToolbarTabs({
   return (
     <div className="Toolbar-tabs">
       <ul className="Toolbar-tab-items">
-        {TabItem('Connection', 'status', handleClick, active)}
-        {TabItem('Local DB', 'db', handleClick, active)}
-        {TabItem('Shell', 'sql', handleClick, active)}
+        {TabItem('Connection', 'status', setActive, active)}
+        {TabItem('Local DB', 'db', setActive, active)}
+        {TabItem('Shell', 'sql', setActive, active)}
       </ul>
       <div className="Toolbar-tab-content">{renderComp()}</div>
     </div>

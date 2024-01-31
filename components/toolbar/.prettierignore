@@ -5,4 +5,3 @@ dist/
 node_modules/
 .gitignore
 .github/
-dev-app/src/generated/

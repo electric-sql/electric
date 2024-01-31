@@ -18,9 +18,8 @@ export default function SQLTab({ dbName, api }: ToolbarTabsProps): JSX.Element {
   const [active, setActive] = useState('query')
 
   function submitSQL() {
-    let cmd = code
     setHistory(history + code + '\n\n')
-    api.queryDB(dbName, { sql: cmd }).then(
+    api.queryDB(dbName, { sql: code }).then(
       (rows) => {
         setResponse(JSON.stringify(rows, null, 4))
       },
