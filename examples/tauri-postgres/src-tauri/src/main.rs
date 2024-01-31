@@ -15,7 +15,7 @@ use sqlx::{Either, PgConnection};
 // General
 use pg_embed::postgres::PgEmbed;
 
-use tauri::api::path::resource_dir;
+
 use tauri::api::process::{Command, CommandEvent};
 // Tauri
 use tauri::async_runtime::block_on;
@@ -637,8 +637,6 @@ fn main() {
                 let main_window = main_window.clone();
                 move |event| match event {
                     // When we click X, stop postgres gracefully first
-                    // BUG: this closes the connection regardless of which window is closed
-                    // so don't close the postgres terminal
                     WindowEvent::Destroyed => {
                         let db_connection: State<DbConnection> = main_window.state();
                         block_on(async {
