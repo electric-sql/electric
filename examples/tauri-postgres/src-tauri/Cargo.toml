@@ -31,6 +31,7 @@ ollama-rs = { path = "crates/ollama-rs", features = ["stream"] }
 ort = { version = "1.16.3", features = [ "load-dynamic" ] }
 portable-pty = "0.8.1"
 fastembed = "1.9.0"
+xz2 = { version = "0.1.7", features = ["static"] } 
 
 tauri-plugin-localhost = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "v1" }
 portpicker = "0.1"

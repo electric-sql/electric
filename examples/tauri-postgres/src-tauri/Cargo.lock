@@ -126,6 +126,7 @@ dependencies = [
  "tauri-plugin-localhost",
  "tauri-plugin-log",
  "tokio",
+ "xz2",
 ]
 
 [[package]]
