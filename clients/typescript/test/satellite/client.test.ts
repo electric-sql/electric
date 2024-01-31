@@ -451,6 +451,7 @@ test.serial('migration transaction contains all information', async (t) => {
       t.deepEqual(transaction, {
         commit_timestamp: commit.commitTimestamp,
         lsn: begin.lsn,
+        id: undefined,
         changes: [
           {
             migrationType: Proto.SatOpMigrate_Type.CREATE_TABLE,

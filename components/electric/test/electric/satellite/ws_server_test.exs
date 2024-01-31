@@ -92,7 +92,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
     on_exit(fn -> clean_connections() end)
 
     user_id = "a5408365-7bf4-48b1-afe2-cb8171631d7c"
-    client_id = "device-id-0000"
+    client_id = "device-id-#{Enum.random(100_000..999_999)}"
     token = Auth.Secure.create_token(user_id)
 
     {:ok, user_id: user_id, client_id: client_id, token: token}
@@ -404,14 +404,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
       limit = 10
 
       with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
-        # Skip initial sync
-        lsn = to_string(@current_wal_pos + 1)
-
-        assert {:ok, _} =
-                 MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{
-                   lsn: lsn
-                 })
-
+        start_replication_and_assert_response(conn, 1)
         [{client_name, _client_pid}] = active_clients()
         mocked_producer = Producer.name(client_name)
 
@@ -583,13 +576,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
     test "changes before the insertion point of a subscription are not sent if no prior subscriptions exist",
          ctx do
       with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->
-        # Skip initial sync
-        lsn = to_string(@current_wal_pos + 1)
-
-        assert {:ok, _} =
-                 MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{
-                   lsn: lsn
-                 })
+        start_replication_and_assert_response(conn, 1)
 
         [{client_name, _client_pid}] = active_clients()
         mocked_producer = Producer.name(client_name)
@@ -624,14 +611,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
     test "unsubscribing works even on not-yet-fulfilled subscriptions",
          ctx do
       with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->
-        # Skip initial sync
-        lsn = to_string(@current_wal_pos + 1)
-
-        assert {:ok, _} =
-                 MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{
-                   lsn: lsn
-                 })
-
+        start_replication_and_assert_response(conn, 1)
         [{client_name, _client_pid}] = active_clients()
         mocked_producer = Producer.name(client_name)
         subscription_id = "00000000-0000-0000-0000-000000000000"
