@@ -13,16 +13,16 @@
   "tauri": {
     "allowlist": {
       "all": false,
-      "shell":{
+      "shell": {
         "scope": [
-          { "name": "./ollama", "sidecar": true }
+          { "name": "ollama", "sidecar": true }
         ],
         "sidecar": true
       }
     },
     "bundle": {
       "externalBin": [
-        "./ollama"
+        "ollama"
       ],
       "active": true,
       "category": "DeveloperTool",
