@@ -1,8 +1,16 @@
 diff --git a/Cargo.toml b/Cargo.toml
-index 63ae842..04daf1b 100644
+index 63ae842..bcf2cd6 100644
 --- a/Cargo.toml
 +++ b/Cargo.toml
-@@ -36,15 +36,16 @@ sqlx_tokio = { version = "0.6", features = [
+@@ -29,22 +29,23 @@ tokio = { version = "1", features = ["full"], optional = true }
+ futures = "0.3"
+ thiserror = "1.0"
+ # Waiting for https://github.com/JoyMoe/archiver-rs/pull/6
+-archiver-rs = { git = "https://github.com/gz/archiver-rs.git", branch = "patch-1" }
++#archiver-rs = { git = "https://github.com/gz/archiver-rs.git", branch = "patch-1" }
+ sqlx_tokio = { version = "0.6", features = [
+     "runtime-tokio-rustls",
+     "postgres",
      "migrate",
  ], package = "sqlx", optional = true }
  zip = "0.6"
@@ -14,11 +22,11 @@ index 63ae842..04daf1b 100644
  async-trait = "0.1"
 +tracing = { version = "0.1.40", features = ["log"]}
 +tracing-subscriber = "0.3.18"
-
+ 
  [dev-dependencies]
  serial_test = "2.0.0"
 -env_logger = "0.10"
-
+ 
  [[test]]
  name = "migration_tokio"
 @@ -59,4 +60,4 @@ required-features = ["rt_tokio"]
@@ -34,7 +42,7 @@ index 643b225..fce90f5 100644
 +++ b/src/command_executor.rs
 @@ -7,7 +7,8 @@ use std::marker;
  use std::process::Stdio;
-
+ 
  use async_trait::async_trait;
 -use log;
 +// use log;
@@ -56,7 +64,7 @@ index 643b225..fce90f5 100644
              }
          }
 diff --git a/src/pg_access.rs b/src/pg_access.rs
-index e1cb065..e87621c 100644
+index e1cb065..4c4a7ce 100644
 --- a/src/pg_access.rs
 +++ b/src/pg_access.rs
 @@ -103,28 +103,13 @@ impl PgAccess {
@@ -95,6 +103,15 @@ index e1cb065..e87621c 100644
          tokio::fs::create_dir_all(&cache_pg_embed)
              .map_err(|e| PgEmbedError {
                  error_type: PgEmbedErrorType::DirCreationError,
+@@ -163,7 +148,7 @@ impl PgAccess {
+             self.zip_file_path.display(),
+             self.cache_dir.display()
+         );
+-        pg_unpack::unpack_postgres(&self.zip_file_path, &self.cache_dir).await?;
++        // pg_unpack::unpack_postgres(&self.zip_file_path, &self.cache_dir).await?;
+ 
+         lock.insert(self.cache_dir.clone(), PgAcquisitionStatus::Finished);
+         Ok(())
 diff --git a/src/pg_fetch.rs b/src/pg_fetch.rs
 index 47604ec..82f9ca3 100644
 --- a/src/pg_fetch.rs
@@ -105,7 +122,7 @@ index 47604ec..82f9ca3 100644
  use reqwest::Response;
 -use std::future::Future;
 +use std::path::PathBuf;
-
+ 
  use crate::pg_enums::{Architecture, OperationSystem};
  use crate::pg_errors::{PgEmbedError, PgEmbedErrorType};
 @@ -40,6 +40,8 @@ pub struct PgFetchSettings {
@@ -115,7 +132,7 @@ index 47604ec..82f9ca3 100644
 +    /// The cache_dir you actually want
 +    pub cache_dir: PathBuf
  }
-
+ 
  impl Default for PgFetchSettings {
 @@ -49,6 +51,11 @@ impl Default for PgFetchSettings {
              operating_system: OperationSystem::default(),
@@ -129,19 +146,253 @@ index 47604ec..82f9ca3 100644
          }
      }
  }
+diff --git a/src/pg_unpack.rs b/src/pg_unpack.rs
+index 2b24ed1..70a299f 100644
+--- a/src/pg_unpack.rs
++++ b/src/pg_unpack.rs
+@@ -3,121 +3,121 @@
+ //!
+ use std::path::PathBuf;
+ 
+-use archiver_rs::{Archive, Compressed};
++// use archiver_rs::{Archive, Compressed};
+ use futures::TryFutureExt;
+ 
+ use crate::pg_errors::{PgEmbedError, PgEmbedErrorType};
+ use crate::pg_types::PgResult;
+ 
+-///
+-/// Unzip the postgresql txz file
+-///
+-/// Returns `Ok(PathBuf(txz_file_path))` file path of the txz archive on success, otherwise returns an error.
+-///
+-fn unzip_txz(zip_file_path: &PathBuf, cache_dir: &PathBuf) -> Result<PathBuf, PgEmbedError> {
+-    let mut zip = archiver_rs::Zip::open(zip_file_path.as_path()).map_err(|e| PgEmbedError {
+-        error_type: PgEmbedErrorType::ReadFileError,
+-        source: Some(Box::new(e)),
+-        message: Some(format!(
+-            "Could not read zip file {}",
+-            zip_file_path.display()
+-        )),
+-    })?;
+-    let file_name = zip
+-        .files()
+-        .map_err(|e| PgEmbedError {
+-            error_type: PgEmbedErrorType::UnpackFailure,
+-            source: Some(Box::new(e)),
+-            message: None,
+-        })?
+-        .into_iter()
+-        .find(|name| name.ends_with(".txz"));
+-    match file_name {
+-        Some(file_name) => {
+-            // decompress zip
+-            let mut target_path = cache_dir.clone();
+-            target_path.push(&file_name);
+-            zip.extract_single(&target_path.as_path(), file_name.clone())
+-                .map_err(|e| PgEmbedError {
+-                    error_type: PgEmbedErrorType::UnpackFailure,
+-                    source: Some(Box::new(e)),
+-                    message: None,
+-                })?;
+-            Ok(target_path)
+-        }
+-        None => Err(PgEmbedError {
+-            error_type: PgEmbedErrorType::InvalidPgPackage,
+-            source: None,
+-            message: Some(String::from("no postgresql txz in zip")),
+-        }),
+-    }
+-}
++//
++// Unzip the postgresql txz file
++//
++// Returns `Ok(PathBuf(txz_file_path))` file path of the txz archive on success, otherwise returns an error.
++//
++// fn unzip_txz(zip_file_path: &PathBuf, cache_dir: &PathBuf) -> Result<PathBuf, PgEmbedError> {
++//     let mut zip = archiver_rs::Zip::open(zip_file_path.as_path()).map_err(|e| PgEmbedError {
++//         error_type: PgEmbedErrorType::ReadFileError,
++//         source: Some(Box::new(e)),
++//         message: Some(format!(
++//             "Could not read zip file {}",
++//             zip_file_path.display()
++//         )),
++//     })?;
++//     let file_name = zip
++//         .files()
++//         .map_err(|e| PgEmbedError {
++//             error_type: PgEmbedErrorType::UnpackFailure,
++//             source: Some(Box::new(e)),
++//             message: None,
++//         })?
++//         .into_iter()
++//         .find(|name| name.ends_with(".txz"));
++//     match file_name {
++//         Some(file_name) => {
++//             // decompress zip
++//             let mut target_path = cache_dir.clone();
++//             target_path.push(&file_name);
++//             zip.extract_single(&target_path.as_path(), file_name.clone())
++//                 .map_err(|e| PgEmbedError {
++//                     error_type: PgEmbedErrorType::UnpackFailure,
++//                     source: Some(Box::new(e)),
++//                     message: None,
++//                 })?;
++//             Ok(target_path)
++//         }
++//         None => Err(PgEmbedError {
++//             error_type: PgEmbedErrorType::InvalidPgPackage,
++//             source: None,
++//             message: Some(String::from("no postgresql txz in zip")),
++//         }),
++//     }
++// }
+ 
+-///
+-/// Decompress the postgresql txz file
+-///
+-/// Returns `Ok(PathBuf(tar_file_path))` (*the file path to the postgresql tar file*) on success, otherwise returns an error.
+-///
+-fn decompress_xz(file_path: &PathBuf) -> Result<PathBuf, PgEmbedError> {
+-    let mut xz = archiver_rs::Xz::open(file_path.as_path()).map_err(|e| PgEmbedError {
+-        error_type: PgEmbedErrorType::ReadFileError,
+-        source: Some(Box::new(e)),
+-        message: None,
+-    })?;
+-    // rename file path suffix from .txz to .tar
+-    let target_path = file_path.with_extension(".tar");
+-    xz.decompress(&target_path.as_path())
+-        .map_err(|e| PgEmbedError {
+-            error_type: PgEmbedErrorType::UnpackFailure,
+-            source: Some(Box::new(e)),
+-            message: None,
+-        })?;
+-    Ok(target_path)
+-}
++//
++// Decompress the postgresql txz file
++//
++// Returns `Ok(PathBuf(tar_file_path))` (*the file path to the postgresql tar file*) on success, otherwise returns an error.
++//
++// fn decompress_xz(file_path: &PathBuf) -> Result<PathBuf, PgEmbedError> {
++//     let mut xz = archiver_rs::Xz::open(file_path.as_path()).map_err(|e| PgEmbedError {
++//         error_type: PgEmbedErrorType::ReadFileError,
++//         source: Some(Box::new(e)),
++//         message: None,
++//     })?;
++//     // rename file path suffix from .txz to .tar
++//     let target_path = file_path.with_extension(".tar");
++//     xz.decompress(&target_path.as_path())
++//         .map_err(|e| PgEmbedError {
++//             error_type: PgEmbedErrorType::UnpackFailure,
++//             source: Some(Box::new(e)),
++//             message: None,
++//         })?;
++//     Ok(target_path)
++// }
+ 
+-///
+-/// Unpack the postgresql tar file
+-///
+-/// Returns `Ok(())` on success, otherwise returns an error.
+-///
+-fn decompress_tar(file_path: &PathBuf, cache_dir: &PathBuf) -> Result<(), PgEmbedError> {
+-    let mut tar = archiver_rs::Tar::open(&file_path.as_path()).map_err(|e| PgEmbedError {
+-        error_type: PgEmbedErrorType::ReadFileError,
+-        source: Some(Box::new(e)),
+-        message: None,
+-    })?;
++//
++// Unpack the postgresql tar file
++//
++// Returns `Ok(())` on success, otherwise returns an error.
++//
++// fn decompress_tar(file_path: &PathBuf, cache_dir: &PathBuf) -> Result<(), PgEmbedError> {
++//     let mut tar = archiver_rs::Tar::open(&file_path.as_path()).map_err(|e| PgEmbedError {
++//         error_type: PgEmbedErrorType::ReadFileError,
++//         source: Some(Box::new(e)),
++//         message: None,
++//     })?;
+ 
+-    tar.extract(cache_dir.as_path()).map_err(|e| PgEmbedError {
+-        error_type: PgEmbedErrorType::UnpackFailure,
+-        source: Some(Box::new(e)),
+-        message: None,
+-    })?;
++//     tar.extract(cache_dir.as_path()).map_err(|e| PgEmbedError {
++//         error_type: PgEmbedErrorType::UnpackFailure,
++//         source: Some(Box::new(e)),
++//         message: None,
++//     })?;
+ 
+-    Ok(())
+-}
++//     Ok(())
++// }
+ 
+-///
+-/// Unpack the postgresql executables
+-///
+-/// Returns `Ok(())` on success, otherwise returns an error.
+-///
+-pub async fn unpack_postgres(zip_file_path: &PathBuf, cache_dir: &PathBuf) -> PgResult<()> {
+-    let txz_file_path = unzip_txz(&zip_file_path, &cache_dir)?;
+-    let tar_file_path = decompress_xz(&txz_file_path)?;
+-    tokio::fs::remove_file(txz_file_path)
+-        .map_err(|e| PgEmbedError {
+-            error_type: PgEmbedErrorType::PgCleanUpFailure,
+-            source: Some(Box::new(e)),
+-            message: None,
+-        })
+-        .await?;
+-    let _ = decompress_tar(&tar_file_path, &cache_dir);
+-    tokio::fs::remove_file(tar_file_path)
+-        .map_err(|e| PgEmbedError {
+-            error_type: PgEmbedErrorType::PgCleanUpFailure,
+-            source: Some(Box::new(e)),
+-            message: None,
+-        })
+-        .await?;
+-    Ok(())
+-}
++//
++// Unpack the postgresql executables
++//
++// Returns `Ok(())` on success, otherwise returns an error.
++//
++// pub async fn unpack_postgres(zip_file_path: &PathBuf, cache_dir: &PathBuf) -> PgResult<()> {
++//     let txz_file_path = unzip_txz(&zip_file_path, &cache_dir)?;
++//     let tar_file_path = decompress_xz(&txz_file_path)?;
++//     tokio::fs::remove_file(txz_file_path)
++//         .map_err(|e| PgEmbedError {
++//             error_type: PgEmbedErrorType::PgCleanUpFailure,
++//             source: Some(Box::new(e)),
++//             message: None,
++//         })
++//         .await?;
++//     let _ = decompress_tar(&tar_file_path, &cache_dir);
++//     tokio::fs::remove_file(tar_file_path)
++//         .map_err(|e| PgEmbedError {
++//             error_type: PgEmbedErrorType::PgCleanUpFailure,
++//             source: Some(Box::new(e)),
++//             message: None,
++//         })
++//         .await?;
++//     Ok(())
++// }
 diff --git a/src/postgres.rs b/src/postgres.rs
 index af2536c..bf7c444 100644
 --- a/src/postgres.rs
 +++ b/src/postgres.rs
 @@ -11,7 +11,8 @@ use std::sync::Arc;
  use std::time::Duration;
-
+ 
  use futures::TryFutureExt;
 -use log::{error, info};
 +use tracing::{error, info, debug};
 +// use log::{error, info};
  use tokio::sync::Mutex;
-
+ 
  #[cfg(feature = "rt_tokio_migrate")]
 @@ -225,7 +226,7 @@ impl PgEmbed {
      pub fn handle_process_io_sync(&self, mut process: std::process::Child) -> PgResult<()> {
