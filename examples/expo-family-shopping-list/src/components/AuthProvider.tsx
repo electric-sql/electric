@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { AppState } from "react-native";
 import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { AuthError, createClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
 
 export type UserId = string
 
@@ -112,6 +112,10 @@ interface EmailPasswordInput {
   password: string
 }
 
+interface AuthError {
+  message: string
+}
+
 /**
  * Signs the user up with an account with given email and password.
  * Check if an error is returned as operation does not throw.
@@ -133,10 +137,20 @@ export async function signUp(
 export async function signIn(
   { email, password } : EmailPasswordInput
 ) : Promise<{ error: AuthError | null }> {
-  const { error } = await supabase.auth.signInWithPassword({
+  const { data, error } = await supabase.auth.signInWithPassword({
     email,
     password
   })
+
+  // special case of successful signup but still needing verification
+  if (!error && !data.session) {
+    return {
+      error: {
+        message: 'Please check your inbox for email verification!'
+      }
+    }
+  }
+
   return { error }
 }
 
