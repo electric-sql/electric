@@ -443,6 +443,10 @@ function opToString(op: Pb.SatTransOp): string {
     }], old: [${
       op.delete.oldRowData ? rowToString(op.delete.oldRowData) : ''
     }]}`
+  if (op.gone)
+    return `#Gone{for: ${op.gone.relationId}, pk: ${rowToString(
+      op.gone.pkData!
+    )}}`
   if (op.migrate)
     return `#Migrate{vsn: ${op.migrate.version}, for: ${
       op.migrate.table?.name
@@ -452,7 +456,7 @@ function opToString(op: Pb.SatTransOp): string {
   if (op.additionalBegin)
     return `#AdditionalBegin{ref: ${op.additionalBegin.ref}}`
   if (op.additionalCommit)
-    return `#AdditionalBegin{ref: ${op.additionalCommit.ref}}`
+    return `#AdditionalCommit{ref: ${op.additionalCommit.ref}}`
   return ''
 }
 

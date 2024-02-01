@@ -64,7 +64,9 @@ import {
   TransactionCallback,
   ServerTransaction,
   InboundReplication,
-  SocketCloseReason
+  SocketCloseReason,
+  AdditionalData,
+  DataInsert,
 } from '../util/types'
 import {
   base64,
@@ -116,6 +118,7 @@ type Events = {
     transaction: ServerTransaction,
     ackCb: () => void
   ) => Promise<void>
+  additionalData: (data: AdditionalData, ack: () => void) => Promise<void>
   outbound_started: () => void
 }
 type EventEmitter = AsyncEventEmitter<Events>
@@ -222,6 +225,8 @@ export class SatelliteClient implements Client {
         () => this.maybeSendAck('timeout'),
         DEFAULT_ACK_PERIOD
       ),
+      additionalData: [],
+      unseenAdditionalDataRefs: new Set(),
     }
   }
 
@@ -400,6 +405,19 @@ export class SatelliteClient implements Client {
     this.emitter.removeListener('transaction', callback)
   }
 
+  subscribeToAdditionalData(callback: (data: AdditionalData) => Promise<void>) {
+    this.emitter.on('additionalData', async (data, ackCb) => {
+      await callback(data)
+      ackCb()
+    })
+  }
+
+  unsubscribeToAdditionalData(
+    callback: (data: AdditionalData) => Promise<void>
+  ) {
+    this.emitter.removeListener('additionalData', callback)
+  }
+
   subscribeToRelations(callback: RelationCallback) {
     this.emitter.on('relation', callback)
   }
@@ -495,8 +513,6 @@ export class SatelliteClient implements Client {
       subscriptionId,
       shapeRequests: shapeRequestToSatShapeReq(shapes),
     })
-
-    console.log(request.shapeRequests[0].shapeDefinition?.selects[0].include)
 
     this.subscriptionsDataCache.subscriptionRequest(request)
 
@@ -935,11 +951,24 @@ export class SatelliteClient implements Client {
           origin: op.begin.origin!,
           id: op.begin.transactionId!,
         }
+        replication.incomplete = 'transaction'
         replication.transactions.push(transaction)
       }
 
+      if (op.additionalBegin) {
+        replication.incomplete = 'additionalData'
+        replication.additionalData.push({
+          ref: op.additionalBegin.ref,
+          changes: [],
+        })
+      }
+
       const lastTxnIdx = replication.transactions.length - 1
+      const lastDataIdx = replication.additionalData.length - 1
       if (op.commit) {
+        if (replication.incomplete !== 'transaction')
+          throw new Error('Unexpected commit message while not waiting for txn')
+
         const { commit_timestamp, lsn, changes, origin, migrationVersion, id } =
           replication.transactions[lastTxnIdx]
         const transaction: ServerTransaction = {
@@ -949,6 +978,9 @@ export class SatelliteClient implements Client {
           origin,
           migrationVersion,
           id,
+          additionalDataRef: op.commit.additionalDataRef.isZero()
+            ? undefined
+            : op.commit.additionalDataRef,
         }
         this.emitter.enqueueEmit('transaction', transaction, () => {
           this.inbound.last_lsn = transaction.lsn
@@ -957,19 +989,46 @@ export class SatelliteClient implements Client {
           this.maybeSendAck()
         })
         replication.transactions.splice(lastTxnIdx)
+        replication.incomplete = undefined
+        if (!op.commit.additionalDataRef.isZero())
+          replication.unseenAdditionalDataRefs.add(
+            op.commit.additionalDataRef.toString()
+          )
+      }
+
+      if (op.additionalCommit) {
+        if (replication.incomplete !== 'additionalData')
+          throw new Error(
+            'Unexpected additionalCommit message while not waiting for additionalData'
+          )
+        // TODO: We need to include these in the ACKs as well
+        this.emitter.enqueueEmit(
+          'additionalData',
+          replication.additionalData[lastDataIdx],
+          () => {}
+        )
+        replication.additionalData.splice(lastDataIdx)
+        replication.incomplete = undefined
+        replication.unseenAdditionalDataRefs.delete(
+          op.additionalCommit.ref.toString()
+        )
       }
 
       if (op.insert) {
         const rel = this.getRelation(op.insert)
 
-        const change = {
+        const change: DataInsert = {
           relation: rel,
           type: DataChangeType.INSERT,
           record: deserializeRow(op.insert.rowData!, rel, this.dbDescription),
           tags: op.insert.tags,
         }
 
-        replication.transactions[lastTxnIdx].changes.push(change)
+        if (replication.incomplete! === 'transaction') {
+          replication.transactions[lastTxnIdx].changes.push(change)
+        } else {
+          replication.additionalData[lastDataIdx].changes.push(change)
+        }
       }
 
       if (op.update) {
@@ -1168,6 +1227,16 @@ export function serializeRow(
   })
 }
 
+export function deserializeRow(
+  row: SatOpRow,
+  relation: Relation,
+  dbDescription: DbSchema<any>
+): Record
+export function deserializeRow(
+  row: SatOpRow | undefined,
+  relation: Relation,
+  dbDescription: DbSchema<any>
+): Record | undefined
 export function deserializeRow(
   row: SatOpRow | undefined,
   relation: Relation,

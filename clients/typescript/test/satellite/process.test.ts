@@ -1614,6 +1614,90 @@ test('applied shape data will be acted upon correctly', async (t) => {
   }
 })
 
+test('additional data will be stored properly', async (t) => {
+  const { client, satellite, adapter } = t.context
+  const { runMigrations, authState } = t.context
+  await runMigrations()
+  const tablename = 'parent'
+
+  // relations must be present at subscription delivery
+  client.setRelations(relations)
+  client.setRelationData(tablename, parentRecord)
+
+  const conn = await satellite.start(authState)
+  await conn.connectionPromise
+
+  const shapeDef: Shape = {
+    tablename,
+  }
+
+  satellite!.relations = relations
+  const { synced } = await satellite.subscribe([shapeDef])
+  await synced
+  await satellite._performSnapshot()
+
+  // Send additional data
+  await client.additionalDataCb!({
+    ref: new Long(10),
+    changes: [
+      {
+        relation: relations.parent,
+        tags: ['server@' + Date.now()],
+        type: DataChangeType.INSERT,
+        record: { id: 100, value: 'new_value' },
+      },
+    ],
+  })
+
+  const [result] = await adapter.query({
+    sql: 'SELECT * FROM main.parent WHERE id = 100',
+  })
+  t.deepEqual(result, { id: 100, value: 'new_value', other: null })
+})
+
+test('GONE messages are applied as DELETEs', async (t) => {
+  const { client, satellite, adapter } = t.context
+  const { runMigrations, authState } = t.context
+  await runMigrations()
+  const tablename = 'parent'
+
+  // relations must be present at subscription delivery
+  client.setRelations(relations)
+  client.setRelationData(tablename, parentRecord)
+
+  const conn = await satellite.start(authState)
+  await conn.connectionPromise
+
+  const shapeDef: Shape = {
+    tablename,
+  }
+
+  satellite!.relations = relations
+  const { synced } = await satellite.subscribe([shapeDef])
+  await synced
+  await satellite._performSnapshot()
+
+  // Send additional data
+  await client.transactionsCb!({
+    commit_timestamp: Long.fromNumber(new Date().getTime()),
+    id: new Long(10),
+    lsn: new Uint8Array(),
+    changes: [
+      {
+        relation: relations.parent,
+        tags: [],
+        type: DataChangeType.GONE,
+        record: { id: 1 },
+      },
+    ],
+  })
+
+  const results = await adapter.query({
+    sql: 'SELECT * FROM main.parent',
+  })
+  t.deepEqual(results, [])
+})
+
 test('a subscription that failed to apply because of FK constraint triggers GC', async (t) => {
   const { client, satellite, adapter, runMigrations, authState, token } =
     t.context

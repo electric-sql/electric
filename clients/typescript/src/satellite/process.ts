@@ -23,6 +23,7 @@ import {
 } from '../util/common'
 import { QualifiedTablename } from '../util/tablename'
 import {
+  AdditionalData,
   ConnectivityState,
   ConnectivityStatus,
   DataChange,
@@ -319,6 +320,7 @@ export class SatelliteProcess implements Satellite {
     this.client.subscribeToError(this._handleClientError.bind(this))
     this.client.subscribeToRelations(this._updateRelations.bind(this))
     this.client.subscribeToTransactions(this._applyTransaction.bind(this))
+    this.client.subscribeToAdditionalData(this._applyAdditionalData.bind(this))
     this.client.subscribeToOutboundStarted(this._throttledSnapshot.bind(this))
 
     this.client.subscribeToSubscriptionEvents(
@@ -525,7 +527,9 @@ export class SatelliteProcess implements Satellite {
     for (const [table, { relation, dataChanges }] of groupedChanges) {
       const records = dataChanges.map((change) => change.record)
       const columnNames = relation.columns.map((col) => col.name)
-      const sqlBase = `INSERT INTO ${table} (${columnNames.join(', ')}) VALUES `
+      const sqlBase = `INSERT OR IGNORE INTO ${table} (${columnNames.join(
+        ', '
+      )}) VALUES `
 
       stmts.push(
         ...prepareInsertBatchedStatements(
@@ -1149,6 +1153,7 @@ export class SatelliteProcess implements Satellite {
         }
 
         switch (entryChanges.optype) {
+          case OPTYPES.gone:
           case OPTYPES.delete:
             stmts.push(_applyDeleteOperation(entryChanges, tablenameStr))
             stmts.push(this._deleteShadowTagsStatement(shadowEntry))
@@ -1374,6 +1379,13 @@ export class SatelliteProcess implements Satellite {
     }
 
     await this._notifyChanges(opLogEntries, 'remote')
+  }
+
+  async _applyAdditionalData(data: AdditionalData) {
+    // Server sends additional data on move-ins and tries to send only data
+    // the client has never seen from its perspective. Because of this, we're writing this
+    // data directly, like subscription data
+    this._applySubscriptionData(data.changes, this._lsn!)
   }
 
   private async maybeGarbageCollect(

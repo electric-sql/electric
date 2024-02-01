@@ -19,6 +19,7 @@ import {
   TransactionCallback,
   SocketCloseReason,
   ReplicationStatus,
+  AdditionalDataCallback,
 } from '../util/types'
 import { ElectricConfig } from '../config/index'
 
@@ -185,6 +186,7 @@ export class MockSatelliteClient
   relations: RelationsCache = {}
   relationsCb?: (relation: Relation) => void
   transactionsCb?: TransactionCallback
+  additionalDataCb?: AdditionalDataCallback
 
   relationData: Record<string, DataRecord[]> = {}
 
@@ -399,6 +401,14 @@ export class MockSatelliteClient
   }
 
   unsubscribeToTransactions(): void {
+    throw new Error('Method not implemented.')
+  }
+
+  subscribeToAdditionalData(callback: AdditionalDataCallback): void {
+    this.additionalDataCb = callback
+  }
+
+  unsubscribeToAdditionalData(_cb: AdditionalDataCallback): void {
     throw new Error('Method not implemented.')
   }
 
