@@ -10,25 +10,25 @@ defmodule Electric.Replication.Shapes.ChangeProcessing do
   import Electric.Replication.Shapes.ChangeProcessing.Reduction
 
   @spec process(Changes.change(), Layer.t(), Reduction.t()) :: Reduction.t()
-  def process(%Changes.NewRecord{} = r, %Layer{} = layer, reduction(graph: graph) = state)
+  def process(%Changes.NewRecord{} = r, %Layer{} = layer, reduction() = state)
       when r.relation == layer.target_table do
     if where_clause_passes?(layer.where_target, r.record) do
       own_id = id(r.record, layer.target_table, layer.target_pk)
 
       case layer.direction do
         :first_layer ->
-          graph = add_to_graph(graph, layer, r.record)
-
-          process_next_layers(layer, reduction(state, graph: graph), r.record, event: :new)
+          state
+          |> add_to_graph(layer, r.record)
+          |> process_next_layers(layer, r.record, event: :new)
           |> add_operation(r, own_id)
 
         :one_to_many ->
           parent_id = id(r.record, layer.source_table, layer.fk)
 
-          if row_in_graph?(graph, parent_id, layer.parent_key) do
-            graph = add_to_graph(graph, layer, r.record, parent_id)
-
-            process_next_layers(layer, reduction(state, graph: graph), r.record, event: :new)
+          if row_in_graph?(state, parent_id, layer.parent_key) do
+            state
+            |> add_to_graph(layer, r.record, parent_id)
+            |> process_next_layers(layer, r.record, event: :new)
             |> add_operation(r, own_id)
           else
             buffer(state, r, layer, waiting_for: {:pk, parent_id})
@@ -38,13 +38,14 @@ defmodule Electric.Replication.Shapes.ChangeProcessing do
           # Since this is a new record, it cannot have been already referenced, unless in the same transaction
           case fetch_buffer_seen_fk(reduction(state, :buffer), layer, own_id) do
             {:ok, {parent_id, count}} ->
-              graph = add_to_graph(graph, layer, r.record, parent_id)
+              state = add_to_graph(state, layer, r.record, parent_id)
 
               if count == 1 do
-                process_next_layers(layer, reduction(state, graph: graph), r.record, event: :new)
+                state
+                |> process_next_layers(layer, r.record, event: :new)
                 |> add_operation(r, own_id)
               else
-                reduction(state, graph: graph)
+                state
               end
 
             :error ->
@@ -56,12 +57,12 @@ defmodule Electric.Replication.Shapes.ChangeProcessing do
     end
   end
 
-  def process(%Changes.DeletedRecord{} = r, %Layer{} = layer, reduction(graph: graph) = state)
+  def process(%Changes.DeletedRecord{} = r, %Layer{} = layer, reduction() = state)
       when r.relation == layer.target_table do
     own_id = id(r.old_record, layer.target_table, layer.target_pk)
 
     cond do
-      row_in_graph?(graph, own_id, layer.key) ->
+      row_in_graph?(state, own_id, layer.key) ->
         state
         |> remove_layer_connection(layer, r.old_record)
         |> cascade_remove_from_graph(layer, own_id)
@@ -78,12 +79,12 @@ defmodule Electric.Replication.Shapes.ChangeProcessing do
     end
   end
 
-  def process(%Changes.UpdatedRecord{} = r, %Layer{} = layer, reduction(graph: graph) = state)
+  def process(%Changes.UpdatedRecord{} = r, %Layer{} = layer, reduction() = state)
       when r.relation == layer.target_table do
     own_id = id(r.record, layer.target_table, layer.target_pk)
     was_in_where? = where_clause_passes?(layer.where_target, r.old_record)
     is_in_where? = where_clause_passes?(layer.where_target, r.record)
-    is_in_graph? = row_in_graph?(graph, own_id, layer.key)
+    is_in_graph? = row_in_graph?(state, own_id, layer.key)
 
     case layer.direction do
       :first_layer ->
@@ -134,10 +135,10 @@ defmodule Electric.Replication.Shapes.ChangeProcessing do
 
             cond do
               parent_id == old_parent_id ->
-                reduction(state, graph: graph)
-                |> add_operation(r, own_id, as: :updated_record)
+                # Parent unchanged, row in graph - just pass the update through
+                add_operation(state, r, own_id, as: :updated_record)
 
-              row_in_graph?(graph, parent_id, layer.parent_key) ->
+              row_in_graph?(state, parent_id, layer.parent_key) ->
                 # We need to special-case a same-layer move between parents to update the graph correctly
                 graph =
                   reduction(state, :graph)
@@ -159,7 +160,7 @@ defmodule Electric.Replication.Shapes.ChangeProcessing do
 
           {false, _, true} ->
             # This update may be relevant if we'll see parent insert/update in the same txn, so we buffer
-            if row_in_graph?(graph, parent_id, layer.parent_key) do
+            if row_in_graph?(state, parent_id, layer.parent_key) do
               move_in(state, r, layer, own_id, parent_id)
             else
               buffer(state, r, layer, waiting_for: {:pk, parent_id})
@@ -183,17 +184,17 @@ defmodule Electric.Replication.Shapes.ChangeProcessing do
     end)
   end
 
-  def move_in(state, %Changes.UpdatedRecord{} = event, layer, own_id, parent_id \\ nil)
-      when is_struct(layer, Layer) and is_reduction(state) do
-    graph = add_to_graph(reduction(state, :graph), layer, event.record, parent_id)
-
-    process_next_layers(layer, reduction(state, graph: graph), event.record, event: :new)
+  defp move_in(state, %Changes.UpdatedRecord{} = event, layer, own_id, parent_id \\ nil)
+       when is_struct(layer, Layer) and is_reduction(state) do
+    state
+    |> add_to_graph(layer, event.record, parent_id)
+    |> process_next_layers(layer, event.record, event: :new)
     |> add_operation(event, own_id, as: :new_record)
     |> mark_gone_superseded(own_id)
     |> add_fetch_action(layer, event.record, own_id)
   end
 
-  def move_out(state, %Changes.UpdatedRecord{} = event, %Layer{} = layer, own_id) do
+  defp move_out(state, %Changes.UpdatedRecord{} = event, %Layer{} = layer, own_id) do
     state
     |> remove_layer_connection(layer, event.old_record)
     |> cascade_remove_from_graph(layer, own_id)
@@ -201,10 +202,10 @@ defmodule Electric.Replication.Shapes.ChangeProcessing do
     |> mark_gone_superseded(own_id)
   end
 
-  def add_fetch_action(state, %Layer{next_layers: []}, _, _) when is_reduction(state), do: state
+  defp add_fetch_action(state, %Layer{next_layers: []}, _, _) when is_reduction(state), do: state
 
-  def add_fetch_action(reduction(actions: actions) = state, layer, record, own_id)
-      when is_struct(layer, Layer) and is_map(record) do
+  defp add_fetch_action(reduction(actions: actions) = state, layer, record, own_id)
+       when is_struct(layer, Layer) and is_map(record) do
     if Enum.any?(layer.next_layers, &(&1.direction == :one_to_many)) do
       actions = Map.update(actions, layer, [{own_id, record}], &[{own_id, record} | &1])
       reduction(state, actions: actions)
@@ -213,17 +214,17 @@ defmodule Electric.Replication.Shapes.ChangeProcessing do
     end
   end
 
-  @spec skip(any()) :: any()
-  def skip(state), do: state
+  @spec skip(Reduction.t()) :: Reduction.t()
+  defp skip(state), do: state
 
-  def mark_gone_superseded(reduction(gone_nodes: gone) = state, id),
+  defp mark_gone_superseded(reduction(gone_nodes: gone) = state, id),
     do: reduction(state, gone_nodes: MapSet.delete(gone, id))
 
-  def row_gone?(reduction(gone_nodes: gone), id), do: MapSet.member?(gone, id)
+  defp row_gone?(reduction(gone_nodes: gone), id), do: MapSet.member?(gone, id)
 
-  def where_clause_passes?(nil, _), do: true
+  defp where_clause_passes?(nil, _), do: true
 
-  def where_clause_passes?(%Eval.Expr{} = expr, record) do
+  defp where_clause_passes?(%Eval.Expr{} = expr, record) do
     {:ok, remapped} = Eval.Runner.record_to_ref_values(expr.used_refs, record)
 
     case Eval.Runner.execute(expr, remapped) do
@@ -234,11 +235,17 @@ defmodule Electric.Replication.Shapes.ChangeProcessing do
   end
 
   @doc """
-  Add record to graph
-  """
-  def add_to_graph(graph, layer, record_or_id, parent_id \\ nil)
+  Add record to graph at a given layer with a given parent.
 
-  def add_to_graph(graph, %Layer{direction: :first_layer} = layer, record_or_id, nil)
+  Either full records or precomputed IDs may be used for graph additions
+  """
+  def add_to_graph(state_or_graph, layer, record_or_id, parent_record_or_id \\ nil)
+
+  def add_to_graph(reduction(graph: graph) = state, layer, record_or_id, parent_record_or_id) do
+    reduction(state, graph: add_to_graph(graph, layer, record_or_id, parent_record_or_id))
+  end
+
+  def add_to_graph(%Graph{} = graph, %Layer{direction: :first_layer} = layer, record_or_id, nil)
       when is_map(record_or_id) or is_tuple(record_or_id) do
     own_id =
       case record_or_id do
@@ -249,7 +256,7 @@ defmodule Electric.Replication.Shapes.ChangeProcessing do
     Graph.add_edge(graph, :root, own_id, label: layer.key)
   end
 
-  def add_to_graph(graph, %Layer{} = layer, record_or_id, parent_record_or_id)
+  def add_to_graph(%Graph{} = graph, %Layer{} = layer, record_or_id, parent_record_or_id)
       when (is_map(record_or_id) or is_tuple(record_or_id)) and layer.direction != :first_layer and
              parent_record_or_id != nil and
              (is_map(parent_record_or_id) or is_tuple(parent_record_or_id)) do
@@ -268,20 +275,12 @@ defmodule Electric.Replication.Shapes.ChangeProcessing do
     Graph.add_edge(graph, parent_id, own_id, label: layer.key)
   end
 
-  def add_to_graph(graph, %Layer{} = layer, own_id, parent_id)
-      when is_tuple(own_id) and layer.direction != :first_layer and parent_id != nil do
-    Graph.add_edge(graph, parent_id, own_id, label: layer.key)
-  end
-
-  @doc """
-
-  """
-  def remove_layer_connection(state, %Layer{} = layer, record) when is_map(record) do
+  defp remove_layer_connection(state, %Layer{} = layer, record) when is_map(record) do
     remove_layer_connection(state, layer, id(record, layer.target_table, layer.target_pk))
   end
 
-  def remove_layer_connection(reduction(graph: graph) = state, %Layer{key: key}, id)
-      when is_tuple(id) do
+  defp remove_layer_connection(reduction(graph: graph) = state, %Layer{key: key}, id)
+       when is_tuple(id) do
     edges_for_removal =
       graph
       |> Graph.in_edges(id)
@@ -290,26 +289,11 @@ defmodule Electric.Replication.Shapes.ChangeProcessing do
     reduction(state, graph: Graph.delete_edges(graph, edges_for_removal))
   end
 
-  def remove_from_graph(graph, %Layer{key: key}, id, parent_id) do
-    Graph.delete_edge(graph, parent_id, id, key)
-  end
-
-  @doc """
-
-  """
-  def gc_node(state, false, _) when is_reduction(state), do: state
-
-  def gc_node(reduction(graph: g, gone_nodes: n) = state, true, id),
-    do: reduction(state, graph: Graph.delete_vertex(g, id), gone_nodes: MapSet.put(n, id))
-
-  @doc """
-
-  """
-  def process_next_layers(%Layer{next_layers: []}, state, _record, _) when is_reduction(state),
+  defp process_next_layers(state, %Layer{next_layers: []}, _record, _) when is_reduction(state),
     do: state
 
-  def process_next_layers(%Layer{} = layer, state, record, event: event_type)
-      when is_reduction(state) do
+  defp process_next_layers(state, %Layer{} = layer, record, event: event_type)
+       when is_reduction(state) do
     for %Layer{} = next_layer <- layer.next_layers, reduce: state do
       state ->
         case {next_layer.direction, event_type} do
@@ -323,7 +307,7 @@ defmodule Electric.Replication.Shapes.ChangeProcessing do
     end
   end
 
-  def cascade_remove_from_graph(reduction(graph: graph) = state, %Layer{} = layer, starting_id) do
+  defp cascade_remove_from_graph(reduction(graph: graph) = state, %Layer{} = layer, starting_id) do
     edges = Graph.out_edges(graph, starting_id)
 
     state =
@@ -361,27 +345,25 @@ defmodule Electric.Replication.Shapes.ChangeProcessing do
   end
 
   @doc """
-
+  Build a node ID for the sent rows graph for a given record.
   """
   def id(record, relation, pk_columns), do: {relation, get_pk(record, pk_columns)}
   defp get_pk(map, keys), do: Enum.map(keys, &Map.fetch!(map, &1))
 
-  @doc """
+  @doc false
+  def row_in_graph?(reduction(graph: graph), row_id, layer_key),
+    do: row_in_graph?(graph, row_id, layer_key)
 
-  """
-  def row_in_graph?(graph, row_id, layer_key) do
+  def row_in_graph?(%Graph{} = graph, row_id, layer_key) do
     graph
     |> Graph.in_edges(row_id)
     |> Enum.any?(&(&1.label == layer_key))
   end
 
-  @doc """
-
-  """
-  def buffer(reduction(buffer: buffer) = state, event, layer, [
-        {:waiting_for, {kind, id}} | if_not_seen
-      ])
-      when kind in [:pk, :fk] do
+  defp buffer(reduction(buffer: buffer) = state, event, layer, [
+         {:waiting_for, {kind, id}} | if_not_seen
+       ])
+       when kind in [:pk, :fk] do
     path = path(kind / {layer.key, id})
 
     buffer = Pathex.force_over!(buffer, path, &[{event, layer} | &1], [{event, layer}])
@@ -400,28 +382,11 @@ defmodule Electric.Replication.Shapes.ChangeProcessing do
     reduction(state, buffer: buffer)
   end
 
-  @doc """
-
-  """
-  def waiting_for?(buffer, %Layer{key: key, direction: dir}, found_id) do
-    kind =
-      case dir do
-        :one_to_many -> :pk
-        :many_to_one -> :fk
-      end
-
-    Pathex.exists?(buffer, path(kind / {key, found_id} / 0))
-  end
-
-  @doc """
-
-  """
-  def fetch_buffer_seen_fk(buffer, %Layer{key: key, direction: :many_to_one}, fk_id) do
+  defp fetch_buffer_seen_fk(buffer, %Layer{key: key, direction: :many_to_one}, fk_id) do
     Pathex.view(buffer, path(:events / :fk / {key, fk_id}))
   end
 
-  @doc """
-  """
+  @doc false
   def trigger_buffer_fk_event(state, %Layer{direction: :many_to_one} = layer, record)
       when is_reduction(state) do
     own_id = id(record, layer.source_table, layer.source_pk)
@@ -434,24 +399,20 @@ defmodule Electric.Replication.Shapes.ChangeProcessing do
       |> Pathex.force_over!(event_path, fn {_, count} -> {own_id, count + 1} end, {own_id, 1})
 
     # If the row has already been referenced in the same layer (i.e. by a sibling), then we can immediately add a graph edge towards it
-    graph =
-      if row_in_graph?(reduction(state, :graph), fk_id, layer.key) do
-        add_to_graph(reduction(state, :graph), layer, fk_id, own_id)
-      else
-        reduction(state, :graph)
-      end
+    state =
+      if row_in_graph?(state, fk_id, layer.key),
+        do: add_to_graph(state, layer, fk_id, own_id),
+        else: state
 
     for {change, layer} <-
           Pathex.get(reduction(state, :buffer), path(:fk / {layer.key, fk_id}), []),
-        reduce: reduction(state, buffer: buffer, graph: graph) do
+        reduce: reduction(state, buffer: buffer) do
       state -> process(change, layer, state)
     end
   end
 
-  @doc """
-  """
-  def trigger_buffer_pk_event(state, %Layer{direction: :one_to_many} = layer, record)
-      when is_reduction(state) do
+  defp trigger_buffer_pk_event(state, %Layer{direction: :one_to_many} = layer, record)
+       when is_reduction(state) do
     own_id = id(record, layer.source_table, layer.source_pk)
 
     buffer =

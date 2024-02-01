@@ -216,7 +216,7 @@ defmodule Electric.Satellite.WebsocketServer do
 
     # We're ignoring actions here since we've "manufactured" migration events
     # which by definition aren't shape-dependent, so actions are always empty
-    {msgs, _actions, state} =
+    {msgs, %{}, state} =
       migrations
       |> Enum.map(&{&1, &1.lsn})
       |> Protocol.handle_outgoing_txs(state)

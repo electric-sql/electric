@@ -810,7 +810,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
       ) do
     insertion_point = Keyword.get(opts, :insertion_point, 0)
     data_delay_ms = Keyword.get(opts, :data_delay_ms, 0)
-    send(pid, {:subscription_insertion_point, ref, insertion_point})
+    send(pid, {:data_insertion_point, ref, insertion_point})
 
     Process.send_after(
       pid,

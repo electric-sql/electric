@@ -42,9 +42,7 @@ defmodule Electric.Replication.Shapes do
           Reduction.add_passthrough_operation(state, change)
 
         change, state ->
-          shapes
-          |> Enum.flat_map(&ShapeRequest.relevant_layers(&1, change))
-          |> Enum.reduce(state, &ChangeProcessing.process(change, &1, &2))
+          process_change_using_shapes(shapes, change, state)
       end)
 
     {graph, changes, actions} =
@@ -52,9 +50,7 @@ defmodule Electric.Replication.Shapes do
         if Reduction.graph_includes_id?(state, id) do
           state
         else
-          shapes
-          |> Enum.flat_map(&ShapeRequest.relevant_layers(&1, change))
-          |> Enum.reduce(state, &ChangeProcessing.process(change, &1, &2))
+          process_change_using_shapes(shapes, change, state)
         end
       end)
       |> ChangeProcessing.finalize_process()
@@ -70,13 +66,15 @@ defmodule Electric.Replication.Shapes do
   @spec process_additional_changes(Enumerable.t(Changes.change()), Graph.t(), [ShapeRequest.t()]) ::
           {Graph.t(), [Changes.change()], subquery_actions()}
   def process_additional_changes(changes, graph, shapes) do
-    Enum.reduce(changes, Reduction.new(graph), fn change, state ->
-      shapes
-      |> Enum.flat_map(&ShapeRequest.relevant_layers(&1, change))
-      |> Enum.reduce(state, &ChangeProcessing.process(change, &1, &2))
-    end)
+    Enum.reduce(changes, Reduction.new(graph), &process_change_using_shapes(shapes, &1, &2))
     |> ChangeProcessing.finalize_process()
     |> Reduction.unwrap()
+  end
+
+  defp process_change_using_shapes(shapes, change, state) do
+    shapes
+    |> Enum.flat_map(&ShapeRequest.relevant_layers(&1, change))
+    |> Enum.reduce(state, &ChangeProcessing.process(change, &1, &2))
   end
 
   @doc """

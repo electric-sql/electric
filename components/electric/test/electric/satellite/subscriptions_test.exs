@@ -818,7 +818,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
             ["New comment 2", comment_2_id]
           )
 
-        refute_receive {^conn, %SatOpLog{}}, 100
+        refute_receive {^conn, %SatOpLog{}}, 1000
       end)
     end
 

@@ -44,6 +44,7 @@ defmodule Electric.Postgres.Extension.Functions do
   @function_names function_names
 
   @name_hash :erlang.md5(sql_template_paths)
+
   def __mix_recompile__?() do
     @name_hash != Path.wildcard(@template_dir_path <> "/**/*.sql.eex") |> :erlang.md5()
   end

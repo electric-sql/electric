@@ -665,14 +665,14 @@ defmodule Electric.Satellite.Protocol do
     Metrics.satellite_replication_event(%{started: 1})
 
     {pid, ref} =
-      Utils.GenStage.gproc_subscribe_self!(
+      Utils.GenStageHelpers.gproc_subscribe_self!(
         to: CachedWal.Producer.name(state.client_id),
         start_subscription: lsn,
         min_demand: 5,
         max_demand: 10
       )
 
-    Utils.GenStage.ask({pid, ref}, @producer_demand)
+    Utils.GenStageHelpers.ask({pid, ref}, @producer_demand)
 
     out_rep = %OutRep{
       out_rep
@@ -1024,7 +1024,7 @@ defmodule Electric.Satellite.Protocol do
     end)
 
     receive do
-      {:subscription_insertion_point, ^ref, xmin} ->
+      {:data_insertion_point, ^ref, xmin} ->
         Logger.debug(
           "Requested data for subscription #{id}, insertion point is at xmin = #{xmin}"
         )
@@ -1047,14 +1047,10 @@ defmodule Electric.Satellite.Protocol do
     end
   end
 
-  @spec query_move_in_data(Shapes.subquery_actions(), State.t()) ::
-          {:ok, State.t()} | {:error, deep_msg_list()}
+  @spec query_move_in_data(actions(), State.t()) :: {:ok, State.t()} | {:error, deep_msg_list()}
   defp query_move_in_data(actions, %State{} = state) do
     ref = make_ref()
     parent = self()
-
-    # state = start_subscription_telemetry_span(state, id, requests)
-
     shape_requests = List.flatten(Map.values(state.subscriptions))
 
     context =
@@ -1065,20 +1061,18 @@ defmodule Electric.Satellite.Protocol do
     # I'm dereferencing these here because calling this in Task implies copying over entire `state` just for two fields.
     fun = state.move_in_data_fun
     move_in_ref = state.out_rep.move_in_next_ref
-    # span = state.telemetry.subscription_spans[id]
 
     Task.start(fn ->
-      # This is `InitialSync.query_subscription_data/2` by default, but can be overridden for tests.
+      # This is `InitialSync.query_move_in_data/4` by default, but can be overridden for tests.
       # Please see documentation on that function for context on the next `receive` block.
       fun.(move_in_ref, actions, context,
         reply_to: {ref, parent},
         connection: state.connector_config
-        # telemetry_span: span
       )
     end)
 
     receive do
-      {:subscription_insertion_point, ^ref, xmin} ->
+      {:data_insertion_point, ^ref, xmin} ->
         Logger.debug(
           "Requested data after transaction move-ins, insertion point is at xmin = #{xmin}"
         )

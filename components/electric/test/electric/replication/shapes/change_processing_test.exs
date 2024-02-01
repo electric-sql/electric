@@ -1,5 +1,6 @@
 defmodule Electric.Replication.Shapes.ChangeProcessingTest do
   use ExUnit.Case, async: true
+  use Pathex, default_mod: :json
 
   alias Electric.Replication.Changes.NewRecord
   alias Electric.Replication.Changes.DeletedRecord
@@ -129,7 +130,7 @@ defmodule Electric.Replication.Shapes.ChangeProcessingTest do
       refute ChangeProcessing.row_in_graph?(new_graph, id, layer.key)
       assert operations == %{}
 
-      assert ChangeProcessing.waiting_for?(
+      assert waiting_for?(
                buffer,
                layer,
                ChangeProcessing.id(%{"id" => @base_uuid_1}, @rel_proj, ["id"])
@@ -168,7 +169,7 @@ defmodule Electric.Replication.Shapes.ChangeProcessingTest do
       refute ChangeProcessing.row_in_graph?(new_graph, id, layer.key)
       assert operations == %{}
 
-      assert ChangeProcessing.waiting_for?(
+      assert waiting_for?(
                buffer,
                layer,
                ChangeProcessing.id(%{"id" => @base_uuid_1}, @rel_proj, ["id"])
@@ -214,7 +215,7 @@ defmodule Electric.Replication.Shapes.ChangeProcessingTest do
       assert ChangeProcessing.row_in_graph?(new_graph, id, layer.key)
       assert operations == %{event => nil}
 
-      refute ChangeProcessing.waiting_for?(
+      refute waiting_for?(
                buffer,
                layer,
                ChangeProcessing.id(%{"id" => @base_uuid_1}, @rel_proj, ["id"])
@@ -847,7 +848,7 @@ defmodule Electric.Replication.Shapes.ChangeProcessingTest do
       assert %{} == operations
       assert %{} == actions
 
-      assert ChangeProcessing.waiting_for?(
+      assert waiting_for?(
                buffer,
                l2,
                ChangeProcessing.id(%{"id" => @base_uuid_1}, @rel_proj, ["id"])
@@ -1398,5 +1399,15 @@ defmodule Electric.Replication.Shapes.ChangeProcessingTest do
       refute MapSet.member?(gone, id2)
       assert %{^e1 => {:deleted_record, _}} = operations
     end
+  end
+
+  defp waiting_for?(buffer, %Layer{key: key, direction: dir}, found_id) do
+    kind =
+      case dir do
+        :one_to_many -> :pk
+        :many_to_one -> :fk
+      end
+
+    Pathex.exists?(buffer, path(kind / {key, found_id} / 0))
   end
 end

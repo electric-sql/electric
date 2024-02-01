@@ -1,4 +1,5 @@
 defmodule Electric.Replication.Shapes.ShapeRequest.Validation do
+  alias Electric.Utils
   alias Electric.Replication.Shapes.ShapeRequest.Layer
   alias Electric.Replication.Eval
 
@@ -24,10 +25,7 @@ defmodule Electric.Replication.Shapes.ShapeRequest.Validation do
   def prepare_layer_base(%Select{} = select, fk_graph, schema, request_id, parent_key \\ nil) do
     with {:ok, table} <- validate_table_exists(select.tablename, fk_graph),
          {:ok, where} <- validate_where(select.where, for: table, schema: schema) do
-      select_hash =
-        Base.encode64(
-          :crypto.hash(:blake2b, :erlang.term_to_iovec({parent_key, select}, [:deterministic]))
-        )
+      select_hash = Utils.term_hash({parent_key, select})
 
       {:ok,
        %Layer{
@@ -46,7 +44,7 @@ defmodule Electric.Replication.Shapes.ShapeRequest.Validation do
   @spec validate_table_exists(String.t(), Graph.t()) :: {:ok, relation()} | error()
   defp validate_table_exists(schema \\ "public", name, fk_graph) do
     cond do
-      name == "" or String.length(name) not in 1..64 or not String.printable?(name) ->
+      name == "" or byte_size(name) not in 1..64 or not String.printable?(name) ->
         {:error, {:TABLE_NOT_FOUND, "Invalid table name"}}
 
       not Graph.has_vertex?(fk_graph, {schema, name}) ->

@@ -24,6 +24,7 @@ defmodule Electric.Replication.Changes do
   (UUID for Satellite clients) and timestamp is millisecond-precision UTC unix timestamp
   """
   @type tag() :: String.t()
+  @type pk() :: [String.t(), ...]
 
   @type change() ::
           Changes.NewRecord.t()
@@ -35,7 +36,7 @@ defmodule Electric.Replication.Changes do
 
     @type referenced_records :: %{
             optional(Changes.relation()) => %{
-              optional([String.t(), ...]) => Changes.ReferencedRecord.t()
+              optional(Changes.pk()) => Changes.ReferencedRecord.t()
             }
           }
 
@@ -192,7 +193,7 @@ defmodule Electric.Replication.Changes do
     @type t() :: %__MODULE__{
             relation: Changes.relation(),
             record: Changes.record(),
-            pk: [String.t(), ...],
+            pk: Changes.pk(),
             tags: [Changes.tag()]
           }
   end
@@ -202,7 +203,7 @@ defmodule Electric.Replication.Changes do
 
     @type t() :: %__MODULE__{
             relation: Changes.relation(),
-            pk: [String.t(), ...]
+            pk: Changes.pk()
           }
   end
 

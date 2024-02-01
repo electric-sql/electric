@@ -10,8 +10,7 @@ defmodule Electric.Replication.Shapes.QueryingTest do
   alias Electric.Replication.Shapes.Querying
 
   describe "query_layer/6" do
-    setup [:setup_replicated_db, :setup_electrified_tables, :setup_with_sql_execute]
-    setup :load_schema
+    setup [:setup_replicated_db, :setup_electrified_tables, :setup_with_sql_execute, :load_schema]
 
     @tag with_sql: """
          INSERT INTO public.my_entries (id, content) VALUES (gen_random_uuid(), 'test content');

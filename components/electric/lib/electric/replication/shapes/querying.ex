@@ -18,7 +18,7 @@ defmodule Electric.Replication.Shapes.Querying do
   Each layer requires a different initial dataset, so this function
   encapsulates that. The arguments, apart from the layer itself, are:
   - `conn` - the `:epgsql` connection to use for queries.
-  - `schema` - the `%Electric.Postgres.Schema.Proto.Schema{}` struct, used to get
+  - `schema` - the `%SchemaLoader.Version{}` struct, used to get
     columns and other information required to build queries
   - `origin` - PG origin that's used to convert PG tags to Satellite tags.
     See `Electric.Postgres.ShadowTableTransformation.convert_tag_list_pg_to_satellite/2`
@@ -28,7 +28,7 @@ defmodule Electric.Replication.Shapes.Querying do
 
   ## Transaction requirements
 
-  Stability and validity of the results depends on running in the correct transaction.
+  Stability and validity of the results depend on running in the correct transaction.
   This function may execute multiple queries separately and expects the data to be stable,
   so the connection needs to be in a transaction with `ISOLATION LEVEL REPEATABLE READ`
   set (see [PG documentation](https://www.postgresql.org/docs/current/transaction-iso.html#XACT-REPEATABLE-READ)

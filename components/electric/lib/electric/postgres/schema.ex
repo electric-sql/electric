@@ -152,7 +152,7 @@ defmodule Electric.Postgres.Schema do
       constraints
       |> Enum.filter(&match?(%{constraint: {:foreign, _}}, &1))
       |> Enum.map(fn %{constraint: {:foreign, fk}} ->
-        {{"public", name.name}, {"public", fk.pk_table.name}, label: fk.fk_cols}
+        {{@public_schema, name.name}, {@public_schema, fk.pk_table.name}, label: fk.fk_cols}
       end)
       |> then(&Graph.add_edges(graph, &1))
     end)

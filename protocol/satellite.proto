@@ -348,7 +348,6 @@ message SatOpCompensation {
 message SatOpGone {
     uint32 relation_id = 1;
     SatOpRow pk_data = 2;
-
 }
 
 // Dependency information for row data.

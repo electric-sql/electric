@@ -1,4 +1,4 @@
-defmodule Electric.Utils.GenStage do
+defmodule Electric.Utils.GenStageHelpers do
   @moduledoc """
   Helpers that wrap GenStage functionality and messages to write custom stages.
   """
