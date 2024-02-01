@@ -20,7 +20,7 @@ export class DatabaseAdapter extends GenericDatabaseAdapter {
       statement.sql,
       statement.args
     )
-    return result.rows?._array ?? []
+        return result.rows?._array ?? []
   }
   async _run(statement: Statement): Promise<RunResult> {
     const result = this.db.execute(
