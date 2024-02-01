@@ -1,4 +1,4 @@
-defmodule Electric.Satellite.Permissions.Tree do
+defmodule Electric.Satellite.Permissions.WriteBuffer do
   alias Electric.Replication.Changes
   alias Electric.Satellite.Permissions
   alias Electric.Satellite.Permissions.Scope

@@ -152,7 +152,7 @@ defmodule Electric.Satellite.Permissions do
   use Electric.Satellite.Protobuf
 
   alias Electric.Replication.Changes
-  alias Electric.Satellite.Permissions.{Grant, Read, Role, Scope, Transient, Tree, Trigger}
+  alias Electric.Satellite.Permissions.{Grant, Read, Role, Scope, Transient, WriteBuffer, Trigger}
   alias Electric.Satellite.{Auth, SatPerms}
 
   require Logger
@@ -265,7 +265,7 @@ defmodule Electric.Satellite.Permissions do
   def new(%Auth{} = auth, {_, _} = scope_resolver, transient_lut_name \\ Transient) do
     %__MODULE__{
       auth: auth,
-      scope_resolver: Scope.new(read: scope_resolver, write: Tree.new(scope_resolver)),
+      scope_resolver: Scope.new(read: scope_resolver, write: WriteBuffer.new(scope_resolver)),
       transient_lut: transient_lut_name,
       intermediate_roles: %IntermediateRoles{}
     }

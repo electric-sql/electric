@@ -1,25 +1,19 @@
-defmodule Electric.Satellite.Permissions.TreeTest do
+defmodule Electric.Satellite.Permissions.WriteBufferTest do
   use ExUnit.Case, async: true
 
-  alias Electric.Satellite.Permissions.Tree
+  alias Electric.Satellite.Permissions.WriteBuffer
   alias Electric.Satellite.Permissions.Scope
   alias ElectricTest.PermissionsHelpers.Chgs
-  alias ElectricTest.PermissionsHelpers.Tree, as: HelperTree
+  alias ElectricTest.PermissionsHelpers.Tree
 
   @workspaces {"public", "workspaces"}
   @projects {"public", "projects"}
   @issues {"public", "issues"}
   @comments {"public", "comments"}
 
-  def fk_graph(edges) do
-    Tree.graph()
-    # |> Graph.add_vertices(@tables)
-    |> Graph.add_edges(Enum.map(edges, fn {v1, v2, label} -> {v1, v2, label: label} end))
-  end
-
   def tree(fks) do
     upstream =
-      HelperTree.new(
+      Tree.new(
         [
           {@workspaces, "w1",
            [
@@ -40,7 +34,7 @@ defmodule Electric.Satellite.Permissions.TreeTest do
         fks
       )
 
-    Tree.new(upstream)
+    WriteBuffer.new(upstream)
   end
 
   setup do
@@ -135,7 +129,7 @@ defmodule Electric.Satellite.Permissions.TreeTest do
 
       tree = apply_updates(cxt.tree, changes)
 
-      assert_raise Tree.Error, fn ->
+      assert_raise WriteBuffer.Error, fn ->
         changes = [
           Chgs.insert(@comments, %{"id" => "c3", "issue_id" => "i2"})
         ]
@@ -143,7 +137,7 @@ defmodule Electric.Satellite.Permissions.TreeTest do
         _tree = apply_updates(tree, changes)
       end
 
-      assert_raise Tree.Error, fn ->
+      assert_raise WriteBuffer.Error, fn ->
         changes = [
           Chgs.delete(@issues, %{"id" => "i2"}),
           Chgs.insert(@comments, %{"id" => "c3", "issue_id" => "i2"})
@@ -160,7 +154,7 @@ defmodule Electric.Satellite.Permissions.TreeTest do
 
       tree = apply_updates(cxt.unmodified_tree, changes)
 
-      refute Tree.pending_changes(tree)
+      refute WriteBuffer.pending_changes(tree)
     end
 
     test "with fk changing updates", cxt do
@@ -236,7 +230,7 @@ defmodule Electric.Satellite.Permissions.TreeTest do
         Chgs.update(@issues, %{"id" => "i1", "project_id" => "p1"}, %{"project_id" => "p3"})
       ]
 
-      assert_raise Tree.Error, fn ->
+      assert_raise WriteBuffer.Error, fn ->
         _tree = apply_updates(cxt.tree, changes)
       end
     end
@@ -268,20 +262,20 @@ defmodule Electric.Satellite.Permissions.TreeTest do
     end
 
     test "tree keeps track of seen client tags", cxt do
-      assert MapSet.equal?(Tree.seen_tags(cxt.tree), MapSet.new(cxt.tags))
-      refute Tree.empty?(cxt.tree)
+      assert MapSet.equal?(WriteBuffer.seen_tags(cxt.tree), MapSet.new(cxt.tags))
+      refute WriteBuffer.empty?(cxt.tree)
     end
 
     test "resets tree to empty when all tags received", cxt do
       %{changes: [changes1, changes2, changes3], tree: tree} = cxt
-      tree = Tree.receive_transaction(tree, Chgs.tx(changes1))
-      refute Tree.empty?(tree)
+      tree = WriteBuffer.receive_transaction(tree, Chgs.tx(changes1))
+      refute WriteBuffer.empty?(tree)
 
-      tree = Tree.receive_transaction(tree, Chgs.tx(changes2))
-      refute Tree.empty?(tree)
+      tree = WriteBuffer.receive_transaction(tree, Chgs.tx(changes2))
+      refute WriteBuffer.empty?(tree)
 
-      tree = Tree.receive_transaction(tree, Chgs.tx(changes3))
-      assert Tree.empty?(tree)
+      tree = WriteBuffer.receive_transaction(tree, Chgs.tx(changes3))
+      assert WriteBuffer.empty?(tree)
 
       # ensure we can still resolve scopes using the upstream
       assert {["w1"], _} = Scope.scope_id(tree, @workspaces, @projects, %{"id" => "p1"})
