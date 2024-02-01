@@ -1005,7 +1005,7 @@ export class SatelliteClient implements Client {
         this.emitter.enqueueEmit(
           'additionalData',
           replication.additionalData[lastDataIdx],
-          () => {}
+          () => void 0
         )
         replication.additionalData.splice(lastDataIdx)
         replication.incomplete = undefined
