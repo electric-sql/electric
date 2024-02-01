@@ -3,13 +3,11 @@ import { Alert, SafeAreaView } from 'react-native'
 import { Button } from 'react-native-paper'
 import EmailPasswordForm from '../components/EmailPasswordForm'
 import { Link } from 'expo-router'
-import { signIn } from '../components/AuthProvider'
+import { signUp } from '../components/AuthProvider'
 
-
-
-export default function SignIn() {
-  const signInWithEmail = async (email: string, password: string) => {
-    const { error } = await signIn({
+export default function SignUp() {
+  const signUpWithEmail = async (email: string, password: string) => {
+    const { error } = await signUp({
       email: email,
       password: password,
     })
@@ -19,12 +17,12 @@ export default function SignIn() {
   return (
     <SafeAreaView style={{ marginHorizontal: 16 }}>
       <EmailPasswordForm
-        submitText="Sign in"
-        onSubmit={signInWithEmail}
+        submitText="Sign up"
+        onSubmit={signUpWithEmail}
         />
-      <Link href="/sign_up" replace asChild>
+      <Link href="/sign_in" replace asChild>
         <Button mode="text" style={{ marginTop: 12 }}>
-          I don't have an account
+          I already have an account
         </Button>
       </Link>
     </SafeAreaView>
