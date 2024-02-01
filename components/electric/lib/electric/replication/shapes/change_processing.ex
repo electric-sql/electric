@@ -1,4 +1,63 @@
 defmodule Electric.Replication.Shapes.ChangeProcessing do
+  @moduledoc """
+  Change processing according to shapes.
+
+  This module contains the main logic that allows us to reason about each change
+  that comes from PG and needs to be propagated to the client. Since each change
+  in a transaction needs to be processed, and some changes influence the processing
+  of other changes in the same transaction, this module has two functions -
+  `process/3` that should be called for each layer of each shape that is relevant to
+  the current change, and `finalize_process/3` after no more changes are available.
+
+  Ongoing processing information is stored in a `Reduction` record, that is built
+  from a current sent rows graph, and will yield a new graph, a set of updated and
+  filtered changes, and a set of actions that need to be done after this transaction.
+
+  ## Sent rows graph
+
+  We're keeping track of sent rows in a graph that has all references between rows, and
+  why exactly they were sent.
+
+  Graph nodes are row identifiers: pairs of a row relation (schema name and table name)
+  and row primary key (a list in the order of the PK columns serialized as strings).
+
+  Graph edges are more interesting: they are following the directions of shape requests
+  over both one-to-many and many-to-one foreign keys on rows. When a row is added to the
+  graph, it's linked to the "parent" that causes this row to be present in one of the shapes
+  (or a special `:root` node for first-layer rows), and the edge between the "parent" and
+  the new row is labeled with the unique key of the layer that allowed this to happen. A row
+  can be linked to the same parent with multiple edges, each labeled with a different key
+  if they are parts of multiple shapes.
+
+  This edge labeling allows us to reference count exact paths that led to the same row -
+  e.g. if a `user:1` is reachable via `comment:1 -> author_id` and `issue:1 -> assignee_id`,
+  then if the comment is no longer visible we can remove edge based on which shape the comment
+  is no longer a part of, but since the user has at least one edge coming in (from the issue),
+  it's still considered part of the sent rows graph and something the client can see.
+
+  ## Juggling changes within a transaction
+
+  We don't have a sort order we can use for changes in a transaction, because multiple shapes
+  may span the same relations over both one-to-many and many-to-one directions. This leads to
+  a situation that if the change currently doesn't fit the shape, we can't just discard it,
+  because a change later on in the transaction may fit the shape and cause that previously-seen
+  change to fit. Because of this, we're keeping an buffer, where we store a possible cause
+  that would make the change fit into this shape, and if we observe such a change, reprocess
+  the old change with the new information in hand. That approach doesn't rely on the transaction
+  order regardless of shape requirements.
+
+  ## GONE or not GONE
+
+  `GONE` messages are a way to notify the client that they can no longer observe the row: no
+  further changes will be sent for it, and it's on the client to clean up.
+
+  Whenever we figure out that the row is not referenced by anything in the graph, we consider it
+  GONE. Within the transaction, the GONE status of row may change multiple times, e.g. if the
+  change falls out of one shape, but now fits into another. Row deletion is special-cased, in that
+  we can guarantee it won't be referenced by anything anymore, but we send the event as a `DELETE`,
+  not a `GONE` - because the client needs to observe the DELETE.
+  """
+
   require Pathex
   alias Electric.Replication.Eval
   alias Electric.Replication.Shapes.ShapeRequest.Layer
