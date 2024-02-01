@@ -8,7 +8,7 @@ import { Link } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import FlatListSeparator from '../../../components/FlatListSeparator'
 
-export default function Home () {
+export default function ShoppingLists () {
   const { db } = useElectric()!
   const { results = [] } = useLiveQuery(db.shopping_list.liveMany({
     select: {

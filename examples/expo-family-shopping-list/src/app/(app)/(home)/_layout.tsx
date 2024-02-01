@@ -6,10 +6,10 @@ export default function HomeLayout() {
     <GestureHandlerRootView style={{ flex: 1}}>
       <Drawer>
         <Drawer.Screen
-          name="index"
+          name="shopping_lists"
           options={{
-            drawerLabel: 'Home',
-            title: 'Home',
+            drawerLabel: 'Shopping Lists',
+            title: 'Shopping Lists',
           }}
         />
         <Drawer.Screen

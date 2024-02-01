@@ -8,7 +8,7 @@ export type UserId = string
 // Initiate your Supabase client
 const supabaseUrl = process.env.EXPO_PUBLIC_ELECTRIC_SUPABASE_URL ?? 'dummy'
 const supabaseAnonKey = process.env.EXPO_PUBLIC_ELECTRIC_SUPABASE_ANON_KEY ?? 'dummy'
-const supabase = createClient(supabaseUrl, supabaseAnonKey,  {
+export const supabase = createClient(supabaseUrl, supabaseAnonKey,  {
   auth: {
     storage: AsyncStorage,
     autoRefreshToken: true,
