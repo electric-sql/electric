@@ -6,10 +6,26 @@ import { createClient } from '@supabase/supabase-js';
 
 export type UserId = string
 
+interface EmailPasswordInput {
+  email: string,
+  password: string
+}
+
+interface AuthError {
+  message: string
+}
+
 interface AuthState {
-  loading: boolean,
+  initializing: boolean,
+  operationInProgress: boolean,
   userId: UserId | null,
   jwtToken: string | null,
+}
+
+interface AuthActions {
+  signIn: (input: EmailPasswordInput) => Promise<{ error: AuthError | null }>,
+  signUp: (input: EmailPasswordInput) => Promise<{ error: AuthError | null }>,
+  signOut: () => Promise<{ error: AuthError | null }>,
 }
 
 // Initiate your Supabase client
@@ -25,11 +41,10 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey,  {
 })
 
 
-const AuthContext = createContext<AuthState>({
-  loading: true,
-  userId: null,
-  jwtToken: null,
-});
+const AuthContext = createContext<{
+  state: AuthState,
+  actions: AuthActions,
+} | null>(null)
 
 function AuthProvider({
   children,
@@ -38,8 +53,10 @@ function AuthProvider({
   children: React.ReactNode,
   onSignOut?: () => void
 }) {
+  const [ operationInProgress, setOperationInProgress ] = useState(false)
   const [ state, setState ] = useState<AuthState>({
-    loading: true,
+    initializing: true,
+    operationInProgress,
     userId: null,
     jwtToken: null
   })
@@ -69,18 +86,20 @@ function AuthProvider({
         case 'INITIAL_SESSION':
         case 'SIGNED_IN':
         case 'TOKEN_REFRESHED':
-          setState({
-            loading: false,
+          setState((state) => ({
+            ...state,
+            initializing: false,
             userId: session?.user.id ?? null,
             jwtToken: session?.access_token ?? null
-          })
+          }))
           break
         case 'SIGNED_OUT':
-          setState({
-            loading: false,
+          setState((state) => ({
+            ...state,
+            initializing: false,
             userId: null,
             jwtToken: null
-          })
+          }))
           onSignOut?.()
           break
       }
@@ -88,8 +107,70 @@ function AuthProvider({
     return subscription.unsubscribe
   }, [])
 
+  /**
+   * Signs the user up with an account with given email and password.
+   * Check if an error is returned as operation does not throw.
+   */
+  async function signUp(
+    { email, password } : EmailPasswordInput
+  ) : Promise<{ error: AuthError | null }> {
+    setOperationInProgress(true)
+    const { error } = await supabase.auth.signUp({
+      email,
+      password
+    })
+    setOperationInProgress(false)
+    return { error }
+  }
+
+  /**
+   * Signs the user with the given email and password in.
+   * Check if an error is returned as operation does not throw.
+   */
+  async function signIn(
+    { email, password } : EmailPasswordInput
+  ) : Promise<{ error: AuthError | null }> {
+    setOperationInProgress(true)
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    })
+    setOperationInProgress(false)
+
+    // special case of successful signup but still needing verification
+    if (!error && !data.session) {
+      return {
+        error: {
+          message: 'Please check your inbox for email verification!'
+        }
+      }
+    }
+
+    return { error }
+  }
+
+  /**
+   * Signs the user out.
+   * Check if an error is returned as operation does not throw.
+   */
+  async function signOut() : Promise<{ error: AuthError | null }> {
+    setOperationInProgress(true)
+    const { error } = await supabase.auth.signOut()
+    setOperationInProgress(false)
+    return { error }
+  }
+
+  const value = {
+    state: state,
+    actions: {
+      signIn,
+      signUp,
+      signOut
+    }
+  }
+
   return (
-    <AuthContext.Provider value={state}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
@@ -100,7 +181,7 @@ function AuthProvider({
  * Retrieve the current authenticated user ID if present
  */
 export function useAuthenticatedUser() : UserId | null {
-  const { userId } = useContext(AuthContext)
+  const { state: { userId } } = useContext(AuthContext)!
   return userId
 }
 
@@ -108,7 +189,7 @@ export function useAuthenticatedUser() : UserId | null {
  * Retrieve the current JWT access token if present
  */
 export function useAccessToken() : string | null {
-  const { jwtToken } = useContext(AuthContext)
+  const { state: { jwtToken } } = useContext(AuthContext)!
   return jwtToken
 }
 
@@ -118,64 +199,19 @@ export function useAccessToken() : string | null {
 export function useAuthenticationState() {
   return {
     authenticated: useAuthenticatedUser() != null,
-    initializing: useContext(AuthContext).loading,
+    initializing: useContext(AuthContext)!.state.initializing,
   }
 }
 
-interface EmailPasswordInput {
-  email: string,
-  password: string
-}
-
-interface AuthError {
-  message: string
-}
-
 /**
- * Signs the user up with an account with given email and password.
- * Check if an error is returned as operation does not throw.
+ * Returns authentication actions such as signing in or out,
+ * as well as a flag to indicate if any action is active
  */
-export async function signUp(
-  { email, password } : EmailPasswordInput
-) : Promise<{ error: AuthError | null }> {
-  const { error } = await supabase.auth.signUp({
-    email,
-    password
-  })
-  return { error }
-}
-
-/**
- * Signs the user with the given email and password in.
- * Check if an error is returned as operation does not throw.
- */
-export async function signIn(
-  { email, password } : EmailPasswordInput
-) : Promise<{ error: AuthError | null }> {
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email,
-    password
-  })
-
-  // special case of successful signup but still needing verification
-  if (!error && !data.session) {
-    return {
-      error: {
-        message: 'Please check your inbox for email verification!'
-      }
-    }
+export function useAuthActions() {
+  return {
+    ...useContext(AuthContext)!.actions,
+    loading: useContext(AuthContext)!.state.operationInProgress,
   }
-
-  return { error }
-}
-
-/**
- * Signs the user out.
- * Check if an error is returned as operation does not throw.
- */
-export async function signOut() : Promise<{ error: AuthError | null }> {
-  const { error } = await supabase.auth.signOut()
-  return { error }
 }
 
 export default AuthProvider

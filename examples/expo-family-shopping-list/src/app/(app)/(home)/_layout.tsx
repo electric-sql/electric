@@ -2,12 +2,13 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Drawer } from 'expo-router/drawer';
 import { DrawerContentScrollView, DrawerItem, DrawerItemList } from '@react-navigation/drawer';
 import { SafeAreaView } from 'react-native';
-import { signOut } from '../../../components/AuthProvider';
+import { useAuthActions } from '../../../components/AuthProvider';
 import { Icon } from 'react-native-paper';
+import { router } from 'expo-router';
 
 export default function HomeLayout() {
   return (
-    <GestureHandlerRootView style={{ flex: 1}}>
+    <GestureHandlerRootView style={{ flex: 1 }}>
       <Drawer drawerContent={AppDrawerContent}>
         <Drawer.Screen
           name="shopping_lists"
@@ -31,6 +32,7 @@ export default function HomeLayout() {
 }
 
 function AppDrawerContent(props: any){
+  const { signOut } = useAuthActions()
   return (
      <DrawerContentScrollView {...props}
       scrollEnabled={false}
@@ -41,7 +43,16 @@ function AppDrawerContent(props: any){
          <DrawerItem
            label="Log out"
            icon={(props) => <Icon source="logout" {...props}/>}
-           onPress={() => signOut()}
+           onPress={() => {
+            signOut()
+
+            // NOTE(msfstef): no proper API to clear history yet
+            // see: https://github.com/expo/router/discussions/495
+            while (router.canGoBack()) {
+              router.back()
+            }
+            router.replace('/sign_in')
+           }}
          />
        </SafeAreaView>
      </DrawerContentScrollView>
