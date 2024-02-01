@@ -5,7 +5,7 @@ import * as SQLite from 'expo-sqlite'
 import { electrify } from 'electric-sql/expo'
 import { makeElectricContext } from 'electric-sql/react'
 
-import { dummyUserId, insecureAuthToken } from '../lib/auth'
+import { dummyUserId } from '../lib/auth'
 import { DEBUG_MODE, ELECTRIC_URL } from '../config'
 import { Electric, schema } from '../generated/client'
 import LoadingView from './LoadingView'
@@ -15,21 +15,25 @@ const { ElectricProvider: ElectricProviderWrapper, useElectric } = makeElectricC
 
 export { useElectric }
 
-export default function ElectricProvider ({ children } : { children: React.ReactNode }) {
+export default function ElectricProvider ({
+  children,
+  accessToken
+} : {
+  children: React.ReactNode,
+  accessToken: string
+}) {
   const [ electric, setElectric ] = useState<Electric>()
   useEffect(() => {
     let isMounted = true
     const init = async () => {
       const config = {
-        auth: {
-          token: await insecureAuthToken()
-        },
+        auth: { token: accessToken },
         debug: DEBUG_MODE,
         url: ELECTRIC_URL
       }
 
 
-      const conn = SQLite.openDatabase('electric.db')
+      const conn = SQLite.openDatabase('shopping_list.db')
       const electric = await electrify(conn, schema, config)
       if (!isMounted) {
         return
@@ -57,6 +61,7 @@ export default function ElectricProvider ({ children } : { children: React.React
         }
       })
       await shape.synced
+      
       
       const family = await electric.db.family.findFirst()
       const familyId = family?.family_id ?? genUUID()

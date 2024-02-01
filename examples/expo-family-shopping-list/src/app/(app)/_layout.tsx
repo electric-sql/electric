@@ -1,12 +1,13 @@
 import { Redirect, Stack } from 'expo-router';
 import ElectricProvider from '../../components/ElectricProvider';
-import { useAuthenticationState } from '../../components/AuthProvider';
+import { useAccessToken, useAuthenticationState } from '../../components/AuthProvider';
 
 export default function AppLayout() {
   const { authenticated } = useAuthenticationState()
+  const accessToken = useAccessToken()
   if (!authenticated) return <Redirect href="/" />
   return (
-    <ElectricProvider>
+    <ElectricProvider accessToken={accessToken!}>
       <Stack screenOptions={{
         headerBackTitleVisible: false,
         contentStyle: {
