@@ -5,13 +5,14 @@ import { ReactComponent as BacklogIcon } from '../assets/icons/circle-dot.svg'
 import { MenuContext } from '../App'
 import classnames from 'classnames'
 import { memo, RefObject, useRef, useState, useContext } from 'react'
-import { useConnectivityState } from 'electric-sql/react'
+import { useConnectivityState, useLiveQuery } from 'electric-sql/react'
 import { BsPencilSquare as AddIcon } from 'react-icons/bs'
 import { BsSearch as SearchIcon } from 'react-icons/bs'
 import { BsFillGrid3X3GapFill as BoardIcon } from 'react-icons/bs'
 import { BsCollectionFill as IssuesIcon } from 'react-icons/bs'
 import { MdKeyboardArrowDown as ExpandMore } from 'react-icons/md'
 import { Link } from 'react-router-dom'
+import { useElectric } from '../electric'
 import Avatar from './Avatar'
 import AboutModal from './AboutModal'
 import IssueModal from './IssueModal'
@@ -25,6 +26,27 @@ function LeftMenu() {
   const [showIssueModal, setShowIssueModal] = useState(false)
   const { showMenu, setShowMenu } = useContext(MenuContext)!
   const { status } = useConnectivityState()
+  const { db } = useElectric()!
+
+  const { results: projects } = useLiveQuery(
+    db.project.liveMany({
+      orderBy: {
+        name: 'asc',
+      },
+    })
+  )
+
+  const syncProject = async (projectId: string) => {
+    await db.issue.sync({
+      where: {
+        project_id: projectId,
+      },
+      include: {
+        project: true,
+        comment: true,
+      },
+    })
+  }
 
   const classes = classnames(
     'absolute z-40 lg:static inset-0 transform duration-300 lg:relative lg:translate-x-0 bg-white flex flex-col flex-shrink-0 w-56 font-sans text-sm text-gray-700 border-r border-gray-100 lg:shadow-none justify-items-start',
@@ -104,7 +126,7 @@ function LeftMenu() {
         </div>
 
         <div className="flex flex-col flex-shrink flex-grow overflow-y-auto mb-0.5 px-2">
-          <ItemGroup title="Your Issues">
+          <ItemGroup title="All Projects">
             <Link
               to="/"
               className="flex items-center pl-6 rounded cursor-pointer group h-7 hover:bg-gray-100"
@@ -136,6 +158,44 @@ function LeftMenu() {
               <span>Board</span>
             </Link>
           </ItemGroup>
+          {projects?.map((project) => (
+            <ItemGroup
+              title={project.name}
+              key={project.id}
+              onSync={() => syncProject(project.id)}
+            >
+              <Link
+                to={`/${project.id}`}
+                className="flex items-center pl-6 rounded cursor-pointer group h-7 hover:bg-gray-100"
+              >
+                <IssuesIcon className="w-3.5 h-3.5 mr-2" />
+                <span>Issues</span>
+              </Link>
+              <Link
+                to={`/${project.id}?status=todo,in_progress`}
+                className="flex items-center pl-6 rounded cursor-pointer h-7 hover:bg-gray-100"
+              >
+                <span className="w-3.5 h-6 mr-2 inline-block">
+                  <span className="block w-2 h-full border-r"></span>
+                </span>
+                <span>Active</span>
+              </Link>
+              <Link
+                to={`/${project.id}?status=backlog`}
+                className="flex items-center pl-6 rounded cursor-pointer h-7 hover:bg-gray-100"
+              >
+                <BacklogIcon className="w-3.5 h-3.5 mr-2" />
+                <span>Backlog</span>
+              </Link>
+              <Link
+                to={`/board/${project.id}`}
+                className="flex items-center pl-6 rounded cursor-pointer h-7 hover:bg-gray-100"
+              >
+                <BoardIcon className="w-3.5 h-3.5 mr-2" />
+                <span>Board</span>
+              </Link>
+            </ItemGroup>
+          ))}
 
           {/* extra space */}
           <div className="flex flex-col flex-grow flex-shrink" />
