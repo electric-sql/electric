@@ -5,9 +5,9 @@
   "license": "Apache-2.0",
   "main": "expo-router/entry",
   "scripts": {
-    "backend:start": "npx electric-sql start --with-postgres",
+    "backend:start": "export $(cat .env | xargs) && docker compose -f compose.yaml up",
     "backend:stop": "npx electric-sql stop",
-    "backend:up": "npx electric-sql start --with-postgres --detach",
+    "backend:up": "npx electric-sql start --detach",
     "backend:down": "npx electric-sql stop --remove",
     "client:generate": "npx electric-sql generate",
     "client:watch": "npx electric-sql generate --watch",
@@ -19,7 +19,9 @@
     "start:ios": "expo start --ios"
   },
   "dependencies": {
+    "@react-native-async-storage/async-storage": "1.21.0",
     "@react-navigation/drawer": "^6.6.6",
+    "@supabase/supabase-js": "^2.39.3",
     "electric-sql": "^0.9.0",
     "expo": "^50.0.0",
     "expo-constants": "~15.4.5",

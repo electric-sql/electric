@@ -5,7 +5,7 @@ import * as SQLite from 'expo-sqlite'
 import { electrify } from 'electric-sql/expo'
 import { makeElectricContext } from 'electric-sql/react'
 
-import { authToken, dummyUserId } from '../lib/auth'
+import { dummyUserId, insecureAuthToken } from '../lib/auth'
 import { DEBUG_MODE, ELECTRIC_URL } from '../config'
 import { Electric, schema } from '../generated/client'
 import LoadingView from './LoadingView'
@@ -22,7 +22,7 @@ export default function ElectricProvider ({ children } : { children: React.React
     const init = async () => {
       const config = {
         auth: {
-          token: authToken()
+          token: await insecureAuthToken()
         },
         debug: DEBUG_MODE,
         url: ELECTRIC_URL
