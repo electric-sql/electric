@@ -17,7 +17,7 @@ There are a number of notable features of the example to highlight:
 4. it compiles [fastembed-rs](https://github.com/Anush008/fastembed-rs) into the Tauri backend for local vectorisation
 5. it compiles https://ai.meta.com/llama/ using [Ollama](https://ollama.ai) into the Tauri backend, a highly capable local LLM model with as large context window that supports retrieval-augmented generation (RAG)
 
-The demo app itself is a varient of [Electric's LinearLite example](https://electric-sql.com/docs/examples/linear-lite). This is a [Linear](https://linear.app) clone, originally dervied from the excellent clone of the Linear UI built by Tuan Nguyen [@tuan3w](https://github.com/tuan3w). This demo extends LinearLite with vector search and a chat interface to ask questions about the issues, which are seeded with issues from the React project's GitHub Issues tracker.
+The demo app itself is a variation of [Electric's LinearLite example](https://electric-sql.com/docs/examples/linear-lite). This is a [Linear](https://linear.app) clone, originally derived from the excellent clone of the Linear UI built by Tuan Nguyen [@tuan3w](https://github.com/tuan3w). This demo extends LinearLite with vector search and a chat interface to ask questions about the issues, which are seeded with issues from the React project's GitHub Issues tracker.
 
 For more information, see the blog post write up here: [Local AI with Postgres, pgvector and llama2, inside a Tauri app with ElectricSQL](https://electric-sql.com/blog/2024/01/25/local-first-ai-with-tauri-postgres-pgvector-llama).
 
