@@ -1,9 +1,12 @@
 {
-    "$schema": "../node_modules/@tauri-apps/cli/schema.json",
-    "tauri": {
-      "bundle": {
-        "identifier": "electric-tauri-postgres",
-        "resources": ["./libonnxruntime.so", "./pgdir/*"]
-      }
+  "$schema": "../node_modules/@tauri-apps/cli/schema.json",
+  "tauri": {
+    "bundle": {
+      "deb": {
+        "depends": ["libsoup2.4-dev", "libjavascriptcoregtk-4.0-dev"]
+      },
+      "identifier": "electric-tauri-postgres",
+      "resources": ["./libonnxruntime.so", "./pgdir/*"]
     }
   }
+}
