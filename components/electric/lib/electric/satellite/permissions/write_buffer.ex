@@ -23,6 +23,9 @@ defmodule Electric.Satellite.Permissions.WriteBuffer do
     {__MODULE__, state(upstream: upstream)}
   end
 
+  # Some util functions useful for testing
+
+  @doc false
   def pending_changes({__MODULE__, state(graph: graph)}) do
     graph
   end
@@ -31,6 +34,7 @@ defmodule Electric.Satellite.Permissions.WriteBuffer do
     graph
   end
 
+  @doc false
   def seen_tags({__MODULE__, state}) do
     seen_tags(state)
   end
@@ -39,6 +43,7 @@ defmodule Electric.Satellite.Permissions.WriteBuffer do
     tags
   end
 
+  @doc false
   def empty?({__MODULE__, state}) do
     empty?(state)
   end
