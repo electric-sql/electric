@@ -60,18 +60,21 @@ export default function ProfileMenu({
         <a
           href="https://www.electric-sql.com"
           className="flex items-center h-8 px-3 hover:bg-gray-100"
+          target="_blank"
         >
           Visit ElectricSQL
         </a>
         <a
           href="https://www.electric-sql.com/docs"
           className="flex items-center h-8 px-3 hover:bg-gray-100"
+          target="_blank"
         >
           Documentation
         </a>
         <a
-          href="https://github.com/electric-sql/electric/tree/main/examples/linearlite"
+          href="https://github.com/electric-sql/electric/tree/tauri-example-postgres/examples/tauri-postgres"
           className="flex items-center h-8 px-3 hover:bg-gray-100"
+          target="_blank"
         >
           GitHub
         </a>

@@ -149,7 +149,11 @@ function LeftMenu() {
 
           {/* bottom group */}
           <div className="flex flex-col px-2 pb-2 text-gray-500 mt-7">
-            <a className="inline-flex" href="https://electric-sql.com/">
+            <a
+              className="inline-flex"
+              href="https://electric-sql.com/"
+              target="_blank"
+            >
               <ElectricIcon className="w-3 h-3 mr-2 mt-1 scale-150" />{' '}
               ElectricSQL
             </a>
