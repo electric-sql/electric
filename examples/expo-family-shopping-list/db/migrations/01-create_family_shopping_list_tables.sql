@@ -55,20 +55,20 @@ BEGIN
     new_user_name := SPLIT_PART(NEW.email, '@', 1);
 
     -- Generate new UUIDs for family and member
-    new_family_id := uuid_generate_v4();
-    new_member_id := uuid_generate_v4();
+    new_family_id := gen_random_uuid();
+    new_member_id := gen_random_uuid();
 
     -- Insert into family table
-    INSERT INTO family (family_id, creator_user_id, name, created_at)
+    INSERT INTO public.family (family_id, creator_user_id, name, created_at)
     VALUES (new_family_id, NEW.id, new_user_name || '''s Family', CURRENT_TIMESTAMP);
 
     -- Insert into member table
-    INSERT INTO member (member_id, family_id, user_id, name, created_at)
+    INSERT INTO public.member (member_id, family_id, user_id, name, created_at)
     VALUES (new_member_id, new_family_id, NEW.id, new_user_name, CURRENT_TIMESTAMP);
 
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Trigger to execute the function after a new user is created
 CREATE TRIGGER on_auth_user_created

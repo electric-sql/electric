@@ -41,7 +41,6 @@ export default function ElectricProvider ({
         include: {
           family: {
             include: {
-              image: true,
               shopping_list: {
                 include: {
                   shopping_list_item: true

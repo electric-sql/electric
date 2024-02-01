@@ -19,7 +19,8 @@ export default function Family () {
     include: {
       member: {
         select: {
-          member_id: true
+          member_id: true,
+          user_id: true,
         }
       }
     },
