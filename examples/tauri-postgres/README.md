@@ -29,10 +29,12 @@ You need Docker, Docker Compose v2, Nodejs >= 16.14 and pnpm.
 
 ### Checkout and setup the Tauri project
 
-Clone this repo and change directory into this folder:
+Clone this repo, change directory and checkout correct branch:
 
 ```sh
 git clone https://github.com/electric-sql/electric
+cd electric
+git checkout tauri-example-postgres
 ```
 
 Build the Electric generator and client library:
