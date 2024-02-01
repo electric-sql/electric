@@ -26,6 +26,14 @@ export default function HomeLayout() {
             title: 'Families',
           }}
         />
+        <Drawer.Screen
+          name="personal_code"
+          options={{
+            drawerLabel: 'Join a Family',
+            drawerIcon: (props) => <Icon source="qrcode" {...props} />,
+            title: 'Join a Family',
+          }}
+        />
       </Drawer>
     </GestureHandlerRootView>
   );

@@ -19,6 +19,7 @@
     "start:ios": "expo start --ios"
   },
   "dependencies": {
+    "@expo/html-elements": "^0.9.1",
     "@react-native-async-storage/async-storage": "1.21.0",
     "@react-navigation/drawer": "^6.6.6",
     "@supabase/supabase-js": "^2.39.3",
@@ -36,9 +37,11 @@
     "react-native-get-random-values": "~1.8.0",
     "react-native-paper": "^5.12.3",
     "react-native-paper-dropdown": "^1.0.7",
+    "react-native-qrcode-svg": "^6.3.0",
     "react-native-reanimated": "~3.6.2",
     "react-native-safe-area-context": "^4.8.2",
     "react-native-screens": "~3.29.0",
+    "react-native-svg": "^14.1.0",
     "react-native-url-polyfill": "^2.0.0"
   },
   "devDependencies": {
