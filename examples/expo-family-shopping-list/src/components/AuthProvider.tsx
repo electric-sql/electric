@@ -7,6 +7,7 @@ import { createClient } from '@supabase/supabase-js';
 export type UserId = string
 
 interface AuthState {
+  loading: boolean,
   userId: UserId | null,
   jwtToken: string | null,
 }
@@ -25,6 +26,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey,  {
 
 
 const AuthContext = createContext<AuthState>({
+  loading: true,
   userId: null,
   jwtToken: null,
 });
@@ -37,6 +39,7 @@ function AuthProvider({
   onSignOut?: () => void
 }) {
   const [ state, setState ] = useState<AuthState>({
+    loading: true,
     userId: null,
     jwtToken: null
   })
@@ -57,22 +60,25 @@ function AuthProvider({
     })
 
     return subscription.remove
-  })
+  }, [])
 
   // Listen to auth events for keeping the user and JWT token up to date
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log(event, session)
       switch (event) {
         case 'INITIAL_SESSION':
         case 'SIGNED_IN':
         case 'TOKEN_REFRESHED':
           setState({
+            loading: false,
             userId: session?.user.id ?? null,
             jwtToken: session?.access_token ?? null
           })
           break
         case 'SIGNED_OUT':
           setState({
+            loading: false,
             userId: null,
             jwtToken: null
           })
@@ -81,7 +87,7 @@ function AuthProvider({
       }
     })
     return subscription.unsubscribe
-  })
+  }, [])
 
   return (
     <AuthContext.Provider value={state}>
@@ -105,6 +111,16 @@ export function useAuthenticatedUser() : UserId | null {
 export function useAccessToken() : string | null {
   const { jwtToken } = useContext(AuthContext)
   return jwtToken
+}
+
+/**
+ * Returns whether current user is authenticated
+ */
+export function useAuthenticationState() {
+  return {
+    authenticated: useAuthenticatedUser() != null,
+    initializing: useContext(AuthContext).loading,
+  }
 }
 
 interface EmailPasswordInput {

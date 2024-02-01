@@ -2,7 +2,7 @@ import React from 'react'
 import { Alert, SafeAreaView, View } from 'react-native'
 import { Button } from 'react-native-paper'
 import EmailPasswordForm from '../components/EmailPasswordForm'
-import { Link } from 'expo-router'
+import { Link, router } from 'expo-router'
 import { signIn } from '../components/AuthProvider'
 import AppLogo from '../components/AppLogo'
 
@@ -15,6 +15,7 @@ export default function SignIn() {
       password: password,
     })
     if (error) Alert.alert(error.message)
+    else router.replace('/')
   }
 
   return (

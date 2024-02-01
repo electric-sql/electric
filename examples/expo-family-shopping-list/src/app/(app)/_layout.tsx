@@ -1,7 +1,10 @@
-import { Stack } from 'expo-router';
+import { Redirect, Stack } from 'expo-router';
 import ElectricProvider from '../../components/ElectricProvider';
+import { useAuthenticationState } from '../../components/AuthProvider';
 
 export default function AppLayout() {
+  const { authenticated } = useAuthenticationState()
+  if (!authenticated) return <Redirect href="/" />
   return (
     <ElectricProvider>
       <Stack screenOptions={{
