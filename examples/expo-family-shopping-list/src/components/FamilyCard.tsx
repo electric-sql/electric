@@ -1,5 +1,5 @@
 import React, { forwardRef, useCallback, useState } from 'react';
-import { Card, IconButton } from 'react-native-paper';
+import { Card, IconButton, Text } from 'react-native-paper';
 import { useLiveQuery } from 'electric-sql/react';
 import { useElectric } from './ElectricProvider';
 import ConfirmationDialog from './ConfirmationDialog';
@@ -40,6 +40,7 @@ const FamilyCard = forwardRef(({
   }), [ memberId ])
 
   if (!membership) return null
+  const isFamilyCreator = membership.user_id == membership.family.creator_user_id;
   return (
     <Card mode="elevated" onPress={onPress}>
       <Card.Title
@@ -51,8 +52,12 @@ const FamilyCard = forwardRef(({
             <Link href={`/family/${membership.family_id}/edit`} asChild>
               <IconButton icon="pencil" />
             </Link>
-            {
-            membership.user_id != membership.family.creator_user_id &&
+            
+            { isFamilyCreator ?
+              <Text variant="labelSmall" style={{ marginRight: 12 }}>
+                Owner
+              </Text>
+              :
               <IconButton
                 icon="account-remove" 
                 onPress={() => setExitDialogVisible(true)}
