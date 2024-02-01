@@ -899,7 +899,7 @@ export class SatelliteProcess implements Satellite {
     const q3: Statement = {
       sql: `
       INSERT INTO ${shadow} (namespace, tablename, "primaryKey", tags)
-      SELECT namespace, tablename, "primaryKey", $1
+      SELECT DISTINCT namespace, tablename, "primaryKey", $1
       FROM ${oplog} AS op
       WHERE timestamp = $2
         AND optype != 'DELETE'
