@@ -12,7 +12,6 @@ export default function AppLayout() {
         headerBackTitleVisible: false,
         contentStyle: {
           padding: 16,
-          
         }
       }}>
         <Stack.Screen
@@ -33,7 +32,6 @@ export default function AppLayout() {
             }
           }}
         />
-
         <Stack.Screen
           name="shopping_list/add"
           options={{
@@ -53,6 +51,16 @@ export default function AppLayout() {
           options={{
             title: 'Add shopping list item',
             presentation: 'formSheet',
+          }}
+        />
+
+        <Stack.Screen
+          name="family/[family_id]/index"
+          options={{
+            headerTitle: 'Family',
+            contentStyle: {
+              paddingHorizontal: 16
+            }
           }}
         />
         <Stack.Screen

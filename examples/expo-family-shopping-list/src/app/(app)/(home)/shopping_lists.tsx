@@ -1,16 +1,15 @@
 import { useLiveQuery } from 'electric-sql/react'
 import React from 'react'
-import { FlatList, View } from 'react-native'
-import { List, FAB } from 'react-native-paper'
+import { FlatList, SafeAreaView, View } from 'react-native'
+import { List, FAB, Text } from 'react-native-paper'
 import { useElectric } from '../../../components/ElectricProvider'
 import ShoppingListCard from '../../../components/ShoppingListCard'
 import { Link } from 'expo-router'
-import { SafeAreaView } from 'react-native-safe-area-context'
 import FlatListSeparator from '../../../components/FlatListSeparator'
 
 export default function ShoppingLists () {
   const { db } = useElectric()!
-  const { results = [] } = useLiveQuery(db.shopping_list.liveMany({
+  const { results: shopping_lists = [] } = useLiveQuery(db.shopping_list.liveMany({
     select: {
       list_id: true
     },
@@ -20,13 +19,14 @@ export default function ShoppingLists () {
   }))
 
   return (
-    <SafeAreaView style={{ flex: 1 }} edges={['bottom']}>
+    <SafeAreaView style={{ flex: 1 }}>
       <View style={{ flex: 1, paddingHorizontal: 16 }}>
         <List.Section style={{ flex: 1 }}>
-          <List.Subheader>Shopping Lists</List.Subheader>
-          <FlatList
+          <List.Subheader>Your Shopping Lists</List.Subheader>
+          { shopping_lists.length > 0 ?
+            <FlatList
             style={{ padding: 6 }}
-            data={results}
+            data={shopping_lists}
             renderItem={(item) => (
               <Link href={`/shopping_list/${item.item.list_id}`} asChild>
                 <ShoppingListCard shoppingListId={item.item.list_id} />
@@ -35,6 +35,11 @@ export default function ShoppingLists () {
             ItemSeparatorComponent={() => <FlatListSeparator />}
             keyExtractor={(item) => item.list_id}
             />
+            :
+            <View style={{ flexDirection:'column', alignItems: 'center' }}>
+              <Text variant="bodyLarge">No shopping lists</Text>
+            </View>
+          }
         </List.Section>
 
         <Link

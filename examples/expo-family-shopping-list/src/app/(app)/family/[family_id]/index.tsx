@@ -50,18 +50,18 @@ export default function Family () {
 
         <List.Subheader>Members</List.Subheader>
         { otherMembers.length > 0 ?
-            <FlatList
-              style={{ padding: 6 }}
-              data={otherMembers}
-              renderItem={(item) => <MemberCard memberId={item.item.member_id} />}
-              keyExtractor={(item) => item.member_id}
-              ItemSeparatorComponent={() => <FlatListSeparator />}
-            />
-            :
-            <View style={{ flexDirection:'column', alignItems: 'center' }}>
-              <Text variant="bodyLarge">No other members in this family</Text>
-            </View>
-          }
+          <FlatList
+            style={{ padding: 6 }}
+            data={otherMembers}
+            renderItem={(item) => <MemberCard memberId={item.item.member_id} />}
+            keyExtractor={(item) => item.member_id}
+            ItemSeparatorComponent={() => <FlatListSeparator />}
+          />
+          :
+          <View style={{ flexDirection:'column', alignItems: 'center' }}>
+            <Text variant="bodyLarge">No other members in this family</Text>
+          </View>
+        }
         
       </List.Section>
     </View>

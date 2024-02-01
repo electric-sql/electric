@@ -3,7 +3,7 @@ import { View, FlatList } from 'react-native'
 import { List, Text } from 'react-native-paper'
 import { useElectric } from '../../../components/ElectricProvider'
 import { useLiveQuery } from 'electric-sql/react'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { SafeAreaView } from 'react-native'
 import { Link } from 'expo-router'
 import FamilyCard from '../../../components/FamilyCard'
 import FlatListSeparator from '../../../components/FlatListSeparator'
@@ -22,7 +22,7 @@ export default function FamilyHome () {
     },
   }))
   return (
-    <SafeAreaView style={{ flex: 1 }} edges={['bottom']}>
+    <SafeAreaView style={{ flex: 1 }}>
       <View style={{ flex: 1, paddingHorizontal: 16 }}>
         <List.Section style={{ flex: 1 }}>
           <List.Subheader>Your Families</List.Subheader>
