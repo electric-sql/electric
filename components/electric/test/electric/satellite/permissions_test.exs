@@ -10,7 +10,7 @@ defmodule Electric.Satellite.PermissionsTest do
     Tree
   }
 
-  alias Electric.Satellite.{Permissions, Permissions.Scope, Permissions.MoveOut}
+  alias Electric.Satellite.{Permissions, Permissions.Graph, Permissions.MoveOut}
   alias Electric.Replication.Changes
 
   import ElectricTest.PermissionsHelpers
@@ -74,32 +74,32 @@ defmodule Electric.Satellite.PermissionsTest do
   describe "PermissionsHelpers.Tree" do
     test "scope_id/3", cxt do
       assert {["p1"], [_ | _]} =
-               Scope.scope_id(cxt.tree, @projects, %Changes.NewRecord{
+               Graph.scope_id(cxt.tree, @projects, %Changes.NewRecord{
                  relation: @reactions,
                  record: %{"id" => "r100", "comment_id" => "c2"}
                })
 
       assert {["p1"], [_ | _]} =
-               Scope.scope_id(cxt.tree, @projects, %Changes.UpdatedRecord{
+               Graph.scope_id(cxt.tree, @projects, %Changes.UpdatedRecord{
                  relation: @reactions,
                  record: %{"id" => "r4"}
                })
 
       assert {["p2"], [_ | _]} =
-               Scope.scope_id(cxt.tree, @projects, %Changes.DeletedRecord{
+               Graph.scope_id(cxt.tree, @projects, %Changes.DeletedRecord{
                  relation: @comments,
                  old_record: %{"id" => "c4"}
                })
     end
 
     test "scope_id/3 with invalid records", cxt do
-      refute Scope.scope_id(cxt.tree, @projects, %Changes.NewRecord{
+      refute Graph.scope_id(cxt.tree, @projects, %Changes.NewRecord{
                relation: @reactions,
                # invalid fk
                record: %{"id" => "r100", "comment_id" => "c100"}
              })
 
-      refute Scope.scope_id(cxt.tree, @projects, %Changes.NewRecord{
+      refute Graph.scope_id(cxt.tree, @projects, %Changes.NewRecord{
                relation: @reactions,
                # no fk
                record: %{"id" => "r100"}
@@ -107,12 +107,12 @@ defmodule Electric.Satellite.PermissionsTest do
     end
 
     test "scope_id/3 with record out of scope", cxt do
-      refute Scope.scope_id(cxt.tree, @projects, %Changes.NewRecord{
+      refute Graph.scope_id(cxt.tree, @projects, %Changes.NewRecord{
                relation: @offices,
                record: %{"id" => "o100", "region_id" => "r1"}
              })
 
-      refute Scope.scope_id(cxt.tree, @projects, %Changes.NewRecord{
+      refute Graph.scope_id(cxt.tree, @projects, %Changes.NewRecord{
                relation: @regions,
                record: %{"id" => "r100"}
              })
@@ -120,7 +120,7 @@ defmodule Electric.Satellite.PermissionsTest do
 
     test "scope_id/3 at root of scope", cxt do
       assert {["p1"], [{@projects, ["p1"]}]} =
-               Scope.scope_id(cxt.tree, @projects, %Changes.NewRecord{
+               Graph.scope_id(cxt.tree, @projects, %Changes.NewRecord{
                  relation: @issues,
                  record: %{"id" => "i100", "project_id" => "p1"}
                })
@@ -128,49 +128,49 @@ defmodule Electric.Satellite.PermissionsTest do
 
     test "parent_scope_id/4", cxt do
       assert {["p1"], [{@projects, ["p1"]}]} =
-               Scope.parent_scope_id(cxt.tree, @projects, @issues, %{
+               Graph.parent_scope_id(cxt.tree, @projects, @issues, %{
                  "id" => "i100",
                  "project_id" => "p1"
                })
 
       assert {["p1"], _} =
-               Scope.parent_scope_id(cxt.tree, @projects, @reactions, %{
+               Graph.parent_scope_id(cxt.tree, @projects, @reactions, %{
                  "id" => "r100",
                  "comment_id" => "c5"
                })
 
-      refute Scope.parent_scope_id(cxt.tree, @projects, @reactions, %{
+      refute Graph.parent_scope_id(cxt.tree, @projects, @reactions, %{
                "id" => "r100",
                "comment_id" => "c99"
              })
     end
 
     test "modifies_fk?/2", cxt do
-      assert Scope.modifies_fk?(
+      assert Graph.modifies_fk?(
                cxt.tree,
                @projects,
                Chgs.update(@issues, %{"project_id" => "1"}, %{"project_id" => "2"})
              )
 
-      refute Scope.modifies_fk?(
+      refute Graph.modifies_fk?(
                cxt.tree,
                @projects,
                Chgs.update(@issues, %{"project_id" => "1"}, %{"comment" => "something"})
              )
 
-      assert Scope.modifies_fk?(
+      assert Graph.modifies_fk?(
                cxt.tree,
                @comments,
                Chgs.update(@reactions, %{"comment_id" => "1"}, %{"comment_id" => "2"})
              )
 
-      refute Scope.modifies_fk?(
+      refute Graph.modifies_fk?(
                cxt.tree,
                @comments,
                Chgs.update(@reactions, %{"comment_id" => "1"}, %{"comment" => "changed"})
              )
 
-      refute Scope.modifies_fk?(
+      refute Graph.modifies_fk?(
                cxt.tree,
                @regions,
                Chgs.update(@reactions, %{"comment_id" => "1"}, %{"comment_id" => "2"})
@@ -191,21 +191,21 @@ defmodule Electric.Satellite.PermissionsTest do
         Chgs.delete(@issues, %{"id" => "i2"})
       ]
 
-      tree = Scope.transaction_context(cxt.tree, [@projects], Chgs.tx(changes))
+      tree = Graph.transaction_context(cxt.tree, [@projects], Chgs.tx(changes))
 
       assert {["p1"], [_ | _]} =
-               Scope.scope_id(tree, @projects, %Changes.UpdatedRecord{
+               Graph.scope_id(tree, @projects, %Changes.UpdatedRecord{
                  relation: @reactions,
                  record: %{"id" => "r100"}
                })
 
       assert {["p1"], [_ | _]} =
-               Scope.scope_id(tree, @projects, %Changes.DeletedRecord{
+               Graph.scope_id(tree, @projects, %Changes.DeletedRecord{
                  relation: @comments,
                  old_record: %{"id" => "c4"}
                })
 
-      refute Scope.scope_id(
+      refute Graph.scope_id(
                tree,
                @projects,
                Chgs.update(@comments, %{"id" => "c5", "issue_id" => "i2"}, %{
@@ -214,13 +214,13 @@ defmodule Electric.Satellite.PermissionsTest do
              )
 
       assert {["p1"], [_ | _]} =
-               Scope.scope_id(tree, @projects, %Changes.NewRecord{
+               Graph.scope_id(tree, @projects, %Changes.NewRecord{
                  relation: @reactions,
                  record: %{"id" => "r100", "comment_id" => "c3"}
                })
 
       assert {["p1"], [_ | _]} =
-               Scope.scope_id(
+               Graph.scope_id(
                  tree,
                  @projects,
                  Chgs.update(@reactions, %{"id" => "r100"}, %{
@@ -231,16 +231,16 @@ defmodule Electric.Satellite.PermissionsTest do
 
     test "parent/4", cxt do
       assert {@projects, ["p1"]} =
-               Scope.parent(cxt.tree, @projects, @issues, %{"project_id" => "p1"})
+               Graph.parent(cxt.tree, @projects, @issues, %{"project_id" => "p1"})
 
       assert {@issues, ["i1"]} =
-               Scope.parent(cxt.tree, @projects, @comments, %{"issue_id" => "i1"})
+               Graph.parent(cxt.tree, @projects, @comments, %{"issue_id" => "i1"})
 
       assert {@workspaces, ["w1"]} =
-               Scope.parent(cxt.tree, @workspaces, @projects, %{"workspace_id" => "w1"})
+               Graph.parent(cxt.tree, @workspaces, @projects, %{"workspace_id" => "w1"})
 
-      refute Scope.parent(cxt.tree, @workspaces, @workspaces, %{"id" => "w1"})
-      refute Scope.parent(cxt.tree, @projects, @offices, %{"id" => "o1", "region_id" => "r1"})
+      refute Graph.parent(cxt.tree, @workspaces, @workspaces, %{"id" => "w1"})
+      refute Graph.parent(cxt.tree, @projects, @offices, %{"id" => "o1", "region_id" => "r1"})
     end
   end
 

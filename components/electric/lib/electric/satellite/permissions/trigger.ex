@@ -2,10 +2,10 @@ defmodule Electric.Satellite.Permissions.Trigger do
   alias Electric.Replication.Changes
   alias Electric.Satellite.{Auth, SatPerms}
   alias Electric.Satellite.Permissions
-  alias Electric.Satellite.Permissions.Scope
+  alias Electric.Satellite.Permissions.Graph
 
   @type assign_trigger_fun() ::
-          (Permissions.change(), Scope.t(), Auth.t() -> [Permissions.Role.t()])
+          (Permissions.change(), Graph.t(), Auth.t() -> [Permissions.Role.t()])
 
   @spec for_assign(%SatPerms.Assign{}) :: {Permissions.relation(), assign_trigger_fun()}
   def for_assign(assign) do
@@ -37,7 +37,7 @@ defmodule Electric.Satellite.Permissions.Trigger do
   end
 
   defp role_for_assign(%Changes.DeletedRecord{} = delete, tree, _auth, _assign) do
-    id = Scope.primary_key(tree, delete.relation, delete.old_record)
+    id = Graph.primary_key(tree, delete.relation, delete.old_record)
 
     [
       {:delete, {delete.relation, id}}
@@ -52,7 +52,7 @@ defmodule Electric.Satellite.Permissions.Trigger do
     with ^user_id <- Map.get(record, user_column, nil),
          role_name = role_name(record, assign),
          scope = role_scope(change, assign, tree) do
-      id = Scope.primary_key(tree, change.relation, record)
+      id = Graph.primary_key(tree, change.relation, record)
 
       {%Permissions.Role{
          id: id,
@@ -84,7 +84,7 @@ defmodule Electric.Satellite.Permissions.Trigger do
       %{scope: %{schema: schema, name: name}} ->
         root = {schema, name}
 
-        case Scope.scope_id(tree, root, change) do
+        case Graph.scope_id(tree, root, change) do
           {id, _} ->
             {root, id}
 

@@ -1,7 +1,6 @@
 defmodule Electric.Satellite.Permissions.WriteBuffer do
   alias Electric.Replication.Changes
   alias Electric.Satellite.Permissions
-  alias Electric.Satellite.Permissions.Scope
 
   require Record
 
@@ -9,7 +8,7 @@ defmodule Electric.Satellite.Permissions.WriteBuffer do
     defexception [:message]
   end
 
-  @behaviour Electric.Satellite.Permissions.Scope
+  @behaviour Electric.Satellite.Permissions.Graph
 
   @type relation() :: Electric.Postgres.relation()
   @type id() :: Electric.Postgres.pk()
@@ -26,10 +25,6 @@ defmodule Electric.Satellite.Permissions.WriteBuffer do
 
   def new(scope_resolver) do
     {__MODULE__, state(upstream: scope_resolver)}
-  end
-
-  def graph do
-    Permissions.Graph.new()
   end
 
   def pending_changes({__MODULE__, state(graph: graph)}) do
@@ -106,13 +101,13 @@ defmodule Electric.Satellite.Permissions.WriteBuffer do
     end
   end
 
-  @impl Scope
+  @impl Permissions.Graph
   def scope_id(state(graph: nil, upstream: upstream), root, relation, record) do
-    Scope.scope_id(upstream, root, relation, record)
+    Permissions.Graph.scope_id(upstream, root, relation, record)
   end
 
   def scope_id(state(upstream: upstream) = state, root, relation, record) when is_map(record) do
-    scope_id(state, root, relation, Scope.primary_key(upstream, relation, record))
+    scope_id(state, root, relation, Permissions.Graph.primary_key(upstream, relation, record))
   end
 
   def scope_id(_state, root, root, id) when is_list(id) do
@@ -150,7 +145,7 @@ defmodule Electric.Satellite.Permissions.WriteBuffer do
   defp scope_id_with_moves(state, root, relation, id) do
     state(moves: moves, upstream: upstream) = state
 
-    if relation_path = Scope.relation_path(upstream, root, relation) do
+    if relation_path = Permissions.Graph.relation_path(upstream, root, relation) do
       ordering = relation_path |> Stream.with_index() |> Map.new()
 
       valid_moves =
@@ -175,11 +170,11 @@ defmodule Electric.Satellite.Permissions.WriteBuffer do
   defp local_scope_id(state, root, relation, id) do
     state(graph: graph, upstream: upstream, deletes: deletes) = state
 
-    relation_path = Scope.relation_path(upstream, root, relation)
+    relation_path = Permissions.Graph.relation_path(upstream, root, relation)
 
     # this may give a partial path, terminating before the root
     with {{scope_relation, scope_id}, path} <-
-           Permissions.Graph.scope_id(graph, relation_path, relation, id) do
+           Permissions.Graph.traverse_fks(graph, relation_path, relation, id) do
       cond do
         Enum.any?(path, &MapSet.member?(deletes, &1)) ->
           :deleted
@@ -190,18 +185,18 @@ defmodule Electric.Satellite.Permissions.WriteBuffer do
         # our local tree doesn't have the full path to `root`, so starting from where the
         # local tree left off, lookup rest of path in upstream
         true ->
-          Scope.scope_id(upstream, root, scope_relation, scope_id)
+          Permissions.Graph.scope_id(upstream, root, scope_relation, scope_id)
       end
     end
   end
 
   defp upstream_scope_id(state(upstream: upstream), root, relation, id) do
-    Scope.scope_id(upstream, root, relation, id)
+    Permissions.Graph.scope_id(upstream, root, relation, id)
   end
 
-  @impl Scope
+  @impl Permissions.Graph
   def parent_scope_id(state(graph: nil, upstream: upstream), root, relation, record) do
-    Scope.parent_scope_id(upstream, root, relation, record)
+    Permissions.Graph.parent_scope_id(upstream, root, relation, record)
   end
 
   def parent_scope_id(state, root, relation, record) do
@@ -210,12 +205,12 @@ defmodule Electric.Satellite.Permissions.WriteBuffer do
     end
   end
 
-  @impl Scope
+  @impl Permissions.Graph
   def parent(state(upstream: upstream), root, relation, record) do
-    Scope.parent(upstream, root, relation, record)
+    Permissions.Graph.parent(upstream, root, relation, record)
   end
 
-  @impl Scope
+  @impl Permissions.Graph
   def apply_change(state, roots, %Changes.NewRecord{} = change) do
     state(graph: graph, upstream: upstream, deletes: deletes) = state
     %{relation: relation, record: record} = change
@@ -223,11 +218,11 @@ defmodule Electric.Satellite.Permissions.WriteBuffer do
     # if this lives in any of the scope roots we care about (in `roots`) then we need to add it
     # if not, who cares
     # in a scope root if the relation == root or the record has a `parent/4` for one of the roots
-    v1 = {relation, Scope.primary_key(upstream, relation, record)}
+    v1 = {relation, Permissions.Graph.primary_key(upstream, relation, record)}
 
     graph =
       Enum.reduce(roots, graph, fn root, src_graph ->
-        case Scope.parent(upstream, root, relation, record) do
+        case Permissions.Graph.parent(upstream, root, relation, record) do
           {parent_relation, parent_id} = v2 ->
             if exists?(graph, upstream, deletes, root, v2) do
               src_graph
@@ -254,7 +249,10 @@ defmodule Electric.Satellite.Permissions.WriteBuffer do
 
     state(state,
       deletes:
-        MapSet.put(deletes, {relation, Scope.primary_key(upstream, relation, change.old_record)})
+        MapSet.put(
+          deletes,
+          {relation, Permissions.Graph.primary_key(upstream, relation, change.old_record)}
+        )
     )
     |> apply_tags(change)
   end
@@ -264,10 +262,10 @@ defmodule Electric.Satellite.Permissions.WriteBuffer do
     %{relation: relation, old_record: old, record: new} = change
 
     Enum.reduce(roots, state, fn root, state(graph: src_graph, moves: moves) = state ->
-      if Scope.modifies_fk?(upstream, root, change) do
-        child = {relation, Scope.primary_key(upstream, relation, new)}
-        old_parent = Scope.parent(upstream, root, relation, old)
-        new_parent = Scope.parent(upstream, root, relation, new)
+      if Permissions.Graph.modifies_fk?(upstream, root, change) do
+        child = {relation, Permissions.Graph.primary_key(upstream, relation, new)}
+        old_parent = Permissions.Graph.parent(upstream, root, relation, old)
+        new_parent = Permissions.Graph.parent(upstream, root, relation, new)
 
         if exists?(src_graph, upstream, deletes, root, new_parent) do
           graph =
@@ -310,30 +308,30 @@ defmodule Electric.Satellite.Permissions.WriteBuffer do
   end
 
   defp exists_upstream?(upstream, root, relation, id) do
-    with {_id, _} <- Scope.scope_id(upstream, root, relation, id) do
+    with {_id, _} <- Permissions.Graph.scope_id(upstream, root, relation, id) do
       true
     else
       _ -> false
     end
   end
 
-  @impl Scope
+  @impl Permissions.Graph
   def primary_key(state(upstream: upstream), relation, record) do
-    Scope.primary_key(upstream, relation, record)
+    Permissions.Graph.primary_key(upstream, relation, record)
   end
 
-  @impl Scope
+  @impl Permissions.Graph
   def modifies_fk?(state(upstream: upstream), root, update) do
-    Scope.modifies_fk?(upstream, root, update)
+    Permissions.Graph.modifies_fk?(upstream, root, update)
   end
 
-  @impl Scope
+  @impl Permissions.Graph
   def relation_path(state(upstream: upstream), root, relation) do
-    Scope.relation_path(upstream, root, relation)
+    Permissions.Graph.relation_path(upstream, root, relation)
   end
 
   defp ensure_graph(nil) do
-    graph()
+    Permissions.Graph.graph()
   end
 
   defp ensure_graph(graph) do

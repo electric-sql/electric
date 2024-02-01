@@ -143,7 +143,7 @@ defmodule Electric.Postgres.Schema do
     graph =
       tables
       |> Enum.map(&{&1.name.schema, &1.name.name})
-      |> then(&Graph.add_vertices(Graph.new(), &1))
+      |> then(&Graph.add_vertices(Graph.new(vertex_identifier: fn v -> v end), &1))
 
     Enum.reduce(tables, graph, fn %Proto.Table{constraints: constraints, name: name}, graph ->
       constraints

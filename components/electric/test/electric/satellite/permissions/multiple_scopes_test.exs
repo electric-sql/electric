@@ -1,4 +1,4 @@
-defmodule Electric.Satellite.Permissions.MultipleScopesTest do
+defmodule Electric.Satellite.Permissions.MultipleScopes.Test do
   use ExUnit.Case, async: true
 
   alias ElectricTest.PermissionsHelpers.{
@@ -8,7 +8,7 @@ defmodule Electric.Satellite.Permissions.MultipleScopesTest do
     Tree
   }
 
-  alias Electric.Satellite.{Permissions, Permissions.Scope}
+  alias Electric.Satellite.{Permissions, Permissions.Graph}
   alias Electric.Replication.Changes
 
   import ElectricTest.PermissionsHelpers
@@ -109,26 +109,26 @@ defmodule Electric.Satellite.Permissions.MultipleScopesTest do
   describe "tree test" do
     test "scope_id/3", cxt do
       assert {["r2"], [_ | _]} =
-               Scope.scope_id(cxt.tree, @restaurants, %Changes.NewRecord{
+               Graph.scope_id(cxt.tree, @restaurants, %Changes.NewRecord{
                  relation: @orders,
                  record: %{"id" => "c2-r2-o2", "restaurant_id" => "r2", "customer_id" => "c2"}
                })
 
       assert {["r2"], [_ | _]} =
-               Scope.scope_id(cxt.tree, @restaurants, @orders, %{
+               Graph.scope_id(cxt.tree, @restaurants, @orders, %{
                  "id" => "c2-r2-o2",
                  "restaurant_id" => "r2",
                  "customer_id" => "c2"
                })
 
       assert {["c2"], [_ | _]} =
-               Scope.scope_id(cxt.tree, @customers, %Changes.NewRecord{
+               Graph.scope_id(cxt.tree, @customers, %Changes.NewRecord{
                  relation: @orders,
                  record: %{"id" => "c2-r1-o1", "restaurant_id" => "r2", "customer_id" => "c2"}
                })
 
       assert {["c2"], [_ | _]} =
-               Scope.scope_id(cxt.tree, @customers, @orders, %{
+               Graph.scope_id(cxt.tree, @customers, @orders, %{
                  "id" => "c2-r1-o1",
                  "restaurant_id" => "r2",
                  "customer_id" => "c2"
@@ -136,34 +136,34 @@ defmodule Electric.Satellite.Permissions.MultipleScopesTest do
     end
 
     test "scope_id/3 for riders", cxt do
-      refute Scope.scope_id(cxt.tree, @orders, @riders, %{
+      refute Graph.scope_id(cxt.tree, @orders, @riders, %{
                "id" => "d1"
              })
 
       tree = assign_rider(cxt.tree, "c2-r1-o1", "d1")
 
       assert {["c2-r1-o1"], [_ | _]} =
-               Scope.scope_id(tree, @orders, @riders, %{
+               Graph.scope_id(tree, @orders, @riders, %{
                  "id" => "d1"
                })
 
       assert {["c2"], [_ | _]} =
-               Scope.scope_id(tree, @customers, @riders, %{
+               Graph.scope_id(tree, @customers, @riders, %{
                  "id" => "d1"
                })
 
       assert {["c2-r1-o1"], [_ | _]} =
-               Scope.scope_id(tree, @orders, @riders, %{
+               Graph.scope_id(tree, @orders, @riders, %{
                  "id" => "d1"
                })
 
       tree = unassign_rider(tree, "c2-r1-o1", "d1")
 
-      refute Scope.scope_id(tree, @restaurants, @riders, %{
+      refute Graph.scope_id(tree, @restaurants, @riders, %{
                "id" => "d1"
              })
 
-      refute Scope.scope_id(tree, @orders, @riders, %{
+      refute Graph.scope_id(tree, @orders, @riders, %{
                "id" => "d1"
              })
     end

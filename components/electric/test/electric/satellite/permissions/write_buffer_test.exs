@@ -2,7 +2,7 @@ defmodule Electric.Satellite.Permissions.WriteBufferTest do
   use ExUnit.Case, async: true
 
   alias Electric.Satellite.Permissions.WriteBuffer
-  alias Electric.Satellite.Permissions.Scope
+  alias Electric.Satellite.Permissions.Graph
   alias ElectricTest.PermissionsHelpers.Chgs
   alias ElectricTest.PermissionsHelpers.Tree
 
@@ -49,7 +49,7 @@ defmodule Electric.Satellite.Permissions.WriteBufferTest do
   end
 
   def apply_updates(tree, changes) do
-    Enum.reduce(changes, tree, &Scope.apply_change(&2, [@workspaces], &1))
+    Enum.reduce(changes, tree, &Graph.apply_change(&2, [@workspaces], &1))
   end
 
   describe "scope_id/3" do
@@ -68,22 +68,22 @@ defmodule Electric.Satellite.Permissions.WriteBufferTest do
     test "resolves mixed local and upstream scopes", cxt do
       # original data
       assert {["w1"], _} =
-               Scope.scope_id(cxt.tree, @workspaces, @projects, %{"id" => "p1"})
+               Graph.scope_id(cxt.tree, @workspaces, @projects, %{"id" => "p1"})
 
       # updates
       assert {["w1"], _} =
-               Scope.scope_id(cxt.tree, @workspaces, @projects, %{"id" => "p2"})
+               Graph.scope_id(cxt.tree, @workspaces, @projects, %{"id" => "p2"})
 
       assert {["w1"], _} =
-               Scope.scope_id(cxt.tree, @workspaces, @issues, %{"id" => "i2"})
+               Graph.scope_id(cxt.tree, @workspaces, @issues, %{"id" => "i2"})
 
       assert {["w1"], _} =
-               Scope.scope_id(cxt.tree, @workspaces, @comments, %{"id" => "c2"})
+               Graph.scope_id(cxt.tree, @workspaces, @comments, %{"id" => "c2"})
 
       assert {["w1"], _} =
-               Scope.scope_id(cxt.tree, @workspaces, @comments, ["c2"])
+               Graph.scope_id(cxt.tree, @workspaces, @comments, ["c2"])
 
-      refute Scope.scope_id(cxt.tree, @workspaces, @projects, %{
+      refute Graph.scope_id(cxt.tree, @workspaces, @projects, %{
                "id" => "p3",
                "workspace_id" => "w1"
              })
@@ -99,13 +99,13 @@ defmodule Electric.Satellite.Permissions.WriteBufferTest do
 
       # updates
       assert {["w1"], _} =
-               Scope.scope_id(tree, @workspaces, @projects, %{"id" => "p2"})
+               Graph.scope_id(tree, @workspaces, @projects, %{"id" => "p2"})
 
       assert {["w1"], _} =
-               Scope.scope_id(tree, @workspaces, @issues, %{"id" => "i3"})
+               Graph.scope_id(tree, @workspaces, @issues, %{"id" => "i3"})
 
       assert {["w1"], _} =
-               Scope.scope_id(tree, @workspaces, @comments, %{"id" => "c3"})
+               Graph.scope_id(tree, @workspaces, @comments, %{"id" => "c3"})
     end
 
     test "with in-scope deletion", cxt do
@@ -116,10 +116,10 @@ defmodule Electric.Satellite.Permissions.WriteBufferTest do
       tree = apply_updates(cxt.tree, changes)
 
       assert {["w1"], _} =
-               Scope.scope_id(tree, @workspaces, @projects, %{"id" => "p2"})
+               Graph.scope_id(tree, @workspaces, @projects, %{"id" => "p2"})
 
-      refute Scope.scope_id(tree, @workspaces, @issues, %{"id" => "i2"})
-      refute Scope.scope_id(tree, @workspaces, @comments, %{"id" => "c2"})
+      refute Graph.scope_id(tree, @workspaces, @issues, %{"id" => "i2"})
+      refute Graph.scope_id(tree, @workspaces, @comments, %{"id" => "c2"})
     end
 
     test "adding with fk to deleted parent", cxt do
@@ -164,8 +164,8 @@ defmodule Electric.Satellite.Permissions.WriteBufferTest do
 
       tree = apply_updates(cxt.tree, changes)
 
-      assert {["p2"], _} = Scope.scope_id(tree, @projects, @issues, ["i1"])
-      assert {["p2"], _} = Scope.scope_id(tree, @projects, @comments, ["c1"])
+      assert {["p2"], _} = Graph.scope_id(tree, @projects, @issues, ["i1"])
+      assert {["p2"], _} = Graph.scope_id(tree, @projects, @comments, ["c1"])
 
       ## double move
 
@@ -176,8 +176,8 @@ defmodule Electric.Satellite.Permissions.WriteBufferTest do
 
       tree = apply_updates(cxt.tree, changes)
 
-      assert {["w2"], _} = Scope.scope_id(tree, @workspaces, @issues, ["i1"])
-      assert {["w2"], _} = Scope.scope_id(tree, @workspaces, @comments, ["c1"])
+      assert {["w2"], _} = Graph.scope_id(tree, @workspaces, @issues, ["i1"])
+      assert {["w2"], _} = Graph.scope_id(tree, @workspaces, @comments, ["c1"])
 
       ## triple move
 
@@ -189,9 +189,9 @@ defmodule Electric.Satellite.Permissions.WriteBufferTest do
 
       tree = apply_updates(cxt.tree, changes)
 
-      assert {["w2"], _} = Scope.scope_id(tree, @workspaces, @comments, ["c9"])
-      assert {["w2"], _} = Scope.scope_id(tree, @workspaces, @issues, ["i1"])
-      assert {["w2"], _} = Scope.scope_id(tree, @workspaces, @comments, ["c1"])
+      assert {["w2"], _} = Graph.scope_id(tree, @workspaces, @comments, ["c9"])
+      assert {["w2"], _} = Graph.scope_id(tree, @workspaces, @issues, ["i1"])
+      assert {["w2"], _} = Graph.scope_id(tree, @workspaces, @comments, ["c1"])
 
       ## move locally added items
 
@@ -202,8 +202,8 @@ defmodule Electric.Satellite.Permissions.WriteBufferTest do
 
       tree = apply_updates(cxt.tree, changes)
 
-      assert {["w1"], _} = Scope.scope_id(tree, @workspaces, @comments, ["c2"])
-      assert {["w1"], _} = Scope.scope_id(tree, @workspaces, @issues, ["i2"])
+      assert {["w1"], _} = Graph.scope_id(tree, @workspaces, @comments, ["c2"])
+      assert {["w1"], _} = Graph.scope_id(tree, @workspaces, @issues, ["i2"])
 
       ## move then delete
 
@@ -219,10 +219,10 @@ defmodule Electric.Satellite.Permissions.WriteBufferTest do
 
       tree = apply_updates(cxt.tree, changes)
 
-      assert {["w2"], _} = Scope.scope_id(tree, @workspaces, @comments, ["c9"])
-      assert {["w2"], _} = Scope.scope_id(tree, @workspaces, @issues, ["i1"])
-      refute Scope.scope_id(tree, @workspaces, @issues, ["i9"])
-      refute Scope.scope_id(tree, @workspaces, @comments, ["c1"])
+      assert {["w2"], _} = Graph.scope_id(tree, @workspaces, @comments, ["c9"])
+      assert {["w2"], _} = Graph.scope_id(tree, @workspaces, @issues, ["i1"])
+      refute Graph.scope_id(tree, @workspaces, @issues, ["i9"])
+      refute Graph.scope_id(tree, @workspaces, @comments, ["c1"])
     end
 
     test "change to invalid fk", cxt do
@@ -278,7 +278,7 @@ defmodule Electric.Satellite.Permissions.WriteBufferTest do
       assert WriteBuffer.empty?(tree)
 
       # ensure we can still resolve scopes using the upstream
-      assert {["w1"], _} = Scope.scope_id(tree, @workspaces, @projects, %{"id" => "p1"})
+      assert {["w1"], _} = Graph.scope_id(tree, @workspaces, @projects, %{"id" => "p1"})
     end
   end
 end

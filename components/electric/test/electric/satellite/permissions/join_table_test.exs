@@ -5,7 +5,7 @@ defmodule Electric.Satellite.Permissions.JoinTableTest do
     Tree
   }
 
-  alias Electric.Satellite.Permissions.Scope
+  alias Electric.Satellite.Permissions.Graph
 
   @restaurants {"public", "restaurants"}
   @orders {"public", "orders"}
@@ -53,12 +53,12 @@ defmodule Electric.Satellite.Permissions.JoinTableTest do
   end
 
   test "scope_id resolves across join tables", cxt do
-    refute Scope.scope_id(cxt.tree, @orders, @riders, ["rd1"])
+    refute Graph.scope_id(cxt.tree, @orders, @riders, ["rd1"])
 
     tree = assign_rider(cxt.tree, "or1", "rd1")
 
-    assert {["or1"], _} = Scope.scope_id(tree, @orders, @riders, ["rd1"])
-    assert {["rt1"], _} = Scope.scope_id(tree, @restaurants, @riders, ["rd1"])
-    refute Scope.scope_id(tree, @orders, @riders, ["rd2"])
+    assert {["or1"], _} = Graph.scope_id(tree, @orders, @riders, ["rd1"])
+    assert {["rt1"], _} = Graph.scope_id(tree, @restaurants, @riders, ["rd1"])
+    refute Graph.scope_id(tree, @orders, @riders, ["rd2"])
   end
 end

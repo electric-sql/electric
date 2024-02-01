@@ -3,12 +3,12 @@ defmodule Electric.Satellite.Permissions.Read do
   alias Electric.Satellite.Permissions
   alias Electric.Satellite.Permissions.MoveOut
   alias Electric.Satellite.Permissions.Role
-  alias Electric.Satellite.Permissions.Scope
+  alias Electric.Satellite.Permissions.Graph
 
   def filter_read(perms, tx) do
     %{scope_resolver: %{read: tree}, scopes: scopes, scoped_roles: scoped_roles} = perms
 
-    tx_tree = Scope.transaction_context(tree, scopes, tx)
+    tx_tree = Graph.transaction_context(tree, scopes, tx)
 
     {readable_changes, excluded_changes} =
       Enum.split_with(tx.changes, &Permissions.validate_read(&1, perms, tx_tree, tx.lsn))
@@ -35,7 +35,7 @@ defmodule Electric.Satellite.Permissions.Read do
 
   defp resolve_scope_moves(%Changes.UpdatedRecord{} = change, tree, scoped_roles) do
     Enum.flat_map(scoped_roles, fn {scope, roles} ->
-      if Scope.modifies_fk?(tree, scope, change) do
+      if Graph.modifies_fk?(tree, scope, change) do
         classify_change(change, scope, tree, roles)
       else
         []
@@ -54,7 +54,7 @@ defmodule Electric.Satellite.Permissions.Read do
     %{relation: relation, old_record: old} = change
 
     # this gets the scope id in the pre-tx tree
-    case Scope.scope_id(tree, scope, relation, old) do
+    case Graph.scope_id(tree, scope, relation, old) do
       {old_scope_id, scope_path} ->
         # do we have any roles that gave us access to the old record in the old tree?
         # if so then the perms status of this change has altered due to changes in this tx
@@ -63,7 +63,7 @@ defmodule Electric.Satellite.Permissions.Read do
             %MoveOut{
               change: change,
               relation: relation,
-              id: Scope.primary_key(tree, relation, old),
+              id: Graph.primary_key(tree, relation, old),
               scope_path: scope_path
             }
           ]
