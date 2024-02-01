@@ -46,5 +46,7 @@ defmodule Electric.DDLX.Command.Error do
     end
 
     def tag(_), do: "ELECTRIC ERROR"
+
+    def to_protobuf(_), do: []
   end
 end

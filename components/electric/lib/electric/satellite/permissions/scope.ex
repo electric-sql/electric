@@ -12,14 +12,20 @@ defmodule Electric.Satellite.Permissions.Scope do
   @type state() :: term()
   @type relation() :: Electric.Postgres.relation()
   @type scope_root() :: relation()
-  @type t() :: {module(), state()}
+  @type impl() :: {module(), state()}
   @type record() :: Changes.record()
 
-  @type id() :: Electric.Postgres.pk()
+  @type id() :: [Electric.Postgres.pk(), ...]
   @type tx_fun() :: (Changes.Transaction.t(), state() -> Changes.Transaction.t())
   @type change() :: Changes.change()
   @type scope_path_information() :: term()
   @type scope_result() :: {id(), scope_path_information()} | nil
+
+  @enforce_keys [:read, :write]
+
+  defstruct [:read, :write]
+
+  @type t() :: %__MODULE__{read: impl(), write: impl()}
 
   @doc """
   Returns the id of the root document of the tree based on the `root` table for the given change
@@ -32,7 +38,7 @@ defmodule Electric.Satellite.Permissions.Scope do
   If the lookup fails for some other reason, e.g. the backing store is offline or something, then
   this should raise.
   """
-  @callback scope_id(state(), scope_root(), relation(), record()) :: scope_result()
+  @callback scope_id(state(), scope_root(), relation(), record() | id()) :: scope_result()
 
   @doc """
   Get the scope of the parent to this record, that is the scope of the record one level up* in the
@@ -46,10 +52,10 @@ defmodule Electric.Satellite.Permissions.Scope do
   """
   @callback parent_scope_id(state(), scope_root(), relation(), record()) :: scope_result()
 
-  # @doc """
-  # Returns an updated (temporary) scope state including the given change.
-  # """
-  @callback apply_change(state(), change()) :: state()
+  @doc """
+  Returns an updated (temporary) scope state including the given change.
+  """
+  @callback apply_change(state(), [scope_root(), ...], change()) :: state()
 
   @doc """
   Returns the primary key value for the given record.
@@ -64,11 +70,40 @@ defmodule Electric.Satellite.Permissions.Scope do
   """
   @callback modifies_fk?(state(), scope_root(), Changes.UpdatedRecord.t()) :: boolean()
 
+  @doc """
+  Returns the parent id, that is a `{relation(), id()}` tuple, based on the given relation and
+  record.
+
+  This does not lookup values in the tree, it merely uses the foreign key information and the
+  values in the record.
+  """
+  @callback parent(state(), scope_root(), relation(), record()) :: {relation(), id()} | nil
+
+  @doc """
+  Return the path through the tables' foreign keys that gets from the given relation to the root.
+
+  If `relation` is the same as `root` then should return `[root]`.
+
+  If there is no path from `relation` to `root`, returns `nil`.
+  """
+  @callback relation_path(state(), scope_root(), relation()) :: [relation(), ...] | nil
+
   @behaviour __MODULE__
 
   defguardp is_relation(r) when is_tuple(r) and tuple_size(r) == 2
 
   defguardp is_update(c) when is_struct(c, Changes.UpdatedRecord)
+
+  @spec new(Access.t()) :: t() | no_return()
+  def new(attrs) do
+    with {:ok, read} <- Access.fetch(attrs, :read),
+         {:ok, write} <- Access.fetch(attrs, :write) do
+      %__MODULE__{read: read, write: write}
+    else
+      :error ->
+        raise ArgumentError, message: "you must pass both :read and :write scope implementations"
+    end
+  end
 
   @doc """
   `scope_id/3` is a wrapper around the #{__MODULE__} callback `scope_id/4` that provides some
@@ -100,9 +135,10 @@ defmodule Electric.Satellite.Permissions.Scope do
   end
 
   @impl __MODULE__
-  def scope_id({module, state}, root, relation, record)
-      when is_relation(root) and is_relation(relation) do
-    module.scope_id(state, root, relation, record)
+  def scope_id({module, state}, root, relation, record_or_ids)
+      when is_relation(root) and is_relation(relation) and
+             (is_map(record_or_ids) or is_list(record_or_ids)) do
+    module.scope_id(state, root, relation, record_or_ids)
   end
 
   @impl __MODULE__
@@ -111,17 +147,23 @@ defmodule Electric.Satellite.Permissions.Scope do
     module.parent_scope_id(state, root, relation, record)
   end
 
-  def transaction_context({_module, _state} = impl, %Changes.Transaction{changes: changes}) do
-    Enum.reduce(changes, impl, &apply_change(&2, &1))
+  @impl __MODULE__
+  def parent({module, state}, root, relation, record) do
+    module.parent(state, root, relation, record)
+  end
+
+  @spec transaction_context(impl(), [relation()], Change.t()) :: impl()
+  def transaction_context({_module, _state} = impl, roots, %Changes.Transaction{changes: changes}) do
+    Enum.reduce(changes, impl, &apply_change(&2, roots, &1))
   end
 
   @impl __MODULE__
-  def apply_change({module, state}, %ScopeMove{} = _change) do
+  def apply_change({module, state}, _roots, %ScopeMove{} = _change) do
     {module, state}
   end
 
-  def apply_change({module, state}, change) do
-    {module, module.apply_change(state, change)}
+  def apply_change({module, state}, roots, change) do
+    {module, module.apply_change(state, roots, change)}
   end
 
   @impl __MODULE__
@@ -136,5 +178,14 @@ defmodule Electric.Satellite.Permissions.Scope do
   @impl __MODULE__
   def primary_key({module, state}, relation, record) do
     module.primary_key(state, relation, record)
+  end
+
+  @impl __MODULE__
+  def relation_path(_impl, root, root) do
+    [root]
+  end
+
+  def relation_path({module, state}, root, relation) do
+    module.relation_path(state, root, relation)
   end
 end

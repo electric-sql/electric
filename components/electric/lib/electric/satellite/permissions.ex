@@ -152,20 +152,10 @@ defmodule Electric.Satellite.Permissions do
   use Electric.Satellite.Protobuf
 
   alias Electric.Replication.Changes
-  alias Electric.Satellite.Permissions.{Grant, Read, Role, Scope, Transient}
+  alias Electric.Satellite.Permissions.{Grant, Read, Role, Scope, Transient, Tree, Trigger}
   alias Electric.Satellite.{Auth, SatPerms}
 
   require Logger
-
-  defstruct [
-    :source,
-    :roles,
-    :scoped_roles,
-    :auth,
-    :scopes,
-    :scope_resolver,
-    transient_lut: Transient
-  ]
 
   defmodule RoleGrant do
     # links a role to its corresponding grant
@@ -197,6 +187,22 @@ defmodule Electric.Satellite.Permissions do
     defstruct [:relation, :record]
   end
 
+  defmodule IntermediateRoles do
+    defstruct source: %{}, role_grants: %{}
+  end
+
+  defstruct [
+    :source,
+    :roles,
+    :scoped_roles,
+    :auth,
+    :scopes,
+    :scope_resolver,
+    :triggers,
+    :intermediate_roles,
+    transient_lut: Transient
+  ]
+
   @type change() :: Changes.change()
   @type tx() :: Changes.Transaction.t()
   @type lsn() :: Electric.Postgres.Lsn.t()
@@ -205,8 +211,9 @@ defmodule Electric.Satellite.Permissions do
   @type privilege() :: :INSERT | :UPDATE | :DELETE | :SELECT
   @type table_permission() :: {relation(), privilege()}
   @type assigned_roles() :: %{unscoped: [RoleGrant.t()], scoped: [RoleGrant.t()]}
-  @type role_lookup() :: %{table_permission() => assigned_roles()}
-  @type scope_id() :: Electric.Postgres.pk()
+  @type role_lookup() :: %{optional(table_permission()) => assigned_roles()}
+  @type id() :: Electric.Postgres.pk()
+  @type scope_id() :: id()
   @type scope() :: {relation, scope_id()}
   @type scoped_change() :: {change(), scope()}
   @type move_out() :: %MoveOut{
@@ -215,11 +222,17 @@ defmodule Electric.Satellite.Permissions do
           relation: relation(),
           id: scope_id()
         }
+  @type scope_resolver() :: %{read: Scope.t(), write: Scope.t()}
+
+  @type intermediate_roles() :: %IntermediateRoles{
+          source: %{optional({relation(), id()}) => Role.t()},
+          role_grants: role_lookup()
+        }
 
   @type empty() :: %__MODULE__{
           auth: Auth.t(),
           transient_lut: Transient.lut(),
-          scope_resolver: Scope.t()
+          scope_resolver: scope_resolver()
         }
 
   @type t() :: %__MODULE__{
@@ -227,9 +240,11 @@ defmodule Electric.Satellite.Permissions do
           source: %{grants: [%SatPerms.Grant{}], roles: [%SatPerms.Role{}]} | nil,
           auth: Auth.t(),
           transient_lut: Transient.lut(),
-          scope_resolver: Scope.t(),
+          scope_resolver: scope_resolver(),
           scopes: [relation()],
-          scoped_roles: %{relation => [Role.t()]}
+          scoped_roles: %{relation => [Role.t()]},
+          triggers: %{relation() => [Trigger.assign_trigger_fun()]},
+          intermediate_roles: intermediate_roles()
         }
 
   @doc """
@@ -250,8 +265,9 @@ defmodule Electric.Satellite.Permissions do
   def new(%Auth{} = auth, {_, _} = scope_resolver, transient_lut_name \\ Transient) do
     %__MODULE__{
       auth: auth,
-      scope_resolver: scope_resolver,
-      transient_lut: transient_lut_name
+      scope_resolver: Scope.new(read: scope_resolver, write: Tree.new(scope_resolver)),
+      transient_lut: transient_lut_name,
+      intermediate_roles: %IntermediateRoles{}
     }
   end
 
@@ -264,28 +280,38 @@ defmodule Electric.Satellite.Permissions do
   - `roles` should be a list of `%SatPerms.Role{}` protobuf structs
 
   """
-  @spec update(empty() | t(), [%SatPerms.Grant{}], [%SatPerms.Role{}]) :: t()
-  def update(%__MODULE__{} = perms, grants, roles) do
+  @spec update(empty() | t(), %SatPerms.Rules{}, [%SatPerms.Role{}]) :: t()
+  def update(%__MODULE__{} = perms, rules, roles) do
+    %{grants: grants, assigns: assigns} = rules
+
     assigned_roles = build_roles(roles, perms.auth)
-
-    role_grants =
-      assigned_roles
-      |> Stream.map(&{&1, Role.matching_grants(&1, grants)})
-      |> Stream.reject(fn {_role, grants} -> Enum.empty?(grants) end)
-      |> Stream.map(&build_grants/1)
-      |> Stream.flat_map(&invert_role_lookup/1)
-      |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
-      |> Map.new(&classify_roles/1)
-
     scoped_roles = compile_scopes(assigned_roles)
+    triggers = build_triggers(assigns)
 
     %{
       perms
-      | source: %{grants: grants, roles: roles},
-        roles: role_grants,
+      | source: %{grants: grants, assigns: assigns, roles: roles},
+        roles: build_role_grants(assigned_roles, grants),
         scoped_roles: scoped_roles,
-        scopes: Map.keys(scoped_roles)
+        scopes: Map.keys(scoped_roles),
+        triggers: triggers
     }
+  end
+
+  defp build_role_grants(roles, grants) do
+    roles
+    |> Stream.map(&{&1, Role.matching_grants(&1, grants)})
+    |> Stream.reject(fn {_role, grants} -> Enum.empty?(grants) end)
+    |> Stream.map(&build_grants/1)
+    |> Stream.flat_map(&invert_role_lookup/1)
+    |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+    |> Map.new(&classify_roles/1)
+  end
+
+  defp build_triggers(assigns) do
+    assigns
+    |> Stream.flat_map(&Trigger.for_assign/1)
+    |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
   end
 
   # For every `{table, privilege}` tuple we have a set of roles that the current user has.
@@ -304,7 +330,10 @@ defmodule Electric.Satellite.Permissions do
   # so that we can create a LUT of table and required privilege to role
   defp invert_role_lookup({role, grants}) do
     Stream.flat_map(grants, fn grant ->
-      Enum.map(grant.privileges, &{{grant.table, &1}, %RoleGrant{grant: grant, role: role}})
+      Enum.map(
+        grant.privileges,
+        &{{grant.table, &1}, %RoleGrant{grant: grant, role: role}}
+      )
     end)
   end
 
@@ -366,7 +395,7 @@ defmodule Electric.Satellite.Permissions do
   Verify that all the writes in a transaction from satellite are allowed given the user's
   permissions.
   """
-  @spec validate_write(t(), tx()) :: :ok | {:error, String.t()}
+  @spec validate_write(t(), tx()) :: {:ok, t()} | {:error, String.t()}
   def validate_write(%__MODULE__{} = perms, %Changes.Transaction{} = tx) do
     tx.changes
     |> Stream.flat_map(&expand_change(&1, perms))
@@ -393,17 +422,21 @@ defmodule Electric.Satellite.Permissions do
   end
 
   defp modifies_scope_fk?(change, perms) do
-    Enum.any?(perms.scopes, &Scope.modifies_fk?(perms.scope_resolver, &1, change))
+    %{scope_resolver: %{write: scope_resolver}} = perms
+    Enum.any?(perms.scopes, &Scope.modifies_fk?(scope_resolver, &1, change))
   end
 
   defp validate_all_writes(changes, perms, lsn) do
-    with {:ok, _tx_scope} <- validate_writes_with_scope(changes, perms, lsn) do
-      :ok
+    with {:ok, perms, scope_resolv} <- validate_writes_with_scope(changes, perms, lsn) do
+      {:ok, put_in(perms.scope_resolver.write, scope_resolv)}
     end
   end
 
   defp validate_writes_with_scope(changes, perms, lsn) do
-    Enum.reduce_while(changes, {:ok, perms.scope_resolver}, fn change, {:ok, scope_resolver} ->
+    %{scope_resolver: %{write: scope_resolver}} = perms
+
+    Enum.reduce_while(changes, {:ok, perms, scope_resolver}, fn change,
+                                                                {:ok, perms, scope_resolver} ->
       case verify_write(change, perms, scope_resolver, lsn) do
         {:error, _} = error ->
           {:halt, error}
@@ -413,23 +446,48 @@ defmodule Electric.Satellite.Permissions do
             "role #{inspect(role)} grant #{inspect(grant)} gives permission for #{inspect(change)}"
           )
 
-          scope_resolver = Scope.apply_change(scope_resolver, change)
+          scope_resolver = Scope.apply_change(scope_resolver, perms.scopes, change)
 
-          {:cont, {:ok, scope_resolver}}
+          perms =
+            perms.triggers
+            |> Map.get(change.relation, [])
+            |> Enum.flat_map(fn trigger_fun ->
+              trigger_fun.(change, scope_resolver, perms.auth)
+            end)
+            |> update_transient_roles(perms)
+
+          {:cont, {:ok, perms, scope_resolver}}
       end
     end)
   end
 
   @spec verify_write(change(), t(), Scope.t(), lsn()) :: RoleGrant.t() | {:error, String.t()}
-  defp verify_write(change, perms, scope_resolve, lsn) do
+  defp verify_write(change, perms, scope_resolver, lsn) do
     action = required_permission(change)
 
     role_grant =
       perms.roles
       |> Map.get(action)
-      |> role_grant_for_change(perms, scope_resolve, change, lsn, :write)
+      |> include_transient_roles(action, perms)
+      |> role_grant_for_change(perms, scope_resolver, change, lsn, :write)
 
     role_grant || permission_error(action)
+  end
+
+  defp include_transient_roles(nil, action, perms) do
+    transient_roles_for_action(perms, action)
+  end
+
+  defp include_transient_roles(grants, action, perms) do
+    transient_grants = transient_roles_for_action(perms, action) || %{}
+
+    Map.merge(grants, transient_grants, fn _key, grants1, grants2 ->
+      Stream.concat(grants1, grants2)
+    end)
+  end
+
+  defp transient_roles_for_action(perms, action) do
+    Map.get(perms.intermediate_roles.role_grants, action)
   end
 
   @spec role_grant_for_change(nil, t(), Scope.t(), change(), lsn(), mode()) :: nil
@@ -517,6 +575,10 @@ defmodule Electric.Satellite.Permissions do
     true
   end
 
+  defp change_in_scope?(nil, _scope_relation, _scope_id, _change) do
+    false
+  end
+
   defp change_in_scope?(scope_resolver, scope_relation, scope_id, change) do
     with {id, _path_information} <- Scope.scope_id(scope_resolver, scope_relation, change) do
       id && id == scope_id
@@ -545,5 +607,31 @@ defmodule Electric.Satellite.Permissions do
     {:error,
      "user does not have permission to " <>
        action <> Electric.Utils.inspect_relation(relation)}
+  end
+
+  def update_transient_roles(role_changes, %__MODULE__{} = perms) do
+    %{intermediate_roles: %IntermediateRoles{source: source_roles}, source: %{grants: grants}} =
+      perms
+
+    roles = Enum.reduce(role_changes, source_roles, &update_intermediate_role/2)
+
+    role_grants =
+      roles
+      |> Map.values()
+      |> build_role_grants(grants)
+
+    %{perms | intermediate_roles: %IntermediateRoles{source: roles, role_grants: role_grants}}
+  end
+
+  defp update_intermediate_role({:insert, {relation, id}, role}, roles) do
+    Map.put(roles, {relation, id}, role)
+  end
+
+  defp update_intermediate_role({:update, {relation, id}, role}, roles) do
+    Map.put(roles, {relation, id}, role)
+  end
+
+  defp update_intermediate_role({:delete, {relation, id}}, roles) do
+    Map.delete(roles, {relation, id})
   end
 end

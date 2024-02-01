@@ -38,5 +38,7 @@ defmodule Electric.DDLX.Command.Enable do
     end
 
     def tag(_a), do: "ELECTRIC ENABLE"
+
+    def to_protobuf(_), do: []
   end
 end

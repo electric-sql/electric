@@ -76,51 +76,6 @@ defmodule Electric.DDLX.Command.Grant do
     end
   end
 
-  def to_protobuf(grant) do
-    %{on_table: {schema, name}} = grant
-
-    %P.Grant{
-      table: %P.Table{schema: schema, name: name},
-      role: pb_role(grant.role),
-      privileges: pb_privs(grant.privileges),
-      columns: grant.column_names,
-      scope: scope(grant),
-      path: grant.using_path,
-      check: grant.check_fn
-    }
-  end
-
-  defp pb_role("__electric__.__authenticated__") do
-    %P.RoleName{role: {:predefined, :AUTHENTICATED}}
-  end
-
-  defp pb_role("__electric__.__anyone__") do
-    %P.RoleName{role: {:predefined, :ANYONE}}
-  end
-
-  defp pb_role(role) when is_binary(role) do
-    %P.RoleName{role: {:application, role}}
-  end
-
-  defp scope(%{scope: {ss, sn}}) do
-    %P.Table{schema: ss, name: sn}
-  end
-
-  defp scope(_), do: nil
-
-  defp pb_privs(privs) do
-    Enum.map(privs, &priv_to_pb/1)
-  end
-
-  defp priv_to_pb(p) do
-    case p do
-      "update" -> :UPDATE
-      "select" -> :SELECT
-      "delete" -> :DELETE
-      "insert" -> :INSERT
-    end
-  end
-
   defimpl Command do
     import Electric.DDLX.Command.Common
 
@@ -144,5 +99,52 @@ defmodule Electric.DDLX.Command.Grant do
     end
 
     def tag(_a), do: "ELECTRIC GRANT"
+
+    def to_protobuf(grant) do
+      %{on_table: {schema, name}} = grant
+
+      [
+        %P.Grant{
+          table: %P.Table{schema: schema, name: name},
+          role: pb_role(grant.role),
+          privileges: pb_privs(grant.privileges),
+          columns: grant.column_names,
+          scope: scope(grant),
+          path: grant.using_path,
+          check: grant.check_fn
+        }
+      ]
+    end
+
+    defp pb_role("__electric__.__authenticated__") do
+      %P.RoleName{role: {:predefined, :AUTHENTICATED}}
+    end
+
+    defp pb_role("__electric__.__anyone__") do
+      %P.RoleName{role: {:predefined, :ANYONE}}
+    end
+
+    defp pb_role(role) when is_binary(role) do
+      %P.RoleName{role: {:application, role}}
+    end
+
+    defp scope(%{scope: {ss, sn}}) do
+      %P.Table{schema: ss, name: sn}
+    end
+
+    defp scope(_), do: nil
+
+    defp pb_privs(privs) do
+      Enum.map(privs, &priv_to_pb/1)
+    end
+
+    defp priv_to_pb(p) do
+      case p do
+        "update" -> :UPDATE
+        "select" -> :SELECT
+        "delete" -> :DELETE
+        "insert" -> :INSERT
+      end
+    end
   end
 end

@@ -74,19 +74,13 @@ defmodule Electric.Satellite.Permissions.Role do
     |> Enum.filter(&matching_role(&1, role_name))
   end
 
-  # scoped roles match grants with the same scope or unscoped
+  # scoped roles match grants with the same scope
   def matching_grants(%__MODULE__{} = role, grants) do
     %{role: role_name, scope: {role_scope, _id}} = role
 
     grants
     |> Stream.filter(&reject_predefined/1)
-    |> Stream.filter(fn
-      %{scope: nil} ->
-        true
-
-      %{scope: %SatPerms.Table{schema: schema, name: name}} ->
-        {schema, name} == role_scope
-    end)
+    |> Stream.filter(&matching_scope(&1, role_scope))
     |> Enum.filter(&matching_role(&1, role_name))
   end
 
@@ -95,6 +89,11 @@ defmodule Electric.Satellite.Permissions.Role do
 
   defp matching_role(%{role: %{role: {:application, role}}}, role), do: true
   defp matching_role(_grant, _role), do: false
+
+  defp matching_scope(%{scope: %SatPerms.Table{schema: schema, name: name}}, {schema, name}),
+    do: true
+
+  defp matching_scope(_, _), do: false
 
   defp make_scope(nil), do: nil
   defp make_scope(%SatPerms.Scope{table: %{schema: s, name: n}, id: id}), do: {{s, n}, id}

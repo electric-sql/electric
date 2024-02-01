@@ -6,9 +6,9 @@ defmodule Electric.Satellite.Permissions.Read do
   alias Electric.Satellite.Permissions.Scope
 
   def filter_read(perms, tx) do
-    %{scope_resolver: tree, scopes: scopes, scoped_roles: scoped_roles} = perms
+    %{scope_resolver: %{read: tree}, scopes: scopes, scoped_roles: scoped_roles} = perms
 
-    tx_tree = Scope.transaction_context(tree, tx)
+    tx_tree = Scope.transaction_context(tree, scopes, tx)
 
     {readable_changes, excluded_changes} =
       Enum.split_with(tx.changes, &Permissions.validate_read(&1, perms, tx_tree, tx.lsn))
@@ -21,7 +21,6 @@ defmodule Electric.Satellite.Permissions.Read do
         &resolve_scope_moves(&1, tree, scopes)
       )
 
-    # %{scope_resolver: scope_resolv} = perms
     {%{tx | changes: readable_changes}, moves}
   end
 

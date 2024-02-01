@@ -19,6 +19,7 @@ defmodule Electric.Satellite.Permissions.MultipleScopesTest do
   @riders {"public", "riders"}
   @customers {"public", "customers"}
   @order_riders {"public", "order_riders"}
+  @order_dishes {"public", "order_dishes"}
   @addresses {"public", "addresses"}
 
   setup do
@@ -73,22 +74,15 @@ defmodule Electric.Satellite.Permissions.MultipleScopesTest do
           {@riders, "d3", []}
         ],
         [
-          {@restaurants, nil,
-           [
-             {@dishes, "restaurant_id", []},
-             {@orders, "restaurant_id", [{@order_riders, "order_id", []}]}
-           ]},
-          {@customers, nil,
-           [
-             {@orders, "customer_id",
-              [
-                {@dishes, "order_dish_id", []},
-                {@order_riders, "order_id", []},
-                {@addresses, "address_id"}
-              ]},
-             {@addresses, "customer_id", []}
-           ]},
-          {@riders, nil, [{@order_riders, "rider_id"}]}
+          {@addresses, @customers, ["customer_id"]},
+          {@dishes, @restaurants, ["restaurant_id"]},
+          {@order_dishes, @dishes, ["dish_id"]},
+          {@order_dishes, @orders, ["order_id"]},
+          {@order_riders, @orders, ["order_id"]},
+          {@order_riders, @riders, ["rider_id"]},
+          {@orders, @addresses, ["address_id"]},
+          {@orders, @customers, ["customer_id"]},
+          {@orders, @restaurants, ["restaurant_id"]}
         ]
       )
 
@@ -98,44 +92,42 @@ defmodule Electric.Satellite.Permissions.MultipleScopesTest do
   end
 
   def assign_rider(tree, order_id, rider_id) do
-    v = {@order_riders, {order_id, rider_id}}
+    v = {@order_riders, [order_id, rider_id]}
 
     tree
     |> Tree.add_vertex(v)
-    |> Tree.add_edge({@orders, order_id}, v)
-    |> Tree.add_edge({@riders, rider_id}, v)
-    |> Tree.add_edge(v, {@orders, order_id})
-    |> Tree.add_edge(v, {@riders, rider_id})
+    |> Tree.add_edge(v, {@orders, [order_id]})
+    |> Tree.add_edge(v, {@riders, [rider_id]})
   end
 
   def unassign_rider(tree, order_id, rider_id) do
-    v = {@order_riders, {order_id, rider_id}}
+    v = {@order_riders, [order_id, rider_id]}
 
     Tree.delete_vertex(tree, v)
   end
 
   describe "tree test" do
     test "scope_id/3", cxt do
-      assert {"r2", [_ | _]} =
+      assert {["r2"], [_ | _]} =
                Scope.scope_id(cxt.tree, @restaurants, %Changes.NewRecord{
                  relation: @orders,
                  record: %{"id" => "c2-r2-o2", "restaurant_id" => "r2", "customer_id" => "c2"}
                })
 
-      assert {"r2", [_ | _]} =
+      assert {["r2"], [_ | _]} =
                Scope.scope_id(cxt.tree, @restaurants, @orders, %{
                  "id" => "c2-r2-o2",
                  "restaurant_id" => "r2",
                  "customer_id" => "c2"
                })
 
-      assert {"c2", [_ | _]} =
+      assert {["c2"], [_ | _]} =
                Scope.scope_id(cxt.tree, @customers, %Changes.NewRecord{
                  relation: @orders,
                  record: %{"id" => "c2-r1-o1", "restaurant_id" => "r2", "customer_id" => "c2"}
                })
 
-      assert {"c2", [_ | _]} =
+      assert {["c2"], [_ | _]} =
                Scope.scope_id(cxt.tree, @customers, @orders, %{
                  "id" => "c2-r1-o1",
                  "restaurant_id" => "r2",
@@ -144,23 +136,23 @@ defmodule Electric.Satellite.Permissions.MultipleScopesTest do
     end
 
     test "scope_id/3 for riders", cxt do
-      refute Scope.scope_id(cxt.tree, @restaurants, @riders, %{
+      refute Scope.scope_id(cxt.tree, @orders, @riders, %{
                "id" => "d1"
              })
 
       tree = assign_rider(cxt.tree, "c2-r1-o1", "d1")
 
-      assert {"r1", [_ | _]} =
-               Scope.scope_id(tree, @restaurants, @riders, %{
+      assert {["c2-r1-o1"], [_ | _]} =
+               Scope.scope_id(tree, @orders, @riders, %{
                  "id" => "d1"
                })
 
-      assert {"c2", [_ | _]} =
+      assert {["c2"], [_ | _]} =
                Scope.scope_id(tree, @customers, @riders, %{
                  "id" => "d1"
                })
 
-      assert {"c2-r1-o1", [_ | _]} =
+      assert {["c2-r1-o1"], [_ | _]} =
                Scope.scope_id(tree, @orders, @riders, %{
                  "id" => "d1"
                })

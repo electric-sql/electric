@@ -22,6 +22,7 @@ defmodule Electric.Satellite.PermissionsTest do
   @issues {"public", "issues"}
   @comments {"public", "comments"}
   @reactions {"public", "reactions"}
+  @project_memberships {"public", "project_memberships"}
 
   setup do
     tree =
@@ -56,15 +57,12 @@ defmodule Electric.Satellite.PermissionsTest do
            ]}
         ],
         [
-          {@regions, nil, [{@offices, "region_id", []}]},
-          {@workspaces, nil,
-           [
-             {@projects, "workspace_id",
-              [
-                {@issues, "project_id",
-                 [{@comments, "issue_id", [{@reactions, "comment_id", []}]}]}
-              ]}
-           ]}
+          {@comments, @issues, ["issue_id"]},
+          {@issues, @projects, ["project_id"]},
+          {@offices, @regions, ["region_id"]},
+          {@project_memberships, @projects, ["project_id"]},
+          {@projects, @workspaces, ["workspace_id"]},
+          {@reactions, @comments, ["comment_id"]}
         ]
       )
 
@@ -75,19 +73,19 @@ defmodule Electric.Satellite.PermissionsTest do
 
   describe "PermissionsHelpers.Tree" do
     test "scope_id/3", cxt do
-      assert {"p1", [_ | _]} =
+      assert {["p1"], [_ | _]} =
                Scope.scope_id(cxt.tree, @projects, %Changes.NewRecord{
                  relation: @reactions,
                  record: %{"id" => "r100", "comment_id" => "c2"}
                })
 
-      assert {"p1", [_ | _]} =
+      assert {["p1"], [_ | _]} =
                Scope.scope_id(cxt.tree, @projects, %Changes.UpdatedRecord{
                  relation: @reactions,
                  record: %{"id" => "r4"}
                })
 
-      assert {"p2", [_ | _]} =
+      assert {["p2"], [_ | _]} =
                Scope.scope_id(cxt.tree, @projects, %Changes.DeletedRecord{
                  relation: @comments,
                  old_record: %{"id" => "c4"}
@@ -121,7 +119,7 @@ defmodule Electric.Satellite.PermissionsTest do
     end
 
     test "scope_id/3 at root of scope", cxt do
-      assert {"p1", [{@projects, "p1"}]} =
+      assert {["p1"], [{@projects, ["p1"]}]} =
                Scope.scope_id(cxt.tree, @projects, %Changes.NewRecord{
                  relation: @issues,
                  record: %{"id" => "i100", "project_id" => "p1"}
@@ -129,13 +127,13 @@ defmodule Electric.Satellite.PermissionsTest do
     end
 
     test "parent_scope_id/4", cxt do
-      assert {"p1", [{@projects, "p1"}]} =
+      assert {["p1"], [{@projects, ["p1"]}]} =
                Scope.parent_scope_id(cxt.tree, @projects, @issues, %{
                  "id" => "i100",
                  "project_id" => "p1"
                })
 
-      assert {"p1", _} =
+      assert {["p1"], _} =
                Scope.parent_scope_id(cxt.tree, @projects, @reactions, %{
                  "id" => "r100",
                  "comment_id" => "c5"
@@ -193,15 +191,15 @@ defmodule Electric.Satellite.PermissionsTest do
         Chgs.delete(@issues, %{"id" => "i2"})
       ]
 
-      tree = Scope.transaction_context(cxt.tree, Chgs.tx(changes))
+      tree = Scope.transaction_context(cxt.tree, [@projects], Chgs.tx(changes))
 
-      assert {"p1", [_ | _]} =
+      assert {["p1"], [_ | _]} =
                Scope.scope_id(tree, @projects, %Changes.UpdatedRecord{
                  relation: @reactions,
                  record: %{"id" => "r100"}
                })
 
-      assert {"p1", [_ | _]} =
+      assert {["p1"], [_ | _]} =
                Scope.scope_id(tree, @projects, %Changes.DeletedRecord{
                  relation: @comments,
                  old_record: %{"id" => "c4"}
@@ -215,13 +213,13 @@ defmodule Electric.Satellite.PermissionsTest do
                })
              )
 
-      assert {"p1", [_ | _]} =
+      assert {["p1"], [_ | _]} =
                Scope.scope_id(tree, @projects, %Changes.NewRecord{
                  relation: @reactions,
                  record: %{"id" => "r100", "comment_id" => "c3"}
                })
 
-      assert {"p1", [_ | _]} =
+      assert {["p1"], [_ | _]} =
                Scope.scope_id(
                  tree,
                  @projects,
@@ -229,6 +227,20 @@ defmodule Electric.Satellite.PermissionsTest do
                    "reaction" => ":sad:"
                  })
                )
+    end
+
+    test "parent/4", cxt do
+      assert {@projects, ["p1"]} =
+               Scope.parent(cxt.tree, @projects, @issues, %{"project_id" => "p1"})
+
+      assert {@issues, ["i1"]} =
+               Scope.parent(cxt.tree, @projects, @comments, %{"issue_id" => "i1"})
+
+      assert {@workspaces, ["w1"]} =
+               Scope.parent(cxt.tree, @workspaces, @projects, %{"workspace_id" => "w1"})
+
+      refute Scope.parent(cxt.tree, @workspaces, @workspaces, %{"id" => "w1"})
+      refute Scope.parent(cxt.tree, @projects, @offices, %{"id" => "o1", "region_id" => "r1"})
     end
   end
 
@@ -252,7 +264,7 @@ defmodule Electric.Satellite.PermissionsTest do
                  ])
                )
 
-      assert :ok =
+      assert {:ok, _perms} =
                Permissions.validate_write(
                  perms,
                  # issue i3 belongs to project p2
@@ -261,7 +273,7 @@ defmodule Electric.Satellite.PermissionsTest do
                  ])
                )
 
-      assert :ok =
+      assert {:ok, _perms} =
                Permissions.validate_write(
                  perms,
                  # issue i3 belongs to project p2
@@ -313,10 +325,10 @@ defmodule Electric.Satellite.PermissionsTest do
                  ])
                )
 
-      assert :ok =
+      assert {:error, _} =
                Permissions.validate_write(
                  perms,
-                 # issue i3 belongs to project p2
+                 # issue i3 belongs to project p2 but the grant is global
                  Chgs.tx([
                    Chgs.insert(@comments, %{"id" => "c100", "issue_id" => "i3"})
                  ])
@@ -344,7 +356,7 @@ defmodule Electric.Satellite.PermissionsTest do
                  ])
                )
 
-      assert :ok =
+      assert {:ok, _perms} =
                Permissions.validate_write(
                  perms,
                  Chgs.tx([
@@ -363,7 +375,7 @@ defmodule Electric.Satellite.PermissionsTest do
           ]
         )
 
-      assert :ok =
+      assert {:ok, _perms} =
                Permissions.validate_write(
                  perms,
                  Chgs.tx([
@@ -400,7 +412,7 @@ defmodule Electric.Satellite.PermissionsTest do
           ]
         )
 
-      assert :ok =
+      assert {:ok, _perms} =
                Permissions.validate_write(
                  perms,
                  Chgs.tx([
@@ -430,7 +442,7 @@ defmodule Electric.Satellite.PermissionsTest do
           ]
         )
 
-      assert :ok =
+      assert {:ok, _perms} =
                Permissions.validate_write(
                  perms,
                  Chgs.tx([
@@ -449,7 +461,7 @@ defmodule Electric.Satellite.PermissionsTest do
           []
         )
 
-      assert :ok =
+      assert {:ok, _perms} =
                Permissions.validate_write(
                  perms,
                  Chgs.tx([
@@ -502,7 +514,7 @@ defmodule Electric.Satellite.PermissionsTest do
           auth: Auth.nobody()
         )
 
-      assert :ok =
+      assert {:ok, _perms} =
                Permissions.validate_write(
                  perms,
                  Chgs.tx([
@@ -524,7 +536,7 @@ defmodule Electric.Satellite.PermissionsTest do
           ]
         )
 
-      assert :ok =
+      assert {:ok, _perms} =
                Permissions.validate_write(
                  perms,
                  Chgs.tx([
@@ -544,7 +556,7 @@ defmodule Electric.Satellite.PermissionsTest do
                  ])
                )
 
-      assert :ok =
+      assert {:ok, _perms} =
                Permissions.validate_write(
                  perms,
                  Chgs.tx([
@@ -581,7 +593,7 @@ defmodule Electric.Satellite.PermissionsTest do
           ]
         )
 
-      assert :ok =
+      assert {:ok, _perms} =
                Permissions.validate_write(
                  perms,
                  Chgs.tx([
@@ -618,7 +630,7 @@ defmodule Electric.Satellite.PermissionsTest do
         )
 
       # a single tx that builds within a writable permissions scope
-      assert :ok =
+      assert {:ok, _perms} =
                Permissions.validate_write(
                  perms,
                  Chgs.tx([
@@ -642,14 +654,180 @@ defmodule Electric.Satellite.PermissionsTest do
     end
   end
 
+  describe "intermediate roles" do
+    # roles that are created on the client and then used within the same tx before triggers have
+    # run on pg
+    setup(cxt) do
+      perms =
+        perms_build(
+          cxt,
+          [
+            ~s[GRANT ALL ON #{table(@issues)} TO (#{table(@projects)}, 'manager')],
+            ~s[GRANT ALL ON #{table(@comments)} TO (#{table(@projects)}, 'manager')],
+            # read only to viewer
+            ~s[GRANT READ ON #{table(@issues)} TO (#{table(@projects)}, 'viewer')],
+            ~s[GRANT READ ON #{table(@comments)} TO (#{table(@projects)}, 'viewer')],
+            # global roles allowing create project and assign members
+            ~s[GRANT ALL ON #{table(@projects)} TO 'project_admin'],
+            ~s[GRANT ALL ON #{table(@project_memberships)} TO 'project_admin'],
+            # the assign rule for the 'manager' role
+            ~s[ASSIGN (#{table(@projects)}, #{table(@project_memberships)}.role) TO #{table(@project_memberships)}.user_id]
+          ],
+          [
+            # start with the ability to create projects and memberships
+            Roles.role("project_admin"),
+            Roles.role("manager", @projects, "p1")
+          ]
+        )
+
+      {:ok, perms: perms}
+    end
+
+    test "create and write to scope", cxt do
+      assert {:ok, perms} =
+               Permissions.validate_write(
+                 cxt.perms,
+                 Chgs.tx([
+                   Chgs.insert(@projects, %{"id" => "p100", "workspace_id" => "w1"}),
+                   Chgs.insert(@project_memberships, %{
+                     "id" => "pm100",
+                     "project_id" => "p100",
+                     "user_id" => Auth.user_id(),
+                     "role" => "manager"
+                   }),
+                   Chgs.insert(@issues, %{"id" => "i100", "project_id" => "p100"}),
+                   Chgs.insert(@comments, %{"id" => "c100", "issue_id" => "i100"})
+                 ])
+               )
+
+      # the generated role persists accross txs
+      assert {:ok, perms} =
+               Permissions.validate_write(
+                 perms,
+                 Chgs.tx([
+                   Chgs.insert(@issues, %{"id" => "i101", "project_id" => "p100"}),
+                   Chgs.insert(@comments, %{"id" => "c101", "issue_id" => "i101"}),
+                   Chgs.insert(@comments, %{"id" => "c200", "issue_id" => "i1"}),
+                   Chgs.insert(@issues, %{"id" => "i200", "project_id" => "p1"})
+                 ])
+               )
+
+      assert {:ok, _perms} =
+               Permissions.validate_write(
+                 perms,
+                 Chgs.tx([
+                   Chgs.insert(@comments, %{"id" => "c102", "issue_id" => "i101"}),
+                   Chgs.insert(@comments, %{"id" => "c102", "issue_id" => "i100"})
+                 ])
+               )
+    end
+
+    test "create then write to scope across txns", cxt do
+      assert {:ok, perms} =
+               Permissions.validate_write(
+                 cxt.perms,
+                 Chgs.tx([
+                   Chgs.insert(@projects, %{"id" => "p100", "workspace_id" => "w1"})
+                 ])
+               )
+
+      assert {:ok, perms} =
+               Permissions.validate_write(
+                 perms,
+                 Chgs.tx([
+                   Chgs.insert(@project_memberships, %{
+                     "id" => "pm100",
+                     "project_id" => "p100",
+                     "user_id" => Auth.user_id(),
+                     "role" => "manager"
+                   })
+                 ])
+               )
+
+      assert {:ok, _perms} =
+               Permissions.validate_write(
+                 perms,
+                 Chgs.tx([
+                   Chgs.insert(@issues, %{"id" => "i100", "project_id" => "p100"}),
+                   Chgs.insert(@comments, %{"id" => "c100", "issue_id" => "i100"})
+                 ])
+               )
+    end
+
+    test "update intermediate role", cxt do
+      assert {:ok, perms} =
+               Permissions.validate_write(
+                 cxt.perms,
+                 Chgs.tx([
+                   Chgs.insert(@projects, %{"id" => "p100", "workspace_id" => "w1"}),
+                   Chgs.insert(@project_memberships, %{
+                     "id" => "pm100",
+                     "project_id" => "p100",
+                     "user_id" => Auth.user_id(),
+                     "role" => "manager"
+                   })
+                 ])
+               )
+
+      assert {:error, _} =
+               Permissions.validate_write(
+                 perms,
+                 Chgs.tx([
+                   Chgs.update(
+                     @project_memberships,
+                     %{
+                       "id" => "pm100",
+                       "project_id" => "p100",
+                       "user_id" => Auth.user_id(),
+                       "role" => "manager"
+                     },
+                     %{"role" => "viewer"}
+                   ),
+                   Chgs.insert(@issues, %{"id" => "i100", "project_id" => "p100"}),
+                   Chgs.insert(@comments, %{"id" => "c100", "issue_id" => "i100"})
+                 ])
+               )
+    end
+
+    test "removal of role via delete to memberships", cxt do
+      assert {:ok, perms} =
+               Permissions.validate_write(
+                 cxt.perms,
+                 Chgs.tx([
+                   Chgs.insert(@projects, %{"id" => "p100", "workspace_id" => "w1"}),
+                   Chgs.insert(@project_memberships, %{
+                     "id" => "pm100",
+                     "project_id" => "p100",
+                     "user_id" => Auth.user_id(),
+                     "role" => "manager"
+                   }),
+                   Chgs.insert(@issues, %{"id" => "i100", "project_id" => "p100"}),
+                   Chgs.insert(@comments, %{"id" => "c100", "issue_id" => "i100"})
+                 ])
+               )
+
+      assert {:error, _} =
+               Permissions.validate_write(
+                 perms,
+                 Chgs.tx([
+                   Chgs.delete(@project_memberships, %{
+                     "id" => "pm100",
+                     "project_id" => "p100"
+                   }),
+                   Chgs.insert(@issues, %{"id" => "i101", "project_id" => "p100"})
+                 ])
+               )
+    end
+  end
+
   describe "transient permissions" do
     setup(cxt) do
       perms =
         perms_build(
           cxt,
           [
-            ~s[GRANT ALL ON #{table(@issues)} TO 'editor'],
-            ~s[GRANT SELECT ON #{table(@issues)} TO 'reader']
+            ~s[GRANT ALL ON #{table(@issues)} TO (#{table(@projects)}, 'editor')],
+            ~s[GRANT SELECT ON #{table(@issues)} TO (#{table(@projects)}, 'reader')]
           ],
           [
             Roles.role("editor", @projects, "p1", assign_id: "assign-01"),
@@ -673,13 +851,13 @@ defmodule Electric.Satellite.PermissionsTest do
     test "valid tdp", cxt do
       lsn = 99
 
-      assert :ok =
+      assert {:ok, _perms} =
                cxt.perms
                |> Perms.add_transient(
                  assign_id: "assign-01",
                  target_relation: @issues,
-                 target_id: "i3",
-                 scope_id: "p1",
+                 target_id: ["i3"],
+                 scope_id: ["p1"],
                  valid_to: LSN.new(lsn + 1)
                )
                |> Permissions.validate_write(
@@ -699,8 +877,8 @@ defmodule Electric.Satellite.PermissionsTest do
                |> Perms.add_transient(
                  assign_id: "assign-01",
                  target_relation: @issues,
-                 target_id: "i4",
-                 scope_id: "p1",
+                 target_id: ["i4"],
+                 scope_id: ["p1"],
                  valid_to: LSN.new(lsn + 1)
                )
                |> Permissions.validate_write(
@@ -720,8 +898,8 @@ defmodule Electric.Satellite.PermissionsTest do
                |> Perms.add_transient(
                  assign_id: "assign-01",
                  target_relation: @issues,
-                 target_id: "i3",
-                 scope_id: "p1",
+                 target_id: ["i3"],
+                 scope_id: ["p1"],
                  valid_to: LSN.new(lsn)
                )
                |> Permissions.validate_write(
@@ -740,10 +918,10 @@ defmodule Electric.Satellite.PermissionsTest do
         perms_build(
           cxt,
           [
-            ~s[GRANT ALL ON #{table(@issues)} TO 'editor'],
-            ~s[GRANT ALL ON #{table(@comments)} TO 'editor'],
-            ~s[GRANT READ ON #{table(@issues)} TO 'reader'],
-            ~s[GRANT READ ON #{table(@comments)} TO 'reader'],
+            ~s[GRANT ALL ON #{table(@issues)} TO (#{table(@projects)}, 'editor')],
+            ~s[GRANT ALL ON #{table(@comments)} TO (#{table(@projects)}, 'editor')],
+            ~s[GRANT READ ON #{table(@issues)} TO (#{table(@projects)}, 'reader')],
+            ~s[GRANT READ ON #{table(@comments)} TO (#{table(@projects)}, 'reader')],
             ~s[GRANT ALL ON #{table(@workspaces)} TO 'global_admin']
           ],
           [
@@ -901,19 +1079,19 @@ defmodule Electric.Satellite.PermissionsTest do
                %MoveOut{
                  change: %Changes.UpdatedRecord{},
                  relation: @issues,
-                 id: "i1",
+                 id: ["i1"],
                  scope_path: [_ | _]
                },
                %MoveOut{
                  change: %Changes.DeletedRecord{},
                  relation: @issues,
-                 id: "i2",
+                 id: ["i2"],
                  scope_path: [_ | _]
                },
                %MoveOut{
                  change: %Changes.DeletedRecord{},
                  relation: @comments,
-                 id: "c5",
+                 id: ["c5"],
                  scope_path: [_ | _]
                }
              ] = move_out

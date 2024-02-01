@@ -20,13 +20,24 @@ defmodule ElectricTest.PermissionsHelpers do
     defmodule Transient do
       @name __MODULE__.Transient
 
-      def name, do: @name
+      def name do
+        Process.get(__MODULE__)
+      end
+
+      def unique_name do
+        id = System.unique_integer([:positive, :monotonic])
+        Module.concat([@name, :"Instance_#{id}"])
+      end
 
       def child_spec(_init_arg) do
+        name = unique_name()
+
         default = %{
           id: @name,
-          start: {Permissions.Transient, :start_link, [[name: @name]]}
+          start: {Permissions.Transient, :start_link, [[name: name]]}
         }
+
+        Process.put(__MODULE__, name)
 
         Supervisor.child_spec(default, [])
       end
@@ -45,7 +56,7 @@ defmodule ElectricTest.PermissionsHelpers do
     def update(perms, ddlx, roles) do
       Permissions.update(
         perms,
-        to_grants(ddlx),
+        to_rules(ddlx),
         roles
       )
     end
@@ -59,7 +70,7 @@ defmodule ElectricTest.PermissionsHelpers do
       perms
     end
 
-    defp to_grants(ddlx) do
+    def to_rules(ddlx) do
       ddlx
       |> List.wrap()
       |> Enum.map(fn
@@ -67,7 +78,12 @@ defmodule ElectricTest.PermissionsHelpers do
         ddl -> "ELECTRIC " <> ddl
       end)
       |> Enum.map(&Electric.DDLX.parse!/1)
-      |> Enum.map(&Electric.DDLX.Command.Grant.to_protobuf/1)
+      |> Enum.flat_map(&Electric.DDLX.Command.to_protobuf/1)
+      |> Enum.group_by(fn
+        %P.Assign{} -> :assigns
+        %P.Grant{} -> :grants
+      end)
+      |> then(&struct(%P.Rules{}, &1))
     end
   end
 
@@ -86,27 +102,36 @@ defmodule ElectricTest.PermissionsHelpers do
 
     def tx(changes, attrs \\ []) do
       %Changes.Transaction{changes: changes}
-      |> put_attrs(attrs)
+      |> put_tx_attrs(attrs)
     end
 
-    def insert(table, record) do
+    def insert(table, record, attrs \\ []) do
       %Changes.NewRecord{relation: table, record: record}
+      |> put_change_attrs(attrs)
     end
 
-    def update(table, old_record, changes) do
+    def update(table, old_record, changes, attrs \\ []) do
       Changes.UpdatedRecord.new(
         relation: table,
         old_record: old_record,
         record: Map.merge(old_record, changes)
       )
+      |> put_change_attrs(attrs)
     end
 
-    def delete(table, record) do
+    def delete(table, record, attrs \\ []) do
       %Changes.DeletedRecord{relation: table, old_record: record}
+      |> put_change_attrs(attrs)
     end
 
-    defp put_attrs(tx, attrs) do
+    defp put_tx_attrs(tx, attrs) do
       Map.put(tx, :lsn, LSN.new(attrs[:lsn]))
+    end
+
+    defp put_change_attrs(change, attrs) do
+      tags = Keyword.get(attrs, :tags, [])
+
+      %{change | tags: tags}
     end
   end
 
@@ -121,7 +146,7 @@ defmodule ElectricTest.PermissionsHelpers do
       %P.Role{
         assign_id: attrs[:assign_id],
         role: role_name,
-        scope: %P.Scope{table: relation(table), id: id}
+        scope: %P.Scope{table: relation(table), id: List.wrap(id)}
       }
     end
 
@@ -138,13 +163,25 @@ defmodule ElectricTest.PermissionsHelpers do
     @behaviour Electric.Satellite.Permissions.Scope
 
     alias Electric.Replication.Changes
+    alias Electric.Satellite.Permissions
 
     @type vertex() :: {{String.t(), String.t()}, String.t(), [vertex()]}
 
     @root :__root__
 
-    def new(vs, fks) do
-      {__MODULE__, {data_tree(vs), fk_tree(fks)}}
+    def new(vs, fk_edges) do
+      {__MODULE__, {data_tree(vs), fk_graph(fk_edges)}}
+    end
+
+    defp fk_graph(fk_edges) do
+      Graph.add_edges(
+        graph(),
+        Enum.map(fk_edges, fn {v1, v2, label} -> {v1, v2, label: label} end)
+      )
+    end
+
+    defp graph(attrs \\ []) do
+      Graph.new(Keyword.merge(attrs, vertex_identifier: & &1))
     end
 
     def add_vertex({__MODULE__, {graph, fks}}, v) do
@@ -162,23 +199,8 @@ defmodule ElectricTest.PermissionsHelpers do
       {__MODULE__, {graph, fks}}
     end
 
-    def path(graph, root, table, id) do
-      paths = Graph.get_paths(graph, {table, id}, @root)
-
-      search_paths =
-        Stream.map(paths, &{&1, Enum.map(tl(Enum.reverse(&1)), fn t -> elem(t, 0) end)})
-
-      Enum.find_value(search_paths, fn {path, v} -> if root in v, do: path end)
-    end
-
-    defp fk_tree(fks) do
-      {_, graph} = Enum.reduce(fks, {@root, Graph.new()}, &build_fk_tree/2)
-
-      graph
-    end
-
     defp data_tree(vs) do
-      {_, graph} = Enum.reduce(vs, {@root, Graph.new()}, &build_data_tree/2)
+      {_, graph} = Enum.reduce(vs, {@root, graph()}, &build_data_tree/2)
 
       graph
     end
@@ -194,133 +216,149 @@ defmodule ElectricTest.PermissionsHelpers do
       {parent, graph}
     end
 
-    defp build_fk_tree({table, fk}, acc) do
-      build_fk_tree({table, fk, []}, acc)
-    end
-
-    defp build_fk_tree({table, fk, children}, {parent, graph}) do
-      graph = Graph.add_edge(graph, table, parent, label: fk)
-
-      {_, graph} = Enum.reduce(children, {table, graph}, &build_fk_tree/2)
-      {parent, graph}
-    end
-
     defp v(@root), do: @root
 
     defp v({table, id, _children}) do
-      {table, id}
+      {table, [id]}
     end
 
     @impl Electric.Satellite.Permissions.Scope
-    def scope_id({graph, _fks}, {_, _} = root, {_, _} = relation, record) do
+    def scope_id(state, {_, _} = root, {_, _} = relation, record) when is_map(record) do
       {table, id} = relation_id(relation, record)
-      scope_root_id(graph, root, table, id)
+      scope_id(state, root, table, id)
+    end
+
+    def scope_id(_state, {_, _} = root, {_, _} = root, id) when is_list(id) do
+      {id, [{root, id}]}
+    end
+
+    def scope_id(state, {_, _} = root, {_, _} = relation, id) when is_list(id) do
+      scope_root_id(state, root, relation, id)
     end
 
     @impl Electric.Satellite.Permissions.Scope
-    def parent_scope_id({_graph, fks} = state, {_, _} = root, {_, _} = relation, record) do
-      with {parent_relation, parent_id} <- parent_id(fks, root, relation, record) do
-        scope_id(state, root, parent_relation, %{"id" => parent_id})
+    def parent_scope_id({_graph, _fks} = state, {_, _} = root, {_, _} = relation, record) do
+      with {parent_relation, parent_id} <- parent(state, root, relation, record) do
+        scope_id(state, root, parent_relation, parent_id)
       end
     end
 
     @impl Electric.Satellite.Permissions.Scope
     def modifies_fk?({_graph, fks}, {_, _} = root, %Changes.UpdatedRecord{} = update) do
       case relation_fk(fks, root, update.relation) do
-        {:ok, _parent, fk} ->
-          MapSet.member?(update.changed_columns, fk)
+        {:ok, _parent, fks} ->
+          Enum.any?(fks, &MapSet.member?(update.changed_columns, &1))
 
-        :error ->
+        nil ->
           false
       end
     end
 
     @impl Electric.Satellite.Permissions.Scope
     def primary_key(_state, _relation, record) do
-      Map.fetch!(record, "id")
+      [Map.fetch!(record, "id")]
     end
 
     @impl Electric.Satellite.Permissions.Scope
-    def apply_change({graph, fks}, change) do
+    def parent({_graph, fks}, {_, _} = root, relation, record) when is_map(record) do
+      with {:ok, parent_relation, fks} <- relation_fk(fks, root, relation) do
+        {parent_relation, Enum.map(fks, &Map.get(record, &1, nil))}
+      end
+    end
+
+    @impl Electric.Satellite.Permissions.Scope
+    def apply_change({graph, fks} = state, roots, change) do
       updated =
-        case change do
-          %Changes.DeletedRecord{relation: relation, old_record: %{"id" => id}} ->
-            Graph.delete_vertex(graph, {relation, id})
+        Enum.reduce(roots, graph, fn root, graph ->
+          case change do
+            %Changes.DeletedRecord{relation: relation, old_record: %{"id" => id}} ->
+              Graph.delete_vertex(graph, {relation, [id]})
 
-          %Changes.NewRecord{relation: relation, record: %{"id" => id} = record} ->
-            case parent_id(fks, @root, relation, record) do
-              nil ->
-                graph
+            %Changes.NewRecord{relation: relation, record: %{"id" => id} = record} ->
+              case parent(state, root, relation, record) do
+                nil ->
+                  graph
 
-              parent ->
-                Graph.add_edge(graph, {relation, id}, parent)
-            end
+                parent ->
+                  Graph.add_edge(graph, {relation, [id]}, parent)
+              end
 
-          %Changes.UpdatedRecord{} = change ->
-            %{relation: relation, old_record: old, record: %{"id" => id} = new} = change
-            child = {relation, id}
-            old_parent = parent_id(fks, @root, relation, old)
-            new_parent = parent_id(fks, @root, relation, new)
+            %Changes.UpdatedRecord{} = change ->
+              %{relation: relation, old_record: old, record: %{"id" => id} = new} = change
+              child = {relation, [id]}
+              old_parent = parent(state, root, relation, old)
+              new_parent = parent(state, root, relation, new)
 
-            graph
-            |> Graph.delete_edge(child, old_parent)
-            |> Graph.add_edge(child, new_parent)
-        end
+              graph
+              |> Graph.delete_edge(child, old_parent)
+              |> Graph.add_edge(child, new_parent)
+          end
+        end)
 
       {updated, fks}
     end
 
-    defp scope_root_id(graph, root, table, id) do
-      case path(graph, root, table, id) do
-        nil ->
-          nil
+    @impl Electric.Satellite.Permissions.Scope
+    def relation_path({_graph, fks}, root, relation) do
+      fk_path(fks, root, relation)
+    end
 
-        # we're already at the root of the tree
-        [{^root, ^id} = root | _path] ->
-          {id, [root]}
-
-        [{^table, ^id} | path] ->
-          Enum.find_value(path, fn
-            {^root, id} -> {id, path}
-            _ -> false
-          end)
+    defp scope_root_id({graph, fks}, root, table, id) do
+      case Permissions.Graph.scope_id(graph, fk_path(fks, root, table), table, id) do
+        {{^root, scope_id}, path} -> {scope_id, path}
+        _ -> nil
       end
     end
 
-    defp relation_fk(fks, root, relation) do
-      case Graph.get_shortest_path(fks, relation, root) do
-        nil ->
-          :error
+    defp relation_fk(_fks, {_, _} = root, root) do
+      nil
+    end
 
-        [_ | _] = path ->
-          %Graph.Edge{v2: parent, label: fk} =
-            path
-            |> Enum.chunk_every(2, 1, :discard)
-            |> Enum.take(1)
-            |> Enum.map(fn [a, b] -> Graph.edges(fks, a, b) |> hd() end)
-            |> hd()
+    defp relation_fk(fks, {_, _} = root, relation) do
+      # we guard against looking for a fk ref to the same table above so relation_path/3 is always
+      # going to return a list of at least 2 items
 
-          {:ok, parent, fk}
+      with [_ | _] = path <- fk_path(fks, root, relation) do
+        edge =
+          path
+          |> Enum.chunk_every(2, 1, :discard)
+          |> Enum.take(1)
+          |> Enum.map(fn [a, b] -> Graph.edges(fks, a, b) |> List.first() end)
+          |> hd()
+
+        case edge do
+          nil -> nil
+          %Graph.Edge{v1: ^relation, v2: parent, label: fk} -> {:ok, parent, fk}
+          %Graph.Edge{v1: parent, v2: ^relation, label: fk} -> {:ok, parent, fk}
+        end
       end
     end
 
-    defp parent_id(fks, root, relation, record) do
-      case relation_fk(fks, root, relation) do
-        {:ok, @root, nil} ->
-          nil
+    defp fk_path(_fks, root, root) do
+      [root]
+    end
 
-        {:ok, parent_relation, fk} ->
-          if id = Map.get(record, fk, nil) do
-            {parent_relation, id}
-          end
-
-        :error ->
-          nil
+    defp fk_path(fks, root, relation) do
+      if path = Graph.get_shortest_path(fks, relation, root) do
+        path
+      else
+        # in the case of a join table, the relation doesn't point to anything,
+        # but the join table points at it. so `get_shortest_path` returns nil
+        # we deal with that case here by finding tables that point to us
+        # and attempting to find their relation with the scope root
+        # (that may end up being recursive \o/)
+        fks
+        |> Graph.in_neighbors(relation)
+        |> Enum.find_value(&fk_path(fks, root, &1))
+        |> then(fn
+          nil -> nil
+          path when is_list(path) -> [relation | path]
+        end)
       end
     end
 
     defp relation_id(relation, %{"id" => id}) do
-      {relation, id}
+      {relation, [id]}
     end
   end
 

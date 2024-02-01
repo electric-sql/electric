@@ -4,7 +4,6 @@ defmodule Electric.Satellite.Permissions.Grant do
   """
 
   alias Electric.Satellite.SatPerms
-  alias Electric.Satellite.Permissions.Role
 
   defstruct [:table, :role, :privileges, :columns, :scope, :check, :source, path: []]
 
@@ -12,7 +11,7 @@ defmodule Electric.Satellite.Permissions.Grant do
 
   @type t() :: %__MODULE__{
           table: relation(),
-          role: Role.t(),
+          role: String.t() | :AUTHENTICATED | :ANYONE,
           privileges: [Electric.Satellite.Permissions.privilege()],
           columns: :all | MapSet.t(),
           scope: relation(),
