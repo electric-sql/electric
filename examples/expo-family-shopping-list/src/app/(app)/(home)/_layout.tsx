@@ -43,16 +43,7 @@ function AppDrawerContent(props: any){
          <DrawerItem
            label="Log out"
            icon={(props) => <Icon source="logout" {...props}/>}
-           onPress={() => {
-            signOut()
-
-            // NOTE(msfstef): no proper API to clear history yet
-            // see: https://github.com/expo/router/discussions/495
-            while (router.canGoBack()) {
-              router.back()
-            }
-            router.replace('/sign_in')
-           }}
+           onPress={() => signOut()}
          />
        </SafeAreaView>
      </DrawerContentScrollView>

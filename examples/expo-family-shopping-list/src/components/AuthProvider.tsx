@@ -11,6 +11,10 @@ interface EmailPasswordInput {
   password: string
 }
 
+interface TokenData {
+  userId: string,
+  jwtToken: string
+}
 interface AuthError {
   message: string
 }
@@ -18,8 +22,8 @@ interface AuthError {
 interface AuthState {
   initializing: boolean,
   operationInProgress: boolean,
-  userId: UserId | null,
-  jwtToken: string | null,
+  userId?: UserId,
+  jwtToken?: string,
 }
 
 interface AuthActions {
@@ -54,12 +58,8 @@ function AuthProvider({
   onSignOut?: () => void
 }) {
   const [ operationInProgress, setOperationInProgress ] = useState(false)
-  const [ state, setState ] = useState<AuthState>({
-    initializing: true,
-    operationInProgress,
-    userId: null,
-    jwtToken: null
-  })
+  const [ initializing, setInitializing ] = useState(true)
+  const [ tokenData, setTokenData ] = useState<TokenData | null>(null)
 
   // Tells Supabase Auth to continuously refresh the session automatically if
   // the app is in the foreground. When this is added, you will continue to receive
@@ -86,20 +86,14 @@ function AuthProvider({
         case 'INITIAL_SESSION':
         case 'SIGNED_IN':
         case 'TOKEN_REFRESHED':
-          setState((state) => ({
-            ...state,
-            initializing: false,
-            userId: session?.user.id ?? null,
-            jwtToken: session?.access_token ?? null
-          }))
+          setInitializing(false)
+          setTokenData(session !== null ? {
+            userId: session.user.id ,
+            jwtToken: session.access_token
+          } : null)
           break
         case 'SIGNED_OUT':
-          setState((state) => ({
-            ...state,
-            initializing: false,
-            userId: null,
-            jwtToken: null
-          }))
+          setTokenData(null)
           onSignOut?.()
           break
       }
@@ -155,13 +149,18 @@ function AuthProvider({
    */
   async function signOut() : Promise<{ error: AuthError | null }> {
     setOperationInProgress(true)
+    setTokenData(null)
     const { error } = await supabase.auth.signOut()
     setOperationInProgress(false)
     return { error }
   }
 
   const value = {
-    state: state,
+    state: {
+      ...tokenData,
+      initializing,
+      operationInProgress,
+    },
     actions: {
       signIn,
       signUp,
@@ -182,7 +181,7 @@ function AuthProvider({
  */
 export function useAuthenticatedUser() : UserId | null {
   const { state: { userId } } = useContext(AuthContext)!
-  return userId
+  return userId ?? null
 }
 
 /**
@@ -190,7 +189,7 @@ export function useAuthenticatedUser() : UserId | null {
  */
 export function useAccessToken() : string | null {
   const { state: { jwtToken } } = useContext(AuthContext)!
-  return jwtToken
+  return jwtToken ?? null
 }
 
 /**
