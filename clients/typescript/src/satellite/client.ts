@@ -67,6 +67,7 @@ import {
   SocketCloseReason,
   AdditionalData,
   DataInsert,
+  AdditionalDataCallback,
 } from '../util/types'
 import {
   base64,
@@ -402,20 +403,19 @@ export class SatelliteClient implements Client {
   }
 
   unsubscribeToTransactions(callback: TransactionCallback) {
+    // TODO: This doesn't work because we're building a callback in the function above
     this.emitter.removeListener('transaction', callback)
   }
 
-  subscribeToAdditionalData(callback: (data: AdditionalData) => Promise<void>) {
+  subscribeToAdditionalData(callback: AdditionalDataCallback) {
     this.emitter.on('additionalData', async (data, ackCb) => {
       await callback(data)
       ackCb()
     })
   }
 
-  unsubscribeToAdditionalData(
-    callback: (data: AdditionalData) => Promise<void>
-  ) {
-    this.emitter.removeListener('additionalData', callback)
+  unsubscribeToAdditionalData(_callback: AdditionalDataCallback) {
+    // TODO: real removeListener implementation, because the old one for txns doesn't work
   }
 
   subscribeToRelations(callback: RelationCallback) {
