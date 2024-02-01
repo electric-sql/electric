@@ -1,6 +1,13 @@
 -- Create the tables for the linearlite example
+CREATE TABLE IF NOT EXISTS "project" (
+    "id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    CONSTRAINT "project_pkey" PRIMARY KEY ("id")
+);
+
 CREATE TABLE IF NOT EXISTS "issue" (
     "id" UUID NOT NULL,
+    "project_id" TEXT NOT NULL,
     "title" TEXT NOT NULL,    
     "description" TEXT NOT NULL,
     "priority" TEXT NOT NULL,
@@ -9,14 +16,9 @@ CREATE TABLE IF NOT EXISTS "issue" (
     "created" TIMESTAMPTZ NOT NULL,
     "kanbanorder" TEXT NOT NULL,
     "username" TEXT NOT NULL,
-    CONSTRAINT "issue_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "issue_pkey" PRIMARY KEY ("id"),
+    FOREIGN KEY (project_id) REFERENCES project(id)
 );
-
--- CREATE TABLE IF NOT EXISTS "user" (
---     "username" TEXT NOT NULL,
---     "avatar" TEXT,
---     CONSTRAINT "user_pkey" PRIMARY KEY ("username")
--- );
 
 CREATE TABLE  IF NOT EXISTS "comment" (
     "id" UUID NOT NULL,
@@ -31,6 +33,6 @@ CREATE TABLE  IF NOT EXISTS "comment" (
 
 -- ⚡
 -- Electrify the tables
+ALTER TABLE project ENABLE ELECTRIC;
 ALTER TABLE issue ENABLE ELECTRIC;
--- ALTER TABLE user ENABLE ELECTRIC;
 ALTER TABLE comment ENABLE ELECTRIC;

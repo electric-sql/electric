@@ -61,7 +61,7 @@
     "react-virtualized-auto-sizer": "^1.0.20",
     "react-window": "^1.8.9",
     "tiptap-markdown": "^0.8.2",
-    "uuid": "^9.0.0",
+    "uuid": "^9.0.1",
     "vite-plugin-svgr": "^3.2.0",
     "wa-sqlite": "github:rhashimoto/wa-sqlite#semver:^0.9.8",
     "zod": "^3.22.4"

@@ -16,7 +16,7 @@ interface Props {
   title?: string
 }
 
-export default function ({
+export default function TopFilter({
   issues,
   hideSort,
   showSearch,
@@ -57,9 +57,9 @@ export default function ({
 
   if (filterState.status?.length) {
     if (eqStatuses(['backlog'])) {
-      title = 'Backlog'
+      title += ' : Backlog'
     } else if (eqStatuses(['todo', 'in_progress'])) {
-      title = 'Active'
+      title += ' : Active'
     }
   }
 
