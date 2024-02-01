@@ -101,9 +101,19 @@ defmodule Electric.Satellite.Auth.JWTUtil do
   @doc false
   def peek_claims(token) do
     try do
-      Joken.peek_claims(token)
+      token
+      |> maybe_add_trailing_dot()
+      |> Joken.peek_claims()
     rescue
       Jason.DecodeError -> {:error, :token_malformed}
+    end
+  end
+
+  defp maybe_add_trailing_dot(token) do
+    case :binary.split(token, ".", [:global]) do
+      [_header, _payload] -> token <> "."
+      [_header, _payload, _signature] -> token
+      _ -> raise Jason.DecodeError
     end
   end
 
