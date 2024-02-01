@@ -65,7 +65,6 @@ function AuthProvider({
   // Listen to auth events for keeping the user and JWT token up to date
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log(event, session)
       switch (event) {
         case 'INITIAL_SESSION':
         case 'SIGNED_IN':

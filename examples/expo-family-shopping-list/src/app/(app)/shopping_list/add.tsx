@@ -5,10 +5,11 @@ import { useElectric } from '../../../components/ElectricProvider'
 import { genUUID } from 'electric-sql/util'
 import { router } from 'expo-router';
 import { useLiveQuery } from 'electric-sql/react'
-import { dummyUserId } from '../../../lib/auth'
+import { useAuthenticatedUser } from '../../../components/AuthProvider'
 
 
 export default function AddShoppingList() {
+  const userId = useAuthenticatedUser()!
   const { db } = useElectric()!
   const { results: memberships = [] } = useLiveQuery(db.member.liveMany({
       include: {
@@ -19,7 +20,7 @@ export default function AddShoppingList() {
         }
       },
       where: {
-        member_id: dummyUserId
+        user_id: userId
       }
     }
   ))

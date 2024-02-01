@@ -3,13 +3,14 @@ import { View, FlatList } from 'react-native'
 import { List, Text } from 'react-native-paper'
 import { useElectric } from '../../../components/ElectricProvider'
 import { useLiveQuery } from 'electric-sql/react'
-import { dummyUserId } from '../../../lib/auth'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Link } from 'expo-router'
 import FamilyCard from '../../../components/FamilyCard'
 import FlatListSeparator from '../../../components/FlatListSeparator'
+import { useAuthenticatedUser } from '../../../components/AuthProvider'
 
 export default function FamilyHome () {
+  const userId = useAuthenticatedUser()!
   const { db } = useElectric()!
   const { results: memberships = [] } = useLiveQuery(db.member.liveMany({
     select: {
@@ -17,7 +18,7 @@ export default function FamilyHome () {
       family_id: true
     },
     where: {
-      user_id: dummyUserId
+      user_id: userId
     },
   }))
   return (

@@ -5,14 +5,15 @@ import { useElectric } from '../../../../components/ElectricProvider'
 import { useLiveQuery } from 'electric-sql/react'
 import { Link, Redirect, Stack, useLocalSearchParams } from 'expo-router'
 import MemberCard from '../../../../components/MemberCard'
-import { dummyUserId } from '../../../../lib/auth'
 import { Member } from '../../../../generated/client'
 import FlatListSeparator from '../../../../components/FlatListSeparator'
+import { useAuthenticatedUser } from '../../../../components/AuthProvider'
 
 export default function Family () {
   const { family_id } = useLocalSearchParams<{ family_id?: string }>()
   if (!family_id) return <Redirect href="/families" />
 
+  const userId = useAuthenticatedUser()!
   const { db } = useElectric()!
   const { results: family } = useLiveQuery(db.family.liveUnique({
     include: {
@@ -27,10 +28,9 @@ export default function Family () {
     }
   }))
   if (!family || !family.member) return null
-  
-  const otherMembers = (family.member ?? []).filter(
-    (m: Pick<Member, 'member_id'>) => m.member_id !== dummyUserId
-  )
+  const memberships = family.member as Member[]
+  const membership = memberships.find((m) => m.user_id === userId)!
+  const otherMembers = memberships.filter((m) => m.user_id !== userId)
   return (
     <View style={{ flex: 1 }}>
       <Stack.Screen
@@ -45,7 +45,7 @@ export default function Family () {
       />
       <List.Section>
         <List.Subheader>Profile</List.Subheader>
-        <MemberCard key={dummyUserId} memberId={dummyUserId} editable />
+        <MemberCard memberId={membership.member_id} editable />
 
         <List.Subheader>Members</List.Subheader>
         { otherMembers.length > 0 ?
