@@ -55,19 +55,20 @@ CREATE TABLE items (
 Adding a column with a not-null constraint is supported, but **not advisable** until default values are implemented:
 
 ```sql
+  -- Unsafe additive migration, requires the table to be empty
 ALTER TABLE items
-  -- Additive migration, supported
   ADD COLUMN baz TEXT NOT NULL;
 
-   -- Possible substitute for default values
-  SET baz = "fie";
+  -- Safe additive migration, but default values are not yet supported
+ALTER TABLE items
+  ADD COLUMN fie TEXT NOT NULL DEFAULT 'some_value';
 ```
 
-Adding a column with not-null constraints after the table is electrified is *technically* possible because it's an [additive migration](./migrations.md#limitations). However, since ElectricSQL does not yet support default values, the migration itself would need to supply non-null values for each existing row for the constraint to be fulfilled.
+Adding a column with not-null constraints after the table is electrified is *technically* possible because it's an [additive migration](./migrations.md#limitations) as long as the table is empty or a default value is provided.
 
-In theory, this is possible to do if you can guarantee that no new rows are in-flight, pending locally on a client or will be added by a client not yet updated. This is not a guarantee that can normally be made.
+ElectricSQL does not yet support default values and you can only consider the table empty if you can *guarantee* that no new rows are in-flight, pending locally on a client or will be added by a client not yet updated.
 
-Without it, writes that were accepted locally with implicit null values in the new column would need to be rejected, which would violate the [finality of local writes](../../reference/architecture.md#local-writes).
+This is not a guarantee that can normally be made and without it, writes that were accepted locally with implicit null values in the new column would need to be rejected, which would violate the [finality of local writes](../../reference/architecture.md#local-writes).
 
 Constraining an existing column by adding a not-null constraint to it is **not supported**:
 
@@ -77,7 +78,7 @@ ALTER TABLE items
   ALTER COLUMN bar TEXT NOT NULL;
 ```
 
-This type of migration is not supported since it isn't *additive*. The same reasoning about *finality of local writes* applies here.
+This type of migration is not supported since it is not *additive*. The same reasoning about *finality of local writes* applies here.
 
 ## Unsupported
 
