@@ -21,11 +21,13 @@ The demo app itself is a variation of [Electric's LinearLite example](https://el
 
 For more information, see the blog post write up here: [Local AI with Postgres, pgvector and llama2, inside a Tauri app with ElectricSQL](https://electric-sql.com/blog/2024/01/25/local-first-ai-with-tauri-postgres-pgvector-llama).
 
-## Prereqs
+## Build and run the App
+
+### Prerequisites
 
 You need Docker, Docker Compose v2, Nodejs >= 16.14 and pnpm.
 
-## Install
+### Checkout and setup the Tauri project
 
 Clone this repo and change directory into this folder:
 
@@ -53,7 +55,7 @@ Install the dependencies:
 pnpm install
 ```
 
-## Additional dependencies
+### Additional dependencies
 
 The example supports compilation for macOS and Linux. We provide shell scripts to setup the third party libraries and software that the app needs, according to your platform:
 
@@ -70,9 +72,9 @@ bash install-linux.sh
 
 This will take up a few hundreds megabytes of space, during the installation, because the macOS postgres and the linux ollama download is large.
 
-## Backend
+### Run the backend
 
-Start Postgres and Electric as normal using Docker (see [running the examples](https://electric-sql.com/docs/examples/notes/running) for more options):
+Start Postgres and Electric using Docker (see [running the examples](https://electric-sql.com/docs/examples/notes/running) for more options):
 
 ```shell
 pnpm run backend:up
@@ -92,7 +94,7 @@ You can apply it with:
 pnpm run db:migrate
 ```
 
-## Client
+### Generate the client
 
 Generate your [type-safe client](https://electric-sql.com/docs/usage/data-access/client):
 
@@ -100,7 +102,7 @@ Generate your [type-safe client](https://electric-sql.com/docs/usage/data-access
 pnpm run client:generate
 ```
 
-## Run
+### Run the app
 
 The app is a Tauri application. To run it:
 
@@ -113,3 +115,13 @@ and to build a distributable package:
 ```bash
 pnpm tauri build
 ```
+
+### Run the app with the public backend
+
+We also have a hosted Postgres and Electric sync service that you can connect the app to, this is pre-loaded with issues and vector embeddings.
+
+```bash
+ELECTRIC_URL='ws://backend.tauri-demo.electric-sql.com' pnpm tauri dev
+```
+
+*(Note that you will have had to have generated the client above first.)*
