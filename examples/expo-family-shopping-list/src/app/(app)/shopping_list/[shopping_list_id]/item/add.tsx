@@ -24,6 +24,13 @@ export default function AddShoppingListItem () {
         completed: false,
       }
     })
+
+    // TODO(msfstef): should live in same transaction
+    await db.shopping_list.update({
+      data: { updated_at: new Date() },
+      where: { list_id: shopping_list_id }
+    })
+
     router.back()
   }
 
