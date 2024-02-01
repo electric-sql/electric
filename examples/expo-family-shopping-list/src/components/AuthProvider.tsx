@@ -169,4 +169,13 @@ export async function signIn(
   return { error }
 }
 
+/**
+ * Signs the user out.
+ * Check if an error is returned as operation does not throw.
+ */
+export async function signOut() : Promise<{ error: AuthError | null }> {
+  const { error } = await supabase.auth.signOut()
+  return { error }
+}
+
 export default AuthProvider
