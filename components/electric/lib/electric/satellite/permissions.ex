@@ -90,12 +90,15 @@ defmodule Electric.Satellite.Permissions do
 
   ### 2. Match roles to the scope of the change
 
-  The `Permissions.scope_resolver` attribute provides an implementation of the `Permissions.Graph`
-  behaviour. This allows for traversing the tree and finding the associated scope root entry for
-  any node.
+  The `Permissions.graph` attribute provides an two implementations of the `Permissions.Graph`
+  behaviour, one for the write path and one for the read. The `Permissions.Graph` behaviour allows
+  for traversing the tree and finding the associated scope root entry for any node.
 
-  With this we can match a change to a set of scoped roles and then verify their associated
+  With these we can match a change to a set of scoped roles and then verify their associated
   grants.
+
+  The write graph is complicated by the need to buffer client writes in order to verify
+  permissions against new scopes that they may have created.
 
   ### 3. Look for applicable transient permissions
 
@@ -197,7 +200,7 @@ defmodule Electric.Satellite.Permissions do
     :scoped_roles,
     :auth,
     :scopes,
-    :scope_resolver,
+    :graph,
     :triggers,
     :intermediate_roles,
     transient_lut: Transient
@@ -222,7 +225,6 @@ defmodule Electric.Satellite.Permissions do
           relation: relation(),
           id: scope_id()
         }
-  @type scope_resolver() :: %{read: Graph.t(), write: Graph.t()}
 
   @type intermediate_roles() :: %IntermediateRoles{
           source: %{optional({relation(), id()}) => Role.t()},
@@ -232,15 +234,19 @@ defmodule Electric.Satellite.Permissions do
   @type empty() :: %__MODULE__{
           auth: Auth.t(),
           transient_lut: Transient.lut(),
-          scope_resolver: scope_resolver()
+          graph: Graph.t()
         }
 
   @type t() :: %__MODULE__{
           roles: role_lookup(),
-          source: %{grants: [%SatPerms.Grant{}], roles: [%SatPerms.Role{}]} | nil,
+          source: %{
+            grants: [%SatPerms.Grant{}],
+            roles: [%SatPerms.Role{}],
+            assigns: [%SatPerms.Assign{}]
+          },
           auth: Auth.t(),
           transient_lut: Transient.lut(),
-          scope_resolver: scope_resolver(),
+          graph: Graph.t(),
           scopes: [relation()],
           scoped_roles: %{relation => [Role.t()]},
           triggers: %{relation() => [Trigger.assign_trigger_fun()]},
@@ -256,16 +262,16 @@ defmodule Electric.Satellite.Permissions do
   Arguments:
 
   - `auth` is the `#{Auth}` struct received from the connection auth
-  - `scope_resolver` is an implementation of the `Permissions.Graph` behaviour in the
+  - `graph` is an implementation of the `Permissions.Graph` behaviour in the
     form `{module, term}`
   - `transient_lut` (default: `#{Transient}`) is the name of the ETS table holding active
     transient permissions
   """
-  @spec new(Auth.t(), Graph.t(), Transient.lut()) :: empty()
-  def new(%Auth{} = auth, {_, _} = scope_resolver, transient_lut_name \\ Transient) do
+  @spec new(Auth.t(), Graph.impl(), Transient.lut()) :: empty()
+  def new(%Auth{} = auth, {_, _} = graph, transient_lut_name \\ Transient) do
     %__MODULE__{
       auth: auth,
-      scope_resolver: Graph.new(read: scope_resolver, write: WriteBuffer.new(scope_resolver)),
+      graph: Graph.new(read: graph, write: WriteBuffer.new(graph)),
       transient_lut: transient_lut_name,
       intermediate_roles: %IntermediateRoles{}
     }
@@ -385,9 +391,9 @@ defmodule Electric.Satellite.Permissions do
     Read.filter_read(perms, tx)
   end
 
-  def validate_read(change, perms, scope_resolver, lsn) do
+  def validate_read(change, perms, graph, lsn) do
     if role_grants = Map.get(perms.roles, {change.relation, :SELECT}) do
-      role_grant_for_change(role_grants, perms, scope_resolver, change, lsn, :read)
+      role_grant_for_change(role_grants, perms, graph, change, lsn, :read)
     end
   end
 
@@ -422,22 +428,21 @@ defmodule Electric.Satellite.Permissions do
   end
 
   defp modifies_scope_fk?(change, perms) do
-    %{scope_resolver: %{write: scope_resolver}} = perms
-    Enum.any?(perms.scopes, &Graph.modifies_fk?(scope_resolver, &1, change))
+    %{graph: %{write: graph}} = perms
+    Enum.any?(perms.scopes, &Graph.modifies_fk?(graph, &1, change))
   end
 
   defp validate_all_writes(changes, perms, lsn) do
-    with {:ok, perms, scope_resolv} <- validate_writes_with_scope(changes, perms, lsn) do
-      {:ok, put_in(perms.scope_resolver.write, scope_resolv)}
+    with {:ok, perms, graph} <- validate_writes_with_scope(changes, perms, lsn) do
+      {:ok, put_in(perms.graph.write, graph)}
     end
   end
 
   defp validate_writes_with_scope(changes, perms, lsn) do
-    %{scope_resolver: %{write: scope_resolver}} = perms
+    %{graph: %{write: graph}} = perms
 
-    Enum.reduce_while(changes, {:ok, perms, scope_resolver}, fn change,
-                                                                {:ok, perms, scope_resolver} ->
-      case verify_write(change, perms, scope_resolver, lsn) do
+    Enum.reduce_while(changes, {:ok, perms, graph}, fn change, {:ok, perms, graph} ->
+      case verify_write(change, perms, graph, lsn) do
         {:error, _} = error ->
           {:halt, error}
 
@@ -446,30 +451,30 @@ defmodule Electric.Satellite.Permissions do
             "role #{inspect(role)} grant #{inspect(grant)} gives permission for #{inspect(change)}"
           )
 
-          scope_resolver = Graph.apply_change(scope_resolver, perms.scopes, change)
+          graph = Graph.apply_change(graph, perms.scopes, change)
 
           perms =
             perms.triggers
             |> Map.get(change.relation, [])
             |> Enum.flat_map(fn trigger_fun ->
-              trigger_fun.(change, scope_resolver, perms.auth)
+              trigger_fun.(change, graph, perms.auth)
             end)
             |> update_transient_roles(perms)
 
-          {:cont, {:ok, perms, scope_resolver}}
+          {:cont, {:ok, perms, graph}}
       end
     end)
   end
 
-  @spec verify_write(change(), t(), Graph.t(), lsn()) :: RoleGrant.t() | {:error, String.t()}
-  defp verify_write(change, perms, scope_resolver, lsn) do
+  @spec verify_write(change(), t(), Graph.impl(), lsn()) :: RoleGrant.t() | {:error, String.t()}
+  defp verify_write(change, perms, graph, lsn) do
     action = required_permission(change)
 
     role_grant =
       perms.roles
       |> Map.get(action)
       |> include_transient_roles(action, perms)
-      |> role_grant_for_change(perms, scope_resolver, change, lsn, :write)
+      |> role_grant_for_change(perms, graph, change, lsn, :write)
 
     role_grant || permission_error(action)
   end
@@ -490,40 +495,40 @@ defmodule Electric.Satellite.Permissions do
     Map.get(perms.intermediate_roles.role_grants, action)
   end
 
-  @spec role_grant_for_change(nil, t(), Graph.t(), change(), lsn(), mode()) :: nil
+  @spec role_grant_for_change(nil, t(), Graph.impl(), change(), lsn(), mode()) :: nil
   defp role_grant_for_change(nil, _perms, _scope, _change, _lsn, _mode) do
     nil
   end
 
-  @spec role_grant_for_change(assigned_roles(), t(), Graph.t(), change(), lsn(), mode()) ::
+  @spec role_grant_for_change(assigned_roles(), t(), Graph.impl(), change(), lsn(), mode()) ::
           RoleGrant.t() | nil
-  defp role_grant_for_change(grants, perms, scope_resolv, change, lsn, mode) do
+  defp role_grant_for_change(grants, perms, graph, change, lsn, mode) do
     %{unscoped: unscoped_role_grants, scoped: scoped_role_grants} = grants
 
     Stream.concat([
       unscoped_role_grants,
-      scoped_role_grants(scoped_role_grants, perms, scope_resolv, change, lsn),
-      transient_role_grants(scoped_role_grants, perms, scope_resolv, change, lsn)
+      scoped_role_grants(scoped_role_grants, perms, graph, change, lsn),
+      transient_role_grants(scoped_role_grants, perms, graph, change, lsn)
     ])
     |> find_grant_allowing_change(change, mode)
   end
 
-  defp scoped_role_grants(role_grants, _perms, scope_resolv, change, _lsn) do
+  defp scoped_role_grants(role_grants, _perms, graph, change, _lsn) do
     Stream.filter(role_grants, fn
       %{role: %{scope: {scope_table, scope_id}}} ->
         # filter out roles whose scope doesn't match
         #   - lookup their root id from the change
         #   - then reject roles that don't match the {table, pk_id}
 
-        change_in_scope?(scope_resolv, scope_table, scope_id, change)
+        change_in_scope?(graph, scope_table, scope_id, change)
     end)
   end
 
-  defp transient_role_grants(role_grants, perms, scope_resolv, change, lsn) do
+  defp transient_role_grants(role_grants, perms, graph, change, lsn) do
     role_grants
     |> Transient.for_roles(lsn, perms.transient_lut)
     |> Stream.flat_map(fn {role_grant, %Transient{target_relation: relation, target_id: id} = tdp} ->
-      if change_in_scope?(scope_resolv, relation, id, change) do
+      if change_in_scope?(graph, relation, id, change) do
         Logger.debug(fn ->
           "Using transient permission #{inspect(tdp)} for #{inspect(change)}"
         end)
@@ -579,8 +584,8 @@ defmodule Electric.Satellite.Permissions do
     false
   end
 
-  defp change_in_scope?(scope_resolver, scope_relation, scope_id, change) do
-    with {id, _path_information} <- Graph.scope_id(scope_resolver, scope_relation, change) do
+  defp change_in_scope?(graph, scope_relation, scope_id, change) do
+    with {id, _path_information} <- Graph.scope_id(graph, scope_relation, change) do
       id && id == scope_id
     end
   end

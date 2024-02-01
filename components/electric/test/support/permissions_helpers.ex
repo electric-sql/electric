@@ -43,12 +43,12 @@ defmodule ElectricTest.PermissionsHelpers do
       end
     end
 
-    def new(scope_resolver, attrs \\ []) do
+    def new(graph, attrs \\ []) do
       auth = Keyword.get(attrs, :auth, Auth.user())
 
       Permissions.new(
         auth,
-        scope_resolver,
+        graph,
         Transient.name()
       )
     end

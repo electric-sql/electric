@@ -12,7 +12,7 @@ defmodule Electric.Satellite.Permissions.Graph do
   @type state() :: term()
   @type relation() :: Electric.Postgres.relation()
   @type scope_root() :: relation()
-  @type impl() :: {module(), state()}
+  @type impl() :: {module(), state()} | state()
   @type record() :: Changes.record()
 
   @type id() :: [Electric.Postgres.pk(), ...]
@@ -38,7 +38,7 @@ defmodule Electric.Satellite.Permissions.Graph do
   If the lookup fails for some other reason, e.g. the backing store is offline or something, then
   this should raise.
   """
-  @callback scope_id(state(), scope_root(), relation(), record() | id()) :: scope_result()
+  @callback scope_id(impl(), scope_root(), relation(), record() | id()) :: scope_result()
 
   @doc """
   Get the scope of the parent to this record, that is the scope of the record one level up* in the
@@ -50,17 +50,17 @@ defmodule Electric.Satellite.Permissions.Graph do
 
   * trees grow _down_, obviously
   """
-  @callback parent_scope_id(state(), scope_root(), relation(), record()) :: scope_result()
+  @callback parent_scope_id(impl(), scope_root(), relation(), record()) :: scope_result()
 
   @doc """
-  Returns an updated (temporary) scope state including the given change.
+  Returns an updated scope state including the given change.
   """
-  @callback apply_change(state(), [scope_root(), ...], change()) :: state()
+  @callback apply_change(impl(), [scope_root(), ...], change()) :: impl()
 
   @doc """
   Returns the primary key value for the given record.
   """
-  @callback primary_key(state(), relation(), Changes.record()) :: id()
+  @callback primary_key(impl(), relation(), Changes.record()) :: id()
 
   @doc """
   Determines if the given update modifies a foreign key that affects the row's scope based on the
@@ -68,7 +68,7 @@ defmodule Electric.Satellite.Permissions.Graph do
 
   That is, does this update move the row from one scope to another?
   """
-  @callback modifies_fk?(state(), scope_root(), Changes.UpdatedRecord.t()) :: boolean()
+  @callback modifies_fk?(impl(), scope_root(), Changes.UpdatedRecord.t()) :: boolean()
 
   @doc """
   Returns the parent id, that is a `{relation(), id()}` tuple, based on the given relation and
@@ -76,8 +76,11 @@ defmodule Electric.Satellite.Permissions.Graph do
 
   This does not lookup values in the tree, it merely uses the foreign key information and the
   values in the record.
+
+  Returns `nil` if the given relation does not have a foreign key for the given scope (which may
+  happen in the case of scopes built via join tables).
   """
-  @callback parent(state(), scope_root(), relation(), record()) :: {relation(), id()} | nil
+  @callback parent(impl(), scope_root(), relation(), record()) :: {relation(), id()} | nil
 
   @doc """
   Return the path through the tables' foreign keys that gets from the given relation to the root.
@@ -86,7 +89,7 @@ defmodule Electric.Satellite.Permissions.Graph do
 
   If there is no path from `relation` to `root`, returns `nil`.
   """
-  @callback relation_path(state(), scope_root(), relation()) :: [relation(), ...] | nil
+  @callback relation_path(impl(), scope_root(), relation()) :: [relation(), ...] | nil
 
   @behaviour __MODULE__
 
@@ -186,7 +189,7 @@ defmodule Electric.Satellite.Permissions.Graph do
     module.parent(state, root, relation, record)
   end
 
-  @spec transaction_context(impl(), [relation()], Change.t()) :: impl()
+  @spec transaction_context(impl(), [relation()], Changes.Transaction.t()) :: impl()
   def transaction_context({_module, _state} = impl, roots, %Changes.Transaction{changes: changes}) do
     Enum.reduce(changes, impl, &apply_change(&2, roots, &1))
   end

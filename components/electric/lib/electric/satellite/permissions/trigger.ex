@@ -7,7 +7,7 @@ defmodule Electric.Satellite.Permissions.Trigger do
   @type assign_trigger_fun() ::
           (Permissions.change(), Graph.t(), Auth.t() -> [Permissions.Role.t()])
 
-  @spec for_assign(%SatPerms.Assign{}) :: {Permissions.relation(), assign_trigger_fun()}
+  @spec for_assign(%SatPerms.Assign{}) :: [{Permissions.relation(), assign_trigger_fun()}]
   def for_assign(assign) do
     %{table: %{schema: schema, name: name}} = assign
 

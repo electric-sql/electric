@@ -7,7 +7,7 @@ defmodule Electric.Satellite.Permissions.Transient do
   defstruct [:id, :assign_id, :scope_id, :target_relation, :target_id, :valid_to]
 
   defmodule IntermediateRole do
-    defstruct [:role, :scope_resolver, :id]
+    defstruct [:role, :id]
   end
 
   @type tid() :: :ets.tid()

@@ -10,11 +10,6 @@ defmodule Electric.Satellite.Permissions.WriteBuffer do
 
   @behaviour Electric.Satellite.Permissions.Graph
 
-  @type relation() :: Electric.Postgres.relation()
-  @type id() :: Electric.Postgres.pk()
-  @type change() :: Changes.change()
-  @type v() :: {relation(), [id(), ...]}
-
   Record.defrecordp(:state,
     graph: nil,
     upstream: nil,
@@ -23,8 +18,9 @@ defmodule Electric.Satellite.Permissions.WriteBuffer do
     tags: MapSet.new()
   )
 
-  def new(scope_resolver) do
-    {__MODULE__, state(upstream: scope_resolver)}
+  @spec new(upstream :: Permissions.Graph.impl()) :: Permissions.Graph.impl()
+  def new(upstream) do
+    {__MODULE__, state(upstream: upstream)}
   end
 
   def pending_changes({__MODULE__, state(graph: graph)}) do
