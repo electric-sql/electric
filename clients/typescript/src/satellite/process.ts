@@ -913,7 +913,7 @@ export class SatelliteProcess implements Satellite {
     const q4: Statement = {
       sql: `
       WITH _to_be_deleted (rowid) AS (
-        SELECT shadow.rowid
+        SELECT ${shadow}.rowid
         FROM ${oplog}
         INNER JOIN ${shadow}
         ON ${shadow}.namespace = ${oplog}.namespace

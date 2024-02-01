@@ -492,9 +492,9 @@ fn main() {
         .targets([
             LogTarget::Folder(utils::app_root()),
             LogTarget::Stdout,
-            // LogTarget::Webview,
+            LogTarget::Webview,
         ])
-        .level(log::LevelFilter::Info);
+        .level(log::LevelFilter::Debug);
 
     // Setup the postgres terminal
     let pty_system = native_pty_system();
