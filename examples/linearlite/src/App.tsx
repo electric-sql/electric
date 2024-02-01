@@ -43,13 +43,18 @@ const App = () => {
     const init = async () => {
       try {
         const client = await initElectric()
+        window.electric = client
         setElectric(client)
-        const { synced } = await client.db.issue.sync({
-          include: {
-            comment: true,
-          },
-        })
-        await synced
+        
+        // const { synced: syncedIssues } = await client.db.issue.sync({
+        //   include: {
+        //     comment: true,
+        //   },
+        // })
+        const { synced: syncedProjects } = await client.db.project.sync()
+        // await syncedIssues
+        await syncedProjects
+
         const timeToSync = performance.now()
         if (DEBUG) {
           console.log(`Synced in ${timeToSync}ms from page load`)
@@ -75,9 +80,11 @@ const App = () => {
 
   const router = (
     <Routes>
-      <Route path="/" element={<List />} />
+    <Route path="/" element={<List />} />
+      <Route path="/:id" element={<List />} />
       <Route path="/search" element={<List showSearch={true} />} />
       <Route path="/board" element={<Board />} />
+      <Route path="/board/:id" element={<Board />} />
       <Route path="/issue/:id" element={<Issue />} />
     </Routes>
   )

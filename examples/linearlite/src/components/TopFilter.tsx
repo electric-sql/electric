@@ -31,7 +31,7 @@ export default function ({
 
   // We don't yet have a DAL for counts, so we use raw SQL
   const totalIssuesCount: number =
-    useLiveQuery(db.liveRaw({ sql: 'SELECT COUNT(*) FROM issue' }))
+    useLiveQuery(db.liveRaw({ sql: 'SELECT COUNT(*) FROM issue ' }))
       .results?.[0]?.['COUNT(*)'] ?? 0
 
   const filteredIssuesCount = issues.length
@@ -58,9 +58,9 @@ export default function ({
 
   if (filterState.status?.length) {
     if (eqStatuses(['backlog'])) {
-      title = 'Backlog'
+      title += ' : Backlog'
     } else if (eqStatuses(['todo', 'in_progress'])) {
-      title = 'Active'
+      title += ' : Active'
     }
   }
 
