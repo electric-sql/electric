@@ -53,10 +53,12 @@ export interface SubscriptionsManager {
   ): null | { inFlight: string } | { fulfilled: string }
 
   /**
-   * Deletes the subscription from the manager.
-   * @param subId the identifier of the subscription
+   * Deletes the subscription(s) from the manager.
+   * @param subId the identifier of the subscription or an array of subscription identifiers
    */
-  unsubscribe(subId: string): Promise<void>
+  unsubscribe(
+    subId: SubscriptionId | SubscriptionId[]
+  ): Promise<SubscriptionId[]>
 
   /**
    * Deletes all subscriptions from the manager. Useful to

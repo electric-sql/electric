@@ -48,6 +48,7 @@ import {
   SubscriptionData,
 } from '../../src/satellite/shapes/types'
 import { mergeEntries } from '../../src/satellite/merge'
+import { MockSubscriptionsManager } from '../../src/satellite/shapes/manager'
 
 const parentRecord = {
   id: 1,
@@ -1718,6 +1719,40 @@ test('a subscription request failure does not clear the manager state', async (t
   } catch (error: any) {
     t.is(error.code, SatelliteErrorCode.TABLE_NOT_FOUND)
   }
+})
+
+test('unsubscribing all subscriptions does not trigger FK violations', async (t) => {
+  const { satellite, runMigrations } = t.context
+
+  await runMigrations() // because the meta tables need to exist for shape GC
+
+  const subsManager = new MockSubscriptionsManager(
+    satellite._garbageCollectShapeHandler.bind(satellite)
+  )
+
+  // Create the 'users' and 'posts' tables expected by sqlite
+  // populate it with foreign keys and check that the subscription
+  // manager does not violate the FKs when unsubscribing from all subscriptions
+  await satellite.adapter.runInTransaction(
+    { sql: `CREATE TABLE users (id TEXT PRIMARY KEY, name TEXT)` },
+    {
+      sql: `CREATE TABLE posts (id TEXT PRIMARY KEY, title TEXT, author_id TEXT, FOREIGN KEY(author_id) REFERENCES users(id))`,
+    },
+    { sql: `INSERT INTO users (id, name) VALUES ('u1', 'user1')` },
+    {
+      sql: `INSERT INTO posts (id, title, author_id) VALUES ('p1', 'My first post', 'u1')`,
+    }
+  )
+
+  await subsManager.unsubscribeAll()
+  // if we reach here, the FKs were not violated
+
+  // Check that everything was deleted
+  const users = await satellite.adapter.query({ sql: 'SELECT * FROM users' })
+  t.assert(users.length === 0)
+
+  const posts = await satellite.adapter.query({ sql: 'SELECT * FROM posts' })
+  t.assert(posts.length === 0)
 })
 
 test("Garbage collecting the subscription doesn't generate oplog entries", async (t) => {
