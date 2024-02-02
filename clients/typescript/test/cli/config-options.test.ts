@@ -61,6 +61,6 @@ test('assert SSL is enabled by default', (t) => {
   t.is(configOptions['DATABASE_REQUIRE_SSL'].defaultVal, true)
 })
 
-test('assert authentication mode is secure by default', (t) => {
-  t.is(configOptions['AUTH_MODE'].defaultVal, 'secure')
+test('assert authentication mode is insecure by default', (t) => {
+  t.is(configOptions['AUTH_MODE'].defaultVal, 'insecure')
 })

@@ -252,7 +252,9 @@ export const configOptions: Record<string, any> = {
     groups: ['electric', 'client', 'proxy'],
   },
   AUTH_MODE: {
-    defaultVal: 'secure',
+    // NOTE(msfstef): 'insecure' by default for simple onboarding - requiring
+    // 'secure' auth would increase the barrier to setting up Electric
+    defaultVal: 'insecure',
     valueType: String,
     valueTypeName: 'secure | insecure',
     doc: 'Authentication mode to use to authenticate clients.',
