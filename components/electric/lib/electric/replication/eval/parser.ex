@@ -101,8 +101,18 @@ defmodule Electric.Replication.Eval.Parser do
     ref = Enum.map(fields, &unwrap_node_string/1)
 
     case Map.fetch(refs, ref) do
-      {:ok, type} -> {:ok, %Ref{path: ref, type: type, location: loc}}
-      :error -> {:error, {loc, "unknown reference #{identifier(ref)}"}}
+      {:ok, type} ->
+        {:ok, %Ref{path: ref, type: type, location: loc}}
+
+      :error ->
+        message = "unknown reference #{identifier(ref)}"
+
+        message =
+          if match?([_], ref) and is_map_key(refs, ["this", List.first(ref)]),
+            do: message <> " - did you mean `this.#{List.first(ref)}`?",
+            else: message
+
+        {:error, {loc, message}}
     end
   end
 

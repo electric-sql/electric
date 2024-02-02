@@ -33,6 +33,11 @@ defmodule Electric.Replication.Eval.ParserTest do
                Parser.parse_and_validate_expression(~S|"test"|, %{})
     end
 
+    test "should fail helpfully on references that might exist" do
+      assert {:error, "At location 0: unknown reference test - did you mean `this.test`?"} =
+               Parser.parse_and_validate_expression(~S|"test"|, %{["this", "test"] => :bool})
+    end
+
     test "should correctly parse a known reference" do
       assert {:ok, %Expr{eval: result}} =
                Parser.parse_and_validate_expression(~S|"test"|, %{["test"] => :bool})

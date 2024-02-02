@@ -1679,9 +1679,9 @@ function makeSqlWhereClause(where: object): string {
     .filter(([key, _]) => !['AND', 'OR', 'NOT'].includes(key))
     .map(([key, value]) => {
       if (typeof value === 'string') {
-        return `${key} = '${value}'`
+        return `this.${key} = '${value}'`
       }
-      return `${key} = ${value}`
+      return `this.${key} = ${value}`
     })
     .join(' AND ')
   const clauses = [fieldSqlClause, andSqlClause, orSqlClause, notSqlClause]
