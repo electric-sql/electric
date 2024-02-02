@@ -57,8 +57,8 @@ test('assert IPv6 is enabled by default', (t) => {
   t.is(configOptions['ELECTRIC_USE_IPV6'].defaultVal, true)
 })
 
-test('assert SSL is enabled by default', (t) => {
-  t.is(configOptions['DATABASE_REQUIRE_SSL'].defaultVal, true)
+test('assert SSL is disabled by default', (t) => {
+  t.is(configOptions['DATABASE_REQUIRE_SSL'].defaultVal, false)
 })
 
 test('assert authentication mode is insecure by default', (t) => {

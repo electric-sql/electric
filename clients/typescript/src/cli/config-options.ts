@@ -150,16 +150,11 @@ export const configOptions: Record<string, any> = {
 
   // *** Electric options ***
   DATABASE_REQUIRE_SSL: {
-    defaultVal: true,
+    // NOTE(msfstef): differs from Electric's 'true' default to reduce
+    // friction to getting set up with electric
+    defaultVal: false,
     valueType: Boolean,
-    doc: dedent`
-      Set to false to enable Electric to fallback to using unencrypted connections
-      in case the database is not configured to work with SSL.
-
-      Be mindful of changing this default, more often than not it's a bad idea to
-      use unencrypted database connections because all data flowing between your
-      database and Electric may get intercepted by an unauthorized party.
-    `,
+    doc: 'Require SSL for the connection to the database.',
     groups: ['electric'],
   },
   DATABASE_USE_IPV6: {
@@ -252,8 +247,8 @@ export const configOptions: Record<string, any> = {
     groups: ['electric', 'client', 'proxy'],
   },
   AUTH_MODE: {
-    // NOTE(msfstef): 'insecure' by default for simple onboarding - requiring
-    // 'secure' auth would increase the barrier to setting up Electric
+    // NOTE(msfstef): differs from Electric's 'secure' default to reduce
+    // friction to getting set up with electric
     defaultVal: 'insecure',
     valueType: String,
     valueTypeName: 'secure | insecure',
