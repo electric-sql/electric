@@ -5,16 +5,14 @@ import {
   inferServiceUrlPart,
   getConfigValue,
   type ConfigMap,
-  AnyConfigOption,
 } from './config'
 import { dedent, getAppName, buildDatabaseURL, parsePgProxyPort } from './utils'
 import { LIB_VERSION } from '../version'
 
 const minorVersion = LIB_VERSION.split('.').slice(0, 2).join('.')
 
-
 // Name will be prefixed with ELECDATABASE_REQUIRE_SSLTRIC_ as environment variables.
-export const configOptions : Record<string, AnyConfigOption> = {
+export const configOptions: Record<string, any> = {
   // *** Client options ***
   SERVICE: {
     valueType: String,
@@ -76,7 +74,8 @@ export const configOptions : Record<string, AnyConfigOption> = {
     `,
     groups: ['client', 'proxy'],
     inferVal: (options: ConfigMap) => inferProxyUrlPart('host', options),
-    defaultVal: (options: ConfigMap) => getConfigValue('SERVICE_HOST', options).toString(),
+    defaultVal: (options: ConfigMap) =>
+      getConfigValue('SERVICE_HOST', options).toString(),
   },
   MODULE_RESOLUTION: {
     valueType: String,
@@ -233,7 +232,8 @@ export const configOptions : Record<string, AnyConfigOption> = {
     groups: ['electric', 'client'],
   },
   PG_PROXY_PORT: {
-    inferVal: (options: ConfigMap) => inferProxyUrlPart('port', options)?.toString(),
+    inferVal: (options: ConfigMap) =>
+      inferProxyUrlPart('port', options)?.toString(),
     defaultVal: '65432',
     valueType: String,
     valueTypeName: 'port',

@@ -1,7 +1,6 @@
 import test from 'ava'
 import { configOptions } from '../../src/cli/config-options'
 
-
 const expectedEnvVars = [
   'SERVICE',
   'PROXY',
@@ -37,19 +36,20 @@ const expectedEnvVars = [
   'CONTAINER_NAME',
 ]
 
-
 test('assert that all expected env vars are options for CLI', (t) => {
   for (const i in expectedEnvVars) {
-    t.not(
-      configOptions[expectedEnvVars[i]],
-      undefined,
+    t.true(
+      configOptions[expectedEnvVars[i]] !== undefined,
       `Environment variable ${expectedEnvVars[i]} is missing from CLI`
     )
   }
 })
 
 test('assert Electric is in logical_replication mode by default', (t) => {
-  t.is(configOptions['ELECTRIC_WRITE_TO_PG_MODE'].defaultVal, 'logical_replication')
+  t.is(
+    configOptions['ELECTRIC_WRITE_TO_PG_MODE'].defaultVal,
+    'logical_replication'
+  )
 })
 
 test('assert IPv6 is enabled by default', (t) => {
