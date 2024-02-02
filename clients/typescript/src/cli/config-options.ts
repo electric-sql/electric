@@ -5,14 +5,16 @@ import {
   inferServiceUrlPart,
   getConfigValue,
   type ConfigMap,
+  AnyConfigOption,
 } from './config'
 import { dedent, getAppName, buildDatabaseURL, parsePgProxyPort } from './utils'
 import { LIB_VERSION } from '../version'
 
 const minorVersion = LIB_VERSION.split('.').slice(0, 2).join('.')
 
+
 // Name will be prefixed with ELECTRIC_ as environment variables.
-export const configOptions = {
+export const configOptions : Record<string, AnyConfigOption> = {
   // *** Client options ***
   SERVICE: {
     valueType: String,
@@ -34,14 +36,14 @@ export const configOptions = {
     groups: ['client', 'proxy'],
     shortForm: 'p',
     defaultVal: (options: ConfigMap) => {
-      const host = getConfigValue('PG_PROXY_HOST', options)
+      const host = getConfigValue('PG_PROXY_HOST', options).toString()
       const port = parsePgProxyPort(
-        getConfigValue('PG_PROXY_PORT', options)
+        parseInt(getConfigValue('PG_PROXY_PORT', options) + '')
       ).port
       const user = 'postgres'
-      const password = getConfigValue('PG_PROXY_PASSWORD', options)
-      const dbName = getConfigValue('DATABASE_NAME', options)
-      const ssl = getConfigValue('DATABASE_REQUIRE_SSL', options)
+      const password = getConfigValue('PG_PROXY_PASSWORD', options).toString()
+      const dbName = getConfigValue('DATABASE_NAME', options).toString()
+      const ssl = getConfigValue('DATABASE_REQUIRE_SSL', options) as boolean
       return buildDatabaseURL({ host, port, user, password, dbName, ssl })
     },
     constructedDefault:
@@ -74,7 +76,7 @@ export const configOptions = {
     `,
     groups: ['client', 'proxy'],
     inferVal: (options: ConfigMap) => inferProxyUrlPart('host', options),
-    defaultVal: (options: ConfigMap) => getConfigValue('SERVICE_HOST', options),
+    defaultVal: (options: ConfigMap) => getConfigValue('SERVICE_HOST', options).toString(),
   },
   MODULE_RESOLUTION: {
     valueType: String,
@@ -100,11 +102,11 @@ export const configOptions = {
     valueTypeName: 'url',
     shortForm: 'db',
     defaultVal: (options: ConfigMap) => {
-      const host = getConfigValue('DATABASE_HOST', options)
-      const port = getConfigValue('DATABASE_PORT', options)
-      const user = getConfigValue('DATABASE_USER', options)
-      const password = getConfigValue('DATABASE_PASSWORD', options)
-      const dbName = getConfigValue('DATABASE_NAME', options)
+      const host = getConfigValue('DATABASE_HOST', options).toString()
+      const port = parseInt(getConfigValue('DATABASE_PORT', options) + '')
+      const user = getConfigValue('DATABASE_USER', options).toString()
+      const password = getConfigValue('DATABASE_PASSWORD', options).toString()
+      const dbName = getConfigValue('DATABASE_NAME', options).toString()
       return buildDatabaseURL({ host, port, user, password, dbName })
     },
     constructedDefault:
@@ -198,7 +200,7 @@ export const configOptions = {
     groups: ['electric', 'client'],
   },
   PG_PROXY_PORT: {
-    inferVal: (options: ConfigMap) => inferProxyUrlPart('port', options),
+    inferVal: (options: ConfigMap) => inferProxyUrlPart('port', options)?.toString(),
     defaultVal: '65432',
     valueType: String,
     valueTypeName: 'port',
