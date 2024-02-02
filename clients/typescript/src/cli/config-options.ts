@@ -11,7 +11,7 @@ import { LIB_VERSION } from '../version'
 
 const minorVersion = LIB_VERSION.split('.').slice(0, 2).join('.')
 
-// Name will be prefixed with ELECDATABASE_REQUIRE_SSLTRIC_ as environment variables.
+// Name will be prefixed with ELECTRIC_ as environment variables.
 export const configOptions: Record<string, any> = {
   // *** Client options ***
   SERVICE: {
