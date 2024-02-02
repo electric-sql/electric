@@ -19,7 +19,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Version do
           primary_keys: %{relation() => [String.t()]}
         }
 
-  @spec new(version(), Schema.t()) :: t()
+  @spec new(nil | version(), Schema.t()) :: t()
   def new(version, %Schema.Proto.Schema{} = schema) do
     %__MODULE__{version: version, schema: schema}
     |> Map.update!(:tables, &cache_tables_by_name(&1, schema))
