@@ -342,7 +342,7 @@ test.serial('nested shape is constructed', async (t) => {
       NOT: [{ id: 1 }, { id: 2 }],
       AND: [{ nbr: 6 }, { nbr: 7 }],
       title: 'foo',
-      contents: 'bar',
+      contents: "important'",
     },
     include: {
       author: {
@@ -358,7 +358,7 @@ test.serial('nested shape is constructed', async (t) => {
   t.deepEqual(shape, {
     tablename: 'Post',
     where:
-      "title = 'foo' AND contents = 'bar' AND nbr = 6 AND nbr = 7 AND ((id = 5) OR (id = 42)) AND NOT ((id = 1) OR (id = 2))",
+      "this.title = 'foo' AND this.contents = 'important''' AND this.nbr = 6 AND this.nbr = 7 AND ((this.id = 5) OR (this.id = 42)) AND NOT ((this.id = 1) OR (this.id = 2))",
     include: [
       {
         foreignKey: ['authorId'],
