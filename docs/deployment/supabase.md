@@ -45,12 +45,20 @@ All Supabase Postgres instances come with logical replication enabled and the pe
 
 Go to "Project Settings" (look for the gear icon at the bottom of the icon menu on the left hand side of the page) and open the "Database" section. Under the heading "Connection string" select the `URI` tab. Copy the connection string shown and save it somewhere.
 
+:::info
+Electric needs to establish a replication connection to the database, so it has to connect to it directly, not through a connection pool. Make sure to uncheck the "Use connection pooling" option when copying the connection string.
+:::
+
 ![Connection Details](./supabase/connection-details.png)
 
 You will use this as the value for the `DATABASE_URL` in your [Electric sync service configuration](../api/service.md).
 
-:::caution
-Do not use the "Connection Pool" connection string displayed a little further down the screen. This will prevent the sync service from operating (because it connects via PgBouncer, which does not support logical replication).
+:::caution Connectivity problems with Supabase Platform
+Supabase Platform [dropped IPv4 support](https://supabase.com/blog/ipv6) for direct database connections on 26 January 2023. Following that, you may see "socket closed" errors in Electric's logs or it may seem like Electric is stuck without producing any log output at all.
+
+The network where Electric is running must support IPv6. If you're running Electric in your own computer, check whether your ISP has IPv6 support on https://test-ipv6.com. If you see "No IPv6 address detected" on that page, consider using a VPN service that works with IPv6 networks.
+
+When running Electric in a Docker container, there's an additional hurdle in that Docker does not enable IPv6 out-of-the-box. Follow the [official guide](https://docs.docker.com/config/daemon/ipv6/#use-ipv6-for-the-default-bridge-network) to configure your Docker daemon for IPv6.
 :::
 
 ### 3. Retrieving the authentication key
