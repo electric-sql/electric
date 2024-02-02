@@ -35,7 +35,7 @@ export interface DatabaseAdapter {
 }
 ```
 
-For convenience, we provide two generic database adapters, `SerialDatabaseAdapter` and `BatchDatabaseAdapter`, that implement the parts of this interface that are common to most adapters such that you can implement a simpler interface:
+For convenience, we provide two generic database adapters, `SerialDatabaseAdapter`` and `BatchDatabaseAdapter``. These implement the parts of the interface that are common to most adapters. This allows you to implement your own driver adapters using a simpler interface.
 ```tsx
 export abstract class SerialDatabaseAdapter implements DatabaseAdapter {
   // Run a single SQL statement against the DB
