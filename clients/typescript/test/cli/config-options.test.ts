@@ -47,3 +47,20 @@ test('assert that all expected env vars are options for CLI', (t) => {
     )
   }
 })
+
+test('assert Electric is in logical_replication mode by default', (t) => {
+  t.is(configOptions['ELECTRIC_WRITE_TO_PG_MODE'].defaultVal, 'logical_replication')
+})
+
+test('assert IPv6 is enabled by default', (t) => {
+  t.is(configOptions['DATABASE_USE_IPV6'].defaultVal, true)
+  t.is(configOptions['ELECTRIC_USE_IPV6'].defaultVal, true)
+})
+
+test('assert SSL is enabled by default', (t) => {
+  t.is(configOptions['DATABASE_REQUIRE_SSL'].defaultVal, true)
+})
+
+test('assert authentication mode is secure by default', (t) => {
+  t.is(configOptions['AUTH_MODE'].defaultVal, 'secure')
+})
