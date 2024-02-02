@@ -184,13 +184,13 @@ export class MockSubscriptionsManager extends InMemorySubscriptionsManager {
       '1': [
         {
           uuid: '00000000-0000-0000-0000-000000000001',
-          definition: { selects: [{ tablename: 'users' }] },
+          definition: { tablename: 'users' },
         },
       ],
       '2': [
         {
           uuid: '00000000-0000-0000-0000-000000000002',
-          definition: { selects: [{ tablename: 'posts' }] },
+          definition: { tablename: 'posts' },
         },
       ],
     }
