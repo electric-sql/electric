@@ -5,8 +5,7 @@ defmodule Electric.Replication.Shapes do
   import Electric.Postgres.Extension, only: [is_migration_relation: 1]
   alias Electric.Utils
   alias Electric.Replication.Changes.Transaction
-  alias Electric.Postgres.Extension.SchemaCache
-  alias Electric.Postgres.Schema
+  alias Electric.Postgres.Extension.{SchemaCache, SchemaLoader}
   alias Electric.Replication.Shapes.ShapeRequest
   use Electric.Satellite.Protobuf
 
@@ -42,12 +41,11 @@ defmodule Electric.Replication.Shapes do
   @spec validate_requests([%SatShapeReq{}, ...], String.t()) ::
           {:ok, [ShapeRequest.t(), ...]} | {:error, [{String.t(), atom(), String.t()}]}
   def validate_requests(shape_requests, origin) do
-    {:ok, _, schema} = SchemaCache.load(origin)
-    # TODO: Move this graph calculation to the SchemaCache when #191 is merged
-    graph = Schema.public_fk_graph(schema)
+    {:ok, schema_version} = SchemaCache.load(origin)
+    graph = SchemaLoader.Version.fk_graph(schema_version)
 
     shape_requests
-    |> Enum.map(&validate_request(&1, schema, graph))
+    |> Enum.map(&validate_request(&1, graph))
     |> Enum.split_with(&is_struct(&1, ShapeRequest))
     |> case do
       {results, []} -> {:ok, results}
@@ -55,9 +53,9 @@ defmodule Electric.Replication.Shapes do
     end
   end
 
-  @spec validate_request(%SatShapeReq{}, Schema.t(), Graph.t()) ::
+  @spec validate_request(%SatShapeReq{}, Graph.t()) ::
           ShapeRequest.t() | {String.t(), atom(), String.t()}
-  defp validate_request(%SatShapeReq{shape_definition: shape} = request, _schema, graph) do
+  defp validate_request(%SatShapeReq{shape_definition: shape} = request, graph) do
     with :ok <- request_cannot_be_empty(shape),
          :ok <- table_names_are_valid(shape),
          :ok <- tables_should_exist(shape, graph),

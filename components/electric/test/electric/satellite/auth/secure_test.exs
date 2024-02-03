@@ -2,14 +2,13 @@ defmodule Electric.Satellite.Auth.SecureTest do
   use ExUnit.Case, async: true
   use ExUnitProperties
 
-  import Electric.Satellite.Auth.Secure, only: [build_config!: 1, validate_token: 2]
+  import Electric.Satellite.Auth.Secure, only: [build_config: 1, validate_token: 2]
   alias Electric.Satellite.Auth
-  alias Electric.Satellite.Auth.ConfigError
 
   @namespace "https://electric-sql.com/jwt/claims"
   @signing_key ~c"abcdefghijklmnopqrstuvwxyz012345" |> Enum.shuffle() |> List.to_string()
 
-  describe "build_config!()" do
+  describe "build_config()" do
     test "returns a clean map when all checks pass" do
       opts = [
         alg: "HS256",
@@ -20,7 +19,7 @@ defmodule Electric.Satellite.Auth.SecureTest do
         extra2: nil
       ]
 
-      config = build_config!(opts)
+      assert {:ok, config} = build_config(opts)
       assert is_map(config)
 
       assert [:alg, :joken_config, :joken_signer, :namespace, :required_claims] ==
@@ -36,43 +35,26 @@ defmodule Electric.Satellite.Auth.SecureTest do
     end
 
     test "checks for missing 'alg'" do
-      message = "Missing or invalid 'alg' configuration option for secure auth mode"
-
-      assert_raise ConfigError, message, fn ->
-        build_config!([])
-      end
+      assert {:error, :alg, "not set"} == build_config([])
     end
 
     test "checks for missing 'key'" do
-      message = "Missing 'key' configuration option for secure auth mode"
-
-      assert_raise ConfigError, message, fn ->
-        build_config!(alg: "HS256")
-      end
+      assert {:error, :key, "not set"} == build_config(alg: "HS256")
     end
 
     test "validates the key length" do
-      message = "The 'key' needs to be at least 32 bytes long for HS256"
-
-      assert_raise ConfigError, message, fn ->
-        build_config!(alg: "HS256", key: "key")
-      end
+      assert {:error, :key, "has to be at least 32 bytes long for HS256"} ==
+               build_config(alg: "HS256", key: "key")
 
       ###
 
-      message = "The 'key' needs to be at least 48 bytes long for HS384"
-
-      assert_raise ConfigError, message, fn ->
-        build_config!(alg: "HS384", key: "key")
-      end
+      assert {:error, :key, "has to be at least 48 bytes long for HS384"} ==
+               build_config(alg: "HS384", key: "key")
 
       ###
 
-      message = "The 'key' needs to be at least 64 bytes long for HS512"
-
-      assert_raise ConfigError, message, fn ->
-        build_config!(alg: "HS512", key: "key")
-      end
+      assert {:error, :key, "has to be at least 64 bytes long for HS512"} ==
+               build_config(alg: "HS512", key: "key")
     end
   end
 
@@ -100,7 +82,7 @@ defmodule Electric.Satellite.Auth.SecureTest do
         signer = Joken.Signer.create(alg, key)
         {:ok, token, _} = Joken.encode_and_sign(claims, signer)
 
-        config = build_config!(alg: alg, key: key, namespace: @namespace)
+        {:ok, config} = build_config(alg: alg, key: key, namespace: @namespace)
         assert {alg, {:ok, %Auth{user_id: "12345"}}} == {alg, validate_token(token, config)}
       end
     end
@@ -115,7 +97,7 @@ defmodule Electric.Satellite.Auth.SecureTest do
         signer = Joken.Signer.create(alg, %{"pem" => private_key})
         {:ok, token, _} = Joken.encode_and_sign(claims, signer)
 
-        config = build_config!(alg: alg, key: public_key, namespace: @namespace)
+        {:ok, config} = build_config(alg: alg, key: public_key, namespace: @namespace)
         assert {alg, {:ok, %Auth{user_id: "12345"}}} == {alg, validate_token(token, config)}
       end
     end
@@ -134,7 +116,7 @@ defmodule Electric.Satellite.Auth.SecureTest do
         signer = Joken.Signer.create(alg, %{"pem" => private_key})
         {:ok, token, _} = Joken.encode_and_sign(claims, signer)
 
-        config = build_config!(alg: alg, key: public_key, namespace: @namespace)
+        {:ok, config} = build_config(alg: alg, key: public_key, namespace: @namespace)
         assert {alg, {:ok, %Auth{user_id: "12345"}}} == {alg, validate_token(token, config)}
       end
     end
@@ -219,21 +201,57 @@ defmodule Electric.Satellite.Auth.SecureTest do
     end
 
     test "validates the iat claim" do
-      token = signed_token(claims(%{"iat" => DateTime.to_unix(~U[2123-05-01 00:00:00Z])}))
+      # To account for clock drift between Electric and a 3rd-party that generates JWTs, we allow for iat to be slightly
+      # in the future.
+      soon = DateTime.utc_now() |> DateTime.add(1, :second) |> DateTime.to_unix()
+
+      token =
+        claims(%{"iat" => soon, @namespace => %{"user_id" => "12345"}})
+        |> signed_token()
+
+      assert {:ok, %Auth{user_id: "12345"}} == validate_token(token, config([]))
+
+      # but not too far off
+      far_future = DateTime.utc_now() |> DateTime.add(5, :second) |> DateTime.to_unix()
+      token = signed_token(claims(%{"iat" => far_future}))
 
       assert {:error, %Auth.TokenError{message: ~S'Invalid "iat" claim value: ' <> _}} =
                validate_token(token, config([]))
     end
 
     test "validates the nbf claim" do
-      token = signed_token(claims(%{"nbf" => DateTime.to_unix(~U[2123-05-01 00:00:00Z])}))
+      # To account for clock drift between Electric and a 3rd-party that generates JWTs, we allow for nbf to be slightly
+      # in the future.
+      soon = DateTime.utc_now() |> DateTime.add(1, :second) |> DateTime.to_unix()
+
+      token =
+        claims(%{"nbf" => soon, @namespace => %{"user_id" => "12345"}})
+        |> signed_token()
+
+      assert {:ok, %Auth{user_id: "12345"}} == validate_token(token, config([]))
+
+      # but not too far off
+      far_future = DateTime.utc_now() |> DateTime.add(5, :second) |> DateTime.to_unix()
+      token = signed_token(claims(%{"nbf" => far_future}))
 
       assert {:error, %Auth.TokenError{message: "Token is not yet valid"}} ==
                validate_token(token, config([]))
     end
 
     test "validates the exp claim" do
-      token = signed_token(claims(%{"exp" => DateTime.to_unix(~U[2023-05-01 00:00:00Z])}))
+      # To account for clock drift between Electric and a 3rd-party that generates JWTs, we allow for exp to be slightly
+      # in the past.
+      just_now = DateTime.utc_now() |> DateTime.add(-1, :second) |> DateTime.to_unix()
+
+      token =
+        claims(%{"nbf" => just_now, @namespace => %{"user_id" => "12345"}})
+        |> signed_token()
+
+      assert {:ok, %Auth{user_id: "12345"}} == validate_token(token, config([]))
+
+      # but not too far off
+      long_past = DateTime.utc_now() |> DateTime.add(-5, :second) |> DateTime.to_unix()
+      token = signed_token(claims(%{"exp" => long_past}))
 
       assert {:error, %Auth.TokenError{message: "Expired token"}} ==
                validate_token(token, config([]))
@@ -260,9 +278,12 @@ defmodule Electric.Satellite.Auth.SecureTest do
     end
 
     defp config(opts) do
-      [alg: "HS256", key: @signing_key, namespace: @namespace]
-      |> Keyword.merge(opts)
-      |> build_config!()
+      {:ok, config} =
+        [alg: "HS256", key: @signing_key, namespace: @namespace]
+        |> Keyword.merge(opts)
+        |> build_config()
+
+      config
     end
 
     defp claims(claims) do

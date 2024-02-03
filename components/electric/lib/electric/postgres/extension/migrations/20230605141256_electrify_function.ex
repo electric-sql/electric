@@ -1,13 +1,7 @@
 defmodule Electric.Postgres.Extension.Migrations.Migration_20230605141256_ElectrifyFunction do
   alias Electric.Postgres.Extension
 
-  require EEx
-
   @behaviour Extension.Migration
-
-  sql_template = Path.expand("20230605141256_electrify_function/electrify.sql.eex", __DIR__)
-
-  @external_resource sql_template
 
   @impl true
   def version, do: 2023_06_05_14_12_56
@@ -25,12 +19,10 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230605141256_Electr
           oid         oid NOT NULL,
           created_at  timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
           CONSTRAINT unique_table_name UNIQUE (schema_name, table_name)
-      );
+      )
       """,
-      """
-      CREATE INDEX electrified_tracking_table_name_idx ON #{electrified_tracking_table} (schema_name, table_name);
-      CREATE INDEX electrified_tracking_table_name_oid ON #{electrified_tracking_table} (oid);
-      """,
+      "CREATE INDEX electrified_tracking_table_name_idx ON #{electrified_tracking_table} (schema_name, table_name)",
+      "CREATE INDEX electrified_tracking_table_name_oid ON #{electrified_tracking_table} (oid)",
       Extension.add_table_to_publication_sql(electrified_tracking_table)
     ]
   end

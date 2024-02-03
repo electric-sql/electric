@@ -2,7 +2,7 @@ defmodule Electric.Postgres.Replication do
   use Electric.Satellite.Protobuf
 
   alias PgQuery, as: Pg
-  alias Electric.Postgres.{Dialect, Schema, Schema.AST, Schema.Proto}
+  alias Electric.Postgres.{Dialect, Extension.SchemaLoader, Schema.AST, Schema.Proto}
 
   defmodule Column do
     alias Electric.Postgres
@@ -59,9 +59,9 @@ defmodule Electric.Postgres.Replication do
   # 4. use the updated schema to get column, fk and pk information for the affected tables
   #
   # - creation of indexes doesn't affect any tables so that list should be empty
-  @spec migrate(Schema.t(), version(), binary(), Electric.Postgres.Dialect.t()) ::
+  @spec migrate(SchemaLoader.Version.t(), binary(), Electric.Postgres.Dialect.t()) ::
           {:ok, [%SatOpMigrate{}], [{binary, binary}]}
-  def migrate(schema, version, stmt, dialect \\ @default_dialect) do
+  def migrate(schema_version, stmt, dialect \\ @default_dialect) do
     ast = Electric.Postgres.parse!(stmt)
 
     case propagatable_stmt?(ast) do
@@ -69,7 +69,7 @@ defmodule Electric.Postgres.Replication do
         {:ok, [], []}
 
       propagate_ast ->
-        {msg, relations} = build_replication_msg(propagate_ast, version, schema, dialect)
+        {msg, relations} = build_replication_msg(propagate_ast, schema_version, dialect)
 
         {:ok, [msg], relations}
     end
@@ -112,14 +112,14 @@ defmodule Electric.Postgres.Replication do
     []
   end
 
-  defp build_replication_msg(ast, version, schema, dialect) do
+  defp build_replication_msg(ast, schema_version, dialect) do
     affected_tables = affected_tables(ast, dialect)
 
     relations = Enum.map(affected_tables, &{&1.schema, &1.name})
 
     tables =
       affected_tables
-      |> Enum.map(&Schema.fetch_table!(schema, &1))
+      |> Enum.map(&SchemaLoader.Version.table!(schema_version, &1))
       |> Enum.map(&replication_msg_table(&1, dialect))
 
     table =
@@ -138,7 +138,7 @@ defmodule Electric.Postgres.Replication do
       )
 
     {%SatOpMigrate{
-       version: version,
+       version: SchemaLoader.Version.version(schema_version),
        table: table,
        stmts: stmts
      }, relations}

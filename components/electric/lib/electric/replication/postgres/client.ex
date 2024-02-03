@@ -6,21 +6,24 @@ defmodule Electric.Replication.Postgres.Client do
   doesn't support connecting via a unix socket.
   """
   alias Electric.Postgres.Extension
+  alias Electric.Replication.Connectors
+
   require Logger
 
   @type connection :: pid
   @type publication :: String.t()
 
-  @spec connect(:epgsql.connect_opts()) ::
+  @spec connect(Connectors.connection_opts()) ::
           {:ok, connection :: pid()} | {:error, reason :: :epgsql.connect_error()}
-  def connect(%{} = config) do
-    config
-    |> Electric.Utils.epgsql_config()
-    |> :epgsql.connect()
+  def connect(conn_opts) do
+    {%{ip_addr: ip_addr}, %{username: username, password: password} = epgsql_conn_opts} =
+      Connectors.pop_extraneous_conn_opts(conn_opts)
+
+    :epgsql.connect(ip_addr, username, password, epgsql_conn_opts)
   end
 
-  @spec with_conn(:epgsql.connect_opts(), fun()) :: term() | {:error, term()}
-  def with_conn(%{host: host, username: username, password: password} = config, fun) do
+  @spec with_conn(Connectors.connection_opts(), fun()) :: term() | {:error, term()}
+  def with_conn(conn_opts, fun) do
     # Best effort capture exit message, expect trap_exit to be set
     wait_exit = fn conn, res ->
       receive do
@@ -30,11 +33,14 @@ defmodule Electric.Replication.Postgres.Client do
       end
     end
 
-    Logger.info("connect: #{inspect(Map.drop(config, [:password]))}")
+    Logger.info("#{inspect(__MODULE__)}.with_conn(#{inspect(sanitize_conn_opts(conn_opts))})")
 
     {:ok, conn} = :epgsql_sock.start_link()
 
-    case :epgsql.connect(conn, host, username, password, Electric.Utils.epgsql_config(config)) do
+    {%{ip_addr: ip_addr}, %{username: username, password: password} = epgsql_conn_opts} =
+      Connectors.pop_extraneous_conn_opts(conn_opts)
+
+    case :epgsql.connect(conn, ip_addr, username, password, epgsql_conn_opts) do
       {:ok, ^conn} ->
         try do
           fun.(conn)
@@ -51,6 +57,15 @@ defmodule Electric.Replication.Postgres.Client do
         close(conn)
         wait_exit.(conn, error)
     end
+  end
+
+  @doc """
+  Format the connection opts for output, hiding the password, etc.
+  """
+  def sanitize_conn_opts(conn_opts) do
+    conn_opts
+    |> Map.put(:password, ~c"******")
+    |> Map.update!(:ip_addr, &:inet.ntoa/1)
   end
 
   @doc """
@@ -75,20 +90,21 @@ defmodule Electric.Replication.Postgres.Client do
       typarray,
       typelem,
       typlen,
-      typtype
+      typtype::text
     FROM
       pg_type t
     JOIN
       pg_namespace ON pg_namespace.oid = typnamespace
     WHERE
-      typtype IN ('b', 'd', 'e')
+      typtype = ANY($1::char[])
       AND nspname IN ('pg_catalog', 'electric', 'public')
     ORDER BY
       t.oid
   """
 
-  def query_oids(conn) do
-    {:ok, _, type_data} = squery(conn, @types_query)
+  def query_oids(conn, kinds \\ [:BASE, :DOMAIN, :ENUM]) do
+    typtypes = Enum.map(kinds, &Electric.Postgres.OidDatabase.PgType.encode_kind/1)
+    {:ok, _, type_data} = :epgsql.equery(conn, @types_query, [typtypes])
     {:ok, type_data}
   end
 
@@ -105,8 +121,7 @@ defmodule Electric.Replication.Postgres.Client do
 
   @spec stop_subscription(connection, String.t()) :: :ok
   def stop_subscription(conn, name) do
-    with {:ok, _, _} <- squery(conn, ~s|ALTER SUBSCRIPTION "#{name}"
-            DISABLE|) do
+    with {:ok, _, _} <- squery(conn, ~s|ALTER SUBSCRIPTION "#{name}" DISABLE|) do
       :ok
     end
   end
@@ -128,9 +143,22 @@ defmodule Electric.Replication.Postgres.Client do
            conn,
            ~s|CREATE_REPLICATION_SLOT "#{slot_name}" LOGICAL pgoutput NOEXPORT_SNAPSHOT|
          ) do
-      {:ok, _, _} -> {:ok, slot_name}
+      {:ok, _, _} ->
+        {:ok, slot_name}
+
       # TODO: Verify that the subscription references the correct publication
-      {:error, {_, _, _, :duplicate_object, _, _}} -> {:ok, slot_name}
+      {:error, {:error, :error, _pg_error_code, :duplicate_object, _, _}} ->
+        {:ok, slot_name}
+
+      {:error,
+       {:error, :error, "55000", :object_not_in_prerequisite_state,
+        "logical decoding requires wal_level >= logical", _c_stacktrace}} ->
+        {:error, :wal_level_not_logical}
+
+      {:error,
+       {:error, :error, "42601", :syntax_error,
+        "syntax error at or near \"CREATE_REPLICATION_SLOT\"" = msg, _c_stacktrace}} ->
+        {:error, {:create_replication_slot_syntax_error, msg}}
     end
   end
 
@@ -159,10 +187,9 @@ defmodule Electric.Replication.Postgres.Client do
       "#{__MODULE__} start_replication: slot: '#{slot}', publication: '#{publication}'"
     )
 
+    slot = String.to_charlist(slot)
     opts = ~c"proto_version '1', publication_names '#{publication}', messages"
-
-    conn
-    |> :epgsql.start_replication(:erlang.binary_to_list(slot), handler, [], ~c"0/0", opts)
+    :epgsql.start_replication(conn, slot, handler, [], ~c"0/0", opts)
   end
 
   @doc """

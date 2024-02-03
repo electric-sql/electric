@@ -22,12 +22,10 @@
 
 [shell user_1_ws1]
     # We expect to receive the transaction on Satellite
-    ?rec \[\d+\]: %Electric.Satellite.SatOpLog\{(?:.*)lsn: "(\d+)"(?:.*)row_data: %Electric\.Satellite\.SatOpRow\{
+    ?rec \[\d+\]: %Electric.Satellite.SatSubsDataBegin\{(?:.*)lsn: "(\d+)"
     [local lsn=$1]
-    ?values: \["00000000-0000-0000-0000-000000000000", "sentinel value", ""\]
-    ?\}
+    ??values: ["00000000-0000-0000-0000-000000000000", "sentinel value", ""]
     ?tags: \["postgres_1@\d{13,16}"\]
-    ?\}
     !TestWsClient.disconnect(conn)
     ?$eprompt
 

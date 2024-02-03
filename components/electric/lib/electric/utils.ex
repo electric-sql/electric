@@ -152,21 +152,24 @@ defmodule Electric.Utils do
 
   Code taken from Ecto: https://github.com/elixir-ecto/ecto/blob/v3.10.2/lib/ecto/uuid.ex#L25
   """
-  @spec validate_uuid(binary()) :: {:ok, String.t()} | :error
-  def validate_uuid(
+  @spec validate_uuid!(binary) :: String.t()
+  def validate_uuid!(
         <<a1, a2, a3, a4, a5, a6, a7, a8, ?-, b1, b2, b3, b4, ?-, c1, c2, c3, c4, ?-, d1, d2, d3,
           d4, ?-, e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12>>
       ) do
     <<c(a1), c(a2), c(a3), c(a4), c(a5), c(a6), c(a7), c(a8), ?-, c(b1), c(b2), c(b3), c(b4), ?-,
       c(c1), c(c2), c(c3), c(c4), ?-, c(d1), c(d2), c(d3), c(d4), ?-, c(e1), c(e2), c(e3), c(e4),
       c(e5), c(e6), c(e7), c(e8), c(e9), c(e10), c(e11), c(e12)>>
-  catch
-    :error -> :error
-  else
-    hex_uuid -> {:ok, hex_uuid}
   end
 
-  def validate_uuid(_), do: :error
+  @spec validate_uuid(binary) :: {:ok, String.t()} | :error
+  def validate_uuid(uuid) do
+    try do
+      {:ok, validate_uuid!(uuid)}
+    rescue
+      FunctionClauseError -> :error
+    end
+  end
 
   @compile {:inline, c: 1}
 
@@ -192,183 +195,12 @@ defmodule Electric.Utils do
   defp c(?d), do: ?d
   defp c(?e), do: ?e
   defp c(?f), do: ?f
-  defp c(_), do: throw(:error)
-
-  def epgsql_config(config) do
-    config
-    |> Map.new()
-    |> Map.put(:nulls, [nil, :null, :undefined])
-    |> maybe_add_inet6()
-  end
-
-  defp maybe_add_inet6(config) do
-    with %{ipv6: true} <- config do
-      config
-      |> Map.delete(:ipv6)
-      |> Map.put(:tcp_opts, [:inet6])
-    end
-  end
 
   @doc """
-  Parse a PostgreSQL URI into a keyword list.
-
-  ## Examples
-
-      iex> parse_postgresql_uri("postgresql://postgres:password@example.com/app-db")
-      [
-        host: "example.com",
-        port: 5432,
-        database: "app-db",
-        username: "postgres",
-        password: "password",
-      ]
-
-      iex> parse_postgresql_uri("postgresql://electric@192.168.111.33:81/__shadow")
-      [
-        host: "192.168.111.33",
-        port: 81,
-        database: "__shadow",
-        username: "electric"
-      ]
-
-      iex> parse_postgresql_uri("postgresql://pg@[2001:db8::1234]:4321")
-      [
-        host: "2001:db8::1234",
-        port: 4321,
-        database: "pg",
-        username: "pg"
-      ]
-
-      iex> parse_postgresql_uri("postgresql://user@localhost:5433/")
-      [
-        host: "localhost",
-        port: 5433,
-        database: "user",
-        username: "user"
-      ]
-
-      iex> parse_postgresql_uri("postgresql://user@localhost:5433/mydb?options=-c%20synchronous_commit%3Doff")
-      [
-        host: "localhost",
-        port: 5433,
-        database: "mydb",
-        username: "user"
-      ]
-
-      iex> parse_postgresql_uri("postgresql://electric@localhost/db?replication=database")
-      [
-        host: "localhost",
-        port: 5432,
-        database: "db",
-        username: "electric",
-        replication: "database"
-      ]
-
-      iex> parse_postgresql_uri("postgresql://electric@localhost/db?replication=off")
-      [
-        host: "localhost",
-        port: 5432,
-        database: "db",
-        username: "electric"
-      ]
-
-  For the `sslmode` keyword, any value but "disable" will result in enabling SSL.
-
-      iex> parse_postgresql_uri("postgres://super_user@localhost:7801/postgres?sslmode=yesplease")
-      [
-        host: "localhost",
-        port: 7801,
-        database: "postgres",
-        username: "super_user",
-        ssl: true
-      ]
+  Output a 2-tuple relation (table) reference as pg-style `"schema"."table"`.
   """
-  @spec parse_postgresql_uri(binary) :: keyword
-  def parse_postgresql_uri(uri_str) do
-    %URI{scheme: scheme, host: host, port: port, path: path, userinfo: userinfo, query: query} =
-      URI.parse(uri_str)
-
-    :ok = assert_valid_scheme!(scheme)
-
-    :ok = assert_valid_host!(host)
-    port = port || 5432
-
-    {username, password} = parse_userinfo!(userinfo)
-
-    database = parse_database(path, username)
-
-    query_params =
-      if query do
-        URI.decode_query(query)
-      else
-        %{}
-      end
-
-    [
-      host: host,
-      port: port,
-      database: database,
-      username: username,
-      password: password
-    ]
-    |> add_replication_param(query_params["replication"])
-    |> add_ssl_param(query_params["sslmode"])
-    |> Enum.reject(fn {_key, val} -> is_nil(val) end)
-  end
-
-  defp assert_valid_scheme!(scheme) when scheme in ["postgres", "postgresql"], do: :ok
-
-  defp assert_valid_scheme!(scheme) do
-    raise "Invalid scheme in DATABASE_URL: #{inspect(scheme)}"
-  end
-
-  defp assert_valid_host!(str) do
-    if is_binary(str) and String.trim(str) != "" do
-      :ok
-    else
-      raise "Missing host in DATABASE_URL"
-    end
-  end
-
-  defp parse_userinfo!(str) do
-    try do
-      true = is_binary(str)
-
-      {username, password} =
-        case String.split(str, ":") do
-          [username] -> {username, nil}
-          [username, password] -> {username, password}
-        end
-
-      false = String.trim(username) == ""
-
-      {username, password}
-    rescue
-      _ -> raise "Invalid username or password in DATABASE_URL: #{inspect(str)}"
-    end
-  end
-
-  defp parse_database(nil, username), do: username
-  defp parse_database("/", username), do: username
-  defp parse_database("/" <> dbname, _username), do: dbname
-
-  defp add_replication_param(params, nil), do: params
-
-  defp add_replication_param(params, str) when is_binary(str) do
-    case String.downcase(str) do
-      off when off in ~w[false off no 0] -> params
-      "database" -> params ++ [replication: "database"]
-      other -> raise "Unsupported replication mode in DATABASE_URL: #{inspect(other)}"
-    end
-  end
-
-  defp add_ssl_param(params, nil), do: params
-
-  defp add_ssl_param(params, str) when is_binary(str) do
-    if String.downcase(str) == "disable" or String.trim(str) == "" do
-      params
-    else
-      params ++ [ssl: true]
-    end
+  @spec inspect_relation({String.t(), String.t()}) :: String.t()
+  def inspect_relation({schema, name}) do
+    "#{inspect(schema)}.#{inspect(name)}"
   end
 end

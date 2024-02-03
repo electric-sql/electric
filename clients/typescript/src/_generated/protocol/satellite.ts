@@ -86,6 +86,12 @@ export interface SatAuthResp {
 export interface SatErrorResp {
   $type: "Electric.Satellite.SatErrorResp";
   errorType: SatErrorResp_ErrorCode;
+  /** lsn of the txn that caused the problem, if available */
+  lsn?:
+    | Uint8Array
+    | undefined;
+  /** human readable explanation of what went wrong */
+  message?: string | undefined;
 }
 
 export enum SatErrorResp_ErrorCode {
@@ -931,7 +937,7 @@ export const SatAuthResp = {
 messageTypeRegistry.set(SatAuthResp.$type, SatAuthResp);
 
 function createBaseSatErrorResp(): SatErrorResp {
-  return { $type: "Electric.Satellite.SatErrorResp", errorType: 0 };
+  return { $type: "Electric.Satellite.SatErrorResp", errorType: 0, lsn: undefined, message: undefined };
 }
 
 export const SatErrorResp = {
@@ -940,6 +946,12 @@ export const SatErrorResp = {
   encode(message: SatErrorResp, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (message.errorType !== 0) {
       writer.uint32(8).int32(message.errorType);
+    }
+    if (message.lsn !== undefined) {
+      writer.uint32(18).bytes(message.lsn);
+    }
+    if (message.message !== undefined) {
+      writer.uint32(26).string(message.message);
     }
     return writer;
   },
@@ -958,6 +970,20 @@ export const SatErrorResp = {
 
           message.errorType = reader.int32() as any;
           continue;
+        case 2:
+          if (tag !== 18) {
+            break;
+          }
+
+          message.lsn = reader.bytes();
+          continue;
+        case 3:
+          if (tag !== 26) {
+            break;
+          }
+
+          message.message = reader.string();
+          continue;
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -974,6 +1000,8 @@ export const SatErrorResp = {
   fromPartial<I extends Exact<DeepPartial<SatErrorResp>, I>>(object: I): SatErrorResp {
     const message = createBaseSatErrorResp();
     message.errorType = object.errorType ?? 0;
+    message.lsn = object.lsn ?? undefined;
+    message.message = object.message ?? undefined;
     return message;
   },
 };

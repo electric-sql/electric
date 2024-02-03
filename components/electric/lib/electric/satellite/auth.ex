@@ -44,33 +44,23 @@ defmodule Electric.Satellite.Auth do
 
   This is a helper function to be used in runtime config.
   """
-  @spec build_provider!(String.t()) :: provider
-  def build_provider!("insecure") do
-    auth_config =
-      [
-        namespace: System.get_env("AUTH_JWT_NAMESPACE")
-      ]
-      |> Auth.Insecure.build_config()
-
-    {Auth.Insecure, auth_config}
+  @spec build_provider(String.t(), Access.t()) ::
+          {:ok, provider} | {:error, :invalid_auth_mode} | {:error, atom, binary}
+  def build_provider("insecure", opts) do
+    auth_config = Auth.Insecure.build_config(opts)
+    {:ok, {Auth.Insecure, auth_config}}
   end
 
-  def build_provider!("secure") do
+  def build_provider("secure", opts) do
     auth_config =
-      [
-        alg: System.get_env("AUTH_JWT_ALG"),
-        key: System.get_env("AUTH_JWT_KEY"),
-        namespace: System.get_env("AUTH_JWT_NAMESPACE"),
-        iss: System.get_env("AUTH_JWT_ISS"),
-        aud: System.get_env("AUTH_JWT_AUD")
-      ]
+      opts
       |> Enum.filter(fn {_, val} -> is_binary(val) and String.trim(val) != "" end)
-      |> Auth.Secure.build_config!()
+      |> Auth.Secure.build_config()
 
-    {Auth.Secure, auth_config}
+    with {:ok, config} <- auth_config do
+      {:ok, {Auth.Secure, config}}
+    end
   end
 
-  def build_prodiver!(other) do
-    raise "Unsupported auth mode: #{inspect(other)}"
-  end
+  def build_provider(_, _), do: {:error, :invalid_auth_mode}
 end

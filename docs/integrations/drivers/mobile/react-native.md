@@ -10,7 +10,7 @@ ElectricSQL supports [React Native](https://reactnative.dev) via the [react-nati
 Add `react-native-sqlite-storage` as a dependency to your app, e.g.:
 
 ```shell
-yarn add react-native-sqlite-storage
+npm install react-native-sqlite-storage
 ```
 
 See the [react-native-sqlite-storage README](https://github.com/andpor/react-native-sqlite-storage#installation) for additional steps -- basically you need

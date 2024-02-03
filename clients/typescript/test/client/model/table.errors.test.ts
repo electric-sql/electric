@@ -1117,4 +1117,92 @@ test.serial(
   }
 )
 
-// TODO: check why we broke some of the regular tests
+test('raw insert query throws error for unsupported unsafe queries', async (t) => {
+  await t.throwsAsync(
+    async () => {
+      await electric.db.rawQuery({
+        sql: "INSERT INTO user (id, name) VALUES (1, 'John Doe')",
+      })
+    },
+    {
+      instanceOf: InvalidArgumentError,
+      message:
+        'Cannot use queries that might alter the store - please use read-only queries',
+    }
+  )
+})
+
+test('raw update query throws error for unsupported unsafe queries', async (t) => {
+  await t.throwsAsync(
+    async () => {
+      await electric.db.rawQuery({
+        sql: "UPDATE user SET name = 'New Name' WHERE id = 1;",
+      })
+    },
+    {
+      instanceOf: InvalidArgumentError,
+      message:
+        'Cannot use queries that might alter the store - please use read-only queries',
+    }
+  )
+})
+
+test('raw delete query throws error for unsupported unsafe queries', async (t) => {
+  await t.throwsAsync(
+    async () => {
+      await electric.db.rawQuery({
+        sql: 'DELETE FROM user WHERE id = 1;',
+      })
+    },
+    {
+      instanceOf: InvalidArgumentError,
+      message:
+        'Cannot use queries that might alter the store - please use read-only queries',
+    }
+  )
+})
+
+test('raw drop table query throws error for unsupported unsafe queries', async (t) => {
+  await t.throwsAsync(
+    async () => {
+      await electric.db.rawQuery({
+        sql: 'DROP TABLE IF EXISTS User',
+      })
+    },
+    {
+      instanceOf: InvalidArgumentError,
+      message:
+        'Cannot use queries that might alter the store - please use read-only queries',
+    }
+  )
+})
+
+test('raw create table query throws error for unsupported unsafe queries', async (t) => {
+  await t.throwsAsync(
+    async () => {
+      await electric.db.rawQuery({
+        sql: "CREATE TABLE IF NOT EXISTS User('id' int PRIMARY KEY, 'name' varchar);",
+      })
+    },
+    {
+      instanceOf: InvalidArgumentError,
+      message:
+        'Cannot use queries that might alter the store - please use read-only queries',
+    }
+  )
+})
+
+test('liveRaw insert query throws error for unsupported unsafe queries', async (t) => {
+  await t.throwsAsync(
+    async () => {
+      await electric.db.liveRawQuery({
+        sql: "INSERT INTO user (id, name) VALUES (1, 'John Doe')",
+      })()
+    },
+    {
+      instanceOf: InvalidArgumentError,
+      message:
+        'Cannot use queries that might alter the store - please use read-only queries',
+    }
+  )
+})

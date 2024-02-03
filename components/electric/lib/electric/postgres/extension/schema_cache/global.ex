@@ -36,18 +36,6 @@ defmodule Electric.Postgres.Extension.SchemaCache.Global do
     fun.(pid)
   end
 
-  def primary_keys({_schema, _name} = relation) do
-    with_instance(fn pid ->
-      SchemaCache.primary_keys(pid, relation)
-    end)
-  end
-
-  def primary_keys(schema, name) when is_binary(schema) and is_binary(name) do
-    with_instance(fn pid ->
-      SchemaCache.primary_keys(pid, schema, name)
-    end)
-  end
-
   def migration_history(version) do
     with_instance(fn pid ->
       SchemaCache.migration_history(pid, version)
@@ -102,15 +90,21 @@ defmodule Electric.Postgres.Extension.SchemaCache.Global do
     end)
   end
 
-  def replicated_internal_tables() do
-    with_instance(fn pid ->
-      SchemaCache.replicated_internal_tables(pid)
-    end)
-  end
-
   def table_electrified?({schema, name}) do
     with_instance(fn pid ->
       SchemaCache.table_electrified?(pid, {schema, name})
+    end)
+  end
+
+  def replicated_relations() do
+    with_instance(fn pid ->
+      SchemaCache.replicated_relations(pid)
+    end)
+  end
+
+  def enums() do
+    with_instance(fn pid ->
+      SchemaCache.enums(pid)
     end)
   end
 end

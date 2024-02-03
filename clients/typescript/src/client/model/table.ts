@@ -29,7 +29,12 @@ import pick from 'lodash.pick'
 import omitBy from 'lodash.omitby'
 import hasOwn from 'object.hasown'
 import * as z from 'zod'
-import { parseTableNames, Row, Statement } from '../../util'
+import {
+  isPotentiallyDangerous,
+  parseTableNames,
+  Row,
+  Statement,
+} from '../../util'
 import { NarrowInclude } from '../input/inputNarrowing'
 import { IShapeManager } from './shapes'
 import { ShapeSubscription } from '../../satellite'
@@ -1541,11 +1546,29 @@ export class Table<
   }
 }
 
-export function raw(adapter: DatabaseAdapter, sql: Statement): Promise<Row[]> {
+export function unsafeExec(
+  adapter: DatabaseAdapter,
+  sql: Statement
+): Promise<Row[]> {
   return adapter.query(sql)
 }
 
-export function liveRaw(
+export function rawQuery(
+  adapter: DatabaseAdapter,
+  sql: Statement
+): Promise<Row[]> {
+  // only allow safe queries from the client
+  if (isPotentiallyDangerous(sql.sql)) {
+    throw new InvalidArgumentError(
+      'Cannot use queries that might alter the store - ' +
+        'please use read-only queries'
+    )
+  }
+
+  return unsafeExec(adapter, sql)
+}
+
+export function liveRawQuery(
   adapter: DatabaseAdapter,
   sql: Statement
 ): LiveResultContext<Row[]> {
@@ -1554,7 +1577,7 @@ export function liveRaw(
     // because this is a raw query so
     // we cannot trust that it queries this table
     const tablenames = parseTableNames(sql.sql)
-    const res = await raw(adapter, sql)
+    const res = await rawQuery(adapter, sql)
     return new LiveResult(res, tablenames)
   })
   result.sourceQuery = sql

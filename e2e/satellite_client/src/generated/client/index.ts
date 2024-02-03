@@ -49,6 +49,8 @@ export const BoolsScalarFieldEnumSchema = z.enum(['id','b']);
 
 export const DatetimesScalarFieldEnumSchema = z.enum(['id','d','t']);
 
+export const EnumsScalarFieldEnumSchema = z.enum(['id','c']);
+
 export const FloatsScalarFieldEnumSchema = z.enum(['id','f4','f8']);
 
 export const IntsScalarFieldEnumSchema = z.enum(['id','i2','i4','i8']);
@@ -72,6 +74,11 @@ export const TimestampsScalarFieldEnumSchema = z.enum(['id','created_at','update
 export const TransactionIsolationLevelSchema = z.enum(['ReadUncommitted','ReadCommitted','RepeatableRead','Serializable']);
 
 export const UuidsScalarFieldEnumSchema = z.enum(['id']);
+
+export const ColorSchema = z.enum(['RED','GREEN','BLUE']);
+
+export type ColorType = `${z.infer<typeof ColorSchema>}`
+
 /////////////////////////////////////////
 // MODELS
 /////////////////////////////////////////
@@ -186,6 +193,17 @@ export const JsonsSchema = z.object({
 export type Jsons = z.infer<typeof JsonsSchema>
 
 /////////////////////////////////////////
+// ENUMS SCHEMA
+/////////////////////////////////////////
+
+export const EnumsSchema = z.object({
+  c: ColorSchema.nullish(),
+  id: z.string(),
+})
+
+export type Enums = z.infer<typeof EnumsSchema>
+
+/////////////////////////////////////////
 // SELECT & INCLUDE
 /////////////////////////////////////////
 
@@ -289,6 +307,14 @@ export const JsonsSelectSchema: z.ZodType<Prisma.JsonsSelect> = z.object({
   id: z.boolean().optional(),
   js: z.boolean().optional(),
   jsb: z.boolean().optional(),
+}).strict()
+
+// ENUMS
+//------------------------------------------------------
+
+export const EnumsSelectSchema: z.ZodType<Prisma.EnumsSelect> = z.object({
+  id: z.boolean().optional(),
+  c: z.boolean().optional(),
 }).strict()
 
 
@@ -642,6 +668,39 @@ export const JsonsScalarWhereWithAggregatesInputSchema: z.ZodType<Prisma.JsonsSc
   id: z.union([ z.lazy(() => StringWithAggregatesFilterSchema),z.string() ]).optional(),
   js: z.lazy(() => JsonNullableWithAggregatesFilterSchema).optional(),
   jsb: z.lazy(() => JsonNullableWithAggregatesFilterSchema).optional()
+}).strict();
+
+export const EnumsWhereInputSchema: z.ZodType<Prisma.EnumsWhereInput> = z.object({
+  AND: z.union([ z.lazy(() => EnumsWhereInputSchema),z.lazy(() => EnumsWhereInputSchema).array() ]).optional(),
+  OR: z.lazy(() => EnumsWhereInputSchema).array().optional(),
+  NOT: z.union([ z.lazy(() => EnumsWhereInputSchema),z.lazy(() => EnumsWhereInputSchema).array() ]).optional(),
+  id: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
+  c: z.union([ z.lazy(() => EnumColorNullableFilterSchema),z.lazy(() => ColorSchema) ]).optional().nullable(),
+}).strict();
+
+export const EnumsOrderByWithRelationInputSchema: z.ZodType<Prisma.EnumsOrderByWithRelationInput> = z.object({
+  id: z.lazy(() => SortOrderSchema).optional(),
+  c: z.lazy(() => SortOrderSchema).optional()
+}).strict();
+
+export const EnumsWhereUniqueInputSchema: z.ZodType<Prisma.EnumsWhereUniqueInput> = z.object({
+  id: z.string().optional()
+}).strict();
+
+export const EnumsOrderByWithAggregationInputSchema: z.ZodType<Prisma.EnumsOrderByWithAggregationInput> = z.object({
+  id: z.lazy(() => SortOrderSchema).optional(),
+  c: z.lazy(() => SortOrderSchema).optional(),
+  _count: z.lazy(() => EnumsCountOrderByAggregateInputSchema).optional(),
+  _max: z.lazy(() => EnumsMaxOrderByAggregateInputSchema).optional(),
+  _min: z.lazy(() => EnumsMinOrderByAggregateInputSchema).optional()
+}).strict();
+
+export const EnumsScalarWhereWithAggregatesInputSchema: z.ZodType<Prisma.EnumsScalarWhereWithAggregatesInput> = z.object({
+  AND: z.union([ z.lazy(() => EnumsScalarWhereWithAggregatesInputSchema),z.lazy(() => EnumsScalarWhereWithAggregatesInputSchema).array() ]).optional(),
+  OR: z.lazy(() => EnumsScalarWhereWithAggregatesInputSchema).array().optional(),
+  NOT: z.union([ z.lazy(() => EnumsScalarWhereWithAggregatesInputSchema),z.lazy(() => EnumsScalarWhereWithAggregatesInputSchema).array() ]).optional(),
+  id: z.union([ z.lazy(() => StringWithAggregatesFilterSchema),z.string() ]).optional(),
+  c: z.union([ z.lazy(() => EnumColorNullableWithAggregatesFilterSchema),z.lazy(() => ColorSchema) ]).optional().nullable(),
 }).strict();
 
 export const ItemsCreateInputSchema: z.ZodType<Prisma.ItemsCreateInput> = z.object({
@@ -1030,6 +1089,41 @@ export const JsonsUncheckedUpdateManyInputSchema: z.ZodType<Prisma.JsonsUnchecke
   id: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
   js: z.union([ z.lazy(() => NullableJsonNullValueInputSchema),InputJsonValue ]).optional(),
   jsb: z.union([ z.lazy(() => NullableJsonNullValueInputSchema),InputJsonValue ]).optional(),
+}).strict();
+
+export const EnumsCreateInputSchema: z.ZodType<Prisma.EnumsCreateInput> = z.object({
+  id: z.string(),
+  c: z.lazy(() => ColorSchema).optional().nullable()
+}).strict();
+
+export const EnumsUncheckedCreateInputSchema: z.ZodType<Prisma.EnumsUncheckedCreateInput> = z.object({
+  id: z.string(),
+  c: z.lazy(() => ColorSchema).optional().nullable()
+}).strict();
+
+export const EnumsUpdateInputSchema: z.ZodType<Prisma.EnumsUpdateInput> = z.object({
+  id: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  c: z.union([ z.lazy(() => ColorSchema),z.lazy(() => NullableEnumColorFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+}).strict();
+
+export const EnumsUncheckedUpdateInputSchema: z.ZodType<Prisma.EnumsUncheckedUpdateInput> = z.object({
+  id: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  c: z.union([ z.lazy(() => ColorSchema),z.lazy(() => NullableEnumColorFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+}).strict();
+
+export const EnumsCreateManyInputSchema: z.ZodType<Prisma.EnumsCreateManyInput> = z.object({
+  id: z.string(),
+  c: z.lazy(() => ColorSchema).optional().nullable()
+}).strict();
+
+export const EnumsUpdateManyMutationInputSchema: z.ZodType<Prisma.EnumsUpdateManyMutationInput> = z.object({
+  id: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  c: z.union([ z.lazy(() => ColorSchema),z.lazy(() => NullableEnumColorFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+}).strict();
+
+export const EnumsUncheckedUpdateManyInputSchema: z.ZodType<Prisma.EnumsUncheckedUpdateManyInput> = z.object({
+  id: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  c: z.union([ z.lazy(() => ColorSchema),z.lazy(() => NullableEnumColorFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 }).strict();
 
 export const StringFilterSchema: z.ZodType<Prisma.StringFilter> = z.object({
@@ -1482,6 +1576,38 @@ export const JsonNullableWithAggregatesFilterSchema: z.ZodType<Prisma.JsonNullab
   _max: z.lazy(() => NestedJsonNullableFilterSchema).optional()
 }).strict();
 
+export const EnumColorNullableFilterSchema: z.ZodType<Prisma.EnumColorNullableFilter> = z.object({
+  equals: z.lazy(() => ColorSchema).optional().nullable(),
+  in: z.union([ z.lazy(() => ColorSchema).array(),z.lazy(() => ColorSchema) ]).optional().nullable(),
+  notIn: z.union([ z.lazy(() => ColorSchema).array(),z.lazy(() => ColorSchema) ]).optional().nullable(),
+  not: z.union([ z.lazy(() => ColorSchema),z.lazy(() => NestedEnumColorNullableFilterSchema) ]).optional().nullable(),
+}).strict();
+
+export const EnumsCountOrderByAggregateInputSchema: z.ZodType<Prisma.EnumsCountOrderByAggregateInput> = z.object({
+  id: z.lazy(() => SortOrderSchema).optional(),
+  c: z.lazy(() => SortOrderSchema).optional()
+}).strict();
+
+export const EnumsMaxOrderByAggregateInputSchema: z.ZodType<Prisma.EnumsMaxOrderByAggregateInput> = z.object({
+  id: z.lazy(() => SortOrderSchema).optional(),
+  c: z.lazy(() => SortOrderSchema).optional()
+}).strict();
+
+export const EnumsMinOrderByAggregateInputSchema: z.ZodType<Prisma.EnumsMinOrderByAggregateInput> = z.object({
+  id: z.lazy(() => SortOrderSchema).optional(),
+  c: z.lazy(() => SortOrderSchema).optional()
+}).strict();
+
+export const EnumColorNullableWithAggregatesFilterSchema: z.ZodType<Prisma.EnumColorNullableWithAggregatesFilter> = z.object({
+  equals: z.lazy(() => ColorSchema).optional().nullable(),
+  in: z.union([ z.lazy(() => ColorSchema).array(),z.lazy(() => ColorSchema) ]).optional().nullable(),
+  notIn: z.union([ z.lazy(() => ColorSchema).array(),z.lazy(() => ColorSchema) ]).optional().nullable(),
+  not: z.union([ z.lazy(() => ColorSchema),z.lazy(() => NestedEnumColorNullableWithAggregatesFilterSchema) ]).optional().nullable(),
+  _count: z.lazy(() => NestedIntNullableFilterSchema).optional(),
+  _min: z.lazy(() => NestedEnumColorNullableFilterSchema).optional(),
+  _max: z.lazy(() => NestedEnumColorNullableFilterSchema).optional()
+}).strict();
+
 export const OtherItemsCreateNestedOneWithoutItemsInputSchema: z.ZodType<Prisma.OtherItemsCreateNestedOneWithoutItemsInput> = z.object({
   create: z.union([ z.lazy(() => OtherItemsCreateWithoutItemsInputSchema),z.lazy(() => OtherItemsUncheckedCreateWithoutItemsInputSchema) ]).optional(),
   connectOrCreate: z.lazy(() => OtherItemsCreateOrConnectWithoutItemsInputSchema).optional(),
@@ -1568,6 +1694,10 @@ export const NullableFloatFieldUpdateOperationsInputSchema: z.ZodType<Prisma.Nul
   decrement: z.number().optional(),
   multiply: z.number().optional(),
   divide: z.number().optional()
+}).strict();
+
+export const NullableEnumColorFieldUpdateOperationsInputSchema: z.ZodType<Prisma.NullableEnumColorFieldUpdateOperationsInput> = z.object({
+  set: z.lazy(() => ColorSchema).optional().nullable()
 }).strict();
 
 export const NestedStringFilterSchema: z.ZodType<Prisma.NestedStringFilter> = z.object({
@@ -1801,6 +1931,23 @@ export const NestedJsonNullableFilterSchema: z.ZodType<Prisma.NestedJsonNullable
   gt: InputJsonValue.optional(),
   gte: InputJsonValue.optional(),
   not: z.union([ InputJsonValue,z.lazy(() => JsonNullValueFilterSchema) ]).optional(),
+}).strict();
+
+export const NestedEnumColorNullableFilterSchema: z.ZodType<Prisma.NestedEnumColorNullableFilter> = z.object({
+  equals: z.lazy(() => ColorSchema).optional().nullable(),
+  in: z.union([ z.lazy(() => ColorSchema).array(),z.lazy(() => ColorSchema) ]).optional().nullable(),
+  notIn: z.union([ z.lazy(() => ColorSchema).array(),z.lazy(() => ColorSchema) ]).optional().nullable(),
+  not: z.union([ z.lazy(() => ColorSchema),z.lazy(() => NestedEnumColorNullableFilterSchema) ]).optional().nullable(),
+}).strict();
+
+export const NestedEnumColorNullableWithAggregatesFilterSchema: z.ZodType<Prisma.NestedEnumColorNullableWithAggregatesFilter> = z.object({
+  equals: z.lazy(() => ColorSchema).optional().nullable(),
+  in: z.union([ z.lazy(() => ColorSchema).array(),z.lazy(() => ColorSchema) ]).optional().nullable(),
+  notIn: z.union([ z.lazy(() => ColorSchema).array(),z.lazy(() => ColorSchema) ]).optional().nullable(),
+  not: z.union([ z.lazy(() => ColorSchema),z.lazy(() => NestedEnumColorNullableWithAggregatesFilterSchema) ]).optional().nullable(),
+  _count: z.lazy(() => NestedIntNullableFilterSchema).optional(),
+  _min: z.lazy(() => NestedEnumColorNullableFilterSchema).optional(),
+  _max: z.lazy(() => NestedEnumColorNullableFilterSchema).optional()
 }).strict();
 
 export const OtherItemsCreateWithoutItemsInputSchema: z.ZodType<Prisma.OtherItemsCreateWithoutItemsInput> = z.object({
@@ -2406,6 +2553,63 @@ export const JsonsFindUniqueOrThrowArgsSchema: z.ZodType<Prisma.JsonsFindUniqueO
   where: JsonsWhereUniqueInputSchema,
 }).strict()
 
+export const EnumsFindFirstArgsSchema: z.ZodType<Prisma.EnumsFindFirstArgs> = z.object({
+  select: EnumsSelectSchema.optional(),
+  where: EnumsWhereInputSchema.optional(),
+  orderBy: z.union([ EnumsOrderByWithRelationInputSchema.array(),EnumsOrderByWithRelationInputSchema ]).optional(),
+  cursor: EnumsWhereUniqueInputSchema.optional(),
+  take: z.number().optional(),
+  skip: z.number().optional(),
+  distinct: EnumsScalarFieldEnumSchema.array().optional(),
+}).strict()
+
+export const EnumsFindFirstOrThrowArgsSchema: z.ZodType<Prisma.EnumsFindFirstOrThrowArgs> = z.object({
+  select: EnumsSelectSchema.optional(),
+  where: EnumsWhereInputSchema.optional(),
+  orderBy: z.union([ EnumsOrderByWithRelationInputSchema.array(),EnumsOrderByWithRelationInputSchema ]).optional(),
+  cursor: EnumsWhereUniqueInputSchema.optional(),
+  take: z.number().optional(),
+  skip: z.number().optional(),
+  distinct: EnumsScalarFieldEnumSchema.array().optional(),
+}).strict()
+
+export const EnumsFindManyArgsSchema: z.ZodType<Prisma.EnumsFindManyArgs> = z.object({
+  select: EnumsSelectSchema.optional(),
+  where: EnumsWhereInputSchema.optional(),
+  orderBy: z.union([ EnumsOrderByWithRelationInputSchema.array(),EnumsOrderByWithRelationInputSchema ]).optional(),
+  cursor: EnumsWhereUniqueInputSchema.optional(),
+  take: z.number().optional(),
+  skip: z.number().optional(),
+  distinct: EnumsScalarFieldEnumSchema.array().optional(),
+}).strict()
+
+export const EnumsAggregateArgsSchema: z.ZodType<Prisma.EnumsAggregateArgs> = z.object({
+  where: EnumsWhereInputSchema.optional(),
+  orderBy: z.union([ EnumsOrderByWithRelationInputSchema.array(),EnumsOrderByWithRelationInputSchema ]).optional(),
+  cursor: EnumsWhereUniqueInputSchema.optional(),
+  take: z.number().optional(),
+  skip: z.number().optional(),
+}).strict()
+
+export const EnumsGroupByArgsSchema: z.ZodType<Prisma.EnumsGroupByArgs> = z.object({
+  where: EnumsWhereInputSchema.optional(),
+  orderBy: z.union([ EnumsOrderByWithAggregationInputSchema.array(),EnumsOrderByWithAggregationInputSchema ]).optional(),
+  by: EnumsScalarFieldEnumSchema.array(),
+  having: EnumsScalarWhereWithAggregatesInputSchema.optional(),
+  take: z.number().optional(),
+  skip: z.number().optional(),
+}).strict()
+
+export const EnumsFindUniqueArgsSchema: z.ZodType<Prisma.EnumsFindUniqueArgs> = z.object({
+  select: EnumsSelectSchema.optional(),
+  where: EnumsWhereUniqueInputSchema,
+}).strict()
+
+export const EnumsFindUniqueOrThrowArgsSchema: z.ZodType<Prisma.EnumsFindUniqueOrThrowArgs> = z.object({
+  select: EnumsSelectSchema.optional(),
+  where: EnumsWhereUniqueInputSchema,
+}).strict()
+
 export const ItemsCreateArgsSchema: z.ZodType<Prisma.ItemsCreateArgs> = z.object({
   select: ItemsSelectSchema.optional(),
   include: ItemsIncludeSchema.optional(),
@@ -2747,6 +2951,43 @@ export const JsonsDeleteManyArgsSchema: z.ZodType<Prisma.JsonsDeleteManyArgs> = 
   where: JsonsWhereInputSchema.optional(),
 }).strict()
 
+export const EnumsCreateArgsSchema: z.ZodType<Prisma.EnumsCreateArgs> = z.object({
+  select: EnumsSelectSchema.optional(),
+  data: z.union([ EnumsCreateInputSchema,EnumsUncheckedCreateInputSchema ]),
+}).strict()
+
+export const EnumsUpsertArgsSchema: z.ZodType<Prisma.EnumsUpsertArgs> = z.object({
+  select: EnumsSelectSchema.optional(),
+  where: EnumsWhereUniqueInputSchema,
+  create: z.union([ EnumsCreateInputSchema,EnumsUncheckedCreateInputSchema ]),
+  update: z.union([ EnumsUpdateInputSchema,EnumsUncheckedUpdateInputSchema ]),
+}).strict()
+
+export const EnumsCreateManyArgsSchema: z.ZodType<Prisma.EnumsCreateManyArgs> = z.object({
+  data: z.union([ EnumsCreateManyInputSchema,EnumsCreateManyInputSchema.array() ]),
+  skipDuplicates: z.boolean().optional(),
+}).strict()
+
+export const EnumsDeleteArgsSchema: z.ZodType<Prisma.EnumsDeleteArgs> = z.object({
+  select: EnumsSelectSchema.optional(),
+  where: EnumsWhereUniqueInputSchema,
+}).strict()
+
+export const EnumsUpdateArgsSchema: z.ZodType<Prisma.EnumsUpdateArgs> = z.object({
+  select: EnumsSelectSchema.optional(),
+  data: z.union([ EnumsUpdateInputSchema,EnumsUncheckedUpdateInputSchema ]),
+  where: EnumsWhereUniqueInputSchema,
+}).strict()
+
+export const EnumsUpdateManyArgsSchema: z.ZodType<Prisma.EnumsUpdateManyArgs> = z.object({
+  data: z.union([ EnumsUpdateManyMutationInputSchema,EnumsUncheckedUpdateManyInputSchema ]),
+  where: EnumsWhereInputSchema.optional(),
+}).strict()
+
+export const EnumsDeleteManyArgsSchema: z.ZodType<Prisma.EnumsDeleteManyArgs> = z.object({
+  where: EnumsWhereInputSchema.optional(),
+}).strict()
+
 interface ItemsGetPayload extends HKT {
   readonly _A?: boolean | null | undefined | Prisma.ItemsArgs
   readonly type: Prisma.ItemsGetPayload<this['_A']>
@@ -2790,6 +3031,11 @@ interface FloatsGetPayload extends HKT {
 interface JsonsGetPayload extends HKT {
   readonly _A?: boolean | null | undefined | Prisma.JsonsArgs
   readonly type: Prisma.JsonsGetPayload<this['_A']>
+}
+
+interface EnumsGetPayload extends HKT {
+  readonly _A?: boolean | null | undefined | Prisma.EnumsArgs
+  readonly type: Prisma.EnumsGetPayload<this['_A']>
 }
 
 export const tableSchemas = {
@@ -3167,6 +3413,43 @@ export const tableSchemas = {
     Prisma.JsonsFindFirstArgs['orderBy'],
     Prisma.JsonsScalarFieldEnum,
     JsonsGetPayload
+  >,
+  enums: {
+    fields: new Map([
+      [
+        "id",
+        "TEXT"
+      ],
+      [
+        "c",
+        "TEXT"
+      ]
+    ]),
+    relations: [
+    ],
+    modelSchema: (EnumsCreateInputSchema as any)
+      .partial()
+      .or((EnumsUncheckedCreateInputSchema as any).partial()),
+    createSchema: EnumsCreateArgsSchema,
+    createManySchema: EnumsCreateManyArgsSchema,
+    findUniqueSchema: EnumsFindUniqueArgsSchema,
+    findSchema: EnumsFindFirstArgsSchema,
+    updateSchema: EnumsUpdateArgsSchema,
+    updateManySchema: EnumsUpdateManyArgsSchema,
+    upsertSchema: EnumsUpsertArgsSchema,
+    deleteSchema: EnumsDeleteArgsSchema,
+    deleteManySchema: EnumsDeleteManyArgsSchema
+  } as TableSchema<
+    z.infer<typeof EnumsCreateInputSchema>,
+    Prisma.EnumsCreateArgs['data'],
+    Prisma.EnumsUpdateArgs['data'],
+    Prisma.EnumsFindFirstArgs['select'],
+    Prisma.EnumsFindFirstArgs['where'],
+    Prisma.EnumsFindUniqueArgs['where'],
+    never,
+    Prisma.EnumsFindFirstArgs['orderBy'],
+    Prisma.EnumsScalarFieldEnum,
+    EnumsGetPayload
   >,
 }
 

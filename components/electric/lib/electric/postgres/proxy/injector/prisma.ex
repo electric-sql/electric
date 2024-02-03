@@ -22,6 +22,10 @@ defmodule Electric.Postgres.Proxy.Injector.Prisma do
   defimpl Operation do
     alias Electric.Postgres.Extension.SchemaLoader
 
+    def upstream_connection(_prisma, connector_config) do
+      connector_config
+    end
+
     def activate(prisma, state, send) do
       {prisma, state, send}
     end
@@ -129,10 +133,10 @@ defmodule Electric.Postgres.Proxy.Injector.Prisma do
         {:ok, {ps, binds}} ->
           {:ok, query_module} = Map.fetch(prisma.prepared_statements, ps)
           # TODO: allow for introspecing a specific version of the schema
-          {:ok, _version, schema} = schema(state)
+          {:ok, schema_version} = schema(state)
 
           data_rows =
-            query_module.data_rows(binds, schema, prisma.config)
+            query_module.data_rows(binds, schema_version, prisma.config)
             |> Enum.map(&%M.DataRow{fields: &1})
 
           {

@@ -27,41 +27,58 @@ CREATE TABLE comments (
 
 This works even when making writes locally in an offline database. See [Introduction -> Conflict-free offline -> Preserving data integrity](../../intro/offline.md#preserving-data-integrity) and the Rich-CRDT post on [Compensations](/blog/2022/05/03/introducing-rich-crdts#compensations) for more information.
 
+:::info
+To preserve referential integrity Electric prevents [updates to a table's primary keys](./validation.md#immutable-primary-keys).
+:::
+
+:::caution
+Electric currently does not allow adding a new foreign key column with `ALTER TABLE ... ADD COLUMN` to an electrified table. This limitation will be removed in a future release.
+:::
+
 ### Not-null constraints
 
-ElectricSQL supports [not-null constraints](https://www.postgresql.org/docs/current/ddl-constraints.html#id-1.5.4.6.6) as long as the constraint is defined when creating the column.
-
-I.e.: the not-null constraint must be defined in an [additive migration](./migrations.md#limitations). So the following is supported because creating the table with new columns is *additive*:
+ElectricSQL supports [not-null constraints](https://www.postgresql.org/docs/current/ddl-constraints.html#id-1.5.4.6.6) as long as the constraint is defined when creating the table or before the table is electrified.
 
 ```sql
 CREATE TABLE items (
-  -- implicit non null constraint
+  -- Implicit non null constraint
   id UUID PRIMARY KEY
 
-  -- explicit non null constraint
+  -- Explicit non null constraint
   foo TEXT NOT NULL
 
-  -- can be null
+  -- Can be null
   bar TEXT
 )
 ```
 
-Adding a column with a not-null constraint is supported because it's *additive*:
+Adding a column with a not-null constraint is supported, but **not advisable** until default values are implemented:
 
 ```sql
+  -- Unsafe additive migration, requires the table to be empty
 ALTER TABLE items
   ADD COLUMN baz TEXT NOT NULL;
+
+  -- Safe additive migration, but default values are not yet supported
+ALTER TABLE items
+  ADD COLUMN fie TEXT NOT NULL DEFAULT 'some_value';
 ```
+
+Adding a column with not-null constraints after the table is electrified is *technically* possible because it's an [additive migration](./migrations.md#limitations) as long as the table is empty or a default value is provided.
+
+ElectricSQL does not yet support default values and you can only consider the table empty if you can *guarantee* that no new rows are in-flight, pending locally on a client or will be added by a client not yet updated.
+
+This is not a guarantee that can normally be made and without it, writes that were accepted locally with implicit null values in the new column would need to be rejected, which would violate the [finality of local writes](../../reference/architecture.md#local-writes).
 
 Constraining an existing column by adding a not-null constraint to it is **not supported**:
 
 ```sql
--- Not supported
 ALTER TABLE items
+  -- Not additive, not supported
   ALTER COLUMN bar TEXT NOT NULL;
 ```
 
-This is not supported because it may invalidate concurrent, in-flight operations. Specifically, writes that were accepted locally with null values would need to be rejected, which would violate the [finality of local writes](../../reference/architecture.md#local-writes).
+This type of migration is not supported since it is not *additive*. The same reasoning about *finality of local writes* applies here.
 
 ## Unsupported
 

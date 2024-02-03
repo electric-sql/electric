@@ -309,6 +309,11 @@ defmodule Electric.Postgres.Dialect.SQLite do
     @types[:text] <> sized(size)
   end
 
+  # Catch-all for user-defined enums or other custom types
+  def do_map_type(_t, size) do
+    @types[:text] <> sized(size)
+  end
+
   defp sized([]), do: ""
 
   defp sized(s),

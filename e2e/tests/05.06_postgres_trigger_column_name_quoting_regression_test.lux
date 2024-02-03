@@ -56,7 +56,7 @@
       %Electric.Replication.Changes.UpdatedRecord\{relation: \{"public", "camelCase"\}, \
                                                    old_record: %\{"id" => "1", "userId" => nil\}, \
                                                    record: %\{"id" => "1", "userId" => "test_user"\}, \
-                                                   tags: \["postgres_1@\d+", "client_1_1@\d+"\]\}
+                                                   tags: \["postgres_1@\d+", "client_1_1@\d+"\]
 
 [shell pg_1]
     [invoke wait-for "SELECT * FROM public.\"camelCase\";" "test_user" 10 ${psql}]

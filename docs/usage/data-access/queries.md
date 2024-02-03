@@ -17,7 +17,7 @@ See <DocPageLink path="api/clients/typescript" /> for more details on the functi
 
 Read data using the [`findUnique`](../../api/clients/typescript.md#findUnique), [`findFirst`](../../api/clients/typescript.md#findFirst) and [`findMany`](../../api/clients/typescript.md#findMany) functions.
 
-For example to get a project by unique ID:
+For example, to get a project by unique ID:
 
 ```ts
 const result = await db.projects.findUnique({
@@ -237,7 +237,7 @@ If the higher-level client API doesn't support the SQL features that you need fo
 To run a static query (or just execute SQL):
 
 ```ts
-const projects = db.raw({
+const projects = db.rawQuery({
   sql: 'select * from projects where id = ?',
   bindParams: ['abcd']
 })
@@ -246,7 +246,7 @@ const projects = db.raw({
 To run a live query that supports arbitrary SQL whilst still working automatically with the reactivity machinery to pick up on live changes:
 
 ```ts
-const liveQuery = db.liveRaw({
+const liveQuery = db.liveRawQuery({
   sql: 'select * from projects where id = ?',
   bindParams: ['abcd']
 })
@@ -259,7 +259,7 @@ For example:
 const MyComponent = () => {
   const { db } = useElectric()!
   const { results } = useLiveQuery(
-    db.liveRaw({
+    db.liveRawQuery({
       sql: 'select * from projects where status = ?',
       bindParams: ['active']
     })

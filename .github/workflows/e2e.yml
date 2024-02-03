@@ -6,16 +6,16 @@ on:
   pull_request:
     paths-ignore:
       # Root files
-      - '*'
-      - '!pnpm-lock.yaml'
+      - "*"
+      - "!pnpm-lock.yaml"
       # CI files not related to GH actions
-      - '.buildkite/**'
-      - '**/README.md'
-      - 'docs/**'
+      - ".buildkite/**"
+      - "**/README.md"
+      - "docs/**"
 
 env:
-  OTP_VERSION: "25.3"
-  ELIXIR_VERSION: "1.15"
+  OTP_VERSION: ${{ vars.OTP_VERSION }}
+  ELIXIR_VERSION: ${{ vars.ELIXIR_VERSION }}
 
 concurrency:
   group: e2e-${{ github.ref }}
@@ -25,11 +25,15 @@ jobs:
   e2e_tests:
     name: E2E tests
     runs-on: electric-e2e-8-32
+    strategy:
+      matrix:
+        write_to_pg_mode: [logical_replication, direct_writes]
     defaults:
       run:
         working-directory: e2e
     env:
       BUILDKITE_ANALYTICS_TOKEN: ${{ secrets.BUILDKITE_TEST_ANALYTICS_E2E }}
+      ELECTRIC_WRITE_TO_PG_MODE: ${{ matrix.write_to_pg_mode }}
     steps:
       - uses: actions/checkout@v3
         with:

@@ -1,0 +1,33 @@
+-- Validate each column of the table that's being electrified and aborts electrification if any column has
+-- a DEFAULT clause.
+--
+-- This implementation mirrors the Electric.Postgres.Proxy.QueryAnalyser.Impl.validate_column_constraint() function.
+--
+-- It is important that this implementation and the one in validate_column_constraint() behave the same to
+-- ensure consistent handling of columns both when a table is first electrified and when a new column is added to an
+-- already electrified table.
+
+CREATE OR REPLACE PROCEDURE <%= schema() %>.__validate_table_column_defaults(table_oid regclass)
+SECURITY DEFINER AS $function$
+DECLARE
+    _col_name text;
+    _col_has_default boolean;
+    _invalid_cols text[];
+BEGIN
+    FOR _col_name, _col_has_default IN
+        SELECT attname, atthasdef
+            FROM pg_attribute
+            WHERE attrelid = table_oid AND attnum > 0 AND NOT attisdropped
+            ORDER BY attnum
+    LOOP
+        IF _col_has_default THEN
+            _invalid_cols = array_append(_invalid_cols, format('%I', _col_name));
+        END IF;
+    END LOOP;
+
+    IF _invalid_cols IS NOT NULL THEN
+        RAISE EXCEPTION E'Cannot electrify % because some of its columns have DEFAULT expressions which are not currently supported by Electric:\n  %',
+                        table_oid::regclass, array_to_string(_invalid_cols, E'\n  ');
+    END IF;
+END;
+$function$ LANGUAGE PLPGSQL;

@@ -2,6 +2,7 @@ defmodule Electric do
   @moduledoc false
 
   @type reg_name :: {:via, :gproc, {:n, :l, term()}}
+  @type write_to_pg_mode :: :logical_replication | :direct_writes
 
   @doc """
   Register process with the given name
@@ -99,4 +100,10 @@ defmodule Electric do
   def vsn do
     @current_vsn
   end
+
+  @spec write_to_pg_mode :: write_to_pg_mode
+  def write_to_pg_mode, do: Application.fetch_env!(:electric, :write_to_pg_mode)
+
+  @spec max_clock_drift_seconds :: non_neg_integer
+  def max_clock_drift_seconds, do: Application.fetch_env!(:electric, :max_clock_drift_seconds)
 end

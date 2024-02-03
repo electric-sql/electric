@@ -43,7 +43,6 @@ import {
 } from '../util/proto'
 import { PROTOCOL_VSN, Socket, SocketFactory } from '../sockets/index'
 import _m0 from 'protobufjs/minimal.js'
-import { EventEmitter } from 'events'
 import {
   AuthResponse,
   DataChangeType,
@@ -62,7 +61,6 @@ import {
   StopReplicationResponse,
   ErrorCallback,
   RelationCallback,
-  IncomingTransactionCallback,
   OutboundStartedCallback,
   TransactionCallback,
 } from '../util/types'
@@ -93,6 +91,7 @@ import { RPC, rpcRespond, withRpcRequestLogging } from './RPC'
 import { Mutex } from 'async-mutex'
 import { DbSchema } from '../client/model'
 import { PgBasicType, PgDateType, PgType } from '../client/conversions/types'
+import { AsyncEventEmitter } from '../util'
 
 type IncomingHandler = (msg: any) => void
 
@@ -105,38 +104,18 @@ const subscriptionError = [
   SatelliteErrorCode.SHAPE_DELIVERY_ERROR,
 ]
 
-interface SafeEventEmitter {
-  on(event: 'error', callback: ErrorCallback): this
-  on(event: 'relation', callback: RelationCallback): this
-  on(event: 'transaction', callback: IncomingTransactionCallback): this
-  on(event: 'outbound_started', callback: OutboundStartedCallback): this
-
-  emit(event: 'error', error: SatelliteError): boolean
-  emit(event: 'relation', relation: Relation): boolean
-  emit(
-    event: 'transaction',
-    transaction: Transaction,
-    ackCb: () => void
-  ): boolean
-  emit(event: 'outbound_started', lsn: LSN): boolean
-
-  removeListener(event: 'error', callback: ErrorCallback): void
-  removeListener(event: 'relation', callback: RelationCallback): void
-  removeListener(event: 'transaction', callback: TransactionCallback): void
-  removeListener(
-    event: 'outbound_started',
-    callback: OutboundStartedCallback
-  ): void
-
-  removeAllListeners(): void
-
-  listenerCount(event: 'error'): number
+type Events = {
+  error: (error: SatelliteError) => void
+  relation: (relation: Relation) => void
+  transaction: (transaction: Transaction, ackCb: () => void) => Promise<void>
+  outbound_started: () => void
 }
+type EventEmitter = AsyncEventEmitter<Events>
 
 export class SatelliteClient implements Client {
   private opts: Required<SatelliteClientOpts>
 
-  private emitter: SafeEventEmitter
+  private emitter: EventEmitter
 
   private socketFactory: SocketFactory
   private socket?: Socket
@@ -184,7 +163,7 @@ export class SatelliteClient implements Client {
     socketFactory: SocketFactory,
     opts: SatelliteClientOpts
   ) {
-    this.emitter = new EventEmitter() as SafeEventEmitter
+    this.emitter = new AsyncEventEmitter<Events>()
 
     this.opts = { ...satelliteClientDefaults, ...opts }
     this.socketFactory = socketFactory
@@ -256,14 +235,14 @@ export class SatelliteClient implements Client {
               `socket error but no listener is attached: ${error.message}`
             )
           }
-          this.emitter.emit('error', error)
+          this.emitter.enqueueEmit('error', error)
         })
         this.socket.onClose(() => {
           this.disconnect()
           if (this.emitter.listenerCount('error') === 0) {
             Log.error(`socket closed but no listener is attached`)
           }
-          this.emitter.emit(
+          this.emitter.enqueueEmit(
             'error',
             new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket closed')
           )
@@ -698,10 +677,10 @@ export class SatelliteClient implements Client {
         { leading: true, trailing: true }
       )
 
-      this.emitter.emit('outbound_started', message.lsn)
+      this.emitter.enqueueEmit('outbound_started')
       return SatInStartReplicationResp.create()
     } else {
-      this.emitter.emit(
+      this.emitter.enqueueEmit(
         'error',
         new SatelliteError(
           SatelliteErrorCode.UNEXPECTED_STATE,
@@ -726,7 +705,7 @@ export class SatelliteClient implements Client {
 
       return SatInStopReplicationResp.create()
     } else {
-      this.emitter.emit(
+      this.emitter.enqueueEmit(
         'error',
         new SatelliteError(
           SatelliteErrorCode.UNEXPECTED_STATE,
@@ -756,7 +735,7 @@ export class SatelliteClient implements Client {
 
   private handleRelation(message: SatRelation) {
     if (this.inbound.isReplicating !== ReplicationStatus.ACTIVE) {
-      this.emitter.emit(
+      this.emitter.enqueueEmit(
         'error',
         new SatelliteError(
           SatelliteErrorCode.UNEXPECTED_STATE,
@@ -782,7 +761,7 @@ export class SatelliteClient implements Client {
     }
 
     this.inbound.relations.set(relation.id, relation)
-    this.emitter.emit('relation', relation)
+    this.emitter.enqueueEmit('relation', relation)
   }
 
   private handleTransaction(message: SatOpLog) {
@@ -800,7 +779,7 @@ export class SatelliteClient implements Client {
   }
 
   private handleError(error: SatErrorResp) {
-    this.emitter.emit('error', serverErrorToSatelliteError(error))
+    this.emitter.enqueueEmit('error', serverErrorToSatelliteError(error))
   }
 
   private handleSubscription(msg: SatSubsResp): SubscribeResponse {
@@ -877,7 +856,7 @@ export class SatelliteClient implements Client {
       if (error instanceof SatelliteError) {
         // subscription errors are emitted through specific event
         if (!subscriptionError.includes(error.code)) {
-          this.emitter.emit('error', error)
+          this.emitter.enqueueEmit('error', error)
         }
       } else {
         // This is an unexpected runtime error
@@ -910,7 +889,7 @@ export class SatelliteClient implements Client {
           origin,
           migrationVersion,
         }
-        this.emitter.emit(
+        this.emitter.enqueueEmit(
           'transaction',
           transaction,
           () => (this.inbound.last_lsn = transaction.lsn)
@@ -1151,6 +1130,7 @@ function deserializeColumnData(
     case PgDateType.PG_TIMETZ:
       return typeDecoder.timetz(column)
     default:
+      // also covers user-defined enumeration types
       return typeDecoder.text(column)
   }
 }

@@ -86,7 +86,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
       {:ok, pid} =
         start_supervised(
           {MigrationConsumer,
-           {[origin: origin, replication: []],
+           {[origin: origin, connection: [], replication: []],
             [
               producer: producer_name,
               backend: backend
@@ -121,7 +121,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
 
       GenStage.call(producer, {:emit, cxt.loader, events, version})
 
-      assert_receive {MockSchemaLoader, {:refresh_subscription, ^origin}}, 500
+      assert_receive {MockSchemaLoader, {:refresh_subscription, ^origin}}, 1500
     end
 
     test "migration consumer stage captures migration records", cxt do

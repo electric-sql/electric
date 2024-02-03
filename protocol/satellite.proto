@@ -99,6 +99,11 @@ message SatErrorResp {
     }
 
     ErrorCode error_type = 1;
+
+    // lsn of the txn that caused the problem, if available
+    optional bytes lsn = 2;
+    // human readable explanation of what went wrong
+    optional string message = 3;
 }
 
 // (Consumer) Starts replication stream from producer to consumer

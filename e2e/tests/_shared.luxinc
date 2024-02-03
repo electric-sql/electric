@@ -14,17 +14,15 @@
     [newshell pg_1]
         [invoke start_psql pg_1 5432]
         -$fail_pattern
-        [timeout 2]
 
     [newshell electric]
-        [timeout 5]
         !make start_electric_1
         -$fail_pattern
-        ?START_REPLICATION SLOT
+        ??Successfully initialized Postgres connector "postgres_1"
         [progress setup finished]
 
     [shell postgres_logs]
-        ?logical replication apply worker for subscription "postgres_1" has started
+        ??has now caught up with upstream server
         # [@magnetised 2023-10-05] Prisma does stuff that causes errors, such
         # as trying to insert into non-existant tables (then creating the table
         # if it gets an error), so if I leave this fail_pattern match here the
@@ -34,7 +32,6 @@
     [newshell proxy_1]
         [invoke start_proxy pg_1 electric_1]
         -$fail_pattern
-        [timeout 2]
 
 [endmacro]
 
@@ -47,9 +44,9 @@
 [macro client_session user_id session_id]
     [invoke log "user ${user_id}: session ${session_id}: start"]
     [local client_id=client_${user_id}_${session_id}]
-    !auth_config = Electric.Satellite.Auth.Secure.build_config!( \
-                     alg: "HS256", key: "integration-tests-signing-key-example" \
-                   )
+    !{:ok, auth_config} = Electric.Satellite.Auth.Secure.build_config( \
+                            alg: "HS256", key: "integration-tests-signing-key-example" \
+                          )
     ?$eprompt
     """!{:ok, conn} = TestWsClient.connect(
                         auth: %{auth_config: auth_config, user_id: "$user_id"},
@@ -67,9 +64,9 @@
 [macro client_session_continue user_id session_id position subscription_ids]
     [invoke log "user ${user_id}: session ${session_id}: start"]
     [local client_id=client_${user_id}_${session_id}]
-    !auth_config = Electric.Satellite.Auth.Secure.build_config!( \
-                     alg: "HS256", key: "integration-tests-signing-key-example" \
-                   )
+    !{:ok, auth_config} = Electric.Satellite.Auth.Secure.build_config( \
+                            alg: "HS256", key: "integration-tests-signing-key-example" \
+                          )
     ?$eprompt
     """!{:ok, conn} = TestWsClient.connect(
                         auth: %{auth_config: auth_config, user_id: "$user_id"},

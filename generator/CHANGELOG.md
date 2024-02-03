@@ -1,5 +1,26 @@
 # @electric-sql/prisma-generator
 
+## 1.1.3
+
+### Patch Changes
+
+- d3cf7043: Revert change to generator to add .js extension to imports for nodenext compatibility as it broke for some bundlers.
+- 4fe5c7f6: Adds client-side support for enumerations.
+
+## 1.1.2
+
+### Patch Changes
+
+- 22652fb3: Change generator to add .js extention to imports for nodenext compatibility
+- 38e1e44b: Fix type issue in generated client for DB schemas containing relations.
+
+## 1.1.1
+
+### Patch Changes
+
+- 4ad7df4d: [VAX-825] Add client-side support for JSON type.
+- 65f10d69: Import types using import type in generated Electric client.
+
 ## 1.1.0
 
 ### Minor Changes

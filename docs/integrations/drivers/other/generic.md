@@ -30,8 +30,29 @@ export interface DatabaseAdapter {
 
   // Get the tables potentially used by an SQL statement.
   // This supports reactivity for raw SQL use via the
-  // `db.liveRaw` function.
+  // `db.liveRawQuery` function.
   tableNames(statement: Statement): QualifiedTablename[]
+}
+```
+
+For convenience, we provide two generic database adapters, `SerialDatabaseAdapter`` and `BatchDatabaseAdapter``. These implement the parts of the interface that are common to most adapters. This allows you to implement your own driver adapters using a simpler interface.
+```tsx
+export abstract class SerialDatabaseAdapter implements DatabaseAdapter {
+  // Run a single SQL statement against the DB
+  abstract _run(stmt: Statement): Promise<RunResult>
+  // Run a single SQL query against the DB
+  abstract _query(stmt: Statement): Promise<Row[]>
+}
+
+// Use `BatchDatabaseAdapter` if the underlying driver
+// supports batch execution of SQL statements
+export abstract class BatchDatabaseAdapter implements DatabaseAdapter {
+  // Run a single SQL statement against the DB
+  abstract _run(stmt: Statement): Promise<RunResult>
+  // Run a single SQL query against the DB
+  abstract _query(stmt: Statement): Promise<Row[]>
+  // Run several SQL statements againt the DB in a single batch
+  abstract execBatch(statements: Statement[]): Promise<RunResult>
 }
 ```
 

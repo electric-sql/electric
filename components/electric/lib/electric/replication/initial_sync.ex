@@ -24,11 +24,10 @@ defmodule Electric.Replication.InitialSync do
   The LSN returned along with the list of transactions corresponds to the latest known cached LSN just prior to starting
   the data fetching.
   """
-  @spec migrations_since(nil | String.t(), Keyword.t(), CachedWal.Api.wal_pos()) :: [
+  @spec migrations_since(nil | String.t(), Connectors.origin(), CachedWal.Api.wal_pos()) :: [
           Transaction.t()
         ]
-  def migrations_since(version, connector_opts, lsn \\ 0) do
-    origin = Connectors.origin(connector_opts)
+  def migrations_since(version, origin, lsn \\ 0) do
     publication = Extension.publication_name()
     {:ok, migrations} = Extension.SchemaCache.migration_history(origin, version)
 
@@ -100,7 +99,7 @@ defmodule Electric.Replication.InitialSync do
       ) do
     Client.with_conn(Connectors.get_connection_opts(opts), fn conn ->
       origin = Connectors.origin(opts)
-      {:ok, _, schema} = Extension.SchemaCache.load(origin)
+      {:ok, schema_version} = Extension.SchemaCache.load(origin)
 
       Client.with_transaction(
         "ISOLATION LEVEL REPEATABLE READ READ ONLY",
@@ -123,7 +122,13 @@ defmodule Electric.Replication.InitialSync do
           Enum.reduce_while(requests, [], fn request, results ->
             start = System.monotonic_time()
 
-            case Shapes.ShapeRequest.query_initial_data(request, conn, schema, origin, context) do
+            case Shapes.ShapeRequest.query_initial_data(
+                   request,
+                   conn,
+                   schema_version,
+                   origin,
+                   context
+                 ) do
               {:ok, num_records, data} ->
                 Metrics.span_event(
                   span,

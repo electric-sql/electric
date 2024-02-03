@@ -1,0 +1,19 @@
+-- This function augments the builtin [`session_replication_role`][1] setting to emulate its behaviour for the direct_writes mode.
+--
+-- With ELECTRIC_WRITE_TO_PG_MODE is set to `logical_replication`, the value of the builtin setting is looked up. On the
+-- Electric->PG replication connection its value is `replica`, whereas on regular connections to Postgres it is
+-- `origin`.
+--
+-- When ELECTRIC_WRITE_TO_PG_MODE is set to `direct_writes`, the value of the [custom `electric.session_replication_role` option][2]
+-- is looked up. It is used to emulate the same Electric->PG trigger activation behaviour even though a regular connection is
+-- used to apply writes to Postgres in this write mode.
+--
+-- [1]: https://www.postgresql.org/docs/14/runtime-config-client.html#GUC-SESSION-REPLICATION-ROLE
+-- [2]: https://www.postgresql.org/docs/14/runtime-config-custom.html
+CREATE OR REPLACE FUNCTION <%= schema() %>.__session_replication_role(OUT role text) AS $$
+BEGIN
+  SELECT INTO role current_setting('electric.session_replication_role');
+EXCEPTION WHEN undefined_object THEN
+  SELECT INTO role current_setting('session_replication_role');
+END;
+$$ LANGUAGE PLPGSQL;

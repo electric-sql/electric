@@ -32,12 +32,16 @@ defmodule Electric.Replication.Connectors do
           username: charlist(),
           password: charlist(),
           replication: charlist(),
-          ssl: boolean()
+          ssl: boolean(),
+          ipv6: boolean(),
+          ip_addr: :inet.ip_address(),
+          tcp_opts: [:gen_tcp.connect_option()]
         }
 
   @type proxy_listen_opts() :: ThousandIsland.options()
   @type proxy_opts() :: %{
           listen: proxy_listen_opts(),
+          use_http_tunnel?: boolean,
           password: String.t(),
           log_level: Logger.level()
         }
@@ -118,6 +122,17 @@ defmodule Electric.Replication.Connectors do
     config
     |> Keyword.fetch!(:proxy)
     |> Map.new()
+  end
+
+  @spec write_to_pg_mode(config()) :: Electric.write_to_pg_mode()
+  def write_to_pg_mode(config) do
+    Keyword.get(config, :write_to_pg_mode, Electric.write_to_pg_mode())
+  end
+
+  # This is needed to please Dialyzer.
+  @spec pop_extraneous_conn_opts(connection_opts()) :: {map, :epgsql.connect_opts_map()}
+  def pop_extraneous_conn_opts(conn_opts) do
+    Map.split(conn_opts, [:ipv6, :ip_addr])
   end
 
   defp new_map_with_charlists(list) do

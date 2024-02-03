@@ -26,7 +26,7 @@ If you can't naturally segment your data then you may find it difficult to optim
 
 ## Primary and foreign keys
 
-You can implicitly segment on **primary keys** and **foreign keys**. For example in your shape query you can use clauses like the following without having to create any segmentation indexes in your DDLX:
+You can implicitly segment on **primary keys** and **foreign keys**. For example, in your shape query you can use clauses like the following without having to create any segmentation indexes in your DDLX:
 
 ```tsx
 {

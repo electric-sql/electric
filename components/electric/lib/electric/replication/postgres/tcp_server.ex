@@ -274,7 +274,8 @@ defmodule Electric.Replication.Postgres.TcpServer do
   defp initialize_connection(socket, %State{} = state, _settings) do
     Messaging.error(:fatal,
       code: "08004",
-      message: "Electric mesh allows connection only in `replication=database` mode"
+      message:
+        "Electric requires connections from Postgres to include the `replication=database` option"
     )
     |> tcp_send(socket)
 
@@ -474,11 +475,7 @@ defmodule Electric.Replication.Postgres.TcpServer do
     # Tables that need to be added to the publication that we're exposing to Postgres. Otherwise, Postgres will
     # ignore any rows from those tables we send it.
     with [_pub] <- Regex.run(~r/\(\'(?<pub>[\w\_]+)\'\)/, publications_list, capture: ["pub"]),
-         {:ok, electrified_tables} <- SchemaCache.Global.electrified_tables() do
-      replicated_relations =
-        (electrified_tables ++ SchemaCache.Global.replicated_internal_tables())
-        |> Enum.map(&{&1.schema, &1.name})
-
+         {:ok, replicated_relations} <- SchemaCache.Global.replicated_relations() do
       Messaging.row_description(schemaname: :name, tablename: :name)
       |> Messaging.data_rows(replicated_relations)
       |> Messaging.command_complete("SELECT #{length(replicated_relations)}")
@@ -610,7 +607,6 @@ defmodule Electric.Replication.Postgres.TcpServer do
   end
 
   # TODO: implement actual logic for authentication requirement
-  defp authentication_required?("127.0.0.1" <> _, _settings), do: false
   defp authentication_required?(_, _settings), do: false
 
   @spec tcp_send(binary() | nil, Socket.t()) :: :ok

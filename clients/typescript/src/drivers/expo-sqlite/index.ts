@@ -11,21 +11,14 @@ import {
 import { DatabaseAdapter } from './adapter'
 import { ElectricConfig } from '../../config'
 import { Database } from './database'
+import { setUUIDImpl } from '../../util/common'
 
 // Provide implementation for TextEncoder/TextDecoder
 import 'fastestsmallesttextencoderdecoder'
 
-// Provide implementation for global uuid()
+// Provide implementation for uuid()
 import uuid from 'react-native-uuid'
-;(function (global: any) {
-  global['uuid'] = uuid.v4
-})(
-  typeof global == '' + void 0
-    ? typeof self == '' + void 0
-      ? this || {}
-      : self
-    : global
-)
+setUUIDImpl(uuid.v4 as () => string)
 
 import { ElectricClient } from '../../client/model/client'
 import { DbSchema } from '../../client/model/schema'

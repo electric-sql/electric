@@ -7,7 +7,6 @@
     # apply the baseline migration
     !make docker-prisma ARGS='--workdir /app/migrations-1 prisma_example_1 prisma migrate resolve --applied 0_init'
     ?SH-PROMPT:
-    [timeout 10]
     !make docker-prisma ARGS='--workdir /app/migrations-1 prisma_example_1 prisma migrate deploy'
     ?SH-PROMPT:
 

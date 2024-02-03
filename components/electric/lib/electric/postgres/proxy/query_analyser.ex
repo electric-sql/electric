@@ -34,33 +34,52 @@ defmodule Electric.Postgres.Proxy.QueryAnalysis do
 end
 
 defmodule Electric.Postgres.Proxy.QueryAnalyser.Impl do
-  alias Electric.Postgres.Extension.SchemaLoader
-
   def unwrap_node(%PgQuery.Node{node: {_type, node}}), do: node
-
-  def is_electrified?(nil, _loader) do
-    false
-  end
-
-  def is_electrified?({_sname, _tname} = table, loader) do
-    {:ok, electrified?} = SchemaLoader.table_electrified?(loader, table)
-    electrified?
-  end
 
   @valid_types for t <- Electric.Postgres.supported_types(), do: to_string(t)
 
-  def check_column_type(%PgQuery.ColumnDef{} = coldef) do
-    %{name: type} = Electric.Postgres.Schema.AST.map(coldef.type_name)
+  # This implementation mirrors the __validate_table_column_types() SQL procedure, with the exception of enum support
+  # (current limitation).
+  #
+  # It is important that this implementation and the one in __validate_table_column_types() behave the same to
+  # ensure consistent handling of columns both when a table is first electrified and when a new column is added to an
+  # already electrified table.
+  def check_column_type(%PgQuery.ColumnDef{type_name: coltype}) do
+    proto_type = Electric.Postgres.Schema.AST.map(coltype)
 
-    if type in @valid_types do
+    if proto_type.name in @valid_types and proto_type.size == [] and proto_type.array == [] do
       :ok
     else
-      {:error, {:invalid_type, type}}
+      {:error, {:invalid_type, Electric.Postgres.Dialect.Postgresql.map_type(proto_type)}}
     end
   end
 
-  def sql_table(%{table: {schema, table}}) do
-    ~s["#{schema}"."#{table}"]
+  def check_column_constraints(%PgQuery.ColumnDef{constraints: constraints}) do
+    Enum.find_value(constraints, :ok, &validate_column_constraint/1)
+  end
+
+  # This function clause mirrors the __validate_table_column_defaults() SQL procedure.
+  #
+  # It is important that this implementation and the one in __validate_table_column_defaults() behave the same to
+  # ensure consistent handling of columns both when a table is first electrified and when a new column is added to an
+  # already electrified table.
+  defp validate_column_constraint(%PgQuery.Node{
+         node: {:constraint, %PgQuery.Constraint{contype: :CONSTR_DEFAULT}}
+       }) do
+    {:error, :unsupported_default_clause}
+  end
+
+  # This function clause mirrors the __validate_table_constraints() SQL procedure.
+  #
+  # It is important that this implementation and the one in __validate_table_constraints() behave the same to
+  # ensure consistent handling of columns both when a table is first electrified and when a new column is added to an
+  # already electrified table.
+  defp validate_column_constraint(%PgQuery.Node{
+         node: {:constraint, %PgQuery.Constraint{contype: constraint}}
+       }) do
+    if constraint not in [:CONSTR_NOTNULL, :CONSTR_NULL] do
+      {:error, {:unsupported_constraint, constraint}}
+    end
   end
 
   def column_map(%PgQuery.InsertStmt{} = ast) do
@@ -124,6 +143,7 @@ end
 
 defimpl QueryAnalyser, for: PgQuery.AlterTableStmt do
   import QueryAnalyser.Impl
+  alias Electric.Postgres.Proxy.Errors
 
   @allowed_subtypes [
     :AT_EnableAlwaysTrig,
@@ -173,19 +193,32 @@ defimpl QueryAnalyser, for: PgQuery.AlterTableStmt do
   defp analyse_alter_table_cmd(%{subtype: :AT_AddColumn} = cmd, analysis) do
     column_def = unwrap_node(cmd.def)
 
-    case check_column_type(column_def) do
-      :ok ->
-        {:cont, %{analysis | capture?: true}}
-
+    with :ok <- check_column_type(column_def),
+         :ok <- check_column_constraints(column_def) do
+      {:cont, %{analysis | capture?: true}}
+    else
       {:error, {:invalid_type, type}} ->
         {:halt,
          %{
            analysis
            | allowed?: false,
-             error: %{
-               code: "EX001",
-               message: ~s[Cannot electrify column of type #{inspect(type)}]
-             }
+             error: Errors.cannot_electrify_column_type(type)
+         }}
+
+      {:error, :unsupported_default_clause} ->
+        {:halt,
+         %{
+           analysis
+           | allowed?: false,
+             error: Errors.cannot_electrify_column_default()
+         }}
+
+      {:error, {:unsupported_constraint, constraint}} ->
+        {:halt,
+         %{
+           analysis
+           | allowed?: false,
+             error: Errors.cannot_electrify_constraint(constraint)
          }}
     end
   end
@@ -195,11 +228,7 @@ defimpl QueryAnalyser, for: PgQuery.AlterTableStmt do
      %{
        analysis
        | allowed?: false,
-         error: %{
-           code: "EX002",
-           message:
-             ~s[Cannot drop column "#{cmd.name}" of electrified table #{sql_table(analysis)}]
-         }
+         error: Errors.cannot_drop_electrified_column(cmd.name, analysis)
      }}
   end
 
@@ -213,18 +242,11 @@ defimpl QueryAnalyser, for: PgQuery.AlterTableStmt do
   end
 
   defp error_for(%{subtype: :AT_AlterColumnType, name: name}, analysis) do
-    %{
-      code: "EX003",
-      message:
-        ~s[Cannot change type of column "#{name}" of electrified table #{sql_table(analysis)}]
-    }
+    Errors.cannot_change_column_type(name, analysis)
   end
 
   defp error_for(%{name: name}, analysis) do
-    %{
-      code: "EX004",
-      message: ~s[Cannot alter column "#{name}" of electrified table #{sql_table(analysis)}]
-    }
+    Errors.cannot_alter_column(name, analysis)
   end
 end
 
@@ -268,6 +290,8 @@ end
 defimpl QueryAnalyser, for: PgQuery.RenameStmt do
   import QueryAnalyser.Impl
 
+  alias Electric.Postgres.Proxy.Errors
+
   def analyse(stmt, %QueryAnalysis{electrified?: false} = analysis, _state) do
     %{analysis | action: action(stmt), tx?: true}
   end
@@ -303,38 +327,26 @@ defimpl QueryAnalyser, for: PgQuery.RenameStmt do
   end
 
   defp error(%{rename_type: :OBJECT_COLUMN} = stmt, analysis) do
-    %{
-      code: "EX005",
-      message:
-        ~s[Cannot rename column "#{stmt.subname}" of electrified table #{sql_table(analysis)}]
-    }
+    Errors.cannot_rename_column(stmt.subname, analysis)
   end
 
   defp error(%{rename_type: :OBJECT_TABCONSTRAINT} = stmt, analysis) do
-    %{
-      code: "EX006",
-      message:
-        ~s[Cannot rename constraint "#{stmt.subname}" of electrified table #{sql_table(analysis)}]
-    }
+    Errors.cannot_rename_constraint(stmt.subname, analysis)
   end
 
   defp error(%{rename_type: :OBJECT_TABLE}, analysis) do
-    %{
-      code: "EX006",
-      message: ~s[Cannot rename electrified table #{sql_table(analysis)}]
-    }
+    Errors.cannot_rename_table(analysis)
   end
 
   defp error(_stmt, analysis) do
-    %{
-      code: "EX007",
-      message: ~s[Cannot rename property of electrified table #{sql_table(analysis)}]
-    }
+    Errors.cannot_rename_table_property(analysis)
   end
 end
 
 defimpl QueryAnalyser, for: PgQuery.DropStmt do
   import QueryAnalyser.Impl
+
+  alias Electric.Postgres.Proxy.Errors
 
   def analyse(stmt, %QueryAnalysis{electrified?: false} = analysis, _state) do
     %{analysis | action: action(stmt), tx?: tx?(stmt)}
@@ -381,10 +393,7 @@ defimpl QueryAnalyser, for: PgQuery.DropStmt do
   defp error(%{remove_type: :OBJECT_INDEX}, _analysis), do: nil
 
   defp error(%{remove_type: :OBJECT_TABLE}, analysis) do
-    %{
-      code: "EX008",
-      message: ~s[Cannot drop electrified table #{sql_table(analysis)}]
-    }
+    Errors.cannot_drop_electrified_table(analysis)
   end
 end
 
@@ -544,6 +553,7 @@ end
 
 defimpl QueryAnalyser, for: PgQuery.CallStmt do
   alias Electric.Postgres.NameParser
+  alias Electric.Postgres.Proxy.Errors
   alias Electric.Postgres.Proxy.Parser
   alias Electric.DDLX
 
@@ -569,13 +579,7 @@ defimpl QueryAnalyser, for: PgQuery.CallStmt do
           %{
             analysis
             | allowed?: false,
-              error: %{
-                message: "#{DDLX.Command.tag(command)} is currently unsupported",
-                detail:
-                  "We are working on implementing access controls -- when these features are completed then this command will work",
-                query: analysis.sql,
-                code: "EX900"
-              }
+              error: Errors.access_control_not_supported(command, analysis.sql)
           }
         end
 

@@ -13,7 +13,7 @@ You can use any configuration of wa-sqlite that you like. However, the instructi
 Add `wa-sqlite` as a dependency to your app, e.g.:
 
 ```shell
-yarn add rhashimoto/wa-sqlite
+npm install rhashimoto/wa-sqlite
 ```
 
 Copy the WASM files into your app's public folder, e.g.:

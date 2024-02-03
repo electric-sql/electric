@@ -1,5 +1,5 @@
 {
-  "version": "0.7.1",
+  "version": "0.9.1",
   "name": "electric-sql",
   "description": "ElectricSQL TypeScript client for developing local-first SQL apps. Supports JavaScript based mobile, web and edge applications.",
   "repository": "https://github.com/electric-sql/electric/tree/main/clients/typescript",
@@ -45,14 +45,9 @@
     "dist"
   ],
   "bin": {
-    "electric-sql": "dist/cli/index.js"
+    "electric-sql": "dist/cli/main.js"
   },
   "exports": {
-    "./package.json": "./package.json",
-    "./angular": {
-      "import": "./dist/frameworks/angular/esm2022/index.js",
-      "require": "./dist/frameworks/angular/fesm2022/index.js"
-    },
     "./browser": "./dist/drivers/wa-sqlite/index.js",
     "./cordova": "./dist/drivers/cordova-sqlite-storage/index.js",
     "./capacitor": "./dist/drivers/capacitor-sqlite/index.js",
@@ -64,6 +59,8 @@
     "./wa-sqlite": "./dist/drivers/wa-sqlite/index.js",
     "./config": "./dist/config/index.js",
     "./debug": "./dist/util/debug/index.js",
+    "./client/model": "./dist/client/model/index.js",
+    "./migrators/builder": "./dist/migrators/builder.js",
     ".": "./dist/index.js",
     "./*": "./dist/*/index.js"
   },
@@ -83,6 +80,9 @@
       ],
       "expo": [
         "./dist/drivers/expo-sqlite/index.d.ts"
+      ],
+      "generic": [
+        "./dist/drivers/generic/index.d.ts"
       ],
       "node": [
         "./dist/drivers/better-sqlite3/index.d.ts"
@@ -116,52 +116,43 @@
       ],
       "util": [
         "./dist/util/index.d.ts"
+      ],
+      "version": [
+        "./dist/version/index.d.ts"
       ]
     }
   },
   "scripts": {
     "post-version-bump": "node -p \"'export const LIB_VERSION = \\'' + require('./package.json').version + '\\''\" > src/version/index.ts",
-    "dev": "tsmodule dev",
-    "build": "rm -rf ./dist && tsc && tsmodule build",
-    "build-dev": "rm -rf ./dist && tsc && tsmodule build --dev",
-    "build-angular": "pnpm --dir ./src/frameworks/angular && pnpm build",
+    "dev": "shx rm -rf dist && npm run build:copy-docker && mkdir dist && concurrently \"tsup --watch\" \"tsc -p tsconfig.build.json --watch\" \"nodemon --watch ./dist  --delay 250ms ./scripts/fix-imports.js\"",
+    "build": "shx rm -rf dist && npm run build:copy-docker && concurrently \"tsup\" \"tsc -p tsconfig.build.json\" && node scripts/fix-imports.js",
+    "build:copy-docker": "shx mkdir -p ./dist/cli/docker-commands/docker && shx cp -r ./src/cli/docker-commands/docker ./dist/cli/docker-commands",
     "test": "ava",
-    "typecheck": "tsc -p tsconfig.tests.json",
+    "typecheck": "tsc -p tsconfig.json",
     "posttest": "npm run typecheck",
     "prepublishOnly": "pnpm run build",
     "lint": "eslint src --fix",
     "check-styleguide": "prettier --check --loglevel warn . && eslint src --quiet",
     "format": "prettier --write --loglevel warn ."
   },
-  "ava": {
-    "timeout": "10m",
-    "files": [
-      "test/**/*.test.ts",
-      "test/**/*.test.tsx"
-    ],
-    "extensions": {
-      "ts": "module",
-      "tsx": "module"
-    },
-    "nodeArguments": [
-      "--no-warnings",
-      "--loader=@tsmodule/tsmodule/loader"
-    ],
-    "workerThreads": false
-  },
   "lint-staged": {
     "**/*": "prettier --write --ignore-unknown"
   },
   "dependencies": {
+    "@electric-sql/prisma-generator": "workspace:*",
+    "@prisma/client": "5.2.0",
     "async-mutex": "^0.4.0",
     "base-64": "^1.0.0",
     "better-sqlite3": "^8.4.0",
+    "commander": "^11.1.0",
     "cross-fetch": "^3.1.5",
     "decompress": "^4.2.1",
+    "dotenv-flow": "^4.1.0",
     "events": "^3.3.0",
     "exponential-backoff": "^3.1.0",
     "fastestsmallesttextencoderdecoder": "^1.0.22",
     "frame-stream": "^3.0.1",
+    "get-port": "^7.0.0",
     "jose": "^4.14.4",
     "lodash.flow": "^3.5.0",
     "lodash.groupby": "^4.6.0",
@@ -175,21 +166,21 @@
     "long": "^5.2.0",
     "object.hasown": "^1.1.2",
     "ohash": "^1.1.2",
+    "prisma": "5.2.0",
+    "prompts": "^2.4.2",
     "protobufjs": "^7.1.1",
     "react-native-uuid": "^2.0.1",
-    "sqlite-parser": "^1.0.1",
     "squel": "^5.13.0",
+    "tcp-port-used": "^1.0.2",
     "ts-dedent": "^2.2.0",
     "uuid": "^9.0.0",
-    "walkjs": "^3.2.4",
     "ws": "^8.8.1",
     "zod": "^3.20.2"
   },
   "devDependencies": {
+    "@electric-sql/prisma-generator": "workspace:*",
     "@ikscodes/browser-env": "^1.0.0",
-    "@prisma/client": "^4.12.0",
     "@testing-library/react": "^13.4.0",
-    "@tsmodule/tsmodule": "42",
     "@types/base-64": "^1.0.0",
     "@types/better-sqlite3": "7.6.3",
     "@types/cordova-sqlite-storage": "^1.5.5",
@@ -203,28 +194,34 @@
     "@types/lodash.pick": "^4.4.7",
     "@types/lodash.throttle": "^4.1.7",
     "@types/node": "^18.8.4",
+    "@types/prompts": "^2.4.9",
     "@types/react": "^18.0.18",
     "@types/react-native-sqlite-storage": "^6.0.0",
     "@types/react-native-uuid": "^2.0.0",
+    "@types/tcp-port-used": "^1.0.2",
     "@types/uuid": "^9.0.1",
     "@types/ws": "^8.5.3",
     "@typescript-eslint/eslint-plugin": "^5.34.0",
     "@typescript-eslint/parser": "^5.34.0",
-    "@electric-sql/prisma-generator": "workspace:*",
     "ava": "^4.3.1",
+    "concurrently": "^8.2.2",
     "eslint": "^8.22.0",
     "expo-sqlite": "^11.7.0",
+    "glob": "^10.3.10",
     "husky": "^8.0.3",
     "lint-staged": "^13.1.0",
     "memorystorage": "^0.12.0",
+    "nodemon": "^3.0.2",
     "prettier": "2.8.2",
-    "prisma": "^4.8.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "release-it": "^15.5.0",
+    "shx": "^0.3.4",
     "ts-proto": "^1.125.0",
+    "tsup": "^8.0.1",
+    "tsx": "^4.1.1",
     "typeorm": "^0.3.9",
-    "typescript": "^4.9",
+    "typescript": "^5.3.3",
     "wa-sqlite": "rhashimoto/wa-sqlite#semver:^0.9.8",
     "web-worker": "^1.2.0",
     "zone.js": "^0.14.2"

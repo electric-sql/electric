@@ -11,25 +11,29 @@ import CodeBlock from '@theme/CodeBlock';
 import ExampleSchema from '!!raw-loader!./example.prisma';
 import ExampleSQL from '!!raw-loader!./example.sql';
 
-ElectricSQL is designed to work with and on top of a Postgres data model. You use migrations to define, evolve and expose parts of this data model.
+ElectricSQL is designed to work with and on top of a Postgres data model. Once you have a [data model](#your-data-model), you use [DDLX statements](../../api/ddlx.md) to expose parts of it, opting tables in to the Electric sync machinery and defining rules that control data access.
 
-The key principles behind Electric's approach to migrations are:
+Electric does not impose a specific migrations system on you. Instead, you can use whichever [migrations tooling](#using-your-migrations-framework) you prefer to define your schema and apply DDLX statements. However, you must configure your migrations tooling to connect via the [Migrations proxy](#migrations-proxy).
 
-1. you can use your own preferred migrations tooling; Electric does not impose a specific migrations system on you, instead, you use whichever system you prefer, often built into [your backend framework](../../integrations/backend/index.md) if you have one, to define and evolve your schema
-2. you must configure your migrations tooling (or any Postgres connection where you're applying DDL migrations to electrified tables) to connect via the [Electric migrations proxy](#migrations-proxy)
+:::caution
+Any migrations or DDL statements that alter [electrified tables](./electrification.md) or use [DDLX syntax](../../api/ddlx.md) **must** be applied via the [Migrations proxy](#migrations-proxy).
+:::
 
 ## Your data model
 
-If you don't have a data model you can create one using your preferred migrations tooling. You then use the same migrations tooling to extend your data model with [DDLX statements](./electrification.md) to expose data to the replication machinery.
+Electric works with an existing Postgres data model, aka DDL schema. The workflow is to:
 
-For example, assuming you have a table called `projects`, you can enable replication, grant public read access to it and write access to the project owner as follows:
+1. opt tables into the Electric sync machinery by ["electrifying"](./electrification.md) them
+2. grant and assign permissions to authorise data access using [DDLX statements](../../api/ddlx.md)
+
+You can then sync data to your local app using [Shapes](../data-access/shapes.md).
+
+For example, assuming you have an existing table called `projects`, you can electrify it, grant read access to the public and write access to the project owner using e.g.:
 
 ```sql
 ALTER TABLE projects
   ENABLE ELECTRIC;
 
--- The ELECTRIC ASSIGN and ELECTRIC GRANT DDLX statements are currently
--- a work in progress.
 ELECTRIC ASSIGN 'projects:owner'
   TO projects.owner_id;
 
@@ -43,14 +47,14 @@ ELECTRIC GRANT SELECT
 ```
 
 :::caution Work in progress
+The `ELECTRIC ASSIGN` and `ELECTRIC GRANT` DDLX statements are work in progress.
+
 See the [Limitations](#limitations) section below and the [Roadmap](../../reference/roadmap.md) page for more context.
 :::
 
-## Creating a data model
+### Creating a data model
 
-If you have your own Postgres-backed application, use the data model from that and continue using whatever method you're currently using to define the database schema.
-
-Alternatively, if you need to create a data model, you can do so using SQL statements like `CREATE TABLE`, or a migrations tool like [Prisma](../../integrations/backend/prisma.md) or [Ecto](../../integrations/backend/phoenix.md).
+If you need to create a data model, you can do so using SQL statements like `CREATE TABLE`, or a migrations tool like [Prisma](../../integrations/backend/prisma.md) or [Ecto](../../integrations/backend/phoenix.md).
 
 Expand the box below for sample code:
 
@@ -72,7 +76,7 @@ Expand the box below for sample code:
 
 ## Using your migrations framework
 
-Use [your prefered migrations framework](../../integrations/backend/index.md) to execute [DDLX statements](./electrification.md) via the proxy. For example:
+You can use your prefered migrations tooling, often built into your [backend framework](../../integrations/backend/index.md) if you have one, to both define your DDL schema and to apply DDLX statements. For example:
 
 <Tabs groupId="migration-framework">
   <TabItem value="ecto" label="Ecto">
@@ -197,28 +201,36 @@ See <DocPageLink path="integrations/backend" /> and <DocPageLink path="api/ddlx"
 
 ## Migrations proxy
 
-Schema migrations to electrified tables must be applied to Postgres via a proxy server integrated into the Electric application.
+Schema migrations to electrified tables must be applied to Postgres via a proxy server integrated into the Electric application. This proxy server:
 
-This proxy server serves various purposes:
+1. enables [DDLX syntax](../../api/ddlx.md)
+2. ensures [consistent propagation](../../reference/consistency.md) of schema changes to client applications
+3. validates [electrified tables](./electrification.md) to ensure they are [supported](./types.md) by Electric
+4. supports [type-safe Client](../data-access/client.md) generation using the CLI [`generate`](../../api/cli.md#generate) command
 
-- It allows the use of the [DDLX syntax](../../api/ddlx.md) for managing your tables and access permissions,
-- It captures migrations applied to Electrified tables in order to propagate those DDL changes to the client schemas,
-- It validates migrations to electrified tables to ensure that changes to the schema are supported by Electric (e.g. validating the types of any added columns, ensuring that only additive migrations are applied, etc), and
-- It provides an endpoint for schema introspection to allow Electric to return its view of the underlying Postgres database to the data access library.
+DDL migrations not applied via the proxy are not captured by Electric. This is fine if they do not use DDLX syntax or do not affect the electrified part of your schema (it's also fine if they affect tables that are electrified later on).
 
-Migrations not passed through the proxy endpoint will not be captured by Electric and will cause problems as Electric's view of the Postgres schema will be out of sync with the actual table schema.
+However, if they **do** use DDLX syntax or **do** affect the electrified part of your schema, then they **must** be applied via the proxy. If not, they will be rejected and an error will be raised.
+
+:::info Not for DML
+You do not need to route all your database access through the Migrations proxy. It is just intended to be used for DDL migrations, not for all your database writes and queries.
+:::
+
+:::info
+Normal DML access to your Postgres **does not** need to be routed via the Migrations proxy. If your app has a backend, it should connect and interact with your database directly and Electric will happily pick up on the changes.
+
+You can either route all DDL access to your Postgres via the Migrations proxy, or just the subset of DDL that impacts Electrified tables and/or uses DDLX statements. Trying to change an electrified table or use a DDLX statement without going through the proxy will raise an error.
+:::
 
 ### Configuring and connecting to the migrations proxy
 
-There are two environment variables that configure the proxy in Electric:
+The [Electric sync service](../../api/service.md) connects to a Postgres database at [`DATABASE_URL`](../../api/service.md#database_url) and, by default, exposes the migrations proxy as a TCP service on `PG_PROXY_PORT`, secured by `PG_PROXY_PASSWORD`. Instead of connecting your migrations tooling (or any interactive session applying migrations) to Postgres directly, connect to the Electric sync service instead.
 
-- `PG_PROXY_PORT` (default `65432`). This is the TCP port that [**Electric sync service**](../../api/service.md) will listen on. You should connect to it in order to pass through the migration proxy. Since the proxy speaks fluent Postgres, you can connect to it via any Postgres-compatible tool, e.g. `psql -U electric -p 65432 electric`
+[![Connecting to the migrations proxy over a TCP port](../../deployment/_images/tcp-port.png)](../../deployment/_images/tcp-port.jpg)
 
-- `PG_PROXY_PASSWORD` (no default). Access to the proxy is controlled by password (see below for information on the username). You must set this password here and pass it to any application hoping to connect to the proxy.
+The migrations proxy intercepts your migrations, validates and transforms them and proxies them on to the Postgres at `DATABASE_URL`. Since the proxy speaks fluent Postgres, you can connect to it via any Postgres-compatible tool, e.g. `psql -U postgres -p 65432 electric`:
 
-You should be able to connect to the proxy directly using `psql` as outlined above and run any DDLX/migration commands you like. These will be validated, captured, and streamed to any connected clients automatically:
-
-```
+```console
 $ PGPASSWORD=${PG_PROXY_PASSWORD} psql -U postgres -p ${PG_PROXY_PORT} electric
 
 electric=# CREATE TABLE public.items (id text, value text);
@@ -232,15 +244,25 @@ electric=# ALTER TABLE public.items ADD COLUMN amount integer;
 ALTER TABLE
 ```
 
-### Framework and application integration
+See <DocPageLink path="api/service#migrations-proxy" /> for more information about configuring the sync service and <DocPageLink path="deployment/concepts#2-migrations---proxy" /> for a description of the different connection options.
 
-Your framework of choice will need to be configured in order to pass migrations (and _only_ migrations, you shouldn't connect your application to the proxy endpoint for any other purpose) through the proxy rather than directly to the underlying Postgres database.
+### Framework integration
 
-As each framework has different requirements for this, example code for each is provided in the [integrations section](../../integrations/backend/index.md)
+Your framework of choice will need to be configured in order to pass migrations (and _only_ migrations) through the proxy rather than directly to the underlying Postgres database.
+
+This typically involves using a different database connection string for migrations, often by running your migrations command with a different `DATABASE_URL` that connects to the migrations proxy. However, as each framework has different requirements, we provide framework-specific example code for this in <DocPageLink path="integrations/backend" />.
 
 :::caution Work in progress
-We are working on providing detailed instructions for as many backend frameworks as possible. If your framework of choice hasn't been documented yet please feel free to raise an issue on our [GitHub repo](https://github.com/electric-sql/electric/issues) and we'll be happy to help.
+If your framework of choice hasn't been documented yet, please feel free to [raise a feature request](https://github.com/electric-sql/electric/discussions/categories/feature-requests) or to [let us know on Discord](https://discord.electric-sql.com). We'll be happy to help you get up and running and ideally to work together to update the documentation.
 :::
+
+### Using the proxy tunnel
+
+In some cases you may not be able to connect to the migrations proxy directly. For example, if your firewall or hosting provider don't support TCP access to the sync service on `PG_PROXY_PORT`. In these cases, you can use the [Proxy tunnel](../../api/cli.md#proxy-tunnel) to connect to the proxy using a TCP-over-HTTP tunnel.
+
+[![Connecting to the migrations proxy using a Proxy tunnel](../../deployment/_images/proxy-tunnel.png)](../../deployment/_images/proxy-tunnel.jpg)
+
+See <DocPageLink path="api/cli#proxy-tunnel" /> and <DocPageLink path="deployment/concepts#2-2-using-a-proxy-tunnel" /> for more information about using the proxy tunnel and <DocPageLink path="api/service#migrations-proxy" /> on configuring the sync service to support it.
 
 ## Limitations
 
@@ -252,7 +274,7 @@ Only tables in the default schema named [`public`](https://www.postgresql.org/do
 
 ### Table names
 
-The client generator sanitises table names (because of an issue in an [external library](https://github.com/chrishoermann/zod-prisma-types/issues/121)) removing any prefix that is not a letter and treating the first letter as case insensitive. For example electrifying the tables `_myTable`, `123myTable`, `myTable`, and `MyTable` will all clash on table name, causing a generator error.
+The client generator sanitises table names (because of an issue in an [external library](https://github.com/chrishoermann/zod-prisma-types/issues/121)) removing any prefix that is not a letter and treating the first letter as case insensitive. As an example, electrifying the tables `_myTable`, `123myTable`, `myTable`, and `MyTable` will all clash on table name, causing a generator error.
 
 ### Forward migrations
 
@@ -264,9 +286,15 @@ We only currently support additive migrations. This means you can't remove or re
 
 In practice this means that we only support this subset of DDL actions:
 
-- `CREATE TABLE` and its associated `ALTER TABLE <table name> ENABLE ELECTRIC` call,
-- `ALTER TABLE <electrified table> ADD COLUMN`, and
-- `CREATE INDEX ON <electrified table>`, `DROP INDEX` -- indexes can be created and dropped because they don't affect the data within the electrified tables.
+- `CREATE TABLE` and its associated `ALTER TABLE <table name> ENABLE ELECTRIC` call
+- `ALTER TABLE <electrified table> ADD COLUMN`
+- `CREATE INDEX ON <electrified table>`, `DROP INDEX`. Indexes can be created and dropped because they don't affect the data within the electrified tables.
+
+### No default values for columns
+
+Currently it's not possible to electrify tables that have columns with `DEFAULT` clauses. This has to do with the fact that those clauses may include Postgres expressions that are difficult or impossible to translate into an SQLite-compatible one.
+
+We will lift this limitation at some point, e.g. by discarding `DEFAULT` clauses in the SQLite schema or by supporting a limited set of default expressions.
 
 ### Data types and constraints
 

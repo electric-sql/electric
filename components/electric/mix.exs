@@ -8,6 +8,7 @@ defmodule Electric.MixProject do
       elixir: "~> 1.12",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
+      compilers: [:yecc] ++ Mix.compilers(),
       deps: deps(),
       test_coverage: [tool: ExCoveralls],
       preferred_cli_env: [
@@ -40,12 +41,12 @@ defmodule Electric.MixProject do
     [
       {:epgsql, "~> 4.2"},
       {:backoff, "~> 1.1"},
-      {:mox, "~> 1.0.2"},
+      {:mox, "~> 1.1"},
       {:mock, "~> 0.3.0", only: :test},
       {:ssl_verify_fun, "~> 1.1.7", override: true},
       {:jason, "~> 1.4"},
-      {:dialyxir, "~> 1.3", only: [:dev], runtime: false},
-      {:excoveralls, "~> 0.14", only: :test, runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev], runtime: false},
+      {:excoveralls, "~> 0.18", only: :test, runtime: false},
       {:gproc, "~> 0.9.0"},
       {:protox, "~> 1.7"},
       {:gen_stage, "~> 1.2"},
@@ -57,19 +58,20 @@ defmodule Electric.MixProject do
       {:libgraph, "~> 0.16.0"},
       {:pathex, "~> 2.5.2"},
       {:stream_data, "~> 0.5", only: [:dev, :test]},
-      {:exqlite, "~> 0.13.5", only: [:dev, :test]},
+      {:exqlite, "~> 0.19", only: [:dev, :test]},
       {:tzdata, "~> 1.1", only: [:dev, :test]},
       {:pg_query_ex, github: "electric-sql/pg_query_ex"},
       {:nimble_pool, "~> 1.0"},
-      {:bandit, "~> 1.0-pre"},
-      {:thousand_island, "~> 1.0-pre"},
+      {:bandit, "~> 1.1"},
+      {:thousand_island, "~> 1.3"},
       {:mint_web_socket, "~> 1.0"},
       {:mint, "~> 1.5"},
       {:req, "~> 0.4"},
       {:pg_protocol, github: "electric-sql/pg_protocol"},
-      {:nimble_parsec, "~> 1.3"},
+      {:nimble_parsec, "~> 1.4"},
       {:postgrex, "~> 0.17", only: [:test]},
-      {:ecto_sql, "~> 3.10", only: [:test]}
+      {:ecto_sql, "~> 3.11", only: [:test]},
+      {:dotenvy, "~> 0.8"}
     ]
   end
 

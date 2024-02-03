@@ -333,7 +333,7 @@ Basically, an assignment tells ElectricSQL where to read these roles from and wh
 
 #### Role definitions
 
-A role can either be global, one that applies to any data, or be scoped by a row in a table so that it applies only to data that has a relationship to that row. This allows you to define roles tied to rows in tables, for example an `'admin'` of a project, or a `'member'` of a club.
+A role can either be global, one that applies to any data, or be scoped by a row in a table so that it applies only to data that has a relationship to that row. This allows you to define roles tied to rows in tables. For example, an `'admin'` of a project, or a `'member'` of a club.
 
 The role can also either be static and explicitly given as a literal in the `ASSIGN` statement or
 dynamically read from a column in the `table_name`.

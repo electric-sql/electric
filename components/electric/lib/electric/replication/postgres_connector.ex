@@ -8,37 +8,35 @@ defmodule Electric.Replication.PostgresConnector do
   alias Electric.Replication.PostgresConnectorSup
 
   @spec start_link(Connectors.config()) :: Supervisor.on_start()
-  def start_link(conn_config) do
-    Supervisor.start_link(__MODULE__, conn_config)
+  def start_link(connector_config) do
+    Supervisor.start_link(__MODULE__, connector_config)
   end
 
   @impl Supervisor
-  def init(conn_config) do
-    origin = Connectors.origin(conn_config)
-    Electric.reg(name(origin))
+  def init(connector_config) do
+    origin = Connectors.origin(connector_config)
+    name = name(origin)
+    Electric.reg(name)
 
-    children = [
-      # %{id: :sup, start: {PostgresConnectorSup, :start_link, [origin]}, type: :supervisor},
-      %{id: :mng, start: {PostgresConnectorMng, :start_link, [conn_config]}}
-    ]
-
+    children = [%{id: :mng, start: {PostgresConnectorMng, :start_link, [connector_config]}}]
     Supervisor.init(children, strategy: :one_for_all)
   end
 
-  @spec start_children(Connectors.config()) :: Supervisor.on_start_child()
-  def start_children(conn_config) do
-    origin = Connectors.origin(conn_config)
+  @spec start_children(Connectors.config()) :: {:ok, pid} | :error
+  def start_children(connector_config) do
+    origin = Connectors.origin(connector_config)
     connector = name(origin)
 
     Supervisor.start_child(
       connector,
       %{
         id: :sup,
-        start: {PostgresConnectorSup, :start_link, [conn_config]},
+        start: {PostgresConnectorSup, :start_link, [connector_config]},
         type: :supervisor,
         restart: :temporary
       }
     )
+    |> log_connector_sup_startup_error(connector_config)
   end
 
   @spec stop_children(Connectors.origin()) :: :ok | {:error, :not_found}
@@ -58,5 +56,102 @@ defmodule Electric.Replication.PostgresConnector do
   @spec name(Connectors.origin()) :: Electric.reg_name()
   def name(origin) when is_binary(origin) do
     Electric.name(__MODULE__, origin)
+  end
+
+  def connector_config do
+    # NOTE(alco): Perhaps we can make this less hard-coded by requiring callers to pass the origin in as an argument.
+    [{connector_name, _}] = Application.get_env(:electric, Electric.Replication.Connectors)
+
+    connector_name
+    |> to_string()
+    |> connector_config()
+  end
+
+  @spec connector_config(Connectors.origin()) :: Connectors.config()
+  def connector_config(origin) do
+    PostgresConnectorMng.connector_config(origin)
+  end
+
+  defp log_connector_sup_startup_error({:ok, _sup_pid} = ok, _connector_config), do: ok
+
+  defp log_connector_sup_startup_error(
+         {:error, {{:shutdown, {:failed_to_start_child, child_id, reason}}, _supervisor_spec}},
+         connector_config
+       ) do
+    Logger.error(
+      "PostgresConnectorSup failed to start child #{inspect(child_id)} with reason: #{inspect(reason)}."
+    )
+
+    _ = log_child_error(child_id, reason, connector_config)
+    :error
+  end
+
+  defp log_child_error(
+         :postgres_producer,
+         {:bad_return_value,
+          {:error,
+           {:error, :error, "55006", :object_in_use, "replication slot" <> _ = msg, _c_stacktrace}}},
+         _connector_config
+       ) do
+    Electric.Errors.print_error(
+      :conn,
+      """
+      Failed to establish replication connection to Postgres:
+        #{msg}
+      """,
+      "Another instance of Electric appears to be connected to this database."
+    )
+  end
+
+  defp log_child_error(
+         :postgres_producer,
+         {:bad_return_value, {:error, :wal_level_not_logical}},
+         _connector_config
+       ) do
+    Electric.Errors.print_fatal_error(
+      :dbconf,
+      "Your Postgres database is not configured with wal_level=logical.",
+      """
+      Visit https://electric-sql.com/docs/usage/installation/postgres
+      to learn more about Electric's requirements for Postgres.
+      """
+    )
+  end
+
+  defp log_child_error(
+         :postgres_producer,
+         {:bad_return_value, {:error, {:create_replication_slot_syntax_error, msg}}},
+         _connector_config
+       ) do
+    Electric.Errors.print_fatal_error(
+      :conf,
+      """
+      Failed to establish replication connection to Postgres:
+        #{msg}
+      """,
+      """
+      Make sure the value of DATABASE_URL is a connection string that can be used
+      to connect to your database directly, not through a connection pool.
+      """
+    )
+  end
+
+  defp log_child_error(
+         {ThousandIsland, _proxy},
+         {:shutdown, {:failed_to_start_child, :listener, :eaddrinuse}},
+         connector_config
+       ) do
+    proxy_port = get_in(Connectors.get_proxy_opts(connector_config), [:listen, :port])
+
+    Electric.Errors.print_error(
+      :conn,
+      "Failed to open a socket to listen for TCP connections on port #{proxy_port}.",
+      "Another instance of Electric or a different application is already listening on the same port."
+    )
+  end
+
+  defp log_child_error(child_id, reason, _connector_config) do
+    Electric.Errors.failed_to_start_child_error(__MODULE__, child_id, reason)
+    |> Electric.Errors.print_fatal_error()
   end
 end

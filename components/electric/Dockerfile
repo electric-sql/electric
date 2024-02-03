@@ -1,6 +1,6 @@
-ARG ELIXIR_VERSION=1.15.4
-ARG OTP_VERSION=25.3.2.4
-ARG DEBIAN_VERSION=bullseye-20230612-slim
+ARG ELIXIR_VERSION=1.16.0
+ARG OTP_VERSION=26.2.1
+ARG DEBIAN_VERSION=bullseye-20231009-slim
 
 ARG BUILDER_IMAGE="hexpm/elixir:${ELIXIR_VERSION}-erlang-${OTP_VERSION}-debian-${DEBIAN_VERSION}"
 ARG RUNNER_IMAGE="debian:${DEBIAN_VERSION}"
@@ -22,12 +22,12 @@ COPY Makefile /app/
 
 COPY mix.* /app/
 RUN mix deps.get
-COPY config/config.exs /app/config/
 RUN mix deps.compile
 
-COPY lib /app/lib/
-COPY src /app/src/
 COPY config/*runtime.exs /app/config/
+COPY lib /app/lib/
+COPY priv /app/priv
+COPY src /app/src/
 
 ARG ELECTRIC_VERSION=local
 ARG MAKE_RELEASE_TASK=release

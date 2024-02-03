@@ -225,7 +225,7 @@ defmodule Electric.Postgres.ExtensionTest do
     assert {:ok, []} = Extension.ddl_history(conn)
   end
 
-  describe "electrification" do
+  describe "table electrification" do
     alias Electric.Postgres.SQLGenerator
 
     test_tx "can generate the ddl to create any index", fn conn ->
@@ -323,7 +323,7 @@ defmodule Electric.Postgres.ExtensionTest do
       end
     end
 
-    test_tx "generated ddl includes defaults and constraints", fn conn ->
+    test_tx "includes defaults and constraints in the generated ddl", fn conn ->
       create_parent_table = """
       CREATE TABLE public.parent (
         id uuid PRIMARY KEY NOT NULL
@@ -363,7 +363,7 @@ defmodule Electric.Postgres.ExtensionTest do
              """
     end
 
-    test_tx "generated ddl includes indexes", fn conn ->
+    test_tx "includes indexes in the generated ddl", fn conn ->
       create_table = """
       CREATE TABLE public.something (
         id uuid PRIMARY KEY NOT NULL,
@@ -400,7 +400,7 @@ defmodule Electric.Postgres.ExtensionTest do
              """
     end
 
-    test_tx "table electrification creates shadow tables", fn conn ->
+    test_tx "creates shadow tables", fn conn ->
       sql1 = "CREATE TABLE public.buttercup (id int4 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
       sql2 = "CREATE TABLE public.daisy (id int4 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
       sql3 = "CALL electric.electrify('buttercup')"
@@ -422,9 +422,11 @@ defmodule Electric.Postgres.ExtensionTest do
                )
     end
 
-    test_tx "table electrification successfully validates column types", fn conn ->
-      assert [{:ok, [], []}, {:ok, [], []}] ==
+    test_tx "successfully validates column types", fn conn ->
+      assert [{:ok, [], []}, {:ok, [], []}, {:ok, [], []}] ==
                :epgsql.squery(conn, """
+               CREATE TYPE shapes AS ENUM ('circle', 'square', 'diamond');
+
                CREATE TABLE public.t1 (
                  id UUID PRIMARY KEY,
                  content TEXT NOT NULL,
@@ -445,56 +447,51 @@ defmodule Electric.Postgres.ExtensionTest do
                  d DATE,
                  t TIME,
                  flag BOOLEAN,
-                 jb JSONB
+                 jb JSONB,
+                 shape shapes
                );
+
                CALL electric.electrify('public.t1');
                """)
     end
 
-    test_tx "table electrification rejects invalid column types", fn conn ->
+    test_tx "rejects invalid column types", fn conn ->
       assert [
+               {:ok, [], []},
                {:ok, [], []},
                {:error, {:error, :error, _, :raise_exception, error_msg, _}}
              ] =
                :epgsql.squery(conn, """
+               CREATE TYPE badenum AS ENUM ('1circle', '_square', 'hello world');
+
                CREATE TABLE public.t1 (
                  id UUID PRIMARY KEY,
                  c1 CHARACTER,
                  c2 CHARACTER(11),
                  "C3" VARCHAR(11),
-                 created_at TIMETZ
+                 created_at TIMETZ,
+                 e badenum
                );
                CALL electric.electrify('public.t1');
                """)
 
       assert error_msg ==
                """
-               Cannot electrify "public.t1" because some of its columns have types not supported by Electric:
-                 c1 character(1)
-                 c2 character(11)
-                 "C3" character varying(11)
-                 created_at time with time zone
+               Cannot electrify t1 because some of its columns have types not supported by Electric:
+
+                   c1 character(1)
+                   c2 character(11)
+                   "C3" character varying(11)
+                   created_at time with time zone
+                   e badenum (enum type badenum contains unsupported values '1circle', '_square', 'hello world')
+
+               See https://electric-sql.com/docs/usage/data-modelling/types#supported-data-types
+               to learn more about data type support in Electric.
                """
                |> String.trim()
     end
 
-    test_tx "electrified?/3", fn conn ->
-      sql1 = "CREATE TABLE public.buttercup (id int4 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
-      sql2 = "CREATE TABLE public.daisy (id int4 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
-      sql3 = "CALL electric.electrify('buttercup')"
-
-      for sql <- [sql1, sql2, sql3] do
-        {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
-      end
-
-      assert {:ok, true} = Extension.electrified?(conn, "buttercup")
-      assert {:ok, true} = Extension.electrified?(conn, "public", "buttercup")
-
-      assert {:ok, false} = Extension.electrified?(conn, "daisy")
-      assert {:ok, false} = Extension.electrified?(conn, "public", "daisy")
-    end
-
-    test_tx "table electrification rejects default column expressions", fn conn ->
+    test_tx "rejects default column expressions", fn conn ->
       assert [
                {:ok, [], []},
                {:error, {:error, :error, _, :raise_exception, error_msg, _}}
@@ -512,12 +509,69 @@ defmodule Electric.Postgres.ExtensionTest do
 
       assert error_msg ==
                """
-               Cannot electrify "public.t1" because some of its columns have DEFAULT expression which is not currently supported by Electric:
+               Cannot electrify t1 because some of its columns have DEFAULT expressions which are not currently supported by Electric:
                  t1
                  "Ts"
                """
                |> String.trim()
     end
+
+    test_tx "rejects columns with CHECK, UNIQUE or EXCLUDE constraints",
+            fn conn ->
+              assert [
+                       {:ok, [], []},
+                       {:error, {:error, :error, _, :raise_exception, error_msg, _}}
+                     ] =
+                       :epgsql.squery(conn, """
+                       CREATE TABLE public.t1 (
+                         id UUID PRIMARY KEY,
+                         t1 TEXT CHECK (t1 != ''),
+                         "Ts" INT CHECK ("Ts" > 3),
+                         uu INT UNIQUE,
+                         "Email" TEXT,
+                         EXCLUDE USING btree (lower("Email") WITH =)
+                       );
+                       CALL electric.electrify('public.t1');
+                       """)
+
+              assert error_msg ==
+                       """
+                       Cannot electrify t1 because some of its columns have CHECK, UNIQUE, EXCLUDE or user-defined constraints which are not currently supported by Electric:
+                         "Ts"
+                         t1
+                         uu
+                       """
+                       |> String.trim()
+            end
+
+    test_tx "rejects tables with missing primary key", fn conn ->
+      assert [
+               {:ok, [], []},
+               {:error, {:error, :error, _, :raise_exception, error_msg, _}}
+             ] =
+               :epgsql.squery(conn, """
+               CREATE TABLE public.t1 (id TEXT, val INTEGER);
+               CALL electric.electrify('public.t1');
+               """)
+
+      assert error_msg == "Cannot electrify t1 because it doesn't have a PRIMARY KEY."
+    end
+  end
+
+  test_tx "electrified?/3", fn conn ->
+    sql1 = "CREATE TABLE public.buttercup (id int4 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
+    sql2 = "CREATE TABLE public.daisy (id int4 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
+    sql3 = "CALL electric.electrify('buttercup')"
+
+    for sql <- [sql1, sql2, sql3] do
+      {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
+    end
+
+    assert {:ok, true} = Extension.electrified?(conn, "buttercup")
+    assert {:ok, true} = Extension.electrified?(conn, "public", "buttercup")
+
+    assert {:ok, false} = Extension.electrified?(conn, "daisy")
+    assert {:ok, false} = Extension.electrified?(conn, "public", "daisy")
   end
 
   defp migration_history(conn, after_version \\ nil) do

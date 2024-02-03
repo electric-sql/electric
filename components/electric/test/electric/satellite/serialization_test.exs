@@ -348,7 +348,7 @@ defmodule Electric.Satellite.SerializationTest do
             {[], schema}
         end)
 
-      assert {:ok, _} = SchemaCache.save(cxt.origin, version, schema, stmts)
+      assert {:ok, _, _} = SchemaCache.save(cxt.origin, version, schema, stmts)
 
       tx
     end

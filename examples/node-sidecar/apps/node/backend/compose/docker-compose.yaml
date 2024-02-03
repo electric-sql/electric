@@ -1,0 +1,47 @@
+version: "3.8"
+name: "${APP_NAME:-electric}"
+
+configs:
+  postgres_config:
+    file: "./postgres/postgres.conf"
+
+volumes:
+  pg_data:
+
+services:
+  postgres:
+    image: "${POSTGRESQL_IMAGE:-postgres:14-alpine}"
+    environment:
+      POSTGRES_DB: ${APP_NAME:-electric}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: pg_password
+    command:
+      - -c
+      - config_file=/etc/postgresql.conf
+    configs:
+      - source: postgres_config
+        target: /etc/postgresql.conf
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - 5432
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+  electric:
+    image: "${ELECTRIC_IMAGE:-electricsql/electric:latest}"
+    init: true
+    environment:
+      DATABASE_URL: postgresql://postgres:pg_password@postgres:5432/${APP_NAME:-electric}
+      DATABASE_REQUIRE_SSL: false
+      PG_PROXY_PASSWORD: proxy_password
+      LOGICAL_PUBLISHER_HOST: electric
+      AUTH_MODE: insecure
+      LOG_LEVEL: debug
+    ports:
+      - ${ELECTRIC_PORT:-5133}:5133
+      - ${ELECTRIC_PROXY_PORT:-65432}:65432
+    depends_on:
+      - postgres

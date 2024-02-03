@@ -3,14 +3,20 @@ export PROJECT_ROOT=$(shell git rev-parse --show-toplevel)
 mkfile_path := $(abspath $(lastword $(MAKEFILE_LIST)))
 export E2E_ROOT := $(dir $(mkfile_path))
 
-LUX=${E2E_ROOT}/lux/bin/lux
-DOCKER_REGISTRY  = europe-docker.pkg.dev/vaxine/vaxine-io
-DOCKER_REGISTRY2 = europe-docker.pkg.dev/vaxine/ci
-export BUILDER_IMAGE=${DOCKER_REGISTRY2}/electric-builder:latest
 
-export ELIXIR_VERSION=1.15.4
-export OTP_VERSION=25.3.2.4
-export DEBIAN_VERSION=bullseye-20230612-slim
+# Any timeouts in the tests, specified in seconds,
+# are multiplied by this to convert to milliseconds.
+# If in CI, double all timeouts to reduce flakiness
+TIMEOUT_MULTIPLIER = 1000
+ifeq ($(CI), true)
+    TIMEOUT_MULTIPLIER = 2000
+endif
+
+LUX_PATH=${E2E_ROOT}lux/bin/lux
+LUX=${LUX_PATH} --multiplier ${TIMEOUT_MULTIPLIER}
+
+DOCKER_REGISTRY  = europe-docker.pkg.dev/vaxine/vaxine-io
+
 # using a realistic password for the proxy to prevent accidentally working tests 
 # with some default "password"
 export PG_PROXY_PASSWORD?=49_G1JYY0BXWldjnA2EFxhWl
@@ -35,7 +41,8 @@ else
 	export ELECTRIC_CLIENT_IMAGE=${ELECTRIC_CLIENT_IMAGE_NAME}:${ELECTRIC_IMAGE_TAG}
 endif
 
-lux: ${LUX}
+
+lux: ${LUX_PATH}
 
 ${LUX}:
 	git clone https://github.com/hawk/lux.git

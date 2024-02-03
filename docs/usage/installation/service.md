@@ -13,7 +13,7 @@ You can run the [pre-packaged Docker images](#images) published on Docker Hub, o
 
 The Electric sync service is configured using environment variables. The three required variables are:
 
-- `DATABASE_URL` in the format of a Postgres [Connection URI](https://www.postgresql.org/docs/current/libpq-connect.html#id-1.7.3.8.3.6)
+- `DATABASE_URL` in the format of a Postgres [Connection URI](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING-URIS)
 - `LOGICAL_PUBLISHER_HOST` that the sync service is running on (must be accessible from the Postgres instance to establish an inbound replication subscription)
 - `PG_PROXY_PASSWORD` to safe-guard access to the [Migrations proxy](../data-modelling/migrations.md#migrations-proxy)
 
@@ -40,6 +40,7 @@ docker run \
     -p 5133:5133 \
     -p 5433:5433 \
     -p 65432:65432 \
+    -t \
     electricsql/electric
 ```
 
@@ -55,7 +56,7 @@ volumes:
 
 services:
   pg:
-    image: postgres
+    image: postgres:14-alpine
     environment:
       POSTGRES_PASSWORD: pg_password
     command:
@@ -64,7 +65,8 @@ services:
     ports:
       - 5432:5432
     restart: always
-    volumes: pg_data:/var/lib/postgresql/data
+    volumes:
+      - pg_data:/var/lib/postgresql/data
 
   electric:
     image: electricsql/electric
@@ -72,6 +74,7 @@ services:
       - pg
     environment:
       DATABASE_URL: postgresql://postgres:pg_password@pg/postgres
+      DATABASE_REQUIRE_SSL: false
       LOGICAL_PUBLISHER_HOST: electric
       PG_PROXY_PASSWORD: proxy_password
       AUTH_MODE: insecure
@@ -106,7 +109,8 @@ docker run \
     -p 5133:5133 \
     -p 5433:5433 \
     -p 65432:65432 \
-    -it electric:local-build
+    -t \
+    electric:local-build
 ```
 
 ## Elixir

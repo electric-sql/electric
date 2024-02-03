@@ -1,7 +1,7 @@
 // This is the namespace that's patched onto the user's database client
 // (technically via the proxy machinery) as the `.electric` property.
 import { DatabaseAdapter } from './adapter'
-import { Notifier } from '../notifiers'
+import { Notifier, UnsubscribeFunction } from '../notifiers'
 import { ConnectivityState } from '../util/types'
 import { GlobalRegistry, Registry } from '../satellite'
 
@@ -15,7 +15,7 @@ export class ElectricNamespace {
     return this._isConnected
   }
 
-  private _stateChangeSubscription: string
+  private _unsubscribeStateChanges: UnsubscribeFunction
 
   constructor(
     dbName: string,
@@ -29,7 +29,7 @@ export class ElectricNamespace {
     this.registry = registry
     this._isConnected = false
 
-    this._stateChangeSubscription =
+    this._unsubscribeStateChanges =
       this.notifier.subscribeToConnectivityStateChanges(
         ({ connectivityState }) => {
           this.setIsConnected(connectivityState)
@@ -52,9 +52,7 @@ export class ElectricNamespace {
    * Cleans up the resources used by the `ElectricNamespace`.
    */
   async close(): Promise<void> {
-    this.notifier.unsubscribeFromConnectivityStateChanges(
-      this._stateChangeSubscription
-    )
+    this._unsubscribeStateChanges()
     await this.registry.stop(this.dbName)
   }
 }

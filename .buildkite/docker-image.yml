@@ -16,6 +16,7 @@ steps:
       - export ELECTRIC_IMAGE_NAME="${DOCKER_REPO}/${IMAGE_NAME}"
       - cd ./components/electric
       - export ELECTRIC_VERSION=$(make --silent print_version_from_git)
+      - export ELECTRIC_CANARY_IMAGE="${DOCKERHUB_REPO}/${IMAGE_NAME}:canary"
       - make docker-build-ci
   - wait
   - label: ":rocket: Publish the image to DockerHub"

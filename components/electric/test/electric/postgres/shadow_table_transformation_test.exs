@@ -3,17 +3,15 @@ defmodule Electric.Postgres.ShadowTableTransformationTest do
   doctest Electric.Postgres.ShadowTableTransformation, import: true
 
   alias Electric.Postgres.ShadowTableTransformation
+  alias Electric.Postgres.Types
   alias Electric.Replication.Changes
   alias Electric.Replication.Changes.Transaction
 
   import Electric.Postgres.Extension, only: [shadow_of: 1]
 
-  import Electric.Postgres.ShadowTableTransformation,
-    only: [serialize_tag_to_pg: 1, serialize_pg_array: 1]
-
   @relation {"public", "test"}
   @transaction_tag {~U[2023-01-01 00:00:00Z], "no origin"}
-  @pg_transaction_tag serialize_tag_to_pg(@transaction_tag)
+  @pg_transaction_tag Types.ElectricTag.serialize(@transaction_tag)
   @observed "local@#{DateTime.to_unix(~U[2022-01-01 00:00:00Z], :millisecond)}"
   @shadow_table_columns [
     "_tag",
@@ -44,24 +42,23 @@ defmodule Electric.Postgres.ShadowTableTransformationTest do
       assert shadow_change.relation == shadow_of(@relation)
 
       assert Map.take(shadow_change.record, @shadow_table_columns) == %{
-               "_tag" => ShadowTableTransformation.serialize_tag_to_pg(@transaction_tag),
+               "_tag" => Types.ElectricTag.serialize(@transaction_tag),
                "_is_a_delete_operation" => "f",
                "_observed_tags" =>
                  ShadowTableTransformation.convert_tag_list_satellite_to_pg([@observed]),
-               "_modified_columns_bit_mask" =>
-                 ShadowTableTransformation.serialize_pg_array(["t", "t"])
+               "_modified_columns_bit_mask" => Types.Array.serialize(["t", "t"])
              }
     end
 
     test "UPDATE operation gets converted and split correctly" do
       assert [main_change, shadow_change] =
                ShadowTableTransformation.split_change_into_main_and_shadow(
-                 %Changes.UpdatedRecord{
+                 Changes.UpdatedRecord.new(
                    relation: @relation,
                    record: %{"id" => "wow", "content" => "test", "content_b" => "new"},
                    old_record: %{"id" => "wow", "content" => "test", "content_b" => "old"},
                    tags: [@observed]
-                 },
+                 ),
                  relations(),
                  @transaction_tag,
                  nil
@@ -75,12 +72,11 @@ defmodule Electric.Postgres.ShadowTableTransformationTest do
       assert shadow_change.relation == shadow_of(@relation)
 
       assert Map.take(shadow_change.record, @shadow_table_columns) == %{
-               "_tag" => ShadowTableTransformation.serialize_tag_to_pg(@transaction_tag),
+               "_tag" => Types.ElectricTag.serialize(@transaction_tag),
                "_is_a_delete_operation" => "f",
                "_observed_tags" =>
                  ShadowTableTransformation.convert_tag_list_satellite_to_pg([@observed]),
-               "_modified_columns_bit_mask" =>
-                 ShadowTableTransformation.serialize_pg_array(["f", "t"])
+               "_modified_columns_bit_mask" => Types.Array.serialize(["f", "t"])
              }
     end
 
@@ -105,12 +101,11 @@ defmodule Electric.Postgres.ShadowTableTransformationTest do
       assert shadow_change.relation == shadow_of(@relation)
 
       assert Map.take(shadow_change.record, @shadow_table_columns) == %{
-               "_tag" => ShadowTableTransformation.serialize_tag_to_pg(@transaction_tag),
+               "_tag" => Types.ElectricTag.serialize(@transaction_tag),
                "_is_a_delete_operation" => "t",
                "_observed_tags" =>
                  ShadowTableTransformation.convert_tag_list_satellite_to_pg([@observed]),
-               "_modified_columns_bit_mask" =>
-                 ShadowTableTransformation.serialize_pg_array(["f", "f"])
+               "_modified_columns_bit_mask" => Types.Array.serialize(["f", "f"])
              }
     end
 
@@ -135,15 +130,14 @@ defmodule Electric.Postgres.ShadowTableTransformationTest do
       assert shadow_change.relation == shadow_of(@relation)
 
       assert Map.take(shadow_change.record, @shadow_table_columns) == %{
-               "_tag" => ShadowTableTransformation.serialize_tag_to_pg(@transaction_tag),
+               "_tag" => Types.ElectricTag.serialize(@transaction_tag),
                "_is_a_delete_operation" => "f",
                "_observed_tags" =>
                  {~U[2022-01-01 00:00:00.000Z], nil}
-                 |> ShadowTableTransformation.serialize_tag_to_pg()
+                 |> Types.ElectricTag.serialize()
                  |> List.wrap()
-                 |> ShadowTableTransformation.serialize_pg_array(),
-               "_modified_columns_bit_mask" =>
-                 ShadowTableTransformation.serialize_pg_array(["t", "t"])
+                 |> Types.Array.serialize(),
+               "_modified_columns_bit_mask" => Types.Array.serialize(["t", "t"])
              }
     end
   end
@@ -154,7 +148,7 @@ defmodule Electric.Postgres.ShadowTableTransformationTest do
         changes: [
           %Changes.NewRecord{
             relation: shadow_of(@relation),
-            record: %{"_tag" => serialize_tag_to_pg(@transaction_tag)}
+            record: %{"_tag" => Types.ElectricTag.serialize(@transaction_tag)}
           }
         ]
       }
@@ -178,7 +172,7 @@ defmodule Electric.Postgres.ShadowTableTransformationTest do
             record: %{
               "id" => "wow",
               "_tag" => @pg_transaction_tag,
-              "_tags" => serialize_pg_array([@pg_transaction_tag])
+              "_tags" => Types.Array.serialize([@pg_transaction_tag])
             }
           }
         ]
@@ -210,17 +204,17 @@ defmodule Electric.Postgres.ShadowTableTransformationTest do
               record: %{
                 "id" => "wow",
                 "_tag" => @pg_transaction_tag,
-                "_tags" => serialize_pg_array([])
+                "_tags" => Types.Array.serialize([])
               }
             },
-            %Changes.UpdatedRecord{
+            Changes.UpdatedRecord.new(
               relation: shadow_of(@relation),
               record: %{
                 "id" => "wow",
                 "_tag" => @pg_transaction_tag,
-                "_tags" => serialize_pg_array([@pg_transaction_tag])
+                "_tags" => Types.Array.serialize([@pg_transaction_tag])
               }
-            }
+            )
           ]
           # to match the parsing order of logical replication producer
           |> Enum.reverse()
@@ -252,7 +246,7 @@ defmodule Electric.Postgres.ShadowTableTransformationTest do
               record: %{
                 "id" => "not wow",
                 "_tag" => @pg_transaction_tag,
-                "_tags" => serialize_pg_array([@pg_transaction_tag])
+                "_tags" => Types.Array.serialize([@pg_transaction_tag])
               }
             },
             %Changes.NewRecord{
@@ -261,7 +255,9 @@ defmodule Electric.Postgres.ShadowTableTransformationTest do
                 "id" => "wow",
                 "_tag" => @pg_transaction_tag,
                 "_tags" =>
-                  serialize_pg_array([serialize_tag_to_pg({~U[2023-01-01 00:00:00Z], "correct"})])
+                  Types.Array.serialize([
+                    Types.ElectricTag.serialize({~U[2023-01-01 00:00:00Z], "correct"})
+                  ])
               }
             }
           ]

@@ -5,6 +5,7 @@ import browserEnv from '@ikscodes/browser-env'
 browserEnv()
 
 import React from 'react'
+import { EventEmitter } from 'events'
 import { act, renderHook, waitFor } from '@testing-library/react'
 
 import { DatabaseAdapter } from '../../src/drivers/react-native-sqlite-storage/adapter'
@@ -27,9 +28,20 @@ import { SocketFactory } from '../../src/sockets'
 import { SatelliteOpts } from '../../src/satellite/config'
 import { Notifier } from '../../src/notifiers'
 
-const assert = (stmt: any, msg: string = 'Assertion failed.'): void => {
+const assert = (stmt: any, msg = 'Assertion failed.'): void => {
   if (!stmt) {
     throw new Error(msg)
+  }
+}
+
+const callSpy = <T,>(queryFn: () => Promise<T>) => {
+  let numCalls = 0
+  return {
+    getNumCalls: () => numCalls,
+    queryFn: () => {
+      numCalls++
+      return queryFn() as Promise<T>
+    },
   }
 }
 
@@ -47,7 +59,7 @@ const test = anyTest as TestFn<{
 test.beforeEach((t) => {
   const original = new MockDatabase('test.db')
   const adapter = new DatabaseAdapter(original, false)
-  const notifier = new MockNotifier('test.db')
+  const notifier = new MockNotifier('test.db', new EventEmitter())
   const satellite = new MockSatelliteProcess(
     'test.db',
     adapter,
@@ -111,9 +123,11 @@ test('useLiveQuery returns query results', async (t) => {
   const { dal, adapter } = t.context
 
   const query = 'select i from bars'
-  const liveQuery = dal.db.liveRaw({
-    sql: query,
-  })
+  const { queryFn: liveQuery, getNumCalls } = callSpy(
+    dal.db.liveRawQuery({
+      sql: query,
+    })
+  )
 
   const wrapper: FC = ({ children }) => {
     return <ElectricProvider db={dal}>{children}</ElectricProvider>
@@ -123,6 +137,7 @@ test('useLiveQuery returns query results', async (t) => {
 
   await waitFor(() => assert(result.current.updatedAt !== undefined))
   t.deepEqual(result.current.results, await adapter.query({ sql: query }))
+  t.is(getNumCalls(), 1) // called once on mount
 })
 
 test('useLiveQuery returns error when query errors', async (t) => {
@@ -146,9 +161,11 @@ test('useLiveQuery re-runs query when data changes', async (t) => {
   const { dal, notifier } = t.context
 
   const query = 'select foo from bars'
-  const liveQuery = dal.db.liveRaw({
-    sql: query,
-  })
+  const { queryFn: liveQuery, getNumCalls } = callSpy(
+    dal.db.liveRawQuery({
+      sql: query,
+    })
+  )
 
   const wrapper: FC = ({ children }) => {
     return <ElectricProvider db={dal}>{children}</ElectricProvider>
@@ -158,6 +175,7 @@ test('useLiveQuery re-runs query when data changes', async (t) => {
   await waitFor(() => assert(result.current.results !== undefined), {
     timeout: 1000,
   })
+  t.is(getNumCalls(), 1) // called once on mount
 
   const { results, updatedAt } = result.current
 
@@ -172,6 +190,7 @@ test('useLiveQuery re-runs query when data changes', async (t) => {
     timeout: 1000,
   })
   t.not(results, result.current.results)
+  t.is(getNumCalls(), 2) // called once more on update
 })
 
 test('useLiveQuery re-runs query when *aliased* data changes', async (t) => {
@@ -184,7 +203,7 @@ test('useLiveQuery re-runs query when *aliased* data changes', async (t) => {
   }
 
   const query = 'select foo from baz.bars'
-  const liveQuery = dal.db.liveRaw({
+  const liveQuery = dal.db.liveRawQuery({
     sql: query,
   })
 
@@ -212,7 +231,7 @@ test('useLiveQuery never sets results if unmounted immediately', async (t) => {
   const { dal } = t.context
 
   const query = 'select foo from bars'
-  const liveQuery = dal.db.liveRaw({
+  const liveQuery = dal.db.liveRawQuery({
     sql: query,
   })
 
@@ -233,7 +252,7 @@ test('useLiveQuery unsubscribes to data changes when unmounted', async (t) => {
   const { dal, notifier } = t.context
 
   const query = 'select foo from bars'
-  const liveQuery = dal.db.liveRaw({
+  const liveQuery = dal.db.liveRawQuery({
     sql: query,
   })
 
@@ -268,7 +287,7 @@ test('useLiveQuery ignores results if unmounted whilst re-querying', async (t) =
   const { dal, notifier } = t.context
 
   const query = 'select foo from bars'
-  const liveQuery = dal.db.liveRaw({
+  const liveQuery = dal.db.liveRawQuery({
     sql: query,
   })
   const slowLiveQuery = async () => {

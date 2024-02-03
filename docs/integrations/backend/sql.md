@@ -9,7 +9,7 @@ sidebar_position: 60
 
 You can execute DDLX statement using raw SQL.
 
-Make sure you connect via the [migrations proxy](../../usage/data-modelling/migrations.md#migrations-proxy). For example using PSQL:
+Make sure you connect via the [migrations proxy](../../usage/data-modelling/migrations.md#migrations-proxy). For example, using PSQL:
 
 ```console
 $ psql "postgresql://postgres:$PG_PROXY_PASSWORD@localhost:$PG_PROXY_PORT/mydb"

@@ -25,8 +25,8 @@ defmodule Electric.Postgres.Proxy.Prisma.QueryTest do
 
     loader_spec = MockSchemaLoader.backend_spec(migrations: migrations)
     {:ok, loader} = SchemaLoader.connect(loader_spec, [])
-    {:ok, version, schema} = SchemaLoader.load(loader)
-    {:ok, version: version, schema: schema, loader: loader}
+    {:ok, schema_version} = SchemaLoader.load(loader)
+    {:ok, version: schema_version.version, schema: schema_version, loader: loader}
   end
 
   test "TableV5_2", cxt do
@@ -37,6 +37,7 @@ defmodule Electric.Postgres.Proxy.Prisma.QueryTest do
                ["with_constraint", "public", <<0>>, <<0>>, <<0>>, nil, nil],
                ["checked", "public", <<0>>, <<0>>, <<0>>, nil, nil],
                ["interesting", "public", <<0>>, <<0>>, <<0>>, nil, nil],
+               ["manuals", "public", <<0>>, <<0>>, <<0>>, nil, nil],
                ["pointy", "public", <<0>>, <<0>>, <<0>>, nil, nil],
                ["pointy2", "public", <<0>>, <<0>>, <<0>>, nil, nil]
              ])
@@ -82,7 +83,11 @@ defmodule Electric.Postgres.Proxy.Prisma.QueryTest do
   end
 
   test "TypeV5_2", cxt do
-    [] = Query.TypeV5_2.data_rows([@public], cxt.schema, config())
+    assert [
+             ["oses", "linux", "public", nil],
+             ["oses", "macos", "public", nil],
+             ["oses", "windows", "public", nil]
+           ] == Query.TypeV5_2.data_rows([@public], cxt.schema, config())
   end
 
   test "ColumnV5_2", cxt do
@@ -314,6 +319,60 @@ defmodule Electric.Postgres.Proxy.Prisma.QueryTest do
                ],
                [
                  "public",
+                 "manuals",
+                 "id",
+                 "text",
+                 nil,
+                 nil,
+                 nil,
+                 nil,
+                 "text",
+                 "pg_catalog",
+                 "text",
+                 nil,
+                 "NO",
+                 "NO",
+                 nil,
+                 nil
+               ],
+               [
+                 "public",
+                 "manuals",
+                 "manual_url",
+                 "text",
+                 nil,
+                 nil,
+                 nil,
+                 nil,
+                 "text",
+                 "pg_catalog",
+                 "text",
+                 nil,
+                 "NO",
+                 "NO",
+                 nil,
+                 nil
+               ],
+               [
+                 "public",
+                 "manuals",
+                 "os",
+                 "oses",
+                 nil,
+                 nil,
+                 nil,
+                 nil,
+                 "oses",
+                 "pg_catalog",
+                 "oses",
+                 nil,
+                 "NO",
+                 "NO",
+                 nil,
+                 nil
+               ],
+               [
+                 "public",
                  "with_constraint",
                  "id",
                  "text",
@@ -498,7 +557,7 @@ defmodule Electric.Postgres.Proxy.Prisma.QueryTest do
   test "ForeignKeyV5_2", cxt do
     data_rows = Query.ForeignKeyV5_2.data_rows([@public], cxt.schema, config())
 
-    # can't do an equality check as the actual oids 
+    # can't do an equality check as the actual oids
     assert Enum.sort(data_rows) ==
              Enum.sort([
                [
@@ -555,7 +614,7 @@ defmodule Electric.Postgres.Proxy.Prisma.QueryTest do
   test "IndexV5_2", cxt do
     data_rows = Query.IndexV5_2.data_rows([@public], cxt.schema, config())
 
-    # can't do an equality check as the actual oids 
+    # can't do an equality check as the actual oids
     assert Enum.sort(data_rows) ==
              Enum.sort([
                [
@@ -647,6 +706,22 @@ defmodule Electric.Postgres.Proxy.Prisma.QueryTest do
                  <<1>>,
                  <<0, 0, 0, 0>>,
                  "uuid_ops",
+                 <<1>>,
+                 "btree",
+                 "ASC",
+                 <<0>>,
+                 <<0>>,
+                 <<0>>
+               ],
+               [
+                 "public",
+                 "manuals_pkey",
+                 "manuals",
+                 "id",
+                 <<1>>,
+                 <<1>>,
+                 <<0, 0, 0, 0>>,
+                 "text_ops",
                  <<1>>,
                  "btree",
                  "ASC",

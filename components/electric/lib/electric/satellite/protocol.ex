@@ -18,11 +18,13 @@ defmodule Electric.Satellite.Protocol do
 
   alias Electric.Replication.Changes.Transaction
   alias Electric.Postgres.Extension.SchemaCache
+  alias Electric.Postgres.Schema
   alias Electric.Replication.Changes
   alias Electric.Replication.Shapes
   alias Electric.Replication.Shapes.ShapeRequest
   alias Electric.Satellite.Serialization
   alias Electric.Satellite.ClientManager
+  alias Electric.Satellite.WriteValidation
   alias Electric.Telemetry.Metrics
 
   require Logger
@@ -217,7 +219,7 @@ defmodule Electric.Satellite.Protocol do
               in_rep: %InRep{},
               out_rep: %OutRep{},
               auth_provider: nil,
-              pg_connector_opts: [],
+              connector_config: [],
               subscriptions: %{},
               subscription_data_fun: nil,
               telemetry: nil
@@ -230,7 +232,7 @@ defmodule Electric.Satellite.Protocol do
             in_rep: InRep.t(),
             out_rep: OutRep.t(),
             auth_provider: Electric.Satellite.Auth.provider(),
-            pg_connector_opts: Keyword.t(),
+            connector_config: Keyword.t(),
             subscriptions: map(),
             subscription_data_fun: fun(),
             telemetry: Telemetry.t() | nil
@@ -406,7 +408,7 @@ defmodule Electric.Satellite.Protocol do
          }, state}
 
       true ->
-        case Shapes.validate_requests(requests, Connectors.origin(state.pg_connector_opts)) do
+        case Shapes.validate_requests(requests, Connectors.origin(state.connector_config)) do
           {:ok, requests} ->
             query_subscription_data(id, requests, state)
 
@@ -532,10 +534,20 @@ defmodule Electric.Satellite.Protocol do
     %{columns: columns} = SchemaCache.Global.relation!({msg.schema_name, msg.table_name})
     relation_columns = Map.new(columns, &{&1.name, &1.type})
 
+    enums = SchemaCache.Global.enums()
+
     columns =
-      Enum.map(msg.columns, fn %SatRelationColumn{name: name} = col ->
-        %{name: name, type: Map.fetch!(relation_columns, name), nullable?: col.is_nullable}
-      end)
+      for %SatRelationColumn{name: name} = col <- msg.columns do
+        typename = Map.fetch!(relation_columns, name)
+
+        type =
+          case Schema.lookup_enum_values(enums, typename) do
+            nil -> typename
+            values -> {:enum, typename, values}
+          end
+
+        %{name: name, type: type, nullable?: col.is_nullable}
+      end
 
     relations =
       Map.put(in_rep.relations, msg.relation_id, %{
@@ -563,16 +575,25 @@ defmodule Electric.Satellite.Protocol do
         {incomplete, complete} ->
           complete = Enum.reverse(complete)
 
-          for tx <- complete do
-            telemetry_event(state, :transaction_receive, Transaction.count_operations(tx))
+          case WriteValidation.validate_transactions!(
+                 complete,
+                 {SchemaCache, Connectors.origin(state.connector_config)}
+               ) do
+            {:ok, accepted} ->
+              {nil, send_transactions(accepted, incomplete, state)}
+
+            {:error, accepted, error, trailing} ->
+              state = send_transactions(accepted, incomplete, state)
+              telemetry_event(state, :bad_transaction)
+
+              Logger.error([
+                "WriteValidation.Error: " <> to_string(error),
+                "\n",
+                "Dropping #{length(trailing)} unapplied transactions: #{Enum.map(trailing, & &1.lsn) |> inspect()}"
+              ])
+
+              {:error, WriteValidation.Error.error_response(error)}
           end
-
-          in_rep =
-            %InRep{in_rep | incomplete_trans: incomplete}
-            |> InRep.add_to_queue(complete)
-            |> send_downstream()
-
-          {nil, %State{state | in_rep: in_rep}}
       end
     rescue
       e ->
@@ -598,6 +619,19 @@ defmodule Electric.Satellite.Protocol do
 
   def process_message(_, %State{}) do
     {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
+  end
+
+  defp send_transactions(complete, incomplete, state) do
+    for tx <- complete do
+      telemetry_event(state, :transaction_receive, Transaction.count_operations(tx))
+    end
+
+    in_rep =
+      %InRep{state.in_rep | incomplete_trans: incomplete}
+      |> InRep.add_to_queue(complete)
+      |> send_downstream()
+
+    %State{state | in_rep: in_rep}
   end
 
   @spec handle_start_replication_request(
@@ -887,7 +921,6 @@ defmodule Electric.Satellite.Protocol do
 
     # I'm dereferencing these here because calling this in Task implies copying over entire `state` just for two fields.
     fun = state.subscription_data_fun
-    opts = state.pg_connector_opts
     span = state.telemetry.subscription_spans[id]
 
     Task.start(fn ->
@@ -895,7 +928,7 @@ defmodule Electric.Satellite.Protocol do
       # Please see documentation on that function for context on the next `receive` block.
       fun.({id, requests, context},
         reply_to: {ref, parent},
-        connection: opts,
+        connection: state.connector_config,
         telemetry_span: span
       )
     end)

@@ -1,34 +1,113 @@
-import path from 'path'
-import * as z from 'zod'
-import * as fs from 'fs/promises'
 import { createWriteStream } from 'fs'
+import { dedent } from 'ts-dedent'
+import { exec } from 'child_process'
+import * as fs from 'fs/promises'
+import * as z from 'zod'
+import decompress from 'decompress'
+import getPort from 'get-port'
 import http from 'node:http'
 import https from 'node:https'
-import decompress from 'decompress'
+import Module from 'node:module'
+import path from 'path'
+import { buildDatabaseURL, parsePgProxyPort } from '../utils'
 import { buildMigrations, getMigrationNames } from './builder'
-import { exec } from 'child_process'
-import { dedent } from 'ts-dedent'
 import { findAndReplaceInFile } from '../util'
+import { getConfig, type Config } from '../config'
+import { start } from '../docker-commands/command-start'
+import { stop } from '../docker-commands/command-stop'
+import { withConfig } from '../configure/command-with-config'
+
+// Rather than run `npx prisma` we resolve the path to the prisma binary so that
+// we can be sure we are using the same version of Prisma that is a dependency of
+// the Electric client.
+// `Module.createRequire(import.meta.url)` creates an old-style `require()` function
+// that can be used to resolve the path to the prisma cli script using
+// `require.resolve()`.
+// We use the same method to resolve the path to `@electric-sql/prisma-generator`.
+const require = Module.createRequire(import.meta.url)
+const prismaPath = require.resolve('prisma')
+const generatorPath = path.join(
+  path.dirname(require.resolve('@electric-sql/prisma-generator')),
+  'bin.js'
+)
 
 const appRoot = path.resolve() // path where the user ran `npx electric migrate`
 
-export const defaultOptions = {
-  service: process.env.ELECTRIC_URL ?? 'http://localhost:5133',
-  proxy:
-    process.env.ELECTRIC_PROXY_URL ??
-    'postgresql://prisma:proxy_password@localhost:65432/electric', // use "prisma" user because we will introspect the DB via the proxy
-  out: path.join(appRoot, 'src/generated/client'),
-  watch: false,
-  pollingInterval: 1000, // in ms
+export const defaultPollingInterval = 1000 // in ms
+
+export interface GeneratorOptions {
+  watch?: boolean
+  pollingInterval?: number
+  withMigrations?: string
+  debug?: boolean
+  exitOnError?: boolean
+  config: Config
 }
 
-export type GeneratorOptions = typeof defaultOptions
-
-export async function generate(opts: GeneratorOptions) {
-  if (opts.watch) {
-    watchMigrations(opts)
-  } else {
-    await _generate(opts)
+export async function generate(options: GeneratorOptions) {
+  const opts = {
+    exitOnError: true,
+    ...options,
+  }
+  let config = opts.config
+  if (opts.watch && opts.withMigrations) {
+    console.error(
+      'Cannot use --watch and --with-migrations at the same time. Please choose one.'
+    )
+    process.exit(1)
+  }
+  console.log('Generating Electric client...')
+  try {
+    if (opts.withMigrations) {
+      // Start new ElectricSQL and PostgreSQL containers
+      console.log('Starting ElectricSQL and PostgreSQL containers...')
+      // Remove the ELECTRIC_SERVICE and ELECTRIC_PROXY env vars
+      delete process.env.ELECTRIC_SERVICE
+      delete process.env.ELECTRIC_PROXY
+      config = getConfig({
+        ...config,
+        SERVICE: undefined,
+        PROXY: undefined,
+        ...(await withMigrationsConfig(config.CONTAINER_NAME)),
+      })
+      opts.config = config
+      await start({
+        config,
+        withPostgres: true,
+        detach: true,
+        exitOnDetached: false,
+      })
+      // Run the provided migrations command
+      console.log('Running migrations...')
+      const ret = withConfig(opts.withMigrations, opts.config)
+      if (ret.status !== 0) {
+        console.log(
+          'Failed to run migrations, --with-migrations command exited with error'
+        )
+        process.exit(1)
+      }
+    }
+    console.log('Service URL: ' + opts.config.SERVICE)
+    console.log(
+      'Proxy URL: ' +
+        stripPasswordFromUrl(buildProxyUrlForIntrospection(opts.config))
+    )
+    // Generate the client
+    if (opts.watch) {
+      watchMigrations(opts)
+    } else {
+      await _generate(opts)
+    }
+  } finally {
+    if (opts.withMigrations) {
+      // Stop and remove the containers
+      console.log('Stopping ElectricSQL and PostgreSQL containers...')
+      await stop({
+        remove: true,
+        config,
+      })
+      console.log('Done')
+    }
   }
 }
 
@@ -37,7 +116,8 @@ export async function generate(opts: GeneratorOptions) {
  * to check for new migrations. Invokes `_generate`
  * when there are new migrations.
  */
-async function watchMigrations(opts: Omit<GeneratorOptions, 'watch'>) {
+async function watchMigrations(opts: GeneratorOptions) {
+  const config = opts.config
   const pollingInterval = opts.pollingInterval
   const pollMigrations = async () => {
     // Create a unique temporary folder in which to save
@@ -48,7 +128,7 @@ async function watchMigrations(opts: Omit<GeneratorOptions, 'watch'>) {
       // Read migrations.js file to check latest migration version
       const latestMigration = await getLatestMigration(opts)
 
-      let migrationEndpoint = opts.service + '/api/migrations?dialect=sqlite'
+      let migrationEndpoint = config.SERVICE + '/api/migrations?dialect=sqlite'
       if (latestMigration !== undefined) {
         // Only fetch new migrations
         migrationEndpoint = migrationEndpoint + `&version=${latestMigration}`
@@ -153,14 +233,16 @@ async function getLatestMigration(
  * @param configFolder Absolute path to the configuration folder.
  */
 async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
+  const config = opts.config
   // Create a unique temporary folder in which to save
   // intermediate files without risking collisions
   const tmpFolder = await fs.mkdtemp('.electric_migrations_tmp_')
+  let generationFailed = false
 
   try {
     const migrationsPath = path.join(tmpFolder, 'migrations')
     await fs.mkdir(migrationsPath)
-    const migrationEndpoint = opts.service + '/api/migrations?dialect=sqlite'
+    const migrationEndpoint = config.SERVICE + '/api/migrations?dialect=sqlite'
 
     const migrationsFolder = path.resolve(migrationsPath)
     const migrationsFile = migrationsFilePath(opts)
@@ -180,27 +262,40 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
     await capitaliseTableNames(prismaSchema)
 
     // Generate a client from the Prisma schema
-    console.log('Generating Electric client...')
     await generateElectricClient(prismaSchema)
-    const relativePath = path.relative(appRoot, opts.out)
+    const relativePath = path.relative(appRoot, config.CLIENT_PATH)
     // Modify the type of JSON input values in the generated Prisma client
     // because we deviate from Prisma's typing for JSON values
-    const outDir = opts.out
-    await extendJsonType(outDir)
+    await extendJsonType(config.CLIENT_PATH)
     // Delete all files generated for the Prisma client, except the typings
-    await keepOnlyPrismaTypings(outDir)
+    await keepOnlyPrismaTypings(config.CLIENT_PATH)
     console.log(`Successfully generated Electric client at: ./${relativePath}`)
 
     // Build the migrations
     console.log('Building migrations...')
     await buildMigrations(migrationsFolder, migrationsFile)
     console.log('Successfully built migrations')
+
+    if (
+      ['nodenext', 'node16'].includes(
+        config.MODULE_RESOLUTION.toLocaleLowerCase()
+      )
+    ) {
+      await rewriteImportsForNodeNext(config.CLIENT_PATH)
+    }
   } catch (e: any) {
+    generationFailed = true
     console.error('generate command failed: ' + e)
-    process.exit(1)
+    throw e
   } finally {
-    // Delete our temporary directory
-    await fs.rm(tmpFolder, { recursive: true })
+    // Delete our temporary directory unless
+    // generation failed in debug mode
+    if (!generationFailed || !opts.debug) {
+      await fs.rm(tmpFolder, { recursive: true })
+    }
+
+    // In case of process exit, make sure to run after folder removal
+    if (generationFailed && opts.exitOnError) process.exit(1)
   }
 }
 
@@ -217,37 +312,42 @@ function escapePathForString(inputPath: string): string {
     : inputPath
 }
 
+function buildProxyUrlForIntrospection(config: Config) {
+  return buildDatabaseURL({
+    user: 'prisma', // We use the "prisma" user to put the proxy into introspection mode
+    password: config.PG_PROXY_PASSWORD,
+    host: config.PG_PROXY_HOST,
+    port: parsePgProxyPort(config.PG_PROXY_PORT).port,
+    dbName: config.DATABASE_NAME,
+  })
+}
+
 /**
  * Creates a fresh Prisma schema in the provided folder.
  * The Prisma schema is initialised with a generator and a datasource.
  */
-async function createPrismaSchema(
-  folder: string,
-  { out, proxy }: Omit<GeneratorOptions, 'watch'>
-) {
+async function createPrismaSchema(folder: string, opts: GeneratorOptions) {
+  const config = opts.config
   const prismaDir = path.join(folder, 'prisma')
   const prismaSchemaFile = path.join(prismaDir, 'schema.prisma')
   await fs.mkdir(prismaDir)
-  const provider = path.join(
-    appRoot,
-    'node_modules/@electric-sql/prisma-generator/dist/bin.js'
-  )
-  const output = path.resolve(out)
+  const output = path.resolve(config.CLIENT_PATH)
+  const proxyUrl = buildProxyUrlForIntrospection(config)
   const schema = dedent`
     generator electric {
-      provider      = "${escapePathForString(provider)}"
+      provider      = "node ${escapePathForString(generatorPath)}"
       output        = "${escapePathForString(output)}"
       relationModel = "false"
     }
 
     generator client {
       provider = "prisma-client-js"
-      output   = "${output}"
+      output   = "${escapePathForString(output)}"
     }
 
     datasource db {
       provider = "postgresql"
-      url      = "${proxy}"
+      url      = "${proxyUrl}"
     }`
   await fs.writeFile(prismaSchemaFile, schema)
   return prismaSchemaFile
@@ -355,7 +455,7 @@ export function doCapitaliseTableNames(lines: string[]): string[] {
 
 async function introspectDB(prismaSchema: string): Promise<void> {
   await executeShellCommand(
-    `npx prisma db pull --schema="${prismaSchema}"`,
+    `node ${prismaPath} db pull --schema="${prismaSchema}"`,
     'Introspection script exited with error code: '
   )
 }
@@ -422,7 +522,7 @@ function addValidator(ln: string): string {
 
 async function generateElectricClient(prismaSchema: string): Promise<void> {
   await executeShellCommand(
-    `npx prisma generate --schema="${prismaSchema}"`,
+    `node ${prismaPath} generate --schema="${prismaSchema}"`,
     'Generator script exited with error code: '
   )
 }
@@ -496,7 +596,7 @@ async function fetchMigrations(
 }
 
 function migrationsFilePath(opts: Omit<GeneratorOptions, 'watch'>) {
-  const outFolder = path.resolve(opts.out)
+  const outFolder = path.resolve(opts.config.CLIENT_PATH)
   return path.join(outFolder, 'migrations.ts')
 }
 
@@ -601,4 +701,36 @@ async function keepOnlyPrismaTypings(prismaDir: string): Promise<void> {
     }
   })
   await Promise.all(proms)
+}
+
+async function rewriteImportsForNodeNext(clientDir: string): Promise<void> {
+  const file = path.join(clientDir, 'index.ts')
+  const content = await fs.readFile(file, 'utf8')
+  const newContent = content
+    .replace("from './migrations';", "from './migrations.js';")
+    .replace("from './prismaClient';", "from './prismaClient.js';")
+  await fs.writeFile(file, newContent)
+}
+
+async function withMigrationsConfig(containerName: string) {
+  return {
+    HTTP_PORT: await getPort(),
+    PG_PROXY_PORT: (await getPort()).toString(),
+    DATABASE_PORT: await getPort(),
+    SERVICE_HOST: 'localhost',
+    PG_PROXY_HOST: 'localhost',
+    DATABASE_REQUIRE_SSL: false,
+    // Random container name to avoid collisions
+    CONTAINER_NAME: `${containerName}-migrations-${Math.random()
+      .toString(36)
+      .slice(6)}`,
+  }
+}
+
+function stripPasswordFromUrl(url: string): string {
+  const parsed = new URL(url)
+  if (parsed.password) {
+    parsed.password = '********'
+  }
+  return parsed.toString()
 }

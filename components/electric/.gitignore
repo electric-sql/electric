@@ -29,3 +29,6 @@ electric-*.tar
 
 /archives
 .node_repl_history
+
+# Optional local configuration files for dev and test envs.
+/*.env.local

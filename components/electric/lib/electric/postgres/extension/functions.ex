@@ -3,23 +3,25 @@ defmodule Electric.Postgres.Extension.Functions do
   This module organizes SQL functions that are to be defined in Electric's internal database schema.
   """
 
-  alias Electric.Postgres.Extension
+  # Import all functions from the Extension module to make them available for calling inside SQL function templates when
+  # those templates are being evaludated by EEx.
+  import Electric.Postgres.Extension, warn: false
+
   require EEx
 
-  sql_files =
-    "functions/*.sql.eex"
-    |> Path.expand(__DIR__)
-    |> Path.wildcard()
+  @template_dir "priv/sql_function_templates"
 
-  function_names =
-    for path <- sql_files do
-      @external_resource path
+  template_dir_path = Application.app_dir(:electric, @template_dir)
+  sql_template_paths = Path.wildcard(template_dir_path <> "/**/*.sql.eex")
 
+  function_paths =
+    for path <- sql_template_paths do
+      relpath = Path.relative_to(path, template_dir_path)
       name = path |> Path.basename(".sql.eex") |> String.to_atom()
-      _ = EEx.function_from_file(:def, name, path, [:assigns])
-
-      name
+      {relpath, name}
     end
+
+  function_names = for {_relpath, name} <- function_paths, do: name
 
   fn_name_type =
     Enum.reduce(function_names, fn name, code ->
@@ -29,13 +31,14 @@ defmodule Electric.Postgres.Extension.Functions do
     end)
 
   @typep name :: unquote(fn_name_type)
-  @typep sql :: String.t()
-  @type function_list :: [{name, sql}]
+  @typep sql :: binary
+  @type function_list :: [{Path.t(), sql}]
 
+  @function_paths function_paths
   @function_names function_names
 
   @doc """
-  Get a list of `{name, SQL}` pairs where the the SQL code contains the definition of a function (or multiple functions).
+  Get a list of `{name, SQL}` pairs where the SQL code contains the definition of a function (or multiple functions).
 
   Every function in the list is defined as `CREATE OR REPLACE FUNCTION`.
   """
@@ -43,8 +46,8 @@ defmodule Electric.Postgres.Extension.Functions do
   # here. See VAX-1016 for details.
   @spec list :: function_list
   def list do
-    for name <- @function_names do
-      {name, by_name(name)}
+    for {relpath, _name} <- @function_paths do
+      {relpath, eval_template(relpath)}
     end
   end
 
@@ -56,19 +59,18 @@ defmodule Electric.Postgres.Extension.Functions do
   """
   @spec by_name(name) :: sql
   def by_name(name) when name in @function_names do
-    apply(__MODULE__, name, [assigns()])
+    {relpath, ^name} = List.keyfind(@function_paths, name, 1)
+    eval_template(relpath)
   end
 
-  # This map of assigns is the same for all function templates.
-  defp assigns do
-    %{
-      schema: Extension.schema(),
-      ddl_table: Extension.ddl_table(),
-      txid_type: Extension.txid_type(),
-      txts_type: Extension.txts_type(),
-      version_table: Extension.version_table(),
-      electrified_tracking_table: Extension.electrified_tracking_table(),
-      publication_name: Extension.publication_name()
-    }
+  defp eval_template(relpath) do
+    # This hack is necessary to get a meaningful error when EEx fails to evaluate the template.
+    # Without it, errors will say that it is lib/electric/postgres/extension/functions.ex that failed to compile.
+    env = %{__ENV__ | file: relpath}
+
+    Path.join(Application.app_dir(:electric, @template_dir), relpath)
+    |> EEx.compile_file(file: relpath)
+    |> Code.eval_quoted([], env)
+    |> elem(0)
   end
 end

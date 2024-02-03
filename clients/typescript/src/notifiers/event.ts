@@ -1,7 +1,6 @@
 import { EventEmitter } from 'events'
 
 import { AuthState } from '../auth/index'
-import { randomValue } from '../util/random'
 import { QualifiedTablename } from '../util/tablename'
 import { ConnectivityState, DbName } from '../util/types'
 import Log from 'loglevel'
@@ -19,9 +18,10 @@ import {
   Notifier,
   PotentialChangeCallback,
   PotentialChangeNotification,
+  UnsubscribeFunction,
 } from './index'
 
-const EVENT_NAMES = {
+export const EVENT_NAMES = {
   authChange: 'auth:changed',
   actualDataChange: 'data:actually:changed',
   potentialDataChange: 'data:potentially:changed',
@@ -51,14 +51,6 @@ export class EventNotifier implements Notifier {
 
   events: EventEmitter
 
-  _changeCallbacks: {
-    [key: string]: NotificationCallback
-  }
-
-  _connectivityStatusCallbacks: {
-    [key: string]: NotificationCallback
-  }
-
   constructor(dbName: DbName, eventEmitter?: EventEmitter) {
     this.dbName = dbName
     this.attachedDbIndex = {
@@ -67,9 +59,6 @@ export class EventNotifier implements Notifier {
     }
 
     this.events = eventEmitter !== undefined ? eventEmitter : globalEmitter
-
-    this._changeCallbacks = {}
-    this._connectivityStatusCallbacks = {}
   }
 
   attach(dbName: DbName, dbAlias: string): void {
@@ -113,24 +102,13 @@ export class EventNotifier implements Notifier {
   authStateChanged(authState: AuthState): void {
     this._emitAuthStateChange(authState)
   }
-  subscribeToAuthStateChanges(callback: AuthStateCallback): string {
-    const key = randomValue()
-
-    this._changeCallbacks[key] = callback
+  subscribeToAuthStateChanges(
+    callback: AuthStateCallback
+  ): UnsubscribeFunction {
     this._subscribe(EVENT_NAMES.authChange, callback)
-
-    return key
-  }
-  unsubscribeFromAuthStateChanges(key: string): void {
-    const callback = this._changeCallbacks[key]
-
-    if (callback === undefined) {
-      return
+    return () => {
+      this._unsubscribe(EVENT_NAMES.authChange, callback)
     }
-
-    this._unsubscribe(EVENT_NAMES.authChange, callback)
-
-    delete this._changeCallbacks[key]
   }
 
   potentiallyChanged(): void {
@@ -148,8 +126,9 @@ export class EventNotifier implements Notifier {
     this._emitActualChange(dbName, changes)
   }
 
-  subscribeToPotentialDataChanges(callback: PotentialChangeCallback): string {
-    const key = randomValue()
+  subscribeToPotentialDataChanges(
+    callback: PotentialChangeCallback
+  ): UnsubscribeFunction {
     const thisHasDbName = this._hasDbName.bind(this)
 
     const wrappedCallback = (notification: PotentialChangeNotification) => {
@@ -158,25 +137,14 @@ export class EventNotifier implements Notifier {
       }
     }
 
-    this._changeCallbacks[key] = wrappedCallback
     this._subscribe(EVENT_NAMES.potentialDataChange, wrappedCallback)
 
-    return key
-  }
-  unsubscribeFromPotentialDataChanges(key: string): void {
-    const callback = this._changeCallbacks[key]
-
-    if (callback === undefined) {
-      return
+    return () => {
+      this._unsubscribe(EVENT_NAMES.potentialDataChange, wrappedCallback)
     }
-
-    this._unsubscribe(EVENT_NAMES.potentialDataChange, callback)
-
-    delete this._changeCallbacks[key]
   }
 
-  subscribeToDataChanges(callback: ChangeCallback): string {
-    const key = randomValue()
+  subscribeToDataChanges(callback: ChangeCallback): UnsubscribeFunction {
     const thisHasDbName = this._hasDbName.bind(this)
 
     const wrappedCallback = (notification: ChangeNotification) => {
@@ -185,21 +153,11 @@ export class EventNotifier implements Notifier {
       }
     }
 
-    this._changeCallbacks[key] = wrappedCallback
     this._subscribe(EVENT_NAMES.actualDataChange, wrappedCallback)
 
-    return key
-  }
-  unsubscribeFromDataChanges(key: string): void {
-    const callback = this._changeCallbacks[key]
-
-    if (callback === undefined) {
-      return
+    return () => {
+      this._unsubscribe(EVENT_NAMES.actualDataChange, wrappedCallback)
     }
-
-    this._unsubscribe(EVENT_NAMES.actualDataChange, callback)
-
-    delete this._changeCallbacks[key]
   }
 
   connectivityStateChanged(dbName: string, status: ConnectivityState) {
@@ -212,8 +170,7 @@ export class EventNotifier implements Notifier {
 
   subscribeToConnectivityStateChanges(
     callback: ConnectivityStateChangeCallback
-  ) {
-    const key = randomValue()
+  ): UnsubscribeFunction {
     const thisHasDbName = this._hasDbName.bind(this)
 
     const wrappedCallback = (
@@ -224,22 +181,11 @@ export class EventNotifier implements Notifier {
       }
     }
 
-    this._connectivityStatusCallbacks[key] = wrappedCallback
     this._subscribe(EVENT_NAMES.connectivityStateChange, wrappedCallback)
 
-    return key
-  }
-
-  unsubscribeFromConnectivityStateChanges(key: string): void {
-    const callback = this._connectivityStatusCallbacks[key]
-
-    if (callback === undefined) {
-      return
+    return () => {
+      this._unsubscribe(EVENT_NAMES.connectivityStateChange, wrappedCallback)
     }
-
-    this._unsubscribe(EVENT_NAMES.connectivityStateChange, callback)
-
-    delete this._connectivityStatusCallbacks[key]
   }
 
   _getDbNames(): DbName[] {

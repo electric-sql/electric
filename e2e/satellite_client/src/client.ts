@@ -5,7 +5,7 @@ import { mockSecureAuthToken } from 'electric-sql/auth/secure'
 import { setLogLevel } from 'electric-sql/debug'
 import { electrify } from 'electric-sql/node'
 import { v4 as uuidv4 } from 'uuid'
-import { schema, Electric } from './generated/client'
+import { schema, Electric, ColorType as Color } from './generated/client'
 export { JsonNull } from './generated/client'
 import { globalRegistry } from 'electric-sql/satellite'
 
@@ -67,15 +67,15 @@ export const syncTable = async (electric: Electric, table: string) => {
 }
 
 export const get_tables = (electric: Electric) => {
-  return electric.db.raw({ sql: `SELECT name FROM sqlite_master WHERE type='table';` })
+  return electric.db.rawQuery({ sql: `SELECT name FROM sqlite_master WHERE type='table';` })
 }
 
 export const get_columns = (electric: Electric, table: string) => {
-  return electric.db.raw({ sql: `SELECT * FROM pragma_table_info(?);`, args: [table] })
+  return electric.db.rawQuery({ sql: `SELECT * FROM pragma_table_info(?);`, args: [table] })
 }
 
 export const get_rows = (electric: Electric, table: string) => {
-  return electric.db.raw({sql: `SELECT * FROM ${table};`})
+  return electric.db.rawQuery({sql: `SELECT * FROM ${table};`})
 }
 
 export const get_timestamps = (electric: Electric) => {
@@ -224,7 +224,7 @@ export const write_float = (electric: Electric, id: string, f4: number, f8: numb
 }
 
 export const get_json_raw = async (electric: Electric, id: string) => {
-  const res = await electric.db.raw({
+  const res = await electric.db.rawQuery({
     sql: `SELECT js FROM jsons WHERE id = ?;`,
     args: [id]
   }) as unknown as Array<{ js: string }>
@@ -232,7 +232,7 @@ export const get_json_raw = async (electric: Electric, id: string) => {
 }
 
 export const get_jsonb_raw = async (electric: Electric, id: string) => {
-  const res = await electric.db.raw({
+  const res = await electric.db.rawQuery({
     sql: `SELECT jsb FROM jsons WHERE id = ?;`,
     args: [id]
   }) as unknown as Array<{ jsb: string }>
@@ -275,8 +275,25 @@ export const write_json = async (electric: Electric, id: string, js: any, jsb: a
   })
 }
 
+export const get_enum = (electric: Electric, id: string) => {
+  return electric.db.enums.findUnique({
+    where: {
+      id: id
+    }
+  })
+}
+
+export const write_enum = (electric: Electric, id: string, c: Color | null) => {
+  return electric.db.enums.create({
+    data: {
+      id,
+      c,
+    }
+  })
+}
+
 export const get_item_columns = (electric: Electric, table: string, column: string) => {
-  return electric.db.raw({ sql: `SELECT ${column} FROM ${table};` })
+  return electric.db.rawQuery({ sql: `SELECT ${column} FROM ${table};` })
 }
 
 export const insert_item = async (electric: Electric, keys: [string]) => {
@@ -304,8 +321,8 @@ export const insert_extended_into = async (electric: Electric, table: string, va
   const columnNames = columns.join(", ")
   const placeHolders = Array(columns.length).fill("?")
   const args = Object.values(values)
-
-  await electric.db.raw({
+  
+  await electric.db.unsafeExec({
     sql: `INSERT INTO ${table} (${columnNames}) VALUES (${placeHolders}) RETURNING *;`,
     args: args,
   })

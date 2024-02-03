@@ -2,6 +2,7 @@ import { Database } from './database'
 import { Row } from '../../util/types'
 import { Statement } from '../../util'
 import { SerialDatabaseAdapter as GenericDatabaseAdapter } from '../generic'
+import { RunResult } from '../../electric/adapter'
 
 export class DatabaseAdapter extends GenericDatabaseAdapter {
   readonly db: Database
@@ -11,11 +12,22 @@ export class DatabaseAdapter extends GenericDatabaseAdapter {
     this.db = db
   }
 
-  async exec(statement: Statement): Promise<Row[]> {
+  private exec(statement: Statement): Promise<Row[]> {
     return this.db.exec(statement)
   }
 
-  getRowsModified() {
+  private getRowsModified() {
     return this.db.getRowsModified()
+  }
+
+  async _run(statement: Statement): Promise<RunResult> {
+    await this.exec(statement)
+    return {
+      rowsAffected: this.getRowsModified(),
+    }
+  }
+
+  _query(statement: Statement): Promise<Row[]> {
+    return this.exec(statement)
   }
 }

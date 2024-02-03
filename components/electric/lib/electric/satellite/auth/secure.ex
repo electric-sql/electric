@@ -13,10 +13,7 @@ defmodule Electric.Satellite.Auth.Secure do
 
   @behaviour Electric.Satellite.Auth
 
-  import Joken, only: [current_time: 0]
-
   alias Electric.Satellite.Auth
-  alias Electric.Satellite.Auth.ConfigError
   alias Electric.Satellite.Auth.JWTUtil
 
   require Logger
@@ -24,8 +21,7 @@ defmodule Electric.Satellite.Auth.Secure do
   # 15 mins
   @token_max_age 60 * 15
 
-  defguardp supported_signing_alg?(alg)
-            when alg in ~w[HS256 HS384 HS512 RS256 RS384 RS512 ES256 ES384 ES512]
+  @supported_signing_algs ~w[HS256 HS384 HS512 RS256 RS384 RS512 ES256 ES384 ES512]
 
   @doc ~S"""
   Validate configuration options and build a clean config for "secure" auth.
@@ -54,74 +50,84 @@ defmodule Electric.Satellite.Auth.Secure do
     * `aud: <string>` - optional audience string to check all auth tokens with. If this is configured, JWTs without an
       "aud" claim will be considered invalid.
   """
-  @spec build_config!(Access.t()) :: map
-  def build_config!(opts) do
-    alg =
-      case opts[:alg] do
-        alg when is_binary(alg) and supported_signing_alg?(alg) ->
-          alg
+  @spec build_config(Access.t()) :: {:ok, map} | {:error, atom, binary}
+  def build_config(opts) do
+    with {:ok, alg} <- validate_alg(opts),
+         {:ok, key} <- validate_key(alg, opts) do
+      key = prepare_key(key, alg)
 
-        _ ->
-          raise ConfigError, "Missing or invalid 'alg' configuration option for secure auth mode"
-      end
+      token_config =
+        %{}
+        |> Joken.Config.add_claim("iat", &JWTUtil.gen_timestamp/0, &JWTUtil.past_timestamp?/1)
+        |> Joken.Config.add_claim("nbf", &JWTUtil.gen_timestamp/0, &JWTUtil.past_timestamp?/1)
+        |> add_exp_claim(in: @token_max_age)
+        |> maybe_add_claim("iss", opts[:iss])
+        |> maybe_add_claim("aud", opts[:aud])
 
-    key =
-      if key = opts[:key] do
-        key
-        |> validate_key(alg)
-        |> prepare_key(alg)
-      else
-        raise ConfigError, "Missing 'key' configuration option for secure auth mode"
-      end
+      required_claims =
+        ["iat", "exp", opts[:iss] && "iss", opts[:aud] && "aud"]
+        |> Enum.reject(&is_nil/1)
 
-    token_config =
-      %{}
-      # Subtracting one second from generated "iat" and "nbf" claims is necessary for tests to pass.
-      |> Joken.Config.add_claim("iat", fn -> current_time() - 1 end, &(&1 < current_time()))
-      |> Joken.Config.add_claim("nbf", fn -> current_time() - 1 end, &(&1 < current_time()))
-      |> add_exp_claim(in: @token_max_age)
-      |> maybe_add_claim("iss", opts[:iss])
-      |> maybe_add_claim("aud", opts[:aud])
+      {:ok,
+       %{
+         alg: alg,
+         namespace: opts[:namespace],
+         joken_signer: Joken.Signer.create(alg, key),
+         joken_config: token_config,
+         required_claims: required_claims
+       }}
+    end
+  end
 
-    required_claims =
-      ["iat", "exp", opts[:iss] && "iss", opts[:aud] && "aud"]
-      |> Enum.reject(&is_nil/1)
+  defp validate_alg(opts) do
+    case opts[:alg] do
+      alg when is_binary(alg) and alg in @supported_signing_algs ->
+        {:ok, alg}
 
-    %{
-      alg: alg,
-      namespace: opts[:namespace],
-      joken_signer: Joken.Signer.create(alg, key),
-      joken_config: token_config,
-      required_claims: required_claims
-    }
+      nil ->
+        {:error, :alg, "not set"}
+
+      other ->
+        {:error, :alg,
+         "has invalid value: #{inspect(other)}. Must be one of #{inspect(@supported_signing_algs)}"}
+    end
+  end
+
+  defp validate_key(alg, opts) when is_binary(alg) and is_list(opts) do
+    if key = opts[:key] do
+      validate_key(key, alg)
+    else
+      {:error, :key, "not set"}
+    end
   end
 
   defp validate_key(key, "HS256") when byte_size(key) < 32,
-    do: raise(ConfigError, "The 'key' needs to be at least 32 bytes long for HS256")
+    do: {:error, :key, "has to be at least 32 bytes long for HS256"}
 
   defp validate_key(key, "HS384") when byte_size(key) < 48,
-    do: raise(ConfigError, "The 'key' needs to be at least 48 bytes long for HS384")
+    do: {:error, :key, "has to be at least 48 bytes long for HS384"}
 
   defp validate_key(key, "HS512") when byte_size(key) < 64,
-    do: raise(ConfigError, "The 'key' needs to be at least 64 bytes long for HS512")
+    do: {:error, :key, "has to be at least 64 bytes long for HS512"}
 
-  defp validate_key(key, _alg), do: key
+  defp validate_key(key, _alg), do: {:ok, key}
 
   defp prepare_key(raw_key, "HS" <> _), do: raw_key
   defp prepare_key(raw_key, "RS" <> _), do: %{"pem" => raw_key}
   defp prepare_key(raw_key, "ES" <> _), do: %{"pem" => raw_key}
 
-  defp add_exp_claim(token_config, in: seconds),
-    do:
-      Joken.Config.add_claim(
-        token_config,
-        "exp",
-        fn -> current_time() + seconds end,
-        &(&1 > current_time())
-      )
+  defp add_exp_claim(token_config, in: seconds) do
+    Joken.Config.add_claim(
+      token_config,
+      "exp",
+      fn -> JWTUtil.gen_timestamp(seconds) end,
+      &JWTUtil.future_timestamp?/1
+    )
+  end
 
-  defp add_exp_claim(token_config, at: unix_time),
-    do: Joken.Config.add_claim(token_config, "exp", fn -> unix_time end, &(&1 > current_time()))
+  defp add_exp_claim(token_config, at: unix_time) do
+    Joken.Config.add_claim(token_config, "exp", fn -> unix_time end, &JWTUtil.future_timestamp?/1)
+  end
 
   defp maybe_add_claim(token_config, _claim, nil), do: token_config
 

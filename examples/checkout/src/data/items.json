@@ -1,0 +1,30 @@
+[
+  {
+    "id": "a609b2e3-bf5d-4f9a-9d61-d2e79375562a",
+    "slug": "hoodie",
+    "name": "Hoodie",
+    "price": 2999,
+    "description": "A hoodie is a sweatshirt with a hood."
+  },
+  {
+    "id": "36707f79-ba37-41d9-95c1-cbc8d5e1d952",
+    "slug": "t-shirt",
+    "name": "T-Shirt",
+    "price": 999,
+    "description": "A T-shirt is a style of unisex fabric shirt named after the T shape of its body and sleeves."
+  },
+  {
+    "id": "da2e84f6-bce5-4e90-820b-9fc97f58c2ff",
+    "slug": "jacket",
+    "name": "Jacket",
+    "price": 4999,
+    "description": "A jacket is a mid-stomach-length garment for the upper body."
+  },
+  {
+    "id": "65ad9ebb-ae89-4a83-963f-2c40bba70754",
+    "slug": "sweater",
+    "name": "Sweater",
+    "price": 3999,
+    "description": "A sweater, also called a jumper in British English, is a piece of clothing."
+  }
+]

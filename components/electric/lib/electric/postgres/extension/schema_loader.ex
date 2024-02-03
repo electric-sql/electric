@@ -1,6 +1,7 @@
 defmodule Electric.Postgres.Extension.SchemaLoader do
   alias Electric.Postgres.{Schema, Extension.Migration}
   alias Electric.Replication.Connectors
+  alias __MODULE__.Version
 
   @type state() :: term()
   @type version() :: String.t()
@@ -18,13 +19,11 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   @type tx_fk_row() :: %{binary() => integer() | binary()}
 
   @callback connect(Connectors.config(), Keyword.t()) :: {:ok, state()}
-  @callback load(state()) :: {:ok, version(), Schema.t()}
-  @callback load(state(), version()) :: {:ok, version(), Schema.t()} | {:error, binary()}
+  @callback load(state()) :: {:ok, Version.t()}
+  @callback load(state(), version()) :: {:ok, Version.t()} | {:error, binary()}
   @callback save(state(), version(), Schema.t(), [String.t()]) ::
-              {:ok, state()} | {:error, term()}
+              {:ok, state(), Version.t()} | {:error, term()}
   @callback relation_oid(state(), rel_type(), schema(), name()) :: oid_result()
-  @callback primary_keys(state(), schema(), name()) :: pk_result()
-  @callback primary_keys(state(), relation()) :: pk_result()
   @callback refresh_subscription(state(), name()) :: :ok | {:error, term()}
   @callback migration_history(state(), version() | nil) ::
               {:ok, [Migration.t()]} | {:error, term()}
@@ -61,21 +60,13 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   end
 
   def save({module, state}, version, schema, stmts) do
-    with {:ok, state} <- module.save(state, version, schema, stmts) do
-      {:ok, {module, state}}
+    with {:ok, state, schema_version} <- module.save(state, version, schema, stmts) do
+      {:ok, {module, state}, schema_version}
     end
   end
 
   def relation_oid({module, state}, rel_type, schema, table) do
     module.relation_oid(state, rel_type, schema, table)
-  end
-
-  def primary_keys({module, state}, schema, table) do
-    module.primary_keys(state, schema, table)
-  end
-
-  def primary_keys({_module, _state} = impl, {schema, table}) do
-    primary_keys(impl, schema, table)
   end
 
   def refresh_subscription({module, state}, name) do

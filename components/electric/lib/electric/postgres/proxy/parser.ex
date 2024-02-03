@@ -115,12 +115,11 @@ defmodule Electric.Postgres.Proxy.Parser do
       %{node: {:range_var, %{schemaname: sname, relname: tname}}} ->
         {:table, {sname, tname}}
 
-      other ->
+      _other ->
         # we don't really care about the table name for SELECT statements
         # unless except perhaps in very specific cases, which are either plain
         # `select * from table` queries, which are handled above, or would be
         # specifically dealt with
-        Logger.debug("unrecognised from_clause object #{inspect(other)}")
         {nil, nil}
     end
   end

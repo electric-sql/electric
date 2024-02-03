@@ -3,7 +3,7 @@ defmodule Electric.Postgres.Extension do
   Manages our pseudo-extension code
   """
 
-  alias Electric.Postgres.{Schema, Schema.Proto, Extension.Functions, Extension.Migration}
+  alias Electric.Postgres.{Schema, Schema.Proto, Extension.Functions, Extension.Migration, Types}
   alias Electric.Replication.Postgres.Client
   alias Electric.Utils
 
@@ -228,7 +228,7 @@ defmodule Electric.Postgres.Extension do
         version: version,
         txid: String.to_integer(txid_str),
         txts: txts,
-        timestamp: decode_epgsql_timestamp(timestamp),
+        timestamp: Types.DateTime.from_epgsql(timestamp),
         schema: Proto.Schema.json_decode!(schema_json),
         stmts: stmts
       }
@@ -287,14 +287,14 @@ defmodule Electric.Postgres.Extension do
 
   @spec define_functions(conn) :: :ok
   def define_functions(conn) do
-    Enum.each(Functions.list(), fn {name, sql} ->
-      case :epgsql.squery(conn, sql) do
-        {:ok, [], []} ->
-          Logger.debug("Successfully (re)defined SQL function/procedure '#{name}'")
-          :ok
-
-        error ->
-          raise "Failed to define function '#{name}' with error: #{inspect(error)}"
+    Enum.each(Functions.list(), fn {path, sql} ->
+      conn
+      |> :epgsql.squery(sql)
+      |> List.wrap()
+      |> Enum.find(&(not match?({:ok, [], []}, &1)))
+      |> case do
+        nil -> Logger.debug("Successfully (re)defined SQL routine from '#{path}'")
+        error -> raise "Failed to define SQL routine from '#{path}' with error: #{inspect(error)}"
       end
     end)
   end
@@ -317,7 +317,9 @@ defmodule Electric.Postgres.Extension do
       Migrations.Migration_20230921161418_ProxyCompatibility,
       Migrations.Migration_20231009121515_AllowLargeMigrations,
       Migrations.Migration_20231010123118_AddPriorityToVersion,
-      Migrations.Migration_20231016141000_ConvertFunctionToProcedure
+      Migrations.Migration_20231016141000_ConvertFunctionToProcedure,
+      Migrations.Migration_20231206130400_ConvertReplicaTriggersToAlways,
+      Migrations.Migration_20240110110200_DropUnusedFunctions
     ]
   end
 
@@ -356,7 +358,9 @@ defmodule Electric.Postgres.Extension do
           end)
         end)
 
-      :ok = define_functions(txconn)
+      if module == __MODULE__ do
+        :ok = define_functions(txconn)
+      end
 
       {:ok, newly_applied_versions}
     end)
@@ -508,16 +512,6 @@ defmodule Electric.Postgres.Extension do
   end
 
   defp known_shadow_column?(_), do: false
-
-  defp decode_epgsql_timestamp({date, {h, m, frac_sec}}) do
-    sec = trunc(frac_sec)
-    microsec = trunc((frac_sec - sec) * 1_000_000)
-    DateTime.from_naive!(NaiveDateTime.from_erl!({date, {h, m, sec}}, {microsec, 6}), "Etc/UTC")
-  end
-
-  def encode_epgsql_timestamp(%DateTime{} = dt) do
-    dt |> DateTime.to_naive() |> NaiveDateTime.to_erl()
-  end
 
   @doc """
   Perform a mostly no-op update to a transaction marker query to make sure

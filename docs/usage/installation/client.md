@@ -6,7 +6,7 @@ description: >-
 sidebar_position: 50
 ---
 
-Install the [`electric-sql`](https://www.npmjs.com/package/electric-sql) library and [`npx electric-sql generate`](../../api/generator.md) your database [Client](../data-access/client.md).
+Install the [`electric-sql`](https://www.npmjs.com/package/electric-sql) library and [`npx electric-sql generate`](../../api/cli.md#generate) your database [Client](../data-access/client.md).
 
 ## Install
 
@@ -15,8 +15,7 @@ Install the [`electric-sql`](https://www.npmjs.com/package/electric-sql) library
 Install the published [TypeScript client](https://www.npmjs.com/package/electric-sql) and [generator](https://www.npmjs.com/package/@electric-sql/prisma-generator):
 
 ```shell
-yarn add electric-sql
-yarn add @electric-sql/prisma-generator
+npm install electric-sql
 ```
 
 ### GitHub
@@ -28,7 +27,7 @@ The source code is in the [clients/typescript](https://github.com/electric-sql/e
 Install, for example, using [GitPkg](https://gitpkg.vercel.app):
 
 ```shell
-yarn add 'https://gitpkg.now.sh/electric-sql/electric/clients/typescript?main'
+npm install 'https://gitpkg.now.sh/electric-sql/electric/clients/typescript?main'
 ```
 
 Or in development you can also use [Yalc](https://github.com/wclr/yalc):
@@ -71,7 +70,7 @@ Your local app will pick up the changes.
 
 ## Generate
 
-Use the [Generator script](../../api/generator.md) to generate a type-safe database client. First, make sure your [sync service is running](./service.md).
+Use the [Generator command](../../api/cli.md#generate) to generate a type-safe database client. First, make sure your [sync service is running](./service.md).
 
 Then run:
 
@@ -81,11 +80,11 @@ npx electric-sql generate
 
 By default this will connect to the [sync service](./service.md) on `http://localhost:5133` and output generated files to a `./src/generated/client` folder.
 
-See <DocPageLink path="api/generator" /> for the command-line options.
+See <DocPageLink path="api/cli#generate" /> for the command-line options.
 
 ### Outputs
 
-The generator script outputs a database schema, type-safe database client and bundled SQL migrations. See <DocPageLink path="usage/data-access/client" /> for details on how to import and use these when instantiating a database client.
+The generator command outputs a database schema, type-safe database client and bundled SQL migrations. See <DocPageLink path="usage/data-access/client" /> for details on how to import and use these when instantiating a database client.
 
 ### Pre-build script
 

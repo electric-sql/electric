@@ -82,7 +82,10 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     publication = repl_opts.publication
     slot = repl_opts.slot
 
-    Logger.debug("#{__MODULE__} init:: publication: '#{publication}', slot: '#{slot}'")
+    Logger.debug("#{__MODULE__}.init: publication: '#{publication}', slot: '#{slot}'")
+
+    Logger.info("Starting replication from #{origin}")
+    Logger.info("#{inspect(__MODULE__)}.init(#{inspect(Client.sanitize_conn_opts(conn_opts))})")
 
     with {:ok, conn} <- Client.connect(conn_opts),
          {:ok, _} <- Client.create_slot(conn, slot),
@@ -93,8 +96,6 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
       Process.monitor(conn)
 
       Logger.metadata(pg_producer: origin)
-      Logger.info("Starting replication from #{origin}")
-      Logger.info("Connection settings: #{inspect(conn_opts)}")
 
       span =
         Metrics.start_span([:postgres, :replication_from], %{electrified_tables: table_count}, %{
@@ -192,11 +193,12 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     old_data = data_tuple_to_map(relation.columns, msg.old_tuple_data)
     data = data_tuple_to_map(relation.columns, msg.tuple_data)
 
-    updated_record = %UpdatedRecord{
-      relation: {relation.namespace, relation.name},
-      old_record: old_data,
-      record: data
-    }
+    updated_record =
+      UpdatedRecord.new(
+        relation: {relation.namespace, relation.name},
+        old_record: old_data,
+        record: data
+      )
 
     {lsn, txn} = state.transaction
     txn = %{txn | changes: [updated_record | txn.changes]}

@@ -22,6 +22,7 @@ Run the Electric sync service using Docker, for example:
 docker pull electricsql/electric:latest
 docker run \
     -e "DATABASE_URL=postgresql://..." \
+    -e "DATABASE_REQUIRE_SSL=false \
     -e "LOGICAL_PUBLISHER_HOST=..." \
     -e "PG_PROXY_PASSWORD=..." \
     -e "AUTH_MODE=insecure" \
@@ -38,7 +39,7 @@ See <DocPageLink path="usage/installation/service" /> for more info.
 Add the `electric-sql` library to your web or mobile app, along with an [SQLite driver](../integrations/drivers/index.md):
 
 ```shell
-yarn add electric-sql
+npm install electric-sql
 ```
 
 Add a prebuild script to your `package.json` to generate a type-safe database client:

@@ -8,7 +8,6 @@
     ?SH-PROMPT:
     !cp ../prisma_example/schema.prisma ../prisma_example/prisma/
     ?SH-PROMPT:
-    [timeout 10]
     !make docker-prisma ARGS='prisma_example_1 prisma db pull'
     ?The introspected database was empty
     ?SH-PROMPT:
@@ -18,6 +17,8 @@
 [shell proxy_1]
     [invoke log "run migration $migration_version_1 on postgres"]
     """!
+    SET electric.disable_constraint_validation = true;
+
     BEGIN;
       CALL electric.migration_version('$migration_version_1');
       CREATE TABLE public.with_constraint (

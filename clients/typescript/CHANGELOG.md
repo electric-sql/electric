@@ -1,5 +1,86 @@
 # electric-sql
 
+## 0.9.1
+
+### Patch Changes
+
+- 6ad33249: Hide proxy password in generate command output Fixes VAX-1548
+- 3605f291: Correctly pass the CONTAINER_NAME to the cli "status" command
+- 356359a2: CLI - Split inferred values from default values (VAX-1569)
+- e5d7a6dc: Validate that the --with-migrations command successfully ran before generating client
+- 4f19a086: [VAX-1544] Map http(s) scheme in service URL to ws(s) when starting a proxy tunnel.
+- bac15160: CLI - Silent dot-env warning when there are no .env files
+- fb2eba1c: Fix redundant query calls in React live query hook implementation
+- 8a97cc9f: Updated docstring for generic database adapter.
+- 3a617982: Upgrade Prisma dependency to 5.2 in the client, Fixes VAX-1524
+
+## 0.9.0
+
+### Minor Changes
+
+- 2e233c01: Redesigned command-line interface featuring a new suite of commands, support for .env configuration, local-only-first mode and streamlined development experience.
+
+### Patch Changes
+
+- bc0d91d5: Ensure migrations CLI failure test always fails
+- de1c848b: - Fixed SQLite table name parsing for windowed queries and removed deprecated sqlite parser dependency
+  - Made the `raw` API throw for unsafe queries, i.e. anything other than read-only queries, to match `liveRaw`'s behaviour
+  - Added an `unsafeExec` API to allow modifying the store directly via the client
+- 9f38fa44: Change build tooling for the client to `tsup`, enable source maps in our distribution, and improve typescript nodenext project support.
+- b840606a: Fix default socket for capacitor driver.
+- ff343753: Fix bug with foreign keys in generate script.
+- e11501d8: - Fix generator not cleaning up temporary migrations folder on error.
+  - Add --debug flag to generator for option to retain migrations folder on error for inspection.
+  - Add temporary migration folder to gitignore in starter template
+- 4fe5c7f6: Adds client-side support for enumerations.
+- ff3ba0cb: Make the `locateSqliteDist` argument `ElectricDatabase.init` optional, this allows bundlers to find and bundle the wa-sqlite wasm file.
+- 4ae19469: Modified interface of the generic database adapter and modified the drivers accordingly.
+- 587899f7: Added new names for raw query APIs (`rawQuery`, `liveRawQuery`, and `unsafeExec`) and deprecated old ones (`raw` and `liveRaw`)
+- Updated dependencies [d3cf7043]
+- Updated dependencies [4fe5c7f6]
+  - @electric-sql/prisma-generator@1.1.3
+
+## 0.8.2
+
+### Patch Changes
+
+- 0dfb35d8: [VAX-1324] Prevent updates to table PKs
+- 9ffb11aa: Modify Satellite client to use async event emitter.
+- 9676b4d0: New "npx electric-sql proxy-tunnel" command that tunnels a Postgres TCP connection over a websocket for the Postgres Proxy.
+- 4fc11d3a: Capacitor sqlite DB driver re-implemented to extend the new generic BatchDatabaseAdapter.
+- 071175d4: Improve Windows support
+- d5cdbf10: Prisma and the electric client generator are now dependencies of the client, you no longer have to include them as dependencies of a project using Electric. Projects can also depend on a different version of Prisma to the one used by Electric.
+- 9a32ea9f: Fix bug with BigInt primary keys.
+- Updated dependencies [22652fb3]
+- Updated dependencies [38e1e44b]
+  - @electric-sql/prisma-generator@1.1.2
+
+## 0.8.1
+
+### Patch Changes
+
+- fab106c4: Properly escape path for Windows in the generator.
+
+## 0.8.0
+
+### Minor Changes
+
+- eb722c9b: [VAX-1335] Create new protocol op to represent a compensation
+
+### Patch Changes
+
+- fb773fbb: Dispose listeners when Electric client is closed.
+- 863f9f37: Fix critical section of wa-sqlite DB adapter to avoid bad interleavings.
+- 5c4a85d4: Generic implementation of serial and batched database adapters.
+- a9bb17ca: Upgrade wa-sqlite version because of a critical bug fix in wa-sqlite.
+- 0ad1867b: Fix assertions in unit tests.
+- 3ed54698: Fix race condition in process.subscribe that made the client crash.
+- 4ad7df4d: [VAX-825] Add client-side support for JSON type.
+- 1fe8c7d6: Rely on Prisma's conversion of PG table names to Prisma model names. No longer turn snake_cased table names into PascalCased model names.
+- cf0f0963: Add comment about possibly receiving empty subsData when handling SubscriptionData message on Satellite
+- e2da540c: Windows support for the generator.
+- e091bbfb: Refactorings to the event notifier.
+
 ## 0.7.1
 
 ### Patch Changes

@@ -1,5 +1,56 @@
 # @core/electric
 
+## 0.9.1
+
+### Patch Changes
+
+- 30179e87: [VAX-1553] Add support for AuthenticationMD5Password upstream auth method in the Migrations proxy. This fixes a connectivity issue between Electric and DigitalOcean Managed PostgreSQL.
+- dd27d6a1: [VAX-1543] Add support for the sslmode query option in DATABASE_URL.
+
+## 0.9.0
+
+### Minor Changes
+
+- df56221b: Reject electrification of tables that have no PRIMARY KEY or include unsupported constraints. Only PRIMARY KEY and FOREIGN KEY constraints are currently supported.
+- 3a7fb38b: Validate table column types and constraints for new columns that are added to electrified tables with ALTER TABLE ... ADD COLUMN.
+- afa4f839: Reject ALTER TABLE ... ADD COLUMN statements that try to add a new foreign key to an already electrified table.
+
+### Patch Changes
+
+- 07499d3e: Format some known errors in an easy-to-read way, including more context and information about resolution in the error messages.
+- 4fe5c7f6: [VAX-1040] [VAX-1041] [VAX-1042] Add support for user-defined enum types in electrified tables.
+- 2ac82759: Validate config values and print all missing or invalid config options at Electirc startup.
+- d386fd98: Try connecting to the database over IPv6 and IPv4, in that order, and use the first option that works. This obviates the need for the DATABASE_USE_IPV6 configuration setting in most cases.
+- e8bb9a8f: Enforce the use of SSL for database connections by default.
+- 82202278: [VAX-1449] Add the notion of "clock drift" to Electric and use it when validating timestamps in auth tokens. Among other things, this fixes the issue where an auth token is used to authenticate with Electric before even a second passes after it was generated.
+- 743c5d07: Configure the sync service using dev.env and test.env files in development and testing.
+
+## 0.8.1
+
+### Patch Changes
+
+- 0dfb35d8: [VAX-1324] Prevent updates to table PKs
+- a3d4bfe2: Electric now opens all its ports to listen both on IPv4- and IPv6-capable interfaces. This obviates the need for the ELECTRIC_USE_IPV6 configuration setting in most cases.
+- 34a89b4a: Automatically publish electricsql/electric:canary images to Docker Hub on every push to main.
+- b57ec927: [VAX-1417] Add the option to tunnel TCP connections to the migrations proxy over regular WebSocket connections.
+- 34a89b4a: Log the version of the Electric sync service on startup.
+- 11878e74: Log a descriptive error message when Electric fails to open a replication connection to Postgres.
+- ddb70c97: [VAX-1374] Add a new write-to-pg mode that applies client updates as DML statements as opposed to streaming them to Postgres over a logical replication connection.
+
+## 0.8.0
+
+### Minor Changes
+
+- eb722c9b: [VAX-1335] Create new protocol op to represent a compensation
+
+### Patch Changes
+
+- 0dc61662: [VAX-820, VAX-1325] Add support for the BIGINT / INT8 column type in electrified tables.
+- d9efe923: [VAX-1264, VAX-1265] Fix some edge cases in the parsing of DATABASE_URL.
+- 4ad7df4d: [VAX-825] Add support for the JSONB column type in electrified tables.
+- b6e589d3: [VAX-846, VAX-849] Add support for the REAL / FLOAT4 column type in electrified tables.
+- 96e75630: Swap to using `sub` claim in jwt, backwards compatible with `user_id`.
+
 ## 0.7.1
 
 ### Patch Changes

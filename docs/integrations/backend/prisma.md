@@ -18,7 +18,7 @@ datasource db {
 }
 ```
 
-You can then use [dotenv-cli](https://www.npmjs.com/package/dotenv-cli) to setup multiple `.env` files, for example create a `.env.proxy` with a database URL to connect to the proxy:
+You can then use [dotenv-cli](https://www.npmjs.com/package/dotenv-cli) to setup multiple `.env` files. For example, create a `.env.proxy` with a database URL to connect to the proxy:
 
 ```shell
 DATABASE_URL=postgresql://postgres:${PG_PROXY_PASSWORD}@localhost:${PG_PROXY_PORT}/mydb
@@ -62,7 +62,7 @@ dotenv -e .env.proxy -- npx prisma migrate dev
 
 ## Generator
 
-Electric uses a customised version of the [zod-prisma-types](https://github.com/chrishoermann/zod-prisma-types) Prisma client generator to [generate](../../api/generator.md) the [Electric Client](../../usage/data-access/client.md).
+Electric uses a customised version of the [zod-prisma-types](https://github.com/chrishoermann/zod-prisma-types) Prisma client generator to [generate](../../api/cli.md#generate) the [Electric Client](../../usage/data-access/client.md).
 
 ## Event sourcing
 

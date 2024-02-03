@@ -1,5 +1,37 @@
 # create-electric-app
 
+## 0.2.5
+
+### Patch Changes
+
+- af32de9a: Expose ELECTRIC\_ prefixed env vars to Vite build - Fix VAX-1549
+
+## 0.2.4
+
+### Patch Changes
+
+- 208dc52a: Update the create-electric-app starter to use Vite and our new CLI
+
+## 0.2.3
+
+### Patch Changes
+
+- e11501d8: - Fix generator not cleaning up temporary migrations folder on error.
+  - Add --debug flag to generator for option to retain migrations folder on error for inspection.
+  - Add temporary migration folder to gitignore in starter template
+
+## 0.2.2
+
+### Patch Changes
+
+- 071175d4: Improve Windows support
+
+## 0.2.1
+
+### Patch Changes
+
+- a9bb17ca: Upgrade wa-sqlite version because of a critical bug fix in wa-sqlite.
+
 ## 0.2.0
 
 ### Minor Changes

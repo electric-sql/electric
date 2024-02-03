@@ -20,7 +20,7 @@ ElectricSQL has three primary components. [Postgres](../usage/installation/postg
 
 [![High level component diagramme](./_images/high-level-components.png)](./_images/high-level-components.jpg)
 
-Inside the Client there is a [generated](../api/generator.md) type-safe [data access library](../usage/data-access/client.md). A [satellite replication process](https://github.com/electric-sql/electric/blob/main/clients/typescript/src/satellite/process.ts) (per named local database), SQLite [driver adapters](../integrations/drivers/index.md) and a [reactivity system](#reactivity) with [front-end framework integrations](../integrations/frontend/index.md).
+Inside the Client there is a [generated](../api/cli.md#generate) type-safe [data access library](../usage/data-access/client.md). A [satellite replication process](https://github.com/electric-sql/electric/blob/main/clients/typescript/src/satellite/process.ts) (per named local database), SQLite [driver adapters](../integrations/drivers/index.md) and a [reactivity system](#reactivity) with [front-end framework integrations](../integrations/frontend/index.md).
 
 ### Topology
 
@@ -41,7 +41,7 @@ The Postgres schema is managed using any [standard migration tooling](../usage/d
 
 ### Bundling
 
-Electric provides an HTTP "status API" to access the electrified DDL schema. In development, the [generator script](../api/generator.md) calls this API to pull down the schema and uses it to:
+Electric provides an HTTP "status API" to access the electrified DDL schema. In development, the [generator command](../api/cli.md#generate) calls this API to pull down the schema and uses it to:
 
 1. generate a type-safe data access library
 2. write an array of SQLite-compatible migrations into an importable Javascript file
@@ -137,7 +137,7 @@ Satellite processes monitor the connectivity state of the network and their unde
 - `error`: there was an error when connecting
 - `syncing`: the connection is active but is currently catching up with the server prior to replicating local writes
 
-If the connection is disconnected manually (for example using the `toggle` functionn returned by the [`useConnectivityState`](../integrations/frontend/react.md#toggleConnectivityState) hook) then it won't automatically reconnect. Otherwise if disconnected due to a transient error or network connectivity then the web socket connection will try to reconnect automatically using a backoff algorithm.
+If the connection is disconnected manually (for example, using the `toggle` functionn returned by the [`useConnectivityState`](../integrations/frontend/react.md#toggleConnectivityState) hook) then it won't automatically reconnect. Otherwise if disconnected due to a transient error or network connectivity then the web socket connection will try to reconnect automatically using a backoff algorithm.
 
 
 ## More information

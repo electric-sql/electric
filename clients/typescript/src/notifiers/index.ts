@@ -47,6 +47,8 @@ export type NotificationCallback =
   | PotentialChangeCallback
   | ConnectivityStateChangeCallback
 
+export type UnsubscribeFunction = () => void
+
 export interface Notifier {
   // The name of the primary database that components communicating via this
   // notifier have open and are using.
@@ -78,8 +80,7 @@ export interface Notifier {
   // Calling `authStateChanged` notifies the Satellite process that the
   // user's authentication credentials have changed.
   authStateChanged(authState: AuthState): void
-  subscribeToAuthStateChanges(callback: AuthStateCallback): string
-  unsubscribeFromAuthStateChanges(key: string): void
+  subscribeToAuthStateChanges(callback: AuthStateCallback): UnsubscribeFunction
 
   // The data change notification workflow starts by the electric database
   // clients (or the user manually) calling `potentiallyChanged` whenever
@@ -90,8 +91,9 @@ export interface Notifier {
   // Satellite processes subscribe to these "data has potentially changed"
   // notifications. When they get one, they check the `_oplog` table in the
   // database for *actual* changes persisted by the triggers.
-  subscribeToPotentialDataChanges(callback: PotentialChangeCallback): string
-  unsubscribeFromPotentialDataChanges(key: string): void
+  subscribeToPotentialDataChanges(
+    callback: PotentialChangeCallback
+  ): UnsubscribeFunction
 
   // When Satellite detects actual data changes in the oplog for a given
   // database, it replicates it and calls  `actuallyChanged` with the list
@@ -102,8 +104,7 @@ export interface Notifier {
   // using the info to trigger re-queries, if the changes affect databases and
   // tables that their queries depend on. This then trigger re-rendering if
   // the query results are actually affected by the data changes.
-  subscribeToDataChanges(callback: ChangeCallback): string
-  unsubscribeFromDataChanges(key: string): void
+  subscribeToDataChanges(callback: ChangeCallback): UnsubscribeFunction
 
   // Notification for network connectivity state changes.
   // A connectivity change s can be triggered manually,
@@ -116,6 +117,5 @@ export interface Notifier {
 
   subscribeToConnectivityStateChanges(
     callback: ConnectivityStateChangeCallback
-  ): string
-  unsubscribeFromConnectivityStateChanges(key: string): void
+  ): UnsubscribeFunction
 }

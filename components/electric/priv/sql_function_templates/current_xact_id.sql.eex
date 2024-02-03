@@ -1,0 +1,8 @@
+CREATE OR REPLACE FUNCTION <%= schema() %>.current_xact_id()
+RETURNS <%= txid_type() %> SECURITY DEFINER AS $function$
+BEGIN
+    RETURN pg_current_xact_id();
+END;
+-- PARALLEL UNSAFE because `pg_current_xact_id` is parallel unsafe
+$function$ LANGUAGE PLPGSQL STABLE STRICT PARALLEL UNSAFE;
+

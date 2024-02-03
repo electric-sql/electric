@@ -153,48 +153,7 @@ defmodule Electric.Postgres.Proxy.QueryAnalyserTest do
                  ast: %{},
                  sql: "ALTER TABLE public.truths ADD COLUMN clowns text"
                }
-             ] =
-               analyse(
-                 "ALTER TABLE public.truths ADD COLUMN clowns text;",
-                 cxt
-               )
-
-      assert [
-               %QueryAnalysis{
-                 action: {:alter, "table"},
-                 table: {"public", "truths"},
-                 electrified?: true,
-                 tx?: true,
-                 allowed?: false,
-                 ast: %{},
-                 source: %M.Query{query: "ALTER TABLE public.truths ADD COLUMN ip cidr"},
-                 sql: "ALTER TABLE public.truths ADD COLUMN ip cidr",
-                 error: %{
-                   message: ~s[Cannot electrify column of type "cidr"]
-                 }
-               }
-             ] =
-               analyse("ALTER TABLE public.truths ADD COLUMN ip cidr;", cxt)
-
-      assert [
-               %QueryAnalysis{
-                 action: {:alter, "table"},
-                 table: {"public", "truths"},
-                 electrified?: true,
-                 tx?: true,
-                 allowed?: false,
-                 capture?: true,
-                 ast: %{},
-                 sql: "ALTER TABLE public.truths ADD COLUMN clowns text, ADD COLUMN ip cidr",
-                 error: %{
-                   message: ~s[Cannot electrify column of type "cidr"]
-                 }
-               }
-             ] =
-               analyse(
-                 "ALTER TABLE public.truths ADD COLUMN clowns text, ADD COLUMN ip cidr;",
-                 cxt
-               )
+             ] = analyse("ALTER TABLE public.truths ADD COLUMN clowns text;", cxt)
 
       assert [
                %QueryAnalysis{
@@ -207,8 +166,141 @@ defmodule Electric.Postgres.Proxy.QueryAnalyserTest do
                  sql: "ALTER TABLE public.socks ADD COLUMN ip cidr",
                  error: nil
                }
-             ] =
-               analyse("ALTER TABLE public.socks ADD COLUMN ip cidr;", cxt)
+             ] = analyse("ALTER TABLE public.socks ADD COLUMN ip cidr;", cxt)
+    end
+
+    test "ALTER TABLE .. ADD COLUMN: successful type checking", cxt do
+      columns = [
+        "j jsonb",
+        "t text",
+        "vc varchar",
+        "vc character varying",
+        "i2 int2",
+        "i2 smallint",
+        "i4 int",
+        "i4 int4",
+        "i4 integer",
+        "i8 int8",
+        "i8 bigint",
+        "t timestamp",
+        "t timestamp with time zone",
+        "u uuid"
+      ]
+
+      Enum.each(columns, fn column ->
+        query = "ALTER TABLE public.truths ADD COLUMN " <> column
+
+        assert [
+                 %QueryAnalysis{
+                   action: {:alter, "table"},
+                   table: {"public", "truths"},
+                   type: :table,
+                   electrified?: true,
+                   tx?: true,
+                   allowed?: true,
+                   ast: %{},
+                   source: %M.Query{query: ^query},
+                   sql: ^query,
+                   error: nil
+                 }
+               ] = analyse(query, cxt)
+      end)
+    end
+
+    test "ALTER TABLE .. ADD COLUMN: failing type checking", cxt do
+      columns_and_errors = [
+        {["ip cidr"], ~s|Cannot electrify column of type "cidr"|},
+        {["clowns text", "ip cidr"], ~s|Cannot electrify column of type "cidr"|},
+        {["j json"], ~s|Cannot electrify column of type "json"|},
+        {["s serial"], ~s|Cannot electrify column of type "serial"|},
+        {["t timetz"], ~s|Cannot electrify column of type "timetz"|},
+        {["t time (1)"], ~s|Cannot electrify column of type "time(1)"|},
+        {["t timestamp (3)"], ~s|Cannot electrify column of type "timestamp(3)"|},
+        {["t timestamptz (6)"], ~s|Cannot electrify column of type "timestamptz(6)"|},
+        {["intarr int[]"], ~s|Cannot electrify column of type "int4[]"|},
+        {["c char"], ~s|Cannot electrify column of type "bpchar(1)"|},
+        {["cc char(10)"], ~s|Cannot electrify column of type "bpchar(10)"|},
+        {["vc varchar(255)"], ~s|Cannot electrify column of type "varchar(255)"|},
+        {["u uuid[][]"], ~s|Cannot electrify column of type "uuid[][]"|}
+      ]
+
+      Enum.each(columns_and_errors, fn {columns, error_msg} ->
+        columns_sql = columns |> Enum.map(&("ADD COLUMN " <> &1)) |> Enum.join(", ")
+        query = "ALTER TABLE public.truths " <> columns_sql
+
+        assert [
+                 %QueryAnalysis{
+                   action: {:alter, "table"},
+                   table: {"public", "truths"},
+                   type: :table,
+                   electrified?: true,
+                   tx?: true,
+                   allowed?: false,
+                   ast: %{},
+                   source: %M.Query{query: ^query},
+                   sql: ^query,
+                   error: %{message: ^error_msg}
+                 }
+               ] = analyse(query, cxt)
+      end)
+    end
+
+    test "ALTER TABLE .. ADD COLUMN: allowed constraints", cxt do
+      query =
+        "ALTER TABLE public.truths " <>
+          "ADD COLUMN tn text NULL, " <>
+          "ADD COLUMN tnn text NOT NULL"
+
+      assert [
+               %QueryAnalysis{
+                 action: {:alter, "table"},
+                 table: {"public", "truths"},
+                 type: :table,
+                 electrified?: true,
+                 tx?: true,
+                 allowed?: true,
+                 ast: %{},
+                 source: %M.Query{query: ^query},
+                 sql: ^query,
+                 error: nil
+               }
+             ] = analyse(query, cxt)
+    end
+
+    test "ALTER TABLE .. ADD COLUMN: disallowed constraints", cxt do
+      queries = [
+        {"ALTER TABLE public.truths ADD COLUMN with_default text DEFAULT ''",
+         "Cannot electrify column with DEFAULT clause"},
+        {"ALTER TABLE public.truths ADD COLUMN with_check text CHECK (with_check != '')",
+         "Cannot electrify column with CHECK constraint"},
+        {"ALTER TABLE public.truths ADD COLUMN pk text PRIMARY KEY",
+         "Cannot electrify column with PRIMARY KEY constraint"},
+        {"ALTER TABLE public.truths ADD COLUMN u text UNIQUE",
+         "Cannot electrify column with UNIQUE constraint"},
+        {"ALTER TABLE public.truths ADD COLUMN i int GENERATED ALWAYS AS (1) STORED",
+         "Cannot electrify column with GENERATED constraint"},
+        {"ALTER TABLE public.truths ADD COLUMN i int GENERATED BY DEFAULT AS IDENTITY",
+         "Cannot electrify column with GENERATED constraint"},
+        {"ALTER TABLE public.truths ADD COLUMN f text REFERENCES dummy(id)",
+         "Cannot electrify column with FOREIGN KEY constraint"}
+      ]
+
+      Enum.each(queries, fn {query, error_msg} ->
+        assert [
+                 %QueryAnalysis{
+                   action: {:alter, "table"},
+                   table: {"public", "truths"},
+                   type: :table,
+                   electrified?: true,
+                   tx?: true,
+                   allowed?: false,
+                   ast: %{},
+                   source: %M.Query{query: ^query},
+                   sql: ^query,
+                   error: %{message: ^error_msg}
+                 }
+               ] = analyse(query, cxt)
+      end)
     end
 
     test "ALTER TABLE .. DROP COLUMN", cxt do
