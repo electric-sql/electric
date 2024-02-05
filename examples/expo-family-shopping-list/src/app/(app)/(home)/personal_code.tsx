@@ -24,7 +24,7 @@ export default function PersonalCode () {
   const joinFamilyLink = useMemo(() => Linking.createURL('/invite', {
     queryParams: {
       user_id: userId,
-      name: name
+      user_name: name
     },
   }), [ userId, name ]);
 

@@ -72,6 +72,13 @@ export default function AppLayout() {
           }}
         />
         <Stack.Screen
+          name="family/[family_id]/invite"
+          options={{
+            title: 'Invite to your family',
+            presentation: 'card',
+          }}
+        />
+        <Stack.Screen
           name="family/[family_id]/edit"
           options={{
             headerTitle: 'Edit family',

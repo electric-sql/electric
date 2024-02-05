@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Redirect, router, useLocalSearchParams } from 'expo-router'
+import { router, useLocalSearchParams } from 'expo-router'
 import { View } from 'react-native'
 import FamilyDropDown from '../../components/FamilyDropDown'
 import { useElectric } from '../../components/ElectricProvider'
@@ -47,14 +47,16 @@ export default function Invite () {
   // such as in the case of inviting someone through a link they
   // provided that contains their user ID and name
   useEffect(() => {
-    if (!inviteeUserId) return handleDismiss()
-
     if (!selectedFamilyId) {
       db.family.findFirst({ where: { creator_user_id: userId }})
         .then((family) => setSelectedFamilyId(family.family_id))
     }
-  }, [selectedFamilyId, userId, inviteeUserId])
+  }, [selectedFamilyId, userId])
 
+  // if not user ID is provided, invite cannot be completed
+  useEffect(() => {
+    if (!inviteeUserId) handleDismiss()
+  }, [inviteeUserId])
 
   if (!selectedFamilyId) return
   return (
