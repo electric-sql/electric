@@ -42,11 +42,6 @@ export const electrify_db = async (
   return result
 }
 
-export const renew_token = async (electric: Electric, exp: string) => {
-  const token = await mockSecureAuthToken(exp)
-  electric.renew(token)
-}
-
 // reconnects with Electric, e.g. after expiration of the JWT
 export const reconnect = async (electric: Electric, exp: string) => {
   const token = await mockSecureAuthToken(exp)
