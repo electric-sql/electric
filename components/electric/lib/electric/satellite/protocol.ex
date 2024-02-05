@@ -1090,12 +1090,17 @@ defmodule Electric.Satellite.Protocol do
   # No expiration set on the auth state
   defp schedule_auth_expiration(state, nil), do: state
 
-  defp schedule_auth_expiration(state, exp_time) do
-    ref = make_ref()
-    delta_ms = 1000 * (exp_time - Joken.current_time())
-    timer = Process.send_after(self(), {:jwt_expired, ref}, delta_ms)
-    %State{state | expiration_timer: {timer, ref}}
-  end
+  defp schedule_auth_expiration(state, _exp_time), do: state
+
+  ## NOTE(alco): This is a real implementation of an expiration timer for client connections.
+  ## It's deactivated until we figure out a proper way to support sessions and start using their
+  ## expiration time for client connection lifetime.
+  # defp schedule_auth_expiration(state, exp_time) do
+  #   ref = make_ref()
+  #   delta_ms = 1000 * (exp_time - Joken.current_time())
+  #   timer = Process.send_after(self(), {:jwt_expired, ref}, delta_ms)
+  #   %State{state | expiration_timer: {timer, ref}}
+  # end
 
   defp reschedule_auth_expiration(%{expiration_timer: old_timer} = state, exp_time) do
     with {timer, _ref} <- old_timer, do: Process.cancel_timer(timer, async: true)
