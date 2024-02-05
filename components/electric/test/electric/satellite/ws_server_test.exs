@@ -203,6 +203,9 @@ defmodule Electric.Satellite.WebsocketServerTest do
       end)
     end
 
+    # This test is disabled while the `Electric.Satellite.Protocol.schedule_auth_expiration()`
+    # is also disabled.
+    @tag :skip
     test "Socket is closed when JWT expires", ctx do
       server_id = ctx.server_id
 
@@ -225,6 +228,9 @@ defmodule Electric.Satellite.WebsocketServerTest do
       assert_receive({^pid, :server_close, 4000, "JWT-expired"}, 1500)
     end
 
+    # This test is disabled while the `Electric.Satellite.Protocol.schedule_auth_expiration()`
+    # is also disabled.
+    @tag :skip
     test "Auth can be renewed", ctx do
       server_id = ctx.server_id
 
