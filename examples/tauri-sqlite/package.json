@@ -19,15 +19,15 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.0.0-alpha.14",
+    "@tauri-apps/api": "2.0.0-alpha.14",
     "@tauri-apps/plugin-sql": "^2.0.0-alpha.5",
-    "electric-sql": "file:path/to/electric-sql-0.9.0-including-tauri-driver.tgz",
+    "electric-sql": "file:/Users/kevin/Documents/Electric/development/electric/clients/typescript/electric-sql-0.9.0-tauri.tgz",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
     "@databases/pg-migrations": "^5.0.2",
-    "@tauri-apps/cli": "^2.0.0-alpha.21",
+    "@tauri-apps/cli": "2.0.0-alpha.21",
     "@types/react": "^18.2.15",
     "@types/react-dom": "^18.2.7",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
