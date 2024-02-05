@@ -81,6 +81,8 @@ cd /Library/Developer/CommandLineTools/SDKs/
 sudo ln -s MacOSX.sdk MacOSX11.3.sdk
 ```
 
+If you have any difficulty getting the demo to build, please reach out on our [Discord](https://discord.electric-sql.com/).
+
 ### Run the backend
 
 Start Postgres and Electric using Docker (see [running the examples](https://electric-sql.com/docs/examples/notes/running) for more options):
