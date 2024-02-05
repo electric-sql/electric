@@ -74,6 +74,13 @@ bash install-linux.sh
 
 This will take up a few hundreds megabytes of space, during the installation, because the macOS postgres and the linux ollama download is large.
 
+If you are running macOS 13 or greater you may need to crate a symbolic link so that the correct SDK is found while building pgvector.
+
+```shell
+cd /Library/Developer/CommandLineTools/SDKs/
+sudo ln -s MacOSX.sdk MacOSX11.3.sdk
+```
+
 ### Run the backend
 
 Start Postgres and Electric using Docker (see [running the examples](https://electric-sql.com/docs/examples/notes/running) for more options):
