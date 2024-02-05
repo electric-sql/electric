@@ -15,7 +15,7 @@
       "all": false,
       "shell": {
         "scope": [
-          { "name": "ollama", "sidecar": true }
+          { "name": "ollama", "sidecar": true, "args": true }
         ],
         "sidecar": true,
         "open": true

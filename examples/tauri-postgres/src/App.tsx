@@ -6,7 +6,7 @@ import { listen } from "@tauri-apps/api/event";
 import { Command } from "@tauri-apps/api/shell";
 import "animate.css/animate.min.css";
 import Board from "./pages/Board";
-import { useEffect, useState, createContext } from "react";
+import { useEffect, useState, createContext, useRef } from "react";
 import { Route, Routes, BrowserRouter } from "react-router-dom";
 import { cssTransition, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -38,6 +38,7 @@ const App = () => {
   const [ollamaLoaded, setOllamaLoaded] = useState(false);
   const [llama2Downoaded, setLlama2Downoaded] = useState(false);
   const [fastembedLoaded, setFastembedLoaded] = useState(false);
+  const ollamaPort = useRef<number | null>(null);
 
   useEffect(() => {
     const init = async () => {
@@ -67,6 +68,7 @@ const App = () => {
         "loaded_ollama",
         (event) => {
           if (ignore) return;
+          ollamaPort.current = event.payload as number;
           setOllamaLoaded(true);
         }
       );
@@ -100,9 +102,18 @@ const App = () => {
     if (!ollamaLoaded) return;
     let ignore = false;
     const init = async () => {
-      console.log("pulling llama2")
-      const command = Command.sidecar('ollama', ["pull", "llama2"])
-      await command.execute()
+      console.log("pulling llama2", "http://127.0.0.1:" + ollamaPort.current)
+      const command = Command.sidecar('ollama', ["pull", "llama2"], {
+        env: {
+          "OLLAMA_HOST": "http://127.0.0.1:" + ollamaPort.current,
+        }
+      })
+      const out = await command.execute()
+      if (out.code === 0) {
+        console.error(out.stderr)
+      } else {
+        console.log(out.stdout)
+      }
       console.log("pulled llama2")
       if (ignore) return;
       setLlama2Downoaded(true)
