@@ -1,37 +1,39 @@
 import React, { useEffect, useState } from 'react'
 import { View } from 'react-native'
 import { TextInput, Button } from 'react-native-paper'
-import DropDown from 'react-native-paper-dropdown'
 import { Shopping_list } from '../generated/client'
+import FamilyDropDown from './FamilyDropDown'
 
-export type ShoppingListProperties = Pick<Shopping_list, 'title'>
+export type ShoppingListProperties = Pick<Shopping_list, 'title' | 'family_id'>
 
 const ShoppingListEditor = ({
   initialTitle,
-  selectedFamilyId,
-  familyIdOptions = [],
+  initialFamilyId,
+  showFamilyPicker = true,
   submitText,
   onChange,
   onSubmit,
 } : {
   initialTitle?: string,
-  selectedFamilyId?: string,
-  familyIdOptions?: {value: string, label: string}[],
+  initialFamilyId: string,
+  showFamilyPicker?: boolean,
   submitText: string,
   onChange?: (props : ShoppingListProperties) => void,
   onSubmit?: (props : ShoppingListProperties) => void,
 }) => {
-  const [ showFamilyDropdown, setShowFamilyDropdown ] = useState(false)
   const [ title, setTitle ] = useState(initialTitle)
-  const [ familyId, setFamilyId ] = useState(selectedFamilyId ?? familyIdOptions[0].value)
+  const [ familyId, setFamilyId ] = useState(initialFamilyId)
 
   useEffect(() => {
-    onChange?.({ title: title ?? '' })
-  }, [title])
+    onChange?.({
+      title: title ?? '',
+      family_id: familyId,
+    })
+  }, [title, familyId])
 
   const onSubmitFn = () => {
     if (!title) return
-    onSubmit?.({ title })
+    onSubmit?.({ title, family_id: familyId })
   }
 
   return (
@@ -46,18 +48,12 @@ const ShoppingListEditor = ({
         value={title}
         onChangeText={setTitle}
       />
-      <View pointerEvents={familyIdOptions.length > 1 ? 'auto' : 'none'}>
-        <DropDown
-          label="Family"
-          mode="outlined"
-          visible={showFamilyDropdown}
-          showDropDown={() => setShowFamilyDropdown(true)}
-          onDismiss={() => setShowFamilyDropdown(false)}
-          value={familyId}
-          setValue={setFamilyId}
-          list={familyIdOptions}
-        />
-      </View>
+      { showFamilyPicker &&
+        <FamilyDropDown
+          selectedFamilyId={familyId}
+          onChange={setFamilyId}
+          />
+      }
       <Button mode="contained" disabled={!title} onPress={onSubmitFn}>
         {submitText}
       </Button>

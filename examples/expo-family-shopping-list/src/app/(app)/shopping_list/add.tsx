@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react'
+import React from 'react'
 import { View } from 'react-native'
 import ShoppingListEditor, { ShoppingListProperties } from '../../../components/ShoppingListEditor'
 import { useElectric } from '../../../components/ElectricProvider'
@@ -11,16 +11,12 @@ import { useAuthenticatedUser } from '../../../components/AuthProvider'
 export default function AddShoppingList() {
   const userId = useAuthenticatedUser()!
   const { db } = useElectric()!
-  const { results: memberships = [] } = useLiveQuery(db.member.liveMany({
-      include: {
-        family: {
-          select: {
-            name: true,
-          }
-        }
+  const { results: family } = useLiveQuery<{ family_id: string }>(db.family.liveFirst({
+      select: {
+        family_id: true,
       },
       where: {
-        user_id: userId
+        creator_user_id: userId
       }
     }
   ))
@@ -30,7 +26,7 @@ export default function AddShoppingList() {
     await db.shopping_list.create({
       data: {
         list_id: newListId,
-        family_id: (await db.family.findFirst()).family_id,
+        family_id: props.family_id,
         title: props.title,
         updated_at: new Date(),
         created_at: new Date(),
@@ -39,19 +35,11 @@ export default function AddShoppingList() {
     router.replace(`/shopping_list/${newListId}`)
   }
 
-  const familyOptions = useMemo(() => memberships.map((membership) => ({
-    label: membership.family.name,
-    value: membership.family_id
-  })), [ memberships ])
-
-  
-
-  if (!familyOptions.length) return null
+  if (!family) return null
   return (
     <View>
       <ShoppingListEditor
-        familyIdOptions={familyOptions}
-        selectedFamilyId={familyOptions[0].value}
+        initialFamilyId={family.family_id}
         onSubmit={onCreate}
         submitText="Create"
       />

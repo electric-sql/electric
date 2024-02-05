@@ -12,13 +12,6 @@ export default function AddShoppingList() {
   const { db } = useElectric()!
   const { results: shoppingList } = useLiveQuery(
     db.shopping_list.liveUnique({
-      include: {
-        family: {
-          select: {
-            name: true 
-          }
-        }
-      },
       where: {
         list_id: shopping_list_id
       }
@@ -43,8 +36,8 @@ export default function AddShoppingList() {
     <View>
       <ShoppingListEditor
         initialTitle={shoppingList.title}
-        familyIdOptions={[{ value: shoppingList.family_id!, label: shoppingList.family.name}]}
-        selectedFamilyId={shoppingList.family_id}
+        initialFamilyId={shoppingList.family_id}
+        showFamilyPicker={false}
         onSubmit={onUpdate}
         submitText="Update"
       />

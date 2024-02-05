@@ -13,7 +13,6 @@ const FamilyEditor = ({
 } : {
   initialName?: string,
   selectedFamilyId?: string,
-  familyIdOptions?: {value: string, label: string}[],
   submitText: string,
   onChange?: (props : FamilyProperties) => void,
   onSubmit?: (props : FamilyProperties) => void,
