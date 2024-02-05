@@ -1,5 +1,4 @@
 import testAny, { TestFn, ExecutionContext } from 'ava'
-import Log from 'loglevel'
 import Database from 'better-sqlite3'
 import { schema } from '../generated'
 import { DatabaseAdapter } from '../../../src/drivers/better-sqlite3'
@@ -10,26 +9,13 @@ import { MockNotifier } from '../../../src/notifiers'
 import { randomValue } from '../../../src/util'
 import { ElectricClient } from '../../../src/client/model/client'
 import { cleanAndStopSatellite } from '../../satellite/common'
+import { LoggedMsg, setupLoggerMock } from '../../support/log-mock'
 import { satelliteDefaults } from '../../../src/satellite/config'
 
 const test = testAny as TestFn<ContextType>
 
-// Modify `loglevel` to store the logged messages
-// based on "Writing plugins" in https://github.com/pimterry/loglevel
-type LoggedMsg = string
 let log: Array<LoggedMsg> = []
-const originalFactory = Log.methodFactory
-Log.methodFactory = function (methodName, logLevel, loggerName) {
-  var rawMethod = originalFactory(methodName, logLevel, loggerName)
-
-  return function (message) {
-    log.push(message)
-    if (message !== 'Reading from unsynced table Post') {
-      rawMethod(message)
-    }
-  }
-}
-Log.setLevel(Log.levels.DEBUG) // Be sure to call setLevel method in order to apply plugin
+setupLoggerMock(test, () => log)
 
 const config = {
   auth: {
