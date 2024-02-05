@@ -68,21 +68,19 @@ install_postgres() {
     rm -rf META-INF
     cd ../../ # root
 
-    # TODO: get postgres15 on linux some way, so you can compile pgvector
-    # # NOTE: The below steps are used just to build the three files the `pgvector` extension use.
-    # # If we can get prebuilt binaries somehow, we can skip this large step altogether
-    # # Get a full version of postgres
-    # wget https://get.enterprisedb.com/postgresql/postgresql-15.5-1-osx-binaries.zip
-    # https://get.enterprisedb.com/postgresql/postgresql-15.5-1-linux-x64-binaries.tar.gz
-    # unzip postgresql-15.5-1-osx-binaries.zip # The directory is called `pgsql`
-    # rm postgresql-15.5-1-osx-binaries.zip
 
-    # git clone --branch v0.5.1 https://github.com/pgvector/pgvector.git
-    # cd pgvector
-    # # Build pgvector with the downloaded postgres
-    # PG_CONFIG=../pgsql/bin/pg_config make
-    # # We don't need the downloaded postgres from this point
-    # rm -rf ../pgsql/
+    if [ -z "${PG_CONFIG}" ]; then
+      echo "On linux, you need PG_CONFIG set up"
+    else
+      echo "PG_CONFIG is already set. Skipping configuration."
+    fi
+
+    git clone --branch v0.5.1 https://github.com/pgvector/pgvector.git
+    cd pgvector
+    # Build pgvector with the downloaded postgres
+    PG_CONFIG=../pgsql/bin/pg_config make
+    # We don't need the downloaded postgres from this point
+    rm -rf ../pgsql/
 
     # We need these files: TODO:
     mv sql/vector--0.5.1.sql ../src-tauri/pgdir/share/postgresql/extension/vector--0.5.1.sql

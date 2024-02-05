@@ -61,12 +61,16 @@ install_postgres() {
     rm -rf META-INF
     cd ../../ # root
 
-    # NOTE: The below steps are used just to build the three files the `pgvector` extension use.
-    # If we can get prebuilt binaries somehow, we can skip this large step altogether
-    # Get a full version of postgres
-    wget https://get.enterprisedb.com/postgresql/postgresql-15.5-1-osx-binaries.zip
-    unzip postgresql-15.5-1-osx-binaries.zip # The directory is called `pgsql`
-    rm postgresql-15.5-1-osx-binaries.zip
+    if [ -z "${PG_CONFIG}" ]; then
+        # NOTE: The below steps are used just to build the three files the `pgvector` extension use.
+        # If we can get prebuilt binaries somehow, we can skip this large step altogether
+        # Get a full version of postgres
+        wget https://get.enterprisedb.com/postgresql/postgresql-15.5-1-osx-binaries.zip
+        unzip postgresql-15.5-1-osx-binaries.zip # The directory is called `pgsql`
+        rm postgresql-15.5-1-osx-binaries.zip
+    else
+      echo "PG_CONFIG is already set. Skipping configuration."
+    fi
 
     git clone --branch v0.5.1 https://github.com/pgvector/pgvector.git
     cd pgvector
