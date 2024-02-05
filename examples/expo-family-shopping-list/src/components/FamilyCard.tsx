@@ -59,7 +59,7 @@ const FamilyCard = forwardRef(({
               </Text>
               :
               <IconButton
-                icon="account-remove" 
+                icon="account-multiple-remove" 
                 onPress={() => setExitDialogVisible(true)}
               />
             }
