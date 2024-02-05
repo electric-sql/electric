@@ -25,6 +25,14 @@ export default function AppLayout() {
         />
 
         <Stack.Screen
+          name="invite"
+          options={{
+            title: 'Invite member',
+            presentation: 'card',
+          }}
+        />
+
+        <Stack.Screen
           name="shopping_list/[shopping_list_id]/index"
           options={{
             contentStyle: {
