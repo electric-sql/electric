@@ -17,61 +17,73 @@ export default function Invite () {
   const {
     family_id: queryTargetFamilyId,
     user_id: inviteeUserId,
-    user_name: inviteeUserName = 'Unknown name'
+    user_name: inviteeUserName
   } = useLocalSearchParams<InviteParams>()
   const [ selectedFamilyId, setSelectedFamilyId ] = useState(queryTargetFamilyId)
+  const [ memberName, setMemberName ] = useState(inviteeUserName)
   const userId = useAuthenticatedUser()!
   const { db } = useElectric()!
 
-  // fallback to inviting to default family if none is specified,
-  // such as in the case of inviting someone through a link they
-  // provided that contains their user ID and name
-  useEffect(() => {
-    if (!selectedFamilyId) {
-      db.family.findFirst({ where: { creator_user_id: userId }})
-        .then((family) => setSelectedFamilyId(family.family_id))
-    }
-  }, [selectedFamilyId, userId])
-
+  const handleDismiss = () =>
+    router.canGoBack() ?
+    router.back() : router.replace('/')
 
   // create membership for invitee user in target family
   const handleInvite = async () => {
-    if (!inviteeUserId || !selectedFamilyId) return
+    if (!inviteeUserId || !selectedFamilyId || !memberName) return
     await db.member.create({
       data: {
         user_id: inviteeUserId,
         family_id: selectedFamilyId,
         member_id: genUUID(),
-        name: inviteeUserName,
+        name: memberName,
         created_at: new Date()
       }
     })
-    router.back()
+    handleDismiss()
   }
 
-  const handleDismiss = () => router.back()
+  // fallback to inviting to default family if none is specified,
+  // such as in the case of inviting someone through a link they
+  // provided that contains their user ID and name
+  useEffect(() => {
+    if (!inviteeUserId) return handleDismiss()
+
+    if (!selectedFamilyId) {
+      db.family.findFirst({ where: { creator_user_id: userId }})
+        .then((family) => setSelectedFamilyId(family.family_id))
+    }
+  }, [selectedFamilyId, userId, inviteeUserId])
 
 
-  // if no user ID to invite is provided, invite cannot happen
-  if (!inviteeUserId) return <Redirect href="../" />
   if (!selectedFamilyId) return
   return (
-    <View>
+    <View style={{ gap: 16 }}>
       <TextInput
+        label="Member name"
         mode="outlined"
+        autoFocus
         value={inviteeUserName}
-        readOnly
+        onChangeText={setMemberName}
+        readOnly={inviteeUserName !== undefined}
       />
       <FamilyDropDown
         selectedFamilyId={selectedFamilyId}
         onChange={setSelectedFamilyId}
         disabled={queryTargetFamilyId !== undefined}
       />
-      <View>
-        <Button mode="contained-tonal" onPress={handleDismiss}>
+      <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+        <Button
+          style={{ flex: 1 }}
+          mode="contained-tonal"
+          onPress={handleDismiss}>
           Cancel
         </Button>
-        <Button mode="contained" onPress={handleInvite}>
+        <Button
+          style={{ flex: 1 }}
+          mode="contained"
+          disabled={!memberName || !selectedFamilyId}
+          onPress={handleInvite}>
           Invite
         </Button>
       </View>
