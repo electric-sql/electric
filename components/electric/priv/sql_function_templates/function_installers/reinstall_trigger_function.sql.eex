@@ -1,0 +1,19 @@
+-- Redefine the given install function family for all electrified tables.
+CREATE OR REPLACE PROCEDURE <%= schema() %>.reinstall_trigger_function(function_name TEXT)
+LANGUAGE PLPGSQL
+AS $$
+DECLARE
+    electrified_table RECORD;
+BEGIN
+    FOR electrified_table IN
+        SELECT * FROM <%= schema() %>.electrified
+    LOOP
+        EXECUTE format('SELECT <%= schema() %>.%s(%L, %L, %L, %L)',
+                       function_name,
+                       electrified_table.schema_name,
+                       electrified_table.table_name,
+                       <%= schema() %>.build_primary_key_list(electrified_table.oid),
+                       <%= schema() %>.build_non_pk_column_list(electrified_table.oid));
+    END LOOP;
+END;
+$$;
