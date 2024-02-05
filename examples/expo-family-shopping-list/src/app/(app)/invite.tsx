@@ -1,24 +1,19 @@
 import React, { useEffect, useState } from 'react'
-import { router, useLocalSearchParams } from 'expo-router'
+import { router } from 'expo-router'
 import { View } from 'react-native'
 import FamilyDropDown from '../../components/FamilyDropDown'
 import { useElectric } from '../../components/ElectricProvider'
 import { useAuthenticatedUser } from '../../components/AuthProvider'
 import { Button, TextInput } from 'react-native-paper'
 import { genUUID } from 'electric-sql/util'
-
-interface InviteParams extends Record<string, string>{
-  user_id: string,
-  user_name: string,
-  family_id: string
-}
+import { useInviteQueryParams } from '../../lib/invite'
 
 export default function Invite () {
   const {
-    family_id: queryTargetFamilyId,
-    user_id: inviteeUserId,
-    user_name: inviteeUserName
-  } = useLocalSearchParams<InviteParams>()
+    queryTargetFamilyId,
+    inviteeUserId,
+    inviteeUserName
+  } = useInviteQueryParams()
   const [ selectedFamilyId, setSelectedFamilyId ] = useState(queryTargetFamilyId)
   const [ memberName, setMemberName ] = useState(inviteeUserName)
   const userId = useAuthenticatedUser()!

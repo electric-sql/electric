@@ -1,11 +1,11 @@
 import React, { useMemo } from 'react'
 import { Dimensions, Share, View } from 'react-native'
 import QRCode from 'react-native-qrcode-svg';
-import * as Linking from 'expo-linking';
 import { useAuthenticatedUser } from '../../../components/AuthProvider'
 import { Button, Text } from 'react-native-paper';
-import { useElectric } from '../../../components/ElectricProvider';
+import { useElectric } from '../../../components/ElectricProvider'; 
 import { useLiveQuery } from 'electric-sql/react';
+import { createInviteUrl } from '../../../lib/invite';
 
 const windowDimensions = Dimensions.get('window');
 
@@ -21,12 +21,10 @@ export default function PersonalCode () {
     })
   )
 
-  const joinFamilyLink = useMemo(() => Linking.createURL('/invite', {
-    queryParams: {
-      user_id: userId,
-      user_name: name
-    },
-  }), [ userId, name ]);
+  const joinFamilyLink = useMemo(
+    () => createInviteUrl(userId, name),
+    [ userId, name ]
+  );
 
   const shareLink = () => Share.share({
     title: 'I\'d like to join your family on Electric Shopping List!',

@@ -5,6 +5,7 @@ import { View } from 'react-native'
 import { Button, Text } from 'react-native-paper'
 import * as Linking from 'expo-linking'
 import { router, useLocalSearchParams } from 'expo-router'
+import { parseToInternalInviteUrl } from '../../../../lib/invite'
 
 export default function FamilyInvite () {
   const { family_id } = useLocalSearchParams<{ family_id: string }>()
@@ -18,20 +19,8 @@ export default function FamilyInvite () {
 
   const onBarcodeScanned = (result: BarcodeScanningResult) => {
     try {
-      const parsedUrl = Linking.parse(result.data)
-      // ensure QR code is correct schema, path, and has relevant user ID
-      // before redirecting to a family invite
-      if (
-        parsedUrl.scheme === Linking.resolveScheme({}) &&
-        parsedUrl.path === 'invite' &&
-        !!parsedUrl.queryParams?.['user_id']
-      ) {
-        const searchParams = new URLSearchParams({
-          ...parsedUrl.queryParams,
-          family_id: family_id!,
-        })
-        router.replace(`/invite?${searchParams.toString()}`)
-      }
+      const localHref = parseToInternalInviteUrl(result.data, family_id)
+      router.replace(localHref)
     } catch (err) {
       console.warn(`Ignoring parsed QR code: ${result.data}`)
     }
