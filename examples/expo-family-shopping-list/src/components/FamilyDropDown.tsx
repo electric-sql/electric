@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { View } from 'react-native'
-import { TextInput, Button } from 'react-native-paper'
+import { TextInput } from 'react-native-paper'
 import DropDown from 'react-native-paper-dropdown'
 import { useElectric } from './ElectricProvider'
 import { useLiveQuery } from 'electric-sql/react'
@@ -9,15 +9,17 @@ import { useAuthenticatedUser } from './AuthProvider'
 const FamilyDropDown = ({
   selectedFamilyId,
   onChange,
+  disabled = false,
 } : {
   selectedFamilyId: string,
   onChange?: (familyId: string) => void,
+  disabled?: boolean
 }) => {
   const [ visible, setVisible ] = useState(false)
   const [ familyId, setFamilyId ] = useState(selectedFamilyId)
   const userId = useAuthenticatedUser()
   if (!userId) return null
-  
+
   const { db } = useElectric()!
   const { results: memberships = [] } = useLiveQuery(db.member.liveMany({
       include: {
@@ -42,8 +44,9 @@ const FamilyDropDown = ({
     setFamilyId(selectedFamilyId)
   }, [selectedFamilyId])
 
+  const enableDropdown = familyOptions.length > 1 && !disabled
   return (
-    <View pointerEvents={familyOptions.length > 1 ? 'auto' : 'none'}>
+    <View style={{ pointerEvents: enableDropdown ? 'auto' : 'none' }}>
       <DropDown
         label="Family"
         mode="outlined"

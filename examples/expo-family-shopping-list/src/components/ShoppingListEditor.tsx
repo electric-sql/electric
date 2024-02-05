@@ -9,14 +9,14 @@ export type ShoppingListProperties = Pick<Shopping_list, 'title' | 'family_id'>
 const ShoppingListEditor = ({
   initialTitle,
   initialFamilyId,
-  showFamilyPicker = true,
+  disableFamilyPicker = false,
   submitText,
   onChange,
   onSubmit,
 } : {
   initialTitle?: string,
   initialFamilyId: string,
-  showFamilyPicker?: boolean,
+  disableFamilyPicker?: boolean,
   submitText: string,
   onChange?: (props : ShoppingListProperties) => void,
   onSubmit?: (props : ShoppingListProperties) => void,
@@ -48,12 +48,11 @@ const ShoppingListEditor = ({
         value={title}
         onChangeText={setTitle}
       />
-      { showFamilyPicker &&
-        <FamilyDropDown
-          selectedFamilyId={familyId}
-          onChange={setFamilyId}
-          />
-      }
+      <FamilyDropDown
+        selectedFamilyId={familyId}
+        onChange={setFamilyId}
+        disabled={disableFamilyPicker}
+        />
       <Button mode="contained" disabled={!title} onPress={onSubmitFn}>
         {submitText}
       </Button>

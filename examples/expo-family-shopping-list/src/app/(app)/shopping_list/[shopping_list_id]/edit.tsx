@@ -37,7 +37,7 @@ export default function AddShoppingList() {
       <ShoppingListEditor
         initialTitle={shoppingList.title}
         initialFamilyId={shoppingList.family_id}
-        showFamilyPicker={false}
+        disableFamilyPicker
         onSubmit={onUpdate}
         submitText="Update"
       />
