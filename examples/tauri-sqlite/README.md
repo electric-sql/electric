@@ -14,7 +14,7 @@
 
 # Welcome to your ElectricSQL app!
 
-This is a web application using ElectricSQL in the browser with [wa-sqlite](https://electric-sql.com/docs/integrations/drivers/web/wa-sqlite).
+This is a desktop application using ElectricSQL with [Tauri sqlite](https://beta.tauri.app/references/v2/js/sql/).
 
 ## Pre-reqs
 
