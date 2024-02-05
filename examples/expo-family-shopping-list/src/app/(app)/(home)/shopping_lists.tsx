@@ -62,11 +62,11 @@ export default function ShoppingLists () {
             </View>
           }
         </List.Section>
-
         <Link
           style={{
             position: 'absolute',
-            margin: 16,
+            marginRight: 16,
+            marginBottom: 16,
             right: 0,
             bottom: 0,
           }}

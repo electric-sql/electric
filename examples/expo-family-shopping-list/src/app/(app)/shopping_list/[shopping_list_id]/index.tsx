@@ -61,7 +61,7 @@ export default function ShoppingListItems () {
         <Link 
           style={{
             position: 'absolute',
-            margin: 16,
+            marginBottom: 16,
             right: 0,
             bottom: 0,
           }}

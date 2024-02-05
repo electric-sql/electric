@@ -47,7 +47,9 @@ export default function Family () {
         />
         <List.Section>
           <List.Subheader>Profile</List.Subheader>
-          <MemberCard memberId={membership.member_id} editable />
+          <View style={{ padding: 6 }}>
+            <MemberCard memberId={membership.member_id} editable />
+          </View>
 
           <List.Subheader>Members</List.Subheader>
           { otherMembers.length > 0 ?
@@ -67,16 +69,16 @@ export default function Family () {
         </List.Section>
 
         <Link
-            style={{
-              position: 'absolute',
-              margin: 16,
-              right: 0,
-              bottom: 0,
-            }}
-            href={`family/${family_id}/invite`}
-            asChild
-          >
-            <FAB icon="account-plus" label="Invite" />
+          style={{
+            position: 'absolute',
+            marginBottom: 16,
+            right: 0,
+            bottom: 0,
+          }}
+          href={`family/${family_id}/invite`}
+          asChild
+        >
+          <FAB icon="account-plus" label="Invite" />
         </Link>
       </View>
     </SafeAreaView>

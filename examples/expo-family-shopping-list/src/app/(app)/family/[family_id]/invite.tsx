@@ -49,7 +49,7 @@ export default function FamilyInvite () {
         which they can find in their side menu under
         <Text style={{ fontWeight: "bold" }}> Join a Family.</Text>
       </Text>
-      { !granted ?
+      { granted ?
         <View style={{ flexDirection: 'row' }}>
           <CameraView
             style={{ flex: 1, aspectRatio: 1 }}
