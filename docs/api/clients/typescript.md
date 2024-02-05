@@ -31,15 +31,18 @@ import { electrify, ElectricDatabase } from 'electric-sql/wa-sqlite'
 
 const config = {
   auth: {
-    token: await insecureAuthToken({user_id: 'dummy'})
+    clientId: 'dummy client id'
   }
 }
 const conn = await ElectricDatabase.init('electric.db', '')
 const electric = await electrify(conn, schema, config)
+const token = await insecureAuthToken({user_id: 'dummy'})
+await electric.connect(token)
 ```
 
 The `electrify` call returns a promise that will resolve to an `ElectricClient` for our database.
-The client exposes the following interface:
+We call `connect` to connect the client to the Electric sync service.
+The Electric client exposes the following interface:
 
 ```ts
 interface ElectricClient<DB> {
@@ -77,24 +80,19 @@ Therefore, only use raw queries for features that are not supported by our regul
 
 The Electric client has a few configuration options that are defined on the `ElectricConfig` type available in
 `electric-sql/config`. At a minimum, you have to include in the config object the URL to your instance of the
-[sync service](../../usage/installation/service) and an [auth token](../../usage/auth), for example:
+[sync service](../../usage/installation/service), for example:
 
 ```ts
 const config: ElectricConfig = {
   url: 'http://my-app-domain',
-  auth: {
-    token: 'eyJ0eXAiOiJKV1QiLCJhbGciOiJub25lIn0...'
-  }
 }
 ```
 
 ### Available options
 
-- `auth: AuthConfig`
+- `auth?: AuthConfig`
 
-   Authentication object that includes an auth `token` and an optional `clientId`.
-
-   `token` must be a JWT that the Electric sync service will be able to validate.
+   Authentication object that includes an optional client id `clientId`.
 
    `clientId` is a unique identifier for this particular client or device. If omitted, a random UUID will be generated
    the first time this client connects to the sync service.
@@ -158,7 +156,7 @@ Tables can be synced by requesting new shape subscriptions.
 
 ### `sync`
 
-To request a new shape subscription, we use the `sync` method on database tables.
+Once we are connected to the sync service we can request a new shape subscription using the `sync` method on database tables.
 We can sync a single table:
 ```ts
 const { synced } = await electric.db.comments.sync()
