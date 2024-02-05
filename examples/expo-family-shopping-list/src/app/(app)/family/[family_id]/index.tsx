@@ -52,7 +52,7 @@ export default function Family () {
           <List.Subheader>Members</List.Subheader>
           { otherMembers.length > 0 ?
             <FlatList
-              style={{ padding: 6 }}
+              contentContainerStyle={{ padding: 6 }}
               data={otherMembers}
               renderItem={(item) => <MemberCard memberId={item.item.member_id} />}
               keyExtractor={(item) => item.member_id}

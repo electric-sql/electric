@@ -28,7 +28,7 @@ export default function FamilyHome () {
           <List.Subheader>Your Families</List.Subheader>
           { memberships.length > 0 ?
             <FlatList
-              style={{ padding: 6 }}
+              contentContainerStyle={{ padding: 6 }}
               data={memberships}
               renderItem={(item) => (
                 <Link href={`/family/${item.item.family_id}`} asChild>

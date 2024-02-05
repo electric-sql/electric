@@ -46,7 +46,7 @@ export default function ShoppingLists () {
           <List.Subheader>Your Shopping Lists</List.Subheader>
           { shoppingLists.length > 0 ?
             <FlatList
-            style={{ padding: 6 }}
+            contentContainerStyle={{ padding: 6 }}
             data={shoppingLists}
             renderItem={(item) => (
               <Link href={`/shopping_list/${item.item.list_id}`} asChild>
