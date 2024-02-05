@@ -13,6 +13,8 @@ const { ElectricProvider: ElectricProviderWrapper, useElectric } = makeElectricC
 
 export { useElectric }
 
+const ELECTRIC_SQLITE_DB_NAME = 'shopping_list.db'
+
 export default function ElectricProvider ({
   children,
   accessToken
@@ -22,7 +24,16 @@ export default function ElectricProvider ({
 }) {
   const [ electric, setElectric ] = useState<Electric>()
   useEffect(() => {
+    // if no access token is present, clean up existing instance
+    // and do not initialize electric
+    if (!accessToken) {
+      electric?.close()
+      setElectric(undefined)
+      return
+    }
+
     let isMounted = true
+
     const init = async () => {
       const config = {
         auth: { token: accessToken },
@@ -30,13 +41,10 @@ export default function ElectricProvider ({
         url: ELECTRIC_URL
       }
 
-
-      const conn = SQLite.openDatabase('shopping_list.db')
+      const conn = SQLite.openDatabase(ELECTRIC_SQLITE_DB_NAME)
       const electric = await electrify(conn, schema, config)
-      if (!isMounted) {
-        return
-      }
-      
+      if (!isMounted) return
+
       const shape = await electric.db.member.sync({
         include: {
           family: {
@@ -50,15 +58,18 @@ export default function ElectricProvider ({
           }
         }
       })
+
       await shape.synced
 
       setElectric(electric)
     }
+
     init()
+
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [accessToken])
 
   if (electric === undefined) {
     return <LoadingView />
