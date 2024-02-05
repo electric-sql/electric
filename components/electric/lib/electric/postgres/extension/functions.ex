@@ -17,7 +17,13 @@ defmodule Electric.Postgres.Extension.Functions do
   function_paths =
     for path <- sql_template_paths do
       relpath = Path.relative_to(path, template_dir_path)
-      name = path |> Path.basename(".sql.eex") |> String.to_atom()
+
+      name =
+        relpath
+        |> String.replace(~r"[/\\]", ".")
+        |> Path.basename(".sql.eex")
+        |> String.to_atom()
+
       {relpath, name}
     end
 
@@ -30,8 +36,8 @@ defmodule Electric.Postgres.Extension.Functions do
       end
     end)
 
-  @typep name :: unquote(fn_name_type)
-  @typep sql :: binary
+  @type name :: unquote(fn_name_type)
+  @type sql :: binary
   @type function_list :: [{Path.t(), sql}]
 
   @function_paths function_paths
