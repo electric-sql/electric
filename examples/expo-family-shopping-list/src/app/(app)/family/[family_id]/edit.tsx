@@ -10,9 +10,13 @@ export default function EditFamily() {
   const { family_id } = useLocalSearchParams<{ family_id: string}>()
   if (!family_id) return <Redirect href='../' />
   const { db } = useElectric()!
-  const { results: { name } = {}} = useLiveQuery<{ name: string }>(db.family.liveUnique({
+  const { results: { name, image_base_64 } = {}} = useLiveQuery<{
+    name: string,
+    image_base_64?:string
+  }>(db.family.liveUnique({
       select: {
-        name: true
+        name: true,
+        image_base_64: true,
       },
       where: {
         family_id: family_id
@@ -38,6 +42,7 @@ export default function EditFamily() {
     <View>
       <FamilyEditor
         initialName={name}
+        initialImage={image_base_64}
         onSubmit={onUpdate}
         submitText="Update"
       />

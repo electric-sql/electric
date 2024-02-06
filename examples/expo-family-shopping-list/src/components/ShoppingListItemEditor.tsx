@@ -49,7 +49,11 @@ const ShoppingListItemEditor = ({
 
   return (
     <View style={{ gap: 16 }}>
-      <ImagePicker aspectRatio={2} onImagePicked={setImageBase64} />
+      <ImagePicker
+        initialImage={imageBase64}
+        aspectRatio={2}
+        onImagePicked={setImageBase64}
+      />
 
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
         <TextInput

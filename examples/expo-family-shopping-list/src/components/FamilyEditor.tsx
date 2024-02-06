@@ -41,7 +41,11 @@ const FamilyEditor = ({
 
   return (
     <View style={{ gap: 16 }}>
-      <ImagePicker aspectRatio={2} onImagePicked={setImageBase64} />
+      <ImagePicker
+        initialImage={imageBase64}
+        aspectRatio={2}
+        onImagePicked={setImageBase64}
+      />
       <TextInput
         label="Name"
         mode="outlined"
