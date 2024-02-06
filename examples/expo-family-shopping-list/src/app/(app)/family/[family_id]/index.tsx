@@ -1,6 +1,6 @@
 import React from 'react'
 import { View, FlatList, SafeAreaView } from 'react-native'
-import { List, Text, IconButton, FAB } from 'react-native-paper'
+import { List, Text, FAB, Appbar } from 'react-native-paper'
 import { useElectric } from '../../../../components/ElectricProvider'
 import { useLiveQuery } from 'electric-sql/react'
 import { Link, Redirect, Stack, useLocalSearchParams } from 'expo-router'
@@ -40,7 +40,7 @@ export default function Family () {
             headerTitle: family.name,
             headerRight: () => (
               <Link href={`family/${family_id}/edit`} asChild>
-                <IconButton size={20} icon="pencil" />
+                <Appbar.Action icon="pencil" />
               </Link>
             )
           }}

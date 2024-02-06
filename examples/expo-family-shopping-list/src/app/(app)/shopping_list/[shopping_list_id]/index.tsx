@@ -3,7 +3,7 @@ import React from 'react'
 import { FlatList, View, SafeAreaView } from 'react-native'
 import { useElectric } from '../../../../components/ElectricProvider';
 import { useLiveQuery } from 'electric-sql/react';
-import { FAB, List, IconButton } from 'react-native-paper';
+import { FAB, List, Appbar } from 'react-native-paper';
 import ShoppingListItemCard from '../../../../components/ShoppingListItemCard';
 import FlatListSeparator from '../../../../components/FlatListSeparator';
 
@@ -41,7 +41,7 @@ export default function ShoppingListItems () {
         headerTitle: title,
         headerRight: () => (
           <Link href={`shopping_list/${shopping_list_id}/edit`} asChild>
-            <IconButton size={20} icon="pencil" />
+            <Appbar.Action icon="pencil" />
           </Link>
         )
       }} />
