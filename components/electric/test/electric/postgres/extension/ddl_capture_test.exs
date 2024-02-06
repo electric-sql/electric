@@ -71,7 +71,7 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
 
     # this loader instance is used by the proxy injector
     loader = MockSchemaLoader.agent_id(__MODULE__.Loader)
-    state = %{loader: loader}
+    state = %{loader: loader, refresh_enum_types: false}
 
     # we have to setup the loader with knowledge of the electrified table
     # and the attached index, otherwise (since we're running in a tx via the proxy)

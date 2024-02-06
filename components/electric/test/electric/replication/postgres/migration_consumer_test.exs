@@ -62,7 +62,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
     origin = "logical_replication_producer_test_1"
     producer_name = Electric.name(FakeProducer, origin)
 
-    {:ok, producer} = start_supervised({FakeProducer, producer_name})
+    producer = start_link_supervised!({FakeProducer, producer_name})
 
     version = "20220421"
 
@@ -89,17 +89,18 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
     backend =
       MockSchemaLoader.start_link([oids: oids, pks: pks], name: __MODULE__.Loader)
 
-    {:ok, pid} =
-      start_supervised(
+    pid =
+      start_link_supervised!(
         {MigrationConsumer,
          {[origin: origin, connection: [], replication: []],
           [
             producer: producer_name,
-            backend: backend
+            backend: backend,
+            refresh_enum_types: false
           ]}}
       )
 
-    {:ok, _consumer} = start_supervised({FakeConsumer, {pid, self()}})
+    _consumer = start_link_supervised!({FakeConsumer, {pid, self()}})
 
     {:ok, origin: origin, producer: producer, version: version, loader: backend}
   end
