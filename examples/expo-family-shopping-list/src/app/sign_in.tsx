@@ -23,7 +23,7 @@ export default function SignIn() {
   }
 
   return (
-    <SafeAreaView style={{ marginHorizontal: 16, gap: 12 }}>
+    <SafeAreaView style={{ margin: 16, gap: 12 }}>
       <View style={{ alignItems: 'center' }}>
         <AppLogo height={200} width={200} />
       </View>
