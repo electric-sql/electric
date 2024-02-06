@@ -33,8 +33,7 @@ export default function AppLayout() {
             }
           </Appbar.Header>
           )
-        }
-        ,
+        },
         contentStyle: {
           padding: 16,
         },
