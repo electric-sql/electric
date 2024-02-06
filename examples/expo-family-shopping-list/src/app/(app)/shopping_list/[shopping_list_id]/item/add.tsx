@@ -19,6 +19,7 @@ export default function AddShoppingListItem () {
         name: props!.name,
         quantity: props?.quantity ?? 1,
         comment: props?.comment,
+        image_base_64: props?.image_base_64,
         updated_at: new Date(),
         added_at: new Date(),
         completed: false,

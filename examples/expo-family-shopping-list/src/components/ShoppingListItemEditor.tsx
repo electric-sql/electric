@@ -3,31 +3,39 @@ import { View } from 'react-native';
 import { TextInput, Button } from 'react-native-paper';
 
 import { Shopping_list_item } from '../generated/client';
+import ImagePicker from './ImagePicker';
 
-export type ShoppingListItemProperties = Pick<Shopping_list_item, 'name' | 'quantity' | 'comment'>
+export type ShoppingListItemProperties = Pick<
+  Shopping_list_item,
+  'name' | 'quantity' | 'comment' | 'image_base_64'
+>
 
 const ShoppingListItemEditor = ({
   initialName,
   initialQuantity = 1,
+  initialImage,
   submitText,
   onChange,
   onSubmit,
 } : {
   initialName?: string,
   initialQuantity?: number,
+  initialImage?: string,
   submitText: string,
   onChange?: (props : ShoppingListItemProperties) => void,
   onSubmit?: (props: ShoppingListItemProperties) => void,
 }) => {
   const [ name, setName ] = useState(initialName)
   const [ quantity, setQuantity ] = useState(initialQuantity)
+  const [ imageBase64, setImageBase64 ] = useState(initialImage)
   const [ comment, setComment ] = useState('')
 
 
   const getProps = () => ({
     name: name ?? '',
     quantity,
-    comment
+    comment,
+    image_base_64: imageBase64 ?? null
   })
 
   useEffect(() => {
@@ -41,6 +49,8 @@ const ShoppingListItemEditor = ({
 
   return (
     <View style={{ gap: 16 }}>
+      <ImagePicker aspectRatio={2} onImagePicked={setImageBase64} />
+
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
         <TextInput
           autoFocus

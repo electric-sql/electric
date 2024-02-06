@@ -1,7 +1,8 @@
-import React, { useCallback } from 'react';
-import { Card, Checkbox, IconButton, Text } from 'react-native-paper';
-import { useLiveQuery } from 'electric-sql/react';
-import { useElectric } from './ElectricProvider';
+import React, { useCallback } from 'react'
+import { Image } from 'react-native'
+import { Card, Checkbox, IconButton, Text } from 'react-native-paper'
+import { useLiveQuery } from 'electric-sql/react'
+import { useElectric } from './ElectricProvider'
 
 const ShoppingListItemCard = ({ shoppingListItemId } : { shoppingListItemId: string }) => {
   const { db } = useElectric()!
@@ -29,6 +30,9 @@ const ShoppingListItemCard = ({ shoppingListItemId } : { shoppingListItemId: str
   if (!item) return null
   return (
     <Card mode="elevated" onPress={onChecked}>
+      { item.image_base_64 &&
+        <Card.Cover source={{ uri: item.image_base_64 }} />
+      }
       <Card.Title
         title={`${item.name} ${item.quantity > 1 ? `×${item.quantity}` : ''}`}
         subtitle={`Added on: ${item.added_at.toLocaleString()}`}
@@ -43,6 +47,7 @@ const ShoppingListItemCard = ({ shoppingListItemId } : { shoppingListItemId: str
           <Text>{item.comment}</Text>
         </Card.Content>
       }
+      
     </Card>
   )
 }
