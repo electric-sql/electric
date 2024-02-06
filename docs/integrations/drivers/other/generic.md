@@ -35,6 +35,27 @@ export interface DatabaseAdapter {
 }
 ```
 
+For convenience, we provide two generic database adapters, `SerialDatabaseAdapter`` and `BatchDatabaseAdapter``. These implement the parts of the interface that are common to most adapters. This allows you to implement your own driver adapters using a simpler interface.
+```tsx
+export abstract class SerialDatabaseAdapter implements DatabaseAdapter {
+  // Run a single SQL statement against the DB
+  abstract _run(stmt: Statement): Promise<RunResult>
+  // Run a single SQL query against the DB
+  abstract _query(stmt: Statement): Promise<Row[]>
+}
+
+// Use `BatchDatabaseAdapter` if the underlying driver
+// supports batch execution of SQL statements
+export abstract class BatchDatabaseAdapter implements DatabaseAdapter {
+  // Run a single SQL statement against the DB
+  abstract _run(stmt: Statement): Promise<RunResult>
+  // Run a single SQL query against the DB
+  abstract _query(stmt: Statement): Promise<Row[]>
+  // Run several SQL statements againt the DB in a single batch
+  abstract execBatch(statements: Statement[]): Promise<RunResult>
+}
+```
+
 The best guidance for this is to look at the [existing driver implementations](https://github.com/electric-sql/electric/tree/main/clients/typescript/src/drivers). You can then build on the [base electrify function](https://github.com/electric-sql/electric/blob/main/clients/typescript/src/electric/index.ts#L33) to implement your own `electrify` function, e.g.:
 
 ```tsx

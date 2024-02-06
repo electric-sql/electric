@@ -1,6 +1,6 @@
 defmodule Electric.Postgres.Extension.Migrations.Migration_20230814170123_RenameDDLX do
   @moduledoc """
-  The ddlx functions we created early on conflict with the "DDLX" names we settled on 
+  The ddlx functions we created early on conflict with the "DDLX" names we settled on
   for the extensions to the pg syntax.
   """
   alias Electric.Postgres.Extension
@@ -119,7 +119,7 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230814170123_Rename
     functions =
       ddlgen_sql
       |> String.split(@split_exp)
-      |> Enum.slice(1..-1)
+      |> tl()
       |> Enum.map(&(@split_exp <> &1))
 
     remove_functions ++ functions ++ overrides(schema)

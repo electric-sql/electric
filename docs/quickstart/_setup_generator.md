@@ -28,7 +28,7 @@ npx electric-sql generate
 Start your app:
 
 ```shell
-npm run start
+npm run dev
 ```
 
 Open [localhost:3001](http://localhost:3001) in your web browser. That's it, you're up and running&nbsp;:)
