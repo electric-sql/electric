@@ -1,4 +1,4 @@
-import { Slot } from 'expo-router';
+import { Stack } from 'expo-router';
 import { ThemeProvider } from '@react-navigation/native'
 import {
   CustomLightTheme, CustomDarkTheme,
@@ -18,7 +18,10 @@ export default function RootLayout() {
     <PaperProvider theme={theme}>
       <ThemeProvider value={navigationTheme}>
         <AuthProvider>
-            <Slot />
+            <Stack screenOptions={{
+              headerShown: false,
+              animation: 'none'
+              }} />
         </AuthProvider>
       </ThemeProvider>
     </PaperProvider>
