@@ -1,6 +1,6 @@
 import { Redirect, Stack, router } from 'expo-router';
 import ElectricProvider from '../../components/ElectricProvider';
-import { useAccessToken, useAuthenticationState } from '../../components/AuthProvider';
+import { useAccessToken, useAuthenticatedUser, useAuthenticationState } from '../../components/AuthProvider';
 import { Appbar } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -8,9 +8,10 @@ export default function AppLayout() {
   const { authenticated } = useAuthenticationState()
   const { bottom: bottomInset } = useSafeAreaInsets()
   const accessToken = useAccessToken()
+  const userId = useAuthenticatedUser()
   if (!authenticated) return <Redirect href="/" />
   return (
-    <ElectricProvider accessToken={accessToken!}>
+    <ElectricProvider accessToken={accessToken!} userId={userId!}>
       <Stack screenOptions={{
         headerBackTitleVisible: false,
         header: (props) => {

@@ -11,22 +11,26 @@ import LoadingView from './LoadingView'
 
 const { ElectricProvider: ElectricProviderWrapper, useElectric } = makeElectricContext<Electric>()
 
-export { useElectric }
+function getElectricDbName(userId: string = 'unauthed') {
+  return `shopping_list_${userId}.db`
+}
 
-const ELECTRIC_SQLITE_DB_NAME = 'shopping_list.db'
+export { useElectric }
 
 export default function ElectricProvider ({
   children,
+  userId,
   accessToken
 } : {
   children: React.ReactNode,
+  userId: string,
   accessToken: string
 }) {
   const [ electric, setElectric ] = useState<Electric>()
   useEffect(() => {
     // if no access token is present, clean up existing instance
     // and do not initialize electric
-    if (!accessToken) {
+    if (!accessToken || !userId) {
       electric?.close()
       setElectric(undefined)
       return
@@ -41,7 +45,7 @@ export default function ElectricProvider ({
         url: ELECTRIC_URL
       }
 
-      const conn = SQLite.openDatabase(ELECTRIC_SQLITE_DB_NAME)
+      const conn = SQLite.openDatabase(getElectricDbName(userId))
       const electric = await electrify(conn, schema, config)
       if (!isMounted) return
 
@@ -68,8 +72,9 @@ export default function ElectricProvider ({
 
     return () => {
       isMounted = false
+      electric?.close()
     }
-  }, [accessToken])
+  }, [accessToken, userId])
 
   if (electric === undefined) {
     return <LoadingView />
