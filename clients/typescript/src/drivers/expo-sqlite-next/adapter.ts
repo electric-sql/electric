@@ -4,8 +4,7 @@ import { RunResult } from '../../electric/adapter'
 import { Database } from './database'
 import { SerialDatabaseAdapter } from '../generic'
 
-export class DatabaseAdapter extends SerialDatabaseAdapter
-{
+export class DatabaseAdapter extends SerialDatabaseAdapter {
   readonly db: Database
   constructor(db: Database) {
     super()
