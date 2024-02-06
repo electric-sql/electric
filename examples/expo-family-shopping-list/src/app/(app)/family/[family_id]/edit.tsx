@@ -24,6 +24,7 @@ export default function EditFamily() {
     await db.family.update({
       data: {
         name: props.name,
+        image_base_64: props.image_base_64,
       },
       where: {
         family_id: family_id

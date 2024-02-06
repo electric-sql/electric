@@ -43,6 +43,9 @@ const FamilyCard = forwardRef(({
   const isFamilyCreator = membership.user_id == membership.family.creator_user_id;
   return (
     <Card mode="elevated" onPress={onPress}>
+      { membership.family.image_base_64 && 
+        <Card.Cover source={{ uri: membership.family.image_base_64}} />
+      }
       <Card.Title
         title={membership.family.name}
         subtitleNumberOfLines={2}
