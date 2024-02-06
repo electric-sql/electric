@@ -7,6 +7,9 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
   alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.Postgres.MigrationConsumer
 
+  @receive_timeout 500
+  @refute_receive_timeout 1000
+
   defmodule FakeProducer do
     use GenStage
 
@@ -71,7 +74,11 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
         {"public", "yet_another_thing"} => 3333,
         {"electric", "shadow__public__something_else"} => 201_111,
         {"electric", "shadow__public__other_thing"} => 202_222,
-        {"electric", "shadow__public__yet_another_thing"} => 203_333
+        {"electric", "shadow__public__yet_another_thing"} => 203_333,
+        {"public", "first_enum_table"} => 10001,
+        {"electric", "shadow__public__first_enum_table"} => 20001,
+        {"public", "second_enum_table"} => 10002,
+        {"electric", "shadow__public__second_enum_table"} => 20002
       }
     }
 
@@ -170,11 +177,11 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
 
     GenStage.call(producer, {:emit, cxt.loader, events, version})
 
-    assert_receive {FakeConsumer, :events, ^events}, 500
-    assert_receive {MockSchemaLoader, :load}, 500
-    assert_receive {MockSchemaLoader, {:save, ^version, schema, [_, _, _]}}
-    # only receive 1 save instruction
-    refute_receive {MockSchemaLoader, {:save, _, _schema}}
+    assert_receive {FakeConsumer, :events, ^events}, @receive_timeout
+    assert_receive {MockSchemaLoader, :load}, @receive_timeout
+    # only 1 save instruction is observed
+    assert_receive {MockSchemaLoader, {:save, ^version, schema, [_, _, _]}}, @receive_timeout
+    refute_receive {MockSchemaLoader, {:save, _, _schema}}, @refute_receive_timeout
 
     assert Enum.map(schema.tables, & &1.name.name) == [
              "something_else",
@@ -184,6 +191,85 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
              "shadow__public__other_thing",
              "shadow__public__yet_another_thing"
            ]
+  end
+
+  test "captures unique enum types from migrations", cxt do
+    %{origin: origin, producer: producer, version: version} = cxt
+    assert_receive {MockSchemaLoader, {:connect, _}}
+
+    events = [
+      %Transaction{
+        changes: [
+          %NewRecord{
+            relation: {"electric", "ddl_commands"},
+            record: %{
+              "id" => "1",
+              "query" => "create type colour as enum ('red', 'green', 'blue');",
+              "txid" => "100",
+              "txts" => "200"
+            },
+            tags: []
+          },
+          %NewRecord{
+            relation: {"electric", "ddl_commands"},
+            record: %{
+              "id" => "2",
+              "query" => """
+              create table first_enum_table (
+                id uuid primary key,
+                foo colour
+              );
+              """,
+              "txid" => "100",
+              "txts" => "200"
+            },
+            tags: []
+          },
+          %NewRecord{
+            relation: {"electric", "ddl_commands"},
+            record: %{
+              "id" => "3",
+              "query" => "create type colour as enum ('red', 'green', 'blue');",
+              "txid" => "100",
+              "txts" => "200"
+            },
+            tags: []
+          },
+          %NewRecord{
+            relation: {"electric", "ddl_commands"},
+            record: %{
+              "id" => "4",
+              "query" => """
+              create table second_enum_table (
+                id uuid primary key,
+                bar colour
+              );
+              """,
+              "txid" => "100",
+              "txts" => "200"
+            },
+            tags: []
+          }
+        ],
+        commit_timestamp: ~U[2024-02-06 10:08:00.000000Z],
+        origin: origin,
+        publication: "mock_pub",
+        origin_type: :postgresql
+      }
+    ]
+
+    GenStage.call(producer, {:emit, cxt.loader, events, version})
+
+    # only 1 save instruction is observed
+    assert_receive {MockSchemaLoader, {:save, ^version, schema, [_, _, _, _]}}, @receive_timeout
+    refute_receive {MockSchemaLoader, {:save, _, _schema}}, @refute_receive_timeout
+
+    assert [
+             %{
+               name: %{name: "colour", schema: "public"},
+               values: ["red", "green", "blue"]
+             }
+           ] = schema.enums
   end
 
   test "filters non-migration records", cxt do
