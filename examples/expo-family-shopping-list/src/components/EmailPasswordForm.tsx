@@ -1,21 +1,29 @@
-import React, { useRef, useState } from 'react'
-import { StyleSheet, View, TextInput as TextInputNative } from 'react-native'
+import React, { useEffect, useRef, useState } from 'react'
+import { View, TextInput as TextInputNative } from 'react-native'
 import { Button, TextInput } from 'react-native-paper'
 
 
 const EmailPasswordForm = ({
+  initialEmail,
   submitText,
-  onSubmit
+  onSubmit,
+  onChange,
 } : {
+  initialEmail?: string,
   submitText: string,
   onSubmit: (email: string, password: string) => Promise<void>
+  onChange?: (email: string, password: string) => void
 }) => {
   const emailInput = useRef<TextInputNative>(null)
   const passwordInput = useRef<TextInputNative>(null)
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(initialEmail ?? '')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    onChange?.(email, password)
+  }, [email, password])
 
   const handleAction = async () => {
     setLoading(true)
