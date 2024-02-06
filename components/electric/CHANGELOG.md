@@ -1,5 +1,14 @@
 # @core/electric
 
+## 0.9.2
+
+### Patch Changes
+
+- 3a78a767: Removes unnecessary comma in conflict resolution PG trigger shadow table update query
+- 6fc36865: Upgrade the build environment to use Erlang (25.3.2.8) and Elixir (1.16.1).
+- 6fc36865: Include the Server Name Indication (SNI) SSL option when connecting to the database. This makes it possible for Electric to connect to Neon (neon.tech).
+- 210b9e36: Support JWTs without a trailing dot in the Insecure auth mode. (#900)
+
 ## 0.9.1
 
 ### Patch Changes

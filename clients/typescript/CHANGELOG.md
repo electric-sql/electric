@@ -1,5 +1,15 @@
 # electric-sql
 
+## 0.9.2
+
+### Patch Changes
+
+- 5fa4eebd: Modified the CLI's generate command to fix issues with the generator when user projects include Prisma v5.
+- 6fc36865: Use SIGINT as the default stop signal for the Electric service started with `npx electric-sql start`. This results in faster shutdown after pressing Ctrl-C or stopping all services with `docker compose stop/down`.
+- a5a54fb3: - Add `ELECTRIC_WRITE_TO_PG_MODE` as option to CLI
+  - Fix CLI option defaults to match Electric defaults
+- 39fc2ac7: Fix clearing local state to avoid FK violations.
+
 ## 0.9.1
 
 ### Patch Changes
