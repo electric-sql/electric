@@ -124,7 +124,7 @@
     "dev": "shx rm -rf dist && npm run build:copy-docker && mkdir dist && concurrently \"tsup --watch\" \"tsc -p tsconfig.build.json --watch\" \"nodemon --watch ./dist  --delay 250ms ./scripts/fix-imports.js\"",
     "build": "shx rm -rf dist && npm run build:copy-docker && concurrently \"tsup\" \"tsc -p tsconfig.build.json\" && node scripts/fix-imports.js",
     "build:copy-docker": "shx mkdir -p ./dist/cli/docker-commands/docker && shx cp -r ./src/cli/docker-commands/docker ./dist/cli/docker-commands",
-    "test": "ava ./test/client/model/builder.test.ts",
+    "test": "ava",
     "typecheck": "tsc -p tsconfig.json",
     "posttest": "npm run typecheck",
     "prepublishOnly": "pnpm run build",
