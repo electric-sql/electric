@@ -27,6 +27,7 @@ export default function SignUp() {
       </View>
       <EmailPasswordForm
         initialEmail={initialEmail}
+        passwordPlaceholder='Must have at least 6 characters'
         submitText="Sign up"
         onSubmit={signUpWithEmail}
         onChange={(email, _) => setEmail(email)}

@@ -6,11 +6,13 @@ import { Button, TextInput } from 'react-native-paper'
 const EmailPasswordForm = ({
   initialEmail,
   submitText,
+  passwordPlaceholder,
   onSubmit,
   onChange,
 } : {
   initialEmail?: string,
   submitText: string,
+  passwordPlaceholder?: string,
   onSubmit: (email: string, password: string) => Promise<void>
   onChange?: (email: string, password: string) => void
 }) => {
@@ -68,7 +70,7 @@ const EmailPasswordForm = ({
           value={password}
           onSubmitEditing={handleAction}
           secureTextEntry={!showPassword}
-          placeholder="At least 6 characters"
+          placeholder={passwordPlaceholder}
           enterKeyHint="done"
           autoComplete="new-password"
           autoCorrect={false}
