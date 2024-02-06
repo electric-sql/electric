@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { Button, Image, View, Platform } from 'react-native';
+import React, { useState } from 'react';
+import { Image, StyleProp } from 'react-native';
 import * as ExpoImagePicker from 'expo-image-picker';
 import { Surface, Text, TouchableRipple } from 'react-native-paper';
+import { ViewStyle } from '@expo/html-elements/build/primitives/View';
 
 
 
@@ -9,10 +10,12 @@ const ImagePicker = ({
   aspectRatio = 1,
   initialImage,
   onImagePicked,
+  minHeight = 100,
 } : {
   aspectRatio?: number,
   initialImage?: string,
   onImagePicked?: (imageBase64: string) => void,
+  minHeight?: number,
 })=> {
   const [ image, setImage ] = useState(initialImage);
 
@@ -40,13 +43,18 @@ const ImagePicker = ({
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'center',
-          minHeight: 100,
+          minHeight
         }}
       >
           { image ?
-            <Image source={{ uri: image }} style={{ flex: 1, aspectRatio }} /> 
+            <Image
+              source={{ uri: image }}
+              style={{ flex: 1, aspectRatio }}
+            /> 
             :
-            <Text variant="bodyLarge">Add an image</Text>
+            <Text variant="bodyLarge" style={{ padding: 12 }}>
+              Add an image
+            </Text>
           } 
       </Surface>
     </TouchableRipple>

@@ -45,14 +45,16 @@ const MemberCard = ({
       <Card.Title
         title={member.name}
         subtitle={`Joined on: ${member.created_at.toLocaleDateString()}`}
-        left={(_) => <Avatar.Text
-          size={32}
-          label={member.name
-            .split(' ')
-            .map((w: string) => w[0].toUpperCase())
-            .slice(0, 2)
-            .join('')}
-          />
+        left={(_) => member.image_base_64 ?
+          <Avatar.Image size={42} source={{ uri: member.image_base_64 }} />
+          :
+          <Avatar.Text size={42}
+            label={member.name
+              .split(' ')
+              .map((w: string) => w[0].toUpperCase())
+              .slice(0, 2)
+              .join('')}
+            />
         }
         right={(_) => 
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>

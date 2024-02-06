@@ -4,6 +4,7 @@ import { TextInput, Button } from 'react-native-paper'
 import { useLiveQuery } from 'electric-sql/react'
 import { Redirect, router, useLocalSearchParams } from 'expo-router'
 import { useElectric } from '../../../../../../components/ElectricProvider'
+import ImagePicker from '../../../../../../components/ImagePicker'
 
 export default function EditMember () {
   const { member_id } = useLocalSearchParams<{ member_id?: string }>()
@@ -11,6 +12,7 @@ export default function EditMember () {
 
   
   const [ name, setName ] = useState<string>()
+  const [ imageBase64, setImageBase64 ] = useState<string>()
   const { db } = useElectric()!
   const { results: member } = useLiveQuery(db.member.liveUnique({
     where: {
@@ -28,18 +30,24 @@ export default function EditMember () {
     if (!name) return
     db.member.update({
       data: {
-        name: name
+        name: name,
+        image_base_64: imageBase64,
       },
       where: {
         member_id: member_id
       }
     })
     router.back()
-  }, [name, member_id])
+  }, [name, member_id, imageBase64])
 
   if (!member) return null
   return (
     <View style={{ gap: 16 }}>
+      <ImagePicker
+        initialImage={member.image_base_64}
+        aspectRatio={1}
+        onImagePicked={setImageBase64}
+        />
       <TextInput 
         mode="outlined"
         autoFocus
