@@ -49,7 +49,7 @@ const MemberCard = ({
           size={32}
           label={member.name
             .split(' ')
-            .map((w: string) => w[0])
+            .map((w: string) => w[0].toUpperCase())
             .slice(0, 2)
             .join('')}
           />
