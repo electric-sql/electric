@@ -81,16 +81,13 @@ defmodule Electric.Plug.Migrations do
           |> Enum.join("\n\n")
 
         metadata =
-          ops
-          |> Enum.map(&table_metadata_proto/1)
-          |> then(
-            &%{
-              version: version,
-              ops: &1,
-              format: "SatOpMigrate",
-              protocol_version: "Electric.Satellite"
-            }
-          )
+          [
+            format: "SatOpMigrate",
+            ops: Enum.map(ops, &table_metadata_proto/1),
+            protocol_version: "Electric.Satellite",
+            version: version
+          ]
+          |> Jason.OrderedObject.new()
           |> Jason.encode!()
 
         [

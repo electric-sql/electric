@@ -209,7 +209,8 @@ defmodule Electric.Postgres.LogicalReplication.Decoder do
 
   defp decode_message_impl(<<"Y", data_type_id::integer-32, namespace_and_name::binary>>) do
     [namespace, name_with_null] = :binary.split(namespace_and_name, <<0>>)
-    name = String.slice(name_with_null, 0..-2)
+    # drop the last character
+    name = String.slice(name_with_null, 0..-2//1)
 
     %Type{
       id: data_type_id,

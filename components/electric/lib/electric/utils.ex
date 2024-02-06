@@ -203,19 +203,4 @@ defmodule Electric.Utils do
   def inspect_relation({schema, name}) do
     "#{inspect(schema)}.#{inspect(name)}"
   end
-
-  def epgsql_config(config) do
-    config
-    |> Map.new()
-    |> Map.put(:nulls, [nil, :null, :undefined])
-    |> maybe_add_inet6()
-  end
-
-  defp maybe_add_inet6(config) do
-    with %{ipv6: true} <- config do
-      config
-      |> Map.delete(:ipv6)
-      |> Map.put(:tcp_opts, [:inet6])
-    end
-  end
 end

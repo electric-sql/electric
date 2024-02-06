@@ -34,7 +34,7 @@ npm run client:generate
 Start the app:
 
 ```shell
-npm run start
+npm run dev
 ```
 
 ## Running your own Postgres

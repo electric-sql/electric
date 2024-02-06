@@ -195,81 +195,8 @@ END;
 $outer_function$;
 
 
-CREATE OR REPLACE FUNCTION electric.install_function__write_correct_max_tag(schema_name TEXT, table_name TEXT, primary_key_list TEXT[], non_pk_column_list TEXT[])
-    RETURNS TEXT
-    LANGUAGE PLPGSQL AS $outer_function$
-DECLARE
-    function_name TEXT := 'write_correct_max_tag___' || schema_name || '__' || table_name;
-    shadow_table_name TEXT := 'shadow__' || schema_name || '__' || table_name;
-    tombstone_table_name TEXT := 'tombstone__' || schema_name || '__' || table_name;
-    tag_column_list TEXT[] := electric.format_every(non_pk_column_list, '_tag_%s');
-    columns_to_write_blocks TEXT;
-    where_pk_substitution TEXT;
-    next_substitution_position_after_pk INTEGER;
-    using_new_pk TEXT;
-    where_pk_clause TEXT;
-BEGIN
-    next_substitution_position_after_pk := array_length(primary_key_list, 1) + 1;
-    columns_to_write_blocks := electric.format_every_and_join(
-        tag_column_list,
-        format($$
-                IF NEW._modified_columns_bit_mask[%%2$s] THEN
-                columns_to_write := array_append(columns_to_write, '%%1$I = $%s');
-                END IF;$$, next_substitution_position_after_pk),
-        '');
-
-    where_pk_substitution := electric.format_every_and_join(primary_key_list, '%I = $%s', ' AND ');
-    using_new_pk := electric.format_every_and_join(primary_key_list, 'NEW.%I');
-    where_pk_clause := electric.format_every_and_join(primary_key_list, '%1$I = NEW.%1$I', ' AND ');
-
-    -- The `%n$I` placeholders use n-th argument for formatting.
-    -- Generally, 1 is a function name, 2 is a shadow table name, 3 is a tombstone table name
-    EXECUTE format($injected$
-        CREATE OR REPLACE FUNCTION electric.%1$I()
-            RETURNS TRIGGER
-            LANGUAGE PLPGSQL SECURITY DEFINER AS
-        $function$
-        DECLARE
-            -- This will throw an error if this setting is missing -- that would be an unexpected situation, so an error is appropriate
-            max_tag electric.tag;
-            columns_to_write text[] := array[]::text[];
-        BEGIN
-            RAISE DEBUG 'Trigger %% executed by operation %% at depth %% (tx %%)', TG_NAME, TG_OP, pg_trigger_depth(), pg_current_xact_id();
-            max_tag := current_setting('electric.current_transaction_max_tag')::electric.tag;
-            RAISE DEBUG '  In particular, with bitmask %% and max tag %%', NEW._modified_columns_bit_mask, max_tag;
-
-            IF NEW._is_a_delete_operation THEN
-                RAISE DEBUG '  Handling as DELETE operation';
-                UPDATE electric.%2$I
-                    SET _tag = max_tag, _tags = array[]::electric.tag[], _resolved = true
-                    WHERE %8$s;
-            ELSE
-                RAISE DEBUG '  Handling as UPSERT operation';
-                -- REPEATED BLOCK PER COLUMN
-                %4$s
-
-                EXECUTE format(
-                    E'UPDATE electric.%2$I\n'
-                    '   SET _tag = $%5$s, _tags = ARRAY[$%5$s], _resolved = true, _modified_columns_bit_mask = array[]::boolean[], %%s\n'
-                    '   WHERE %6$s', array_to_string(columns_to_write, ', '))
-                    USING %7$s, max_tag;
-            END IF;
-
-            RETURN NULL;
-        END;
-        $function$;$injected$,
-    function_name,
-    shadow_table_name,
-    tombstone_table_name,
-    columns_to_write_blocks,
-    next_substitution_position_after_pk,
-    where_pk_substitution,
-    using_new_pk,
-    where_pk_clause);
-
-    RETURN function_name;
-END;
-$outer_function$;
+-- The electric.install_function__write_correct_max_tag() function is defined in a template file in
+-- priv/sql_function_templates/.
 
 
 /*
