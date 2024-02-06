@@ -32,7 +32,7 @@ export default function PersonalCode () {
   })
 
   return (
-    <View style={{ flex: 1, alignItems: 'center', padding: 16, gap: 16 }}>
+    <View style={{ flex: 1, alignItems: 'center', gap: 16 }}>
       <Text variant="titleLarge">
         How to use
       </Text>

@@ -21,7 +21,7 @@ export default function FamilyHome () {
     },
   }))
   return (
-    <View style={{ flex: 1, paddingHorizontal: 16 }}>
+    <View style={{ flex: 1 }}>
       <List.Section style={{ flex: 1 }}>
         <List.Subheader>Your Families</List.Subheader>
         { memberships.length > 0 ?

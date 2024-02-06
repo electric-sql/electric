@@ -40,7 +40,7 @@ export default function ShoppingLists () {
 
 
   return (
-    <View style={{ flex: 1, paddingHorizontal: 16 }}>
+    <View style={{ flex: 1 }}>
       <List.Section style={{ flex: 1 }}>
         <List.Subheader>Your Shopping Lists</List.Subheader>
         { shoppingLists.length > 0 ?
@@ -64,7 +64,6 @@ export default function ShoppingLists () {
       <Link
         style={{
           position: 'absolute',
-          marginRight: 16,
           marginBottom: 16,
           right: 0,
           bottom: 0,

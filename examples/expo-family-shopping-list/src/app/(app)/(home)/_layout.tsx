@@ -7,14 +7,22 @@ import {
 import { RegisteredStyle, TextStyle } from 'react-native';
 import { useAuthActions } from '../../../components/AuthProvider';
 import { Appbar, Icon } from 'react-native-paper';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function HomeLayout() {
+  const { bottom: bottomInset } = useSafeAreaInsets()
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <Drawer drawerContent={AppDrawerContent} screenOptions={{
-        header: AppDrawerHeader,
-      }}>
+      <Drawer
+        drawerContent={AppDrawerContent}
+        screenOptions={{
+          header: AppDrawerHeader,
+          sceneContainerStyle: {
+            paddingHorizontal: 16,
+            paddingBottom: bottomInset
+          }
+        }}
+      >
         <Drawer.Screen
           name="shopping_lists"
           options={{
