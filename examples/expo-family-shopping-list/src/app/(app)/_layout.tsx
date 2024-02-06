@@ -22,7 +22,8 @@ export default function AppLayout() {
             { headerTitle && 
               <Appbar.Content
                 title={headerTitle as string}
-                titleStyle={props.options.headerTitleStyle} />
+                titleStyle={props.options.headerTitleStyle}
+              />
             }
             {
               props.options.headerRight?.({

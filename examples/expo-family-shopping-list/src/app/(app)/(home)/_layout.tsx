@@ -1,20 +1,27 @@
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Drawer } from 'expo-router/drawer';
-import { DrawerContentScrollView, DrawerItem, DrawerItemList } from '@react-navigation/drawer';
-import { SafeAreaView } from 'react-native';
+import {
+  DrawerContentComponentProps, DrawerContentScrollView,
+  DrawerHeaderProps, DrawerItem, DrawerItemList
+} from '@react-navigation/drawer';
+import { RegisteredStyle, SafeAreaView, TextStyle } from 'react-native';
 import { useAuthActions } from '../../../components/AuthProvider';
-import { Icon } from 'react-native-paper';
-import { router } from 'expo-router';
+import { Appbar, Icon } from 'react-native-paper';
 
 export default function HomeLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <Drawer drawerContent={AppDrawerContent}>
+      <Drawer drawerContent={AppDrawerContent} screenOptions={{
+        header: AppDrawerHeader,
+      }}>
         <Drawer.Screen
           name="shopping_lists"
           options={{
             drawerLabel: 'Shopping Lists',
-            drawerIcon: (props) => <Icon source="cart-outline" {...props} />,
+            drawerIcon: (props) => 
+              <Icon {...props}
+                source={props.focused ? "cart" : "cart-outline"}
+              />,
             title: 'Shopping Lists',
           }}
         />
@@ -22,7 +29,10 @@ export default function HomeLayout() {
           name="family"
           options={{
             drawerLabel: 'Families',
-            drawerIcon: (props) => <Icon source="account-group-outline" {...props} />,
+            drawerIcon: (props) => 
+              <Icon {...props}
+                source={props.focused ? "account-group" : "account-group-outline"}
+              />,
             title: 'Families',
           }}
         />
@@ -30,7 +40,8 @@ export default function HomeLayout() {
           name="personal_code"
           options={{
             drawerLabel: 'Join a Family',
-            drawerIcon: (props) => <Icon source="qrcode" {...props} />,
+            drawerIcon: (props) => <Icon {...props} source={"qrcode"} />,
+            
             title: 'Join a Family',
           }}
         />
@@ -39,7 +50,22 @@ export default function HomeLayout() {
   );
 }
 
-function AppDrawerContent(props: any){
+function AppDrawerHeader(props: DrawerHeaderProps) {
+  const headerTitle = (props.options.title ?? props.options.headerTitle)
+  return (
+    <Appbar.Header>
+      <Appbar.Action icon="menu" onPress={props.navigation.toggleDrawer} />
+      { headerTitle && 
+        <Appbar.Content
+          title={headerTitle as string}
+          titleStyle={props.options.headerTitleStyle as RegisteredStyle<TextStyle>}
+        />
+      }
+    </Appbar.Header>
+  )
+}
+
+function AppDrawerContent(props: DrawerContentComponentProps){
   const { signOut } = useAuthActions()
   return (
      <DrawerContentScrollView {...props}
