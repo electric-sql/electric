@@ -4,6 +4,7 @@ import {
   DrawerContentComponentProps, DrawerContentScrollView,
   DrawerHeaderProps, DrawerItem, DrawerItemList
 } from '@react-navigation/drawer';
+import { Drawer as PaperDrawer } from 'react-native-paper'
 import { RegisteredStyle, TextStyle } from 'react-native';
 import { useAuthActions } from '../../../components/AuthProvider';
 import { Appbar, Icon } from 'react-native-paper';
@@ -81,14 +82,16 @@ function AppDrawerContent(props: DrawerContentComponentProps){
       scrollEnabled={false}
       contentContainerStyle={{ flex: 1 }}
       >
-       <DrawerItemList {...props}/>
-       <SafeAreaView style={{ flex: 1, justifyContent: 'flex-end' }}>
-         <DrawerItem
-           label="Log out"
-           icon={(props) => <Icon source="logout" {...props}/>}
-           onPress={() => signOut()}
-         />
-       </SafeAreaView>
+        <PaperDrawer.Section title="Menu" showDivider={false}>
+          <DrawerItemList {...props}/>
+        </PaperDrawer.Section>
+        <SafeAreaView style={{ flex: 1, justifyContent: 'flex-end' }}>
+          <DrawerItem
+            label="Log out"
+            icon={(props) => <Icon source="logout" {...props}/>}
+            onPress={() => signOut()}
+          />
+        </SafeAreaView>
      </DrawerContentScrollView>
    );
  }
