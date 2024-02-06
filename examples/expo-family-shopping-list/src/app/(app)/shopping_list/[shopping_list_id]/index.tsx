@@ -1,6 +1,6 @@
 import { Link, Redirect, Stack, useLocalSearchParams } from 'expo-router';
 import React from 'react'
-import { FlatList, View, SafeAreaView } from 'react-native'
+import { FlatList, View } from 'react-native'
 import { useElectric } from '../../../../components/ElectricProvider';
 import { useLiveQuery } from 'electric-sql/react';
 import { FAB, List, Appbar } from 'react-native-paper';
@@ -36,7 +36,7 @@ export default function ShoppingListItems () {
   }))
 
   return (
-    <SafeAreaView style={{ flex: 1 }}>
+    <View style={{ flex: 1  }}>
       <Stack.Screen options={{
         headerTitle: title,
         headerRight: () => (
@@ -45,30 +45,28 @@ export default function ShoppingListItems () {
           </Link>
         )
       }} />
-      <View style={{ flex: 1  }}>
-        <List.Section style={{ flex: 1 }}>
-          <List.Subheader>Items</List.Subheader>
-          <FlatList
-            contentContainerStyle={{ padding: 6 }}
-            data={shopping_list_items}
-            ItemSeparatorComponent={() => <FlatListSeparator />}
-            renderItem={(item) => (
-              <ShoppingListItemCard shoppingListItemId={item.item.item_id} />
-            )}
-            keyExtractor={(item) => item.item_id}
-            />
-        </List.Section>
-        <Link 
-          style={{
-            position: 'absolute',
-            marginBottom: 16,
-            right: 0,
-            bottom: 0,
-          }}
-          href={`shopping_list/${shopping_list_id}/item/add`} asChild>
-          <FAB icon="plus" />
-        </Link>
-      </View>
-    </SafeAreaView>
+      <List.Section style={{ flex: 1 }}>
+        <List.Subheader>Items</List.Subheader>
+        <FlatList
+          contentContainerStyle={{ padding: 6 }}
+          data={shopping_list_items}
+          ItemSeparatorComponent={() => <FlatListSeparator />}
+          renderItem={(item) => (
+            <ShoppingListItemCard shoppingListItemId={item.item.item_id} />
+          )}
+          keyExtractor={(item) => item.item_id}
+          />
+      </List.Section>
+      <Link 
+        style={{
+          position: 'absolute',
+          marginBottom: 16,
+          right: 0,
+          bottom: 0,
+        }}
+        href={`shopping_list/${shopping_list_id}/item/add`} asChild>
+        <FAB icon="plus" />
+      </Link>
+    </View>
   )
 }

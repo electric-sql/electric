@@ -3,7 +3,6 @@ import { View, FlatList } from 'react-native'
 import { List, Text } from 'react-native-paper'
 import { useElectric } from '../../../components/ElectricProvider'
 import { useLiveQuery } from 'electric-sql/react'
-import { SafeAreaView } from 'react-native'
 import { Link } from 'expo-router'
 import FamilyCard from '../../../components/FamilyCard'
 import FlatListSeparator from '../../../components/FlatListSeparator'
@@ -22,29 +21,27 @@ export default function FamilyHome () {
     },
   }))
   return (
-    <SafeAreaView style={{ flex: 1 }}>
-      <View style={{ flex: 1, paddingHorizontal: 16 }}>
-        <List.Section style={{ flex: 1 }}>
-          <List.Subheader>Your Families</List.Subheader>
-          { memberships.length > 0 ?
-            <FlatList
-              contentContainerStyle={{ padding: 6 }}
-              data={memberships}
-              renderItem={(item) => (
-                <Link href={`/family/${item.item.family_id}`} asChild>
-                  <FamilyCard memberId={item.item.member_id} />
-                </Link>
-              )}
-              ItemSeparatorComponent={() => <FlatListSeparator />}
-              keyExtractor={(item) => item.member_id}
-              />
-            :
-            <View style={{ flexDirection:'column', alignItems: 'center' }}>
-              <Text variant="bodyLarge">You are not part of any family</Text>
-            </View>
-          }
-        </List.Section>
-      </View>
-    </SafeAreaView>
+    <View style={{ flex: 1, paddingHorizontal: 16 }}>
+      <List.Section style={{ flex: 1 }}>
+        <List.Subheader>Your Families</List.Subheader>
+        { memberships.length > 0 ?
+          <FlatList
+            contentContainerStyle={{ padding: 6 }}
+            data={memberships}
+            renderItem={(item) => (
+              <Link href={`/family/${item.item.family_id}`} asChild>
+                <FamilyCard memberId={item.item.member_id} />
+              </Link>
+            )}
+            ItemSeparatorComponent={() => <FlatListSeparator />}
+            keyExtractor={(item) => item.member_id}
+            />
+          :
+          <View style={{ flexDirection:'column', alignItems: 'center' }}>
+            <Text variant="bodyLarge">You are not part of any family</Text>
+          </View>
+        }
+      </List.Section>
+    </View>
   )
 }

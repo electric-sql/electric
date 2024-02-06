@@ -1,10 +1,11 @@
 import React from 'react'
-import { Alert, SafeAreaView, View } from 'react-native'
+import { Alert, View } from 'react-native'
 import { Button } from 'react-native-paper'
 import EmailPasswordForm from '../components/EmailPasswordForm'
 import { Link, router } from 'expo-router'
 import { useAuthActions } from '../components/AuthProvider'
 import AppLogo from '../components/AppLogo'
+import { SafeAreaView } from 'react-native-safe-area-context'
 
 export default function SignUp() {
   const { signUp } = useAuthActions()

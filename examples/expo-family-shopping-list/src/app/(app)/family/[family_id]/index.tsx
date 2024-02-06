@@ -1,5 +1,5 @@
 import React from 'react'
-import { View, FlatList, SafeAreaView } from 'react-native'
+import { View, FlatList } from 'react-native'
 import { List, Text, FAB, Appbar } from 'react-native-paper'
 import { useElectric } from '../../../../components/ElectricProvider'
 import { useLiveQuery } from 'electric-sql/react'
@@ -33,55 +33,53 @@ export default function Family () {
   const membership = memberships.find((m) => m.user_id === userId)!
   const otherMembers = memberships.filter((m) => m.user_id !== userId)
   return (
-    <SafeAreaView style={{ flex: 1 }}>
-      <View style={{ flex: 1 }}>
-        <Stack.Screen
-          options={{
-            headerTitle: family.name,
-            headerRight: () => (
-              <Link href={`family/${family_id}/edit`} asChild>
-                <Appbar.Action icon="pencil" />
-              </Link>
-            )
-          }}
-        />
-        <List.Section>
-          <List.Subheader>Profile</List.Subheader>
-          <View style={{ padding: 6 }}>
-            <MemberCard memberId={membership.member_id} editable />
+    <View style={{ flex: 1 }}>
+      <Stack.Screen
+        options={{
+          headerTitle: family.name,
+          headerRight: () => (
+            <Link href={`family/${family_id}/edit`} asChild>
+              <Appbar.Action icon="pencil" />
+            </Link>
+          )
+        }}
+      />
+      <List.Section>
+        <List.Subheader>Profile</List.Subheader>
+        <View style={{ padding: 6 }}>
+          <MemberCard memberId={membership.member_id} editable />
+        </View>
+
+        <List.Subheader>Members</List.Subheader>
+        { otherMembers.length > 0 ?
+          <FlatList
+            contentContainerStyle={{ padding: 6 }}
+            data={otherMembers}
+            renderItem={(item) => <MemberCard memberId={item.item.member_id} />}
+            keyExtractor={(item) => item.member_id}
+            ItemSeparatorComponent={() => <FlatListSeparator />}
+          />
+          :
+          <View style={{ flexDirection:'column', alignItems: 'center' }}>
+            <Text variant="bodyLarge">No other members in this family</Text>
           </View>
+        }
+        
+      </List.Section>
 
-          <List.Subheader>Members</List.Subheader>
-          { otherMembers.length > 0 ?
-            <FlatList
-              contentContainerStyle={{ padding: 6 }}
-              data={otherMembers}
-              renderItem={(item) => <MemberCard memberId={item.item.member_id} />}
-              keyExtractor={(item) => item.member_id}
-              ItemSeparatorComponent={() => <FlatListSeparator />}
-            />
-            :
-            <View style={{ flexDirection:'column', alignItems: 'center' }}>
-              <Text variant="bodyLarge">No other members in this family</Text>
-            </View>
-          }
-          
-        </List.Section>
-
-        <Link
-          style={{
-            position: 'absolute',
-            marginBottom: 16,
-            right: 0,
-            bottom: 0,
-          }}
-          href={`family/${family_id}/invite`}
-          asChild
-        >
-          <FAB icon="account-plus" label="Invite" />
-        </Link>
-      </View>
-    </SafeAreaView>
+      <Link
+        style={{
+          position: 'absolute',
+          marginBottom: 16,
+          right: 0,
+          bottom: 0,
+        }}
+        href={`family/${family_id}/invite`}
+        asChild
+      >
+        <FAB icon="account-plus" label="Invite" />
+      </Link>
+    </View>
   )
 }
 

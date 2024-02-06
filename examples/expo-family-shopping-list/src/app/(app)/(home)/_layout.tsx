@@ -4,9 +4,10 @@ import {
   DrawerContentComponentProps, DrawerContentScrollView,
   DrawerHeaderProps, DrawerItem, DrawerItemList
 } from '@react-navigation/drawer';
-import { RegisteredStyle, SafeAreaView, TextStyle } from 'react-native';
+import { RegisteredStyle, TextStyle } from 'react-native';
 import { useAuthActions } from '../../../components/AuthProvider';
 import { Appbar, Icon } from 'react-native-paper';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function HomeLayout() {
   return (
