@@ -1,5 +1,5 @@
 import React, { forwardRef, useCallback } from 'react';
-import { Card, IconButton } from 'react-native-paper';
+import { Card, IconButton, Text } from 'react-native-paper';
 import { useLiveQuery } from 'electric-sql/react';
 import { useElectric } from './ElectricProvider';
 import { View } from 'react-native';
@@ -49,6 +49,11 @@ const ShoppingListCard = forwardRef(({
           
         )}
       />
+      <Card.Content>
+        <Text numberOfLines={1}>
+          {`Shared with ${shoppingList.family.name}`}
+        </Text>
+      </Card.Content>
     </Card>
   )
 })
