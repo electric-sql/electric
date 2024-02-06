@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'electric-sql/react'
 import React, { useMemo } from 'react'
 import { FlatList, View } from 'react-native'
-import { List, FAB, Text } from 'react-native-paper'
+import { List, FAB, Text, Button } from 'react-native-paper'
 import { useElectric } from '../../../components/ElectricProvider'
 import ShoppingListCard from '../../../components/ShoppingListCard'
 import { Link } from 'expo-router'
@@ -56,8 +56,11 @@ export default function ShoppingLists () {
           keyExtractor={(item) => item.list_id}
           />
           :
-          <View style={{ flexDirection:'column', alignItems: 'center' }}>
+          <View style={{ flexDirection:'column', alignItems: 'center', gap: 12 }}>
             <Text variant="bodyLarge">No shopping lists</Text>
+            <Link href="/shopping_list/add" asChild>
+              <Button mode="contained">Create list</Button>
+            </Link>
           </View>
         }
       </List.Section>

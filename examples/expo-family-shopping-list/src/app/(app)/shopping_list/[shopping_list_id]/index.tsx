@@ -3,7 +3,7 @@ import React from 'react'
 import { FlatList, View } from 'react-native'
 import { useElectric } from '../../../../components/ElectricProvider';
 import { useLiveQuery } from 'electric-sql/react';
-import { FAB, List, Appbar } from 'react-native-paper';
+import { FAB, List, Appbar, Text, Button } from 'react-native-paper';
 import ShoppingListItemCard from '../../../../components/ShoppingListItemCard';
 import FlatListSeparator from '../../../../components/FlatListSeparator';
 
@@ -47,15 +47,24 @@ export default function ShoppingListItems () {
       }} />
       <List.Section style={{ flex: 1 }}>
         <List.Subheader>Items</List.Subheader>
-        <FlatList
-          contentContainerStyle={{ padding: 6 }}
-          data={shopping_list_items}
-          ItemSeparatorComponent={() => <FlatListSeparator />}
-          renderItem={(item) => (
-            <ShoppingListItemCard shoppingListItemId={item.item.item_id} />
-          )}
-          keyExtractor={(item) => item.item_id}
-          />
+        { shopping_list_items.length > 0 ? 
+          <FlatList
+            contentContainerStyle={{ padding: 6 }}
+            data={shopping_list_items}
+            ItemSeparatorComponent={() => <FlatListSeparator />}
+            renderItem={(item) => (
+              <ShoppingListItemCard shoppingListItemId={item.item.item_id} />
+            )}
+            keyExtractor={(item) => item.item_id}
+            />
+            :
+            <View style={{ flexDirection:'column', alignItems: 'center', gap: 12}}>
+              <Text variant="bodyLarge">No items in this shopping list</Text>
+              <Link href={`shopping_list/${shopping_list_id}/item/add`} asChild>
+                <Button mode="contained">Add item</Button>
+              </Link>
+            </View>
+        }
       </List.Section>
       <Link 
         style={{

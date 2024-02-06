@@ -1,6 +1,6 @@
 import React from 'react'
 import { View, FlatList } from 'react-native'
-import { List, Text } from 'react-native-paper'
+import { Button, List, Text } from 'react-native-paper'
 import { useElectric } from '../../../components/ElectricProvider'
 import { useLiveQuery } from 'electric-sql/react'
 import { Link } from 'expo-router'
@@ -37,8 +37,11 @@ export default function FamilyHome () {
             keyExtractor={(item) => item.member_id}
             />
           :
-          <View style={{ flexDirection:'column', alignItems: 'center' }}>
+          <View style={{ flexDirection:'column', alignItems: 'center', gap: 12 }}>
             <Text variant="bodyLarge">You are not part of any family</Text>
+            <Link href="/personal_code" asChild>
+              <Button mode="contained">Join a family</Button>
+            </Link>
           </View>
         }
       </List.Section>
