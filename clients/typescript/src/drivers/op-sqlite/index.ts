@@ -24,7 +24,6 @@ import { WebSocketReactNative } from '../../sockets/react-native'
 export { DatabaseAdapter }
 export type { Database }
 
-
 export const electrify = async <T extends Database, DB extends DbSchema<any>>(
   db: T,
   dbDescription: DB,
