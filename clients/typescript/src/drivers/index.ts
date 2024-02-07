@@ -10,6 +10,10 @@ import { Database as ReactNativeSQLiteStorageDatabase } from './react-native-sql
 
 import { Database as CapacitorSQLiteDatabase } from './capacitor-sqlite/database'
 
+import { Database as NodePostgresDatabase } from './node-postgres/database'
+
+import { Database as TauriPostgresDatabase } from './tauri-postgres/database'
+
 export type AnyDatabase =
   | BetterSQLite3Database
   | CordovaSQLiteStorageDatabase
@@ -17,3 +21,5 @@ export type AnyDatabase =
   | ReactNativeSQLiteStorageDatabase
   | WASQLiteDatabase
   | CapacitorSQLiteDatabase
+  | NodePostgresDatabase
+  | TauriPostgresDatabase

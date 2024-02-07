@@ -23,6 +23,9 @@ importers:
       '@prisma/client':
         specifier: 5.2.0
         version: 5.2.0(prisma@5.2.0)
+      '@tauri-apps/api':
+        specifier: ^1.5.3
+        version: 1.5.3
       async-mutex:
         specifier: ^0.4.0
         version: 0.4.0
@@ -183,6 +186,9 @@ importers:
       '@types/node':
         specifier: ^18.8.4
         version: 18.16.16
+      '@types/pg':
+        specifier: ^8.11.0
+        version: 8.11.0
       '@types/prompts':
         specifier: ^2.4.9
         version: 2.4.9
@@ -216,6 +222,9 @@ importers:
       concurrently:
         specifier: ^8.2.2
         version: 8.2.2
+      embedded-postgres:
+        specifier: 16.1.1-beta.9
+        version: 16.1.1-beta.9
       eslint:
         specifier: ^8.22.0
         version: 8.41.0
@@ -263,13 +272,13 @@ importers:
         version: 4.6.2
       typeorm:
         specifier: ^0.3.9
-        version: 0.3.16(better-sqlite3@8.4.0)
+        version: 0.3.16(better-sqlite3@8.4.0)(pg@8.11.3)
       typescript:
         specifier: ^5.3.3
         version: 5.3.3
       wa-sqlite:
         specifier: rhashimoto/wa-sqlite#semver:^0.9.8
-        version: github.com/rhashimoto/wa-sqlite/5266fd8cdb4b3ced41352ba7b1f0e919ac37027a
+        version: github.com/rhashimoto/wa-sqlite/390744d41c61aa0bbd53d3c738abef5e23f71cc4
       web-worker:
         specifier: ^1.2.0
         version: 1.2.0
@@ -2051,6 +2060,70 @@ packages:
     resolution: {integrity: sha512-ooWCrlZP11i8GImSjTHYHLkvFDP48nS4+204nGb1RiX/WXYHmJA2III9/e2DWVabCESdW7hBAEzHRqUn9OUVvQ==}
     engines: {node: '>=0.1.90'}
     dev: false
+
+  /@embedded-postgres/darwin-arm64@16.1.1-beta.9:
+    resolution: {integrity: sha512-rYhWpszHXWMykAob3SLiVtzQdAfN0WQT+16dUHxxGIgoT6W435Do7DKDE4+Sg6I/U4dj0d/SUXevwi9svmiH9w==}
+    cpu: [arm64]
+    os: [darwin]
+    requiresBuild: true
+    dev: true
+    optional: true
+
+  /@embedded-postgres/darwin-x64@16.1.1-beta.9:
+    resolution: {integrity: sha512-ny/EtURgyWcEy9rDZuTDDhgx+Fv26QdBPsR3GmRPPNh9QJWRd/77yNJ34V41WO8ORiWZpAx7j5PfqcfaFZx1bQ==}
+    cpu: [x64]
+    os: [darwin]
+    requiresBuild: true
+    dev: true
+    optional: true
+
+  /@embedded-postgres/linux-arm64@16.1.1-beta.9:
+    resolution: {integrity: sha512-5TjdNJh3jgKlHyQrGDv9Ea7FGyT57DirfOAhA+TOu+n+97uAUwjOv/HgbHaqneAqNGJf0QazOTTHBDQhAVrslQ==}
+    cpu: [arm64]
+    os: [linux]
+    requiresBuild: true
+    dev: true
+    optional: true
+
+  /@embedded-postgres/linux-arm@16.1.1-beta.9:
+    resolution: {integrity: sha512-hpZ169WLsawrk0WZ3antzxy14jx75aNyTVwEctxtE9Si+AxrOFhEV2XivI40H3XtpJRAVRLxzWujJEpEq9mkrg==}
+    cpu: [arm]
+    os: [linux]
+    requiresBuild: true
+    dev: true
+    optional: true
+
+  /@embedded-postgres/linux-ia32@16.1.1-beta.9:
+    resolution: {integrity: sha512-BUJsM34OpLeuwc1GUa8mg5/n5f2Sdu++Cq40vc7hngbTdebwzcQ5kjWaXG+dt+Xxm9/biV/5r0NMgBHQcsdqvA==}
+    cpu: [ia32]
+    os: [linux]
+    requiresBuild: true
+    dev: true
+    optional: true
+
+  /@embedded-postgres/linux-ppc64@16.1.1-beta.9:
+    resolution: {integrity: sha512-25VffF0/MDHcOMo2UCEgW+lz9CGYCn4SxDeJUp/IF0P1rbO3so4ldfr+fbnkghWthPebjcH9gTskT3iP6saSaw==}
+    cpu: [ppc64]
+    os: [linux]
+    requiresBuild: true
+    dev: true
+    optional: true
+
+  /@embedded-postgres/linux-x64@16.1.1-beta.9:
+    resolution: {integrity: sha512-DWyCp01oXjIHUhhfYRUwgPav0bNnjbJqaYVNyWdIj0g/Uo80gUQx8UryvsYl8ZsVtHB4YNuFhJ1CRDdthkVW5w==}
+    cpu: [x64]
+    os: [linux]
+    requiresBuild: true
+    dev: true
+    optional: true
+
+  /@embedded-postgres/windows-x64@16.1.1-beta.9:
+    resolution: {integrity: sha512-1/1Cf1zL0NPTmIJjpeHXYPWJQLDa+pG27H8j/VEQIN8BVqRMJKXMSqlXw3RdKT7bWDDY2YkNKhfgsGjWY+yxnw==}
+    cpu: [x64]
+    os: [win32]
+    requiresBuild: true
+    dev: true
+    optional: true
 
   /@esbuild/android-arm64@0.17.19:
     resolution: {integrity: sha512-KBMWvEZooR7+kzY0BtbTQn0OAYY7CsiydT63pVEaPtVYF0hXbUaOyZog37DKxK7NF3XacBJOpYT4adIJh+avxA==}
@@ -4110,6 +4183,11 @@ packages:
       defer-to-connect: 2.0.1
     dev: true
 
+  /@tauri-apps/api@1.5.3:
+    resolution: {integrity: sha512-zxnDjHHKjOsrIzZm6nO5Xapb/BxqUq1tc7cGkFXsFkGTsSWgCPH1D8mm0XS9weJY2OaR73I3k3S+b7eSzJDfqA==}
+    engines: {node: '>= 14.6.0', npm: '>= 6.6.0', yarn: '>= 1.19.1'}
+    dev: false
+
   /@testing-library/dom@8.20.0:
     resolution: {integrity: sha512-d9ULIT+a4EXLX3UU8FBjauG9NnsZHkHztXoIcTsOKoOw030fyjheN9svkTULjJxtYag9DZz5Jz5qkWZDPxTFwA==}
     engines: {node: '>=12'}
@@ -4203,7 +4281,7 @@ packages:
   /@types/cross-spawn@6.0.2:
     resolution: {integrity: sha512-KuwNhp3eza+Rhu8IFI5HUXRP0LIhqH5cAjubUvGXXthh4YYBuP2ntwEX+Cz8GJoZUHlKo247wPWOfA9LYEq4cw==}
     dependencies:
-      '@types/node': 16.18.34
+      '@types/node': 18.16.16
 
   /@types/debug@4.1.8:
     resolution: {integrity: sha512-/vPO1EPOs306Cvhwv7KfVfYvOJqA/S/AXjaHQiJboCZzcNDb+TIJFN9/2C9DZ//ijSKWioNyUxD792QmDJ+HKQ==}
@@ -4352,6 +4430,14 @@ packages:
 
   /@types/object-hash@1.3.4:
     resolution: {integrity: sha512-xFdpkAkikBgqBdG9vIlsqffDV8GpvnPEzs0IUtr1v3BEB97ijsFQ4RXVbUZwjFThhB4MDSTUfvmxUD5PGx0wXA==}
+    dev: true
+
+  /@types/pg@8.11.0:
+    resolution: {integrity: sha512-sDAlRiBNthGjNFfvt0k6mtotoVYVQ63pA8R4EMWka7crawSR60waVYR0HAgmPRs/e2YaeJTD/43OoZ3PFw80pw==}
+    dependencies:
+      '@types/node': 18.16.16
+      pg-protocol: 1.6.0
+      pg-types: 4.0.2
     dev: true
 
   /@types/prompts@2.4.9:
@@ -5111,6 +5197,11 @@ packages:
     engines: {node: '>=8'}
     dev: true
 
+  /async-exit-hook@2.0.1:
+    resolution: {integrity: sha512-NW2cX8m1Q7KPA7a5M2ULQeZ2wR5qI5PAbw5L0UOMxdioVk9PMZ0h1TmyZEkPYrCvYjDlFICusOu1dlEKAAeXBw==}
+    engines: {node: '>=0.12.0'}
+    dev: true
+
   /async-limiter@1.0.1:
     resolution: {integrity: sha512-csOlWGAcRFJaI6m+F2WKdnMKr4HhdhFVBk0H/QbJFMCr+uO2kwohwXQPxw/9OCxp05r5ghVBFSyioixx3gfkNQ==}
     dev: false
@@ -5579,6 +5670,11 @@ packages:
   /buffer-from@1.1.2:
     resolution: {integrity: sha512-E+XQCRwSbaaiChtv6k6Dwgc+bx+Bs6vuKJHHl5kox/BaKbhiXzqQOwK4cO22yElGp2OCmjwVhT3HmxgyPGnJfQ==}
     dev: false
+
+  /buffer-writer@2.0.0:
+    resolution: {integrity: sha512-a7ZpuTZU1TRtnwyCNW3I5dc0wWNC3VR9S++Ewyk2HHZdrO3CQJqSpd+95Us590V6AL7JqUAH2IwZ/398PmNFgw==}
+    engines: {node: '>=4'}
+    dev: true
 
   /buffer@5.7.1:
     resolution: {integrity: sha512-EHcyIPBQ4BSGlvjB16k5KgAJ27CIsHY/2JBmCRReo48y9rQ3MaUzWX3KVlBa4U7MyX02HdVj0K7C3WaB3ju7FQ==}
@@ -6828,6 +6924,24 @@ packages:
 
   /electron-to-chromium@1.4.416:
     resolution: {integrity: sha512-AUYh0XDTb2vrj0rj82jb3P9hHSyzQNdTPYWZIhPdCOui7/vpme7+HTE07BE5jwuqg/34TZ8ktlRz6GImJ4IXjA==}
+
+  /embedded-postgres@16.1.1-beta.9:
+    resolution: {integrity: sha512-GhPY7VvJXsPPo84xED+hRKPO4rNt2SLHT2Ne0HgjtqSj3YAvto2gAgru+9tZ5UGyjOHSWCozZlsRVc14aOvObA==}
+    dependencies:
+      async-exit-hook: 2.0.1
+      pg: 8.11.3
+    optionalDependencies:
+      '@embedded-postgres/darwin-arm64': 16.1.1-beta.9
+      '@embedded-postgres/darwin-x64': 16.1.1-beta.9
+      '@embedded-postgres/linux-arm': 16.1.1-beta.9
+      '@embedded-postgres/linux-arm64': 16.1.1-beta.9
+      '@embedded-postgres/linux-ia32': 16.1.1-beta.9
+      '@embedded-postgres/linux-ppc64': 16.1.1-beta.9
+      '@embedded-postgres/linux-x64': 16.1.1-beta.9
+      '@embedded-postgres/windows-x64': 16.1.1-beta.9
+    transitivePeerDependencies:
+      - pg-native
+    dev: true
 
   /emittery@0.11.0:
     resolution: {integrity: sha512-S/7tzL6v5i+4iJd627Nhv9cLFIo5weAIlGccqJFpnBoDB8U1TF2k5tez4J/QNuxyyhWuFqHg1L84Kd3m7iXg6g==}
@@ -11522,6 +11636,10 @@ packages:
       es-abstract: 1.21.2
     dev: true
 
+  /obuf@1.1.2:
+    resolution: {integrity: sha512-PX1wu0AmAdPqOL1mWhqmlOd8kOIZQwGZw6rh7uby9fTc5lhaOWFLX3I6R1hrF9k3zUY40e6igsLGkDXK92LJNg==}
+    dev: true
+
   /ohash@1.1.2:
     resolution: {integrity: sha512-9CIOSq5945rI045GFtcO3uudyOkYVY1nyfFxVQp+9BRgslr8jPNiSSrsFGg/BNTUFOLqx0P5tng6G32brIPw0w==}
     dev: false
@@ -11856,6 +11974,10 @@ packages:
       semver: 7.5.4
     dev: true
 
+  /packet-reader@1.0.0:
+    resolution: {integrity: sha512-HAKu/fG3HpHFO0AA8WE8q2g+gBJaZ9MG7fcKk+IJPLTGAD6Psw4443l+9DGRbOIh3/aXr7Phy0TjilYivJo5XQ==}
+    dev: true
+
   /pako@1.0.11:
     resolution: {integrity: sha512-4hLB8Py4zZce5s4yd9XzopqwVv/yGNhV1Bl8NTmCq1763HeK2+EwVTv+leGeL13Dnh2wfbqowVPXCIO0z4taYw==}
     dev: false
@@ -12001,6 +12123,88 @@ packages:
 
   /performance-now@2.1.0:
     resolution: {integrity: sha512-7EAHlyLHI56VEIdK57uwHdHKIaAGbnXPiw0yWbarQZOKaKpvUIgW0jWRVLiatnM+XXlSwsanIBH/hzGMJulMow==}
+    dev: true
+
+  /pg-cloudflare@1.1.1:
+    resolution: {integrity: sha512-xWPagP/4B6BgFO+EKz3JONXv3YDgvkbVrGw2mTo3D6tVDQRh1e7cqVGvyR3BE+eQgAvx1XhW/iEASj4/jCWl3Q==}
+    requiresBuild: true
+    dev: true
+    optional: true
+
+  /pg-connection-string@2.6.2:
+    resolution: {integrity: sha512-ch6OwaeaPYcova4kKZ15sbJ2hKb/VP48ZD2gE7i1J+L4MspCtBMAx8nMgz7bksc7IojCIIWuEhHibSMFH8m8oA==}
+    dev: true
+
+  /pg-int8@1.0.1:
+    resolution: {integrity: sha512-WCtabS6t3c8SkpDBUlb1kjOs7l66xsGdKpIPZsg4wR+B3+u9UAum2odSsF9tnvxg80h4ZxLWMy4pRjOsFIqQpw==}
+    engines: {node: '>=4.0.0'}
+    dev: true
+
+  /pg-numeric@1.0.2:
+    resolution: {integrity: sha512-BM/Thnrw5jm2kKLE5uJkXqqExRUY/toLHda65XgFTBTFYZyopbKjBe29Ii3RbkvlsMoFwD+tHeGaCjjv0gHlyw==}
+    engines: {node: '>=4'}
+    dev: true
+
+  /pg-pool@3.6.1(pg@8.11.3):
+    resolution: {integrity: sha512-jizsIzhkIitxCGfPRzJn1ZdcosIt3pz9Sh3V01fm1vZnbnCMgmGl5wvGGdNN2EL9Rmb0EcFoCkixH4Pu+sP9Og==}
+    peerDependencies:
+      pg: '>=8.0'
+    dependencies:
+      pg: 8.11.3
+    dev: true
+
+  /pg-protocol@1.6.0:
+    resolution: {integrity: sha512-M+PDm637OY5WM307051+bsDia5Xej6d9IR4GwJse1qA1DIhiKlksvrneZOYQq42OM+spubpcNYEo2FcKQrDk+Q==}
+    dev: true
+
+  /pg-types@2.2.0:
+    resolution: {integrity: sha512-qTAAlrEsl8s4OiEQY69wDvcMIdQN6wdz5ojQiOy6YRMuynxenON0O5oCpJI6lshc6scgAY8qvJ2On/p+CXY0GA==}
+    engines: {node: '>=4'}
+    dependencies:
+      pg-int8: 1.0.1
+      postgres-array: 2.0.0
+      postgres-bytea: 1.0.0
+      postgres-date: 1.0.7
+      postgres-interval: 1.2.0
+    dev: true
+
+  /pg-types@4.0.2:
+    resolution: {integrity: sha512-cRL3JpS3lKMGsKaWndugWQoLOCoP+Cic8oseVcbr0qhPzYD5DWXK+RZ9LY9wxRf7RQia4SCwQlXk0q6FCPrVng==}
+    engines: {node: '>=10'}
+    dependencies:
+      pg-int8: 1.0.1
+      pg-numeric: 1.0.2
+      postgres-array: 3.0.2
+      postgres-bytea: 3.0.0
+      postgres-date: 2.1.0
+      postgres-interval: 3.0.0
+      postgres-range: 1.1.4
+    dev: true
+
+  /pg@8.11.3:
+    resolution: {integrity: sha512-+9iuvG8QfaaUrrph+kpF24cXkH1YOOUeArRNYIxq1viYHZagBxrTno7cecY1Fa44tJeZvaoG+Djpkc3JwehN5g==}
+    engines: {node: '>= 8.0.0'}
+    peerDependencies:
+      pg-native: '>=3.0.1'
+    peerDependenciesMeta:
+      pg-native:
+        optional: true
+    dependencies:
+      buffer-writer: 2.0.0
+      packet-reader: 1.0.0
+      pg-connection-string: 2.6.2
+      pg-pool: 3.6.1(pg@8.11.3)
+      pg-protocol: 1.6.0
+      pg-types: 2.2.0
+      pgpass: 1.0.5
+    optionalDependencies:
+      pg-cloudflare: 1.1.1
+    dev: true
+
+  /pgpass@1.0.5:
+    resolution: {integrity: sha512-FdW9r/jQZhSeohs1Z3sI1yxFQNFvMcnmfuj4WBMUTxOrAyLMaTcE1aAMBiTlbMNaXvBCQuVi0R7hd8udDSP7ug==}
+    dependencies:
+      split2: 4.2.0
     dev: true
 
   /picocolors@1.0.0:
@@ -12171,6 +12375,54 @@ packages:
       nanoid: 3.3.6
       picocolors: 1.0.0
       source-map-js: 1.0.2
+    dev: true
+
+  /postgres-array@2.0.0:
+    resolution: {integrity: sha512-VpZrUqU5A69eQyW2c5CA1jtLecCsN2U/bD6VilrFDWq5+5UIEVO7nazS3TEcHf1zuPYO/sqGvUvW62g86RXZuA==}
+    engines: {node: '>=4'}
+    dev: true
+
+  /postgres-array@3.0.2:
+    resolution: {integrity: sha512-6faShkdFugNQCLwucjPcY5ARoW1SlbnrZjmGl0IrrqewpvxvhSLHimCVzqeuULCbG0fQv7Dtk1yDbG3xv7Veog==}
+    engines: {node: '>=12'}
+    dev: true
+
+  /postgres-bytea@1.0.0:
+    resolution: {integrity: sha512-xy3pmLuQqRBZBXDULy7KbaitYqLcmxigw14Q5sj8QBVLqEwXfeybIKVWiqAXTlcvdvb0+xkOtDbfQMOf4lST1w==}
+    engines: {node: '>=0.10.0'}
+    dev: true
+
+  /postgres-bytea@3.0.0:
+    resolution: {integrity: sha512-CNd4jim9RFPkObHSjVHlVrxoVQXz7quwNFpz7RY1okNNme49+sVyiTvTRobiLV548Hx/hb1BG+iE7h9493WzFw==}
+    engines: {node: '>= 6'}
+    dependencies:
+      obuf: 1.1.2
+    dev: true
+
+  /postgres-date@1.0.7:
+    resolution: {integrity: sha512-suDmjLVQg78nMK2UZ454hAG+OAW+HQPZ6n++TNDUX+L0+uUlLywnoxJKDou51Zm+zTCjrCl0Nq6J9C5hP9vK/Q==}
+    engines: {node: '>=0.10.0'}
+    dev: true
+
+  /postgres-date@2.1.0:
+    resolution: {integrity: sha512-K7Juri8gtgXVcDfZttFKVmhglp7epKb1K4pgrkLxehjqkrgPhfG6OO8LHLkfaqkbpjNRnra018XwAr1yQFWGcA==}
+    engines: {node: '>=12'}
+    dev: true
+
+  /postgres-interval@1.2.0:
+    resolution: {integrity: sha512-9ZhXKM/rw350N1ovuWHbGxnGh/SNJ4cnxHiM0rxE4VN41wsg8P8zWn9hv/buK00RP4WvlOyr/RBDiptyxVbkZQ==}
+    engines: {node: '>=0.10.0'}
+    dependencies:
+      xtend: 4.0.2
+    dev: true
+
+  /postgres-interval@3.0.0:
+    resolution: {integrity: sha512-BSNDnbyZCXSxgA+1f5UU2GmwhoI0aU5yMxRGO8CdFEcY2BQF9xm/7MqKnYoM1nJDk8nONNWDk9WeSmePFhQdlw==}
+    engines: {node: '>=12'}
+    dev: true
+
+  /postgres-range@1.1.4:
+    resolution: {integrity: sha512-i/hbxIE9803Alj/6ytL7UHQxRvZkI9O4Sy+J3HGc4F4oo/2eQAjTSNJ0bfxyse3bH0nuVesCk+3IRLaMtG3H6w==}
     dev: true
 
   /pouchdb-collections@1.0.1:
@@ -13600,6 +13852,11 @@ packages:
       extend-shallow: 3.0.2
     dev: false
 
+  /split2@4.2.0:
+    resolution: {integrity: sha512-UcjcJOWknrNkF6PLX83qcHM6KHgVKNkV62Y8a5uYDVv9ydGQVwAHMKqHdJje1VTWpljG0WYpCDhrCdAOYH4TWg==}
+    engines: {node: '>= 10.x'}
+    dev: true
+
   /split@1.0.1:
     resolution: {integrity: sha512-mTyOoPbrivtXnwnIxZRFYRrPNtEFKlpB2fvjSnCQUiAA6qAZzqwna5envK4uk6OIeP17CsdF3rSBGYVBsU0Tkg==}
     dependencies:
@@ -14513,7 +14770,7 @@ packages:
       is-typedarray: 1.0.0
     dev: true
 
-  /typeorm@0.3.16(better-sqlite3@8.4.0):
+  /typeorm@0.3.16(better-sqlite3@8.4.0)(pg@8.11.3):
     resolution: {integrity: sha512-wJ4Qy1oqRKNDdZiBTTaVMqwo/XxC52Q7uNPTjltPgLhvIW173bL6Iad0lhptMOsFlpixFPaUu3PNziaRBwX2Zw==}
     engines: {node: '>= 12.9.0'}
     hasBin: true
@@ -14582,6 +14839,7 @@ packages:
       dotenv: 16.1.1
       glob: 8.1.0
       mkdirp: 2.1.6
+      pg: 8.11.3
       reflect-metadata: 0.1.13
       sha.js: 2.4.11
       tslib: 2.5.2
@@ -15276,7 +15534,6 @@ packages:
   /xtend@4.0.2:
     resolution: {integrity: sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==}
     engines: {node: '>=0.4'}
-    dev: false
 
   /y18n@4.0.3:
     resolution: {integrity: sha512-JKhqTOwSrqNA1NY5lSztJ1GrBiUodLMmIZuLiDaMRJ+itFd+ABVE8XBjOvIWL+rSqNDC74LCSFmlb/U4UZ4hJQ==}
@@ -15394,8 +15651,8 @@ packages:
     resolution: {integrity: sha512-m46AKbrzKVzOzs/DZgVnG5H55N1sv1M8qZU3A8RIKbs3mrACDNeIOeilDymVb2HdmP8uwshOCF4uJ8uM9rCqJw==}
     dev: false
 
-  github.com/rhashimoto/wa-sqlite/5266fd8cdb4b3ced41352ba7b1f0e919ac37027a:
-    resolution: {tarball: https://codeload.github.com/rhashimoto/wa-sqlite/tar.gz/5266fd8cdb4b3ced41352ba7b1f0e919ac37027a}
+  github.com/rhashimoto/wa-sqlite/390744d41c61aa0bbd53d3c738abef5e23f71cc4:
+    resolution: {tarball: https://codeload.github.com/rhashimoto/wa-sqlite/tar.gz/390744d41c61aa0bbd53d3c738abef5e23f71cc4}
     name: wa-sqlite
-    version: 0.9.9
+    version: 0.9.11
     dev: true

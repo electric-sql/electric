@@ -56,6 +56,7 @@
     "./node": "./dist/drivers/better-sqlite3/index.js",
     "./react": "./dist/frameworks/react/index.js",
     "./react-native": "./dist/drivers/react-native-sqlite-storage/index.js",
+    "./tauri-postgres": "./dist/drivers/tauri-postgres/index.js",
     "./wa-sqlite": "./dist/drivers/wa-sqlite/index.js",
     "./config": "./dist/config/index.js",
     "./debug": "./dist/util/debug/index.js",
@@ -89,6 +90,9 @@
       ],
       "react-native": [
         "./dist/drivers/react-native-sqlite-storage/index.d.ts"
+      ],
+      "tauri-postgres": [
+        "./dist/drivers/tauri-postgres/index.d.ts"
       ],
       "wa-sqlite": [
         "./dist/drivers/wa-sqlite/index.d.ts"
@@ -138,6 +142,7 @@
   "dependencies": {
     "@electric-sql/prisma-generator": "workspace:*",
     "@prisma/client": "5.2.0",
+    "@tauri-apps/api": "^1.5.3",
     "async-mutex": "^0.4.0",
     "base-64": "^1.0.0",
     "better-sqlite3": "^8.4.0",
@@ -191,6 +196,7 @@
     "@types/lodash.pick": "^4.4.7",
     "@types/lodash.throttle": "^4.1.7",
     "@types/node": "^18.8.4",
+    "@types/pg": "^8.11.0",
     "@types/prompts": "^2.4.9",
     "@types/react": "^18.0.18",
     "@types/react-native-sqlite-storage": "^6.0.0",
@@ -202,6 +208,7 @@
     "@typescript-eslint/parser": "^5.34.0",
     "ava": "^4.3.1",
     "concurrently": "^8.2.2",
+    "embedded-postgres": "16.1.1-beta.9",
     "eslint": "^8.22.0",
     "expo-sqlite": "^11.7.0",
     "glob": "^10.3.10",
