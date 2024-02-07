@@ -13,6 +13,7 @@ export type ShoppingListItemProperties = Pick<
 const ShoppingListItemEditor = ({
   initialName,
   initialQuantity = 1,
+  initialComment = '',
   initialImage,
   submitText,
   onChange,
@@ -20,6 +21,7 @@ const ShoppingListItemEditor = ({
 }: {
   initialName?: string;
   initialQuantity?: number;
+  initialComment?: string;
   initialImage?: string;
   submitText: string;
   onChange?: (props: ShoppingListItemProperties) => void;
@@ -27,8 +29,8 @@ const ShoppingListItemEditor = ({
 }) => {
   const [name, setName] = useState(initialName);
   const [quantity, setQuantity] = useState(initialQuantity);
+  const [comment, setComment] = useState(initialComment);
   const [imageBase64, setImageBase64] = useState(initialImage);
-  const [comment, setComment] = useState('');
 
   const getProps = () => ({
     name: name ?? '',
