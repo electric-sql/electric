@@ -3,13 +3,13 @@ import Database from 'better-sqlite3'
 
 import { rm as removeFile } from 'node:fs/promises'
 
-import { DatabaseAdapter } from '../../src/drivers/better-sqlite3/adapter'
-import { BundleMigrator } from '../../src/migrators/bundle'
-import { makeStmtMigration } from '../../src/migrators'
+import { DatabaseAdapter } from '../../../src/drivers/better-sqlite3/adapter'
+import { SqliteBundleMigrator as BundleMigrator } from '../../../src/migrators/bundle'
+import { makeStmtMigration } from '../../../src/migrators'
 
-import { randomValue } from '../../src/util/random'
+import { randomValue } from '../../../src/util/random'
 
-import migrations from '../support/migrations/migrations.js'
+import migrations from '../../support/migrations/migrations.js'
 
 test.beforeEach((t) => {
   const dbName = `bundle-migrator-${randomValue()}.db`

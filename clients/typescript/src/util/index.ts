@@ -1,7 +1,6 @@
 export * from './common'
 export * from './hex'
 export * from './keys'
-export * from './options'
 export * from './parser'
 export * from './proto'
 export * from './random'

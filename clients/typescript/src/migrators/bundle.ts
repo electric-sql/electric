@@ -3,43 +3,66 @@ import {
   Migration,
   MigrationRecord,
   Migrator,
-  MigratorOptions,
   StmtMigration,
 } from './index'
 import { DatabaseAdapter } from '../electric/adapter'
-import { overrideDefined } from '../util/options'
-import { data as baseMigration } from './schema'
+import { getData as makeBaseMigration } from './schema'
 import Log from 'loglevel'
-import { SatelliteError, SatelliteErrorCode } from '../util'
+import {
+  SatelliteError,
+  SatelliteErrorCode,
+  SqlValue,
+  Statement,
+} from '../util'
+import { ElectricSchema } from './schema'
+import {
+  Kysely,
+  KyselyConfig,
+  sql as raw,
+  DummyDriver,
+  PostgresAdapter,
+  PostgresIntrospector,
+  PostgresQueryCompiler,
+  SqliteAdapter,
+  SqliteIntrospector,
+  SqliteQueryCompiler,
+  expressionBuilder,
+  ExpressionBuilder,
+} from 'kysely'
+import { _electric_migrations } from '../satellite/config'
 
 export const SCHEMA_VSN_ERROR_MSG = `Local schema doesn't match server's. Clear local state through developer tools and retry connection manually. If error persists, re-generate the client. Check documentation (https://electric-sql.com/docs/reference/roadmap) to learn more.`
 
-const DEFAULTS: MigratorOptions = {
-  tableName: '_electric_migrations',
-}
-
 const VALID_VERSION_EXP = new RegExp('^[0-9_]+')
 
-export class BundleMigrator implements Migrator {
+abstract class BundleMigratorBase implements Migrator {
   adapter: DatabaseAdapter
   migrations: StmtMigration[]
 
-  tableName: string
+  readonly tableName = _electric_migrations
+  queryBuilder: Kysely<ElectricSchema>
+  eb: ExpressionBuilder<ElectricSchema, typeof _electric_migrations>
 
   constructor(
     adapter: DatabaseAdapter,
     migrations: Migration[] = [],
-    tableName?: string
+    queryBuilderConfig: KyselyConfig,
+    dialect: 'SQLite' | 'PG'
   ) {
-    const overrides = { tableName: tableName }
-    const opts = overrideDefined(DEFAULTS, overrides) as MigratorOptions
-
     this.adapter = adapter
+    const baseMigration = makeBaseMigration(dialect)
     this.migrations = [...baseMigration.migrations, ...migrations].map(
       makeStmtMigration
     )
-    this.tableName = opts.tableName
+    this.queryBuilder = new Kysely<ElectricSchema>(queryBuilderConfig)
+    this.eb = expressionBuilder<ElectricSchema, typeof _electric_migrations>()
   }
+
+  /**
+   * Returns a SQL statement that checks if the given table exists.
+   * @param tableName The name of the table to check for existence.
+   */
+  abstract createTableExistsStatement(tableName: string): Statement
 
   async up(): Promise<number> {
     const existing = await this.queryApplied()
@@ -58,16 +81,8 @@ export class BundleMigrator implements Migrator {
   async migrationsTableExists(): Promise<boolean> {
     // If this is the first time we're running migrations, then the
     // migrations table won't exist.
-    const tableExists = `
-      SELECT 1 FROM sqlite_master
-        WHERE type = 'table'
-          AND name = ?
-    `
-    const tables = await this.adapter.query({
-      sql: tableExists,
-      args: [this.tableName],
-    })
-
+    const tableExists = this.createTableExistsStatement(this.tableName)
+    const tables = await this.adapter.query(tableExists)
     return tables.length > 0
   }
 
@@ -77,9 +92,10 @@ export class BundleMigrator implements Migrator {
     }
 
     const existingRecords = `
-      SELECT version FROM ${this.tableName}
+      SELECT version FROM main.${this.tableName}
         ORDER BY id ASC
     `
+
     const rows = await this.adapter.query({ sql: existingRecords })
     return rows as unknown as MigrationRecord[]
   }
@@ -93,7 +109,7 @@ export class BundleMigrator implements Migrator {
     // The hard-coded version '0' below corresponds to the version of the internal migration defined in `schema.ts`.
     // We're ignoring it because this function is supposed to return the application schema version.
     const schemaVersion = `
-      SELECT version FROM ${this.tableName}
+      SELECT version FROM main.${this.tableName}
         WHERE version != '0'
         ORDER BY version DESC
         LIMIT 1
@@ -144,13 +160,15 @@ export class BundleMigrator implements Migrator {
       )
     }
 
-    const applied = `INSERT INTO ${this.tableName}
-        ('version', 'applied_at') VALUES (?, ?)
-        `
+    const { sql, parameters } = raw`
+      INSERT INTO main.${this.eb.table(
+        this.tableName
+      )} (version, applied_at) VALUES (${version}, ${Date.now().toString()})
+    `.compile(this.queryBuilder)
 
     await this.adapter.runInTransaction(...statements, {
-      sql: applied,
-      args: [version, Date.now()],
+      sql,
+      args: parameters as SqlValue[],
     })
   }
 
@@ -161,13 +179,14 @@ export class BundleMigrator implements Migrator {
    *          that indicates if the migration was applied.
    */
   async applyIfNotAlready(migration: StmtMigration): Promise<boolean> {
-    const versionExists = `
-      SELECT 1 FROM ${this.tableName}
-        WHERE version = ?
-    `
+    const { sql, parameters } = raw`
+      SELECT 1 FROM main.${this.eb.table(this.tableName)}
+        WHERE version = ${migration.version}
+    `.compile(this.queryBuilder)
+
     const rows = await this.adapter.query({
-      sql: versionExists,
-      args: [migration.version],
+      sql,
+      args: parameters as SqlValue[],
     })
 
     const shouldApply = rows.length === 0
@@ -179,5 +198,47 @@ export class BundleMigrator implements Migrator {
     }
 
     return shouldApply
+  }
+}
+
+export class SqliteBundleMigrator extends BundleMigratorBase {
+  constructor(adapter: DatabaseAdapter, migrations: Migration[] = []) {
+    const config: KyselyConfig = {
+      dialect: {
+        createAdapter: () => new SqliteAdapter(),
+        createDriver: () => new DummyDriver(),
+        createIntrospector: (db) => new SqliteIntrospector(db),
+        createQueryCompiler: () => new SqliteQueryCompiler(),
+      },
+    }
+    super(adapter, migrations, config, 'SQLite')
+  }
+
+  createTableExistsStatement(tableName: string): Statement {
+    return {
+      sql: `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`,
+      args: [tableName],
+    }
+  }
+}
+
+export class PgBundleMigrator extends BundleMigratorBase {
+  constructor(adapter: DatabaseAdapter, migrations: Migration[] = []) {
+    const config: KyselyConfig = {
+      dialect: {
+        createAdapter: () => new PostgresAdapter(),
+        createDriver: () => new DummyDriver(),
+        createIntrospector: (db) => new PostgresIntrospector(db),
+        createQueryCompiler: () => new PostgresQueryCompiler(),
+      },
+    }
+    super(adapter, migrations, config, 'PG')
+  }
+
+  createTableExistsStatement(tableName: string): Statement {
+    return {
+      sql: `SELECT 1 FROM information_schema.tables WHERE table_name = $1`,
+      args: [tableName],
+    }
   }
 }

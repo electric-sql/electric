@@ -1,10 +1,10 @@
 import { dedent } from 'ts-dedent'
 import Database from 'better-sqlite3'
 import testAny, { TestFn } from 'ava'
-import { generateTableTriggers } from '../../src/migrators/triggers'
+import { generateTableTriggers } from '../../../src/migrators/triggers'
 import type { Database as SqliteDB } from 'better-sqlite3'
-import { satelliteDefaults } from '../../src/satellite/config'
-import { migrateDb, personTable } from '../satellite/common'
+import { satelliteDefaults } from '../../../src/satellite/config'
+import { migrateDb, personTable } from '../../satellite/common'
 
 type Context = { db: SqliteDB; migrateDb: () => void }
 const test = testAny as TestFn<Context>

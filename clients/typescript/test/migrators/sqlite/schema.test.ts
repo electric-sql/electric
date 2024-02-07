@@ -2,15 +2,15 @@ import test from 'ava'
 import Database from 'better-sqlite3'
 
 import { rm as removeFile } from 'node:fs/promises'
-import { AnyDatabase } from '../../src/drivers'
+import { AnyDatabase } from '../../../src/drivers'
 
-import { DatabaseAdapter } from '../../src/drivers/better-sqlite3/adapter'
-import { BundleMigrator } from '../../src/migrators/bundle'
-import { satelliteDefaults } from '../../src/satellite/config'
+import { DatabaseAdapter } from '../../../src/drivers/better-sqlite3/adapter'
+import { SqliteBundleMigrator as BundleMigrator } from '../../../src/migrators/bundle'
+import { satelliteDefaults } from '../../../src/satellite/config'
 
-import { randomValue } from '../../src/util/random'
+import { randomValue } from '../../../src/util/random'
 
-import migrations from '../support/migrations/migrations.js'
+import migrations from '../../support/migrations/migrations.js'
 
 type Context = {
   dbName: string

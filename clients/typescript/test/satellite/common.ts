@@ -3,14 +3,14 @@ import { randomValue } from '../../src/util'
 import Database from 'better-sqlite3'
 import type { Database as SqliteDB } from 'better-sqlite3'
 import { DatabaseAdapter } from '../../src/drivers/better-sqlite3'
-import { BundleMigrator } from '../../src/migrators'
+import { SqliteBundleMigrator as BundleMigrator } from '../../src/migrators'
 import { EventNotifier, MockNotifier } from '../../src/notifiers'
 import { MockSatelliteClient } from '../../src/satellite/mock'
 import { GlobalRegistry, Registry, SatelliteProcess } from '../../src/satellite'
 import { TableInfo, initTableInfo } from '../support/satellite-helpers'
 import { satelliteDefaults, SatelliteOpts } from '../../src/satellite/config'
 import { Table, generateTableTriggers } from '../../src/migrators/triggers'
-import { data as initialMigration } from '../../src/migrators/schema'
+import { getData as makeInitialMigration } from '../../src/migrators/schema'
 
 export const dbDescription = new DbSchema(
   {
@@ -313,6 +313,7 @@ export function migrateDb(db: SqliteDB, table: Table) {
   db.exec(createTableSQL)
 
   // Apply the initial migration on the database
+  const initialMigration = makeInitialMigration('SQLite')
   const migration = initialMigration.migrations[0].statements
   migration.forEach((stmt) => {
     db.exec(stmt)

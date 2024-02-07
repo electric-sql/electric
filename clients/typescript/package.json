@@ -156,6 +156,7 @@
     "frame-stream": "^3.0.1",
     "get-port": "^7.0.0",
     "jose": "^4.14.4",
+    "kysely": "^0.27.2",
     "lodash.flow": "^3.5.0",
     "lodash.groupby": "^4.6.0",
     "lodash.isequal": "^4.5.0",

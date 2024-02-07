@@ -1,6 +1,6 @@
 import { ElectricConfig, hydrateConfig } from '../config/index'
 import { DatabaseAdapter } from '../electric/adapter'
-import { BundleMigrator, Migrator } from '../migrators/index'
+import { Migrator } from '../migrators/index'
 import { EventNotifier, Notifier } from '../notifiers/index'
 import { globalRegistry, Registry } from '../satellite/index'
 import { SocketFactory } from '../sockets/index'
@@ -9,6 +9,7 @@ import { setLogLevel } from '../util/debug'
 import { ElectricNamespace } from './namespace'
 import { ElectricClient } from '../client/model/client'
 import { DbSchema } from '../client/model/schema'
+import { SqliteBundleMigrator } from '../migrators/bundle'
 
 export { ElectricNamespace }
 
@@ -17,6 +18,9 @@ export { ElectricNamespace }
 // implementations to be passed in to facilitate testing.
 export interface ElectrifyOptions {
   adapter?: DatabaseAdapter
+  /**
+   * Defaults to the migrator for SQLite.
+   */
   migrator?: Migrator
   notifier?: Notifier
   socketFactory?: SocketFactory
@@ -55,7 +59,8 @@ export const electrify = async <DB extends DbSchema<any>>(
 
   const configWithDefaults = hydrateConfig(config)
   const migrator =
-    opts?.migrator || new BundleMigrator(adapter, dbDescription.migrations)
+    opts?.migrator ||
+    new SqliteBundleMigrator(adapter, dbDescription.migrations)
   const notifier = opts?.notifier || new EventNotifier(dbName)
   const registry = opts?.registry || globalRegistry
 
