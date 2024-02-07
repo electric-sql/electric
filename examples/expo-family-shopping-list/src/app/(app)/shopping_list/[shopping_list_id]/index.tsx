@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'electric-sql/react';
 import { Link, Redirect, Stack, useLocalSearchParams } from 'expo-router';
-import React from 'react';
+import React, { useCallback } from 'react';
 import { FlatList, View } from 'react-native';
 import { FAB, List, Appbar, Text, Button } from 'react-native-paper';
 
@@ -15,7 +15,9 @@ export default function ShoppingListItems() {
   }
 
   const { db } = useElectric()!;
-  const { results: { title } = {} } = useLiveQuery<{ title: string }>(
+
+  // retrieve the shopping list title for the header
+  const { results: { title: shoppingListTitle } = {} } = useLiveQuery<{ title: string }>(
     db.shopping_list.liveUnique({
       select: {
         title: true,
@@ -26,11 +28,9 @@ export default function ShoppingListItems() {
     }),
   );
 
-  const { results: shopping_list_items = [] } = useLiveQuery(
+  // retrieve all shopping list items for this list
+  const { results: shoppingListItems = [] } = useLiveQuery(
     db.shopping_list_item.liveMany({
-      select: {
-        item_id: true,
-      },
       where: {
         list_id: shopping_list_id,
       },
@@ -40,11 +40,30 @@ export default function ShoppingListItems() {
     }),
   );
 
+  // method for toggling item check status
+  const onItemChecked = useCallback(
+    (itemId: string, checked: boolean) =>
+      db.shopping_list_item.update({
+        data: { completed: checked },
+        where: { item_id: itemId },
+      }),
+    [],
+  );
+
+  // method for deleting items
+  const onItemDeleted = useCallback(
+    (itemId: string) =>
+      db.shopping_list_item.delete({
+        where: { item_id: itemId },
+      }),
+    [],
+  );
+
   return (
     <View style={{ flex: 1 }}>
       <Stack.Screen
         options={{
-          headerTitle: title,
+          headerTitle: shoppingListTitle,
           headerRight: () => (
             <Link href={`shopping_list/${shopping_list_id}/edit`} asChild>
               <Appbar.Action icon="pencil" />
@@ -54,12 +73,18 @@ export default function ShoppingListItems() {
       />
       <List.Section style={{ flex: 1 }}>
         <List.Subheader>Items</List.Subheader>
-        {shopping_list_items.length > 0 ? (
+        {shoppingListItems.length > 0 ? (
           <FlatList
             contentContainerStyle={{ padding: 6 }}
-            data={shopping_list_items}
+            data={shoppingListItems}
             ItemSeparatorComponent={() => <FlatListSeparator />}
-            renderItem={(item) => <ShoppingListItemCard shoppingListItemId={item.item.item_id} />}
+            renderItem={(item) => (
+              <ShoppingListItemCard
+                item={item.item}
+                onDeleted={onItemDeleted}
+                onChecked={onItemChecked}
+              />
+            )}
             keyExtractor={(item) => item.item_id}
           />
         ) : (

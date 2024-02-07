@@ -1,60 +1,40 @@
-import { useLiveQuery } from 'electric-sql/react';
+import deepEqual from 'deep-equal';
 import { Link } from 'expo-router';
-import React, { useCallback } from 'react';
+import React, { memo } from 'react';
 import { View } from 'react-native';
 import { Card, Checkbox, IconButton, Text } from 'react-native-paper';
 
-import { useElectric } from './ElectricProvider';
+import { Shopping_list_item } from '../generated/client';
 
-const ShoppingListItemCard = ({ shoppingListItemId }: { shoppingListItemId: string }) => {
-  const { db } = useElectric()!;
-  const { results: item } = useLiveQuery(
-    db.shopping_list_item.liveUnique({
-      where: {
-        item_id: shoppingListItemId,
-      },
-    }),
-  );
-
-  const onChecked = useCallback(
-    () =>
-      db.shopping_list_item.update({
-        data: {
-          completed: !item.completed,
-        },
-        where: {
-          item_id: item.item_id,
-        },
-      }),
-    [item],
-  );
-
-  const onDeleted = useCallback(
-    () =>
-      db.shopping_list_item.delete({
-        where: {
-          item_id: item.item_id,
-        },
-      }),
-    [item],
-  );
-
-  if (!item) return null;
+const ShoppingListItemCard = ({
+  item,
+  onChecked,
+  onDeleted,
+}: {
+  item: Shopping_list_item;
+  onChecked: (itemId: string, checked: boolean) => void;
+  onDeleted: (itemId: string) => void;
+}) => {
+  const handleChecked = () => onChecked(item.item_id, !item.completed);
+  const handleDeleted = () => onDeleted(item.item_id);
   return (
-    <Card mode="elevated" onPress={onChecked}>
+    <Card mode="elevated" onPress={handleChecked}>
       {item.image_base_64 && <Card.Cover source={{ uri: item.image_base_64 }} />}
       <Card.Title
         title={`${item.name} ${item.quantity > 1 ? `×${item.quantity}` : ''}`}
         subtitle={`Added on: ${item.added_at.toLocaleString()}`}
         left={(_) => (
-          <Checkbox.Android status={item.completed ? 'checked' : 'unchecked'} onPress={onChecked} />
+          <Checkbox.Android
+            status={item.completed ? 'checked' : 'unchecked'}
+            onPress={handleChecked}
+          />
         )}
         right={(_) => (
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Link href={`shopping_list/${item.list_id}/item/${shoppingListItemId}/edit`} asChild>
+            <Link href={`shopping_list/${item.list_id}/item/${item.item_id}/edit`} asChild>
               <IconButton icon="pencil" />
             </Link>
-            <IconButton icon="trash-can" onPress={onDeleted} />
+            <IconButton icon="trash-can" onPress={handleDeleted} />
           </View>
         )}
       />
@@ -67,4 +47,4 @@ const ShoppingListItemCard = ({ shoppingListItemId }: { shoppingListItemId: stri
   );
 };
 
-export default ShoppingListItemCard;
+export default memo(ShoppingListItemCard, deepEqual);
