@@ -388,7 +388,7 @@ defmodule Electric.Postgres.Schema.Update do
     Logger.info("CREATE ENUM #{name} WITH VALUES #{inspect(values)}")
 
     enum = %Proto.Enum{name: name, values: values}
-    schema = %{schema | enums: schema.enums ++ [enum]}
+    schema = %{schema | enums: Enum.uniq_by([enum | schema.enums], & &1.name)}
 
     {[], schema}
   end
