@@ -84,6 +84,13 @@ export default function AppLayout() {
         />
 
         <Stack.Screen
+          name="shopping_list/[shopping_list_id]/item/[item_id]/edit"
+          options={{
+            title: 'Edit shopping list item',
+          }}
+        />
+
+        <Stack.Screen
           name="family/[family_id]/index"
           options={{
             headerTitle: 'Family',

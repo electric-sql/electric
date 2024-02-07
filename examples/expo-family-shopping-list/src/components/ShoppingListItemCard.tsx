@@ -1,5 +1,7 @@
 import { useLiveQuery } from 'electric-sql/react';
+import { Link } from 'expo-router';
 import React, { useCallback } from 'react';
+import { View } from 'react-native';
 import { Card, Checkbox, IconButton, Text } from 'react-native-paper';
 
 import { useElectric } from './ElectricProvider';
@@ -47,7 +49,14 @@ const ShoppingListItemCard = ({ shoppingListItemId }: { shoppingListItemId: stri
         left={(_) => (
           <Checkbox.Android status={item.completed ? 'checked' : 'unchecked'} onPress={onChecked} />
         )}
-        right={(_) => <IconButton icon="trash-can" onPress={onDeleted} />}
+        right={(_) => (
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Link href={`shopping_list/${item.list_id}/item/${shoppingListItemId}/edit`} asChild>
+              <IconButton icon="pencil" />
+            </Link>
+            <IconButton icon="trash-can" onPress={onDeleted} />
+          </View>
+        )}
       />
       {item.comment && (
         <Card.Content>
