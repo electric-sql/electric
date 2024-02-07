@@ -131,6 +131,8 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
   end
 
   defp bootstrap(conn, cxt) do
+    :epgsql.squery(conn, "SET electric.__schema_validation_enabled = false;")
+
     for sql <- @sqls do
       {:ok, [], []} = :epgsql.squery(conn, sql)
     end

@@ -40,6 +40,7 @@ defmodule Electric.Postgres.ProxyTest do
 
   test "electrified index tracking", cxt do
     sqls = [
+      "SET electric.__schema_validation_enabled = false;",
       "CREATE SCHEMA meadow;",
       "CREATE TABLE public.buttercup (id int4 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);",
       "CREATE TABLE meadow.daisy (id int4 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);",
