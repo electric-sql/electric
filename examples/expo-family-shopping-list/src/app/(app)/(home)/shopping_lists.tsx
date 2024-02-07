@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'electric-sql/react';
 import { Link } from 'expo-router';
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { FlatList, View } from 'react-native';
 import { List, FAB, Text, Button } from 'react-native-paper';
 
@@ -18,9 +18,12 @@ export default function ShoppingLists() {
         family: {
           include: {
             shopping_list: {
-              select: {
-                list_id: true,
-                updated_at: true,
+              include: {
+                family: {
+                  select: {
+                    name: true,
+                  },
+                },
               },
             },
           },
@@ -43,6 +46,14 @@ export default function ShoppingLists() {
     [memberships],
   );
 
+  const onDeleted = useCallback(
+    (listId: string) =>
+      db.shopping_list.delete({
+        where: { list_id: listId },
+      }),
+    [],
+  );
+
   return (
     <View style={{ flex: 1 }}>
       <List.Section style={{ flex: 1 }}>
@@ -52,9 +63,7 @@ export default function ShoppingLists() {
             contentContainerStyle={{ padding: 6 }}
             data={shoppingLists}
             renderItem={(item) => (
-              <Link href={`/shopping_list/${item.item.list_id}`} asChild>
-                <ShoppingListCard shoppingListId={item.item.list_id} />
-              </Link>
+              <ShoppingListCard shoppingList={item.item} onDeleted={onDeleted} />
             )}
             ItemSeparatorComponent={() => <FlatListSeparator />}
             keyExtractor={(item) => item.list_id}
