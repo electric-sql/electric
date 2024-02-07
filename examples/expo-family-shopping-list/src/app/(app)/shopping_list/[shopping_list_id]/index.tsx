@@ -35,7 +35,7 @@ export default function ShoppingListItems() {
         list_id: shopping_list_id,
       },
       orderBy: {
-        updated_at: 'asc',
+        added_at: 'asc',
       },
     }),
   );
