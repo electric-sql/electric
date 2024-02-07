@@ -1,19 +1,46 @@
-/* This is an example of an SQL DDL migration. It creates an `items` table and
- * then calls an `electric.electrify` procedure to expose the table to the
- * ElectricSQL replication machinery.
- *
- * Note that these statements are applied directly to the *Postgres* database.
- * Electric then handles keeping the local SQLite database schema in sync with
- * the electrified subset of your Postgres database schema.
- *
- * See https://electric-sql.com/docs/usage/data-modelling for more information.
- */
+BEGIN;
 
--- Create a simple items table.
-CREATE TABLE IF NOT EXISTS items (
-  value TEXT PRIMARY KEY NOT NULL
+CREATE EXTENSION vector;
+
+-- Pin the migration version
+CALL electric.migration_version('20240129154650_919');
+
+-- Create the tables for the linearlite example
+CREATE TABLE IF NOT EXISTS "issue" (
+    "id" TEXT NOT NULL,
+    "title" TEXT NOT NULL,
+    "description" TEXT NOT NULL,
+    "priority" TEXT NOT NULL,
+    "status" TEXT NOT NULL,
+    "modified" TEXT NOT NULL,
+    "created" TEXT NOT NULL,
+    "kanbanorder" TEXT NOT NULL,
+    "username" TEXT NOT NULL,
+    -- "embeddings" TEXT NOT NULL, -- Embeddings, for the tauri demo
+    "embeddings" vector(768), -- Embeddings, for the tauri demo
+    CONSTRAINT "issue_pkey" PRIMARY KEY ("id")
+);
+
+-- CREATE TABLE IF NOT EXISTS "user" (
+--     "username" TEXT NOT NULL,
+--     "avatar" TEXT,
+--     CONSTRAINT "user_pkey" PRIMARY KEY ("username")
+-- );
+
+CREATE TABLE  IF NOT EXISTS "comment" (
+    "id" TEXT NOT NULL,
+    "body" TEXT NOT NULL,
+    "username" TEXT NOT NULL,
+    "issue_id" TEXT NOT NULL,
+    "created_at" TEXT NOT NULL,
+    CONSTRAINT "comment_pkey" PRIMARY KEY ("id")
+    -- FOREIGN KEY (username) REFERENCES "user"(username),
+    -- FOREIGN KEY (issue_id) REFERENCES issue(id) -- Disable for the tauri demo
 );
 
 -- ⚡
--- Electrify the items table
-ALTER TABLE items ENABLE ELECTRIC;
+-- Electrify the tables
+ALTER TABLE issue ENABLE ELECTRIC;
+ALTER TABLE comment ENABLE ELECTRIC;
+
+COMMIT;

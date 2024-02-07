@@ -6,14 +6,14 @@ import { genUUID, uniqueTabId } from 'electric-sql/util'
 import { ElectricDatabase, electrify } from 'electric-sql/wa-sqlite'
 
 import { authToken } from './auth'
-import { Electric, Items as Item, schema } from './generated/client'
+import { Electric, Issue, schema } from './generated/client'
 
 import './Example.css'
 
 const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
 
 export const Example = () => {
-  const [ electric, setElectric ] = useState<Electric>()
+  const [electric, setElectric] = useState<Electric>()
 
   useEffect(() => {
     let isMounted = true
@@ -30,7 +30,7 @@ export const Example = () => {
       const { tabId } = uniqueTabId()
       const scopedDbName = `basic-${LIB_VERSION}-${tabId}.db`
 
-      const conn = await ElectricDatabase.init(scopedDbName) 
+      const conn = await ElectricDatabase.init(scopedDbName)
       const electric = await electrify(conn, schema, config)
 
       if (!isMounted) {
@@ -60,49 +60,58 @@ export const Example = () => {
 
 const ExampleComponent = () => {
   const { db } = useElectric()!
+  window.db = db
   const { results } = useLiveQuery(
-    db.items.liveMany()
+    db.issue.liveMany()
   )
 
   useEffect(() => {
-    const syncItems = async () => {
+    const syncIssues = async () => {
       // Resolves when the shape subscription has been established.
-      const shape = await db.items.sync()
+      const shape = await db.issue.sync()
 
       // Resolves when the data has been synced into the local database.
       await shape.synced
     }
 
-    syncItems()
+    syncIssues()
   }, [])
 
-  const addItem = async () => {
-    await db.items.create({
+  const addIssue = async () => {
+    await db.issue.create({
       data: {
-        value: genUUID(),
+        id: genUUID(),
+        title: "foo title",
+        description: "...",
+        priority: "1",
+        status: "(no status)",
+        modified: "" + new Date(),
+        created: "" + new Date(),
+        kanbanorder: "4",
+        username: genUUID(),
       }
     })
   }
 
-  const clearItems = async () => {
-    await db.items.deleteMany()
+  const clearIssues = async () => {
+    await db.issue.deleteMany()
   }
 
-  const items: Item[] = results ?? []
+  const issues: Issue[] = results ?? []
 
   return (
     <div>
       <div className="controls">
-        <button className="button" onClick={ addItem }>
+        <button className="button" onClick={addIssue}>
           Add
         </button>
-        <button className="button" onClick={ clearItems }>
+        <button className="button" onClick={clearIssues}>
           Clear
         </button>
       </div>
-      {items.map((item: Item, index: number) => (
-        <p key={ index } className="item">
-          <code>{ item.value }</code>
+      {issues.map((issue: Issue, index: number) => (
+        <p key={index} className="item">
+          <code>{issue.username}</code>
         </p>
       ))}
     </div>
