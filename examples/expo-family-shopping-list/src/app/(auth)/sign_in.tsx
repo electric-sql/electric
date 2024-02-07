@@ -1,13 +1,9 @@
 import React, { useState } from 'react'
 import { Alert, View } from 'react-native'
 import { Button } from 'react-native-paper'
-import EmailPasswordForm from '../components/EmailPasswordForm'
+import EmailPasswordForm from '../../components/EmailPasswordForm'
 import { Link, router, useLocalSearchParams } from 'expo-router'
-import { useAuthActions } from '../components/AuthProvider'
-import AppLogo from '../components/AppLogo'
-import { SafeAreaView } from 'react-native-safe-area-context'
-
-
+import { useAuthActions } from '../../components/AuthProvider'
 
 export default function SignIn() {
   const { email: initialEmail } = useLocalSearchParams<{ email: string }>()
@@ -23,10 +19,7 @@ export default function SignIn() {
   }
 
   return (
-    <SafeAreaView style={{ margin: 16, gap: 12 }}>
-      <View style={{ alignItems: 'center' }}>
-        <AppLogo height={200} width={200} />
-      </View>
+    <View style={{ gap: 12 }}>
       <EmailPasswordForm
         initialEmail={initialEmail}
         submitText="Sign in"
@@ -38,6 +31,6 @@ export default function SignIn() {
           I don't have an account
         </Button>
       </Link>
-    </SafeAreaView>
+    </View>
   )
 }
