@@ -27,6 +27,7 @@ export default function PersonalCode() {
   const shareLink = () =>
     Share.share({
       title: "I'd like to join your family on Electric Shopping List!",
+      message: joinFamilyLink,
       url: joinFamilyLink,
     });
 
