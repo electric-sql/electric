@@ -1,9 +1,8 @@
 import test from 'ava'
 
-import { ElectricDatabase } from '../../src/drivers/node-postgres'
 import { MockDatabase } from '../../src/drivers/node-postgres/mock'
 import { DatabaseAdapter } from '../../src/drivers/node-postgres'
-import fs from 'fs/promises'
+import { makePgDatabase } from '../support/node-postgres'
 
 test('database adapter run works', async (t) => {
   const db = new MockDatabase('test.db')
@@ -34,20 +33,11 @@ test('database adapter query works', async (t) => {
 
 // Test with an actual embedded-postgres DB
 async function makeAdapter() {
-  const db = await ElectricDatabase.init({
-    name: 'driver-test',
-    databaseDir: './tmp/pg/db',
-    persistent: false,
-  })
-
+  const { db, stop } = await makePgDatabase('driver-test')
   const adapter = new DatabaseAdapter(db)
   const createTableSql =
     'CREATE TABLE IF NOT EXISTS Post(id TEXT PRIMARY KEY, title TEXT, contents TEXT, nbr integer);'
   await adapter.run({ sql: createTableSql })
-  const stop = async () => {
-    await db.stop()
-    await fs.rm('./tmp', { recursive: true, force: true })
-  }
   return { adapter, stop }
 }
 
