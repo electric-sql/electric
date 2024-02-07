@@ -1,98 +1,67 @@
-import { useLiveQuery } from 'electric-sql/react';
-import { Link } from 'expo-router';
-import React, { forwardRef, useCallback, useState } from 'react';
+import deepEqual from 'deep-equal';
+import { Link, router } from 'expo-router';
+import React, { memo, useState } from 'react';
 import { View } from 'react-native';
 import { Card, IconButton, Text } from 'react-native-paper';
 
 import ConfirmationDialog from './ConfirmationDialog';
-import { useElectric } from './ElectricProvider';
+import { Family, Member } from '../generated/client';
 
-const FamilyCard = forwardRef(
-  (
-    {
-      memberId,
-      onPress,
-    }: {
-      memberId: string;
-      onPress?: () => void;
-    },
-    _,
-  ) => {
-    const [exitDialogVisible, setExitDialogVisible] = useState(false);
-    const { db } = useElectric()!;
-    const { results: membership } = useLiveQuery(
-      db.member.liveUnique({
-        include: {
-          family: {
-            include: {
-              member: {
-                select: {
-                  member_id: true,
-                },
-              },
-            },
-          },
-        },
-        where: {
-          member_id: memberId,
-        },
-      }),
-    );
+interface MembershipWithFamily extends Member {
+  family: Pick<Family, 'creator_user_id' | 'name' | 'image_base_64'>;
+}
 
-    const onLeave = useCallback(
-      () =>
-        db.member.delete({
-          where: {
-            member_id: memberId,
-          },
-        }),
-      [memberId],
-    );
+const FamilyCard = ({
+  membership,
+  onLeave,
+}: {
+  membership: MembershipWithFamily;
+  onLeave: (memberId: string) => void;
+}) => {
+  const [exitDialogVisible, setExitDialogVisible] = useState(false);
+  const onCardPressed = () => router.push(`/family/${membership.family_id}`);
+  const isFamilyCreator = membership.user_id === membership.family.creator_user_id;
+  return (
+    <Card mode="elevated" onPress={onCardPressed}>
+      {membership.family.image_base_64 && (
+        <Card.Cover source={{ uri: membership.family.image_base_64 }} />
+      )}
+      <Card.Title
+        title={membership.family.name}
+        subtitleNumberOfLines={2}
+        subtitle={`Joined on ${membership.created_at.toLocaleDateString()}`}
+        right={(_) => (
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Link href={`/family/${membership.family_id}/edit`} asChild>
+              <IconButton icon="pencil" />
+            </Link>
 
-    if (!membership) return null;
-    const isFamilyCreator = membership.user_id === membership.family.creator_user_id;
-    return (
-      <Card mode="elevated" onPress={onPress}>
-        {membership.family.image_base_64 && (
-          <Card.Cover source={{ uri: membership.family.image_base_64 }} />
+            {isFamilyCreator ? (
+              <Text variant="labelSmall" style={{ marginRight: 12 }}>
+                Owner
+              </Text>
+            ) : (
+              <IconButton
+                icon="account-multiple-remove"
+                onPress={() => setExitDialogVisible(true)}
+              />
+            )}
+          </View>
         )}
-        <Card.Title
-          title={membership.family.name}
-          subtitleNumberOfLines={2}
-          subtitle={`Joined on ${membership.created_at.toLocaleDateString()}`}
-          right={(_) => (
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Link href={`/family/${membership.family_id}/edit`} asChild>
-                <IconButton icon="pencil" />
-              </Link>
+      />
 
-              {isFamilyCreator ? (
-                <Text variant="labelSmall" style={{ marginRight: 12 }}>
-                  Owner
-                </Text>
-              ) : (
-                <IconButton
-                  icon="account-multiple-remove"
-                  onPress={() => setExitDialogVisible(true)}
-                />
-              )}
-            </View>
-          )}
-        />
+      <ConfirmationDialog
+        visible={exitDialogVisible}
+        title="Leave family"
+        body={`Are you sure you want to leave ${membership.family.name}?`}
+        onDismiss={() => setExitDialogVisible(false)}
+        onConfirm={() => {
+          onLeave(membership.member_id);
+          setExitDialogVisible(false);
+        }}
+      />
+    </Card>
+  );
+};
 
-        <ConfirmationDialog
-          visible={exitDialogVisible}
-          title="Leave family"
-          body={`Are you sure you want to leave ${membership.family.name}?`}
-          onDismiss={() => setExitDialogVisible(false)}
-          onConfirm={() => {
-            onLeave();
-            setExitDialogVisible(false);
-          }}
-        />
-      </Card>
-    );
-  },
-);
-
-export default FamilyCard;
+export default memo(FamilyCard, deepEqual);

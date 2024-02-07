@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'electric-sql/react';
 import { Link } from 'expo-router';
-import React from 'react';
+import React, { useCallback } from 'react';
 import { View, FlatList } from 'react-native';
 import { Button, List, Text } from 'react-native-paper';
 
@@ -14,15 +14,27 @@ export default function FamilyHome() {
   const { db } = useElectric()!;
   const { results: memberships = [] } = useLiveQuery(
     db.member.liveMany({
-      select: {
-        member_id: true,
-        family_id: true,
+      include: {
+        family: {
+          select: {
+            name: true,
+            creator_user_id: true,
+            image_base_64: true,
+          },
+        },
       },
-      where: {
-        user_id: userId,
-      },
+      where: { user_id: userId },
     }),
   );
+
+  const onLeave = useCallback(
+    (memberId: string) =>
+      db.member.delete({
+        where: { member_id: memberId },
+      }),
+    [],
+  );
+
   return (
     <View style={{ flex: 1 }}>
       <List.Section style={{ flex: 1 }}>
@@ -31,11 +43,7 @@ export default function FamilyHome() {
           <FlatList
             contentContainerStyle={{ padding: 6 }}
             data={memberships}
-            renderItem={(item) => (
-              <Link href={`/family/${item.item.family_id}`} asChild>
-                <FamilyCard memberId={item.item.member_id} />
-              </Link>
-            )}
+            renderItem={(item) => <FamilyCard membership={item.item} onLeave={onLeave} />}
             ItemSeparatorComponent={() => <FlatListSeparator />}
             keyExtractor={(item) => item.member_id}
           />
