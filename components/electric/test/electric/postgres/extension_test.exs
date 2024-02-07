@@ -556,6 +556,28 @@ defmodule Electric.Postgres.ExtensionTest do
 
       assert error_msg == "Cannot electrify t1 because it doesn't have a PRIMARY KEY."
     end
+
+    test_tx "rejects tables defined outside of the public schema", fn conn ->
+      assert [
+               {:ok, [], []},
+               {:ok, [], []},
+               {:error, {:error, :error, _, :raise_exception, error_msg, _}}
+             ] =
+               :epgsql.squery(conn, """
+               CREATE SCHEMA test_schema;
+               CREATE TABLE test_schema.foo (id TEXT PRIMARY KEY);
+               CALL electric.electrify('test_schema.foo');
+               """)
+
+      assert error_msg ==
+               """
+               Cannot electrify test_schema.foo because only tables in the default `public` schema can be electrified.
+
+               See https://electric-sql.com/docs/usage/data-modelling/migrations#limitations
+               to learn more about the current limitations of electrified tables.
+               """
+               |> String.trim()
+    end
   end
 
   test_tx "electrified?/3", fn conn ->
