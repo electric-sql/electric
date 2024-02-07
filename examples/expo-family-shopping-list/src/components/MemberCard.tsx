@@ -46,7 +46,7 @@ const MemberCard = ({
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             {editable && (
               <Link
-                href={`/family/${membership.family_id}/membership/${membership.member_id}/edit`}
+                href={`/family/${membership.family_id}/member/${membership.member_id}/edit`}
                 asChild>
                 <IconButton icon="pencil" />
               </Link>
