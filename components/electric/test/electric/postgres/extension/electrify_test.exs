@@ -113,6 +113,8 @@ defmodule Electric.Postgres.Extension.ElectrifyTest do
   end
 
   test_tx "allows for specifying the schema", fn conn ->
+    :epgsql.squery(conn, "SET electric.__schema_validation_enabled = false;")
+
     sql = """
     CREATE SCHEMA balloons;
     """

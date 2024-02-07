@@ -1,0 +1,18 @@
+CREATE OR REPLACE PROCEDURE <%= schema() %>.__validate_table_schema(table_oid regclass)
+SECURITY DEFINER AS $function$
+DECLARE
+    _table_schema text;
+BEGIN
+    SELECT relnamespace::regnamespace
+      FROM pg_class
+      WHERE oid = table_oid
+    INTO _table_schema;
+
+    IF _table_schema != 'public' AND <%= schema() %>.__lookup_test_flag('__schema_validation_enabled', true) THEN
+        RAISE EXCEPTION
+            E'Cannot electrify % because only tables in the default `public` schema can be electrified.'
+             '\n\nSee https://electric-sql.com/docs/usage/data-modelling/migrations#limitations'
+             '\nto learn more about the current limitations of electrified tables.', table_oid::regclass;
+    END IF;
+END;
+$function$ LANGUAGE PLPGSQL;

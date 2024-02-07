@@ -23,6 +23,7 @@ BEGIN
         ) THEN
         RAISE NOTICE 'Electrify table %I.%I', _schema, _table;
 
+        CALL <%= schema() %>.__validate_table_schema(_oid);
         CALL <%= schema() %>.__validate_table_column_types(_oid);
         CALL <%= schema() %>.__validate_table_column_defaults(_oid);
         CALL <%= schema() %>.__validate_table_constraints(_oid);

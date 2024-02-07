@@ -35,7 +35,7 @@ BEGIN
         RAISE EXCEPTION E'Cannot electrify % because it doesn''t have a PRIMARY KEY.', table_oid::regclass;
     END IF;
 
-    IF _invalid_cols IS NOT NULL AND <%= schema() %>.__constraint_validation_enabled() THEN
+    IF _invalid_cols IS NOT NULL AND <%= schema() %>.__lookup_test_flag('__constraint_validation_enabled', true) THEN
         RAISE EXCEPTION E'Cannot electrify % because some of its columns have CHECK, UNIQUE, EXCLUDE or user-defined constraints which are not currently supported by Electric:\n  %',
                         table_oid::regclass, array_to_string(_invalid_cols, E'\n  ');
     END IF;
