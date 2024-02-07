@@ -1,6 +1,6 @@
 import test from 'ava'
-import { makeMigration, parseMetadata } from '../../src/migrators/builder'
-import { loadMigrations } from '../../src/cli/migrations/builder'
+import { makeMigration, parseMetadata } from '../../../src/migrators/builder'
+import { loadMigrations } from '../../../src/cli/migrations/builder'
 import {
   SatOpMigrate,
   SatOpMigrate_Table,
@@ -9,13 +9,13 @@ import {
   SatOpMigrate_Column,
   SatOpMigrate_PgColumnType,
   SatOpMigrate_ForeignKey,
-} from '../../src/_generated/protocol/satellite'
+} from '../../../src/_generated/protocol/satellite'
 import _m0 from 'protobufjs/minimal.js'
 import Database from 'better-sqlite3'
-import { electrify } from '../../src/drivers/better-sqlite3'
+import { electrify } from '../../../src/drivers/better-sqlite3'
 import path from 'path'
-import { DbSchema } from '../../src/client/model'
-import { MockSocket } from '../../src/sockets/mock'
+import { DbSchema } from '../../../src/client/model'
+import { MockSocket } from '../../../src/sockets/mock'
 
 function encodeSatOpMigrateMsg(request: SatOpMigrate) {
   return (
