@@ -542,6 +542,55 @@ defmodule Electric.Satellite.WsValidationsTest do
     end)
   end
 
+  test "validates vector values", ctx do
+    vsn = "2024020701"
+
+    :ok =
+      migrate(
+        ctx.db,
+        vsn,
+        "CREATE TABLE public.foo (id TEXT PRIMARY KEY, v1 VECTOR, v2 VECTOR(3))",
+        electrify: "public.foo"
+      )
+
+    valid_records = [
+      %{"id" => "1", "v1" => "[1]", "v2" => "[0,0,0]"},
+      %{"id" => "2", "v1" => "[-1000.11,+0.5,1.333,8,9,0]", "v2" => "[-1,0,1]"}
+    ]
+
+    within_replication_context(ctx, vsn, fn conn ->
+      Enum.each(valid_records, fn record ->
+        tx_op_log = serialize_trans(record)
+        MockClient.send_data(conn, tx_op_log)
+      end)
+
+      refute_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
+    end)
+
+    invalid_records = [
+      %{"id" => "10", "v1" => "[]"},
+      %{"id" => "11", "v1" => "[a]"},
+      %{"id" => "12", "v1" => "['a']"},
+      %{"id" => "13", "v1" => "1,2,3"},
+      %{"id" => "14", "v1" => "[8,8,]"},
+      %{"id" => "15", "v1" => "[8,8,"},
+      %{"id" => "16", "v1" => "[8,8"},
+      %{"id" => "17", "v1" => "(8,8)"},
+      %{"id" => "18", "v2" => "[]"}
+      # TODO: validate vector dimensionality
+      # %{"id" => "19", "v2" => "[1]"},
+      # %{"id" => "20", "v2" => "[1,2]"}
+    ]
+
+    Enum.each(invalid_records, fn record ->
+      within_replication_context(ctx, vsn, fn conn ->
+        tx_op_log = serialize_trans(record)
+        MockClient.send_data(conn, tx_op_log)
+        assert_receive {^conn, %SatErrorResp{error_type: :INVALID_REQUEST}}, @receive_timeout
+      end)
+    end)
+  end
+
   defp within_replication_context(ctx, vsn, expectation_fn) do
     with_connect(ctx.conn_opts, fn conn ->
       # Replication start ceremony

@@ -24,7 +24,8 @@ defmodule Electric.Satellite.SerializationTest do
         "id" => uuid,
         "date" => "2024-12-24",
         "time" => "12:01:00.123",
-        "bool" => "t"
+        "bool" => "t",
+        "vec" => "[1,2,4.333]"
       }
 
       columns = [
@@ -37,7 +38,8 @@ defmodule Electric.Satellite.SerializationTest do
         %{name: "real", type: :float8},
         %{name: "date", type: :date},
         %{name: "time", type: :time},
-        %{name: "bool", type: :bool}
+        %{name: "bool", type: :bool},
+        %{name: "vec", type: :vector}
       ]
 
       assert %SatOpRow{
@@ -51,7 +53,8 @@ defmodule Electric.Satellite.SerializationTest do
                  "-3.14",
                  "2024-12-24",
                  "12:01:00.123",
-                 "t"
+                 "t",
+                 "[1,2,4.333]"
                ],
                nulls_bitmask: <<0b11000000, 0>>
              } == Serialization.map_to_row(data, columns)
@@ -96,7 +99,8 @@ defmodule Electric.Satellite.SerializationTest do
           "",
           "0400-02-29",
           "03:59:59",
-          "f"
+          "f",
+          "[-1.0,+1.0]"
         ]
       }
 
@@ -111,7 +115,8 @@ defmodule Electric.Satellite.SerializationTest do
         %{name: "x", type: :float4, nullable?: true},
         %{name: "date", type: :date},
         %{name: "time", type: :time},
-        %{name: "bool", type: :bool}
+        %{name: "bool", type: :bool},
+        %{name: "vec", type: :vector}
       ]
 
       assert %{
@@ -125,7 +130,8 @@ defmodule Electric.Satellite.SerializationTest do
                "x" => nil,
                "date" => "0400-02-29",
                "time" => "03:59:59",
-               "bool" => "f"
+               "bool" => "f",
+               "vec" => "[-1.0,+1.0]"
              } == Serialization.decode_record!(row, columns)
     end
 

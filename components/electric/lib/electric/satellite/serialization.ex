@@ -477,7 +477,7 @@ defmodule Electric.Satellite.Serialization do
   def decode_column_value!(val, :bool) when val in ["t", "f"], do: val
 
   def decode_column_value!(val, :bool) do
-    raise "Unexpected value for bool column: #{inspect(val)}"
+    raise "Unexpected value for bool type: #{inspect(val)}"
   end
 
   def decode_column_value!(val, type) when type in [:bytea, :text, :varchar] do
@@ -503,9 +503,14 @@ defmodule Electric.Satellite.Serialization do
 
   def decode_column_value!(val, type) when type in [:float4, :float8] do
     case String.downcase(val) do
-      inf_or_nan when inf_or_nan in ~w[inf infinity -inf -infinity nan] -> val
-      _ -> decode_float_value!(val, type)
+      inf_or_nan when inf_or_nan in ~w[inf infinity -inf -infinity nan] ->
+        nil
+
+      _ ->
+        "" = decode_float_value!(val, type)
     end
+
+    val
   end
 
   def decode_column_value!(val, type) when type in [:int2, :int4, :int8] do
@@ -566,6 +571,15 @@ defmodule Electric.Satellite.Serialization do
     Electric.Utils.validate_uuid!(val)
   end
 
+  def decode_column_value!(val, :vector) do
+    "[" <> num_str = val
+
+    numbers = :binary.split(num_str, ",", [:global])
+    assert_valid_vector!(numbers)
+
+    val
+  end
+
   def decode_column_value!(val, {:enum, typename, values}) do
     if val in values do
       val
@@ -576,12 +590,12 @@ defmodule Electric.Satellite.Serialization do
 
   defp decode_float_value!(val, type) do
     case Float.parse(val) do
-      {num, ""} ->
+      {num, trailing_str} ->
         assert_float_in_range!(num, type)
-        val
+        trailing_str
 
       _ ->
-        raise "Unexpected value for #{type} colum: #{inspect(val)}"
+        raise "Unexpected value for #{type} type: #{inspect(val)}"
     end
   end
 
@@ -623,6 +637,18 @@ defmodule Electric.Satellite.Serialization do
   defp assert_valid_fractional_seconds!("." <> fs_str) when byte_size(fs_str) <= 6 do
     _ = String.to_integer(fs_str)
     :ok
+  end
+
+  # Assert that there's at least one element in the list and that the last element includes the
+  # closing bracket.
+  defp assert_valid_vector!([last]) do
+    "]" = decode_float_value!(last, :float4)
+    :ok
+  end
+
+  defp assert_valid_vector!([h | t]) do
+    "" = decode_float_value!(h, :float4)
+    assert_valid_vector!(t)
   end
 
   defp assert_float_in_range!(_num, :float8), do: :ok
