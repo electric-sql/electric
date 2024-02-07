@@ -11,23 +11,21 @@ CREATE OR REPLACE PROCEDURE <%= schema() %>.__validate_table_constraints(table_o
 SECURITY DEFINER AS $function$
 DECLARE
     _con_type char;
-    _con_columns text[];
+    _col_name text;
     _invalid_cols text[];
     _has_primary_key boolean := false;
 BEGIN
-    FOR _con_type, _con_columns IN
-        SELECT contype, (SELECT array_agg(format('%I', attname) ORDER BY attname)
-                         FROM pg_attribute
-                         WHERE attnum = ANY(pg_constraint.conkey)
-                               AND attrelid = pg_constraint.conrelid)
+    FOR _con_type, _col_name IN
+        SELECT contype, attname
         FROM pg_constraint
+        JOIN pg_attribute ON attrelid = conrelid AND attnum = ANY(conkey)
         WHERE conrelid = table_oid
-        ORDER BY contype
+        ORDER BY contype, attname
     LOOP
         IF _con_type = 'p' THEN
             _has_primary_key = true;
         ELSIF _con_type NOT IN ('p', 'f') THEN
-            _invalid_cols = array_cat(_invalid_cols, _con_columns);
+            _invalid_cols = array_append(_invalid_cols, format('%I', _col_name));
         END IF;
     END LOOP;
 
