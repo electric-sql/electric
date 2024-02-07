@@ -423,8 +423,10 @@ defmodule Electric.Postgres.ExtensionTest do
     end
 
     test_tx "successfully validates column types", fn conn ->
-      assert [{:ok, [], []}, {:ok, [], []}, {:ok, [], []}] ==
+      assert [{:ok, [], []}, {:ok, [], []}, {:ok, [], []}, {:ok, [], []}] ==
                :epgsql.squery(conn, """
+               CREATE EXTENSION vector;
+
                CREATE TYPE shapes AS ENUM ('circle', 'square', 'diamond');
 
                CREATE TABLE public.t1 (
@@ -448,7 +450,9 @@ defmodule Electric.Postgres.ExtensionTest do
                  t TIME,
                  flag BOOLEAN,
                  jb JSONB,
-                 shape shapes
+                 shape shapes,
+                 v VECTOR,
+                 v3 VECTOR(3)
                );
 
                CALL electric.electrify('public.t1');
