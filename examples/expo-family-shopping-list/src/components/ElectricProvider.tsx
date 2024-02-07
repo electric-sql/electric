@@ -1,53 +1,51 @@
-import React, { useEffect, useState } from 'react'
+import { electrify } from 'electric-sql/expo';
+import { makeElectricContext } from 'electric-sql/react';
+import * as SQLite from 'expo-sqlite';
+import React, { useEffect, useState } from 'react';
 
-import * as SQLite from 'expo-sqlite'
+import LoadingView from './LoadingView';
+import { DEBUG_MODE, ELECTRIC_URL } from '../config';
+import { Electric, schema } from '../generated/client';
 
-import { electrify } from 'electric-sql/expo'
-import { makeElectricContext } from 'electric-sql/react'
-
-import { DEBUG_MODE, ELECTRIC_URL } from '../config'
-import { Electric, schema } from '../generated/client'
-import LoadingView from './LoadingView'
-
-const { ElectricProvider: ElectricProviderWrapper, useElectric } = makeElectricContext<Electric>()
+const { ElectricProvider: ElectricProviderWrapper, useElectric } = makeElectricContext<Electric>();
 
 function getElectricDbName(userId: string = 'unauthed') {
-  return `shopping_list_${userId}.db`
+  return `shopping_list_${userId}.db`;
 }
 
-export { useElectric }
+export { useElectric };
 
-export default function ElectricProvider ({
+export default function ElectricProvider({
   children,
   userId,
-  accessToken
-} : {
-  children: React.ReactNode,
-  userId: string,
-  accessToken: string
+  accessToken,
+}: {
+  children: React.ReactNode;
+  userId: string;
+  accessToken: string;
 }) {
-  const [ electric, setElectric ] = useState<Electric>()
+  const [electric, setElectric] = useState<Electric>();
   useEffect(() => {
     // if no access token is present, clean up existing instance
     // and do not initialize electric
     if (!accessToken || !userId) {
-      electric?.close()
-      setElectric(undefined)
-      return
+      electric?.close();
+      setElectric(undefined);
+      return;
     }
 
-    let isMounted = true
+    let isMounted = true;
 
     const init = async () => {
       const config = {
         auth: { token: accessToken },
         debug: DEBUG_MODE,
-        url: ELECTRIC_URL
-      }
+        url: ELECTRIC_URL,
+      };
 
-      const conn = SQLite.openDatabase(getElectricDbName(userId))
-      const electric = await electrify(conn, schema, config)
-      if (!isMounted) return
+      const conn = SQLite.openDatabase(getElectricDbName(userId));
+      const electric = await electrify(conn, schema, config);
+      if (!isMounted) return;
 
       const shape = await electric.db.member.sync({
         include: {
@@ -55,34 +53,30 @@ export default function ElectricProvider ({
             include: {
               shopping_list: {
                 include: {
-                  shopping_list_item: true
-                }
-              }
-            }
-          }
-        }
-      })
+                  shopping_list_item: true,
+                },
+              },
+            },
+          },
+        },
+      });
 
-      await shape.synced
+      await shape.synced;
 
-      setElectric(electric)
-    }
+      setElectric(electric);
+    };
 
-    init()
+    init();
 
     return () => {
-      isMounted = false
-      electric?.close()
-    }
-  }, [accessToken, userId])
+      isMounted = false;
+      electric?.close();
+    };
+  }, [accessToken, userId]);
 
   if (electric === undefined) {
-    return <LoadingView />
+    return <LoadingView />;
   }
 
-  return (
-    <ElectricProviderWrapper db={electric}>
-      { children }
-    </ElectricProviderWrapper>
-  )
+  return <ElectricProviderWrapper db={electric}>{children}</ElectricProviderWrapper>;
 }

@@ -1,61 +1,70 @@
-import React, { forwardRef, useCallback } from 'react';
-import { Card, IconButton, Text } from 'react-native-paper';
 import { useLiveQuery } from 'electric-sql/react';
-import { useElectric } from './ElectricProvider';
-import { View } from 'react-native';
 import { Link } from 'expo-router';
+import React, { forwardRef, useCallback } from 'react';
+import { View } from 'react-native';
+import { Card, IconButton, Text } from 'react-native-paper';
 
-const ShoppingListCard = forwardRef(({
-  shoppingListId,
-  onPress
-} : {
-  shoppingListId: string,
-  onPress?: () => void,
-}, _) => {
-  const { db } = useElectric()!
-  const { results: shoppingList } = useLiveQuery(db.shopping_list.liveUnique({
-    include: {
-      family: true,
-      shopping_list_item: {
-        select: {
-          name: true
-        }
-      },
+import { useElectric } from './ElectricProvider';
+
+const ShoppingListCard = forwardRef(
+  (
+    {
+      shoppingListId,
+      onPress,
+    }: {
+      shoppingListId: string;
+      onPress?: () => void;
     },
-    where: {
-      list_id: shoppingListId
-    }
-  }))
+    _,
+  ) => {
+    const { db } = useElectric()!;
+    const { results: shoppingList } = useLiveQuery(
+      db.shopping_list.liveUnique({
+        include: {
+          family: true,
+          shopping_list_item: {
+            select: {
+              name: true,
+            },
+          },
+        },
+        where: {
+          list_id: shoppingListId,
+        },
+      }),
+    );
 
-  const onDeleted = useCallback(() => db.shopping_list.delete({
-    where: {
-      list_id: shoppingListId
-    }
-  }), [ shoppingListId ])
+    const onDeleted = useCallback(
+      () =>
+        db.shopping_list.delete({
+          where: {
+            list_id: shoppingListId,
+          },
+        }),
+      [shoppingListId],
+    );
 
-  if (!shoppingList) return null
-  return (
-    <Card mode="elevated" onPress={onPress}>
-      <Card.Title
-        title={shoppingList.title}
-        subtitle={`Last updated: ${shoppingList.updated_at.toLocaleString()}`}
-        right={(_) => (
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Link href={`shopping_list/${shoppingListId}/edit`} asChild>
-              <IconButton icon="pencil" />
-            </Link>
-            <IconButton icon="trash-can" onPress={onDeleted} />
-          </View>
-          
-        )}
-      />
-      <Card.Content>
-        <Text numberOfLines={1}>
-          {`Shared with ${shoppingList.family.name}`}
-        </Text>
-      </Card.Content>
-    </Card>
-  )
-})
+    if (!shoppingList) return null;
+    return (
+      <Card mode="elevated" onPress={onPress}>
+        <Card.Title
+          title={shoppingList.title}
+          subtitle={`Last updated: ${shoppingList.updated_at.toLocaleString()}`}
+          right={(_) => (
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Link href={`shopping_list/${shoppingListId}/edit`} asChild>
+                <IconButton icon="pencil" />
+              </Link>
+              <IconButton icon="trash-can" onPress={onDeleted} />
+            </View>
+          )}
+        />
+        <Card.Content>
+          <Text numberOfLines={1}>{`Shared with ${shoppingList.family.name}`}</Text>
+        </Card.Content>
+      </Card>
+    );
+  },
+);
 
 export default ShoppingListCard;

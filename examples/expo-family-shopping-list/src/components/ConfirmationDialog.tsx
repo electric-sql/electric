@@ -6,38 +6,30 @@ const ConfirmationDialog = ({
   title,
   body,
   onConfirm,
-  onDismiss
-} : {
-  visible: boolean,
-  title: string,
-  body: string,
-  onConfirm: () => void,
-  onDismiss?: () => void,
+  onDismiss,
+}: {
+  visible: boolean;
+  title: string;
+  body: string;
+  onConfirm: () => void;
+  onDismiss?: () => void;
 }) => {
   return (
     <>
       <Portal>
-        <Dialog
-          visible={visible}
-          onDismiss={onDismiss}>
+        <Dialog visible={visible} onDismiss={onDismiss}>
           <Dialog.Title>{title}</Dialog.Title>
           <Dialog.Content>
-            <Text variant="bodyMedium">
-              {body}
-            </Text>
+            <Text variant="bodyMedium">{body}</Text>
           </Dialog.Content>
           <Dialog.Actions>
-            <Button onPress={onDismiss}>
-              Cancel
-            </Button>
-            <Button onPress={onConfirm}>
-              Confirm
-            </Button>
+            <Button onPress={onDismiss}>Cancel</Button>
+            <Button onPress={onConfirm}>Confirm</Button>
           </Dialog.Actions>
         </Dialog>
       </Portal>
     </>
-  )
-}
+  );
+};
 
-export default ConfirmationDialog
+export default ConfirmationDialog;

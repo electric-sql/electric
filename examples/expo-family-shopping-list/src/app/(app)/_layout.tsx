@@ -1,54 +1,56 @@
 import { Redirect, Stack, router } from 'expo-router';
-import ElectricProvider from '../../components/ElectricProvider';
-import { useAccessToken, useAuthenticatedUser, useAuthenticationState } from '../../components/AuthProvider';
 import { Appbar } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import {
+  useAccessToken,
+  useAuthenticatedUser,
+  useAuthenticationState,
+} from '../../components/AuthProvider';
+import ElectricProvider from '../../components/ElectricProvider';
+
 export default function AppLayout() {
-  const { authenticated } = useAuthenticationState()
-  const { bottom: bottomInset } = useSafeAreaInsets()
-  const accessToken = useAccessToken()
-  const userId = useAuthenticatedUser()
-  if (!authenticated) return <Redirect href="/" />
+  const { authenticated } = useAuthenticationState();
+  const { bottom: bottomInset } = useSafeAreaInsets();
+  const accessToken = useAccessToken();
+  const userId = useAuthenticatedUser();
+  if (!authenticated) return <Redirect href="/" />;
   return (
     <ElectricProvider accessToken={accessToken!} userId={userId!}>
-      <Stack screenOptions={{
-        headerBackTitleVisible: false,
-        header: (props) => {
-          const headerTitle = (props.options.headerTitle ?? props.options.title)
-          return (
-          <Appbar.Header>
-            { props.back &&
-              <Appbar.BackAction onPress={router.back} />
-            }
-            { headerTitle && 
-              <Appbar.Content
-                title={headerTitle as string}
-                titleStyle={props.options.headerTitleStyle}
-              />
-            }
-            {
-              props.options.headerRight?.({
-                canGoBack: props.navigation.canGoBack(),
-                tintColor: props.options.headerTintColor
-              })
-            }
-          </Appbar.Header>
-          )
-        },
-        contentStyle: {
-          paddingHorizontal: 16,
-          paddingBottom: bottomInset,
-          paddingTop: 0
-        },
-      }}>
+      <Stack
+        screenOptions={{
+          headerBackTitleVisible: false,
+          header: (props) => {
+            const headerTitle = props.options.headerTitle ?? props.options.title;
+            return (
+              <Appbar.Header>
+                {props.back && <Appbar.BackAction onPress={router.back} />}
+                {headerTitle && (
+                  <Appbar.Content
+                    title={headerTitle as string}
+                    titleStyle={props.options.headerTitleStyle}
+                  />
+                )}
+                {props.options.headerRight?.({
+                  canGoBack: props.navigation.canGoBack(),
+                  tintColor: props.options.headerTintColor,
+                })}
+              </Appbar.Header>
+            );
+          },
+          contentStyle: {
+            paddingHorizontal: 16,
+            paddingBottom: bottomInset,
+            paddingTop: 0,
+          },
+        }}>
         <Stack.Screen
           name="(home)"
           options={{
             headerShown: false,
             contentStyle: {
-              padding: 0
-            }
+              padding: 0,
+            },
           }}
         />
 
@@ -60,9 +62,7 @@ export default function AppLayout() {
           }}
         />
 
-        <Stack.Screen
-          name="shopping_list/[shopping_list_id]/index"
-        />
+        <Stack.Screen name="shopping_list/[shopping_list_id]/index" />
         <Stack.Screen
           name="shopping_list/add"
           options={{

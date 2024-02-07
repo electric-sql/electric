@@ -1,56 +1,61 @@
-import React, { useCallback } from 'react'
-import { Image } from 'react-native'
-import { Card, Checkbox, IconButton, Text } from 'react-native-paper'
-import { useLiveQuery } from 'electric-sql/react'
-import { useElectric } from './ElectricProvider'
+import { useLiveQuery } from 'electric-sql/react';
+import React, { useCallback } from 'react';
+import { Card, Checkbox, IconButton, Text } from 'react-native-paper';
 
-const ShoppingListItemCard = ({ shoppingListItemId } : { shoppingListItemId: string }) => {
-  const { db } = useElectric()!
-  const { results: item } = useLiveQuery(db.shopping_list_item.liveUnique({
-    where: {
-      item_id: shoppingListItemId
-    }
-  }))
+import { useElectric } from './ElectricProvider';
 
-  const onChecked = useCallback(() => db.shopping_list_item.update({
-    data: {
-      completed: !item.completed
-    },
-    where: {
-      item_id: item.item_id
-    }
-  }), [ item ])
+const ShoppingListItemCard = ({ shoppingListItemId }: { shoppingListItemId: string }) => {
+  const { db } = useElectric()!;
+  const { results: item } = useLiveQuery(
+    db.shopping_list_item.liveUnique({
+      where: {
+        item_id: shoppingListItemId,
+      },
+    }),
+  );
 
-  const onDeleted = useCallback(() => db.shopping_list_item.delete({
-    where: {
-      item_id: item.item_id
-    }
-  }), [ item ])
+  const onChecked = useCallback(
+    () =>
+      db.shopping_list_item.update({
+        data: {
+          completed: !item.completed,
+        },
+        where: {
+          item_id: item.item_id,
+        },
+      }),
+    [item],
+  );
 
-  if (!item) return null
+  const onDeleted = useCallback(
+    () =>
+      db.shopping_list_item.delete({
+        where: {
+          item_id: item.item_id,
+        },
+      }),
+    [item],
+  );
+
+  if (!item) return null;
   return (
     <Card mode="elevated" onPress={onChecked}>
-      { item.image_base_64 &&
-        <Card.Cover source={{ uri: item.image_base_64 }} />
-      }
+      {item.image_base_64 && <Card.Cover source={{ uri: item.image_base_64 }} />}
       <Card.Title
         title={`${item.name} ${item.quantity > 1 ? `×${item.quantity}` : ''}`}
         subtitle={`Added on: ${item.added_at.toLocaleString()}`}
-        left={(_) => <Checkbox.Android
-          status={item.completed ? 'checked' : 'unchecked'}
-          onPress={onChecked}
-        />}
+        left={(_) => (
+          <Checkbox.Android status={item.completed ? 'checked' : 'unchecked'} onPress={onChecked} />
+        )}
         right={(_) => <IconButton icon="trash-can" onPress={onDeleted} />}
       />
-      { item.comment &&
+      {item.comment && (
         <Card.Content>
           <Text>{item.comment}</Text>
         </Card.Content>
-      }
-      
+      )}
     </Card>
-  )
-}
-
+  );
+};
 
 export default ShoppingListItemCard;

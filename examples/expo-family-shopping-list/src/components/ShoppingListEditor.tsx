@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react'
-import { View } from 'react-native'
-import { TextInput, Button } from 'react-native-paper'
-import { Shopping_list } from '../generated/client'
-import FamilyDropDown from './FamilyDropDown'
+import React, { useEffect, useState } from 'react';
+import { View } from 'react-native';
+import { TextInput, Button } from 'react-native-paper';
 
-export type ShoppingListProperties = Pick<Shopping_list, 'title' | 'family_id'>
+import FamilyDropDown from './FamilyDropDown';
+import { Shopping_list } from '../generated/client';
+
+export type ShoppingListProperties = Pick<Shopping_list, 'title' | 'family_id'>;
 
 const ShoppingListEditor = ({
   initialTitle,
@@ -13,28 +14,28 @@ const ShoppingListEditor = ({
   submitText,
   onChange,
   onSubmit,
-} : {
-  initialTitle?: string,
-  initialFamilyId: string,
-  disableFamilyPicker?: boolean,
-  submitText: string,
-  onChange?: (props : ShoppingListProperties) => void,
-  onSubmit?: (props : ShoppingListProperties) => void,
+}: {
+  initialTitle?: string;
+  initialFamilyId: string;
+  disableFamilyPicker?: boolean;
+  submitText: string;
+  onChange?: (props: ShoppingListProperties) => void;
+  onSubmit?: (props: ShoppingListProperties) => void;
 }) => {
-  const [ title, setTitle ] = useState(initialTitle)
-  const [ familyId, setFamilyId ] = useState(initialFamilyId)
+  const [title, setTitle] = useState(initialTitle);
+  const [familyId, setFamilyId] = useState(initialFamilyId);
 
   useEffect(() => {
     onChange?.({
       title: title ?? '',
       family_id: familyId,
-    })
-  }, [title, familyId])
+    });
+  }, [title, familyId]);
 
   const onSubmitFn = () => {
-    if (!title) return
-    onSubmit?.({ title, family_id: familyId })
-  }
+    if (!title) return;
+    onSubmit?.({ title, family_id: familyId });
+  };
 
   return (
     <View style={{ gap: 16 }}>
@@ -52,12 +53,12 @@ const ShoppingListEditor = ({
         selectedFamilyId={familyId}
         onChange={setFamilyId}
         disabled={disableFamilyPicker}
-        />
+      />
       <Button mode="contained" disabled={!title} onPress={onSubmitFn}>
         {submitText}
       </Button>
     </View>
   );
-}
+};
 
 export default ShoppingListEditor;

@@ -1,17 +1,20 @@
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { Drawer } from 'expo-router/drawer';
 import {
-  DrawerContentComponentProps, DrawerContentScrollView,
-  DrawerHeaderProps, DrawerItem, DrawerItemList
+  DrawerContentComponentProps,
+  DrawerContentScrollView,
+  DrawerHeaderProps,
+  DrawerItem,
+  DrawerItemList,
 } from '@react-navigation/drawer';
-import { Drawer as PaperDrawer } from 'react-native-paper'
+import { Drawer } from 'expo-router/drawer';
 import { RegisteredStyle, TextStyle } from 'react-native';
-import { useAuthActions } from '../../../components/AuthProvider';
-import { Appbar, Icon } from 'react-native-paper';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { Drawer as PaperDrawer, Appbar, Icon } from 'react-native-paper';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useAuthActions } from '../../../components/AuthProvider';
+
 export default function HomeLayout() {
-  const { bottom: bottomInset } = useSafeAreaInsets()
+  const { bottom: bottomInset } = useSafeAreaInsets();
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <Drawer
@@ -20,18 +23,16 @@ export default function HomeLayout() {
           header: AppDrawerHeader,
           sceneContainerStyle: {
             paddingHorizontal: 16,
-            paddingBottom: bottomInset
-          }
-        }}
-      >
+            paddingBottom: bottomInset,
+          },
+        }}>
         <Drawer.Screen
           name="shopping_lists"
           options={{
             drawerLabel: 'Shopping Lists',
-            drawerIcon: (props) => 
-              <Icon {...props}
-                source={props.focused ? "cart" : "cart-outline"}
-              />,
+            drawerIcon: (props) => (
+              <Icon {...props} source={props.focused ? 'cart' : 'cart-outline'} />
+            ),
             title: 'Shopping Lists',
           }}
         />
@@ -39,10 +40,9 @@ export default function HomeLayout() {
           name="family"
           options={{
             drawerLabel: 'Families',
-            drawerIcon: (props) => 
-              <Icon {...props}
-                source={props.focused ? "account-group" : "account-group-outline"}
-              />,
+            drawerIcon: (props) => (
+              <Icon {...props} source={props.focused ? 'account-group' : 'account-group-outline'} />
+            ),
             title: 'Families',
           }}
         />
@@ -50,8 +50,8 @@ export default function HomeLayout() {
           name="personal_code"
           options={{
             drawerLabel: 'Join a Family',
-            drawerIcon: (props) => <Icon {...props} source={"qrcode"} />,
-            
+            drawerIcon: (props) => <Icon {...props} source={'qrcode'} />,
+
             title: 'Join a Family',
           }}
         />
@@ -61,37 +61,34 @@ export default function HomeLayout() {
 }
 
 function AppDrawerHeader(props: DrawerHeaderProps) {
-  const headerTitle = (props.options.title ?? props.options.headerTitle)
+  const headerTitle = props.options.title ?? props.options.headerTitle;
   return (
     <Appbar.Header>
       <Appbar.Action icon="menu" onPress={props.navigation.toggleDrawer} />
-      { headerTitle && 
+      {headerTitle && (
         <Appbar.Content
           title={headerTitle as string}
           titleStyle={props.options.headerTitleStyle as RegisteredStyle<TextStyle>}
         />
-      }
+      )}
     </Appbar.Header>
-  )
+  );
 }
 
-function AppDrawerContent(props: DrawerContentComponentProps){
-  const { signOut } = useAuthActions()
+function AppDrawerContent(props: DrawerContentComponentProps) {
+  const { signOut } = useAuthActions();
   return (
-     <DrawerContentScrollView {...props}
-      scrollEnabled={false}
-      contentContainerStyle={{ flex: 1 }}
-      >
-        <PaperDrawer.Section title="Menu" showDivider={false}>
-          <DrawerItemList {...props}/>
-        </PaperDrawer.Section>
-        <SafeAreaView style={{ flex: 1, justifyContent: 'flex-end' }}>
-          <DrawerItem
-            label="Log out"
-            icon={(props) => <Icon source="logout" {...props}/>}
-            onPress={() => signOut()}
-          />
-        </SafeAreaView>
-     </DrawerContentScrollView>
-   );
- }
+    <DrawerContentScrollView {...props} scrollEnabled={false} contentContainerStyle={{ flex: 1 }}>
+      <PaperDrawer.Section title="Menu" showDivider={false}>
+        <DrawerItemList {...props} />
+      </PaperDrawer.Section>
+      <SafeAreaView style={{ flex: 1, justifyContent: 'flex-end' }}>
+        <DrawerItem
+          label="Log out"
+          icon={(props) => <Icon source="logout" {...props} />}
+          onPress={() => signOut()}
+        />
+      </SafeAreaView>
+    </DrawerContentScrollView>
+  );
+}

@@ -1,7 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react'
-import { View, TextInput as TextInputNative } from 'react-native'
-import { Button, TextInput } from 'react-native-paper'
-
+import React, { useEffect, useRef, useState } from 'react';
+import { View, TextInput as TextInputNative } from 'react-native';
+import { Button, TextInput } from 'react-native-paper';
 
 const EmailPasswordForm = ({
   initialEmail,
@@ -9,31 +8,31 @@ const EmailPasswordForm = ({
   passwordPlaceholder,
   onSubmit,
   onChange,
-} : {
-  initialEmail?: string,
-  submitText: string,
-  passwordPlaceholder?: string,
-  onSubmit: (email: string, password: string) => Promise<void>
-  onChange?: (email: string, password: string) => void
+}: {
+  initialEmail?: string;
+  submitText: string;
+  passwordPlaceholder?: string;
+  onSubmit: (email: string, password: string) => Promise<void>;
+  onChange?: (email: string, password: string) => void;
 }) => {
-  const emailInput = useRef<TextInputNative>(null)
-  const passwordInput = useRef<TextInputNative>(null)
-  const [email, setEmail] = useState(initialEmail ?? '')
-  const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
-  const [loading, setLoading] = useState(false)
+  const emailInput = useRef<TextInputNative>(null);
+  const passwordInput = useRef<TextInputNative>(null);
+  const [email, setEmail] = useState(initialEmail ?? '');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    onChange?.(email, password)
-  }, [email, password])
+    onChange?.(email, password);
+  }, [email, password]);
 
   const handleAction = async () => {
-    setLoading(true)
-    emailInput.current?.blur()
-    passwordInput.current?.blur()
-    await onSubmit(email, password)
-    setLoading(false)
-  }
+    setLoading(true);
+    emailInput.current?.blur();
+    passwordInput.current?.blur();
+    await onSubmit(email, password);
+    setLoading(false);
+  };
 
   return (
     <View>
@@ -83,7 +82,7 @@ const EmailPasswordForm = ({
         </Button>
       </View>
     </View>
-  )
-}
+  );
+};
 
-export default EmailPasswordForm
+export default EmailPasswordForm;
