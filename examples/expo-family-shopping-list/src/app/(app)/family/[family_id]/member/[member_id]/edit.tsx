@@ -6,6 +6,7 @@ import { TextInput, Button } from 'react-native-paper';
 
 import { useElectric } from '../../../../../../components/ElectricProvider';
 import ImagePicker from '../../../../../../components/ImagePicker';
+import LoadingView from '../../../../../../components/LoadingView';
 
 export default function EditMember() {
   const { member_id } = useLocalSearchParams<{ member_id?: string }>();
@@ -42,7 +43,7 @@ export default function EditMember() {
     router.back();
   }, [name, member_id, imageBase64]);
 
-  if (!member) return null;
+  if (!member) return <LoadingView />;
   return (
     <View style={{ gap: 16 }}>
       <ImagePicker

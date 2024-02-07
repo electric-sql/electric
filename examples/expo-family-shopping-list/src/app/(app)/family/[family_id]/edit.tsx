@@ -5,6 +5,7 @@ import { View } from 'react-native';
 
 import { useElectric } from '../../../../components/ElectricProvider';
 import FamilyEditor, { FamilyProperties } from '../../../../components/FamilyEditor';
+import LoadingView from '../../../../components/LoadingView';
 
 export default function EditFamily() {
   const { family_id } = useLocalSearchParams<{ family_id: string }>();
@@ -41,7 +42,7 @@ export default function EditFamily() {
     [family_id],
   );
 
-  if (!name) return null;
+  if (!name) return <LoadingView />;
   return (
     <View>
       <FamilyEditor

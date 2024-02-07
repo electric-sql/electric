@@ -7,6 +7,7 @@ import { useElectric } from '../../../../components/ElectricProvider';
 import ShoppingListEditor, {
   ShoppingListProperties,
 } from '../../../../components/ShoppingListEditor';
+import LoadingView from '../../../../components/LoadingView';
 
 export default function AddShoppingList() {
   const { shopping_list_id } = useLocalSearchParams<{ shopping_list_id: string }>();
@@ -33,7 +34,7 @@ export default function AddShoppingList() {
     router.back();
   };
 
-  if (!shoppingList) return null;
+  if (!shoppingList) return <LoadingView />;
   return (
     <View>
       <ShoppingListEditor

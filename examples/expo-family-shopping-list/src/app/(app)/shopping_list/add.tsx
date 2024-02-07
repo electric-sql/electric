@@ -7,6 +7,7 @@ import { View } from 'react-native';
 import { useAuthenticatedUser } from '../../../components/AuthProvider';
 import { useElectric } from '../../../components/ElectricProvider';
 import ShoppingListEditor, { ShoppingListProperties } from '../../../components/ShoppingListEditor';
+import LoadingView from '../../../components/LoadingView';
 
 export default function AddShoppingList() {
   const userId = useAuthenticatedUser()!;
@@ -36,7 +37,7 @@ export default function AddShoppingList() {
     router.replace(`/shopping_list/${newListId}`);
   };
 
-  if (!family) return null;
+  if (!family) return <LoadingView />;
   return (
     <View>
       <ShoppingListEditor

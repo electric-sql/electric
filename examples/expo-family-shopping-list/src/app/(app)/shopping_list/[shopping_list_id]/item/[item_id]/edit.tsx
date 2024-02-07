@@ -7,6 +7,7 @@ import { useElectric } from '../../../../../../components/ElectricProvider';
 import ShoppingListItemEditor, {
   ShoppingListItemProperties,
 } from '../../../../../../components/ShoppingListItemEditor';
+import LoadingView from '../../../../../../components/LoadingView';
 
 export default function EditShoppingListItem() {
   const { item_id } = useLocalSearchParams<{ item_id: string }>();
@@ -41,7 +42,7 @@ export default function EditShoppingListItem() {
     router.back();
   };
 
-  if (!item) return null;
+  if (!item) return <LoadingView />;
   return (
     <View>
       <ShoppingListItemEditor

@@ -17,9 +17,7 @@ const FamilyDropDown = ({
 }) => {
   const [visible, setVisible] = useState(false);
   const [familyId, setFamilyId] = useState(selectedFamilyId);
-  const userId = useAuthenticatedUser();
-  if (!userId) return null;
-
+  const userId = useAuthenticatedUser()!;
   const { db } = useElectric()!;
   const { results: memberships = [] } = useLiveQuery(
     db.member.liveMany({
