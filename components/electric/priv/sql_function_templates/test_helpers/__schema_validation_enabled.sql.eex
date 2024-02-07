@@ -1,6 +1,0 @@
-CREATE OR REPLACE FUNCTION <%= schema() %>.__schema_validation_enabled()
-RETURNS boolean
-SECURITY DEFINER
-AS $$
-    SELECT coalesce(current_setting('<%= schema() %>.__schema_validation_enabled', true)::boolean, true);
-$$ LANGUAGE SQL;
