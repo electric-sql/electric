@@ -4,14 +4,6 @@ A web app demonstrating common patterns and recipes implemented using Electric S
 
 ## Recipes
 
-### Activity Events
-
-Example of real time social-media-like activities showing up as a toast and in a notifications dropdown with read acknowledgements.
-
-- [Schema](db/migrations/01-activity_events_table.sql) - a more practical implementation would relate the `source` and `target` as foreign keys to users and/or user groups.
-- [Activity Popover](src/activity_events/ActivityPopover.tsx) - shows recent notifications along with read acknowledgement badges.
-- [Activity Toast](src/activity_events/ActivityToast.tsx) - pops up a toast everytime a new activity is received, with a read acknowledgement action and an another optional action specified in the schema
-
 ### Log Viewer
 
 Example of viewing log messages in real time as well as historical logs.
@@ -35,6 +27,22 @@ Example of viewing and querying data through something like an analytics dashboa
 - [Schema](db/migrations/04-data_viewer_tables.sql) - defines a generic commerce/order table.
 
 - [Data Viewer](src/data_viewer/DataViewer.tsx) - allows browsing, sorting, filtering, and charting tables.
+
+### Activity Events
+
+Example of real time social-media-like activities showing up as a toast and in a notifications dropdown with read acknowledgements.
+
+- [Schema](db/migrations/01-activity_events_table.sql) - a more practical implementation would relate the `source` and `target` as foreign keys to users and/or user groups.
+- [Activity Popover](src/activity_events/ActivityPopover.tsx) - shows recent notifications along with read acknowledgement badges.
+- [Activity Toast](src/activity_events/ActivityToast.tsx) - pops up a toast everytime a new activity is received, with a read acknowledgement action and an another optional action specified in the schema
+
+### Chatroom
+
+Example of a realtime chatroom with persistence and offline resilience.
+
+- [Schema](db/migrations/05-chat_room_table.sql) - stores chat messages with a timestamp, username, and message text - can be extended with delivery acknowledgements, reactions, replies referencing other rows within the table.
+
+- [Chatroom](src/chat_room/ChatRoom.tsx) - shows a list of chat messages that updates in realtime as new messages are sent or received. Allows sending messages.
 
 ## How to run the app
 

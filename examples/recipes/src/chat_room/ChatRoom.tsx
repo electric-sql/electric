@@ -77,6 +77,10 @@ export const ChatRoom = ({ username }: { username: string }) => {
   )
 }
 
+// *********
+// View
+// *********
+
 interface Message {
   id: string
   timestamp: Date
