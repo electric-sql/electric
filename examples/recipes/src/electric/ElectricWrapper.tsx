@@ -1,7 +1,7 @@
 import { ReactElement, useEffect, useState } from 'react'
 import { makeElectricContext } from 'electric-sql/react'
 import { authToken } from './auth.ts'
-import { DEBUG_MODE, ELECTRIC_URL } from './config.ts'
+import { LIB_VERSION } from 'electric-sql/version'
 import { uniqueTabId } from 'electric-sql/util'
 import { ElectricDatabase, electrify } from 'electric-sql/browser'
 import { Electric, schema } from '../generated/client/index.ts'
@@ -22,14 +22,14 @@ export function ElectricWrapper(props: { children: ReactElement[] | ReactElement
         auth: {
           token: authToken(),
         },
-        debug: DEBUG_MODE,
-        url: ELECTRIC_URL,
+        debug: import.meta.env.DEV,
+        url: import.meta.env.ELECTRIC_SERVICE,
       }
 
       const { tabId } = uniqueTabId()
-      const tabScopedDbName = `electric-${tabId}.db`
+      const scopedDbName = `recipes-${LIB_VERSION}-${tabId}.db`
 
-      const conn = await ElectricDatabase.init(tabScopedDbName, '')
+      const conn = await ElectricDatabase.init(scopedDbName)
       const electric = await electrify(conn, schema, config)
 
       if (!isMounted) {

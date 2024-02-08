@@ -1,11 +1,11 @@
 {
   "name": "recipes",
   "private": true,
-  "version": "0.0.0",
+  "author": "ElectricSQL",
+  "license": "Apache-2.0",
   "type": "module",
   "scripts": {
     "backend:compose": "docker compose --ansi always --env-file backend/.envrc -f backend/docker-compose.yaml",
-    "backend:startss": "node ./backend/startCompose.js",
     "backend:start": "npm run backend:compose up",
     "backend:stop": "npm run backend:compose stop",
     "backend:up": "npm run backend:start --detach",
