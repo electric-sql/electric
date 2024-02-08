@@ -89,6 +89,10 @@ export const MonitoringChart = () => {
   )
 }
 
+// *********
+// View
+// *********
+
 interface MonitoringChartViewProps
   extends MonitoringLineChartViewProps,
     MonitoringChartControlViewProps {}

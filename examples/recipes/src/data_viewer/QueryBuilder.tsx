@@ -28,7 +28,7 @@ export const QueryBuilder = ({
 
   useEffect(() => {
     onQueryChanged(formatQuery(query, 'sql'))
-  }, [query])
+  }, [onQueryChanged, query])
 
   return (
     <Box>

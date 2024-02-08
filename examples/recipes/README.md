@@ -20,6 +20,22 @@ Example of viewing log messages in real time as well as historical logs.
 
 - [Log Viewer](src/log_viewer/LogViewer.tsx) - shows recent log messages along with filtering and search capabilities.
 
+### Monitoring
+
+Example of a dashboard for monitoring system metrics with a live graph with dynamic windowing.
+
+- [Schema](db/migrations/02-logs_table.sql) - very general log table with arbitrary content.
+
+- [Monitoring Chart](src/monitoring_metrics/MonitoringChart.tsx) - graph showing minimum, average, and maximum CPU usage with configurable aggregation window and view range.
+
+### Data Viewer
+
+Example of viewing and querying data through something like an analytics dashboard. All operations are done with local data and SQL queries, making it very fast for both querying, pagination, sorting, etc.
+
+- [Schema](db/migrations/04-data_viewer_tables.sql) - defines a generic commerce/order table.
+
+- [Data Viewer](src/data_viewer/DataViewer.tsx) - allows browsing, sorting, filtering, and charting tables.
+
 ## How to run the app
 
 ### Prerequisites

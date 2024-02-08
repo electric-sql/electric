@@ -8,7 +8,7 @@ export const ChartView = ({
   height,
   width,
 }: {
-  dataset: Record<string, any>[]
+  dataset: Record<string, string | number | Date | null>[]
   keysToShow: string[]
   xAxis: Partial<AxisConfig>
   yAxis?: Partial<AxisConfig>

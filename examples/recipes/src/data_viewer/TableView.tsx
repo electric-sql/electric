@@ -22,11 +22,11 @@ export interface SortingState {
   order?: 'asc' | 'desc'
 }
 
-export type ColumnDef = {
+export interface ColumnDef {
   field: string
   headerName: string
   type: 'date' | 'number' | 'text'
-  format?: (val: any) => string
+  format?: (val: unknown) => string
   width?: number
 }
 
@@ -40,7 +40,7 @@ export const TableView = ({
   onPaginationChange,
 }: {
   columns: ColumnDef[]
-  rows: Record<string, any>[]
+  rows: Record<string, unknown>[]
   totalNumberOfRows?: number
   sorting?: SortingState[]
   onSortingChange?: (sorting: SortingState[]) => void
@@ -79,11 +79,11 @@ export const TableView = ({
       }
       onSortingChange?.([
         ...sorting.slice(0, index),
-        ...(!!newSortOrder ? [{ field, order: newSortOrder } as SortingState] : []),
+        ...(newSortOrder ? [{ field, order: newSortOrder } as SortingState] : []),
         ...sorting.slice(index + 1),
       ])
     },
-    [sorting],
+    [onSortingChange, sortMap, sorting],
   )
 
   return (
@@ -124,7 +124,9 @@ export const TableView = ({
                   }}
                   component="th"
                   scope="row">
-                  {(column.format ?? ((v: any) => (v !== null ? '' + v : '')))(row[column.field])}
+                  {(column.format ?? ((v: unknown) => (v !== null ? '' + v : '')))(
+                    row[column.field],
+                  )}
                 </TableCell>
               ))}
             </TableRow>
