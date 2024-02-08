@@ -80,7 +80,7 @@ const ActivityToastView = ({
   }
 
   useEffect(() => setOpen(show), [show])
-  useEffect(() => onChange(open), [open])
+  useEffect(() => onChange(open), [onChange, open])
 
   return (
     <Snackbar
