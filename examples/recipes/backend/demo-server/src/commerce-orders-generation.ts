@@ -1,14 +1,11 @@
-import { faker } from "@faker-js/faker"
+import { faker } from '@faker-js/faker'
 import { v4 as uuidv4 } from 'uuid'
 import { type Pool } from 'pg'
-import { waitForTable } from "./pg-utils"
-
+import { waitForTable } from './pg-utils'
 
 const YEAR_MS = 365.25 * 24 * 60 * 60 * 1000
 
-const PROMO_CODES = [
-  'XMAS', 'BLACK_FRIDAY', 'RETURNING'
-]
+const PROMO_CODES = ['XMAS', 'BLACK_FRIDAY', 'RETURNING']
 
 function maybeGeneratePromoCode(): string | null {
   if (Math.random() < 0.8) return null
@@ -18,10 +15,12 @@ function maybeGeneratePromoCode(): string | null {
 function generateOrder(orderId: string) {
   return [
     orderId,
-    faker.date.between({
-      from: Date.now() - YEAR_MS,
-      to: Date.now()
-    }).toISOString(),
+    faker.date
+      .between({
+        from: Date.now() - YEAR_MS,
+        to: Date.now(),
+      })
+      .toISOString(),
     parseFloat(faker.commerce.price()),
     faker.finance.currencyCode(),
     maybeGeneratePromoCode(),
@@ -34,14 +33,11 @@ function generateOrder(orderId: string) {
 /**
  * Generates and inserts [numOrders] rows to orders and line items
  */
-export async function batchInsertOrders(
-  pgPool: Pool,
-  numOrders: number = 10000
-) {
+export async function batchInsertOrders(pgPool: Pool, numOrders: number = 10000) {
   // wait for table to exist
-  await waitForTable(pgPool, 'commerce_orders');
+  await waitForTable(pgPool, 'commerce_orders')
 
-  const client = await pgPool.connect();
+  const client = await pgPool.connect()
 
   try {
     console.log(`Generating ${numOrders} random commerce orders.`)
@@ -53,7 +49,7 @@ export async function batchInsertOrders(
     }
 
     // Start a transaction
-    await client.query('BEGIN');
+    await client.query('BEGIN')
 
     // Insert orders
     const insertOrderQuery = `
@@ -65,16 +61,16 @@ export async function batchInsertOrders(
     await Promise.all(orders.map((o) => client.query(insertOrderQuery, o)))
 
     // Commit the transaction
-    await client.query('COMMIT');
+    await client.query('COMMIT')
 
-    console.log(`Successfully inserted ${numOrders} orders.`);
+    console.log(`Successfully inserted ${numOrders} orders.`)
   } catch (error) {
     // Rollback the transaction in case of any error
     console.log(`Failed to generate and insert orders - rolling back transaction.`)
-    await client.query('ROLLBACK');
-    throw error;
+    await client.query('ROLLBACK')
+    throw error
   } finally {
     // Release the client back to the pool
-    client.release();
+    client.release()
   }
 }

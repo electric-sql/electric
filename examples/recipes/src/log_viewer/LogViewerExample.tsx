@@ -1,12 +1,12 @@
-import { Box, Container } from "@mui/material"
-import { NavigationBar } from "../components/NavigationBar"
-import { useEffect, useState } from "react"
-import { useElectric } from "../electric/ElectricWrapper"
-import { LogViewer } from "./LogViewer"
-import { LoadingView } from "../components/LoadingView"
+import { Box, Container } from '@mui/material'
+import { NavigationBar } from '../components/NavigationBar'
+import { useEffect, useState } from 'react'
+import { useElectric } from '../electric/ElectricWrapper'
+import { LogViewer } from './LogViewer'
+import { LoadingView } from '../components/LoadingView'
 
 export const LogViewerExample = () => {
-  const [ synced, setSynced ] = useState(false)
+  const [synced, setSynced] = useState(false)
   const { db } = useElectric()!
   useEffect(() => {
     const syncItems = async () => {
@@ -20,7 +20,6 @@ export const LogViewerExample = () => {
 
     syncItems()
   }, [db.logs])
-
 
   return (
     <Box height="100%" display="flex" flexDirection="column">

@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from 'uuid'
  * Starts listening to request notifications from Postgres, redirecting
  * them to the appropriate API
  */
-export async function startListeningToPgRequests (pgPool: Pool, apiPort: number): Promise<void> {
+export async function startListeningToPgRequests(pgPool: Pool, apiPort: number): Promise<void> {
   const pgClient = await pgPool.connect()
 
   // Listen for PostgreSQL notifications
@@ -33,20 +33,21 @@ export async function startListeningToPgRequests (pgPool: Pool, apiPort: number)
       } catch (err: any) {
         response = {
           status: err?.response?.status ?? 500,
-          data: { message: err?.message ?? 'Failed to process' }
+          data: { message: err?.message ?? 'Failed to process' },
         }
       }
 
       console.log(`Received response: ${response.status} - ${JSON.stringify(response.data)}`)
 
       // Insert the API response into the 'responses' table
-      const query = 'INSERT INTO responses (id, timestamp, request_id, status_code, data) VALUES ($1, $2, $3, $4, $5)'
+      const query =
+        'INSERT INTO responses (id, timestamp, request_id, status_code, data) VALUES ($1, $2, $3, $4, $5)'
       const values = [
         uuidv4(),
-        (new Date()).toISOString(),
+        new Date().toISOString(),
         payload.id,
         response.status,
-        JSON.stringify(response.data)
+        JSON.stringify(response.data),
       ]
       await pgClient.query(query, values)
     }

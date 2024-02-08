@@ -13,23 +13,26 @@ interface SumApiRequest {
 /**
  * An endpoint for calculating the sum of a list of summands
  */
-function randomResultApi (app: Express): void {
-  app.get('/random-result', expressAsyncHandler(async (req: SumApiRequest, res) => {
-    try {
-      await wait(Math.random() * 1000)
-      res.status(200).json({
-        message: faker.word.words({ count: { min: 2, max: 4 }})
-      })
-    } catch (err: any) {
-      res.status(500).json({ message: err?.message })
-    }
-  }))
+function randomResultApi(app: Express): void {
+  app.get(
+    '/random-result',
+    expressAsyncHandler(async (req: SumApiRequest, res) => {
+      try {
+        await wait(Math.random() * 1000)
+        res.status(200).json({
+          message: faker.word.words({ count: { min: 2, max: 4 } }),
+        })
+      } catch (err: any) {
+        res.status(500).json({ message: err?.message })
+      }
+    }),
+  )
 }
 
 /**
  * Initialize Express API
  */
-export function setupApi (port: number): Express {
+export function setupApi(port: number): Express {
   const app = express()
 
   // Middleware to parse JSON data in the request body

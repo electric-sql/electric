@@ -6,7 +6,7 @@ import { CronJob } from 'cron'
  * Generates promise that resolves once a connection to the
  * Postgres database specified is possible
  */
-export async function waitForPostgresConnection (pgPool: Pool): Promise<void> {
+export async function waitForPostgresConnection(pgPool: Pool): Promise<void> {
   let connected = false
   while (!connected) {
     try {
@@ -26,16 +26,13 @@ export async function waitForPostgresConnection (pgPool: Pool): Promise<void> {
  * Checks whether a the given tableName exists on the
  * database specified by pgPool
  */
-export const checkTableExists = async (
-  pgPool: Pool,
-  tableName: string
-): Promise<boolean> => {
+export const checkTableExists = async (pgPool: Pool, tableName: string): Promise<boolean> => {
   try {
     const result = await pgPool.query(
       `SELECT EXISTS (
         SELECT 1 FROM information_schema.tables
         WHERE table_name = '${tableName}'
-      );`
+      );`,
     )
     return result?.rows[0]?.exists ?? false
   } catch (err) {
@@ -50,24 +47,22 @@ export const checkTableExists = async (
 export const waitForTable = async (
   pgPool: Pool,
   tableName: string,
-  waitIntervalMs: number = 2000
+  waitIntervalMs: number = 2000,
 ): Promise<void> => {
   // wait for table to be created before attempting to generate logs
   while (!(await checkTableExists(pgPool, tableName))) {
     console.warn(`Waiting for "${tableName}" table to be created...`)
-    await wait(waitIntervalMs);
+    await wait(waitIntervalMs)
   }
 }
-
-
 
 /**
  * Starts generating rows with the specified query and value
  * generator.
- * 
+ *
  * Can specify the various timings and gneeration frequencies
  */
-export async function startGeneratingData ({
+export async function startGeneratingData({
   pgPool,
   tableName,
   rowGenerationQuery,
@@ -79,24 +74,21 @@ export async function startGeneratingData ({
   rowGenerationLoggingFrequencyMs = 60000,
   waitForTableIntervalMs = 3000,
 }: {
-  pgPool: Pool,
-  tableName: string,
-  rowGenerationQuery: string,
-  valueGenerator: () => Promise<any[]> | any[],
-  timestampColumn?: string,
-  minutesToRetain?: number,
-  rowGenerationFrequencyMs?: number,
-  rowGenerationFrequencyVariationMs?: number,
-  rowGenerationLoggingFrequencyMs?: number,
+  pgPool: Pool
+  tableName: string
+  rowGenerationQuery: string
+  valueGenerator: () => Promise<any[]> | any[]
+  timestampColumn?: string
+  minutesToRetain?: number
+  rowGenerationFrequencyMs?: number
+  rowGenerationFrequencyVariationMs?: number
+  rowGenerationLoggingFrequencyMs?: number
   waitForTableIntervalMs?: number
 }): Promise<void> {
   let numRowsInserted = 0
   let lastLoggedTime = Date.now()
 
-  const tag = () => [
-    (new Date()).toISOString(),
-    tableName
-  ].join(' - ')
+  const tag = () => [new Date().toISOString(), tableName].join(' - ')
 
   const insertRow = async (): Promise<void> => {
     try {
@@ -135,9 +127,9 @@ export async function startGeneratingData ({
       void insertRow()
     },
     rowGenerationFrequencyMs,
-    rowGenerationFrequencyVariationMs
-  );
+    rowGenerationFrequencyVariationMs,
+  )
 
   // try to clean up old rows every 5 minutes
-  (new CronJob('*/5 * * * *', cleanUpOldRows)).start()
+  new CronJob('*/5 * * * *', cleanUpOldRows).start()
 }

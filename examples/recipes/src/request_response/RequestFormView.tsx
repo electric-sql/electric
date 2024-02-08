@@ -1,32 +1,34 @@
-import { Box, Select, MenuItem, TextField, Typography, Fade, Button } from "@mui/material"
-import { HttpMethod } from "./utilities"
-import { useMemo, useState } from "react"
-
+import { Box, Select, MenuItem, TextField, Typography, Fade, Button } from '@mui/material'
+import { HttpMethod } from './utilities'
+import { useMemo, useState } from 'react'
 
 export const RequestFormView = ({
   methods,
-  paths, 
+  paths,
   initialPayload,
   onSend,
-} : {
-  methods: HttpMethod[],
-  paths: string[],
-  initialPayload?: string,
-  onSend: (method: HttpMethod, path: string, payload: string | null) => void,
+}: {
+  methods: HttpMethod[]
+  paths: string[]
+  initialPayload?: string
+  onSend: (method: HttpMethod, path: string, payload: string | null) => void
 }) => {
-  const [ method, setMethod ] = useState(HttpMethod.POST)
-  const [ path, setPath ] = useState(paths[0])
-  const [ payload, setPayload ] = useState<string | null>(initialPayload ?? null)
+  const [method, setMethod] = useState(HttpMethod.POST)
+  const [path, setPath] = useState(paths[0])
+  const [payload, setPayload] = useState<string | null>(initialPayload ?? null)
   const includePayload = useMemo(
-    () =>  method == HttpMethod.POST || method == HttpMethod.PUT || method == HttpMethod.PATCH,
-    [method]
+    () => method == HttpMethod.POST || method == HttpMethod.PUT || method == HttpMethod.PATCH,
+    [method],
   )
   return (
     <Box display="flex" flexDirection="row" justifyContent="space-between">
-      <Box display="flex" flexDirection="row" alignItems="center" justifyContent="space-between" minWidth="650px">
-        <Typography variant="h5">
-          Request:
-        </Typography>
+      <Box
+        display="flex"
+        flexDirection="row"
+        alignItems="center"
+        justifyContent="space-between"
+        minWidth="650px">
+        <Typography variant="h5">Request:</Typography>
         <Select
           value={method}
           sx={{ minWidth: 120 }}
@@ -37,10 +39,7 @@ export const RequestFormView = ({
             </MenuItem>
           ))}
         </Select>
-        <Select
-          value={path}
-          sx={{ minWidth: 200 }}
-          onChange={(e) => setPath(e.target.value)}>
+        <Select value={path} sx={{ minWidth: 200 }} onChange={(e) => setPath(e.target.value)}>
           {paths.map((path) => (
             <MenuItem key={path} value={path}>
               {path}
@@ -49,14 +48,11 @@ export const RequestFormView = ({
         </Select>
         <Fade in={includePayload}>
           <TextField
-          label="Payload"
-          variant="outlined"
-          inputProps={{ maxLength: 100 }}
-          value={payload}
-          onChange={(e) => setPayload(
-            e.target.value?.length > 0 ?
-            e.target.value : null
-          )}
+            label="Payload"
+            variant="outlined"
+            inputProps={{ maxLength: 100 }}
+            value={payload}
+            onChange={(e) => setPayload(e.target.value?.length > 0 ? e.target.value : null)}
           />
         </Fade>
       </Box>
@@ -67,5 +63,5 @@ export const RequestFormView = ({
         Send
       </Button>
     </Box>
-    )
-    }
+  )
+}

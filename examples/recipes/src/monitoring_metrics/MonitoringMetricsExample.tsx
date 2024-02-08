@@ -1,12 +1,12 @@
-import { Box, Container } from "@mui/material"
-import { NavigationBar } from "../components/NavigationBar"
-import { useEffect, useState } from "react"
-import { useElectric } from "../electric/ElectricWrapper"
-import { MonitoringChart } from "./MonitoringChart"
-import { LoadingView } from "../components/LoadingView"
+import { Box, Container } from '@mui/material'
+import { NavigationBar } from '../components/NavigationBar'
+import { useEffect, useState } from 'react'
+import { useElectric } from '../electric/ElectricWrapper'
+import { MonitoringChart } from './MonitoringChart'
+import { LoadingView } from '../components/LoadingView'
 
 export const MonitoringMetricsExample = () => {
-  const [ synced, setSynced ] = useState(false)
+  const [synced, setSynced] = useState(false)
   const { db } = useElectric()!
 
   useEffect(() => {

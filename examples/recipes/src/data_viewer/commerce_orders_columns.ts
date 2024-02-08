@@ -1,6 +1,6 @@
-import { ColumnDef } from "./TableView";
+import { ColumnDef } from './TableView'
 
-export const columns : ColumnDef[] = [
+export const columns: ColumnDef[] = [
   {
     field: 'order_id',
     headerName: 'Order ID',
@@ -18,50 +18,50 @@ export const columns : ColumnDef[] = [
     field: 'price_amount',
     headerName: 'Price',
     type: 'number',
-    width: 80
+    width: 80,
   },
   {
     field: 'price_currency',
     headerName: 'Currency',
     type: 'text',
-    width: 80
+    width: 80,
   },
   {
     field: 'promo_code',
     headerName: 'Promo Code',
     type: 'text',
-    width: 80
+    width: 80,
   },
   {
     field: 'customer_full_name',
     headerName: 'Customer',
     type: 'text',
-    width: 180
+    width: 180,
   },
   {
     field: 'country',
     headerName: 'Country',
     type: 'text',
-    width: 150
+    width: 150,
   },
   {
     field: 'product',
     headerName: 'Product',
     type: 'text',
-    width: 80
+    width: 80,
   },
-];
+]
 
 export const aggregateColumns = columns
-      .filter((c) => {
-        switch(c.field) {
-          case 'country':
-          case 'product':
-          case 'promo_code':
-          case 'price_currency':
-            return true
-          default:
-            return false
-        }
-      })
-      .sort((a, b) => a.headerName.localeCompare(b.headerName))
+  .filter((c) => {
+    switch (c.field) {
+      case 'country':
+      case 'product':
+      case 'promo_code':
+      case 'price_currency':
+        return true
+      default:
+        return false
+    }
+  })
+  .sort((a, b) => a.headerName.localeCompare(b.headerName))

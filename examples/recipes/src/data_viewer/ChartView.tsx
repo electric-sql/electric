@@ -1,4 +1,4 @@
-import { AxisConfig, LineChart } from "@mui/x-charts"
+import { AxisConfig, LineChart } from '@mui/x-charts'
 
 export const ChartView = ({
   dataset,
@@ -7,15 +7,14 @@ export const ChartView = ({
   yAxis,
   height,
   width,
-} : {
-  dataset: Record<string, any>[],
-  keysToShow: string[],
-  xAxis: Partial<AxisConfig>,
-  yAxis?: Partial<AxisConfig>,
-  height?: number,
+}: {
+  dataset: Record<string, any>[]
+  keysToShow: string[]
+  xAxis: Partial<AxisConfig>
+  yAxis?: Partial<AxisConfig>
+  height?: number
   width?: number
 }) => {
-
   return (
     <LineChart
       series={keysToShow.map((key) => ({

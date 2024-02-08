@@ -7,13 +7,17 @@ module.exports = {
     'plugin:@typescript-eslint/stylistic-type-checked',
     'plugin:react-hooks/recommended',
     'plugin:react/recommended',
-    'plugin:react/jsx-runtime'
+    'plugin:react/jsx-runtime',
   ],
   ignorePatterns: [
-    'dist', '.eslintrc.cjs',
-    '*.config.ts', '*.config.js',
-    'backend', 'db', 'scripts',
-    'src/generated/**'
+    'dist',
+    '.eslintrc.cjs',
+    '*.config.ts',
+    '*.config.js',
+    'backend',
+    'db',
+    'scripts',
+    'src/generated/**',
   ],
   parser: '@typescript-eslint/parser',
   parserOptions: {
@@ -24,9 +28,6 @@ module.exports = {
   },
   plugins: ['react-refresh'],
   rules: {
-    'react-refresh/only-export-components': [
-      'warn',
-      { allowConstantExport: true },
-    ],
+    'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
   },
 }

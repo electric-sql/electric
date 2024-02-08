@@ -9,10 +9,10 @@ import { Electric, schema } from '../generated/client/index.ts'
 const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
 
 // eslint-disable-next-line react-refresh/only-export-components
-export { useElectric };
+export { useElectric }
 
-export function ElectricWrapper (props: { children: ReactElement[] | ReactElement }) {
-  const [ electric, setElectric ] = useState<Electric>()
+export function ElectricWrapper(props: { children: ReactElement[] | ReactElement }) {
+  const [electric, setElectric] = useState<Electric>()
 
   useEffect(() => {
     let isMounted = true
@@ -20,10 +20,10 @@ export function ElectricWrapper (props: { children: ReactElement[] | ReactElemen
     const init = async () => {
       const config = {
         auth: {
-          token: authToken()
+          token: authToken(),
         },
         debug: DEBUG_MODE,
-        url: ELECTRIC_URL
+        url: ELECTRIC_URL,
       }
 
       const { tabId } = uniqueTabId()
@@ -50,10 +50,5 @@ export function ElectricWrapper (props: { children: ReactElement[] | ReactElemen
     return null
   }
 
-  return (
-    <ElectricProvider db={electric}>
-      {props.children}
-    </ElectricProvider>
-  )
-  
+  return <ElectricProvider db={electric}>{props.children}</ElectricProvider>
 }

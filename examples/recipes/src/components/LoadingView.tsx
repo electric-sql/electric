@@ -1,36 +1,37 @@
-import CircularProgress from '@mui/material/CircularProgress';
-import React from 'react';
-import { Box, Fade, Typography } from '@mui/material';
+import CircularProgress from '@mui/material/CircularProgress'
+import React from 'react'
+import { Box, Fade, Typography } from '@mui/material'
 
 export const LoadingView = ({
   children,
-  loading
-} : {
-  children: React.ReactElement,
-  loading: boolean 
+  loading,
+}: {
+  children: React.ReactElement
+  loading: boolean
 }) => {
   return (
     <Box height="100%">
-      { loading &&
-        <Box sx={{
+      {loading && (
+        <Box
+          sx={{
             position: 'fixed',
-            left: 0, right: 0,
-            top: 0, bottom: 0,
+            left: 0,
+            right: 0,
+            top: 0,
+            bottom: 0,
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
           }}>
-          <CircularProgress  />
+          <CircularProgress />
           <Typography variant="h4" sx={{ my: 2 }}>
             Loading...
           </Typography>
         </Box>
-      }
-      
-      <Fade in={!loading}>
-        {children}
-      </Fade>
+      )}
+
+      <Fade in={!loading}>{children}</Fade>
     </Box>
-  );
-};
+  )
+}

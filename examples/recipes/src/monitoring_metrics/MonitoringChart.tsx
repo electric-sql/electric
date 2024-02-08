@@ -1,32 +1,42 @@
-import { Box, MenuItem, Paper, Select, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material"
-import { LineChart, LineSeriesType } from "@mui/x-charts"
-import { useElectric } from "../electric/ElectricWrapper"
-import { useEffect, useState } from "react";
-import { useLiveQuery } from "electric-sql/react";
-
+import {
+  Box,
+  MenuItem,
+  Paper,
+  Select,
+  ToggleButton,
+  ToggleButtonGroup,
+  Typography,
+} from '@mui/material'
+import { LineChart, LineSeriesType } from '@mui/x-charts'
+import { useElectric } from '../electric/ElectricWrapper'
+import { useEffect, useState } from 'react'
+import { useLiveQuery } from 'electric-sql/react'
 
 export const MonitoringChart = () => {
   // Oldest time to show data for in Unix time
-  const [ oldestTimeToShowSeconds, setOldestTimeToShowSeconds ] = useState(0)
+  const [oldestTimeToShowSeconds, setOldestTimeToShowSeconds] = useState(0)
 
   // The size of the time window to show data for
-  const [ viewWindowSeconds, setViewWindowSeconds ] = useState(60)
+  const [viewWindowSeconds, setViewWindowSeconds] = useState(60)
 
   // The size of the "buckets" for which the data will be aggregated
-  const [ aggregationWindowSeconds, setAggregationWindowSeconds ] = useState(5)
+  const [aggregationWindowSeconds, setAggregationWindowSeconds] = useState(5)
 
-  const { db } = useElectric()!;
+  const { db } = useElectric()!
 
   // perform an aggregation on the timestamps by dividing the Unix Epoch
   // format by [aggregationWindowSeconds] and grouping by that amount, and
   // only show data older than [oldestTimeToShowSeconds]
-  const { results: timeSeries = [] } =  useLiveQuery<{
-    timestamp: string,
-    value_avg: number,
-    value_max: number,
-    value_min: number
-  }[]>(db.liveRaw({
-    sql:`
+  const { results: timeSeries = [] } = useLiveQuery<
+    {
+      timestamp: string
+      value_avg: number
+      value_max: number
+      value_min: number
+    }[]
+  >(
+    db.liveRaw({
+      sql: `
     SELECT
       timestamp,
       AVG(value) as value_avg,
@@ -36,20 +46,20 @@ export const MonitoringChart = () => {
     WHERE CAST (strftime('%s', timestamp) AS INT) > ${oldestTimeToShowSeconds}
     GROUP BY strftime('%s', timestamp) / ${aggregationWindowSeconds}
     ORDER BY timestamp ASC
-    `
-  }))
+    `,
+    }),
+  )
 
-  
   // update oldest time to show every second or so, or when the
   // view window changes
   useEffect(() => {
     // use a buffer of at least 10sec in front of the data being shown
     // to avoid the time range changing too often
-    const viewBufferSeconds = Math.max((viewWindowSeconds * 0.10), 10)
+    const viewBufferSeconds = Math.max(viewWindowSeconds * 0.1, 10)
 
     const updateOldestTimeToShow = () => {
       const steppedTimeSeconds =
-        Math.floor((Date.now() / 1000) / viewBufferSeconds) * viewBufferSeconds
+        Math.floor(Date.now() / 1000 / viewBufferSeconds) * viewBufferSeconds
       const bufferedStartTimeSeconds = steppedTimeSeconds - viewWindowSeconds
       setOldestTimeToShowSeconds(bufferedStartTimeSeconds)
     }
@@ -59,14 +69,16 @@ export const MonitoringChart = () => {
     return () => clearInterval(interval)
   }, [viewWindowSeconds])
 
-
   return (
     <MonitoringChartView
-      dataset={timeSeries.map((ts) => ({ ...ts, timestamp: new Date(ts.timestamp)}))}
+      dataset={timeSeries.map((ts) => ({
+        ...ts,
+        timestamp: new Date(ts.timestamp),
+      }))}
       dataKeyConfig={{
-        'value_avg': { label: 'Average' },
-        'value_min': { label: 'Minimum' },
-        'value_max': { label: 'Maximum' }
+        value_avg: { label: 'Average' },
+        value_min: { label: 'Minimum' },
+        value_max: { label: 'Maximum' },
       }}
       timestampKey="timestamp"
       aggregationWindowSeconds={aggregationWindowSeconds}
@@ -77,9 +89,9 @@ export const MonitoringChart = () => {
   )
 }
 
-interface MonitoringChartViewProps extends
-  MonitoringLineChartViewProps,
-  MonitoringChartControlViewProps {}
+interface MonitoringChartViewProps
+  extends MonitoringLineChartViewProps,
+    MonitoringChartControlViewProps {}
 
 const MonitoringChartView = ({
   dataset,
@@ -91,7 +103,13 @@ const MonitoringChartView = ({
   onViewWindowSecondsChanged,
 }: MonitoringChartViewProps) => {
   return (
-    <Paper sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', p: 2 }}>
+    <Paper
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        p: 2,
+      }}>
       <MonitoringChartControlView
         aggregationWindowSeconds={aggregationWindowSeconds}
         onAggregationWindowSecondsChanged={onAggregationWindowSecondsChanged}
@@ -108,8 +126,8 @@ const MonitoringChartView = ({
 }
 
 interface MonitoringLineChartViewProps {
-  dataset: Record<string, number | Date>[],
-  dataKeyConfig: Record<string, Omit<LineSeriesType, 'type'>>,
+  dataset: Record<string, number | Date>[]
+  dataKeyConfig: Record<string, Omit<LineSeriesType, 'type'>>
   timestampKey?: string
 }
 
@@ -117,7 +135,7 @@ const MonitoringLineChartView = ({
   dataset = [],
   dataKeyConfig = {},
   timestampKey = 'timestamp',
-} : MonitoringLineChartViewProps) => {
+}: MonitoringLineChartViewProps) => {
   return (
     <LineChart
       height={400}
@@ -127,8 +145,8 @@ const MonitoringLineChartView = ({
           position: {
             vertical: 'bottom',
             horizontal: 'middle',
-          }
-        }
+          },
+        },
       }}
       xAxis={[
         {
@@ -139,39 +157,37 @@ const MonitoringLineChartView = ({
           label: 'Time',
         },
       ]}
-      yAxis={[{
-        label: 'CPU Usage (%)'
-      }]}
-      dataset={dataset}
-      series={Object.keys(dataKeyConfig).map((dataKey) => (
+      yAxis={[
         {
-          dataKey: dataKey,
-          label: dataKeyConfig[dataKey].label,
-          showMark: false,
-          valueFormatter: (v) => `${v?.toLocaleString(
-            'en-US', 
-            {
-              minimumSignificantDigits: 2,
-              maximumSignificantDigits: 2
-            }
-          )}%`,
-          curve: 'stepBefore',
-          stackStrategy: {
-            stack: 'total',
-            area: false,
-            stackOffset: 'none',
-          }
-        }
-      ))}
+          label: 'CPU Usage (%)',
+        },
+      ]}
+      dataset={dataset}
+      series={Object.keys(dataKeyConfig).map((dataKey) => ({
+        dataKey: dataKey,
+        label: dataKeyConfig[dataKey].label,
+        showMark: false,
+        valueFormatter: (v) =>
+          `${v?.toLocaleString('en-US', {
+            minimumSignificantDigits: 2,
+            maximumSignificantDigits: 2,
+          })}%`,
+        curve: 'stepBefore',
+        stackStrategy: {
+          stack: 'total',
+          area: false,
+          stackOffset: 'none',
+        },
+      }))}
       tooltip={{ trigger: 'axis' }}
     />
   )
 }
 
 interface MonitoringChartControlViewProps {
-  aggregationWindowSeconds: number,
-  onAggregationWindowSecondsChanged: (val: number) => void,
-  viewWindowSeconds: number,
+  aggregationWindowSeconds: number
+  onAggregationWindowSecondsChanged: (val: number) => void
+  viewWindowSeconds: number
   onViewWindowSecondsChanged: (val: number) => void
 }
 
@@ -180,22 +196,22 @@ const MonitoringChartControlView = ({
   onAggregationWindowSecondsChanged,
   viewWindowSeconds,
   onViewWindowSecondsChanged,
-} : MonitoringChartControlViewProps) => {
+}: MonitoringChartControlViewProps) => {
   return (
-    <Box sx={{
-      display: 'flex', flexDirection: 'row',
-      alignItems: 'center', justifyContent: 'space-between',
-      width: '100%'
-    }}>
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        width: '100%',
+      }}>
       <Box sx={{ display: 'flex', alignItems: 'baseline' }}>
-        <Typography sx={{ mr: 1 }}>
-          Aggregation Period:
-        </Typography>
+        <Typography sx={{ mr: 1 }}>Aggregation Period:</Typography>
         <Select
           value={aggregationWindowSeconds}
           size="small"
-          onChange={(e) => onAggregationWindowSecondsChanged(e.target.value as number)}
-        >
+          onChange={(e) => onAggregationWindowSecondsChanged(e.target.value as number)}>
           <MenuItem value={1}>1 sec</MenuItem>
           <MenuItem value={5}>5 sec</MenuItem>
           <MenuItem value={20}>20 sec</MenuItem>
@@ -205,18 +221,12 @@ const MonitoringChartControlView = ({
       </Box>
 
       <Box sx={{ display: 'flex', alignItems: 'baseline' }}>
-        <Typography sx={{ mr: 1 }}>
-          View Window:
-        </Typography>
+        <Typography sx={{ mr: 1 }}>View Window:</Typography>
         <ToggleButtonGroup
           value={viewWindowSeconds}
           exclusive
           size="small"
-          onChange={(_, newVal) => newVal != null ?
-            onViewWindowSecondsChanged(newVal) :
-            null
-          }
-        >
+          onChange={(_, newVal) => (newVal != null ? onViewWindowSecondsChanged(newVal) : null)}>
           <ToggleButton value={1 * 60}>1 min</ToggleButton>
           <ToggleButton value={5 * 60}>5 min</ToggleButton>
           <ToggleButton value={10 * 60}>10 min</ToggleButton>

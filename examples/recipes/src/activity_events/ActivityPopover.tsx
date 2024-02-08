@@ -1,15 +1,21 @@
 import {
-  Avatar, IconButton,
-  Badge, Box, Button, Collapse,
-  List, ListItemButton, ListItemIcon, ListItemText,
-  Popover
-} from "@mui/material"
-import { Notifications } from "@mui/icons-material"
-import { ReactElement, useState } from "react"
-import { useElectric } from "../electric/ElectricWrapper"
-import { useLiveQuery } from "electric-sql/react"
-import { CURRENT_USER, formatDateTime } from "./utilities"
-
+  Avatar,
+  IconButton,
+  Badge,
+  Box,
+  Button,
+  Collapse,
+  List,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Popover,
+} from '@mui/material'
+import { Notifications } from '@mui/icons-material'
+import { ReactElement, useState } from 'react'
+import { useElectric } from '../electric/ElectricWrapper'
+import { useLiveQuery } from 'electric-sql/react'
+import { CURRENT_USER, formatDateTime } from './utilities'
 
 export const ActivityPopover = () => {
   const { db } = useElectric()!
@@ -21,112 +27,96 @@ export const ActivityPopover = () => {
         target: CURRENT_USER,
       },
       orderBy: {
-        timestamp: 'desc'
+        timestamp: 'desc',
       },
-      take: 5, 
-    })
+      take: 5,
+    }),
   )
-  
-  // Use raw SQL to count all unread activities
-  const numUnreadActivities = useLiveQuery(
-    db.liveRaw({
-      sql: `
-      SELECT COUNT(*) FROM activity_events
-      WHERE target = '${CURRENT_USER}' AND read_at IS NULL`
-    })
-  ).results?.[0]?.['COUNT(*)'] ?? 0
-  const hasUnreadActivities = numUnreadActivities > 0;
 
+  // Use raw SQL to count all unread activities
+  const numUnreadActivities =
+    useLiveQuery(
+      db.liveRaw({
+        sql: `
+      SELECT COUNT(*) FROM activity_events
+      WHERE target = '${CURRENT_USER}' AND read_at IS NULL`,
+      }),
+    ).results?.[0]?.['COUNT(*)'] ?? 0
+  const hasUnreadActivities = numUnreadActivities > 0
 
   // Update individual activity's read status through its ID
   const markActivityAsRead = (activityId: string) =>
     db.activity_events.update({
       data: {
-        read_at: new Date()
+        read_at: new Date(),
       },
       where: {
         id: activityId,
-      }
+      },
     })
-  
+
   // Update all unread activities using a WHERE clause
-  const markAllAsRead = () => 
+  const markAllAsRead = () =>
     db.activity_events.updateMany({
       data: {
-        read_at: new Date()
+        read_at: new Date(),
       },
       where: {
-        read_at: null
-      }
+        read_at: null,
+      },
     })
 
   return (
     <NotificationPopover showBadge={hasUnreadActivities}>
-        <Box pb={1}>
-          <List>
-            {mostRecentActivities.map((activity) => (
-              <ListItemButton
-                key={activity.id}
-                onPointerEnter={
-                  () =>
-                    activity.read_at ?
-                    null :
-                    markActivityAsRead(activity.id)
-                }
-              >
-                <ListItemIcon>
-                  <Avatar>{activity.source.slice(0,1)}</Avatar>
-                </ListItemIcon>
-                <ListItemText
-                  primary={activity.message}
-                  secondary={formatDateTime(activity.timestamp)}
-                />
-                <Badge
-                  color="secondary"
-                  variant="dot"
-                  invisible={activity.read_at !== null}
-                  sx={{ width: 24 }}
-                />
-              </ListItemButton>
-            ))}
-          </List>
+      <Box pb={1}>
+        <List>
+          {mostRecentActivities.map((activity) => (
+            <ListItemButton
+              key={activity.id}
+              onPointerEnter={() => (activity.read_at ? null : markActivityAsRead(activity.id))}>
+              <ListItemIcon>
+                <Avatar>{activity.source.slice(0, 1)}</Avatar>
+              </ListItemIcon>
+              <ListItemText
+                primary={activity.message}
+                secondary={formatDateTime(activity.timestamp)}
+              />
+              <Badge
+                color="secondary"
+                variant="dot"
+                invisible={activity.read_at !== null}
+                sx={{ width: 24 }}
+              />
+            </ListItemButton>
+          ))}
+        </List>
 
-          <Button fullWidth>
-            {
-            'See all activities' +
-            (hasUnreadActivities ? ` (${numUnreadActivities} unread)` : '')
-            }
+        <Button fullWidth>
+          {'See all activities' + (hasUnreadActivities ? ` (${numUnreadActivities} unread)` : '')}
+        </Button>
+
+        <Collapse in={hasUnreadActivities} collapsedSize={0}>
+          <Button fullWidth disabled={!hasUnreadActivities} onClick={markAllAsRead}>
+            Mark all as read
           </Button>
-
-          <Collapse in={hasUnreadActivities} collapsedSize={0}>
-            <Button fullWidth
-              disabled={!hasUnreadActivities}
-              onClick={markAllAsRead}>
-              Mark all as read
-            </Button>
-          </Collapse>
-        </Box>
+        </Collapse>
+      </Box>
     </NotificationPopover>
   )
 }
 
 const NotificationPopover = ({
   children,
-  showBadge = false
+  showBadge = false,
 }: {
-  children: ReactElement[] | ReactElement,
+  children: ReactElement[] | ReactElement
   showBadge: boolean
 }) => {
-
-  const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
+  const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null)
   return (
     <>
       <IconButton color="inherit" onClick={(e) => setAnchorEl(e.currentTarget)}>
-        <Badge
-          color="secondary"
-          variant="dot"
-          invisible={!showBadge}
-        >
+        <Badge color="secondary" variant="dot" invisible={!showBadge}>
           <Notifications />
         </Badge>
       </IconButton>
@@ -137,8 +127,7 @@ const NotificationPopover = ({
         anchorOrigin={{
           vertical: 'bottom',
           horizontal: 'left',
-        }}
-        >
+        }}>
         {children}
       </Popover>
     </>

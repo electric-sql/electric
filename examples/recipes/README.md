@@ -3,12 +3,14 @@
 A simple web app demonstrating common patterns and recipes implemented using Electric SQL.
 
 ## Recipes
+
 ### Activity Events
+
 Simple example of real time social-media-like activities showing up as a toast if occurring in real time and in a notifications dropdown with read acknowledgements.
 
-Schema can be found in ```db/migrations/01-activity_events_table.sql``` - a more practical implementation could relate sources and targets for the events to users and user groups.
+Schema can be found in `db/migrations/01-activity_events_table.sql` - a more practical implementation could relate sources and targets for the events to users and user groups.
 
-The ```ActivityPopover.tsx``` and ```ActivityToast.tsx``` components under ```src/activity_events/``` illustrate the respective functionalities.
+The `ActivityPopover.tsx` and `ActivityToast.tsx` components under `src/activity_events/` illustrate the respective functionalities.
 
 ## Pre-reqs
 
