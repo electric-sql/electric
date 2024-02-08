@@ -32,6 +32,7 @@ export class ElectricDatabase implements Database {
   ) {}
 
   async exec(statement: Statement): Promise<QueryResult> {
+    console.log(`EXEC: ${statement.sql} - ${JSON.stringify(statement.args)}`)
     const { rows, rowCount } = await this.db.query<Row>(
       statement.sql,
       statement.args
