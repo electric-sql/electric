@@ -278,6 +278,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
       |> Keyword.put(:ip_addr, ip_addr)
       |> maybe_put_inet6(ip_addr)
       |> maybe_put_sni()
+      |> maybe_verify_peer()
     end)
   end
 
@@ -308,6 +309,41 @@ defmodule Electric.Replication.PostgresConnectorMng do
       update_in(conn_opts, [:ssl_opts], &[sni_opt | List.wrap(&1)])
     else
       conn_opts
+    end
+  end
+
+  defp maybe_verify_peer(conn_opts) do
+    if conn_opts[:ssl] == :required do
+      ssl_opts = get_verify_peer_opts()
+      update_in(conn_opts, [:ssl_opts], &(ssl_opts ++ List.wrap(&1)))
+    else
+      conn_opts
+    end
+  end
+
+  defp get_verify_peer_opts do
+    case :public_key.cacerts_load() do
+      :ok ->
+        cacerts = :public_key.cacerts_get()
+        Logger.info("Successfully loaded #{length(cacerts)} cacerts from the OS")
+
+        [
+          verify: :verify_peer,
+          cacerts: cacerts,
+          customize_hostname_check: [
+            # Use a custom match function to support wildcard CN in server certificates.
+            # For example, CN = *.us-east-2.aws.neon.tech
+            match_fun: :public_key.pkix_verify_hostname_match_fun(:https)
+          ]
+        ]
+
+      {:error, reason} ->
+        Logger.warning("Failed to load cacerts from the OS: #{inspect(reason)}")
+        # We're not sure how reliable OS certificate stores are in general, so keep going even
+        # if the loading of cacerts has failed. A warning will be logged every time a new
+        # database connection is established without the `verify_peer` option, so the issue will be
+        # visible to the developer.
+        []
     end
   end
 
