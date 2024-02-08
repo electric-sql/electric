@@ -17,7 +17,6 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
 
     @impl NimblePool
     def init_worker(conn_config) do
-      Logger.debug("Starting SchemaLoader pg connection: #{inspect(conn_config)}")
       # NOTE: use `__connection__: conn` in tests to pass an existing connection
       {:ok, conn} =
         case Keyword.fetch(conn_config, :__connection__) do

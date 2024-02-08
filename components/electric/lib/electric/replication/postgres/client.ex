@@ -16,6 +16,8 @@ defmodule Electric.Replication.Postgres.Client do
   @spec connect(Connectors.connection_opts()) ::
           {:ok, connection :: pid()} | {:error, reason :: :epgsql.connect_error()}
   def connect(conn_opts) do
+    Logger.debug("#{inspect(__MODULE__)}.connect(#{inspect(sanitize_conn_opts(conn_opts))})")
+
     {%{ip_addr: ip_addr}, %{username: username, password: password} = epgsql_conn_opts} =
       Connectors.pop_extraneous_conn_opts(conn_opts)
 
