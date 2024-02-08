@@ -16,7 +16,7 @@ Example of viewing log messages in real time as well as historical logs.
 
 Example of a dashboard for monitoring system metrics with a live graph with dynamic windowing.
 
-- [Schema](db/migrations/02-logs_table.sql) - very general log table with arbitrary content.
+- [Schema](db/migrations/04-monitoring_table.sql) - very general log table with arbitrary content.
 
 - [Monitoring Chart](src/monitoring_metrics/MonitoringChart.tsx) - graph showing minimum, average, and maximum CPU usage with configurable aggregation window and view range.
 
@@ -24,7 +24,7 @@ Example of a dashboard for monitoring system metrics with a live graph with dyna
 
 Example of viewing and querying data through something like an analytics dashboard. All operations are done with local data and SQL queries, making it very fast for both querying, pagination, sorting, etc.
 
-- [Schema](db/migrations/04-data_viewer_tables.sql) - defines a generic commerce/order table.
+- [Schema](db/migrations/07-data_viewer_table.sql) - defines a generic commerce/order table.
 
 - [Data Viewer](src/data_viewer/DataViewer.tsx) - allows browsing, sorting, filtering, and charting tables.
 
@@ -33,14 +33,16 @@ Example of viewing and querying data through something like an analytics dashboa
 Example of real time social-media-like activities showing up as a toast and in a notifications dropdown with read acknowledgements.
 
 - [Schema](db/migrations/01-activity_events_table.sql) - a more practical implementation would relate the `source` and `target` as foreign keys to users and/or user groups.
+
 - [Activity Popover](src/activity_events/ActivityPopover.tsx) - shows recent notifications along with read acknowledgement badges.
+
 - [Activity Toast](src/activity_events/ActivityToast.tsx) - pops up a toast everytime a new activity is received, with a read acknowledgement action and an another optional action specified in the schema
 
 ### Chatroom
 
 Example of a realtime chatroom with persistence and offline resilience.
 
-- [Schema](db/migrations/05-chat_room_table.sql) - stores chat messages with a timestamp, username, and message text - can be extended with delivery acknowledgements, reactions, replies referencing other rows within the table.
+- [Schema](db/migrations/06-chat_room_table.sql) - stores chat messages with a timestamp, username, and message text - can be extended with delivery acknowledgements, reactions, replies referencing other rows within the table.
 
 - [Chatroom](src/chat_room/ChatRoom.tsx) - shows a list of chat messages that updates in realtime as new messages are sent or received. Allows sending messages.
 
@@ -48,9 +50,17 @@ Example of a realtime chatroom with persistence and offline resilience.
 
 Example of submitting and monitoring background jobs. Progress is updated by the backend processor and streamed in real time, while locally jobs can be submitted even while offline and optionally cancelled. Once the job is completed, the result is also replicated to the client.
 
-- [Schema](db/migrations/06-background_jobs_table.sql) - stores job metadata like id, progress, result, etc.
+- [Schema](db/migrations/05-background_jobs_table.sql) - stores job metadata like id, progress, result, etc.
 
 - [Background Jobs](src/background_jobs/BackgroundJobs.tsx) - shows a list of jobs that updates in realtime as new jobs are submitted and processed.
+
+### Request-Response
+
+Example of substituting regular API calls with submitting requests lcoally and and viewing responses as they come in. This has the main benefits of offline persistence - all requests made while offline will eventually get serviced once back onlline without needing retries and other mechanisms - as well as a full audit log of all requests made.
+
+- [Schema](db/migrations/03-request_response_tables.sql) - stores requests and responses with metadata like timestamps, statuses, etc and ties
+
+- [Request Viewer](src/request_response/RequestResponse.tsx) - interface to submit new requests and view log of recent requests made and responses received.
 
 ## How to run the app
 
