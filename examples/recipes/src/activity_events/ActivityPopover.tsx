@@ -37,7 +37,7 @@ export const ActivityPopover = () => {
   // Use raw SQL to count all unread activities
   const numUnreadActivities =
     useLiveQuery(
-      db.liveRaw({
+      db.liveRawQuery({
         sql: `
       SELECT COUNT(*) FROM activity_events
       WHERE target = '${CURRENT_USER}' AND read_at IS NULL`,

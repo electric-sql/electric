@@ -45,7 +45,7 @@ export const LogViewer = ({
   // Use raw SQL to count all logs matching filter
   const totalNumberOfLogs =
     useLiveQuery(
-      db.liveRaw({
+      db.liveRawQuery({
         sql: `SELECT COUNT(*) FROM logs WHERE content LIKE '%${searchFilter}%';`,
       }),
     ).results?.[0]?.['COUNT(*)'] ?? 0

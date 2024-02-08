@@ -30,7 +30,7 @@ export const RequestResponse = () => {
 
   // TODO(msfstef): better query builder for left joins
   const { results: requests = [] } = useLiveQuery(
-    db.liveRaw({
+    db.liveRawQuery({
       sql: `
     SELECT
         r.timestamp AS requestTime,

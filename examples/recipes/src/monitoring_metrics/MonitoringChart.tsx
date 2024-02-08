@@ -35,7 +35,7 @@ export const MonitoringChart = () => {
       value_min: number
     }[]
   >(
-    db.liveRaw({
+    db.liveRawQuery({
       sql: `
     SELECT
       timestamp,

@@ -62,7 +62,7 @@ const TableDataViewer = ({
 
   // Get the order data for the given query
   const { results: orders = [] } = useLiveQuery(
-    db.liveRaw({
+    db.liveRawQuery({
       sql: `
       SELECT * FROM commerce_orders
       WHERE ${whereClause}
@@ -77,7 +77,7 @@ const TableDataViewer = ({
   // to inform the pagination controller
   const totalNumOrders =
     useLiveQuery(
-      db.liveRaw({
+      db.liveRawQuery({
         sql: `
       SELECT COUNT(*) FROM commerce_orders
       WHERE ${whereClause};
@@ -115,7 +115,7 @@ const ChartDataViewer = ({
 
   // Find the top values for the given query and select a few to display
   const { results: topValues = [] } = useLiveQuery<PropertyValue[]>(
-    db.liveRaw({
+    db.liveRawQuery({
       sql: `
       SELECT ${groupProperty} as property, COUNT(${groupProperty}) as value
       FROM commerce_orders
@@ -133,7 +133,7 @@ const ChartDataViewer = ({
 
   // Get the aggregated number of orders, grouped by the given property, for the top keys
   const { results: aggregatedValues = [] } = useLiveQuery<MonthlyPropertyValue[]>(
-    db.liveRaw({
+    db.liveRawQuery({
       sql: `
       SELECT
         strftime('%Y-%m', timestamp) AS month,
