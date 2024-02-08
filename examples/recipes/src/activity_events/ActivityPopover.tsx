@@ -16,6 +16,7 @@ import { ReactElement, useState } from 'react'
 import { useElectric } from '../electric/ElectricWrapper'
 import { useLiveQuery } from 'electric-sql/react'
 import { CURRENT_USER, formatDateTime } from './utilities'
+import { Activity_events } from '../generated/client'
 
 export const ActivityPopover = () => {
   const { db } = useElectric()!
@@ -42,7 +43,6 @@ export const ActivityPopover = () => {
       WHERE target = '${CURRENT_USER}' AND read_at IS NULL`,
       }),
     ).results?.[0]?.['COUNT(*)'] ?? 0
-  const hasUnreadActivities = numUnreadActivities > 0
 
   // Update individual activity's read status through its ID
   const markActivityAsRead = (activityId: string) =>
@@ -67,13 +67,39 @@ export const ActivityPopover = () => {
     })
 
   return (
+    <ActivityPopoverView
+      recentActivities={mostRecentActivities}
+      numUnreadActivities={numUnreadActivities}
+      onActivityRead={markActivityAsRead}
+      onAllActivitiesRead={markAllAsRead}
+    />
+  )
+}
+
+// *********
+// View
+// *********
+
+const ActivityPopoverView = ({
+  recentActivities,
+  numUnreadActivities,
+  onActivityRead,
+  onAllActivitiesRead,
+}: {
+  recentActivities: Activity_events[]
+  numUnreadActivities: number
+  onActivityRead: (activityId: string) => void
+  onAllActivitiesRead: () => void
+}) => {
+  const hasUnreadActivities = numUnreadActivities > 0
+  return (
     <NotificationPopover showBadge={hasUnreadActivities}>
       <Box pb={1}>
         <List>
-          {mostRecentActivities.map((activity) => (
+          {recentActivities.map((activity) => (
             <ListItemButton
               key={activity.id}
-              onPointerEnter={() => (activity.read_at ? null : markActivityAsRead(activity.id))}>
+              onPointerEnter={() => (activity.read_at ? null : onActivityRead(activity.id))}>
               <ListItemIcon>
                 <Avatar>{activity.source.slice(0, 1)}</Avatar>
               </ListItemIcon>
@@ -96,7 +122,7 @@ export const ActivityPopover = () => {
         </Button>
 
         <Collapse in={hasUnreadActivities} collapsedSize={0}>
-          <Button fullWidth disabled={!hasUnreadActivities} onClick={markAllAsRead}>
+          <Button fullWidth disabled={!hasUnreadActivities} onClick={onAllActivitiesRead}>
             Mark all as read
           </Button>
         </Collapse>

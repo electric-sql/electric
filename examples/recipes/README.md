@@ -1,65 +1,71 @@
 # Electric SQL Recipes
 
-A simple web app demonstrating common patterns and recipes implemented using Electric SQL.
+A web app demonstrating common patterns and recipes implemented using Electric SQL.
 
 ## Recipes
 
 ### Activity Events
 
-Simple example of real time social-media-like activities showing up as a toast if occurring in real time and in a notifications dropdown with read acknowledgements.
+Example of real time social-media-like activities showing up as a toast and in a notifications dropdown with read acknowledgements.
 
-Schema can be found in `db/migrations/01-activity_events_table.sql` - a more practical implementation could relate sources and targets for the events to users and user groups.
+- [Schema](db/migrations/01-activity_events_table.sql) - a more practical implementation would relate the `source` and `target` as foreign keys to users and/or user groups.
+- [Activity Popover](src/activity_events/ActivityPopover.tsx) - shows recent notifications along with read acknowledgement badges.
+- [Activity Toast](src/activity_events/ActivityToast.tsx) - pops up a toast everytime a new activity is received, with a read acknowledgement action and an another optional action specified in the schema
 
-The `ActivityPopover.tsx` and `ActivityToast.tsx` components under `src/activity_events/` illustrate the respective functionalities.
+### Log Viewer
 
-## Pre-reqs
+Example of viewing log messages in real time as well as historical logs.
 
-You need [NodeJS >= 16.11 and Docker Compose v2](https://electric-sql.com/docs/usage/installation/prereqs). Install `yarn` if you don't have it already:
+- [Schema](db/migrations/02-logs_table.sql) - can be extended with a `log_level` column as well as a `type` or `source` column, to refine permissions to view.
 
-```shell
-npm -g install yarn
-```
+- [Log Viewer](src/log_viewer/LogViewer.tsx) - shows recent log messages along with filtering and search capabilities.
 
-## Install
+## How to run the app
+
+### Prerequisites
+
+You need [NodeJS >= 16.11 and Docker Compose v2](https://electric-sql.com/docs/usage/installation/prereqs).
+
+### Install
 
 Install the dependencies:
 
 ```sh
-yarn install
+npm install
 ```
 
-## Setup
+### Setup
 
 Start Postgres and Electric using Docker (see [running the examples](https://electric-sql.com/docs/examples/notes/running) for more options):
 
 ```shell
-yarn backend:up
+npm run backend:up
 # Or `yarn backend:start` to foreground
 ```
 
 Note that, if useful, you can connect to Postgres using:
 
 ```shell
-yarn db:psql
+npm run db:psql
 ```
 
 Setup your [database schema](https://electric-sql.com/docs/usage/data-modelling):
 
 ```shell
-yarn db:migrate
+npm run db:migrate
 ```
 
 Generate your [type-safe client](https://electric-sql.com/docs/usage/data-access/client):
 
 ```shell
-yarn client:generate
-# or `yarn client:watch`` to re-generate whenever the DB schema changes
+npm run client:generate
+# or `npm run client:watch`` to re-generate whenever the DB schema changes
 ```
 
-## Run
+### Run
 
 Start your app:
 
 ```sh
-yarn dev
+npm run dev
 ```

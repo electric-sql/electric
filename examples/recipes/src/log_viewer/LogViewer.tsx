@@ -73,6 +73,9 @@ export const LogViewer = ({
   )
 }
 
+// *********
+// View
+// *********
 interface Log {
   id: string
   timestamp: Date

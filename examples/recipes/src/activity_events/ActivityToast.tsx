@@ -3,10 +3,11 @@ import { useCallback, useEffect, useState } from 'react'
 import { useElectric } from '../electric/ElectricWrapper'
 import { useLiveQuery } from 'electric-sql/react'
 import { Close } from '@mui/icons-material'
+import { Activity_events } from '../generated/client'
 
 export const ActivityToast = () => {
   const [visitTime] = useState(new Date())
-  const [open, setOpen] = useState(false)
+  const [show, setShow] = useState(false)
 
   const { db } = useElectric()!
 
@@ -25,15 +26,8 @@ export const ActivityToast = () => {
     }),
   )
 
-  const handleClose = (_event: React.SyntheticEvent | Event, reason?: string) => {
-    if (reason === 'clickaway') {
-      return
-    }
-    setOpen(false)
-  }
-
   // Acknowledge activity by marking it as read
-  const handleAck = useCallback(() => {
+  const onAck = useCallback(() => {
     if (liveActivity && liveActivity.read_at === null) {
       db.activity_events.update({
         data: {
@@ -44,18 +38,53 @@ export const ActivityToast = () => {
         },
       })
     }
-    setOpen(false)
   }, [db.activity_events, liveActivity])
 
   useEffect(() => {
     if (liveActivity?.id !== undefined) {
-      setOpen(true)
+      setShow(true)
     }
   }, [liveActivity?.id])
 
+  return <ActivityToastView activity={liveActivity} show={show} onChange={setShow} onAck={onAck} />
+}
+
+// *********
+// View
+// *********
+
+const ActivityToastView = ({
+  activity,
+  show,
+  onChange,
+  onAck,
+}: {
+  activity?: Activity_events | null
+  show: boolean
+  onChange: (show: boolean) => void
+  onAck: (activityId: string) => void
+}) => {
+  const [open, setOpen] = useState(show)
+
+  const handleAck = () => {
+    if (!activity) return
+    onAck?.(activity.id)
+    setOpen(false)
+  }
+
+  const handleClose = (_event: React.SyntheticEvent | Event, reason?: string) => {
+    if (reason === 'clickaway') {
+      return
+    }
+    setOpen(false)
+  }
+
+  useEffect(() => setOpen(show), [show])
+  useEffect(() => onChange(open), [open])
+
   return (
     <Snackbar
-      key={liveActivity?.id}
+      key={activity?.id}
       open={open}
       autoHideDuration={3000}
       onClose={handleClose}
@@ -65,12 +94,12 @@ export const ActivityToast = () => {
         vertical: 'bottom',
         horizontal: 'center',
       }}
-      message={liveActivity?.message}
+      message={activity?.message}
       action={
         <>
-          {liveActivity?.action && (
+          {activity?.action && (
             <Button variant="text" color="inherit" size="small">
-              {liveActivity.action}
+              {activity.action}
             </Button>
           )}
           <Button variant="text" color="inherit" size="small" onClick={handleAck}>
