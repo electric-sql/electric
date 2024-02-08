@@ -1,3 +1,4 @@
+import { DatabaseAdapter as DatabaseAdapterI } from '../../electric/adapter'
 import { DatabaseAdapter } from './adapter'
 import { Database, ElectricDatabase } from './database'
 import { ElectricConfig } from '../../config'
@@ -24,6 +25,7 @@ export const electrify = async <T extends Database, DB extends DbSchema<any>>(
   const migrator =
     opts?.migrator || new PgBundleMigrator(adapter, dbDescription.migrations)
   const socketFactory = opts?.socketFactory || WebSocketWeb
+  const prepare = async (_connection: DatabaseAdapterI) => {}
 
   const client = await baseElectrify(
     dbName,
@@ -33,6 +35,7 @@ export const electrify = async <T extends Database, DB extends DbSchema<any>>(
     config,
     {
       migrator,
+      prepare,
       ...opts,
     }
   )
