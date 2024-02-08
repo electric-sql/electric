@@ -10,7 +10,9 @@ Example of viewing log messages in real time as well as historical logs.
 
 - [Schema](db/migrations/02-logs_table.sql) - can be extended with a `log_level` column as well as a `type` or `source` column, to refine permissions to view.
 
-- [Log Viewer](src/log_viewer/LogViewer.tsx) - shows recent log messages along with filtering and search capabilities.
+- [useLogs](src/log_viewer/use_logs.ts) hook - returns given number of most recent logs with optional text filter.
+
+- [Log Viewer](src/log_viewer/LogViewer.tsx) - list UI for showing and filtering the logs
 
 ### Monitoring
 

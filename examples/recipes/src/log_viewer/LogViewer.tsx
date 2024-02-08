@@ -11,8 +11,7 @@ import {
   Typography,
 } from '@mui/material'
 import React, { Fragment, useCallback, useEffect, useState } from 'react'
-import { useElectric } from '../electric/ElectricWrapper'
-import { useLiveQuery } from 'electric-sql/react'
+import { useLogs } from './use_logs'
 
 export const LogViewer = ({
   defaultNumLogsToShow = 10,
@@ -24,31 +23,7 @@ export const LogViewer = ({
   const [numLogsToShow, setNumLogsToShow] = useState(defaultNumLogsToShow)
   const [searchFilter, setSearchFilter] = useState('')
 
-  const { db } = useElectric()!
-
-  // Retrieve specified number of logs matching filter in descending
-  // chronological order
-  const { results: logs = [] } = useLiveQuery(
-    db.logs.liveMany({
-      orderBy: {
-        timestamp: 'desc',
-      },
-      where: {
-        content: {
-          contains: searchFilter,
-        },
-      },
-      take: numLogsToShow,
-    }),
-  )
-
-  // Use raw SQL to count all logs matching filter
-  const totalNumberOfLogs =
-    useLiveQuery(
-      db.liveRawQuery({
-        sql: `SELECT COUNT(*) FROM logs WHERE content LIKE '%${searchFilter}%';`,
-      }),
-    ).results?.[0]?.['COUNT(*)'] ?? 0
+  const { logs, totalNumberOfLogs } = useLogs({ maxNumberOfLogs: numLogsToShow, searchFilter })
 
   // Reset number of logs shown when updating search filter
   useEffect(() => {
