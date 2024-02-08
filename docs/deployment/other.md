@@ -1,7 +1,7 @@
 ---
 title: Other
 description: >-
-  Deploy to any infrastructure and hosting platform ...
+  Deploy to any infrastructure and hosting platform.
 sidebar_position: 60
 ---
 
