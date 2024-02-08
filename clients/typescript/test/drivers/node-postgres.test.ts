@@ -32,8 +32,10 @@ test('database adapter query works', async (t) => {
 })
 
 // Test with an actual embedded-postgres DB
+let port = 5321
+let i = 1
 async function makeAdapter() {
-  const { db, stop } = await makePgDatabase('driver-test')
+  const { db, stop } = await makePgDatabase(`driver-test-${i++}`, port++)
   const adapter = new DatabaseAdapter(db)
   const createTableSql =
     'CREATE TABLE IF NOT EXISTS Post(id TEXT PRIMARY KEY, title TEXT, contents TEXT, nbr integer);'
@@ -41,7 +43,7 @@ async function makeAdapter() {
   return { adapter, stop }
 }
 
-test.serial('adapter run works on real DB', async (t) => {
+test('adapter run works on real DB', async (t) => {
   const { adapter, stop } = await makeAdapter()
   const insertRecordSql =
     "INSERT INTO Post (id, title, contents, nbr) VALUES ('i1', 't1', 'c1', 18)"
@@ -50,7 +52,7 @@ test.serial('adapter run works on real DB', async (t) => {
   await stop()
 })
 
-test.serial('adapter query works on real DB', async (t) => {
+test('adapter query works on real DB', async (t) => {
   const { adapter, stop } = await makeAdapter()
   const insertRecordSql =
     "INSERT INTO Post (id, title, contents, nbr) VALUES ('i1', 't1', 'c1', 18)"
@@ -63,7 +65,7 @@ test.serial('adapter query works on real DB', async (t) => {
   await stop()
 })
 
-test.serial('adapter runInTransaction works on real DB', async (t) => {
+test('adapter runInTransaction works on real DB', async (t) => {
   const { adapter, stop } = await makeAdapter()
   const insertRecord1Sql =
     "INSERT INTO Post (id, title, contents, nbr) VALUES ('i1', 't1', 'c1', 18)"
@@ -84,7 +86,7 @@ test.serial('adapter runInTransaction works on real DB', async (t) => {
   await stop()
 })
 
-test.serial('adapter runInTransaction rolls back on conflict', async (t) => {
+test('adapter runInTransaction rolls back on conflict', async (t) => {
   const { adapter, stop } = await makeAdapter()
   const insertRecord1Sql =
     "INSERT INTO Post (id, title, contents, nbr) VALUES ('i1', 't1', 'c1', 18)"
@@ -110,53 +112,50 @@ test.serial('adapter runInTransaction rolls back on conflict', async (t) => {
   await stop()
 })
 
-test.serial(
-  'adapter supports dependent queries in transaction on real DB',
-  async (t) => {
-    const { adapter, stop } = await makeAdapter()
-    const [txRes, rowsAffected] = (await adapter.transaction<Array<number>>(
-      (tx, setResult) => {
-        let rowsAffected = 0
-        tx.run(
-          {
-            sql: "INSERT INTO Post (id, title, contents, nbr) VALUES ('i1', 't1', 'c1', 18)",
-          },
-          (tx2, res) => {
-            rowsAffected += res.rowsAffected
-            const select = { sql: "SELECT nbr FROM Post WHERE id = 'i1'" }
-            tx2.query(select, (tx3, rows) => {
-              const [res] = rows as unknown as Array<{ nbr: number }>
-              const newNbr = res.nbr + 2
-              tx3.run(
-                {
-                  sql: `INSERT INTO Post (id, title, contents, nbr) VALUES ('i2', 't2', 'c2', ${newNbr})`,
-                },
-                (_, res) => {
-                  rowsAffected += res.rowsAffected
-                  setResult([newNbr, rowsAffected])
-                }
-              )
-            })
-          }
-        )
-      }
-    )) as unknown as Array<number>
+test('adapter supports dependent queries in transaction on real DB', async (t) => {
+  const { adapter, stop } = await makeAdapter()
+  const [txRes, rowsAffected] = (await adapter.transaction<Array<number>>(
+    (tx, setResult) => {
+      let rowsAffected = 0
+      tx.run(
+        {
+          sql: "INSERT INTO Post (id, title, contents, nbr) VALUES ('i1', 't1', 'c1', 18)",
+        },
+        (tx2, res) => {
+          rowsAffected += res.rowsAffected
+          const select = { sql: "SELECT nbr FROM Post WHERE id = 'i1'" }
+          tx2.query(select, (tx3, rows) => {
+            const [res] = rows as unknown as Array<{ nbr: number }>
+            const newNbr = res.nbr + 2
+            tx3.run(
+              {
+                sql: `INSERT INTO Post (id, title, contents, nbr) VALUES ('i2', 't2', 'c2', ${newNbr})`,
+              },
+              (_, res) => {
+                rowsAffected += res.rowsAffected
+                setResult([newNbr, rowsAffected])
+              }
+            )
+          })
+        }
+      )
+    }
+  )) as unknown as Array<number>
 
-    t.is(txRes, 20)
-    t.is(rowsAffected, 2)
+  t.is(txRes, 20)
+  t.is(rowsAffected, 2)
 
-    const selectAll = 'SELECT * FROM Post'
-    const res = await adapter.query({ sql: selectAll })
+  const selectAll = 'SELECT * FROM Post'
+  const res = await adapter.query({ sql: selectAll })
 
-    t.deepEqual(res, [
-      { id: 'i1', title: 't1', contents: 'c1', nbr: 18 },
-      { id: 'i2', title: 't2', contents: 'c2', nbr: 20 },
-    ])
-    await stop()
-  }
-)
+  t.deepEqual(res, [
+    { id: 'i1', title: 't1', contents: 'c1', nbr: 18 },
+    { id: 'i2', title: 't2', contents: 'c2', nbr: 20 },
+  ])
+  await stop()
+})
 
-test.serial('adapter rolls back dependent queries on conflict', async (t) => {
+test('adapter rolls back dependent queries on conflict', async (t) => {
   const { adapter, stop } = await makeAdapter()
   try {
     await adapter.transaction((tx) => {

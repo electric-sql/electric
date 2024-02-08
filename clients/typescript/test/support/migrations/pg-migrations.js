@@ -10,7 +10,7 @@ export default [
   {
     statements: [
       'DROP TABLE IF EXISTS main._electric_trigger_settings;',
-      'CREATE TABLE main._electric_trigger_settings(tablename TEXT PRIMARY KEY, flag INTEGER);',
+      'CREATE TABLE main._electric_trigger_settings(namespace TEXT, tablename TEXT, flag INTEGER, PRIMARY KEY (namespace, tablename));',
     ],
     version: '1',
   },
@@ -20,10 +20,10 @@ export default [
       'CREATE TABLE IF NOT EXISTS main.parent (\n  id INTEGER PRIMARY KEY NOT NULL,\n  value TEXT,\n  other INTEGER DEFAULT 0\n);',
       'CREATE TABLE IF NOT EXISTS main.child (\n  id INTEGER PRIMARY KEY NOT NULL,\n  parent INTEGER NOT NULL,\n  FOREIGN KEY(parent) REFERENCES main.parent(id)\n);',
       'DROP TABLE IF EXISTS main._electric_trigger_settings;',
-      'CREATE TABLE main._electric_trigger_settings(tablename TEXT PRIMARY KEY, flag INTEGER);',
-      "INSERT INTO main._electric_trigger_settings(tablename,flag) VALUES ('main.child', 1);",
-      "INSERT INTO main._electric_trigger_settings(tablename,flag) VALUES ('main.items', 1);",
-      "INSERT INTO main._electric_trigger_settings(tablename,flag) VALUES ('main.parent', 1);",
+      'CREATE TABLE main._electric_trigger_settings(namespace TEXT, tablename TEXT, flag INTEGER, PRIMARY KEY (namespace, tablename));',
+      "INSERT INTO main._electric_trigger_settings(namespace, tablename,flag) VALUES ('main', 'child', 1);",
+      "INSERT INTO main._electric_trigger_settings(namespace, tablename,flag) VALUES ('main', 'items', 1);",
+      "INSERT INTO main._electric_trigger_settings(namespace, tablename,flag) VALUES ('main', 'parent', 1);",
 
       'DROP TRIGGER IF EXISTS update_ensure_main_child_primarykey ON main.child;',
       `
@@ -53,7 +53,7 @@ export default [
           flag_value INTEGER;
         BEGIN
           -- Get the flag value from _electric_trigger_settings
-          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = 'main.child';
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE namespace = 'main' AND tablename = 'child';
 
           IF flag_value = 1 THEN
             -- Insert into _electric_oplog
@@ -83,7 +83,7 @@ export default [
           flag_value INTEGER;
         BEGIN
           -- Get the flag value from _electric_trigger_settings
-          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = 'main.child';
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE namespace = 'main' AND tablename = 'child';
 
           IF flag_value = 1 THEN
             -- Insert into _electric_oplog
@@ -112,7 +112,7 @@ export default [
           flag_value INTEGER;
         BEGIN
           -- Get the flag value from _electric_trigger_settings
-          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = 'main.child';
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE namespace = 'main' AND tablename = 'child';
 
           IF flag_value = 1 THEN
             -- Insert into _electric_oplog
@@ -141,7 +141,7 @@ export default [
           flag_value INTEGER;
           meta_value TEXT;
         BEGIN
-          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = 'main.parent';
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE namespace = 'main' AND tablename = 'parent';
 
           SELECT value INTO meta_value FROM main._electric_meta WHERE key = 'compensations';
 
@@ -174,7 +174,7 @@ export default [
           meta_value TEXT;
         BEGIN
           -- Get the flag value from _electric_trigger_settings
-          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = 'main.parent';
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE namespace = 'main' AND tablename = 'parent';
 
           -- Get the 'compensations' value from _electric_meta
           SELECT value INTO meta_value FROM main._electric_meta WHERE key = 'compensations';
@@ -226,7 +226,7 @@ export default [
           flag_value INTEGER;
         BEGIN
           -- Get the flag value from _electric_trigger_settings
-          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = 'main.items';
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE namespace = 'main' AND tablename = 'items';
 
           IF flag_value = 1 THEN
             -- Insert into _electric_oplog
@@ -257,7 +257,7 @@ export default [
           flag_value INTEGER;
         BEGIN
           -- Get the flag value from _electric_trigger_settings
-          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = 'main.items';
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE namespace = 'main' AND tablename = 'items';
 
           IF flag_value = 1 THEN
             -- Insert into _electric_oplog
@@ -287,7 +287,7 @@ export default [
           flag_value INTEGER;
         BEGIN
           -- Get the flag value from _electric_trigger_settings
-          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = 'main.items';
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE namespace = 'main' AND tablename = 'items';
 
           IF flag_value = 1 THEN
             -- Insert into _electric_oplog
@@ -337,7 +337,7 @@ export default [
           flag_value INTEGER;
         BEGIN
           -- Get the flag value from _electric_trigger_settings
-          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = 'main.parent';
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE namespace = 'main' AND tablename = 'parent';
 
           IF flag_value = 1 THEN
             -- Insert into _electric_oplog
@@ -377,7 +377,7 @@ export default [
           flag_value INTEGER;
         BEGIN
           -- Get the flag value from _electric_trigger_settings
-          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = 'main.parent';
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE namespace = 'main' AND tablename = 'parent';
 
           IF flag_value = 1 THEN
             -- Insert into _electric_oplog
@@ -417,7 +417,7 @@ export default [
           flag_value INTEGER;
         BEGIN
           -- Get the flag value from _electric_trigger_settings
-          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE tablename = 'main.parent';
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE namespace = 'main' AND tablename = 'parent';
 
           IF flag_value = 1 THEN
             -- Insert into _electric_oplog

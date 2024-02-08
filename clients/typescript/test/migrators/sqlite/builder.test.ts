@@ -16,6 +16,7 @@ import { electrify } from '../../../src/drivers/better-sqlite3'
 import path from 'path'
 import { DbSchema } from '../../../src/client/model'
 import { MockSocket } from '../../../src/sockets/mock'
+import { sqliteBuilder } from '../../../src/migrators/query-builder'
 
 function encodeSatOpMigrateMsg(request: SatOpMigrate) {
   return (
@@ -102,7 +103,7 @@ test('parse migration meta data', (t) => {
 
 test('generate migration from meta data', (t) => {
   const metaData = parseMetadata(migrationMetaData)
-  const migration = makeMigration(metaData)
+  const migration = makeMigration(metaData, sqliteBuilder)
   t.is(migration.version, migrationMetaData.version)
   t.is(
     migration.statements[0],
@@ -270,7 +271,7 @@ test('make migration for table with FKs', (t) => {
 
   //const migrateMetaData = JSON.parse(`{"format":"SatOpMigrate","ops":["GjcKB3RlbmFudHMSEgoCaWQSBFRFWFQaBgoEdXVpZBIUCgRuYW1lEgRURVhUGgYKBHRleHQiAmlkCgExEooBEocBQ1JFQVRFIFRBQkxFICJ0ZW5hbnRzIiAoCiAgImlkIiBURVhUIE5PVCBOVUxMLAogICJuYW1lIiBURVhUIE5PVCBOVUxMLAogIENPTlNUUkFJTlQgInRlbmFudHNfcGtleSIgUFJJTUFSWSBLRVkgKCJpZCIpCikgV0lUSE9VVCBST1dJRDsK","GmsKBXVzZXJzEhIKAmlkEgRURVhUGgYKBHV1aWQSFAoEbmFtZRIEVEVYVBoGCgR0ZXh0EhUKBWVtYWlsEgRURVhUGgYKBHRleHQSHQoNcGFzc3dvcmRfaGFzaBIEVEVYVBoGCgR0ZXh0IgJpZAoBMRLAARK9AUNSRUFURSBUQUJMRSAidXNlcnMiICgKICAiaWQiIFRFWFQgTk9UIE5VTEwsCiAgIm5hbWUiIFRFWFQgTk9UIE5VTEwsCiAgImVtYWlsIiBURVhUIE5PVCBOVUxMLAogICJwYXNzd29yZF9oYXNoIiBURVhUIE5PVCBOVUxMLAogIENPTlNUUkFJTlQgInVzZXJzX3BrZXkiIFBSSU1BUlkgS0VZICgiaWQiKQopIFdJVEhPVVQgUk9XSUQ7Cg==","GoYBCgx0ZW5hbnRfdXNlcnMSGQoJdGVuYW50X2lkEgRURVhUGgYKBHV1aWQSFwoHdXNlcl9pZBIEVEVYVBoGCgR1dWlkGhgKCXRlbmFudF9pZBIHdGVuYW50cxoCaWQaFAoHdXNlcl9pZBIFdXNlcnMaAmlkIgl0ZW5hbnRfaWQiB3VzZXJfaWQKATESkgMSjwNDUkVBVEUgVEFCTEUgInRlbmFudF91c2VycyIgKAogICJ0ZW5hbnRfaWQiIFRFWFQgTk9UIE5VTEwsCiAgInVzZXJfaWQiIFRFWFQgTk9UIE5VTEwsCiAgQ09OU1RSQUlOVCAidGVuYW50X3VzZXJzX3RlbmFudF9pZF9ma2V5IiBGT1JFSUdOIEtFWSAoInRlbmFudF9pZCIpIFJFRkVSRU5DRVMgInRlbmFudHMiICgiaWQiKSBPTiBERUxFVEUgQ0FTQ0FERSwKICBDT05TVFJBSU5UICJ0ZW5hbnRfdXNlcnNfdXNlcl9pZF9ma2V5IiBGT1JFSUdOIEtFWSAoInVzZXJfaWQiKSBSRUZFUkVOQ0VTICJ1c2VycyIgKCJpZCIpIE9OIERFTEVURSBDQVNDQURFLAogIENPTlNUUkFJTlQgInRlbmFudF91c2Vyc19wa2V5IiBQUklNQVJZIEtFWSAoInRlbmFudF9pZCIsICJ1c2VyX2lkIikKKSBXSVRIT1VUIFJPV0lEOwo="],"protocol_version":"Electric.Satellite","version":"1"}`)
   const metaData = parseMetadata(migration)
-  makeMigration(metaData)
+  makeMigration(metaData, sqliteBuilder)
   t.pass()
 })
 
@@ -293,7 +294,7 @@ test('generate index creation migration from meta data', (t) => {
     protocol_version: 'Electric.Satellite',
     version: '20230613112725_814',
   })
-  const migration = makeMigration(metaData)
+  const migration = makeMigration(metaData, sqliteBuilder)
   t.is(migration.version, migrationMetaData.version)
   t.deepEqual(migration.statements, [
     'CREATE INDEX idx_stars_username ON stars(username);',
@@ -303,14 +304,17 @@ test('generate index creation migration from meta data', (t) => {
 const migrationsFolder = path.join('./test/migrators/support/migrations')
 
 test('read migration meta data', async (t) => {
-  const migrations = await loadMigrations(migrationsFolder)
+  const migrations = await loadMigrations(migrationsFolder, sqliteBuilder)
   const versions = migrations.map((m) => m.version)
   t.deepEqual(versions, ['20230613112725_814', '20230613112735_992'])
 })
 
 test('load migration from meta data', async (t) => {
   const db = new Database(':memory:')
-  const migration = makeMigration(parseMetadata(migrationMetaData))
+  const migration = makeMigration(
+    parseMetadata(migrationMetaData),
+    sqliteBuilder
+  )
   const electric = await electrify(
     db,
     new DbSchema({}, [migration]),
