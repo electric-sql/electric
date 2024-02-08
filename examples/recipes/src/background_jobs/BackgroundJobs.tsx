@@ -69,6 +69,10 @@ export const BackgroundJobs = ({ numJobsToShow = 10 }: { numJobsToShow?: number 
   )
 }
 
+// *********
+// View
+// *********
+
 interface Job {
   id: string
   timestamp: Date

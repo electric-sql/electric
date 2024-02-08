@@ -44,6 +44,14 @@ Example of a realtime chatroom with persistence and offline resilience.
 
 - [Chatroom](src/chat_room/ChatRoom.tsx) - shows a list of chat messages that updates in realtime as new messages are sent or received. Allows sending messages.
 
+### Background Jobs
+
+Example of submitting and monitoring background jobs. Progress is updated by the backend processor and streamed in real time, while locally jobs can be submitted even while offline and optionally cancelled. Once the job is completed, the result is also replicated to the client.
+
+- [Schema](db/migrations/06-background_jobs_table.sql) - stores job metadata like id, progress, result, etc.
+
+- [Background Jobs](src/background_jobs/BackgroundJobs.tsx) - shows a list of jobs that updates in realtime as new jobs are submitted and processed.
+
 ## How to run the app
 
 ### Prerequisites
