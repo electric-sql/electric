@@ -14,7 +14,24 @@ export class QualifiedTablename {
   }
 
   toString(): string {
-    return `${this.namespace}.${this.tablename}`
+    // Don't collapse it to "<namespace>.<tablename>" because that can lead to clashes
+    // since both `QualifiedTablename("foo", "bar.baz")` and `QualifiedTablename("foo.bar", "baz")`
+    // would be collapsed to "foo.bar.baz".
+    return JSON.stringify({
+      namespace: this.namespace,
+      tablename: this.tablename,
+    })
+  }
+
+  static parse(json: string): QualifiedTablename {
+    try {
+      const { namespace, tablename } = JSON.parse(json)
+      return new QualifiedTablename(namespace, tablename)
+    } catch (_e) {
+      throw new Error(
+        'Could not parse string into a qualified table name: ' + json
+      )
+    }
   }
 }
 

@@ -7,6 +7,7 @@ import {
   MetaData,
   makeMigration,
 } from '../../migrators'
+import { QueryBuilder } from '../../migrators/query-builder'
 
 /*
  * This file defines functions to build migrations
@@ -34,10 +35,11 @@ import {
  */
 export async function buildMigrations(
   migrationsFolder: string,
-  migrationsFile: string
+  migrationsFile: string,
+  builder: QueryBuilder
 ) {
   try {
-    const migrations = await loadMigrations(migrationsFolder)
+    const migrations = await loadMigrations(migrationsFolder, builder)
     // Update the configuration file
     await fs.writeFile(
       migrationsFile,
@@ -72,7 +74,8 @@ export async function getMigrationNames(
  * @returns An array of migrations.
  */
 export async function loadMigrations(
-  migrationsFolder: string
+  migrationsFolder: string,
+  builder: QueryBuilder
 ): Promise<Migration[]> {
   const dirNames = await getMigrationNames(migrationsFolder)
   const migrationPaths = dirNames.map((dirName) =>
@@ -81,7 +84,7 @@ export async function loadMigrations(
   const migrationMetaDatas = await Promise.all(
     migrationPaths.map(readMetadataFile)
   )
-  return migrationMetaDatas.map(makeMigration)
+  return migrationMetaDatas.map((data) => makeMigration(data, builder))
 }
 
 /**

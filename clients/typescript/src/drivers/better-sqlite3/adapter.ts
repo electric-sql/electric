@@ -26,6 +26,7 @@ export class DatabaseAdapter
   }
 
   async runInTransaction(...statements: DbStatement[]): Promise<RunResult> {
+    console.log(`runInTransaction: ${JSON.stringify(statements)}`)
     const txn = this.db.transaction((stmts: DbStatement[]) => {
       let rowsAffected = 0
       for (const stmt of stmts) {
@@ -51,6 +52,7 @@ export class DatabaseAdapter
 
   // Promise interface, but impl not actually async
   async run({ sql, args }: DbStatement): Promise<RunResult> {
+    console.log(`RUN: ${sql} - ${JSON.stringify(args)}`)
     const prep = this.db.prepare(sql)
     const res = prep.run(...wrapBindParams(args))
     return {
@@ -60,6 +62,7 @@ export class DatabaseAdapter
 
   // This `query` function does not enforce that the query is read-only
   async query({ sql, args }: DbStatement): Promise<Row[]> {
+    console.log(`QUERY: ${sql} - ${JSON.stringify(args)}`)
     const stmt = this.db.prepare(sql)
     return stmt.all(...wrapBindParams(args))
   }
@@ -83,6 +86,7 @@ class WrappedTx implements Tx {
     successCallback?: (tx: WrappedTx, res: RunResult) => void,
     errorCallback?: (error: any) => void
   ): void {
+    console.log(`wrapped tx run: ${sql} - ${JSON.stringify(args)}`)
     try {
       const prep = this.db.prepare(sql)
       const res = prep.run(...wrapBindParams(args))
@@ -99,6 +103,7 @@ class WrappedTx implements Tx {
     successCallback: (tx: WrappedTx, res: Row[]) => void,
     errorCallback?: (error: any) => void
   ): void {
+    console.log(`wrapped tx query: ${sql} - ${JSON.stringify(args)}`)
     try {
       const stmt = this.db.prepare(sql)
       const rows = stmt.all(...wrapBindParams(args))

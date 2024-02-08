@@ -6,7 +6,7 @@ import {
   StmtMigration,
 } from './index'
 import { DatabaseAdapter } from '../electric/adapter'
-import { getData as makeBaseMigration } from './schema'
+import { buildInitialMigration as makeBaseMigration } from './schema'
 import Log from 'loglevel'
 import {
   SatelliteError,
@@ -30,6 +30,7 @@ import {
   ExpressionBuilder,
 } from 'kysely'
 import { _electric_migrations } from '../satellite/config'
+import { pgBuilder, QueryBuilder, sqliteBuilder } from './query-builder'
 
 export const SCHEMA_VSN_ERROR_MSG = `Local schema doesn't match server's. Clear local state through developer tools and retry connection manually. If error persists, re-generate the client. Check documentation (https://electric-sql.com/docs/reference/roadmap) to learn more.`
 
@@ -47,10 +48,10 @@ abstract class BundleMigratorBase implements Migrator {
     adapter: DatabaseAdapter,
     migrations: Migration[] = [],
     queryBuilderConfig: KyselyConfig,
-    dialect: 'SQLite' | 'PG'
+    electricQueryBuilder: QueryBuilder
   ) {
     this.adapter = adapter
-    const baseMigration = makeBaseMigration(dialect)
+    const baseMigration = makeBaseMigration(electricQueryBuilder)
     this.migrations = [...baseMigration.migrations, ...migrations].map(
       makeStmtMigration
     )
@@ -60,9 +61,13 @@ abstract class BundleMigratorBase implements Migrator {
 
   /**
    * Returns a SQL statement that checks if the given table exists.
+   * @param namespace The namespace where to check.
    * @param tableName The name of the table to check for existence.
    */
-  abstract createTableExistsStatement(tableName: string): Statement
+  abstract createTableExistsStatement(
+    namespace: string,
+    tableName: string
+  ): Statement
 
   async up(): Promise<number> {
     const existing = await this.queryApplied()
@@ -81,7 +86,7 @@ abstract class BundleMigratorBase implements Migrator {
   async migrationsTableExists(): Promise<boolean> {
     // If this is the first time we're running migrations, then the
     // migrations table won't exist.
-    const tableExists = this.createTableExistsStatement(this.tableName)
+    const tableExists = this.createTableExistsStatement('main', this.tableName)
     const tables = await this.adapter.query(tableExists)
     return tables.length > 0
   }
@@ -92,7 +97,7 @@ abstract class BundleMigratorBase implements Migrator {
     }
 
     const existingRecords = `
-      SELECT version FROM main.${this.tableName}
+      SELECT version FROM "main"."${this.tableName}"
         ORDER BY id ASC
     `
 
@@ -109,7 +114,7 @@ abstract class BundleMigratorBase implements Migrator {
     // The hard-coded version '0' below corresponds to the version of the internal migration defined in `schema.ts`.
     // We're ignoring it because this function is supposed to return the application schema version.
     const schemaVersion = `
-      SELECT version FROM main.${this.tableName}
+      SELECT version FROM "main"."${this.tableName}"
         WHERE version != '0'
         ORDER BY version DESC
         LIMIT 1
@@ -161,7 +166,7 @@ abstract class BundleMigratorBase implements Migrator {
     }
 
     const { sql, parameters } = raw`
-      INSERT INTO main.${this.eb.table(
+      INSERT INTO "main".${this.eb.table(
         this.tableName
       )} (version, applied_at) VALUES (${version}, ${Date.now().toString()})
     `.compile(this.queryBuilder)
@@ -180,7 +185,7 @@ abstract class BundleMigratorBase implements Migrator {
    */
   async applyIfNotAlready(migration: StmtMigration): Promise<boolean> {
     const { sql, parameters } = raw`
-      SELECT 1 FROM main.${this.eb.table(this.tableName)}
+      SELECT 1 FROM "main".${this.eb.table(this.tableName)}
         WHERE version = ${migration.version}
     `.compile(this.queryBuilder)
 
@@ -211,10 +216,10 @@ export class SqliteBundleMigrator extends BundleMigratorBase {
         createQueryCompiler: () => new SqliteQueryCompiler(),
       },
     }
-    super(adapter, migrations, config, 'SQLite')
+    super(adapter, migrations, config, sqliteBuilder)
   }
 
-  createTableExistsStatement(tableName: string): Statement {
+  createTableExistsStatement(_namespace: string, tableName: string): Statement {
     return {
       sql: `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`,
       args: [tableName],
@@ -232,13 +237,13 @@ export class PgBundleMigrator extends BundleMigratorBase {
         createQueryCompiler: () => new PostgresQueryCompiler(),
       },
     }
-    super(adapter, migrations, config, 'PG')
+    super(adapter, migrations, config, pgBuilder)
   }
 
-  createTableExistsStatement(tableName: string): Statement {
+  createTableExistsStatement(namespace: string, tableName: string): Statement {
     return {
-      sql: `SELECT 1 FROM information_schema.tables WHERE table_name = $1`,
-      args: [tableName],
+      sql: `SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = $2`,
+      args: [namespace, tableName],
     }
   }
 }

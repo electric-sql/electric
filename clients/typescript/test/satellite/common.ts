@@ -10,7 +10,7 @@ import { GlobalRegistry, Registry, SatelliteProcess } from '../../src/satellite'
 import { TableInfo, initTableInfo } from '../support/satellite-helpers'
 import { satelliteDefaults, SatelliteOpts } from '../../src/satellite/config'
 import { Table, generateTableTriggers } from '../../src/migrators/triggers'
-import { getData as makeInitialMigration } from '../../src/migrators/schema'
+import { buildInitialMigration as makeInitialMigration } from '../../src/migrators/schema'
 
 export const dbDescription = new DbSchema(
   {
@@ -195,6 +195,7 @@ import { PgBasicType } from '../../src/client/conversions/types'
 import { HKT } from '../../src/client/util/hkt'
 import { ElectricClient } from '../../src/client/model'
 import EventEmitter from 'events'
+import { sqliteBuilder } from '../../src/migrators/query-builder'
 
 // Speed up the intervals for testing.
 export const opts = Object.assign({}, satelliteDefaults, {
@@ -313,14 +314,14 @@ export function migrateDb(db: SqliteDB, table: Table) {
   db.exec(createTableSQL)
 
   // Apply the initial migration on the database
-  const initialMigration = makeInitialMigration('SQLite')
+  const initialMigration = makeInitialMigration(sqliteBuilder)
   const migration = initialMigration.migrations[0].statements
   migration.forEach((stmt) => {
     db.exec(stmt)
   })
 
   // Generate the table triggers
-  const triggers = generateTableTriggers(tableName, table)
+  const triggers = generateTableTriggers(table, sqliteBuilder)
 
   // Apply the triggers on the database
   triggers.forEach((trigger) => {

@@ -16,6 +16,7 @@ import { getConfig, type Config } from '../config'
 import { start } from '../docker-commands/command-start'
 import { stop } from '../docker-commands/command-stop'
 import { withConfig } from '../configure/command-with-config'
+import { sqliteBuilder } from '../../migrators/query-builder'
 
 // Rather than run `npx prisma` we resolve the path to the prisma binary so that
 // we can be sure we are using the same version of Prisma that is a dependency of
@@ -233,6 +234,10 @@ async function getLatestMigration(
  * @param configFolder Absolute path to the configuration folder.
  */
 async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
+  // TODO: introduce an option for the generator which indicates
+  //       whether the app runs on Sqlite or PG
+  //       and then here use the right query builder
+  const builder = sqliteBuilder
   const config = opts.config
   // Create a unique temporary folder in which to save
   // intermediate files without risking collisions
@@ -273,7 +278,7 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
 
     // Build the migrations
     console.log('Building migrations...')
-    await buildMigrations(migrationsFolder, migrationsFile)
+    await buildMigrations(migrationsFolder, migrationsFile, builder)
     console.log('Successfully built migrations')
 
     if (

@@ -1,7 +1,8 @@
 import { Statement } from '../util'
 import { dedent } from 'ts-dedent'
+import { QueryBuilder } from './query-builder'
 
-type ForeignKey = {
+export type ForeignKey = {
   table: string
   childKey: string
   parentKey: string
@@ -35,7 +36,6 @@ function mkStatement(sql: string): Statement {
 /**
  * Generates the triggers Satellite needs for the given table.
  * Assumes that the necessary meta tables already exist.
- * @param tableFullName - Full name of the table for which to generate triggers.
  * @param table - A new or existing table for which to create/update the triggers.
  * @returns An array of SQLite statements that add the necessary oplog triggers.
  *
@@ -44,8 +44,8 @@ function mkStatement(sql: string): Statement {
  * do not accept queries containing more than one SQL statement.
  */
 export function generateOplogTriggers(
-  tableFullName: TableFullName,
-  table: Omit<Table, 'foreignKeys'>
+  table: Omit<Table, 'foreignKeys'>,
+  builder: QueryBuilder
 ): Statement[] {
   const { tableName, namespace, columns, primary, columnTypes } = table
 
@@ -54,69 +54,53 @@ export function generateOplogTriggers(
   const newRows = joinColsForJSON(columns, columnTypes, 'new')
   const oldRows = joinColsForJSON(columns, columnTypes, 'old')
 
+  const [dropFkTrigger, ...createFkTrigger] =
+    builder.createOrReplaceNoFkUpdateTrigger(namespace, tableName, primary)
+  const [dropInsertTrigger, ...createInsertTrigger] =
+    builder.createOrReplaceInsertTrigger(
+      namespace,
+      tableName,
+      newPKs,
+      newRows,
+      oldRows
+    )
+
   return [
     dedent`
-    -- Toggles for turning the triggers on and off
-    INSERT OR IGNORE INTO _electric_trigger_settings(tablename,flag) VALUES ('${tableFullName}', 1);
+      -- Toggles for turning the triggers on and off
+      ${builder.insertOrIgnore(
+        'main',
+        '_electric_trigger_settings',
+        ['namespace', 'tablename', 'flag'],
+        [`'${namespace}'`, `'${tableName}'`, '1']
+      )}
     `,
     dedent`
     /* Triggers for table ${tableName} */
   
     -- ensures primary key is immutable
-    DROP TRIGGER IF EXISTS update_ensure_${namespace}_${tableName}_primarykey;
+    ${dropFkTrigger}
     `,
+    ...createFkTrigger,
     dedent`
-    CREATE TRIGGER update_ensure_${namespace}_${tableName}_primarykey
-      BEFORE UPDATE ON "${namespace}"."${tableName}"
-    BEGIN
-      SELECT
-        CASE
-          ${primary
-            .map(
-              (col) =>
-                `WHEN old."${col}" != new."${col}" THEN\n\t\tRAISE (ABORT, 'cannot change the value of column ${col} as it belongs to the primary key')`
-            )
-            .join('\n')}
-        END;
-    END;
+      -- Triggers that add INSERT, UPDATE, DELETE operation to the oplog table
+      ${dropInsertTrigger}
     `,
-    dedent`
-    -- Triggers that add INSERT, UPDATE, DELETE operation to the _opslog table
-    DROP TRIGGER IF EXISTS insert_${namespace}_${tableName}_into_oplog;
-    `,
-    dedent`
-    CREATE TRIGGER insert_${namespace}_${tableName}_into_oplog
-       AFTER INSERT ON "${namespace}"."${tableName}"
-       WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == '${tableFullName}')
-    BEGIN
-      INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
-      VALUES ('${namespace}', '${tableName}', 'INSERT', json_object(${newPKs}), json_object(${newRows}), NULL, NULL);
-    END;
-    `,
-    dedent`
-    DROP TRIGGER IF EXISTS update_${namespace}_${tableName}_into_oplog;
-    `,
-    dedent`
-    CREATE TRIGGER update_${namespace}_${tableName}_into_oplog
-       AFTER UPDATE ON "${namespace}"."${tableName}"
-       WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == '${tableFullName}')
-    BEGIN
-      INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
-      VALUES ('${namespace}', '${tableName}', 'UPDATE', json_object(${newPKs}), json_object(${newRows}), json_object(${oldRows}), NULL);
-    END;
-    `,
-    dedent`
-    DROP TRIGGER IF EXISTS delete_${namespace}_${tableName}_into_oplog;
-    `,
-    dedent`
-    CREATE TRIGGER delete_${namespace}_${tableName}_into_oplog
-       AFTER DELETE ON "${namespace}"."${tableName}"
-       WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == '${tableFullName}')
-    BEGIN
-      INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
-      VALUES ('${namespace}', '${tableName}', 'DELETE', json_object(${oldPKs}), NULL, json_object(${oldRows}), NULL);
-    END;
-    `,
+    ...createInsertTrigger,
+    ...builder.createOrReplaceUpdateTrigger(
+      namespace,
+      tableName,
+      newPKs,
+      newRows,
+      oldRows
+    ),
+    ...builder.createOrReplaceDeleteTrigger(
+      namespace,
+      tableName,
+      oldPKs,
+      newRows,
+      oldRows
+    ),
   ].map(mkStatement)
 }
 
@@ -134,7 +118,10 @@ export function generateOplogTriggers(
  * @param tables Map of all tables (needed to look up the tables that are pointed at by FKs).
  * @returns An array of SQLite statements that add the necessary compensation triggers.
  */
-function generateCompensationTriggers(table: Table): Statement[] {
+function generateCompensationTriggers(
+  table: Table,
+  builder: QueryBuilder
+): Statement[] {
   const { tableName, namespace, foreignKeys, columnTypes } = table
 
   const makeTriggers = (foreignKey: ForeignKey) => {
@@ -154,36 +141,36 @@ function generateCompensationTriggers(table: Table): Statement[] {
       [fkTablePK]: columnTypes[foreignKey.childKey],
     })
 
+    const [dropInsertTrigger, ...createInsertTrigger] =
+      builder.createOrReplaceInsertCompensationTrigger(
+        namespace,
+        tableName,
+        childKey,
+        fkTableNamespace,
+        fkTableName,
+        joinedFkPKs,
+        foreignKey
+      )
+
     return [
-      dedent`-- Triggers for foreign key compensations
-      DROP TRIGGER IF EXISTS compensation_insert_${namespace}_${tableName}_${childKey}_into_oplog;`,
       // The compensation trigger inserts a row in `_electric_oplog` if the row pointed at by the FK exists
       // The way how this works is that the values for the row are passed to the nested SELECT
       // which will return those values for every record that matches the query
       // which can be at most once since we filter on the foreign key which is also the primary key and thus is unique.
       dedent`
-      CREATE TRIGGER compensation_insert_${namespace}_${tableName}_${childKey}_into_oplog
-        AFTER INSERT ON "${namespace}"."${tableName}"
-        WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == '${fkTableNamespace}.${fkTableName}') AND
-             1 == (SELECT value from _electric_meta WHERE key == 'compensations')
-      BEGIN
-        INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
-        SELECT '${fkTableNamespace}', '${fkTableName}', 'COMPENSATION', json_object(${joinedFkPKs}), json_object(${joinedFkPKs}), NULL, NULL
-        FROM "${fkTableNamespace}"."${fkTableName}" WHERE "${foreignKey.parentKey}" = new."${foreignKey.childKey}";
-      END;
+        -- Triggers for foreign key compensations
+        ${dropInsertTrigger}
       `,
-      dedent`DROP TRIGGER IF EXISTS compensation_update_${namespace}_${tableName}_${foreignKey.childKey}_into_oplog;`,
-      dedent`
-      CREATE TRIGGER compensation_update_${namespace}_${tableName}_${foreignKey.childKey}_into_oplog
-         AFTER UPDATE ON "${namespace}"."${tableName}"
-         WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == '${fkTableNamespace}.${fkTableName}') AND
-              1 == (SELECT value from _electric_meta WHERE key == 'compensations')
-      BEGIN
-        INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
-        SELECT '${fkTableNamespace}', '${fkTableName}', 'COMPENSATION', json_object(${joinedFkPKs}), json_object(${joinedFkPKs}), NULL, NULL
-        FROM "${fkTableNamespace}"."${fkTableName}" WHERE "${foreignKey.parentKey}" = new."${foreignKey.childKey}";
-      END;
-      `,
+      ...createInsertTrigger,
+      ...builder.createOrReplaceUpdateCompensationTrigger(
+        namespace,
+        tableName,
+        foreignKey.childKey,
+        fkTableNamespace,
+        fkTableName,
+        joinedFkPKs,
+        foreignKey
+      ),
     ].map(mkStatement)
   }
   const fkTriggers = foreignKeys.map((fk) => makeTriggers(fk))
@@ -198,11 +185,11 @@ function generateCompensationTriggers(table: Table): Statement[] {
  * @returns An array of SQLite statements that add the necessary oplog and compensation triggers.
  */
 export function generateTableTriggers(
-  tableFullName: TableFullName,
-  table: Table
+  table: Table,
+  builder: QueryBuilder
 ): Statement[] {
-  const oplogTriggers = generateOplogTriggers(tableFullName, table)
-  const fkTriggers = generateCompensationTriggers(table)
+  const oplogTriggers = generateOplogTriggers(table, builder)
+  const fkTriggers = generateCompensationTriggers(table, builder)
   return oplogTriggers.concat(fkTriggers)
 }
 
@@ -211,17 +198,20 @@ export function generateTableTriggers(
  * @param tables - Dictionary mapping full table names to the corresponding tables.
  * @returns An array of SQLite statements that add the necessary oplog and compensation triggers for all tables.
  */
-export function generateTriggers(tables: Tables): Statement[] {
+export function generateTriggers(
+  tables: Tables,
+  builder: QueryBuilder
+): Statement[] {
   const tableTriggers: Statement[] = []
-  tables.forEach((table, tableFullName) => {
-    const triggers = generateTableTriggers(tableFullName, table)
+  tables.forEach((table) => {
+    const triggers = generateTableTriggers(table, builder)
     tableTriggers.push(...triggers)
   })
 
   const stmts = [
-    { sql: 'DROP TABLE IF EXISTS _electric_trigger_settings;' },
+    { sql: 'DROP TABLE IF EXISTS main._electric_trigger_settings;' },
     {
-      sql: 'CREATE TABLE _electric_trigger_settings(tablename TEXT PRIMARY KEY, flag INTEGER);',
+      sql: 'CREATE TABLE main._electric_trigger_settings(namespace TEXT, tablename TEXT, flag INTEGER, PRIMARY KEY(namespace, tablename));',
     },
     ...tableTriggers,
   ]

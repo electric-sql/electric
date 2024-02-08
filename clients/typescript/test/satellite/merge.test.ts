@@ -9,11 +9,17 @@ import {
   DEFAULT_LOG_POS,
   DataChangeType,
   DataTransaction,
+  QualifiedTablename,
 } from '../../src/util'
 import Long from 'long'
 import { relations, migrateDb, personTable } from './common'
 import Database from 'better-sqlite3'
 import { satelliteDefaults } from '../../src/satellite/config'
+
+const qualifiedMergeTable = new QualifiedTablename(
+  'main',
+  'mergeTable'
+).toString()
 
 test('merging entries: local no-op updates should cancel incoming delete', (t) => {
   const pk = primaryKeyToStr({ id: 1 })
@@ -48,9 +54,10 @@ test('merging entries: local no-op updates should cancel incoming delete', (t) =
   const merged = mergeEntries('local', local, 'remote', remote, relations)
 
   // Merge should resolve into the UPSERT for this row, since the remote DELETE didn't observe this local update
-  t.like(merged, { 'main.parent': { [pk]: { optype: 'UPSERT' } } })
-  t.deepEqual(merged['main.parent'][pk].tags, ['local@100001000'])
-  t.deepEqual(merged['main.parent'][pk].fullRow, { id: 1, value: 'TEST' })
+  const qualifiedTableName = new QualifiedTablename('main', 'parent').toString()
+  t.like(merged, { [qualifiedTableName]: { [pk]: { optype: 'UPSERT' } } })
+  t.deepEqual(merged[qualifiedTableName][pk].tags, ['local@100001000'])
+  t.deepEqual(merged[qualifiedTableName][pk].fullRow, { id: 1, value: 'TEST' })
 })
 
 test('merge can handle infinity values', (t) => {
@@ -152,9 +159,9 @@ function _mergeTableTest(
 
   // tx2 should win because tx1 and tx2 happened concurrently
   // but the timestamp of tx2 > tx1
-  t.like(merged, { 'main.mergeTable': { [pk]: { optype: 'UPSERT' } } })
+  t.like(merged, { [qualifiedMergeTable]: { [pk]: { optype: 'UPSERT' } } })
 
-  t.deepEqual(merged['main.mergeTable'][pk].fullRow, {
+  t.deepEqual(merged[qualifiedMergeTable][pk].fullRow, {
     ...opts.expected,
     id: pkId,
   })
@@ -171,9 +178,8 @@ test('merge works on oplog entries', (t) => {
   db.exec(insertRowSQL)
 
   // Fetch the oplog entry for the inserted row
-  const oplogRows = db
-    .prepare(`SELECT * FROM ${satelliteDefaults.oplogTable}`)
-    .all()
+  const oplogTable = `"${satelliteDefaults.oplogTable.namespace}"."${satelliteDefaults.oplogTable.tablename}"`
+  const oplogRows = db.prepare(`SELECT * FROM ${oplogTable}`).all()
 
   t.is(oplogRows.length, 1)
 
@@ -213,10 +219,14 @@ test('merge works on oplog entries', (t) => {
   const pk = primaryKeyToStr({ id: 9e999 })
 
   // the incoming transaction wins
+  const qualifiedTableName = new QualifiedTablename(
+    personTable.namespace,
+    personTable.tableName
+  ).toString()
   t.like(merged, {
-    [`main.${personTable.tableName}`]: { [pk]: { optype: 'UPSERT' } },
+    [qualifiedTableName]: { [pk]: { optype: 'UPSERT' } },
   })
-  t.deepEqual(merged[`main.${personTable.tableName}`][pk].fullRow, {
+  t.deepEqual(merged[qualifiedTableName][pk].fullRow, {
     id: 9e999,
     name: 'John Doe',
     age: 30,

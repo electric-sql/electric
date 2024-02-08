@@ -18,4 +18,8 @@ export class MockDatabase implements Database {
       rowsModified: 0,
     }
   }
+
+  async stop(): Promise<void> {
+    return
+  }
 }

@@ -5,9 +5,11 @@ import { generateTableTriggers } from '../../../src/migrators/triggers'
 import type { Database as SqliteDB } from 'better-sqlite3'
 import { satelliteDefaults } from '../../../src/satellite/config'
 import { migrateDb, personTable } from '../../satellite/common'
+import { sqliteBuilder } from '../../../src/migrators/query-builder'
 
 type Context = { db: SqliteDB; migrateDb: () => void }
 const test = testAny as TestFn<Context>
+const oplogTable = `"${satelliteDefaults.oplogTable.namespace}"."${satelliteDefaults.oplogTable.tablename}"`
 
 test.beforeEach(async (t) => {
   const db = new Database(':memory:')
@@ -20,7 +22,7 @@ test.beforeEach(async (t) => {
 
 test('generateTableTriggers should create correct triggers for a table', (t) => {
   // Generate the oplog triggers
-  const triggers = generateTableTriggers(personTable.tableName, personTable)
+  const triggers = generateTableTriggers(personTable, sqliteBuilder)
 
   // Check that the oplog triggers are correct
   const triggersSQL = triggers.map((t) => t.sql).join('\n')
@@ -29,7 +31,7 @@ test('generateTableTriggers should create correct triggers for a table', (t) => 
       dedent`
     CREATE TRIGGER insert_main_personTable_into_oplog
        AFTER INSERT ON "main"."personTable"
-       WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == 'personTable')
+       WHEN 1 = (SELECT flag from _electric_trigger_settings WHERE namespace = 'main' AND tablename = 'personTable')
     BEGIN
       INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
       VALUES ('main', 'personTable', 'INSERT', json_object('id', cast(new."id" as TEXT)), json_object('age', new."age", 'bmi', cast(new."bmi" as TEXT), 'id', cast(new."id" as TEXT), 'int8', cast(new."int8" as TEXT), 'name', new."name"), NULL, NULL);
@@ -43,7 +45,7 @@ test('generateTableTriggers should create correct triggers for a table', (t) => 
       dedent`
     CREATE TRIGGER update_main_personTable_into_oplog
        AFTER UPDATE ON "main"."personTable"
-       WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == 'personTable')
+       WHEN 1 = (SELECT flag from _electric_trigger_settings WHERE namespace = 'main' AND tablename = 'personTable')
     BEGIN
       INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
       VALUES ('main', 'personTable', 'UPDATE', json_object('id', cast(new."id" as TEXT)), json_object('age', new."age", 'bmi', cast(new."bmi" as TEXT), 'id', cast(new."id" as TEXT), 'int8', cast(new."int8" as TEXT), 'name', new."name"), json_object('age', old."age", 'bmi', cast(old."bmi" as TEXT), 'id', cast(old."id" as TEXT), 'int8', cast(old."int8" as TEXT), 'name', old."name"), NULL);
@@ -57,7 +59,7 @@ test('generateTableTriggers should create correct triggers for a table', (t) => 
       dedent`
     CREATE TRIGGER delete_main_personTable_into_oplog
        AFTER DELETE ON "main"."personTable"
-       WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == 'personTable')
+       WHEN 1 = (SELECT flag from _electric_trigger_settings WHERE namespace = 'main' AND tablename = 'personTable')
     BEGIN
       INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
       VALUES ('main', 'personTable', 'DELETE', json_object('id', cast(old."id" as TEXT)), NULL, json_object('age', old."age", 'bmi', cast(old."bmi" as TEXT), 'id', cast(old."id" as TEXT), 'int8', cast(old."int8" as TEXT), 'name', old."name"), NULL);
@@ -79,9 +81,7 @@ test('oplog insertion trigger should insert row into oplog table', (t) => {
   db.exec(insertRowSQL)
 
   // Check that the oplog table contains an entry for the inserted row
-  const oplogRows = db
-    .prepare(`SELECT * FROM ${satelliteDefaults.oplogTable}`)
-    .all()
+  const oplogRows = db.prepare(`SELECT * FROM ${oplogTable}`).all()
   t.is(oplogRows.length, 1)
   t.deepEqual(oplogRows[0], {
     namespace: 'main',
@@ -121,9 +121,7 @@ test('oplog trigger should handle Infinity values correctly', (t) => {
   db.exec(insertRowSQL)
 
   // Check that the oplog table contains an entry for the inserted row
-  const oplogRows = db
-    .prepare(`SELECT * FROM ${satelliteDefaults.oplogTable}`)
-    .all()
+  const oplogRows = db.prepare(`SELECT * FROM ${oplogTable}`).all()
   t.is(oplogRows.length, 1)
   t.deepEqual(oplogRows[0], {
     namespace: 'main',
