@@ -48,6 +48,7 @@ defmodule Electric.Postgres.Proxy.UpstreamConnection do
        decoder: decoder,
        conn_opts: conn_opts,
        ssl_handshake: false,
+       ssl_opts: [],
        transport_module: :gen_tcp
      }, {:continue, {:connect, conn_opts}}}
   end
@@ -57,13 +58,14 @@ defmodule Electric.Postgres.Proxy.UpstreamConnection do
     host = conn_opts[:ip_addr] || conn_opts[:host] || ~c"localhost"
     port = conn_opts[:port] || 5432
     tcp_opts = [active: true] ++ List.wrap(conn_opts[:tcp_opts])
+    ssl_opts = List.wrap(conn_opts[:ssl_opts])
 
     Logger.debug(
       "Connecting to upstream PG cluster #{inspect(host)}:#{port} with options #{inspect(tcp_opts)}"
     )
 
     {:ok, conn} = :gen_tcp.connect(host, port, tcp_opts, 1000)
-    state = %{state | conn: conn}
+    state = %{state | conn: conn, ssl_opts: ssl_opts}
 
     if conn_opts[:ssl] do
       msg = %M.SSLRequest{}
@@ -100,7 +102,7 @@ defmodule Electric.Postgres.Proxy.UpstreamConnection do
       case IO.iodata_to_binary(data) do
         "S" ->
           Logger.debug("Upgrading upstream connection to use SSL")
-          {:ok, conn} = :ssl.connect(conn, [])
+          {:ok, conn} = :ssl.connect(conn, state.ssl_opts)
           %{state | conn: conn, transport_module: :ssl}
 
         "N" ->
