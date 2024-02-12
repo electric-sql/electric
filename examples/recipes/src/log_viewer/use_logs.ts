@@ -4,9 +4,11 @@ import { useLiveQuery } from 'electric-sql/react'
 export const useLogs = ({
   maxNumberOfLogs = 10,
   searchFilter = '',
+  sourceId,
 }: {
   maxNumberOfLogs: number
   searchFilter: string
+  sourceId?: string
 }) => {
   const { db } = useElectric()!
 
@@ -14,20 +16,25 @@ export const useLogs = ({
   // chronological order
   const { results: logs = [] } = useLiveQuery(
     db.logs.liveMany({
+      where: {
+        content: { contains: searchFilter },
+        ...(sourceId && { source_id: sourceId })
+      },
       orderBy: { timestamp: 'desc' },
-      where: { content: { contains: searchFilter } },
       take: maxNumberOfLogs,
     }),
   )
 
   // Use raw SQL to count all logs matching filter
-  const totalNumberOfLogs =
-    useLiveQuery(
-      db.liveRawQuery({
-        sql: `SELECT COUNT(*) FROM logs WHERE content LIKE '%?%';`,
-        args: [searchFilter],
-      }),
-    ).results?.[0]?.['COUNT(*)'] ?? 0
+  const totalNumberOfLogs = useLiveQuery(
+    db.liveRawQuery({
+      sql: `
+      SELECT COUNT(*) FROM logs WHERE
+      content LIKE '%${searchFilter}%'
+      ${sourceId ? `AND source_id = ${sourceId}` : ''}
+      `,
+    }),
+  ).results?.[0]?.['COUNT(*)'] ?? 0
 
   return {
     logs,

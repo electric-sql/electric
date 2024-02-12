@@ -24,8 +24,8 @@ export async function startGeneratingWebServerLogs(pgPool: Pool): Promise<void> 
   await startGeneratingData({
     pgPool: pgPool,
     tableName: 'logs',
-    rowGenerationQuery: 'INSERT INTO logs(id, timestamp, content) VALUES($1, $2, $3)',
-    valueGenerator: () => [uuidv4(), new Date().toISOString(), generateWebServerLog()],
+    rowGenerationQuery: 'INSERT INTO logs(id, source_id, timestamp, content) VALUES($1, $2, $3, $4)',
+    valueGenerator: () => [uuidv4(), uuidv4(), new Date().toISOString(), generateWebServerLog()],
     rowGenerationFrequencyMs: 250,
     rowGenerationFrequencyVariationMs: 200,
   })
