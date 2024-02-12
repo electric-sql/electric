@@ -140,12 +140,39 @@ Connection to Postgres is up!
 ```
 
 
+## Deploying Electric connected to Fly Postgres
+
+Follow the [offical Fly Postgres docs](https://fly.io/docs/postgres/) to set up your database. If you already have an instance of Fly Postgres running, make sure it's configured with `wal_level=logical`:
+
+```shell
+$ fly pg -a <pg app name> config update --wal-level logical
+
+NAME     	VALUE  	TARGET VALUE	RESTART REQUIRED
+wal-level	replica	logical     	true
+
+// highlight-next-line
+? Are you sure you want to apply these changes? Yes
+Performing update...
+Update complete!
+Please note that some of your changes will require a cluster restart
+before they will be applied.
+// highlight-next-line
+? Restart cluster now? Yes
+Identifying cluster role(s)
+  Machine 148ed127a03de8: primary
+Restarting machine 148ed127a03de8
+  Waiting for 148ed127a03de8 to become healthy (started, 1/3)
+```
+
+Now go back to [Configure your Fly app](#configure-your-fly-app) above and modify the contents of the `fly.toml` file shown there by changing the `DATABASE_URL` value to use your Fly Postgres instance's connection string and adding the `DATABASE_REQUIRE_SSL` environment variable:
 
 
+```toml
+[env]
+  DATABASE_URL = "postgres://postgres:...@<pg-app-name>.flycast:5432"
+  DATABASE_REQUIRE_SSL = "false"
+  ...the rest of the env vars
+```
 
-
-
-
-
-
+Fly Postgres does not support encrypted database connections inside its private 6PN network while Electric enforces encryption by default. The above `DATABASE_REQUIRE_SSL` setting changes Electric's behaviour by allowing it to fallback to using unencrypted connections.
 
