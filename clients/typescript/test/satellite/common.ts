@@ -12,6 +12,20 @@ import { satelliteDefaults, SatelliteOpts } from '../../src/satellite/config'
 import { Table, generateTableTriggers } from '../../src/migrators/triggers'
 import { buildInitialMigration as makeInitialMigration } from '../../src/migrators/schema'
 
+export type Database = {
+  exec(statement: { sql: string }): Promise<void>
+}
+
+export function wrapDB(db: SqliteDB): Database {
+  const wrappedDB = {
+    exec: async ({ sql }: { sql: string }) => {
+      console.log('EXECCC:\n' + sql)
+      db.exec(sql)
+    },
+  }
+  return wrappedDB
+}
+
 export const dbDescription = new DbSchema(
   {
     child: {
@@ -215,7 +229,7 @@ import { PgBasicType } from '../../src/client/conversions/types'
 import { HKT } from '../../src/client/util/hkt'
 import { ElectricClient } from '../../src/client/model'
 import EventEmitter from 'events'
-import { sqliteBuilder } from '../../src/migrators/query-builder'
+import { QueryBuilder } from '../../src/migrators/query-builder'
 
 // Speed up the intervals for testing.
 export const opts = Object.assign({}, satelliteDefaults, {
@@ -339,26 +353,35 @@ export const cleanAndStopSatellite = async (
   await clean(t)
 }
 
-export function migrateDb(db: SqliteDB, table: Table) {
+export async function migrateDb(
+  db: Database,
+  table: Table,
+  builder: QueryBuilder
+) {
+  // First create the "main" schema (only when running on PG)
+  const initialMigration = makeInitialMigration(builder)
+  const migration = initialMigration.migrations[0].statements
+  const [createMainSchema, ...restMigration] = migration
+  await db.exec({ sql: createMainSchema })
+
+  const namespace = table.namespace
   const tableName = table.tableName
-  // Create the table in the database
-  const createTableSQL = `CREATE TABLE ${tableName} (id REAL PRIMARY KEY, name TEXT, age INTEGER, bmi REAL, int8 INTEGER, blob BLOB)`
-  db.exec(createTableSQL)
+  // Create the table in the database on the given namespace
+  const createTableSQL = `CREATE TABLE "${namespace}"."${tableName}" (id REAL PRIMARY KEY, name TEXT, age INTEGER, bmi REAL, int8 INTEGER, blob BLOB)`
+  await db.exec({ sql: createTableSQL })
 
   // Apply the initial migration on the database
-  const initialMigration = makeInitialMigration(sqliteBuilder)
-  const migration = initialMigration.migrations[0].statements
-  migration.forEach((stmt) => {
-    db.exec(stmt)
-  })
+  for (const stmt of restMigration) {
+    await db.exec({ sql: stmt })
+  }
 
   // Generate the table triggers
-  const triggers = generateTableTriggers(table, sqliteBuilder)
+  const triggers = generateTableTriggers(table, builder)
 
   // Apply the triggers on the database
-  triggers.forEach((trigger) => {
-    db.exec(trigger.sql)
-  })
+  for (const trigger of triggers) {
+    await db.exec({ sql: trigger.sql })
+  }
 }
 
 export const personTable: Table = {
@@ -368,19 +391,11 @@ export const personTable: Table = {
   primary: ['id'],
   foreignKeys: [],
   columnTypes: {
-<<<<<<< HEAD
-    id: { sqliteType: 'REAL', pgType: PgBasicType.PG_REAL },
-    name: { sqliteType: 'TEXT', pgType: PgBasicType.PG_TEXT },
-    age: { sqliteType: 'INTEGER', pgType: PgBasicType.PG_INTEGER },
-    bmi: { sqliteType: 'REAL', pgType: PgBasicType.PG_REAL },
-    int8: { sqliteType: 'INTEGER', pgType: PgBasicType.PG_INT8 },
-    blob: { sqliteType: 'BLOB', pgType: PgBasicType.PG_BYTEA },
-=======
     id: PgBasicType.PG_REAL,
     name: PgBasicType.PG_TEXT,
     age: PgBasicType.PG_INTEGER,
     bmi: PgBasicType.PG_REAL,
     int8: PgBasicType.PG_INT8,
->>>>>>> 2007ecb76 (Deprecate PgColumnType.sqlite_type)
+    blob: PgBasicType.PG_BYTEA,
   },
 }
