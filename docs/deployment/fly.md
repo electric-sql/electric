@@ -176,3 +176,18 @@ Now go back to [Configure your Fly app](#configure-your-fly-app) above and modif
 
 Fly Postgres does not support encrypted database connections inside its private 6PN network while Electric enforces encryption by default. The above `DATABASE_REQUIRE_SSL` setting changes Electric's behaviour by allowing it to fallback to using unencrypted connections.
 
+## Connecting the client app to Electric running on Fly
+
+If you don't already have an Electric-enabled client app, follow our <DocPageLink path="quickstart" /> guide or clone our [Basic Items](/docs/examples/basic) example app and go through its README. In either case, skip the steps that show how to run Postgres and Electric locally.
+
+Create a file named `.env.local` inside your client app's root directory with the following contents so that [`electric-sql commands`](/docs/api/cli) know how to connect to your instance of Electric sync service running on Fly:
+
+```shell
+ELECTRIC_SERVICE=https://electric-on-fly-test-app.fly.dev/
+
+# This should be the same password as the one used
+# for PG_PROXY_PASSWORD in your fly.toml
+ELECTRIC_PG_PROXY_PASSWORD=proxy_password
+```
+
+If you're wondering why we don't set the `ELECTRIC_DATABASE_URL` variable here, that's because client commands only connect to the Migrations proxy which is a component of Electric sync service. Learn more about the Migrations proxy's role and how it fits into the bigger picture in our <DocPageLink path="deployment/concepts#migrations-proxy" /> guide.
