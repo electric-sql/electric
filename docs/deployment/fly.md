@@ -28,7 +28,7 @@ Save the following snippet into a file named `fly.toml` somewhere on your comput
 app = "electric-on-fly-test-app"
 
 [build]
-  image = "electricsql/electric"
+  image = "electricsql/electric:latest"
 
 [env]
   AUTH_MODE = "insecure"
