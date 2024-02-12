@@ -12,9 +12,10 @@ import {
   QualifiedTablename,
 } from '../../src/util'
 import Long from 'long'
-import { relations, migrateDb, personTable } from './common'
+import { relations, migrateDb, personTable, wrapDB } from './common'
 import Database from 'better-sqlite3'
 import { satelliteDefaults } from '../../src/satellite/config'
+import { sqliteBuilder } from '../../src/migrators/query-builder'
 
 const qualifiedMergeTable = new QualifiedTablename(
   'main',
@@ -167,11 +168,12 @@ function _mergeTableTest(
   })
 }
 
-test('merge works on oplog entries', (t) => {
+test('merge works on oplog entries', async (t) => {
   const db = new Database(':memory:')
+  const wrappedDb = wrapDB(db)
 
   // Migrate the DB with the necessary tables and triggers
-  migrateDb(db, personTable)
+  await migrateDb(wrappedDb, personTable, sqliteBuilder)
 
   // Insert a row in the table
   const insertRowSQL = `INSERT INTO ${personTable.tableName} (id, name, age, bmi, int8) VALUES (9e999, 'John Doe', 30, 25.5, 7)`

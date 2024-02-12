@@ -1,22 +1,23 @@
 import { dedent } from 'ts-dedent'
-import Database from 'better-sqlite3'
+import OriginalDatabase from 'better-sqlite3'
+import { Database } from 'better-sqlite3'
 import testAny, { TestFn } from 'ava'
 import { generateTableTriggers } from '../../../src/migrators/triggers'
-import type { Database as SqliteDB } from 'better-sqlite3'
 import { satelliteDefaults } from '../../../src/satellite/config'
-import { migrateDb, personTable } from '../../satellite/common'
+import { migrateDb, personTable, wrapDB } from '../../satellite/common'
 import { sqliteBuilder } from '../../../src/migrators/query-builder'
 
-type Context = { db: SqliteDB; migrateDb: () => void }
+type Context = { db: Database; migrateDb: () => Promise<void> }
 const test = testAny as TestFn<Context>
 const oplogTable = `"${satelliteDefaults.oplogTable.namespace}"."${satelliteDefaults.oplogTable.tablename}"`
 
 test.beforeEach(async (t) => {
-  const db = new Database(':memory:')
+  const db = new OriginalDatabase(':memory:')
+  const wrappedDb = wrapDB(db)
 
   t.context = {
     db,
-    migrateDb: migrateDb.bind(null, db, personTable),
+    migrateDb: migrateDb.bind(null, wrappedDb, personTable, sqliteBuilder),
   }
 })
 
@@ -69,12 +70,12 @@ test('generateTableTriggers should create correct triggers for a table', (t) => 
   )
 })
 
-test('oplog insertion trigger should insert row into oplog table', (t) => {
+test('oplog insertion trigger should insert row into oplog table', async (t) => {
   const { db, migrateDb } = t.context
   const tableName = personTable.tableName
 
   // Migrate the DB with the necessary tables and triggers
-  migrateDb()
+  await migrateDb()
 
   // Insert a row in the table
   const insertRowSQL = `INSERT INTO ${tableName} (id, name, age, bmi, int8) VALUES (1, 'John Doe', 30, 25.5, 7)`
@@ -109,12 +110,12 @@ test('oplog insertion trigger should insert row into oplog table', (t) => {
   })
 })
 
-test('oplog trigger should handle Infinity values correctly', (t) => {
+test('oplog trigger should handle Infinity values correctly', async (t) => {
   const { db, migrateDb } = t.context
   const tableName = personTable.tableName
 
   // Migrate the DB with the necessary tables and triggers
-  migrateDb()
+  await migrateDb()
 
   // Insert a row in the table
   const insertRowSQL = `INSERT INTO ${tableName} (id, name, age, bmi, int8) VALUES (-9e999, 'John Doe', 30, 9e999, 7)`
