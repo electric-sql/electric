@@ -164,62 +164,13 @@ $ curl https://electric-on-fly-test-app.fly.dev/api/status
 Connection to Postgres is up!
 ```
 
-## Preparing the client app
-
-Let's see how to set up a client app to connect to the Electric sync service we've just deployed. Clone the source code repository to your machine and navigate to the basic example, as explained on [this page](../examples/basic#source-code).
-
-Open `examples/web-wa-sqlite/.env` and replace the URL on the `ELECTRIC_SERVICE=http://localhost:5133` line with your Fly app's URL:
-
-```
-ELECTRIC_SERVICE=https://electric-on-fly-test-app.fly.dev/
-```
-
-### Apply migrations
-
-You may use your preferred tool to manage database migrations. See the <DocPageLink path="integrations/backend" /> section of the docs for an overview of the most popular frameworks. In this demo we'll use `@databases/pg-migrations` as it's already included in the basic example. Make sure you have installed all of the dependencies for the example app by running `npm install` once.
-
-Run `npm run db:migrate` to apply the included migration to your database:
-
-```shell
-$ npm run db:migrate
-
-> electric-sql-wa-sqlite-example@0.9.0 db:migrate
-> npx electric-sql with-config "npx pg-migrations apply --database {{ELECTRIC_PROXY}} --directory ./db/migrations"
-
-Applying 01-create_items_table.sql
-Applied 01-create_items_table.sql
-1 migrations applied
-```
-
-### Generate a type-safe client
-
-Now that the database has one electrified table, we can [generate a type-safe client](../usage/data-access/client.md) from it:
-
-```shell
-$ npm run client:generate
-
-Generating Electric client...
-Service URL: https://electric-on-fly-test-app.fly.dev/
-Proxy URL: postgresql://prisma:********@electric-on-fly-test-app.fly.dev:65432
-Successfully generated Electric client at: ./src/generated/client
-Building migrations...
-Successfully built migrations
-```
-
-### Start the app!
-
-Now you should have everything ready to start the web app and have it connect to the Electric sync service running on Fly:
-
-```shell
-$ npm run dev
-
-> electric-sql-wa-sqlite-example@0.9.0 dev
-> vite
 
 
-  VITE v4.5.0  ready in 181 ms
 
-  ➜  Local:   http://localhost:5173/
-  ➜  Network: use --host to expose
-  ➜  press h to show help
-```
+
+
+
+
+
+
+
