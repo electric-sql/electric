@@ -84,7 +84,7 @@ Start Postgres and Electric using Docker (see [running the examples](https://ele
 
 ```shell
 npm run backend:up
-# Or `yarn backend:start` to foreground
+# Or `npm run backend:start` to foreground
 ```
 
 Note that, if useful, you can connect to Postgres using:
