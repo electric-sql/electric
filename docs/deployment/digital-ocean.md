@@ -7,7 +7,16 @@ sidebar_position: 20
 
 DigitalOcean is a cloud provider that is easy to use and has a low starting cost. You can get a virtual machine running in the cloud within minutes or deploy a web app to their fully-managed App Platform in just a few clicks.
 
-Make sure you have a DigitalOcean account with billing activated before you follow one of the guides below.
+This guide covers two scenarios:
+
+  1. Deploying Electric sync service to the App Platform.
+  2. Deploying Electric sync service to a Droplet.
+
+Make sure you have a [DigitalOcean account](https://cloud.digitalocean.com/registrations/new) with [billing activated](https://cloud.digitalocean.com/account/billing) before proceeding.
+
+:::info
+For background on how to successfully deploy the sync service and what needs to connect where, see <DocPageLink path="deployment/concepts" />.
+:::
 
 ## Running Electric on App Platform
 
