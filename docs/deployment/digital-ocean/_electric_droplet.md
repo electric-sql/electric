@@ -8,10 +8,8 @@ Type "help" for help.
 [167] postgres:postgres=>
 ```
 
-Open `examples/web-wa-sqlite/.env` and replace the URL on the `ELECTRIC_SERVICE=http://localhost:5133` line with your Droplet's IP address:
+Create a file named `.env.local` inside your client app's root directory and use your Droplet's IP address to add the `ELECTRIC_SERVICE` configuration option to it:
 
-```
+```shell
 ELECTRIC_SERVICE=http://167.99.132.206
 ```
-
-Make sure you have installed all of the dependencies for the example app by running `npm install` once. Now you should have everything ready to proceed with building the client app.

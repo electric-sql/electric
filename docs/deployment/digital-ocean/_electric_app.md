@@ -1,15 +1,17 @@
-Apps running on DigitalOcean's App Platform can only accept HTTP/HTTPS connections. In order to connect to the [Migrations proxy](/docs/usage/data-modelling/migrations#migrations-proxy) that runs inside Electric, we need to start a local server that will tunnel TCP traffic over HTTP between a local Postgres client and Electric.
+Apps running on DigitalOcean's App Platform can only accept HTTP/HTTPS connections. In order to connect to the [Migrations proxy](/docs/deployment/concepts#migrations-proxy) that runs inside Electric, we need to start a local server that will tunnel TCP traffic between a local Postgres client and Electric running on DigitalOcean over the HTTP protocol.
 
-Open `examples/web-wa-sqlite/.env`, replace the URL on the `ELECTRIC_SERVICE=http://localhost:5133` line with your app's URL and add the `ELECTRIC_PROXY` configuration option below it:
+Create a file named `.env.local` inside your client app's root directory with the following contents:
 
-```
+```shell
 ELECTRIC_SERVICE=https://electric-sync-service-4ha5b.ondigitalocean.app/
-ELECTRIC_PROXY=postgresql://postgres:<proxy password>@localhost:65432
+ELECTRIC_PG_PROXY_HOST=localhost
+
+# This should be the same password as the one used
+# for PG_PROXY_PASSWORD in your app config
+ELECTRIC_PG_PROXY_PASSWORD=proxy_password
 ```
 
-*(substitute the same password you configured for your DigitalOcean app's* `PG_PROXY_PASSWORD` *variable for the* `<proxy password>` *placeholder in the above URL)*
-
-Make sure you have installed all of the dependencies for the example app by running `npm install` once. Now start the tunnel and keep it running while you go through the steps that follow:
+Make sure you have installed all of the dependencies for the client app by running `npm install` once. Start the [proxy tunnel](/docs/deployment/concepts#22-using-a-proxy-tunnel) and keep it running while you go through the steps that follow:
 
 ```shell
 $ npx electric-sql proxy-tunnel

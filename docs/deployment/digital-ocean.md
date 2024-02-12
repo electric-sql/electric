@@ -88,7 +88,7 @@ $ curl -i https://electric-sync-service-4ha5b.ondigitalocean.app/api/status
 Connection to Postgres is up!
 ```
 
-Proceed to the [Running the basic example app](#running-the-basic-example-app) section below.
+Proceed to [Connecting the client app to Electric running on DigitalOcean](#connecting-the-client-app-to-electric-running-on-digitalocean) below.
 
 :::info
 If you see errors in the logs, there's likely a problem with some of the environment variables. To update the environment, go to the Settings tab, click on the `electric` component at the top and then click on the Edit link in the "Environment Variables" row.
@@ -259,13 +259,11 @@ Connection to Postgres is up!
 ```
 
 
-## Running the basic example app
+## Connecting the client app to Electric running on DigitalOcean
 
-Let's see how to set up a client app to connect to the Electric sync service we've just deployed. Clone the source code repository to your machine and navigate to the basic example, as explained on [this page](../examples/basic#source-code).
+If you don't already have an Electric-enabled client app, follow our <DocPageLink path="quickstart" /> guide or clone our [Basic Items](/docs/examples/basic) example app and go through its README. In either case, skip the steps that show how to run Postgres and Electric locally.
 
-### Initial setup
-
-As the first step, we need to make a few edits to the stock example app so that it knows about our deployed Electric instance. Choose the appropriate tab below depending on how you have Electric deployed:
+As the first step, we need to make a few changes to the stock client app so that [`electric-sql commands`](/docs/api/cli) know how to connect to the instance of Electric sync service running on DigitalOcean. Choose the appropriate tab below depending on how you have Electric deployed:
 
 import ElectricApp from './digital-ocean/_electric_app.md';
 import ElectricDroplet from './digital-ocean/_electric_droplet.md';
@@ -274,56 +272,11 @@ import ElectricDroplet from './digital-ocean/_electric_droplet.md';
   <TabItem value="generator" label="DigitalOcean App">
     <ElectricApp />
   </TabItem>
-  <TabItem value="manual" label="Running on Droplet">
+  <TabItem value="manual" label="Droplet">
     <ElectricDroplet />
   </TabItem>
 </Tabs>
 
-### Apply migrations
+If you're wondering why we don't set the `ELECTRIC_DATABASE_URL` variable in the `.env.local` file, that's because client commands only connect to the Migrations proxy which is a component of Electric sync service. Learn more about the Migrations proxy's role and how it fits into the bigger picture in our <DocPageLink path="deployment/concepts#migrations-proxy" /> guide.
 
-You may use your preferred tool to manage database migrations. See the <DocPageLink path="integrations/backend" /> section of the docs for an overview of the most popular frameworks. In this demo we'll use `@databases/pg-migrations` as it's already included in the basic example.
-
-Run `npm run db:migrate` to apply the included migration to your database:
-
-```shell
-$ npm run db:migrate
-
-> electric-sql-wa-sqlite-example@0.9.0 db:migrate
-> npx electric-sql with-config "npx pg-migrations apply --database {{ELECTRIC_PROXY}} --directory ./db/migrations"
-
-Applying 01-create_items_table.sql
-Applied 01-create_items_table.sql
-1 migrations applied
-```
-
-### Generate a type-safe client
-
-Now that the database has one electrified table, we can [generate a type-safe client](../usage/data-access/client.md) from it:
-
-```shell
-$ npm run client:generate
-
-Generating Electric client...
-Service URL: https://electric-sync-service-4ha5b.ondigitalocean.app/
-Proxy URL: postgresql://prisma:********@localhost:65432
-Successfully generated Electric client at: ./src/generated/client
-Building migrations...
-Successfully built migrations
-```
-
-### Start the app!
-
-Now you should have everything ready to start the web app and have it connect to the Electric sync service running as a DigitalOcean app:
-
-```shell
-$ npm run dev
-
-> electric-sql-wa-sqlite-example@0.9.0 dev
-> vite
-
-  VITE v4.5.0  ready in 181 ms
-
-  ➜  Local:   http://localhost:5173/
-  ➜  Network: use --host to expose
-  ➜  press h to show help
-```
+Now you should have everything ready to get your client app up and running.
