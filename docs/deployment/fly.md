@@ -5,45 +5,22 @@ description: >-
 sidebar_position: 40
 ---
 
-You can deploy ElectricSQL to [Fly.io](https://fly.io).
+You can deploy ElectricSQL to [Fly.io](https://fly.io) and use either an external Postgres or an instance of Fly Postgres as the database for the sync service. This guide covers both scenarios:
 
-The app config needs to include an `http_service` with internal port `5133` and a TCP service for Electric's [migrations proxy](../usage/data-modelling/migrations#migrations-proxy) that listens on port `65432` by default.
+  1. Deploying Electric sync service and connecting it to an external Postgres.
+  2. Configuring Fly Postgres and Electric sync service to connect over Fly's private network.
 
-The environment variables used by Electric are described in <DocPageLink path="api/service" />.
+:::info
+For background on how to successfully deploy the sync service and what needs to connect where, see <DocPageLink path="deployment/concepts" />.
+:::
 
-## Postgres with logical replication
+## Deploying Electric connected to an external Postgres
 
-Before deploying Electric, you'll need a Postgres database (with logical replication enabled) hosted somewhere Electric can connect to. See the next section if you intend to use Fly Postgres with Electric.
-
-Alternatively, many other managed database providers support logical replication, see <DocPageLink path="usage/installation/postgres#hosting" /> for some options. Retrieve your database's connection URI with password included from your provider and use it as the value of the `DATABASE_URL` variable when setting up the app.
-
-### Fly Postgres
-
-If you have an instance of [Fly Postgres](https://fly.io/docs/postgres/) that you want Electric to connect to, make sure it's configured with `wal_level=logical`:
-
-```shell
-$ fly pg -a <pg app name> config update --wal-level logical
-
-NAME     	VALUE  	TARGET VALUE	RESTART REQUIRED
-wal-level	replica	logical     	true
-
-// highlight-next-line
-? Are you sure you want to apply these changes? Yes
-Performing update...
-Update complete!
-Please note that some of your changes will require a cluster restart
-before they will be applied.
-// highlight-next-line
-? Restart cluster now? Yes
-Identifying cluster role(s)
-  Machine 148ed127a03de8: primary
-Restarting machine 148ed127a03de8
-  Waiting for 148ed127a03de8 to become healthy (started, 1/3)
-```
-
-## Deploying Electric
+Before deploying Electric, you'll need a Postgres database (with logical replication enabled) hosted somewhere Electric can connect to. Many managed database providers support logical replication, see <DocPageLink path="usage/installation/postgres#hosting" /> for some options. Retrieve your database's connection URI with password included from your provider and use it as the value of the `DATABASE_URL` variable when setting up the app.
 
 ### Configure your Fly app
+
+The app config needs to include an `http_service` with internal port `5133` and a TCP service for Electric's [migrations proxy](../usage/data-modelling/migrations#migrations-proxy) that listens on port `65432` by default.  See <DocPageLink path="api/service" /> to learn about the environment variables used by Electric in detail.
 
 Save the following snippet into a file named `fly.toml` somewhere on your computer, changing the `app` name as you see fit:
 
@@ -56,10 +33,6 @@ app = "electric-on-fly-test-app"
 [env]
   AUTH_MODE = "insecure"
   DATABASE_URL = "postgresql://..."
-  # When using Fly Postgres, uncomment the config line below.
-  # Fly Postgres does not support encrypted connections
-  # inside its private 6PN network.
-  #DATABASE_REQUIRE_SSL = "false"
   ELECTRIC_WRITE_TO_PG_MODE = "direct_writes"
   PG_PROXY_PASSWORD = "proxy_password"
 
@@ -90,7 +63,9 @@ app = "electric-on-fly-test-app"
 :::info Secrets and environment variables
 [Secrets](https://fly.io/docs/reference/secrets/) allow sensitive values, such as credentials, to be passed securely to your Fly app. The secret is encrypted and stored in a vault. It is made available to the app as an environment variable.
 
-We're not using secrets in this example to keep things short and simple. As soon as you're ready to take your Fly app from development to production, make sure to replace the `DATABASE_URL`, `PG_PROXY_PASSWORD` and `AUTH_JWT_KEY` (this latter one is required in the [secure authentication mode](/docs/usage/auth/secure)) environment variables with secrets.
+We're not using secrets in this example to keep things short and simple. As soon as you're ready to take your Fly app from development to production, make sure to replace the `DATABASE_URL`, `PG_PROXY_PASSWORD` and `AUTH_JWT_KEY` environment variables with secrets.
+
+See also <DocPageLink path="usage/auth/secure"/> to learn about the secure authentication mode for your production-ready deployment of Electric.
 :::
 
 ### Deploy!
