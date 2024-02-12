@@ -19,8 +19,7 @@ CREATE TABLE IF NOT EXISTS responses (
   data JSONB
 );
 
--- ⚡
--- Electrify the requests and responses table
+-- ⚡ Electrify the requests and responses tables
 ALTER TABLE requests ENABLE ELECTRIC;
 ALTER TABLE responses ENABLE ELECTRIC;
 

@@ -10,6 +10,5 @@ CREATE TABLE IF NOT EXISTS activity_events (
   read_at TIMESTAMPTZ
 );
 
--- ⚡
--- Electrify the items table
+-- ⚡ Electrify the table
 ALTER TABLE activity_events ENABLE ELECTRIC;

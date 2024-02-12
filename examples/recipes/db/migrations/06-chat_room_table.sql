@@ -6,6 +6,5 @@ CREATE TABLE IF NOT EXISTS chat_room (
   message TEXT NOT NULL
 );
 
--- ⚡
--- Electrify the chat room table
+-- ⚡ Electrify the table
 ALTER TABLE chat_room ENABLE ELECTRIC;

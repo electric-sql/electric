@@ -16,6 +16,5 @@ CREATE INDEX idx_timestamp ON commerce_orders(timestamp);
 -- Index for country column in commerce_orders table
 CREATE INDEX idx_country ON commerce_orders(country);
 
--- ⚡
--- Electrify the commerce table
+-- ⚡ Electrify the table
 ALTER TABLE commerce_orders ENABLE ELECTRIC;

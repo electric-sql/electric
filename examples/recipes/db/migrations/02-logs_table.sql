@@ -8,6 +8,5 @@ CREATE TABLE IF NOT EXISTS logs (
   content TEXT NOT NULL
 );
 
--- ⚡
--- Electrify the items table
+-- ⚡ Electrify the table
 ALTER TABLE logs ENABLE ELECTRIC;

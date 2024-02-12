@@ -8,8 +8,7 @@ CREATE TABLE IF NOT EXISTS background_jobs (
   result JSONB
 );
 
--- ⚡
--- Electrify the table
+-- ⚡ Electrify the table
 ALTER TABLE background_jobs ENABLE ELECTRIC;
 
 

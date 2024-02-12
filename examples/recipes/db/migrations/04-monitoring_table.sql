@@ -6,6 +6,5 @@ CREATE TABLE IF NOT EXISTS monitoring (
   value DOUBLE PRECISION NOT NULL
 );
 
--- ⚡
--- Electrify the table
+-- ⚡ Electrify the table
 ALTER TABLE monitoring ENABLE ELECTRIC;
