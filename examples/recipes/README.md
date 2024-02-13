@@ -48,7 +48,9 @@ Example of a realtime chatroom with persistence and offline resilience.
 
 - [Schema](db/migrations/06-chat_room_table.sql) - stores chat messages with a timestamp, username, and message text - can be extended with delivery acknowledgements, reactions, replies referencing other rows within the table.
 
-- [Chatroom](src/chat_room/ChatRoom.tsx) - shows a list of chat messages that updates in realtime as new messages are sent or received. Allows sending messages.
+- [useChatRoom](src/chat_room/use_chat_room.ts) hook - returns a list of chat messages up to specified time, as well as a function to submit new messages.
+
+- [Chatroom](src/chat_room/ChatRoom.tsx) - chatroom UI shows messages that update in realtime as new messages are sent or received.
 
 ### Background Jobs
 
