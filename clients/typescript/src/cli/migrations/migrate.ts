@@ -302,11 +302,8 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
     console.error('generate command failed: ' + e)
     throw e
   } finally {
-    // Delete our temporary directory unless
-    // generation failed in debug mode
-    if (!generationFailed || !opts.debug) {
-      await fs.rm(tmpFolder, { recursive: true })
-    }
+    // Delete our temporary directory unless in debug mode
+    if (!opts.debug) await fs.rm(tmpFolder, { recursive: true })
 
     // In case of process exit, make sure to run after folder removal
     if (generationFailed && opts.exitOnError) process.exit(1)
