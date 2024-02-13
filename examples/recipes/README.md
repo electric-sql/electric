@@ -36,11 +36,13 @@ Example of viewing and querying data through something like an analytics dashboa
 
 Example of real time social-media-like activities showing up as a toast and in a notifications dropdown with read acknowledgements.
 
-- [Schema](db/migrations/01-activity_events_table.sql) - a more practical implementation would relate the `source` and `target` as foreign keys to users and/or user groups.
+- [Schema](db/migrations/01-activity_events_table.sql) - defines activities with a source and target, read acknowledgments, and a message with optional action. The `source_user_id` and `target_user_id` should operate as foreign keys to users and/or user groups.
 
-- [Activity Popover](src/activity_events/ActivityPopover.tsx) - shows recent notifications along with read acknowledgement badges.
+- [useActivityEvents](src/activity_events/use_activity_events.ts) hook - get recent activities, total number of unread activities, and manage their read acknowledgement status
 
-- [Activity Toast](src/activity_events/ActivityToast.tsx) - pops up a toast everytime a new activity is received, with a read acknowledgement action and an another optional action specified in the schema
+- [Activity Popover](src/activity_events/ActivityPopover.tsx) - popover UI that shows recent notifications along with read acknowledgement badges.
+
+- [Activity Toast](src/activity_events/ActivityToast.tsx) - toast UI taht pops up everytime a new activity is received, with a read acknowledgement action and an another optional action specified
 
 ### Chatroom
 
