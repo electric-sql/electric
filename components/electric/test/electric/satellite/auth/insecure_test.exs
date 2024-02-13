@@ -181,6 +181,7 @@ defmodule Electric.Satellite.Auth.InsecureTest do
   end
 
   defp config(opts) do
-    Auth.Insecure.build_config(opts)
+    {:ok, config} = Auth.Insecure.build_config(opts)
+    config
   end
 end

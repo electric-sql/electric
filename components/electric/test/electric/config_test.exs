@@ -102,6 +102,19 @@ defmodule Electric.ConfigTest do
                  key: {"AUTH_JWT_KEY", "..."}
                )
     end
+
+    test "complains about secure auth opts in insecure mode" do
+      error_msg = "is not valid in Insecure auth mode. Did you forget to set AUTH_MODE=secure?"
+
+      assert {nil, [{"AUTH_JWT_ALG", {:error, error_msg}}]} ==
+               validate_auth_config("insecure", alg: {"AUTH_JWT_ALG", "HS256"})
+
+      assert {nil, [{"AUTH_JWT_KEY", {:error, error_msg}}]} ==
+               validate_auth_config("insecure",
+                 key: {"AUTH_JWT_KEY", "..."},
+                 alg: {"AUTH_JWT_ALG", "HS256"}
+               )
+    end
   end
 
   describe "parse_pg_proxy_port" do

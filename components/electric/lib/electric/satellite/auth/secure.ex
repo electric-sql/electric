@@ -50,7 +50,7 @@ defmodule Electric.Satellite.Auth.Secure do
     * `aud: <string>` - optional audience string to check all auth tokens with. If this is configured, JWTs without an
       "aud" claim will be considered invalid.
   """
-  @spec build_config(Access.t()) :: {:ok, map} | {:error, atom, binary}
+  @spec build_config(keyword) :: {:ok, map} | {:error, atom, binary}
   def build_config(opts) do
     with {:ok, alg} <- validate_alg(opts),
          {:ok, key} <- validate_key(alg, opts) do
