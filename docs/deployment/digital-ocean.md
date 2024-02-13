@@ -26,9 +26,9 @@ App Platform is a Platform-as-a-Service (PaaS) offering that allows developers t
 
 ### Postgres with logical replication
 
-Before deploying Electric, you'll need a Postgres database (with logical replication enabled) hosted somewhere Electric can connect to. DigitalOcean offers [Managed PostgreSQL](https://docs.digitalocean.com/products/databases/postgresql/) which would be the easiest way to get started with Electric and a hosted Postgres at the same time, if you don't have one yet. Create a new database cluster and wait for it to become ready before proceeding to the next section.
+Before deploying Electric, you'll need a Postgres database (with logical replication enabled) hosted somewhere Electric can connect to. DigitalOcean offers [Managed Postgres](https://docs.digitalocean.com/products/databases/postgresql/) which would be the easiest way to get started with Electric and a hosted Postgres at the same time, if you don't have one yet. Create a new database cluster and wait for it to become ready before proceeding to the next section.
 
-Alternatively, many other managed database providers support logical replication, see <DocPageLink path="usage/installation/postgres#hosting" /> for some options. If you choose not to use DigitalOcean's Managed PostgreSQL, retrieve your database's connection URI with password included from your provider and use it as the value of the `DATABASE_URL` variable when setting up the app.
+Alternatively, many other managed database providers support logical replication, see <DocPageLink path="usage/installation/postgres#hosting" /> for some options. If you choose not to use DigitalOcean's Managed Postgres, retrieve your database's connection URI with password included from your provider and use it as the value of the `DATABASE_URL` variable when setting up the app.
 
 ### Deploying Electric
 
@@ -48,8 +48,8 @@ Click on the "Edit Plan" button, pick the Basic plan and the Basic instance size
 
 ![Create App: Edit Plan](./digital-ocean/create-app/edit-plan.png)
 
-:::info Configuring Managed PostgreSQL
-If you have set up a [Managed PostgreSQL cluster on DigitalOcean](https://docs.digitalocean.com/products/databases/postgresql/) for use with Electric, click on the "Add Resource (Optional)" label, pick the "Database" option and click on the "Add" button.
+:::info Configuring Managed Postgres
+If you have set up a [Managed Postgres cluster on DigitalOcean](https://docs.digitalocean.com/products/databases/postgresql/) for use with Electric, click on the "Add Resource (Optional)" label, pick the "Database" option and click on the "Add" button.
 
 ![Create App: Database Resource](./digital-ocean/create-app/resources-db.png)
 
@@ -67,7 +67,7 @@ Fill in the value for `PG_PROXY_PASSWORD`. Make sure you pick a strong proxy pas
 ![Create App: Edit Environment](./digital-ocean/create-app/env-vars.png)
 
 :::info DATABASE_URL
-If you have set up a [Managed PostgreSQL cluster on DigitalOcean](https://docs.digitalocean.com/products/databases/postgresql/) for use with Electric, it will automatically create a `DATABASE_URL` variable for you as shown in the above screenshot.
+If you have set up a [Managed Postgres cluster on DigitalOcean](https://docs.digitalocean.com/products/databases/postgresql/) for use with Electric, it will automatically create a `DATABASE_URL` variable for you as shown in the above screenshot.
 
 However, if you want to use a 3rd-party database provider, add the `DATABASE_URL` variable yourself before proceeding to the next step.
 :::
