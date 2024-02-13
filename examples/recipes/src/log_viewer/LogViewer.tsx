@@ -27,7 +27,6 @@ export const LogViewer = ({
     [additionalLogsToShow],
   )
 
-  // Any custom view for showing and filtering logs
   return (
     <LogViewerView
       logs={logs}
