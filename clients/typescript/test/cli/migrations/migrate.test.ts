@@ -119,7 +119,10 @@ model Model {
  *
  * Returns `true` if failed so the failure can be asserted
  */
-const failedGenerate = async (debug = false): Promise<boolean> => {
+const generateMigrations = async ({
+  failure = false,
+  debug = false,
+}): Promise<boolean> => {
   let migrationFailed = false
   const origConsoleError = console.error
   try {
@@ -131,7 +134,7 @@ const failedGenerate = async (debug = false): Promise<boolean> => {
       // point to invalid ports so that it does not find an electric service
       // or migrations proxy and fails
       config: getConfig({
-        SERVICE_HOST: 'does-not-exist', // Use a non-existent host to force failure
+        SERVICE_HOST: failure ? 'does-not-exist' : undefined, // Use a non-existent host to force failure
       }),
       // prevent process.exit call to perform test
       exitOnError: false,
@@ -149,8 +152,8 @@ const failedGenerate = async (debug = false): Promise<boolean> => {
 }
 
 // finds temporary migraitons folder, if it exists
-const findMigrationFolder = async (): Promise<string | null> => {
-  const files = await fs.readdirSync('./')
+const findMigrationFolder = (): string | null => {
+  const files = fs.readdirSync('./')
   for (const file of files) {
     if (file.startsWith('.electric_migrations_tmp')) {
       return file
@@ -166,15 +169,34 @@ test('migrator correctly capitalises model names', (t) => {
   t.assert(newSchema === expectedPrismaSchema)
 })
 
+test.serial.afterEach(async () => {
+  // clean-up migrations folder after test
+  let migrationFolder = findMigrationFolder()
+  while (migrationFolder !== null) {
+    fs.rmdirSync(migrationFolder, { recursive: true })
+    migrationFolder = findMigrationFolder()
+  }
+})
+
 test.serial(
   'migrator should clean up temporary folders on failure',
   async (t) => {
     // should fail generaton - if not, ensure the generation
     // command is not pointing to a running electric service
-    t.assert(await failedGenerate(false))
+    t.assert(await generateMigrations({ failure: true, debug: false }))
 
     // should clean up temporary folders
-    t.assert((await findMigrationFolder()) === null)
+    t.assert(findMigrationFolder() === null)
+  }
+)
+
+test.serial(
+  'migrator should clean up temporary folders on success',
+  async (t) => {
+    t.assert(await generateMigrations({ failure: false, debug: false }))
+
+    // should clean up temporary folders
+    t.assert(findMigrationFolder() === null)
   }
 )
 
@@ -183,13 +205,21 @@ test.serial(
   async (t) => {
     // should fail generaton in debug mode - if not, ensure the generation
     // command is not pointing to a running electric service
-    t.assert(await failedGenerate(true))
+    t.assert(await generateMigrations({ failure: true, debug: true }))
 
     // should retain temporary migrations folder
-    const debugMigrationFolder = await findMigrationFolder()
+    const debugMigrationFolder = findMigrationFolder()
     t.assert(debugMigrationFolder !== null)
+  }
+)
 
-    // clean-up folder after test
-    await fs.rmdirSync(debugMigrationFolder as string, { recursive: true })
+test.serial(
+  'migrator should retain temporary folder on success in debug mode',
+  async (t) => {
+    t.assert(await generateMigrations({ failure: false, debug: true }))
+
+    // should retain temporary migrations folder
+    const debugMigrationFolder = findMigrationFolder()
+    t.assert(debugMigrationFolder !== null)
   }
 )
