@@ -74,21 +74,29 @@ defmodule ElectricTest.PermissionsHelpers do
         ddl -> "ELECTRIC " <> ddl
       end)
       |> Enum.map(&Electric.DDLX.parse!/1)
-      |> Enum.flat_map(&Electric.DDLX.Command.to_protobuf/1)
-      |> Enum.map_reduce(%{assign: 1, grant: 1}, fn
-        # give each ddlx statement an id
-        %P.Assign{} = assign, %{assign: id} = s ->
-          {%{assign | id: "assign-#{id}"}, %{s | assign: id + 1}}
+      |> Enum.reduce(
+        {%P.Rules{}, {1, 1}},
+        fn %{action: %{assigns: assigns, grants: grants}}, {rules, {assign_id, grant_id}} ->
+          # give all the rules deterministic ids based on order
+          # which makes it easier to assign roles to rules in tests
+          {assigns, assign_id} =
+            Enum.map_reduce(assigns, assign_id, fn assign, id ->
+              {%{assign | id: "assign-#{id}"}, id + 1}
+            end)
 
-        %P.Grant{} = grant, %{grant: id} = s ->
-          {%{grant | id: "grant-#{id}"}, %{s | grant: id + 1}}
-      end)
+          {grants, grant_id} =
+            Enum.map_reduce(grants, grant_id, fn grant, id ->
+              {%{grant | id: "grant-#{id}"}, id + 1}
+            end)
+
+          {%{
+             rules
+             | assigns: rules.assigns ++ assigns,
+               grants: rules.grants ++ grants
+           }, {assign_id, grant_id}}
+        end
+      )
       |> then(&elem(&1, 0))
-      |> Enum.group_by(fn
-        %P.Assign{} -> :assigns
-        %P.Grant{} -> :grants
-      end)
-      |> then(&struct(%P.Rules{}, &1))
     end
   end
 
@@ -387,5 +395,25 @@ defmodule ElectricTest.PermissionsHelpers do
     attrs
     |> Perms.new()
     |> Perms.update(grants, roles)
+  end
+
+  defmodule Proto do
+    alias Electric.Satellite.SatPerms
+
+    def table(schema \\ "public", name) do
+      %SatPerms.Table{schema: schema, name: name}
+    end
+
+    def role(name) do
+      %SatPerms.RoleName{role: {:application, name}}
+    end
+
+    def authenticated() do
+      %SatPerms.RoleName{role: {:predefined, :AUTHENTICATED}}
+    end
+
+    def anyone() do
+      %SatPerms.RoleName{role: {:predefined, :ANYONE}}
+    end
   end
 end

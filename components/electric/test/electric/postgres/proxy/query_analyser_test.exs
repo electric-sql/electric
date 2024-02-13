@@ -6,6 +6,7 @@ defmodule Electric.Postgres.Proxy.QueryAnalyserTest do
   alias Electric.Postgres.MockSchemaLoader
   alias Electric.Postgres.Extension.SchemaLoader
   alias Electric.Postgres.SQLGenerator
+  alias Electric.DDLX.Command
   alias PgProtocol.Message, as: M
 
   def simple(sql), do: %M.Query{query: sql}
@@ -30,7 +31,8 @@ defmodule Electric.Postgres.Proxy.QueryAnalyserTest do
         proxy_ddlx_grant: true,
         proxy_ddlx_revoke: true,
         proxy_ddlx_assign: true,
-        proxy_ddlx_unassign: true
+        proxy_ddlx_unassign: true,
+        proxy_ddlx_sqlite: true
       )
 
       migrations = [
@@ -660,13 +662,13 @@ defmodule Electric.Postgres.Proxy.QueryAnalyserTest do
     test "ELECTRIC...", cxt do
       assert [
                %QueryAnalysis{
-                 action: {:electric, %Electric.DDLX.Command.Enable{}},
+                 action: {:electric, %Command{action: %Command.Enable{}}},
                  table: {"public", "truths"},
                  electrified?: true,
                  tx?: true,
                  allowed?: true,
                  capture?: true,
-                 ast: %Electric.DDLX.Command.Enable{},
+                 ast: %Command{action: %Command.Enable{}},
                  sql: "ALTER TABLE truths ENABLE ELECTRIC"
                }
              ] =
@@ -674,13 +676,13 @@ defmodule Electric.Postgres.Proxy.QueryAnalyserTest do
 
       assert [
                %QueryAnalysis{
-                 action: {:electric, %Electric.DDLX.Command.Revoke{}},
+                 action: {:electric, %Command{action: %{revokes: [_]}}},
                  table: {"public", "truths"},
                  electrified?: true,
                  tx?: true,
                  allowed?: true,
                  capture?: true,
-                 ast: %Electric.DDLX.Command.Revoke{},
+                 ast: %Command{},
                  sql:
                    ~s[ELECTRIC REVOKE UPDATE (status, name) ON truths FROM 'projects:house.admin']
                }
@@ -717,13 +719,13 @@ defmodule Electric.Postgres.Proxy.QueryAnalyserTest do
                  sql: ^query1
                },
                %QueryAnalysis{
-                 action: {:electric, %Electric.DDLX.Command.Enable{}},
+                 action: {:electric, %Command{action: %Command.Enable{}}},
                  table: {"public", "pants"},
                  electrified?: true,
                  tx?: true,
                  allowed?: true,
                  capture?: true,
-                 ast: %Electric.DDLX.Command.Enable{},
+                 ast: %Command{action: %Command.Enable{}},
                  sql: ^query2
                },
                %QueryAnalysis{
@@ -748,25 +750,25 @@ defmodule Electric.Postgres.Proxy.QueryAnalyserTest do
 
       assert [
                %QueryAnalysis{
-                 action: {:electric, %Electric.DDLX.Command.Enable{}},
+                 action: {:electric, %Command{action: %Command.Enable{}}},
                  table: {"public", "pants"},
                  type: nil,
                  electrified?: true,
                  tx?: true,
                  allowed?: true,
                  capture?: true,
-                 ast: %Electric.DDLX.Command.Enable{},
+                 ast: %Command{action: %Command.Enable{}},
                  sql: ^query1
                },
                %QueryAnalysis{
-                 action: {:electric, %Electric.DDLX.Command.Enable{}},
+                 action: {:electric, %Command{action: %Command.Enable{}}},
                  table: {"public", "hats"},
                  type: nil,
                  electrified?: true,
                  tx?: true,
                  allowed?: true,
                  capture?: true,
-                 ast: %Electric.DDLX.Command.Enable{},
+                 ast: %Command{action: %Command.Enable{}},
                  sql: ^query2
                },
                %QueryAnalysis{
@@ -781,13 +783,13 @@ defmodule Electric.Postgres.Proxy.QueryAnalyserTest do
                  sql: ^query3
                },
                %QueryAnalysis{
-                 action: {:electric, %Electric.DDLX.Command.Grant{}},
+                 action: {:electric, %Command{}},
                  table: {"public", "truths"},
                  electrified?: true,
                  tx?: true,
                  allowed?: true,
                  capture?: true,
-                 ast: %Electric.DDLX.Command.Grant{},
+                 ast: %Command{},
                  sql: ^query4
                }
              ] = analyse(query, cxt)
@@ -796,7 +798,7 @@ defmodule Electric.Postgres.Proxy.QueryAnalyserTest do
     test "electric.electrify(...)", cxt do
       assert [
                %QueryAnalysis{
-                 action: {:electric, %Electric.DDLX.Command.Enable{}},
+                 action: {:electric, %Command{action: %Command.Enable{}}},
                  table: {"public", "pants"},
                  type: :table,
                  electrified?: true,

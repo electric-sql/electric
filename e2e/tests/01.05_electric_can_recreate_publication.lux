@@ -24,6 +24,7 @@
     ??electric   | assignments
     ??public     | baz
     ??electric   | ddl_commands
+    ??electric   | ddlx_commands
     ??electric   | electrified
     ??public     | foo
     ??electric   | grants
@@ -33,7 +34,7 @@
     ??electric   | shadow__public__foo
     ??electric   | shadow__public__items
     ??electric   | transaction_marker
-    ??(13 rows)
+    ??(14 rows)
 
 # Make sure Electric consumes all migrations from the replication stream before stopping it.
 [shell electric]
@@ -67,6 +68,7 @@
     ??electric   | assignments
     ??public     | baz
     ??electric   | ddl_commands
+    ??electric   | ddlx_commands
     ??electric   | electrified
     ??public     | foo
     ??electric   | grants
@@ -76,7 +78,7 @@
     ??electric   | shadow__public__foo
     ??electric   | shadow__public__items
     ??electric   | transaction_marker
-    ??(13 rows)
+    ??(14 rows)
 
 [cleanup]
     [invoke teardown]

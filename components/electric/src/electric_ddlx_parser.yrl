@@ -21,12 +21,11 @@ Nonterminals
    func_args
    permissions
    privilege
-   privileges
    using_clause
    scope_path
    column_list
    columns
-   check_clause
+   where_clause
    .
 
 % terminals are the outputs of the tokeniser, so e.g. the terminal
@@ -36,7 +35,7 @@ Nonterminals
 Terminals 
    '.' '(' ')' ',' ':'
    'ALTER' 'TABLE' 'DISABLE' 'ENABLE' 'ELECTRIC' 'NULL' 'UNASSIGN' 'ASSIGN' 'TO' 'IF'
-   'GRANT' 'ON' 'USING' 'SELECT' 'INSERT' 'UPDATE' 'DELETE' 'ALL' 'READ' 'WRITE' 'CHECK'
+   'GRANT' 'ON' 'USING' 'SELECT' 'INSERT' 'UPDATE' 'DELETE' 'ALL' 'READ' 'WRITE' 'WHERE'
    'REVOKE' 'FROM' 'SQLITE'
    'AUTHENTICATED' 'ANYONE' 'PRIVILEGES'
    string  int float
@@ -84,7 +83,7 @@ assign_stmt -> 'ELECTRIC' 'ASSIGN' scoped_role 'TO' column_ident 'IF' if_expr : 
 unassign_stmt -> 'ELECTRIC' 'UNASSIGN' scoped_role 'FROM' column_ident : unassign_cmd('$3' ++ '$5').
 
 % ELECTRIC GRANT
-grant_stmt -> 'ELECTRIC' 'GRANT' permissions 'ON' table_ident 'TO' grant_scoped_role using_clause check_clause : grant_cmd('$3' ++ '$5' ++ '$7' ++ '$8' ++ '$9').
+grant_stmt -> 'ELECTRIC' 'GRANT' permissions 'ON' table_ident 'TO' grant_scoped_role using_clause where_clause : grant_cmd('$3' ++ '$5' ++ '$7' ++ '$8' ++ '$9').
 
 % ELECTRIC REVOKE
 revoke_stmt -> 'ELECTRIC' 'REVOKE' permissions 'ON' table_ident 'FROM' grant_scoped_role : revoke_cmd('$3' ++ '$5' ++ '$7').
@@ -157,20 +156,16 @@ func_args -> '$empty' : [].
 func_args -> expr : ['$1'].
 func_args -> expr ',' func_args : ['$1', "," , '$3'].
 
-permissions -> privileges column_list : [{privilege, '$1'}] ++ '$2'.
+permissions -> privilege column_list : [{privilege, '$1'}] ++ '$2'.
 
-privileges -> '$empty' : [].
-privileges -> 'ALL' :  [<<"select">>, <<"insert">>, <<"update">>, <<"delete">>].
-privileges -> 'ALL' 'PRIVILEGES' :  [<<"select">>, <<"insert">>, <<"update">>, <<"delete">>].
-privileges -> privilege : '$1'.
-privileges -> privilege ',' privileges : lists:uniq('$1' ++ '$3').
-
-privilege -> 'SELECT' : [<<"select">>].
-privilege -> 'INSERT' : [<<"insert">>].
-privilege -> 'UPDATE' : [<<"update">>].
-privilege -> 'DELETE' : [<<"delete">>].
-privilege -> 'READ' :  [<<"select">>].
-privilege -> 'WRITE' :  [<<"insert">>, <<"update">>, <<"delete">>].
+privilege -> 'ALL' :  ['SELECT', 'INSERT', 'UPDATE', 'DELETE'].
+privilege -> 'ALL' 'PRIVILEGES' :  ['SELECT', 'INSERT', 'UPDATE', 'DELETE'].
+privilege -> 'SELECT' : ['SELECT'].
+privilege -> 'INSERT' : ['INSERT'].
+privilege -> 'UPDATE' : ['UPDATE'].
+privilege -> 'DELETE' : ['DELETE'].
+privilege -> 'READ' :  ['SELECT'].
+privilege -> 'WRITE' :  ['INSERT', 'UPDATE', 'DELETE'].
 
 column_list -> '$empty' : [].
 column_list -> '(' columns ')' : [{column_names, '$2'}] .
@@ -186,8 +181,8 @@ scope_path -> '$empty' : [].
 scope_path -> identifier : ['$1'].
 scope_path -> identifier '/' scope_path : ['$1' | '$3'].
 
-check_clause -> '$empty' : [].
-check_clause -> 'CHECK' '(' expr ')' : [{check, erlang:iolist_to_binary('$3')}].
+where_clause -> '$empty' : [].
+where_clause -> 'WHERE' '(' expr ')' : [{check, erlang:iolist_to_binary('$3')}].
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 Erlang code.

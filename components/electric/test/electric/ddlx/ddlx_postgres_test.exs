@@ -4,6 +4,10 @@ defmodule Electric.DDLX.DDLXPostgresTest do
 
   @moduletag ddlx: true
 
+  def assign_id do
+    :crypto.strong_rand_bytes(16) |> Base.encode32(case: :lower, padding: false)
+  end
+
   def list_tables(conn, schema \\ "public") do
     {:ok, _cols, rows} =
       query(
@@ -121,7 +125,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
     test_tx "creates assignments table", fn conn ->
       assignments_column_asserts = %{
         "id" => %{
-          "udt_name" => "uuid",
+          "udt_name" => "text",
           "is_nullable" => "NO"
         },
         "table_name" => %{
@@ -402,8 +406,11 @@ defmodule Electric.DDLX.DDLXPostgresTest do
     test_tx "assign creates an assignment", fn conn ->
       set_up_assignment(conn)
 
+      assign_id = assign_id()
+
       pg_sql = """
       CALL electric.assign(
+        assignment_id => '#{assign_id}',
         assign_table_full_name => '"public"."memberships"',
         scope => '"public"."projects"',
         user_column_name => 'user_id',
@@ -419,6 +426,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
         "electric.assignments",
         [
           [
+            assign_id,
             ~s["public"."memberships"],
             ~s["public"."projects"],
             "user_id",
@@ -427,15 +435,18 @@ defmodule Electric.DDLX.DDLXPostgresTest do
             "hello"
           ]
         ],
-        1..6
+        0..6
       )
     end
 
     test_tx "assign with scope compound key makes join table", fn conn ->
       set_up_assignment_compound(conn)
 
+      assign_id = assign_id()
+
       pg_sql = """
       CALL electric.assign(
+        assignment_id => '#{assign_id}',
         assign_table_full_name => '"public"."memberships"',
         scope => '"public"."projects"',
         user_column_name => 'user_id',
@@ -462,7 +473,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
       ## checking the join table that is created
       assignment_id = List.first(row)
       uuid_string = assignment_id |> String.replace("-", "_")
-      join_table_name = "assignment_#{uuid_string}_join"
+      join_table_name = "assign_#{uuid_string}_join"
 
       tables = list_tables(conn, "electric")
 
@@ -488,7 +499,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
                  "electric",
                  "assignments",
                  ["id"],
-                 ["uuid"]
+                 ["text"]
                ],
                [
                  "electric",
@@ -532,8 +543,11 @@ defmodule Electric.DDLX.DDLXPostgresTest do
     test_tx "assign makes functions and triggers", fn conn ->
       set_up_assignment_compound(conn)
 
+      assign_id = assign_id()
+
       pg_sql = """
       CALL electric.assign(
+        assignment_id => '#{assign_id}',
         assign_table_full_name => '"public"."memberships"',
         scope => '"public"."projects"',
         user_column_name => 'user_id',
@@ -586,7 +600,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
       FROM
           information_schema.triggers
       WHERE
-          event_object_table = 'assignment_#{uuid_string}_join';
+          event_object_table = 'assign_#{uuid_string}_join';
       """
 
       {:ok, _, rows} = query(conn, triggers_sql)
@@ -596,8 +610,11 @@ defmodule Electric.DDLX.DDLXPostgresTest do
     test_tx "role assignment", fn conn ->
       set_up_assignment_compound(conn)
 
+      assign_id = assign_id()
+
       pg_sql = """
       CALL electric.assign(
+        assignment_id => '#{assign_id}',
         assign_table_full_name => '"public"."memberships"',
         scope => '"public"."projects"',
         user_column_name => 'user_id',
@@ -651,8 +668,11 @@ defmodule Electric.DDLX.DDLXPostgresTest do
     test_tx "role assignment with compound membership pk", fn conn ->
       set_up_assignment_compound_membership(conn)
 
+      assign_id = assign_id()
+
       pg_sql = """
       CALL electric.assign(
+        assignment_id => '#{assign_id}',
         assign_table_full_name => '"public"."memberships"',
         scope => '"public"."projects"',
         user_column_name => 'user_id',
@@ -706,26 +726,33 @@ defmodule Electric.DDLX.DDLXPostgresTest do
     test_tx "dupelicate assignment fails", fn conn ->
       set_up_assignment_compound(conn)
 
+      assign_id = assign_id()
+
       pg_sql = """
+
       CALL electric.assign(
+        assignment_id => '#{assign_id}',
         assign_table_full_name => '"public"."memberships"',
         scope => '"public"."projects"',
         user_column_name => 'user_id',
         role_name_string => null,
         role_column_name => 'role',
-        if_fn => 'TRUE');
+        if_fn => 'TRUE'
+      );
       """
 
       {:ok, _, _rows} = query(conn, pg_sql)
 
       pg_sql = """
       CALL electric.assign(
+        assignment_id => '#{assign_id}',
         assign_table_full_name => '"public"."memberships"',
         scope => '"public"."projects"',
         user_column_name => 'user_id',
         role_name_string => null,
         role_column_name => 'role',
-        if_fn => 'TRUE');
+        if_fn => 'TRUE'
+      );
       """
 
       {:error, {:error, :error, _code, :unique_violation, _message, params}} = query(conn, pg_sql)
@@ -735,8 +762,11 @@ defmodule Electric.DDLX.DDLXPostgresTest do
     test_tx "role update", fn conn ->
       set_up_assignment_compound(conn)
 
+      assign_id = assign_id()
+
       pg_sql = """
       CALL electric.assign(
+        assignment_id => '#{assign_id}',
         assign_table_full_name => '"public"."memberships"',
         scope => '"public"."projects"',
         user_column_name => 'user_id',
@@ -812,8 +842,11 @@ defmodule Electric.DDLX.DDLXPostgresTest do
     test_tx "role removed by func", fn conn ->
       set_up_assignment_compound(conn)
 
+      assign_id = assign_id()
+
       pg_sql = """
       CALL electric.assign(
+        assignment_id => '#{assign_id}',
         assign_table_full_name => '"public"."memberships"',
         scope => '"public"."projects"',
         user_column_name => 'user_id',
@@ -901,8 +934,11 @@ defmodule Electric.DDLX.DDLXPostgresTest do
 
       query(conn, memberships_sql)
 
+      assign_id = assign_id()
+
       pg_sql = """
       CALL electric.assign(
+        assignment_id => '#{assign_id}',
         assign_table_full_name => '"public"."memberships"',
         scope => null,
         user_column_name => 'user_id',
@@ -987,8 +1023,11 @@ defmodule Electric.DDLX.DDLXPostgresTest do
 
       query(conn, memberships_sql)
 
+      assign_id = assign_id()
+
       pg_sql = """
       CALL electric.assign(
+        assignment_id => '#{assign_id}',
         assign_table_full_name => '"public"."memberships"',
         scope => '"public"."projects"',
         user_column_name => 'user_id',
@@ -1003,8 +1042,11 @@ defmodule Electric.DDLX.DDLXPostgresTest do
     test_tx "unassign cleans up", fn conn ->
       set_up_assignment_compound(conn)
 
+      assign_id = assign_id()
+
       pg_sql = """
       CALL electric.assign(
+        assignment_id => '#{assign_id}',
         assign_table_full_name => '"public"."memberships"',
         scope => '"public"."projects"',
         user_column_name => 'user_id',
@@ -1031,7 +1073,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
       assignment_id = List.first(row)
       uuid_string = assignment_id |> String.replace("-", "_")
 
-      join_table_name = "assignment_#{uuid_string}_join"
+      join_table_name = "assign_#{uuid_string}_join"
 
       tables = list_tables(conn, "electric")
 
@@ -1069,6 +1111,7 @@ defmodule Electric.DDLX.DDLXPostgresTest do
 
       pg_sql = """
       CALL electric.unassign(
+        assignment_id => '#{assign_id}',
         assign_table_full_name => '"public"."memberships"',
         scope => '"public"."projects"',
         user_column_name => 'user_id',
