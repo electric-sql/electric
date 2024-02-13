@@ -45,6 +45,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
   end
 
   @status_key :status
+  @connector_config_key :connector_config
 
   @spec start_link(Connectors.config()) :: {:ok, pid} | :ignore | {:error, term}
   def start_link(connector_config) do
@@ -73,7 +74,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
 
   @spec connector_config(Connectors.origin()) :: Connectors.config()
   def connector_config(origin) do
-    GenServer.call(name(origin), :connector_config)
+    :ets.lookup_element(ets_table_name(origin), @connector_config_key, 2)
   end
 
   @impl GenServer
@@ -88,16 +89,10 @@ defmodule Electric.Replication.PostgresConnectorMng do
     # Use an ETS table to store data that are regularly looked up by other processes.
     :ets.new(ets_table_name(origin), [:protected, :named_table, :read_concurrency])
 
-    connector_config = preflight_connector_config(connector_config)
-
     state =
-      reset_state(%State{
-        origin: origin,
-        connector_config: connector_config,
-        conn_opts: Connectors.get_connection_opts(connector_config),
-        repl_opts: Connectors.get_replication_opts(connector_config),
-        write_to_pg_mode: Connectors.write_to_pg_mode(connector_config)
-      })
+      %State{origin: origin, connector_config: connector_config}
+      |> update_connector_config(&preflight_connector_config/1)
+      |> reset_state()
 
     {:ok, state, {:continue, :init}}
   end
@@ -118,6 +113,20 @@ defmodule Electric.Replication.PostgresConnectorMng do
   defp set_status(state, status) do
     :ets.insert(ets_table_name(state.origin), {@status_key, status})
     %{state | status: status}
+  end
+
+  defp update_connector_config(state, fun) do
+    connector_config = fun.(state.connector_config)
+
+    :ets.insert(ets_table_name(state.origin), {@connector_config_key, connector_config})
+
+    %{
+      state
+      | connector_config: connector_config,
+        conn_opts: Connectors.get_connection_opts(connector_config),
+        repl_opts: Connectors.get_replication_opts(connector_config),
+        write_to_pg_mode: Connectors.write_to_pg_mode(connector_config)
+    }
   end
 
   @impl GenServer
@@ -172,11 +181,6 @@ defmodule Electric.Replication.PostgresConnectorMng do
   def handle_continue(:subscribe, %State{write_to_pg_mode: :direct_writes} = state) do
     :ok = stop_subscription(state)
     {:noreply, set_status(state, :ready)}
-  end
-
-  @impl GenServer
-  def handle_call(:connector_config, _from, state) do
-    {:reply, state.connector_config, state}
   end
 
   @impl GenServer
@@ -365,13 +369,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
       "Falling back to trying an unencrypted connection to Postgres, since DATABASE_REQUIRE_SSL=false."
     )
 
-    connector_config = put_in(state.connector_config, [:connection, :ssl], false)
-
-    %State{
-      state
-      | connector_config: connector_config,
-        conn_opts: Connectors.get_connection_opts(connector_config)
-    }
+    update_connector_config(state, &put_in(&1, [:connection, :ssl], false))
   end
 
   defp extra_error_description(:invalid_authorization_specification) do
