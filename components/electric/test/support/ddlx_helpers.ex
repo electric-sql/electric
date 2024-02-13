@@ -46,4 +46,8 @@ defmodule ElectricTest.DDLXHelpers do
   def quote_table({schema, table}) do
     ~s["#{schema}"."#{table}"]
   end
+
+  def quote_table(%{schema: schema, name: table}) do
+    ~s["#{schema}"."#{table}"]
+  end
 end

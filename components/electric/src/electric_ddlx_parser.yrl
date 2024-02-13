@@ -21,7 +21,6 @@ Nonterminals
    func_args
    permissions
    privilege
-   privileges
    using_clause
    scope_path
    column_list
@@ -157,14 +156,10 @@ func_args -> '$empty' : [].
 func_args -> expr : ['$1'].
 func_args -> expr ',' func_args : ['$1', "," , '$3'].
 
-permissions -> privileges column_list : [{privilege, '$1'}] ++ '$2'.
+permissions -> privilege column_list : [{privilege, '$1'}] ++ '$2'.
 
-privileges -> '$empty' : [].
-privileges -> 'ALL' :  [<<"select">>, <<"insert">>, <<"update">>, <<"delete">>].
-privileges -> 'ALL' 'PRIVILEGES' :  [<<"select">>, <<"insert">>, <<"update">>, <<"delete">>].
-privileges -> privilege : '$1'.
-privileges -> privilege ',' privileges : lists:uniq('$1' ++ '$3').
-
+privilege -> 'ALL' :  [<<"select">>, <<"insert">>, <<"update">>, <<"delete">>].
+privilege -> 'ALL' 'PRIVILEGES' :  [<<"select">>, <<"insert">>, <<"update">>, <<"delete">>].
 privilege -> 'SELECT' : [<<"select">>].
 privilege -> 'INSERT' : [<<"insert">>].
 privilege -> 'UPDATE' : [<<"update">>].

@@ -79,15 +79,20 @@ See <DocPageLink path="usage/data-modelling/permissions" /> for more information
 Grants permissions to roles.
 
 ```sql
-ELECTRIC GRANT { { SELECT | INSERT | UPDATE | DELETE }
-  ( column_name [, ...] )
-  [, ...] | ALL [ PRIVILEGES ] ( column_name [, ...] )
-  | READ ( column_name [, ...] )
-  | WRITE ( column_name [, ...] )}
-  ON [ TABLE ] table_name [, ...]
-  TO role_name [, ...]
+ELECTRIC GRANT
+  { SELECT | INSERT | UPDATE | DELETE | READ | WRITE | ALL [ PRIVILEGES ] } [ ( column_name [, ...] ) ]
+  ON [ TABLE ] table_name
+  TO role
   [ USING scope_path ]
   [ CHECK ( check_expression )];
+```
+
+Where `role` is:
+
+```sql
+{ ( scope_table_name, 'role_name' )
+  | { 'role_name' | AUTHENTICATED | ANYONE  }
+}
 ```
 
 Grants ones of these four permissions on the table `table_name` to the role `role_name`:
@@ -125,7 +130,7 @@ Users have a set of roles. Every user will have the `ANYONE` role and authentica
 
 If you add a `CHECK` clause, then when the permission is used the `check_expression` will be evaluated against any existing row and any data being written. If it evaluates as false then the operation will fail.
 
-The `check_expression` also has the value `auth.user_id` in scope which will hold the user id of the current authenticated user. This can be used to validate that a column contains the current user id, which is very useful for having a reliable reference to the user who inserted a row.
+The `check_expression` also has the value `AUTH.user_id` in scope which will hold the user id of the current authenticated user. This can be used to validate that a column contains the current user id, which is very useful for having a reliable reference to the user who inserted a row.
 
 :::note
 If you have added additional claims to the authentication JWT then they can also be referenced in the `check_expression`. By convention, they should be added as a `data` claim, which is available at `auth.data`.
@@ -136,9 +141,9 @@ This can be used to extend authorisation and provide additional discrimination b
 #### Parameters
 
 - **`column_name`** - you can provide one or more column names that this permission will apply to.
-If you don't give any column names then the grant applies to the whole table
+If you don't give any column names then the grant applies to the whole table.
 - **`table_name`** - the name of an existing electrified table table on which to grant the permission.
-- **`role_name`** - the name of a role that has been assigned to users with an `ELECTRIC ASSIGN` statement. Role names are strings enclosed in single quotes. For scoped roles this must be in the form `'scope_table:role'`
+- **`role_name`** - the name of a role that has been assigned to users with an `ELECTRIC ASSIGN` statement. Role names are strings enclosed in single quotes.
 - **`scope_path`** - if there is any ambiguity about from where to read the id for the scope that a row belongs to then this can be used to specify it. If there is a single foreign key constraint in `table_name` pointing to the `scope_table_name` table then this can be inferred and is not necessary. If there is more than one foreign key pointing to the `scope_table_name` table then `scope_path` should be the name of the column in `table_name` to use. If there is no foreign key in the table `table_name` pointing directly to the `scope_table_name` table you can specify a path
 indicating where to find the foreign key by walking through intermediate foreign keys, there is an example below
 - **`check_expression`** - a sql expression that will be evaluated when the permission is used
@@ -173,7 +178,7 @@ This grant with a scope gives all permissions on the `projects` table to users w
 ```sql
 ELECTRIC GRANT ALL
   ON projects 
-  TO 'projects:admin';
+  TO (projects, 'admin');
 ```
 
 This grant lets users who have the role `member` in a project read the project's issues. Here `project_id` refers to a column on the `issues` table that is a foreign key pointing to a project.
@@ -181,7 +186,7 @@ This grant lets users who have the role `member` in a project read the project's
 ```sql
 ELECTRIC GRANT READ
   ON issues
-  TO 'projects:member'
+  TO (projects, 'member')
   USING project_id;
 ```
 
@@ -190,7 +195,7 @@ This is similar to the grant above. It lets a project member read comments on is
 ```sql
 ELECTRIC GRANT READ
   ON comments
-  TO 'projects:member'
+  TO (projects, member')
   USING issue_id/project_id;
 ```
 
@@ -199,29 +204,29 @@ Here an `admin` can add project members with any role to the `project_members` j
 ```sql
 ELECTRIC GRANT INSERT
   ON project_members
-  TO 'projects:admin';
+  TO (projects, 'admin');
 
 ELECTRIC GRANT READ
   ON project_members
-  TO 'projects:member';
+  TO (projects, 'member');
 
 ELECTRIC GRANT INSERT
   ON project_members
-  TO 'projects:member'
+  TO (projects, 'member')
   CHECK (
-    new.role_name = 'member'
-    OR new.role_name = 'guest'
+    NEW.role_name = 'member'
+    OR NEW.role_name = 'guest'
   );
 ```
 
-Here any authenticated user can create a new project if they correctly set the owner_id of the new project to their user_id:
+Here any authenticated user can create a new project if they correctly set the `owner_id` of the new project to their `user_id`:
 
 ```sql
 ELECTRIC GRANT INSERT
   ON projects 
-  TO 'AUTHENTICATED'
+  TO AUTHENTICATED
   CHECK (
-    new.owner_id = auth.user_id
+    NEW.owner_id = AUTH.user_id
   );
 ```
 
@@ -233,22 +238,46 @@ ELECTRIC GRANT READ (
     description
   ) 
   ON issues
-  TO 'projects:member'
+  TO (projects, 'member')
   USING project_id;
 ```
+
+#### Updating grants
+
+The current grant state for a given permission, table and role is determined by the last `GRANT` command issued. Grants are not merged together.
+
+For example, after this sequence of grant commands:
+
+```sql
+ELECTRIC GRANT READ ON issues TO (projects, 'member');
+ELECTRIC GRANT READ ON comments TO (projects, 'member');
+ELECTRIC GRANT READ (title, description, date) ON issues TO (projects, 'member');
+ELECTRIC GRANT READ (title, status) ON issues TO (projects, 'member');
+```
+
+The `(projects, 'member')` role will have `READ` permissions to the entire `comments` table but only the `title` and `status` columns of `issues` (within the `projects` scope).
+
+If you then ran `ELECTRIC GRANT READ ON issues TO (projects, 'member')` the access would again widen to all columns of `issues`.
+
+The `CHECK` expression uses the same logic as the column specification, the last write for a specific permission, table and role tuple wins.
 
 ### `REVOKE`
 
 Revokes previously granted permissions.
 
 ```sql
-ELECTRIC REVOKE { { SELECT | INSERT | UPDATE | DELETE }
-  ( column_name [, ...] )
-  [, ...] | ALL [ PRIVILEGES ] ( column_name [, ...] )
-  | READ ( column_name [, ...] )
-  | WRITE ( column_name [, ...] )}
-  ON [ TABLE ] table_name [, ...]
-  FROM role_name [, ...];
+ELECTRIC REVOKE
+  { SELECT | INSERT | UPDATE | DELETE | READ | WRITE | ALL [ PRIVILEGES ] }
+  ON [ TABLE ] table_name
+  FROM role;
+```
+
+Where `role` is:
+
+```sql
+{ ( scope_table_name, 'role_name' )
+  | { 'role_name' | AUTHENTICATED | ANYONE  }
+}
 ```
 
 You can specify one of these permissions:
@@ -259,14 +288,6 @@ You can specify one of these permissions:
 - `DELETE`
 
 Or you can use `ALL`, `READ` or `WRITE` as for [`GRANT`](#grant) above.
-
-:::note
-Like the native PostgreSQL version of `GRANT` there is a subtlety to revoking grants for columns that is worth noting. A whole row permission, granted by not specifying any column names is a separate permission from a collection of column specific permissions.
-
-This means that if you have previously granted a whole row permission you cannot then revoke a single column, it would be a no-op. You would have to instead revoke the permission for the whole table and add back the permissions for the rows you do want.
-
-Likewise, you can't revoke a column level permission by revoking access to the whole table. You need to issue revoke statement that matches the column spec of the previous grant.
-:::
 
 #### Parameters
 
@@ -281,11 +302,11 @@ This shows the granting and revoking of permissions using matching `GRANT` and `
 ```sql
 ELECTRIC GRANT ALL
   ON projects 
-  TO 'projects:admin';
+  TO (projects, 'admin');
 
 ELECTRIC REVOKE ALL 
   ON projects 
-  FROM 'projects:admin';
+  FROM (projects, 'admin');
 ```
 
 As `ALL` acts as an alias for all the other permissions this will result in global `'admin'`s having the `INSERT`, `SELECT` and `UPDATE` permissions on the table `records`.
@@ -300,18 +321,14 @@ ELECTRIC REVOKE DELETE
   FROM 'admin';
 ```
 
-Whole row grants are different from individual column grants so removing a column will not affect the whole table grant. Here users with the global `'admin'` role will still be able to update the name column. This is consistent with the standard behaviour for column specific grants in Postgres.
+Revocation works at the permissions level for a given table and role. Revoking e.g. `READ` from a table for a given role will remove that role's read access to the table, no matter what the column specification for the read was. The code below will completely remove `UPDATE` rights for the `admin` role.
 
 ```sql
-ELECTRIC GRANT UPDATE
-  ON records 
-  TO 'admin';
+-- grant partial update rights to `admin`s
+ELECTRIC GRANT UPDATE (name) ON records TO 'admin';
 
-ELECTRIC REVOKE UPDATE (
-    name
-  ) 
-  ON records 
-  FROM 'admin';
+-- remove update rights from admin
+ELECTRIC REVOKE UPDATE ON records FROM 'admin';
 ```
 
 ### `ASSIGN`
@@ -343,7 +360,7 @@ dynamically read from a column in the `table_name`.
 These are string literals either with or without a scope table.
 
 - `'admin'` - global admin role
-- `'projects:admin'` - project admin role, scoped to the `projects` table
+- `(projects, 'admin')` - project admin role, scoped to the `projects` table
 
 ##### Dynamic role definitions
 
@@ -352,13 +369,12 @@ These specify a database column to read the role value from, using tuple syntax 
 - `users.role_name` - read a global (unscoped) role name from the `users.role_name` column
 - `(projects, memberships.role_name)` - read the role name from the `memberships.role_name` column and then concatenate with the `projects` scope
 
-In the first example above the global role assigned will be read from the column `role_name` in the table `users`. In the second example the scoped role is read from the column `role_name` in the table `memberships` and then concatenated with the `projects` scope. So, for example, if the `memberships.role_name` column contained the string `'admin'` then the scoped role assigned would be equivalent to the literal `'projects:admin'`.
+In the first example above the global role assigned will be read from the column `role_name` in the table `users`. In the second example the scoped role is read from the column `role_name` in the table `memberships` and then concatenated with the `projects` scope. So, for example, if the `memberships.role_name` column contained the string `'admin'` then the scoped role assigned would be equivalent to the literal `(projects, 'admin')`.
 
 :::note
 You can always user the longer syntax for role definitions if you prefer or are writing them programmatically.
 
 - `'admin'` can be written as `(NULL, 'admin')`
-- `'projects:admin'` can be written as `(projects, 'admin')`
 - `users.role_name` can be written as `(NULL, users.role_name)`
 :::
 
@@ -415,10 +431,10 @@ Then the user with ID `21ba776e-cced-46de-9bb7-631dc9043287` would be granted ad
 In the next example, explicitly named roles are assigned to users using different fields on the same table.
 
 ```sql
-ELECTRIC ASSIGN 'deliveries:driver'
+ELECTRIC ASSIGN (deliveries, 'driver')
     TO deliveries.driver_id;
 
-ELECTRIC ASSIGN 'deliveries:customer'
+ELECTRIC ASSIGN (deliveries, 'customer')
     TO deliveries.customer_id;
 ```
 
@@ -464,12 +480,14 @@ Apart from the `IF` clause, an `UNASSIGN` statement must match its the correspon
 ```sql
 ELECTRIC ASSIGN project_members.role
   TO project_members.user_id;
+
 ELECTRIC UNASSIGN project_members.role 
   FROM project_members.user_id;
 
 ELECTRIC ASSIGN 'record.reader'
     TO user_permissions.user_id
     IF ( can_read_records );
+
 ELECTRIC UNASSIGN 'record.reader'
     FROM user_permissions.user_id;
 ```
@@ -492,11 +510,13 @@ This allows you to propagate migrations to local devices and work around any mis
 
 #### Parameters
 
-- **`sqlite_statement`** - a string holding a valid SQLite statements; seperate multiple statements with `;` delimiters
+- **`sqlite_statement`** - a string holding a valid SQLite statements; separate multiple statements with `;` delimiters
 
 #### Examples
 
 ```sql
-ELECTRIC SQLITE
-  'CREATE TABLE local_only (id TEXT primary key);'
+-- use PG's dollar quoted strings to avoid having to escape single quotes in the SQLite statements
+ELECTRIC SQLITE $sqlite$
+    CREATE TABLE local_only (id TEXT PRIMARY KEY);
+  $sqlite$;
 ```

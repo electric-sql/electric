@@ -98,7 +98,8 @@ defmodule Electric.Postgres.Proxy.Injector.ElectricTest do
         proxy_ddlx_grant: false,
         proxy_ddlx_revoke: false,
         proxy_ddlx_assign: false,
-        proxy_ddlx_unassign: false
+        proxy_ddlx_unassign: false,
+        proxy_ddlx_sqlite: false
       )
 
       migrations = [

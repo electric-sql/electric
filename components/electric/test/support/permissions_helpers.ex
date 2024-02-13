@@ -78,12 +78,9 @@ defmodule ElectricTest.PermissionsHelpers do
         ddl -> "ELECTRIC " <> ddl
       end)
       |> Enum.map(&Electric.DDLX.parse!/1)
-      |> Enum.flat_map(&Electric.DDLX.Command.to_protobuf/1)
-      |> Enum.group_by(fn
-        %P.Assign{} -> :assigns
-        %P.Grant{} -> :grants
+      |> Enum.reduce(%P.Rules{}, fn %{cmds: %{assigns: assigns, grants: grants}}, rules ->
+        %{rules | assigns: rules.assigns ++ assigns, grants: rules.grants ++ grants}
       end)
-      |> then(&struct(%P.Rules{}, &1))
     end
   end
 
@@ -355,5 +352,25 @@ defmodule ElectricTest.PermissionsHelpers do
     tree
     |> Perms.new(attrs)
     |> Perms.update(grants, roles)
+  end
+
+  defmodule Proto do
+    alias Electric.Satellite.SatPerms
+
+    def table(schema \\ "public", name) do
+      %SatPerms.Table{schema: schema, name: name}
+    end
+
+    def role(name) do
+      %SatPerms.RoleName{role: {:application, name}}
+    end
+
+    def authenticated() do
+      %SatPerms.RoleName{role: {:predefined, :AUTHENTICATED}}
+    end
+
+    def anyone() do
+      %SatPerms.RoleName{role: {:predefined, :ANYONE}}
+    end
   end
 end

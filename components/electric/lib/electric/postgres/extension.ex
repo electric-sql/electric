@@ -28,6 +28,7 @@ defmodule Electric.Postgres.Extension do
   @grants_relation "grants"
   @roles_relation "roles"
   @assignments_relation "assignments"
+  @ddlx_commands_relation "ddlx_commands"
 
   electric = &to_string([?", @schema, ?", ?., ?", &1, ?"])
 
@@ -42,6 +43,7 @@ defmodule Electric.Postgres.Extension do
   @grants_table electric.(@grants_relation)
   @roles_table electric.(@roles_relation)
   @assignments_table electric.(@assignments_relation)
+  @ddlx_table electric.(@ddlx_commands_relation)
 
   @all_schema_query ~s(SELECT "schema", "version", "migration_ddl" FROM #{@schema_table} ORDER BY "version" ASC)
   @current_schema_query ~s(SELECT "schema", "version" FROM #{@schema_table} ORDER BY "id" DESC LIMIT 1)
@@ -111,6 +113,7 @@ defmodule Electric.Postgres.Extension do
   def grants_table, do: @grants_table
   def roles_table, do: @roles_table
   def assignments_table, do: @assignments_table
+  def ddlx_table, do: @ddlx_table
 
   def ddl_relation, do: {@schema, @ddl_relation}
   def version_relation, do: {@schema, @version_relation}
@@ -129,6 +132,8 @@ defmodule Electric.Postgres.Extension do
 
   defguard is_acked_client_lsn_relation(relation)
            when relation == {@schema, @acked_client_lsn_relation}
+
+  defguard is_perms_relation(relation) when relation == {@schema, @ddlx_commands_relation}
 
   def extract_ddl_sql(%{"txid" => _, "txts" => _, "query" => query}) do
     {:ok, query}
@@ -320,7 +325,8 @@ defmodule Electric.Postgres.Extension do
       Migrations.Migration_20231016141000_ConvertFunctionToProcedure,
       Migrations.Migration_20231206130400_ConvertReplicaTriggersToAlways,
       Migrations.Migration_20240110110200_DropUnusedFunctions,
-      Migrations.Migration_20240205141200_ReinstallTriggerFunctionWriteCorrectMaxTag
+      Migrations.Migration_20240205141200_ReinstallTriggerFunctionWriteCorrectMaxTag,
+      Migrations.Migration_20240212161153_DDLXCommands
     ]
   end
 

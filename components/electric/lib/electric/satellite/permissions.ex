@@ -352,11 +352,8 @@ defmodule Electric.Satellite.Permissions do
   # expand the grants into a list of `{{relation, privilege}, %RoleGrant{}}`
   # so that we can create a LUT of table and required privilege to role
   defp invert_role_lookup({role, grants}) do
-    Stream.flat_map(grants, fn grant ->
-      Enum.map(
-        grant.privileges,
-        &{{grant.table, &1}, %RoleGrant{grant: grant, role: role}}
-      )
+    Stream.map(grants, fn grant ->
+      {{grant.table, grant.privilege}, %RoleGrant{grant: grant, role: role}}
     end)
   end
 

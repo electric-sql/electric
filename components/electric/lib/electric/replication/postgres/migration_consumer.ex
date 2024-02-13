@@ -4,7 +4,8 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
   """
   use GenStage
 
-  import Electric.Postgres.Extension, only: [is_ddl_relation: 1, is_extension_relation: 1]
+  import Electric.Postgres.Extension,
+    only: [is_ddl_relation: 1, is_extension_relation: 1, is_perms_relation: 1]
 
   alias Electric.Postgres.{
     Extension,
@@ -106,6 +107,9 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
       Enum.filter(changes, fn
         %{relation: relation} when is_ddl_relation(relation) ->
           true
+
+        %{relation: relation} when is_perms_relation(relation) ->
+          false
 
         %{relation: relation} = change when is_extension_relation(relation) ->
           Logger.debug("---- Filtering #{inspect(change)}")

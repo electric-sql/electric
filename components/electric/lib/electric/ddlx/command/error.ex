@@ -8,16 +8,14 @@ defmodule Electric.DDLX.Command.Error do
           message: String.t()
         }
 
-  @keys [
+  @enforce_keys [:sql, :message]
+
+  defstruct [
     :sql,
-    :line,
-    :position,
-    :message
+    :message,
+    line: 0,
+    position: 0
   ]
-
-  @enforce_keys @keys
-
-  defstruct @keys
 
   @behaviour Exception
 
@@ -36,17 +34,9 @@ defmodule Electric.DDLX.Command.Error do
     message
   end
 
-  defimpl Command do
-    def pg_sql(_) do
+  defimpl Command.PgSQL do
+    def to_sql(_) do
       []
     end
-
-    def table_name(_) do
-      ""
-    end
-
-    def tag(_), do: "ELECTRIC ERROR"
-
-    def to_protobuf(_), do: []
   end
 end

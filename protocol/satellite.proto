@@ -582,15 +582,25 @@ message SatPerms {
             string application = 2;
         }
     }
+    message ColumnList {
+        repeated string names = 5;
+    }
     message Grant {
         string id = 1;
         Table table = 2;
         RoleName role = 3;
-        repeated Privilege privileges = 4;
-        repeated string columns = 5;
+        Privilege privilege = 4;
+        optional ColumnList columns = 5;
         optional Table scope = 6;
         optional Path path = 7;
         optional string check = 8;
+    }
+    message Revoke {
+        Table table = 2;
+        RoleName role = 3;
+        Privilege privilege = 4;
+        optional Table scope = 6;
+        optional Path path = 7;
     }
     message Assign {
         string id = 1;
@@ -601,6 +611,18 @@ message SatPerms {
         optional Table scope = 6;
         optional string if = 7;
     }
+    message Unassign {
+        Table table = 2;
+        optional string user_column = 3;
+        optional string role_column = 4;
+        optional string role_name = 5;
+        optional Table scope = 6;
+    }
+
+    message Sqlite {
+        string stmt = 1;
+    }
+
     message Role {
         string id = 1;
         string role = 2;
@@ -613,6 +635,13 @@ message SatPerms {
     message Rules {
         repeated Grant grants = 1;
         repeated Assign assigns = 2;
+    }
+    message DDLX {
+        repeated Grant grants = 1;
+        repeated Revoke revokes = 2;
+        repeated Assign assigns = 3;
+        repeated Unassign unassigns = 4;
+        repeated Sqlite sqlite = 5;
     }
     message Roles {
         repeated Role roles = 2;

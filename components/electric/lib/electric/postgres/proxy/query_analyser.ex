@@ -559,9 +559,21 @@ defimpl QueryAnalyser, for: PgQuery.CallStmt do
 
   def analyse(stmt, analysis, state) do
     case extract_electric(stmt, analysis) do
+      {:electric, %Electric.DDLX.Command.Error{} = error, _analysis} ->
+        %{
+          analysis
+          | allowed?: false,
+            electrified?: true,
+            error: error
+        }
+
       {:electric, command, analysis} ->
+        # TODO: the new grant syntax will result in multiple tables being involved.
+        #       is this analysis.table field being used for anything after this point?
         {:ok, table} =
-          parse_table_name(DDLX.Command.table_name(command), default_schema: state.default_schema)
+          command
+          |> DDLX.Command.table_names()
+          |> parse_table_name(default_schema: state.default_schema)
 
         analysis = %{
           analysis
@@ -573,7 +585,7 @@ defimpl QueryAnalyser, for: PgQuery.CallStmt do
             capture?: true
         }
 
-        if command_enabled?(command) do
+        if DDLX.Command.enabled?(command) do
           analysis
         else
           %{
@@ -601,8 +613,9 @@ defimpl QueryAnalyser, for: PgQuery.CallStmt do
     end
   end
 
-  defp parse_table_name({_schema, _name} = table_name, _opts), do: {:ok, table_name}
-  defp parse_table_name(name, opts) when is_binary(name), do: NameParser.parse(name, opts)
+  defp parse_table_name([], _opts), do: {:ok, nil}
+  defp parse_table_name([{_schema, _name} = table_name | _], _opts), do: {:ok, table_name}
+  defp parse_table_name([name | _], opts) when is_binary(name), do: NameParser.parse(name, opts)
 
   defp extract_electric(stmt, analysis) do
     case function_name(stmt) do
@@ -626,7 +639,9 @@ defimpl QueryAnalyser, for: PgQuery.CallStmt do
 
       ["electric", "electrify"] ->
         {:table, table} = Parser.table_name(stmt)
-        command = %DDLX.Command.Enable{table_name: table}
+
+        command = DDLX.Command.electric_enable(table)
+
         {:electric, command, analysis}
 
       _ ->
@@ -640,27 +655,5 @@ defimpl QueryAnalyser, for: PgQuery.CallStmt do
 
   defp function_name(%PgQuery.CallStmt{funccall: %{funcname: funcname}}) do
     Enum.map(funcname, &Parser.string_node_val/1)
-  end
-
-  # shortcut the enable command, which has to be enabled
-  defp command_enabled?(%DDLX.Command.Enable{}), do: true
-
-  defp command_enabled?(cmd) do
-    cmd
-    |> feature_flag()
-    |> Electric.Features.enabled?()
-  end
-
-  @feature_flags %{
-    DDLX.Command.Grant => :proxy_ddlx_grant,
-    DDLX.Command.Revoke => :proxy_ddlx_revoke,
-    DDLX.Command.Assign => :proxy_ddlx_assign,
-    DDLX.Command.Unassign => :proxy_ddlx_unassign
-  }
-
-  # either we have a specific flag for the command or we fallback to the
-  # default setting for the features module, which is `false`
-  defp feature_flag(%cmd{}) do
-    @feature_flags[cmd] || Electric.Features.default_key()
   end
 end
