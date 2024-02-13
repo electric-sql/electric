@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { MonitoringChartView } from './MonitoringChartView'
-import { useMonitoringMetric } from './use_monitoring_metric'
+import { useMonitoringMetric } from './use_monitoring_metrics'
 
 export const MonitoringChart = () => {
   // The size of the time window to show data for

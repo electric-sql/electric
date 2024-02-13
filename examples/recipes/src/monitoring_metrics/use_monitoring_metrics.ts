@@ -6,7 +6,7 @@ export const useMonitoringMetric = ({
   metricType,
   viewWindowSeconds = 60,
   aggregationWindowSeconds = 5,
-} : {
+}: {
   metricType: 'CPU' | 'Memory' | 'Disk'
   viewWindowSeconds?: number
   aggregationWindowSeconds?: number
@@ -67,6 +67,6 @@ export const useMonitoringMetric = ({
       max: ts.value_max,
       min: ts.value_min,
       avg: ts.value_avg,
-    }))
+    })),
   }
 }
