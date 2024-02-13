@@ -11,8 +11,8 @@ DigitalOcean also provides [Managed Postgres](https://docs.digitalocean.com/prod
 
 This guide covers two scenarios:
 
-  1. Deploying Electric sync service to the App Platform.
-  2. Deploying Electric sync service to a Droplet.
+  1. deploying the Electric sync service to the App Platform
+  2. deploying the Electric sync service to a Droplet
 
 Make sure you have a [DigitalOcean account](https://cloud.digitalocean.com/registrations/new) with [billing activated](https://cloud.digitalocean.com/account/billing) before proceeding.
 
