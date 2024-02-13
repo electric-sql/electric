@@ -19,9 +19,9 @@ export const MonitoringChart = () => {
     <MonitoringChartView
       dataset={timeSeries}
       dataKeyConfig={{
-        value_avg: { label: 'Average' },
-        value_min: { label: 'Minimum' },
-        value_max: { label: 'Maximum' },
+        avg: { label: 'Average' },
+        min: { label: 'Minimum' },
+        max: { label: 'Maximum' },
       }}
       timestampKey="timestamp"
       aggregationWindowSeconds={aggregationWindowSeconds}

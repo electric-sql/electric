@@ -36,7 +36,7 @@ export const useMonitoringMetric = ({
       MIN(value) as value_min
     FROM monitoring
     WHERE CAST (strftime('%s', timestamp) AS INT) > ${oldestTimeToSelect}
-    AND type = ${metricType}
+    AND type = '${metricType}'
     GROUP BY strftime('%s', timestamp) / ${aggregationWindowSeconds}
     ORDER BY timestamp ASC
     `,
