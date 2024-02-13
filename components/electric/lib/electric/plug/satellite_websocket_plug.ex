@@ -26,7 +26,8 @@ defmodule Electric.Plug.SatelliteWebsocketPlug do
   def call(conn, handler_opts) do
     with :ok <- check_if_valid_upgrade(conn),
          {:ok, conn} <- check_if_subprotocol_present(conn),
-         {:ok, conn} <- check_if_vsn_compatible(conn, with: @currently_supported_versions) do
+         {:ok, conn} <- check_if_vsn_compatible(conn, with: @currently_supported_versions),
+         :ok <- check_if_postgres_is_ready() do
       Logger.metadata(
         remote_ip: conn.remote_ip |> :inet.ntoa() |> to_string(),
         instance_id: Electric.instance_id()
@@ -76,6 +77,16 @@ defmodule Electric.Plug.SatelliteWebsocketPlug do
 
       Logger.debug("Client WebSocket connection failed with reason: #{reason}")
       {:error, 400, reason}
+    end
+  end
+
+  defp check_if_postgres_is_ready() do
+    Electric.Replication.PostgresConnector.connector_config()
+    |> Electric.Replication.Connectors.origin()
+    |> Electric.Replication.PostgresConnectorMng.status()
+    |> case do
+      :ready -> :ok
+      other -> {:error, 503, "Postgres connection is not ready: #{other}..."}
     end
   end
 
