@@ -1,7 +1,10 @@
 -- Create a background jobs table.
 CREATE TABLE IF NOT EXISTS background_jobs (
   id UUID PRIMARY KEY NOT NULL,
+  -- Can have foreign key to the creator of the background job
+  -- submitted_by UUID REFERENCES users(id)
   timestamp TIMESTAMPTZ NOT NULL,
+  payload JSONB NOT NULL, -- job specification
   completed BOOLEAN NOT NULL,
   cancelled BOOLEAN NOT NULL,
   progress REAL NOT NULL,

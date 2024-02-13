@@ -56,7 +56,9 @@ Example of submitting and monitoring background jobs. Progress is updated by the
 
 - [Schema](db/migrations/05-background_jobs_table.sql) - stores job metadata like id, progress, result, etc.
 
-- [Background Jobs](src/background_jobs/BackgroundJobs.tsx) - shows a list of jobs that updates in realtime as new jobs are submitted and processed.
+- [useBackgroundJobs](src/background_jobs/use_background_jobs.ts) hook - manage background job submission, cancellation, and monitoring of progress.
+
+- [Background Jobs](src/background_jobs/BackgroundJobs.tsx) - table UI for managing background jobs.
 
 ### Request-Response
 
