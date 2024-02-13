@@ -20,7 +20,9 @@ Example of a dashboard for monitoring system metrics with a live graph with dyna
 
 - [Schema](db/migrations/04-monitoring_table.sql) - very general log table with arbitrary content.
 
-- [Monitoring Chart](src/monitoring_metrics/MonitoringChart.tsx) - graph showing minimum, average, and maximum CPU usage with configurable aggregation window and view range.
+- [useMonitoringMetric](src/monitoring_metrics/use_monitoring_metric.ts) hook - returns value range timeseries for specified monitoring metric
+
+- [Monitoring Chart](src/monitoring_metrics/MonitoringChart.tsx) - graph UI showing minimum, average, and maximum CPU usage with configurable aggregation window and view range.
 
 ### Data Viewer
 
