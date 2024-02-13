@@ -4,9 +4,9 @@ sidebar_position: 10
 ---
 
 import useBaseUrl from '@docusaurus/useBaseUrl'
-import LogViewerSchema from '!!raw-loader!@site/submodules/electric/examples/recipes/db/migrations/02-logs_table.sql'
-import useLogsHook from '!!raw-loader!@site/submodules/electric/examples/recipes/src/log_viewer/use_logs.ts'
-import LogViewer from '!!raw-loader!@site/submodules/electric/examples/recipes/src/log_viewer/LogViewer.tsx'
+import Schema from '!!raw-loader!@site/submodules/electric/examples/recipes/db/migrations/02-logs_table.sql'
+import Hook from '!!raw-loader!@site/submodules/electric/examples/recipes/src/log_viewer/use_logs.ts'
+import View from '!!raw-loader!@site/submodules/electric/examples/recipes/src/log_viewer/LogViewer.tsx'
 
 Logs are a crucial component of any software application, offering valuable insights into its performance, errors, and user interactions, so you often need to expose them to your users and/or application administrators.
 
@@ -21,17 +21,17 @@ Electric provides a simple and efficient way to view logs in your application, w
 ## Schema
 
 <CodeBlock language="sql">
-  {LogViewerSchema}
+  {Schema}
 </CodeBlock>
 
 ## Data access
 
 <CodeBlock language="ts">
-  {useLogsHook}
+  {Hook}
 </CodeBlock>
 
 ## Usage
 
 <CodeBlock language="tsx">
-  {LogViewer}
+  {View}
 </CodeBlock>
