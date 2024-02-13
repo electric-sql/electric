@@ -7,15 +7,30 @@ sidebar_position: 20
 
 DigitalOcean is a cloud provider that is easy to use and has a low starting cost. You can get a virtual machine running in the cloud within minutes or deploy a web app to their fully-managed App Platform in just a few clicks.
 
-Make sure you have a DigitalOcean account with billing activated before you follow one of the guides below.
+DigitalOcean also provides [Managed Postgres](https://docs.digitalocean.com/products/databases/postgresql) hosting. This has logical replication enabled and works with Electric. The sections below include instructions for connecting the Electric sync service to DigitalOcean Managed Postgres and for connecting to an external Postgres instance, as you prefer.
+
+This guide covers two scenarios:
+
+  1. deploying the Electric sync service to the App Platform
+  2. deploying the Electric sync service to a Droplet
+
+Make sure you have a [DigitalOcean account](https://cloud.digitalocean.com/registrations/new) with [billing activated](https://cloud.digitalocean.com/account/billing) before proceeding.
+
+:::info
+For background on how to successfully deploy the sync service and what needs to connect where, see <DocPageLink path="deployment/concepts" />.
+:::
 
 ## Running Electric on App Platform
 
 App Platform is a Platform-as-a-Service (PaaS) offering that allows developers to publish code directly to DigitalOcean servers without worrying about the underlying infrastructure.
 
-### Deploying Electric
+### Postgres with logical replication
 
-Before deploying Electric, make sure you have a Postgres database with logical replication enabled hosted somewhere where Electric will be able to connect to it. Retrieve your database's connection URI with password included and use it as the value of the `DATABASE_URL` variable when customizing the app.
+Before deploying Electric, you'll need a Postgres database (with logical replication enabled) hosted somewhere Electric can connect to. DigitalOcean offers [Managed Postgres](https://docs.digitalocean.com/products/databases/postgresql/) which would be the easiest way to get started with Electric and a hosted Postgres at the same time, if you don't have one yet. Create a new database cluster and wait for it to become ready before proceeding to the next section.
+
+Alternatively, many other managed database providers support logical replication, see <DocPageLink path="usage/installation/postgres#hosting" /> for some options. If you choose not to use DigitalOcean's Managed Postgres, retrieve your database's connection URI with password included from your provider and use it as the value of the `DATABASE_URL` variable when setting up the app.
+
+### Deploying Electric
 
 Click on the "Deploy to DO" button below to be taken to DigitalOcean's Create App wizard.
 
@@ -25,21 +40,43 @@ Click on the "Deploy to DO" button below to be taken to DigitalOcean's Create Ap
 
 </div>
 
+You may need to log in or create a new account first. Once signed in, you should see the *Resources* page of the Create App wizard.
+
 ![Create App: Resources](./digital-ocean/create-app/resources.png)
 
 Click on the "Edit Plan" button, pick the Basic plan and the Basic instance size. That will be enough to get started.
 
 ![Create App: Edit Plan](./digital-ocean/create-app/edit-plan.png)
 
-Go to the next page and click on the Edit link next to the `electric` service.
+:::info Configuring Managed Postgres
+If you have set up a [Managed Postgres cluster on DigitalOcean](https://docs.digitalocean.com/products/databases/postgresql/) for use with Electric, click on the "Add Resource (Optional)" label, pick the "Database" option and click on the "Add" button.
+
+![Create App: Database Resource](./digital-ocean/create-app/resources-db.png)
+
+Pick your database cluster, name and user from the dropdowns, then click on the "Attach Database" button.
+
+![Create App: Configure Database](./digital-ocean/create-app/resources-db-configure.png)
+:::
+
+Back on the *Resources* page, click on the "Next" button to go to the *Environment Variables* page and click on the "Edit" link next to the `electric` service.
 
 ![Create App: Environment](./digital-ocean/create-app/environment.png)
 
-Fill in the values for `DATABASE_URL` and `PG_PROXY_PASSWORD`. Make sure you pick a strong proxy password as the proxy effectively makes it possible to connect to your database over the public Internet in this particular deployment scenario.
+Fill in the value for `PG_PROXY_PASSWORD`. Make sure you pick a strong proxy password as the proxy effectively makes it possible to connect to your database over the public Internet in this particular deployment scenario.
 
 ![Create App: Edit Environment](./digital-ocean/create-app/env-vars.png)
 
-You can leave the `AUTH_MODE` insecure for now but remember to switch to the secure mode and add a secret signing key before making your app available to users.
+:::info DATABASE_URL
+If you have set up a [Managed Postgres cluster on DigitalOcean](https://docs.digitalocean.com/products/databases/postgresql/) for use with Electric, it will automatically create a `DATABASE_URL` variable for you as shown in the above screenshot.
+
+However, if you want to use a 3rd-party database provider, add the `DATABASE_URL` variable yourself before proceeding to the next step.
+:::
+
+:::caution Encrypted Environment Variables
+DigitalOcean recommends encrypting environment variables if they contain secrets that you don't want to be viewable in the environment editor. Be careful with that, though. If you check the "Encrypt" checkbox next to a variable, you won't be able to edit it afterwards; you'll have to delete it first, then create it again with a new value.
+:::
+
+You can leave the `AUTH_MODE` insecure for now but remember to switch to the secure mode and add a [secret signing key](/docs/usage/auth/secure) before making your app available to users.
 
 Click "Save" and go the next page.
 
@@ -47,11 +84,11 @@ Click "Save" and go the next page.
 
 Here you can pick a different region for the app. We recommend choosing the same (or the closest) region to the one where your database is running.
 
-Finally, go to the Review page and click on the "Create Resources" button at the bottom.
+Finally, go to the *Review* page and click on the "Create Resources" button at the bottom.
 
 ![Create App: Review](./digital-ocean/create-app/review.png)
 
-You'll be taken to the new app's Settings tab. Click on the Activity tab to see the deployment status and logs. It should only take a minute before the app goes live.
+You'll be taken to the new app's *Settings* tab. Click on the *Activity* tab to see the deployment status and logs. It should only take a minute before the app goes live.
 
 ![Create App: Activity](./digital-ocean/create-app/activity.png)
 
@@ -62,73 +99,16 @@ $ curl -i https://electric-sync-service-4ha5b.ondigitalocean.app/api/status
 Connection to Postgres is up!
 ```
 
+Proceed to [Connecting the client app to Electric running on DigitalOcean](#connecting-the-client-app-to-electric-running-on-digitalocean) below.
+
+:::info
 If you see errors in the logs, there's likely a problem with some of the environment variables. To update the environment, go to the Settings tab, click on the `electric` component at the top and then click on the Edit link in the "Environment Variables" row.
 
 ![Create App: Component Settings](./digital-ocean/create-app/component-settings.png)
 
 Saving your changes to Environment Variables will trigger a new deployment for the app. Once that finishes, check Deploy logs and Runtime logs to see if there are any more issues remaining.
+:::
 
-### Running the basic example app
-
-Let's see how to set up a client app to connect to the Electric sync service we've just deployed. Clone the source code repository to your machine and navigate to the basic example, as explained on [this page](../examples/basic#source-code).
-
-#### Apply migrations
-
-Apps running on DigitalOcean's App Platform can only accept HTTP/HTTPS connections. In order to connect to the migrations proxy that runs inside Electric, we need to start a local server that will tunnel TCP traffic over HTTP between a local Postgres client and the migrations proxy:
-
-```shell
-npx electric-sql proxy-tunnel \
-    --service https://electric-sync-service-4ha5b.ondigitalocean.app \
-    --local-port 8000
-```
-
-Electric can work alongside any tooling you use to manage database migrations with. See the <DocPageLink path="integrations/backend" /> section of the docs for an overview of the most popular frameworks. In this demo we'll use `@databases/pg-migrations` as it's already included in the basic example. Make sure you have installed all of the dependencies by running `npm install` once.
-
-Before running the following commands, export an environment variable `PG_PROXY_PASSWORD` on your local using the same value as the one configured for the DigitalOcean app:
-
-```shell
-export PG_PROXY_PASSWORD=...
-```
-
-Run `npx pg-migrations apply` to apply the migration included in the example to your database via the proxy tunnel:
-
-```shell
-$ npx pg-migrations apply \
-      --directory db/migrations \
-      --database postgresql://postgres:$PG_PROXY_PASSWORD@localhost:8000/postgres
-Applying 01-create_items_table.sql
-Applied 01-create_items_table.sql
-1 migrations applied
-```
-
-#### Generate a type-safe client
-
-Now that the database has one electrified table, we can [generate a type-safe client](../usage/data-access/client.md) from it. Use the same database connection URL as in the previous step but change the username to `prisma` (this is required for the schema introspection to work correctly).
-
-```shell
-$ npx electric-sql generate
-      --service https://electric-sync-service-4ha5b.ondigitalocean.app
-      --proxy postgresql://prisma:$PG_PROXY_PASSWORD@localhost:8000/postgres
-Generating Electric client...
-Successfully generated Electric client at: ./src/generated/client
-Building migrations...
-Successfully built migrations
-```
-
-#### Start the app!
-
-Now you should have everything ready to start the web app and have it connected to the Electric sync service running as a DigitalOcean app:
-
-```shell
-$ ELECTRIC_URL='wss://electric-sync-service-4ha5b.ondigitalocean.app' \
-  SERVE=true \
-  npm run build
-
-> electric-sql-wa-sqlite-example@0.7.0 build
-> node copy-wasm-files.js && node builder.js
-
-Your app is running at http://localhost:3001
-```
 
 ## Running Electric on a Droplet
 
@@ -289,66 +269,25 @@ $ curl http://167.99.132.206/api/status
 Connection to Postgres is up!
 ```
 
-Unlike the DigitalOcean app we deployed above which could only listen on standard HTTP/HTTPS ports, a Droplet is just a virtual server that may have any number of ports open. This allows us to connect to the Electric proxy directly without having to run a local tunnel:
 
-```shell
-$ psql postgresql://postgres:******@167.99.132.206:65432/postgres
-psql (15.4, server 15.1 (Ubuntu 15.1-1.pgdg20.04+1))
-Type "help" for help.
+## Connecting the client app to Electric running on DigitalOcean
 
-[167] postgres:postgres=>
-```
+If you don't already have an Electric-enabled client app, follow our <DocPageLink path="quickstart" /> guide or clone our [Basic Items](/docs/examples/basic) example app and go through its README. In either case, skip the steps that show how to run Postgres and Electric locally.
 
-### Running the basic example app
+As the first step, we need to make a few changes to the stock client app so that [`electric-sql commands`](/docs/api/cli) know how to connect to the instance of Electric sync service running on DigitalOcean. Choose the appropriate tab below depending on how you have Electric deployed:
 
-Let's see how to set up a client app to connect to the Electric sync service we've just deployed. Clone the source code repository to your machine and navigate to the basic example, as explained on [this page](../examples/basic#source-code).
+import ElectricApp from './digital-ocean/_electric_app.md';
+import ElectricDroplet from './digital-ocean/_electric_droplet.md';
 
-#### Apply migrations
+<Tabs groupId="digital-ocean-basic-example" queryString>
+  <TabItem value="generator" label="DigitalOcean App">
+    <ElectricApp />
+  </TabItem>
+  <TabItem value="manual" label="Droplet">
+    <ElectricDroplet />
+  </TabItem>
+</Tabs>
 
-Electric can work alongside any tooling you use to manage database migrations with. See the <DocPageLink path="integrations/backend" /> section of the docs for an overview of the most popular frameworks. In this demo we'll use `@databases/pg-migrations` as it's already included in the basic example. Make sure you have installed all of the dependencies by running `npm install` once.
+If you're wondering why we don't set the `ELECTRIC_DATABASE_URL` variable in the `.env.local` file, that's because client commands only connect to the Migrations proxy which is a component of Electric sync service. Learn more about the Migrations proxy's role and how it fits into the bigger picture in our <DocPageLink path="deployment/concepts#migrations-proxy" /> guide.
 
-Export an environment variable `PG_PROXY_PASSWORD` on your local machine before running the commands below, use the same value as the one configured for the DigitalOcean app:
-
-```shell
-export PG_PROXY_PASSWORD=...
-```
-
-Run `npx pg-migrations apply` to apply the migration included in the example to your database via the migrations proxy:
-
-```shell
-$ npx pg-migrations apply \
-      --directory db/migrations \
-      --database postgresql://postgres:$PG_PROXY_PASSWORD@167.99.132.206:65432/postgres
-Applying 01-create_items_table.sql
-Applied 01-create_items_table.sql
-1 migrations applied
-```
-
-#### Generate a type-safe client
-
-Now that the database has one electrified table, we can [generate a type-safe client](../usage/data-access/client.md) from it. Use the same database connection URL as in the previous step but change the username to `prisma` (this is required for the schema introspection to work correctly).
-
-```shell
-$ npx electric-sql generate \
-      --service http://167.99.132.206 \
-      --proxy postgresql://prisma:$PG_PROXY_PASSWORD@@167.99.132.206:65432/postgres
-Generating Electric client...
-Successfully generated Electric client at: ./src/generated/client
-Building migrations...
-Successfully built migrations
-```
-
-#### Start the app!
-
-Now you should have everything ready to start the web app and have it connected to the Electric sync service running on a DigitalOcean Droplet:
-
-```shell
-$ ELECTRIC_URL='ws://167.99.132.206' \
-  SERVE=true \
-  npm run build
-
-> electric-sql-wa-sqlite-example@0.7.0 build
-> node copy-wasm-files.js && node builder.js
-
-Your app is running at http://localhost:3001
-```
+Now you should have everything ready to get your client app up and running.
