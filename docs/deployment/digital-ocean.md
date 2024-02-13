@@ -7,6 +7,8 @@ sidebar_position: 20
 
 DigitalOcean is a cloud provider that is easy to use and has a low starting cost. You can get a virtual machine running in the cloud within minutes or deploy a web app to their fully-managed App Platform in just a few clicks.
 
+DigitalOcean also provides [Managed Postgres](https://docs.digitalocean.com/products/databases/postgresql) hosting. This has logical replication enabled and works with Electric. The sections below include instructions for connecting the Electric sync service to DigitalOcean Managed Postgres and for connecting to an external Postgres instance, as you prefer.
+
 This guide covers two scenarios:
 
   1. Deploying Electric sync service to the App Platform.
