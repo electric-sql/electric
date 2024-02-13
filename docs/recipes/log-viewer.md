@@ -32,6 +32,6 @@ Electric provides a simple and efficient way to view logs in your application, w
 
 ## Usage
 
-<CodeBlock language="ts">
+<CodeBlock language="tsx">
   {LogViewer}
 </CodeBlock>
