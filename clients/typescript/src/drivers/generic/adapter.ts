@@ -131,26 +131,25 @@ export abstract class SerialDatabaseAdapter
   async runInTransaction(...statements: Statement[]): Promise<RunResult> {
     // Uses a mutex to ensure that transactions are not interleaved.
     const release = await this.txMutex.acquire()
-    let open = false
+    let transactionBegan = false
     let rowsAffected = 0
     try {
       await this._run({ sql: 'BEGIN' })
-      open = true
+      transactionBegan = true
       for (const stmt of statements) {
         const { rowsAffected: rowsModified } = await this._run(stmt)
         rowsAffected += rowsModified
       }
+      await this._run({ sql: 'COMMIT' })
       return {
         rowsAffected: rowsAffected,
       }
     } catch (error) {
-      await this._run({ sql: 'ROLLBACK' })
-      open = false
+      if (transactionBegan) {
+        await this._run({ sql: 'ROLLBACK' })
+      }
       throw error // rejects the promise with the reason for the rollback
     } finally {
-      if (open) {
-        await this._run({ sql: 'COMMIT' })
-      }
       release()
     }
   }
