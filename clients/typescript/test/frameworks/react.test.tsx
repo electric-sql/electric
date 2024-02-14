@@ -27,21 +27,11 @@ import { Migrator } from '../../src/migrators'
 import { SocketFactory } from '../../src/sockets'
 import { SatelliteOpts } from '../../src/satellite/config'
 import { Notifier } from '../../src/notifiers'
+import { createQueryResultSubscribeFunction } from '../../src/util/subscribe'
 
 const assert = (stmt: any, msg = 'Assertion failed.'): void => {
   if (!stmt) {
     throw new Error(msg)
-  }
-}
-
-const callSpy = <T,>(queryFn: () => Promise<T>) => {
-  let numCalls = 0
-  return {
-    getNumCalls: () => numCalls,
-    queryFn: () => {
-      numCalls++
-      return queryFn() as Promise<T>
-    },
   }
 }
 
@@ -123,11 +113,9 @@ test('useLiveQuery returns query results', async (t) => {
   const { dal, adapter } = t.context
 
   const query = 'select i from bars'
-  const { queryFn: liveQuery, getNumCalls } = callSpy(
-    dal.db.liveRawQuery({
-      sql: query,
-    })
-  )
+  const liveQuery = dal.db.liveRawQuery({
+    sql: query,
+  })
 
   const wrapper: FC = ({ children }) => {
     return <ElectricProvider db={dal}>{children}</ElectricProvider>
@@ -137,17 +125,25 @@ test('useLiveQuery returns query results', async (t) => {
 
   await waitFor(() => assert(result.current.updatedAt !== undefined))
   t.deepEqual(result.current.results, await adapter.query({ sql: query }))
-  t.is(getNumCalls(), 1) // called once on mount
 })
 
 test('useLiveQuery returns error when query errors', async (t) => {
-  const { dal } = t.context
+  const { notifier, dal } = t.context
 
   const wrapper: FC = ({ children }) => {
     return <ElectricProvider db={dal}>{children}</ElectricProvider>
   }
 
-  const { result } = renderHook(() => useLiveQuery(mockLiveQueryError), {
+  const errorLiveQuery = async () => {
+    throw new Error('Mock query error')
+  }
+
+  errorLiveQuery.subscribe = createQueryResultSubscribeFunction(
+    notifier,
+    errorLiveQuery
+  )
+
+  const { result } = renderHook(() => useLiveQuery(errorLiveQuery), {
     wrapper,
   })
 
@@ -161,11 +157,9 @@ test('useLiveQuery re-runs query when data changes', async (t) => {
   const { dal, notifier } = t.context
 
   const query = 'select foo from bars'
-  const { queryFn: liveQuery, getNumCalls } = callSpy(
-    dal.db.liveRawQuery({
-      sql: query,
-    })
-  )
+  const liveQuery = dal.db.liveRawQuery({
+    sql: query,
+  })
 
   const wrapper: FC = ({ children }) => {
     return <ElectricProvider db={dal}>{children}</ElectricProvider>
@@ -175,7 +169,6 @@ test('useLiveQuery re-runs query when data changes', async (t) => {
   await waitFor(() => assert(result.current.results !== undefined), {
     timeout: 1000,
   })
-  t.is(getNumCalls(), 1) // called once on mount
 
   const { results, updatedAt } = result.current
 
@@ -190,7 +183,6 @@ test('useLiveQuery re-runs query when data changes', async (t) => {
     timeout: 1000,
   })
   t.not(results, result.current.results)
-  t.is(getNumCalls(), 2) // called once more on update
 })
 
 test('useLiveQuery re-runs query when *aliased* data changes', async (t) => {
@@ -292,9 +284,13 @@ test('useLiveQuery ignores results if unmounted whilst re-querying', async (t) =
   })
   const slowLiveQuery = async () => {
     await sleepAsync(100)
-
     return await liveQuery()
   }
+
+  slowLiveQuery.subscribe = createQueryResultSubscribeFunction(
+    notifier,
+    slowLiveQuery
+  )
 
   const wrapper: FC = ({ children }) => {
     return <ElectricProvider db={dal}>{children}</ElectricProvider>
@@ -373,7 +369,3 @@ test('useConnectivityState ignores connectivity events after unmounting', async 
   await sleepAsync(1000)
   t.is(result.current.connectivityState, 'disconnected')
 })
-
-const mockLiveQueryError = async () => {
-  throw new Error('Mock query error')
-}

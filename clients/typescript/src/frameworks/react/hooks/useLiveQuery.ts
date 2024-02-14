@@ -1,45 +1,11 @@
-import {
-  useContext,
-  useEffect,
-  useState,
-  useCallback,
-  useMemo,
-  DependencyList,
-} from 'react'
+import { useContext, useEffect, useState, useMemo, DependencyList } from 'react'
 import { hash } from 'ohash'
 
-import { ChangeNotification, Notifier } from '../../../notifiers/index'
-import { QualifiedTablename, hasIntersection } from '../../../util/tablename'
-
 import { ElectricContext } from '../provider'
-import { LiveResultContext } from '../../../client/model/model'
-
-export interface ResultData<T> {
-  error?: unknown
-  results?: T
-  updatedAt?: Date
-}
-
-interface QueryResult<T> {
-  result: ResultData<T>
-  tablenames?: QualifiedTablename[]
-}
-
-function successResult<T>(results: T): ResultData<T> {
-  return {
-    error: undefined,
-    results: results,
-    updatedAt: new Date(),
-  }
-}
-
-function errorResult<T>(error: unknown): ResultData<T> {
-  return {
-    error: error,
-    results: undefined,
-    updatedAt: new Date(),
-  }
-}
+import {
+  LiveResultContext,
+  LiveResultUpdate,
+} from '../../../client/model/model'
 
 /**
  * Main reactive query hook for React applications. It needs to be
@@ -59,7 +25,9 @@ function errorResult<T>(error: unknown): ResultData<T> {
  * const { results } = useLiveQuery(db.items.liveMany({}))
  * ```
  */
-function useLiveQuery<Res>(runQuery: LiveResultContext<Res>): ResultData<Res>
+function useLiveQuery<Res>(
+  runQuery: LiveResultContext<Res>
+): LiveResultUpdate<Res>
 
 /**
  * Main reactive query hook for React applications. It needs to be
@@ -85,11 +53,11 @@ function useLiveQuery<Res>(runQuery: LiveResultContext<Res>): ResultData<Res>
 function useLiveQuery<Res>(
   runQueryFn: () => LiveResultContext<Res>,
   dependencies: DependencyList
-): ResultData<Res>
+): LiveResultUpdate<Res>
 function useLiveQuery<Res>(
   runQueryOrFn: LiveResultContext<Res> | (() => LiveResultContext<Res>),
   deps?: DependencyList
-): ResultData<Res> {
+): LiveResultUpdate<Res> {
   if (deps) {
     return useLiveQueryWithDependencies(
       runQueryOrFn as () => LiveResultContext<Res>,
@@ -103,7 +71,7 @@ function useLiveQuery<Res>(
 function useLiveQueryWithDependencies<Res>(
   runQueryFn: () => LiveResultContext<Res>,
   dependencies: DependencyList
-): ResultData<Res> {
+): LiveResultUpdate<Res> {
   const runQuery = useMemo(runQueryFn, dependencies)
 
   return useLiveQueryWithQueryUpdates(runQuery, [runQuery])
@@ -111,7 +79,7 @@ function useLiveQueryWithDependencies<Res>(
 
 function useLiveQueryWithQueryHash<Res>(
   runQuery: LiveResultContext<Res>
-): ResultData<Res> {
+): LiveResultUpdate<Res> {
   const queryHash = useMemo(
     () => hash(runQuery.sourceQuery),
     [runQuery.sourceQuery]
@@ -123,79 +91,17 @@ function useLiveQueryWithQueryHash<Res>(
 function useLiveQueryWithQueryUpdates<Res>(
   runQuery: LiveResultContext<Res>,
   runQueryDependencies: DependencyList
-): ResultData<Res> {
+): LiveResultUpdate<Res> {
   const electric = useContext(ElectricContext)
-  const [resultData, setResultData] = useState<ResultData<Res>>({})
+  const [resultData, setResultData] = useState<LiveResultUpdate<Res>>({})
 
-  // Store the `runQuery` function as a callback, optionally
-  // provide way to prevent state updates for handling dangling
-  // async calls
-  const runLiveQuery = useCallback(async (): Promise<QueryResult<Res>> => {
-    try {
-      const res = await runQuery()
-      return {
-        result: successResult(res.result),
-        tablenames: res.tablenames,
-      }
-    } catch (err) {
-      return {
-        result: errorResult(err),
-        tablenames: undefined,
-      }
-    }
-  }, runQueryDependencies)
-
-  // Runs initial query, storing affected tablenames, and subscribes to
-  // any subsequent changes to the affected tables for rerunning the query
-  const subscribeToDataChanges = useCallback(
-    (notifier: Notifier) => {
-      let cancelled = false
-      let relevantTablenames: QualifiedTablename[] | undefined
-
-      // utility to conditionally update the results and affected tablenames
-      // if change subscription is still active
-      const updateState = ({ result, tablenames }: QueryResult<Res>) => {
-        if (cancelled) return
-        relevantTablenames = tablenames
-        setResultData(result)
-      }
-
-      const handleChange = (notification: ChangeNotification): void => {
-        // Reduces the `ChangeNotification` to an array of namespaced tablenames,
-        // in a way that supports both the main namespace for the primary database
-        // and aliases for any attached databases.
-        const changedTablenames = notifier.alias(notification)
-        if (
-          relevantTablenames &&
-          hasIntersection(relevantTablenames, changedTablenames)
-        ) {
-          runLiveQuery().then(updateState)
-        }
-      }
-
-      // run initial query to populate results and affected tablenames
-      runLiveQuery().then(updateState)
-      const unsubscribe = notifier?.subscribeToDataChanges(handleChange)
-
-      return () => {
-        cancelled = true
-        unsubscribe?.()
-      }
-    },
-    [runLiveQuery]
-  )
-
-  // Once we have electric, we then run the query and establish the data
-  // change notification subscription, comparing the tablenames used by the
-  // query with the changed tablenames in the data change notification
-  // to determine whether to re-query or not.
-  //
-  // If we do need to re-query, then we use the saved function to reuse the query
+  // Once we have electric, we subscribe to the query results and
+  // update that subscription on any dependency change
   useEffect(() => {
     if (electric?.notifier === undefined) return
-    const unsubscribe = subscribeToDataChanges(electric?.notifier)
+    const unsubscribe = runQuery.subscribe(setResultData)
     return unsubscribe
-  }, [electric?.notifier, subscribeToDataChanges])
+  }, [electric?.notifier, ...runQueryDependencies])
 
   return resultData
 }
