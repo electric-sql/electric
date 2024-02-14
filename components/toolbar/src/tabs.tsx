@@ -10,7 +10,7 @@ type TabName = 'status' | 'db' | 'sql'
 function TabItem(
   label: string,
   name: TabName,
-  handleClick: (name: 'status' | 'db' | 'sql') => void,
+  handleClick: (name: TabName) => void,
   active: string,
 ): JSX.Element {
   const className =
