@@ -135,6 +135,7 @@ await fs.mkdir(projectDir, { recursive: true })
 const thisDir = path.dirname(fileURLToPath(import.meta.url))
 const templateDir = path.resolve(thisDir, '..', 'template')
 await fs.cp(templateDir, projectDir, { recursive: true })
+await fs.rename(path.join(projectDir, 'dot_gitignore'), path.join(projectDir, '.gitignore'))
 
 // read package.json file and parse it as JSON
 // we could import it but then we get a warning
