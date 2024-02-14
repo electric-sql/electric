@@ -1,4 +1,3 @@
-
 export class MockIndexDB {
   private deleted: string[]
 
