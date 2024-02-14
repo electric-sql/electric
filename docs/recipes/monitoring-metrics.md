@@ -1,5 +1,6 @@
 ---
 title: Monitoring Metrics
+description: Live metric monitoring with arbitrary time aggregation and view window
 sidebar_position: 20
 ---
 

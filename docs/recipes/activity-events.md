@@ -1,6 +1,7 @@
 ---
 title: Activity Events
-sidebar_position: 50
+description: Live activity feed pattern with read acknowledgements
+sidebar_position: 30
 ---
 
 import useBaseUrl from '@docusaurus/useBaseUrl'
