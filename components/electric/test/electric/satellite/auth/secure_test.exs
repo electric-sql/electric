@@ -56,6 +56,38 @@ defmodule Electric.Satellite.Auth.SecureTest do
       assert {:error, :key, "has to be at least 64 bytes long for HS512"} ==
                build_config(alg: "HS512", key: "key")
     end
+
+    test "validates the public key format" do
+      error_msg = """
+      is not a valid key for AUTH_JWT_ALG=<alg> or it has invalid format.
+
+          The key for RS* and ES* algorithms must use the PEM format, with the header
+          and footer included:
+
+              -----BEGIN PUBLIC KEY-----
+              MFkwEwYHKoZIzj0CAQY...
+              ...
+              -----END PUBLIC KEY-----
+      """
+
+      assert {:error, :key, String.replace(error_msg, "<alg>", "RS256")} ==
+               build_config(alg: "RS256", key: "...")
+
+      ###
+
+      assert {:error, :key, String.replace(error_msg, "<alg>", "ES384")} ==
+               build_config(alg: "ES384", key: "...")
+
+      ###
+
+      public_key = File.read!("test/fixtures/keys/rsa_pub.pem")
+
+      assert {:error, :key, String.replace(error_msg, "<alg>", "ES512")} ==
+               build_config(alg: "ES512", key: public_key)
+
+      assert {:error, :key, String.replace(error_msg, "<alg>", "RS256")} ==
+               build_config(alg: "RS256", key: String.slice(public_key, 1..-1//1))
+    end
   end
 
   describe "validate_token()" do

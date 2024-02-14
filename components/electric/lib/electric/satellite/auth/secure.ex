@@ -110,7 +110,31 @@ defmodule Electric.Satellite.Auth.Secure do
   defp validate_key(key, "HS512") when byte_size(key) < 64,
     do: {:error, :key, "has to be at least 64 bytes long for HS512"}
 
-  defp validate_key(key, _alg), do: {:ok, key}
+  defp validate_key(key, "HS" <> _), do: {:ok, key}
+
+  defp validate_key(key, pk_alg) do
+    algorithms_for_key =
+      key
+      |> JOSE.JWK.from_pem()
+      |> JOSE.JWK.verifier()
+
+    if pk_alg in algorithms_for_key do
+      {:ok, key}
+    else
+      {:error, :key,
+       """
+       is not a valid key for AUTH_JWT_ALG=#{pk_alg} or it has invalid format.
+
+           The key for RS* and ES* algorithms must use the PEM format, with the header
+           and footer included:
+
+               -----BEGIN PUBLIC KEY-----
+               MFkwEwYHKoZIzj0CAQY...
+               ...
+               -----END PUBLIC KEY-----
+       """}
+    end
+  end
 
   defp prepare_key(raw_key, "HS" <> _), do: raw_key
   defp prepare_key(raw_key, "RS" <> _), do: %{"pem" => raw_key}
