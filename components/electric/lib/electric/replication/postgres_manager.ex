@@ -87,7 +87,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
     Process.flag(:trap_exit, true)
 
     # Use an ETS table to store data that are regularly looked up by other processes.
-    :ets.new(ets_table_name(origin), [:protected, :named_table, :read_concurrency])
+    :ets.new(ets_table_name(origin), [:protected, :named_table, {:read_concurrency, true}])
 
     state =
       %State{origin: origin, connector_config: connector_config}
