@@ -5,23 +5,22 @@ description: >-
 sidebar_position: 40
 ---
 
-You can deploy ElectricSQL to [Fly.io](https://fly.io).
+You can deploy ElectricSQL to [Fly.io](https://fly.io) and use either an external Postgres or an instance of Fly Postgres as the database for the sync service. This guide covers both scenarios:
 
-The app config needs to include an `http_service` with internal port `5133` and a TCP service for Electric's [migrations proxy](../usage/data-modelling/migrations#migrations-proxy) that listens on port `65432` by default.
+  1. deploying the Electric sync service and connecting it to an external Postgres
+  2. configuring Fly Postgres and the Electric sync service to connect over Fly's private network
 
-The environment variables used by Electric are described in <DocPageLink path="api/service" />.
+:::info
+For background on how to successfully deploy the sync service and what needs to connect where, see <DocPageLink path="deployment/concepts" />.
+:::
 
-## Deploying Electric
+## Deploying Electric connected to an external Postgres
 
-As a quick example, let's create a new Fly app to run Electric and connect it to a third-party database such as [Supabase](./supabase.md).
-
-### Postgres with logical replication
-
-Before deploying Electric, make sure you have a Postgres database hosted somewhere where Electric will be able to connect to it and that it has logical replication enabled. Many managed hosting providers support logical replication, see <DocPageLink path="usage/installation/postgres#hosting" /> for some options.
-
-Retrieve your database's connection URI with password included and use it as the value of the `DATABASE_URL` variable in the next step.
+Before deploying Electric, you'll need a Postgres database (with logical replication enabled) hosted somewhere Electric can connect to. Many managed database providers support logical replication, see <DocPageLink path="usage/installation/postgres#hosting" /> for some options. Retrieve your database's connection URI with password included from your provider and use it as the value of the `DATABASE_URL` variable when setting up the app.
 
 ### Configure your Fly app
+
+The app config needs to include an `http_service` with internal port `5133` and a TCP service for Electric's [migrations proxy](../usage/data-modelling/migrations#migrations-proxy) that listens on port `65432` by default.  See <DocPageLink path="api/service" /> to learn about the environment variables used by Electric in detail.
 
 Save the following snippet into a file named `fly.toml` somewhere on your computer, changing the `app` name as you see fit:
 
@@ -29,18 +28,16 @@ Save the following snippet into a file named `fly.toml` somewhere on your comput
 app = "electric-on-fly-test-app"
 
 [build]
-  image = "electricsql/electric"
+  image = "electricsql/electric:latest"
 
 [env]
   AUTH_MODE = "insecure"
   DATABASE_URL = "postgresql://..."
-  # When using Fly Postgres, uncomment the below. Fly Postgres does not
-  # support encrypted connections when connecting over its private 6PN network.
-  #DATABASE_REQUIRE_SSL = "false"
   ELECTRIC_WRITE_TO_PG_MODE = "direct_writes"
   PG_PROXY_PASSWORD = "proxy_password"
 
-# The main Internet-facing service of Electric to which clients will be connecting.
+# The main Internet-facing service of Electric
+# to which clients will be connecting.
 [http_service]
   internal_port = 5133
   force_https = true
@@ -52,7 +49,8 @@ app = "electric-on-fly-test-app"
     method = "GET"
     path = "/api/status"
 
-# Service definition for the migrations proxy that should be accessible on a separate TCP port.
+# Service definition for the migrations proxy that runs
+# on a separate TCP port.
 [[services]]
   protocol = "tcp"
   internal_port = 65432
@@ -61,6 +59,14 @@ app = "electric-on-fly-test-app"
     port = 65432
     handlers = ["pg_tls"]
 ```
+
+:::info Secrets and environment variables
+[Secrets](https://fly.io/docs/reference/secrets/) allow sensitive values, such as credentials, to be passed securely to your Fly app. The secret is encrypted and stored in a vault. It is made available to the app as an environment variable.
+
+We're not using secrets in this example to keep things short and simple. As soon as you're ready to take your Fly app from development to production, make sure to replace the `DATABASE_URL`, `PG_PROXY_PASSWORD` and `AUTH_JWT_KEY` environment variables with secrets.
+
+See also <DocPageLink path="usage/auth/secure"/> to learn about the secure authentication mode for your production-ready deployment of Electric.
+:::
 
 ### Deploy!
 
@@ -133,56 +139,55 @@ $ curl https://electric-on-fly-test-app.fly.dev/api/status
 Connection to Postgres is up!
 ```
 
-## Preparing the client app
 
-Let's see how to set up a client app to connect to the Electric sync service we've just deployed. Clone the source code repository to your machine and navigate to the basic example, as explained on [this page](../examples/basic#source-code).
+## Deploying Electric connected to Fly Postgres
 
-### Apply migrations
-
-Electric can work alongside any tooling you use to manage database migrations with. See the <DocPageLink path="integrations/backend" /> section of the docs for an overview of the most popular frameworks.
-
-In this demo we'll use `@databases/pg-migrations` as it's already included in the basic example. Make sure you have installed all of the dependencies by running `npm install` once.
-
-:::note
-Electric requires database migrations to be applied via the migrations proxy, so instead of using the connection URL from `DATABASE_URL`, we build a custom one that includes the configured `PG_PROXY_PASSWORD` and the domain name of the deployed Electric sync service.
-:::
-
-Run `npx pg-migrations apply` to apply the migration included in the example to your database:
+Follow the [offical Fly Postgres docs](https://fly.io/docs/postgres/) to set up your database. If you already have an instance of Fly Postgres running, make sure it's configured with `wal_level=logical`:
 
 ```shell
-$ npx pg-migrations apply \
-      --directory db/migrations \
-      --database postgresql://postgres:proxy_password@electric-on-fly-test-app.fly.dev:65432/postgres
-Applying 01-create_items_table.sql
-Applied 01-create_items_table.sql
-1 migrations applied
+$ fly pg -a <pg app name> config update --wal-level logical
+
+NAME     	VALUE  	TARGET VALUE	RESTART REQUIRED
+wal-level	replica	logical     	true
+
+// highlight-next-line
+? Are you sure you want to apply these changes? Yes
+Performing update...
+Update complete!
+Please note that some of your changes will require a cluster restart
+before they will be applied.
+// highlight-next-line
+? Restart cluster now? Yes
+Identifying cluster role(s)
+  Machine 148ed127a03de8: primary
+Restarting machine 148ed127a03de8
+  Waiting for 148ed127a03de8 to become healthy (started, 1/3)
 ```
 
-### Generate a type-safe client
+Now go back to [Configure your Fly app](#configure-your-fly-app) above and modify the contents of the `fly.toml` file shown there by changing the `DATABASE_URL` value to use your Fly Postgres instance's connection string and adding the `DATABASE_REQUIRE_SSL` environment variable:
 
-Now that the database has one electrified table, we can [generate a type-safe client](../usage/data-access/client.md) from it. Use the same database connection URL as in the previous step but change the username to `prisma` (this is required for the schema introspection to work correctly).
+
+```toml
+[env]
+  DATABASE_URL = "postgres://postgres:...@<pg-app-name>.flycast:5432"
+  DATABASE_REQUIRE_SSL = "false"
+  ...the rest of the env vars
+```
+
+Fly Postgres does not support encrypted database connections inside its private 6PN network while Electric enforces encryption by default. The above `DATABASE_REQUIRE_SSL` setting changes Electric's behaviour by allowing it to fallback to using unencrypted connections.
+
+## Connecting the client app to Electric running on Fly
+
+If you don't already have an Electric-enabled client app, follow our <DocPageLink path="quickstart" /> guide or clone our [Basic Items](/docs/examples/basic) example app and go through its README. In either case, skip the steps that show how to run Postgres and Electric locally.
+
+Create a file named `.env.local` inside your client app's root directory with the following contents so that [`electric-sql commands`](/docs/api/cli) know how to connect to your instance of Electric sync service running on Fly:
 
 ```shell
-$ npx electric-sql generate
-      --service https://electric-on-fly-test-app.fly.dev
-      --proxy postgresql://prisma:proxy_password@electric-on-fly-test-app.fly.dev:65432/postgres
-Generating Electric client...
-Successfully generated Electric client at: ./src/generated/client
-Building migrations...
-Successfully built migrations
+ELECTRIC_SERVICE=https://electric-on-fly-test-app.fly.dev/
+
+# This should be the same password as the one used
+# for PG_PROXY_PASSWORD in your fly.toml
+ELECTRIC_PG_PROXY_PASSWORD=proxy_password
 ```
 
-### Start the app!
-
-Now you should have everything ready to start the web app and have it connected to the Electric sync service deployed on Fly.
-
-```shell
-$ ELECTRIC_URL='wss://electric-on-fly-test-app.fly.dev' \
-  SERVE=true \
-  npm run build
-
-> electric-sql-wa-sqlite-example@0.7.0 build
-> node copy-wasm-files.js && node builder.js
-
-Your app is running at http://localhost:3001
-```
+If you're wondering why we don't set the `ELECTRIC_DATABASE_URL` variable here, that's because client commands only connect to the Migrations proxy which is a component of Electric sync service. Learn more about the Migrations proxy's role and how it fits into the bigger picture in our <DocPageLink path="deployment/concepts#migrations-proxy" /> guide.
