@@ -54,6 +54,9 @@ try {
 await mkdir(templateDir, { recursive: true })
 await copyFiles(exampleDir, templateDir)
 await copyFiles(templateOverlayDir, templateDir)
+
+// npmjs.com seems to be removing .gitignore files from published packages.
+// Hance this renaming operation and a reverse operation in src/index.ts.
 await rename(join(templateDir, '.gitignore'), join(templateDir, 'dot_gitignore'))
 
 // change package name and version
