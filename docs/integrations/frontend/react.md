@@ -181,31 +181,31 @@ With a signature of:
 ```tsx
 import { LiveResultContext } from 'electric-sql/client/model/model'
 
-export interface LiveResultUpdate<T> {
-  results?: T
+export interface ResultData<T> {
   error?: unknown
+  results?: T
   updatedAt?: Date
 }
 
-function successResult<T>(results: T): LiveResultUpdate<T> {
+function successResult<T>(results: T): ResultData<T> {
   return {
-    results: results,
     error: undefined,
+    results: results,
     updatedAt: new Date(),
   }
 }
 
-function errorResult<T>(error: unknown): LiveResultUpdate<T> {
+function errorResult<T>(error: unknown): ResultData<T> {
   return {
-    results: undefined,
     error: error,
+    results: undefined,
     updatedAt: new Date(),
   }
 }
 
 function useLiveQuery<Res>(
   runQuery: LiveResultContext<Res>
-): LiveResultUpdate<Res>
+): ResultData<Res>
 ```
 
 Running the query successfully will assign a new array of rows to the `results` and `error` will be `undefined`. Or if the query errors, the error will be assigned to the `error` variable and `results` will be `undefined`. The `updatedAt` variable is a [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) instance set when the return value last changed. Which is either when the query is first run or whenever it's re-run following a data change event.
@@ -262,7 +262,7 @@ Note that with this usage, the first argument wraps the `db.projects.liveMany()`
 function useLiveQuery<Res>(
   runQueryFn: () => LiveResultContext<Res>,
   dependencies: DependencyList
-): LiveResultUpdate<Res>
+): ResultData<Res>
 ```
 
 ### `useConnectivityState`
