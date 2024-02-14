@@ -10,7 +10,8 @@ ElectricSQL extends the PostgreSQL language with the following DDLX statements.
 Use these in your [migrations](../usage/data-modelling/migrations.md) to [electrify tables](../usage/data-modelling/electrification.md) and expose data by granting [permissions](../usage/data-modelling/permissions.md) to roles and assigning roles to [authenticated](../usage/auth/index.md) users.
 
 :::caution Work in progress
-The syntax and features described in this page are not fully implemented. Currently, DDLX rules are limited to [enabling electrification](#enable). See [Roadmap -> DDLX rules](../reference/roadmap.md#ddlx-rules) for more context.
+The syntax and features described in this page are not fully implemented. There are some notes below on which parts are not implemented yet. 
+See [Roadmap -> DDLX rules](../reference/roadmap.md#ddlx-rules) for more context.
 :::
 
 ## Electrification
@@ -78,13 +79,17 @@ See <DocPageLink path="usage/data-modelling/permissions" /> for more information
 
 Grants permissions to roles.
 
+:::caution Work in progress
+The column_name statement is not implemented yet, but is coming soon. 
+We have included it here as it's helpful in explaining how the permissions will work overall.
+:::
+
 ```sql
 ELECTRIC GRANT
   { SELECT | INSERT | UPDATE | DELETE | READ | WRITE | ALL [ PRIVILEGES ] } [ ( column_name [, ...] ) ]
   ON [ TABLE ] table_name
   TO role
-  [ USING scope_path ]
-  [ CHECK ( check_expression )];
+  [ WHERE ( check_expression )];
 ```
 
 Where `role` is:
@@ -114,26 +119,31 @@ You can grant a permission on a whole table or only on specific columns by givin
 This is very similar to the standard PostgreSQL `GRANT` for tables, but extends the syntax to give more fine grained control over who can do what. These are the main differences:
 
 1. you can, optionally, define a scope in which the grant applies
-2. you can add a `CHECK` constraint to make permissions dependent on the content of rows
+2. you can add a `WHERE` constraint to make permissions dependent on the content of rows
 3. the roles referred to are ElectricSQL specific role names rather than usual Postgres roles
 4. these roles are assigned to users with the [`ASSIGN`](#assign) statement below
 5. only four permissions (directly, or via their aliases) can be granted with this statement
 
 The optional scope table `scope_table_name` may be the same table as `table_name` or another table. Using a scope lets you limit where this grant applies e.g. you can grant permissions on the content of a project to only admins of that specific project.
 
-As well as role names you create, there are a couple of built in roles automatically provided by ElectricSQL:
+As well as role names you create, there are a couple of built-in roles automatically provided by ElectricSQL:
 
 - `AUTHENTICATED`
 - `ANYONE`
 
 Users have a set of roles. Every user will have the `ANYONE` role and authenticated users will have the `AUTHENTICATED` role.
 
-If you add a `CHECK` clause, then when the permission is used the `check_expression` will be evaluated against any existing row and any data being written. If it evaluates as false then the operation will fail.
+If you add a `WHERE` clause, then when the permission is used the `check_expression` will be evaluated against any existing row and any data being written. If it evaluates as false then the operation will fail.
 
-The `check_expression` also has the value `AUTH.user_id` in scope which will hold the user id of the current authenticated user. This can be used to validate that a column contains the current user id, which is very useful for having a reliable reference to the user who inserted a row.
+The `check_expression` is a sql boolean expression. This function will have various pre-defined variables available to validate the action. 
+
+- AUTH the auth state for the connection is available for every operation. Has the user_id which may be null defined by the authentication token and also the claims field which provides all the claims from the JWT. 
+- NEW available for INSERT and UPDATE operations, NULL in DELETE operations
+- OLD available for DELETE and UPDATE operations, NULL in INSERT operations
+- ROW available for SELECT operations. 
 
 :::note
-If you have added additional claims to the authentication JWT then they can also be referenced in the `check_expression`. By convention, they should be added as a `data` claim, which is available at `auth.data`.
+If you have added additional claims to the authentication JWT then they can also be referenced in the `check_expression`. They are available at `auth.claims`.
 
 This can be used to extend authorisation and provide additional discrimination between users that is not modelled in the data and hence not available to the `ASSIGN` mechanism. However, if possible, it is generally best to use `ASSIGN` rather than add complex extra claims to the JWT. This is because the state of the permissions via `ASSIGN` will be consistent with the contents of the database (i.e.: part of the same snapshot) whereas those in the JWT are tied to the lifecycle of the client's connection and are thus less responsive and not guaranteed to be consistent with the contents of the database.
 :::
@@ -143,9 +153,7 @@ This can be used to extend authorisation and provide additional discrimination b
 - **`column_name`** - you can provide one or more column names that this permission will apply to.
 If you don't give any column names then the grant applies to the whole table.
 - **`table_name`** - the name of an existing electrified table table on which to grant the permission.
-- **`role_name`** - the name of a role that has been assigned to users with an `ELECTRIC ASSIGN` statement. Role names are strings enclosed in single quotes.
-- **`scope_path`** - if there is any ambiguity about from where to read the id for the scope that a row belongs to then this can be used to specify it. If there is a single foreign key constraint in `table_name` pointing to the `scope_table_name` table then this can be inferred and is not necessary. If there is more than one foreign key pointing to the `scope_table_name` table then `scope_path` should be the name of the column in `table_name` to use. If there is no foreign key in the table `table_name` pointing directly to the `scope_table_name` table you can specify a path
-indicating where to find the foreign key by walking through intermediate foreign keys, there is an example below
+- **`role_name`** - the name of a role that has been assigned to users with an `ELECTRIC ASSIGN` statement.
 - **`check_expression`** - a sql expression that will be evaluated when the permission is used
 
 #### Examples
@@ -186,8 +194,7 @@ This grant lets users who have the role `member` in a project read the project's
 ```sql
 ELECTRIC GRANT READ
   ON issues
-  TO (projects, 'member')
-  USING project_id;
+  TO (projects, 'member');
 ```
 
 This is similar to the grant above. It lets a project member read comments on issues in a project, but the comments table doesn't itself have a foreign key pointing to the project so the `USING` parameter provides a path to where to find it.
@@ -195,8 +202,7 @@ This is similar to the grant above. It lets a project member read comments on is
 ```sql
 ELECTRIC GRANT READ
   ON comments
-  TO (projects, member')
-  USING issue_id/project_id;
+  TO (projects, member');
 ```
 
 Here an `admin` can add project members with any role to the `project_members` join table, but a member can only add people as `member` or `guest`. The `CHECK` statement limits what they can do.
@@ -213,7 +219,7 @@ ELECTRIC GRANT READ
 ELECTRIC GRANT INSERT
   ON project_members
   TO (projects, 'member')
-  CHECK (
+  WHERE (
     NEW.role_name = 'member'
     OR NEW.role_name = 'guest'
   );
@@ -225,7 +231,7 @@ Here any authenticated user can create a new project if they correctly set the `
 ELECTRIC GRANT INSERT
   ON projects 
   TO AUTHENTICATED
-  CHECK (
+  WHERE (
     NEW.owner_id = AUTH.user_id
   );
 ```
@@ -238,8 +244,7 @@ ELECTRIC GRANT READ (
     description
   ) 
   ON issues
-  TO (projects, 'member')
-  USING project_id;
+  TO (projects, 'member');
 ```
 
 #### Updating grants
@@ -259,7 +264,7 @@ The `(projects, 'member')` role will have `READ` permissions to the entire `comm
 
 If you then ran `ELECTRIC GRANT READ ON issues TO (projects, 'member')` the access would again widen to all columns of `issues`.
 
-The `CHECK` expression uses the same logic as the column specification, the last write for a specific permission, table and role tuple wins.
+The `WHERE` expression uses the same logic as the column specification, the last write for a specific permission, table and role tuple wins.
 
 ### `REVOKE`
 
@@ -338,7 +343,6 @@ Assigns a role to an [authenticated user](../usage/auth/index.md).
 ```sql
 ELECTRIC ASSIGN role_definition
   TO table_name.user_fk
-  [ USING scope_path ]
   [ IF if_statement ];
 ```
 
@@ -372,7 +376,7 @@ These specify a database column to read the role value from, using tuple syntax 
 In the first example above the global role assigned will be read from the column `role_name` in the table `users`. In the second example the scoped role is read from the column `role_name` in the table `memberships` and then concatenated with the `projects` scope. So, for example, if the `memberships.role_name` column contained the string `'admin'` then the scoped role assigned would be equivalent to the literal `(projects, 'admin')`.
 
 :::note
-You can always user the longer syntax for role definitions if you prefer or are writing them programmatically.
+You can always use the longer syntax for role definitions if you prefer or are writing them programmatically.
 
 - `'admin'` can be written as `(NULL, 'admin')`
 - `users.role_name` can be written as `(NULL, users.role_name)`
@@ -383,7 +387,6 @@ You can always user the longer syntax for role definitions if you prefer or are 
 - **`role_definition`** - the definition of a role as described above
 - **`table_name`** - the name of an electrified table that holds the users foreign keys to assign roles to
 - **`user_fk`** - the name of the column holding the foreign key of the users to be assigned the role
-- **scope_path** - if there is any ambiguity about how to link from `table_name` to the `scope_table_name`, this can be used to specify the foreign key path. If there is a single foreign key constraint in `table_name` pointing to the scope_table_name table then this is not necessary, ElectricSQL will work out which column to use. If there is more than one foreign key pointing to the scope_table_name table then scope_path should be the name of the column in table_name to use. If there is no foreign key in the table table_name pointing directly to the scope_table_name table you can specify a path indicating where to find the foreign key by walking through intermediate foreign keys
 - **`if_statement`** - optionally add a statement that will be evaluated against the row in `table_name`. The assignment rule will only assign the role if it evaluates as true. This is useful to assign roles dependent on things like booleans or specific string values
 
 #### Examples
@@ -493,6 +496,10 @@ ELECTRIC UNASSIGN 'record.reader'
 ```
 
 ## Local migrations
+
+:::caution Work in progress
+The local migrations are not implemented yet, but are coming soon.
+:::
 
 The `SQLITE` statement provides a mechanism to run DDL statements directly on the local SQLite database. 
 
