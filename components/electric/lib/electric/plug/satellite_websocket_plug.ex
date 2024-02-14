@@ -3,6 +3,8 @@ defmodule Electric.Plug.SatelliteWebsocketPlug do
 
   import Plug.Conn
 
+  alias Electric.Replication.{InitialSync, PostgresConnector}
+
   require Logger
 
   @protocol_prefix "electric."
@@ -14,11 +16,9 @@ defmodule Electric.Plug.SatelliteWebsocketPlug do
       base_opts
       |> Keyword.put(:client_version, client_version)
       |> Keyword.put_new_lazy(:auth_provider, fn -> Electric.Satellite.Auth.provider() end)
-      |> Keyword.put_new_lazy(:connector_config, fn ->
-        Electric.Replication.PostgresConnector.connector_config()
-      end)
+      |> Keyword.put_new_lazy(:connector_config, fn -> PostgresConnector.connector_config() end)
       |> Keyword.put_new_lazy(:subscription_data_fun, fn ->
-        &Electric.Replication.InitialSync.query_subscription_data/2
+        &InitialSync.query_subscription_data/2
       end)
 
   @currently_supported_versions ">= 0.6.0 and <= #{%{Electric.vsn() | pre: []}}"
@@ -80,13 +80,17 @@ defmodule Electric.Plug.SatelliteWebsocketPlug do
     end
   end
 
-  defp check_if_postgres_is_ready() do
-    Electric.Replication.PostgresConnector.connector_config()
-    |> Electric.Replication.Connectors.origin()
-    |> Electric.Replication.PostgresConnectorMng.status()
-    |> case do
-      :ready -> :ok
-      other -> {:error, 503, "Postgres connection is not ready: #{other}..."}
+  if Mix.env() == :test do
+    defp check_if_postgres_is_ready, do: :ok
+  else
+    defp check_if_postgres_is_ready do
+      PostgresConnector.connector_config()
+      |> Electric.Replication.Connectors.origin()
+      |> Electric.Replication.PostgresConnectorMng.status()
+      |> case do
+        :ready -> :ok
+        other -> {:error, 503, "Postgres connection is not ready: #{other}..."}
+      end
     end
   end
 
