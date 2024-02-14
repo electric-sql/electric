@@ -99,16 +99,15 @@ defmodule Electric.Satellite.Auth.Secure do
     end
   end
 
-  defp validate_key(key, "HS256") when byte_size(key) < 32,
-    do: {:error, :key, "has to be at least 32 bytes long for HS256"}
+  defp validate_key(key, "HS" <> _ = alg) do
+    raw_key =
+      case Base.decode64(key, padding: false) do
+        {:ok, raw_key} -> raw_key
+        :error -> key
+      end
 
-  defp validate_key(key, "HS384") when byte_size(key) < 48,
-    do: {:error, :key, "has to be at least 48 bytes long for HS384"}
-
-  defp validate_key(key, "HS512") when byte_size(key) < 64,
-    do: {:error, :key, "has to be at least 64 bytes long for HS512"}
-
-  defp validate_key(key, "HS" <> _), do: {:ok, key}
+    validate_key_length(raw_key, alg)
+  end
 
   defp validate_key(key, pk_alg) do
     algorithms_for_key =
@@ -133,6 +132,17 @@ defmodule Electric.Satellite.Auth.Secure do
        """}
     end
   end
+
+  defp validate_key_length(raw_key, "HS256") when byte_size(raw_key) < 32,
+    do: {:error, :key, "has to be at least 32 bytes long for HS256"}
+
+  defp validate_key_length(raw_key, "HS384") when byte_size(raw_key) < 48,
+    do: {:error, :key, "has to be at least 48 bytes long for HS384"}
+
+  defp validate_key_length(raw_key, "HS512") when byte_size(raw_key) < 64,
+    do: {:error, :key, "has to be at least 64 bytes long for HS512"}
+
+  defp validate_key_length(raw_key, "HS" <> _), do: {:ok, raw_key}
 
   defp add_exp_claim(token_config, in: seconds) do
     Joken.Config.add_claim(
