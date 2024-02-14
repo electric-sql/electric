@@ -4,6 +4,9 @@ import {
   ref,
   Ref,
   computed,
+  readonly,
+  shallowReadonly,
+  DeepReadonly,
   shallowReactive,
   onUnmounted,
 } from 'vue'
@@ -59,11 +62,11 @@ function useLiveQuery<Res>(
  */
 function useLiveQuery<Res>(
   runQueryRef: Ref<LiveResultContext<Res>>
-): LiveResultUpdate<Res>
+): DeepReadonly<LiveResultUpdate<Res>>
 
 function useLiveQuery<Res>(
   runQueryOrRef: LiveResultContext<Res> | Ref<LiveResultContext<Res>>
-): LiveResultUpdate<Res> {
+): DeepReadonly<LiveResultUpdate<Res>> {
   if (typeof runQueryOrRef === 'function') {
     return useLiveQueryWithQueryHash(runQueryOrRef as LiveResultContext<Res>)
   }
@@ -74,7 +77,7 @@ function useLiveQuery<Res>(
 
 function useLiveQueryWithQueryHash<Res>(
   runQuery: LiveResultContext<Res>
-): LiveResultUpdate<Res> {
+): DeepReadonly<LiveResultUpdate<Res>> {
   const queryHash = computed(() => hash(runQuery.sourceQuery))
 
   return useLiveQueryWithQueryUpdates(runQuery, [queryHash])
@@ -83,7 +86,7 @@ function useLiveQueryWithQueryHash<Res>(
 function useLiveQueryWithQueryUpdates<Res>(
   runQuery: LiveResultContext<Res>,
   runQueryDependencies: WatchSource[]
-): LiveResultUpdate<Res> {
+): DeepReadonly<LiveResultUpdate<Res>> {
   const results = shallowReactive<LiveResultUpdate<Res>>({})
   const unsubscribeRef = ref<UnsubscribeFunction>()
 
@@ -102,7 +105,7 @@ function useLiveQueryWithQueryUpdates<Res>(
 
   onUnmounted(() => unsubscribeRef.value?.())
 
-  return results
+  return readonly(results)
 }
 
 export default useLiveQuery
