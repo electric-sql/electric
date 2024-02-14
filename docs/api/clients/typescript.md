@@ -852,19 +852,7 @@ The live query above fetches all issues.
 The `results` variable will automatically be updated
 when new issues are created and when existing issues are updated or deleted.
 
-If the existing bindings for live reactive queries don't cover your desired use case, you can subscribe to the results of a live query via its `subscribe` method, to which you can attach a handler that will get called anytime there are changes to data relevant to the query. Make sure to clean up any subscriptions after they are no longer needed.
-
-```ts
-const liveQuery = db.issues.liveMany()
-const unsubscribe = liveQuery.subscribe(
-  (resultUpdate) => * handle updated result *
-)
-
-// clean up live query subscription when done
-unsubscribe()
-```
-
-The `useLiveQuery` hook and `subscribe` method can be used in combination with any live query.
+The `useLiveQuery` hook can be used in combination with any live query.
 The supported live queries are discussed below.
 
 ### `liveUnique`
