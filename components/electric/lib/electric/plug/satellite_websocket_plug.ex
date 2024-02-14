@@ -63,7 +63,7 @@ defmodule Electric.Plug.SatelliteWebsocketPlug do
 
       :error ->
         reason = "Missing satellite websocket subprotocol"
-        Logger.debug("Client WebSocket connection failed with reason: #{reason}")
+        Logger.warning("Client WebSocket connection failed with reason: #{reason}")
         {:error, 400, reason}
     end
   end
@@ -75,7 +75,7 @@ defmodule Electric.Plug.SatelliteWebsocketPlug do
       reason =
         "Cannot connect satellite version #{assigns.satellite_vsn}: this server requires #{requirements}"
 
-      Logger.debug("Client WebSocket connection failed with reason: #{reason}")
+      Logger.warning("Client WebSocket connection failed with reason: #{reason}")
       {:error, 400, reason}
     end
   end
