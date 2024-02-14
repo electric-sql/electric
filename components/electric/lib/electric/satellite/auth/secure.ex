@@ -54,8 +54,6 @@ defmodule Electric.Satellite.Auth.Secure do
   def build_config(opts) do
     with {:ok, alg} <- validate_alg(opts),
          {:ok, key} <- validate_key(alg, opts) do
-      key = prepare_key(key, alg)
-
       token_config =
         %{}
         |> Joken.Config.add_claim("iat", &JWTUtil.gen_timestamp/0, &JWTUtil.past_timestamp?/1)
@@ -119,7 +117,7 @@ defmodule Electric.Satellite.Auth.Secure do
       |> JOSE.JWK.verifier()
 
     if pk_alg in algorithms_for_key do
-      {:ok, key}
+      {:ok, %{"pem" => key}}
     else
       {:error, :key,
        """
@@ -135,10 +133,6 @@ defmodule Electric.Satellite.Auth.Secure do
        """}
     end
   end
-
-  defp prepare_key(raw_key, "HS" <> _), do: raw_key
-  defp prepare_key(raw_key, "RS" <> _), do: %{"pem" => raw_key}
-  defp prepare_key(raw_key, "ES" <> _), do: %{"pem" => raw_key}
 
   defp add_exp_claim(token_config, in: seconds) do
     Joken.Config.add_claim(
