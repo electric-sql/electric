@@ -5,7 +5,6 @@ import {
   Ref,
   computed,
   readonly,
-  shallowReadonly,
   DeepReadonly,
   shallowReactive,
   onUnmounted,
