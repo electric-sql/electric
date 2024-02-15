@@ -62,14 +62,7 @@ export function generateOplogTriggers(
 
   return [
     // Toggles for turning the triggers on and off
-    dedent`
-      ${builder.insertOrIgnore(
-        'main',
-        '_electric_trigger_settings',
-        ['namespace', 'tablename', 'flag'],
-        [`'${namespace}'`, `'${tableName}'`, '1']
-      )}
-    `,
+    builder.setTriggerSetting(namespace, tableName, 1),
     // Triggers for table ${tableName}
     // ensures primary key is immutable
     dropFkTrigger,

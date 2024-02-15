@@ -4,9 +4,9 @@ import {
   MOCK_BEHIND_WINDOW_LSN,
   MOCK_INTERNAL_ERROR,
   MockSatelliteClient,
-} from '../../src/satellite/mock'
-import { QualifiedTablename } from '../../src/util/tablename'
-import { sleepAsync } from '../../src/util/timer'
+} from '../../../src/satellite/mock'
+import { QualifiedTablename } from '../../../src/util/tablename'
+import { sleepAsync } from '../../../src/util/timer'
 
 import {
   OPTYPES,
@@ -17,8 +17,8 @@ import {
   generateTag,
   encodeTags,
   opLogEntryToChange,
-} from '../../src/satellite/oplog'
-import { SatelliteProcess } from '../../src/satellite/process'
+} from '../../../src/satellite/oplog'
+import { SatelliteProcess } from '../../../src/satellite/process'
 
 import {
   loadSatelliteMetaTable,
@@ -26,35 +26,34 @@ import {
   generateRemoteOplogEntry,
   genEncodedTags,
   getMatchingShadowEntries,
-} from '../support/satellite-helpers'
+} from '../../support/satellite-helpers'
 import Long from 'long'
 import {
   DataChangeType,
   DataTransaction,
   SatelliteError,
   SatelliteErrorCode,
-} from '../../src/util/types'
+} from '../../../src/util/types'
 import {
-  makeContext,
+  makePgContext,
   opts,
   relations,
   cleanAndStopSatellite,
   ContextType,
-  clean,
-} from './common'
+} from '../common'
 import {
   DEFAULT_LOG_POS,
   numberToBytes,
   base64,
-  blobToHexString,
-} from '../../src/util/common'
+} from '../../../src/util/common'
 
-import { Shape, SubscriptionData } from '../../src/satellite/shapes/types'
-import { mergeEntries } from '../../src/satellite/merge'
-import { MockSubscriptionsManager } from '../../src/satellite/shapes/manager'
-import { AuthState, insecureAuthToken } from '../../src/auth'
-import { ConnectivityStateChangeNotification } from '../../src/notifiers'
-import { sqliteBuilder } from '../../src/migrators/query-builder'
+import {
+  ClientShapeDefinition,
+  SubscriptionData,
+} from '../../../src/satellite/shapes/types'
+import { mergeEntries } from '../../../src/satellite/merge'
+import { MockSubscriptionsManager } from '../../../src/satellite/shapes/manager'
+import { pgBuilder } from '../../../src/migrators/query-builder'
 
 const parentRecord = {
   id: 1,
@@ -67,25 +66,20 @@ const childRecord = {
   parent: 1,
 }
 
-const startSatellite = async (
-  satellite: SatelliteProcess,
-  authState: AuthState,
-  token: string
-) => {
-  await satellite.start(authState)
-  satellite.setToken(token)
-  const connectionPromise = satellite.connectWithBackoff()
-  return { connectionPromise }
-}
-
-const test = anyTest as TestFn<ContextType>
-test.beforeEach(makeContext)
+let port = 5200
+// Run all tests in this file serially
+// because there are a lot of tests
+// and it would lead to PG running out of shared memory
+const test = anyTest.serial as TestFn<ContextType>
+test.beforeEach(async (t) => {
+  await makePgContext(t, port++)
+})
 test.afterEach.always(cleanAndStopSatellite)
 const qualifiedParentTableName = new QualifiedTablename(
   'main',
   'parent'
 ).toString()
-const builder = sqliteBuilder
+const builder = pgBuilder
 
 test('setup starts a satellite process', async (t) => {
   t.true(t.context.satellite instanceof SatelliteProcess)
@@ -108,95 +102,37 @@ test('load metadata', async (t) => {
 
   const meta = await loadSatelliteMetaTable(adapter)
   t.deepEqual(meta, {
-    compensations: 1,
+    compensations: '1',
     lsn: '',
     clientId: '',
     subscriptions: '',
-    seenAdditionalData: '',
   })
 })
 
 test('set persistent client id', async (t) => {
-  const { satellite, authState, token } = t.context
+  const { satellite, authState } = t.context
 
-  const { connectionPromise } = await startSatellite(
-    satellite,
-    authState,
-    token
-  )
+  await satellite.start(authState)
   const clientId1 = satellite._authState!.clientId
   t.truthy(clientId1)
-
-  await connectionPromise
-
   await satellite.stop()
 
-  await startSatellite(satellite, authState, token)
+  await satellite.start(authState)
 
   const clientId2 = satellite._authState!.clientId
   t.truthy(clientId2)
   t.assert(clientId1 === clientId2)
 })
 
-test('can use user_id in JWT', async (t) => {
-  const { satellite, authState } = t.context
-
-  await t.notThrowsAsync(async () => {
-    await startSatellite(
-      satellite,
-      authState,
-      insecureAuthToken({ user_id: 'test-userA' })
-    )
-  })
-})
-
-test('can use sub in JWT', async (t) => {
-  const { satellite, authState } = t.context
-
-  await t.notThrowsAsync(async () => {
-    await startSatellite(
-      satellite,
-      authState,
-      insecureAuthToken({ sub: 'test-userB' })
-    )
-  })
-})
-
-test('require user_id or sub in JWT', async (t) => {
-  const { satellite, authState } = t.context
-
-  const error = await t.throwsAsync(async () => {
-    await startSatellite(
-      satellite,
-      authState,
-      insecureAuthToken({ custom_user_claim: 'test-userC' })
-    )
-  })
-  t.is(error?.message, 'Token does not contain a sub or user_id claim')
-})
-
-test('cannot update user id', async (t) => {
-  const { satellite, authState, token } = t.context
-
-  await startSatellite(satellite, authState, token)
-  const error = t.throws(() => {
-    satellite.setToken(insecureAuthToken({ sub: 'test-user2' }))
-  })
-  t.is(
-    error?.message,
-    "Can't change user ID when reconnecting. Previously connected with user ID 'test-user' but trying to reconnect with user ID 'test-user2'"
-  )
-})
-
 test('cannot UPDATE primary key', async (t) => {
   const { adapter, runMigrations } = t.context
   await runMigrations()
 
-  await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
+  await adapter.run({ sql: `INSERT INTO main.parent(id) VALUES ('1'),('2')` })
   await t.throwsAsync(
-    adapter.run({ sql: `UPDATE parent SET id='3' WHERE id = '1'` }),
+    adapter.run({ sql: `UPDATE main.parent SET id='3' WHERE id = '1'` }),
     {
-      code: 'SQLITE_CONSTRAINT_TRIGGER',
+      code: 'P0001',
     }
   )
 })
@@ -207,7 +143,7 @@ test('snapshot works', async (t) => {
   await runMigrations()
   await satellite._setAuthState(authState)
 
-  await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
+  await adapter.run({ sql: `INSERT INTO main.parent(id) VALUES ('1'),('2')` })
 
   let snapshotTimestamp = await satellite._performSnapshot()
 
@@ -215,7 +151,7 @@ test('snapshot works', async (t) => {
   let shadowTags = encodeTags([generateTag(clientId, snapshotTimestamp)])
 
   var shadowRows = await adapter.query({
-    sql: `SELECT tags FROM _electric_shadow`,
+    sql: `SELECT tags FROM main._electric_shadow`,
   })
   t.is(shadowRows.length, 2)
   for (const row of shadowRows) {
@@ -228,10 +164,6 @@ test('snapshot works', async (t) => {
   const expectedChange = {
     qualifiedTablename: new QualifiedTablename('main', 'parent'),
     rowids: [1, 2],
-    recordChanges: [
-      { primaryKey: { id: 1 }, type: 'INSERT' },
-      { primaryKey: { id: 2 }, type: 'INSERT' },
-    ],
   }
 
   t.deepEqual(changes, [expectedChange])
@@ -283,13 +215,12 @@ test('(regression) throttle with mutex prevents race when snapshot is slow', asy
 })
 
 test('starting and stopping the process works', async (t) => {
-  const { adapter, notifier, runMigrations, satellite, authState, token } =
-    t.context
+  const { adapter, notifier, runMigrations, satellite, authState } = t.context
   await runMigrations()
 
-  await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
+  await adapter.run({ sql: `INSERT INTO main.parent(id) VALUES ('1'),('2')` })
 
-  const conn = await startSatellite(satellite, authState, token)
+  const conn = await satellite.start(authState)
   await conn.connectionPromise
 
   await sleepAsync(opts.pollingInterval)
@@ -297,20 +228,20 @@ test('starting and stopping the process works', async (t) => {
   // connect, 1st txn
   t.is(notifier.notifications.length, 2)
 
-  await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('3'),('4')` })
+  await adapter.run({ sql: `INSERT INTO main.parent(id) VALUES ('3'),('4')` })
   await sleepAsync(opts.pollingInterval)
 
   // 2nd txm
   t.is(notifier.notifications.length, 3)
 
   await satellite.stop()
-  await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('5'),('6')` })
+  await adapter.run({ sql: `INSERT INTO main.parent(id) VALUES ('5'),('6')` })
   await sleepAsync(opts.pollingInterval)
 
   // no txn notified
   t.is(notifier.notifications.length, 4)
 
-  const conn1 = await startSatellite(satellite, authState, token)
+  const conn1 = await satellite.start(authState)
   await conn1.connectionPromise
   await sleepAsync(opts.pollingInterval)
 
@@ -322,7 +253,7 @@ test('snapshots on potential data change', async (t) => {
   const { adapter, notifier, runMigrations } = t.context
   await runMigrations()
 
-  await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
+  await adapter.run({ sql: `INSERT INTO main.parent(id) VALUES ('1'),('2')` })
 
   t.is(notifier.notifications.length, 0)
 
@@ -340,10 +271,10 @@ test('snapshot of INSERT after DELETE', async (t) => {
   await runMigrations()
 
   await adapter.run({
-    sql: `INSERT INTO parent(id, value) VALUES (1,'val1')`,
+    sql: `INSERT INTO main.parent(id, value) VALUES (1,'val1')`,
   })
-  await adapter.run({ sql: `DELETE FROM parent WHERE id=1` })
-  await adapter.run({ sql: `INSERT INTO parent(id) VALUES (1)` })
+  await adapter.run({ sql: `DELETE FROM main.parent WHERE id=1` })
+  await adapter.run({ sql: `INSERT INTO main.parent(id) VALUES (1)` })
 
   await satellite._setAuthState(authState)
   await satellite._performSnapshot()
@@ -368,7 +299,7 @@ test('snapshot of INSERT with bigint', async (t) => {
   await runMigrations()
 
   await adapter.run({
-    sql: `INSERT INTO bigIntTable(value) VALUES (1)`,
+    sql: `INSERT INTO main."bigIntTable"(value) VALUES (1)`,
   })
 
   await satellite._setAuthState(authState)
@@ -392,36 +323,6 @@ test('snapshot of INSERT with bigint', async (t) => {
   t.is(resultingValue, 1n)
 })
 
-test('snapshot of INSERT with blob/Uint8Array', async (t) => {
-  const { adapter, runMigrations, satellite, authState } = t.context
-
-  await runMigrations()
-
-  const blob = new Uint8Array([1, 2, 255, 244, 160, 1])
-
-  await adapter.run({
-    sql: `INSERT INTO blobTable(value) VALUES (?)`,
-    args: [blob],
-  })
-
-  await satellite._setAuthState(authState)
-  await satellite._performSnapshot()
-  const entries = await satellite._getEntries()
-  const clientId = satellite._authState!.clientId
-
-  const merged = localOperationsToTableChanges(
-    entries,
-    (timestamp: Date) => {
-      return generateTag(clientId, timestamp)
-    },
-    relations
-  )
-  const [_, keyChanges] =
-    merged['main.blobTable'][`{"value":"${blobToHexString(blob)}"}`]
-  const resultingValue = keyChanges.changes.value.value
-  t.deepEqual(resultingValue, blob)
-})
-
 test('take snapshot and merge local wins', async (t) => {
   const { adapter, runMigrations, satellite, tableInfo, authState } = t.context
   await runMigrations()
@@ -440,7 +341,7 @@ test('take snapshot and merge local wins', async (t) => {
     }
   )
   await adapter.run({
-    sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', 1)`,
+    sql: `INSERT INTO main.parent(id, value, other) VALUES (1, 'local', 1)`,
   })
 
   await satellite._setAuthState(authState)
@@ -485,7 +386,7 @@ test('take snapshot and merge incoming wins', async (t) => {
   await runMigrations()
 
   await adapter.run({
-    sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', 1)`,
+    sql: `INSERT INTO main.parent(id, value, other) VALUES (1, 'local', 1)`,
   })
 
   await satellite._setAuthState(authState)
@@ -548,7 +449,7 @@ test('merge incoming wins on persisted ops', async (t) => {
 
   // This operation is persisted
   await adapter.run({
-    sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', 1)`,
+    sql: `INSERT INTO main.parent(id, value, other) VALUES (1, 'local', 1)`,
   })
   await satellite._performSnapshot()
   const [originalInsert] = await satellite._getEntries()
@@ -561,7 +462,7 @@ test('merge incoming wins on persisted ops', async (t) => {
 
   // This operation is done offline
   await adapter.run({
-    sql: `UPDATE parent SET value = 'new local' WHERE id = 1`,
+    sql: `UPDATE main.parent SET value = 'new local' WHERE id = 1`,
   })
   await satellite._performSnapshot()
   const [offlineInsert] = await satellite._getEntries()
@@ -589,7 +490,7 @@ test('merge incoming wins on persisted ops', async (t) => {
   await satellite._applyTransaction(firstIncomingTx)
 
   const [{ value: value1 }] = await adapter.query({
-    sql: 'SELECT value FROM parent WHERE id = 1',
+    sql: 'SELECT value FROM main.parent WHERE id = 1',
   })
   t.is(
     value1,
@@ -621,7 +522,7 @@ test('merge incoming wins on persisted ops', async (t) => {
   await satellite._applyTransaction(secondIncomingTx)
 
   const [{ value: value2 }] = await adapter.query({
-    sql: 'SELECT value FROM parent WHERE id = 1',
+    sql: 'SELECT value FROM main.parent WHERE id = 1',
   })
   t.is(
     value2,
@@ -634,7 +535,7 @@ test('apply does not add anything to oplog', async (t) => {
   const { adapter, runMigrations, satellite, tableInfo, authState } = t.context
   await runMigrations()
   await adapter.run({
-    sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', null)`,
+    sql: `INSERT INTO main.parent(id, value, other) VALUES (1, 'local', null)`,
   })
 
   await satellite._setAuthState(authState)
@@ -670,13 +571,17 @@ test('apply does not add anything to oplog', async (t) => {
 
   await satellite._performSnapshot()
 
-  const sql = 'SELECT * from parent WHERE id=1'
+  const sql = 'SELECT * from main.parent WHERE id=1'
   const [row] = await adapter.query({ sql })
   t.is(row.value, 'incoming')
   t.is(row.other, 1)
 
   const localEntries = await satellite._getEntries()
-  const shadowEntry = await getMatchingShadowEntries(adapter, localEntries[0])
+  const shadowEntry = await getMatchingShadowEntries(
+    adapter,
+    localEntries[0],
+    builder
+  )
 
   t.deepEqual(
     encodeTags([
@@ -714,9 +619,13 @@ test('apply incoming with no local', async (t) => {
   await satellite._setAuthState(authState)
   await satellite._apply([incomingEntry], 'remote')
 
-  const sql = 'SELECT * from parent WHERE id=1'
+  const sql = 'SELECT * from main.parent WHERE id=1'
   const rows = await adapter.query({ sql })
-  const shadowEntries = await getMatchingShadowEntries(adapter)
+  const shadowEntries = await getMatchingShadowEntries(
+    adapter,
+    undefined,
+    builder
+  )
 
   t.is(shadowEntries.length, 0)
   t.is(rows.length, 0)
@@ -1010,7 +919,6 @@ test('compensations: referential integrity is enforced', async (t) => {
   const { adapter, runMigrations, satellite } = t.context
   await runMigrations()
 
-  await adapter.run({ sql: `PRAGMA foreign_keys = ON` })
   await satellite._setMeta('compensations', 0)
   await adapter.run({
     sql: `INSERT INTO main.parent(id, value) VALUES (1, '1')`,
@@ -1019,17 +927,16 @@ test('compensations: referential integrity is enforced', async (t) => {
   await t.throwsAsync(
     adapter.run({ sql: `INSERT INTO main.child(id, parent) VALUES (1, 2)` }),
     {
-      code: 'SQLITE_CONSTRAINT_FOREIGNKEY',
+      code: '23503',
     }
   )
 })
 
 test('compensations: incoming operation breaks referential integrity', async (t) => {
-  const { adapter, runMigrations, satellite, tableInfo, timestamp, authState } =
+  const { runMigrations, satellite, tableInfo, timestamp, authState } =
     t.context
   await runMigrations()
 
-  await adapter.run({ sql: `PRAGMA foreign_keys = ON;` })
   await satellite._setMeta('compensations', 0)
   await satellite._setAuthState(authState)
 
@@ -1046,8 +953,6 @@ test('compensations: incoming operation breaks referential integrity', async (t)
     }
   )
 
-  // await satellite._setAuthState(authState)
-
   satellite.relations = relations // satellite must be aware of the relations in order to turn `DataChange`s into `OpLogEntry`s
 
   const incomingChange = opLogEntryToChange(incoming, relations)
@@ -1059,7 +964,7 @@ test('compensations: incoming operation breaks referential integrity', async (t)
   }
 
   await t.throwsAsync(satellite._applyTransaction(incomingTx), {
-    code: 'SQLITE_CONSTRAINT_FOREIGNKEY',
+    code: '23503',
   })
 })
 
@@ -1068,7 +973,6 @@ test('compensations: incoming operations accepted if restore referential integri
     t.context
   await runMigrations()
 
-  await adapter.run({ sql: `PRAGMA foreign_keys = ON;` })
   await satellite._setMeta('compensations', 0)
   await satellite._setAuthState(authState)
   const clientId = satellite._authState!.clientId
@@ -1132,7 +1036,6 @@ test('compensations: using triggers with flag 0', async (t) => {
   const { adapter, runMigrations, satellite, tableInfo, authState } = t.context
   await runMigrations()
 
-  await adapter.run({ sql: `PRAGMA foreign_keys = ON` })
   await satellite._setMeta('compensations', 0)
 
   await adapter.run({
@@ -1169,7 +1072,7 @@ test('compensations: using triggers with flag 0', async (t) => {
   }
 
   await t.throwsAsync(satellite._applyTransaction(incomingTx), {
-    code: 'SQLITE_CONSTRAINT_FOREIGNKEY',
+    code: '23503',
   })
 })
 
@@ -1177,7 +1080,6 @@ test('compensations: using triggers with flag 1', async (t) => {
   const { adapter, runMigrations, satellite, tableInfo, authState } = t.context
   await runMigrations()
 
-  await adapter.run({ sql: `PRAGMA foreign_keys = ON` })
   await satellite._setMeta('compensations', 1)
 
   await adapter.run({
@@ -1326,18 +1228,13 @@ test('get transactions from opLogEntries', async (t) => {
   t.deepEqual(opLog, expected)
 })
 
-test('disconnect stops queueing operations', async (t) => {
-  const { runMigrations, satellite, adapter, authState, token } = t.context
+test('handling connectivity state change stops queueing operations', async (t) => {
+  const { runMigrations, satellite, adapter, authState } = t.context
   await runMigrations()
-  const { connectionPromise } = await startSatellite(
-    satellite,
-    authState,
-    token
-  )
-  await connectionPromise
+  await satellite.start(authState)
 
   adapter.run({
-    sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', 1)`,
+    sql: `INSERT INTO main.parent(id, value, other) VALUES (1, 'local', 1)`,
   })
 
   await satellite._performSnapshot()
@@ -1346,10 +1243,10 @@ test('disconnect stops queueing operations', async (t) => {
   const sentLsn = satellite.client.getLastSentLsn()
   t.deepEqual(sentLsn, numberToBytes(1))
 
-  satellite.disconnect()
+  await satellite._handleConnectivityStateChange('disconnected')
 
   adapter.run({
-    sql: `INSERT INTO parent(id, value, other) VALUES (2, 'local', 1)`,
+    sql: `INSERT INTO main.parent(id, value, other) VALUES (2, 'local', 1)`,
   })
 
   await satellite._performSnapshot()
@@ -1359,65 +1256,23 @@ test('disconnect stops queueing operations', async (t) => {
   t.deepEqual(lsn1, sentLsn)
 
   // Once connectivity is restored, we will immediately run a snapshot to send pending rows
-  await satellite.connectWithBackoff()
+  await satellite._handleConnectivityStateChange('available')
   await sleepAsync(200) // Wait for snapshot to run
   const lsn2 = satellite.client.getLastSentLsn()
   t.deepEqual(lsn2, numberToBytes(2))
 })
 
-test('notifies about JWT expiration', async (t) => {
-  const {
-    satellite,
-    authState,
-    runMigrations,
-    client,
-    notifier,
-    dbName,
-    token,
-  } = t.context
-  await runMigrations()
-  await startSatellite(satellite, authState, token)
-
-  // give some time for Satellite to start
-  // (needed because connecting and starting replication are async)
-  await sleepAsync(100)
-
-  // we're expecting 2 assertions
-  t.plan(4)
-
-  notifier.subscribeToConnectivityStateChanges(
-    (notification: ConnectivityStateChangeNotification) => {
-      t.is(notification.dbName, dbName)
-      t.is(notification.connectivityState.status, 'disconnected')
-      t.is(
-        notification.connectivityState.reason?.code,
-        SatelliteErrorCode.AUTH_EXPIRED
-      )
-    }
-  )
-
-  // mock JWT expiration
-  client.emitSocketClosedError(SatelliteErrorCode.AUTH_EXPIRED)
-
-  // give the notifier some time to fire
-  await sleepAsync(100)
-
-  // check that the client is disconnected
-  t.false(client.isConnected())
-})
-
 test('garbage collection is triggered when transaction from the same origin is replicated', async (t) => {
   const { satellite } = t.context
-  const { runMigrations, adapter, authState, token } = t.context
+  const { runMigrations, adapter, authState } = t.context
   await runMigrations()
-  const conn = await startSatellite(satellite, authState, token)
-  await conn.connectionPromise
+  await satellite.start(authState)
 
   adapter.run({
-    sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', 1);`,
+    sql: `INSERT INTO main.parent(id, value, other) VALUES (1, 'local', 1);`,
   })
   adapter.run({
-    sql: `UPDATE parent SET value = 'local', other = 2 WHERE id = 1;`,
+    sql: `UPDATE main.parent SET value = 'local', other = 2 WHERE id = 1;`,
   })
 
   // Before snapshot, we didn't send anything
@@ -1442,13 +1297,13 @@ test('garbage collection is triggered when transaction from the same origin is r
 // stub client and make satellite throw the error with option off/succeed with option on
 test('clear database on BEHIND_WINDOW', async (t) => {
   const { satellite } = t.context
-  const { runMigrations, authState, token } = t.context
+  const { runMigrations, authState } = t.context
   await runMigrations()
 
   const base64lsn = base64.fromBytes(numberToBytes(MOCK_BEHIND_WINDOW_LSN))
   await satellite._setMeta('lsn', base64lsn)
   try {
-    const conn = await startSatellite(satellite, authState, token)
+    const conn = await satellite.start(authState)
     await conn.connectionPromise
     const lsnAfter = await satellite._getMeta('lsn')
     t.not(lsnAfter, base64lsn)
@@ -1461,13 +1316,14 @@ test('clear database on BEHIND_WINDOW', async (t) => {
 
 test('throw other replication errors', async (t) => {
   t.plan(2)
-  const { satellite, runMigrations, authState, token } = t.context
+  const { satellite } = t.context
+  const { runMigrations, authState } = t.context
   await runMigrations()
 
   const base64lsn = base64.fromBytes(numberToBytes(MOCK_INTERNAL_ERROR))
   await satellite._setMeta('lsn', base64lsn)
 
-  const conn = await startSatellite(satellite, authState, token)
+  const conn = await satellite.start(authState)
   return Promise.all(
     [satellite['initializing']?.waitOn(), conn.connectionPromise].map((p) =>
       p?.catch((e: SatelliteError) => {
@@ -1478,7 +1334,7 @@ test('throw other replication errors', async (t) => {
 })
 
 test('apply shape data and persist subscription', async (t) => {
-  const { client, satellite, adapter, notifier, token } = t.context
+  const { client, satellite, adapter, notifier } = t.context
   const { runMigrations, authState } = t.context
   await runMigrations()
 
@@ -1490,11 +1346,11 @@ test('apply shape data and persist subscription', async (t) => {
   client.setRelations(relations)
   client.setRelationData(tablename, parentRecord)
 
-  const conn = await startSatellite(satellite, authState, token)
+  const conn = await satellite.start(authState)
   await conn.connectionPromise
 
-  const shapeDef: Shape = {
-    tablename,
+  const shapeDef: ClientShapeDefinition = {
+    selects: [{ tablename }],
   }
 
   satellite!.relations = relations
@@ -1506,12 +1362,6 @@ test('apply shape data and persist subscription', async (t) => {
   t.is(notifier.notifications[1].changes.length, 1)
   t.deepEqual(notifier.notifications[1].changes[0], {
     qualifiedTablename: qualified,
-    recordChanges: [
-      {
-        primaryKey: { id: 1 },
-        type: 'INITIAL',
-      },
-    ],
     rowids: [],
   })
 
@@ -1524,7 +1374,7 @@ test('apply shape data and persist subscription', async (t) => {
     t.is(row.length, 1)
 
     const shadowRows = await adapter.query({
-      sql: `SELECT tags FROM _electric_shadow`,
+      sql: `SELECT tags FROM main._electric_shadow`,
     })
     t.is(shadowRows.length, 1)
 
@@ -1540,7 +1390,8 @@ test('apply shape data and persist subscription', async (t) => {
 })
 
 test('(regression) shape subscription succeeds even if subscription data is delivered before the SatSubsReq RPC call receives its SatSubsResp answer', async (t) => {
-  const { client, satellite, runMigrations, authState, token } = t.context
+  const { client, satellite } = t.context
+  const { runMigrations, authState } = t.context
   await runMigrations()
 
   const tablename = 'parent'
@@ -1549,11 +1400,11 @@ test('(regression) shape subscription succeeds even if subscription data is deli
   client.setRelations(relations)
   client.setRelationData(tablename, parentRecord)
 
-  const conn = await startSatellite(satellite, authState, token)
+  const conn = await satellite.start(authState)
   await conn.connectionPromise
 
-  const shapeDef: Shape = {
-    tablename,
+  const shapeDef: ClientShapeDefinition = {
+    selects: [{ tablename }],
   }
 
   satellite!.relations = relations
@@ -1571,7 +1422,8 @@ test('(regression) shape subscription succeeds even if subscription data is deli
 })
 
 test('multiple subscriptions for the same shape are deduplicated', async (t) => {
-  const { client, satellite, runMigrations, authState, token } = t.context
+  const { client, satellite } = t.context
+  const { runMigrations, authState } = t.context
   await runMigrations()
 
   const tablename = 'parent'
@@ -1580,11 +1432,11 @@ test('multiple subscriptions for the same shape are deduplicated', async (t) => 
   client.setRelations(relations)
   client.setRelationData(tablename, parentRecord)
 
-  const conn = await startSatellite(satellite, authState, token)
+  const conn = await satellite.start(authState)
   await conn.connectionPromise
 
-  const shapeDef: Shape = {
-    tablename,
+  const shapeDef: ClientShapeDefinition = {
+    selects: [{ tablename }],
   }
 
   satellite!.relations = relations
@@ -1610,8 +1462,8 @@ test('multiple subscriptions for the same shape are deduplicated', async (t) => 
 })
 
 test('applied shape data will be acted upon correctly', async (t) => {
-  const { client, satellite, adapter, runMigrations, authState, token } =
-    t.context
+  const { client, satellite, adapter } = t.context
+  const { runMigrations, authState } = t.context
   await runMigrations()
 
   const namespace = 'main'
@@ -1622,11 +1474,11 @@ test('applied shape data will be acted upon correctly', async (t) => {
   client.setRelations(relations)
   client.setRelationData(tablename, parentRecord)
 
-  const conn = await startSatellite(satellite, authState, token)
+  const conn = await satellite.start(authState)
   await conn.connectionPromise
 
-  const shapeDef: Shape = {
-    tablename,
+  const shapeDef: ClientShapeDefinition = {
+    selects: [{ tablename }],
   }
 
   satellite!.relations = relations
@@ -1641,7 +1493,7 @@ test('applied shape data will be acted upon correctly', async (t) => {
     t.is(row.length, 1)
 
     const shadowRows = await adapter.query({
-      sql: `SELECT * FROM _electric_shadow`,
+      sql: `SELECT * FROM main._electric_shadow`,
     })
     t.is(shadowRows.length, 1)
     t.like(shadowRows[0], {
@@ -1653,7 +1505,7 @@ test('applied shape data will be acted upon correctly', async (t) => {
     await satellite._performSnapshot()
 
     const oplogs = await adapter.query({
-      sql: `SELECT * FROM _electric_oplog`,
+      sql: `SELECT * FROM main._electric_oplog`,
     })
     t.not(oplogs[0].clearTags, '[]')
   } catch (e) {
@@ -1661,91 +1513,9 @@ test('applied shape data will be acted upon correctly', async (t) => {
   }
 })
 
-test('additional data will be stored properly', async (t) => {
-  const { client, satellite, adapter } = t.context
-  const { runMigrations, authState, token } = t.context
-  await runMigrations()
-  const tablename = 'parent'
-
-  // relations must be present at subscription delivery
-  client.setRelations(relations)
-  client.setRelationData(tablename, parentRecord)
-
-  await startSatellite(satellite, authState, token)
-
-  const shapeDef: Shape = {
-    tablename,
-  }
-
-  satellite!.relations = relations
-  const { synced } = await satellite.subscribe([shapeDef])
-  await synced
-  await satellite._performSnapshot()
-
-  // Send additional data
-  await client.additionalDataCb!({
-    ref: new Long(10),
-    changes: [
-      {
-        relation: relations.parent,
-        tags: ['server@' + Date.now()],
-        type: DataChangeType.INSERT,
-        record: { id: 100, value: 'new_value' },
-      },
-    ],
-  })
-
-  const [result] = await adapter.query({
-    sql: 'SELECT * FROM main.parent WHERE id = 100',
-  })
-  t.deepEqual(result, { id: 100, value: 'new_value', other: null })
-})
-
-test('GONE messages are applied as DELETEs', async (t) => {
-  const { client, satellite, adapter } = t.context
-  const { runMigrations, authState, token } = t.context
-  await runMigrations()
-  const tablename = 'parent'
-
-  // relations must be present at subscription delivery
-  client.setRelations(relations)
-  client.setRelationData(tablename, parentRecord)
-
-  await startSatellite(satellite, authState, token)
-
-  const shapeDef: Shape = {
-    tablename,
-  }
-
-  satellite!.relations = relations
-  const { synced } = await satellite.subscribe([shapeDef])
-  await synced
-  await satellite._performSnapshot()
-
-  // Send additional data
-  await client.transactionsCb!({
-    commit_timestamp: Long.fromNumber(new Date().getTime()),
-    id: new Long(10),
-    lsn: new Uint8Array(),
-    changes: [
-      {
-        relation: relations.parent,
-        tags: [],
-        type: DataChangeType.GONE,
-        record: { id: 1 },
-      },
-    ],
-  })
-
-  const results = await adapter.query({
-    sql: 'SELECT * FROM main.parent',
-  })
-  t.deepEqual(results, [])
-})
-
 test('a subscription that failed to apply because of FK constraint triggers GC', async (t) => {
-  const { client, satellite, adapter, runMigrations, authState, token } =
-    t.context
+  const { client, satellite, adapter } = t.context
+  const { runMigrations, authState } = t.context
   await runMigrations()
 
   const tablename = 'child'
@@ -1755,11 +1525,11 @@ test('a subscription that failed to apply because of FK constraint triggers GC',
   client.setRelations(relations)
   client.setRelationData(tablename, childRecord)
 
-  const conn = await startSatellite(satellite, authState, token)
+  const conn = await satellite.start(authState)
   await conn.connectionPromise
 
-  const shapeDef1: Shape = {
-    tablename,
+  const shapeDef1: ClientShapeDefinition = {
+    selects: [{ tablename }],
   }
 
   satellite!.relations = relations
@@ -1777,8 +1547,8 @@ test('a subscription that failed to apply because of FK constraint triggers GC',
 })
 
 test('a second successful subscription', async (t) => {
-  const { client, satellite, adapter, runMigrations, authState, token } =
-    t.context
+  const { client, satellite, adapter } = t.context
+  const { runMigrations, authState } = t.context
   await runMigrations()
 
   const namespace = 'main'
@@ -1789,14 +1559,14 @@ test('a second successful subscription', async (t) => {
   client.setRelationData('parent', parentRecord)
   client.setRelationData(tablename, childRecord)
 
-  const conn = await startSatellite(satellite, authState, token)
+  const conn = await satellite.start(authState)
   await conn.connectionPromise
 
-  const shapeDef1: Shape = {
-    tablename: 'parent',
+  const shapeDef1: ClientShapeDefinition = {
+    selects: [{ tablename: 'parent' }],
   }
-  const shapeDef2: Shape = {
-    tablename,
+  const shapeDef2: ClientShapeDefinition = {
+    selects: [{ tablename: tablename }],
   }
 
   satellite!.relations = relations
@@ -1811,7 +1581,7 @@ test('a second successful subscription', async (t) => {
     t.is(row.length, 1)
 
     const shadowRows = await adapter.query({
-      sql: `SELECT tags FROM _electric_shadow`,
+      sql: `SELECT tags FROM main._electric_shadow`,
     })
     t.is(shadowRows.length, 2)
 
@@ -1824,8 +1594,8 @@ test('a second successful subscription', async (t) => {
 })
 
 test('a single subscribe with multiple tables with FKs', async (t) => {
-  const { client, satellite, adapter, runMigrations, authState, token } =
-    t.context
+  const { client, satellite, adapter } = t.context
+  const { runMigrations, authState } = t.context
   await runMigrations()
 
   // relations must be present at subscription delivery
@@ -1833,14 +1603,14 @@ test('a single subscribe with multiple tables with FKs', async (t) => {
   client.setRelationData('parent', parentRecord)
   client.setRelationData('child', childRecord)
 
-  const conn = await startSatellite(satellite, authState, token)
+  const conn = await satellite.start(authState)
   await conn.connectionPromise
 
-  const shapeDef1: Shape = {
-    tablename: 'child',
+  const shapeDef1: ClientShapeDefinition = {
+    selects: [{ tablename: 'child' }],
   }
-  const shapeDef2: Shape = {
-    tablename: 'parent',
+  const shapeDef2: ClientShapeDefinition = {
+    selects: [{ tablename: 'parent' }],
   }
 
   satellite!.relations = relations
@@ -1874,9 +1644,9 @@ test('a single subscribe with multiple tables with FKs', async (t) => {
   return prom
 })
 
-test.serial('a shape delivery that triggers garbage collection', async (t) => {
-  const { client, satellite, adapter, runMigrations, authState, token } =
-    t.context
+test('a shape delivery that triggers garbage collection', async (t) => {
+  const { client, satellite, adapter } = t.context
+  const { runMigrations, authState } = t.context
   await runMigrations()
 
   const namespace = 'main'
@@ -1884,47 +1654,38 @@ test.serial('a shape delivery that triggers garbage collection', async (t) => {
 
   // relations must be present at subscription delivery
   client.setRelations(relations)
-  client.setRelationData('parent', parentRecord)
-  client.setRelationData('child', childRecord)
+  client.setRelationData(tablename, parentRecord)
   client.setRelationData('another', {})
 
-  const conn = await startSatellite(satellite, authState, token)
+  const conn = await satellite.start(authState)
   await conn.connectionPromise
 
-  const shapeDef1: Shape = {
-    tablename: 'parent',
-    include: [{ foreignKey: ['parent'], select: { tablename: 'child' } }],
+  const shapeDef1: ClientShapeDefinition = {
+    selects: [{ tablename: 'parent' }],
   }
-  const shapeDef2: Shape = {
-    tablename: 'another',
+  const shapeDef2: ClientShapeDefinition = {
+    selects: [{ tablename: 'another' }],
   }
 
   satellite!.relations = relations
   const { synced: synced1 } = await satellite.subscribe([shapeDef1])
   await synced1
-  const row = await adapter.query({ sql: `SELECT id FROM main.parent` })
-  t.is(row.length, 1)
-  const row1 = await adapter.query({ sql: `SELECT id FROM main.child` })
-  t.is(row1.length, 1)
   const { synced } = await satellite.subscribe([shapeDef2])
 
   try {
     await synced
     t.fail()
   } catch (expected: any) {
-    t.true(expected instanceof SatelliteError)
     try {
       const row = await adapter.query({
         sql: `SELECT id FROM "${namespace}"."${tablename}"`,
       })
       t.is(row.length, 0)
-      const row1 = await adapter.query({ sql: `SELECT id FROM main.child` })
-      t.is(row1.length, 0)
 
       const shadowRows = await adapter.query({
-        sql: `SELECT tags FROM _electric_shadow`,
+        sql: `SELECT tags FROM main._electric_shadow`,
       })
-      t.is(shadowRows.length, 2)
+      t.is(shadowRows.length, 1)
 
       const subsMeta = await satellite._getMeta('subscriptions')
       const subsObj = JSON.parse(subsMeta)
@@ -1937,8 +1698,8 @@ test.serial('a shape delivery that triggers garbage collection', async (t) => {
 })
 
 test('a subscription request failure does not clear the manager state', async (t) => {
-  const { client, satellite, adapter, runMigrations, authState, token } =
-    t.context
+  const { client, satellite, adapter } = t.context
+  const { runMigrations, authState } = t.context
   await runMigrations()
 
   // relations must be present at subscription delivery
@@ -1947,15 +1708,15 @@ test('a subscription request failure does not clear the manager state', async (t
   client.setRelations(relations)
   client.setRelationData(tablename, parentRecord)
 
-  const conn = await startSatellite(satellite, authState, token)
+  const conn = await satellite.start(authState)
   await conn.connectionPromise
 
-  const shapeDef1: Shape = {
-    tablename: tablename,
+  const shapeDef1: ClientShapeDefinition = {
+    selects: [{ tablename: tablename }],
   }
 
-  const shapeDef2: Shape = {
-    tablename: 'failure',
+  const shapeDef2: ClientShapeDefinition = {
+    selects: [{ tablename: 'failure' }],
   }
 
   satellite!.relations = relations
@@ -1991,13 +1752,13 @@ test('unsubscribing all subscriptions does not trigger FK violations', async (t)
   // populate it with foreign keys and check that the subscription
   // manager does not violate the FKs when unsubscribing from all subscriptions
   await satellite.adapter.runInTransaction(
-    { sql: `CREATE TABLE users (id TEXT PRIMARY KEY, name TEXT)` },
+    { sql: `CREATE TABLE main.users (id TEXT PRIMARY KEY, name TEXT)` },
     {
-      sql: `CREATE TABLE posts (id TEXT PRIMARY KEY, title TEXT, author_id TEXT, FOREIGN KEY(author_id) REFERENCES users(id))`,
+      sql: `CREATE TABLE main.posts (id TEXT PRIMARY KEY, title TEXT, author_id TEXT, FOREIGN KEY(author_id) REFERENCES main.users(id) DEFERRABLE INITIALLY IMMEDIATE)`,
     },
-    { sql: `INSERT INTO users (id, name) VALUES ('u1', 'user1')` },
+    { sql: `INSERT INTO main.users (id, name) VALUES ('u1', 'user1')` },
     {
-      sql: `INSERT INTO posts (id, title, author_id) VALUES ('p1', 'My first post', 'u1')`,
+      sql: `INSERT INTO main.posts (id, title, author_id) VALUES ('p1', 'My first post', 'u1')`,
     }
   )
 
@@ -2005,63 +1766,37 @@ test('unsubscribing all subscriptions does not trigger FK violations', async (t)
   // if we reach here, the FKs were not violated
 
   // Check that everything was deleted
-  const users = await satellite.adapter.query({ sql: 'SELECT * FROM users' })
+  const users = await satellite.adapter.query({
+    sql: 'SELECT * FROM main.users',
+  })
   t.assert(users.length === 0)
 
-  const posts = await satellite.adapter.query({ sql: 'SELECT * FROM posts' })
+  const posts = await satellite.adapter.query({
+    sql: 'SELECT * FROM main.posts',
+  })
   t.assert(posts.length === 0)
 })
 
 test("Garbage collecting the subscription doesn't generate oplog entries", async (t) => {
-  const { adapter, runMigrations, satellite, authState, token } = t.context
-  await startSatellite(satellite, authState, token)
+  const { adapter, runMigrations, satellite, authState } = t.context
+  await satellite.start(authState)
   await runMigrations()
-  await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
+  await adapter.run({ sql: `INSERT INTO main.parent(id) VALUES ('1'),('2')` })
   const ts = await satellite._performSnapshot()
   await satellite._garbageCollectOplog(ts)
   t.is((await satellite._getEntries(0)).length, 0)
 
   satellite._garbageCollectShapeHandler([
-    { uuid: '', definition: { tablename: 'parent' } },
+    { uuid: '', definition: { selects: [{ tablename: 'parent' }] } },
   ])
 
   await satellite._performSnapshot()
   t.deepEqual(await satellite._getEntries(0), [])
 })
 
-test("snapshot while not fully connected doesn't throw", async (t) => {
-  const { adapter, runMigrations, satellite, client, authState, token } =
-    t.context
-  client.setStartReplicationDelayMs(100)
-
-  await runMigrations()
-
-  // Add log entry while offline
-  await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
-
-  const conn = await startSatellite(satellite, authState, token)
-
-  // Performing a snapshot while the replication connection has not been stablished
-  // should not throw
-  await satellite._performSnapshot()
-
-  await conn.connectionPromise
-
-  await satellite._performSnapshot()
-
-  t.pass()
-})
-
 test('snapshots: generated oplog entries have the correct tags', async (t) => {
-  const {
-    client,
-    satellite,
-    adapter,
-    tableInfo,
-    runMigrations,
-    authState,
-    token,
-  } = t.context
+  const { client, satellite, adapter, tableInfo } = t.context
+  const { runMigrations, authState } = t.context
   await runMigrations()
 
   const namespace = 'main'
@@ -2072,11 +1807,11 @@ test('snapshots: generated oplog entries have the correct tags', async (t) => {
   client.setRelations(relations)
   client.setRelationData(tablename, parentRecord)
 
-  const conn = await startSatellite(satellite, authState, token)
+  const conn = await satellite.start(authState)
   await conn.connectionPromise
 
-  const shapeDef: Shape = {
-    tablename,
+  const shapeDef: ClientShapeDefinition = {
+    selects: [{ tablename }],
   }
 
   satellite!.relations = relations
@@ -2110,7 +1845,7 @@ test('snapshots: generated oplog entries have the correct tags', async (t) => {
   t.is(row.length, 2)
 
   const shadowRows = await adapter.query({
-    sql: `SELECT * FROM _electric_shadow`,
+    sql: `SELECT * FROM main._electric_shadow`,
   })
   t.is(shadowRows.length, 2)
   t.like(shadowRows[0], {
@@ -2119,19 +1854,12 @@ test('snapshots: generated oplog entries have the correct tags', async (t) => {
   })
 
   await adapter.run({ sql: `DELETE FROM ${qualified} WHERE id = 2` })
-  const deleteTx = await satellite._performSnapshot()
+  await satellite._performSnapshot()
 
   const oplogs = await adapter.query({
-    sql: `SELECT * FROM _electric_oplog`,
+    sql: `SELECT * FROM main._electric_oplog`,
   })
-
-  t.is(
-    oplogs[0].clearTags,
-    encodeTags([
-      generateTag(satellite._authState!.clientId, deleteTx),
-      generateTag('remote', expectedTs),
-    ])
-  )
+  t.is(oplogs[0].clearTags, genEncodedTags('remote', [expectedTs]))
 })
 
 test('DELETE after DELETE sends clearTags', async (t) => {
@@ -2141,17 +1869,17 @@ test('DELETE after DELETE sends clearTags', async (t) => {
   await satellite._setAuthState(authState)
 
   await adapter.run({
-    sql: `INSERT INTO parent(id, value) VALUES (1,'val1')`,
+    sql: `INSERT INTO main.parent(id, value) VALUES (1,'val1')`,
   })
   await adapter.run({
-    sql: `INSERT INTO parent(id, value) VALUES (2,'val2')`,
+    sql: `INSERT INTO main.parent(id, value) VALUES (2,'val2')`,
   })
 
-  await adapter.run({ sql: `DELETE FROM parent WHERE id=1` })
+  await adapter.run({ sql: `DELETE FROM main.parent WHERE id=1` })
 
   await satellite._performSnapshot()
 
-  await adapter.run({ sql: `DELETE FROM parent WHERE id=2` })
+  await adapter.run({ sql: `DELETE FROM main.parent WHERE id=2` })
 
   await satellite._performSnapshot()
 
@@ -2173,11 +1901,11 @@ test('DELETE after DELETE sends clearTags', async (t) => {
   t.not(delete2.clearTags, '[]')
 })
 
-test.serial('connection backoff success', async (t) => {
+test('connection backoff success', async (t) => {
   t.plan(3)
   const { client, satellite } = t.context
 
-  client.shutdown()
+  client.disconnect()
 
   const retry = (_e: any, a: number) => {
     if (a > 0) {
@@ -2190,31 +1918,10 @@ test.serial('connection backoff success', async (t) => {
   satellite['_connectRetryHandler'] = retry
 
   await Promise.all(
-    [satellite.connectWithBackoff(), satellite['initializing']?.waitOn()].map(
+    [satellite._connectWithBackoff(), satellite['initializing']?.waitOn()].map(
       (p) => p?.catch(() => t.pass())
     )
   )
-})
-
-test.serial('connection cancelled on disconnect', async (t) => {
-  const { client, satellite, authState, token } = t.context
-  client.shutdown() // such that satellite can't connect to Electric and will keep retrying
-  const { connectionPromise } = await startSatellite(
-    satellite,
-    authState,
-    token
-  )
-
-  // We expect the connection to be cancelled
-  const prom = t.throwsAsync(connectionPromise, {
-    code: SatelliteErrorCode.CONNECTION_CANCELLED_BY_DISCONNECT,
-  })
-
-  // Disconnect Satellite
-  satellite.clientDisconnect()
-
-  // Await until the connection promise is rejected
-  await prom
 })
 
 // check that performing snapshot doesn't throw without resetting the performing snapshot assertions
@@ -2238,63 +1945,5 @@ test('(regression) performSnapshot handles exceptions gracefully', async (t) => 
   }
 
   await satellite._performSnapshot()
-  t.pass()
-})
-
-test("don't leave a snapshot running when stopping", async (t) => {
-  const { adapter, runMigrations, satellite, authState } = t.context
-  await runMigrations()
-  await satellite._setAuthState(authState)
-
-  // Make the adapter slower, to interleave stopping the process and closing the db with a snapshot
-  const transaction = satellite.adapter.transaction.bind(satellite.adapter)
-  satellite.adapter.transaction = (f) =>
-    new Promise((res) => {
-      setTimeout(() => transaction(f).then(res), 500)
-    })
-
-  // Add something to the oplog
-  await adapter.run({
-    sql: `INSERT INTO parent(id, value) VALUES (1,'val1')`,
-  })
-
-  // // Perform snapshot with the mutex, to emulate a real scenario
-  const snapshotPromise = satellite._mutexSnapshot()
-  // Give some time to start the "slow" snapshot
-  await sleepAsync(100)
-
-  // Stop the process while the snapshot is being performed
-  await satellite.stop()
-
-  // Remove/close the database connection
-  await clean(t)
-
-  // Wait for the snapshot to finish to consider the test successful
-  await snapshotPromise
-
-  t.pass()
-})
-
-test("don't snapshot after closing satellite process", async (t) => {
-  // open and then immediately close
-  // check that no snapshot is called after close
-  const { satellite, authState, token } = t.context
-  const { connectionPromise } = await startSatellite(
-    satellite,
-    authState,
-    token
-  )
-
-  await connectionPromise
-  await satellite.stop()
-
-  satellite._performSnapshot = () => {
-    t.fail('Snapshot was called')
-    return Promise.resolve(new Date())
-  }
-
-  // wait some time to see that mutexSnapshot is not called
-  await sleepAsync(50)
-
   t.pass()
 })
