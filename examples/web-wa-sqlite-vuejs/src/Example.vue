@@ -1,13 +1,13 @@
 
 <script lang="ts">
-import { defineComponent, toRaw } from 'vue';
+import { defineComponent } from 'vue';
 import { useLiveQuery } from 'electric-sql/vuejs';
 import { genUUID } from 'electric-sql/util';
 import { injectElectric } from './electric';
 
 export default defineComponent({
   setup() {
-    const { db } = toRaw(injectElectric()!.value)
+    const { db } = injectElectric()!
     const { results: items } = useLiveQuery(db.items.liveMany())
   
     const addItem = () => db.items.create({
@@ -28,15 +28,25 @@ export default defineComponent({
 <template>
   <div>
     <div class="controls">
-      <button class="button" @click="addItem">
+      <button
+        class="button"
+        @click="addItem"
+      >
         Add
       </button>
-      <button class="button" @click="clearItems">
+      <button
+        class="button"
+        @click="clearItems"
+      >
         Clear
       </button>
     </div>
     <div v-if="items && items.length > 0">
-      <p v-for="(item, index) in items" :key="index" class="item">
+      <p
+        v-for="(item, index) in items"
+        :key="index"
+        class="item"
+      >
         <code>{{ item.value }}</code>
       </p>
     </div>

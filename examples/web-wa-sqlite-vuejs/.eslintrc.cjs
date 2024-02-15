@@ -4,15 +4,11 @@ module.exports = {
   extends: [
     'eslint:recommended',
     'plugin:@typescript-eslint/recommended',
-    'plugin:react-hooks/recommended',
+    'plugin:vue/vue3-recommended',
   ],
-  ignorePatterns: ['dist', '.eslintrc.cjs'],
-  parser: '@typescript-eslint/parser',
-  plugins: ['react-refresh'],
-  rules: {
-    'react-refresh/only-export-components': [
-      'warn',
-      { allowConstantExport: true },
-    ],
-  },
+  ignorePatterns: ['dist', '.eslintrc.cjs', 'src/generated/*'],
+  parser: "vue-eslint-parser",
+  parserOptions: { 
+    parser: "@typescript-eslint/parser" 
+  }
 }

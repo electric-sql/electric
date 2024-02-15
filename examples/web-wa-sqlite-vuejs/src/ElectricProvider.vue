@@ -1,5 +1,5 @@
 <script lang="ts">
-import { computed, defineComponent, onMounted, ref } from 'vue';
+import { computed, defineComponent, onMounted, shallowRef } from 'vue';
 import { LIB_VERSION } from 'electric-sql/version';
 import { uniqueTabId } from 'electric-sql/util';
 import { ElectricDatabase, electrify } from 'electric-sql/wa-sqlite';
@@ -11,7 +11,7 @@ import { Electric, schema } from './generated/client';
 export default defineComponent({
   setup() {
     
-    const electricRef = ref<Electric>();
+    const electricRef = shallowRef<Electric>()
     const showChild = computed(() => electricRef.value !== undefined)
 
     onMounted(async () => {
@@ -46,7 +46,7 @@ export default defineComponent({
 
 <template>
   <div v-if="showChild">
-    <slot></slot>
+    <slot />
   </div>
 </template>
 
