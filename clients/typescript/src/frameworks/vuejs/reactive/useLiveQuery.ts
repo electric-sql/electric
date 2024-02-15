@@ -19,15 +19,13 @@ import { hash } from 'ohash'
 import { UnsubscribeFunction } from '../../../notifiers'
 
 /**
- * Main reactive query hook for Vue applications. It needs to be
- * used in tandem with the {@link ElectricProvider} which sets an
- * {@link ElectricClient) as the `electric` value. This provides
- * a notifier which this hook uses to subscribe to data change
- * notifications to matching tables. The {@link ElectricProvider}
- * can be obtained through {@link makeElectricContext}.
+ * Main reactive query method for Vue applications. It can be
+ * used in tandem with {@link makeElectricDependencyInjector}
+ * which injects an {@link ElectricClient} into the component
+ * tree in order to be able to form live queries.
  *
- * Live query provided can be dynamic, but it will be a hash of the provided query will be computed on every render.
- * If you need a more optimal approach, use a two-argument version of this with explicit dependency listing
+ * Live query provided can be dynamic, but it will be a hash of
+ * the provided query will be computed on every render.
  *
  * @param runQuery - a live query.
  *
@@ -41,24 +39,21 @@ function useLiveQuery<Res>(
 ): ToRefs<DeepReadonly<LiveResultUpdate<Res>>>
 
 /**
- * Main reactive query hook for React applications. It needs to be
- * used in tandem with the {@link ElectricProvider} which sets an
- * {@link ElectricClient) as the `electric` value. This provides
- * a notifier which this hook uses to subscribe to data change
- * notifications to matching tables. The {@link ElectricProvider}
- * can be obtained through {@link makeElectricContext}.
+ * Main reactive query method for Vue applications. It can be
+ * used in tandem with {@link makeElectricDependencyInjector}
+ * which injects an {@link ElectricClient} into the component
+ * tree in order to be able to form live queries.
  *
- * You can think of arguments to this functions as arguments to `useMemo`.
- * The function should return a live query, and the dependency list is passed
- * to `useMemo` to rerun the function.
+ * You can provide a reference to a live query, and the reactivity
+ * provided by the reference to the query will be carried forward
+ * to the results, ensuring that changes to the query are reflected
  *
- * @param runQueryFn - a function that returns a live query
- * @param dependencies - a list of React dependencies that causes the function returning the live query to rerun
+ * @param runQueryRef - a reference to a live query
  *
  * @example Using a simple live query with a dependency. The table will depend on your application
  * ```ts
- * const [limit, _setLimit] = useState(10)
- * const { results } = useLiveQuery(() => db.items.liveMany({ take: limit }), [limit])
+ * const limit = ref(5)
+ * const { results } = useLiveQuery(computed(() => db.items.liveMany({ take: limit })))
  * ```
  */
 function useLiveQuery<Res>(
