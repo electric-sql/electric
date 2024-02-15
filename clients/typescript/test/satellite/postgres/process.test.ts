@@ -4,9 +4,9 @@ import {
   MOCK_BEHIND_WINDOW_LSN,
   MOCK_INTERNAL_ERROR,
   MockSatelliteClient,
-} from '../../src/satellite/mock'
-import { QualifiedTablename } from '../../src/util/tablename'
-import { sleepAsync } from '../../src/util/timer'
+} from '../../../src/satellite/mock'
+import { QualifiedTablename } from '../../../src/util/tablename'
+import { sleepAsync } from '../../../src/util/timer'
 
 import {
   OPTYPES,
@@ -17,8 +17,8 @@ import {
   generateTag,
   encodeTags,
   opLogEntryToChange,
-} from '../../src/satellite/oplog'
-import { SatelliteProcess } from '../../src/satellite/process'
+} from '../../../src/satellite/oplog'
+import { SatelliteProcess } from '../../../src/satellite/process'
 
 import {
   loadSatelliteMetaTable,
@@ -26,30 +26,34 @@ import {
   generateRemoteOplogEntry,
   genEncodedTags,
   getMatchingShadowEntries,
-} from '../support/satellite-helpers'
+} from '../../support/satellite-helpers'
 import Long from 'long'
 import {
   DataChangeType,
   DataTransaction,
   SatelliteError,
   SatelliteErrorCode,
-} from '../../src/util/types'
+} from '../../../src/util/types'
 import {
-  makeContext,
+  makePgContext,
   opts,
   relations,
   cleanAndStopSatellite,
   ContextType,
-} from './common'
-import { DEFAULT_LOG_POS, numberToBytes, base64 } from '../../src/util/common'
+} from '../common'
+import {
+  DEFAULT_LOG_POS,
+  numberToBytes,
+  base64,
+} from '../../../src/util/common'
 
 import {
   ClientShapeDefinition,
   SubscriptionData,
-} from '../../src/satellite/shapes/types'
-import { mergeEntries } from '../../src/satellite/merge'
-import { MockSubscriptionsManager } from '../../src/satellite/shapes/manager'
-import { sqliteBuilder } from '../../src/migrators/query-builder'
+} from '../../../src/satellite/shapes/types'
+import { mergeEntries } from '../../../src/satellite/merge'
+import { MockSubscriptionsManager } from '../../../src/satellite/shapes/manager'
+import { pgBuilder } from '../../../src/migrators/query-builder'
 
 const parentRecord = {
   id: 1,
@@ -62,14 +66,20 @@ const childRecord = {
   parent: 1,
 }
 
-const test = anyTest as TestFn<ContextType>
-test.beforeEach(makeContext)
+let port = 5200
+// Run all tests in this file serially
+// because there are a lot of tests
+// and it would lead to PG running out of shared memory
+const test = anyTest.serial as TestFn<ContextType>
+test.beforeEach(async (t) => {
+  await makePgContext(t, port++)
+})
 test.afterEach.always(cleanAndStopSatellite)
 const qualifiedParentTableName = new QualifiedTablename(
   'main',
   'parent'
 ).toString()
-const builder = sqliteBuilder
+const builder = pgBuilder
 
 test('setup starts a satellite process', async (t) => {
   t.true(t.context.satellite instanceof SatelliteProcess)
@@ -92,7 +102,7 @@ test('load metadata', async (t) => {
 
   const meta = await loadSatelliteMetaTable(adapter)
   t.deepEqual(meta, {
-    compensations: 1,
+    compensations: '1',
     lsn: '',
     clientId: '',
     subscriptions: '',
@@ -118,11 +128,11 @@ test('cannot UPDATE primary key', async (t) => {
   const { adapter, runMigrations } = t.context
   await runMigrations()
 
-  await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
+  await adapter.run({ sql: `INSERT INTO main.parent(id) VALUES ('1'),('2')` })
   await t.throwsAsync(
-    adapter.run({ sql: `UPDATE parent SET id='3' WHERE id = '1'` }),
+    adapter.run({ sql: `UPDATE main.parent SET id='3' WHERE id = '1'` }),
     {
-      code: 'SQLITE_CONSTRAINT_TRIGGER',
+      code: 'P0001',
     }
   )
 })
@@ -133,7 +143,7 @@ test('snapshot works', async (t) => {
   await runMigrations()
   await satellite._setAuthState(authState)
 
-  await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
+  await adapter.run({ sql: `INSERT INTO main.parent(id) VALUES ('1'),('2')` })
 
   let snapshotTimestamp = await satellite._performSnapshot()
 
@@ -141,7 +151,7 @@ test('snapshot works', async (t) => {
   let shadowTags = encodeTags([generateTag(clientId, snapshotTimestamp)])
 
   var shadowRows = await adapter.query({
-    sql: `SELECT tags FROM _electric_shadow`,
+    sql: `SELECT tags FROM main._electric_shadow`,
   })
   t.is(shadowRows.length, 2)
   for (const row of shadowRows) {
@@ -208,7 +218,7 @@ test('starting and stopping the process works', async (t) => {
   const { adapter, notifier, runMigrations, satellite, authState } = t.context
   await runMigrations()
 
-  await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
+  await adapter.run({ sql: `INSERT INTO main.parent(id) VALUES ('1'),('2')` })
 
   const conn = await satellite.start(authState)
   await conn.connectionPromise
@@ -218,14 +228,14 @@ test('starting and stopping the process works', async (t) => {
   // connect, 1st txn
   t.is(notifier.notifications.length, 2)
 
-  await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('3'),('4')` })
+  await adapter.run({ sql: `INSERT INTO main.parent(id) VALUES ('3'),('4')` })
   await sleepAsync(opts.pollingInterval)
 
   // 2nd txm
   t.is(notifier.notifications.length, 3)
 
   await satellite.stop()
-  await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('5'),('6')` })
+  await adapter.run({ sql: `INSERT INTO main.parent(id) VALUES ('5'),('6')` })
   await sleepAsync(opts.pollingInterval)
 
   // no txn notified
@@ -243,7 +253,7 @@ test('snapshots on potential data change', async (t) => {
   const { adapter, notifier, runMigrations } = t.context
   await runMigrations()
 
-  await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
+  await adapter.run({ sql: `INSERT INTO main.parent(id) VALUES ('1'),('2')` })
 
   t.is(notifier.notifications.length, 0)
 
@@ -261,10 +271,10 @@ test('snapshot of INSERT after DELETE', async (t) => {
   await runMigrations()
 
   await adapter.run({
-    sql: `INSERT INTO parent(id, value) VALUES (1,'val1')`,
+    sql: `INSERT INTO main.parent(id, value) VALUES (1,'val1')`,
   })
-  await adapter.run({ sql: `DELETE FROM parent WHERE id=1` })
-  await adapter.run({ sql: `INSERT INTO parent(id) VALUES (1)` })
+  await adapter.run({ sql: `DELETE FROM main.parent WHERE id=1` })
+  await adapter.run({ sql: `INSERT INTO main.parent(id) VALUES (1)` })
 
   await satellite._setAuthState(authState)
   await satellite._performSnapshot()
@@ -289,7 +299,7 @@ test('snapshot of INSERT with bigint', async (t) => {
   await runMigrations()
 
   await adapter.run({
-    sql: `INSERT INTO bigIntTable(value) VALUES (1)`,
+    sql: `INSERT INTO main."bigIntTable"(value) VALUES (1)`,
   })
 
   await satellite._setAuthState(authState)
@@ -331,7 +341,7 @@ test('take snapshot and merge local wins', async (t) => {
     }
   )
   await adapter.run({
-    sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', 1)`,
+    sql: `INSERT INTO main.parent(id, value, other) VALUES (1, 'local', 1)`,
   })
 
   await satellite._setAuthState(authState)
@@ -376,7 +386,7 @@ test('take snapshot and merge incoming wins', async (t) => {
   await runMigrations()
 
   await adapter.run({
-    sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', 1)`,
+    sql: `INSERT INTO main.parent(id, value, other) VALUES (1, 'local', 1)`,
   })
 
   await satellite._setAuthState(authState)
@@ -439,7 +449,7 @@ test('merge incoming wins on persisted ops', async (t) => {
 
   // This operation is persisted
   await adapter.run({
-    sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', 1)`,
+    sql: `INSERT INTO main.parent(id, value, other) VALUES (1, 'local', 1)`,
   })
   await satellite._performSnapshot()
   const [originalInsert] = await satellite._getEntries()
@@ -452,7 +462,7 @@ test('merge incoming wins on persisted ops', async (t) => {
 
   // This operation is done offline
   await adapter.run({
-    sql: `UPDATE parent SET value = 'new local' WHERE id = 1`,
+    sql: `UPDATE main.parent SET value = 'new local' WHERE id = 1`,
   })
   await satellite._performSnapshot()
   const [offlineInsert] = await satellite._getEntries()
@@ -480,7 +490,7 @@ test('merge incoming wins on persisted ops', async (t) => {
   await satellite._applyTransaction(firstIncomingTx)
 
   const [{ value: value1 }] = await adapter.query({
-    sql: 'SELECT value FROM parent WHERE id = 1',
+    sql: 'SELECT value FROM main.parent WHERE id = 1',
   })
   t.is(
     value1,
@@ -512,7 +522,7 @@ test('merge incoming wins on persisted ops', async (t) => {
   await satellite._applyTransaction(secondIncomingTx)
 
   const [{ value: value2 }] = await adapter.query({
-    sql: 'SELECT value FROM parent WHERE id = 1',
+    sql: 'SELECT value FROM main.parent WHERE id = 1',
   })
   t.is(
     value2,
@@ -525,7 +535,7 @@ test('apply does not add anything to oplog', async (t) => {
   const { adapter, runMigrations, satellite, tableInfo, authState } = t.context
   await runMigrations()
   await adapter.run({
-    sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', null)`,
+    sql: `INSERT INTO main.parent(id, value, other) VALUES (1, 'local', null)`,
   })
 
   await satellite._setAuthState(authState)
@@ -561,13 +571,17 @@ test('apply does not add anything to oplog', async (t) => {
 
   await satellite._performSnapshot()
 
-  const sql = 'SELECT * from parent WHERE id=1'
+  const sql = 'SELECT * from main.parent WHERE id=1'
   const [row] = await adapter.query({ sql })
   t.is(row.value, 'incoming')
   t.is(row.other, 1)
 
   const localEntries = await satellite._getEntries()
-  const shadowEntry = await getMatchingShadowEntries(adapter, localEntries[0])
+  const shadowEntry = await getMatchingShadowEntries(
+    adapter,
+    localEntries[0],
+    builder
+  )
 
   t.deepEqual(
     encodeTags([
@@ -605,9 +619,13 @@ test('apply incoming with no local', async (t) => {
   await satellite._setAuthState(authState)
   await satellite._apply([incomingEntry], 'remote')
 
-  const sql = 'SELECT * from parent WHERE id=1'
+  const sql = 'SELECT * from main.parent WHERE id=1'
   const rows = await adapter.query({ sql })
-  const shadowEntries = await getMatchingShadowEntries(adapter)
+  const shadowEntries = await getMatchingShadowEntries(
+    adapter,
+    undefined,
+    builder
+  )
 
   t.is(shadowEntries.length, 0)
   t.is(rows.length, 0)
@@ -901,7 +919,6 @@ test('compensations: referential integrity is enforced', async (t) => {
   const { adapter, runMigrations, satellite } = t.context
   await runMigrations()
 
-  await adapter.run({ sql: `PRAGMA foreign_keys = ON` })
   await satellite._setMeta('compensations', 0)
   await adapter.run({
     sql: `INSERT INTO main.parent(id, value) VALUES (1, '1')`,
@@ -910,17 +927,16 @@ test('compensations: referential integrity is enforced', async (t) => {
   await t.throwsAsync(
     adapter.run({ sql: `INSERT INTO main.child(id, parent) VALUES (1, 2)` }),
     {
-      code: 'SQLITE_CONSTRAINT_FOREIGNKEY',
+      code: '23503',
     }
   )
 })
 
 test('compensations: incoming operation breaks referential integrity', async (t) => {
-  const { adapter, runMigrations, satellite, tableInfo, timestamp, authState } =
+  const { runMigrations, satellite, tableInfo, timestamp, authState } =
     t.context
   await runMigrations()
 
-  await adapter.run({ sql: `PRAGMA foreign_keys = ON;` })
   await satellite._setMeta('compensations', 0)
   await satellite._setAuthState(authState)
 
@@ -937,8 +953,6 @@ test('compensations: incoming operation breaks referential integrity', async (t)
     }
   )
 
-  // await satellite._setAuthState(authState)
-
   satellite.relations = relations // satellite must be aware of the relations in order to turn `DataChange`s into `OpLogEntry`s
 
   const incomingChange = opLogEntryToChange(incoming, relations)
@@ -950,7 +964,7 @@ test('compensations: incoming operation breaks referential integrity', async (t)
   }
 
   await t.throwsAsync(satellite._applyTransaction(incomingTx), {
-    code: 'SQLITE_CONSTRAINT_FOREIGNKEY',
+    code: '23503',
   })
 })
 
@@ -959,7 +973,6 @@ test('compensations: incoming operations accepted if restore referential integri
     t.context
   await runMigrations()
 
-  await adapter.run({ sql: `PRAGMA foreign_keys = ON;` })
   await satellite._setMeta('compensations', 0)
   await satellite._setAuthState(authState)
   const clientId = satellite._authState!.clientId
@@ -1023,7 +1036,6 @@ test('compensations: using triggers with flag 0', async (t) => {
   const { adapter, runMigrations, satellite, tableInfo, authState } = t.context
   await runMigrations()
 
-  await adapter.run({ sql: `PRAGMA foreign_keys = ON` })
   await satellite._setMeta('compensations', 0)
 
   await adapter.run({
@@ -1060,7 +1072,7 @@ test('compensations: using triggers with flag 0', async (t) => {
   }
 
   await t.throwsAsync(satellite._applyTransaction(incomingTx), {
-    code: 'SQLITE_CONSTRAINT_FOREIGNKEY',
+    code: '23503',
   })
 })
 
@@ -1068,7 +1080,6 @@ test('compensations: using triggers with flag 1', async (t) => {
   const { adapter, runMigrations, satellite, tableInfo, authState } = t.context
   await runMigrations()
 
-  await adapter.run({ sql: `PRAGMA foreign_keys = ON` })
   await satellite._setMeta('compensations', 1)
 
   await adapter.run({
@@ -1223,7 +1234,7 @@ test('handling connectivity state change stops queueing operations', async (t) =
   await satellite.start(authState)
 
   adapter.run({
-    sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', 1)`,
+    sql: `INSERT INTO main.parent(id, value, other) VALUES (1, 'local', 1)`,
   })
 
   await satellite._performSnapshot()
@@ -1235,7 +1246,7 @@ test('handling connectivity state change stops queueing operations', async (t) =
   await satellite._handleConnectivityStateChange('disconnected')
 
   adapter.run({
-    sql: `INSERT INTO parent(id, value, other) VALUES (2, 'local', 1)`,
+    sql: `INSERT INTO main.parent(id, value, other) VALUES (2, 'local', 1)`,
   })
 
   await satellite._performSnapshot()
@@ -1258,10 +1269,10 @@ test('garbage collection is triggered when transaction from the same origin is r
   await satellite.start(authState)
 
   adapter.run({
-    sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', 1);`,
+    sql: `INSERT INTO main.parent(id, value, other) VALUES (1, 'local', 1);`,
   })
   adapter.run({
-    sql: `UPDATE parent SET value = 'local', other = 2 WHERE id = 1;`,
+    sql: `UPDATE main.parent SET value = 'local', other = 2 WHERE id = 1;`,
   })
 
   // Before snapshot, we didn't send anything
@@ -1363,7 +1374,7 @@ test('apply shape data and persist subscription', async (t) => {
     t.is(row.length, 1)
 
     const shadowRows = await adapter.query({
-      sql: `SELECT tags FROM _electric_shadow`,
+      sql: `SELECT tags FROM main._electric_shadow`,
     })
     t.is(shadowRows.length, 1)
 
@@ -1482,7 +1493,7 @@ test('applied shape data will be acted upon correctly', async (t) => {
     t.is(row.length, 1)
 
     const shadowRows = await adapter.query({
-      sql: `SELECT * FROM _electric_shadow`,
+      sql: `SELECT * FROM main._electric_shadow`,
     })
     t.is(shadowRows.length, 1)
     t.like(shadowRows[0], {
@@ -1494,7 +1505,7 @@ test('applied shape data will be acted upon correctly', async (t) => {
     await satellite._performSnapshot()
 
     const oplogs = await adapter.query({
-      sql: `SELECT * FROM _electric_oplog`,
+      sql: `SELECT * FROM main._electric_oplog`,
     })
     t.not(oplogs[0].clearTags, '[]')
   } catch (e) {
@@ -1570,7 +1581,7 @@ test('a second successful subscription', async (t) => {
     t.is(row.length, 1)
 
     const shadowRows = await adapter.query({
-      sql: `SELECT tags FROM _electric_shadow`,
+      sql: `SELECT tags FROM main._electric_shadow`,
     })
     t.is(shadowRows.length, 2)
 
@@ -1633,7 +1644,7 @@ test('a single subscribe with multiple tables with FKs', async (t) => {
   return prom
 })
 
-test.serial('a shape delivery that triggers garbage collection', async (t) => {
+test('a shape delivery that triggers garbage collection', async (t) => {
   const { client, satellite, adapter } = t.context
   const { runMigrations, authState } = t.context
   await runMigrations()
@@ -1672,7 +1683,7 @@ test.serial('a shape delivery that triggers garbage collection', async (t) => {
       t.is(row.length, 0)
 
       const shadowRows = await adapter.query({
-        sql: `SELECT tags FROM _electric_shadow`,
+        sql: `SELECT tags FROM main._electric_shadow`,
       })
       t.is(shadowRows.length, 1)
 
@@ -1741,13 +1752,13 @@ test('unsubscribing all subscriptions does not trigger FK violations', async (t)
   // populate it with foreign keys and check that the subscription
   // manager does not violate the FKs when unsubscribing from all subscriptions
   await satellite.adapter.runInTransaction(
-    { sql: `CREATE TABLE users (id TEXT PRIMARY KEY, name TEXT)` },
+    { sql: `CREATE TABLE main.users (id TEXT PRIMARY KEY, name TEXT)` },
     {
-      sql: `CREATE TABLE posts (id TEXT PRIMARY KEY, title TEXT, author_id TEXT, FOREIGN KEY(author_id) REFERENCES users(id))`,
+      sql: `CREATE TABLE main.posts (id TEXT PRIMARY KEY, title TEXT, author_id TEXT, FOREIGN KEY(author_id) REFERENCES main.users(id) DEFERRABLE INITIALLY IMMEDIATE)`,
     },
-    { sql: `INSERT INTO users (id, name) VALUES ('u1', 'user1')` },
+    { sql: `INSERT INTO main.users (id, name) VALUES ('u1', 'user1')` },
     {
-      sql: `INSERT INTO posts (id, title, author_id) VALUES ('p1', 'My first post', 'u1')`,
+      sql: `INSERT INTO main.posts (id, title, author_id) VALUES ('p1', 'My first post', 'u1')`,
     }
   )
 
@@ -1755,10 +1766,14 @@ test('unsubscribing all subscriptions does not trigger FK violations', async (t)
   // if we reach here, the FKs were not violated
 
   // Check that everything was deleted
-  const users = await satellite.adapter.query({ sql: 'SELECT * FROM users' })
+  const users = await satellite.adapter.query({
+    sql: 'SELECT * FROM main.users',
+  })
   t.assert(users.length === 0)
 
-  const posts = await satellite.adapter.query({ sql: 'SELECT * FROM posts' })
+  const posts = await satellite.adapter.query({
+    sql: 'SELECT * FROM main.posts',
+  })
   t.assert(posts.length === 0)
 })
 
@@ -1766,7 +1781,7 @@ test("Garbage collecting the subscription doesn't generate oplog entries", async
   const { adapter, runMigrations, satellite, authState } = t.context
   await satellite.start(authState)
   await runMigrations()
-  await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
+  await adapter.run({ sql: `INSERT INTO main.parent(id) VALUES ('1'),('2')` })
   const ts = await satellite._performSnapshot()
   await satellite._garbageCollectOplog(ts)
   t.is((await satellite._getEntries(0)).length, 0)
@@ -1830,7 +1845,7 @@ test('snapshots: generated oplog entries have the correct tags', async (t) => {
   t.is(row.length, 2)
 
   const shadowRows = await adapter.query({
-    sql: `SELECT * FROM _electric_shadow`,
+    sql: `SELECT * FROM main._electric_shadow`,
   })
   t.is(shadowRows.length, 2)
   t.like(shadowRows[0], {
@@ -1842,7 +1857,7 @@ test('snapshots: generated oplog entries have the correct tags', async (t) => {
   await satellite._performSnapshot()
 
   const oplogs = await adapter.query({
-    sql: `SELECT * FROM _electric_oplog`,
+    sql: `SELECT * FROM main._electric_oplog`,
   })
   t.is(oplogs[0].clearTags, genEncodedTags('remote', [expectedTs]))
 })
@@ -1854,17 +1869,17 @@ test('DELETE after DELETE sends clearTags', async (t) => {
   await satellite._setAuthState(authState)
 
   await adapter.run({
-    sql: `INSERT INTO parent(id, value) VALUES (1,'val1')`,
+    sql: `INSERT INTO main.parent(id, value) VALUES (1,'val1')`,
   })
   await adapter.run({
-    sql: `INSERT INTO parent(id, value) VALUES (2,'val2')`,
+    sql: `INSERT INTO main.parent(id, value) VALUES (2,'val2')`,
   })
 
-  await adapter.run({ sql: `DELETE FROM parent WHERE id=1` })
+  await adapter.run({ sql: `DELETE FROM main.parent WHERE id=1` })
 
   await satellite._performSnapshot()
 
-  await adapter.run({ sql: `DELETE FROM parent WHERE id=2` })
+  await adapter.run({ sql: `DELETE FROM main.parent WHERE id=2` })
 
   await satellite._performSnapshot()
 
@@ -1886,7 +1901,7 @@ test('DELETE after DELETE sends clearTags', async (t) => {
   t.not(delete2.clearTags, '[]')
 })
 
-test.serial('connection backoff success', async (t) => {
+test('connection backoff success', async (t) => {
   t.plan(3)
   const { client, satellite } = t.context
 

@@ -68,12 +68,7 @@ export function generateOplogTriggers(
   return [
     dedent`
       -- Toggles for turning the triggers on and off
-      ${builder.insertOrIgnore(
-        'main',
-        '_electric_trigger_settings',
-        ['namespace', 'tablename', 'flag'],
-        [`'${namespace}'`, `'${tableName}'`, '1']
-      )}
+      ${builder.setTriggerSetting(namespace, tableName, 1)}
     `,
     dedent`
     /* Triggers for table ${tableName} */

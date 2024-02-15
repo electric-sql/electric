@@ -57,7 +57,6 @@ import {
 import { Mutex } from 'async-mutex'
 import Log from 'loglevel'
 import { generateTableTriggers } from '../migrators/triggers'
-import { prepareInsertBatchedStatements } from '../util/statements'
 import { mergeEntries } from './merge'
 import { SubscriptionsManager } from './shapes'
 import { InMemorySubscriptionsManager } from './shapes/manager'
@@ -73,9 +72,8 @@ import {
 import { backOff } from 'exponential-backoff'
 import { chunkBy } from '../util'
 import { isFatal, isOutOfSyncError, isThrowable, wrapFatalError } from './error'
-import { inferRelationsFromSQLite } from '../util/relations'
+import { inferRelationsFromDb } from '../util/relations'
 import { QueryBuilder } from '../migrators/query-builder'
-import { sqliteBuilder } from '../migrators/query-builder'
 
 type ChangeAccumulator = {
   [key: string]: Change
@@ -118,6 +116,7 @@ export class SatelliteProcess implements Satellite {
   migrator: Migrator
   notifier: Notifier
   client: Client
+  builder: QueryBuilder
 
   opts: SatelliteOpts
 
@@ -147,7 +146,7 @@ export class SatelliteProcess implements Satellite {
    * arguments. Precisely, its either 999 for versions prior to 3.32.0 and 32766 for
    * versions after.
    */
-  private maxSqlParameters: 999 | 32766 = 999
+  private maxSqlParameters: 999 | 32766 | 65535 = 999
   private snapshotMutex: Mutex = new Mutex()
   private performingSnapshot = false
 
@@ -160,15 +159,14 @@ export class SatelliteProcess implements Satellite {
     migrator: Migrator,
     notifier: Notifier,
     client: Client,
-    opts: SatelliteOpts,
-    // TODO: turn `builder` into an abstract readonly field when introducing subclasses of the process
-    private builder: QueryBuilder = sqliteBuilder
+    opts: SatelliteOpts
   ) {
     this.dbName = dbName
     this.adapter = adapter
     this.migrator = migrator
     this.notifier = notifier
     this.client = client
+    this.builder = this.migrator.electricQueryBuilder
 
     this.opts = opts
     this.relations = {}
@@ -209,7 +207,7 @@ export class SatelliteProcess implements Satellite {
 
   async start(authConfig: AuthConfig): Promise<ConnectionWrapper> {
     if (this.opts.debug) {
-      await this.logSQLiteVersion()
+      await this.logDatabaseVersion()
     }
 
     await this.migrator.up()
@@ -291,11 +289,13 @@ export class SatelliteProcess implements Satellite {
     return { connectionPromise }
   }
 
-  private async logSQLiteVersion(): Promise<void> {
-    const sqliteVersionRow = await this.adapter.query({
-      sql: 'SELECT sqlite_version() AS version',
+  private async logDatabaseVersion(): Promise<void> {
+    const versionRow = await this.adapter.query({
+      sql: this.builder.getVersion,
     })
-    Log.info(`Using SQLite version: ${sqliteVersionRow[0]['version']}`)
+    Log.info(
+      `Using ${this.builder.dialect} version: ${versionRow[0]['version']}`
+    )
   }
 
   async _setAuthState(authState: AuthState): Promise<void> {
@@ -308,22 +308,22 @@ export class SatelliteProcess implements Satellite {
     const stmts: Statement[] = []
     const tables: QualifiedTablename[] = []
     // reverts to off on commit/abort
-    stmts.push({ sql: 'PRAGMA defer_foreign_keys = ON' })
+    stmts.push({ sql: this.builder.deferForeignKeys })
     shapeDefs
       .flatMap((def: ShapeDefinition) => def.definition.selects)
       .map((select: ShapeSelect) => {
-        tables.push(new QualifiedTablename('main', select.tablename))
-        return 'main.' + select.tablename
+        const qualifiedTable = new QualifiedTablename('main', select.tablename)
+        tables.push(qualifiedTable)
+        return qualifiedTable
       }) // We need "fully qualified" table names in the next calls
-      .reduce((stmts: Statement[], tablename: string) => {
+      .reduce((stmts: Statement[], table: QualifiedTablename) => {
         stmts.push({
-          sql: `DELETE FROM ${tablename}`,
+          sql: `DELETE FROM "${table.namespace}"."${table.tablename}"`,
         })
         return stmts
         // does not delete shadow rows but we can do that
       }, stmts)
 
-    console.log(`tables in GC: ${JSON.stringify(tables)}`)
     const stmtsWithTriggers = [
       ...this._disableTriggers(tables),
       ...stmts,
@@ -481,7 +481,7 @@ export class SatelliteProcess implements Satellite {
   // subscriptions for entire tables.
   async _applySubscriptionData(changes: InitialDataChange[], lsn: LSN) {
     const stmts: Statement[] = []
-    stmts.push({ sql: 'PRAGMA defer_foreign_keys = ON' })
+    stmts.push({ sql: this.builder.deferForeignKeys })
 
     // It's much faster[1] to do less statements to insert the data instead of doing an insert statement for each row
     // so we're going to do just that, but with a caveat: SQLite has a max number of parameters in prepared statements,
@@ -549,7 +549,7 @@ export class SatelliteProcess implements Satellite {
       )}) VALUES `
 
       stmts.push(
-        ...prepareInsertBatchedStatements(
+        ...this.builder.prepareInsertBatchedStatements(
           sqlBase,
           columns,
           records as Record<string, SqlValue>[],
@@ -562,16 +562,16 @@ export class SatelliteProcess implements Satellite {
     stmts.push(...this._enableTriggers(qualifiedTableNames))
 
     // Then do a batched insert for the shadow table
-    const qualifiedShadowTable = `"${this.opts.shadowTable.namespace}"."${this.opts.shadowTable.tablename}"`
-    const upsertShadowStmt = `INSERT or REPLACE INTO ${qualifiedShadowTable} (namespace, tablename, primaryKey, tags) VALUES `
-    stmts.push(
-      ...prepareInsertBatchedStatements(
-        upsertShadowStmt,
-        ['namespace', 'tablename', 'primaryKey', 'tags'],
-        allArgsForShadowInsert,
-        this.maxSqlParameters
-      )
+    const batchedShadowInserts = this.builder.batchedInsertOrReplace(
+      this.opts.shadowTable.namespace,
+      this.opts.shadowTable.tablename,
+      ['namespace', 'tablename', 'primaryKey', 'tags'],
+      allArgsForShadowInsert,
+      ['namespace', 'tablename', 'primaryKey'],
+      ['namespace', 'tablename', 'tags'],
+      this.maxSqlParameters
     )
+    stmts.push(...batchedShadowInserts)
 
     // Then update subscription state and LSN
     stmts.push(
@@ -837,16 +837,9 @@ export class SatelliteProcess implements Satellite {
     const oplog = this.opts.oplogTable.tablename
     const shadow = this.opts.shadowTable.tablename
 
-    const tablesExist = `
-      SELECT count(name) as numTables FROM sqlite_master
-        WHERE type='table'
-        AND name IN (?, ?, ?)
-    `
-
-    const [{ numTables }] = await this.adapter.query({
-      sql: tablesExist,
-      args: [meta, oplog, shadow],
-    })
+    const [{ numTables }] = await this.adapter.query(
+      this.builder.countTablesIn('numTables', [meta, oplog, shadow])
+    )
     return numTables === 3
   }
 
@@ -876,7 +869,6 @@ export class SatelliteProcess implements Satellite {
 
     try {
       const oplog = `"${this.opts.oplogTable.namespace}"."${this.opts.oplogTable.tablename}"`
-      const shadow = `"${this.opts.shadowTable.namespace}"."${this.opts.shadowTable.tablename}"`
       const timestamp = new Date()
       const newTag = this._generateTag(timestamp)
 
@@ -895,7 +887,7 @@ export class SatelliteProcess implements Satellite {
       // Update the timestamps on all "new" entries - they have been added but timestamp is still `NULL`
       const q1: Statement = {
         sql: `
-      UPDATE ${oplog} SET timestamp = ?
+      UPDATE ${oplog} SET timestamp = ${this.builder.makePositionalParam(1)}
       WHERE rowid in (
         SELECT rowid FROM ${oplog}
             WHERE timestamp is NULL
@@ -908,54 +900,28 @@ export class SatelliteProcess implements Satellite {
 
       // For each first oplog entry per element, set `clearTags` array to previous tags from the shadow table
       const q2: Statement = {
-        sql: `
-      UPDATE ${oplog}
-      SET clearTags = updates.tags
-      FROM (
-        SELECT shadow.tags as tags, min(op.rowid) as op_rowid
-        FROM ${shadow} AS shadow
-        JOIN ${oplog} as op
-          ON op.namespace = shadow.namespace
-            AND op.tablename = shadow.tablename
-            AND op.primaryKey = shadow.primaryKey
-        WHERE op.timestamp = ?
-        GROUP BY op.namespace, op.tablename, op.primaryKey
-      ) AS updates
-      WHERE updates.op_rowid = ${oplog}.rowid
-      `,
+        sql: this.builder.setClearTagsForTimestamp(
+          this.opts.oplogTable,
+          this.opts.shadowTable
+        ),
         args: [timestamp.toISOString()],
       }
 
       // For each affected shadow row, set new tag array, unless the last oplog operation was a DELETE
       const q3: Statement = {
-        sql: `
-      INSERT OR REPLACE INTO ${shadow} (namespace, tablename, primaryKey, tags)
-      SELECT namespace, tablename, primaryKey, ?
-        FROM ${oplog} AS op
-        WHERE timestamp = ?
-        GROUP BY namespace, tablename, primaryKey
-        HAVING rowid = max(rowid) AND optype != 'DELETE'
-      `,
+        sql: this.builder.setTagsForShadowRows(
+          this.opts.oplogTable,
+          this.opts.shadowTable
+        ),
         args: [encodeTags([newTag]), timestamp.toISOString()],
       }
 
       // And finally delete any shadow rows where the last oplog operation was a `DELETE`
-      // We do an inner join in a CTE instead of a `WHERE EXISTS (...)` since this is not reliant on re-executing a query per every row in shadow table, but uses a PK join instead.
       const q4: Statement = {
-        sql: `
-      WITH _to_be_deleted (rowid) AS (
-        SELECT shadow.rowid
-          FROM ${oplog} AS op
-          INNER JOIN ${shadow} AS shadow
-            ON shadow.namespace = op.namespace AND shadow.tablename = op.tablename AND shadow.primaryKey = op.primaryKey
-          WHERE op.timestamp = ?
-          GROUP BY op.namespace, op.tablename, op.primaryKey
-          HAVING op.rowid = max(op.rowid) AND op.optype = 'DELETE'
-      )
-
-      DELETE FROM ${shadow}
-      WHERE rowid IN _to_be_deleted
-      `,
+        sql: this.builder.removeDeletedShadowRows(
+          this.opts.oplogTable,
+          this.opts.shadowTable
+        ),
         args: [timestamp.toISOString()],
       }
 
@@ -1072,13 +1038,15 @@ export class SatelliteProcess implements Satellite {
 
         switch (entryChanges.optype) {
           case OPTYPES.delete:
-            stmts.push(_applyDeleteOperation(entryChanges, qualifiedTableName))
+            stmts.push(
+              this._applyDeleteOperation(entryChanges, qualifiedTableName)
+            )
             stmts.push(this._deleteShadowTagsStatement(shadowEntry))
             break
 
           default:
             stmts.push(
-              _applyNonDeleteOperation(entryChanges, qualifiedTableName)
+              this._applyNonDeleteOperation(entryChanges, qualifiedTableName)
             )
             stmts.push(this._updateShadowTagsStatement(shadowEntry))
         }
@@ -1100,7 +1068,7 @@ export class SatelliteProcess implements Satellite {
     const selectEntries = `
       SELECT * FROM ${oplog}
         WHERE timestamp IS NOT NULL
-          AND rowid > ?
+          AND rowid > ${this.builder.makePositionalParam(1)}
         ORDER BY rowid ASC
     `
     const rows = await this.adapter.query({ sql: selectEntries, args: [since] })
@@ -1109,11 +1077,12 @@ export class SatelliteProcess implements Satellite {
 
   _deleteShadowTagsStatement(shadow: ShadowEntry): Statement {
     const shadowTable = `"${this.opts.shadowTable.namespace}"."${this.opts.shadowTable.tablename}"`
+    const pos = (i: number) => this.builder.makePositionalParam(i)
     const deleteRow = `
       DELETE FROM ${shadowTable}
-      WHERE namespace = ? AND
-            tablename = ? AND
-            primaryKey = ?;
+      WHERE namespace = ${pos(1)} AND
+            tablename = ${pos(2)} AND
+            "primaryKey" = ${pos(3)};
     `
     return {
       sql: deleteRow,
@@ -1122,20 +1091,14 @@ export class SatelliteProcess implements Satellite {
   }
 
   _updateShadowTagsStatement(shadow: ShadowEntry): Statement {
-    const shadowTable = `"${this.opts.shadowTable.namespace}"."${this.opts.shadowTable.tablename}"`
-    const updateTags = `
-      INSERT or REPLACE INTO ${shadowTable} (namespace, tablename, primaryKey, tags) VALUES
-      (?, ?, ?, ?);
-    `
-    return {
-      sql: updateTags,
-      args: [
-        shadow.namespace,
-        shadow.tablename,
-        shadow.primaryKey,
-        shadow.tags,
-      ],
-    }
+    return this.builder.insertOrReplace(
+      this.opts.shadowTable.namespace,
+      this.opts.shadowTable.tablename,
+      ['namespace', 'tablename', 'primaryKey', 'tags'],
+      [shadow.namespace, shadow.tablename, shadow.primaryKey, shadow.tags],
+      ['namespace', 'tablename', 'primaryKey'],
+      ['tags']
+    )
   }
 
   _updateRelations(rel: Omit<Relation, 'id'>) {
@@ -1197,7 +1160,7 @@ export class SatelliteProcess implements Satellite {
     let firstDMLChunk = true
 
     // switches off on transaction commit/abort
-    stmts.push({ sql: 'PRAGMA defer_foreign_keys = ON' })
+    //stmts.push({ sql: this.builder.deferForeignKeys })
     // update lsn.
     stmts.push(this.updateLsnStmt(lsn))
 
@@ -1347,16 +1310,18 @@ export class SatelliteProcess implements Satellite {
     const namespacesAndTableNames = tables
       .map((tbl) => [tbl.namespace, tbl.tablename])
       .flat()
-    if (tables.length > 0)
+    if (tables.length > 0) {
+      const pos = (i: number) => this.builder.makePositionalParam(i)
+      let i = 1
       return [
         {
-          sql: `UPDATE ${triggers} SET flag = ? WHERE ${tables
-            .map(() => '(namespace = ? AND tablename = ?)')
+          sql: `UPDATE ${triggers} SET flag = ${pos(i++)} WHERE ${tables
+            .map((_) => `(namespace = ${pos(i++)} AND tablename = ${pos(i++)})`)
             .join(' OR ')}`,
           args: [flag, ...namespacesAndTableNames],
         },
       ]
-    else return []
+    } else return []
   }
 
   _setMetaStatement<K extends keyof MetaEntries>(
@@ -1366,8 +1331,8 @@ export class SatelliteProcess implements Satellite {
   _setMetaStatement(key: Uuid, value: string | null): Statement
   _setMetaStatement(key: string, value: SqlValue) {
     const meta = `"${this.opts.metaTable.namespace}"."${this.opts.metaTable.tablename}"`
-
-    const sql = `UPDATE ${meta} SET value = ? WHERE key = ?`
+    const pos = (i: number) => this.builder.makePositionalParam(i)
+    const sql = `UPDATE ${meta} SET value = ${pos(1)} WHERE key = ${pos(2)}`
     const args = [value, key]
     return { sql, args }
   }
@@ -1389,8 +1354,8 @@ export class SatelliteProcess implements Satellite {
   async _getMeta<K extends keyof MetaEntries>(key: K): Promise<MetaEntries[K]>
   async _getMeta(key: string) {
     const meta = `"${this.opts.metaTable.namespace}"."${this.opts.metaTable.tablename}"`
-
-    const sql = `SELECT value from ${meta} WHERE key = ?`
+    const pos = (i: number) => this.builder.makePositionalParam(i)
+    const sql = `SELECT value from ${meta} WHERE key = ${pos(1)}`
     const args = [key]
     const rows = await this.adapter.query({ sql, args })
 
@@ -1414,7 +1379,7 @@ export class SatelliteProcess implements Satellite {
   }
 
   private async _getLocalRelations(): Promise<{ [k: string]: Relation }> {
-    return inferRelationsFromSQLite(this.adapter, this.opts)
+    return inferRelationsFromDb(this.adapter, this.opts, this.builder)
   }
 
   private _generateTag(timestamp: Date): string {
@@ -1425,9 +1390,9 @@ export class SatelliteProcess implements Satellite {
   async _garbageCollectOplog(commitTimestamp: Date): Promise<void> {
     const isoString = commitTimestamp.toISOString()
     const oplog = `"${this.opts.oplogTable.namespace}"."${this.opts.oplogTable.tablename}"`
-
+    const pos = (i: number) => this.builder.makePositionalParam(i)
     await this.adapter.run({
-      sql: `DELETE FROM ${oplog} WHERE timestamp = ?`,
+      sql: `DELETE FROM ${oplog} WHERE timestamp = ${pos(1)}`,
       args: [isoString],
     })
   }
@@ -1442,85 +1407,85 @@ export class SatelliteProcess implements Satellite {
     this._lsn = lsn
     const lsn_base64 = base64.fromBytes(lsn)
     const metatable = `"${this.opts.metaTable.namespace}"."${this.opts.metaTable.tablename}"`
+    const pos = (i: number) => this.builder.makePositionalParam(i)
     return {
-      sql: `UPDATE ${metatable} set value = ? WHERE key = ?`,
+      sql: `UPDATE ${metatable} set value = ${pos(1)} WHERE key = ${pos(2)}`,
       args: [lsn_base64, 'lsn'],
     }
   }
 
-  private async checkMaxSqlParameters() {
-    const [{ version }] = (await this.adapter.query({
-      sql: 'SELECT sqlite_version() AS version',
-    })) as [{ version: string }]
-
-    const [major, minor, _patch] = version.split('.').map((x) => parseInt(x))
-
-    if (major === 3 && minor >= 32) this.maxSqlParameters = 32766
-    else this.maxSqlParameters = 999
-  }
-}
-
-function _applyDeleteOperation(
-  entryChanges: ShadowEntryChanges,
-  qualifiedTableName: QualifiedTablename
-): Statement {
-  const pkEntries = Object.entries(entryChanges.primaryKeyCols)
-  if (pkEntries.length === 0)
-    throw new Error(
-      "Can't apply delete operation. None of the columns in changes are marked as PK."
-    )
-  const params = pkEntries.reduce(
-    (acc, [column, value]) => {
-      acc.where.push(`${column} = ?`)
-      acc.values.push(value)
-      return acc
-    },
-    { where: [] as string[], values: [] as SqlValue[] }
-  )
-
-  return {
-    sql: `DELETE FROM "${qualifiedTableName.namespace}"."${
-      qualifiedTableName.tablename
-    }" WHERE ${params.where.join(' AND ')}`,
-    args: params.values,
-  }
-}
-
-function _applyNonDeleteOperation(
-  { fullRow, primaryKeyCols }: ShadowEntryChanges,
-  qualifiedTableName: QualifiedTablename
-): Statement {
-  const columnNames = Object.keys(fullRow)
-  const columnValues = Object.values(fullRow)
-  let insertStmt = `INTO "${qualifiedTableName.namespace}"."${
-    qualifiedTableName.tablename
-  }" (${columnNames.join(', ')}) VALUES (${columnValues
-    .map((_) => '?')
-    .join(',')})`
-
-  const updateColumnStmts = columnNames
-    .filter((c) => !(c in primaryKeyCols))
-    .reduce(
-      (acc, c) => {
-        acc.where.push(`${c} = ?`)
-        acc.values.push(fullRow[c])
+  _applyDeleteOperation(
+    entryChanges: ShadowEntryChanges,
+    qualifiedTableName: QualifiedTablename
+  ): Statement {
+    const pkEntries = Object.entries(entryChanges.primaryKeyCols)
+    if (pkEntries.length === 0)
+      throw new Error(
+        "Can't apply delete operation. None of the columns in changes are marked as PK."
+      )
+    let i = 1
+    const pos = (i: number) => this.builder.makePositionalParam(i)
+    const params = pkEntries.reduce(
+      (acc, [column, value]) => {
+        acc.where.push(`${column} = ${pos(i++)}`)
+        acc.values.push(value)
         return acc
       },
       { where: [] as string[], values: [] as SqlValue[] }
     )
 
-  if (updateColumnStmts.values.length > 0) {
-    insertStmt = `
-                INSERT ${insertStmt} 
-                ON CONFLICT DO UPDATE SET ${updateColumnStmts.where.join(', ')}
-              `
-    columnValues.push(...updateColumnStmts.values)
-  } else {
-    // no changes, can ignore statement if exists
-    insertStmt = `INSERT OR IGNORE ${insertStmt}`
+    return {
+      sql: `DELETE FROM "${qualifiedTableName.namespace}"."${
+        qualifiedTableName.tablename
+      }" WHERE ${params.where.join(' AND ')}`,
+      args: params.values,
+    }
   }
 
-  return { sql: insertStmt, args: columnValues }
+  _applyNonDeleteOperation(
+    { fullRow, primaryKeyCols }: ShadowEntryChanges,
+    qualifiedTableName: QualifiedTablename
+  ): Statement {
+    const columnNames = Object.keys(fullRow)
+    const columnValues = Object.values(fullRow)
+    const updateColumnStmts = columnNames.filter((c) => !(c in primaryKeyCols))
+
+    if (updateColumnStmts.length > 0) {
+      return this.builder.insertOrReplaceWith(
+        qualifiedTableName.namespace,
+        qualifiedTableName.tablename,
+        columnNames,
+        columnValues,
+        ['id'],
+        updateColumnStmts,
+        updateColumnStmts.map((col) => fullRow[col])
+      )
+    }
+
+    // no changes, can ignore statement if exists
+    return this.builder.insertOrIgnore(
+      qualifiedTableName.namespace,
+      qualifiedTableName.tablename,
+      columnNames,
+      columnValues
+    )
+  }
+
+  private async checkMaxSqlParameters() {
+    if (this.builder.dialect === 'SQLite') {
+      const [{ version }] = (await this.adapter.query({
+        sql: 'SELECT sqlite_version() AS version',
+      })) as [{ version: string }]
+
+      const [major, minor, _patch] = version.split('.').map((x) => parseInt(x))
+
+      if (major === 3 && minor >= 32) this.maxSqlParameters = 32766
+      else this.maxSqlParameters = 999
+    } else {
+      // Postgres allows a maximum of 65535 query parameters
+      this.maxSqlParameters = 65535
+    }
+  }
 }
 
 export function generateTriggersForTable(

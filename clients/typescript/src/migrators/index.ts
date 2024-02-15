@@ -1,4 +1,5 @@
 import { Statement } from '../util'
+import { QueryBuilder } from './query-builder'
 
 export { SqliteBundleMigrator, PgBundleMigrator } from './bundle'
 export { MockMigrator } from './mock'
@@ -31,4 +32,5 @@ export interface Migrator {
   apply(migration: StmtMigration): Promise<void>
   applyIfNotAlready(migration: StmtMigration): Promise<boolean>
   querySchemaVersion(): Promise<string | undefined>
+  electricQueryBuilder: QueryBuilder
 }

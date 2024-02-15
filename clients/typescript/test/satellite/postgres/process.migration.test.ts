@@ -4,9 +4,8 @@ import Long from 'long'
 import {
   SatOpMigrate_Type,
   SatRelation_RelationType,
-} from '../../src/_generated/protocol/satellite'
-import { DatabaseAdapter } from '../../src/electric/adapter'
-import { generateTag } from '../../src/satellite/oplog'
+} from '../../../src/_generated/protocol/satellite'
+import { generateTag } from '../../../src/satellite/oplog'
 import {
   DataChange,
   DataChangeType,
@@ -14,20 +13,25 @@ import {
   SchemaChange,
   Statement,
   Transaction,
-} from '../../src/util'
+} from '../../../src/util'
 import {
   ContextType,
   cleanAndStopSatellite,
-  makeContext,
+  makePgContext,
   relations,
-} from './common'
-import { getMatchingShadowEntries } from '../support/satellite-helpers'
+} from '../common'
+import { getPgMatchingShadowEntries as getMatchingShadowEntries } from '../../support/satellite-helpers'
+import { DatabaseAdapter } from '../../../src/electric/adapter'
+import { pgBuilder } from '../../../src/migrators/query-builder'
+import isEqual from 'lodash.isequal'
 
 type CurrentContext = ContextType<{ clientId: string; txDate: Date }>
 const test = testAny as TestFn<CurrentContext>
+const builder = pgBuilder
 
+let port = 5000
 test.beforeEach(async (t) => {
-  await makeContext(t)
+  await makePgContext(t, port++)
   const { satellite, authState } = t.context
   await satellite.start(authState)
   t.context['clientId'] = satellite._authState!.clientId // store clientId in the context
@@ -53,11 +57,11 @@ const populateDB = async (t: ExecutionContext<CurrentContext>) => {
   const stmts: Statement[] = []
 
   stmts.push({
-    sql: `INSERT INTO parent (id, value, other) VALUES (?, ?, ?);`,
+    sql: `INSERT INTO main.parent (id, value, other) VALUES ($1, $2, $3);`,
     args: [1, 'local', null],
   })
   stmts.push({
-    sql: `INSERT INTO parent (id, value, other) VALUES (?, ?, ?);`,
+    sql: `INSERT INTO main.parent (id, value, other) VALUES ($1, $2, $3);`,
     args: [2, 'local', null],
   })
   await adapter.runInTransaction(...stmts)
@@ -68,11 +72,9 @@ async function assertDbHasTables(
   ...tables: string[]
 ) {
   const adapter = t.context.adapter as DatabaseAdapter
-  const schemaRows = await adapter.query({
-    sql: "SELECT tbl_name FROM sqlite_schema WHERE type = 'table'",
-  })
+  const schemaRows = await adapter.query(builder.getLocalTableNames())
 
-  const tableNames = new Set(schemaRows.map((r) => r.tbl_name))
+  const tableNames = new Set(schemaRows.map((r) => r.name))
   tables.forEach((tbl) => {
     t.true(tableNames.has(tbl))
   })
@@ -83,9 +85,7 @@ async function getTableInfo(
   t: ExecutionContext<CurrentContext>
 ): Promise<ColumnInfo[]> {
   const adapter = t.context.adapter as DatabaseAdapter
-  return (await adapter.query({
-    sql: `pragma table_info(${table});`,
-  })) as ColumnInfo[]
+  return (await adapter.query(builder.getTableInfo(table))) as ColumnInfo[]
 }
 
 type ColumnInfo = {
@@ -100,7 +100,7 @@ type ColumnInfo = {
 test.serial('setup populates DB', async (t) => {
   const adapter = t.context.adapter
 
-  const sql = 'SELECT * FROM parent'
+  const sql = 'SELECT * FROM main.parent'
   const rows = await adapter.query({ sql })
   t.deepEqual(rows, [
     {
@@ -140,7 +140,7 @@ const createTable: SchemaChange = {
     pks: ['id'],
   },
   migrationType: SatOpMigrate_Type.CREATE_TABLE,
-  sql: 'CREATE TABLE NewTable(\
+  sql: 'CREATE TABLE main."NewTable"(\
          id TEXT NOT NULL,\
          foo INTEGER,\
          bar TEXT,\
@@ -177,7 +177,7 @@ const addColumn: SchemaChange = {
     pks: ['id'],
   },
   migrationType: SatOpMigrate_Type.ALTER_ADD_COLUMN,
-  sql: 'ALTER TABLE parent ADD baz TEXT',
+  sql: 'ALTER TABLE main.parent ADD baz TEXT',
 }
 
 const addColumnRelation = {
@@ -244,19 +244,22 @@ async function checkMigrationIsApplied(t: ExecutionContext<CurrentContext>) {
 
   const newTableInfo = await getTableInfo('NewTable', t)
 
-  t.deepEqual(newTableInfo, [
+  const expectedTables = [
     // id, foo, bar
-    { cid: 0, name: 'id', type: 'TEXT', notnull: 1, dflt_value: null, pk: 1 },
     {
-      cid: 1,
       name: 'foo',
       type: 'INTEGER',
       notnull: 0,
       dflt_value: null,
       pk: 0,
     },
-    { cid: 2, name: 'bar', type: 'TEXT', notnull: 0, dflt_value: null, pk: 0 },
-  ])
+    { name: 'id', type: 'TEXT', notnull: 1, dflt_value: null, pk: 1 },
+    { name: 'bar', type: 'TEXT', notnull: 0, dflt_value: null, pk: 0 },
+  ]
+
+  expectedTables.forEach((tbl) => {
+    t.true(newTableInfo.some((t) => isEqual(t, tbl)))
+  })
 
   const parentTableInfo = await getTableInfo('parent', t)
   const parentTableHasColumn = parentTableInfo.some((col: ColumnInfo) => {
@@ -274,7 +277,7 @@ async function checkMigrationIsApplied(t: ExecutionContext<CurrentContext>) {
 
 const fetchParentRows = async (adapter: DatabaseAdapter): Promise<Row[]> => {
   return adapter.query({
-    sql: 'SELECT * FROM parent',
+    sql: 'SELECT * FROM main.parent',
   })
 }
 
@@ -503,7 +506,7 @@ test.serial(
 
     // Check the row that was inserted in the new table
     const newTableRows = await adapter.query({
-      sql: 'SELECT * FROM NewTable',
+      sql: 'SELECT * FROM main."NewTable"',
     })
 
     t.is(newTableRows.length, 1)
@@ -525,7 +528,7 @@ test.serial('apply migration containing DDL and conflicting DML', async (t) => {
 
   // Locally update row with id 1
   await adapter.runInTransaction({
-    sql: `UPDATE parent SET value = ?, other = ? WHERE id = ?;`,
+    sql: `UPDATE main.parent SET value = $1, other = $2 WHERE id = $3;`,
     args: ['still local', 5, 1],
   })
 
@@ -710,10 +713,10 @@ const migrationWithFKs: SchemaChange[] = [
   {
     migrationType: SatOpMigrate_Type.CREATE_TABLE,
     sql: `
-    CREATE TABLE "test_items" (
+    CREATE TABLE main."test_items" (
       "id" TEXT NOT NULL,
       CONSTRAINT "test_items_pkey" PRIMARY KEY ("id")
-    ) WITHOUT ROWID;
+    );
     `,
     table: {
       name: 'test_items',
@@ -731,12 +734,12 @@ const migrationWithFKs: SchemaChange[] = [
   {
     migrationType: SatOpMigrate_Type.CREATE_TABLE,
     sql: `
-    CREATE TABLE "test_other_items" (
+    CREATE TABLE main."test_other_items" (
       "id" TEXT NOT NULL,
       "item_id" TEXT,
       -- CONSTRAINT "test_other_items_item_id_fkey" FOREIGN KEY ("item_id") REFERENCES "test_items" ("id"),
       CONSTRAINT "test_other_items_pkey" PRIMARY KEY ("id")
-    ) WITHOUT ROWID;
+    );
     `,
     table: {
       name: 'test_other_items',

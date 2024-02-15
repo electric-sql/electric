@@ -1,9 +1,9 @@
 import { mkdir, rm as removeFile } from 'node:fs/promises'
 import { randomValue } from '../../src/util'
-import Database from 'better-sqlite3'
 import type { Database as SqliteDB } from 'better-sqlite3'
-import { DatabaseAdapter } from '../../src/drivers/better-sqlite3'
-import { SqliteBundleMigrator as BundleMigrator } from '../../src/migrators'
+import SqliteDatabase from 'better-sqlite3'
+import { DatabaseAdapter as SqliteDatabaseAdapter } from '../../src/drivers/better-sqlite3'
+import { SqliteBundleMigrator, PgBundleMigrator } from '../../src/migrators'
 import { EventNotifier, MockNotifier } from '../../src/notifiers'
 import { MockSatelliteClient } from '../../src/satellite/mock'
 import { GlobalRegistry, Registry, SatelliteProcess } from '../../src/satellite'
@@ -12,8 +12,23 @@ import { satelliteDefaults, SatelliteOpts } from '../../src/satellite/config'
 import { Table, generateTableTriggers } from '../../src/migrators/triggers'
 import { buildInitialMigration as makeInitialMigration } from '../../src/migrators/schema'
 
+import sqliteMigrations from '../support/migrations/migrations.js'
+import pgMigrations from '../support/migrations/pg-migrations.js'
+import { ExecutionContext } from 'ava'
+import { AuthState } from '../../src/auth'
+import { DbSchema, TableSchema } from '../../src/client/model/schema'
+import { PgBasicType } from '../../src/client/conversions/types'
+import { HKT } from '../../src/client/util/hkt'
+import { ElectricClient } from '../../src/client/model'
+import EventEmitter from 'events'
+import { QueryBuilder } from '../../src/migrators/query-builder'
+import { BundleMigratorBase } from '../../src/migrators/bundle'
+import { makePgDatabase } from '../support/node-postgres'
+import { DatabaseAdapter as PgDatabaseAdapter } from '../../src/drivers/node-postgres/adapter'
+import { DatabaseAdapter } from '../../src/electric/adapter'
+
 export type Database = {
-  exec(statement: { sql: string }): Promise<void>
+  exec(statement: { sql: string }): Promise<unknown>
 }
 
 export function wrapDB(db: SqliteDB): Database {
@@ -201,16 +216,6 @@ export const relations = {
   },
 }
 
-import migrations from '../support/migrations/migrations.js'
-import { ExecutionContext } from 'ava'
-import { AuthState } from '../../src/auth'
-import { DbSchema, TableSchema } from '../../src/client/model/schema'
-import { PgBasicType } from '../../src/client/conversions/types'
-import { HKT } from '../../src/client/util/hkt'
-import { ElectricClient } from '../../src/client/model'
-import EventEmitter from 'events'
-import { QueryBuilder } from '../../src/migrators/query-builder'
-
 // Speed up the intervals for testing.
 export const opts = Object.assign({}, satelliteDefaults, {
   minSnapshotWindow: 40,
@@ -236,17 +241,16 @@ export type ContextType<Extra = {}> = {
   tableInfo: TableInfo
   timestamp: number
   authState: AuthState
+  stop?: () => Promise<void>
 } & Extra
 
-export const makeContext = async (
+const makeContextInternal = async (
   t: ExecutionContext<ContextType>,
+  dbName: string,
+  adapter: DatabaseAdapter,
+  migrator: BundleMigratorBase,
   options: Opts = opts
 ) => {
-  await mkdir('.tmp', { recursive: true })
-  const dbName = `.tmp/test-${randomValue()}.db`
-  const db = new Database(dbName)
-  const adapter = new DatabaseAdapter(db)
-  const migrator = new BundleMigrator(adapter, migrations)
   const notifier = new MockNotifier(dbName)
   const client = new MockSatelliteClient()
   const satellite = new SatelliteProcess(
@@ -280,14 +284,39 @@ export const makeContext = async (
   }
 }
 
+export const makeContext = async (
+  t: ExecutionContext<ContextType>,
+  options: Opts = opts
+) => {
+  await mkdir('.tmp', { recursive: true })
+  const dbName = `.tmp/test-${randomValue()}.db`
+  const db = new SqliteDatabase(dbName)
+  const adapter = new SqliteDatabaseAdapter(db)
+  const migrator = new SqliteBundleMigrator(adapter, sqliteMigrations)
+  makeContextInternal(t, dbName, adapter, migrator, options)
+}
+
+export const makePgContext = async (
+  t: ExecutionContext<ContextType>,
+  port: number,
+  options: Opts = opts
+) => {
+  const dbName = `test-${randomValue()}`
+  const { db, stop } = await makePgDatabase(dbName, port)
+  const adapter = new PgDatabaseAdapter(db)
+  const migrator = new PgBundleMigrator(adapter, pgMigrations)
+  makeContextInternal(t, dbName, adapter, migrator, options)
+  t.context.stop = stop
+}
+
 export const mockElectricClient = async (
   db: SqliteDB,
   registry: Registry | GlobalRegistry,
   options: Opts = opts
 ): Promise<ElectricClient<any>> => {
   const dbName = db.name
-  const adapter = new DatabaseAdapter(db)
-  const migrator = new BundleMigrator(adapter, migrations)
+  const adapter = new SqliteDatabaseAdapter(db)
+  const migrator = new SqliteBundleMigrator(adapter, sqliteMigrations)
   const notifier = new MockNotifier(dbName, new EventEmitter())
   const client = new MockSatelliteClient()
   const satellite = new SatelliteProcess(
@@ -314,11 +343,16 @@ export const clean = async (t: ExecutionContext<{ dbName: string }>) => {
 }
 
 export const cleanAndStopSatellite = async (
-  t: ExecutionContext<{ dbName: string; satellite: SatelliteProcess }>
+  t: ExecutionContext<{
+    dbName: string
+    satellite: SatelliteProcess
+    stop?: () => Promise<void>
+  }>
 ) => {
   const { satellite } = t.context
   await satellite.stop()
   await clean(t)
+  await t.context.stop?.()
 }
 
 export async function migrateDb(

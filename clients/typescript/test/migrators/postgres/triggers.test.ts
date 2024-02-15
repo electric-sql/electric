@@ -73,7 +73,7 @@ test('generateTableTriggers should create correct triggers for a table', (t) => 
               'main',
               'personTable',
               'INSERT',
-              jsonb_build_object('id', cast(new."id" as TEXT)),
+              json_strip_nulls(json_build_object('id', cast(new."id" as TEXT))),
               jsonb_build_object('age', new."age", 'bmi', cast(new."bmi" as TEXT), 'id', cast(new."id" as TEXT), 'int8', cast(new."int8" as TEXT), 'name', new."name"),
               NULL,
               NULL
@@ -118,7 +118,7 @@ test('generateTableTriggers should create correct triggers for a table', (t) => 
               'main',
               'personTable',
               'UPDATE',
-              jsonb_build_object('id', cast(new."id" as TEXT)),
+              json_strip_nulls(json_build_object('id', cast(new."id" as TEXT))),
               jsonb_build_object('age', new."age", 'bmi', cast(new."bmi" as TEXT), 'id', cast(new."id" as TEXT), 'int8', cast(new."int8" as TEXT), 'name', new."name"),
               jsonb_build_object('age', old."age", 'bmi', cast(old."bmi" as TEXT), 'id', cast(old."id" as TEXT), 'int8', cast(old."int8" as TEXT), 'name', old."name"),
               NULL
@@ -163,7 +163,7 @@ test('generateTableTriggers should create correct triggers for a table', (t) => 
               'main',
               'personTable',
               'DELETE',
-              jsonb_build_object('id', cast(old."id" as TEXT)),
+              json_strip_nulls(json_build_object('id', cast(old."id" as TEXT))),
               NULL,
               jsonb_build_object('age', old."age", 'bmi', cast(old."bmi" as TEXT), 'id', cast(old."id" as TEXT), 'int8', cast(old."int8" as TEXT), 'name', old."name"),
               NULL
@@ -205,7 +205,7 @@ test('oplog insertion trigger should insert row into oplog table', async (t) => 
     // cf. `joinColsForJSON` function in `src/migrators/triggers.ts`
     // These strings are then parsed back into real numbers
     // by the `deserialiseRow` function in `src/satellite/oplog.ts`
-    primaryKey: '{"id": "1"}',
+    primaryKey: '{"id":"1"}',
     newRow:
       '{"id": "1", "age": 30, "bmi": "25.5", "int8": "7", "name": "John Doe"}', // BigInts are serialized as strings in the oplog
     oldRow: null,
@@ -242,7 +242,7 @@ test('oplog trigger should handle Infinity values correctly', async (t) => {
     // cf. `joinColsForJSON` function in `src/migrators/triggers.ts`
     // These strings are then parsed back into real numbers
     // by the `deserialiseRow` function in `src/satellite/oplog.ts`
-    primaryKey: '{"id": "-Infinity"}',
+    primaryKey: '{"id":"-Infinity"}',
     newRow:
       '{"id": "-Infinity", "age": 30, "bmi": "Infinity", "int8": "7", "name": "John Doe"}', // BigInts are serialized as strings in the oplog
     oldRow: null,
