@@ -1,4 +1,8 @@
+import 'global-jsdom/register'
 import anyTest, { TestFn } from 'ava'
+import { useLiveQuery } from '../../src/frameworks/vuejs'
+import { render, screen, waitFor } from '@testing-library/vue'
+import { watchEffect, computed } from 'vue'
 
 import { DatabaseAdapter } from '../../src/drivers/react-native-sqlite-storage/adapter'
 import { MockDatabase } from '../../src/drivers/react-native-sqlite-storage/mock'
@@ -16,24 +20,11 @@ import { Notifier } from '../../src/notifiers'
 import { createQueryResultSubscribeFunction } from '../../src/util/subscribe'
 import EventEmitter from 'events'
 
-// TODO(msfstef): hacky way to ensure vue has access to browser environment
-// maybe should switch to other testing solution (e.g. Vitest)?
-import browserEnv from '@ikscodes/browser-env'
-browserEnv()
-const { useLiveQuery, makeElectricDependencyInjector } = await import(
-  '../../src/frameworks/vuejs'
-)
-const { render, screen, waitFor } = await import('@testing-library/vue')
-const { watchEffect, computed } = await import('vue')
-
-const assert = (stmt: any, msg = 'Assertion failed.'): void => {
+const assert = (stmt: unknown, msg = 'Assertion failed.'): void => {
   if (!stmt) {
     throw new Error(msg)
   }
 }
-
-// const { provideElectric, injectElectric } =
-//   makeElectricDependencyInjector<Electric>()
 
 const test = anyTest as TestFn<{
   dal: Electric
