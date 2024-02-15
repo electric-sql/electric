@@ -85,7 +85,9 @@ export function writeTableSchemas(
     .blankLine()
 
   writer
-    .writeLine('export const schema = new DbSchema(tableSchemas, migrations)')
+    .writeLine(
+      'export const schema = new DbSchema(tableSchemas, migrations, pgMigrations)'
+    )
     .writeLine('export type Electric = ElectricClient<typeof schema>')
     .conditionalWriteLine(
       dmmf.schema.hasJsonTypes,
