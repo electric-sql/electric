@@ -258,7 +258,7 @@
     "expo-sqlite": {
       "optional": true
     },
-    "vue": {
+    "vuejs": {
       "optional": true
     },
     "react": {
