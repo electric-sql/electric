@@ -21,7 +21,7 @@
     }]
     """]
 
-[invoke setup_client_with_migrations 1 "electric_1" 5133 $client_migrations]
+[invoke setup_client_with_migrations 1 "electric_1" 5133 $client_migrations "true"]
 
 [shell satellite_1]
   # Make sure we don't receive a SatOpLog message with $migration1_vsn in it.

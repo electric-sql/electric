@@ -8,7 +8,6 @@ import { v4 as uuidv4 } from 'uuid'
 import { schema, Electric, ColorType as Color } from './generated/client'
 export { JsonNull } from './generated/client'
 import { globalRegistry } from 'electric-sql/satellite'
-import { AuthStatus } from 'electric-sql/auth'
 import { SatelliteErrorCode } from 'electric-sql/util'
 
 setLogLevel('DEBUG')
@@ -25,6 +24,7 @@ export const electrify_db = async (
   host: string,
   port: number,
   migrations: any,
+  connectToElectric: boolean,
   exp?: string
 ): Promise<Electric> => {
   const config: ElectricConfig = {
@@ -37,7 +37,9 @@ export const electrify_db = async (
   const token = await mockSecureAuthToken(exp)
   
   result.notifier.subscribeToConnectivityStateChanges((x) => console.log(`Connectivity state changed: ${x.connectivityState.status}`))
-  await result.connect(token) // connect to Electric
+  if (connectToElectric) {
+    await result.connect(token) // connect to Electric
+  }
 
   return result
 }
