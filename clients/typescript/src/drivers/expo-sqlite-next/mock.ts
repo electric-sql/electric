@@ -7,9 +7,6 @@ import {
 
 export class MockDatabase implements Database {
   constructor(public databaseName: string, public fail?: Error) {}
-  withTransactionAsync(task: () => Promise<void>): Promise<void> {
-    return task()
-  }
 
   getAllAsync<T>(source: string, params: SQLiteBindParams): Promise<T[]>
   getAllAsync<T>(
