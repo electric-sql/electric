@@ -23,8 +23,8 @@ browserEnv()
 const { useLiveQuery, makeElectricDependencyInjector } = await import(
   '../../src/frameworks/vuejs'
 )
-const { render, fireEvent, screen } = await import('@testing-library/vue')
-const { computed } = await import('vue')
+const { render, screen, waitFor } = await import('@testing-library/vue')
+const { watchEffect, computed } = await import('vue')
 
 const assert = (stmt: any, msg = 'Assertion failed.'): void => {
   if (!stmt) {
@@ -67,22 +67,206 @@ test.beforeEach((t) => {
 })
 
 test('useLiveQuery returns query results', async (t) => {
-  const { dal, adapter, notifier } = t.context
+  const { dal, adapter } = t.context
 
   const query = 'select i from bars'
   adapter.query = async () => [{ count: 2 }]
+  const liveQuery = dal.db.liveRawQuery({ sql: query })
+
   const { unmount } = render({
     template: '<div>count: {{ count }}</div>',
     setup() {
-      const { db } = dal
-      const { results } = useLiveQuery(db.liveRawQuery({ sql: query }))
+      const { results } = useLiveQuery(liveQuery)
       const count = computed(() => results?.value?.[0].count ?? 0)
       return { count }
     },
   })
 
-  t.notThrows(() => screen.getByText('count: 0'))
-  await new Promise((res) => setTimeout(res))
-  t.notThrows(() => screen.getByText('count: 2'))
+  t.not(screen.getByText('count: 0'), null)
+  await waitFor(() => t.not(screen.getByText('count: 2'), null))
   await unmount()
+})
+
+test('useLiveQuery returns error when query errors', async (t) => {
+  const { notifier } = t.context
+
+  const expectedError = new Error('Mock query error')
+
+  const errorLiveQuery = async () => {
+    throw expectedError
+  }
+  errorLiveQuery.subscribe = createQueryResultSubscribeFunction(
+    notifier,
+    errorLiveQuery
+  )
+  let errorEmitted: unknown
+  const { unmount } = render({
+    template: '<div></div>',
+    setup() {
+      const { error } = useLiveQuery(errorLiveQuery)
+      watchEffect(() => {
+        errorEmitted = error?.value
+      })
+    },
+  })
+
+  await waitFor(() => assert(errorEmitted !== undefined))
+  t.deepEqual(errorEmitted, expectedError)
+  await unmount()
+})
+
+test('useLiveQuery re-runs query when data changes', async (t) => {
+  const { dal, adapter, notifier } = t.context
+
+  const query = 'select foo from bars'
+  adapter.query = async () => [{ count: 2 }]
+  const liveQuery = dal.db.liveRawQuery({
+    sql: query,
+  })
+
+  let lastUpdateTime: Date | undefined
+
+  const { unmount } = render({
+    template: '<div>count: {{ count }}</div>',
+    setup() {
+      const { results, updatedAt } = useLiveQuery(liveQuery)
+      const count = computed(() => results?.value?.[0].count ?? 0)
+      watchEffect(() => {
+        lastUpdateTime = updatedAt?.value
+      })
+      return { count }
+    },
+  })
+
+  await waitFor(() => screen.getByText('count: 2'))
+  // keep track of first update time
+  const firstUpdateTime = lastUpdateTime as Date
+  t.true(firstUpdateTime instanceof Date)
+
+  // trigger notifier
+  adapter.query = async () => [{ count: 3 }]
+  const qtn = new QualifiedTablename('main', 'bars')
+  const changes = [{ qualifiedTablename: qtn }]
+  notifier.actuallyChanged('test.db', changes)
+
+  await waitFor(() => screen.getByText('count: 3'))
+  const secondUpdateTime = lastUpdateTime as Date
+  t.true(secondUpdateTime > firstUpdateTime)
+  await unmount()
+})
+
+test('useLiveQuery never sets results if unmounted immediately', async (t) => {
+  const { dal } = t.context
+
+  const query = 'select foo from bars'
+  const liveQuery = dal.db.liveRawQuery({
+    sql: query,
+  })
+
+  let renderedResults
+
+  const { unmount } = render({
+    template: '<div>count: {{ count }}</div>',
+    setup() {
+      const { results } = useLiveQuery(liveQuery)
+      const count = computed(() => results?.value?.[0].count ?? 0)
+      watchEffect(() => {
+        renderedResults = results?.value
+      })
+      return { count }
+    },
+  })
+  await unmount()
+
+  await sleepAsync(1000)
+  t.assert(renderedResults === undefined)
+})
+
+test('useLiveQuery unsubscribes to data changes when unmounted', async (t) => {
+  const { dal, adapter, notifier } = t.context
+
+  const query = 'select foo from bars'
+  adapter.query = async () => [{ count: 2 }]
+  const liveQuery = dal.db.liveRawQuery({
+    sql: query,
+  })
+
+  let reactiveUpdatesTriggered = 0
+  let lastUpdateTime: Date | undefined
+
+  const { unmount } = render({
+    template: '<div>count: {{ count }}</div>',
+    setup() {
+      const { results, updatedAt } = useLiveQuery(liveQuery)
+      const count = computed(() => results?.value?.[0].count ?? 0)
+      watchEffect(() => {
+        reactiveUpdatesTriggered++
+        lastUpdateTime = updatedAt?.value
+      })
+      return { count }
+    },
+  })
+
+  await waitFor(() => screen.getByText('count: 2'))
+  const firstUpdateTime = lastUpdateTime
+  t.assert(firstUpdateTime instanceof Date)
+  t.is(reactiveUpdatesTriggered, 2)
+
+  // trigger notifier after unmounting
+  await unmount()
+  adapter.query = async () => [{ count: 3 }]
+  const qtn = new QualifiedTablename('main', 'bars')
+  const changes = [{ qualifiedTablename: qtn }]
+  notifier.actuallyChanged('test.db', changes)
+
+  // no updates triggered
+  await sleepAsync(1000)
+  const secondUpdateTime = lastUpdateTime
+  t.is(secondUpdateTime, firstUpdateTime)
+  t.is(reactiveUpdatesTriggered, 2)
+})
+
+test('useLiveQuery ignores results if unmounted whilst re-querying', async (t) => {
+  const { dal, adapter, notifier } = t.context
+
+  const query = 'select foo from bars'
+  adapter.query = async () => [{ count: 2 }]
+  const liveQuery = dal.db.liveRawQuery({
+    sql: query,
+  })
+
+  let reactiveUpdatesTriggered = 0
+  let lastUpdateTime: Date | undefined
+
+  const { unmount } = render({
+    template: '<div>count: {{ count }}</div>',
+    setup() {
+      const { results, updatedAt } = useLiveQuery(liveQuery)
+      const count = computed(() => results?.value?.[0].count ?? 0)
+      watchEffect(() => {
+        reactiveUpdatesTriggered++
+        lastUpdateTime = updatedAt?.value
+      })
+      return { count }
+    },
+  })
+
+  await waitFor(() => screen.getByText('count: 2'))
+  const firstUpdateTime = lastUpdateTime
+  t.assert(firstUpdateTime instanceof Date)
+  t.is(reactiveUpdatesTriggered, 2)
+
+  // trigger notifier and _then_ immediately unmount
+
+  adapter.query = async () => [{ count: 3 }]
+  const qtn = new QualifiedTablename('main', 'bars')
+  const changes = [{ qualifiedTablename: qtn }]
+  notifier.actuallyChanged('test.db', changes)
+  await unmount()
+
+  // no updates triggered
+  await sleepAsync(1000)
+  const secondUpdateTime = lastUpdateTime
+  t.is(secondUpdateTime, firstUpdateTime)
+  t.is(reactiveUpdatesTriggered, 2)
 })
