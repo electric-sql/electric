@@ -15,7 +15,7 @@
     "db:psql": "npx electric-sql psql",
     "electric:start": "npx electric-sql start",
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "vue-tsc && vite build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
   },
@@ -29,9 +29,10 @@
     "@types/vue": "^2.0.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
-    "@vitejs/plugin-vue": "^4.0.3",
+    "@vitejs/plugin-vue": "^5.0.4",
     "eslint": "^8.45.0",
     "typescript": "^5.0.2",
-    "vite": "^4.4.5"
+    "vite": "^5.1.1",
+    "vue-tsc": "^1.8.27"
   }
 }

@@ -12,7 +12,10 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
-    "jsx": "react-jsx",
+
+    /* Required in Vue projects */
+    "jsx": "preserve",
+    "jsxImportSource": "vue",
 
     /* Linting */
     "strict": true,
