@@ -183,6 +183,7 @@
     "@electric-sql/prisma-generator": "workspace:*",
     "@ikscodes/browser-env": "^1.0.0",
     "@testing-library/react": "^13.4.0",
+    "@testing-library/vue": "^8.0.2",
     "@types/base-64": "^1.0.0",
     "@types/better-sqlite3": "7.6.3",
     "@types/cordova-sqlite-storage": "^1.5.5",

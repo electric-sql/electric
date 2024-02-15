@@ -5,9 +5,15 @@ import {
   Ref,
   computed,
   readonly,
+  shallowReadonly,
   DeepReadonly,
+  reactive,
   shallowReactive,
+  ShallowReactive,
   onUnmounted,
+  toRefs,
+  ToRefs,
+  toRef,
 } from 'vue'
 import {
   LiveResultContext,
@@ -36,7 +42,7 @@ import { UnsubscribeFunction } from '../../../notifiers'
  */
 function useLiveQuery<Res>(
   runQuery: LiveResultContext<Res>
-): LiveResultUpdate<Res>
+): ToRefs<DeepReadonly<LiveResultUpdate<Res>>>
 
 /**
  * Main reactive query hook for React applications. It needs to be
@@ -61,11 +67,11 @@ function useLiveQuery<Res>(
  */
 function useLiveQuery<Res>(
   runQueryRef: Ref<LiveResultContext<Res>>
-): DeepReadonly<LiveResultUpdate<Res>>
+): ToRefs<DeepReadonly<LiveResultUpdate<Res>>>
 
 function useLiveQuery<Res>(
   runQueryOrRef: LiveResultContext<Res> | Ref<LiveResultContext<Res>>
-): DeepReadonly<LiveResultUpdate<Res>> {
+) {
   if (typeof runQueryOrRef === 'function') {
     return useLiveQueryWithQueryHash(runQueryOrRef as LiveResultContext<Res>)
   }
@@ -74,9 +80,7 @@ function useLiveQuery<Res>(
   return useLiveQueryWithQueryUpdates(runQueryRef.value, [runQueryRef])
 }
 
-function useLiveQueryWithQueryHash<Res>(
-  runQuery: LiveResultContext<Res>
-): DeepReadonly<LiveResultUpdate<Res>> {
+function useLiveQueryWithQueryHash<Res>(runQuery: LiveResultContext<Res>) {
   const queryHash = computed(() => hash(runQuery.sourceQuery))
 
   return useLiveQueryWithQueryUpdates(runQuery, [queryHash])
@@ -85,8 +89,13 @@ function useLiveQueryWithQueryHash<Res>(
 function useLiveQueryWithQueryUpdates<Res>(
   runQuery: LiveResultContext<Res>,
   runQueryDependencies: WatchSource[]
-): DeepReadonly<LiveResultUpdate<Res>> {
-  const results = shallowReactive<LiveResultUpdate<Res>>({})
+): ToRefs<DeepReadonly<LiveResultUpdate<Res>>> {
+  const liveUpdate = shallowReactive<LiveResultUpdate<Res>>({
+    results: undefined,
+    error: undefined,
+    updatedAt: undefined,
+  })
+
   const unsubscribeRef = ref<UnsubscribeFunction>()
 
   watch(
@@ -94,9 +103,9 @@ function useLiveQueryWithQueryUpdates<Res>(
     () => {
       unsubscribeRef.value?.()
       unsubscribeRef.value = runQuery.subscribe((newResults) => {
-        results.results = newResults.results
-        results.error = newResults.error
-        results.updatedAt = newResults.updatedAt
+        liveUpdate.results = newResults.results
+        liveUpdate.error = newResults.error
+        liveUpdate.updatedAt = newResults.updatedAt
       })
     },
     { immediate: true }
@@ -104,7 +113,7 @@ function useLiveQueryWithQueryUpdates<Res>(
 
   onUnmounted(() => unsubscribeRef.value?.())
 
-  return readonly(results)
+  return toRefs(readonly(liveUpdate))
 }
 
 export default useLiveQuery
