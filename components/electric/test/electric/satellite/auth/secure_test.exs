@@ -232,16 +232,16 @@ defmodule Electric.Satellite.Auth.SecureTest do
 
   describe "validate_token(<signed token>)" do
     test "successfully extracts the namespaced user_id claim" do
-      clms = claims(%{"custom_namespace" => %{"user_id" => "000"}})
-      token = signed_token(clms)
+      claims = claims(%{"custom_namespace" => %{"user_id" => "000"}})
+      token = signed_token(claims)
 
-      assert {:ok, %Auth{user_id: "000", expires_at: clms["exp"]}} ==
+      assert {:ok, %Auth{user_id: "000", expires_at: claims["exp"]}} ==
                validate_token(token, config(namespace: "custom_namespace"))
 
-      clms = claims(%{"user_id" => "111"})
-      token = signed_token(clms)
+      claims = claims(%{"user_id" => "111"})
+      token = signed_token(claims)
 
-      assert {:ok, %Auth{user_id: "111", expires_at: clms["exp"]}} ==
+      assert {:ok, %Auth{user_id: "111", expires_at: claims["exp"]}} ==
                validate_token(token, config(namespace: ""))
     end
 
@@ -288,11 +288,11 @@ defmodule Electric.Satellite.Auth.SecureTest do
       # in the future.
       soon = DateTime.utc_now() |> DateTime.add(1, :second) |> DateTime.to_unix()
 
-      token =
-        claims(%{"iat" => soon, @namespace => %{"user_id" => "12345"}})
-        |> signed_token()
+      claims = claims(%{"iat" => soon, @namespace => %{"user_id" => "12345"}})
+      token = signed_token(claims)
 
-      assert {:ok, %Auth{user_id: "12345"}} == validate_token(token, config([]))
+      assert {:ok, %Auth{user_id: "12345", expires_at: claims["exp"]}} ==
+               validate_token(token, config([]))
 
       # but not too far off
       far_future = DateTime.utc_now() |> DateTime.add(5, :second) |> DateTime.to_unix()
@@ -307,11 +307,11 @@ defmodule Electric.Satellite.Auth.SecureTest do
       # in the future.
       soon = DateTime.utc_now() |> DateTime.add(1, :second) |> DateTime.to_unix()
 
-      token =
-        claims(%{"nbf" => soon, @namespace => %{"user_id" => "12345"}})
-        |> signed_token()
+      claims = claims(%{"nbf" => soon, @namespace => %{"user_id" => "12345"}})
+      token = signed_token(claims)
 
-      assert {:ok, %Auth{user_id: "12345"}} == validate_token(token, config([]))
+      assert {:ok, %Auth{user_id: "12345", expires_at: claims["exp"]}} ==
+               validate_token(token, config([]))
 
       # but not too far off
       far_future = DateTime.utc_now() |> DateTime.add(5, :second) |> DateTime.to_unix()
@@ -326,11 +326,11 @@ defmodule Electric.Satellite.Auth.SecureTest do
       # in the past.
       just_now = DateTime.utc_now() |> DateTime.add(-1, :second) |> DateTime.to_unix()
 
-      token =
-        claims(%{"nbf" => just_now, @namespace => %{"user_id" => "12345"}})
-        |> signed_token()
+      claims = claims(%{"nbf" => just_now, @namespace => %{"user_id" => "12345"}})
+      token = signed_token(claims)
 
-      assert {:ok, %Auth{user_id: "12345"}} == validate_token(token, config([]))
+      assert {:ok, %Auth{user_id: "12345", expires_at: claims["exp"]}} ==
+               validate_token(token, config([]))
 
       # but not too far off
       long_past = DateTime.utc_now() |> DateTime.add(-5, :second) |> DateTime.to_unix()
