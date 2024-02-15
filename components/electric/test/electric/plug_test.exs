@@ -56,7 +56,7 @@ defmodule Electric.PlugTest do
                |> sent_resp()
     end
 
-    test_tx "returns migrations translated to given dialect", fn conn ->
+    test_tx "returns migrations translated to the sqlite dialect", fn conn ->
       assert {:ok, _schema} = apply_migrations(conn)
 
       {:ok, _pid} = start_supervised({SchemaCache, [__connection__: conn, origin: "postgres_1"]})
@@ -147,6 +147,76 @@ defmodule Electric.PlugTest do
       assert {~c"0004/metadata.json", json} = List.keyfind(file_list, ~c"0004/metadata.json", 0)
 
       assert {:ok, %{"ops" => [_]}} = Jason.decode(json)
+    end
+
+    test_tx "returns migrations translated to the postgresql dialect", fn conn ->
+      assert {:ok, _schema} = apply_migrations(conn)
+
+      {:ok, _pid} = start_supervised({SchemaCache, [__connection__: conn, origin: "postgres_1"]})
+
+      resp =
+        conn(:get, "/api/migrations", %{"dialect" => "postgresql"})
+        |> Electric.Plug.Router.call([])
+
+      assert {200, _headers, body} = sent_resp(resp)
+      assert ["application/zip"] = get_resp_header(resp, "content-type")
+
+      {:ok, file_list} = :zip.extract(body, [:memory])
+
+      assert [
+               {~c"0001/migration.sql",
+                "CREATE TABLE a (id uuid PRIMARY KEY, value text NOT NULL);\n\nCREATE TABLE b (id uuid PRIMARY KEY, value text NOT NULL);\n\nCREATE INDEX a_idx ON a (value);"},
+               {~c"0001/metadata.json", metadata_json_0001},
+               {~c"0002/migration.sql",
+                "CREATE TABLE c (id uuid PRIMARY KEY, value text NOT NULL);"},
+               {~c"0002/metadata.json", metadata_json_0002},
+               {~c"0003/migration.sql",
+                "CREATE TABLE d (id uuid PRIMARY KEY, value text NOT NULL);\n\nALTER TABLE d ADD COLUMN is_valid boolean;"},
+               {~c"0003/metadata.json", metadata_json_0003},
+               {~c"0004/migration.sql",
+                "CREATE TABLE e (id uuid PRIMARY KEY, value text NOT NULL);"},
+               {~c"0004/metadata.json", metadata_json_0004}
+             ] = file_list
+
+      assert {:ok,
+              %{
+                "format" => "SatOpMigrate",
+                "ops" => [op1, _op2, _op3],
+                "protocol_version" => "Electric.Satellite",
+                "version" => "0001"
+              }} = Jason.decode(metadata_json_0001)
+
+      assert {:ok,
+              %SatOpMigrate{
+                stmts: [
+                  %SatOpMigrate.Stmt{
+                    type: :CREATE_TABLE,
+                    sql: "CREATE TABLE a (id uuid PRIMARY KEY, value text NOT NULL);"
+                  }
+                ],
+                table: %SatOpMigrate.Table{
+                  name: "a",
+                  columns: [
+                    %SatOpMigrate.Column{
+                      name: "id",
+                      sqlite_type: "TEXT",
+                      pg_type: %SatOpMigrate.PgColumnType{name: "uuid"}
+                    },
+                    %SatOpMigrate.Column{
+                      name: "value",
+                      sqlite_type: "TEXT",
+                      pg_type: %SatOpMigrate.PgColumnType{name: "text"}
+                    }
+                  ],
+                  fks: [],
+                  pks: ["id"]
+                },
+                version: "0001"
+              }} = op1 |> Base.decode64!() |> SatOpMigrate.decode()
+
+      assert {:ok, %{"version" => "0002", "ops" => [_]}} = Jason.decode(metadata_json_0002)
+      assert {:ok, %{"version" => "0003", "ops" => [_, _]}} = Jason.decode(metadata_json_0003)
+      assert {:ok, %{"version" => "0004", "ops" => [_]}} = Jason.decode(metadata_json_0004)
     end
 
     test_tx "can return migrations after a certain point", fn conn ->
