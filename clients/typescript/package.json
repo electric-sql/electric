@@ -181,7 +181,6 @@
   },
   "devDependencies": {
     "@electric-sql/prisma-generator": "workspace:*",
-    "@ikscodes/browser-env": "^1.0.0",
     "@testing-library/react": "^13.4.0",
     "@testing-library/vue": "^8.0.2",
     "@types/base-64": "^1.0.0",
@@ -211,7 +210,9 @@
     "eslint": "^8.22.0",
     "expo-sqlite": "^11.7.0",
     "glob": "^10.3.10",
+    "global-jsdom": "24.0.0",
     "husky": "^8.0.3",
+    "jsdom": "24.0.0",
     "lint-staged": "^13.1.0",
     "memorystorage": "^0.12.0",
     "nodemon": "^3.0.2",
