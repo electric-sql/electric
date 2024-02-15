@@ -5,7 +5,6 @@ import {
   SatOpMigrate_Type,
   SatRelation_RelationType,
 } from '../../src/_generated/protocol/satellite'
-
 import { generateTag } from '../../src/satellite/oplog'
 
 import {
