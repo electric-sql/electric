@@ -2,9 +2,10 @@ import { provide, inject, unref, ShallowRef } from 'vue'
 
 import { ElectricClient } from '../../client/model/client'
 import { DbSchema } from '../../client/model'
-
 interface ElectricDependencyInjection<S extends ElectricClient<DbSchema<any>>> {
-  provideElectric: (electric: ShallowRef<S> | S) => void
+  provideElectric: (
+    electric: ShallowRef<S | undefined> | (S | undefined)
+  ) => void
   injectElectric: () => S | undefined
 }
 
@@ -30,9 +31,9 @@ const ElectricKey = Symbol('ElectricProvider')
 export function makeElectricDependencyInjector<
   S extends ElectricClient<DbSchema<any>>
 >(): ElectricDependencyInjection<S> {
-  const provideElectric = (electric: ShallowRef<S> | S): void => {
-    provide(ElectricKey, electric)
-  }
+  const provideElectric = (
+    electric: ShallowRef<S | undefined> | (S | undefined)
+  ): void => provide(ElectricKey, electric)
 
   const injectElectric = (): S | undefined => {
     const electric = inject<ShallowRef<S> | S>(ElectricKey)

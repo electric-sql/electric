@@ -1,8 +1,18 @@
 import 'global-jsdom/register'
 import anyTest, { TestFn } from 'ava'
-import { useLiveQuery } from '../../src/frameworks/vuejs'
+import {
+  makeElectricDependencyInjector,
+  useLiveQuery,
+} from '../../src/frameworks/vuejs'
 import { render, screen, waitFor } from '@testing-library/vue'
-import { watchEffect, computed } from 'vue'
+import {
+  watchEffect,
+  computed,
+  defineComponent,
+  shallowRef,
+  ref,
+  isProxy,
+} from 'vue'
 
 import { DatabaseAdapter } from '../../src/drivers/react-native-sqlite-storage/adapter'
 import { MockDatabase } from '../../src/drivers/react-native-sqlite-storage/mock'
@@ -25,6 +35,9 @@ const assert = (stmt: unknown, msg = 'Assertion failed.'): void => {
     throw new Error(msg)
   }
 }
+
+const { provideElectric, injectElectric } =
+  makeElectricDependencyInjector<Electric>()
 
 const test = anyTest as TestFn<{
   dal: Electric
@@ -260,4 +273,133 @@ test('useLiveQuery ignores results if unmounted whilst re-querying', async (t) =
   const secondUpdateTime = lastUpdateTime
   t.is(secondUpdateTime, firstUpdateTime)
   t.is(reactiveUpdatesTriggered, 2)
+})
+
+test('dependency injection works without reference to client', async (t) => {
+  const { dal, adapter } = t.context
+  adapter.query = async () => [{ count: 2 }]
+
+  const ProviderComponent = defineComponent({
+    template: '<div v-if={show}><slot/></div>',
+    setup() {
+      provideElectric(dal)
+      return { show: true }
+    },
+  })
+
+  const ConsumerComponent = defineComponent({
+    template: '<div>count: {{ count }}</div>',
+    setup() {
+      const electric = injectElectric()!
+      const liveQuery = electric.db.liveRawQuery({
+        sql: 'select foo from bars',
+      })
+      const { results } = useLiveQuery(liveQuery)
+      const count = computed(() => results?.value?.[0].count ?? 0)
+      return { count }
+    },
+  })
+
+  const { unmount } = render({
+    template: '<ProviderComponent><ConsumerComponent/></ProviderComponent>',
+    components: { ProviderComponent, ConsumerComponent },
+  })
+
+  await waitFor(() => t.assert(screen.getByText('count: 2')))
+  await unmount()
+})
+
+test('dependency injection works with shallow reference to client', async (t) => {
+  const { dal, adapter } = t.context
+  adapter.query = async () => [{ count: 2 }]
+
+  const ProviderComponent = defineComponent({
+    template: '<div v-if=show><slot/></div>',
+    setup() {
+      const client = shallowRef<Electric>()
+      const show = computed(() => client.value !== undefined)
+      setTimeout(() => {
+        client.value = dal
+      }, 500)
+      provideElectric(client)
+      return { show }
+    },
+  })
+
+  let electricInstance: Electric | undefined
+
+  const ConsumerComponent = defineComponent({
+    template: '<div>count: {{ count }}</div>',
+    setup() {
+      const electric = injectElectric()!
+      electricInstance = electric
+      const liveQuery = electric.db.liveRawQuery({
+        sql: 'select foo from bars',
+      })
+
+      const { results } = useLiveQuery(liveQuery)
+      const count = computed(() => results?.value?.[0].count ?? 0)
+      return { count }
+    },
+  })
+
+  const { unmount } = render({
+    template: '<ProviderComponent><ConsumerComponent/></ProviderComponent>',
+    components: { ProviderComponent, ConsumerComponent },
+  })
+
+  // should update the count
+  await waitFor(() => t.assert(screen.getByText('count: 2')))
+
+  // consumer's instance should not be a proxy
+  t.assert(!isProxy(electricInstance))
+
+  await unmount()
+})
+
+test('dependency injection works with deep reference to client', async (t) => {
+  const { dal, adapter } = t.context
+  adapter.query = async () => [{ count: 2 }]
+
+  const ProviderComponent = defineComponent({
+    template: '<div v-if=show><slot/></div>',
+    setup() {
+      const client = ref<Electric>()
+      const show = computed(() => client.value !== undefined)
+      setTimeout(() => {
+        client.value = dal
+      }, 500)
+      provideElectric(client)
+      return { show }
+    },
+  })
+
+  let electricInstance: Electric | undefined
+
+  const ConsumerComponent = defineComponent({
+    template: '<div>count: {{ count }}</div>',
+    setup() {
+      const electric = injectElectric()!
+      electricInstance = electric
+      const liveQuery = electric.db.liveRawQuery({
+        sql: 'select foo from bars',
+      })
+      const { results } = useLiveQuery(liveQuery)
+      const count = computed(() => results?.value?.[0].count ?? 0)
+      return { count }
+    },
+  })
+
+  const { unmount } = render({
+    template: '<ProviderComponent><ConsumerComponent/></ProviderComponent>',
+    components: { ProviderComponent, ConsumerComponent },
+  })
+
+  // should update the count
+  await waitFor(() => t.assert(screen.getByText('count: 2')))
+
+  // consumer's instance should not be a proxy
+  t.assert(!isProxy(electricInstance))
+
+  await unmount()
 })
