@@ -36,7 +36,7 @@ export const SCHEMA_VSN_ERROR_MSG = `Local schema doesn't match server's. Clear 
 
 const VALID_VERSION_EXP = new RegExp('^[0-9_]+')
 
-abstract class BundleMigratorBase implements Migrator {
+export abstract class BundleMigratorBase implements Migrator {
   adapter: DatabaseAdapter
   migrations: StmtMigration[]
 
@@ -48,7 +48,7 @@ abstract class BundleMigratorBase implements Migrator {
     adapter: DatabaseAdapter,
     migrations: Migration[] = [],
     queryBuilderConfig: KyselyConfig,
-    electricQueryBuilder: QueryBuilder
+    public electricQueryBuilder: QueryBuilder
   ) {
     this.adapter = adapter
     const baseMigration = makeBaseMigration(electricQueryBuilder)
