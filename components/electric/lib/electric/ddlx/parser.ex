@@ -17,8 +17,16 @@ defmodule Electric.DDLX.Parser do
     :electric_ddlx_parser.parse(tokens)
   end
 
-  defp build_cmd({:ok, {module, attrs}}, _ddlx, opts) do
-    module.build(attrs, opts)
+  defp build_cmd({:ok, {module, attrs}}, ddlx, opts) do
+    with {:error, reason} <- module.build(attrs, opts) do
+      {:error,
+       %Command.Error{
+         line: 0,
+         position: 0,
+         message: reason,
+         sql: ddlx
+       }}
+    end
   end
 
   defp build_cmd({:error, {{line, position, _}, :electric_ddlx_parser, messages}}, ddlx, _opts) do

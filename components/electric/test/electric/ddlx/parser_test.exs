@@ -442,6 +442,18 @@ defmodule Electric.DDLX.ParserTest do
                using_path: nil
              }
     end
+
+    test "parse grant missing role_name attribute" do
+      sql = "ELECTRIC GRANT ALL ON Asset TO ANYONE"
+      assert {:error, result} = Parser.parse(sql)
+
+      assert result == %Command.Error{
+               line: 0,
+               position: 0,
+               message: "missing role_name attribute",
+               sql: sql
+             }
+    end
   end
 
   describe "ELECTRIC REVOKE" do
