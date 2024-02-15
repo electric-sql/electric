@@ -17,8 +17,9 @@ export default [
   {
     statements: [
       'CREATE TABLE IF NOT EXISTS main.items (\n  value TEXT PRIMARY KEY NOT NULL\n);',
+      'CREATE TABLE IF NOT EXISTS main."bigIntTable" (\n  value BIGINT PRIMARY KEY NOT NULL\n);',
       'CREATE TABLE IF NOT EXISTS main.parent (\n  id INTEGER PRIMARY KEY NOT NULL,\n  value TEXT,\n  other INTEGER DEFAULT 0\n);',
-      'CREATE TABLE IF NOT EXISTS main.child (\n  id INTEGER PRIMARY KEY NOT NULL,\n  parent INTEGER NOT NULL,\n  FOREIGN KEY(parent) REFERENCES main.parent(id)\n);',
+      'CREATE TABLE IF NOT EXISTS main.child (\n  id INTEGER PRIMARY KEY NOT NULL,\n  parent INTEGER NOT NULL,\n  FOREIGN KEY(parent) REFERENCES main.parent(id) DEFERRABLE INITIALLY IMMEDIATE\n);',
       'DROP TABLE IF EXISTS main._electric_trigger_settings;',
       'CREATE TABLE main._electric_trigger_settings(namespace TEXT, tablename TEXT, flag INTEGER, PRIMARY KEY (namespace, tablename));',
       "INSERT INTO main._electric_trigger_settings(namespace, tablename,flag) VALUES ('main', 'child', 1);",
@@ -58,7 +59,7 @@ export default [
           IF flag_value = 1 THEN
             -- Insert into _electric_oplog
             INSERT INTO main._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
-            VALUES ('main', 'child', 'INSERT', jsonb_build_object('id', NEW.id), jsonb_build_object('id', NEW.id, 'parent', NEW.parent), NULL, NULL);
+            VALUES ('main', 'child', 'INSERT', json_strip_nulls(json_build_object('id', NEW.id)), jsonb_build_object('id', NEW.id, 'parent', NEW.parent), NULL, NULL);
           END IF;
 
           RETURN NEW;
@@ -88,7 +89,7 @@ export default [
           IF flag_value = 1 THEN
             -- Insert into _electric_oplog
             INSERT INTO main._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
-            VALUES ('main', 'child', 'UPDATE', jsonb_build_object('id', NEW.id), jsonb_build_object('id', NEW.id, 'parent', NEW.parent), jsonb_build_object('id', OLD.id, 'parent', OLD.parent), NULL);
+            VALUES ('main', 'child', 'UPDATE', json_strip_nulls(json_build_object('id', NEW.id)), jsonb_build_object('id', NEW.id, 'parent', NEW.parent), jsonb_build_object('id', OLD.id, 'parent', OLD.parent), NULL);
           END IF;
 
           RETURN NEW;
@@ -117,7 +118,7 @@ export default [
           IF flag_value = 1 THEN
             -- Insert into _electric_oplog
             INSERT INTO main._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
-            VALUES ('main', 'child', 'DELETE', jsonb_build_object('id', OLD.id), NULL, jsonb_build_object('id', OLD.id, 'parent', OLD.parent), NULL);
+            VALUES ('main', 'child', 'DELETE', json_strip_nulls(json_build_object('id', OLD.id)), NULL, jsonb_build_object('id', OLD.id, 'parent', OLD.parent), NULL);
           END IF;
 
           RETURN NEW;
@@ -147,7 +148,7 @@ export default [
 
           IF flag_value = 1 AND meta_value = '1' THEN
             INSERT INTO main._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
-            SELECT 'main', 'parent', 'INSERT', jsonb_build_object('id', id),
+            SELECT 'main', 'parent', 'INSERT', json_strip_nulls(json_build_object('id', id)),
               jsonb_build_object('id', id, 'value', value, 'other', other), NULL, NULL
             FROM main.parent WHERE id = NEW."parent";
           END IF;
@@ -182,7 +183,7 @@ export default [
           IF flag_value = 1 AND meta_value = '1' THEN
             -- Insert into _electric_oplog
             INSERT INTO main._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
-            SELECT 'main', 'parent', 'UPDATE', jsonb_build_object('id', id),
+            SELECT 'main', 'parent', 'UPDATE', json_strip_nulls(json_build_object('id', id)),
               jsonb_build_object('id', id, 'value', value, 'other', other), NULL, NULL
             FROM main.parent WHERE id = NEW."parent";
           END IF;
@@ -194,7 +195,7 @@ export default [
       `,
       `
       CREATE TRIGGER compensation_update_main_child_parent_into_oplog
-      AFTER UPDATE ON main.parent
+      AFTER UPDATE ON main.child
       FOR EACH ROW
       EXECUTE FUNCTION compensation_update_main_child_parent_into_oplog_function();
       `,
@@ -231,7 +232,7 @@ export default [
           IF flag_value = 1 THEN
             -- Insert into _electric_oplog
             INSERT INTO main._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
-            VALUES ('main', 'items', 'INSERT', jsonb_build_object('value', NEW.value), jsonb_build_object('value', NEW.value), NULL, NULL);
+            VALUES ('main', 'items', 'INSERT', json_strip_nulls(json_build_object('value', NEW.value)), jsonb_build_object('value', NEW.value), NULL, NULL);
           END IF;
 
           RETURN NEW;
@@ -262,7 +263,7 @@ export default [
           IF flag_value = 1 THEN
             -- Insert into _electric_oplog
             INSERT INTO main._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
-            VALUES ('main', 'items', 'UPDATE', jsonb_build_object('value', NEW.value), jsonb_build_object('value', NEW.value), jsonb_build_object('value', OLD.value), NULL);
+            VALUES ('main', 'items', 'UPDATE', json_strip_nulls(json_build_object('value', NEW.value)), jsonb_build_object('value', NEW.value), jsonb_build_object('value', OLD.value), NULL);
           END IF;
 
           RETURN NEW;
@@ -292,7 +293,7 @@ export default [
           IF flag_value = 1 THEN
             -- Insert into _electric_oplog
             INSERT INTO main._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
-            VALUES ('main', 'items', 'DELETE', jsonb_build_object('value', OLD.value), NULL, jsonb_build_object('value', OLD.value), NULL);
+            VALUES ('main', 'items', 'DELETE', json_strip_nulls(json_build_object('value', OLD.value)), NULL, jsonb_build_object('value', OLD.value), NULL);
           END IF;
 
           RETURN OLD;
@@ -346,7 +347,7 @@ export default [
               'main',
               'parent',
               'INSERT',
-              jsonb_build_object('id', NEW.id),
+              json_strip_nulls(json_build_object('id', NEW.id)),
               jsonb_build_object('id', NEW.id, 'value', NEW.value, 'other', NEW.other),
               NULL,
               NULL
@@ -386,7 +387,7 @@ export default [
               'main',
               'parent',
               'UPDATE',
-              jsonb_build_object('id', NEW.id),
+              json_strip_nulls(json_build_object('id', NEW.id)),
               jsonb_build_object('id', NEW.id, 'value', NEW.value, 'other', NEW.other),
               jsonb_build_object('id', OLD.id, 'value', OLD.value, 'other', OLD.other),
               NULL
@@ -426,7 +427,7 @@ export default [
               'main',
               'parent',
               'DELETE',
-              jsonb_build_object('id', OLD.id),
+              json_strip_nulls(json_build_object('id', OLD.id)),
               NULL,
               jsonb_build_object('id', OLD.id, 'value', OLD.value, 'other', OLD.other),
               NULL
@@ -445,6 +446,146 @@ export default [
       AFTER DELETE ON main.parent
       FOR EACH ROW
       EXECUTE FUNCTION delete_main_parent_into_oplog_function();
+      `,
+      `
+      -- Toggles for turning the triggers on and off
+      INSERT INTO "main"."_electric_trigger_settings" ("namespace", "tablename", "flag")
+        VALUES ('main', 'bigIntTable', 1)
+        ON CONFLICT DO NOTHING;
+      `,
+      `
+      /* Triggers for table bigIntTable */
+
+      -- ensures primary key is immutable
+      DROP TRIGGER IF EXISTS update_ensure_main_bigIntTable_primarykey ON "main"."bigIntTable";
+      `,
+      `
+      CREATE OR REPLACE FUNCTION update_ensure_main_bigIntTable_primarykey_function()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        IF OLD."value" IS DISTINCT FROM NEW."value" THEN
+          RAISE EXCEPTION 'Cannot change the value of column value as it belongs to the primary key';
+        END IF;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql;
+      `,
+      `
+      CREATE TRIGGER update_ensure_main_bigIntTable_primarykey
+        BEFORE UPDATE ON "main"."bigIntTable"
+          FOR EACH ROW
+            EXECUTE FUNCTION update_ensure_main_bigIntTable_primarykey_function();
+      `,
+      `
+      -- Triggers that add INSERT, UPDATE, DELETE operation to the oplog table
+      DROP TRIGGER IF EXISTS insert_main_bigIntTable_into_oplog ON "main"."bigIntTable";
+      `,
+      `
+      CREATE OR REPLACE FUNCTION insert_main_bigIntTable_into_oplog_function()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        DECLARE
+          flag_value INTEGER;
+        BEGIN
+          -- Get the flag value from _electric_trigger_settings
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE namespace = 'main' AND tablename = 'bigIntTable';
+  
+          IF flag_value = 1 THEN
+            -- Insert into _electric_oplog
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
+            VALUES (
+              'main',
+              'bigIntTable',
+              'INSERT',
+              json_strip_nulls(json_build_object('value', cast(new."value" as TEXT))),
+              jsonb_build_object('value', cast(new."value" as TEXT)),
+              NULL,
+              NULL
+            );
+          END IF;
+  
+          RETURN NEW;
+        END;
+      END;
+      $$ LANGUAGE plpgsql;
+      `,
+      `
+      CREATE TRIGGER insert_main_bigIntTable_into_oplog
+        AFTER INSERT ON "main"."bigIntTable"
+          FOR EACH ROW
+            EXECUTE FUNCTION insert_main_bigIntTable_into_oplog_function();
+      `,
+      'DROP TRIGGER IF EXISTS update_main_bigIntTable_into_oplog ON "main"."bigIntTable";',
+      `
+      CREATE OR REPLACE FUNCTION update_main_bigIntTable_into_oplog_function()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        DECLARE
+          flag_value INTEGER;
+        BEGIN
+          -- Get the flag value from _electric_trigger_settings
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE namespace = 'main' AND tablename = 'bigIntTable';
+  
+          IF flag_value = 1 THEN
+            -- Insert into _electric_oplog
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
+            VALUES (
+              'main',
+              'bigIntTable',
+              'UPDATE',
+              json_strip_nulls(json_build_object('value', cast(new."value" as TEXT))),
+              jsonb_build_object('value', cast(new."value" as TEXT)),
+              jsonb_build_object('value', cast(old."value" as TEXT)),
+              NULL
+            );
+          END IF;
+  
+          RETURN NEW;
+        END;
+      END;
+      $$ LANGUAGE plpgsql;
+      `,
+      `
+      CREATE TRIGGER update_main_bigIntTable_into_oplog
+        AFTER UPDATE ON "main"."bigIntTable"
+          FOR EACH ROW
+            EXECUTE FUNCTION update_main_bigIntTable_into_oplog_function();
+      `,
+      'DROP TRIGGER IF EXISTS delete_main_bigIntTable_into_oplog ON "main"."bigIntTable";',
+      `
+      CREATE OR REPLACE FUNCTION delete_main_bigIntTable_into_oplog_function()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        DECLARE
+          flag_value INTEGER;
+        BEGIN
+          -- Get the flag value from _electric_trigger_settings
+          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE namespace = 'main' AND tablename = 'bigIntTable';
+  
+          IF flag_value = 1 THEN
+            -- Insert into _electric_oplog
+            INSERT INTO main._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
+            VALUES (
+              'main',
+              'bigIntTable',
+              'DELETE',
+              json_strip_nulls(json_build_object('value', cast(old."value" as TEXT))),
+              NULL,
+              jsonb_build_object('value', cast(old."value" as TEXT)),
+              NULL
+            );
+          END IF;
+  
+          RETURN NEW;
+        END;
+      END;
+      $$ LANGUAGE plpgsql;
+      `,
+      `
+      CREATE TRIGGER delete_main_bigIntTable_into_oplog
+        AFTER DELETE ON "main"."bigIntTable"
+          FOR EACH ROW
+            EXECUTE FUNCTION delete_main_bigIntTable_into_oplog_function();
       `,
     ],
     version: '2',
