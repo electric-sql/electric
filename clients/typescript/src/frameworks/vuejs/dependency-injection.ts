@@ -1,10 +1,10 @@
-import { provide, inject } from 'vue'
+import { provide, inject, unref, ShallowRef } from 'vue'
 
 import { ElectricClient } from '../../client/model/client'
 import { DbSchema } from '../../client/model'
 
-interface ElectricDependencyInjector<S extends ElectricClient<DbSchema<any>>> {
-  provideElectric: (electric: S) => void
+interface ElectricDependencyInjection<S extends ElectricClient<DbSchema<any>>> {
+  provideElectric: (electric: ShallowRef<S> | S) => void
   injectElectric: () => S | undefined
 }
 
@@ -23,13 +23,21 @@ const ElectricKey = Symbol('ElectricProvider')
  * // generic DB type, no type-safe client
  * const { db } = inject(ElectricKey)
  * ```
+ *
+ * @returns An object with two functions: `provideElectric` and `injectElectric`.
+ *
  */
 export function makeElectricDependencyInjector<
   S extends ElectricClient<DbSchema<any>>
->(): ElectricDependencyInjector<S> {
-  const provideElectric = (electric: S): void => provide(ElectricKey, electric)
+>(): ElectricDependencyInjection<S> {
+  const provideElectric = (electric: ShallowRef<S> | S): void => {
+    provide(ElectricKey, electric)
+  }
 
-  const injectElectric = (): S | undefined => inject(ElectricKey)
+  const injectElectric = (): S | undefined => {
+    const electric = inject<ShallowRef<S> | S>(ElectricKey)
+    return unref(electric)
+  }
 
   return {
     provideElectric,
