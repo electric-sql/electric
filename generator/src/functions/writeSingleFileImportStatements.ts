@@ -33,4 +33,5 @@ export const writeSingleFileImportStatements: WriteStatements = (
   writeImport(`{ ${imports.join(', ')} }`, 'electric-sql/client/model')
 
   writeImport(`migrations`, './migrations')
+  writeImport(`pgMigrations`, './pg-migrations')
 }
