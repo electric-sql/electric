@@ -235,6 +235,7 @@
     "@capacitor-community/sqlite": ">= 5.4.1",
     "cordova-sqlite-storage": ">= 5.0.0",
     "expo-sqlite": ">= 11.7.0",
+    "vue": ">=3.0.0",
     "react": ">= 16.8.0",
     "react-dom": ">= 16.8.0",
     "react-native": ">= 0.68.0",
@@ -252,7 +253,7 @@
     "expo-sqlite": {
       "optional": true
     },
-    "vue": {
+    "vuejs": {
       "optional": true
     },
     "react": {
