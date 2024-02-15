@@ -100,6 +100,9 @@ defmodule Electric.Satellite.Auth.Secure do
   end
 
   defp validate_key(key, "HS" <> _ = alg) do
+    # Try decoding the user-provided key as base64. If that fails, assume the key is a raw
+    # binary and use it verbatim.
+    # The `padding: false` is required to accept keys that are base64-encoded without padding.
     raw_key =
       case Base.decode64(key, padding: false) do
         {:ok, raw_key} -> raw_key
