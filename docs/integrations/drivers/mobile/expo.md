@@ -3,7 +3,7 @@ title: Expo
 sidebar_position: 10
 ---
 
-ElectricSQL supports [Expo](https://expo.dev) via both [expo-sqlite](https://docs.expo.dev/versions/latest/sdk/sqlite/) and [expo-sqlite/next](https://docs.expo.dev/versions/latest/sdk/sqlite-next/).
+ElectricSQL supports [Expo](https://expo.dev) via [expo-sqlite](https://docs.expo.dev/versions/latest/sdk/sqlite/).
 
 ## Dependencies
 
@@ -13,13 +13,13 @@ Add `expo-sqlite` as a dependency to your app, e.g.:
 npx expo install expo-sqlite
 ```
 
-This package includes both the regular and `next` drivers. See the [expo-sqlite docs](https://docs.expo.dev/versions/latest/sdk/sqlite/) or [expo-sqlite/next docs](https://docs.expo.dev/versions/latest/sdk/sqlite-next/) for more information.
+See the [expo-sql docs](https://docs.expo.dev/versions/latest/sdk/sqlite/) for more information.
 
 ## Usage
 
 ```tsx
-import * as SQLite from 'expo-sqlite' // or 'expo-sqlite/next'
-import { electrify } from 'electric-sql/expo' // or 'electric-sql/expo-next' 
+import * as SQLite from 'expo-sqlite'
+import { electrify } from 'electric-sql/expo'
 
 // Import your generated database schema.
 import { schema } from './generated/client'
@@ -35,8 +35,6 @@ const config = {
 // Create the expo-sqlite database connection. The first argument
 // is your database name. Changing this will create/use a new
 // local database file.
-//
-// When using expo-sqlite/next, use SQLite.openDatabaseSync('electric.db')
 const conn = SQLite.openDatabase('electric.db')
 
 // Instantiate your electric client.
