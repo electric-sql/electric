@@ -4,12 +4,7 @@ import {
   makeElectricDependencyInjector,
   useLiveQuery,
 } from '../../src/frameworks/vuejs'
-import {
-  mount,
-  shallowMount,
-  flushPromises,
-  enableAutoUnmount,
-} from '@vue/test-utils'
+import { mount, shallowMount, flushPromises } from '@vue/test-utils'
 import { computed, defineComponent, shallowRef, ref, isProxy, watch } from 'vue'
 
 import { DatabaseAdapter } from '../../src/drivers/wa-sqlite/adapter'
@@ -37,7 +32,7 @@ const test = anyTest as TestFn<{
   notifier: Notifier
 }>
 
-enableAutoUnmount(test.afterEach)
+// enableAutoUnmount(test.afterEach)
 
 test.beforeEach((t) => {
   const original = new MockDatabase('test.db')
@@ -84,6 +79,7 @@ test('useLiveQuery returns query results', async (t) => {
   t.is(wrapper.vm.count as number, 0)
   await flushPromises()
   t.is(wrapper.vm.count as number, 2)
+  wrapper.unmount()
 })
 
 test('useLiveQuery returns error when query errors', async (t) => {
@@ -111,9 +107,10 @@ test('useLiveQuery returns error when query errors', async (t) => {
   await flushPromises()
   t.is(wrapper.vm.results as unknown, undefined)
   t.deepEqual(wrapper.vm.error as unknown, new Error('Mock query error'))
+  wrapper.unmount()
 })
 
-test.serial('useLiveQuery re-runs query when data changes', async (t) => {
+test('useLiveQuery re-runs query when data changes', async (t) => {
   const { dal, adapter, notifier } = t.context
 
   const query = 'select foo from bars'
@@ -150,6 +147,7 @@ test.serial('useLiveQuery re-runs query when data changes', async (t) => {
   t.is(wrapper.vm.count as number, 3)
   const secondUpdateTime = wrapper.vm.updatedAt as Date
   t.true(secondUpdateTime > firstUpdateTime)
+  wrapper.unmount()
 })
 
 test('useLiveQuery never runs query if unmounted immediately', async (t) => {
@@ -172,6 +170,7 @@ test('useLiveQuery never runs query if unmounted immediately', async (t) => {
 
   await flushPromises()
   t.is(wrapper.vm.count as number, 0)
+  wrapper.unmount()
 })
 
 test('useLiveQuery unsubscribes to data changes when unmounted', async (t) => {
@@ -210,6 +209,7 @@ test('useLiveQuery unsubscribes to data changes when unmounted', async (t) => {
   const secondUpdateTime = wrapper.vm.updatedAt as Date
   t.is(secondUpdateTime, firstUpdateTime)
   t.is(reactiveUpdatesTriggered, 1)
+  wrapper.unmount()
 })
 
 test('useLiveQuery ignores results if unmounted whilst re-querying', async (t) => {
@@ -249,109 +249,104 @@ test('useLiveQuery ignores results if unmounted whilst re-querying', async (t) =
   const secondUpdateTime = wrapper.vm.updatedAt as Date
   t.is(secondUpdateTime, firstUpdateTime)
   t.is(reactiveUpdatesTriggered, 1)
+  wrapper.unmount()
 })
 
-test.serial(
-  'useLiveQuery re-runs reffed query when live query arguments change',
-  async (t) => {
-    const { dal, adapter } = t.context
+test('useLiveQuery re-runs reffed query when live query arguments change', async (t) => {
+  const { dal, adapter } = t.context
 
-    adapter.query = async ({ sql }) => [{ count: sql.includes('foo') ? 2 : 3 }]
-    const wrapper = shallowMount({
-      template: '<div>count: {{ count }}</div>',
-      setup() {
-        const columnToSelect = ref('foo')
-        const { results, updatedAt } = useLiveQuery(
-          computed(() =>
-            dal.db.liveRawQuery({
-              sql: `select ${columnToSelect.value} from bars`,
-            })
-          )
-        )
-        setTimeout(() => (columnToSelect.value = 'other'), 500)
-        const count = computed(() => results?.value?.[0].count ?? 0)
-        return { count, updatedAt }
-      },
-    })
-
-    await flushPromises()
-    t.is(wrapper.vm.count as number, 2)
-    const firstUpdateTime = wrapper.vm.updatedAt as Date
-
-    await sleepAsync(600)
-    await flushPromises()
-    t.is(wrapper.vm.count as number, 3)
-    const secondUpdateTime = wrapper.vm.updatedAt as Date
-    t.true(secondUpdateTime > firstUpdateTime)
-  }
-)
-
-test.serial(
-  'useLiveQuery re-runs func query when live query arguments change',
-  async (t) => {
-    const { dal, adapter } = t.context
-
-    adapter.query = async ({ sql }) => [{ count: sql.includes('foo') ? 2 : 3 }]
-    const wrapper = shallowMount({
-      template: '<div>count: {{ count }}</div>',
-      setup() {
-        const columnToSelect = ref('foo')
-        const { results, updatedAt } = useLiveQuery(() =>
+  adapter.query = async ({ sql }) => [{ count: sql.includes('foo') ? 2 : 3 }]
+  const wrapper = shallowMount({
+    template: '<div>count: {{ count }}</div>',
+    setup() {
+      const columnToSelect = ref('foo')
+      const { results, updatedAt } = useLiveQuery(
+        computed(() =>
           dal.db.liveRawQuery({
             sql: `select ${columnToSelect.value} from bars`,
           })
         )
-        setTimeout(() => (columnToSelect.value = 'other'), 500)
-        const count = computed(() => results?.value?.[0].count ?? 0)
-        return { count, updatedAt }
-      },
-    })
+      )
+      setTimeout(() => (columnToSelect.value = 'other'), 500)
+      const count = computed(() => results?.value?.[0].count ?? 0)
+      return { count, updatedAt }
+    },
+  })
 
-    await flushPromises()
-    t.is(wrapper.vm.count as number, 2)
-    const firstUpdateTime = wrapper.vm.updatedAt as Date
+  await flushPromises()
+  t.is(wrapper.vm.count as number, 2)
+  const firstUpdateTime = wrapper.vm.updatedAt as Date
 
-    await sleepAsync(600)
-    await flushPromises()
-    t.is(wrapper.vm.count as number, 3)
-    const secondUpdateTime = wrapper.vm.updatedAt as Date
-    t.true(secondUpdateTime > firstUpdateTime)
-  }
-)
+  await sleepAsync(600)
+  await flushPromises()
+  t.is(wrapper.vm.count as number, 3)
+  const secondUpdateTime = wrapper.vm.updatedAt as Date
+  t.true(secondUpdateTime > firstUpdateTime)
+  wrapper.unmount()
+})
 
-test.serial(
-  'useLiveQuery re-runs static query when dependencies change',
-  async (t) => {
-    const { dal, adapter } = t.context
+test('useLiveQuery re-runs func query when live query arguments change', async (t) => {
+  const { dal, adapter } = t.context
 
-    adapter.query = async () => [{ count: 2 }]
-    const wrapper = shallowMount({
-      template: '<div>count: {{ count }}</div>',
-      setup() {
-        const arbitraryDependency = ref('a')
-        const { results, updatedAt } = useLiveQuery(
-          dal.db.liveRawQuery({
-            sql: `select foo from bars`,
-          }),
-          [arbitraryDependency]
-        )
-        setTimeout(() => {
-          arbitraryDependency.value = 'b'
-        }, 200)
-        const count = computed(() => results?.value?.[0].count ?? 0)
-        return { count, updatedAt }
-      },
-    })
+  adapter.query = async ({ sql }) => [{ count: sql.includes('foo') ? 2 : 3 }]
+  const wrapper = shallowMount({
+    template: '<div>count: {{ count }}</div>',
+    setup() {
+      const columnToSelect = ref('foo')
+      const { results, updatedAt } = useLiveQuery(() =>
+        dal.db.liveRawQuery({
+          sql: `select ${columnToSelect.value} from bars`,
+        })
+      )
+      setTimeout(() => (columnToSelect.value = 'other'), 500)
+      const count = computed(() => results?.value?.[0].count ?? 0)
+      return { count, updatedAt }
+    },
+  })
 
-    await flushPromises()
-    const firstUpdateTime = wrapper.vm.updatedAt as Date
+  await flushPromises()
+  t.is(wrapper.vm.count as number, 2)
+  const firstUpdateTime = wrapper.vm.updatedAt as Date
 
-    await sleepAsync(300)
-    await flushPromises()
-    const secondUpdateTime = wrapper.vm.updatedAt as Date
-    t.true(secondUpdateTime > firstUpdateTime)
-  }
-)
+  await sleepAsync(600)
+  await flushPromises()
+  t.is(wrapper.vm.count as number, 3)
+  const secondUpdateTime = wrapper.vm.updatedAt as Date
+  t.true(secondUpdateTime > firstUpdateTime)
+  wrapper.unmount()
+})
+
+test('useLiveQuery re-runs static query when dependencies change', async (t) => {
+  const { dal, adapter } = t.context
+
+  adapter.query = async () => [{ count: 2 }]
+  const wrapper = shallowMount({
+    template: '<div>count: {{ count }}</div>',
+    setup() {
+      const arbitraryDependency = ref('a')
+      const { results, updatedAt } = useLiveQuery(
+        dal.db.liveRawQuery({
+          sql: `select foo from bars`,
+        }),
+        [arbitraryDependency]
+      )
+      setTimeout(() => {
+        arbitraryDependency.value = 'b'
+      }, 200)
+      const count = computed(() => results?.value?.[0].count ?? 0)
+      return { count, updatedAt }
+    },
+  })
+
+  await flushPromises()
+  const firstUpdateTime = wrapper.vm.updatedAt as Date
+
+  await sleepAsync(300)
+  await flushPromises()
+  const secondUpdateTime = wrapper.vm.updatedAt as Date
+  t.true(secondUpdateTime > firstUpdateTime)
+  wrapper.unmount()
+})
 
 test('dependency injection works without reference to client', async (t) => {
   const { dal, adapter } = t.context
@@ -385,103 +380,100 @@ test('dependency injection works without reference to client', async (t) => {
 
   await flushPromises()
   t.is(wrapper.text(), 'count: 2')
+  wrapper.unmount()
 })
 
-test.serial(
-  'dependency injection works with shallow reference to client',
-  async (t) => {
-    const { dal, adapter } = t.context
-    adapter.query = async () => [{ count: 2 }]
+test('dependency injection works with shallow reference to client', async (t) => {
+  const { dal, adapter } = t.context
+  adapter.query = async () => [{ count: 2 }]
 
-    const ProviderComponent = defineComponent({
-      template: '<div v-if=show><slot/></div>',
-      setup() {
-        const client = shallowRef<Electric>()
-        const show = computed(() => client.value !== undefined)
-        setTimeout(() => (client.value = dal), 200)
-        provideElectric(client)
-        return { show }
-      },
-    })
+  const ProviderComponent = defineComponent({
+    template: '<div v-if=show><slot/></div>',
+    setup() {
+      const client = shallowRef<Electric>()
+      const show = computed(() => client.value !== undefined)
+      setTimeout(() => (client.value = dal), 200)
+      provideElectric(client)
+      return { show }
+    },
+  })
 
-    let electricInstance: Electric | undefined
+  let electricInstance: Electric | undefined
 
-    const ConsumerComponent = defineComponent({
-      template: '<div>count: {{ count }}</div>',
-      setup() {
-        const electric = injectElectric()!
-        electricInstance = electric
-        const liveQuery = electric.db.liveRawQuery({
-          sql: 'select foo from bars',
-        })
+  const ConsumerComponent = defineComponent({
+    template: '<div>count: {{ count }}</div>',
+    setup() {
+      const electric = injectElectric()!
+      electricInstance = electric
+      const liveQuery = electric.db.liveRawQuery({
+        sql: 'select foo from bars',
+      })
 
-        const { results } = useLiveQuery(liveQuery)
-        const count = computed(() => results?.value?.[0].count ?? 0)
-        return { count }
-      },
-    })
+      const { results } = useLiveQuery(liveQuery)
+      const count = computed(() => results?.value?.[0].count ?? 0)
+      return { count }
+    },
+  })
 
-    const wrapper = mount({
-      template: '<ProviderComponent><ConsumerComponent/></ProviderComponent>',
-      components: { ProviderComponent, ConsumerComponent },
-    })
+  const wrapper = mount({
+    template: '<ProviderComponent><ConsumerComponent/></ProviderComponent>',
+    components: { ProviderComponent, ConsumerComponent },
+  })
 
-    await flushPromises()
-    t.is(wrapper.text(), '')
-    await sleepAsync(300)
-    await flushPromises()
-    t.is(wrapper.text(), 'count: 2')
+  await flushPromises()
+  t.is(wrapper.text(), '')
+  await sleepAsync(300)
+  await flushPromises()
+  t.is(wrapper.text(), 'count: 2')
 
-    // consumer's instance should not be a proxy
-    t.assert(!isProxy(electricInstance))
-  }
-)
+  // consumer's instance should not be a proxy
+  t.assert(!isProxy(electricInstance))
+  wrapper.unmount()
+})
 
-test.serial(
-  'dependency injection works with deep reference to client but is proxy',
-  async (t) => {
-    const { dal, adapter } = t.context
-    adapter.query = async () => [{ count: 2 }]
+test('dependency injection works with deep reference to client but is proxy', async (t) => {
+  const { dal, adapter } = t.context
+  adapter.query = async () => [{ count: 2 }]
 
-    const ProviderComponent = defineComponent({
-      template: '<div v-if=show><slot/></div>',
-      setup() {
-        const client = ref<Electric>()
-        const show = computed(() => client.value !== undefined)
-        setTimeout(() => (client.value = dal), 200)
-        provideElectric(client)
-        return { show }
-      },
-    })
+  const ProviderComponent = defineComponent({
+    template: '<div v-if=show><slot/></div>',
+    setup() {
+      const client = ref<Electric>()
+      const show = computed(() => client.value !== undefined)
+      setTimeout(() => (client.value = dal), 200)
+      provideElectric(client)
+      return { show }
+    },
+  })
 
-    let electricInstance: Electric | undefined
+  let electricInstance: Electric | undefined
 
-    const ConsumerComponent = defineComponent({
-      template: '<div>count: {{ count }}</div>',
-      setup() {
-        const electric = injectElectric()!
-        electricInstance = electric
-        const liveQuery = electric.db.liveRawQuery({
-          sql: 'select foo from bars',
-        })
-        const { results } = useLiveQuery(liveQuery)
-        const count = computed(() => results?.value?.[0].count ?? 0)
-        return { count }
-      },
-    })
+  const ConsumerComponent = defineComponent({
+    template: '<div>count: {{ count }}</div>',
+    setup() {
+      const electric = injectElectric()!
+      electricInstance = electric
+      const liveQuery = electric.db.liveRawQuery({
+        sql: 'select foo from bars',
+      })
+      const { results } = useLiveQuery(liveQuery)
+      const count = computed(() => results?.value?.[0].count ?? 0)
+      return { count }
+    },
+  })
 
-    const wrapper = mount({
-      template: '<ProviderComponent><ConsumerComponent/></ProviderComponent>',
-      components: { ProviderComponent, ConsumerComponent },
-    })
+  const wrapper = mount({
+    template: '<ProviderComponent><ConsumerComponent/></ProviderComponent>',
+    components: { ProviderComponent, ConsumerComponent },
+  })
 
-    await flushPromises()
-    t.is(wrapper.text(), '')
-    await sleepAsync(300)
-    await flushPromises()
-    t.is(wrapper.text(), 'count: 2')
+  await flushPromises()
+  t.is(wrapper.text(), '')
+  await sleepAsync(300)
+  await flushPromises()
+  t.is(wrapper.text(), 'count: 2')
 
-    // consumer's instance will be a proxy
-    t.assert(isProxy(electricInstance))
-  }
-)
+  // consumer's instance will be a proxy
+  t.assert(isProxy(electricInstance))
+  wrapper.unmount()
+})
