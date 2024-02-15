@@ -182,7 +182,6 @@
   "devDependencies": {
     "@electric-sql/prisma-generator": "workspace:*",
     "@testing-library/react": "^13.4.0",
-    "@testing-library/vue": "^8.0.2",
     "@types/base-64": "^1.0.0",
     "@types/better-sqlite3": "7.6.3",
     "@types/cordova-sqlite-storage": "^1.5.5",
@@ -205,6 +204,7 @@
     "@types/ws": "^8.5.3",
     "@typescript-eslint/eslint-plugin": "^5.34.0",
     "@typescript-eslint/parser": "^5.34.0",
+    "@vue/test-utils": "^2.4.4",
     "ava": "^4.3.1",
     "concurrently": "^8.2.2",
     "eslint": "^8.22.0",
@@ -235,12 +235,12 @@
     "@capacitor-community/sqlite": ">= 5.4.1",
     "cordova-sqlite-storage": ">= 5.0.0",
     "expo-sqlite": ">= 11.7.0",
-    "vue": ">=3.0.0",
     "react": ">= 16.8.0",
     "react-dom": ">= 16.8.0",
     "react-native": ">= 0.68.0",
     "react-native-sqlite-storage": ">= 6.0.0",
     "typeorm": ">=0.3.0",
+    "vue": ">=3.0.0",
     "wa-sqlite": "rhashimoto/wa-sqlite#semver:^0.9.8"
   },
   "peerDependenciesMeta": {

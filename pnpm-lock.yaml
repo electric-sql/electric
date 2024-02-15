@@ -144,9 +144,6 @@ importers:
       '@testing-library/react':
         specifier: ^13.4.0
         version: 13.4.0(react-dom@18.2.0)(react@18.2.0)
-      '@testing-library/vue':
-        specifier: ^8.0.2
-        version: 8.0.2(vue@3.4.19)
       '@types/base-64':
         specifier: ^1.0.0
         version: 1.0.0
@@ -213,6 +210,9 @@ importers:
       '@typescript-eslint/parser':
         specifier: ^5.34.0
         version: 5.59.8(eslint@8.41.0)(typescript@5.3.3)
+      '@vue/test-utils':
+        specifier: ^2.4.4
+        version: 2.4.4(vue@3.4.19)
       ava:
         specifier: ^4.3.1
         version: 4.3.3
@@ -4178,20 +4178,6 @@ packages:
       pretty-format: 27.5.1
     dev: true
 
-  /@testing-library/dom@9.3.4:
-    resolution: {integrity: sha512-FlS4ZWlp97iiNWig0Muq8p+3rVDjRiYE+YKGbAqXOu9nwJFFOdL00kFpz42M+4huzYi86vAK1sOOfyOG45muIQ==}
-    engines: {node: '>=14'}
-    dependencies:
-      '@babel/code-frame': 7.21.4
-      '@babel/runtime': 7.23.9
-      '@types/aria-query': 5.0.1
-      aria-query: 5.1.3
-      chalk: 4.1.2
-      dom-accessibility-api: 0.5.16
-      lz-string: 1.5.0
-      pretty-format: 27.5.1
-    dev: true
-
   /@testing-library/react@13.4.0(react-dom@18.2.0)(react@18.2.0):
     resolution: {integrity: sha512-sXOGON+WNTh3MLE9rve97ftaZukN3oNf2KjDy7YTx6hcTO2uuLHuCGynMDhFwGw/jYf4OJ2Qk0i4i79qMNNkyw==}
     engines: {node: '>=12'}
@@ -4204,24 +4190,6 @@ packages:
       '@types/react-dom': 18.2.4
       react: 18.2.0
       react-dom: 18.2.0(react@18.2.0)
-    dev: true
-
-  /@testing-library/vue@8.0.2(vue@3.4.19):
-    resolution: {integrity: sha512-A8wWX+qQn0o0izpQWnGCpwQt8wAdpsVP8vPP2h5Q/jcGhZ5yKXz9PPUqhQv+45LTFaWlyRf8bArTVaB/KFFd5A==}
-    engines: {node: '>=14'}
-    peerDependencies:
-      '@vue/compiler-sfc': '>= 3'
-      vue: '>= 3'
-    peerDependenciesMeta:
-      '@vue/compiler-sfc':
-        optional: true
-    dependencies:
-      '@babel/runtime': 7.23.9
-      '@testing-library/dom': 9.3.4
-      '@vue/test-utils': 2.4.4(vue@3.4.19)
-      vue: 3.4.19(typescript@5.3.3)
-    transitivePeerDependencies:
-      - '@vue/server-renderer'
     dev: true
 
   /@tootallnate/once@1.1.2:
