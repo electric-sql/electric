@@ -4,18 +4,16 @@ import {
   makeElectricDependencyInjector,
   useLiveQuery,
 } from '../../src/frameworks/vuejs'
-import { render, screen, waitFor } from '@testing-library/vue'
 import {
-  watchEffect,
-  computed,
-  defineComponent,
-  shallowRef,
-  ref,
-  isProxy,
-} from 'vue'
+  mount,
+  shallowMount,
+  flushPromises,
+  enableAutoUnmount,
+} from '@vue/test-utils'
+import { computed, defineComponent, shallowRef, ref, isProxy, watch } from 'vue'
 
-import { DatabaseAdapter } from '../../src/drivers/react-native-sqlite-storage/adapter'
-import { MockDatabase } from '../../src/drivers/react-native-sqlite-storage/mock'
+import { DatabaseAdapter } from '../../src/drivers/wa-sqlite/adapter'
+import { MockDatabase } from '../../src/drivers/wa-sqlite/mock'
 
 import { MockNotifier } from '../../src/notifiers/mock'
 import { QualifiedTablename } from '../../src/util/tablename'
@@ -30,12 +28,6 @@ import { Notifier } from '../../src/notifiers'
 import { createQueryResultSubscribeFunction } from '../../src/util/subscribe'
 import EventEmitter from 'events'
 
-const assert = (stmt: unknown, msg = 'Assertion failed.'): void => {
-  if (!stmt) {
-    throw new Error(msg)
-  }
-}
-
 const { provideElectric, injectElectric } =
   makeElectricDependencyInjector<Electric>()
 
@@ -45,9 +37,11 @@ const test = anyTest as TestFn<{
   notifier: Notifier
 }>
 
+enableAutoUnmount(test.afterEach)
+
 test.beforeEach((t) => {
   const original = new MockDatabase('test.db')
-  const adapter = new DatabaseAdapter(original, false)
+  const adapter = new DatabaseAdapter(original)
   const notifier = new MockNotifier('test.db', new EventEmitter())
   const satellite = new MockSatelliteProcess(
     'test.db',
@@ -67,6 +61,7 @@ test.beforeEach((t) => {
     registry
   )
   dal.db.Items.sync()
+
   t.context = { dal, adapter, notifier }
 })
 
@@ -77,7 +72,7 @@ test('useLiveQuery returns query results', async (t) => {
   adapter.query = async () => [{ count: 2 }]
   const liveQuery = dal.db.liveRawQuery({ sql: query })
 
-  const { unmount } = render({
+  const wrapper = shallowMount({
     template: '<div>count: {{ count }}</div>',
     setup() {
       const { results } = useLiveQuery(liveQuery)
@@ -86,9 +81,9 @@ test('useLiveQuery returns query results', async (t) => {
     },
   })
 
-  t.not(screen.getByText('count: 0'), null)
-  await waitFor(() => t.not(screen.getByText('count: 2'), null))
-  await unmount()
+  t.is(wrapper.vm.count as number, 0)
+  await flushPromises()
+  t.is(wrapper.vm.count as number, 2)
 })
 
 test('useLiveQuery returns error when query errors', async (t) => {
@@ -96,30 +91,29 @@ test('useLiveQuery returns error when query errors', async (t) => {
 
   const expectedError = new Error('Mock query error')
 
-  const errorLiveQuery = async () => {
-    throw expectedError
-  }
+  const errorLiveQuery = () => Promise.reject(expectedError)
+  errorLiveQuery.sourceQuery = { sql: '' }
   errorLiveQuery.subscribe = createQueryResultSubscribeFunction(
     notifier,
     errorLiveQuery
   )
-  let errorEmitted: unknown
-  const { unmount } = render({
+
+  const wrapper = shallowMount({
     template: '<div></div>',
     setup() {
-      const { error } = useLiveQuery(errorLiveQuery)
-      watchEffect(() => {
-        errorEmitted = error?.value
-      })
+      const { results, error } = useLiveQuery(errorLiveQuery)
+      return { results, error }
     },
   })
 
-  await waitFor(() => assert(errorEmitted !== undefined))
-  t.deepEqual(errorEmitted, expectedError)
-  await unmount()
+  t.is(wrapper.vm.results as unknown, undefined)
+  t.is(wrapper.vm.error as unknown, undefined)
+  await flushPromises()
+  t.is(wrapper.vm.results as unknown, undefined)
+  t.deepEqual(wrapper.vm.error as unknown, new Error('Mock query error'))
 })
 
-test('useLiveQuery re-runs query when data changes', async (t) => {
+test.serial('useLiveQuery re-runs query when data changes', async (t) => {
   const { dal, adapter, notifier } = t.context
 
   const query = 'select foo from bars'
@@ -128,62 +122,56 @@ test('useLiveQuery re-runs query when data changes', async (t) => {
     sql: query,
   })
 
-  let lastUpdateTime: Date | undefined
-
-  const { unmount } = render({
+  const wrapper = shallowMount({
     template: '<div>count: {{ count }}</div>',
     setup() {
       const { results, updatedAt } = useLiveQuery(liveQuery)
       const count = computed(() => results?.value?.[0].count ?? 0)
-      watchEffect(() => {
-        lastUpdateTime = updatedAt?.value
-      })
-      return { count }
+      return { count, updatedAt }
     },
   })
 
-  await waitFor(() => screen.getByText('count: 2'))
+  t.is(wrapper.vm.count as number, 0)
+  await flushPromises()
+  t.is(wrapper.vm.count as number, 2)
+
   // keep track of first update time
-  const firstUpdateTime = lastUpdateTime as Date
+  const firstUpdateTime = wrapper.vm.updatedAt as Date
   t.true(firstUpdateTime instanceof Date)
 
   // trigger notifier
   adapter.query = async () => [{ count: 3 }]
-  const qtn = new QualifiedTablename('main', 'bars')
-  const changes = [{ qualifiedTablename: qtn }]
-  notifier.actuallyChanged('test.db', changes)
+  notifier.actuallyChanged('test.db', [
+    { qualifiedTablename: new QualifiedTablename('main', 'bars') },
+  ])
 
-  await waitFor(() => screen.getByText('count: 3'))
-  const secondUpdateTime = lastUpdateTime as Date
+  await flushPromises()
+
+  t.is(wrapper.vm.count as number, 3)
+  const secondUpdateTime = wrapper.vm.updatedAt as Date
   t.true(secondUpdateTime > firstUpdateTime)
-  await unmount()
 })
 
-test('useLiveQuery never sets results if unmounted immediately', async (t) => {
-  const { dal } = t.context
-
+test('useLiveQuery never runs query if unmounted immediately', async (t) => {
+  const { dal, adapter } = t.context
+  adapter.query = async () => [{ count: 2 }]
   const query = 'select foo from bars'
   const liveQuery = dal.db.liveRawQuery({
     sql: query,
   })
 
-  let renderedResults
-
-  const { unmount } = render({
+  const wrapper = shallowMount({
     template: '<div>count: {{ count }}</div>',
     setup() {
       const { results } = useLiveQuery(liveQuery)
       const count = computed(() => results?.value?.[0].count ?? 0)
-      watchEffect(() => {
-        renderedResults = results?.value
-      })
       return { count }
     },
   })
-  await unmount()
+  await wrapper.unmount()
 
-  await sleepAsync(1000)
-  t.assert(renderedResults === undefined)
+  await flushPromises()
+  t.is(wrapper.vm.count as number, 0)
 })
 
 test('useLiveQuery unsubscribes to data changes when unmounted', async (t) => {
@@ -196,38 +184,32 @@ test('useLiveQuery unsubscribes to data changes when unmounted', async (t) => {
   })
 
   let reactiveUpdatesTriggered = 0
-  let lastUpdateTime: Date | undefined
-
-  const { unmount } = render({
+  const wrapper = shallowMount({
     template: '<div>count: {{ count }}</div>',
     setup() {
       const { results, updatedAt } = useLiveQuery(liveQuery)
       const count = computed(() => results?.value?.[0].count ?? 0)
-      watchEffect(() => {
-        reactiveUpdatesTriggered++
-        lastUpdateTime = updatedAt?.value
-      })
+      watch([updatedAt], () => reactiveUpdatesTriggered++)
       return { count }
     },
   })
 
-  await waitFor(() => screen.getByText('count: 2'))
-  const firstUpdateTime = lastUpdateTime
-  t.assert(firstUpdateTime instanceof Date)
-  t.is(reactiveUpdatesTriggered, 2)
+  await flushPromises()
+  const firstUpdateTime = wrapper.vm.updatedAt as Date
+  t.is(reactiveUpdatesTriggered, 1)
 
   // trigger notifier after unmounting
-  await unmount()
+  await wrapper.unmount()
   adapter.query = async () => [{ count: 3 }]
   const qtn = new QualifiedTablename('main', 'bars')
   const changes = [{ qualifiedTablename: qtn }]
   notifier.actuallyChanged('test.db', changes)
 
   // no updates triggered
-  await sleepAsync(1000)
-  const secondUpdateTime = lastUpdateTime
+  await flushPromises()
+  const secondUpdateTime = wrapper.vm.updatedAt as Date
   t.is(secondUpdateTime, firstUpdateTime)
-  t.is(reactiveUpdatesTriggered, 2)
+  t.is(reactiveUpdatesTriggered, 1)
 })
 
 test('useLiveQuery ignores results if unmounted whilst re-querying', async (t) => {
@@ -240,25 +222,19 @@ test('useLiveQuery ignores results if unmounted whilst re-querying', async (t) =
   })
 
   let reactiveUpdatesTriggered = 0
-  let lastUpdateTime: Date | undefined
-
-  const { unmount } = render({
+  const wrapper = shallowMount({
     template: '<div>count: {{ count }}</div>',
     setup() {
       const { results, updatedAt } = useLiveQuery(liveQuery)
       const count = computed(() => results?.value?.[0].count ?? 0)
-      watchEffect(() => {
-        reactiveUpdatesTriggered++
-        lastUpdateTime = updatedAt?.value
-      })
+      watch([updatedAt], () => reactiveUpdatesTriggered++)
       return { count }
     },
   })
 
-  await waitFor(() => screen.getByText('count: 2'))
-  const firstUpdateTime = lastUpdateTime
-  t.assert(firstUpdateTime instanceof Date)
-  t.is(reactiveUpdatesTriggered, 2)
+  await flushPromises()
+  const firstUpdateTime = wrapper.vm.updatedAt as Date
+  t.is(reactiveUpdatesTriggered, 1)
 
   // trigger notifier and _then_ immediately unmount
 
@@ -266,14 +242,116 @@ test('useLiveQuery ignores results if unmounted whilst re-querying', async (t) =
   const qtn = new QualifiedTablename('main', 'bars')
   const changes = [{ qualifiedTablename: qtn }]
   notifier.actuallyChanged('test.db', changes)
-  await unmount()
+  await wrapper.unmount()
 
   // no updates triggered
-  await sleepAsync(1000)
-  const secondUpdateTime = lastUpdateTime
+  await flushPromises()
+  const secondUpdateTime = wrapper.vm.updatedAt as Date
   t.is(secondUpdateTime, firstUpdateTime)
-  t.is(reactiveUpdatesTriggered, 2)
+  t.is(reactiveUpdatesTriggered, 1)
 })
+
+test.serial(
+  'useLiveQuery re-runs reffed query when live query arguments change',
+  async (t) => {
+    const { dal, adapter } = t.context
+
+    adapter.query = async ({ sql }) => [{ count: sql.includes('foo') ? 2 : 3 }]
+    const wrapper = shallowMount({
+      template: '<div>count: {{ count }}</div>',
+      setup() {
+        const columnToSelect = ref('foo')
+        const { results, updatedAt } = useLiveQuery(
+          computed(() =>
+            dal.db.liveRawQuery({
+              sql: `select ${columnToSelect.value} from bars`,
+            })
+          )
+        )
+        setTimeout(() => (columnToSelect.value = 'other'), 500)
+        const count = computed(() => results?.value?.[0].count ?? 0)
+        return { count, updatedAt }
+      },
+    })
+
+    await flushPromises()
+    t.is(wrapper.vm.count as number, 2)
+    const firstUpdateTime = wrapper.vm.updatedAt as Date
+
+    await sleepAsync(600)
+    await flushPromises()
+    t.is(wrapper.vm.count as number, 3)
+    const secondUpdateTime = wrapper.vm.updatedAt as Date
+    t.true(secondUpdateTime > firstUpdateTime)
+  }
+)
+
+test.serial(
+  'useLiveQuery re-runs func query when live query arguments change',
+  async (t) => {
+    const { dal, adapter } = t.context
+
+    adapter.query = async ({ sql }) => [{ count: sql.includes('foo') ? 2 : 3 }]
+    const wrapper = shallowMount({
+      template: '<div>count: {{ count }}</div>',
+      setup() {
+        const columnToSelect = ref('foo')
+        const { results, updatedAt } = useLiveQuery(() =>
+          dal.db.liveRawQuery({
+            sql: `select ${columnToSelect.value} from bars`,
+          })
+        )
+        setTimeout(() => (columnToSelect.value = 'other'), 500)
+        const count = computed(() => results?.value?.[0].count ?? 0)
+        return { count, updatedAt }
+      },
+    })
+
+    await flushPromises()
+    t.is(wrapper.vm.count as number, 2)
+    const firstUpdateTime = wrapper.vm.updatedAt as Date
+
+    await sleepAsync(600)
+    await flushPromises()
+    t.is(wrapper.vm.count as number, 3)
+    const secondUpdateTime = wrapper.vm.updatedAt as Date
+    t.true(secondUpdateTime > firstUpdateTime)
+  }
+)
+
+test.serial(
+  'useLiveQuery re-runs static query when dependencies change',
+  async (t) => {
+    const { dal, adapter } = t.context
+
+    adapter.query = async () => [{ count: 2 }]
+    const wrapper = shallowMount({
+      template: '<div>count: {{ count }}</div>',
+      setup() {
+        const arbitraryDependency = ref('a')
+        const { results, updatedAt } = useLiveQuery(
+          dal.db.liveRawQuery({
+            sql: `select foo from bars`,
+          }),
+          [arbitraryDependency]
+        )
+        setTimeout(() => {
+          arbitraryDependency.value = 'b'
+        }, 200)
+        const count = computed(() => results?.value?.[0].count ?? 0)
+        return { count, updatedAt }
+      },
+    })
+
+    await flushPromises()
+    const firstUpdateTime = wrapper.vm.updatedAt as Date
+
+    await sleepAsync(300)
+    await flushPromises()
+    const secondUpdateTime = wrapper.vm.updatedAt as Date
+    t.true(secondUpdateTime > firstUpdateTime)
+  }
+)
 
 test('dependency injection works without reference to client', async (t) => {
   const { dal, adapter } = t.context
@@ -300,106 +378,110 @@ test('dependency injection works without reference to client', async (t) => {
     },
   })
 
-  const { unmount } = render({
+  const wrapper = mount({
     template: '<ProviderComponent><ConsumerComponent/></ProviderComponent>',
     components: { ProviderComponent, ConsumerComponent },
   })
 
-  await waitFor(() => t.assert(screen.getByText('count: 2')))
-  await unmount()
+  await flushPromises()
+  t.is(wrapper.text(), 'count: 2')
 })
 
-test('dependency injection works with shallow reference to client', async (t) => {
-  const { dal, adapter } = t.context
-  adapter.query = async () => [{ count: 2 }]
+test.serial(
+  'dependency injection works with shallow reference to client',
+  async (t) => {
+    const { dal, adapter } = t.context
+    adapter.query = async () => [{ count: 2 }]
 
-  const ProviderComponent = defineComponent({
-    template: '<div v-if=show><slot/></div>',
-    setup() {
-      const client = shallowRef<Electric>()
-      const show = computed(() => client.value !== undefined)
-      setTimeout(() => {
-        client.value = dal
-      }, 500)
-      provideElectric(client)
-      return { show }
-    },
-  })
+    const ProviderComponent = defineComponent({
+      template: '<div v-if=show><slot/></div>',
+      setup() {
+        const client = shallowRef<Electric>()
+        const show = computed(() => client.value !== undefined)
+        setTimeout(() => (client.value = dal), 200)
+        provideElectric(client)
+        return { show }
+      },
+    })
 
-  let electricInstance: Electric | undefined
+    let electricInstance: Electric | undefined
 
-  const ConsumerComponent = defineComponent({
-    template: '<div>count: {{ count }}</div>',
-    setup() {
-      const electric = injectElectric()!
-      electricInstance = electric
-      const liveQuery = electric.db.liveRawQuery({
-        sql: 'select foo from bars',
-      })
+    const ConsumerComponent = defineComponent({
+      template: '<div>count: {{ count }}</div>',
+      setup() {
+        const electric = injectElectric()!
+        electricInstance = electric
+        const liveQuery = electric.db.liveRawQuery({
+          sql: 'select foo from bars',
+        })
 
-      const { results } = useLiveQuery(liveQuery)
-      const count = computed(() => results?.value?.[0].count ?? 0)
-      return { count }
-    },
-  })
+        const { results } = useLiveQuery(liveQuery)
+        const count = computed(() => results?.value?.[0].count ?? 0)
+        return { count }
+      },
+    })
 
-  const { unmount } = render({
-    template: '<ProviderComponent><ConsumerComponent/></ProviderComponent>',
-    components: { ProviderComponent, ConsumerComponent },
-  })
+    const wrapper = mount({
+      template: '<ProviderComponent><ConsumerComponent/></ProviderComponent>',
+      components: { ProviderComponent, ConsumerComponent },
+    })
 
-  // should update the count
-  await waitFor(() => t.assert(screen.getByText('count: 2')))
+    await flushPromises()
+    t.is(wrapper.text(), '')
+    await sleepAsync(300)
+    await flushPromises()
+    t.is(wrapper.text(), 'count: 2')
 
-  // consumer's instance should not be a proxy
-  t.assert(!isProxy(electricInstance))
+    // consumer's instance should not be a proxy
+    t.assert(!isProxy(electricInstance))
+  }
+)
 
-  await unmount()
-})
+test.serial(
+  'dependency injection works with deep reference to client but is proxy',
+  async (t) => {
+    const { dal, adapter } = t.context
+    adapter.query = async () => [{ count: 2 }]
 
-test('dependency injection works with deep reference to client', async (t) => {
-  const { dal, adapter } = t.context
-  adapter.query = async () => [{ count: 2 }]
+    const ProviderComponent = defineComponent({
+      template: '<div v-if=show><slot/></div>',
+      setup() {
+        const client = ref<Electric>()
+        const show = computed(() => client.value !== undefined)
+        setTimeout(() => (client.value = dal), 200)
+        provideElectric(client)
+        return { show }
+      },
+    })
 
-  const ProviderComponent = defineComponent({
-    template: '<div v-if=show><slot/></div>',
-    setup() {
-      const client = ref<Electric>()
-      const show = computed(() => client.value !== undefined)
-      setTimeout(() => {
-        client.value = dal
-      }, 500)
-      provideElectric(client)
-      return { show }
-    },
-  })
+    let electricInstance: Electric | undefined
 
-  let electricInstance: Electric | undefined
+    const ConsumerComponent = defineComponent({
+      template: '<div>count: {{ count }}</div>',
+      setup() {
+        const electric = injectElectric()!
+        electricInstance = electric
+        const liveQuery = electric.db.liveRawQuery({
+          sql: 'select foo from bars',
+        })
+        const { results } = useLiveQuery(liveQuery)
+        const count = computed(() => results?.value?.[0].count ?? 0)
+        return { count }
+      },
+    })
 
-  const ConsumerComponent = defineComponent({
-    template: '<div>count: {{ count }}</div>',
-    setup() {
-      const electric = injectElectric()!
-      electricInstance = electric
-      const liveQuery = electric.db.liveRawQuery({
-        sql: 'select foo from bars',
-      })
-      const { results } = useLiveQuery(liveQuery)
-      const count = computed(() => results?.value?.[0].count ?? 0)
-      return { count }
-    },
-  })
+    const wrapper = mount({
+      template: '<ProviderComponent><ConsumerComponent/></ProviderComponent>',
+      components: { ProviderComponent, ConsumerComponent },
+    })
 
-  const { unmount } = render({
-    template: '<ProviderComponent><ConsumerComponent/></ProviderComponent>',
-    components: { ProviderComponent, ConsumerComponent },
-  })
+    await flushPromises()
+    t.is(wrapper.text(), '')
+    await sleepAsync(300)
+    await flushPromises()
+    t.is(wrapper.text(), 'count: 2')
 
-  // should update the count
-  await waitFor(() => t.assert(screen.getByText('count: 2')))
-
-  // consumer's instance should not be a proxy
-  t.assert(!isProxy(electricInstance))
-
-  await unmount()
-})
+    // consumer's instance will be a proxy
+    t.assert(isProxy(electricInstance))
+  }
+)
