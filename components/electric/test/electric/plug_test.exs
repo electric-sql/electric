@@ -214,11 +214,25 @@ defmodule Electric.PlugTest do
       assert [
                {~c"0003/migration.sql",
                 "CREATE TABLE \"d\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"d_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n\n\nALTER TABLE \"d\" ADD COLUMN \"is_valid\" INTEGER;\n"},
-               {~c"0003/metadata.json", _metadata_json_0003},
+               {~c"0003/metadata.json", metadata_json_0003},
                {~c"0004/migration.sql",
                 "CREATE TABLE \"e\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"e_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n"},
-               {~c"0004/metadata.json", _metadata_json_0004}
+               {~c"0004/metadata.json", metadata_json_0004}
              ] = file_list
+
+      assert %{
+               "format" => "SatOpMigrate",
+               "ops" => [_create_table, _alter_table],
+               "protocol_version" => "Electric.Satellite",
+               "version" => "0003"
+             } = Jason.decode!(metadata_json_0003)
+
+      assert %{
+               "format" => "SatOpMigrate",
+               "ops" => [_create_table],
+               "protocol_version" => "Electric.Satellite",
+               "version" => "0004"
+             } = Jason.decode!(metadata_json_0004)
     end
 
     test "returns error if dialect missing", _cxt do
