@@ -609,7 +609,6 @@ defimpl QueryAnalyser, for: PgQuery.CallStmt do
       ["electric", "__smuggle__"] ->
         [command_sql] = function_args(stmt)
 
-        # FIXME: [VAX-1220] fix the ddlx parser to cope with statements that don't end with a ;
         sql =
           case String.at(command_sql, -1) do
             ";" -> command_sql
