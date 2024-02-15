@@ -6,24 +6,27 @@ import {
   generateTag,
   encodeTags,
   opLogEntryToChange,
-} from '../../src/satellite/oplog'
+} from '../../../src/satellite/oplog'
 
 import {
   generateRemoteOplogEntry,
   genEncodedTags,
-  getMatchingShadowEntries,
-} from '../support/satellite-helpers'
-import { Statement } from '../../src/util/types'
+  getPgMatchingShadowEntries as getMatchingShadowEntries,
+} from '../../support/satellite-helpers'
+import { Statement } from '../../../src/util/types'
 
 import {
-  makeContext,
+  makePgContext,
   cleanAndStopSatellite,
   relations,
   ContextType,
-} from './common'
+} from '../common'
 
 const test = anyTest as TestFn<ContextType>
-test.beforeEach(makeContext)
+let port = 5100
+test.beforeEach(async (t) => {
+  await makePgContext(t, port++)
+})
 test.afterEach.always(cleanAndStopSatellite)
 
 test('basic rules for setting tags', async (t) => {
@@ -34,7 +37,7 @@ test('basic rules for setting tags', async (t) => {
   const clientId = satellite._authState?.clientId ?? 'test_client'
 
   await adapter.run({
-    sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', null)`,
+    sql: `INSERT INTO main.parent(id, value, other) VALUES (1, 'local', null)`,
   })
 
   const txDate1 = await satellite._performSnapshot()
@@ -43,7 +46,7 @@ test('basic rules for setting tags', async (t) => {
   t.is(shadow[0].tags, genEncodedTags(clientId, [txDate1]))
 
   await adapter.run({
-    sql: `UPDATE parent SET value = 'local1', other = 'other1' WHERE id = 1`,
+    sql: `UPDATE main.parent SET value = 'local1', other = 3 WHERE id = 1`,
   })
 
   const txDate2 = await satellite._performSnapshot()
@@ -52,7 +55,7 @@ test('basic rules for setting tags', async (t) => {
   t.is(shadow[0].tags, genEncodedTags(clientId, [txDate2]))
 
   await adapter.run({
-    sql: `UPDATE parent SET value = 'local2', other = 'other2' WHERE id = 1`,
+    sql: `UPDATE main.parent SET value = 'local2', other = 4 WHERE id = 1`,
   })
 
   const txDate3 = await satellite._performSnapshot()
@@ -61,7 +64,7 @@ test('basic rules for setting tags', async (t) => {
   t.is(shadow[0].tags, genEncodedTags(clientId, [txDate3]))
 
   await adapter.run({
-    sql: `DELETE FROM parent WHERE id = 1`,
+    sql: `DELETE FROM main.parent WHERE id = 1`,
   })
 
   const txDate4 = await satellite._performSnapshot()
@@ -88,7 +91,7 @@ test('TX1=INSERT, TX2=DELETE, TX3=INSERT, ack TX1', async (t) => {
 
   // Local INSERT
   const stmts1 = {
-    sql: `INSERT INTO parent (id, value, other) VALUES (?, ?, ?)`,
+    sql: `INSERT INTO main.parent (id, value, other) VALUES ($1, $2, $3)`,
     args: ['1', 'local', null],
   }
   await adapter.runInTransaction(stmts1)
@@ -108,7 +111,7 @@ test('TX1=INSERT, TX2=DELETE, TX3=INSERT, ack TX1', async (t) => {
 
   // Local DELETE
   const stmts2 = {
-    sql: `DELETE FROM parent WHERE id=?`,
+    sql: `DELETE FROM main.parent WHERE id=$1`,
     args: ['1'],
   }
   await adapter.runInTransaction(stmts2)
@@ -127,7 +130,7 @@ test('TX1=INSERT, TX2=DELETE, TX3=INSERT, ack TX1', async (t) => {
 
   // Local INSERT
   const stmts3 = {
-    sql: `INSERT INTO parent (id, value, other) VALUES (?, ?, ?)`,
+    sql: `INSERT INTO main.parent (id, value, other) VALUES ($1, $2, $3)`,
     args: ['1', 'local', null],
   }
   await adapter.runInTransaction(stmts3)
@@ -193,16 +196,16 @@ test('remote tx (INSERT) concurrently with local tx (INSERT -> DELETE)', async (
 
   // For this key we will choose remote Tx, such that: Local TM > Remote TX
   stmts.push({
-    sql: `INSERT INTO parent (id, value, other) VALUES (?, ?, ?);`,
+    sql: `INSERT INTO main.parent (id, value, other) VALUES ($1, $2, $3);`,
     args: ['1', 'local', null],
   })
-  stmts.push({ sql: `DELETE FROM parent WHERE id = 1` })
+  stmts.push({ sql: `DELETE FROM main.parent WHERE id = 1` })
   // For this key we will choose remote Tx, such that: Local TM < Remote TX
   stmts.push({
-    sql: `INSERT INTO parent (id, value, other) VALUES (?, ?, ?);`,
+    sql: `INSERT INTO main.parent (id, value, other) VALUES ($1, $2, $3);`,
     args: ['2', 'local', null],
   })
-  stmts.push({ sql: `DELETE FROM parent WHERE id = 2` })
+  stmts.push({ sql: `DELETE FROM main.parent WHERE id = 2` })
   await adapter.runInTransaction(...stmts)
 
   const txDate1 = await satellite._performSnapshot()
@@ -276,7 +279,7 @@ test('remote tx (INSERT) concurrently with local tx (INSERT -> DELETE)', async (
   ]
   t.deepEqual(shadow, expectedShadow)
 
-  const userTable = await adapter.query({ sql: `SELECT * FROM parent;` })
+  const userTable = await adapter.query({ sql: `SELECT * FROM main.parent;` })
 
   // In both cases insert wins over delete, but
   // for id = 1 CR picks local data before delete, while
@@ -297,11 +300,11 @@ test('remote tx (INSERT) concurrently with 2 local txses (INSERT -> DELETE)', as
 
   // For this key we will choose remote Tx, such that: Local TM > Remote TX
   stmts.push({
-    sql: `INSERT INTO parent (id, value, other) VALUES (?, ?, ?);`,
+    sql: `INSERT INTO main.parent (id, value, other) VALUES ($1, $2, $3);`,
     args: ['1', 'local', null],
   })
   stmts.push({
-    sql: `INSERT INTO parent (id, value, other) VALUES (?, ?, ?);`,
+    sql: `INSERT INTO main.parent (id, value, other) VALUES ($1, $2, $3);`,
     args: ['2', 'local', null],
   })
   await adapter.runInTransaction(...stmts)
@@ -309,8 +312,8 @@ test('remote tx (INSERT) concurrently with 2 local txses (INSERT -> DELETE)', as
 
   stmts = []
   // For this key we will choose remote Tx, such that: Local TM < Remote TX
-  stmts.push({ sql: `DELETE FROM parent WHERE id = 1` })
-  stmts.push({ sql: `DELETE FROM parent WHERE id = 2` })
+  stmts.push({ sql: `DELETE FROM main.parent WHERE id = 1` })
+  stmts.push({ sql: `DELETE FROM main.parent WHERE id = 2` })
   await adapter.runInTransaction(...stmts)
   await satellite._performSnapshot()
 
@@ -383,7 +386,7 @@ test('remote tx (INSERT) concurrently with 2 local txses (INSERT -> DELETE)', as
   ]
   t.deepEqual(shadow, expectedShadow)
 
-  let userTable = await adapter.query({ sql: `SELECT * FROM parent;` })
+  let userTable = await adapter.query({ sql: `SELECT * FROM main.parent;` })
 
   // In both cases insert wins over delete, but
   // for id = 1 CR picks local data before delete, while
@@ -404,21 +407,21 @@ test('remote tx (INSERT) concurrently with local tx (INSERT -> UPDATE)', async (
 
   // For this key we will choose remote Tx, such that: Local TM > Remote TX
   stmts.push({
-    sql: `INSERT INTO parent (id, value, other) VALUES (?, ?, ?);`,
+    sql: `INSERT INTO main.parent (id, value, other) VALUES ($1, $2, $3);`,
     args: ['1', 'local', null],
   })
   stmts.push({
-    sql: `UPDATE parent SET value = ?, other = ? WHERE id = 1`,
-    args: ['local', 'not_null'],
+    sql: `UPDATE main.parent SET value = $1, other = $2 WHERE id = 1`,
+    args: ['local', 999],
   })
   // For this key we will choose remote Tx, such that: Local TM < Remote TX
   stmts.push({
-    sql: `INSERT INTO parent (id, value, other) VALUES (?, ?, ?);`,
+    sql: `INSERT INTO main.parent (id, value, other) VALUES ($1, $2, $3);`,
     args: ['2', 'local', null],
   })
   stmts.push({
-    sql: `UPDATE parent SET value = ?, other = ? WHERE id = 1`,
-    args: ['local', 'not_null'],
+    sql: `UPDATE main.parent SET value = $1, other = $2 WHERE id = 1`,
+    args: ['local', 999],
   })
   await adapter.runInTransaction(...stmts)
 
@@ -509,13 +512,13 @@ test('remote tx (INSERT) concurrently with local tx (INSERT -> UPDATE)', async (
   t.is(entries[2].clearTags, encodeTags([]))
   t.is(entries[3].clearTags, encodeTags([]))
 
-  let userTable = await adapter.query({ sql: `SELECT * FROM parent;` })
+  let userTable = await adapter.query({ sql: `SELECT * FROM main.parent;` })
 
   // In both cases insert wins over delete, but
   // for id = 1 CR picks local data before delete, while
   // for id = 2 CR picks remote data
   const expectedUserTable = [
-    { id: 1, value: 'local', other: 'not_null' },
+    { id: 1, value: 'local', other: 999 },
     { id: 2, value: 'remote', other: 2 },
   ]
   t.deepEqual(expectedUserTable, userTable)
@@ -532,11 +535,11 @@ test('origin tx (INSERT) concurrently with local txses (INSERT -> DELETE)', asyn
 
   // For this key we will choose remote Tx, such that: Local TM > Remote TX
   stmts.push({
-    sql: `INSERT INTO parent (id, value, other) VALUES (?, ?, ?);`,
+    sql: `INSERT INTO main.parent (id, value, other) VALUES ($1, $2, $3);`,
     args: ['1', 'local', null],
   })
   stmts.push({
-    sql: `INSERT INTO parent (id, value, other) VALUES (?, ?, ?);`,
+    sql: `INSERT INTO main.parent (id, value, other) VALUES ($1, $2, $3);`,
     args: ['2', 'local', null],
   })
   await adapter.runInTransaction(...stmts)
@@ -544,8 +547,8 @@ test('origin tx (INSERT) concurrently with local txses (INSERT -> DELETE)', asyn
 
   stmts = []
   // For this key we will choose remote Tx, such that: Local TM < Remote TX
-  stmts.push({ sql: `DELETE FROM parent WHERE id = 1` })
-  stmts.push({ sql: `DELETE FROM parent WHERE id = 2` })
+  stmts.push({ sql: `DELETE FROM main.parent WHERE id = 1` })
+  stmts.push({ sql: `DELETE FROM main.parent WHERE id = 2` })
   await adapter.runInTransaction(...stmts)
   await satellite._performSnapshot()
 
@@ -613,7 +616,7 @@ test('origin tx (INSERT) concurrently with local txses (INSERT -> DELETE)', asyn
   ]
   t.deepEqual(shadow, expectedShadow)
 
-  let userTable = await adapter.query({ sql: `SELECT * FROM parent;` })
+  let userTable = await adapter.query({ sql: `SELECT * FROM main.parent;` })
   const expectedUserTable = [{ id: 2, value: 'local', other: null }]
   t.deepEqual(expectedUserTable, userTable)
 })

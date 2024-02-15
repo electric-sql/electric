@@ -513,7 +513,6 @@ test.serial('send transaction', async (t) => {
   ]
 
   const transaction = toTransactions(opLogEntries, relations)
-  // console.log(transaction)
 
   t.plan(7) // We expect exactly 1 + 3 messages to be sent by the client, with 2 checks per non-relation message
 
