@@ -1,12 +1,12 @@
-// Available templates for the starter
-enum TemplateType {
-  react = 'react',
-  vue = 'vue',
-}
-const validTemplates = Object.values(TemplateType) as readonly string[]
+import templateConfig from '../template-config.json'
+
+type TemplateType = keyof typeof templateConfig
+
+const validTemplates = Object.values(templateConfig) as readonly string[]
 
 function getTemplateDirectory(templateType: TemplateType): string {
   return `template-${templateType}`
 }
 
-export { TemplateType, validTemplates, getTemplateDirectory }
+export { validTemplates, getTemplateDirectory }
+export type { TemplateType }

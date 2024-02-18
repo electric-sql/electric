@@ -28,13 +28,13 @@ const error = (err: string) => {
   process.exit(1)
 }
 
-const defaultTemplateType = TemplateType.react
+const defaultTemplateType = 'react'
 const defaultElectricPort = 5133
 const defaultElectricProxyPort = 65432
 
 let projectName = process.argv[2]
 let args = process.argv.slice(3)
-let templateType = defaultTemplateType
+let templateType: TemplateType = defaultTemplateType
 let electricPort = defaultElectricPort
 let electricProxyPort = defaultElectricProxyPort
 
@@ -100,7 +100,7 @@ if (typeof projectName === 'undefined') {
         type: 'string',
         pattern: new RegExp(`^(${validTemplates.join('|')})$`),
         message: `Template should be one of: ${validTemplates.join(', ')}.`,
-        default: TemplateType.react,
+        default: templateType,
       },
       electricPort: {
         description: 'Port on which to run Electric',
@@ -119,14 +119,14 @@ if (typeof projectName === 'undefined') {
     },
   })) as {
     appName: string
-    template: string
+    template: TemplateType
     electricPort: number
     electricProxyPort: number
   }
 
   spinner.start()
   projectName = userInput.appName
-  templateType = userInput.template as TemplateType
+  templateType = userInput.template
   electricPort = userInput.electricPort
   electricProxyPort = userInput.electricProxyPort
 }
