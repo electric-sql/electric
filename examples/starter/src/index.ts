@@ -22,7 +22,7 @@ const error = (err: string) => {
   console.error(
     '\x1b[31m',
     err +
-      '\nnpx create-electric-app [<app-name>] [--electric-port <port>] [--electric-proxy-port <port>]',
+      '\nnpx create-electric-app [<app-name>] [--template <template>] [--electric-port <port>] [--electric-proxy-port <port>]',
     '\x1b[0m'
   )
   process.exit(1)
@@ -96,7 +96,7 @@ if (typeof projectName === 'undefined') {
         required: true,
       },
       template: {
-        description: `Starter template to use, e.g. 'react' or 'vue'`,
+        description: `Template to use (${validTemplates.join(', ')})`,
         type: 'string',
         pattern: new RegExp(`^(${validTemplates.join('|')})$`),
         message: `Template should be one of: ${validTemplates.join(', ')}.`,
