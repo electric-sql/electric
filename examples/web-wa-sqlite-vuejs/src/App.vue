@@ -3,14 +3,14 @@ import { defineComponent } from 'vue';
 import logo from './assets/logo.svg';
 import './App.css';
 import './style.css';
-import Example from './Example.vue';
+import ItemsExample from './ItemsExample.vue';
 import ElectricProvider from './ElectricProvider.vue'
 
 export default defineComponent({
   name: 'App',
   components: {
     ElectricProvider,
-    Example,
+    ItemsExample,
   },
   data() {
     return {
@@ -29,7 +29,7 @@ export default defineComponent({
         alt="logo"
       >
       <ElectricProvider>
-        <Example />
+        <ItemsExample />
       </ElectricProvider>
     </header>
   </div>
