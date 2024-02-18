@@ -14,7 +14,7 @@ const ElectricKey = Symbol('ElectricProvider')
 /**
  * Call this function to get an Electric provider and injector for your Vue application.
  * We can't provide a predefined provider and injector because that would lose type information
- * as the types depend on the type of the database `S` that's provides as a type argument.
+ * as the types depend on the type of the database `S` that's provided as a type argument.
  *
  * @example
  * This example loses information about the concrete DB tables:
