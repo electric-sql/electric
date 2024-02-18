@@ -1,4 +1,3 @@
-
 <script lang="ts">
 import { defineComponent } from 'vue';
 import { useLiveQuery } from 'electric-sql/vuejs';
@@ -56,4 +55,4 @@ export default defineComponent({
   </div>
 </template>
 
-<style src="./Example.css" />
+<style src="./ItemsExample.css" />
