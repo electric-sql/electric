@@ -78,7 +78,11 @@ Open [localhost:5173](http://localhost:5173) in your web browser.
 
 ## Develop
 
-`./src/Example.tsx` has the main example code. For more information see the:
+[`./src/ElectricProvider.vue`](./src/ElectricProvider.vue) has the example code for initializing and providing Electric to the rest of the app
+
+[`./src/Example.vue`](./src/Example.vue) has the main example code for using the Electric instance.
+
+For more information see the:
 
 - [Documentation](https://electric-sql.com/docs)
 - [Quickstart](https://electric-sql.com/docs/quickstart)
