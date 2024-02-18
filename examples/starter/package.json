@@ -16,7 +16,7 @@
   "scripts": {
     "build": "pnpm run make-templates && shx rm -rf ./dist && tsc && tsmodule build",
     "prepublishOnly": "pnpm run build",
-    "make-templates": "node ./make-templates.js",
+    "make-templates": "node ./scripts/make-templates.js",
     "format": "prettier --write --loglevel warn ."
   },
   "devDependencies": {
