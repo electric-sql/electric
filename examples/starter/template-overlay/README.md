@@ -68,7 +68,7 @@ Open [localhost:3001](http://localhost:3001) in your web browser.
 
 ## Develop
 
-`./src/Example.tsx` has the main example code. For more information see the:
+This template contains the basic Electric code which you can adapt to your use case. For more information see the:
 
 - [Documentation](https://electric-sql.com/docs)
 - [Quickstart](https://electric-sql.com/docs/quickstart)
