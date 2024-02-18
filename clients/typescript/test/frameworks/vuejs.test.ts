@@ -32,8 +32,6 @@ const test = anyTest as TestFn<{
   notifier: Notifier
 }>
 
-// enableAutoUnmount(test.afterEach)
-
 test.beforeEach((t) => {
   const original = new MockDatabase('test.db')
   const adapter = new DatabaseAdapter(original)
