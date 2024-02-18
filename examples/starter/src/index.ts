@@ -296,7 +296,7 @@ function parsePort(port: string): number {
 }
 
 function parseTemplateType(templateType: string): TemplateType {
-  if (!validTemplates.includes(templateType)) {
+  if (!(validTemplates as unknown as string[]).includes(templateType)) {
     error(
       `Invalid template type '${templateType}'. ` +
         `Must be one of: ${validTemplates.join(', ')}`

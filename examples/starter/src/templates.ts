@@ -1,8 +1,6 @@
-import templateConfig from '../template-config.json'
+const validTemplates = ['react', 'vue'] as const
 
-type TemplateType = keyof typeof templateConfig
-
-const validTemplates = Object.values(templateConfig) as readonly string[]
+type TemplateType = (typeof validTemplates)[number]
 
 function getTemplateDirectory(templateType: TemplateType): string {
   return `template-${templateType}`
