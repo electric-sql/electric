@@ -63,8 +63,8 @@ Start your app:
 ```sh
 npm run dev
 ```
-
-Open [localhost:3001](http://localhost:3001) in your web browser.
+<!-- see https://vitejs.dev/config/server-options#server-port for default Vite port -->
+Open [localhost:5173](http://localhost:5173) in your web browser.
 
 ## Develop
 
