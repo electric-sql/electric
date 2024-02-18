@@ -65,7 +65,7 @@ function useLiveQuery<Res>(
  * @example Using a simple live query with a dependency. The table will depend on your application
  * ```ts
  * const limit = ref(5)
- * const { results } = useLiveQuery(computed(() => db.items.liveMany({ take: limit })))
+ * const { results } = useLiveQuery(() => db.items.liveMany({ take: limit }))
  * ```
  */
 function useLiveQuery<Res>(
