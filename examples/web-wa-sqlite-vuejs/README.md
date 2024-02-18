@@ -63,7 +63,7 @@ Generate your [type-safe client](https://electric-sql.com/docs/usage/data-access
 
 ```shell
 npm run client:generate
-# or `yarn client:watch`` to re-generate whenever the DB schema changes
+# or `npm run client:watch`` to re-generate whenever the DB schema changes
 ```
 
 ## Run
