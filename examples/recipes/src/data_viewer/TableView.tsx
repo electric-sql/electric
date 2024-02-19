@@ -11,16 +11,7 @@ import {
 } from '@mui/material'
 import TablePaginationActions from '@mui/material/TablePagination/TablePaginationActions'
 import { useCallback, useMemo } from 'react'
-
-export interface PaginationState {
-  pageIndex: number
-  pageSize: number
-}
-
-export interface SortingState {
-  field: string
-  order?: 'asc' | 'desc'
-}
+import { PaginationState, SortingState } from './use_table_data'
 
 export interface ColumnDef {
   field: string
