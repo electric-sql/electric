@@ -56,7 +56,6 @@ export const TableView = ({
   const toggleSorting = useCallback(
     (field: string) => {
       const sortState = sortMap[field]
-      const index = sortState?.index ?? Infinity
       let newSortOrder
       switch (sortState?.order) {
         case 'desc':
@@ -68,13 +67,9 @@ export const TableView = ({
         default:
           newSortOrder = 'asc'
       }
-      onSortingChange?.([
-        ...sorting.slice(0, index),
-        ...(newSortOrder ? [{ field, order: newSortOrder } as SortingState] : []),
-        ...sorting.slice(index + 1),
-      ])
+      onSortingChange?.(newSortOrder ? [{ field, order: newSortOrder } as SortingState] : [])
     },
-    [onSortingChange, sortMap, sorting],
+    [onSortingChange, sortMap],
   )
 
   return (
