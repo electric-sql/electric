@@ -8,12 +8,7 @@ type ForeignKey = {
 }
 
 type ColumnName = string
-type SQLiteType = string
-type PgType = string
-type ColumnType = {
-  sqliteType: SQLiteType
-  pgType: PgType
-}
+type ColumnType = string
 type ColumnTypes = Record<ColumnName, ColumnType>
 
 export type Table = {
@@ -71,11 +66,11 @@ export function generateOplogTriggers(
       SELECT
         CASE
           ${primary
-            .map(
-              (col) =>
-                `WHEN old."${col}" != new."${col}" THEN\n\t\tRAISE (ABORT, 'cannot change the value of column ${col} as it belongs to the primary key')`
-            )
-            .join('\n')}
+        .map(
+          (col) =>
+            `WHEN old."${col}" != new."${col}" THEN\n\t\tRAISE (ABORT, 'cannot change the value of column ${col} as it belongs to the primary key')`
+        )
+        .join('\n')}
         END;
     END;
     `,
@@ -283,17 +278,15 @@ function joinColsForJSON(
   // Perform transformations on some columns to ensure consistent
   // serializability into JSON
   const transformIfNeeded = (col: string, targetedCol: string) => {
-    const tpes = colTypes[col]
-    const sqliteType = tpes.sqliteType
-    const pgType = tpes.pgType
+    const pgType = colTypes[col]
 
     // cast REALs, INT8s, BIGINTs to TEXT to work around SQLite's `json_object` bug
-    if (sqliteType === 'REAL' || pgType === 'INT8' || pgType === 'BIGINT') {
+    if (pgType === 'FLOAT4' || pgType === 'REAL' || pgType === 'INT8' || pgType === 'BIGINT') {
       return `cast(${targetedCol} as TEXT)`
     }
 
     // transform blobs/bytestrings into hexadecimal strings for JSON encoding
-    if (sqliteType === 'BLOB' || pgType === 'BYTEA') {
+    if (pgType === 'BYTEA') {
       return `CASE WHEN ${targetedCol} IS NOT NULL THEN hex(${targetedCol}) ELSE NULL END`
     }
     return targetedCol

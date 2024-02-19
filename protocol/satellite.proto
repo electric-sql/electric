@@ -404,8 +404,15 @@ message SatOpMigrate {
         repeated int32 size = 3;
     }
     message Column {
+        //reserved 2;
+
         string name = 1;
+
+        // deprecated
+        // leaving it here to avoid breaking TypeScript tests that have hard-coded,
+        // base64-encoded SatOpMigrate messages.
         string sqlite_type = 2;
+
         PgColumnType pg_type = 3;
     }
     message ForeignKey {
