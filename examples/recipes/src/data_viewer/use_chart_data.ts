@@ -16,10 +16,12 @@ export const useChartData = <T extends Chartable>({
   propertyToChart,
   whereClause = '1=1',
   maxDistinctPropertyValues = 10,
+  missingPropertyLabel = 'N/A',
 }: {
   propertyToChart: T
   whereClause?: string
   maxDistinctPropertyValues?: number
+  missingPropertyLabel?: string
 }) => {
   const { db } = useElectric()!
 
@@ -36,9 +38,10 @@ export const useChartData = <T extends Chartable>({
     `,
     }),
   )
+
   const propertyLabels = useMemo(
-    () => topValues.map((r) => r.property.toString()).filter((p) => p !== null),
-    [topValues],
+    () => topValues.map((r) => r.property?.toString() ?? missingPropertyLabel),
+    [topValues, missingPropertyLabel],
   )
 
   // Get the aggregated number of orders, grouped by the given property, for the top keys
@@ -69,13 +72,13 @@ export const useChartData = <T extends Chartable>({
                 month: new Date(row.month),
                 ...propertyLabels.reduce((agg, key) => ({ ...agg, [key]: 0 }), {}),
               }),
-              [row.property.toString()]: row.value,
+              [row.property?.toString() ?? missingPropertyLabel]: row.value,
             },
           }),
           {} as Record<string, Record<string, number>>,
         ),
       ),
-    [aggregatedValues, propertyLabels],
+    [aggregatedValues, propertyLabels, missingPropertyLabel],
   )
 
   return {
