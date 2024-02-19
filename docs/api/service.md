@@ -125,6 +125,7 @@ The mode you choose affects your networking config and [database user permission
 
 import ElectricWriteToPgMode from './_ELECTRIC_WRITE_TO_PG_MODE.md'
 
+#### ELECTRIC_WRITE_TO_PG_MODE
 
 <EnvVarConfig
     name="ELECTRIC_WRITE_TO_PG_MODE"
@@ -255,7 +256,7 @@ import PgProxyPassword from './_PG_PROXY_PASSWORD.md'
 import PgProxyPort from './_PG_PROXY_PORT.md'
 
 
-### PG_PROXY_PASSWORD
+#### PG_PROXY_PASSWORD
 
 <EnvVarConfig
     name="PG_PROXY_PASSWORD"
@@ -264,7 +265,7 @@ import PgProxyPort from './_PG_PROXY_PORT.md'
   <PgProxyPassword />
 </EnvVarConfig>
 
-### PG_PROXY_PORT
+#### PG_PROXY_PORT
 
 <EnvVarConfig
     name="PG_PROXY_PORT"
@@ -286,7 +287,7 @@ import AuthMode from './_AUTH_MODE.md'
 import AuthJwtNamespace from './_AUTH_JWT_NAMESPACE.md'
 
 
-### AUTH_MODE
+#### AUTH_MODE
 
 <EnvVarConfig
     name="AUTH_MODE"
@@ -295,7 +296,7 @@ import AuthJwtNamespace from './_AUTH_JWT_NAMESPACE.md'
   <AuthMode />
 </EnvVarConfig>
 
-### AUTH_JWT_NAMESPACE
+#### AUTH_JWT_NAMESPACE
 
 <EnvVarConfig
     name="AUTH_JWT_NAMESPACE"
@@ -315,6 +316,7 @@ import AuthJwtKey from './_AUTH_JWT_KEY.md'
 import AuthJwtIss from './_AUTH_JWT_ISS.md'
 import AuthJwtAud from './_AUTH_JWT_AUD.md'
 
+#### AUTH_JWT_ALG
 
 <EnvVarConfig
     name="AUTH_JWT_ALG"
@@ -323,6 +325,8 @@ import AuthJwtAud from './_AUTH_JWT_AUD.md'
   <AuthJwtAlg />
 </EnvVarConfig>
 
+#### AUTH_JWT_KEY
+
 <EnvVarConfig
     name="AUTH_JWT_KEY"
     required={true}
@@ -330,12 +334,16 @@ import AuthJwtAud from './_AUTH_JWT_AUD.md'
   <AuthJwtKey />
 </EnvVarConfig>
 
+#### AUTH_JWT_ISS
+
 <EnvVarConfig
     name="AUTH_JWT_ISS"
     optional={true}
     example="example.com">
   <AuthJwtIss />
 </EnvVarConfig>
+
+#### AUTH_JWT_AUD
 
 <EnvVarConfig
     name="AUTH_JWT_AUD"
@@ -356,7 +364,7 @@ See <DocPageLink path="usage/auth/insecure" /> for more information.
 
 By default, ElectricSQL collects aggregated, anonymous usage data and sends them to our telemetry service. See <DocPageLink path="reference/telemetry" /> for more information.
 
-### ELECTRIC_TELEMETRY
+#### ELECTRIC_TELEMETRY
 
 import ElectricTelemetry from './_ELECTRIC_TELEMETRY.md'
 
