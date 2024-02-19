@@ -33,7 +33,7 @@ defmodule Electric.Satellite.Permissions.Role do
   @spec new(%SatPerms.Role{} | predefined()) :: t()
   def new(%SatPerms.Role{} = role) do
     %__MODULE__{
-      id: role.id,
+      id: role.row_id,
       role: role.role,
       user_id: role.user_id,
       assign_id: role.assign_id,

@@ -641,7 +641,7 @@ message SatPerms {
     }
     message Scope {
         Table table = 1;
-        string id = 2;
+        repeated string id = 2;
     }
     enum Privilege {
         DELETE = 0;
@@ -673,6 +673,7 @@ message SatPerms {
         optional string check = 8;
     }
     message Revoke {
+        string id = 1;
         Table table = 2;
         RoleName role = 3;
         Privilege privilege = 4;
@@ -689,6 +690,7 @@ message SatPerms {
         optional string if = 7;
     }
     message Unassign {
+        string id = 1;
         Table table = 2;
         optional string user_column = 3;
         optional string role_column = 4;
@@ -701,17 +703,11 @@ message SatPerms {
     }
 
     message Role {
-        string id = 1;
+        repeated string row_id = 1;
         string role = 2;
         string user_id = 3;
         string assign_id = 4;
         optional Scope scope = 5;
-    }
-    // split the rules and roles info into distinct messages so they can be
-    // serialized separately
-    message Rules {
-        repeated Grant grants = 1;
-        repeated Assign assigns = 2;
     }
     message DDLX {
         repeated Grant grants = 1;
@@ -720,11 +716,27 @@ message SatPerms {
         repeated Unassign unassigns = 4;
         repeated Sqlite sqlite = 5;
     }
-    message Roles {
-        repeated Role roles = 2;
+
+    // split the rules and roles info into distinct messages so they can be
+    // serialized separately
+    message Rules {
+        uint64 id = 1;
+        optional uint64 parent_id = 2;
+        repeated Grant grants = 3;
+        repeated Assign assigns = 4;
     }
 
+    message Roles {
+        uint64 id = 1;
+        optional uint64 parent_id = 2;
+        uint64 rules_id = 3;
+        repeated Role roles = 4;
+    }
+
+    // this id is the id of the user permissions, this struct is the user
+    // permissions fused with the global permissions at that point in time
     int64 id = 1;
+    string user_id = 2;
     Rules rules = 3;
-    Roles roles = 4;
+    repeated Role roles = 4;
 }

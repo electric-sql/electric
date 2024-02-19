@@ -18,7 +18,33 @@ defmodule Electric.DDLX.Command do
           tables: [Electric.Postgres.relation()]
         }
 
-  def tag(%__MODULE__{tag: tag}), do: tag
+  def tag(%__MODULE__{tag: tag}) do
+    tag
+  end
+
+  @perms_with_ids [:assigns, :unassigns, :grants, :revokes]
+  @perms_without_ids [:sqlite]
+
+  def ddlx(cmds) do
+    ddlx =
+      Enum.reduce(@perms_with_ids, %SatPerms.DDLX{}, fn type, ddlx ->
+        Map.update!(ddlx, type, fn [] ->
+          cmds
+          |> Keyword.get(type, [])
+          |> Enum.map(&put_id/1)
+        end)
+      end)
+
+    Enum.reduce(@perms_without_ids, ddlx, &Map.put(&2, &1, Keyword.get(cmds, &1, [])))
+  end
+
+  def put_id(%{id: id} = cmd) when is_struct(cmd) and id in ["", nil] do
+    Map.put(cmd, :id, command_id(cmd))
+  end
+
+  def put_id(cmd) when is_struct(cmd) do
+    cmd
+  end
 
   def pg_sql(cmd) do
     PgSQL.to_sql(cmd)
@@ -108,6 +134,17 @@ defmodule Electric.DDLX.Command do
     ])
   end
 
+  def command_id(%SatPerms.Sqlite{} = sqlite) do
+    hash([
+      sqlite.stmt
+    ])
+  end
+
+  # hash the given terms in the struct together. `SHA1` is chosen because it is smaller in terms
+  # of bytes, rather than for any cryptographic reason. Since the hash/id is used in the naming of
+  # triggers and tables within pg, a bigger hash, such as `SHA256`, would use too many of the 64
+  # available bytes for these pg objects. This is the same reason to use encode32 rather than
+  # encode16 -- it just eats fewer of the available characters.
   defp hash(terms) do
     terms
     |> Enum.map(&fingerprint/1)
@@ -185,54 +222,19 @@ defimpl Electric.DDLX.Command.PgSQL, for: SatPerms.Revoke do
 end
 
 defimpl Electric.DDLX.Command.PgSQL, for: SatPerms.Assign do
-  import Electric.DDLX.Command.Common
-
-  def to_sql(%SatPerms.Assign{} = assign) do
-    id = Electric.DDLX.Command.command_id(assign)
-
-    [
-      """
-      CALL electric.assign(
-        assignment_id => #{sql_repr(id)},
-        assign_table_full_name => #{sql_repr(assign.table)},
-        scope => #{sql_repr(assign.scope)},
-        user_column_name => #{sql_repr(assign.user_column)},
-        role_name_string => #{sql_repr(assign.role_name)},
-        role_column_name => #{sql_repr(assign.role_column)},
-        if_fn => #{sql_repr(assign.if)}
-      );
-      """
-    ]
+  def to_sql(%SatPerms.Assign{} = _assign) do
+    []
   end
 end
 
 defimpl Electric.DDLX.Command.PgSQL, for: SatPerms.Unassign do
-  import Electric.DDLX.Command.Common
-
-  def to_sql(%SatPerms.Unassign{} = unassign) do
-    id = Electric.DDLX.Command.command_id(unassign)
-
-    [
-      """
-      CALL electric.unassign(
-        assignment_id => #{sql_repr(id)},
-        assign_table_full_name => #{sql_repr(unassign.table)},
-        scope => #{sql_repr(unassign.scope)},
-        user_column_name => #{sql_repr(unassign.user_column)},
-        role_name_string => #{sql_repr(unassign.role_name)},
-        role_column_name => #{sql_repr(unassign.role_column)}
-      );
-      """
-    ]
+  def to_sql(%SatPerms.Unassign{} = _unassign) do
+    []
   end
 end
 
 defimpl Electric.DDLX.Command.PgSQL, for: SatPerms.Sqlite do
-  def to_sql(%SatPerms.Sqlite{stmt: stmt}) when is_binary(stmt) do
-    [
-      """
-      CALL electric.sqlite(sql => $sqlite$#{stmt}$sqlite$);
-      """
-    ]
+  def to_sql(%SatPerms.Sqlite{} = _sqlite) do
+    []
   end
 end

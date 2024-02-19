@@ -1,8 +1,8 @@
 defmodule Electric.Replication.Postgres.MigrationConsumerTest do
   use ExUnit.Case, async: true
+  use Electric.Postgres.MockSchemaLoader
 
-  alias Electric.Postgres.MockSchemaLoader
-
+  alias Electric.Replication.Changes
   alias Electric.Replication.Changes.NewRecord
   alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.Postgres.MigrationConsumer
@@ -78,7 +78,17 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
         {"public", "first_enum_table"} => 10001,
         {"electric", "shadow__public__first_enum_table"} => 20001,
         {"public", "second_enum_table"} => 10002,
-        {"electric", "shadow__public__second_enum_table"} => 20002
+        {"electric", "shadow__public__second_enum_table"} => 20002,
+        {"public", "users"} => 30001,
+        {"electric", "shadow__public__users"} => 30011,
+        {"public", "projects"} => 30002,
+        {"electric", "shadow__public__projects"} => 30012,
+        {"public", "project_memberships"} => 30003,
+        {"electric", "shadow__public__project_memberships"} => 30013,
+        {"public", "teams"} => 30004,
+        {"electric", "shadow__public__teams"} => 30014,
+        {"public", "team_memberships"} => 30005,
+        {"electric", "shadow__public__team_memberships"} => 30015
       }
     }
 
@@ -86,8 +96,30 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
       {"public", "mistakes"} => ["id"]
     }
 
+    migrations = [
+      {"20220000",
+       [
+         """
+         create table projects (id uuid primary key)
+         """,
+         """
+         create table users (id uuid primary key)
+         """,
+         """
+         create table project_memberships (
+            id uuid primary key,
+            user_id uuid not null references users (id),
+            project_id uuid not null references projects (id),
+            project_role text not null
+         )
+         """
+       ]}
+    ]
+
     backend =
-      MockSchemaLoader.start_link([oids: oids, pks: pks], name: __MODULE__.Loader)
+      MockSchemaLoader.start_link([oids: oids, pks: pks, migrations: migrations],
+        name: __MODULE__.Loader
+      )
 
     pid =
       start_link_supervised!(
@@ -105,236 +137,485 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
     {:ok, origin: origin, producer: producer, version: version, loader: backend}
   end
 
-  test "refreshes subscription after receiving a migration", cxt do
-    %{producer: producer, origin: origin, version: version} = cxt
-    assert_receive {MockSchemaLoader, {:connect, _}}
+  describe "migrations" do
+    test "refreshes subscription after receiving a migration", cxt do
+      %{producer: producer, origin: origin, version: version} = cxt
+      assert_receive {MockSchemaLoader, {:connect, _}}
 
-    events = [
-      %Transaction{
-        changes: [
-          %NewRecord{
-            relation: {"electric", "ddl_commands"},
-            record: %{
-              "id" => "6",
-              "query" => "create table something_else (id uuid primary key);",
-              "txid" => "101",
-              "txts" => "201"
+      events = [
+        %Transaction{
+          changes: [
+            %NewRecord{
+              relation: {"electric", "ddl_commands"},
+              record: %{
+                "id" => "6",
+                "query" => "create table something_else (id uuid primary key);",
+                "txid" => "101",
+                "txts" => "201"
+              },
+              tags: []
+            }
+          ]
+        }
+      ]
+
+      GenStage.call(producer, {:emit, cxt.loader, events, version})
+
+      assert_receive {MockSchemaLoader, {:refresh_subscription, ^origin}}, 1500
+    end
+
+    test "captures migration records", cxt do
+      %{origin: origin, producer: producer, version: version} = cxt
+      assert_receive {MockSchemaLoader, {:connect, _}}
+
+      events = [
+        %Transaction{
+          changes: [
+            %NewRecord{
+              relation: {"electric", "ddl_commands"},
+              record: %{
+                "id" => "6",
+                "query" => "create table something_else (id uuid primary key);",
+                "txid" => "100",
+                "txts" => "200"
+              },
+              tags: []
             },
-            tags: []
-          }
-        ]
-      }
-    ]
+            %NewRecord{
+              relation: {"electric", "ddl_commands"},
+              record: %{
+                "id" => "7",
+                "query" => "create table other_thing (id uuid primary key);",
+                "txid" => "100",
+                "txts" => "200"
+              },
+              tags: []
+            },
+            %NewRecord{
+              relation: {"electric", "ddl_commands"},
+              record: %{
+                "id" => "8",
+                "query" => "create table yet_another_thing (id uuid primary key);",
+                "txid" => "100",
+                "txts" => "200"
+              },
+              tags: []
+            }
+          ],
+          commit_timestamp: ~U[2023-05-02 10:08:00.948788Z],
+          origin: origin,
+          publication: "mock_pub",
+          origin_type: :postgresql
+        }
+      ]
 
-    GenStage.call(producer, {:emit, cxt.loader, events, version})
+      GenStage.call(producer, {:emit, cxt.loader, events, version})
 
-    assert_receive {MockSchemaLoader, {:refresh_subscription, ^origin}}, 1500
+      assert_receive {FakeConsumer, :events, ^events}, @receive_timeout
+      assert_receive {MockSchemaLoader, :load}, @receive_timeout
+      # only 1 save instruction is observed
+      assert_receive {MockSchemaLoader, {:save, ^version, schema, [_, _, _]}}, @receive_timeout
+      refute_receive {MockSchemaLoader, {:save, _, _schema}}, @refute_receive_timeout
+
+      assert Enum.map(schema.tables, & &1.name.name) == [
+               "projects",
+               "users",
+               "project_memberships",
+               "something_else",
+               "other_thing",
+               "yet_another_thing",
+               "shadow__public__projects",
+               "shadow__public__users",
+               "shadow__public__project_memberships",
+               "shadow__public__something_else",
+               "shadow__public__other_thing",
+               "shadow__public__yet_another_thing"
+             ]
+    end
+
+    test "captures unique enum types from migrations", cxt do
+      %{origin: origin, producer: producer, version: version} = cxt
+      assert_receive {MockSchemaLoader, {:connect, _}}
+
+      events = [
+        %Transaction{
+          changes: [
+            %NewRecord{
+              relation: {"electric", "ddl_commands"},
+              record: %{
+                "id" => "1",
+                "query" => "create type colour as enum ('red', 'green', 'blue');",
+                "txid" => "100",
+                "txts" => "200"
+              },
+              tags: []
+            },
+            %NewRecord{
+              relation: {"electric", "ddl_commands"},
+              record: %{
+                "id" => "2",
+                "query" => """
+                create table first_enum_table (
+                  id uuid primary key,
+                  foo colour
+                );
+                """,
+                "txid" => "100",
+                "txts" => "200"
+              },
+              tags: []
+            },
+            %NewRecord{
+              relation: {"electric", "ddl_commands"},
+              record: %{
+                "id" => "3",
+                "query" => "create type colour as enum ('red', 'green', 'blue');",
+                "txid" => "100",
+                "txts" => "200"
+              },
+              tags: []
+            },
+            %NewRecord{
+              relation: {"electric", "ddl_commands"},
+              record: %{
+                "id" => "4",
+                "query" => """
+                create table second_enum_table (
+                  id uuid primary key,
+                  bar colour
+                );
+                """,
+                "txid" => "100",
+                "txts" => "200"
+              },
+              tags: []
+            }
+          ],
+          commit_timestamp: ~U[2024-02-06 10:08:00.000000Z],
+          origin: origin,
+          publication: "mock_pub",
+          origin_type: :postgresql
+        }
+      ]
+
+      GenStage.call(producer, {:emit, cxt.loader, events, version})
+
+      # only 1 save instruction is observed
+      assert_receive {MockSchemaLoader, {:save, ^version, schema, [_, _, _, _]}}, @receive_timeout
+      refute_receive {MockSchemaLoader, {:save, _, _schema}}, @refute_receive_timeout
+
+      assert [
+               %{
+                 name: %{name: "colour", schema: "public"},
+                 values: ["red", "green", "blue"]
+               }
+             ] = schema.enums
+    end
+
+    test "filters non-migration records", cxt do
+      %{origin: origin, producer: producer, version: version} = cxt
+      assert_receive {MockSchemaLoader, {:connect, _}}
+
+      raw_events = [
+        %Transaction{
+          changes: [
+            %NewRecord{
+              relation: {"electric", "ddl_commands"},
+              record: %{
+                "id" => "6",
+                "query" => "create table something_else (id uuid primary key);",
+                "txid" => "101",
+                "txts" => "201"
+              },
+              tags: []
+            },
+            %NewRecord{
+              relation: {"electric", "schema"},
+              record: %{
+                "id" => "7",
+                "version" => version,
+                "schema" => "{}"
+              },
+              tags: []
+            }
+          ],
+          commit_timestamp: ~U[2023-05-02 10:08:00.948788Z],
+          origin: origin,
+          publication: "mock_pub",
+          origin_type: :postgresql
+        }
+      ]
+
+      filtered_events = [
+        %Transaction{
+          changes: [
+            %NewRecord{
+              relation: {"electric", "ddl_commands"},
+              record: %{
+                "id" => "6",
+                "query" => "create table something_else (id uuid primary key);",
+                "txid" => "101",
+                "txts" => "201"
+              },
+              tags: []
+            }
+          ],
+          commit_timestamp: ~U[2023-05-02 10:08:00.948788Z],
+          origin: origin,
+          publication: "mock_pub",
+          origin_type: :postgresql
+        }
+      ]
+
+      GenStage.call(producer, {:emit, cxt.loader, raw_events, version})
+
+      assert_receive {FakeConsumer, :events, ^filtered_events}, 1000
+      assert_receive {MockSchemaLoader, :load}, 500
+
+      assert_receive {MockSchemaLoader,
+                      {:save, ^version, _schema,
+                       ["create table something_else (id uuid primary key);"]}}
+    end
   end
 
-  test "captures migration records", cxt do
-    %{origin: origin, producer: producer, version: version} = cxt
-    assert_receive {MockSchemaLoader, {:connect, _}}
+  describe "permissions" do
+    alias ElectricTest.PermissionsHelpers.Proto
+    alias ElectricTest.PermissionsHelpers.Chgs
 
-    events = [
-      %Transaction{
-        changes: [
-          %NewRecord{
-            relation: {"electric", "ddl_commands"},
-            record: %{
-              "id" => "6",
-              "query" => "create table something_else (id uuid primary key);",
-              "txid" => "100",
-              "txts" => "200"
-            },
-            tags: []
-          },
-          %NewRecord{
-            relation: {"electric", "ddl_commands"},
-            record: %{
-              "id" => "7",
-              "query" => "create table other_thing (id uuid primary key);",
-              "txid" => "100",
-              "txts" => "200"
-            },
-            tags: []
-          },
-          %NewRecord{
-            relation: {"electric", "ddl_commands"},
-            record: %{
-              "id" => "8",
-              "query" => "create table yet_another_thing (id uuid primary key);",
-              "txid" => "100",
-              "txts" => "200"
-            },
-            tags: []
+    test "converts ddlx events into global permission change messages", cxt do
+      %{origin: origin, producer: producer, version: version} = cxt
+      assert_receive {MockSchemaLoader, {:connect, _}}
+
+      raw_events = [
+        %Transaction{
+          changes: [
+            Chgs.ddlx(
+              assigns: [
+                Proto.assign(
+                  table: Proto.table("project_memberships"),
+                  user_column: "user_id",
+                  role_column: "project_role",
+                  scope: Proto.table("projects")
+                )
+              ]
+            )
+          ],
+          commit_timestamp: ~U[2023-05-02 10:08:00.948788Z],
+          origin: origin,
+          publication: "mock_pub",
+          origin_type: :postgresql
+        }
+      ]
+
+      GenStage.call(producer, {:emit, cxt.loader, raw_events, version})
+
+      assert_receive {FakeConsumer, :events, filtered_events}, 1000
+
+      assert [
+               %Transaction{
+                 changes: [
+                   %Changes.UpdatedPermissions{
+                     type: :global,
+                     permissions: %Changes.UpdatedPermissions.GlobalPermissions{permissions_id: 2}
+                   }
+                 ],
+                 commit_timestamp: ~U[2023-05-02 10:08:00.948788Z],
+                 publication: "mock_pub",
+                 origin_type: :postgresql
+               }
+             ] = filtered_events
+    end
+
+    test "converts membership changes into user permission change messages", cxt do
+      %{origin: origin, producer: producer, version: version} = cxt
+      assert_receive {MockSchemaLoader, {:connect, _}}
+
+      raw_events = [
+        %Transaction{
+          changes: [
+            Chgs.ddlx(
+              assigns: [
+                Proto.assign(
+                  table: Proto.table("project_memberships"),
+                  user_column: "user_id",
+                  role_column: "project_role",
+                  scope: Proto.table("projects")
+                )
+              ]
+            )
+          ],
+          commit_timestamp: ~U[2023-05-02 10:08:00.948788Z],
+          origin: origin,
+          publication: "mock_pub",
+          origin_type: :postgresql
+        }
+      ]
+
+      GenStage.call(producer, {:emit, cxt.loader, raw_events, version})
+      assert_receive {MockSchemaLoader, {:save_global_permissions, _}}, 500
+
+      assert_receive {FakeConsumer, :events, _filtered_events}, 1000
+
+      insert =
+        Chgs.insert(
+          {"public", "project_memberships"},
+          %{
+            "id" => "pm-1",
+            "user_id" => "user-1",
+            "project_id" => "p-1",
+            "project_role" => "admin"
           }
-        ],
-        commit_timestamp: ~U[2023-05-02 10:08:00.948788Z],
-        origin: origin,
-        publication: "mock_pub",
-        origin_type: :postgresql
-      }
-    ]
+        )
 
-    GenStage.call(producer, {:emit, cxt.loader, events, version})
+      raw_events = [
+        %Transaction{
+          changes: [insert],
+          commit_timestamp: ~U[2023-05-02 10:08:00.948788Z],
+          origin: origin,
+          publication: "mock_pub",
+          origin_type: :postgresql
+        }
+      ]
 
-    assert_receive {FakeConsumer, :events, ^events}, @receive_timeout
-    assert_receive {MockSchemaLoader, :load}, @receive_timeout
-    # only 1 save instruction is observed
-    assert_receive {MockSchemaLoader, {:save, ^version, schema, [_, _, _]}}, @receive_timeout
-    refute_receive {MockSchemaLoader, {:save, _, _schema}}, @refute_receive_timeout
+      GenStage.call(producer, {:emit, cxt.loader, raw_events, version})
 
-    assert Enum.map(schema.tables, & &1.name.name) == [
-             "something_else",
-             "other_thing",
-             "yet_another_thing",
-             "shadow__public__something_else",
-             "shadow__public__other_thing",
-             "shadow__public__yet_another_thing"
-           ]
-  end
+      assert_receive {FakeConsumer, :events, filtered_events}, 1000
 
-  test "captures unique enum types from migrations", cxt do
-    %{origin: origin, producer: producer, version: version} = cxt
-    assert_receive {MockSchemaLoader, {:connect, _}}
+      assert [
+               %Transaction{
+                 changes: [
+                   ^insert,
+                   %Changes.UpdatedPermissions{
+                     type: :user,
+                     permissions: %Changes.UpdatedPermissions.UserPermissions{
+                       user_id: "user-1",
+                       permissions: _user_perms
+                     }
+                   }
+                 ],
+                 commit_timestamp: ~U[2023-05-02 10:08:00.948788Z],
+                 publication: "mock_pub",
+                 origin_type: :postgresql
+               }
+             ] = filtered_events
 
-    events = [
-      %Transaction{
-        changes: [
-          %NewRecord{
-            relation: {"electric", "ddl_commands"},
-            record: %{
-              "id" => "1",
-              "query" => "create type colour as enum ('red', 'green', 'blue');",
-              "txid" => "100",
-              "txts" => "200"
-            },
-            tags: []
-          },
-          %NewRecord{
-            relation: {"electric", "ddl_commands"},
-            record: %{
-              "id" => "2",
-              "query" => """
-              create table first_enum_table (
-                id uuid primary key,
-                foo colour
-              );
-              """,
-              "txid" => "100",
-              "txts" => "200"
-            },
-            tags: []
-          },
-          %NewRecord{
-            relation: {"electric", "ddl_commands"},
-            record: %{
-              "id" => "3",
-              "query" => "create type colour as enum ('red', 'green', 'blue');",
-              "txid" => "100",
-              "txts" => "200"
-            },
-            tags: []
-          },
-          %NewRecord{
-            relation: {"electric", "ddl_commands"},
-            record: %{
-              "id" => "4",
-              "query" => """
-              create table second_enum_table (
-                id uuid primary key,
-                bar colour
-              );
-              """,
-              "txid" => "100",
-              "txts" => "200"
-            },
-            tags: []
+      assert_receive {MockSchemaLoader, {:save_user_permissions, "user-1", _}}, 500
+    end
+
+    test "uses updated schema information", cxt do
+      %{origin: origin, producer: producer, version: version} = cxt
+      assert_receive {MockSchemaLoader, {:connect, _}}
+
+      insert =
+        Chgs.insert(
+          {"public", "team_memberships"},
+          %{
+            "id" => "tm-1",
+            "user_id" => "user-1",
+            "team_id" => "t-1",
+            "team_role" => "manager"
           }
-        ],
-        commit_timestamp: ~U[2024-02-06 10:08:00.000000Z],
-        origin: origin,
-        publication: "mock_pub",
-        origin_type: :postgresql
-      }
-    ]
+        )
 
-    GenStage.call(producer, {:emit, cxt.loader, events, version})
-
-    # only 1 save instruction is observed
-    assert_receive {MockSchemaLoader, {:save, ^version, schema, [_, _, _, _]}}, @receive_timeout
-    refute_receive {MockSchemaLoader, {:save, _, _schema}}, @refute_receive_timeout
-
-    assert [
-             %{
-               name: %{name: "colour", schema: "public"},
-               values: ["red", "green", "blue"]
-             }
-           ] = schema.enums
-  end
-
-  test "filters non-migration records", cxt do
-    %{origin: origin, producer: producer, version: version} = cxt
-    assert_receive {MockSchemaLoader, {:connect, _}}
-
-    raw_events = [
-      %Transaction{
-        changes: [
-          %NewRecord{
-            relation: {"electric", "ddl_commands"},
-            record: %{
-              "id" => "6",
-              "query" => "create table something_else (id uuid primary key);",
-              "txid" => "101",
-              "txts" => "201"
+      raw_events = [
+        %Transaction{
+          changes: [
+            %NewRecord{
+              relation: {"electric", "ddl_commands"},
+              record: %{
+                "id" => "6",
+                "query" => "create table teams (id uuid primary key);",
+                "txid" => "101",
+                "txts" => "201"
+              },
+              tags: []
             },
-            tags: []
-          },
-          %NewRecord{
-            relation: {"electric", "schema"},
-            record: %{
-              "id" => "7",
-              "version" => version,
-              "schema" => "{}"
+            %NewRecord{
+              relation: {"electric", "ddl_commands"},
+              record: %{
+                "id" => "7",
+                "query" => """
+                create table team_memberships (
+                  id uuid primary key,
+                  team_id uuid references teams (id),
+                  user_id uuid references users (id),
+                  team_role text not null
+                );
+                """,
+                "txid" => "101",
+                "txts" => "201"
+              },
+              tags: []
             },
-            tags: []
-          }
-        ],
-        commit_timestamp: ~U[2023-05-02 10:08:00.948788Z],
-        origin: origin,
-        publication: "mock_pub",
-        origin_type: :postgresql
-      }
-    ]
+            Chgs.ddlx(
+              assigns: [
+                Proto.assign(
+                  table: Proto.table("team_memberships"),
+                  user_column: "user_id",
+                  role_column: "team_role",
+                  scope: Proto.table("teams")
+                )
+              ]
+            ),
+            insert
+          ],
+          commit_timestamp: ~U[2023-05-02 10:08:00.948788Z],
+          origin: origin,
+          publication: "mock_pub",
+          origin_type: :postgresql
+        }
+      ]
 
-    filtered_events = [
-      %Transaction{
-        changes: [
-          %NewRecord{
-            relation: {"electric", "ddl_commands"},
-            record: %{
-              "id" => "6",
-              "query" => "create table something_else (id uuid primary key);",
-              "txid" => "101",
-              "txts" => "201"
-            },
-            tags: []
-          }
-        ],
-        commit_timestamp: ~U[2023-05-02 10:08:00.948788Z],
-        origin: origin,
-        publication: "mock_pub",
-        origin_type: :postgresql
-      }
-    ]
+      GenStage.call(producer, {:emit, cxt.loader, raw_events, version})
 
-    GenStage.call(producer, {:emit, cxt.loader, raw_events, version})
+      assert_receive {FakeConsumer, :events, filtered_events}, 1000
 
-    assert_receive {FakeConsumer, :events, ^filtered_events}, 1000
-    assert_receive {MockSchemaLoader, :load}, 500
-
-    assert_receive {MockSchemaLoader,
-                    {:save, ^version, _schema,
-                     ["create table something_else (id uuid primary key);"]}}
+      assert [
+               %Transaction{
+                 changes: [
+                   %NewRecord{
+                     relation: {"electric", "ddl_commands"},
+                     record: %{
+                       "id" => "6",
+                       "query" => "create table teams (id uuid primary key);",
+                       "txid" => "101",
+                       "txts" => "201"
+                     }
+                   },
+                   %NewRecord{
+                     relation: {"electric", "ddl_commands"},
+                     record: %{
+                       "id" => "7",
+                       "query" => """
+                       create table team_memberships (
+                         id uuid primary key,
+                         team_id uuid references teams (id),
+                         user_id uuid references users (id),
+                         team_role text not null
+                       );
+                       """,
+                       "txid" => "101",
+                       "txts" => "201"
+                     }
+                   },
+                   %Changes.UpdatedPermissions{
+                     type: :global,
+                     permissions: %Changes.UpdatedPermissions.GlobalPermissions{permissions_id: 2}
+                   },
+                   ^insert,
+                   %Changes.UpdatedPermissions{
+                     type: :user,
+                     permissions: %Changes.UpdatedPermissions.UserPermissions{
+                       user_id: "user-1",
+                       permissions: _user_perms
+                     }
+                   }
+                 ],
+                 commit_timestamp: ~U[2023-05-02 10:08:00.948788Z],
+                 publication: "mock_pub",
+                 origin_type: :postgresql
+               }
+             ] = filtered_events
+    end
   end
 end

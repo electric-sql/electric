@@ -23,9 +23,7 @@ defmodule Electric.DDLX.Command.Revoke do
 
       {:ok,
        %Command{
-         action: %SatPerms.DDLX{
-           revokes: revokes
-         },
+         action: Command.ddlx(revokes: revokes),
          stmt: ddlx,
          tables: [{table_schema, table_name}],
          tag: "ELECTRIC REVOKE"

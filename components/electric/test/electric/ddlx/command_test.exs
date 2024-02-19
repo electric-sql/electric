@@ -36,8 +36,7 @@ defmodule Electric.DDLX.CommandTest do
       ddlx = "ELECTRIC ASSIGN (projects, memberships.role) TO memberships.user_id"
 
       assert [
-               ~S[INSERT INTO "electric"."ddlx_commands" (ddlx) VALUES ('\x] <> hex,
-               ~S[CALL electric.assign(] <> args
+               ~S[INSERT INTO "electric"."ddlx_commands" (ddlx) VALUES ('\x] <> hex
              ] = pg_sql(ddlx)
 
       assert %SatPerms.DDLX{assigns: [assign]} = parse_pb(hex)
@@ -48,27 +47,13 @@ defmodule Electric.DDLX.CommandTest do
                user_column: "user_id",
                role_column: "role"
              } = assign
-
-      args =
-        String.split(args, "\n", trim: true) |> Enum.map(&String.trim/1) |> Enum.slice(0..-2//1)
-
-      assert args == [
-               "assignment_id => 'cfl4yau3uwjlscmzukhavbniggdrpenr',",
-               "assign_table_full_name => '\"public\".\"memberships\"',",
-               "scope => '\"public\".\"projects\"',",
-               "user_column_name => 'user_id',",
-               "role_name_string => NULL,",
-               "role_column_name => 'role',",
-               "if_fn => NULL"
-             ]
     end
 
     test "ELECTRIC UNASSIGN" do
       ddlx = "ELECTRIC UNASSIGN (projects, memberships.role) FROM memberships.user_id"
 
       assert [
-               ~S[INSERT INTO "electric"."ddlx_commands" (ddlx) VALUES ('\x] <> hex,
-               ~S[CALL electric.unassign(] <> args
+               ~S[INSERT INTO "electric"."ddlx_commands" (ddlx) VALUES ('\x] <> hex
              ] = pg_sql(ddlx)
 
       assert %SatPerms.DDLX{unassigns: [unassign]} = parse_pb(hex)
@@ -79,18 +64,6 @@ defmodule Electric.DDLX.CommandTest do
                user_column: "user_id",
                role_column: "role"
              } = unassign
-
-      args =
-        String.split(args, "\n", trim: true) |> Enum.map(&String.trim/1) |> Enum.slice(0..-2//1)
-
-      assert args == [
-               "assignment_id => 'cfl4yau3uwjlscmzukhavbniggdrpenr',",
-               "assign_table_full_name => '\"public\".\"memberships\"',",
-               "scope => '\"public\".\"projects\"',",
-               "user_column_name => 'user_id',",
-               "role_name_string => NULL,",
-               "role_column_name => 'role'"
-             ]
     end
 
     test "ELECTRIC GRANT" do

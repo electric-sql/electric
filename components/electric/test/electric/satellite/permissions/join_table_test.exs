@@ -8,6 +8,8 @@ defmodule Electric.Satellite.Permissions.JoinTableTest do
     Tree
   }
 
+  alias Electric.Postgres.Extension.SchemaLoader
+  alias Electric.Postgres.MockSchemaLoader
   alias Electric.Satellite.Permissions
   alias Electric.Satellite.Permissions.Graph
 
@@ -43,6 +45,28 @@ defmodule Electric.Satellite.Permissions.JoinTableTest do
 
   describe "simple join table" do
     setup do
+      loader_spec =
+        MockSchemaLoader.backend_spec(
+          migrations: [
+            {"01",
+             [
+               "create table restaurants (id uuid primary key)",
+               "create table orders (id uuid primary key)",
+               "create table riders (id uuid primary key)",
+               """
+               create table order_riders (
+                  id uuid primary key,
+                  order_id uuid not null references orders (id),
+                  rider_id uuid not null references riders (id)
+               )
+               """
+             ]}
+          ]
+        )
+
+      {:ok, loader} = SchemaLoader.connect(loader_spec, [])
+      {:ok, schema_version} = SchemaLoader.load(loader)
+
       tree =
         Tree.new(
           [
@@ -60,7 +84,7 @@ defmodule Electric.Satellite.Permissions.JoinTableTest do
         )
 
       tree = add_order(tree, "rt1", "or1")
-      {:ok, tree: tree}
+      {:ok, tree: tree, loader: loader, schema_version: schema_version}
     end
 
     test "scope_id resolves across join tables", cxt do
@@ -96,6 +120,50 @@ defmodule Electric.Satellite.Permissions.JoinTableTest do
 
   describe "more complex schema" do
     setup do
+      loader_spec =
+        MockSchemaLoader.backend_spec(
+          migrations: [
+            {"01",
+             [
+               "create table restaurants (id uuid primary key)",
+               "create table customers (id uuid primary key)",
+               "create table riders (id uuid primary key)",
+               "create table addresses (id uuid primary key, customer_id uuid references customers (id))",
+               """
+               create table orders (
+                  id uuid primary key,
+                  restaurant_id uuid not null references restaurants (id),
+                  customer_id uuid not null references customers (id),
+                  address_id uuid not null references addresses (id)
+                )
+               """,
+               """
+               create table dishes (
+                  id uuid primary key,
+                  restaurant_id uuid not null references restaurants (id)
+               )
+               """,
+               """
+               create table order_riders (
+                  id uuid primary key,
+                  order_id uuid not null references orders (id),
+                  rider_id uuid not null references riders (id)
+               )
+               """,
+               """
+               create table order_dishes (
+                  id uuid primary key,
+                  order_id uuid not null references orders (id),
+                  dish_id uuid not null references dishes (id)
+               )
+               """
+             ]}
+          ]
+        )
+
+      {:ok, loader} = SchemaLoader.connect(loader_spec, [])
+      {:ok, schema_version} = SchemaLoader.load(loader)
+
       tree =
         Tree.new(
           [
@@ -161,7 +229,7 @@ defmodule Electric.Satellite.Permissions.JoinTableTest do
 
       {:ok, _} = start_supervised(Perms.Transient)
 
-      {:ok, tree: tree}
+      {:ok, tree: tree, loader: loader, schema_version: schema_version}
     end
 
     test "scope_id/3", cxt do
@@ -258,12 +326,14 @@ defmodule Electric.Satellite.Permissions.JoinTableTest do
 
       perms =
         perms_build(
+          cxt,
           [
             ~s[GRANT READ ON #{table(@orders)} TO (#{table(@orders)}, 'rider')],
-            ~s[GRANT READ ON #{table(@addresses)} TO (#{table(@orders)}, 'rider')]
+            ~s[GRANT READ ON #{table(@addresses)} TO (#{table(@orders)}, 'rider')],
+            ~s[ASSIGN (#{table(@orders)}, 'rider') TO #{table(@order_riders)}.user_id]
           ],
           [
-            Roles.role("rider", @orders, "c2-r2-o2")
+            Roles.role("rider", @orders, "c2-r2-o2", "assign-1")
           ]
         )
 
