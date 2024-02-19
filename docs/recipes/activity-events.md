@@ -5,6 +5,9 @@ sidebar_position: 40
 ---
 
 import useBaseUrl from '@docusaurus/useBaseUrl'
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
 import Schema from '!!raw-loader!@site/submodules/electric/examples/recipes/db/migrations/01-activity_events_table.sql'
 import Hook from '!!raw-loader!@site/submodules/electric/examples/recipes/src/activity_events/use_activity_events.ts'
 import PopoverView from '!!raw-loader!@site/submodules/electric/examples/recipes/src/activity_events/ActivityPopover.tsx'
@@ -26,10 +29,15 @@ TODO(msfstef): write overview
 
 ## Usage
 
-<CodeBlock title="Activity Popover" language="tsx">
-  {PopoverView}
-</CodeBlock>
-
-<CodeBlock title="Activity Toast" language="tsx">
-  {ToastView}
-</CodeBlock>
+<Tabs groupId="view-component" queryString>
+  <TabItem value="popover" label="Activity Popover">
+    <CodeBlock language="tsx">
+      {PopoverView}
+    </CodeBlock>
+  </TabItem>
+  <TabItem value="toast" label="Activity Toast">
+    <CodeBlock language="tsx">
+      {ToastView}
+    </CodeBlock>
+  </TabItem>
+</Tabs>
