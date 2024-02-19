@@ -8,12 +8,7 @@ type ForeignKey = {
 }
 
 type ColumnName = string
-type SQLiteType = string
-type PgType = string
-type ColumnType = {
-  sqliteType: SQLiteType
-  pgType: PgType
-}
+type ColumnType = string
 type ColumnTypes = Record<ColumnName, ColumnType>
 
 export type Table = {

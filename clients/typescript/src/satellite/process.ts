@@ -1651,13 +1651,7 @@ export function generateTriggersForTable(tbl: MigrationTable): Statement[] {
       }
     }),
     columnTypes: Object.fromEntries(
-      tbl.columns.map((col) => [
-        col.name,
-        {
-          sqliteType: col.sqliteType.toUpperCase(),
-          pgType: col.pgType!.name.toUpperCase(),
-        },
-      ])
+      tbl.columns.map((col) => [col.name, col.pgType!.name.toUpperCase()])
     ),
   }
   const fullTableName = table.namespace + '.' + table.tableName
