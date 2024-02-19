@@ -1735,7 +1735,7 @@
               {1, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[tablename: delimited], rest}
+                {[tablename: Protox.Decode.validate_string(delimited)], rest}
 
               {tag, wire_type, rest} ->
                 {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
@@ -2172,12 +2172,12 @@
               {2, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[message: delimited], rest}
+                {[message: Protox.Decode.validate_string(delimited)], rest}
 
               {3, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[request_id: delimited], rest}
+                {[request_id: Protox.Decode.validate_string(delimited)], rest}
 
               {tag, wire_type, rest} ->
                 {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
@@ -2556,12 +2556,12 @@
               {2, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[message: delimited], rest}
+                {[message: Protox.Decode.validate_string(delimited)], rest}
 
               {3, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[request_id: delimited], rest}
+                {[request_id: Protox.Decode.validate_string(delimited)], rest}
 
               {tag, wire_type, rest} ->
                 {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
@@ -2994,12 +2994,16 @@
               {4, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[subscription_ids: msg.subscription_ids ++ [delimited]], rest}
+
+                {[
+                   subscription_ids:
+                     msg.subscription_ids ++ [Protox.Decode.validate_string(delimited)]
+                 ], rest}
 
               {5, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[schema_version: delimited], rest}
+                {[schema_version: Protox.Decode.validate_string(delimited)], rest}
 
               {tag, wire_type, rest} ->
                 {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
@@ -3417,12 +3421,12 @@
               {1, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[id: delimited], rest}
+                {[id: Protox.Decode.validate_string(delimited)], rest}
 
               {2, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[token: delimited], rest}
+                {[token: Protox.Decode.validate_string(delimited)], rest}
 
               {3, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
@@ -3774,7 +3778,7 @@
               {1, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[subscription_id: delimited], rest}
+                {[subscription_id: Protox.Decode.validate_string(delimited)], rest}
 
               {2, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
@@ -4145,12 +4149,12 @@
               {2, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[message: delimited], rest}
+                {[message: Protox.Decode.validate_string(delimited)], rest}
 
               {3, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[subscription_id: delimited], rest}
+                {[subscription_id: Protox.Decode.validate_string(delimited)], rest}
 
               {4, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
@@ -4610,7 +4614,7 @@
               {1, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[name: delimited], rest}
+                {[name: Protox.Decode.validate_string(delimited)], rest}
 
               {2, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
@@ -4632,7 +4636,7 @@
               {4, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[pks: msg.pks ++ [delimited]], rest}
+                {[pks: msg.pks ++ [Protox.Decode.validate_string(delimited)]], rest}
 
               {tag, wire_type, rest} ->
                 {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
@@ -5035,17 +5039,17 @@
               {1, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[fk_cols: msg.fk_cols ++ [delimited]], rest}
+                {[fk_cols: msg.fk_cols ++ [Protox.Decode.validate_string(delimited)]], rest}
 
               {2, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[pk_table: delimited], rest}
+                {[pk_table: Protox.Decode.validate_string(delimited)], rest}
 
               {3, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[pk_cols: msg.pk_cols ++ [delimited]], rest}
+                {[pk_cols: msg.pk_cols ++ [Protox.Decode.validate_string(delimited)]], rest}
 
               {tag, wire_type, rest} ->
                 {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
@@ -5477,7 +5481,7 @@
               {4, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[tags: msg.tags ++ [delimited]], rest}
+                {[tags: msg.tags ++ [Protox.Decode.validate_string(delimited)]], rest}
 
               {tag, wire_type, rest} ->
                 {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
@@ -5905,7 +5909,7 @@
               {1, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[version: delimited], rest}
+                {[version: Protox.Decode.validate_string(delimited)], rest}
 
               {2, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
@@ -6310,7 +6314,7 @@
               {2, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[trans_id: delimited], rest}
+                {[trans_id: Protox.Decode.validate_string(delimited)], rest}
 
               {3, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
@@ -6320,7 +6324,7 @@
               {4, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[origin: delimited], rest}
+                {[origin: Protox.Decode.validate_string(delimited)], rest}
 
               {5, _, bytes} ->
                 {value, rest} = Protox.Decode.parse_bool(bytes)
@@ -7000,7 +7004,7 @@
   end,
   defmodule Electric.Satellite.SatOpMigrate.Column do
     @moduledoc false
-    defstruct name: "", sqlite_type: "", pg_type: nil
+    defstruct name: "", sqlite_type: "", pg_type: nil, type_info: nil
 
     (
       (
@@ -7015,7 +7019,11 @@
 
         @spec encode!(struct) :: iodata | no_return
         def encode!(msg) do
-          [] |> encode_name(msg) |> encode_sqlite_type(msg) |> encode_pg_type(msg)
+          []
+          |> encode_name(msg)
+          |> encode_sqlite_type(msg)
+          |> encode_pg_type(msg)
+          |> encode_type_info(msg)
         end
       )
 
@@ -7058,6 +7066,18 @@
             ArgumentError ->
               reraise Protox.EncodingError.new(:pg_type, "invalid field value"), __STACKTRACE__
           end
+        end,
+        defp encode_type_info(acc, msg) do
+          try do
+            if msg.type_info == nil do
+              acc
+            else
+              [acc, "\"", Protox.Encode.encode_message(msg.type_info)]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:type_info, "invalid field value"), __STACKTRACE__
+          end
         end
       ]
 
@@ -7099,12 +7119,12 @@
               {1, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[name: delimited], rest}
+                {[name: Protox.Decode.validate_string(delimited)], rest}
 
               {2, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[sqlite_type: delimited], rest}
+                {[sqlite_type: Protox.Decode.validate_string(delimited)], rest}
 
               {3, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
@@ -7114,6 +7134,18 @@
                    pg_type:
                      Protox.MergeMessage.merge(
                        msg.pg_type,
+                       Electric.Satellite.SatOpMigrate.PgColumnType.decode!(delimited)
+                     )
+                 ], rest}
+
+              {4, _, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+
+                {[
+                   type_info:
+                     Protox.MergeMessage.merge(
+                       msg.type_info,
                        Electric.Satellite.SatOpMigrate.PgColumnType.decode!(delimited)
                      )
                  ], rest}
@@ -7178,7 +7210,9 @@
           1 => {:name, {:scalar, ""}, :string},
           2 => {:sqlite_type, {:scalar, ""}, :string},
           3 =>
-            {:pg_type, {:scalar, nil}, {:message, Electric.Satellite.SatOpMigrate.PgColumnType}}
+            {:pg_type, {:scalar, nil}, {:message, Electric.Satellite.SatOpMigrate.PgColumnType}},
+          4 =>
+            {:type_info, {:scalar, nil}, {:message, Electric.Satellite.SatOpMigrate.PgColumnType}}
         }
       end
 
@@ -7190,7 +7224,8 @@
         %{
           name: {1, {:scalar, ""}, :string},
           pg_type: {3, {:scalar, nil}, {:message, Electric.Satellite.SatOpMigrate.PgColumnType}},
-          sqlite_type: {2, {:scalar, ""}, :string}
+          sqlite_type: {2, {:scalar, ""}, :string},
+          type_info: {4, {:scalar, nil}, {:message, Electric.Satellite.SatOpMigrate.PgColumnType}}
         }
       end
     )
@@ -7224,6 +7259,15 @@
             label: :optional,
             name: :pg_type,
             tag: 3,
+            type: {:message, Electric.Satellite.SatOpMigrate.PgColumnType}
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "typeInfo",
+            kind: {:scalar, nil},
+            label: :optional,
+            name: :type_info,
+            tag: 4,
             type: {:message, Electric.Satellite.SatOpMigrate.PgColumnType}
           }
         ]
@@ -7340,6 +7384,46 @@
              }}
           end
         ),
+        (
+          def field_def(:type_info) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "typeInfo",
+               kind: {:scalar, nil},
+               label: :optional,
+               name: :type_info,
+               tag: 4,
+               type: {:message, Electric.Satellite.SatOpMigrate.PgColumnType}
+             }}
+          end
+
+          def field_def("typeInfo") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "typeInfo",
+               kind: {:scalar, nil},
+               label: :optional,
+               name: :type_info,
+               tag: 4,
+               type: {:message, Electric.Satellite.SatOpMigrate.PgColumnType}
+             }}
+          end
+
+          def field_def("type_info") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "typeInfo",
+               kind: {:scalar, nil},
+               label: :optional,
+               name: :type_info,
+               tag: 4,
+               type: {:message, Electric.Satellite.SatOpMigrate.PgColumnType}
+             }}
+          end
+        ),
         def field_def(_) do
           {:error, :no_such_field}
         end
@@ -7371,6 +7455,9 @@
         {:ok, ""}
       end,
       def default(:pg_type) do
+        {:ok, nil}
+      end,
+      def default(:type_info) do
         {:ok, nil}
       end,
       def default(_) do
@@ -7508,7 +7595,7 @@
               {3, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[message: delimited], rest}
+                {[message: Protox.Decode.validate_string(delimited)], rest}
 
               {4, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
@@ -7914,7 +8001,7 @@
               {1, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[name: delimited], rest}
+                {[name: Protox.Decode.validate_string(delimited)], rest}
 
               {2, 2, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
@@ -8266,12 +8353,12 @@
               {1, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[request_id: delimited], rest}
+                {[request_id: Protox.Decode.validate_string(delimited)], rest}
 
               {2, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[uuid: delimited], rest}
+                {[uuid: Protox.Decode.validate_string(delimited)], rest}
 
               {tag, wire_type, rest} ->
                 {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
@@ -8568,7 +8655,7 @@
               {1, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[subscription_id: delimited], rest}
+                {[subscription_id: Protox.Decode.validate_string(delimited)], rest}
 
               {2, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
@@ -8895,7 +8982,7 @@
               {1, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[method: delimited], rest}
+                {[method: Protox.Decode.validate_string(delimited)], rest}
 
               {2, _, bytes} ->
                 {value, rest} = Protox.Decode.parse_uint32(bytes)
@@ -9338,7 +9425,7 @@
               {3, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[message: delimited], rest}
+                {[message: Protox.Decode.validate_string(delimited)], rest}
 
               {tag, wire_type, rest} ->
                 {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
@@ -9742,7 +9829,7 @@
               {1, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[schema_name: delimited], rest}
+                {[schema_name: Protox.Decode.validate_string(delimited)], rest}
 
               {2, _, bytes} ->
                 {value, rest} =
@@ -9753,7 +9840,7 @@
               {3, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[table_name: delimited], rest}
+                {[table_name: Protox.Decode.validate_string(delimited)], rest}
 
               {4, _, bytes} ->
                 {value, rest} = Protox.Decode.parse_uint32(bytes)
@@ -10415,7 +10502,7 @@
               {2, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[message: delimited], rest}
+                {[message: Protox.Decode.validate_string(delimited)], rest}
 
               {tag, wire_type, rest} ->
                 {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
@@ -10727,7 +10814,7 @@
               {2, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[trans_id: delimited], rest}
+                {[trans_id: Protox.Decode.validate_string(delimited)], rest}
 
               {3, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
@@ -11089,7 +11176,7 @@
               {1, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[request_id: delimited], rest}
+                {[request_id: Protox.Decode.validate_string(delimited)], rest}
 
               {2, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
@@ -11443,12 +11530,12 @@
               {1, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[name: delimited], rest}
+                {[name: Protox.Decode.validate_string(delimited)], rest}
 
               {2, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[type: delimited], rest}
+                {[type: Protox.Decode.validate_string(delimited)], rest}
 
               {3, _, bytes} ->
                 {value, rest} = Protox.Decode.parse_bool(bytes)
@@ -12010,7 +12097,7 @@
               {1, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[subscription_id: delimited], rest}
+                {[subscription_id: Protox.Decode.validate_string(delimited)], rest}
 
               {2, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
@@ -12326,7 +12413,11 @@
               {1, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[subscription_ids: msg.subscription_ids ++ [delimited]], rest}
+
+                {[
+                   subscription_ids:
+                     msg.subscription_ids ++ [Protox.Decode.validate_string(delimited)]
+                 ], rest}
 
               {tag, wire_type, rest} ->
                 {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
@@ -13026,7 +13117,7 @@
               {3, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[tags: msg.tags ++ [delimited]], rest}
+                {[tags: msg.tags ++ [Protox.Decode.validate_string(delimited)]], rest}
 
               {tag, wire_type, rest} ->
                 {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
@@ -13585,7 +13676,7 @@
               {3, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[tags: msg.tags ++ [delimited]], rest}
+                {[tags: msg.tags ++ [Protox.Decode.validate_string(delimited)]], rest}
 
               {tag, wire_type, rest} ->
                 {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
@@ -13977,7 +14068,7 @@
               {4, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[tags: msg.tags ++ [delimited]], rest}
+                {[tags: msg.tags ++ [Protox.Decode.validate_string(delimited)]], rest}
 
               {tag, wire_type, rest} ->
                 {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
@@ -14836,7 +14927,7 @@
               {1, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[id: delimited], rest}
+                {[id: Protox.Decode.validate_string(delimited)], rest}
 
               {3, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
@@ -15148,7 +15239,7 @@
               {2, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[sql: delimited], rest}
+                {[sql: Protox.Decode.validate_string(delimited)], rest}
 
               {tag, wire_type, rest} ->
                 {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
@@ -15449,7 +15540,7 @@
               {2, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[value: delimited], rest}
+                {[value: Protox.Decode.validate_string(delimited)], rest}
 
               {tag, wire_type, rest} ->
                 {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
@@ -15752,7 +15843,7 @@
               {1, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[method: delimited], rest}
+                {[method: Protox.Decode.validate_string(delimited)], rest}
 
               {2, _, bytes} ->
                 {value, rest} = Protox.Decode.parse_uint32(bytes)

@@ -383,11 +383,15 @@ export interface SatOpMigrate_PgColumnType {
   size: number[];
 }
 
+/** reserved 2, 3; */
 export interface SatOpMigrate_Column {
   $type: "Electric.Satellite.SatOpMigrate.Column";
-  name: string;
+  /** deprecated */
   sqliteType: string;
+  /** deprecated */
   pgType: SatOpMigrate_PgColumnType | undefined;
+  name: string;
+  typeInfo: SatOpMigrate_PgColumnType | undefined;
 }
 
 export interface SatOpMigrate_ForeignKey {
@@ -2462,21 +2466,30 @@ export const SatOpMigrate_PgColumnType = {
 messageTypeRegistry.set(SatOpMigrate_PgColumnType.$type, SatOpMigrate_PgColumnType);
 
 function createBaseSatOpMigrate_Column(): SatOpMigrate_Column {
-  return { $type: "Electric.Satellite.SatOpMigrate.Column", name: "", sqliteType: "", pgType: undefined };
+  return {
+    $type: "Electric.Satellite.SatOpMigrate.Column",
+    sqliteType: "",
+    pgType: undefined,
+    name: "",
+    typeInfo: undefined,
+  };
 }
 
 export const SatOpMigrate_Column = {
   $type: "Electric.Satellite.SatOpMigrate.Column" as const,
 
   encode(message: SatOpMigrate_Column, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
-    if (message.name !== "") {
-      writer.uint32(10).string(message.name);
-    }
     if (message.sqliteType !== "") {
       writer.uint32(18).string(message.sqliteType);
     }
     if (message.pgType !== undefined) {
       SatOpMigrate_PgColumnType.encode(message.pgType, writer.uint32(26).fork()).ldelim();
+    }
+    if (message.name !== "") {
+      writer.uint32(10).string(message.name);
+    }
+    if (message.typeInfo !== undefined) {
+      SatOpMigrate_PgColumnType.encode(message.typeInfo, writer.uint32(34).fork()).ldelim();
     }
     return writer;
   },
@@ -2488,13 +2501,6 @@ export const SatOpMigrate_Column = {
     while (reader.pos < end) {
       const tag = reader.uint32();
       switch (tag >>> 3) {
-        case 1:
-          if (tag !== 10) {
-            break;
-          }
-
-          message.name = reader.string();
-          continue;
         case 2:
           if (tag !== 18) {
             break;
@@ -2508,6 +2514,20 @@ export const SatOpMigrate_Column = {
           }
 
           message.pgType = SatOpMigrate_PgColumnType.decode(reader, reader.uint32());
+          continue;
+        case 1:
+          if (tag !== 10) {
+            break;
+          }
+
+          message.name = reader.string();
+          continue;
+        case 4:
+          if (tag !== 34) {
+            break;
+          }
+
+          message.typeInfo = SatOpMigrate_PgColumnType.decode(reader, reader.uint32());
           continue;
       }
       if ((tag & 7) === 4 || tag === 0) {
@@ -2524,10 +2544,13 @@ export const SatOpMigrate_Column = {
 
   fromPartial<I extends Exact<DeepPartial<SatOpMigrate_Column>, I>>(object: I): SatOpMigrate_Column {
     const message = createBaseSatOpMigrate_Column();
-    message.name = object.name ?? "";
     message.sqliteType = object.sqliteType ?? "";
     message.pgType = (object.pgType !== undefined && object.pgType !== null)
       ? SatOpMigrate_PgColumnType.fromPartial(object.pgType)
+      : undefined;
+    message.name = object.name ?? "";
+    message.typeInfo = (object.typeInfo !== undefined && object.typeInfo !== null)
+      ? SatOpMigrate_PgColumnType.fromPartial(object.typeInfo)
       : undefined;
     return message;
   },
