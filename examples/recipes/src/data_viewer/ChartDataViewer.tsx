@@ -5,16 +5,16 @@ import { useChartData } from './use_chart_data'
 
 export const ChartDataViewer = ({
   whereClause,
-  aggregateCols,
+  aggregateColumns,
 }: {
   whereClause: string
-  aggregateCols: { field: string; headerName: string }[]
+  aggregateColumns: { field: string; headerName: string }[]
 }) => {
   // Specify how many values to show
   const [numValuesToShow] = useState(5)
 
   // The property by which results will be grouped and aggregated
-  const [groupProperty, setGroupProperty] = useState(aggregateCols[0].field)
+  const [groupProperty, setGroupProperty] = useState(aggregateColumns[0].field)
 
   const { dataset, propertyLabels } = useChartData({
     propertyToChart: groupProperty,
@@ -28,8 +28,8 @@ export const ChartDataViewer = ({
       <Selector
         style={{ position: 'absolute', right: 0, zIndex: 1 }}
         selectedValue={groupProperty}
-        values={aggregateCols.map((c) => c.field)}
-        valueLabels={aggregateCols.map((c) => c.headerName)}
+        values={aggregateColumns.map((c) => c.field)}
+        valueLabels={aggregateColumns.map((c) => c.headerName)}
         label="Aggregate By"
         onValueSelected={setGroupProperty}
       />

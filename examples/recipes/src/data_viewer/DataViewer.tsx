@@ -16,7 +16,7 @@ export const DataViewer = () => {
           <QueryBuilder columns={columns} onQueryChanged={setWhereClause} />
         </Box>
         <Box sx={{ flex: 1 }}>
-          <ChartDataViewer aggregateCols={aggregateColumns} whereClause={whereClause} />
+          <ChartDataViewer aggregateColumns={aggregateColumns} whereClause={whereClause} />
         </Box>
       </Box>
       <TableDataViewer columns={columns} whereClause={whereClause} />
