@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ColumnDef, TableView } from './TableView'
+import { ColumnDef, TableView } from './components/TableView'
 import { PaginationState, SortingState, useTableData } from './use_table_data'
 
 export const TableDataViewer = ({

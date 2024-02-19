@@ -1,5 +1,6 @@
-import { ColumnDef } from './TableView'
+import { ColumnDef } from './components/TableView'
 
+// Column definitions for the commerce_orders table
 export const columns: ColumnDef[] = [
   {
     field: 'order_id',
@@ -52,6 +53,7 @@ export const columns: ColumnDef[] = [
   },
 ]
 
+// Columns that we can aggregate for charting purposes
 export const aggregateColumns = columns
   .filter((c) => {
     switch (c.field) {

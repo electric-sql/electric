@@ -11,7 +11,7 @@ import {
 } from '@mui/material'
 import TablePaginationActions from '@mui/material/TablePagination/TablePaginationActions'
 import { useCallback, useMemo } from 'react'
-import { PaginationState, SortingState } from './use_table_data'
+import { PaginationState, SortingState } from '../use_table_data'
 
 export interface ColumnDef {
   field: string

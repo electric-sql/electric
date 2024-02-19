@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { ChartView } from './ChartView'
-import { Selector } from './Selector'
+import { ChartView } from './components/ChartView'
+import { Selector } from './components/Selector'
 import { useChartData } from './use_chart_data'
 
 export const ChartDataViewer = ({

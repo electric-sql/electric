@@ -1,7 +1,7 @@
 import { Box, Paper } from '@mui/material'
 import { useState } from 'react'
 import { columns, aggregateColumns } from './commerce_orders_columns'
-import { QueryBuilder } from './QueryBuilder'
+import { QueryBuilder } from './components/QueryBuilder'
 import { TableDataViewer } from './TableDataViewer'
 import { ChartDataViewer } from './ChartDataViewer'
 
