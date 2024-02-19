@@ -1,0 +1,65 @@
+.CodeMirror {
+  height: 100%;
+  max-height: 100%;
+}
+
+.mirror-wrapper {
+  height: 100%;
+}
+
+.mirror-column {
+  float: left;
+  height: 100%;
+  width: calc(50% - 10px);
+  margin-left: 5px;
+  margin-right: 5px;
+}
+
+.mirror-ctls {
+  background-color: #263238;
+  height: 35px;
+}
+
+.mirror-in {
+  height: calc(100% - 55px);
+}
+
+.mirror-history {
+  height: calc(100% - 55px);
+}
+
+.mirror-out {
+  height: calc(100% - 55px);
+}
+
+.react-codemirror2 {
+  height: 100%;
+}
+
+.mirror-ctls button {
+  position: relative;
+  top: 4px;
+  float: right;
+  width: 110px;
+  height: 25px;
+  margin-right: 5px;
+  font-size: 0.7rem;
+}
+
+.mirror-header {
+  height: 20px;
+  font-size: 0.9rem;
+}
+
+.header-span {
+  margin-right: 10px;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+.header-span-button {
+  color: #61dafb;
+}

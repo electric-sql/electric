@@ -1,0 +1,7 @@
+*.log
+*.md
+.DS_Store
+dist/
+node_modules/
+.gitignore
+.github/

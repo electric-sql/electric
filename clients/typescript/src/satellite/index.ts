@@ -27,6 +27,7 @@ import {
 } from './shapes/types'
 import { ShapeSubscription } from './process'
 import { DbSchema } from '../client/model/schema'
+export { MockRegistry } from './mock'
 
 export { SatelliteProcess } from './process'
 export { GlobalRegistry, globalRegistry } from './registry'

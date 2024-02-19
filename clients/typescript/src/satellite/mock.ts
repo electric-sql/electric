@@ -17,6 +17,7 @@ import {
   StopReplicationResponse,
   OutboundStartedCallback,
   TransactionCallback,
+  ConnectivityState,
 } from '../util/types'
 import { ElectricConfig } from '../config/index'
 
@@ -63,6 +64,7 @@ export class MockSatelliteProcess implements Satellite {
   notifier: Notifier
   socketFactory: SocketFactory
   opts: SatelliteOpts
+  connectivityState?: ConnectivityState
 
   constructor(
     dbName: DbName,
@@ -78,6 +80,7 @@ export class MockSatelliteProcess implements Satellite {
     this.notifier = notifier
     this.socketFactory = socketFactory
     this.opts = opts
+    this.connectivityState = 'disconnected'
   }
   subscribe(
     _shapeDefinitions: ClientShapeDefinition[]
@@ -126,17 +129,23 @@ export class MockRegistry extends BaseRegistry {
 
     const opts = { ...satelliteDefaults, ...overrides }
 
-    const satellite = new MockSatelliteProcess(
-      dbName,
-      adapter,
-      migrator,
-      notifier,
-      socketFactory,
-      opts
-    )
-    await satellite.start(config.auth)
-
-    return satellite
+    const satellites = this.satellites
+    const satellite = satellites[dbName]
+    if (satellite !== undefined) {
+      return satellite
+    } else {
+      const satellite = new MockSatelliteProcess(
+        dbName,
+        adapter,
+        migrator,
+        notifier,
+        socketFactory,
+        opts
+      )
+      await satellite.start(config.auth)
+      this.satellites[dbName] = satellite
+      return satellite
+    }
   }
 }
 
