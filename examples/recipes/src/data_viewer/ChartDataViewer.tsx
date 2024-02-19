@@ -18,6 +18,7 @@ export const ChartDataViewer = ({
 
   const { dataset, propertyLabels } = useChartData({
     propertyToChart: groupProperty,
+    aggregationWindowSeconds: 30 * 24 * 60 * 60,
     whereClause,
     maxDistinctPropertyValues: numValuesToShow,
   })

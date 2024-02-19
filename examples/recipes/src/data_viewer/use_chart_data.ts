@@ -4,11 +4,13 @@ import { useLiveQuery } from 'electric-sql/react'
 
 export const useChartData = ({
   propertyToChart,
+  aggregationWindowSeconds = 30 * 24 * 60 * 60,
   whereClause = '1=1',
   maxDistinctPropertyValues = 10,
   missingPropertyLabel = 'N/A',
 }: {
   propertyToChart: string
+  aggregationWindowSeconds: number
   whereClause?: string
   maxDistinctPropertyValues?: number
   missingPropertyLabel?: string
@@ -44,7 +46,7 @@ export const useChartData = ({
   // the given property, for the top property values
   const { results: aggregatedValues = [] } = useLiveQuery<
     {
-      month: string
+      time_period: string
       property: unknown
       value: number
     }[]
@@ -52,13 +54,13 @@ export const useChartData = ({
     db.liveRawQuery({
       sql: `
       SELECT
-        strftime('%Y-%m', timestamp) AS month,
+        (strftime('%s', timestamp) / ${aggregationWindowSeconds}) as time_period,
         ${propertyToChart} as property,
         COUNT(${propertyToChart}) as value
       FROM commerce_orders
       WHERE ${whereClause}
-      GROUP BY month, property
-      ORDER BY month ASC, value DESC
+      GROUP BY time_period, property
+      ORDER BY time_period ASC, value DESC
     `,
     }),
   )
@@ -70,9 +72,9 @@ export const useChartData = ({
         aggregatedValues.reduce<Record<string, Record<string, number>>>(
           (aggregated, row) => ({
             ...aggregated,
-            [row.month]: {
-              ...(aggregated[row.month] ?? {
-                month: new Date(row.month),
+            [row.time_period]: {
+              ...(aggregated[row.time_period] ?? {
+                month: new Date(Number(row.time_period) * aggregationWindowSeconds * 1000),
                 ...propertyLabels.reduce((agg, key) => ({ ...agg, [key]: 0 }), {}),
               }),
               [row.property?.toString() ?? missingPropertyLabel]: row.value,
@@ -81,7 +83,7 @@ export const useChartData = ({
           {},
         ),
       ),
-    [aggregatedValues, propertyLabels, missingPropertyLabel],
+    [aggregatedValues, propertyLabels, missingPropertyLabel, aggregationWindowSeconds],
   )
 
   return {
