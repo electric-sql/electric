@@ -27,7 +27,7 @@ TODO(msfstef): write overview
 ## Usage
 
 <CodeBlock title="Activity Popover" language="tsx">
-{PopoverView}
+  {PopoverView}
 </CodeBlock>
 
 <CodeBlock title="Activity Toast" language="tsx">
