@@ -8,12 +8,7 @@ type ForeignKey = {
 }
 
 type ColumnName = string
-type SQLiteType = string
-type PgType = string
-type ColumnType = {
-  sqliteType: SQLiteType
-  pgType: PgType
-}
+type ColumnType = string
 type ColumnTypes = Record<ColumnName, ColumnType>
 
 export type Table = {
@@ -282,10 +277,8 @@ function joinColsForJSON(
   // casts the value to TEXT if it is of type REAL
   // to work around the bug in SQLite's `json_object` function
   const castIfNeeded = (col: string, targettedCol: string) => {
-    const tpes = colTypes[col]
-    const sqliteType = tpes.sqliteType
-    const pgType = tpes.pgType
-    if (sqliteType === 'REAL' || pgType === 'INT8' || pgType === 'BIGINT') {
+    const colType = colTypes[col]
+    if (colType === 'FLOAT4' || colType === 'REAL' || colType === 'INT8' || colType === 'BIGINT') {
       return `cast(${targettedCol} as TEXT)`
     } else {
       return targettedCol

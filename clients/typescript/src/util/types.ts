@@ -138,6 +138,7 @@ export type DataChange = {
   tags: Tag[]
 }
 
+// TODO: Update this to use either typeInfo or pgType.
 export type SatOpMigrate_Col = Omit<SatOpMigrate_Column, '$type' | 'pgType'> & {
   pgType: Omit<SatOpMigrate_PgColumnType, '$type'> | undefined
 }

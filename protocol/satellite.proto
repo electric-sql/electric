@@ -340,9 +340,15 @@ message SatOpMigrate {
         repeated int32 size = 3;
     }
     message Column {
-        string name = 1;
-        string sqlite_type = 2;
+        //reserved 2, 3;
+
+        // deprecated
+        string sqlite_type = 2;    
+        // deprecated
         PgColumnType pg_type = 3;
+
+        string name = 1;
+        PgColumnType type_info = 4;
     }
     message ForeignKey {
         // the columns in the child table that point to the parent
