@@ -1,7 +1,7 @@
 ---
 title: Log Viewer
 description: Real-time logs with search filtering
-sidebar_position: 10
+sidebar_position: 20
 ---
 
 import useBaseUrl from '@docusaurus/useBaseUrl'

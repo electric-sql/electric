@@ -1,7 +1,7 @@
 ---
 title: Monitoring Metrics
 description: Live metric monitoring with arbitrary time aggregation and view window
-sidebar_position: 20
+sidebar_position: 30
 ---
 
 import useBaseUrl from '@docusaurus/useBaseUrl'
