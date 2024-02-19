@@ -1,4 +1,6 @@
 -- Create an orders table.
+-- Can be extended or modified to any arbitrary table
+-- to fit your use case.
 CREATE TABLE IF NOT EXISTS commerce_orders (
   order_id UUID PRIMARY KEY NOT NULL,
   timestamp TIMESTAMPTZ NOT NULL,
