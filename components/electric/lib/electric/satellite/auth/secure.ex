@@ -54,8 +54,6 @@ defmodule Electric.Satellite.Auth.Secure do
   def build_config(opts) do
     with {:ok, alg} <- validate_alg(opts),
          {:ok, key} <- validate_key(alg, opts) do
-      key = prepare_key(key, alg)
-
       token_config =
         %{}
         |> Joken.Config.add_claim("iat", &JWTUtil.gen_timestamp/0, &JWTUtil.past_timestamp?/1)
@@ -101,20 +99,53 @@ defmodule Electric.Satellite.Auth.Secure do
     end
   end
 
-  defp validate_key(key, "HS256") when byte_size(key) < 32,
+  defp validate_key(key, "HS" <> _ = alg) do
+    # Try decoding the user-provided key as base64. If that fails, assume the key is a raw
+    # binary and use it verbatim.
+    # The `padding: false` is required to accept keys that are base64-encoded without padding.
+    raw_key =
+      case Base.decode64(key, padding: false) do
+        {:ok, raw_key} -> raw_key
+        :error -> key
+      end
+
+    validate_key_length(raw_key, alg)
+  end
+
+  defp validate_key(key, pk_alg) do
+    algorithms_for_key =
+      key
+      |> JOSE.JWK.from_pem()
+      |> JOSE.JWK.verifier()
+
+    if pk_alg in algorithms_for_key do
+      {:ok, %{"pem" => key}}
+    else
+      {:error, :key,
+       """
+       is not a valid key for AUTH_JWT_ALG=#{pk_alg} or it has invalid format.
+
+           The key for RS* and ES* algorithms must use the PEM format, with the header
+           and footer included:
+
+               -----BEGIN PUBLIC KEY-----
+               MFkwEwYHKoZIzj0CAQY...
+               ...
+               -----END PUBLIC KEY-----
+       """}
+    end
+  end
+
+  defp validate_key_length(raw_key, "HS256") when byte_size(raw_key) < 32,
     do: {:error, :key, "has to be at least 32 bytes long for HS256"}
 
-  defp validate_key(key, "HS384") when byte_size(key) < 48,
+  defp validate_key_length(raw_key, "HS384") when byte_size(raw_key) < 48,
     do: {:error, :key, "has to be at least 48 bytes long for HS384"}
 
-  defp validate_key(key, "HS512") when byte_size(key) < 64,
+  defp validate_key_length(raw_key, "HS512") when byte_size(raw_key) < 64,
     do: {:error, :key, "has to be at least 64 bytes long for HS512"}
 
-  defp validate_key(key, _alg), do: {:ok, key}
-
-  defp prepare_key(raw_key, "HS" <> _), do: raw_key
-  defp prepare_key(raw_key, "RS" <> _), do: %{"pem" => raw_key}
-  defp prepare_key(raw_key, "ES" <> _), do: %{"pem" => raw_key}
+  defp validate_key_length(raw_key, "HS" <> _), do: {:ok, raw_key}
 
   defp add_exp_claim(token_config, in: seconds) do
     Joken.Config.add_claim(
