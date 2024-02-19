@@ -6,7 +6,8 @@ DECLARE
     _schema name;
     _table text;
     _oid regclass;
-    _create_sql text;
+    _ddl_statement text;
+    _ddl_statements text[];
 BEGIN
     SELECT
         schema_name, table_name, table_oid
@@ -29,11 +30,14 @@ BEGIN
         CALL <%= schema() %>.__validate_table_constraints(_oid);
 
         -- insert the required ddl into the migrations table
-        SELECT <%= schema() %>.generate_electrified_sql(_oid) INTO _create_sql;
+        SELECT <%= schema() %>.generate_electrified_sql(_oid) INTO _ddl_statements;
 
-        RAISE DEBUG '%', _create_sql;
+        RAISE DEBUG '%', _ddl_statements;
 
-        CALL <%= schema() %>.capture_ddl(_create_sql);
+        FOREACH _ddl_statement IN ARRAY _ddl_statements
+        LOOP
+            CALL <%= schema() %>.capture_ddl(_ddl_statement);
+        END LOOP;
 
         EXECUTE format('ALTER TABLE %I.%I REPLICA IDENTITY FULL;', _schema, _table);
 

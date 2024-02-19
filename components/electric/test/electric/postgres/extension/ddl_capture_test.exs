@@ -289,13 +289,19 @@ defmodule Electric.Postgres.Extension.DDLCaptureTest do
       {:ok, [], []} = :epgsql.squery(conn, sql)
     end
 
-    assert {:ok, [%{"id" => 1, "query" => query}]} = Extension.ddl_history(conn)
-    stmts = String.split(query, "\n\n\n", trim: true)
+    assert {:ok,
+            [
+              %{"id" => 1, "query" => query1},
+              %{"id" => 2, "query" => query2},
+              %{"id" => 3, "query" => query3}
+            ]} = Extension.ddl_history(conn)
 
-    assert [
-             "CREATE TABLE funny_table (" <> _,
-             "CREATE TYPE colors AS ENUM (\n 'red',\n 'turqoise',\n 'energizing_yellow'\n);",
-             "CREATE TYPE states AS ENUM (\n 'foo',\n 'bar'\n);"
-           ] = Enum.sort(stmts)
+    assert "CREATE TYPE states AS ENUM (\n 'foo',\n 'bar'\n);\n\n\n" == query1
+
+    assert "CREATE TYPE colors AS ENUM (\n 'red',\n 'turqoise',\n 'energizing_yellow'\n);\n\n\n" ==
+             query2
+
+    assert "CREATE TABLE funny_table (\n    id uuid NOT NULL,\n    s states,\n    c colors NOT NULL,\n    CONSTRAINT funny_table_pkey PRIMARY KEY (id)\n);\n\n\n" ==
+             query3
   end
 end

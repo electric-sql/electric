@@ -320,7 +320,8 @@ defmodule Electric.Postgres.Extension do
       Migrations.Migration_20231016141000_ConvertFunctionToProcedure,
       Migrations.Migration_20231206130400_ConvertReplicaTriggersToAlways,
       Migrations.Migration_20240110110200_DropUnusedFunctions,
-      Migrations.Migration_20240205141200_ReinstallTriggerFunctionWriteCorrectMaxTag
+      Migrations.Migration_20240205141200_ReinstallTriggerFunctionWriteCorrectMaxTag,
+      Migrations.Migration_20240213160300_DropGenerateElectrifiedSqlFunction
     ]
   end
 
