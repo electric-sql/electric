@@ -28,7 +28,7 @@ defmodule Electric.Config do
   @spec validate_auth_config(binary, keyword) ::
           {Electric.Satellite.Auth.provider() | nil, [{binary, {:error, binary}}]}
   def validate_auth_config(auth_mode, auth_opts) do
-    auth_mode_opts = for {key, {_, val}} <- auth_opts, do: {key, val}
+    auth_mode_opts = filter_auth_opts(auth_opts)
 
     case Electric.Satellite.Auth.build_provider(auth_mode, auth_mode_opts) do
       {:ok, provider} ->
@@ -43,6 +43,12 @@ defmodule Electric.Config do
       {:error, key, reason} ->
         {varname, _} = Keyword.fetch!(auth_opts, key)
         {nil, [{varname, {:error, reason}}]}
+    end
+  end
+
+  defp filter_auth_opts(auth_opts) do
+    for {key, {_, val}} <- auth_opts, is_binary(val) and String.trim(val) != "" do
+      {key, val}
     end
   end
 

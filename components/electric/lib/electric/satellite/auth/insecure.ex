@@ -25,15 +25,28 @@ defmodule Electric.Satellite.Auth.Insecure do
     * `namespace: <string>` - optional namespace under which the "sub" or "user_id" claim will be looked up. If omitted,
       "sub" or "user_id" must be a top-level claim.
   """
-  @spec build_config(Access.t()) :: map
+  @spec build_config(keyword) :: {:ok, map} | {:error, atom, binary}
   def build_config(opts) do
-    token_config =
-      %{}
-      |> Joken.Config.add_claim("iat", nil, &JWTUtil.past_timestamp?/1)
-      |> Joken.Config.add_claim("nbf", nil, &JWTUtil.past_timestamp?/1)
-      |> Joken.Config.add_claim("exp", nil, &JWTUtil.future_timestamp?/1)
+    with {:ok, namespace} <- validate_opts(opts) do
+      token_config =
+        %{}
+        |> Joken.Config.add_claim("iat", nil, &JWTUtil.past_timestamp?/1)
+        |> Joken.Config.add_claim("nbf", nil, &JWTUtil.past_timestamp?/1)
+        |> Joken.Config.add_claim("exp", nil, &JWTUtil.future_timestamp?/1)
 
-    %{namespace: opts[:namespace], joken_config: token_config}
+      {:ok, %{namespace: namespace, joken_config: token_config}}
+    end
+  end
+
+  defp validate_opts(opts) do
+    case Keyword.pop(opts, :namespace) do
+      {namespace, []} ->
+        {:ok, namespace}
+
+      {_, [{key, _} | _extraneous_opts]} ->
+        {:error, key,
+         "is not valid in Insecure auth mode. Did you forget to set AUTH_MODE=secure?"}
+    end
   end
 
   @impl true

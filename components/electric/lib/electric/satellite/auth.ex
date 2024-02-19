@@ -44,23 +44,16 @@ defmodule Electric.Satellite.Auth do
 
   This is a helper function to be used in runtime config.
   """
-  @spec build_provider(String.t(), Access.t()) ::
+  @spec build_provider(String.t(), keyword) ::
           {:ok, provider} | {:error, :invalid_auth_mode} | {:error, atom, binary}
-  def build_provider("insecure", opts) do
-    auth_config = Auth.Insecure.build_config(opts)
-    {:ok, {Auth.Insecure, auth_config}}
-  end
-
-  def build_provider("secure", opts) do
-    auth_config =
-      opts
-      |> Enum.filter(fn {_, val} -> is_binary(val) and String.trim(val) != "" end)
-      |> Auth.Secure.build_config()
-
-    with {:ok, config} <- auth_config do
-      {:ok, {Auth.Secure, config}}
+  def build_provider(mode, opts) do
+    with {:ok, module} <- provider_module(mode),
+         {:ok, auth_config} <- module.build_config(opts) do
+      {:ok, {module, auth_config}}
     end
   end
 
-  def build_provider(_, _), do: {:error, :invalid_auth_mode}
+  defp provider_module("insecure"), do: {:ok, Auth.Insecure}
+  defp provider_module("secure"), do: {:ok, Auth.Secure}
+  defp provider_module(_), do: {:error, :invalid_auth_mode}
 end
