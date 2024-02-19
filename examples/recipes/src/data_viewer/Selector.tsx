@@ -6,17 +6,17 @@ export const Selector = ({
   values,
   valueLabels,
   onValueSelected,
-  sx,
+  style,
 }: {
   label: string
   selectedValue: string
   values: string[]
   valueLabels?: string[]
   onValueSelected: (newValue: string) => void
-  sx?: SxProps
+  style?: SxProps
 }) => {
   return (
-    <FormControl color="secondary" sx={sx}>
+    <FormControl color="secondary" sx={style}>
       <InputLabel>{label}</InputLabel>
       <Select value={selectedValue} label={label} onChange={(e) => onValueSelected(e.target.value)}>
         {values.map((val, idx) => (
