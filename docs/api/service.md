@@ -330,7 +330,7 @@ import AuthJwtAud from './_AUTH_JWT_AUD.md'
 <EnvVarConfig
     name="AUTH_JWT_KEY"
     required={true}
-    example="8e4f0...4bec3">
+    example="AAECAwQFBgc...">
   <AuthJwtKey />
 </EnvVarConfig>
 
