@@ -1,7 +1,6 @@
-import { useLiveQuery } from 'electric-sql/react'
-import { useElectric } from '../electric/ElectricWrapper'
 import { useMemo } from 'react'
-
+import { useElectric } from '../electric/ElectricWrapper'
+import { useLiveQuery } from 'electric-sql/react'
 export interface PaginationState {
   pageIndex: number
   pageSize: number

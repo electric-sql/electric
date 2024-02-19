@@ -1,32 +1,28 @@
-import { useLiveQuery } from 'electric-sql/react'
-import { useElectric } from '../electric/ElectricWrapper'
 import { useMemo } from 'react'
+import { useElectric } from '../electric/ElectricWrapper'
+import { useLiveQuery } from 'electric-sql/react'
 
-type Chartable = string | number | boolean
-interface PropertyValue<T extends Chartable> {
-  property: T
-  value: number
-}
-
-interface MonthlyPropertyValue<T extends Chartable> extends PropertyValue<T> {
-  month: string
-}
-
-export const useChartData = <T extends Chartable>({
+export const useChartData = ({
   propertyToChart,
   whereClause = '1=1',
   maxDistinctPropertyValues = 10,
   missingPropertyLabel = 'N/A',
 }: {
-  propertyToChart: T
+  propertyToChart: string
   whereClause?: string
   maxDistinctPropertyValues?: number
   missingPropertyLabel?: string
 }) => {
   const { db } = useElectric()!
 
-  // Find the top values for the given query and select a few to display
-  const { results: topValues = [] } = useLiveQuery<PropertyValue<T>[]>(
+  // Find the top values for the given property and filters
+  // and select the top `maxDistinctPropertyValues` to display
+  const { results: topValues = [] } = useLiveQuery<
+    {
+      property: unknown
+      value: number
+    }[]
+  >(
     db.liveRawQuery({
       sql: `
       SELECT ${propertyToChart} as property, COUNT(${propertyToChart}) as value
@@ -44,8 +40,15 @@ export const useChartData = <T extends Chartable>({
     [topValues, missingPropertyLabel],
   )
 
-  // Get the aggregated number of orders, grouped by the given property, for the top keys
-  const { results: aggregatedValues = [] } = useLiveQuery<MonthlyPropertyValue<T>[]>(
+  // Get the aggregated number of orders, grouped by
+  // the given property, for the top property values
+  const { results: aggregatedValues = [] } = useLiveQuery<
+    {
+      month: string
+      property: unknown
+      value: number
+    }[]
+  >(
     db.liveRawQuery({
       sql: `
       SELECT
@@ -60,11 +63,11 @@ export const useChartData = <T extends Chartable>({
     }),
   )
 
-  // Convert to appropriate format to show on the chart
+  // Convert results to appropriate format to show on the chart
   const dataset = useMemo(
     () =>
       Object.values(
-        aggregatedValues.reduce(
+        aggregatedValues.reduce<Record<string, Record<string, number>>>(
           (aggregated, row) => ({
             ...aggregated,
             [row.month]: {
@@ -75,7 +78,7 @@ export const useChartData = <T extends Chartable>({
               [row.property?.toString() ?? missingPropertyLabel]: row.value,
             },
           }),
-          {} as Record<string, Record<string, number>>,
+          {},
         ),
       ),
     [aggregatedValues, propertyLabels, missingPropertyLabel],
