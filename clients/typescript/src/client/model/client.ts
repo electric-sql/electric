@@ -5,7 +5,6 @@ import { Row, Statement } from '../../util'
 import { LiveResult, LiveResultContext } from './model'
 import { Notifier } from '../../notifiers'
 import { DatabaseAdapter } from '../../electric/adapter'
-import type { ConnectionWrapper } from '../../satellite'
 import { GlobalRegistry, Registry, Satellite } from '../../satellite'
 import { ShapeManager } from './shapes'
 

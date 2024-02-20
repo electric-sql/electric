@@ -1279,8 +1279,15 @@ test('disconnect stops queueing operations', async (t) => {
 })
 
 test('notifies about JWT expiration', async (t) => {
-  const { satellite, authState, runMigrations, client, notifier, dbName, token } =
-    t.context
+  const {
+    satellite,
+    authState,
+    runMigrations,
+    client,
+    notifier,
+    dbName,
+    token,
+  } = t.context
   await runMigrations()
   await startSatellite(satellite, authState, token)
 

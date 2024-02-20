@@ -30,10 +30,7 @@ test.beforeEach(async (t) => {
   await makeContext(t)
   const { satellite, authState, token } = t.context
   await satellite.start(authState)
-<<<<<<< HEAD
   satellite.setToken(token)
-=======
->>>>>>> 1aeda9b3 (Detach electrification from connecting to Electric.)
   await satellite.connectWithBackoff()
   t.context['clientId'] = satellite._authState!.clientId // store clientId in the context
   await populateDB(t)

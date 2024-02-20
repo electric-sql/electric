@@ -16,11 +16,7 @@ defmodule Electric.Satellite.Auth do
 
   @type t() :: %__MODULE__{
           user_id: user_id(),
-<<<<<<< HEAD
           expires_at: non_neg_integer | nil
-=======
-          expires_at: pos_integer
->>>>>>> 024b62a6 (Add expires_at key to the Auth struct)
         }
 
   @type provider() :: {module, map}
