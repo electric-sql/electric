@@ -7,7 +7,11 @@ import ElectricProvider from './ElectricProvider.vue'
 <template>
   <div class="App">
     <header class="App-header">
-      <img :src="logo" class="App-logo" alt="logo" />
+      <img
+        :src="logo"
+        class="App-logo"
+        alt="logo"
+      >
       <ElectricProvider>
         <ItemsExample />
       </ElectricProvider>

@@ -14,15 +14,31 @@ const clearItems = () => db.items.deleteMany()
 <template>
   <div>
     <div class="controls">
-      <button class="button" @click="addItem">Add</button>
-      <button class="button" @click="clearItems">Clear</button>
+      <button
+        class="button"
+        @click="addItem"
+      >
+        Add
+      </button>
+      <button
+        class="button"
+        @click="clearItems"
+      >
+        Clear
+      </button>
     </div>
     <div v-if="items && items.length > 0">
-      <p v-for="(item, index) in items" :key="index" class="item">
+      <p
+        v-for="(item, index) in items"
+        :key="index"
+        class="item"
+      >
         <code>{{ item.value }}</code>
       </p>
     </div>
-    <div v-else>No items available.</div>
+    <div v-else>
+      No items available.
+    </div>
   </div>
 </template>
 
