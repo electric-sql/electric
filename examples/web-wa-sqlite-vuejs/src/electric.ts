@@ -1,7 +1,7 @@
-import { makeElectricDependencyInjector } from "electric-sql/vuejs";
-import { Electric } from "./generated/client";
+import { makeElectricDependencyInjector } from 'electric-sql/vuejs'
+import { Electric } from './generated/client'
 
 const { provideElectric, injectElectric } =
-  makeElectricDependencyInjector<Electric>();
+  makeElectricDependencyInjector<Electric>()
 
-export { provideElectric, injectElectric };
+export { provideElectric, injectElectric }
