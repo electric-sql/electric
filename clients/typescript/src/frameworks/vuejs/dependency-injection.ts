@@ -45,5 +45,3 @@ export function makeElectricDependencyInjector<
     injectElectric,
   }
 }
-
-// TODO(msfstef): turn into Vue plugin? how to preserve type?
