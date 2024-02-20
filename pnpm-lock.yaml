@@ -224,7 +224,7 @@ importers:
         version: 8.41.0
       expo-sqlite:
         specifier: ^13.0.0
-        version: 13.2.1(expo@48.0.19)
+        version: 13.2.2(expo@48.0.19)
       glob:
         specifier: ^10.3.10
         version: 10.3.10
@@ -8159,8 +8159,8 @@ packages:
       invariant: 2.2.4
     dev: true
 
-  /expo-sqlite@13.2.1(expo@48.0.19):
-    resolution: {integrity: sha512-wYPCXygwRIDlU7qkqVCW78ExVk5lBRipZwfVyHpjNWPldt3U2ijvHvRtu+24eL7Xij1HS7R3yAuSLu4ZkPc4MA==}
+  /expo-sqlite@13.2.2(expo@48.0.19):
+    resolution: {integrity: sha512-aad52QL0Nbe5+KTlwNPEaSro9l39H5dWtGrykwWRvnUbAC9FMP+6ixSKtcNGNTEb7BHKx5AfuFVy+vxKVAOX1Q==}
     peerDependencies:
       expo: '*'
     dependencies:
@@ -15056,46 +15056,6 @@ packages:
 
   /vue-component-type-helpers@1.8.27:
     resolution: {integrity: sha512-0vOfAtI67UjeO1G6UiX5Kd76CqaQ67wrRZiOe7UAb9Jm6GzlUr/fC7CV90XfwapJRjpCMaZFhv1V0ajWRmE9Dg==}
-  /vue-template-compiler@2.7.16:
-    resolution: {integrity: sha512-AYbUWAJHLGGQM7+cNTELw+KsOG9nl2CnSv467WobS5Cv9uk3wFcnr1Etsz2sEIHEZvw1U+o9mRlEO6QbZvUPGQ==}
-    dependencies:
-      de-indent: 1.0.2
-      he: 1.2.0
-    dev: true
-
-  /vue-tsc@1.8.27(typescript@5.3.3):
-    resolution: {integrity: sha512-WesKCAZCRAbmmhuGl3+VrdWItEvfoFIPXOvUJkjULi+x+6G/Dy69yO3TBRJDr9eUlmsNAwVmxsNZxvHKzbkKdg==}
-    hasBin: true
-    peerDependencies:
-      typescript: '*'
-    dependencies:
-      '@volar/typescript': 1.11.1
-      '@vue/language-core': 1.8.27(typescript@5.3.3)
-      semver: 7.5.4
-      typescript: 5.3.3
-    dev: true
-
-  /vue@3.4.19(typescript@5.3.3):
-    resolution: {integrity: sha512-W/7Fc9KUkajFU8dBeDluM4sRGc/aa4YJnOYck8dkjgZoXtVsn3OeTGni66FV1l3+nvPA7VBFYtPioaGKUmEADw==}
-    peerDependencies:
-      typescript: '*'
-    peerDependenciesMeta:
-      typescript:
-        optional: true
-    dependencies:
-      '@vue/compiler-dom': 3.4.19
-      '@vue/compiler-sfc': 3.4.19
-      '@vue/runtime-dom': 3.4.19
-      '@vue/server-renderer': 3.4.19(vue@3.4.19)
-      '@vue/shared': 3.4.19
-      typescript: 5.3.3
-    dev: true
-
-  /w3c-xmlserializer@5.0.0:
-    resolution: {integrity: sha512-o8qghlI8NZHU1lLPrpi2+Uq7abh4GGPpYANlalzWxyWteJOCsr/P+oPBA49TOLu5FTZO4d3F9MnWJfiMo4BkmA==}
-    engines: {node: '>=18'}
-    dependencies:
-      browser-process-hrtime: 1.0.0
     dev: true
 
   /vue-template-compiler@2.7.16:
