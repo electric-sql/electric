@@ -22,7 +22,7 @@ export const useElectricQueryLog = ({
   // filter for both request and response times between the given dates
   const whereClause = useMemo(() => {
     const safeStartTime = Math.round((startDate?.getTime() ?? 0) / 1000)
-    const safeEndTime = Math.round((endDate ?? new Date()).getTime() / 1000)
+    const safeEndTime = Math.round((endDate?.getTime() ?? Number.MAX_SAFE_INTEGER) / 1000)
     return `
       WHERE (strftime('%s', requestTime)
         BETWEEN '${safeStartTime}' AND '${safeEndTime}')
