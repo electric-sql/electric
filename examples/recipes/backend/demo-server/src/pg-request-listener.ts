@@ -31,8 +31,8 @@ export async function startListeningToPgRequests(pgPool: Pool, apiPort: number):
           url: `http://localhost:${apiPort}/random-result`,
         })
       } catch (err: any) {
-        response = {
-          status: err?.response?.status ?? 500,
+        response = err?.response ?? {
+          status: 500,
           data: { message: err?.message ?? 'Failed to process' },
         }
       }

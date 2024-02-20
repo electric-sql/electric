@@ -19,7 +19,14 @@ function randomResultApi(app: Express): void {
     expressAsyncHandler(async (req: SumApiRequest, res) => {
       try {
         await wait(Math.random() * 1000)
-        res.status(200).json({
+
+        // return some form of error status code with a 10% chance
+        const statusCode =
+          Math.random() > 0.9
+            ? faker.internet.httpStatusCode({ types: ['clientError', 'serverError'] })
+            : 200
+
+        res.status(statusCode).json({
           message: faker.word.words({ count: { min: 2, max: 4 } }),
         })
       } catch (err: any) {
