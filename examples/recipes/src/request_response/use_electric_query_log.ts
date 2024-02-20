@@ -1,7 +1,6 @@
 import { useMemo } from 'react'
 import { useElectric } from '../electric/ElectricWrapper'
 import { useLiveQuery } from 'electric-sql/react'
-import { HttpMethod } from './use_electric_query'
 
 export interface PaginationState {
   pageSize: number
@@ -19,7 +18,7 @@ export const useElectricQueryLog = ({
 }) => {
   const { db } = useElectric()!
 
-  // filter for both request and response times between the given dates
+  // Filter for both request and response times between the given dates
   const whereClause = useMemo(() => {
     const safeStartTime = Math.round((startDate?.getTime() ?? 0) / 1000)
     const safeEndTime = Math.round((endDate?.getTime() ?? Number.MAX_SAFE_INTEGER) / 1000)
@@ -34,13 +33,13 @@ export const useElectricQueryLog = ({
   // Retrieve specified request logs
   const { results: requestLogs } = useLiveQuery<
     {
-      requestTime: Date
+      requestTime: string
       path: string
-      method: HttpMethod
+      method: string
       payload?: string
       processing: boolean
       cancelled: boolean
-      responseTime?: Date
+      responseTime?: string
       responseStatus?: number
       responseData?: string
     }[]
