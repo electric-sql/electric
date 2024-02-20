@@ -1,7 +1,7 @@
 ---
 title: Chat Room
 description: Interactive chat room with offline resilience
-sidebar_position: 50
+sidebar_position: 60
 ---
 
 import useBaseUrl from '@docusaurus/useBaseUrl'

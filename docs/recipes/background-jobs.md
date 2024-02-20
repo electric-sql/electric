@@ -1,7 +1,7 @@
 ---
 title: Background Jobs
 description: Event-sourcing pattern for scheduling back-end jobs
-sidebar_position: 60
+sidebar_position: 70
 ---
 
 import useBaseUrl from '@docusaurus/useBaseUrl'

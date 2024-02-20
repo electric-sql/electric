@@ -1,7 +1,7 @@
 ---
 title: Data Viewer
 description: Fast queriable table and chart views
-sidebar_position: 70
+sidebar_position: 30
 ---
 
 import useBaseUrl from '@docusaurus/useBaseUrl'
