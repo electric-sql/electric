@@ -6,8 +6,7 @@ CREATE TABLE IF NOT EXISTS requests (
   method TEXT NOT NULL,
   data JSONB,
   processing BOOLEAN NOT NULL,
-  cancelled BOOLEAN NOT NULL
-
+  cancelled BOOLEAN NOT NULLxw
 );
 
 -- Create a responses table referencing requests.
@@ -27,7 +26,7 @@ ALTER TABLE responses ENABLE ELECTRIC;
 /* Set up the triggers that will notify the appropriate APIs and perform
  * the work required to process incoming requests on the requests table
  * and generate responses to be added to the responses table, which will
- * in turn sync with the client and simulate an request/response pattern
+ * in turn sync with the client and emulate the request/response pattern
  */
 
 -- When request is received, set it as processing notify API to process it
