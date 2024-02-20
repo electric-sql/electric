@@ -1,8 +1,6 @@
+import 'global-jsdom/register'
 // https://react-hooks-testing-library.com/usage/advanced-hooks#context
 import anyTest, { TestFn } from 'ava'
-
-import browserEnv from '@ikscodes/browser-env'
-browserEnv()
 
 import React from 'react'
 import { EventEmitter } from 'events'
@@ -29,7 +27,7 @@ import { SatelliteOpts } from '../../src/satellite/config'
 import { Notifier } from '../../src/notifiers'
 import { createQueryResultSubscribeFunction } from '../../src/util/subscribe'
 
-const assert = (stmt: any, msg = 'Assertion failed.'): void => {
+const assert = (stmt: unknown, msg = 'Assertion failed.'): void => {
   if (!stmt) {
     throw new Error(msg)
   }

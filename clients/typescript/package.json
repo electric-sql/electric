@@ -57,6 +57,7 @@
     "./node": "./dist/drivers/better-sqlite3/index.js",
     "./react": "./dist/frameworks/react/index.js",
     "./react-native": "./dist/drivers/react-native-sqlite-storage/index.js",
+    "./vuejs": "./dist/frameworks/vuejs/index.js",
     "./wa-sqlite": "./dist/drivers/wa-sqlite/index.js",
     "./config": "./dist/config/index.js",
     "./debug": "./dist/util/debug/index.js",
@@ -93,6 +94,9 @@
       ],
       "react-native": [
         "./dist/drivers/react-native-sqlite-storage/index.d.ts"
+      ],
+      "vuejs": [
+        "./dist/frameworks/vuejs/index.d.ts"
       ],
       "wa-sqlite": [
         "./dist/drivers/wa-sqlite/index.d.ts"
@@ -181,7 +185,6 @@
   },
   "devDependencies": {
     "@electric-sql/prisma-generator": "workspace:*",
-    "@ikscodes/browser-env": "^1.0.0",
     "@testing-library/react": "^13.4.0",
     "@types/base-64": "^1.0.0",
     "@types/better-sqlite3": "7.6.3",
@@ -205,12 +208,15 @@
     "@types/ws": "^8.5.3",
     "@typescript-eslint/eslint-plugin": "^5.34.0",
     "@typescript-eslint/parser": "^5.34.0",
+    "@vue/test-utils": "^2.4.4",
     "ava": "^4.3.1",
     "concurrently": "^8.2.2",
     "eslint": "^8.22.0",
     "expo-sqlite": "^13.0.0",
     "glob": "^10.3.10",
+    "global-jsdom": "24.0.0",
     "husky": "^8.0.3",
+    "jsdom": "24.0.0",
     "lint-staged": "^13.1.0",
     "memorystorage": "^0.12.0",
     "nodemon": "^3.0.2",
@@ -224,6 +230,8 @@
     "tsx": "^4.1.1",
     "typeorm": "^0.3.9",
     "typescript": "^5.3.3",
+    "vue": "^3.4.19",
+    "vue-tsc": "^1.8.27",
     "wa-sqlite": "rhashimoto/wa-sqlite#semver:^0.9.8",
     "web-worker": "^1.2.0"
   },
@@ -236,6 +244,7 @@
     "react-native": ">= 0.68.0",
     "react-native-sqlite-storage": ">= 6.0.0",
     "typeorm": ">=0.3.0",
+    "vue": ">=3.0.0",
     "wa-sqlite": "rhashimoto/wa-sqlite#semver:^0.9.8"
   },
   "peerDependenciesMeta": {
@@ -246,6 +255,9 @@
       "optional": true
     },
     "expo-sqlite": {
+      "optional": true
+    },
+    "vue": {
       "optional": true
     },
     "react": {
