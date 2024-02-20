@@ -1,7 +1,7 @@
 .DS_Store
 .expo/
 node_modules/
-src/generated/
+# src/generated/
 dist/
 npm-debug.*
 *.jks
