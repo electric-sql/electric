@@ -43,6 +43,12 @@ test('assert that all expected env vars are options for CLI', (t) => {
       `Environment variable ${expectedEnvVars[i]} is missing from CLI`
     )
   }
+
+  t.deepEqual(
+    Object.keys(configOptions).length,
+    expectedEnvVars.length,
+    'CLI options do not match expected environment variables'
+  )
 })
 
 test('assert Electric is in logical_replication mode by default', (t) => {
