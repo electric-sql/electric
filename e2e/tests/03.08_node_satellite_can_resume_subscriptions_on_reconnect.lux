@@ -47,7 +47,7 @@
     !await client.stop(db)
     ?$node
     [progress resuming client]
-    [invoke electrify_db "originalDb" "electric_1" 5133 "[]"]
+    [invoke electrify_db "originalDb" "electric_1" 5133 "[]" true]
     ?$node
 
 [shell pg_1]
