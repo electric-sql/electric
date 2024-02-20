@@ -9,10 +9,12 @@ import path from 'path'
 import ora from 'ora'
 import portUsed from 'tcp-port-used'
 import prompt from 'prompt'
+import { TemplateType, getTemplateDirectory, validTemplates } from './templates'
 
 // Regex to check that a number is between 0 and 65535
 const portRegex =
   /^([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$/
+
 const spinner = ora('Validating arguments').start()
 
 const error = (err: string) => {
@@ -20,17 +22,19 @@ const error = (err: string) => {
   console.error(
     '\x1b[31m',
     err +
-      '\nnpx create-electric-app [<app-name>] [--electric-port <port>] [--electric-proxy-port <port>]',
+      '\nnpx create-electric-app [<app-name>] [--template <template>] [--electric-port <port>] [--electric-proxy-port <port>]',
     '\x1b[0m'
   )
   process.exit(1)
 }
 
+const defaultTemplateType = 'react'
 const defaultElectricPort = 5133
 const defaultElectricProxyPort = 65432
 
 let projectName = process.argv[2]
 let args = process.argv.slice(3)
+let templateType: TemplateType = defaultTemplateType
 let electricPort = defaultElectricPort
 let electricProxyPort = defaultElectricProxyPort
 
@@ -49,6 +53,10 @@ while (args.length > 0) {
   }
 
   switch (flag) {
+    case '--template':
+      checkValue()
+      templateType = parseTemplateType(value)
+      break
     case '--electric-port':
       checkValue()
       electricPort = parsePort(value)
@@ -87,6 +95,13 @@ if (typeof projectName === 'undefined') {
         message: invalidAppNameMessage,
         required: true,
       },
+      template: {
+        description: `Template to use (${validTemplates.join(', ')})`,
+        type: 'string',
+        pattern: new RegExp(`^(${validTemplates.join('|')})$`),
+        message: `Template should be one of: ${validTemplates.join(', ')}.`,
+        default: templateType,
+      },
       electricPort: {
         description: 'Port on which to run Electric',
         type: 'number',
@@ -101,11 +116,17 @@ if (typeof projectName === 'undefined') {
         message: 'Port should be between 0 and 65535.',
         default: electricProxyPort,
       },
-    }
-  })) as { appName: string, electricPort: number, electricProxyPort: number }
+    },
+  })) as {
+    appName: string
+    template: TemplateType
+    electricPort: number
+    electricProxyPort: number
+  }
 
   spinner.start()
   projectName = userInput.appName
+  templateType = userInput.template
   electricPort = userInput.electricPort
   electricProxyPort = userInput.electricProxyPort
 }
@@ -133,9 +154,16 @@ await fs.mkdir(projectDir, { recursive: true })
 
 // Copy the app template to the project's directory
 const thisDir = path.dirname(fileURLToPath(import.meta.url))
-const templateDir = path.resolve(thisDir, '..', 'template')
+const templateDir = path.resolve(
+  thisDir,
+  '..',
+  getTemplateDirectory(templateType)
+)
 await fs.cp(templateDir, projectDir, { recursive: true })
-await fs.rename(path.join(projectDir, 'dot_gitignore'), path.join(projectDir, '.gitignore'))
+await fs.rename(
+  path.join(projectDir, 'dot_gitignore'),
+  path.join(projectDir, '.gitignore')
+)
 
 // read package.json file and parse it as JSON
 // we could import it but then we get a warning
@@ -265,4 +293,14 @@ function parsePort(port: string): number {
     error(`Invalid port '${port}. Port should be between 0 and 65535.'`)
   }
   return Number.parseInt(port)
+}
+
+function parseTemplateType(templateType: string): TemplateType {
+  if (!(validTemplates as unknown as string[]).includes(templateType)) {
+    error(
+      `Invalid template type '${templateType}'. ` +
+        `Must be one of: ${validTemplates.join(', ')}`
+    )
+  }
+  return templateType as TemplateType
 }
