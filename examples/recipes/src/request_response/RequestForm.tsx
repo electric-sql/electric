@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { RequestFormView } from './RequestFormView'
-import { RequestResultView } from './RequestResultView'
+import { RequestFormView } from './components/RequestFormView'
+import { RequestResultView } from './components/RequestResultView'
 import { useElectricQuery, HttpMethod } from './use_electric_query'
 
 const paths = ['/health', '/user/activities', '/payments', '/contacts/new']
@@ -20,8 +20,9 @@ export const RequestForm = () => {
         paths={paths}
         onSend={(method, path, payload) => {
           setRequestParams({ method, path, payload })
-          // refreshing to allow multiple submissions - otherwise
-          // request will only be sent once per unique specification
+          // refreshing here to allow re-submissions - otherwise
+          // request will only be executed once per unique
+          // method-path-payload combination
           refresh()
         }}
       />

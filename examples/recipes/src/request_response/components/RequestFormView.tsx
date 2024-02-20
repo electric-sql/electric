@@ -1,6 +1,6 @@
 import { Box, Select, MenuItem, TextField, Typography, Fade, Button } from '@mui/material'
 import { useEffect, useMemo, useState } from 'react'
-import { HttpMethod } from './use_electric_query'
+import { HttpMethod } from '../use_electric_query'
 
 export const RequestFormView = ({
   paths,
