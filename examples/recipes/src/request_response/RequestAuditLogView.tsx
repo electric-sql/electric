@@ -9,8 +9,8 @@ import {
   TableCell,
   TableBody,
 } from '@mui/material'
-import { HttpMethod } from './utilities'
 import { ReactNode } from 'react'
+import { HttpMethod } from './use_electric_query'
 
 export interface RequestResponseRow extends Record<string, unknown> {
   requestTime: Date

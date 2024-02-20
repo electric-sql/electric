@@ -6,11 +6,13 @@ export const RequestFormView = ({
   paths,
   methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   initialPayload,
+  disableOnSubmit = false,
   onSend,
 }: {
   paths: string[]
   methods?: HttpMethod[]
   initialPayload?: string
+  disableOnSubmit?: boolean
   onSend: (method: HttpMethod, path: string, payload: string | null) => void
 }) => {
   const [submitted, setSubmitted] = useState(false)
@@ -66,7 +68,7 @@ export const RequestFormView = ({
         </Fade>
       </Box>
       <Button
-        disabled={submitted}
+        disabled={disableOnSubmit && submitted}
         variant="outlined"
         sx={{ px: 4 }}
         onClick={() => handleSend(method, path, includePayload ? payload : null)}>

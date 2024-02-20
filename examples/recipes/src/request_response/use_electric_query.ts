@@ -18,6 +18,7 @@ export const useElectricQuery = ({
   const { db } = useElectric()!
 
   const [requestId, setRequestId] = useState('')
+  const [refreshCounter, setRefreshCounter] = useState(0)
 
   useEffect(() => {
     const newRequestId = genUUID()
@@ -33,7 +34,7 @@ export const useElectricQuery = ({
         cancelled: false,
       },
     })
-  }, [db.requests, path, method, payload])
+  }, [db.requests, path, method, payload, refreshCounter])
 
   const request = useLiveQuery(
     db.requests.liveUnique({
@@ -50,5 +51,6 @@ export const useElectricQuery = ({
     lastUpdatedAt: response?.timestamp,
     isPending: !response && request?.processing == false,
     isFetching: request?.processing == true,
+    refresh: () => setRefreshCounter((c) => (c + 1) % 2),
   }
 }
