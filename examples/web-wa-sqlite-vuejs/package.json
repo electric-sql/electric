@@ -20,7 +20,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "electric-sql": "file:./electric-sql-with-vue.tgz",
+    "electric-sql": "^0.9.3",
     "vue": "^3.4.19",
     "wa-sqlite": "rhashimoto/wa-sqlite#semver:^0.9.8"
   },
