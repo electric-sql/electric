@@ -1,25 +1,34 @@
 import { Box, Select, MenuItem, TextField, Typography, Fade, Button } from '@mui/material'
-import { HttpMethod } from './utilities'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { HttpMethod } from './use_electric_query'
 
 export const RequestFormView = ({
-  methods,
   paths,
+  methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   initialPayload,
   onSend,
 }: {
-  methods: HttpMethod[]
   paths: string[]
+  methods?: HttpMethod[]
   initialPayload?: string
   onSend: (method: HttpMethod, path: string, payload: string | null) => void
 }) => {
-  const [method, setMethod] = useState(HttpMethod.POST)
+  const [submitted, setSubmitted] = useState(false)
+  const [method, setMethod] = useState<HttpMethod>('POST')
   const [path, setPath] = useState(paths[0])
   const [payload, setPayload] = useState<string | null>(initialPayload ?? null)
   const includePayload = useMemo(
-    () => method == HttpMethod.POST || method == HttpMethod.PUT || method == HttpMethod.PATCH,
+    () => method == 'POST' || method == 'PUT' || method == 'PATCH',
     [method],
   )
+  const handleSend = (method: HttpMethod, path: string, payload: string | null) => {
+    onSend(method, path, payload)
+    setSubmitted(true)
+  }
+
+  // reset submission state on change
+  useEffect(() => setSubmitted(false), [method, path, payload])
+
   return (
     <Box display="flex" flexDirection="row" justifyContent="space-between">
       <Box
@@ -57,9 +66,10 @@ export const RequestFormView = ({
         </Fade>
       </Box>
       <Button
+        disabled={submitted}
         variant="outlined"
         sx={{ px: 4 }}
-        onClick={() => onSend(method, path, includePayload ? payload : null)}>
+        onClick={() => handleSend(method, path, includePayload ? payload : null)}>
         Send
       </Button>
     </Box>
