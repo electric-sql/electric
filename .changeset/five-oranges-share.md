@@ -3,4 +3,4 @@
 "electric-sql": patch
 ---
 
-Handle JWT expiration on Electric and on the TS client, support renewal of JWT, and support reconnecting after JWT expires.
+Handle JWT expiration on the TS client, and support reconnecting after JWT expires.
