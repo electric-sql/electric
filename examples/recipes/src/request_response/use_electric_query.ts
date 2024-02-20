@@ -17,7 +17,10 @@ export const useElectricQuery = ({
 }) => {
   const { db } = useElectric()!
 
+  // Keep track of the active request ID to match to response
   const [requestId, setRequestId] = useState('')
+
+  // Arbitrary counter to allow re-submitting the same request
   const [refreshCounter, setRefreshCounter] = useState(0)
 
   useEffect(() => {
@@ -36,6 +39,7 @@ export const useElectricQuery = ({
     })
   }, [db.requests, path, method, payload, refreshCounter])
 
+  // Reactive query for the active request/response pair
   const request = useLiveQuery(
     db.requests.liveUnique({
       include: { responses: true },
