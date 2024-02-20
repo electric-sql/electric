@@ -1,5 +1,7 @@
 import createPool, { sql } from '@databases/pg'
-import { DATABASE_URL } from './util.cjs'
+
+const DATABASE_URL =
+  process.env.ELECTRIC_DATABASE_URL || process.env.DATABASE_URL
 
 console.info(`Connecting to Postgres..`)
 const db = createPool(DATABASE_URL)
