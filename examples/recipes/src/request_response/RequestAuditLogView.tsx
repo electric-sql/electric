@@ -8,20 +8,14 @@ import {
   TableRow,
   TableCell,
   TableBody,
+  TableFooter,
+  TablePagination,
 } from '@mui/material'
+import TablePaginationActions from '@mui/material/TablePagination/TablePaginationActions'
 import { ReactNode } from 'react'
-import { HttpMethod } from './use_electric_query'
 
 export interface RequestResponseRow extends Record<string, unknown> {
-  requestTime: Date
-  path: string
-  method: HttpMethod
-  payload?: string
   processing: boolean
-  cancelled: boolean
-  responseTime?: Date
-  responseStatus?: number
-  responseData?: string
 }
 
 interface ColumnDef {
@@ -29,6 +23,11 @@ interface ColumnDef {
   width?: number
   accessorKey: string
   render?: (row: RequestResponseRow) => ReactNode
+}
+
+interface PaginationState {
+  pageIndex: number
+  pageSize: number
 }
 
 const columns: ColumnDef[] = [
@@ -70,7 +69,17 @@ const columns: ColumnDef[] = [
   },
 ]
 
-export const RequestAuditLogView = ({ rows }: { rows: RequestResponseRow[] }) => {
+export const RequestAuditLogView = ({
+  rows = [],
+  totalNumberOfRows,
+  pagination,
+  onPaginationChange,
+}: {
+  rows?: RequestResponseRow[]
+  totalNumberOfRows?: number
+  pagination: PaginationState
+  onPaginationChange: (pagination: PaginationState) => void
+}) => {
   return (
     <Box>
       <Typography variant="h5" sx={{ p: 2 }}>
@@ -105,6 +114,30 @@ export const RequestAuditLogView = ({ rows }: { rows: RequestResponseRow[] }) =>
               </TableRow>
             ))}
           </TableBody>
+
+          <TableFooter>
+            <TableRow>
+              <TablePagination
+                rowsPerPageOptions={[5, 10, 20, 50, 100]}
+                count={totalNumberOfRows ?? rows.length}
+                rowsPerPage={pagination.pageSize}
+                page={pagination.pageIndex}
+                onPageChange={(_, newPageIndex) =>
+                  onPaginationChange({
+                    ...pagination,
+                    pageIndex: newPageIndex,
+                  })
+                }
+                onRowsPerPageChange={(event) =>
+                  onPaginationChange({
+                    pageIndex: 0,
+                    pageSize: parseInt(event.target.value, 10),
+                  })
+                }
+                ActionsComponent={TablePaginationActions}
+              />
+            </TableRow>
+          </TableFooter>
         </Table>
       </TableContainer>
     </Box>
