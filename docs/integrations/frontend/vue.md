@@ -37,38 +37,32 @@ We provide this dynamic API rather than static `provideElectric` and `injectElec
 
 ```vue
 // ElectricProvider.vue
-<script lang="ts">
-import { computed, defineComponent, onMounted, shallowRef } from 'vue'
+<script lang="ts" setup>
+import { onMounted, shallowRef } from 'vue'
 import { ElectricDatabase, electrify } from 'electric-sql/wa-sqlite'
 import { insecureAuthToken } from 'electric-sql/auth'
 import { provideElectric } from './electric'
 import { Electric, schema } from './generated/client'
-export default defineComponent({
-  setup() {
-    // use shallow reference for the client as deep reactivity is not
-    // necessary and likely to cause issues
-    const electricRef = shallowRef<Electric>()
-    const showChild = computed(() => electricRef.value !== undefined)
 
-    onMounted(async () => {
-      const config = { auth: { token: insecureAuthToken() } }
-      const conn = await ElectricDatabase.init('electric.db')
-      const electric = await electrify(conn, schema, config)
+// use shallow reference for the client as deep reactivity is not
+// necessary and likely to cause issues
+const electric = shallowRef<Electric>()
 
-      // update the reference with client instance
-      electricRef.value = electric
-    })
+onMounted(async () => {
+  const config = { auth: { token: insecureAuthToken() } }
+  const conn = await ElectricDatabase.init('electric.db')
+  const client = await electrify(conn, schema, config)
 
-    // provide the client to the rest of the app
-    provideElectric(electricRef)
-
-    return { showChild }
-  },
+  // update the reference with client instance
+  electric.value = client
 })
+
+// provide the client to the rest of the app
+provideElectric(electric)
 </script>
 
 <template>
-  <div v-if="showChild">
+  <div v-if="electric">
     <slot />
   </div>
 </template>
@@ -77,26 +71,19 @@ export default defineComponent({
 With a `provideElectric` call in a parent component in place, you can then access the `electric` client instance using the `injectElectric` method, e.g.:
 
 ```vue
-<script lang="ts">
-import { defineComponent, ref } from 'vue'
+<script lang="ts" setup>
+import { ref } from 'vue'
 import { injectElectric } from './electric'
 
-export default defineComponent({
-  setup() {
-    const { db } = injectElectric()!
-    const value = ref()
+const { db } = injectElectric()!
+const value = ref()
 
-    const generate = async () => {
-      const { newValue } = await db.rawQuery({
-        sql: 'select random() as newValue'
-      })
-
-      value.value = newValue
-    }
-      
-    return { value }
-  },
-});
+const generate = async () => {
+  const { newValue } = await db.rawQuery({
+    sql: 'select random() as newValue'
+  })
+  value.value = newValue
+}
 </script>
 
 <template>
@@ -114,37 +101,30 @@ export default defineComponent({
 `useLiveQuery` sets up a live query (aka a dynamic or reactive query). This takes query function returned by one of the `db.live*` methods and keeps the results in sync whenever the relevant data changes.
 
 ```vue
-<script lang="ts">
-import { defineComponent, computed } from 'vue'
+<script lang="ts" setup>
+import { computed } from 'vue'
 import { useLiveQuery } from 'electric-sql/vuejs'
 import { injectElectric } from './electric'
 
-export default defineComponent({
-  setup() {
-    const { db } = useElectric()!
+const { db } = useElectric()!
 
-    // Use the query builder API.
-    const { results } = useLiveQuery(
-      db.items.liveMany()
-    )
+// Use the query builder API.
+const { results } = useLiveQuery(db.items.liveMany())
 
-    // Use the raw SQL API.
-    const { results: countResults } = useLiveQuery(
-      db.liveRawQuery({
-        sql: 'select count(*) from items'
-      })
-    )
+// Use the raw SQL API.
+const { results: countResults } = useLiveQuery(
+  db.liveRawQuery({
+    sql: 'select count(*) from items'
+  })
+)
 
-    const items: Item[] = computed(() => results ?? [])
-    
-    const count: number = computed(
-      () => countResults.value !== undefined 
-        ? countResults.value[0].count 
-        : items.value.length
-    )
-    return { items, count }
-  },
-});
+const items: Item[] = computed(() => results ?? [])
+
+const count: number = computed(
+  () => countResults.value !== undefined 
+    ? countResults.value[0].count 
+    : items.value.length
+)
 </script>
 
 <template>
@@ -178,52 +158,44 @@ See the implementation in [frameworks/vuejs/reactive/useLiveQuery.ts](https://gi
 
 #### Query dependencies
 
-The live query is always re-run when any of the data in any of the tables it depends on changes. When using the static form of `useLiveQuery` that takes a live query as an argument, the results will not be reactive with respect to the query parameters.
+The live query is always re-run when any of the data in any of the tables it depends on changes. When using the static form of `useLiveQuery` that takes a live query as an argument, the results will _not_ be reactive with respect to the query parameters.
 
 To make the results reactive with respect to the query parameters, you can use the dynamic form of `useLiveQuery` that takes a function that returns a live query, or a reference to a live query. Under the hood, the live query will be recomputed when any of the query parameters change by observing the resulting query string. This means that the query function will be re-run when any of the parameters change, e.g.:
 
 ```ts
-export default defineComponent({
-  setup() {
-    const status = ref(true)
+const status = ref(true)
 
-    const { results } = useLiveQuery(
-      () => db.projects.liveMany({
-        where: { status: status }
-      })
-    )
+const { results } = useLiveQuery(
+  () => db.projects.liveMany({
+    where: { status: status }
+  })
+)
 
-    // `results` will be recomputed on data changes
-    // and anytime the `status` flag changes
+// `results` will be recomputed on data changes
+// and anytime the `status` flag changes
 
-    // ...
-  }
-})
+// ...
 ```
 
 With this API, any change to the query dependencies will cause it to recompute. You can exert more control over this recomputation by passing an explicit list of [Watch Sources](https://vuejs.org/guide/essentials/watchers.html#watch-source-types) as a second argument to `useLiveQuery`, such that the query is recomputed when any of the provided watch sources changes:
 
 ```ts
-export default defineComponent({
-  setup() {
-    const status = ref(true)
-    const filter = ref('@example.com')
+const status = ref(true)
+const filter = ref('@example.com')
 
-    const { results } = useLiveQuery(
-      () => db.projects.liveMany({
-        where: {
-          status: status,
-          email: { endsWith: filter }
-        }
-      }),
-      [ status ]
-    )
+const { results } = useLiveQuery(
+  () => db.projects.liveMany({
+    where: {
+      status: status,
+      email: { endsWith: filter }
+    }
+  }),
+  [ status ]
+)
 
-    // `results` will be recomputed on data changes
-    // and anytime the `status` flag changes, but not
-    // when the `filter` changes
+// `results` will be recomputed on data changes
+// and anytime the `status` flag changes, but not
+// when the `filter` changes
 
-    // ...
-  }
-})
+// ...
 ```
