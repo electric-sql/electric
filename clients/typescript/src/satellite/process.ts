@@ -673,15 +673,15 @@ export class SatelliteProcess implements Satellite {
   async _handleOrThrowClientError(error: SatelliteError): Promise<void> {
     if (error.code === SatelliteErrorCode.AUTH_EXPIRED) {
       Log.warn('Connection closed by Electric because the JWT expired.')
-      return this.disconnect(
-        new SatelliteError(
+      return this.disconnect({
+        error: new SatelliteError(
           error.code,
           'Connection closed by Electric because the JWT expired.'
-        )
-      )
+        ),
+      })
     }
 
-    this.disconnect(error)
+    this.disconnect({ error })
 
     if (isThrowable(error)) {
       throw error
@@ -744,7 +744,12 @@ export class SatelliteProcess implements Satellite {
       retry: this._connectRetryHandler,
     }
 
+    const prom = this.initializing.waitOn()
+
     await backOff(async () => {
+      if (this.initializing?.finished()) {
+        return prom
+      }
       await this._connect()
       await this._startReplication()
       this._subscribePreviousShapeRequests()
@@ -760,10 +765,12 @@ export class SatelliteProcess implements Satellite {
             SatelliteErrorCode.CONNECTION_FAILED_AFTER_RETRY,
             `Failed to connect to server after exhausting retry policy. Last error thrown by server: ${e.message}`
           )
-      this.disconnect(error.message)
+
+      this.disconnect(error)
       this.initializing?.reject(error)
-      throw error
     })
+
+    return prom
   }
 
   _subscribePreviousShapeRequests(): void {
@@ -818,9 +825,29 @@ export class SatelliteProcess implements Satellite {
     this._setAuthState(authState)
   }
 
-  disconnect(error?: SatelliteError): void {
+  cancelConnectionWaiter(error: SatelliteError): void {
+    if (this.initializing && !this.initializing.finished()) {
+      this.initializing?.reject(error)
+    }
+  }
+
+  disconnect(opts?: {
+    error?: SatelliteError
+    issuedByClient?: boolean
+  }): void {
+    const error =
+      opts?.error ??
+      (opts?.issuedByClient
+        ? new SatelliteError(
+            SatelliteErrorCode.CONNECTION_CANCELLED_BY_DISCONNECT,
+            `Connection cancelled by 'disconnect'`
+          )
+        : undefined)
     this.client.disconnect()
-    this._notifyConnectivityState('disconnected', error)
+    this._notifyConnectivityState('disconnected', opts?.error)
+    if (opts?.issuedByClient) {
+      this.cancelConnectionWaiter(error!)
+    }
   }
 
   async _startReplication(): Promise<void> {

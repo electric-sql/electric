@@ -110,9 +110,16 @@ test('load metadata', async (t) => {
 test('set persistent client id', async (t) => {
   const { satellite, authState, token } = t.context
 
-  await startSatellite(satellite, authState, token)
+  const { connectionPromise } = await startSatellite(
+    satellite,
+    authState,
+    token
+  )
   const clientId1 = satellite._authState!.clientId
   t.truthy(clientId1)
+
+  await connectionPromise
+
   await satellite.stop()
 
   await startSatellite(satellite, authState, token)
@@ -1970,7 +1977,7 @@ test.serial('connection backoff success', async (t) => {
   t.plan(3)
   const { client, satellite } = t.context
 
-  client.disconnect()
+  client.shutdown()
 
   const retry = (_e: any, a: number) => {
     if (a > 0) {
@@ -1987,6 +1994,27 @@ test.serial('connection backoff success', async (t) => {
       (p) => p?.catch(() => t.pass())
     )
   )
+})
+
+test.serial('connection cancelled on disconnect', async (t) => {
+  const { client, satellite, authState, token } = t.context
+  client.shutdown() // such that satellite can't connect to Electric and will keep retrying
+  const { connectionPromise } = await startSatellite(
+    satellite,
+    authState,
+    token
+  )
+
+  // We expect the connection to be cancelled
+  const prom = t.throwsAsync(connectionPromise, {
+    code: SatelliteErrorCode.CONNECTION_CANCELLED_BY_DISCONNECT,
+  })
+
+  // Disconnect Satellite
+  satellite.disconnect({ issuedByClient: true })
+
+  // Await until the connection promise is rejected
+  await prom
 })
 
 // check that performing snapshot doesn't throw without resetting the performing snapshot assertions

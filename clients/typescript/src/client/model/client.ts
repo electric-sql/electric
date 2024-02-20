@@ -121,18 +121,7 @@ export class ElectricClient<
   }
 
   disconnect(): void {
-    this.satellite.disconnect()
-  }
-
-  /**
-   * Renews the auth token before it expires.
-   * Renewing is only possible while the existing auth token is still valid.
-   * The token's sub claim must be the same as the one used to first authenticate.
-   * @param token - The renewed JWT.
-   * @throws If renewal fails.
-   */
-  async renew(token: string): Promise<void> {
-    await this.satellite.authenticate(token)
+    this.satellite.disconnect({ issuedByClient: true })
   }
 
   // Builds the DAL namespace from a `dbDescription` object

@@ -130,6 +130,7 @@ export function emptyPromise<T = void>(): PromiseWithResolvers<T> {
 }
 
 export type Waiter = {
+  promise: Promise<void>
   waitOn: () => Promise<void>
   resolve: () => Promise<void>
   reject: (error: SatelliteError) => Promise<void>
@@ -142,6 +143,8 @@ export function getWaiter(): Waiter {
   let finished = false
 
   return {
+    promise: promise,
+
     waitOn: async () => {
       waiting = true
       await promise
