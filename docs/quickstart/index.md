@@ -74,19 +74,6 @@ ELECTRIC GRANT ALL
   TO ANYONE;
 ```
 
-### Authenticate
-
-[Authenticate](../usage/auth/index.md) the local app with the replication protocol using a JSON Web Token:
-
-```tsx
-const config = {
-  url: "http://localhost:5133",
-  auth: {
-    token: '<your JWT>'
-  }
-}
-```
-
 ### Instantiate
 
 Wrap your [SQLite driver](../integrations/drivers/index.md) with a type-safe, schema-aware [database Client](../usage/data-access/client.md):
@@ -95,8 +82,19 @@ Wrap your [SQLite driver](../integrations/drivers/index.md) with a type-safe, sc
 import { electrify, ElectricDatabase } from 'electric-sql/wa-sqlite'
 import { schema } from './generated/client'
 
+const config = {
+  url: "http://localhost:5133"
+}
 const conn = await ElectricDatabase.init('my.db', '')
-const { db } = await electrify(conn, schema, config)
+const electric = await electrify(conn, schema, config)
+```
+
+### Connect and authenticate
+
+Connect to Electric and [authenticate](../usage/auth/index.md) the local app with the replication protocol using a JSON Web Token:
+
+```tsx
+await electric.connect('<your JWT>')
 ```
 
 ### Sync data
@@ -104,6 +102,7 @@ const { db } = await electrify(conn, schema, config)
 Sync data into the local database using [Shapes](../usage/data-access/shapes.md):
 
 ```tsx
+const db = electric.db
 const shape = await db.items.sync({
   where: {
     // ... clauses

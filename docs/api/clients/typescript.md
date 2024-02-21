@@ -36,7 +36,7 @@ const config = {
 }
 const conn = await ElectricDatabase.init('electric.db', '')
 const electric = await electrify(conn, schema, config)
-const token = await insecureAuthToken({user_id: 'dummy'})
+const token = insecureAuthToken({user_id: 'dummy'})
 await electric.connect(token)
 ```
 

@@ -12,16 +12,12 @@ ElectricSQL provides a JSON Web Token based authentication mechanism for [client
 
 Your application must generate a [valid JWT](./token.md). This must have at least a `sub` claim (formerly `user_id`), which should be a non-empty string matching the primary key UUID of the authenticated user.
 
-Pass this JWT as a string value to the [`electrify`](../../api/clients/typescript.md) function when [instantiating your client](../data-access/client.md), e.g.:
+Pass this JWT as a string value to the [`connect`](../../api/clients/typescript.md) function after [instantiating your client](../data-access/client.md), e.g.:
 
 ```tsx
-const config = {
-  auth: {
-    token: '<your JWT>'
-  }
-}
-
-const { db } = await electrify(conn, schema, config)
+const electric = await electrify(conn, schema)
+const token = '<your JWT>'
+await electric.connect(token)
 ```
 
 The client uses the JWT internally to authenticate with the Electric sync service over the [Satellite protocol](../../api/satellite.md). The sync service must be [configured](../../api/service.md) with the correct authentication mode using the `AUTH_MODE` environment variable.

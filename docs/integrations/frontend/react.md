@@ -49,13 +49,10 @@ export const ElectricWrapper = ({ children }) => {
     const isMounted = true
 
     const init = async () => {
-      const config = {
-        auth: {
-          token: insecureAuthToken({user_id: 'dummy'})
-        }
-      }
       const conn = await ElectricDatabase.init('electric.db', '')
       const electric = await electrify(conn, schema, config)
+      const token = insecureAuthToken({user_id: 'dummy'})
+      await electric.connect(token)
 
       if (!isMounted) {
         return

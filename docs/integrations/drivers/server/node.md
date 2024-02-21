@@ -21,12 +21,9 @@ import { electrify } from 'electric-sql/node'
 // Import your generated database schema.
 import { schema } from './generated/client'
 
-// Define your config with at least an auth token.
-// See Usage -> Authentication for more details.
+// Define custom configuration if needed
 const config = {
-  auth: {
-    token: '...'
-  }
+  url: 'https://example.com:5133'
 }
 
 // Create the better-sqlite3 database connection. The first
@@ -41,6 +38,10 @@ conn.pragma('journal_mode = WAL')
 
 // Instantiate your electric client.
 const electric = await electrify(conn, schema, config)
+
+// Connect to Electric, passing along your authentication token
+// See Usage -> Authentication for more details.
+await electric.connect('your token')
 ```
 
 You can now use the client to read, write and sync data, e.g.:

@@ -96,18 +96,14 @@ JWTUtil.signed_auth_token(user_id, private_key)
 </TabItem>*/}
 </Tabs>
 
-You can now include this token in the [client instantiation code](../data-access/client.md) to have your client successfully authenticate with the server instance we configured above:
+You can now include this token when connecting to Electric after the [client instantiation code](../data-access/client.md) to have your client successfully authenticate with the server instance we configured above:
 
 ```tsx
 import { electrify } from 'electric-sql/wa-sqlite'
 
-const config = {
-  auth: {
-    token: 'eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiJ9.eyJ1c2VyX2lkIjoiMSIsImlhdCI6MTY4NDc0OTIxMywiZXhwIjoxNjg0NzU5MjEzfQ.dLd_bG5_VayLzTemgATu566NP3itwafMbu1zgef_8mB6VGHojczsXyh3g7QE4GM_l8kUQm9MJN7OWg8Kf-40YQ'
-  }
-}
-
-const { db } = await electrify(conn, schema, config)
+const token = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiJ9.eyJ1c2VyX2lkIjoiMSIsImlhdCI6MTY4NDc0OTIxMywiZXhwIjoxNjg0NzU5MjEzfQ.dLd_bG5_VayLzTemgATu566NP3itwafMbu1zgef_8mB6VGHojczsXyh3g7QE4GM_l8kUQm9MJN7OWg8Kf-40YQ'
+const electric = await electrify(conn, schema)
+await electric.connect(token)
 ```
 
 ## How the server validates auth tokens

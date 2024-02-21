@@ -154,7 +154,7 @@ See the sections above on [Retrieving the authentication key](#3-retrieving-the-
 
 #### Authenticating the Electric client connection
 
-Having authenticated a user, set the `session.access_token` returned by `supabase.auth.getSession()` as the value for `config.auth.token` when electrifying your database connection.
+Having authenticated a user, use the `session.access_token` returned by `supabase.auth.getSession()` as the value for the token when connecting to Electric.
 
 For example:
 
@@ -171,15 +171,14 @@ const supabase = createClient(supabaseUrl, anonKey)
 // Construct the config for Electric using the user's JWT
 const { data } = await supabase.auth.getSession()
 const config = {
-  auth: { 
-    token: data.session.access_token
-  },
   url: import.meta.env.ELECTRIC_URL,
 }
 
 // Initiate your Electric database
 const conn = await ElectricDatabase.init('myApp.db', '')
 const electric = await electrify(conn, schema, config)
+const token = data.session.access_token
+await electric.connect(token)
 ```
 
 You can see an example of this pattern in our [Checkout Example](../examples/checkout.md).

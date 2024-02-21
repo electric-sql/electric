@@ -27,12 +27,9 @@ import { electrify } from 'electric-sql/react-native'
 // Import your generated database schema.
 import { schema } from './generated/client'
 
-// Define your config with at least an auth token.
-// See Usage -> Authentication for more details.
+// Define custom configuration if needed
 const config = {
-  auth: {
-    token: '...'
-  }
+  url: 'https://example.com:5133'
 }
 
 // Enable the promise API. Note that we use the
@@ -49,6 +46,10 @@ const conn = await SQLite.openDatabase('electric.db')
 
 // Instantiate your electric client.
 const electric = await electrify(conn, schema, promisesEnabled, config)
+
+// Connect to Electric, passing along your authentication token
+// See Usage -> Authentication for more details.
+await electric.connect('your token')
 ```
 
 You can now use the client to read, write and sync data, e.g.:
