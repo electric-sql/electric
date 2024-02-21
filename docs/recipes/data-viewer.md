@@ -8,6 +8,10 @@ import useBaseUrl from '@docusaurus/useBaseUrl'
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
+import SchemaSection from './_section_schema.md'
+import DataAccessSection from './_section_data_access.md'
+import UsageSection from './_section_usage.md'
+
 import Schema from '!!raw-loader!@site/submodules/electric/examples/recipes/db/migrations/07-data_viewer_table.sql'
 import TableHook from '!!raw-loader!@site/submodules/electric/examples/recipes/src/data_viewer/use_table_data.ts'
 import ChartHook from '!!raw-loader!@site/submodules/electric/examples/recipes/src/data_viewer/use_chart_data.ts'
@@ -16,13 +20,13 @@ import ChartView from '!!raw-loader!@site/submodules/electric/examples/recipes/s
 
 TODO(msfstef): write overview
 
-## Schema
+<SchemaSection />
 
 <CodeBlock language="sql">
   {Schema}
 </CodeBlock>
 
-## Data access
+<DataAccessSection />
 
 <Tabs groupId="data-access" queryString>
   <TabItem value="use-table-data" label="useTableData">
@@ -38,7 +42,7 @@ TODO(msfstef): write overview
 </Tabs>
 
 
-## Usage
+<UsageSection />
 
 <Tabs groupId="view-component" queryString>
   <TabItem value="table-data-view" label="Table Data Viewer">

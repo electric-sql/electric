@@ -5,6 +5,11 @@ sidebar_position: 60
 ---
 
 import useBaseUrl from '@docusaurus/useBaseUrl'
+
+import SchemaSection from './_section_schema.md'
+import DataAccessSection from './_section_data_access.md'
+import UsageSection from './_section_usage.md'
+
 import Schema from '!!raw-loader!@site/submodules/electric/examples/recipes/db/migrations/06-chat_room_table.sql'
 import Hook from '!!raw-loader!@site/submodules/electric/examples/recipes/src/chat_room/use_chat_room.ts'
 import View from '!!raw-loader!@site/submodules/electric/examples/recipes/src/chat_room/ChatRoom.tsx'
@@ -14,19 +19,20 @@ Building an engaging and real-time online chat room is essential for fostering c
 With ElectricSQL, the synchronization and consistency across multiple users and devices is handled for you, allowing you to focus on building more exciting features and refining the user experience without worrying about messages being lost or arriving out of order.
 
 On top of that, the local-first approach to interactive applications means that you can build a chat room that is resilient to users having intermittent connectivity.
-## Schema
+
+<SchemaSection />
 
 <CodeBlock language="sql">
   {Schema}
 </CodeBlock>
 
-## Data access
+<DataAccessSection />
 
 <CodeBlock language="ts">
   {Hook}
 </CodeBlock>
 
-## Usage
+<UsageSection />
 
 <CodeBlock language="tsx">
   {View}

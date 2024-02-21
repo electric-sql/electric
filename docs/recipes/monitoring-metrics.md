@@ -5,6 +5,11 @@ sidebar_position: 40
 ---
 
 import useBaseUrl from '@docusaurus/useBaseUrl'
+
+import SchemaSection from './_section_schema.md'
+import DataAccessSection from './_section_data_access.md'
+import UsageSection from './_section_usage.md'
+
 import Schema from '!!raw-loader!@site/submodules/electric/examples/recipes/db/migrations/04-monitoring_table.sql'
 import Hook from '!!raw-loader!@site/submodules/electric/examples/recipes/src/monitoring_metrics/use_monitoring_metrics.ts'
 import View from '!!raw-loader!@site/submodules/electric/examples/recipes/src/monitoring_metrics/MonitoringChart.tsx'
@@ -13,20 +18,21 @@ Often times mission-critical metrics need to be monitored in real-time to ensure
 
 Electric provides a simple way to monitor metrics, with the relevant data synced locally for fast access while retaining real-time updates.
 
-## Schema
+<SchemaSection />
 
 <CodeBlock language="sql">
   {Schema}
 </CodeBlock>
 
-## Data access
+<DataAccessSection />
 
 <CodeBlock language="ts">
   {Hook}
 </CodeBlock>
 
-## Usage
+<UsageSection />
 
 <CodeBlock language="tsx">
   {View}
 </CodeBlock>
+

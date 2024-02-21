@@ -8,6 +8,10 @@ import useBaseUrl from '@docusaurus/useBaseUrl'
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
+import SchemaSection from './_section_schema.md'
+import DataAccessSection from './_section_data_access.md'
+import UsageSection from './_section_usage.md'
+
 import Schema from '!!raw-loader!@site/submodules/electric/examples/recipes/db/migrations/03-request_response_tables.sql'
 import QueryHook from '!!raw-loader!@site/submodules/electric/examples/recipes/src/request_response/use_electric_query.ts'
 import QueryLogHook from '!!raw-loader!@site/submodules/electric/examples/recipes/src/request_response/use_electric_query_log.ts'
@@ -16,13 +20,13 @@ import QueryLogView from '!!raw-loader!@site/submodules/electric/examples/recipe
 
 TODO(msfstef): write overview
 
-## Schema
+<SchemaSection />
 
 <CodeBlock language="sql">
   {Schema}
 </CodeBlock>
 
-## Data access
+<DataAccessSection />
 
 <Tabs groupId="data-access" queryString>
   <TabItem value="use-electric-query" label="useElectricQuery">
@@ -37,7 +41,7 @@ TODO(msfstef): write overview
   </TabItem>
 </Tabs>
 
-## Usage
+<UsageSection />
 
 <Tabs groupId="view-component" queryString>
   <TabItem value="request-form" label="Request Form">
