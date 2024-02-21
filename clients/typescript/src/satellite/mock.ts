@@ -114,6 +114,7 @@ export class MockSatelliteProcess implements Satellite {
   }
 
   disconnect(): void {}
+  clientDisconnect(): void {}
 
   authenticate(_token: string): Promise<void> {
     return Promise.resolve()

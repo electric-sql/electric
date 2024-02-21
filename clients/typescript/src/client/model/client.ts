@@ -121,7 +121,7 @@ export class ElectricClient<
   }
 
   disconnect(): void {
-    this.satellite.disconnect({ issuedByClient: true })
+    this.satellite.clientDisconnect()
   }
 
   // Builds the DAL namespace from a `dbDescription` object

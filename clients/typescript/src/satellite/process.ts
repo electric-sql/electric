@@ -673,15 +673,15 @@ export class SatelliteProcess implements Satellite {
   async _handleOrThrowClientError(error: SatelliteError): Promise<void> {
     if (error.code === SatelliteErrorCode.AUTH_EXPIRED) {
       Log.warn('Connection closed by Electric because the JWT expired.')
-      return this.disconnect({
-        error: new SatelliteError(
+      return this.disconnect(
+        new SatelliteError(
           error.code,
           'Connection closed by Electric because the JWT expired.'
-        ),
-      })
+        )
+      )
     }
 
-    this.disconnect({ error })
+    this.disconnect(error)
 
     if (isThrowable(error)) {
       throw error
@@ -831,23 +831,21 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  disconnect(opts?: {
-    error?: SatelliteError
-    issuedByClient?: boolean
-  }): void {
-    const error =
-      opts?.error ??
-      (opts?.issuedByClient
-        ? new SatelliteError(
-            SatelliteErrorCode.CONNECTION_CANCELLED_BY_DISCONNECT,
-            `Connection cancelled by 'disconnect'`
-          )
-        : undefined)
+  disconnect(error?: SatelliteError): void {
     this.client.disconnect()
-    this._notifyConnectivityState('disconnected', opts?.error)
-    if (opts?.issuedByClient) {
-      this.cancelConnectionWaiter(error!)
-    }
+    this._notifyConnectivityState('disconnected', error)
+  }
+
+  /**
+   * A disconnection issued by the client.
+   */
+  clientDisconnect(): void {
+    const error = new SatelliteError(
+      SatelliteErrorCode.CONNECTION_CANCELLED_BY_DISCONNECT,
+      `Connection cancelled by 'disconnect'`
+    )
+    this.disconnect(error)
+    this.cancelConnectionWaiter(error)
   }
 
   async _startReplication(): Promise<void> {

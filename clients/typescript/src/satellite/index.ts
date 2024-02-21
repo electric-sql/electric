@@ -69,7 +69,8 @@ export interface Satellite {
   setToken(token?: string): void
   hasToken(): boolean
   connectWithBackoff(): Promise<void>
-  disconnect(opts: { error?: SatelliteError; issuedByClient?: boolean }): void
+  disconnect(error?: SatelliteError): void
+  clientDisconnect(): void
   authenticate(token: string): Promise<void>
   subscribe(
     shapeDefinitions: ClientShapeDefinition[]

@@ -2011,7 +2011,7 @@ test.serial('connection cancelled on disconnect', async (t) => {
   })
 
   // Disconnect Satellite
-  satellite.disconnect({ issuedByClient: true })
+  satellite.clientDisconnect()
 
   // Await until the connection promise is rejected
   await prom
