@@ -22,6 +22,7 @@ This package includes both the regular and `next` drivers. See the [expo-sqlite 
 
 <Tabs groupId="usage" queryString>
 <TabItem value="expo-sqlite" label="expo-sqlite">
+
 ```ts
 import * as SQLite from 'expo-sqlite'
 import { electrify } from 'electric-sql/expo'
@@ -44,8 +45,11 @@ const electric = await electrify(conn, schema, config)
 // See Usage -> Authentication for more details.
 await electric.connect('your token')
 ```
+
 </TabItem>
+
 <TabItem value="expo-sqlite-next" label="expo-sqlite/next">
+
 ```ts
 import * as SQLite from 'expo-sqlite/next'
 import { electrify } from 'electric-sql/expo-next' 
@@ -68,6 +72,7 @@ const electric = await electrify(conn, schema, config)
 // See Usage -> Authentication for more details.
 await electric.connect('your token')
 ```
+
 </TabItem>
 </Tabs>
 
