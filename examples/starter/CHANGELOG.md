@@ -1,5 +1,12 @@
 # create-electric-app
 
+## 0.2.6
+
+### Patch Changes
+
+- 57bb9510: Add a .gitignore file to newly created apps such that running `git init` in them will ignore the `node_modules/` and other ephemeral directories/files by default.
+- 52e9e511: Added `--template` flag to `create-electric-app` CLI tool to choose between React and Vue templates
+
 ## 0.2.5
 
 ### Patch Changes

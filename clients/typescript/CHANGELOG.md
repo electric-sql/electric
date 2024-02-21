@@ -1,5 +1,18 @@
 # electric-sql
 
+## 0.9.3
+
+### Patch Changes
+
+- d0bc48c2: Add basic Vue.js bindings for using live queries
+- 223319ea: Add expo-sqlite/next driver to client
+- 4d193eb1: Make `--debug` flag in CLI `generate` command always retain temporary migrations folders
+- 5143a99c: Detach database electrification from connecting to the Electric sync service.
+- 11069a90: Handle JWT expiration on the TS client, and support reconnecting after JWT expires.
+- a968a636: Made connectivityState read-only and introduced a disconnect method.
+- 0ebd3e2d: Added support for Tauri SQLite driver.
+- 162d6e6e: Add row primary key infomation to the ActuallyChanged notification.
+
 ## 0.9.2
 
 ### Patch Changes
