@@ -18,18 +18,21 @@ Often times mission-critical metrics need to be monitored in real-time to ensure
 
 Electric provides a simple way to monitor metrics, with the relevant data synced locally for fast access while retaining real-time updates.
 
+## Schema
 <SchemaSection />
 
 <CodeBlock language="sql">
   {Schema}
 </CodeBlock>
 
+## Data Access
 <DataAccessSection />
 
 <CodeBlock language="ts">
   {Hook}
 </CodeBlock>
 
+## Usage
 <UsageSection />
 
 <CodeBlock language="tsx">

@@ -16,18 +16,21 @@ import View from '!!raw-loader!@site/submodules/electric/examples/recipes/src/ba
 
 TODO(msfstef): write overview
 
+## Schema
 <SchemaSection />
 
 <CodeBlock language="sql">
   {Schema}
 </CodeBlock>
 
+## Data Access
 <DataAccessSection />
 
 <CodeBlock language="ts">
   {Hook}
 </CodeBlock>
 
+## Usage
 <UsageSection />
 
 <CodeBlock language="tsx">

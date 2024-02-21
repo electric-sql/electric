@@ -20,18 +20,21 @@ With ElectricSQL, the synchronization and consistency across multiple users and 
 
 On top of that, the local-first approach to interactive applications means that you can build a chat room that is resilient to users having intermittent connectivity.
 
+## Schema
 <SchemaSection />
 
 <CodeBlock language="sql">
   {Schema}
 </CodeBlock>
 
+## Data Access
 <DataAccessSection />
 
 <CodeBlock language="ts">
   {Hook}
 </CodeBlock>
 
+## Usage
 <UsageSection />
 
 <CodeBlock language="tsx">

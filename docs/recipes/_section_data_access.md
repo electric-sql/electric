@@ -1,2 +1,1 @@
-## Data Access
 Adapt the [headless components](./how-to-use#data-access) below and enhance them with additional features.

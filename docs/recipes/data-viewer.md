@@ -20,12 +20,14 @@ import ChartView from '!!raw-loader!@site/submodules/electric/examples/recipes/s
 
 TODO(msfstef): write overview
 
+## Schema
 <SchemaSection />
 
 <CodeBlock language="sql">
   {Schema}
 </CodeBlock>
 
+## Data Access
 <DataAccessSection />
 
 <Tabs groupId="data-access" queryString>
@@ -42,6 +44,7 @@ TODO(msfstef): write overview
 </Tabs>
 
 
+## Usage
 <UsageSection />
 
 <Tabs groupId="view-component" queryString>

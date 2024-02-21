@@ -24,18 +24,21 @@ Logs are a crucial component of any software application, offering valuable insi
 
 Electric provides a simple and efficient way to view logs in your application, with the ability to filter, sort, and paginate them efficiently while also receiving them live as they are being created.
 
+## Schema
 <SchemaSection />
 
 <CodeBlock language="sql">
   {Schema}
 </CodeBlock>
 
+## Data Access
 <DataAccessSection />
 
 <CodeBlock language="ts">
   {Hook}
 </CodeBlock>
 
+## Usage
 <UsageSection />
 
 <CodeBlock language="tsx">

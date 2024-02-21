@@ -1,2 +1,1 @@
-## Usage
 Connect the [schema](#schema) and [headless components](#data-access) with your [UI library of choice](./how-to-use#usage) to get a working component.

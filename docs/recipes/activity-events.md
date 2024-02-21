@@ -19,18 +19,21 @@ import ToastView from '!!raw-loader!@site/submodules/electric/examples/recipes/s
 
 TODO(msfstef): write overview
 
+## Schema
 <SchemaSection />
 
 <CodeBlock language="sql">
   {Schema}
 </CodeBlock>
 
+## Data Access
 <DataAccessSection />
 
 <CodeBlock language="ts">
   {Hook}
 </CodeBlock>
 
+## Usage
 <UsageSection />
 
 <Tabs groupId="view-component" queryString>
