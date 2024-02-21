@@ -8,7 +8,6 @@ defmodule Electric.Satellite.Protocol do
   use Pathex
 
   import Electric.Postgres.Extension, only: [is_migration_relation: 1]
-  import Joken, only: [current_time: 0]
 
   alias Electric.Postgres.CachedWal
 
