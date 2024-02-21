@@ -52,7 +52,7 @@ const conn = SQLite.openDatabaseSync('electric.db')
 
 You can now instantiate an Electric client for the database connection and use it to read, write and sync data, e.g.:
 
-```tsx
+```ts
 // Import your generated database schema.
 import { schema } from './generated/client'
 
@@ -68,7 +68,7 @@ await electric.connect('your token')
 
 const { db } = electric
 
-const results = db.projects.findMany()
+const results = await db.projects.findMany()
 console.log(results)
 ```
 
