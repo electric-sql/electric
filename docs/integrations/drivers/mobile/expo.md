@@ -27,23 +27,10 @@ This package includes both the regular and `next` drivers. See the [expo-sqlite 
 import * as SQLite from 'expo-sqlite'
 import { electrify } from 'electric-sql/expo'
 
-// Import your generated database schema.
-import { schema } from './generated/client'
-
 // Create the expo-sqlite database connection. The first argument
 // is your database name. Changing this will create/use a new
 // local database file.
 const conn = SQLite.openDatabase('electric.db')
-
-// Define custom configuration if needed
-const config = { url: 'https://example.com:5133' }
-
-// Instantiate your electric client.
-const electric = await electrify(conn, schema, config)
-
-// Connect to Electric, passing along your authentication token
-// See Usage -> Authentication for more details.
-await electric.connect('your token')
 ```
 
 </TabItem>
@@ -54,13 +41,20 @@ await electric.connect('your token')
 import * as SQLite from 'expo-sqlite/next'
 import { electrify } from 'electric-sql/expo-next' 
 
-// Import your generated database schema.
-import { schema } from './generated/client'
-
 // Create the expo-sqlite database connection. The first argument
 // is your database name. Changing this will create/use a new
 // local database file.
 const conn = SQLite.openDatabaseSync('electric.db')
+```
+
+</TabItem>
+</Tabs>
+
+You can now instantiate an Electric client for the database connection and use it to read, write and sync data, e.g.:
+
+```tsx
+// Import your generated database schema.
+import { schema } from './generated/client'
 
 // Define custom configuration if needed
 const config = { url: 'https://example.com:5133' }
@@ -71,14 +65,7 @@ const electric = await electrify(conn, schema, config)
 // Connect to Electric, passing along your authentication token
 // See Usage -> Authentication for more details.
 await electric.connect('your token')
-```
 
-</TabItem>
-</Tabs>
-
-You can now use the client to read, write and sync data, e.g.:
-
-```tsx
 const { db } = electric
 
 const results = db.projects.findMany()
