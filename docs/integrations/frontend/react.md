@@ -49,13 +49,10 @@ export const ElectricWrapper = ({ children }) => {
     const isMounted = true
 
     const init = async () => {
-      const config = {
-        auth: {
-          token: insecureAuthToken({user_id: 'dummy'})
-        }
-      }
       const conn = await ElectricDatabase.init('electric.db', '')
-      const electric = await electrify(conn, schema, config)
+      const electric = await electrify(conn, schema)
+      const token = insecureAuthToken({user_id: 'dummy'})
+      await electric.connect(token)
 
       if (!isMounted) {
         return
@@ -267,21 +264,19 @@ function useLiveQuery<Res>(
 
 ### `useConnectivityState`
 
-`useConnectivityState` binds the current connectivity status of the Satellite replication process for the electrified database client to a state variable and provides a function to toggle it between connected and disconnected:
+`useConnectivityState` binds the current connectivity status of the Satellite replication process for the electrified database client to a state variable:
 
 ```tsx
 import React from 'react'
 import { useConnectivityState } from 'electric-sql/react'
 
-const ConnectivityControl = () => {
-  const { connectivityState, toggleConnectivityState } = useConnectivityState()
+const ConnectivityMonitor = () => {
+  const connectivityState = useConnectivityState()
 
   return (
-    <a onMouseDown={ toggleConnectivityState }>
-      <span className="capitalize">
-        { connectivityState }
-      </span>
-    </a>
+    <span className="capitalize">
+      { connectivityState }
+    </span>
   )
 }
 ```

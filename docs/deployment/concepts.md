@@ -159,15 +159,13 @@ import { schema } from './generated/client'
 
 const config = {
   url: "https://example.com:5133",
-  auth: {
-    token: '...'
-  }
 }
 
 const init = async () => {
   const conn = await ElectricDatabase.init('my.db', '/')
-
-  return electrify(conn, schema, config)
+  const electric = await electrify(conn, schema, config)
+  await electric.connect('your token')
+  return electric
 }
 ```
 
