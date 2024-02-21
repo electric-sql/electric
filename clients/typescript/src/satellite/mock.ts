@@ -17,6 +17,7 @@ import {
   StopReplicationResponse,
   OutboundStartedCallback,
   TransactionCallback,
+  SocketCloseReason,
 } from '../util/types'
 import { ElectricConfig } from '../config/index'
 
@@ -105,6 +106,10 @@ export class MockSatelliteProcess implements Satellite {
     await this.connect()
   }
 
+  authenticate(_token: string): Promise<void> {
+    return Promise.resolve()
+  }
+
   async stop(): Promise<void> {
     await sleepAsync(50)
   }
@@ -151,7 +156,7 @@ type Events = {
   [SUBSCRIPTION_DELIVERED]: (data: SubscriptionData) => void
   [SUBSCRIPTION_ERROR]: (error: SatelliteError, subscriptionId: string) => void
   outbound_started: OutboundStartedCallback
-  error: ErrorCallback
+  error: (error: SatelliteError) => void
 }
 export class MockSatelliteClient
   extends AsyncEventEmitter<Events>
@@ -282,11 +287,15 @@ export class MockSatelliteClient
     this.removeListener(SUBSCRIPTION_ERROR, errorCallback)
   }
 
-  subscribeToError(cb: ErrorCallback): void {
+  subscribeToError(cb: (error: SatelliteError) => void): void {
     this.on('error', cb)
   }
 
-  unsubscribeToError(cb: ErrorCallback): void {
+  emitSocketClosedError(ev: SocketCloseReason): void {
+    this.enqueueEmit('error', new SatelliteError(ev, 'socket closed'))
+  }
+
+  unsubscribeToError(cb: (error: SatelliteError) => void): void {
     this.removeListener('error', cb)
   }
 

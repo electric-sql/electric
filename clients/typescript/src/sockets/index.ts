@@ -1,4 +1,4 @@
-import { SatelliteError } from '../util'
+import { SatelliteError, SocketCloseReason } from '../util'
 import { LIB_VERSION } from '../version'
 
 export type Data = string | Uint8Array
@@ -6,6 +6,8 @@ export type Data = string | Uint8Array
 export interface ConnectionOptions {
   url: string
 }
+
+export const AUTH_EXPIRED_CLOSE_EVENT = 'JWT-expired'
 
 // Take major & minor version of the library
 export const PROTOCOL_VSN =
@@ -18,7 +20,7 @@ export interface Socket {
 
   onMessage(cb: (data: Data) => void): void
   onError(cb: (error: SatelliteError) => void): void
-  onClose(cb: () => void): void
+  onClose(cb: (reason: SocketCloseReason) => void): void
 
   onceConnect(cb: () => void): void
   onceError(cb: (error: SatelliteError) => void): void

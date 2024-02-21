@@ -13,6 +13,7 @@ const fatalErrors = [
   SatelliteErrorCode.INVALID_REQUEST,
   SatelliteErrorCode.UNKNOWN_SCHEMA_VSN,
   SatelliteErrorCode.AUTH_REQUIRED,
+  SatelliteErrorCode.AUTH_EXPIRED,
 ]
 
 const outOfSyncErrors = [

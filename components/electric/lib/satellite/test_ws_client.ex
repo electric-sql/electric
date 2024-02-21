@@ -159,6 +159,11 @@ defmodule Satellite.TestWsClient do
     end
   end
 
+  @impl WebSocketClient
+  def handle_server_close(code, reason, state) do
+    send(state.opts.parent, {self(), :server_close, code, reason})
+  end
+
   @impl GenServer
   def terminate(:shutdown, {conn, _}) do
     WebSocketClient.send_frames(conn, [{:close, 1001, ""}])

@@ -25,6 +25,7 @@ import {
 import { QualifiedTablename } from '../util/tablename'
 import {
   ConnectivityState,
+  ConnectivityStatus,
   DataChange,
   DbName,
   LSN,
@@ -341,6 +342,10 @@ export class SatelliteProcess implements Satellite {
 
   // Unsubscribe from data changes and stop polling
   async stop(shutdown?: boolean): Promise<void> {
+    this._stop(shutdown)
+  }
+
+  private async _stop(shutdown?: boolean): Promise<void> {
     // Stop snapshotting and polling for changes.
     this._throttledSnapshot.cancel()
 
@@ -624,7 +629,7 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  // handles async client erros: can be a socket error or a server error message
+  // handles async client errors: can be a socket error or a server error message
   _handleClientError(satelliteError: SatelliteError) {
     if (this.initializing && !this.initializing.finished()) {
       if (satelliteError.code === SatelliteErrorCode.SOCKET_ERROR) {
@@ -651,8 +656,18 @@ export class SatelliteProcess implements Satellite {
     this._handleOrThrowClientError(satelliteError)
   }
 
-  _handleOrThrowClientError(error: SatelliteError): Promise<void> {
-    this._disconnect()
+  async _handleOrThrowClientError(error: SatelliteError): Promise<void> {
+    if (error.code === SatelliteErrorCode.AUTH_EXPIRED) {
+      Log.warn('Connection closed by Electric because the JWT expired.')
+      return this._disconnect(
+        new SatelliteError(
+          error.code,
+          'Connection closed by Electric because the JWT expired.'
+        )
+      )
+    }
+
+    this._disconnect(error)
 
     if (isThrowable(error)) {
       throw error
@@ -665,9 +680,9 @@ export class SatelliteProcess implements Satellite {
     return this.connectWithBackoff()
   }
 
-  async _handleConnectivityStateChange(
-    status: ConnectivityState
-  ): Promise<void> {
+  async _handleConnectivityStateChange({
+    status,
+  }: ConnectivityState): Promise<void> {
     Log.debug(`Connectivity state changed: ${status}`)
     switch (status) {
       case 'available': {
@@ -746,7 +761,7 @@ export class SatelliteProcess implements Satellite {
             SatelliteErrorCode.CONNECTION_FAILED_AFTER_RETRY,
             `Failed to connect to server after exhausting retry policy. Last error thrown by server: ${e.message}`
           )
-      this._disconnect()
+      this._disconnect(error.message)
       this.initializing?.reject(error)
       throw error
     })
@@ -773,18 +788,13 @@ export class SatelliteProcess implements Satellite {
   private async _connect(): Promise<void> {
     Log.info(`connecting to electric server`)
 
-    if (!this._authState) {
+    if (!this._authState || !this._authState.token) {
       throw new Error(`trying to connect before authentication`)
     }
-    const authState = this._authState
 
     try {
       await this.client.connect()
-      const authResp = await this.client.authenticate(authState)
-
-      if (authResp.error) {
-        throw authResp.error
-      }
+      await this.authenticate(this._authState!.token!)
     } catch (error: any) {
       Log.debug(
         `server returned an error while establishing connection: ${error.message}`
@@ -793,9 +803,25 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  private _disconnect(): void {
+  /**
+   * Authenticates with the Electric sync service using the provided token.
+   * @returns A promise that resolves to void if authentication succeeded. Otherwise, rejects with the reason for the error.
+   */
+  async authenticate(token: string): Promise<void> {
+    const authState = {
+      clientId: this._authState!.clientId,
+      token,
+    }
+    const authResp = await this.client.authenticate(authState)
+    if (authResp.error) {
+      throw authResp.error
+    }
+    this._setAuthState(authState)
+  }
+
+  private _disconnect(error?: SatelliteError): void {
     this.client.disconnect()
-    this._notifyConnectivityState('disconnected')
+    this._notifyConnectivityState('disconnected', error)
   }
 
   async _startReplication(): Promise<void> {
@@ -839,8 +865,14 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  private _notifyConnectivityState(connectivityState: ConnectivityState): void {
-    this.connectivityState = connectivityState
+  private _notifyConnectivityState(
+    connectivityStatus: ConnectivityStatus,
+    error?: SatelliteError
+  ): void {
+    this.connectivityState = {
+      status: connectivityStatus,
+      reason: error,
+    }
     this.notifier.connectivityStateChanged(this.dbName, this.connectivityState)
   }
 

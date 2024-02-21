@@ -216,6 +216,7 @@ defmodule Electric.Satellite.Protocol do
               auth: nil,
               last_msg_time: nil,
               client_id: nil,
+              expiration_timer: nil,
               in_rep: %InRep{},
               out_rep: %OutRep{},
               auth_provider: nil,
@@ -229,6 +230,7 @@ defmodule Electric.Satellite.Protocol do
             auth: nil | Electric.Satellite.Auth.t(),
             last_msg_time: :erlang.timestamp() | nil | :ping_sent,
             client_id: String.t() | nil,
+            expiration_timer: {reference(), reference()} | nil,
             in_rep: InRep.t(),
             out_rep: OutRep.t(),
             auth_provider: Electric.Satellite.Auth.provider(),
@@ -274,11 +276,11 @@ defmodule Electric.Satellite.Protocol do
       Logger.info("Successfully authenticated the client")
       Metrics.satellite_connection_event(%{authorized_connection: 1})
 
-      {
-        :reply,
-        %SatAuthResp{id: Electric.instance_id()},
+      state =
         %State{state | auth: auth, auth_passed: true, client_id: client_id}
-      }
+        |> schedule_auth_expiration(auth.expires_at)
+
+      {:reply, %SatAuthResp{id: Electric.instance_id()}, state}
     else
       {:error, %SatErrorResp{}} = error ->
         error
@@ -302,6 +304,37 @@ defmodule Electric.Satellite.Protocol do
 
   def handle_rpc_request(_, state) when not auth_passed?(state),
     do: {:error, %SatErrorResp{error_type: :AUTH_REQUIRED}}
+
+  def handle_rpc_request(%SatAuthReq{id: client_id, token: token}, state)
+      when auth_passed?(state) and client_id === state.client_id and token != "" do
+    # Request to renew auth token
+    with {:ok, auth} <- Electric.Satellite.Auth.validate_token(token, state.auth_provider) do
+      if auth.user_id != state.auth.user_id do
+        # cannot change user ID on renewal
+        Logger.warning("Client authentication failed: can't change user ID on renewal")
+        {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
+      else
+        Logger.info("Successfully renewed the token")
+        # cancel the old expiration timer and schedule a new one
+        state =
+          %State{state | auth: auth}
+          |> reschedule_auth_expiration(auth.expires_at)
+
+        {:reply, %SatAuthResp{id: Electric.instance_id()}, state}
+      end
+    else
+      {:error, %Electric.Satellite.Auth.TokenError{message: message}} ->
+        Logger.warning("Client authentication failed: #{message}")
+        {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
+
+      {:error, reason} ->
+        Logger.error("Client authentication failed: #{inspect(reason)}")
+        {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
+    end
+  end
+
+  def handle_rpc_request(%SatAuthReq{}, state) when auth_passed?(state),
+    do: {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
 
   # Satellite client request replication
   def handle_rpc_request(
@@ -1053,4 +1086,26 @@ defmodule Electric.Satellite.Protocol do
   end
 
   defp rpc_encode(%module{} = message), do: IO.iodata_to_binary(module.encode!(message))
+
+  # No expiration set on the auth state
+  defp schedule_auth_expiration(state, nil), do: state
+
+  defp schedule_auth_expiration(state, _exp_time), do: state
+
+  ## NOTE(alco): This is a real implementation of an expiration timer for client connections.
+  ## It's deactivated until we figure out a proper way to support sessions and start using their
+  ## expiration time for client connection lifetime.
+  # defp schedule_auth_expiration(state, exp_time) do
+  #   ref = make_ref()
+  #   delta_ms = 1000 * (exp_time - Joken.current_time())
+  #   timer = Process.send_after(self(), {:jwt_expired, ref}, delta_ms)
+  #   %State{state | expiration_timer: {timer, ref}}
+  # end
+
+  defp reschedule_auth_expiration(%{expiration_timer: old_timer} = state, exp_time) do
+    with {timer, _ref} <- old_timer, do: Process.cancel_timer(timer, async: true)
+
+    %State{state | expiration_timer: nil}
+    |> schedule_auth_expiration(exp_time)
+  end
 end

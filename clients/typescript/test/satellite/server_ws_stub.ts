@@ -127,6 +127,11 @@ export class SatelliteWSServerStub {
     this.httpServer.listen(PORT, IP)
   }
 
+  closeSocket(reason?: string) {
+    // status codes 4000-4999 are available for applications
+    this.socket.close(reason ? 4000 : undefined, reason)
+  }
+
   close() {
     this.server.close()
     this.httpServer.close()

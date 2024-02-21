@@ -10,12 +10,13 @@ defmodule Electric.Satellite.Auth do
   require Logger
 
   @enforce_keys [:user_id]
-  defstruct [:user_id]
+  defstruct [:user_id, :expires_at]
 
   @type user_id() :: binary()
 
   @type t() :: %__MODULE__{
-          user_id: user_id()
+          user_id: user_id(),
+          expires_at: non_neg_integer | nil
         }
 
   @type provider() :: {module, map}

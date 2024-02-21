@@ -17,11 +17,11 @@ const STATES: {
   connected: ConnectivityState
   disconnected: ConnectivityState
 } = {
-  available: 'available',
-  connected: 'connected',
-  disconnected: 'disconnected',
+  available: { status: 'available' },
+  connected: { status: 'connected' },
+  disconnected: { status: 'disconnected' },
 }
-const VALID_STATES = Object.values(STATES)
+const VALID_STATUSES = Object.values(STATES).map((s) => s.status)
 
 const getElectricState = (electric?: ElectricNamespace) => {
   if (electric === undefined) {
@@ -35,7 +35,9 @@ const getNextState = (currentState: ConnectivityState) =>
   currentState === STATES.connected ? STATES.disconnected : STATES.available
 
 const getValidState = (candidateState: ConnectivityState) =>
-  VALID_STATES.includes(candidateState) ? candidateState : STATES.disconnected
+  VALID_STATUSES.includes(candidateState.status)
+    ? candidateState
+    : STATES.disconnected
 
 /**
  * React Hook to observe and manage Electric's connectivity state

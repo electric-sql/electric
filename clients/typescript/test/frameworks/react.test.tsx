@@ -326,9 +326,9 @@ test('useConnectivityState defaults to disconnected', async (t) => {
   const { result } = renderHook(() => useConnectivityState(), { wrapper })
 
   await waitFor(() =>
-    assert(result.current.connectivityState === 'disconnected')
+    assert(result.current.connectivityState.status === 'disconnected')
   )
-  t.is(result.current.connectivityState, 'disconnected')
+  t.is(result.current.connectivityState.status, 'disconnected')
 })
 
 test('useConnectivityState handles connectivity events', async (t) => {
@@ -340,10 +340,12 @@ test('useConnectivityState handles connectivity events', async (t) => {
 
   const { result } = renderHook(() => useConnectivityState(), { wrapper })
 
-  notifier.connectivityStateChanged('test.db', 'connected')
+  notifier.connectivityStateChanged('test.db', { status: 'connected' })
 
-  await waitFor(() => assert(result.current.connectivityState === 'connected'))
-  t.is(result.current.connectivityState, 'connected')
+  await waitFor(() =>
+    assert(result.current.connectivityState.status === 'connected')
+  )
+  t.is(result.current.connectivityState.status, 'connected')
 })
 
 test('useConnectivityState ignores connectivity events after unmounting', async (t) => {
@@ -353,17 +355,17 @@ test('useConnectivityState ignores connectivity events after unmounting', async 
     return <ElectricProvider db={dal}>{children}</ElectricProvider>
   }
 
-  notifier.connectivityStateChanged('test.db', 'disconnected')
+  notifier.connectivityStateChanged('test.db', { status: 'disconnected' })
 
   const { result, unmount } = renderHook(() => useConnectivityState(), {
     wrapper,
   })
-  t.is(result.current.connectivityState, 'disconnected')
+  t.is(result.current.connectivityState.status, 'disconnected')
 
   unmount()
 
-  notifier.connectivityStateChanged('test.db', 'connected')
+  notifier.connectivityStateChanged('test.db', { status: 'connected' })
 
   await sleepAsync(1000)
-  t.is(result.current.connectivityState, 'disconnected')
+  t.is(result.current.connectivityState.status, 'disconnected')
 })
