@@ -12,6 +12,8 @@ import { Database as ReactNativeSQLiteStorageDatabase } from './react-native-sql
 
 import { Database as CapacitorSQLiteDatabase } from './capacitor-sqlite/database'
 
+import { Database as TauriSQLiteDatabase } from './tauri-sqlite/database'
+
 export type AnyDatabase =
   | BetterSQLite3Database
   | CordovaSQLiteStorageDatabase
@@ -20,3 +22,4 @@ export type AnyDatabase =
   | ReactNativeSQLiteStorageDatabase
   | WASQLiteDatabase
   | CapacitorSQLiteDatabase
+  | TauriSQLiteDatabase
