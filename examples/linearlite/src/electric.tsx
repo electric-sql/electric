@@ -10,11 +10,20 @@ export const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
 
 const discriminator = 'linearlite'
 
+declare global {
+  interface Window {
+    // Tauir provides a global __TAURI__ object
+    // we can use it to detect if we are running in a Tauri app
+    __TAURI__: any
+  }
+}
+
 // import.meta.env is a special object that Vite provides for accessing
 // environment variables at build time and runtime.
 // They are replaced at build time with the actual values.
 // https://vitejs.dev/guide/env-and-mode.html
 const DEV_MODE = import.meta.env.DEV
+const IS_TAURI = !!(import.meta.env.TAURI_PLATFORM || window.__TAURI__)
 const ELECTRIC_SERVICE =
   import.meta.env.ELECTRIC_SERVICE || import.meta.env.ELECTRIC_URL
 const DEBUG_ENV = import.meta.env.DEBUG
@@ -46,15 +55,30 @@ export const initElectric = async () => {
   }
   const authToken = insecureAuthToken({ sub: userId })
 
-  const conn = await ElectricDatabase.init(dbName)
-  if (DEBUG) {
-    console.log('initElectric')
-    console.log('dbName', dbName)
-    console.log(conn)
-    console.log(schema)
-    console.log(config)
+  let electric
+
+  const logDebug = (conn: any) => {
+    if (DEBUG) {
+      console.log('initElectric')
+      console.log('dbName', dbName)
+      console.log(conn)
+      console.log(schema)
+      console.log(config)
+    }
   }
-  const electric = await electrify(conn, schema, config)
+
+  if (IS_TAURI) {
+    // We use dynamic imports to avoid importing tauri-electron in the browser
+    let { createDatabase, electrify } = await import('electric-sql/tauri')
+    const conn = await createDatabase(dbName)
+    logDebug(conn)
+    electric = await electrify(conn, schema, config)
+  } else {
+    const conn = await ElectricDatabase.init(dbName)
+    logDebug(conn)
+    electric = await electrify(conn, schema, config)
+  }
+
   await electric.connect(authToken)
   return electric
 }
