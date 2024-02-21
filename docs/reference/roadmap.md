@@ -6,7 +6,7 @@ description: >-
 
 ElectricSQL is in <strong className="warning-color">public alpha</strong> phase.
 
-APIs are not guaranteed to be stable. Backwards incompatible changes may (and will) be introduced in both minor and major version releases.
+APIs are not guaranteed to be stable. Backwards incompatible changes may (and will) be introduced in patch, minor and major version releases.
 
 ## Practical limitations
 
