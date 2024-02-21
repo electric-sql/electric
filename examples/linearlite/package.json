@@ -46,7 +46,7 @@
     "animate.css": "^4.1.1",
     "classnames": "^2.3.2",
     "dayjs": "^1.11.9",
-    "electric-sql": "file:../../clients/typescript/electric-sql-0.9.2.tgz",
+    "electric-sql": "^0.9.3",
     "fractional-indexing": "^3.2.0",
     "jsonwebtoken": "^9.0.2",
     "lodash.debounce": "^4.0.8",
