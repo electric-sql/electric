@@ -29,15 +29,13 @@ import { electrify } from 'electric-sql/expo'
 // Import your generated database schema.
 import { schema } from './generated/client'
 
-// Define custom configuration if needed
-const config = {
-  url: 'https://example.com:5133'
-}
-
 // Create the expo-sqlite database connection. The first argument
 // is your database name. Changing this will create/use a new
 // local database file.
 const conn = SQLite.openDatabase('electric.db')
+
+// Define custom configuration if needed
+const config = { url: 'https://example.com:5133' }
 
 // Instantiate your electric client.
 const electric = await electrify(conn, schema, config)
@@ -48,28 +46,27 @@ await electric.connect('your token')
 ```
 </TabItem>
 <TabItem value="expo-sqlite-next" label="expo-sqlite/next">
-```tsx
+```ts
 import * as SQLite from 'expo-sqlite/next'
 import { electrify } from 'electric-sql/expo-next' 
 
 // Import your generated database schema.
 import { schema } from './generated/client'
 
-// Define your config with at least an auth token.
-// See Usage -> Authentication for more details.
-const config = {
-  auth: {
-    token: '...'
-  }
-}
-
 // Create the expo-sqlite database connection. The first argument
 // is your database name. Changing this will create/use a new
 // local database file.
 const conn = SQLite.openDatabaseSync('electric.db')
 
+// Define custom configuration if needed
+const config = { url: 'https://example.com:5133' }
+
 // Instantiate your electric client.
 const electric = await electrify(conn, schema, config)
+
+// Connect to Electric, passing along your authentication token
+// See Usage -> Authentication for more details.
+await electric.connect('your token')
 ```
 </TabItem>
 </Tabs>
