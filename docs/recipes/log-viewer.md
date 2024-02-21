@@ -5,6 +5,7 @@ sidebar_position: 20
 ---
 
 import useBaseUrl from '@docusaurus/useBaseUrl'
+import TOCInline from '@theme/TOCInline'
 
 import SchemaSection from './_section_schema.md'
 import DataAccessSection from './_section_data_access.md'
@@ -22,7 +23,11 @@ import View from '!!raw-loader!@site/submodules/electric/examples/recipes/src/lo
 
 Logs are a crucial component of any software application, offering valuable insights into its performance, errors, and user interactions, so you often need to expose them to your users and/or application administrators.
 
-Electric provides a simple and efficient way to view logs in your application, with the ability to filter, sort, and paginate them efficiently while also receiving them live as they are being created.
+ElectricSQL provides a simple and efficient way to view logs in your application, with the ability to filter, sort, and paginate them efficiently while also receiving them live as they are being created.
+
+This recipe demonstrates how to build a log viewer for arbitrary, unstructured text logs, such as web-server logs.
+
+<TOCInline toc={toc} />
 
 ## Schema
 <SchemaSection />

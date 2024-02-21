@@ -1,12 +1,13 @@
 ---
-title: Request Response
-description: Event-sourcing pattern for API requests
+title: Request-Response
+description: Event-sourcing pattern for performing requests
 sidebar_position: 80
 ---
 
 import useBaseUrl from '@docusaurus/useBaseUrl'
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+import TOCInline from '@theme/TOCInline'
 
 import SchemaSection from './_section_schema.md'
 import DataAccessSection from './_section_data_access.md'
@@ -18,7 +19,15 @@ import QueryLogHook from '!!raw-loader!@site/submodules/electric/examples/recipe
 import QueryView from '!!raw-loader!@site/submodules/electric/examples/recipes/src/request_response/RequestForm.tsx'
 import QueryLogView from '!!raw-loader!@site/submodules/electric/examples/recipes/src/request_response/RequestAuditLog.tsx'
 
-TODO(msfstef): write overview
+In modern web applications, efficiently handling request-response cycles while ensuring data integrity and responsiveness is paramount. Popular approaches to state transfer like [REST](https://en.wikipedia.org/wiki/REST) and [GraphQL](https://graphql.org/) can lead to complexities in managing concurrent requests and maintaining consistency across distributed systems, and they incur additional complexities when dealing with offline usage and intermittent connectivity.
+
+While [local-first development](../intro/local-first) tends to reduce the need for external connectivity, there will be some sensitive or complex workloads such as [payment processing](../examples/checkout.md) that need to be handled by a secure server. Furthermore, redesigning a large application to be local-first can be a daunting task, and being able to gradually transition is often a safer path.
+
+With ElectricSQL, state transfer is abstracted away by syncing the application's local database, and request-response cycles can be implemented using an [event-sourcing pattern](../integrations/event-sourcing/index.md). Requests can become entries in a table that get picked up by the server upon syncing using [database triggers](https://en.wikipedia.org/wiki/Database_trigger), and responses can be written to a related table that can be queried by the client. No complex retrying logic necessary, no additional code for queueing requests made while offline - clients submit requests locally, and because of Electric's [finality of local writes](../reference/architecture#local-writes) you can rest assured that the request will eventually be processed.
+
+This recipe demonstrates how to build a declarative, reactive query tool (inspired by [TanStack Query](https://tanstack.com/query/v3/)), as well as a live request audit log.
+
+<TOCInline toc={toc} />
 
 ## Schema
 <SchemaSection />
