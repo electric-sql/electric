@@ -35,12 +35,11 @@ export const initElectric = async () => {
   dbName = `${discriminator}-${LIB_VERSION}-${tabId}.db`
 
   const config = {
-    auth: {
-      token: insecureAuthToken({ user_id: genUUID() }),
-    },
     url: electricUrl,
     debug: DEBUG,
   }
+
+  const authToken = insecureAuthToken({ sub: genUUID() })
 
   const conn = await ElectricDatabase.init(dbName)
   if (DEBUG) {
@@ -50,5 +49,7 @@ export const initElectric = async () => {
     console.log(schema)
     console.log(config)
   }
-  return await electrify(conn, schema, config)
+  const electric = await electrify(conn, schema, config)
+  await electric.connect(authToken)
+  return electric
 }

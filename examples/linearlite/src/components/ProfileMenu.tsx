@@ -24,9 +24,10 @@ export default function ProfileMenu({
   )
   const ref = useRef(null)
 
-  const connectivityConnected = connectivityState !== 'disconnected'
+  const connectivityConnected = connectivityState.status !== 'disconnected'
   const connectivityStateDisplay =
-    connectivityState[0].toUpperCase() + connectivityState.slice(1)
+    connectivityState.status[0].toUpperCase() +
+    connectivityState.status.slice(1)
 
   useClickOutside(ref, () => {
     if (isOpen && onDismiss) {
