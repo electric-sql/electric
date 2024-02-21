@@ -1,16 +1,21 @@
-import {CreateInput, CreateManyInput} from '../input/createInput'
-import squel, {PostgresSelect, QueryBuilder, ReturningMixin, WhereMixin,} from 'squel'
-import {FindInput, FindUniqueInput} from '../input/findInput'
-import {UpdateInput, UpdateManyInput} from '../input/updateInput'
-import {DeleteInput, DeleteManyInput} from '../input/deleteInput'
+import { CreateInput, CreateManyInput } from '../input/createInput'
+import squel, {
+  PostgresSelect,
+  QueryBuilder,
+  ReturningMixin,
+  WhereMixin,
+} from 'squel'
+import { FindInput, FindUniqueInput } from '../input/findInput'
+import { UpdateInput, UpdateManyInput } from '../input/updateInput'
+import { DeleteInput, DeleteManyInput } from '../input/deleteInput'
 import flow from 'lodash.flow'
-import {InvalidArgumentError} from '../validation/errors/invalidArgumentError'
+import { InvalidArgumentError } from '../validation/errors/invalidArgumentError'
 import * as z from 'zod'
-import {IShapeManager} from './shapes'
+import { IShapeManager } from './shapes'
 import Log from 'loglevel'
-import {ExtendedTableSchema} from './schema'
-import {PgBasicType} from '../conversions/types'
-import {HKT} from '../util/hkt'
+import { ExtendedTableSchema } from './schema'
+import { PgBasicType } from '../conversions/types'
+import { HKT } from '../util/hkt'
 
 const squelPostgres = squel.useFlavour('postgres')
 squelPostgres.registerValueHandler('bigint', function (bigint) {
@@ -49,20 +54,20 @@ export class Builder {
 
   createMany(i: CreateManyInput<any>): QueryBuilder {
     const insert = squelPostgres
-        .insert()
-        .into(this._tableName)
-        .setFieldsRows(i.data)
+      .insert()
+      .into(this._tableName)
+      .setFieldsRows(i.data)
     return i.skipDuplicates
-        ? insert.onConflict() // adds "ON CONFLICT DO NOTHING" to the query
-        : insert
+      ? insert.onConflict() // adds "ON CONFLICT DO NOTHING" to the query
+      : insert
   }
 
   findUnique(i: FindUniqueInput<any, any, any>): QueryBuilder {
-    return this.findWhere({...i, take: 2}, true) // take 2 such that we can throw an error if more than one record matches
+    return this.findWhere({ ...i, take: 2 }, true) // take 2 such that we can throw an error if more than one record matches
   }
 
   findFirst(i: AnyFindInput): QueryBuilder {
-    return this.findWhere({...i, take: 1})
+    return this.findWhere({ ...i, take: 1 })
   }
 
   findMany(i: AnyFindInput): QueryBuilder {
@@ -91,10 +96,7 @@ export class Builder {
     return this.deleteInternal(i)
   }
 
-  deleteInternal(
-      i: DeleteManyInput<any>,
-      idRequired = false
-  ): QueryBuilder {
+  deleteInternal(i: DeleteManyInput<any>, idRequired = false): QueryBuilder {
     const deleteQuery = squel.delete().from(this._tableName)
     const whereObject = i.where // safe because the schema for `where` adds an empty object as default which is provided if the `where` field is absent
     const fields = this.getFields(whereObject, idRequired)
@@ -102,8 +104,8 @@ export class Builder {
   }
 
   updateInternal(
-      i: UpdateManyInput<any, any>,
-      idRequired = false
+    i: UpdateManyInput<any, any>,
+    idRequired = false
   ): QueryBuilder {
     const unsupportedEntry = Object.entries(i.data).find((entry) => {
       const [_key, value] = entry
@@ -111,15 +113,15 @@ export class Builder {
     })
     if (unsupportedEntry)
       throw new InvalidArgumentError(
-          `Unsupported value ${JSON.stringify(unsupportedEntry[1])} for field "${
-              unsupportedEntry[0]
-          }" in update query.`
+        `Unsupported value ${JSON.stringify(unsupportedEntry[1])} for field "${
+          unsupportedEntry[0]
+        }" in update query.`
       )
 
     const query = squelPostgres
-        .update()
-        .table(this._tableName)
-        .setFields(i.data)
+      .update()
+      .table(this._tableName)
+      .setFields(i.data)
 
     // Adds a `RETURNING` statement that returns all known fields
     const queryWithReturn = this.returnAllFields(query)
@@ -136,9 +138,9 @@ export class Builder {
    * @param selectWhereFields By default, `findWhere` selects the fields provided in the `where` argument. By providing `false` it will not automatically select those fields.
    */
   findWhere(
-      i: FindInput<any, any, any, any, any>,
-      idRequired = false,
-      selectWhereFields = true
+    i: FindInput<any, any, any, any, any>,
+    idRequired = false,
+    selectWhereFields = true
   ): QueryBuilder {
     if ('cursor' in i && typeof i.cursor !== 'undefined') {
       throw new InvalidArgumentError('Unsupported cursor argument.')
@@ -153,9 +155,9 @@ export class Builder {
     const query = squelPostgres.select().from(this._tableName) // specify from which table to select
     // only select the fields provided in `i.select` and the ones in `i.where`
     const addFieldSelectionP = this.addFieldSelection.bind(
-        this,
-        i,
-        selectWhereFields ? identificationFields : []
+      this,
+      i,
+      selectWhereFields ? identificationFields : []
     )
     // add a where clause to filter on the conditions provided in `i.where`
     const addFiltersP = addFilters.bind(null, identificationFields, whereObject)
@@ -164,20 +166,20 @@ export class Builder {
     const addDistinctP = addDistinct.bind(null, i)
     const addOrderByP = this.addOrderBy.bind(this, i)
     const buildQuery = flow(
-        addFieldSelectionP,
-        addFiltersP,
-        addLimitP,
-        addOffsetP,
-        addDistinctP,
-        addOrderByP
+      addFieldSelectionP,
+      addFiltersP,
+      addLimitP,
+      addOffsetP,
+      addDistinctP,
+      addOrderByP
     )
     return buildQuery(query)
   }
 
   addFieldSelection(
-      i: AnyFindInput,
-      identificationFields: string[],
-      q: PostgresSelect
+    i: AnyFindInput,
+    identificationFields: string[],
+    q: PostgresSelect
   ): PostgresSelect {
     if (typeof i.select === 'undefined') {
       // Select all known fields explicitly
@@ -191,25 +193,25 @@ export class Builder {
     const selectedFields = getSelectedFields(i.select)
     if (selectedFields.length == 0)
       throw new InvalidArgumentError(
-          `The \`select\` statement for type ${this._tableName} needs at least one truthy value.`
+        `The \`select\` statement for type ${this._tableName} needs at least one truthy value.`
       )
 
     const unknownField: string | undefined = selectedFields.find(
-        (f) => !this._fields.includes(f)
+      (f) => !this._fields.includes(f)
     )
     if (unknownField) {
       // query selects a field that does not exist on this table
       throw new InvalidArgumentError(
-          `Cannot select field ${unknownField} on table ${this._tableName}. Use 'include' to fetch related objects.`
+        `Cannot select field ${unknownField} on table ${this._tableName}. Use 'include' to fetch related objects.`
       )
     }
 
     // the filter below removes boolean filters like AND, OR, NOT
     // which are not columns and thus should not be selected
     const fields = identificationFields
-        .filter((f) => this._fields.includes(f))
-        .concat(selectedFields)
-        .map((f) => this.castBigIntToText(f))
+      .filter((f) => this._fields.includes(f))
+      .concat(selectedFields)
+      .map((f) => this.castBigIntToText(f))
 
     return q.fields(fields)
   }
@@ -239,7 +241,7 @@ export class Builder {
       const fields = Object.keys(orderBy)
       if (fields.length > 1)
         throw new InvalidArgumentError(
-            `Argument 'orderBy' can have at most one field per 'OrderByInput' object. Consider providing several 'OrderByInput' objects in an array.`
+          `Argument 'orderBy' can have at most one field per 'OrderByInput' object. Consider providing several 'OrderByInput' objects in an array.`
         )
       if (fields.length === 0) return query
 
@@ -248,7 +250,7 @@ export class Builder {
 
       if (typeof order === 'object' && order !== null)
         throw new InvalidArgumentError(
-            `Ordering query results based on the '${field}' related object(s) is not yet supported`
+          `Ordering query results based on the '${field}' related object(s) is not yet supported`
         )
 
       const squelOrder = order === 'asc' // squel expects 'true' for ascending order, 'false' for descending order
@@ -262,15 +264,13 @@ export class Builder {
 
     if (fieldsRequired && fields.length == 0)
       throw new InvalidArgumentError(
-          `Argument \`where\` for query on ${this._tableName} type requires at least one argument.`
+        `Argument \`where\` for query on ${this._tableName} type requires at least one argument.`
       )
 
     return fields
   }
 
-  returnAllFields<T extends QueryBuilder & ReturningMixin>(
-      query: T
-  ): T {
+  returnAllFields<T extends QueryBuilder & ReturningMixin>(query: T): T {
     return this._fields.reduce((query, field) => {
       // if field is of type BigInt cast the result to TEXT
       // because not all adapters deal well with BigInts

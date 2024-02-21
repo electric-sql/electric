@@ -1,8 +1,8 @@
 import test from 'ava'
-import {ShapeManagerMock} from '../../../src/client/model/shapes'
+import { ShapeManagerMock } from '../../../src/client/model/shapes'
 // import {ZodError} from 'zod'
-import {schema} from '../generated'
-import {KyselyBuilder} from "../../../src/client/model/kyselyBuilder";
+import { schema } from '../generated'
+import { KyselyBuilder } from '../../../src/client/model/kyselyBuilder'
 
 const shapeManager = new ShapeManagerMock()
 const postTableDescription = schema.getTableDescription('Post')
