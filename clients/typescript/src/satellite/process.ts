@@ -494,8 +494,8 @@ export class SatelliteProcess implements Satellite {
       string,
       {
         columns: string[]
-        records: InitialDataChange['record'][]
         dataChanges: InitialDataChange[]
+        tableName: QualifiedTablename
       }
     >()
 
@@ -510,13 +510,12 @@ export class SatelliteProcess implements Satellite {
       const tableNameString = tableName.toString()
       if (groupedChanges.has(tableNameString)) {
         const changeGroup = groupedChanges.get(tableNameString)!
-        changeGroup.records.push(op.record)
         changeGroup.dataChanges.push(op)
       } else {
         groupedChanges.set(tableNameString, {
           columns: op.relation.columns.map((x) => x.name),
-          records: [op.record],
           dataChanges: [op],
+          tableName: tableName,
         })
       }
 
@@ -539,7 +538,8 @@ export class SatelliteProcess implements Satellite {
     stmts.push(...this._disableTriggers([...groupedChanges.keys()]))
 
     // For each table, do a batched insert
-    for (const [table, { columns, records }] of groupedChanges) {
+    for (const [table, { columns, dataChanges }] of groupedChanges) {
+      const records = dataChanges.map((change) => change.record)
       const sqlBase = `INSERT INTO ${table} (${columns.join(', ')}) VALUES `
 
       stmts.push(
@@ -579,11 +579,7 @@ export class SatelliteProcess implements Satellite {
       // because nobody uses them and we don't have the machinery to to a
       // `RETURNING` clause in the middle of `runInTransaction`.
       const notificationChanges: Change[] = []
-      groupedChanges.forEach(({ dataChanges }) => {
-        const tableName = new QualifiedTablename(
-          'main',
-          dataChanges[0].relation.table
-        )
+      groupedChanges.forEach(({ dataChanges, tableName }) => {
         const primaryKeyColNames = dataChanges[0].relation.columns
           .filter((col) => col.primaryKey)
           .map((col) => col.name)

@@ -230,9 +230,9 @@ export class EventNotifier implements Notifier {
     origin: ChangeOrigin
   ): ChangeNotification {
     const notification = {
-      origin: origin,
       dbName: dbName,
       changes: changes,
+      origin: origin,
     }
 
     this._emit(EVENT_NAMES.actualDataChange, notification)

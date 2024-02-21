@@ -26,9 +26,9 @@ export interface Change {
 }
 export type ChangeOrigin = 'local' | 'remote' | 'initial'
 export interface ChangeNotification {
-  origin: ChangeOrigin
   dbName: DbName
   changes: Change[]
+  origin: ChangeOrigin
 }
 export interface PotentialChangeNotification {
   dbName: DbName
