@@ -153,10 +153,10 @@ function IssuePage() {
         </div>
 
         {/* <div className="flex flex-col overflow-auto">issue info</div> */}
-        <div className="flex flex-1 p-3 md:p-2 overflow-hidden flex-col md:flex-row">
+        <div className="flex flex-1 p-3 md:p-2 overflow-hidden flex-col md:flex-row whitespace-nowrap">
           <div className="md:block flex md:flex-[1_0_0] min-w-0 md:p-3 md:order-2">
-            <div className="max-w-4xl flex flex-row md:flex-col">
-              <div className="flex flex-1 mb-3 mr-5 md-mr-0">
+            <div className="max-w-4xl flex flex-row md:flex-col max-sm:flex-wrap">
+              <div className="flex flex-1 mb-3 mr-5 md-mr-0 max-sm:w-[250px] max-sm:grow-0 max-sm:shrink-0">
                 <div className="flex flex-[2_0_0] mr-2 md-mr-0 items-center">
                   Opened by
                 </div>
@@ -167,7 +167,7 @@ function IssuePage() {
                   </button>
                 </div>
               </div>
-              <div className="flex flex-1 mb-3 mr-5 md-mr-0">
+              <div className="flex flex-1 mb-3 mr-5 md-mr-0 max-sm:w-[250px] max-sm:grow-0 max-sm:shrink-0">
                 <div className="flex flex-[2_0_0] mr-2 md-mr-0 items-center">
                   Status
                 </div>
@@ -184,7 +184,7 @@ function IssuePage() {
                   />
                 </div>
               </div>
-              <div className="flex flex-1 mb-3 mr-5 md-mr-0">
+              <div className="flex flex-1 mb-3 mr-5 md-mr-0 max-sm:w-[250px] max-sm:grow-0 max-sm:shrink-0">
                 <div className="flex flex-[2_0_0] mr-2 md-mr-0 items-center">
                   Priority
                 </div>
