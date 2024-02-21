@@ -16,12 +16,13 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "tauri": "tauri"
   },
   "dependencies": {
     "@tauri-apps/api": "2.0.0-alpha.14",
     "@tauri-apps/plugin-sql": "^2.0.0-alpha.5",
-    "electric-sql": "file:/Users/kevin/Documents/Electric/development/electric/clients/typescript/electric-sql-0.9.0-tauri.tgz",
+    "electric-sql": "^0.9.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
