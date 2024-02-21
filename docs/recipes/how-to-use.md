@@ -18,6 +18,8 @@ For the sake of keeping the recipes simple, functional, and extensible, the sche
 
 This means that you can easily integrate them into your existing application's database schema through e.g. turning some columns into foreign keys to your users table for managing access permissions, or simply adding new columns to store additional data.
 
+Make sure to go over the [data modelling](../usage/data-modelling/index.md) section to learn more about the data modelling approach used in the recipes. If any DDL commands used feel unfamiliar, check out the [DDLX reference page](../api/ddlx.md) which should cover any Electric-specific statements you might encounter.
+
 #### Headless component
 
 The data access and interaction component will assume that it is being used within the context of an existing Electric client (see the [React integration guide](./integrations/frontend/react) for an example), and that the relevant data is already synced and available through the use of an appropriate [shape subscription](./usage/data-access/shapes).
