@@ -110,9 +110,16 @@ test('load metadata', async (t) => {
 test('set persistent client id', async (t) => {
   const { satellite, authState, token } = t.context
 
-  await startSatellite(satellite, authState, token)
+  const { connectionPromise } = await startSatellite(
+    satellite,
+    authState,
+    token
+  )
   const clientId1 = satellite._authState!.clientId
   t.truthy(clientId1)
+
+  await connectionPromise
+
   await satellite.stop()
 
   await startSatellite(satellite, authState, token)
@@ -1239,7 +1246,7 @@ test('get transactions from opLogEntries', async (t) => {
   t.deepEqual(opLog, expected)
 })
 
-test('handling connectivity state change stops queueing operations', async (t) => {
+test('disconnect stops queueing operations', async (t) => {
   const { runMigrations, satellite, adapter, authState, token } = t.context
   await runMigrations()
   const { connectionPromise } = await startSatellite(
@@ -1259,7 +1266,7 @@ test('handling connectivity state change stops queueing operations', async (t) =
   const sentLsn = satellite.client.getLastSentLsn()
   t.deepEqual(sentLsn, numberToBytes(1))
 
-  await satellite._handleConnectivityStateChange({ status: 'disconnected' })
+  satellite.disconnect()
 
   adapter.run({
     sql: `INSERT INTO parent(id, value, other) VALUES (2, 'local', 1)`,
@@ -1272,17 +1279,24 @@ test('handling connectivity state change stops queueing operations', async (t) =
   t.deepEqual(lsn1, sentLsn)
 
   // Once connectivity is restored, we will immediately run a snapshot to send pending rows
-  await satellite._handleConnectivityStateChange({ status: 'available' })
+  await satellite.connectWithBackoff()
   await sleepAsync(200) // Wait for snapshot to run
   const lsn2 = satellite.client.getLastSentLsn()
   t.deepEqual(lsn2, numberToBytes(2))
 })
 
 test('notifies about JWT expiration', async (t) => {
-  const { satellite, authState, runMigrations, client, notifier, dbName } =
-    t.context
+  const {
+    satellite,
+    authState,
+    runMigrations,
+    client,
+    notifier,
+    dbName,
+    token,
+  } = t.context
   await runMigrations()
-  await satellite.start(authState)
+  await startSatellite(satellite, authState, token)
 
   // give some time for Satellite to start
   // (needed because connecting and starting replication are async)
@@ -1963,7 +1977,7 @@ test.serial('connection backoff success', async (t) => {
   t.plan(3)
   const { client, satellite } = t.context
 
-  client.disconnect()
+  client.shutdown()
 
   const retry = (_e: any, a: number) => {
     if (a > 0) {
@@ -1980,6 +1994,27 @@ test.serial('connection backoff success', async (t) => {
       (p) => p?.catch(() => t.pass())
     )
   )
+})
+
+test.serial('connection cancelled on disconnect', async (t) => {
+  const { client, satellite, authState, token } = t.context
+  client.shutdown() // such that satellite can't connect to Electric and will keep retrying
+  const { connectionPromise } = await startSatellite(
+    satellite,
+    authState,
+    token
+  )
+
+  // We expect the connection to be cancelled
+  const prom = t.throwsAsync(connectionPromise, {
+    code: SatelliteErrorCode.CONNECTION_CANCELLED_BY_DISCONNECT,
+  })
+
+  // Disconnect Satellite
+  satellite.clientDisconnect()
+
+  // Await until the connection promise is rejected
+  await prom
 })
 
 // check that performing snapshot doesn't throw without resetting the performing snapshot assertions

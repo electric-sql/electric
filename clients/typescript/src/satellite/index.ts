@@ -16,6 +16,7 @@ import {
   TransactionCallback,
   RelationCallback,
   OutboundStartedCallback,
+  SatelliteError,
 } from '../util/types'
 import {
   ClientShapeDefinition,
@@ -65,8 +66,11 @@ export interface Satellite {
 
   start(authConfig: AuthConfig): Promise<void>
   stop(shutdown?: boolean): Promise<void>
-  setToken(token: string): void
+  setToken(token?: string): void
+  hasToken(): boolean
   connectWithBackoff(): Promise<void>
+  disconnect(error?: SatelliteError): void
+  clientDisconnect(): void
   authenticate(token: string): Promise<void>
   subscribe(
     shapeDefinitions: ClientShapeDefinition[]

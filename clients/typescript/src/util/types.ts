@@ -36,6 +36,7 @@ export class SatelliteError extends Error {
 }
 
 export enum SatelliteErrorCode {
+  CONNECTION_CANCELLED_BY_DISCONNECT,
   CONNECTION_FAILED_AFTER_RETRY,
   INTERNAL,
   TIMEOUT,
@@ -199,7 +200,7 @@ export type IncomingTransactionCallback = (
 ) => void
 export type OutboundStartedCallback = () => void
 
-export type ConnectivityStatus = 'available' | 'connected' | 'disconnected'
+export type ConnectivityStatus = 'connected' | 'disconnected'
 export type ConnectivityState = {
   status: ConnectivityStatus
   reason?: SatelliteError // reason for `disconnected` status

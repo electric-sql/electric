@@ -5,19 +5,12 @@ import { ConnectivityStateChangeNotification as Notification } from '../../../no
 import { ConnectivityState } from '../../../util/types'
 import { ElectricContext } from '../provider'
 
-type RetVal = {
-  connectivityState: ConnectivityState
-  setConnectivityState: (state: ConnectivityState) => void
-  toggleConnectivityState: () => void
-}
-type HookFn = () => RetVal
+type ConnectivityHook = () => ConnectivityState
 
 const STATES: {
-  available: ConnectivityState
   connected: ConnectivityState
   disconnected: ConnectivityState
 } = {
-  available: { status: 'available' },
   connected: { status: 'connected' },
   disconnected: { status: 'disconnected' },
 }
@@ -31,18 +24,15 @@ const getElectricState = (electric?: ElectricNamespace) => {
   return electric.isConnected ? STATES.connected : STATES.disconnected
 }
 
-const getNextState = (currentState: ConnectivityState) =>
-  currentState === STATES.connected ? STATES.disconnected : STATES.available
-
 const getValidState = (candidateState: ConnectivityState) =>
   VALID_STATUSES.includes(candidateState.status)
     ? candidateState
     : STATES.disconnected
 
 /**
- * React Hook to observe and manage Electric's connectivity state
+ * React Hook to observe Electric's connectivity state
  */
-const useConnectivityState: HookFn = () => {
+const useConnectivityState: ConnectivityHook = () => {
   const electric = useContext(ElectricContext)
   const initialState: ConnectivityState = getElectricState(electric)
   const [state, setState] = useState<ConnectivityState>(initialState)
@@ -73,26 +63,7 @@ const useConnectivityState: HookFn = () => {
     }
   }, [electric])
 
-  const toggleState = () => {
-    if (electric === undefined) {
-      return
-    }
-
-    const nextState = getNextState(state)
-
-    const { notifier } = electric
-    const { dbName } = notifier
-
-    notifier.connectivityStateChanged(dbName, nextState)
-
-    setState(nextState)
-  }
-
-  return {
-    connectivityState: state,
-    setConnectivityState: setState,
-    toggleConnectivityState: toggleState,
-  }
+  return state
 }
 
 export default useConnectivityState
