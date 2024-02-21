@@ -50,7 +50,7 @@ export const ElectricWrapper = ({ children }) => {
 
     const init = async () => {
       const conn = await ElectricDatabase.init('electric.db', '')
-      const electric = await electrify(conn, schema, config)
+      const electric = await electrify(conn, schema)
       const token = insecureAuthToken({user_id: 'dummy'})
       await electric.connect(token)
 
