@@ -18,8 +18,6 @@ export interface AuthStateNotification {
 export type RecordChange = {
   primaryKey: Record
   type: `${DataChangeType}` | 'INITIAL'
-  record?: Record
-  oldRecord?: Record
 }
 export interface Change {
   qualifiedTablename: QualifiedTablename

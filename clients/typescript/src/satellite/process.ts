@@ -598,7 +598,6 @@ export class SatelliteProcess implements Satellite {
                 })
               ),
               type: 'INITIAL',
-              record: change.record,
             }
           }),
         })
@@ -1098,7 +1097,6 @@ export class SatelliteProcess implements Satellite {
         change.recordChanges.push({
           primaryKey: JSON.parse(entry.primaryKey),
           type: entry.optype,
-          record: entry.newRow ? JSON.parse(entry.newRow) : undefined,
         })
       } else {
         acc[key] = {
@@ -1108,7 +1106,6 @@ export class SatelliteProcess implements Satellite {
             {
               primaryKey: JSON.parse(entry.primaryKey),
               type: entry.optype,
-              record: entry.newRow ? JSON.parse(entry.newRow) : undefined,
             },
           ],
         }
