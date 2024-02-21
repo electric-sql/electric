@@ -1,6 +1,6 @@
 import test from 'ava'
 
-import { ElectricConfig } from '../../src/config/index'
+import { InternalElectricConfig } from '../../src/config/index'
 import { DatabaseAdapter } from '../../src/electric/adapter'
 import { Migrator } from '../../src/migrators/index'
 import { Notifier } from '../../src/notifiers/index'
@@ -15,10 +15,8 @@ const adapter = {} as DatabaseAdapter
 const migrator = {} as Migrator
 const notifier = {} as Notifier
 const socketFactory = {} as SocketFactory
-const config: ElectricConfig = {
-  auth: {
-    token: 'test-token ',
-  },
+const config: InternalElectricConfig = {
+  auth: {},
 }
 const args = [
   dbName,

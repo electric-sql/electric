@@ -103,6 +103,16 @@ export class ElectricClient<
     this.satellite = satellite
   }
 
+  /**
+   * Connects to the Electric sync service.
+   * This method is idempotent, it is safe to call it multiple times.
+   * @param token - The JWT token to use to connect to the Electric sync service.
+   */
+  async connect(token: string): Promise<void> {
+    this.satellite.setToken(token)
+    await this.satellite.connectWithBackoff()
+  }
+
   // Builds the DAL namespace from a `dbDescription` object
   static create<DB extends DbSchema<any>>(
     dbName: string,

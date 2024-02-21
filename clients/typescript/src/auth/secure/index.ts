@@ -1,6 +1,7 @@
-import { SignJWT } from 'jose'
+import { SignJWT, decodeJwt, JWTPayload } from 'jose'
 
 import { TokenClaims } from '../index'
+import { InvalidArgumentError } from '../../client/validation/errors/invalidArgumentError'
 
 export function secureAuthToken(
   claims: TokenClaims,
@@ -31,4 +32,12 @@ export function mockSecureAuthToken(
   const mockKey = key ?? 'integration-tests-signing-key-example'
 
   return secureAuthToken({ sub: 'test-user' }, mockIss, mockKey)
+}
+
+export function decodeToken(token: string): JWTPayload & { sub: string } {
+  const decoded = decodeJwt(token)
+  if (typeof decoded.sub === 'undefined') {
+    throw new InvalidArgumentError('Token does not contain a sub claim')
+  }
+  return decoded as JWTPayload & { sub: string }
 }

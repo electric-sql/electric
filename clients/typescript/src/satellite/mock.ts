@@ -1,4 +1,4 @@
-import { AuthConfig, AuthState } from '../auth/index'
+import { AuthState } from '../auth/index'
 import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
 import { Notifier } from '../notifiers/index'
@@ -20,7 +20,7 @@ import {
 } from '../util/types'
 import { ElectricConfig } from '../config/index'
 
-import { Client, ConnectionWrapper, Satellite } from './index'
+import { Client, Satellite } from './index'
 import { SatelliteOpts, SatelliteOverrides, satelliteDefaults } from './config'
 import { BaseRegistry } from './registry'
 import { SocketFactory } from '../sockets'
@@ -91,11 +91,18 @@ export class MockSatelliteProcess implements Satellite {
     throw new Error('Method not implemented.')
   }
 
-  async start(_authConfig: AuthConfig): Promise<ConnectionWrapper> {
+  async start(): Promise<void> {
     await sleepAsync(50)
-    return {
-      connectionPromise: new Promise((resolve) => resolve()),
-    }
+  }
+
+  setToken(_token: string): void {}
+
+  async connect(): Promise<void> {
+    await sleepAsync(50)
+  }
+
+  async connectWithBackoff(): Promise<void> {
+    await this.connect()
   }
 
   async stop(): Promise<void> {
@@ -117,7 +124,7 @@ export class MockRegistry extends BaseRegistry {
     migrator: Migrator,
     notifier: Notifier,
     socketFactory: SocketFactory,
-    config: ElectricConfig,
+    _config: ElectricConfig,
     overrides?: SatelliteOverrides
   ): Promise<Satellite> {
     if (this.shouldFailToStart) {
@@ -134,7 +141,7 @@ export class MockRegistry extends BaseRegistry {
       socketFactory,
       opts
     )
-    await satellite.start(config.auth)
+    await satellite.start()
 
     return satellite
   }

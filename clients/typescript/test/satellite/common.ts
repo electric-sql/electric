@@ -189,7 +189,7 @@ export const relations = {
 
 import migrations from '../support/migrations/migrations.js'
 import { ExecutionContext } from 'ava'
-import { AuthState } from '../../src/auth'
+import { AuthState, insecureAuthToken } from '../../src/auth'
 import { DbSchema, TableSchema } from '../../src/client/model/schema'
 import { PgBasicType } from '../../src/client/conversions/types'
 import { HKT } from '../../src/client/util/hkt'
@@ -250,7 +250,7 @@ export const makeContext = async (
     await migrator.up()
   }
 
-  const authState = { clientId: '', token: 'test-token' }
+  const authState = { clientId: '' }
 
   t.context = {
     dbName,
@@ -284,11 +284,20 @@ export const mockElectricClient = async (
     options
   )
 
-  await satellite.start({ clientId: '', token: 'test-token' })
+  await satellite.start({ clientId: '' })
   registry.satellites[dbName] = satellite
 
   // @ts-ignore Mock Electric client that does not contain the DAL
-  return new ElectricClient({}, dbName, adapter, notifier, satellite, registry)
+  const electric = new ElectricClient(
+    {},
+    dbName,
+    adapter,
+    notifier,
+    satellite,
+    registry
+  )
+  await electric.connect(insecureAuthToken({ sub: 'test-token' }))
+  return electric
 }
 
 export const clean = async (t: ExecutionContext<{ dbName: string }>) => {
