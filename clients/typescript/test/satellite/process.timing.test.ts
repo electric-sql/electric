@@ -1,36 +1,42 @@
-import anyTest, { TestFn } from 'ava'
+import { TestFn } from 'ava'
 import { sleepAsync } from '../../src/util/timer'
 
+import { ContextType } from './common'
 import { satelliteDefaults } from '../../src/satellite/config'
-import { makeContext, clean, ContextType } from './common'
+
+/*
+ * This file defines the tests for the process timing of Satellite.
+ * These tests are common to both SQLite and Postgres.
+ * Only their context differs.
+ * Therefore, the SQLite and Postgres test files
+ * setup their context and then call the tests from this file.
+ */
 
 // Speed up the intervals for testing.
-const opts = Object.assign({}, satelliteDefaults, {
+export const opts = Object.assign({}, satelliteDefaults, {
   minSnapshotWindow: 80,
   pollingInterval: 500,
 })
 
-const test = anyTest as TestFn<ContextType>
-test.beforeEach(async (t) => makeContext(t, opts))
-test.afterEach.always(clean)
+export const processTimingTests = (test: TestFn<ContextType>) => {
+  test(`throttled snapshot respects window`, async (t) => {
+    const { adapter, notifier, runMigrations, satellite, authState } = t.context
+    await runMigrations()
 
-test('throttled snapshot respects window', async (t) => {
-  const { adapter, notifier, runMigrations, satellite, authState } = t.context
-  await runMigrations()
+    await satellite._setAuthState(authState)
 
-  await satellite._setAuthState(authState)
+    await satellite._throttledSnapshot()
 
-  await satellite._throttledSnapshot()
+    const numNotifications = notifier.notifications.length
 
-  const numNotifications = notifier.notifications.length
+    const sql = `INSERT INTO main.parent(id) VALUES ('1'),('2')`
+    await adapter.run({ sql })
+    await satellite._throttledSnapshot()
 
-  const sql = `INSERT INTO parent(id) VALUES ('1'),('2')`
-  await adapter.run({ sql })
-  await satellite._throttledSnapshot()
+    t.is(notifier.notifications.length, numNotifications)
 
-  t.is(notifier.notifications.length, numNotifications)
+    await sleepAsync(opts.minSnapshotWindow + 50)
 
-  await sleepAsync(opts.minSnapshotWindow)
-
-  t.is(notifier.notifications.length, numNotifications + 1)
-})
+    t.is(notifier.notifications.length, numNotifications + 1)
+  })
+}
