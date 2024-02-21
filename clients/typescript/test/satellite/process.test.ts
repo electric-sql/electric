@@ -175,6 +175,10 @@ test('snapshot works', async (t) => {
   const expectedChange = {
     qualifiedTablename: new QualifiedTablename('main', 'parent'),
     rowids: [1, 2],
+    recordChanges: [
+      { primaryKey: { id: 1 }, type: 'INSERT' },
+      { primaryKey: { id: 2 }, type: 'INSERT' },
+    ],
   }
 
   t.deepEqual(changes, [expectedChange])
@@ -1407,6 +1411,12 @@ test('apply shape data and persist subscription', async (t) => {
   t.is(notifier.notifications[1].changes.length, 1)
   t.deepEqual(notifier.notifications[1].changes[0], {
     qualifiedTablename: qualified,
+    recordChanges: [
+      {
+        primaryKey: { id: 1 },
+        type: 'INITIAL',
+      },
+    ],
     rowids: [],
   })
 

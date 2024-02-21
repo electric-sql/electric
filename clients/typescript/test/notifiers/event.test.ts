@@ -55,7 +55,7 @@ test('subscribe to actual data changes', async (t) => {
 
   const qualifiedTablename = new QualifiedTablename('main', 'Items')
 
-  source.actuallyChanged('test.db', [{ qualifiedTablename }])
+  source.actuallyChanged('test.db', [{ qualifiedTablename }], 'local')
 
   t.is(notifications.length, 1)
 })
@@ -77,21 +77,21 @@ test('actual data change subscriptions are scoped by dbName', async (t) => {
   const qualifiedTablename = new QualifiedTablename('main', 'Items')
   const changes = [{ qualifiedTablename }]
 
-  source.actuallyChanged('foo.db', changes)
+  source.actuallyChanged('foo.db', changes, 'local')
   t.is(notifications.length, 1)
 
-  source.actuallyChanged('lala.db', changes)
+  source.actuallyChanged('lala.db', changes, 'local')
   t.is(notifications.length, 1)
 
-  source.actuallyChanged('bar.db', changes)
+  source.actuallyChanged('bar.db', changes, 'local')
   t.is(notifications.length, 1)
 
   source.attach('bar.db', 'bar.db')
-  source.actuallyChanged('bar.db', changes)
+  source.actuallyChanged('bar.db', changes, 'local')
   t.is(notifications.length, 2)
 
   t2.attach('foo.db', 'foo.db')
-  source.actuallyChanged('foo.db', changes)
+  source.actuallyChanged('foo.db', changes, 'local')
   t.is(notifications.length, 4)
 })
 

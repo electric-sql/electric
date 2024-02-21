@@ -136,9 +136,11 @@ test('useLiveQuery re-runs query when data changes', async (t) => {
 
   // trigger notifier
   adapter.query = async () => [{ count: 3 }]
-  notifier.actuallyChanged('test.db', [
-    { qualifiedTablename: new QualifiedTablename('main', 'bars') },
-  ])
+  notifier.actuallyChanged(
+    'test.db',
+    [{ qualifiedTablename: new QualifiedTablename('main', 'bars') }],
+    'local'
+  )
 
   await flushPromises()
 
@@ -200,7 +202,7 @@ test('useLiveQuery unsubscribes to data changes when unmounted', async (t) => {
   adapter.query = async () => [{ count: 3 }]
   const qtn = new QualifiedTablename('main', 'bars')
   const changes = [{ qualifiedTablename: qtn }]
-  notifier.actuallyChanged('test.db', changes)
+  notifier.actuallyChanged('test.db', changes, 'local')
 
   // no updates triggered
   await flushPromises()
@@ -239,7 +241,7 @@ test('useLiveQuery ignores results if unmounted whilst re-querying', async (t) =
   adapter.query = async () => [{ count: 3 }]
   const qtn = new QualifiedTablename('main', 'bars')
   const changes = [{ qualifiedTablename: qtn }]
-  notifier.actuallyChanged('test.db', changes)
+  notifier.actuallyChanged('test.db', changes, 'local')
   await wrapper.unmount()
 
   // no updates triggered

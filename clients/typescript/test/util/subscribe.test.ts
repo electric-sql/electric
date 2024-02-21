@@ -60,9 +60,11 @@ test('should yield subsequent updates as notifier signals changes', async (t) =>
   const updates: LiveResultUpdate<string>[] = []
   subscribe((u) => updates.push(u))
   await wait()
-  t.context.notifier.actuallyChanged(mockDbName, [
-    { qualifiedTablename: mockTablename },
-  ])
+  t.context.notifier.actuallyChanged(
+    mockDbName,
+    [{ qualifiedTablename: mockTablename }],
+    'local'
+  )
   await wait()
   t.is(updates[1].results, 'foo')
   t.is(updates.length, 2)
@@ -80,9 +82,11 @@ test('should NOT yield subsequent updates if change is to irrelevant table', asy
   subscribe((u) => updates.push(u))
   await wait()
 
-  t.context.notifier.actuallyChanged(mockDbName, [
-    { qualifiedTablename: mockTablenameAlt },
-  ])
+  t.context.notifier.actuallyChanged(
+    mockDbName,
+    [{ qualifiedTablename: mockTablenameAlt }],
+    'local'
+  )
   await wait()
   t.is(updates.length, 1)
   t.is(getNumCalls(), 1)
@@ -100,9 +104,11 @@ test('should NOT yield subsequent updates after unsubscribing', async (t) => {
   await wait()
 
   unsubscribe()
-  t.context.notifier.actuallyChanged(mockDbName, [
-    { qualifiedTablename: mockTablename },
-  ])
+  t.context.notifier.actuallyChanged(
+    mockDbName,
+    [{ qualifiedTablename: mockTablename }],
+    'local'
+  )
   await wait()
   t.is(updates.length, 1)
   t.is(getNumCalls(), 1)
@@ -143,9 +149,11 @@ test('should populate relevant tablename from result if not provided', async (t)
   await wait()
 
   // if tablename is populated, update to relevant table should trigger result
-  t.context.notifier.actuallyChanged(mockDbName, [
-    { qualifiedTablename: mockTablename },
-  ])
+  t.context.notifier.actuallyChanged(
+    mockDbName,
+    [{ qualifiedTablename: mockTablename }],
+    'local'
+  )
   await wait()
   t.is(updates[1].results, 'foo')
   t.is(updates.length, 2)
@@ -191,17 +199,21 @@ test('should return error in subsequent updates but not interrupt', async (t) =>
   t.is(updates[0].results, 'foo')
   t.is(updates[0].error, undefined)
 
-  t.context.notifier.actuallyChanged(mockDbName, [
-    { qualifiedTablename: mockTablename },
-  ])
+  t.context.notifier.actuallyChanged(
+    mockDbName,
+    [{ qualifiedTablename: mockTablename }],
+    'local'
+  )
   await wait()
   t.is(updates.length, 2)
   t.is(updates[1].results, undefined)
   t.deepEqual(updates[1].error, new Error('test'))
 
-  t.context.notifier.actuallyChanged(mockDbName, [
-    { qualifiedTablename: mockTablename },
-  ])
+  t.context.notifier.actuallyChanged(
+    mockDbName,
+    [{ qualifiedTablename: mockTablename }],
+    'local'
+  )
   await wait()
 
   t.is(updates.length, 3)
