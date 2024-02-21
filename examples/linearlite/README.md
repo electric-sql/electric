@@ -63,6 +63,12 @@ You can apply it with:
 npm run db:migrate
 ```
 
+The realtime presence for this demo uses WebRTC, a signaling server can be started with:
+
+```shell
+npm run backend:webrtc
+```
+
 ## Client
 
 Generate your [type-safe client](https://electric-sql.com/docs/usage/data-access/client):
