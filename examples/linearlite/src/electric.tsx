@@ -39,7 +39,12 @@ export const initElectric = async () => {
     debug: DEBUG,
   }
 
-  const authToken = insecureAuthToken({ sub: genUUID() })
+  let userId = window.sessionStorage.getItem('userId')
+  if (!userId) {
+    userId = genUUID()
+    window.sessionStorage.setItem('userId', userId)
+  }
+  const authToken = insecureAuthToken({ sub: userId })
 
   const conn = await ElectricDatabase.init(dbName)
   if (DEBUG) {
