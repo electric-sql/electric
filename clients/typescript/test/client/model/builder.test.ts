@@ -24,12 +24,12 @@ const post1 = {
   nbr: 18,
 }
 
-// const post2 = {
-//   id: 'i2',
-//   title: 't2',
-//   contents: 'c2',
-//   nbr: 21,
-// }
+const post2 = {
+  id: 'i2',
+  title: 't2',
+  contents: 'c2',
+  nbr: 21,
+}
 
 /*
  * The tests below check that the generated queries are correct.
@@ -50,9 +50,10 @@ test('null values are inserted as NULL', (t) => {
     .compile()
 
   t.is(
-    query,
-    "INSERT INTO Post (id, title, contents, nbr) VALUES ('i1', 't1', 'c1', NULL) RETURNING id, title, contents, nbr"
+    query.sql,
+    'insert into "Post" ("id", "title", "contents", "nbr") values (?, ?, ?, ?) returning "id", "title", "contents", "nbr"'
   )
+  t.deepEqual(query.parameters, ['i1', 't1', 'c1', null])
 })
 
 // Test that we can make a create query
@@ -61,39 +62,43 @@ test('create query', (t) => {
     .create({
       data: post1,
     })
-    .compile().sql
+    .compile()
 
   t.is(
-    query,
-    "INSERT INTO Post (id, title, contents, nbr) VALUES ('i1', 't1', 'c1', 18) RETURNING id, title, contents, nbr"
+    query.sql,
+    'insert into "Post" ("id", "title", "contents", "nbr") values (?, ?, ?, ?) returning "id", "title", "contents", "nbr"'
   )
+  t.deepEqual(query.parameters, ['i1', 't1', 'c1', 18])
 })
 
-// test('createMany query', (t) => {
-//   const query = tbl
-//     .createMany({
-//       data: [post1, post2],
-//     })
-//     .toString()
-//
-//   t.is(
-//     query,
-//     "INSERT INTO Post (id, title, contents, nbr) VALUES ('i1', 't1', 'c1', 18), ('i2', 't2', 'c2', 21)"
-//   )
-//
-//   const query2 = tbl
-//     .createMany({
-//       data: [post1, post2],
-//       skipDuplicates: true,
-//     })
-//     .toString()
-//
-//   t.is(
-//     query2,
-//     "INSERT INTO Post (id, title, contents, nbr) VALUES ('i1', 't1', 'c1', 18), ('i2', 't2', 'c2', 21) ON CONFLICT DO NOTHING"
-//   )
-// })
-//
+test('createMany query', (t) => {
+  const query = tbl
+    .createMany({
+      data: [post1, post2],
+    })
+    .compile()
+
+  t.is(
+    query.sql,
+    'insert into "Post" ("id", "title", "contents", "nbr") values (?, ?, ?, ?), (?, ?, ?, ?)'
+  )
+
+  t.deepEqual(query.parameters, ['i1', 't1', 'c1', 18, 'i2', 't2', 'c2', 21])
+
+  const query2 = tbl
+    .createMany({
+      data: [post1, post2],
+      skipDuplicates: true,
+    })
+    .compile()
+
+  t.is(
+    query2.sql,
+    'insert into "Post" ("id", "title", "contents", "nbr") values (?, ?, ?, ?), (?, ?, ?, ?) on conflict do nothing'
+  )
+  t.deepEqual(query2.parameters, ['i1', 't1', 'c1', 18, 'i2', 't2', 'c2', 21])
+})
+
 // test('findUnique query', async (t) => {
 //   const query = tbl
 //     .findUnique({

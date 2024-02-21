@@ -9,6 +9,7 @@ import {
   SqliteAdapter,
   SqliteIntrospector,
   SqliteQueryCompiler,
+  WhereInterface,
 } from 'kysely'
 import { IShapeManager } from './shapes'
 import { ExtendedTableSchema } from './schema'
@@ -68,38 +69,75 @@ export class KyselyBuilder {
     return i.skipDuplicates ? insert.onConflict((oc) => oc.doNothing()) : insert
   }
 
-  delete(i: DeleteInput<any, any, any>) {
-    return
-  }
-
-  deleteMany(i: DeleteManyInput<any>) {
-    return undefined
+  findUnique(i: FindUniqueInput<any, any, any>) {
+    return this.findWhere({ ...i, take: 2 }, true) // take 2 such that we can throw an error if more than one record matches
   }
 
   findFirst(i: AnyFindInput) {
-    return undefined
+    return this.findWhere({ ...i, take: 1 })
   }
 
   findMany(i: AnyFindInput) {
-    return undefined
+    return this.findWhere(i)
   }
 
-  findUnique(i: FindUniqueInput<any, any, any>) {
-    return undefined
-  }
-
+  // Finds a record but does not select the fields provided in the `where` argument
+  // whereas `findUnique`, `findFirst`, and `findMany` also automatically select the fields in `where`
   findWithoutAutoSelect(i: AnyFindInput) {
-    return undefined
+    return this.findWhere(i, false, false)
   }
 
   update(i: UpdateInput<any, any, any, any>) {
-    return undefined
+    return this.updateInternal(i, true)
   }
 
   updateMany(i: UpdateManyInput<any, any>) {
-    return undefined
+    return this.updateInternal(i)
   }
 
+  delete(i: DeleteInput<any, any, any>) {
+    return this.deleteInternal(i, true)
+  }
+
+  deleteMany(i: DeleteManyInput<any>) {
+    return this.deleteInternal(i)
+  }
+
+  deleteInternal(i: DeleteManyInput<any>, idRequired = false) {
+    const deleteQuery = db.deleteFrom(this._tableName)
+    const whereObject = i.where // safe because the schema for `where` adds an empty object as default which is provided if the `where` field is absent
+    const fields = this.getFields(whereObject, idRequired)
+    return addFilters(fields, whereObject, deleteQuery)
+  }
+
+  updateInternal(i: UpdateManyInput<any, any>, idRequired = false) {
+    const unsupportedEntry = Object.entries(i.data).find((entry) => {
+      const [_key, value] = entry
+      return typeof value === 'object' && value !== null
+    })
+    if (unsupportedEntry)
+      throw new InvalidArgumentError(
+        `Unsupported value ${JSON.stringify(unsupportedEntry[1])} for field "${
+          unsupportedEntry[0]
+        }" in update query.`
+      )
+
+    const query = db.updateTable(this._tableName).set(i.data)
+
+    // Adds a `RETURNING` statement that returns all known fields
+    const queryWithReturn = query.returning(this.returnAllFields())
+
+    const whereObject = i.where // safe because the schema for `where` adds an empty object as default which is provided if the `where` field is absent
+    const fields = this.getFields(whereObject, idRequired)
+    return addFilters(fields, whereObject, queryWithReturn)
+  }
+
+  /**
+   * Creates a `SELECT fields FROM table WHERE conditions` query.
+   * @param i Object containing optional `where` and `selection` fields.
+   * @param idRequired If true, will throw an error if no fields are provided in the `where` argument.
+   * @param selectWhereFields By default, `findWhere` selects the fields provided in the `where` argument. By providing `false` it will not automatically select those fields.
+   */
   findWhere(
     i: FindInput<any, any, any, any, any>,
     idRequired = false,
@@ -115,7 +153,7 @@ export class KyselyBuilder {
     if (!this.shapeManager.hasBeenSubscribed(this._tableName))
       Log.debug('Reading from unsynced table ' + this._tableName)
 
-    const query = db.selectFrom(this._tableName)
+    const query = db.selectFrom(this._tableName) // specify from which table to select
     // only select the fields provided in `i.select` and the ones in `i.where`
     const addFieldSelectionP = this.addFieldSelection.bind(
       this,
@@ -137,22 +175,6 @@ export class KyselyBuilder {
       addOrderByP
     )
     return buildQuery(query)
-  }
-
-  returnAllFields(): string[] {
-    return this._fields.map((field) => this.castBigIntToText(field))
-  }
-
-  getFields(whereObject?: object, fieldsRequired = false) {
-    const obj = typeof whereObject !== 'undefined' ? whereObject : {} // provide empty object if no `where` argument is provided
-    const fields = Object.keys(obj)
-
-    if (fieldsRequired && fields.length == 0)
-      throw new InvalidArgumentError(
-        `Argument \`where\` for query on ${this._tableName} type requires at least one argument.`
-      )
-
-    return fields
   }
 
   addFieldSelection(
@@ -241,10 +263,22 @@ export class KyselyBuilder {
       q
     )
   }
-}
 
-function getSelectedFields(obj: object): string[] {
-  return Object.keys(obj).filter((key) => obj[key as keyof object])
+  getFields(whereObject?: object, fieldsRequired = false) {
+    const obj = typeof whereObject !== 'undefined' ? whereObject : {} // provide empty object if no `where` argument is provided
+    const fields = Object.keys(obj)
+
+    if (fieldsRequired && fields.length == 0)
+      throw new InvalidArgumentError(
+        `Argument \`where\` for query on ${this._tableName} type requires at least one argument.`
+      )
+
+    return fields
+  }
+
+  returnAllFields(): string[] {
+    return this._fields.map((field) => this.castBigIntToText(field))
+  }
 }
 
 /**
@@ -254,7 +288,7 @@ function getSelectedFields(obj: object): string[] {
  * @param whereObject - The `where` argument provided by the user.
  * @param q - The SQL query.
  */
-function addFilters<T, Q extends SelectQueryBuilder<any, any, any>>(
+function addFilters<T, Q extends WhereInterface<any, any>>(
   fields: string[],
   whereObject: T,
   q: Q
@@ -266,30 +300,6 @@ function addFilters<T, Q extends SelectQueryBuilder<any, any, any>>(
       return query.where(filter.sql, ...(filter.args ?? [])) as Q
     }, query)
   }, q)
-}
-
-function addOffset(
-  i: AnyFindInput,
-  q: SelectQueryBuilder<any, any, any>
-): SelectQueryBuilder<any, any, any> {
-  if (typeof i.skip === 'undefined') return q // no offset
-  return q.offset(i.skip)
-}
-
-function addLimit(
-  i: AnyFindInput,
-  q: SelectQueryBuilder<any, any, any>
-): SelectQueryBuilder<any, any, any> {
-  if (typeof i.take === 'undefined') return q // no limit
-  return q.limit(i.take)
-}
-
-function addDistinct(
-  i: AnyFindInput,
-  q: SelectQueryBuilder<any, any, any>
-): SelectQueryBuilder<any, any, any> {
-  if (typeof i.distinct === 'undefined') return q
-  return q.distinct()
 }
 
 function makeFilter(
@@ -355,6 +365,54 @@ function makeFilter(
   }
   // needed because `WHERE field = NULL` is not valid SQL
   else return [{ sql: `${fieldName} = ?`, args: [fieldValue] }]
+}
+
+function joinStatements(
+  statements: Array<{ sql: string; args?: unknown[] }>,
+  connective: 'OR' | 'AND'
+): { sql: string; args?: unknown[] } {
+  const sql = statements.map((s) => s.sql).join(` ${connective} `)
+  const args = statements
+    .map((s) => s.args)
+    .reduce((a1, a2) => (a1 ?? []).concat(a2 ?? []))
+  return { sql, args }
+}
+
+function makeBooleanFilter(
+  fieldName: 'AND' | 'OR' | 'NOT',
+  value: unknown
+): { sql: string; args?: unknown[] } {
+  const objects = Array.isArray(value) ? value : [value] // the value may be a single object or an array of objects connected by the provided connective (AND, OR, NOT)
+  const sqlStmts = objects.map((obj) => {
+    // Make the necessary filters for this object:
+    //  - a filter for each field of this object
+    //  - connect those filters into 1 filter using AND
+    const fields = Object.keys(obj)
+    const stmts = fields.reduce(
+      (stmts: Array<{ sql: string; args?: unknown[] }>, fieldName) => {
+        const fieldValue = obj[fieldName as keyof typeof obj]
+        const stmts2 = makeFilter(fieldValue, fieldName)
+        return stmts.concat(stmts2)
+      },
+      []
+    )
+    return joinStatements(stmts, 'AND')
+  })
+
+  if (fieldName === 'NOT') {
+    // Every statement in `sqlStmts` must be negated
+    // and the negated statements must then be connected by a conjunction (i.e. using AND)
+    const statements = sqlStmts.map(({ sql, args }) => {
+      return {
+        sql: sqlStmts.length > 1 ? `(NOT ${sql})` : `NOT ${sql}`, // ternary if to avoid obsolete parentheses
+        args: args,
+      }
+    })
+    return joinStatements(statements, 'AND')
+  } else {
+    // Join all filters in `sqlStmts` using the requested connective (which is 'OR' or 'NOT')
+    return joinStatements(sqlStmts, fieldName)
+  }
 }
 
 function makeEqualsFilter(
@@ -439,50 +497,36 @@ function makeContainsFilter(
   return { sql: `${fieldName} LIKE ?`, args: [`%${value}%`] }
 }
 
-function makeBooleanFilter(
-  fieldName: 'AND' | 'OR' | 'NOT',
-  value: unknown
-): { sql: string; args?: unknown[] } {
-  const objects = Array.isArray(value) ? value : [value] // the value may be a single object or an array of objects connected by the provided connective (AND, OR, NOT)
-  const sqlStmts = objects.map((obj) => {
-    // Make the necessary filters for this object:
-    //  - a filter for each field of this object
-    //  - connect those filters into 1 filter using AND
-    const fields = Object.keys(obj)
-    const stmts = fields.reduce(
-      (stmts: Array<{ sql: string; args?: unknown[] }>, fieldName) => {
-        const fieldValue = obj[fieldName as keyof typeof obj]
-        const stmts2 = makeFilter(fieldValue, fieldName)
-        return stmts.concat(stmts2)
-      },
-      []
-    )
-    return joinStatements(stmts, 'AND')
-  })
-
-  if (fieldName === 'NOT') {
-    // Every statement in `sqlStmts` must be negated
-    // and the negated statements must then be connected by a conjunction (i.e. using AND)
-    const statements = sqlStmts.map(({ sql, args }) => {
-      return {
-        sql: sqlStmts.length > 1 ? `(NOT ${sql})` : `NOT ${sql}`, // ternary if to avoid obsolete parentheses
-        args: args,
-      }
-    })
-    return joinStatements(statements, 'AND')
-  } else {
-    // Join all filters in `sqlStmts` using the requested connective (which is 'OR' or 'NOT')
-    return joinStatements(sqlStmts, fieldName)
-  }
+function addOffset(
+  i: AnyFindInput,
+  q: SelectQueryBuilder<any, any, any>
+): SelectQueryBuilder<any, any, any> {
+  if (typeof i.skip === 'undefined') return q // no offset
+  return q.offset(i.skip)
 }
 
-function joinStatements(
-  statements: Array<{ sql: string; args?: unknown[] }>,
-  connective: 'OR' | 'AND'
-): { sql: string; args?: unknown[] } {
-  const sql = statements.map((s) => s.sql).join(` ${connective} `)
-  const args = statements
-    .map((s) => s.args)
-    .reduce((a1, a2) => (a1 ?? []).concat(a2 ?? []))
-  return { sql, args }
+function addLimit(
+  i: AnyFindInput,
+  q: SelectQueryBuilder<any, any, any>
+): SelectQueryBuilder<any, any, any> {
+  if (typeof i.take === 'undefined') return q // no limit
+  return q.limit(i.take)
+}
+
+function addDistinct(
+  i: AnyFindInput,
+  q: SelectQueryBuilder<any, any, any>
+): SelectQueryBuilder<any, any, any> {
+  if (typeof i.distinct === 'undefined') return q
+  return q.distinct()
+}
+
+/**
+ * Returns an array containing the names of the fields that are set to `true`
+ *
+ * @param obj - A selection object.
+ * @returns Array containing the names of the selected fields.
+ */
+function getSelectedFields(obj: object): string[] {
+  return Object.keys(obj).filter((key) => obj[key as keyof object])
 }
