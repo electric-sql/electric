@@ -14,7 +14,7 @@ declare global {
   interface Window {
     // Tauir provides a global __TAURI__ object
     // we can use it to detect if we are running in a Tauri app
-    __TAURI__: any
+    __TAURI_INTERNALS__: any
   }
 }
 
@@ -23,7 +23,9 @@ declare global {
 // They are replaced at build time with the actual values.
 // https://vitejs.dev/guide/env-and-mode.html
 const DEV_MODE = import.meta.env.DEV
-const IS_TAURI = !!(import.meta.env.TAURI_PLATFORM || window.__TAURI__)
+const IS_TAURI = !!(
+  import.meta.env.TAURI_PLATFORM || window.__TAURI_INTERNALS__
+)
 const ELECTRIC_SERVICE =
   import.meta.env.ELECTRIC_SERVICE || import.meta.env.ELECTRIC_URL
 const DEBUG_ENV = import.meta.env.DEBUG
@@ -41,7 +43,9 @@ export let dbName: string
 export const initElectric = async () => {
   const { tabId } = uniqueTabId()
   const electricUrl = ELECTRIC_SERVICE ?? 'ws://localhost:5133'
-  dbName = `${discriminator}-${LIB_VERSION}-${tabId}.db`
+  dbName = IS_TAURI
+    ? `${discriminator}.db`
+    : `${discriminator}-${LIB_VERSION}-${tabId}.db`
 
   const config = {
     url: electricUrl,
