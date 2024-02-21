@@ -1,9 +1,10 @@
 import { Transition } from '@headlessui/react'
-import { useConnectivityState } from 'electric-sql/react'
+import { useRef } from 'react'
 import classnames from 'classnames'
+import { useConnectivityState } from 'electric-sql/react'
 import { useClickOutside } from '../hooks/useClickOutside'
 import Toggle from './Toggle'
-import { useRef } from 'react'
+import { useElectric } from '../electric'
 
 interface Props {
   isOpen: boolean
@@ -17,7 +18,8 @@ export default function ProfileMenu({
   onDismiss,
   setShowAboutModal,
 }: Props) {
-  const { connectivityState, toggleConnectivityState } = useConnectivityState()
+  const electric = useElectric()!
+  const connectivityState = useConnectivityState()
   const classes = classnames(
     'select-none w-53 shadow-modal z-50 flex flex-col py-1 bg-white font-normal rounded text-gray-800',
     className
@@ -28,6 +30,14 @@ export default function ProfileMenu({
   const connectivityStateDisplay =
     connectivityState.status[0].toUpperCase() +
     connectivityState.status.slice(1)
+
+  const toggleConnectivityState = () => {
+    if (connectivityConnected) {
+      electric.disconnect()
+    } else {
+      electric.connect()
+    }
+  }
 
   useClickOutside(ref, () => {
     if (isOpen && onDismiss) {
