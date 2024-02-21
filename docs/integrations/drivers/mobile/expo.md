@@ -3,6 +3,9 @@ title: Expo
 sidebar_position: 10
 ---
 
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
 ElectricSQL supports [Expo](https://expo.dev) via both [expo-sqlite](https://docs.expo.dev/versions/latest/sdk/sqlite/) and [expo-sqlite/next](https://docs.expo.dev/versions/latest/sdk/sqlite-next/).
 
 ## Dependencies
@@ -17,9 +20,11 @@ This package includes both the regular and `next` drivers. See the [expo-sqlite 
 
 ## Usage
 
-```tsx
-import * as SQLite from 'expo-sqlite' // or 'expo-sqlite/next'
-import { electrify } from 'electric-sql/expo' // or 'electric-sql/expo-next' 
+<Tabs groupId="usage" queryString>
+<TabItem value="expo-sqlite" label="expo-sqlite">
+```ts
+import * as SQLite from 'expo-sqlite'
+import { electrify } from 'electric-sql/expo'
 
 // Import your generated database schema.
 import { schema } from './generated/client'
@@ -32,8 +37,6 @@ const config = {
 // Create the expo-sqlite database connection. The first argument
 // is your database name. Changing this will create/use a new
 // local database file.
-//
-// When using expo-sqlite/next, use SQLite.openDatabaseSync('electric.db')
 const conn = SQLite.openDatabase('electric.db')
 
 // Instantiate your electric client.
@@ -43,6 +46,33 @@ const electric = await electrify(conn, schema, config)
 // See Usage -> Authentication for more details.
 await electric.connect('your token')
 ```
+</TabItem>
+<TabItem value="expo-sqlite-next" label="expo-sqlite/next">
+```tsx
+import * as SQLite from 'expo-sqlite/next'
+import { electrify } from 'electric-sql/expo-next' 
+
+// Import your generated database schema.
+import { schema } from './generated/client'
+
+// Define your config with at least an auth token.
+// See Usage -> Authentication for more details.
+const config = {
+  auth: {
+    token: '...'
+  }
+}
+
+// Create the expo-sqlite database connection. The first argument
+// is your database name. Changing this will create/use a new
+// local database file.
+const conn = SQLite.openDatabaseSync('electric.db')
+
+// Instantiate your electric client.
+const electric = await electrify(conn, schema, config)
+```
+</TabItem>
+</Tabs>
 
 You can now use the client to read, write and sync data, e.g.:
 
