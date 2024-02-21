@@ -493,7 +493,7 @@ export class SatelliteProcess implements Satellite {
     const groupedChanges = new Map<
       string,
       {
-        columns: string[]
+        relation: Relation
         dataChanges: InitialDataChange[]
         tableName: QualifiedTablename
       }
@@ -513,7 +513,7 @@ export class SatelliteProcess implements Satellite {
         changeGroup.dataChanges.push(op)
       } else {
         groupedChanges.set(tableNameString, {
-          columns: op.relation.columns.map((x) => x.name),
+          relation: op.relation,
           dataChanges: [op],
           tableName: tableName,
         })
@@ -538,14 +538,15 @@ export class SatelliteProcess implements Satellite {
     stmts.push(...this._disableTriggers([...groupedChanges.keys()]))
 
     // For each table, do a batched insert
-    for (const [table, { columns, dataChanges }] of groupedChanges) {
+    for (const [table, { relation, dataChanges }] of groupedChanges) {
       const records = dataChanges.map((change) => change.record)
-      const sqlBase = `INSERT INTO ${table} (${columns.join(', ')}) VALUES `
+      const columnNames = relation.columns.map((col) => col.name)
+      const sqlBase = `INSERT INTO ${table} (${columnNames.join(', ')}) VALUES `
 
       stmts.push(
         ...prepareInsertBatchedStatements(
           sqlBase,
-          columns,
+          columnNames,
           records as Record<string, SqlValue>[],
           this.maxSqlParameters
         )
@@ -579,8 +580,8 @@ export class SatelliteProcess implements Satellite {
       // because nobody uses them and we don't have the machinery to to a
       // `RETURNING` clause in the middle of `runInTransaction`.
       const notificationChanges: Change[] = []
-      groupedChanges.forEach(({ dataChanges, tableName }) => {
-        const primaryKeyColNames = dataChanges[0].relation.columns
+      groupedChanges.forEach(({ dataChanges, tableName, relation }) => {
+        const primaryKeyColNames = relation.columns
           .filter((col) => col.primaryKey)
           .map((col) => col.name)
         notificationChanges.push({
