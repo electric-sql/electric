@@ -1,5 +1,19 @@
 # @core/electric
 
+## 0.9.3
+
+### Patch Changes
+
+- 11069a90: Handle JWT expiration on the TS client, and support reconnecting after JWT expires.
+- 8f9bcb53: Deduplicate enum type definitions in the electrified schema.
+- 65aaeee5: Electric will now fail to start when a secure auth setting is used with AUTH_MODE=insecure.
+- 21a3a8c4: Pass the SSL options used for the main database connection to upstream connections established by the migrations proxy.
+- 0deba4d7: Validate public signing keys at startup. This allows for catching invalid key configuration early as opposed to getting an "invalid token signature" error when a client tries to authenticate.
+- b320bc16: Changed how the DDL statements for electrified enum columns are stored internally. This change requires resetting the database if it has at least one electrified enum column.
+- 0deba4d7: Accept base64-encoded symmetric signing keys. Electric will detect and decode such keys automatically. Binary keys are also accepted as before.
+- 9ed7b728: Reject electrification of tables outside of the public schema. This is a documented limitation that is now also enforced in the code.
+- c037fdd9: Enable SSL certificate validation for database connections when DATABASE_REQUIRE_SSL=true.
+
 ## 0.9.2
 
 ### Patch Changes
