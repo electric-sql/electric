@@ -32,7 +32,8 @@ export class YDocMaterializer {
   }
 
   async #processDataChanges(changes: ChangeNotification) {
-    const changedYDocIds = changes.changes
+    console.log(changes)
+    const changedYDocUpdateIds = changes.changes
       .filter(
         (change) =>
           change.recordChanges &&
@@ -40,12 +41,22 @@ export class YDocMaterializer {
       )
       .reduce((ids, change) => {
         change.recordChanges?.forEach((recordChange) => {
-          if (recordChange.record) {
-            ids.add(recordChange.record['ydoc_id'] as string)
+          if (recordChange.primaryKey) {
+            ids.add(recordChange.primaryKey['id'] as string)
           }
         })
         return ids
       }, new Set<string>())
+    const sqlIn = new Array(changedYDocUpdateIds.size).fill('?').join(',')
+    const changedYDocIds = new Set(
+      (
+        await this.#electricClient.db.rawQuery({
+          sql: `SELECT DISTINCT ydoc_id FROM ydoc_update WHERE id IN (${sqlIn})`,
+          args: Array.from(changedYDocUpdateIds),
+        })
+      ).map((record) => record.ydoc_id as string)
+    )
+    console.log(changedYDocIds)
     changedYDocIds.forEach((ydocId) => this.#processYDocChanges(ydocId))
   }
 
@@ -109,7 +120,7 @@ export class YDocMaterializer {
       sql: `UPDATE ydoc SET last_materialized = ? WHERE id = ?`,
       args: [updatesHash, ydocId],
     })
-    
+
     const callbacks = this.#materializeCallbacks.get(docType) || []
     await Promise.all(
       callbacks.map((callback) =>
