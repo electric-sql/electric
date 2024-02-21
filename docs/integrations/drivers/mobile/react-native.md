@@ -56,7 +56,7 @@ You can now use the client to read, write and sync data, e.g.:
 ```tsx
 const { db } = electric
 
-const results = db.projects.findMany()
+const results = await db.projects.findMany()
 console.log(results)
 ```
 
