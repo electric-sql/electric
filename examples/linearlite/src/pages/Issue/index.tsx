@@ -204,22 +204,24 @@ function IssuePage() {
                   />
                 </div>
               </div>
-              <div className="flex flex-1 mb-3 mr-5 md-mr-0">
-                <div className="flex flex-[2_0_0] mr-2 md-mr-0 items-center">
-                  Related
+              {!!relatedIssues?.length && (
+                <div className="flex flex-1 mb-3 mr-5 md-mr-0">
+                  <div className="flex flex-[2_0_0] mr-2 md-mr-0 items-center">
+                    Related
+                  </div>
+                  <div className="flex flex-[3_0_0]">
+                    <button className="inline-flex items-center h-6 ps-1.5 pe-2 text-gray-500border-none rounded hover:bg-gray-100">
+                      {
+                        relatedIssues?.map((relatedIssue, index) => (
+                          <span key={index} className="inline-flex items-center h-6 ps-1.5 pe-2 text-gray-500border-none rounded hover:bg-gray-100">
+                            <span className="me-1">{relatedIssue.issue_related_issue_issue_id_1Toissue?.id.slice(0, 8)}</span>
+                          </span>
+                        ))
+                      }
+                    </button>
+                  </div>
                 </div>
-                <div className="flex flex-[3_0_0]">
-                  <button className="inline-flex items-center h-6 ps-1.5 pe-2 text-gray-500border-none rounded hover:bg-gray-100">
-                    {
-                      relatedIssues?.map((relatedIssue, index) => (
-                        <span key={index} className="h-6 ps-1.5 pe-2 text-gray-500border-none rounded hover:bg-gray-100">
-                          <span className="me-1">{relatedIssue.issue_related_issue_issue_id_1Toissue?.id.slice(0, 8)}</span>
-                        </span>
-                      ))
-                    }
-                  </button>
-                </div>
-              </div>
+              )}
             </div>
           </div>
           <div className="flex flex-col md:flex-[3_0_0] md:p-3 border-gray-200 md:border-r min-h-0 min-w-0 overflow-auto">

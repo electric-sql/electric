@@ -8,6 +8,7 @@
     "backend:stop": "npx electric-sql stop",
     "backend:up": "npx electric-sql start --with-postgres --detach",
     "backend:down": "npx electric-sql stop --remove",
+    "backend:webrtc": "HOST=localhost PORT=4444 npx y-webrtc-signaling",
     "client:generate": "npx electric-sql generate",
     "client:watch": "npx electric-sql generate --watch",
     "db:migrate": "npx electric-sql with-config \"npx pg-migrations apply --database {{ELECTRIC_PROXY}} --directory ./db/migrations\"",

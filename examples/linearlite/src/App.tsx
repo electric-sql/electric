@@ -45,7 +45,6 @@ const App = () => {
     const init = async () => {
       try {
         const client = await initElectric()
-        window.client = client
         setElectric(client)
         materializer = makeMaterializer(client)
 
