@@ -47,7 +47,7 @@ class SqliteBuilder extends QueryBuilder {
 
   getTableInfo(tablename: string): Statement {
     return {
-      sql: `SELECT * FROM pragma_table_info(?)`,
+      sql: `SELECT name, type, "notnull", dflt_value, pk FROM pragma_table_info(?)`,
       args: [tablename],
     }
   }
