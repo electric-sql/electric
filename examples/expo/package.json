@@ -28,8 +28,8 @@
     "react": "^18.2.0",
     "react-native": "0.72.6",
     "react-native-base64": "^0.2.1",
-    "react-native-get-random-values": "^1.10.0",
-    "react-native-url-polyfill": "^2.0.0"
+    "react-native-url-polyfill": "^2.0.0",
+    "expo-crypto": "~12.4.1"
   },
   "devDependencies": {
     "@babel/core": "^7.23.9",
