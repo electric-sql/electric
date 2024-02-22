@@ -19,10 +19,12 @@
     "start:ios": "expo start --ios"
   },
   "dependencies": {
+    "base-64": "^1.0.0",
     "electric-sql": "^0.9.3",
     "expo": "~49.0.8",
     "expo-sqlite": "^13.2.2",
     "expo-status-bar": "~1.6.0",
+    "fastestsmallesttextencoderdecoder": "^1.0.22",
     "react": "^18.2.0",
     "react-native": "0.72.6",
     "react-native-base64": "^0.2.1",
@@ -33,6 +35,7 @@
     "@babel/core": "^7.23.9",
     "@databases/pg-migrations": "^5.0.3",
     "@tsconfig/react-native": "^2.0.3",
+    "@types/base-64": "^1.0.2",
     "@types/react": "^18.2.57",
     "@types/react-native": "^0.72.8",
     "fs-extra": "^10.1.0",
