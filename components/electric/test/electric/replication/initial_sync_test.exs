@@ -118,7 +118,7 @@ defmodule Electric.Replication.InitialSyncTest do
 
   defp fetch_current_lsn(conn) do
     {:ok, _, [{lsn_str}]} = :epgsql.squery(conn, "SELECT pg_current_wal_lsn()")
-    Lsn.from_string(lsn_str) |> Lsn.to_integer()
+    lsn_str |> Lsn.from_string() |> Lsn.to_integer()
   end
 
   defp electrify_table(conn, name, version) do
