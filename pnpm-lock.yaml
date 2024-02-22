@@ -190,8 +190,8 @@ importers:
         specifier: ^18.0.18
         version: 18.2.7
       '@types/react-native-sqlite-storage':
-        specifier: ^6.0.0
-        version: 6.0.0
+        specifier: ^6.0.5
+        version: 6.0.5
       '@types/tcp-port-used':
         specifier: ^1.0.2
         version: 1.0.2
@@ -5226,8 +5226,8 @@ packages:
       '@types/react': 18.2.7
     dev: true
 
-  /@types/react-native-sqlite-storage@6.0.0:
-    resolution: {integrity: sha512-bzZLc+DsfSQUcUtZUa5M1Ubi/ud88Pdd3k1nbUCQ1baHHzLg95S0DidCWscDHnnuGFB+18GBbcY7r97ivb0XpA==}
+  /@types/react-native-sqlite-storage@6.0.5:
+    resolution: {integrity: sha512-1gPwgYil6pHV/EDF816M8KmVsQC5nGMTAm8OMC25GbyuBaXFn7sdguMq6A2owtXB8c4qsH2tOEIQNetbOquawA==}
     dev: true
 
   /@types/react@18.2.7:
