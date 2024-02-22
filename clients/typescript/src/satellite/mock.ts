@@ -315,7 +315,9 @@ export class MockSatelliteClient
   }
 
   getOutboundReplicationStatus(): ReplicationStatus {
-    return this.isConnected() ? ReplicationStatus.ACTIVE : ReplicationStatus.STOPPED
+    return this.isConnected()
+      ? ReplicationStatus.ACTIVE
+      : ReplicationStatus.STOPPED
   }
 
   shutdown(): void {
