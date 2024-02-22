@@ -1,5 +1,11 @@
 # create-electric-app
 
+## 0.2.7
+
+### Patch Changes
+
+- 6bb8a2c1: Include template folders in starter app CLI distribution
+
 ## 0.2.6
 
 ### Patch Changes
