@@ -11,9 +11,6 @@ const electric = shallowRef<Electric>()
 
 onMounted(async () => {
   const config = {
-    auth: {
-      token: authToken(),
-    },
     debug: import.meta.env.DEV,
     url: import.meta.env.ELECTRIC_SERVICE,
   }
@@ -23,6 +20,8 @@ onMounted(async () => {
 
   const conn = await ElectricDatabase.init(scopedDbName)
   const client = await electrify(conn, schema, config)
+  await client.connect(authToken())
+  
 
   // Resolves when the shape subscription has been established.
   const shape = await client.db.items.sync()

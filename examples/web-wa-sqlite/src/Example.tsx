@@ -20,9 +20,6 @@ export const Example = () => {
 
     const init = async () => {
       const config = {
-        auth: {
-          token: authToken()
-        },
         debug: import.meta.env.DEV,
         url: import.meta.env.ELECTRIC_SERVICE
       }
@@ -32,6 +29,8 @@ export const Example = () => {
 
       const conn = await ElectricDatabase.init(scopedDbName) 
       const electric = await electrify(conn, schema, config)
+      await electric.connect(authToken())
+
 
       if (!isMounted) {
         return

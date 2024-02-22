@@ -1,6 +1,6 @@
 {
   "name": "electric-sql-wa-sqlite-example",
-  "version": "0.9.0",
+  "version": "0.9.3",
   "author": "ElectricSQL",
   "license": "Apache-2.0",
   "type": "module",
@@ -20,22 +20,22 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "electric-sql": "^0.9.0",
+    "electric-sql": "^0.9.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "wa-sqlite": "rhashimoto/wa-sqlite#semver:^0.9.8"
+    "wa-sqlite": "github:rhashimoto/wa-sqlite#semver:^0.9.8"
   },
   "devDependencies": {
-    "@databases/pg-migrations": "^5.0.2",
-    "@types/react": "^18.2.15",
-    "@types/react-dom": "^18.2.7",
-    "@typescript-eslint/eslint-plugin": "^6.0.0",
-    "@typescript-eslint/parser": "^6.0.0",
-    "@vitejs/plugin-react": "^4.0.3",
-    "eslint": "^8.45.0",
+    "@databases/pg-migrations": "^5.0.3",
+    "@types/react": "^18.2.57",
+    "@types/react-dom": "^18.2.19",
+    "@typescript-eslint/eslint-plugin": "^6.21.0",
+    "@typescript-eslint/parser": "^6.21.0",
+    "@vitejs/plugin-react": "^4.2.1",
+    "eslint": "^8.56.0",
     "eslint-plugin-react-hooks": "^4.6.0",
-    "eslint-plugin-react-refresh": "^0.4.3",
-    "typescript": "^5.0.2",
-    "vite": "^4.4.5"
+    "eslint-plugin-react-refresh": "^0.4.5",
+    "typescript": "^5.3.3",
+    "vite": "^5.1.4"
   }
 }
