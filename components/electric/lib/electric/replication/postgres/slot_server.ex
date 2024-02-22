@@ -71,6 +71,8 @@ defmodule Electric.Replication.Postgres.SlotServer do
           | {:preprocess_change_fn, preprocess_change_fn()}
           | {:preprocess_relation_list_fn, preprocess_relation_list_fn()}
 
+  @lsn_step 10
+
   # Public interface
 
   @spec start_link([opts(), ...]) :: GenServer.on_start()
@@ -371,7 +373,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
          %Changes.Transaction{commit_timestamp: ts, changes: changes, origin: origin},
          %State{} = state
        ) do
-    first_lsn = Lsn.increment(state.current_lsn)
+    first_lsn = Lsn.increment(state.current_lsn, @lsn_step)
 
     {internal_relations, user_relations} =
       changes
@@ -413,14 +415,16 @@ defmodule Electric.Replication.Postgres.SlotServer do
         end)
       )
       |> Enum.map(&changes_to_wal(&1, relations))
-      |> Enum.map_reduce(first_lsn, fn elem, lsn -> {{lsn, elem}, Lsn.increment(lsn)} end)
+      |> Enum.map_reduce(first_lsn, fn elem, lsn ->
+        {{lsn, elem}, Lsn.increment(lsn, @lsn_step)}
+      end)
 
     relation_messages =
       Enum.map(missing_relations, fn table_info ->
         {%Lsn{segment: 0, offset: 0}, relation_to_wal(table_info)}
       end)
 
-    commit_lsn = Lsn.increment(final_lsn)
+    commit_lsn = Lsn.increment(final_lsn, @lsn_step)
 
     begin = [
       {first_lsn,

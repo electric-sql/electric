@@ -275,6 +275,5 @@ defmodule Electric.Postgres.LogicalReplication.Decoder do
     DateTime.add(@pg_epoch, microsecond_offset, :microsecond)
   end
 
-  defp decode_lsn(<<segment::integer-32, offset::integer-32>>),
-    do: %Lsn{segment: segment, offset: offset}
+  defp decode_lsn(bin), do: Lsn.decode_bin(bin)
 end

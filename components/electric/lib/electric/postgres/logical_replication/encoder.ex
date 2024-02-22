@@ -167,9 +167,7 @@ defmodule Electric.Postgres.LogicalReplication.Encoder do
     data
   end
 
-  defp encode_lsn(%Lsn{segment: segment, offset: offset}) do
-    <<segment::integer-32, offset::integer-32>>
-  end
+  defp encode_lsn(lsn), do: Lsn.encode_bin(lsn)
 
   @pg_epoch DateTime.from_iso8601("2000-01-01T00:00:00.000000Z") |> elem(1)
   defp timestamp_to_pgtimestamp(datetime) when is_struct(datetime, DateTime) do
