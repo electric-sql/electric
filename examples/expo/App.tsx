@@ -1,5 +1,5 @@
-// import 'react-native-get-random-values'
-// import 'react-native-url-polyfill/auto'
+import 'react-native-get-random-values'
+import 'react-native-url-polyfill/auto'
 
 import React from 'react'
 import { SafeAreaView, ScrollView, StatusBar, StyleSheet } from 'react-native'
