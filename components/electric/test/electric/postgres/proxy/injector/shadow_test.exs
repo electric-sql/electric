@@ -92,5 +92,63 @@ defmodule Electric.Postgres.Proxy.Injector.ShadowTest do
       |> server(complete_ready("COMMIT", :idle))
       |> idle!(Shadow)
     end
+
+    test "correctly handles multiple statements", cxt do
+      cxt.injector
+      |> client(
+        [
+          query("""
+          create table users (id uuid, value text);
+          create index users_value_idx on users (value);
+          """)
+        ],
+        server: [
+          query("create table users (id uuid, value text)"),
+          query("create index users_value_idx on users (value)")
+        ]
+      )
+      |> server([complete("CREATE TABLE"), ready(:idle), complete("CREATE INDEX"), ready(:idle)],
+        client: [
+          complete("CREATE TABLE"),
+          complete("CREATE INDEX"),
+          ready(:idle)
+        ]
+      )
+      |> idle!(Shadow)
+
+      cxt.injector
+      |> client(
+        [
+          close(),
+          sync(),
+          query("""
+          create table users (id uuid, value text);
+          create index users_value_idx on users (value);
+          """)
+        ],
+        server: [
+          close(),
+          sync()
+        ]
+      )
+      |> server([close_complete(), ready(:idle)],
+        client: [
+          close_complete(),
+          ready(:idle)
+        ],
+        server: [
+          query("create table users (id uuid, value text)"),
+          query("create index users_value_idx on users (value)")
+        ]
+      )
+      |> server([complete("CREATE TABLE"), ready(:idle), complete("CREATE INDEX"), ready(:idle)],
+        client: [
+          complete("CREATE TABLE"),
+          complete("CREATE INDEX"),
+          ready(:idle)
+        ]
+      )
+      |> idle!(Shadow)
+    end
   end
 end
