@@ -155,8 +155,17 @@ defmodule Electric.Replication.Postgres.Client do
     {:ok, system_id}
   end
 
-  @spec create_slot(connection(), String.t()) :: {:ok, String.t()}
-  def create_slot(conn, slot_name) do
+  @doc """
+  Create the main replication slot to maintain a resumable window of WAL records in Postgres.
+
+  This slot should be used as a source for pg_copy_logical_replication() to create a new,
+  temporary replication slot for the replication connection.
+
+  Note that unless manually moved forward with pg_replication_slot_advance(), it will prevent
+  Postgres from discarding old WAL records, leading to unbounded disk usage growth.
+  """
+  @spec create_main_slot(connection(), String.t()) :: {:ok, String.t()}
+  def create_main_slot(conn, slot_name) do
     case squery(
            conn,
            ~s|CREATE_REPLICATION_SLOT "#{slot_name}" LOGICAL pgoutput NOEXPORT_SNAPSHOT|
@@ -201,6 +210,26 @@ defmodule Electric.Replication.Postgres.Client do
     end
   end
 
+  @doc """
+  Create a temporary slot as a copy of the main one.
+
+  Its lsn matches that of the main slot at the time of the copy. This temporary slot should be
+  used for starting a new replication connection, at which point a later lsn can be specified
+  as a starting point for the replication stream.
+
+  Postgres will automatically delete the temporary slot when the connection that created it closes.
+  """
+  @spec create_temporary_slot(connection(), String.t(), String.t()) ::
+          {:ok, String.t(), Lsn.t()} | {:error, term}
+  def create_temporary_slot(conn, source_slot_name, tmp_slot_name) do
+    sql =
+      "SELECT * FROM pg_copy_logical_replication_slot('#{source_slot_name}', '#{tmp_slot_name}', true)"
+
+    with {:ok, _, [{^tmp_slot_name, lsn_str}]} <- squery(conn, sql) do
+      {:ok, tmp_slot_name, Lsn.from_string(lsn_str)}
+    end
+  end
+
   def create_subscription(conn, name, publication_name, connection_params) do
     connection_string = Enum.map_join(connection_params, " ", fn {k, v} -> "#{k}=#{v}" end)
 
@@ -215,20 +244,21 @@ defmodule Electric.Replication.Postgres.Client do
   end
 
   @doc """
-  Start consuming logical replication feed using a given `publication` and `slot`.
+  Start consuming the logical replication stream using given `publication` and `slot`.
 
-  The handler can be a pid or a module implementing the `handle_x_log_data` callback.
-
-  Returns `:ok` on success.
+  The handler can be a pid or a module implementing epgsql's `handle_x_log_data` callback.
   """
-  def start_replication(conn, publication, slot, handler) do
+  @spec start_replication(connection, String.t(), String.t(), Lsn.t(), module | pid) ::
+          :ok | {:error, term}
+  def start_replication(conn, publication, slot, lsn, handler) do
     Logger.debug(
       "#{__MODULE__} start_replication: slot: '#{slot}', publication: '#{publication}'"
     )
 
-    slot = String.to_charlist(slot)
+    slot = to_charlist(slot)
+    lsn = to_charlist(lsn)
     opts = ~c"proto_version '1', publication_names '#{publication}', messages"
-    :epgsql.start_replication(conn, slot, handler, [], ~c"0/0", opts)
+    :epgsql.start_replication(conn, slot, handler, [], lsn, opts)
   end
 
   @doc """
@@ -267,6 +297,29 @@ defmodule Electric.Replication.Postgres.Client do
   def acknowledge_lsn(conn, lsn) do
     wal_offset = Lsn.to_integer(lsn)
     :epgsql.standby_status_update(conn, wal_offset, wal_offset)
+  end
+
+  @doc """
+  Fetch the current lsn from Postgres.
+  """
+  @spec current_lsn(connection) :: {:ok, Lsn.t()} | {:error, term}
+  def current_lsn(conn) do
+    with {:ok, _, [{lsn_str}]} <- squery(conn, "SELECT pg_current_wal_lsn()") do
+      {:ok, Lsn.from_string(lsn_str)}
+    end
+  end
+
+  @doc """
+  Advance the earliest accessible lsn of the given slot to `to_lsn`.
+
+  After a slot is advanced there is no way for it to be rewound back to an earlier lsn.
+  """
+  @spec advance_replication_slot(connection, String.t(), Lsn.t()) :: :ok | {:error, term}
+  def advance_replication_slot(conn, slot_name, to_lsn) do
+    with {:ok, _, _} <-
+           squery(conn, "SELECT pg_replication_slot_advance('#{slot_name}', '#{to_lsn}')") do
+      :ok
+    end
   end
 
   @relkind %{table: ["r"], index: ["i"], view: ["v", "m"]}
