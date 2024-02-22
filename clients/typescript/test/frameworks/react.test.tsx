@@ -6,8 +6,8 @@ import React from 'react'
 import { EventEmitter } from 'events'
 import { act, renderHook, waitFor } from '@testing-library/react'
 
-import { DatabaseAdapter } from '../../src/drivers/react-native-sqlite-storage/adapter'
-import { MockDatabase } from '../../src/drivers/react-native-sqlite-storage/mock'
+import { DatabaseAdapter } from '../../src/drivers/wa-sqlite/adapter'
+import { MockDatabase } from '../../src/drivers/wa-sqlite/mock'
 
 import { MockNotifier } from '../../src/notifiers/mock'
 import { QualifiedTablename } from '../../src/util/tablename'
@@ -46,7 +46,7 @@ const test = anyTest as TestFn<{
 
 test.beforeEach((t) => {
   const original = new MockDatabase('test.db')
-  const adapter = new DatabaseAdapter(original, false)
+  const adapter = new DatabaseAdapter(original)
   const notifier = new MockNotifier('test.db', new EventEmitter())
   const satellite = new MockSatelliteProcess(
     'test.db',
@@ -72,7 +72,8 @@ test.beforeEach((t) => {
 })
 
 test('liveFirst arguments are optional', async (t) => {
-  const { dal } = t.context
+  const { dal, adapter } = t.context
+  adapter._query = async () => [{ value: 'potato' }]
 
   const liveQuery = dal.db.Items.liveFirst() // this one already fails because later down `result.current` contains an error...
 
@@ -90,7 +91,8 @@ test('liveFirst arguments are optional', async (t) => {
 })
 
 test('liveMany arguments are optional', async (t) => {
-  const { dal } = t.context
+  const { dal, adapter } = t.context
+  adapter._query = async () => [{ value: 'potato' }]
 
   const liveQuery = dal.db.Items.liveMany() // this one already fails because later down `result.current` contains an error...
 
