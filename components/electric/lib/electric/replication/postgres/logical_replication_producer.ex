@@ -319,10 +319,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
 
     Metrics.span_event(state.span, :transaction, Transaction.count_operations(event))
 
-    queue = :queue.in(event, queue)
-    state = %{state | queue: queue, transaction: nil}
-
-    state
+    %{state | queue: :queue.in(event, queue), transaction: nil}
     |> advance_main_slot(end_lsn)
     |> dispatch_events([])
   end
@@ -331,9 +328,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   # meet it by dispatching events.
   @impl true
   def handle_demand(incoming_demand, %{demand: pending_demand} = state) do
-    state = %{state | demand: incoming_demand + pending_demand}
-
-    dispatch_events(state, [])
+    %{state | demand: incoming_demand + pending_demand}
+    |> dispatch_events([])
   end
 
   # When we're done exhausting demand, emit events.
@@ -346,15 +342,13 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
       # If the queue has events, recurse to accumulate them
       # as long as there is demand.
       {{:value, event}, queue} ->
-        state = %{state | demand: demand - 1, queue: queue}
-
-        dispatch_events(state, [event | events])
+        %{state | demand: demand - 1, queue: queue}
+        |> dispatch_events([event | events])
 
       # When the queue is empty, emit any accumulated events.
       {:empty, queue} ->
-        state = %{state | queue: queue}
-
-        emit_events(state, events)
+        %{state | queue: queue}
+        |> emit_events(events)
     end
   end
 
