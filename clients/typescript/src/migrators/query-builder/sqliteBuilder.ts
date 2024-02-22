@@ -23,6 +23,25 @@ class SqliteBuilder extends QueryBuilder {
     return [query]
   }
 
+  countTablesIn(countName: string, tables: string[]): Statement {
+    const sql = dedent`
+      SELECT count(name) as ${countName} FROM sqlite_master
+        WHERE type='table'
+        AND name IN (${tables.map(() => '?').join(', ')})
+    `
+    return {
+      sql,
+      args: tables,
+    }
+  }
+
+  getTableInfo(tablename: string): Statement {
+    return {
+      sql: `SELECT name, type, "notnull", dflt_value, pk FROM pragma_table_info(?)`,
+      args: [tablename],
+    }
+  }
+
   createIndex(
     indexName: string,
     onTable: QualifiedTablename,
