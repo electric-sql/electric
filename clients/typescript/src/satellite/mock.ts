@@ -18,6 +18,7 @@ import {
   OutboundStartedCallback,
   TransactionCallback,
   SocketCloseReason,
+  ReplicationStatus,
 } from '../util/types'
 import { ElectricConfig } from '../config/index'
 
@@ -311,6 +312,10 @@ export class MockSatelliteClient
 
   isConnected(): boolean {
     return !this.disconnected
+  }
+
+  getOutboundReplicationStatus(): ReplicationStatus {
+    return this.isConnected() ? ReplicationStatus.ACTIVE : ReplicationStatus.STOPPED
   }
 
   shutdown(): void {

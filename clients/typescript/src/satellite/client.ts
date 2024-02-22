@@ -277,6 +277,10 @@ export class SatelliteClient implements Client {
     return !!this.socketHandler
   }
 
+  getOutboundReplicationStatus(): ReplicationStatus {
+    return this.outbound.isReplicating
+  }
+
   shutdown(): void {
     this.disconnect()
     this.emitter.removeAllListeners()

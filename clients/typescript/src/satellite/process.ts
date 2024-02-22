@@ -32,6 +32,7 @@ import {
   MigrationTable,
   Relation,
   RelationsCache,
+  ReplicationStatus,
   SatelliteError,
   SatelliteErrorCode,
   SchemaChange,
@@ -1050,7 +1051,9 @@ export class SatelliteProcess implements Satellite {
 
       if (oplogEntries.length > 0) this._notifyChanges(oplogEntries, 'local')
 
-      if (this.client.isConnected()) {
+      if (
+        this.client.getOutboundReplicationStatus() === ReplicationStatus.ACTIVE
+      ) {
         const enqueued = this.client.getLastSentLsn()
         const enqueuedLogPos = bytesToNumber(enqueued)
 
@@ -1117,8 +1120,9 @@ export class SatelliteProcess implements Satellite {
   }
 
   async _replicateSnapshotChanges(results: OplogEntry[]): Promise<void> {
-    // TODO: Don't try replicating when outbound is inactive
-    if (!this.client.isConnected()) {
+    if (
+      this.client.getOutboundReplicationStatus() != ReplicationStatus.ACTIVE
+    ) {
       return
     }
 
