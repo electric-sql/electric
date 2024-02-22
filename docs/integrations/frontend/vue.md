@@ -51,7 +51,7 @@ const electric = shallowRef<Electric>()
 onMounted(async () => {
   const conn = await ElectricDatabase.init('electric.db')
   const client = await electrify(conn, schema)
-  await client.connect(insecureAuthToken())
+  await client.connect(insecureAuthToken({ sub: 'dummy' }))
 
   // update the reference with client instance
   electric.value = client
