@@ -1,5 +1,11 @@
 # electric-sql
 
+## 0.9.4
+
+### Patch Changes
+
+- dace3fc1: Restore support for both `sub` and `user_id` claim in auth JWTs
+
 ## 0.9.3
 
 ### Patch Changes

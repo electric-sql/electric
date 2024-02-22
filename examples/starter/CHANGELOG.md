@@ -1,5 +1,11 @@
 # create-electric-app
 
+## 0.2.8
+
+### Patch Changes
+
+- ecf1025c: Add contents of template folders to package
+
 ## 0.2.7
 
 ### Patch Changes
