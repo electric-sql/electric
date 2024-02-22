@@ -32,13 +32,13 @@ cd electric/examples/react-native
 Install the dependencies:
 
 ```sh
-yarn
+npm install
 ```
 
 Install the [pods](https://cocoapods.org) (if you get a `pod: command not found` error, then you need to [install CocoaPods](https://guides.cocoapods.org/using/getting-started.html)):
 
 ```sh
-yarn pods:install
+npm run pods:install
 ```
 
 You may want to also check the [install section of the react-native-sqlite-storage driver README](https://github.com/andpor/react-native-sqlite-storage#installation).
@@ -48,27 +48,27 @@ You may want to also check the [install section of the react-native-sqlite-stora
 Start Postgres and Electric using Docker (see [running the examples](https://electric-sql.com/docs/examples/notes/running) for more options):
 
 ```shell
-yarn backend:up
-# Or `yarn backend:start` to foreground
+npm run backend:up
+# Or `npm run backend:start` to foreground
 ```
 
 Note that, if useful, you can connect to Postgres using:
 
 ```shell
-yarn db:psql
+npm run db:psql
 ```
 
 Setup your [database schema](https://electric-sql.com/docs/usage/data-modelling):
 
 ```shell
-yarn db:migrate
+npm run db:migrate
 ```
 
 Generate your [type-safe client](https://electric-sql.com/docs/usage/data-access/client):
 
 ```shell
-yarn client:generate
-# or `yarn client:watch`` to re-generate whenever the DB schema changes
+npm run client:generate
+# or `npm run client:watch`` to re-generate whenever the DB schema changes
 ```
 
 ## Run
@@ -76,7 +76,7 @@ yarn client:generate
 Run in the iOS simulator:
 
 ```shell
-yarn start:ios
+npm run start:ios
 ```
 
 ## More information
