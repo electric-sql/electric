@@ -42,8 +42,13 @@ export function mockSecureAuthToken(
 
 export function decodeToken(token: string): JWTPayload & { sub: string } {
   const decoded = decodeJwt(token)
-  if (typeof decoded.sub === 'undefined') {
-    throw new InvalidArgumentError('Token does not contain a sub claim')
+  if (
+    typeof decoded.sub === 'undefined' &&
+    typeof decoded.user_id === 'undefined'
+  ) {
+    throw new InvalidArgumentError(
+      'Token does not contain a sub or user_id claim'
+    )
   }
   return decoded as JWTPayload & { sub: string }
 }

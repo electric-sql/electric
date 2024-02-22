@@ -699,19 +699,22 @@ export class SatelliteProcess implements Satellite {
    * @param token The JWT token.
    */
   setToken(token: string): void {
-    const { sub } = decodeToken(token)
+    const { sub, user_id } = decodeToken(token)
+    // `sub` is the standard claim, but `user_id` is also used in the Electric service
+    // We first check for sub, and if it's not present, we use user_id
+    const newUserId = sub ?? user_id
     const userId: string | undefined = this._authState?.userId
-    if (typeof userId !== 'undefined' && sub !== userId) {
+    if (typeof userId !== 'undefined' && newUserId !== userId) {
       // We must check that the new token is still using the same user ID.
       // We can't accept a re-connection that changes the user ID because the Satellite process is statefull.
       // To change user ID the user must re-electrify the database.
       throw new InvalidArgumentError(
-        `Can't change user ID when reconnecting. Previously connected with user ID '${userId}' but trying to reconnect with user ID '${sub}'`
+        `Can't change user ID when reconnecting. Previously connected with user ID '${userId}' but trying to reconnect with user ID '${newUserId}'`
       )
     }
     this._setAuthState({
       ...this._authState!,
-      userId: sub,
+      userId: newUserId,
       token,
     })
   }

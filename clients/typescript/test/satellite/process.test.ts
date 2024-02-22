@@ -129,6 +129,43 @@ test('set persistent client id', async (t) => {
   t.assert(clientId1 === clientId2)
 })
 
+test('can use user_id in JWT', async (t) => {
+  const { satellite, authState } = t.context
+
+  await t.notThrowsAsync(async () => {
+    await startSatellite(
+      satellite,
+      authState,
+      insecureAuthToken({ user_id: 'test-userA' })
+    )
+  })
+})
+
+test('can use sub in JWT', async (t) => {
+  const { satellite, authState } = t.context
+
+  await t.notThrowsAsync(async () => {
+    await startSatellite(
+      satellite,
+      authState,
+      insecureAuthToken({ sub: 'test-userB' })
+    )
+  })
+})
+
+test('require user_id or sub in JWT', async (t) => {
+  const { satellite, authState } = t.context
+
+  const error = await t.throwsAsync(async () => {
+    await startSatellite(
+      satellite,
+      authState,
+      insecureAuthToken({ custom_user_claim: 'test-userC' })
+    )
+  })
+  t.is(error?.message, 'Token does not contain a sub or user_id claim')
+})
+
 test('cannot update user id', async (t) => {
   const { satellite, authState, token } = t.context
 
