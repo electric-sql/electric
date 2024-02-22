@@ -11,6 +11,10 @@ Authentication uses JSON Web Tokens, a [standard method](https://tools.ietf.org/
 
 A valid authentication JWT must contain a `sub` claim (formerly `user_id`). This must be a non-empty string, which should correspond to the primary key UUID of the authenticated app user.
 
+:::note
+Since version 0.8.0, the `sub` claim replaces the `user_id` as the standard "subject" designator in JWT tokens. However, Electric still validates tokens that have the `user_id` claim for backwards compatibility with old clients.
+:::
+
 ## Validated claims
 
 If you are using [insecure mode](./insecure.md) any other claims are optional and unvalidated.
