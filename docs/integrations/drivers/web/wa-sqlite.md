@@ -41,7 +41,7 @@ const config = {
 // is your database name. Changing this will create/use a new
 // local database file. The second argument is the public URL
 // path to use when loading the wa-sqlite WASM files.
-const conn = await ElectricDatabase.init('electric.db', '')
+const conn = await ElectricDatabase.init('electric.db')
 
 // Instantiate your electric client.
 const electric = await electrify(conn, schema, config)

@@ -49,9 +49,9 @@ import { Electric, schema } from './generated/client'
 const electric = shallowRef<Electric>()
 
 onMounted(async () => {
-  const config = { auth: { token: insecureAuthToken() } }
   const conn = await ElectricDatabase.init('electric.db')
-  const client = await electrify(conn, schema, config)
+  const client = await electrify(conn, schema)
+  await client.connect(insecureAuthToken({ sub: 'dummy' }))
 
   // update the reference with client instance
   electric.value = client
