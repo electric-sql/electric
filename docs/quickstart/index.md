@@ -85,7 +85,7 @@ import { schema } from './generated/client'
 const config = {
   url: "http://localhost:5133"
 }
-const conn = await ElectricDatabase.init('my.db', '')
+const conn = await ElectricDatabase.init('my.db')
 const electric = await electrify(conn, schema, config)
 ```
 

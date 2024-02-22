@@ -162,7 +162,7 @@ const config = {
 }
 
 const init = async () => {
-  const conn = await ElectricDatabase.init('my.db', '/')
+  const conn = await ElectricDatabase.init('my.db')
   const electric = await electrify(conn, schema, config)
   await electric.connect('your token')
   return electric

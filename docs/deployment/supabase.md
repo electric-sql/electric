@@ -182,7 +182,7 @@ const config = {
 }
 
 // Initiate your Electric database
-const conn = await ElectricDatabase.init('myApp.db', '')
+const conn = await ElectricDatabase.init('myApp.db')
 const electric = await electrify(conn, schema, config)
 const token = data.session.access_token
 await electric.connect(token)
