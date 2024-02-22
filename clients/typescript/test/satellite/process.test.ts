@@ -153,7 +153,7 @@ test('can use sub in JWT', async (t) => {
   })
 })
 
-test('Require user_id or sub in JWT', async (t) => {
+test('require user_id or sub in JWT', async (t) => {
   const { satellite, authState } = t.context
 
   const error = await t.throwsAsync(async () => {
