@@ -15,9 +15,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-               BuildableName = "reactnative.app"
-               BlueprintName = "reactnative"
-               ReferencedContainer = "container:reactnative.xcodeproj">
+               BuildableName = "ElectricSQLExample.app"
+               BlueprintName = "ElectricSQLExample"
+               ReferencedContainer = "container:ElectricSQLExample.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -33,9 +33,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "00E356ED1AD99517003FC87E"
-               BuildableName = "reactnativeTests.xctest"
-               BlueprintName = "reactnativeTests"
-               ReferencedContainer = "container:reactnative.xcodeproj">
+               BuildableName = "ElectricSQLExampleTests.xctest"
+               BlueprintName = "ElectricSQLExampleTests"
+               ReferencedContainer = "container:ElectricSQLExample.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
@@ -55,9 +55,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-            BuildableName = "reactnative.app"
-            BlueprintName = "reactnative"
-            ReferencedContainer = "container:reactnative.xcodeproj">
+            BuildableName = "ElectricSQLExample.app"
+            BlueprintName = "ElectricSQLExample"
+            ReferencedContainer = "container:ElectricSQLExample.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -72,9 +72,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-            BuildableName = "reactnative.app"
-            BlueprintName = "reactnative"
-            ReferencedContainer = "container:reactnative.xcodeproj">
+            BuildableName = "ElectricSQLExample.app"
+            BlueprintName = "ElectricSQLExample"
+            ReferencedContainer = "container:ElectricSQLExample.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>
