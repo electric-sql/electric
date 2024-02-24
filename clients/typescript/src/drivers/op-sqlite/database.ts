@@ -5,5 +5,5 @@ type OriginalDatabase = OPSQLiteConnection
 
 export interface Database
   extends Pick<OriginalDatabase, 'executeAsync' | 'executeBatchAsync'> {
-  dbName?: DbName
+  dbName: DbName
 }

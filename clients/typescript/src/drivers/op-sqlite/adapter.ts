@@ -1,8 +1,9 @@
 import { Row, SqlValue } from '../../util/types'
-import { SerialDatabaseAdapter as GenericDatabaseAdapter } from '../generic'
+import { BatchDatabaseAdapter as GenericDatabaseAdapter } from '../generic'
 import { Statement } from '../../util'
 import { Database } from './database'
 import { RunResult } from '../../electric/adapter'
+import { SQLBatchTuple } from '@op-engineering/op-sqlite'
 
 export class DatabaseAdapter extends GenericDatabaseAdapter {
   readonly db: Database
@@ -14,21 +15,21 @@ export class DatabaseAdapter extends GenericDatabaseAdapter {
 
   async _query(statement: Statement): Promise<Row[]> {
     const result = await this.db.executeAsync(statement.sql, statement.args)
-    return result.rows?._array ?? []
+    return result.rows!._array 
   }
   async _run(statement: Statement): Promise<RunResult> {
     const result = await this.db.executeAsync(statement.sql, statement.args)
-    return { rowsAffected: result.rowsAffected }
+    return { rowsAffected: result.rowsAffected! }
   }
 
   async execBatch(statements: Statement[]): Promise<RunResult> {
-    const set: any[] = statements.map(({ sql, args }) => ({
-      statement: sql,
-      values: (args ?? []) as SqlValue[],
-    }))
+    const set: SQLBatchTuple[] = statements.map(({ sql, args }) => ([
+      sql,
+      (args ?? []) as SqlValue[]
+    ]))
 
     const result = await this.db.executeBatchAsync(set)
 
-    return { rowsAffected: result?.rowsAffected ?? 0 }
+    return { rowsAffected: result.rowsAffected! }
   }
 }

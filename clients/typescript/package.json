@@ -258,7 +258,6 @@
     "vue-tsc": "^1.8.27",
     "wa-sqlite": "rhashimoto/wa-sqlite#semver:^0.9.8",
     "web-worker": "^1.2.0",
-    "@op-engineering/op-sqlite": ">= 2.0.16",
     "@capacitor-community/sqlite": ">= 5.4.1"
   },
   "peerDependencies": {
@@ -273,7 +272,8 @@
     "react-native-sqlite-storage": ">= 6.0.0",
     "typeorm": ">=0.3.0",
     "vue": ">=3.0.0",
-    "wa-sqlite": "rhashimoto/wa-sqlite#semver:^0.9.8"
+    "wa-sqlite": "rhashimoto/wa-sqlite#semver:^0.9.8",
+    "@op-engineering/op-sqlite": ">= 2.0.16"
   },
   "peerDependenciesMeta": {
     "@op-engineering/op-sqlite": {
