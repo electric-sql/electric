@@ -10,7 +10,6 @@ export const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
 export type Appointment = Appointments
 
 const discriminator = 'iconicdemo'
-const distPath = '/'
 
 // import.meta.env is a special object that Vite provides for accessing
 // environment variables at build time and runtime.
@@ -36,21 +35,21 @@ export const initElectric = async () => {
   dbName = `${discriminator}-${LIB_VERSION}-${tabId}.db`
 
   const config = {
-    auth: {
-      token: insecureAuthToken({ user_id: genUUID() }),
-    },
     url: electricUrl,
     debug: DEBUG,
   }
 
-  return Capacitor.isNativePlatform()
+  const client = Capacitor.isNativePlatform()
     ? await initCapacitorSQLite(dbName, config)
     : await initWaSQLite(dbName, config)
+
+  await client.connect(insecureAuthToken({ sub: genUUID() }))
+  return client
 }
 
 async function initWaSQLite(dbName: string, config: ElectricConfig) {
   const { ElectricDatabase, electrify } = await import('electric-sql/wa-sqlite')
-  const conn = await ElectricDatabase.init(dbName, distPath)
+  const conn = await ElectricDatabase.init(dbName)
   return await electrify(conn, schema, config)
 }
 

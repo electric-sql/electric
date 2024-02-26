@@ -1,25 +1,25 @@
 PODS:
-  - Capacitor (5.4.1):
+  - Capacitor (5.7.0):
     - CapacitorCordova
   - CapacitorApp (5.0.6):
     - Capacitor
-  - CapacitorCommunitySqlite (5.4.1):
+  - CapacitorCommunitySqlite (5.6.0):
     - Capacitor
     - SQLCipher
     - ZIPFoundation
-  - CapacitorCordova (5.4.1)
+  - CapacitorCordova (5.7.0)
   - CapacitorHaptics (5.0.6):
     - Capacitor
   - CapacitorKeyboard (5.0.6):
     - Capacitor
   - CapacitorStatusBar (5.0.6):
     - Capacitor
-  - SQLCipher (4.5.5):
-    - SQLCipher/standard (= 4.5.5)
-  - SQLCipher/common (4.5.5)
-  - SQLCipher/standard (4.5.5):
+  - SQLCipher (4.5.6):
+    - SQLCipher/standard (= 4.5.6)
+  - SQLCipher/common (4.5.6)
+  - SQLCipher/standard (4.5.6):
     - SQLCipher/common
-  - ZIPFoundation (0.9.16)
+  - ZIPFoundation (0.9.18)
 
 DEPENDENCIES:
   - "Capacitor (from `../../node_modules/@capacitor/ios`)"
@@ -52,16 +52,16 @@ EXTERNAL SOURCES:
     :path: "../../node_modules/@capacitor/status-bar"
 
 SPEC CHECKSUMS:
-  Capacitor: 4c0681b47eebeba1f902093d24149cf2f518393e
+  Capacitor: fc155ee2ee45a2093d716f13cf5aa5a865e2d85a
   CapacitorApp: 024e1b1bea5f883d79f6330d309bc441c88ad04a
-  CapacitorCommunitySqlite: 1f3fd8af86941bcb56ee1e1c7c05d721fc5dc0e4
-  CapacitorCordova: 1222fdd78bfd0d323cc22bf254eed1484fe6c92a
+  CapacitorCommunitySqlite: 613f7182e77ac60edc4552f9b9173efd01387530
+  CapacitorCordova: e825fce1a2e14e4b5730641c7e098dccf74397b7
   CapacitorHaptics: 1fffc1217c7e64a472d7845be50fb0c2f7d4204c
   CapacitorKeyboard: b978154b024a5f65e044908e37d15b7de58b9d12
   CapacitorStatusBar: 565c0a1ebd79bb40d797606a8992b4a105885309
-  SQLCipher: f2e96b3822e3006b379181a0e4fd145f6de29b56
-  ZIPFoundation: d170fa8e270b2a32bef9dcdcabff5b8f1a5deced
+  SQLCipher: 838309284f29953a28ad2e81d87d55ea6b7c74fd
+  ZIPFoundation: fa9ae5af13b7cf168245f24d1c672a4fb972e37f
 
 PODFILE CHECKSUM: f44bc5ec959d7b958c2cbc033c29bc3d0b482fa0
 
-COCOAPODS: 1.13.0
+COCOAPODS: 1.15.1

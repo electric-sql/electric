@@ -69,17 +69,16 @@ Generate your [type-safe client](https://electric-sql.com/docs/usage/data-access
 
 ```shell
 npm run client:generate
-# or `npm run client:watch`` to re-generate whenever the DB schema changes
+# or `npm run client:watch` to re-generate whenever the DB schema changes
 ```
 
-## Run the webapp
+## Run the web app
 
 The app is a React application, to run it:
 
 ```bash
 npm run start
-// or this if you have the ionic cli installed:
-ionic serve
+# or `ionic serve` if you have the Ionic CLI installed
 ```
 
 The app displays the port on localhost where you can view the app.
