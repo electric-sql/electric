@@ -1,4 +1,3 @@
-// import { SignJWT } from 'jose'
 import { jwtDecode, JwtPayload } from '../decode'
 import { TokenClaims } from '../index'
 import { InvalidArgumentError } from '../../client/validation/errors/invalidArgumentError'
