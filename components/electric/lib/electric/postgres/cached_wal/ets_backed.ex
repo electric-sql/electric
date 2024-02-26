@@ -26,7 +26,7 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
 
   @typep state :: %{
            notification_requests: %{optional(reference()) => {Api.wal_pos(), pid()}},
-           table: ETS.Set.t(),
+           table: :ets.table(),
            last_seen_wal_pos: Api.wal_pos(),
            current_tx_count: non_neg_integer(),
            wal_window_size: non_neg_integer()
@@ -115,7 +115,7 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
 
   @impl GenStage
   def init(opts) do
-    set = ETS.Set.new!(name: @ets_table_name, ordered: true)
+    set = :ets.new(@ets_table_name, [:named_table, :ordered_set])
     Logger.metadata(component: "CachedWal.EtsBacked")
 
     state = %{
@@ -152,19 +152,15 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
 
   def handle_call(:telemetry_stats, _from, state) do
     oldest_timestamp =
-      with {:ok, key} <- ETS.Set.first(state.table),
-           {:ok, %Transaction{} = tx} <- ETS.Set.get_element(state.table, key, 2) do
+      if tx = lookup_oldest_transaction(state.table) do
         tx.commit_timestamp
-      else
-        _ -> nil
       end
 
     stats = %{
       transaction_count: state.current_tx_count,
       oldest_transaction_timestamp: oldest_timestamp,
       max_cache_size: state.wal_window_size,
-      cache_memory_total:
-        ETS.Set.info!(state.table, true)[:memory] * :erlang.system_info(:wordsize)
+      cache_memory_total: :ets.info(state.table, :memory) * :erlang.system_info(:wordsize)
     }
 
     {:reply, stats, [], state}
@@ -172,7 +168,7 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
 
   @impl GenStage
   def handle_cast(:clear_cache, state) do
-    ETS.Set.delete_all!(state.table)
+    :ets.delete_all_objects(state.table)
 
     # This doesn't do anything with notification requests, but this function is not meant to be used in production
     {:noreply, [], %{state | current_tx_count: 0, last_seen_wal_pos: 0}}
@@ -209,7 +205,7 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
     )
     |> Stream.map(fn %Transaction{} = tx -> {lsn_to_position(tx.lsn), tx} end)
     |> Enum.to_list()
-    |> tap(&ETS.Set.put(state.table, &1))
+    |> tap(&:ets.insert(state.table, &1))
     |> List.last()
     |> case do
       nil ->
@@ -258,10 +254,17 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
   defp trim_cache(state) do
     first_in_window_pos = state.last_seen_wal_pos - state.wal_window_size
 
-    ETS.Set.select_delete!(state.table, [
+    :ets.select_delete(state.table, [
       {{:"$1", :_}, [{:<, :"$1", first_in_window_pos}], [true]}
     ])
 
-    %{state | current_tx_count: ETS.Set.info!(state.table, :size)}
+    %{state | current_tx_count: :ets.info(state.table, :size)}
+  end
+
+  defp lookup_oldest_transaction(ets_table) do
+    case :ets.match(ets_table, {:_, :"$1"}, 1) do
+      {[[%Transaction{} = tx]], _cont} -> tx
+      :"$end_of_table" -> nil
+    end
   end
 end
