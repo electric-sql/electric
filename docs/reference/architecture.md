@@ -59,7 +59,7 @@ This is done with [transactional causal consistency](./consistency.md). The DDL 
 
 Data is synced onto local devices using [Shape subscriptions](../usage/data-access/shapes.md). Once data is synced into the local database, it can be queried using [static](../usage/data-access/queries.md#static-queries) and [live queries](../usage/data-access/queries.md#live-queries).
 
-Local writes to SQLite are copied by triggers into the "oplog", an system table that keeps a log of pending write operations. In the local client app, the satellite process is in charge of replicating these operations over the [Satellite protocol](../api/satellite.md).
+Local writes to SQLite are copied by triggers into the "oplog", a system table that keeps a log of pending write operations. In the local client app, the satellite process is in charge of replicating these operations over the [Satellite protocol](../api/satellite.md).
 
 [![Data flow diagramme](./_images/data-flow.png)](./_images/data-flow.jpg)
 
