@@ -22,6 +22,8 @@ export const typeEncoder = {
 }
 
 export const base64 = {
+  encode: (string: string) =>
+    base64.fromBytes(new TextEncoder().encode(string)),
   fromBytes: (bytes: Uint8Array) =>
     BASE64.encode(
       String.fromCharCode.apply(null, new Uint8Array(bytes) as any)
