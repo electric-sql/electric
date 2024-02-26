@@ -20,7 +20,6 @@ import {
   bytesToNumber,
   emptyPromise,
   getWaiter,
-  uuid,
 } from '../util/common'
 import { QualifiedTablename } from '../util/tablename'
 import {
@@ -72,7 +71,7 @@ import {
   SubscriptionData,
 } from './shapes/types'
 import { backOff } from 'exponential-backoff'
-import { chunkBy } from '../util'
+import { chunkBy, genUUID } from '../util'
 import { isFatal, isOutOfSyncError, isThrowable, wrapFatalError } from './error'
 import { inferRelationsFromSQLite } from '../util/relations'
 import { decodeToken } from '../auth/secure'
@@ -186,7 +185,7 @@ export class SatelliteProcess implements Satellite {
     )
     this.subscriptionNotifiers = {}
 
-    this.subscriptionIdGenerator = () => uuid()
+    this.subscriptionIdGenerator = () => genUUID()
     this.shapeRequestIdGenerator = this.subscriptionIdGenerator
 
     this._connectRetryHandler = connectRetryHandler
@@ -1473,7 +1472,7 @@ export class SatelliteProcess implements Satellite {
     let clientId = await this._getMeta(clientIdKey)
 
     if (clientId === '') {
-      clientId = uuid() as Uuid
+      clientId = genUUID() as Uuid
       await this._setMeta(clientIdKey, clientId)
     }
     return clientId

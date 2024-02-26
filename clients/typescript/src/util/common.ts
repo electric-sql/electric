@@ -1,12 +1,5 @@
 import BASE64 from 'base-64'
-import { v4 as uuidv4 } from 'uuid'
 import { SatelliteError } from './types'
-
-let uuidImpl: () => string = uuidv4
-
-export function setUUIDImpl(impl: () => string) {
-  uuidImpl = impl
-}
 
 export const typeDecoder = {
   bool: bytesToBool,
@@ -108,10 +101,6 @@ function bytesToFloat(bytes: Uint8Array) {
  */
 function stringToTimetzString(str: string) {
   return `${str}+00`
-}
-
-export function uuid() {
-  return uuidImpl()
 }
 
 export type PromiseWithResolvers<T> = {

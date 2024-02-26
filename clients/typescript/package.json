@@ -179,11 +179,9 @@
     "prisma-v5": "npm:prisma@5.9.0",
     "prompts": "^2.4.2",
     "protobufjs": "^7.1.1",
-    "react-native-uuid": "^2.0.1",
     "squel": "^5.13.0",
     "tcp-port-used": "^1.0.2",
     "ts-dedent": "^2.2.0",
-    "uuid": "^9.0.0",
     "ws": "^8.8.1",
     "zod": "^3.20.2"
   },
@@ -248,6 +246,7 @@
     "react": ">= 16.8.0",
     "react-dom": ">= 16.8.0",
     "react-native": ">= 0.68.0",
+    "react-native-get-random-values": ">= 1.10.0",
     "react-native-sqlite-storage": ">= 6.0.0",
     "typeorm": ">=0.3.0",
     "vue": ">=3.0.0",
@@ -270,6 +269,9 @@
       "optional": true
     },
     "react-native": {
+      "optional": true
+    },
+    "react-native-get-random-values": {
       "optional": true
     },
     "react-native-sqlite-storage": {
