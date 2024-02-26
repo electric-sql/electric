@@ -272,7 +272,7 @@
     "react-native-sqlite-storage": ">= 6.0.0",
     "typeorm": ">=0.3.0",
     "vue": ">=3.0.0",
-    "wa-sqlite": "rhashimoto/wa-sqlite#semver:^0.9.8",
+    "wa-sqlite": "rhashimoto/wa-sqlite#semver:^0.9.8"
   },
   "peerDependenciesMeta": {
     "@op-engineering/op-sqlite": {
