@@ -17,6 +17,8 @@
      # define `exp` to avoid `ReferenceError: exp is not defined`
      # when trying to read `exp` when calling `electrify_db`
      !if (typeof exp === 'undefined') { var exp = undefined }
+     ??$node
+
      !db = await client.electrify_db(originalDb, \
                                      "$host", \
                                      $port, \
