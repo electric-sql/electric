@@ -1,4 +1,9 @@
+// Provide implementation for base64 encoding/decoding
 import BASE64 from 'base-64'
+
+// Provide implementation for TextEncoder/TextDecoder if missing
+import 'fastestsmallesttextencoderdecoder'
+
 import { SatelliteError } from './types'
 
 export const typeDecoder = {
@@ -10,7 +15,7 @@ export const typeDecoder = {
 
 export const typeEncoder = {
   bool: boolToBytes,
-  text: (string: string) => new TextEncoder().encode(string),
+  text: (string: string) => textEncoder.encode(string),
   timetz: (string: string) => typeEncoder.text(stringToTimetzString(string)),
 }
 
@@ -21,9 +26,13 @@ export const base64 = {
     ),
   toBytes: (string: string) =>
     Uint8Array.from(BASE64.decode(string), (c) => c.charCodeAt(0)),
-  encode: (string: string) =>
-    base64.fromBytes(new TextEncoder().encode(string)),
-  decode: (string: string) => new TextDecoder().decode(base64.toBytes(string)),
+  encode: (string: string) => base64.fromBytes(textEncoder.encode(string)),
+  decode: (string: string) => textEncoder.decode(base64.toBytes(string)),
+}
+
+export const textEncoder = {
+  encode: (string: string): Uint8Array => new TextEncoder().encode(string),
+  decode: (bytes: Uint8Array): string => new TextDecoder().decode(bytes),
 }
 
 export const DEFAULT_LOG_POS = numberToBytes(0)

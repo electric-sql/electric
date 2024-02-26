@@ -3,8 +3,6 @@
 // alternative entrypoint in `./test` to avoid importing this.
 import { DbName } from '../../util/types'
 
-// Provide implementation for TextEncoder/TextDecoder
-import 'fastestsmallesttextencoderdecoder'
 // Provide implementation for crypto.getRandomValues
 import 'react-native-get-random-values'
 

@@ -1,4 +1,5 @@
 import { jwtDecode, JwtPayload } from '../decode'
+import { textEncoder } from '../../util/common'
 import { TokenClaims } from '../index'
 import { InvalidArgumentError } from '../../client/validation/errors/invalidArgumentError'
 
@@ -14,7 +15,7 @@ export async function secureAuthToken(opts: {
   const expiration = opts.exp ?? '2h'
   const iat = Math.floor(Date.now() / 1000)
 
-  const encodedKey = new TextEncoder().encode(opts.key)
+  const encodedKey = textEncoder.encode(opts.key)
 
   return new SignJWT({ ...opts.claims, type: 'access' })
     .setIssuedAt(iat)
