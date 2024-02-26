@@ -30,38 +30,34 @@ test('test getWaiter onWait reject', async (t) => {
   }
 })
 
-test('test base64 encodes string', (t) => {
+test('test base64 encodes/decodes string', (t) => {
   const originalString = 'Hello, World!'
   const expectedBase64 = 'SGVsbG8sIFdvcmxkIQ=='
 
-  const encodedString = base64.encode(originalString)
-
-  t.is(encodedString, expectedBase64)
+  t.is(base64.encode(originalString), expectedBase64)
+  t.is(base64.decode(expectedBase64), originalString)
 })
 
-test('test base64 encodes empty string', (t) => {
+test('test base64 encodes/decodes empty string', (t) => {
   const originalString = ''
   const expectedBase64 = ''
 
-  const encodedString = base64.encode(originalString)
-
-  t.is(encodedString, expectedBase64)
+  t.is(base64.encode(originalString), expectedBase64)
+  t.is(base64.decode(expectedBase64), originalString)
 })
 
-test('test base64 encodes special characters', (t) => {
+test('test base64 encodes/decodes special characters', (t) => {
   const originalString = '🚀🌟🌈'
   const expectedBase64 = '8J+agPCfjJ/wn4yI'
 
-  const encodedString = base64.encode(originalString)
-
-  t.is(encodedString, expectedBase64)
+  t.is(base64.encode(originalString), expectedBase64)
+  t.is(base64.decode(expectedBase64), originalString)
 })
 
-test('test base64 encodes Unicode characters', (t) => {
+test('test base64 encodes/decodes Unicode characters', (t) => {
   const originalString = 'こんにちは、世界！'
   const expectedBase64 = '44GT44KT44Gr44Gh44Gv44CB5LiW55WM77yB'
 
-  const encodedString = base64.encode(originalString)
-
-  t.is(encodedString, expectedBase64)
+  t.is(base64.encode(originalString), expectedBase64)
+  t.is(base64.decode(expectedBase64), originalString)
 })

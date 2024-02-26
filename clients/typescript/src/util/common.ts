@@ -22,14 +22,15 @@ export const typeEncoder = {
 }
 
 export const base64 = {
-  encode: (string: string) =>
-    base64.fromBytes(new TextEncoder().encode(string)),
   fromBytes: (bytes: Uint8Array) =>
     BASE64.encode(
       String.fromCharCode.apply(null, new Uint8Array(bytes) as any)
     ),
   toBytes: (string: string) =>
     Uint8Array.from(BASE64.decode(string), (c) => c.charCodeAt(0)),
+  encode: (string: string) =>
+    base64.fromBytes(new TextEncoder().encode(string)),
+  decode: (string: string) => new TextDecoder().decode(base64.toBytes(string)),
 }
 
 export const DEFAULT_LOG_POS = numberToBytes(0)
