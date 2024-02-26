@@ -273,7 +273,6 @@
     "typeorm": ">=0.3.0",
     "vue": ">=3.0.0",
     "wa-sqlite": "rhashimoto/wa-sqlite#semver:^0.9.8",
-    "@op-engineering/op-sqlite": ">= 2.0.16"
   },
   "peerDependenciesMeta": {
     "@op-engineering/op-sqlite": {
