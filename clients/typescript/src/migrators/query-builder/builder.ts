@@ -353,6 +353,7 @@ export abstract class QueryBuilder {
     const batchMaxSize =
       (maxParameters - (maxParameters % columnCount)) / columnCount
     while (processed < recordCount) {
+      positionalParam = 1 // start counting parameters from 1 again
       const currentInsertCount = Math.min(recordCount - processed, batchMaxSize)
       const sql =
         baseSql +
