@@ -19,9 +19,6 @@ export function ElectricWrapper(props: { children: ReactElement[] | ReactElement
 
     const init = async () => {
       const config = {
-        auth: {
-          token: authToken(),
-        },
         debug: import.meta.env.DEV,
         url: import.meta.env.ELECTRIC_SERVICE,
       }
@@ -31,6 +28,7 @@ export function ElectricWrapper(props: { children: ReactElement[] | ReactElement
 
       const conn = await ElectricDatabase.init(scopedDbName)
       const electric = await electrify(conn, schema, config)
+      await electric.connect(authToken())
 
       if (!isMounted) {
         return

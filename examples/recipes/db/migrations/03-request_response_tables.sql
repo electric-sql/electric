@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS requests (
   method TEXT NOT NULL,
   data JSONB,
   processing BOOLEAN NOT NULL,
-  cancelled BOOLEAN NOT NULLxw
+  cancelled BOOLEAN NOT NULL
 );
 
 -- Create a responses table referencing requests.
