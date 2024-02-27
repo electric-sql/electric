@@ -1,7 +1,5 @@
 import BASE64 from 'base-64'
-
-// Provide implementation for TextEncoder/TextDecoder if missing
-import 'fastestsmallesttextencoderdecoder'
+import { default as TextEncodeDecodeAlternative } from 'fastestsmallesttextencoderdecoder'
 
 import { SatelliteError } from './types'
 
@@ -30,8 +28,14 @@ export const base64 = {
 }
 
 export const textEncoder = {
-  encode: (string: string): Uint8Array => new TextEncoder().encode(string),
-  decode: (bytes: Uint8Array): string => new TextDecoder().decode(bytes),
+  encode: (string: string): Uint8Array =>
+    'TextEncoder' in globalThis && !!globalThis.TextEncoder
+      ? new TextEncoder().encode(string)
+      : TextEncodeDecodeAlternative.encode(string),
+  decode: (bytes: Uint8Array): string =>
+    'TextDecoder' in globalThis && !!globalThis.TextDecoder
+      ? new TextDecoder().decode(bytes)
+      : TextEncodeDecodeAlternative.decode(bytes),
 }
 
 export const DEFAULT_LOG_POS = numberToBytes(0)

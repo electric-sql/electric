@@ -1,7 +1,15 @@
 import test from 'ava'
 
-import { getWaiter, base64 } from '../../src/util/common'
+import { getWaiter, base64, textEncoder } from '../../src/util/common'
 import { SatelliteError, SatelliteErrorCode } from '../../src/util/types'
+
+const OriginalEncoder = globalThis['TextEncoder']
+const OriginalDecoder = globalThis['TextDecoder']
+
+test.afterEach(() => {
+  globalThis['TextEncoder'] = OriginalEncoder
+  globalThis['TextDecoder'] = OriginalDecoder
+})
 
 test('test getWaiter onWait resolve', async (t) => {
   const waiter = getWaiter()
@@ -60,4 +68,26 @@ test('test base64 encodes/decodes Unicode characters', (t) => {
 
   t.is(base64.encode(originalString), expectedBase64)
   t.is(base64.decode(expectedBase64), originalString)
+})
+
+test('test textEncoder replacement encodes Unicode characters', (t) => {
+  const originalString = 'こんにちは、世界！'
+
+  delete (globalThis as { TextEncoder?: unknown })['TextEncoder']
+
+  const originalEncoded = new OriginalEncoder().encode(originalString)
+  const alternativeEncoded = textEncoder.encode(originalString)
+  t.deepEqual(originalEncoded, alternativeEncoded)
+})
+
+test('test textEncoder replacement decodes Unicode characters', (t) => {
+  const originalString = 'こんにちは、世界！'
+  const originalEncoded = new OriginalEncoder().encode(originalString)
+
+  delete (globalThis as { TextDecoder?: unknown })['TextDecoder']
+
+  const originalDecoded = new OriginalDecoder().decode(originalEncoded)
+  const alternativeDecoded = textEncoder.decode(originalEncoded)
+  t.is(alternativeDecoded, originalString)
+  t.is(originalDecoded, alternativeDecoded)
 })

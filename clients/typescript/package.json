@@ -193,6 +193,7 @@
     "@types/better-sqlite3": "7.6.3",
     "@types/cordova-sqlite-storage": "^1.5.5",
     "@types/decompress": "^4.2.4",
+    "@types/fastestsmallesttextencoderdecoder": "^1.0.2",
     "@types/lodash.flow": "^3.5.7",
     "@types/lodash.groupby": "^4.6.7",
     "@types/lodash.isequal": "^4.5.6",
