@@ -1,9 +1,17 @@
-import { QualifiedTablename, hasIntersection } from '.'
+import { ConnectivityState, QualifiedTablename, hasIntersection } from '.'
 import { LiveResult, LiveResultUpdate } from '../client/model/model'
-import { Notifier, UnsubscribeFunction } from '../notifiers'
+import {
+  ConnectivityStateChangeNotification,
+  Notifier,
+  UnsubscribeFunction,
+} from '../notifiers'
 
 export type LiveResultSubscribeFunction<T> = (
   handler: (resultUpdate: LiveResultUpdate<T>) => void
+) => UnsubscribeFunction
+
+export type ConnectivityStateSubscribeFuncition = (
+  handler: (connectivityStateUpdate: ConnectivityState) => void
 ) => UnsubscribeFunction
 
 /**
@@ -44,6 +52,27 @@ export function createQueryResultSubscribeFunction<T>(
       )
         update()
     })
+
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
+  }
+}
+
+export function createConnectivityStateSubscribeFunction(
+  notifier: Notifier
+): ConnectivityStateSubscribeFuncition {
+  return (handler) => {
+    let cancelled = false
+    const update = ({
+      connectivityState,
+    }: Pick<ConnectivityStateChangeNotification, 'connectivityState'>) => {
+      if (cancelled) return
+      handler(connectivityState)
+    }
+
+    const unsubscribe = notifier.subscribeToConnectivityStateChanges(update)
 
     return () => {
       cancelled = true
