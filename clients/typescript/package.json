@@ -246,7 +246,7 @@
     "react": ">= 16.8.0",
     "react-dom": ">= 16.8.0",
     "react-native": ">= 0.68.0",
-    "react-native-get-random-values": ">= 1.10.0",
+    "react-native-get-random-values": ">= 1.0.0",
     "react-native-sqlite-storage": ">= 6.0.0",
     "typeorm": ">=0.3.0",
     "vue": ">=3.0.0",
