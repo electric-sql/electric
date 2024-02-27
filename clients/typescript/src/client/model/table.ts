@@ -34,6 +34,7 @@ import {
   parseTableNames,
   Row,
   Statement,
+  createQueryResultSubscribeFunction,
 } from '../../util'
 import { NarrowInclude } from '../input/inputNarrowing'
 import { IShapeManager } from './shapes'
@@ -49,7 +50,6 @@ import {
   transformUpdateMany,
   transformUpsert,
 } from '../conversions/input'
-import { createQueryResultSubscribeFunction } from '../../util/subscribe'
 
 type AnyTable = Table<any, any, any, any, any, any, any, any, any, HKT>
 

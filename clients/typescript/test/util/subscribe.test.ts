@@ -1,6 +1,6 @@
 import anyTest, { TestFn } from 'ava'
 import { MockNotifier, Notifier } from '../../src/notifiers'
-import { createQueryResultSubscribeFunction } from '../../src/util/subscribe'
+import { createQueryResultSubscribeFunction } from '../../src/util'
 import { LiveResult, LiveResultUpdate } from '../../src/client/model/model'
 import { QualifiedTablename } from '../../src/util'
 import EventEmitter from 'events'

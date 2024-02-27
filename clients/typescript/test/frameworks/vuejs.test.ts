@@ -20,7 +20,7 @@ import { Migrator } from '../../src/migrators'
 import { SocketFactory } from '../../src/sockets'
 import { SatelliteOpts } from '../../src/satellite/config'
 import { Notifier } from '../../src/notifiers'
-import { createQueryResultSubscribeFunction } from '../../src/util/subscribe'
+import { createQueryResultSubscribeFunction } from '../../src/util'
 import EventEmitter from 'events'
 
 const { provideElectric, injectElectric } =
