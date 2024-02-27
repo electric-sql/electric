@@ -19,12 +19,14 @@ import {
 import DeleteModal from './DeleteModal'
 import Comments from './Comments'
 
+const WEBRTC_SIGNALING = import.meta.env.ELECTRIC_WEBRTC_SIGNALING || 'ws://localhost:4444'
+
 const electricYDocOptions: UseElectricYDocOptions = {
   webrtc: {
     // Enable webrtc for collaboration
     // Use a local signaling server
     // run it with `npx PORT=4444 npx y-webrtc-signaling`
-    signaling: ['ws://localhost:4444'],
+    signaling: [WEBRTC_SIGNALING],
   },
 }
 
