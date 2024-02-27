@@ -38,13 +38,13 @@ export default function ElectricProvider({
 
     const init = async () => {
       const config = {
-        auth: { token: accessToken },
         debug: DEBUG_MODE,
         url: ELECTRIC_URL,
       };
 
       const conn = SQLite.openDatabase(getElectricDbName(userId));
       const electric = await electrify(conn, schema, config);
+      await electric.connect(accessToken);
       if (!isMounted) return;
 
       const shape = await electric.db.member.sync({
