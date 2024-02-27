@@ -281,6 +281,12 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
     // Modify the type of JSON input values in the generated Prisma client
     // because we deviate from Prisma's typing for JSON values
     await extendJsonType(config.CLIENT_PATH)
+    // Modify Prisma's `AtLeast` type because it was used in Prisma v5
+    // but we want to keep the type as it was in Prisma v4,
+    // however, due to a bug in v4 that makes the Prisma generator crash
+    // if the user has a Prisma v5 dependency in their project, we had to use v5,
+    // hence, the need for this patch
+    await modifyAtLeastType(config.CLIENT_PATH)
     // Delete all files generated for the Prisma client, except the typings
     await keepOnlyPrismaTypings(config.CLIENT_PATH)
     console.log(`Successfully generated Electric client at: ./${relativePath}`)
@@ -753,6 +759,31 @@ function extendJsonType(prismaDir: string): Promise<void> {
   const inputJsonValueRegex = /^\s*export\s*type\s*InputJsonValue\s*(=)\s*/gm
   const replacement = 'export type InputJsonValue = null | '
   return findAndReplaceInFile(inputJsonValueRegex, replacement, prismaTypings)
+}
+
+/*
+ * Modifies Prisma's `AtLeast` type such that
+ * it returns a union of the unique properties:
+ *   type AtLeast<O extends object, K extends keyof O> =
+ *     K extends any
+ *       ? { [P in K]: O[P] }
+ *       : never
+ *
+ * Example usage:
+ *   type ProfileWhereUniqueInput = AtLeast<{
+ *     id?: number
+ *     userId?: string,
+ *     foo: number
+ *   }, "id" | "userId">
+ *
+ * The above example resolves to the type `{ id?: number } | { userId?: string }`
+ */
+function modifyAtLeastType(prismaDir: string): Promise<void> {
+  const prismaTypings = path.join(prismaDir, 'index.d.ts')
+  const atLeastRegex = /^\s*type\s*AtLeast\s*<[^;]*;/gm
+  const replacement =
+    'type AtLeast<O extends object, K extends keyof O> = K extends any ? { [P in K]: O[P] } : never'
+  return findAndReplaceInFile(atLeastRegex, replacement, prismaTypings)
 }
 
 async function keepOnlyPrismaTypings(prismaDir: string): Promise<void> {
