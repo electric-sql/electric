@@ -1,6 +1,6 @@
 {
   "name": "electric-sql-expo-example",
-  "version": "0.7.0",
+  "version": "0.9.4",
   "author": "ElectricSQL",
   "license": "Apache-2.0",
   "main": "expo-router/entry",
@@ -25,7 +25,7 @@
     "@react-navigation/drawer": "^6.6.6",
     "@supabase/supabase-js": "^2.39.3",
     "deep-equal": "^2.2.3",
-    "electric-sql": "^0.9.0",
+    "electric-sql": "^0.9.4",
     "expo": "~50.0.6",
     "expo-camera": "~14.0.4",
     "expo-constants": "~15.4.5",
