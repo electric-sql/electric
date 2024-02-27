@@ -1,4 +1,3 @@
-// Provide implementation for base64 encoding/decoding
 import BASE64 from 'base-64'
 
 // Provide implementation for TextEncoder/TextDecoder if missing
