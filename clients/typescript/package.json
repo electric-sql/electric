@@ -191,7 +191,6 @@
     "object.hasown": "^1.1.2",
     "ohash": "^1.1.2",
     "prisma": "4.8.1",
-    "prisma-v5": "npm:prisma@5.9.0",
     "prompts": "^2.4.2",
     "protobufjs": "^7.1.1",
     "react-native-get-random-values": "^1.0.0",
@@ -200,7 +199,7 @@
     "text-encoder-lite": "^2.0.0",
     "ts-dedent": "^2.2.0",
     "ws": "^8.8.1",
-    "zod": "^3.20.2"
+    "zod": "3.21.1"
   },
   "devDependencies": {
     "@electric-sql/prisma-generator": "workspace:*",
