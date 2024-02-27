@@ -122,7 +122,7 @@ function useLiveQueryWithQueryUpdates<Res>(
   // keep track of subscriptions and unsubscribe from unused ones
   const unsubscribeRef = shallowRef<UnsubscribeFunction>()
 
-  const unwatch = watch(
+  watch(
     runQueryDependencies,
     () => {
       unsubscribeRef.value?.()
@@ -135,10 +135,7 @@ function useLiveQueryWithQueryUpdates<Res>(
     { immediate: true }
   )
 
-  onUnmounted(() => {
-    unwatch()
-    unsubscribeRef.value?.()
-  })
+  onUnmounted(() => unsubscribeRef.value?.())
 
   return toRefs(readonly(liveUpdate))
 }
