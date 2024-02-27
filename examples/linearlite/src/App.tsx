@@ -7,6 +7,7 @@ import 'react-toastify/dist/ReactToastify.css'
 import List from './pages/List'
 import Issue from './pages/Issue'
 import LeftMenu from './components/LeftMenu'
+import { makeMaterializer } from './utils/makeMaterializer'
 
 import { ElectricProvider, initElectric, dbName, DEBUG } from './electric'
 import { Electric } from './generated/client'
@@ -40,16 +41,28 @@ const App = () => {
   const [showMenu, setShowMenu] = useState(false)
 
   useEffect(() => {
+    let materializer: ReturnType<typeof makeMaterializer>
     const init = async () => {
       try {
         const client = await initElectric()
         setElectric(client)
-        const { synced } = await client.db.issue.sync({
+        materializer = makeMaterializer(client)
+
+        const { synced: syncedIssues } = await client.db.issue.sync({
           include: {
             comment: true,
+            related_issue_related_issue_issue_id_1Toissue: true,
+            related_issue_related_issue_issue_id_2Toissue: true,
+            ydoc: {
+              include: {
+                ydoc_update: true,
+              },
+            },
           },
         })
-        await synced
+        await syncedIssues
+        // const { synced: syncedRelatedIssues } = await client.db.related_issue.sync()
+        // await Promise.all([syncedIssues, syncedRelatedIssues])
         const timeToSync = performance.now()
         if (DEBUG) {
           console.log(`Synced in ${timeToSync}ms from page load`)
@@ -67,6 +80,12 @@ const App = () => {
     }
 
     init()
+
+    return () => {
+      if (materializer) {
+        materializer.dispose()
+      }
+    }
   }, [])
 
   if (electric === undefined) {

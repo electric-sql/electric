@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'electric-sql/react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { BsTrash3 as DeleteIcon } from 'react-icons/bs'
 import { BsXLg as CloseIcon } from 'react-icons/bs'
 import PriorityMenu from '../../components/contextmenu/PriorityMenu'
@@ -10,45 +10,66 @@ import StatusIcon from '../../components/StatusIcon'
 import Avatar from '../../components/Avatar'
 import { useElectric } from '../../electric'
 import { PriorityDisplay, StatusDisplay } from '../../types/issue'
-import Editor from '../../components/editor/Editor'
+import YdocEditor from '../../components/editor/YdocEditor'
+import YdocTextInput from '../../components/editor/YdocTextInput'
+import {
+  useElectricYDoc,
+  UseElectricYDocOptions,
+} from '../../utils/y-electricsql/react'
 import DeleteModal from './DeleteModal'
 import Comments from './Comments'
-import debounce from 'lodash.debounce'
 
-const debounceTime = 500
+const WEBRTC_SIGNALING = import.meta.env.ELECTRIC_WEBRTC_SIGNALING || 'ws://localhost:4444'
+
+const electricYDocOptions: UseElectricYDocOptions = {
+  webrtc: {
+    // Enable webrtc for collaboration
+    // Use a local signaling server
+    // run it with `npx PORT=4444 npx y-webrtc-signaling`
+    signaling: [WEBRTC_SIGNALING],
+  },
+}
 
 function IssuePage() {
   const navigate = useNavigate()
   const { id } = useParams()
-  const { db } = useElectric()!
+  const electricClient = useElectric()!
+  const db = electricClient.db
   const { results: issue } = useLiveQuery(
     db.issue.liveUnique({
       where: { id: id },
     })
   )
+  const { results: relatedIssues } = useLiveQuery(
+    db.related_issue.liveMany({
+      where: {
+        issue_id_2: id,
+      },
+      include: {
+        issue_related_issue_issue_id_1Toissue: {
+          select: {
+            id: true,
+            title: true,
+          },
+        }
+      },
+    })
+  )
+
+  const {
+    ydoc,
+    loaded: ydocLoaded,
+    error: _ydocError,
+    webrtcProvider,
+  } = useElectricYDoc(electricClient, issue?.ydoc_id, electricYDocOptions)
+  // TODO: handle ydocError
 
   const [showDeleteModal, setShowDeleteModal] = useState(false)
-
-  const [dirtyTitle, setDirtyTitle] = useState<string | null>(null)
-  const titleIsDirty = useRef(false)
-  const [dirtyDescription, setDirtyDescription] = useState<string | null>(null)
-  const descriptionIsDirty = useRef(false)
 
   if (issue === undefined) {
     return <div className="p-8 w-full text-center">Loading...</div>
   } else if (issue === null) {
     return <div className="p-8 w-full text-center">Issue not found</div>
-  }
-
-  // We check if the dirty title or description is the same as the actual title or
-  // description, and if so, we can switch back to the non-dirty version
-  if (dirtyTitle === issue.title) {
-    setDirtyTitle(null)
-    titleIsDirty.current = false
-  }
-  if (dirtyDescription === issue.description) {
-    setDirtyDescription(null)
-    descriptionIsDirty.current = false
   }
 
   const handleStatusChange = (status: string) => {
@@ -75,51 +96,6 @@ function IssuePage() {
     })
   }
 
-  const handleTitleChangeDebounced = debounce(async (title: string) => {
-    await db.issue.update({
-      data: {
-        title: title,
-        modified: new Date(),
-      },
-      where: {
-        id: issue.id,
-      },
-    })
-    // We can't set titleIsDirty.current = false here because we haven't yet received
-    // the updated issue from the db
-  }, debounceTime)
-
-  const handleTitleChange = (title: string) => {
-    setDirtyTitle(title)
-    titleIsDirty.current = true
-    // We debounce the title change so that we don't spam the db with updates
-    handleTitleChangeDebounced(title)
-  }
-
-  const handleDescriptionChangeDebounced = debounce(
-    async (description: string) => {
-      await db.issue.update({
-        data: {
-          description: description,
-          modified: new Date(),
-        },
-        where: {
-          id: issue.id,
-        },
-      })
-      // We can't set descriptionIsDirty.current = false here because we haven't yet received
-      // the updated issue from the db
-    },
-    debounceTime
-  )
-
-  const handleDescriptionChange = (description: string) => {
-    setDirtyDescription(description)
-    descriptionIsDirty.current = true
-    // We debounce the description change so that we don't spam the db with updates
-    handleDescriptionChangeDebounced(description)
-  }
-
   const handleDelete = () => {
     db.comment.deleteMany({
       where: {
@@ -143,7 +119,7 @@ function IssuePage() {
 
   const shortId = () => {
     if (issue.id.includes('-')) {
-      return issue.id.slice(issue.id.length - 8)
+      return issue.id.slice(0, 8)
     } else {
       return issue.id
     }
@@ -179,10 +155,10 @@ function IssuePage() {
         </div>
 
         {/* <div className="flex flex-col overflow-auto">issue info</div> */}
-        <div className="flex flex-1 p-3 md:p-2 overflow-hidden flex-col md:flex-row">
+        <div className="flex flex-1 p-3 md:p-2 overflow-hidden flex-col md:flex-row whitespace-nowrap">
           <div className="md:block flex md:flex-[1_0_0] min-w-0 md:p-3 md:order-2">
-            <div className="max-w-4xl flex flex-row md:flex-col">
-              <div className="flex flex-1 mb-3 mr-5 md-mr-0">
+            <div className="max-w-4xl flex flex-row md:flex-col max-sm:flex-wrap">
+              <div className="flex flex-1 mb-3 mr-5 md-mr-0 max-sm:w-[250px] max-sm:grow-0 max-sm:shrink-0">
                 <div className="flex flex-[2_0_0] mr-2 md-mr-0 items-center">
                   Opened by
                 </div>
@@ -193,7 +169,7 @@ function IssuePage() {
                   </button>
                 </div>
               </div>
-              <div className="flex flex-1 mb-3 mr-5 md-mr-0">
+              <div className="flex flex-1 mb-3 mr-5 md-mr-0 max-sm:w-[250px] max-sm:grow-0 max-sm:shrink-0">
                 <div className="flex flex-[2_0_0] mr-2 md-mr-0 items-center">
                   Status
                 </div>
@@ -210,7 +186,7 @@ function IssuePage() {
                   />
                 </div>
               </div>
-              <div className="flex flex-1 mb-3 mr-5 md-mr-0">
+              <div className="flex flex-1 mb-3 mr-5 md-mr-0 max-sm:w-[250px] max-sm:grow-0 max-sm:shrink-0">
                 <div className="flex flex-[2_0_0] mr-2 md-mr-0 items-center">
                   Priority
                 </div>
@@ -230,26 +206,46 @@ function IssuePage() {
                   />
                 </div>
               </div>
+              {!!relatedIssues?.length && (
+                <div className="flex flex-1 mb-3 mr-5 md-mr-0">
+                  <div className="flex flex-[2_0_0] mr-2 md-mr-0 items-center">
+                    Related
+                  </div>
+                  <div className="flex flex-[3_0_0]">
+                    <button className="inline-flex items-center h-6 ps-1.5 pe-2 text-gray-500border-none rounded hover:bg-gray-100">
+                      {
+                        relatedIssues?.map((relatedIssue, index) => (
+                          <span key={index} className="inline-flex items-center h-6 ps-1.5 pe-2 text-gray-500border-none rounded hover:bg-gray-100">
+                            <span className="me-1">{relatedIssue.issue_related_issue_issue_id_1Toissue?.id.slice(0, 8)}</span>
+                          </span>
+                        ))
+                      }
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
           <div className="flex flex-col md:flex-[3_0_0] md:p-3 border-gray-200 md:border-r min-h-0 min-w-0 overflow-auto">
-            <input
-              className="w-full px-3 py-1 text-lg font-semibold placeholder-gray-400 border-transparent rounded "
-              placeholder="Issue title"
-              value={titleIsDirty.current ? dirtyTitle! : issue.title}
-              onChange={(e) => handleTitleChange(e.target.value)}
-            />
+            {ydoc && ydocLoaded && (
+              <YdocTextInput
+                className="w-full px-3 py-1 text-lg font-semibold placeholder-gray-400 border-transparent rounded"
+                ydoc={ydoc}
+                field="title"
+                placeholder="Issue title"
+                collaborationProvider={webrtcProvider}
+              />
+            )}
 
-            <Editor
-              className="prose w-full max-w-full mt-2 font-normal appearance-none min-h-12 p-3 text-md rounded editor"
-              value={
-                descriptionIsDirty.current
-                  ? dirtyDescription || ''
-                  : issue.description || ''
-              }
-              onChange={(val) => handleDescriptionChange(val)}
-              placeholder="Add description..."
-            />
+            {ydoc && ydocLoaded && (
+              <YdocEditor
+                className="prose w-full max-w-full mt-2 font-normal appearance-none min-h-12 p-3 text-md rounded editor"
+                ydoc={ydoc}
+                field="description"
+                placeholder="Add description..."
+                collaborationProvider={webrtcProvider}
+              />
+            )}
             <div className="border-t border-gray-200 mt-3 p-3">
               <h2 className="text-md mb-3">Comments</h2>
               <Comments issue={issue} />

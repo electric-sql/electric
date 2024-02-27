@@ -1,14 +1,18 @@
 import { memo, useEffect, useRef, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { generateKeyBetween } from 'fractional-indexing'
+import * as Y from 'yjs'
 import { useElectric } from '../electric'
+import { saveNewElectricYDoc } from '../utils/y-electricsql'
+import { extractTextFromXmlFragment } from '../utils/y-electricsql/utils'
 
 import { BsChevronRight as ChevronRight } from 'react-icons/bs'
 import { ReactComponent as CloseIcon } from '../assets/icons/close.svg'
 import { ReactComponent as ElectricIcon } from '../assets/images/icon.inverse.svg'
 
 import Modal from '../components/Modal'
-import Editor from '../components/editor/Editor'
+import YdocEditor from './editor/YdocEditor'
+import YdocTextInput from './editor/YdocTextInput'
 import PriorityIcon from './PriorityIcon'
 import StatusIcon from './StatusIcon'
 import PriorityMenu from './contextmenu/PriorityMenu'
@@ -24,37 +28,53 @@ interface Props {
 
 function IssueModal({ isOpen, onDismiss }: Props) {
   const ref = useRef<HTMLInputElement>(null)
-  const [title, setTitle] = useState('')
-  const [description, setDescription] = useState<string>()
   const [priority, setPriority] = useState(Priority.NONE)
   const [status, setStatus] = useState(Status.BACKLOG)
-  const { db } = useElectric()!
+  const electricClient = useElectric()!
+  const ydoc = useRef(new Y.Doc())
 
   const handleSubmit = async () => {
+    const title = extractTextFromXmlFragment(
+      ydoc.current.getXmlFragment('title')
+    )
+    const description = extractTextFromXmlFragment(
+      ydoc.current.getXmlFragment('description')
+    )
+    console.log(title, description)
+
     if (title === '') {
       showWarning('Please enter a title before submitting', 'Title required')
       return
     }
 
-    const lastIssue = await db.issue.findFirst({
+    const lastIssue = await electricClient.db.issue.findFirst({
       orderBy: {
         kanbanorder: 'desc',
       },
     })
     const kanbanorder = generateKeyBetween(lastIssue?.kanbanorder, null)
 
+    // Save the new YDoc to the database
+    // returns the uuid of the new YDoc which is used as the ydoc_id in the issue table
+    const ydocId = await saveNewElectricYDoc(
+      electricClient,
+      ydoc.current,
+      'issue'
+    )
+
     const date = new Date()
-    db.issue.create({
+    await electricClient.db.issue.create({
       data: {
         id: uuidv4(),
         title: title,
+        description: description,
         username: 'testuser',
         priority: priority,
         status: status,
-        description: description ?? '',
         modified: date,
         created: date,
         kanbanorder: kanbanorder,
+        ydoc_id: ydocId,
       },
     })
 
@@ -70,10 +90,9 @@ function IssueModal({ isOpen, onDismiss }: Props) {
 
   const reset = () => {
     setTimeout(() => {
-      setTitle('')
-      setDescription('')
       setPriority(Priority.NONE)
       setStatus(Status.BACKLOG)
+      ydoc.current = new Y.Doc()
     }, 250)
   }
 
@@ -120,21 +139,22 @@ function IssueModal({ isOpen, onDismiss }: Props) {
               setStatus(st)
             }}
           />
-          <input
-            className="w-full ml-1.5 text-lg font-semibold placeholder-gray-400 border-none h-7 focus:border-none focus:outline-none focus:ring-0"
-            placeholder="Issue title"
-            value={title}
-            ref={ref}
-            onChange={(e) => setTitle(e.target.value)}
-          />
+          <div className="w-full">
+            <YdocTextInput
+              className="w-full ml-1.5 text-lg font-semibold placeholder-gray-400 border-none h-7 focus:border-none focus:outline-none focus:ring-0"
+              ydoc={ydoc.current}
+              field="title"
+              placeholder="Issue title"
+            />
+          </div>
         </div>
 
         {/* Issue description editor */}
         <div className="w-full px-4">
-          <Editor
+          <YdocEditor
             className="prose w-full max-w-full mt-2 font-normal appearance-none min-h-12 p-1 text-md editor border border-transparent focus:outline-none focus:ring-0"
-            value={description || ''}
-            onChange={(val) => setDescription(val)}
+            ydoc={ydoc.current}
+            field="description"
             placeholder="Add description..."
           />
         </div>

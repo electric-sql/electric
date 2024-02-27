@@ -9,7 +9,9 @@ CREATE TABLE IF NOT EXISTS "issue" (
     "created" TIMESTAMPTZ NOT NULL,
     "kanbanorder" TEXT NOT NULL,
     "username" TEXT NOT NULL,
-    CONSTRAINT "issue_pkey" PRIMARY KEY ("id")
+    "ydoc_id" UUID NOT NULL,
+    CONSTRAINT "issue_pkey" PRIMARY KEY ("id"),
+    FOREIGN KEY (ydoc_id) REFERENCES ydoc(id)
 );
 
 -- CREATE TABLE IF NOT EXISTS "user" (
