@@ -3,6 +3,12 @@ defmodule Electric.Config do
 
   @spec format_required_config_error(list) :: maybe_string
   def format_required_config_error(potential_errors) when is_list(potential_errors) do
+    format_invalid_config_error(potential_errors, true)
+  end
+
+  @spec format_invalid_config_error(list) :: maybe_string
+  @spec format_invalid_config_error(list, boolean) :: maybe_string
+  def format_invalid_config_error(potential_errors, required? \\ false) do
     errors =
       for {varname, {:error, str}} <- potential_errors do
         "  * #{varname} " <> str
@@ -12,7 +18,7 @@ defmodule Electric.Config do
       Electric.Errors.format_error(
         :conf,
         """
-        The following required configuration options have invalid or missing values:
+        The following#{if required?, do: " required"} configuration options have invalid or missing values:
 
         #{Enum.join(errors, "\n\n")}
         """,
@@ -313,4 +319,62 @@ defmodule Electric.Config do
   defp parse_database(nil, username), do: username
   defp parse_database("/", username), do: username
   defp parse_database("/" <> dbname, _username), do: dbname
+
+  @spec parse_human_readable_size(binary, pos_integer) :: {:ok, pos_integer} | {:error, binary}
+
+  @doc """
+  Parse human-readable memory/storage size string into bytes.
+
+  ## Examples
+
+    iex> parse_human_readable_size("1G", 1)
+    {:ok, #{1024 * 1024 * 1024}}
+
+    iex> parse_human_readable_size("2.23g", 1)
+    {:ok, 2_230_000_000}
+
+    iex> parse_human_readable_size("256M", 1)
+    {:ok, #{256 * 1024 * 1024}}
+
+    iex> parse_human_readable_size("377m", 1)
+    {:ok, 377_000_000}
+
+    iex> parse_human_readable_size("430K", 1)
+    {:ok, #{430 * 1024}}
+
+    iex> parse_human_readable_size("142888k", 1)
+    {:ok, 142_888_000}
+
+    iex> parse_human_readable_size("123456789", 1)
+    {:ok, 123_456_789}
+
+    iex> parse_human_readable_size(nil, 111222333)
+    {:ok, 111_222_333}
+
+    iex> parse_human_readable_size("", 1)
+    {:error, "has invalid value: \\"\\""}
+
+    iex> parse_human_readable_size("foo", 1)
+    {:error, "has invalid value: \\"foo\\""}
+  """
+  def parse_human_readable_size(nil, default), do: {:ok, default}
+
+  def parse_human_readable_size(str, _) do
+    with {num, suffix} <- Float.parse(str),
+         true <- num > 0,
+         suffix = String.trim(suffix),
+         true <- suffix == "" or suffix in ~w[G M K g m k] do
+      {:ok, trunc(num * size_multiplier(suffix))}
+    else
+      _ -> {:error, "has invalid value: #{inspect(str)}"}
+    end
+  end
+
+  defp size_multiplier(""), do: 1
+  defp size_multiplier("k"), do: 1_000
+  defp size_multiplier("K"), do: 1024
+  defp size_multiplier("m"), do: 1_000_000
+  defp size_multiplier("M"), do: 1024 * 1024
+  defp size_multiplier("g"), do: 1_000_000_000
+  defp size_multiplier("G"), do: 1024 * 1024 * 1024
 end
