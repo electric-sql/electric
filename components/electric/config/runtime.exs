@@ -90,6 +90,8 @@ default_database_require_ssl = true
 default_database_use_ipv6 = true
 default_write_to_pg_mode = "logical_replication"
 default_proxy_tracing_enable = false
+default_resumable_wal_window = 2 * 1024 * 1024 * 1024
+default_txn_cache_size = 256 * 1024 * 1024
 
 if config_env() in [:dev, :test] do
   source!([".env.#{config_env()}", ".env.#{config_env()}.local", System.get_env()])
@@ -151,6 +153,19 @@ if error = Electric.Config.format_required_config_error(potential_errors) do
 end
 
 ###
+
+wal_window_config =
+  [
+    {"ELECTRIC_RESUMABLE_WAL_WINDOW", default_resumable_wal_window},
+    {"ELECTRIC_TXN_CACHE_SIZE", default_txn_cache_size}
+  ]
+  |> Enum.map(fn {var, default} ->
+    {var, env!(var, :string, nil) |> Electric.Config.parse_human_readable_size(default)}
+  end)
+
+if error = Electric.Config.format_invalid_config_error(wal_window_config) do
+  Electric.Errors.print_fatal_error(error)
+end
 
 {:ok, log_level} = log_level_config
 config :logger, level: log_level
@@ -262,7 +277,12 @@ connector_config =
           use_http_tunnel?: use_http_tunnel?,
           password: proxy_password,
           log_level: log_level
-        ]
+        ],
+        wal_window:
+          Enum.map(wal_window_config, fn
+            {"ELECTRIC_RESUMABLE_WAL_WINDOW", {:ok, size}} -> {:resumable_size, size}
+            {"ELECTRIC_TXN_CACHE_SIZE", {:ok, size}} -> {:in_memory_size, size}
+          end)
       ]
     ]
   end
