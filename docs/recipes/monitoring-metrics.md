@@ -15,7 +15,7 @@ import Schema from '!!raw-loader!@site/submodules/electric/examples/recipes/db/m
 import Hook from '!!raw-loader!@site/submodules/electric/examples/recipes/src/monitoring_metrics/use_monitoring_metrics.ts'
 import View from '!!raw-loader!@site/submodules/electric/examples/recipes/src/monitoring_metrics/MonitoringChart.tsx'
 
-<video className="w-full mx-auto" autoPlay={true} loop muted playsInline>
+<video className="w-full mx-auto mb-3" autoPlay={true} loop muted playsInline>
   <source src={useBaseUrl('/videos/recipes/monitoring-metrics.mp4')} />
 </video>
 

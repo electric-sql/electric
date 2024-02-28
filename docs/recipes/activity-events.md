@@ -18,7 +18,7 @@ import Hook from '!!raw-loader!@site/submodules/electric/examples/recipes/src/ac
 import PopoverView from '!!raw-loader!@site/submodules/electric/examples/recipes/src/activity_events/ActivityPopover.tsx'
 import ToastView from '!!raw-loader!@site/submodules/electric/examples/recipes/src/activity_events/ActivityToast.tsx'
 
-<video className="w-full mx-auto" autoPlay={true} loop muted playsInline>
+<video className="w-full mx-auto mb-3" autoPlay={true} loop muted playsInline>
   <source src={useBaseUrl('/videos/recipes/activity-events-toast.mp4')} />
 </video>
 

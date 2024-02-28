@@ -15,7 +15,7 @@ import Schema from '!!raw-loader!@site/submodules/electric/examples/recipes/db/m
 import Hook from '!!raw-loader!@site/submodules/electric/examples/recipes/src/log_viewer/use_logs.ts'
 import View from '!!raw-loader!@site/submodules/electric/examples/recipes/src/log_viewer/LogViewer.tsx'
 
-<video className="w-full mx-auto" autoPlay={true} loop muted playsInline>
+<video className="w-full mx-auto mb-3" autoPlay={true} loop muted playsInline>
   <source src={useBaseUrl('/videos/recipes/log-viewer.mp4')} />
 </video>
 

@@ -19,7 +19,7 @@ import ChartHook from '!!raw-loader!@site/submodules/electric/examples/recipes/s
 import TableView from '!!raw-loader!@site/submodules/electric/examples/recipes/src/data_viewer/TableDataViewer.tsx'
 import ChartView from '!!raw-loader!@site/submodules/electric/examples/recipes/src/data_viewer/ChartDataViewer.tsx'
 
-<video className="w-full mx-auto" autoPlay={true} loop muted playsInline>
+<video className="w-full mx-auto mb-3" autoPlay={true} loop muted playsInline>
   <source src={useBaseUrl('/videos/recipes/data-viewer.mp4')} />
 </video>
 

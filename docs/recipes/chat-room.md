@@ -16,7 +16,7 @@ import Hook from '!!raw-loader!@site/submodules/electric/examples/recipes/src/ch
 import View from '!!raw-loader!@site/submodules/electric/examples/recipes/src/chat_room/ChatRoom.tsx'
 
 
-<video className="w-full mx-auto" autoPlay={true} loop muted playsInline>
+<video className="w-full mx-auto mb-3" autoPlay={true} loop muted playsInline>
   <source src={useBaseUrl('/videos/recipes/chat-room.mp4')} />
 </video>
 

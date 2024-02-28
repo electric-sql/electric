@@ -19,7 +19,7 @@ import QueryLogHook from '!!raw-loader!@site/submodules/electric/examples/recipe
 import QueryView from '!!raw-loader!@site/submodules/electric/examples/recipes/src/request_response/RequestForm.tsx'
 import QueryLogView from '!!raw-loader!@site/submodules/electric/examples/recipes/src/request_response/RequestAuditLog.tsx'
 
-<video className="w-full mx-auto" autoPlay={true} loop muted playsInline>
+<video className="w-full mx-auto mb-3" autoPlay={true} loop muted playsInline>
   <source src={useBaseUrl('/videos/recipes/request-response.mp4')} />
 </video>
 
