@@ -22,7 +22,7 @@ Make sure to go over the [data modelling](../usage/data-modelling/index.md) sect
 
 #### Headless component
 
-The data access and interaction component will assume that it is being used within the context of an existing Electric client (see the [React integration guide](./integrations/frontend/react) for an example), and that the relevant data is already synced and available through the use of an appropriate [shape subscription](./usage/data-access/shapes).
+The data access and interaction component will assume that it is being used within the context of an existing Electric client (see the [React integration guide](../integrations/frontend/react) for an example), and that the relevant data is already synced and available through the use of an appropriate [shape subscription](../usage/data-access/shapes).
 
 #### Usage examples
 
