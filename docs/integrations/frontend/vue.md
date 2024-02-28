@@ -35,7 +35,7 @@ We provide this dynamic API rather than static `provideElectric` and `injectElec
 
 `provideElectric` is a [provider](https://vuejs.org/api/composition-api-dependency-injection.html#provide) method that injects the Electric [Client](../../usage/data-access/client.md) instance to the rest of the app under an Electric-specific symbol key, so it will never clash with other dependency injections. You can call it within the context of a provider-like component, e.g.:
 
-```vue
+```html
 // ElectricProvider.vue
 <script lang="ts" setup>
 import { onMounted, shallowRef } from 'vue'
@@ -70,7 +70,7 @@ provideElectric(electric)
 
 With a `provideElectric` call in a parent component in place, you can then access the `electric` client instance using the `injectElectric` method, e.g.:
 
-```vue
+```html
 <script lang="ts" setup>
 import { ref } from 'vue'
 import { injectElectric } from './electric'
@@ -100,7 +100,7 @@ const generate = async () => {
 
 `useLiveQuery` sets up a live query (aka a dynamic or reactive query). This takes query function returned by one of the `db.live*` methods and keeps the results in sync whenever the relevant data changes.
 
-```vue
+```html
 <script lang="ts" setup>
 import { computed } from 'vue'
 import { useLiveQuery } from 'electric-sql/vuejs'
