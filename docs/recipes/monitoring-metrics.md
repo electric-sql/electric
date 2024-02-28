@@ -15,6 +15,10 @@ import Schema from '!!raw-loader!@site/submodules/electric/examples/recipes/db/m
 import Hook from '!!raw-loader!@site/submodules/electric/examples/recipes/src/monitoring_metrics/use_monitoring_metrics.ts'
 import View from '!!raw-loader!@site/submodules/electric/examples/recipes/src/monitoring_metrics/MonitoringChart.tsx'
 
+<video className="w-full mx-auto" autoPlay={true} loop muted playsInline>
+  <source src={useBaseUrl('/videos/recipes/monitoring-metrics.mp4')} />
+</video>
+
 Often times mission-critical metrics need to be monitored in real-time to ensure operations are running smoothly. This is often done through polling or streaming aggregated data, resulting in delays and slow queries when you want to drill in to the finer details - e.g. going from a 5 minute period to a 10 second period.
 
 ElectricSQL provides a simple way to monitor metrics, with the relevant data synced locally for fast access while retaining real-time updates.

@@ -19,6 +19,10 @@ import QueryLogHook from '!!raw-loader!@site/submodules/electric/examples/recipe
 import QueryView from '!!raw-loader!@site/submodules/electric/examples/recipes/src/request_response/RequestForm.tsx'
 import QueryLogView from '!!raw-loader!@site/submodules/electric/examples/recipes/src/request_response/RequestAuditLog.tsx'
 
+<video className="w-full mx-auto" autoPlay={true} loop muted playsInline>
+  <source src={useBaseUrl('/videos/recipes/request-response.mp4')} />
+</video>
+
 In modern web applications, efficiently handling request-response cycles while ensuring data integrity and responsiveness is paramount. Popular approaches to state transfer like [REST](https://en.wikipedia.org/wiki/REST) and [GraphQL](https://graphql.org/) can lead to complexities in managing concurrent requests and maintaining consistency across distributed systems, and they incur additional complexities when dealing with offline usage and intermittent connectivity.
 
 While [local-first development](../intro/local-first) tends to reduce the need for external connectivity, there will be some sensitive or complex workloads such as [payment processing](../examples/checkout.md) that need to be handled by a secure server. Furthermore, redesigning a large application to be local-first can be a daunting task, and being able to gradually transition is often a safer path.

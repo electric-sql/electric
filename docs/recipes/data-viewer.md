@@ -19,6 +19,10 @@ import ChartHook from '!!raw-loader!@site/submodules/electric/examples/recipes/s
 import TableView from '!!raw-loader!@site/submodules/electric/examples/recipes/src/data_viewer/TableDataViewer.tsx'
 import ChartView from '!!raw-loader!@site/submodules/electric/examples/recipes/src/data_viewer/ChartDataViewer.tsx'
 
+<video className="w-full mx-auto" autoPlay={true} loop muted playsInline>
+  <source src={useBaseUrl('/videos/recipes/data-viewer.mp4')} />
+</video>
+
 In data-driven applications, providing users with intuitive tools to explore and visualize data is essential for informed decision-making and insights discovery. Those explorations often involve filtering, sorting, and generally making complex queries on data. Those queries are often offloaded to the provider of the data, which can be slow due to round-trip delays, expensive as all computations are done on the server, and if the client querying is offline or with poor network connectivity, queries may fail and return no results, leading to a poor user experience.
 
 With ElectricSQL, the [local-first development](../intro/local-first) approach uses a local database for efficient querying, sorting, and filtering of data, enabling users to quickly and interactively explore datasets with ease, without worrying about network connectivity. By leveraging the power of SQL queries, developers can perform complex data manipulations and retrieve specific subsets of data based on user-defined criteria, ensuring a tailored and responsive viewing experience.

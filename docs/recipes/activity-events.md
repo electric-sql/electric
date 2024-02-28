@@ -18,6 +18,10 @@ import Hook from '!!raw-loader!@site/submodules/electric/examples/recipes/src/ac
 import PopoverView from '!!raw-loader!@site/submodules/electric/examples/recipes/src/activity_events/ActivityPopover.tsx'
 import ToastView from '!!raw-loader!@site/submodules/electric/examples/recipes/src/activity_events/ActivityToast.tsx'
 
+<video className="w-full mx-auto" autoPlay={true} loop muted playsInline>
+  <source src={useBaseUrl('/videos/recipes/activity-events-toast.mp4')} />
+</video>
+
 In today's social-media-driven world, keeping users engaged and informed about relevant activities within your application is crucial for driving interaction and fostering a sense of community. Implementing activity notifications, such as likes, comments, and mentions, enhances the user experience by providing real-time updates on their interactions and connections.
 
 With ElectricSQL, implementing activity events in your local-first application becomes a seamless process. ElectricSQL handles the complex task of synchronizing activity data [across multiple users and devices](../intro/multi-user.md), ensuring that notifications are delivered promptly and consistently, regardless of network conditions or device types.
