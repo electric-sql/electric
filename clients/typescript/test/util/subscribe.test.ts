@@ -1,6 +1,10 @@
 import anyTest, { TestFn } from 'ava'
 import { MockNotifier, Notifier } from '../../src/notifiers'
-import { createQueryResultSubscribeFunction } from '../../src/util'
+import {
+  ConnectivityState,
+  createConnectivityStateSubscribeFunction,
+  createQueryResultSubscribeFunction,
+} from '../../src/util'
 import { LiveResult, LiveResultUpdate } from '../../src/client/model/model'
 import { QualifiedTablename } from '../../src/util'
 import EventEmitter from 'events'
@@ -219,4 +223,53 @@ test('should return error in subsequent updates but not interrupt', async (t) =>
   t.is(updates.length, 3)
   t.is(updates[2].results, 'foo')
   t.is(updates[2].error, undefined)
+})
+
+test('should yield connectivity state updates as notifier signals them', async (t) => {
+  const subscribe = createConnectivityStateSubscribeFunction(t.context.notifier)
+  const states: ConnectivityState[] = []
+
+  subscribe((s) => states.push(s))
+  t.is(states.length, 0)
+
+  t.context.notifier.connectivityStateChanged(mockDbName, {
+    status: 'connected',
+  })
+  await wait()
+  t.is(states.length, 1)
+  t.is(states[0].status, 'connected')
+
+  t.context.notifier.connectivityStateChanged(mockDbName, {
+    status: 'connected',
+  })
+  await wait()
+  t.is(states.length, 2)
+  t.is(states[1].status, 'connected')
+
+  t.context.notifier.connectivityStateChanged(mockDbName, {
+    status: 'disconnected',
+  })
+
+  await wait()
+  t.is(states.length, 3)
+  t.is(states[2].status, 'disconnected')
+})
+
+test('should NOT yield subsequent connectivity updates after unsubscribing', async (t) => {
+  const subscribe = createConnectivityStateSubscribeFunction(t.context.notifier)
+
+  const states: ConnectivityState[] = []
+  const unsubscribe = subscribe((u) => states.push(u))
+
+  t.is(states.length, 0)
+
+  // unsubscribing before change should not yield update
+  unsubscribe()
+  t.context.notifier.connectivityStateChanged(mockDbName, {
+    status: 'connected',
+  })
+
+  await wait()
+
+  t.is(states.length, 0)
 })
