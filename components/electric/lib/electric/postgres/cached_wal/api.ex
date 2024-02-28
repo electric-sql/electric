@@ -16,8 +16,8 @@ defmodule Electric.Postgres.CachedWal.Api do
 
   @type stats :: %{
           transaction_count: non_neg_integer(),
-          max_transaction_count: pos_integer(),
           oldest_transaction_timestamp: DateTime.t() | nil,
+          max_cache_size: pos_integer(),
           cache_memory_total: non_neg_integer()
         }
 
