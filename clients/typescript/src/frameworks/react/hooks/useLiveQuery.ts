@@ -1,7 +1,6 @@
-import { useContext, useEffect, useState, useMemo, DependencyList } from 'react'
+import { useEffect, useState, useMemo, DependencyList } from 'react'
 import { hash } from 'ohash'
 
-import { ElectricContext } from '../provider'
 import {
   LiveResultContext,
   LiveResultUpdate,
@@ -92,16 +91,14 @@ function useLiveQueryWithQueryUpdates<Res>(
   runQuery: LiveResultContext<Res>,
   runQueryDependencies: DependencyList
 ): LiveResultUpdate<Res> {
-  const electric = useContext(ElectricContext)
   const [resultData, setResultData] = useState<LiveResultUpdate<Res>>({})
 
   // Once we have electric, we subscribe to the query results and
   // update that subscription on any dependency change
   useEffect(() => {
-    if (electric?.notifier === undefined) return
     const unsubscribe = runQuery.subscribe(setResultData)
     return unsubscribe
-  }, [electric?.notifier, ...runQueryDependencies])
+  }, runQueryDependencies)
 
   return resultData
 }
