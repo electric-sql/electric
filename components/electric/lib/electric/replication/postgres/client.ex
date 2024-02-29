@@ -16,6 +16,8 @@ defmodule Electric.Replication.Postgres.Client do
   @spec connect(Connectors.connection_opts()) ::
           {:ok, connection :: pid()} | {:error, reason :: :epgsql.connect_error()}
   def connect(conn_opts) do
+    Logger.debug("#{inspect(__MODULE__)}.connect(#{inspect(sanitize_conn_opts(conn_opts))})")
+
     {%{ip_addr: ip_addr}, %{username: username, password: password} = epgsql_conn_opts} =
       Connectors.pop_extraneous_conn_opts(conn_opts)
 
@@ -66,7 +68,20 @@ defmodule Electric.Replication.Postgres.Client do
     conn_opts
     |> Map.put(:password, ~c"******")
     |> Map.update!(:ip_addr, &:inet.ntoa/1)
+    |> truncate_cacerts()
   end
+
+  defp truncate_cacerts(%{ssl_opts: ssl_opts} = conn_opts) do
+    ssl_opts =
+      case ssl_opts[:cacerts] do
+        nil -> ssl_opts
+        list -> Keyword.put(ssl_opts, :cacerts, "[...](#{length(list)})")
+      end
+
+    %{conn_opts | ssl_opts: ssl_opts}
+  end
+
+  defp truncate_cacerts(conn_opts), do: conn_opts
 
   @doc """
   Wrapper for :epgsql.with_transaction/3 that always sets `reraise` to `true` by default and makes `begin_opts` a

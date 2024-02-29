@@ -1,4 +1,4 @@
-import { AuthConfig, AuthState } from '../auth/index'
+import { AuthState } from '../auth/index'
 import { DatabaseAdapter } from '../electric/adapter'
 import { Migrator } from '../migrators/index'
 import { Notifier } from '../notifiers/index'
@@ -17,10 +17,11 @@ import {
   StopReplicationResponse,
   OutboundStartedCallback,
   TransactionCallback,
+  SocketCloseReason,
 } from '../util/types'
 import { ElectricConfig } from '../config/index'
 
-import { Client, ConnectionWrapper, Satellite } from './index'
+import { Client, Satellite } from './index'
 import { SatelliteOpts, SatelliteOverrides, satelliteDefaults } from './config'
 import { BaseRegistry } from './registry'
 import { SocketFactory } from '../sockets'
@@ -63,6 +64,7 @@ export class MockSatelliteProcess implements Satellite {
   notifier: Notifier
   socketFactory: SocketFactory
   opts: SatelliteOpts
+  token: string | undefined
 
   constructor(
     dbName: DbName,
@@ -91,11 +93,31 @@ export class MockSatelliteProcess implements Satellite {
     throw new Error('Method not implemented.')
   }
 
-  async start(_authConfig: AuthConfig): Promise<ConnectionWrapper> {
+  async start(): Promise<void> {
     await sleepAsync(50)
-    return {
-      connectionPromise: new Promise((resolve) => resolve()),
-    }
+  }
+
+  setToken(token: string): void {
+    this.token = token
+  }
+
+  hasToken() {
+    return this.token !== undefined
+  }
+
+  async connect(): Promise<void> {
+    await sleepAsync(50)
+  }
+
+  async connectWithBackoff(): Promise<void> {
+    await this.connect()
+  }
+
+  disconnect(): void {}
+  clientDisconnect(): void {}
+
+  authenticate(_token: string): Promise<void> {
+    return Promise.resolve()
   }
 
   async stop(): Promise<void> {
@@ -117,7 +139,7 @@ export class MockRegistry extends BaseRegistry {
     migrator: Migrator,
     notifier: Notifier,
     socketFactory: SocketFactory,
-    config: ElectricConfig,
+    _config: ElectricConfig,
     overrides?: SatelliteOverrides
   ): Promise<Satellite> {
     if (this.shouldFailToStart) {
@@ -134,7 +156,7 @@ export class MockRegistry extends BaseRegistry {
       socketFactory,
       opts
     )
-    await satellite.start(config.auth)
+    await satellite.start()
 
     return satellite
   }
@@ -144,7 +166,7 @@ type Events = {
   [SUBSCRIPTION_DELIVERED]: (data: SubscriptionData) => void
   [SUBSCRIPTION_ERROR]: (error: SatelliteError, subscriptionId: string) => void
   outbound_started: OutboundStartedCallback
-  error: ErrorCallback
+  error: (error: SatelliteError) => void
 }
 export class MockSatelliteClient
   extends AsyncEventEmitter<Events>
@@ -275,11 +297,15 @@ export class MockSatelliteClient
     this.removeListener(SUBSCRIPTION_ERROR, errorCallback)
   }
 
-  subscribeToError(cb: ErrorCallback): void {
+  subscribeToError(cb: (error: SatelliteError) => void): void {
     this.on('error', cb)
   }
 
-  unsubscribeToError(cb: ErrorCallback): void {
+  emitSocketClosedError(ev: SocketCloseReason): void {
+    this.enqueueEmit('error', new SatelliteError(ev, 'socket closed'))
+  }
+
+  unsubscribeToError(cb: (error: SatelliteError) => void): void {
     this.removeListener('error', cb)
   }
 

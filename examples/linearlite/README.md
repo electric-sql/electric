@@ -75,7 +75,7 @@ npm run client:generate
 The app is a React application to install and run it:
 
 ```bash
-npm run start
+npm run dev
 ```
 
 The app should be available on `localhost:5173`

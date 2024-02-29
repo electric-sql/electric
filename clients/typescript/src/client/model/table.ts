@@ -49,6 +49,7 @@ import {
   transformUpdateMany,
   transformUpsert,
 } from '../conversions/input'
+import { createQueryResultSubscribeFunction } from '../../util/subscribe'
 
 type AnyTable = Table<any, any, any, any, any, any, any, any, any, HKT>
 
@@ -106,7 +107,7 @@ export class Table<
   constructor(
     public tableName: string,
     adapter: DatabaseAdapter,
-    notifier: Notifier,
+    private _notifier: Notifier,
     shapeManager: IShapeManager,
     private _dbDescription: DbSchema<any>
   ) {
@@ -119,7 +120,7 @@ export class Table<
       shapeManager,
       tableDescription
     )
-    this._executor = new Executor(adapter, notifier, this._fields)
+    this._executor = new Executor(adapter, _notifier, this._fields)
     this._shapeManager = shapeManager
     this._qualifiedTableName = new QualifiedTablename('main', tableName)
     this._tables = new Map()
@@ -1541,6 +1542,12 @@ export class Table<
         return new LiveResult(res, tables)
       })
     })
+
+    result.subscribe = createQueryResultSubscribeFunction(
+      this._notifier,
+      result,
+      tables
+    )
     result.sourceQuery = i
     return result
   }
@@ -1570,6 +1577,7 @@ export function rawQuery(
 
 export function liveRawQuery(
   adapter: DatabaseAdapter,
+  notifier: Notifier,
   sql: Statement
 ): LiveResultContext<Row[]> {
   const result = <LiveResultContext<Row[]>>(async () => {
@@ -1580,6 +1588,12 @@ export function liveRawQuery(
     const res = await rawQuery(adapter, sql)
     return new LiveResult(res, tablenames)
   })
+
+  result.subscribe = createQueryResultSubscribeFunction(
+    notifier,
+    result,
+    parseTableNames(sql.sql)
+  )
   result.sourceQuery = sql
   return result
 }

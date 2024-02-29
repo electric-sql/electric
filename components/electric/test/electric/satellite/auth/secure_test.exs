@@ -6,7 +6,7 @@ defmodule Electric.Satellite.Auth.SecureTest do
   alias Electric.Satellite.Auth
 
   @namespace "https://electric-sql.com/jwt/claims"
-  @signing_key ~c"abcdefghijklmnopqrstuvwxyz012345" |> Enum.shuffle() |> List.to_string()
+  @signing_key ~c"abcdefghijklmnopqrstuvwxyz01234_" |> Enum.shuffle() |> List.to_string()
 
   describe "build_config()" do
     test "returns a clean map when all checks pass" do
@@ -34,6 +34,22 @@ defmodule Electric.Satellite.Auth.SecureTest do
              } = config
     end
 
+    test "accepts a base64-encoded symmetric key" do
+      options = [
+        [],
+        [padding: true],
+        [padding: false]
+      ]
+
+      Enum.each(options, fn opts ->
+        raw_key = String.duplicate(<<1, 2, 3, 4, 5, 6, 7, 8>>, 4)
+        opts = [alg: "HS256", key: Base.encode64(raw_key, opts)]
+
+        assert {:ok, config} = build_config(opts)
+        assert is_map(config)
+      end)
+    end
+
     test "checks for missing 'alg'" do
       assert {:error, :alg, "not set"} == build_config([])
     end
@@ -55,6 +71,65 @@ defmodule Electric.Satellite.Auth.SecureTest do
 
       assert {:error, :key, "has to be at least 64 bytes long for HS512"} ==
                build_config(alg: "HS512", key: "key")
+    end
+
+    test "validates the base64-encoded key length" do
+      raw_key = String.duplicate("_", 31)
+      key = Base.encode64(raw_key)
+      assert byte_size(key) >= 32
+
+      assert {:error, :key, "has to be at least 32 bytes long for HS256"} ==
+               build_config(alg: "HS256", key: key)
+
+      ###
+
+      raw_key = String.duplicate("_", 47)
+      key = Base.encode64(raw_key)
+      assert byte_size(key) >= 48
+
+      assert {:error, :key, "has to be at least 48 bytes long for HS384"} ==
+               build_config(alg: "HS384", key: key)
+
+      ###
+
+      raw_key = String.duplicate("_", 63)
+      key = Base.encode64(raw_key)
+      assert byte_size(key) >= 64
+
+      assert {:error, :key, "has to be at least 64 bytes long for HS512"} ==
+               build_config(alg: "HS512", key: key)
+    end
+
+    test "validates the public key format" do
+      error_msg = """
+      is not a valid key for AUTH_JWT_ALG=<alg> or it has invalid format.
+
+          The key for RS* and ES* algorithms must use the PEM format, with the header
+          and footer included:
+
+              -----BEGIN PUBLIC KEY-----
+              MFkwEwYHKoZIzj0CAQY...
+              ...
+              -----END PUBLIC KEY-----
+      """
+
+      assert {:error, :key, String.replace(error_msg, "<alg>", "RS256")} ==
+               build_config(alg: "RS256", key: "...")
+
+      ###
+
+      assert {:error, :key, String.replace(error_msg, "<alg>", "ES384")} ==
+               build_config(alg: "ES384", key: "...")
+
+      ###
+
+      public_key = File.read!("test/fixtures/keys/rsa_pub.pem")
+
+      assert {:error, :key, String.replace(error_msg, "<alg>", "ES512")} ==
+               build_config(alg: "ES512", key: public_key)
+
+      assert {:error, :key, String.replace(error_msg, "<alg>", "RS256")} ==
+               build_config(alg: "RS256", key: String.slice(public_key, 1..-1//1))
     end
   end
 
@@ -83,7 +158,9 @@ defmodule Electric.Satellite.Auth.SecureTest do
         {:ok, token, _} = Joken.encode_and_sign(claims, signer)
 
         {:ok, config} = build_config(alg: alg, key: key, namespace: @namespace)
-        assert {alg, {:ok, %Auth{user_id: "12345"}}} == {alg, validate_token(token, config)}
+
+        assert {alg, {:ok, %Auth{user_id: "12345", expires_at: claims["exp"]}}} ==
+                 {alg, validate_token(token, config)}
       end
     end
 
@@ -98,7 +175,9 @@ defmodule Electric.Satellite.Auth.SecureTest do
         {:ok, token, _} = Joken.encode_and_sign(claims, signer)
 
         {:ok, config} = build_config(alg: alg, key: public_key, namespace: @namespace)
-        assert {alg, {:ok, %Auth{user_id: "12345"}}} == {alg, validate_token(token, config)}
+
+        assert {alg, {:ok, %Auth{user_id: "12345", expires_at: claims["exp"]}}} ==
+                 {alg, validate_token(token, config)}
       end
     end
 
@@ -117,7 +196,9 @@ defmodule Electric.Satellite.Auth.SecureTest do
         {:ok, token, _} = Joken.encode_and_sign(claims, signer)
 
         {:ok, config} = build_config(alg: alg, key: public_key, namespace: @namespace)
-        assert {alg, {:ok, %Auth{user_id: "12345"}}} == {alg, validate_token(token, config)}
+
+        assert {alg, {:ok, %Auth{user_id: "12345", expires_at: claims["exp"]}}} ==
+                 {alg, validate_token(token, config)}
       end
     end
 
@@ -151,15 +232,31 @@ defmodule Electric.Satellite.Auth.SecureTest do
 
   describe "validate_token(<signed token>)" do
     test "successfully extracts the namespaced user_id claim" do
-      token = signed_token(claims(%{"custom_namespace" => %{"user_id" => "000"}}))
+      clms = claims(%{"custom_namespace" => %{"user_id" => "000"}})
+      token = signed_token(clms)
 
-      assert {:ok, %Auth{user_id: "000"}} ==
+      assert {:ok, %Auth{user_id: "000", expires_at: clms["exp"]}} ==
                validate_token(token, config(namespace: "custom_namespace"))
 
-      ###
+      clms = claims(%{"user_id" => "111"})
+      token = signed_token(clms)
 
-      token = signed_token(claims(%{"user_id" => "111"}))
-      assert {:ok, %Auth{user_id: "111"}} == validate_token(token, config(namespace: ""))
+      assert {:ok, %Auth{user_id: "111", expires_at: clms["exp"]}} ==
+               validate_token(token, config(namespace: ""))
+    end
+
+    test "successfully extracts the namespaced exp claim" do
+      exp = DateTime.to_unix(~U[2123-05-01 00:00:00Z])
+      token = signed_token(claims(%{"custom_namespace" => %{"user_id" => "000"}}))
+
+      assert {:ok, %Auth{user_id: "000", expires_at: exp}} ==
+               validate_token(token, config(namespace: "custom_namespace"))
+
+      claims = claims(%{"user_id" => "111"})
+      token = signed_token(claims)
+
+      assert {:ok, %Auth{user_id: "111", expires_at: claims["exp"]}} ==
+               validate_token(token, config(namespace: ""))
     end
 
     test "verifies that user_id is present and is not empty" do
@@ -205,11 +302,11 @@ defmodule Electric.Satellite.Auth.SecureTest do
       # in the future.
       soon = DateTime.utc_now() |> DateTime.add(1, :second) |> DateTime.to_unix()
 
-      token =
-        claims(%{"iat" => soon, @namespace => %{"user_id" => "12345"}})
-        |> signed_token()
+      claims = claims(%{"iat" => soon, @namespace => %{"user_id" => "12345"}})
+      token = signed_token(claims)
 
-      assert {:ok, %Auth{user_id: "12345"}} == validate_token(token, config([]))
+      assert {:ok, %Auth{user_id: "12345", expires_at: claims["exp"]}} ==
+               validate_token(token, config([]))
 
       # but not too far off
       far_future = DateTime.utc_now() |> DateTime.add(5, :second) |> DateTime.to_unix()
@@ -224,11 +321,11 @@ defmodule Electric.Satellite.Auth.SecureTest do
       # in the future.
       soon = DateTime.utc_now() |> DateTime.add(1, :second) |> DateTime.to_unix()
 
-      token =
-        claims(%{"nbf" => soon, @namespace => %{"user_id" => "12345"}})
-        |> signed_token()
+      claims = claims(%{"nbf" => soon, @namespace => %{"user_id" => "12345"}})
+      token = signed_token(claims)
 
-      assert {:ok, %Auth{user_id: "12345"}} == validate_token(token, config([]))
+      assert {:ok, %Auth{user_id: "12345", expires_at: claims["exp"]}} ==
+               validate_token(token, config([]))
 
       # but not too far off
       far_future = DateTime.utc_now() |> DateTime.add(5, :second) |> DateTime.to_unix()
@@ -243,11 +340,11 @@ defmodule Electric.Satellite.Auth.SecureTest do
       # in the past.
       just_now = DateTime.utc_now() |> DateTime.add(-1, :second) |> DateTime.to_unix()
 
-      token =
-        claims(%{"nbf" => just_now, @namespace => %{"user_id" => "12345"}})
-        |> signed_token()
+      claims = claims(%{"nbf" => just_now, @namespace => %{"user_id" => "12345"}})
+      token = signed_token(claims)
 
-      assert {:ok, %Auth{user_id: "12345"}} == validate_token(token, config([]))
+      assert {:ok, %Auth{user_id: "12345", expires_at: claims["exp"]}} ==
+               validate_token(token, config([]))
 
       # but not too far off
       long_past = DateTime.utc_now() |> DateTime.add(-5, :second) |> DateTime.to_unix()

@@ -55,6 +55,7 @@ All arguments are optional. The principal ones are described below:
 | <span className="no-wrap">`--watch`</span><br /><span className="no-wrap">`-w`</span> | `<pollingInterval>` | Run the generator in watch mode. Accepts an optional polling interval (in milliseconds) which defines how often to poll Electric for database migrations.<br /> The default polling interval is 1000ms. |
 | <span className="no-wrap">`--with-migrations`</span> | `<command>` | Specify a command to run migrations against an ephemeral postgres in order to create a client. [See details below](#local-only-first-mode) |
 | <span className="no-wrap">`--module-resolution`</span> | `<command>` | The module resolution used for the project. The generated client will be compatible with this resolution scheme, [see notes below](#electric_module_resolution). |
+| <span className="no-wrap">`--debug`</span> | `<boolean>` | Optional flag to enable debug mode. When enabled, the temporary migration files used to generate the client will be retained for inspection. |
 
 For a full list of arguments run `npx electric-sql help generate` or see the [environment variables](#environment-variables) below.
 

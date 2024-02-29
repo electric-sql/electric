@@ -60,6 +60,9 @@ export function makeGenerateCommand(): Command {
       '--debug',
       dedent`
         Optional flag to enable debug mode.
+
+        When enabled, the temporary migration files used to generate
+        the client will be retained for inspection.
       `
     )
 

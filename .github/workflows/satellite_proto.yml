@@ -11,8 +11,8 @@ on:
   workflow_dispatch:
 
 env:
-  OTP_VERSION: ${{ vars.OTP_VERSION }}
-  ELIXIR_VERSION: ${{ vars.ELIXIR_VERSION }}
+  OTP_VERSION: "25.3.2.8"
+  ELIXIR_VERSION: "1.16.1-otp-25"
 
 jobs:
   verify_proto:

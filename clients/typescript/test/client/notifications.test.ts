@@ -8,11 +8,7 @@ import { mockElectricClient } from '../satellite/common'
 import { EVENT_NAMES } from '../../src/notifiers/event'
 
 const conn = new Database(':memory:')
-const config = {
-  auth: {
-    token: 'test-token',
-  },
-}
+const config = {}
 
 const { notifier, adapter, db } = await electrify(conn, schema, config, {
   registry: new MockRegistry(),

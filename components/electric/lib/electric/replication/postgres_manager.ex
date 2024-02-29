@@ -272,27 +272,14 @@ defmodule Electric.Replication.PostgresConnectorMng do
       |> Connectors.get_connection_opts()
       |> resolve_host_to_addr()
 
-    update_in(connector_config, [:connection], fn conn_opts ->
+    Keyword.update!(connector_config, :connection, fn conn_opts ->
       conn_opts
       |> Keyword.put(:nulls, [nil, :null, :undefined])
       |> Keyword.put(:ip_addr, ip_addr)
-      |> maybe_put_sni()
       |> maybe_put_inet6(ip_addr)
+      |> maybe_put_sni()
+      |> maybe_verify_peer()
     end)
-  end
-
-  defp maybe_put_inet6(conn_opts, {_, _, _, _, _, _, _, _}),
-    do: Keyword.put(conn_opts, :tcp_opts, [:inet6])
-
-  defp maybe_put_inet6(conn_opts, _), do: conn_opts
-
-  defp maybe_put_sni(conn_opts) do
-    if conn_opts[:ssl] do
-      sni_opt = {:server_name_indication, String.to_charlist(conn_opts[:host])}
-      update_in(conn_opts, [:ssl_opts], &[sni_opt | List.wrap(&1)])
-    else
-      conn_opts
-    end
   end
 
   # Perform a DNS lookup for an IPv6 IP address, followed by a lookup for an IPv4 address in case the first one fails.
@@ -309,6 +296,55 @@ defmodule Electric.Replication.PostgresConnectorMng do
 
   defp resolve_host_to_addr(%{host: host, ipv6: false}) do
     :inet.getaddr(host, :inet)
+  end
+
+  defp maybe_put_inet6(conn_opts, {_, _, _, _, _, _, _, _}),
+    do: Keyword.put(conn_opts, :tcp_opts, [:inet6])
+
+  defp maybe_put_inet6(conn_opts, _), do: conn_opts
+
+  defp maybe_put_sni(conn_opts) do
+    if conn_opts[:ssl] do
+      sni_opt = {:server_name_indication, String.to_charlist(conn_opts[:host])}
+      update_in(conn_opts, [:ssl_opts], &[sni_opt | List.wrap(&1)])
+    else
+      conn_opts
+    end
+  end
+
+  defp maybe_verify_peer(conn_opts) do
+    if conn_opts[:ssl] == :required do
+      ssl_opts = get_verify_peer_opts()
+      update_in(conn_opts, [:ssl_opts], &(ssl_opts ++ List.wrap(&1)))
+    else
+      conn_opts
+    end
+  end
+
+  defp get_verify_peer_opts do
+    case :public_key.cacerts_load() do
+      :ok ->
+        cacerts = :public_key.cacerts_get()
+        Logger.info("Successfully loaded #{length(cacerts)} cacerts from the OS")
+
+        [
+          verify: :verify_peer,
+          cacerts: cacerts,
+          customize_hostname_check: [
+            # Use a custom match function to support wildcard CN in server certificates.
+            # For example, CN = *.us-east-2.aws.neon.tech
+            match_fun: :public_key.pkix_verify_hostname_match_fun(:https)
+          ]
+        ]
+
+      {:error, reason} ->
+        Logger.warning("Failed to load cacerts from the OS: #{inspect(reason)}")
+        # We're not sure how reliable OS certificate stores are in general, so keep going even
+        # if the loading of cacerts has failed. A warning will be logged every time a new
+        # database connection is established without the `verify_peer` option, so the issue will be
+        # visible to the developer.
+        []
+    end
   end
 
   defp fallback_to_nossl(state) do

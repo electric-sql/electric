@@ -1,5 +1,34 @@
 # electric-sql
 
+## 0.9.4
+
+### Patch Changes
+
+- dace3fc1: Restore support for both `sub` and `user_id` claim in auth JWTs
+
+## 0.9.3
+
+### Patch Changes
+
+- d0bc48c2: Add basic Vue.js bindings for using live queries
+- 223319ea: Add expo-sqlite/next driver to client
+- 4d193eb1: Make `--debug` flag in CLI `generate` command always retain temporary migrations folders
+- 5143a99c: Detach database electrification from connecting to the Electric sync service.
+- 11069a90: Handle JWT expiration on the TS client, and support reconnecting after JWT expires.
+- a968a636: Made connectivityState read-only and introduced a disconnect method.
+- 0ebd3e2d: Added support for Tauri SQLite driver.
+- 162d6e6e: Add row primary key infomation to the ActuallyChanged notification.
+
+## 0.9.2
+
+### Patch Changes
+
+- 5fa4eebd: Modified the CLI's generate command to fix issues with the generator when user projects include Prisma v5.
+- 6fc36865: Use SIGINT as the default stop signal for the Electric service started with `npx electric-sql start`. This results in faster shutdown after pressing Ctrl-C or stopping all services with `docker compose stop/down`.
+- a5a54fb3: - Add `ELECTRIC_WRITE_TO_PG_MODE` as option to CLI
+  - Fix CLI option defaults to match Electric defaults
+- 39fc2ac7: Fix clearing local state to avoid FK violations.
+
 ## 0.9.1
 
 ### Patch Changes

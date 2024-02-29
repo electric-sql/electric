@@ -131,10 +131,6 @@ defmodule Electric.Postgres.TestConnection do
       password: System.get_env("PGPASSWORD", "password"),
       ipv6: false
     ]
-    |> Enum.map(fn
-      {k, v} when is_binary(v) -> {k, String.to_charlist(v)}
-      other -> other
-    end)
   end
 
   def conn_opts(config) when is_list(config) do

@@ -38,7 +38,7 @@ export class ElectricNamespace {
   }
 
   setIsConnected(connectivityState: ConnectivityState): void {
-    this._isConnected = connectivityState === 'connected'
+    this._isConnected = connectivityState.status === 'connected'
   }
 
   // We lift this function a level so the user can call

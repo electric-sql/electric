@@ -28,8 +28,10 @@ const test = testAny as TestFn<CurrentContext>
 
 test.beforeEach(async (t) => {
   await makeContext(t)
-  const { satellite, authState } = t.context
+  const { satellite, authState, token } = t.context
   await satellite.start(authState)
+  satellite.setToken(token)
+  await satellite.connectWithBackoff()
   t.context['clientId'] = satellite._authState!.clientId // store clientId in the context
   await populateDB(t)
   const txDate = await satellite._performSnapshot()

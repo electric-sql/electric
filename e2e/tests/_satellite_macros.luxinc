@@ -1,6 +1,6 @@
 [global node=>]
 
-[macro connect_to_electric host port migrations]
+[macro connect_to_electric host port migrations connectToElectric]
     !client = await import('./dist/client.js')
     ??$node
     # !migrations = await client.read_migrations(process.env.MIGRATION_DIRS + "/index.js")
@@ -9,26 +9,31 @@
     ??$node
     !originalDb = client.make_db(process.env.SATELLITE_DB_PATH + "/$LUX_SHELLNAME")
     ??$node
-    [invoke electrify_db "originalDb" $host $port $migrations]
+    [invoke electrify_db "originalDb" $host $port $migrations $connectToElectric]
     ??(in electrify_db) config:
 [endmacro]
 
-[macro electrify_db db host port migrations]
+[macro electrify_db db host port migrations connectToElectric]
+     # define `exp` to avoid `ReferenceError: exp is not defined`
+     # when trying to read `exp` when calling `electrify_db`
+     !if (typeof exp === 'undefined') { var exp = undefined }
      !db = await client.electrify_db(originalDb, \
                                      "$host", \
                                      $port, \
-                                     $migrations)
+                                     $migrations, \
+                                     $connectToElectric, \
+                                     exp)
 [endmacro]
 
-[macro setup_client_with_migrations satellite_number electric port migrations]
+[macro setup_client_with_migrations satellite_number electric port migrations connectToElectric]
     [invoke start_satellite $satellite_number]
     -$fail_pattern
     ??$node
-    [invoke connect_to_electric $electric $port $migrations]
+    [invoke connect_to_electric $electric $port $migrations $connectToElectric]
 [endmacro]
 
 [macro setup_client satellite_number electric port]
-    [invoke setup_client_with_migrations $satellite_number $electric $port "[]"]
+    [invoke setup_client_with_migrations $satellite_number $electric $port "[]" "true"]
 [endmacro]
 
 [macro node_await_get match]
@@ -183,4 +188,48 @@
 
 [macro node_sync_table table]
     !await client.syncTable(db, "${table}")
+[endmacro]
+
+# Makes both satellites and PG write rows
+[macro write sat1_msg sat2_msg pg_msg]
+    [shell satellite_1]
+        [invoke log "Insert data into satellite_1"]
+        [invoke node_await_insert "['$sat1_msg']"]
+    
+    [shell satellite_2]
+        [invoke log "Insert data into satellite_2"]
+        [invoke node_await_insert "['$sat2_msg']"]
+
+    [shell pg_1]
+        [invoke log "Insert a row on PG side"]
+        !INSERT INTO public.items (id, content) VALUES (gen_random_uuid(), '$pg_msg');
+        ?$psql
+[endmacro]
+
+# Reads the given rows on the satellites and PG
+[macro read sat1_msg sat2_msg pg_msg]
+    [shell pg_1]
+        [invoke log "Verify that pg has received data from both Satellites"]
+        [invoke wait-for "SELECT * FROM public.items;" "$sat1_msg" 15 $psql]
+        [invoke wait-for "SELECT * FROM public.items;" "$sat2_msg" 15 $psql]
+    
+    [invoke log "Verify that satellite inserts reached each other"]
+    [shell satellite_1]
+        [invoke wait-for "await client.get_items(db)" "$sat2_msg" 15 $node]
+    
+    [shell satellite_2]
+        [invoke wait-for "await client.get_items(db)" "$sat1_msg" 15 $node]
+    
+    [invoke log "Verify that pg insert has reached both Satellites"]
+    [shell satellite_1]
+        [invoke wait-for "await client.get_items(db)" "$pg_msg" 15 $node]
+    
+    [shell satellite_2]
+        [invoke wait-for "await client.get_items(db)" "$pg_msg" 15 $node]
+[endmacro]
+
+# Checks that the given rows sync between satellites and PG
+[macro test_sync sat1_msg sat2_msg pg_msg]
+    [invoke write "$sat1_msg" "$sat2_msg" "$pg_msg"]
+    [invoke read "$sat1_msg" "$sat2_msg" "$pg_msg"]
 [endmacro]

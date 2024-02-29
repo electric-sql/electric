@@ -8,14 +8,8 @@ import { schema } from '../client/generated'
 const promisesEnabled = true
 SQLite.enablePromise(promisesEnabled)
 
-const config = {
-  auth: {
-    token: 'test-token',
-  },
-}
-
 const original = await SQLite.openDatabase({ name: 'example.db' })
-const { db } = await electrify(original, schema, promisesEnabled, config)
+const { db } = await electrify(original, schema, promisesEnabled)
 
 await db.Items.findMany({
   select: {

@@ -17,11 +17,7 @@ import { ElectricConfig } from '../../config'
 import { ElectricClient } from '../../client/model/client'
 import { DbSchema } from '../../client/model'
 
-const testConfig = {
-  auth: {
-    token: 'test-token',
-  },
-}
+const testToken = 'test-token'
 
 type RetVal<
   S extends DbSchema<any>,
@@ -60,7 +56,7 @@ export async function initTestable<
   dbName: DbName,
   dbDescription: S,
   _useWebSQLDatabase = false,
-  config: ElectricConfig = testConfig,
+  config: ElectricConfig = {},
   opts?: ElectrifyOptions
 ): RetVal<S, N> {
   const db = new MockDatabase(dbName)
@@ -71,7 +67,7 @@ export async function initTestable<
   const socketFactory = opts?.socketFactory || MockSocket
   const registry = opts?.registry || new MockRegistry()
 
-  const dal = await electrify(
+  const client = await electrify(
     dbName,
     dbDescription,
     adapter,
@@ -83,5 +79,8 @@ export async function initTestable<
       registry: registry,
     }
   )
-  return [db, notifier, dal]
+
+  await client.connect(testToken)
+
+  return [db, notifier, client]
 }

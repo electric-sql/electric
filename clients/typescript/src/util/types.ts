@@ -36,6 +36,7 @@ export class SatelliteError extends Error {
 }
 
 export enum SatelliteErrorCode {
+  CONNECTION_CANCELLED_BY_DISCONNECT,
   CONNECTION_FAILED_AFTER_RETRY,
   INTERNAL,
   TIMEOUT,
@@ -53,6 +54,7 @@ export enum SatelliteErrorCode {
   AUTH_ERROR,
   AUTH_FAILED,
   AUTH_REQUIRED,
+  AUTH_EXPIRED,
 
   // server errors
   INVALID_REQUEST,
@@ -83,6 +85,10 @@ export enum SatelliteErrorCode {
   SHAPE_DELIVERY_ERROR,
   SHAPE_SIZE_LIMIT_EXCEEDED,
 }
+
+export type SocketCloseReason =
+  | SatelliteErrorCode.AUTH_EXPIRED
+  | SatelliteErrorCode.SOCKET_ERROR
 
 export type AuthResponse = {
   serverId?: string
@@ -194,4 +200,8 @@ export type IncomingTransactionCallback = (
 ) => void
 export type OutboundStartedCallback = () => void
 
-export type ConnectivityState = 'available' | 'connected' | 'disconnected'
+export type ConnectivityStatus = 'connected' | 'disconnected'
+export type ConnectivityState = {
+  status: ConnectivityStatus
+  reason?: SatelliteError // reason for `disconnected` status
+}

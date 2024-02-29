@@ -1,27 +1,18 @@
 CREATE OR REPLACE FUNCTION <%= schema() %>.generate_electrified_sql(table_oid regclass)
-RETURNS text
+RETURNS text[]
 SECURITY DEFINER
 AS $function$
 DECLARE
     _col_type regtype;
-    _ddlgen_sql text;
-    _result_sql text := '';
+    _ddl_statements text[];
 BEGIN
-    FOR _col_type IN
-        SELECT atttypid
-            FROM pg_attribute
-            JOIN pg_type on atttypid = pg_type.oid
-            WHERE attrelid = table_oid AND attnum > 0 AND NOT attisdropped AND typtype = 'e'
-            ORDER BY attnum
-    LOOP
-        SELECT <%= schema() %>.ddlgen_create(_col_type) INTO _ddlgen_sql;
-        _result_sql := _result_sql || _ddlgen_sql;
-    END LOOP;
+    SELECT array_agg(<%= schema() %>.ddlgen_create(atttypid) ORDER BY attnum)
+        FROM pg_attribute
+        JOIN pg_type on atttypid = pg_type.oid
+        WHERE attrelid = table_oid AND attnum > 0 AND NOT attisdropped AND typtype = 'e'
+    INTO _ddl_statements;
 
-    SELECT <%= schema() %>.ddlgen_create(table_oid) INTO _ddlgen_sql;
-    _result_sql := _result_sql || _ddlgen_sql;
-
-    RETURN _result_sql;
+    RETURN array_append(_ddl_statements, (SELECT <%= schema() %>.ddlgen_create(table_oid)));
 END;
 $function$
 LANGUAGE PLPGSQL;

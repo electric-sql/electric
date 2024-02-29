@@ -63,6 +63,7 @@ import {
   RelationCallback,
   OutboundStartedCallback,
   TransactionCallback,
+  SocketCloseReason,
 } from '../util/types'
 import {
   base64,
@@ -74,7 +75,6 @@ import {
 import { Client } from '.'
 import { SatelliteClientOpts, satelliteClientDefaults } from './config'
 import Log from 'loglevel'
-import { AuthState } from '../auth'
 import isequal from 'lodash.isequal'
 import {
   SUBSCRIPTION_DELIVERED,
@@ -92,6 +92,7 @@ import { Mutex } from 'async-mutex'
 import { DbSchema } from '../client/model'
 import { PgBasicType, PgDateType, PgType } from '../client/conversions/types'
 import { AsyncEventEmitter } from '../util'
+import { AuthState } from '../auth'
 
 type IncomingHandler = (msg: any) => void
 
@@ -237,14 +238,14 @@ export class SatelliteClient implements Client {
           }
           this.emitter.enqueueEmit('error', error)
         })
-        this.socket.onClose(() => {
+        this.socket.onClose((ev: SocketCloseReason) => {
           this.disconnect()
           if (this.emitter.listenerCount('error') === 0) {
             Log.error(`socket closed but no listener is attached`)
           }
           this.emitter.enqueueEmit(
             'error',
-            new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket closed')
+            new SatelliteError(ev, 'socket closed')
           )
         })
 

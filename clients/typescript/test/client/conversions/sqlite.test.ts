@@ -14,11 +14,7 @@ const db = new Database(':memory:')
 const electric = await electrify(
   db,
   schema,
-  {
-    auth: {
-      token: 'test-token',
-    },
-  },
+  {},
   { registry: new MockRegistry() }
 )
 

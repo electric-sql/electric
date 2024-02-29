@@ -46,16 +46,13 @@ export const ElectricWrapper = ({ children }) => {
   const [ electric, setElectric ] = useState<Electric>()
 
   useEffect(() => {
-    const isMounted = true
+    let isMounted = true
 
     const init = async () => {
-      const config = {
-        auth: {
-          token: insecureAuthToken({user_id: 'dummy'})
-        }
-      }
-      const conn = await ElectricDatabase.init('electric.db', '')
-      const electric = await electrify(conn, schema, config)
+      const conn = await ElectricDatabase.init('electric.db')
+      const electric = await electrify(conn, schema)
+      const token = insecureAuthToken({sub: 'dummy'})
+      await electric.connect(token)
 
       if (!isMounted) {
         return
@@ -181,31 +178,31 @@ With a signature of:
 ```tsx
 import { LiveResultContext } from 'electric-sql/client/model/model'
 
-export interface ResultData<T> {
-  error?: unknown
+export interface LiveResultUpdate<T> {
   results?: T
+  error?: unknown
   updatedAt?: Date
 }
 
-function successResult<T>(results: T): ResultData<T> {
+function successResult<T>(results: T): LiveResultUpdate<T> {
   return {
-    error: undefined,
     results: results,
+    error: undefined,
     updatedAt: new Date(),
   }
 }
 
-function errorResult<T>(error: unknown): ResultData<T> {
+function errorResult<T>(error: unknown): LiveResultUpdate<T> {
   return {
-    error: error,
     results: undefined,
+    error: error,
     updatedAt: new Date(),
   }
 }
 
 function useLiveQuery<Res>(
   runQuery: LiveResultContext<Res>
-): ResultData<Res>
+): LiveResultUpdate<Res>
 ```
 
 Running the query successfully will assign a new array of rows to the `results` and `error` will be `undefined`. Or if the query errors, the error will be assigned to the `error` variable and `results` will be `undefined`. The `updatedAt` variable is a [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) instance set when the return value last changed. Which is either when the query is first run or whenever it's re-run following a data change event.
@@ -262,26 +259,24 @@ Note that with this usage, the first argument wraps the `db.projects.liveMany()`
 function useLiveQuery<Res>(
   runQueryFn: () => LiveResultContext<Res>,
   dependencies: DependencyList
-): ResultData<Res>
+): LiveResultUpdate<Res>
 ```
 
 ### `useConnectivityState`
 
-`useConnectivityState` binds the current connectivity status of the Satellite replication process for the electrified database client to a state variable and provides a function to toggle it between connected and disconnected:
+`useConnectivityState` binds the current connectivity status of the Satellite replication process for the electrified database client to a state variable:
 
 ```tsx
 import React from 'react'
 import { useConnectivityState } from 'electric-sql/react'
 
-const ConnectivityControl = () => {
-  const { connectivityState, toggleConnectivityState } = useConnectivityState()
+const ConnectivityMonitor = () => {
+  const connectivityState = useConnectivityState()
 
   return (
-    <a onMouseDown={ toggleConnectivityState }>
-      <span className="capitalize">
-        { connectivityState }
-      </span>
-    </a>
+    <span className="capitalize">
+      { connectivityState }
+    </span>
   )
 }
 ```

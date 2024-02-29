@@ -20,7 +20,7 @@
     ]
     """]
 
-[invoke setup_client_with_migrations 1 "electric_1" 5133 $migrations]
+[invoke setup_client_with_migrations 1 "electric_1" 5133 $migrations "false"]
 
 [shell satellite_1]
     # Disable fail pattern because electric is not running and thus cannot be reached

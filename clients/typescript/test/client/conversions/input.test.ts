@@ -15,14 +15,9 @@ const db = new Database(':memory:')
 const electric = await electrify(
   db,
   schema,
-  {
-    auth: {
-      token: 'test-token',
-    },
-  },
+  {},
   { registry: new MockRegistry() }
 )
-
 const tbl = electric.db.DataTypes
 
 // Sync all shapes such that we don't get warnings on every query

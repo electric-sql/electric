@@ -8,6 +8,9 @@ import { v4 as uuidv4 } from 'uuid'
 import { schema, Electric, ColorType as Color } from './generated/client'
 export { JsonNull } from './generated/client'
 import { globalRegistry } from 'electric-sql/satellite'
+import { SatelliteErrorCode } from 'electric-sql/util'
+import { DbSchema, ElectricClient } from 'electric-sql/client/model'
+import { AuthStatus } from 'electric-sql/auth'
 
 setLogLevel('DEBUG')
 
@@ -22,22 +25,47 @@ export const electrify_db = async (
   db: any,
   host: string,
   port: number,
-  migrations: any
+  migrations: any,
+  connectToElectric: boolean,
+  exp?: string
 ): Promise<Electric> => {
   const config: ElectricConfig = {
     url: `electric://${host}:${port}`,
     debug: true,
-    auth: {
-      token: await mockSecureAuthToken()
-    }
   }
   console.log(`(in electrify_db) config: ${JSON.stringify(config)}`)
   schema.migrations = migrations
   const result = await electrify(db, schema, config)
-
-  result.notifier.subscribeToConnectivityStateChanges((x) => console.log("Connectivity state changed", x))
+  const token = await mockSecureAuthToken(exp)
+  
+  result.notifier.subscribeToConnectivityStateChanges((x) => console.log(`Connectivity state changed: ${x.connectivityState.status}`))
+  if (connectToElectric) {
+    await result.connect(token) // connect to Electric
+  }
 
   return result
+}
+
+// reconnects with Electric, e.g. after expiration of the JWT
+export const reconnect = async (electric: Electric, exp: string) => {
+  const token = await mockSecureAuthToken(exp)
+  await electric.connect(token)
+}
+
+export const check_token_expiration = (electric: Electric, minimalTime: number) => {
+  const start = Date.now()
+  const unsubscribe = electric.notifier.subscribeToConnectivityStateChanges((x) => {
+    if (x.connectivityState.status === 'disconnected' && x.connectivityState.reason?.code === SatelliteErrorCode.AUTH_EXPIRED) {
+      const delta = Date.now() - start
+      if (delta >= minimalTime) {
+        console.log(`JWT expired after ${delta} ms`)
+      }
+      else {
+        console.log(`JWT expired too early, after only ${delta} ms`)
+      }
+      unsubscribe()
+    }
+  })
 }
 
 export const set_subscribers = (db: Electric) => {
