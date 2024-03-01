@@ -15,7 +15,7 @@ export class DatabaseAdapter extends GenericDatabaseAdapter {
 
   async _query(statement: Statement): Promise<Row[]> {
     const result = await this.db.executeAsync(statement.sql, statement.args)
-    return result.rows!._array 
+    return result.rows!._array
   }
   async _run(statement: Statement): Promise<RunResult> {
     const result = await this.db.executeAsync(statement.sql, statement.args)
@@ -23,10 +23,10 @@ export class DatabaseAdapter extends GenericDatabaseAdapter {
   }
 
   async execBatch(statements: Statement[]): Promise<RunResult> {
-    const set: SQLBatchTuple[] = statements.map(({ sql, args }) => ([
+    const set: SQLBatchTuple[] = statements.map(({ sql, args }) => [
       sql,
-      (args ?? []) as SqlValue[]
-    ]))
+      (args ?? []) as SqlValue[],
+    ])
 
     const result = await this.db.executeBatchAsync(set)
 

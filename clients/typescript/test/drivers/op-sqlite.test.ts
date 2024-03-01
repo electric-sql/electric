@@ -40,21 +40,20 @@ test('database adapter execute batch works', async (t) => {
   t.is(result.rowsAffected, 1)
 })
 
-test("database adapter reject promise on failure",async(t)=>{
-  const err = new Error("Test Failure")
-  const db = new MockDatabase("test.db",err)
+test('database adapter reject promise on failure', async (t) => {
+  const err = new Error('Test Failure')
+  const db = new MockDatabase('test.db', err)
   const adapter = new DatabaseAdapter(db)
-  const sql = "select * from electric"
+  const sql = 'select * from electric'
 
-  const assertFailure = async (promise: Promise<any>)=>{
-    await t.throwsAsync(promise, {instanceOf: Error, message:err.message})
+  const assertFailure = async (promise: Promise<any>) => {
+    await t.throwsAsync(promise, { instanceOf: Error, message: err.message })
   }
   const batchQuery = [
     { sql: 'select * from electric;', args: [] },
     { sql: 'select * from opsqlite', args: [] },
   ]
-  await assertFailure(adapter._run({sql}))
-  await assertFailure(adapter._query({sql}))
+  await assertFailure(adapter._run({ sql }))
+  await assertFailure(adapter._query({ sql }))
   await assertFailure(adapter.execBatch(batchQuery))
-  
 })

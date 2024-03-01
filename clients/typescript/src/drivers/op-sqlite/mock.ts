@@ -6,7 +6,7 @@ export class MockDatabase implements Database {
   constructor(public dbName: DbName, public fail?: Error) {}
 
   executeAsync(): Promise<QueryResult> {
-   const _array= [
+    const _array = [
       {
         column1: 'text1',
         column2: 'text2',
@@ -26,7 +26,7 @@ export class MockDatabase implements Database {
   }
 
   private resolveIfNotFail<T>(value: T): Promise<T> {
-    if(typeof this.fail !== "undefined" ){
+    if (typeof this.fail !== 'undefined') {
       return Promise.reject(this.fail)
     }
     return Promise.resolve(value)
