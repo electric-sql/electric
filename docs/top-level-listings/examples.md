@@ -44,4 +44,3 @@ Plus you have example source code for the:
 
 - [intro demos](https://github.com/electric-sql/electric/tree/main/examples/introduction/src) from the [Introduction](../intro/local-first.md) section
 - [create-electric-app](https://github.com/electric-sql/electric/tree/main/examples/starter) starter template
-- [beer-stars](https://github.com/electric-sql/electric/tree/main/examples/beer-stars) conference demo app
