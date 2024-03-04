@@ -19,8 +19,6 @@ import {
 import { makePgDatabase } from '../support/node-postgres'
 import { randomValue } from '../../src/util/random'
 
-const builder = sqliteBuilder
-
 test('serialize/deserialize row data', async (t) => {
   const rel: Relation = {
     id: 1,
@@ -273,73 +271,6 @@ test('Null mask uses bits as if they were a list', async (t) => {
   t.is(mask, '1101000010000000')
 })
 
-test('Prioritize PG types in the schema before inferred SQLite types', async (t) => {
-  const db = new Database(':memory:')
-  t.teardown(() => db.close())
-
-  const adapter = new SQLiteDatabaseAdapter(db)
-  await adapter.run({
-    sql: 'CREATE TABLE bools (id INTEGER PRIMARY KEY, b INTEGER)',
-  })
-
-  const sqliteInferredRelations = await inferRelationsFromDb(
-    adapter,
-    satelliteDefaults,
-    builder
-  )
-  const boolsInferredRelation = sqliteInferredRelations['bools']
-
-  // Inferred types only support SQLite types, so the bool column is INTEGER
-  const boolColumn = boolsInferredRelation.columns[1]
-  t.is(boolColumn.name, 'b')
-  t.is(boolColumn.type, 'INTEGER')
-
-  // Db schema holds the correct Postgres types
-  const boolsDbDescription = new DbSchema(
-    {
-      bools: {
-        fields: new Map([
-          ['id', PgBasicType.PG_INTEGER],
-          ['b', PgBasicType.PG_BOOL],
-        ]),
-        relations: [],
-      } as unknown as TableSchema<
-        any,
-        any,
-        any,
-        any,
-        any,
-        any,
-        any,
-        any,
-        any,
-        HKT
-      >,
-    },
-    []
-  )
-
-  const satOpRow = serializeRow(
-    { id: 5, b: 1 },
-    boolsInferredRelation,
-    boolsDbDescription
-  )
-
-  // Encoded values ["5", "t"]
-  t.deepEqual(satOpRow.values, [
-    new Uint8Array(['5'.charCodeAt(0)]),
-    new Uint8Array(['t'.charCodeAt(0)]),
-  ])
-
-  const deserializedRow = deserializeRow(
-    satOpRow,
-    boolsInferredRelation,
-    boolsDbDescription
-  )
-
-  t.deepEqual(deserializedRow, { id: 5, b: 1 })
-})
-
 type MaybePromise<T> = T | Promise<T>
 type SetupFn = (
   t: ExecutionContext<unknown>
@@ -347,7 +278,7 @@ type SetupFn = (
 const setupSqlite: SetupFn = (t: ExecutionContext<unknown>) => {
   const db = new Database(':memory:')
   t.teardown(() => db.close())
-  return [new SQLiteDatabaseAdapter(db), builder]
+  return [new SQLiteDatabaseAdapter(db), sqliteBuilder]
 }
 
 let port = 4800
@@ -364,6 +295,71 @@ const setupPG: SetupFn = async (t: ExecutionContext<unknown>) => {
     ['Postgres', setupPG],
   ] as const
 ).forEach(([dialect, setup]) => {
+  test(`(${dialect}) Prioritize PG types in the schema before inferred SQLite types`, async (t) => {
+    const [adapter, builder] = await setup(t)
+
+    await adapter.run({
+      sql: 'CREATE TABLE bools (id INTEGER PRIMARY KEY, b INTEGER)',
+    })
+
+    const sqliteInferredRelations = await inferRelationsFromDb(
+      adapter,
+      satelliteDefaults,
+      builder
+    )
+    const boolsInferredRelation = sqliteInferredRelations['bools']
+
+    // Inferred types only support SQLite types, so the bool column is INTEGER
+    const boolColumn = boolsInferredRelation.columns[1]
+    t.is(boolColumn.name, 'b')
+    t.is(boolColumn.type, 'INTEGER')
+
+    // Db schema holds the correct Postgres types
+    const boolsDbDescription = new DbSchema(
+      {
+        bools: {
+          fields: new Map([
+            ['id', PgBasicType.PG_INTEGER],
+            ['b', PgBasicType.PG_BOOL],
+          ]),
+          relations: [],
+        } as unknown as TableSchema<
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+          HKT
+        >,
+      },
+      []
+    )
+
+    const satOpRow = serializeRow(
+      { id: 5, b: 1 },
+      boolsInferredRelation,
+      boolsDbDescription
+    )
+
+    // Encoded values ["5", "t"]
+    t.deepEqual(satOpRow.values, [
+      new Uint8Array(['5'.charCodeAt(0)]),
+      new Uint8Array(['t'.charCodeAt(0)]),
+    ])
+
+    const deserializedRow = deserializeRow(
+      satOpRow,
+      boolsInferredRelation,
+      boolsDbDescription
+    )
+
+    t.deepEqual(deserializedRow, { id: 5, b: 1 })
+  })
+
   test(`(${dialect}) Use incoming Relation types if not found in the schema`, async (t) => {
     const [adapter, builder] = await setup(t)
 

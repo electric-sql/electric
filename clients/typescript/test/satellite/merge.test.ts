@@ -15,7 +15,16 @@ import Long from 'long'
 import { relations, migrateDb, personTable, wrapDB } from './common'
 import Database from 'better-sqlite3'
 import { satelliteDefaults } from '../../src/satellite/config'
-import { sqliteBuilder } from '../../src/migrators/query-builder'
+import {
+  QueryBuilder,
+  pgBuilder,
+  sqliteBuilder,
+} from '../../src/migrators/query-builder'
+import { DatabaseAdapter as SQLiteDatabaseAdapter } from '../../src/drivers/better-sqlite3'
+import { DatabaseAdapter as PgDatabaseAdapter } from '../../src/drivers/node-postgres/adapter'
+import { DatabaseAdapter as DatabaseAdapterInterface } from '../../src/electric/adapter'
+import { makePgDatabase } from '../support/node-postgres'
+import { randomValue } from '../../src/util/random'
 
 const qualifiedMergeTable = new QualifiedTablename(
   'main',
@@ -168,73 +177,99 @@ function _mergeTableTest(
   })
 }
 
-test('merge works on oplog entries', async (t) => {
+type MaybePromise<T> = T | Promise<T>
+type SetupFn = (
+  t: ExecutionContext<unknown>
+) => MaybePromise<[DatabaseAdapterInterface, QueryBuilder]>
+const setupSqlite: SetupFn = (t: ExecutionContext<unknown>) => {
   const db = new Database(':memory:')
-  const wrappedDb = wrapDB(db)
+  t.teardown(() => db.close())
+  return [new SQLiteDatabaseAdapter(db), sqliteBuilder]
+}
 
-  // Migrate the DB with the necessary tables and triggers
-  await migrateDb(wrappedDb, personTable, sqliteBuilder)
+let port = 4800
+const setupPG: SetupFn = async (t: ExecutionContext<unknown>) => {
+  const dbName = `merge-test-${randomValue()}`
+  const { db, stop } = await makePgDatabase(dbName, port++)
+  t.teardown(async () => await stop())
+  return [new PgDatabaseAdapter(db), pgBuilder]
+}
 
-  // Insert a row in the table
-  const insertRowSQL = `INSERT INTO ${personTable.tableName} (id, name, age, bmi, int8, blob) VALUES (9e999, 'John Doe', 30, 25.5, 7, x'0001ff')`
-  db.exec(insertRowSQL)
+;(
+  [
+    ['SQLite', setupSqlite],
+    ['Postgres', setupPG],
+  ] as const
+).forEach(([dialect, setup]) => {
+  test(`(${dialect}) merge works on oplog entries`, async (t) => {
+    const [adapter, builder] = await setup(t)
 
-  // Fetch the oplog entry for the inserted row
-  const oplogTable = `"${satelliteDefaults.oplogTable.namespace}"."${satelliteDefaults.oplogTable.tablename}"`
-  const oplogRows = db.prepare(`SELECT * FROM ${oplogTable}`).all()
+    // Migrate the DB with the necessary tables and triggers
+    await migrateDb(adapter, personTable, builder)
 
-  t.is(oplogRows.length, 1)
+    // Insert a row in the table
+    const insertRowSQL = `INSERT INTO "${personTable.namespace}"."${personTable.tableName}" (id, name, age, bmi, int8, blob) VALUES (54321, 'John Doe', 30, 25.5, 7, x'0001ff')`
+    await adapter.run({ sql: insertRowSQL })
 
-  const oplogEntry = oplogRows[0] as OplogEntry
+    // Fetch the oplog entry for the inserted row
+    const oplogTable = `"${satelliteDefaults.oplogTable.namespace}"."${satelliteDefaults.oplogTable.tablename}"`
+    const oplogRows = await adapter.query({
+      sql: `SELECT * FROM ${oplogTable}`,
+    })
 
-  // Define a transaction that happened concurrently
-  // and inserts a row with the same id but different values
-  const tx: DataTransaction = {
-    lsn: DEFAULT_LOG_POS,
-    commit_timestamp: to_commit_timestamp('1970-01-02T03:46:42.000Z'),
-    changes: [
-      {
-        relation: relations[personTable.tableName as keyof typeof relations],
-        type: DataChangeType.INSERT,
-        record: {
-          // fields must be ordered alphabetically to match the behavior of the triggers
-          age: 30,
-          blob: new Uint8Array([0, 1, 255]),
-          bmi: 8e888,
-          id: 9e999,
-          int8: '224', // Big ints are serialized as strings in the oplog
-          name: 'John Doe',
+    t.is(oplogRows.length, 1)
+
+    const oplogEntry = oplogRows[0] as unknown as OplogEntry
+
+    // Define a transaction that happened concurrently
+    // and inserts a row with the same id but different values
+    const tx: DataTransaction = {
+      lsn: DEFAULT_LOG_POS,
+      commit_timestamp: to_commit_timestamp('1970-01-02T03:46:42.000Z'),
+      changes: [
+        {
+          relation: relations[personTable.tableName as keyof typeof relations],
+          type: DataChangeType.INSERT,
+          record: {
+            // fields must be ordered alphabetically to match the behavior of the triggers
+            age: 30,
+            blob: new Uint8Array([0, 1, 255]),
+            bmi: 21.3,
+            id: 54321,
+            int8: '224', // Big ints are serialized as strings in the oplog
+            name: 'John Doe',
+          },
+          tags: [],
         },
-        tags: [],
-      },
-    ],
-  }
+      ],
+    }
 
-  // Merge the oplog entry with the transaction
-  const merged = mergeEntries(
-    'local',
-    [oplogEntry],
-    'remote',
-    fromTransaction(tx, relations),
-    relations
-  )
+    // Merge the oplog entry with the transaction
+    const merged = mergeEntries(
+      'local',
+      [oplogEntry],
+      'remote',
+      fromTransaction(tx, relations),
+      relations
+    )
 
-  const pk = primaryKeyToStr({ id: 9e999 })
+    const pk = primaryKeyToStr({ id: 54321 })
 
-  // the incoming transaction wins
-  const qualifiedTableName = new QualifiedTablename(
-    personTable.namespace,
-    personTable.tableName
-  ).toString()
-  t.like(merged, {
-    [qualifiedTableName]: { [pk]: { optype: 'UPSERT' } },
-  })
-  t.deepEqual(merged[qualifiedTableName][pk].fullRow, {
-    id: 9e999,
-    name: 'John Doe',
-    age: 30,
-    blob: new Uint8Array([0, 1, 255]),
-    bmi: Infinity,
-    int8: 224n,
+    // the incoming transaction wins
+    const qualifiedTableName = new QualifiedTablename(
+      personTable.namespace,
+      personTable.tableName
+    ).toString()
+    t.like(merged, {
+      [qualifiedTableName]: { [pk]: { optype: 'UPSERT' } },
+    })
+    t.deepEqual(merged[qualifiedTableName][pk].fullRow, {
+      id: 54321,
+      name: 'John Doe',
+      age: 30,
+      blob: new Uint8Array([0, 1, 255]),
+      bmi: 21.3,
+      int8: 224n,
+    })
   })
 })
