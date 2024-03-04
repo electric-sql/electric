@@ -613,7 +613,7 @@ test.serial(
       {
         ...author2,
         posts: [post3],
-      }
+      },
     ])
   }
 )
