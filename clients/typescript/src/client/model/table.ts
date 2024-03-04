@@ -666,7 +666,7 @@ export class Table<
     relationType: Arity,
     includeArg: true | FindInput<any, any, any, any, any>,
     db: DB,
-    onResult: (joinedRows: Kind<GetPayload, T>[]) => void,
+    onResult: () => void,
     onError: (err: any) => void
   ) {
     const otherTable = this._tables.get(relatedTable)!
@@ -687,7 +687,8 @@ export class Table<
       (relatedRows: object[]) => {
         // Now, join the original `rows` with the `relatedRows`
         // where `row.fromField == relatedRow.toField`
-        const join = this.joinObjects(
+        // (this mutates the original rows)
+        this.joinObjects(
           rows,
           relatedRows,
           fromField,
@@ -695,7 +696,7 @@ export class Table<
           relationField,
           relationType
         ) as Kind<GetPayload, T>[]
-        onResult(join)
+        onResult()
       },
       onError
     )
@@ -706,11 +707,11 @@ export class Table<
     relation: Relation,
     includeArg: boolean | FindInput<any, any, any, any, any>,
     db: DB,
-    onResult: (rows: Kind<GetPayload, T>[]) => void,
+    onResult: () => void,
     onError: (err: any) => void
   ) {
     if (includeArg === false) {
-      return onResult([])
+      return onResult()
     } else if (relation.isIncomingRelation()) {
       // incoming relation from the `fromField` in the other table
       // to the `toField` in this table
