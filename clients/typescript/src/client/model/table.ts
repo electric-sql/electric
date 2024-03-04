@@ -48,7 +48,6 @@ import {
   transformFindUnique,
   transformUpdate,
   transformUpdateMany,
-  transformUpsert,
 } from '../conversions/input'
 
 type AnyTable = Table<any, any, any, any, any, any, any, any, any, HKT>

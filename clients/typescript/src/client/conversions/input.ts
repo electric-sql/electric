@@ -14,7 +14,6 @@ type UpdateInput = { data: object; where: object }
 type UpdateManyInput = { data: object; where?: object }
 type CreateInput = { data: object }
 type CreateManyInput = { data: Array<object> }
-type UpsertInput = { update: object; create: object; where: object }
 type WhereUniqueInput = { where: object }
 type WhereInput = { where?: object }
 
