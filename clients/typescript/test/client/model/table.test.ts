@@ -599,11 +599,9 @@ test.serial(
   'findMany can fetch related objects based on incoming FK of one-to-many relation',
   async (t) => {
     const res = await userTable.findMany({
-      where: {
-        id: 1,
-      },
       include: {
         posts: true,
+        profile: true,
       },
     })
 
@@ -612,6 +610,10 @@ test.serial(
         ...author1,
         posts: [post1, post2],
       },
+      {
+        ...author2,
+        posts: [post3],
+      }
     ])
   }
 )
