@@ -60,3 +60,5 @@ services:
       AUTH_JWT_ISS: ${AUTH_JWT_ISS:-}
       AUTH_JWT_KEY: ${AUTH_JWT_KEY:-}
       AUTH_JWT_NAMESPACE: ${AUTH_JWT_NAMESPACE:-}
+    depends_on:
+      - postgres
