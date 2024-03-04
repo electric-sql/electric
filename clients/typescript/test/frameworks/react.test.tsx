@@ -25,7 +25,7 @@ import { Migrator } from '../../src/migrators'
 import { SocketFactory } from '../../src/sockets'
 import { SatelliteOpts } from '../../src/satellite/config'
 import { Notifier } from '../../src/notifiers'
-import { createQueryResultSubscribeFunction } from '../../src/util/subscribe'
+import { createQueryResultSubscribeFunction } from '../../src/util'
 
 const assert = (stmt: unknown, msg = 'Assertion failed.'): void => {
   if (!stmt) {
