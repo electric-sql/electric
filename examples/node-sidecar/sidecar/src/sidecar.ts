@@ -6,20 +6,19 @@ import { HydratedConfig } from './util/config.js'
 
 export class SideCar {
   private electric?: ElectricClient<any>
-  
+
   constructor(private config: HydratedConfig, private ipc: Server) {}
 
   async start(): Promise<void> {
     const config = {
-      auth: {
-        token: this.config.auth.token,
-      },
       url: this.config.service,
     }
-  
+
     const conn = new Database(this.config.databaseFile)
     const schema = new DbSchema({}, []) // empty DB schema, we won't use the client anyway
-    this.electric = await electrify(conn, schema, config)
+    const client = await electrify(conn, schema, config)
+    await client.connect(this.config.auth.token)
+    this.electric = client
 
     // Sync shapes
     await this.syncShapes()
@@ -28,9 +27,7 @@ export class SideCar {
     await this.ipc.start()
 
     // Perform snapshot on potential data change
-    await this.ipc.onPotentialDataChange(
-      this.potentiallyChanged.bind(this)
-    )
+    await this.ipc.onPotentialDataChange(this.potentiallyChanged.bind(this))
 
     // Notify clients of actual data changes
     this.electric.notifier.subscribeToDataChanges(
@@ -39,12 +36,7 @@ export class SideCar {
   }
 
   async stop(): Promise<void> {
-    await Promise.all(
-      [
-        this.electric?.close(),
-        this.ipc.stop(),
-      ]
-    )
+    await Promise.all([this.electric?.close(), this.ipc.stop()])
   }
 
   private async potentiallyChanged(): Promise<void> {
@@ -57,13 +49,13 @@ export class SideCar {
     const shapeDef = {
       selects: tables.map((tbl) => ({ tablename: tbl })),
     }
-    
+
     const joinedNames = tables.join(', ')
     console.log(`Syncing tables ${joinedNames}...`)
 
     const { synced } = await this.electric!.satellite.subscribe([shapeDef])
     await synced
-    
+
     console.log(`Synced tables ${joinedNames}`)
   }
 }
