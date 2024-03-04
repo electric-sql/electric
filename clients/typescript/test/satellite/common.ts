@@ -28,20 +28,6 @@ import { makePgDatabase } from '../support/node-postgres'
 import { DatabaseAdapter as PgDatabaseAdapter } from '../../src/drivers/node-postgres/adapter'
 import { DatabaseAdapter } from '../../src/electric/adapter'
 
-export type Database = {
-  exec(statement: { sql: string }): Promise<unknown>
-}
-
-export function wrapDB(db: SqliteDB): Database {
-  const wrappedDB = {
-    exec: async ({ sql }: { sql: string }) => {
-      console.log('EXECCC:\n' + sql)
-      db.exec(sql)
-    },
-  }
-  return wrappedDB
-}
-
 export const dbDescription = new DbSchema(
   {
     child: {
@@ -414,7 +400,7 @@ export const cleanAndStopSatellite = async (
 }
 
 export async function migrateDb(
-  db: Database,
+  db: DatabaseAdapter,
   table: Table,
   builder: QueryBuilder
 ) {
@@ -422,17 +408,17 @@ export async function migrateDb(
   const initialMigration = makeInitialMigration(builder)
   const migration = initialMigration.migrations[0].statements
   const [createMainSchema, ...restMigration] = migration
-  await db.exec({ sql: createMainSchema })
+  await db.run({ sql: createMainSchema })
 
   const namespace = table.namespace
   const tableName = table.tableName
   // Create the table in the database on the given namespace
   const createTableSQL = `CREATE TABLE "${namespace}"."${tableName}" (id REAL PRIMARY KEY, name TEXT, age INTEGER, bmi REAL, int8 INTEGER, blob BLOB)`
-  await db.exec({ sql: createTableSQL })
+  await db.run({ sql: createTableSQL })
 
   // Apply the initial migration on the database
   for (const stmt of restMigration) {
-    await db.exec({ sql: stmt })
+    await db.run({ sql: stmt })
   }
 
   // Generate the table triggers
@@ -440,7 +426,7 @@ export async function migrateDb(
 
   // Apply the triggers on the database
   for (const trigger of triggers) {
-    await db.exec({ sql: trigger.sql })
+    await db.run({ sql: trigger.sql })
   }
 }
 
