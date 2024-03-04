@@ -95,25 +95,6 @@ export function transformUpdateMany<T extends UpdateManyInput>(
 }
 
 /**
- * Takes the data input of an `upsert` operation and
- * converts the JS values to their corresponding SQLite values.
- * @param i The validated input of the `upsert` operation.
- * @param fields The table's fields.
- * @returns The transformed input.
- */
-export function transformUpsert<T extends UpsertInput>(
-  i: T,
-  fields: Fields
-): Swap<T, UpsertInput, 'update' | 'create' | 'where'> {
-  return {
-    ...i,
-    update: transformFields(i.update, fields),
-    create: transformFields(i.create, fields),
-    where: transformWhere(i.where, fields),
-  }
-}
-
-/**
  * Takes the data input of a `delete` operation and
  * converts the JS values to their corresponding SQLite values.
  */
