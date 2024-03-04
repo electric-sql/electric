@@ -77,7 +77,7 @@ npm run client:generate
 The app is a React application, to run it:
 
 ```bash
-npm run start
+npm run dev
 # or `ionic serve` if you have the Ionic CLI installed
 ```
 
@@ -87,7 +87,7 @@ The app displays the port on localhost where you can view the app.
 
 To build and run the app on an iOS device follow the prerequisites above and run:
 
-```
+```bash
 ionic capacitor build ios
 ```
 
@@ -95,7 +95,7 @@ Xcode should open ready for running in the simulator or on a tethered device.
 
 When testing in the iOS simulator, the device can see the Electric sync service on your `localhost`, however when running on another device you will need to build with an accessible `ELECTRIC_URL`. Note that as the app connects to the sync service with a web socket, when running on a different host you may have to use SSL (wss://). The easiest way to do this is with a service such as [ngrok](http://ngrok.com). For example:
 
-```
+```bash
 ngrok http 5133
 ```
 
@@ -107,7 +107,12 @@ ELECTRIC_URL=https://abcdef123456.ngrok.app ionic capacitor build ios
 
 ## Build and run the Android app
 
-To build and run the app on an iOS device follow the prerequisites above and run the following command, note you may have to expose your sync service on a an SSL enabled endpoint (see iOS instruction for an example with ngrok).
+To build and run the app on an Android device follow the prerequisites above and run the following command:
+
+```bash
+ionic capacitor build android
+```
+Note you may have to expose your sync service on a an SSL enabled endpoint (see iOS instruction for an example with ngrok).
 
 ```
 ELECTRIC_URL=https://hostname.of.sync.service ionic capacitor build android
