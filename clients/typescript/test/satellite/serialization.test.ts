@@ -327,7 +327,7 @@ const setupPG: SetupFn = async (t: ExecutionContext<unknown>) => {
         >,
       },
       [],
-    []
+      []
     )
 
     const satOpRow = serializeRow(
