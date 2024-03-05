@@ -2,6 +2,9 @@ export const randomValue = (): string => {
   return Math.random().toString(16).substring(2)
 }
 
+// only warn about unsafe RNG once to avoid flooding logs
+let unsafeRandomWarned = false
+
 export const genUUID = (): string => {
   // best case, `crypto.randomUUID` is available
   if (globalThis.crypto?.randomUUID) {
@@ -15,12 +18,15 @@ export const genUUID = (): string => {
     globalThis.crypto.getRandomValues(bytes)
   } else {
     // fallback to Math.random, if the Crypto API is completely missing
-    console.warn(
-      'Crypto API is not available. ' +
-        'Falling back to Math.random for UUID generation ' +
-        'with weak uniqueness guarantees. ' +
-        'Provide polyfill or alternative for crypto.getRandomValues.'
-    )
+    if (!unsafeRandomWarned) {
+      console.warn(
+        'Crypto API is not available. ' +
+          'Falling back to Math.random for UUID generation ' +
+          'with weak uniqueness guarantees. ' +
+          'Provide polyfill or alternative for crypto.getRandomValues.'
+      )
+      unsafeRandomWarned = true
+    }
     for (let i = 0; i < bytes.length; i++) {
       bytes[i] = Math.floor(Math.random() * 256)
     }
