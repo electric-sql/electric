@@ -4,8 +4,9 @@ import { Database } from 'better-sqlite3'
 import testAny, { TestFn } from 'ava'
 import { generateTableTriggers } from '../../../src/migrators/triggers'
 import { satelliteDefaults } from '../../../src/satellite/config'
-import { migrateDb, personTable, wrapDB } from '../../satellite/common'
+import { migrateDb, personTable } from '../../satellite/common'
 import { sqliteBuilder } from '../../../src/migrators/query-builder'
+import { DatabaseAdapter } from '../../../src/drivers/better-sqlite3'
 
 type Context = { db: Database; migrateDb: () => Promise<void> }
 const test = testAny as TestFn<Context>
@@ -13,11 +14,11 @@ const oplogTable = `"${satelliteDefaults.oplogTable.namespace}"."${satelliteDefa
 
 test.beforeEach(async (t) => {
   const db = new OriginalDatabase(':memory:')
-  const wrappedDb = wrapDB(db)
+  const adapter = new DatabaseAdapter(db)
 
   t.context = {
     db,
-    migrateDb: migrateDb.bind(null, wrappedDb, personTable, sqliteBuilder),
+    migrateDb: migrateDb.bind(null, adapter, personTable, sqliteBuilder),
   }
 })
 

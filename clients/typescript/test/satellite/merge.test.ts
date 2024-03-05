@@ -12,7 +12,7 @@ import {
   QualifiedTablename,
 } from '../../src/util'
 import Long from 'long'
-import { relations, migrateDb, personTable, wrapDB } from './common'
+import { relations, migrateDb, personTable } from './common'
 import Database from 'better-sqlite3'
 import { satelliteDefaults } from '../../src/satellite/config'
 import {
