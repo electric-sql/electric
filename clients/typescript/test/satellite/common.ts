@@ -16,7 +16,7 @@ import { buildInitialMigration as makeInitialMigration } from '../../src/migrato
 import sqliteMigrations from '../support/migrations/migrations.js'
 import pgMigrations from '../support/migrations/pg-migrations.js'
 import { ExecutionContext } from 'ava'
-import { AuthState } from '../../src/auth'
+import { AuthState, insecureAuthToken } from '../../src/auth'
 import { DbSchema, TableSchema } from '../../src/client/model/schema'
 import { PgBasicType } from '../../src/client/conversions/types'
 import { HKT } from '../../src/client/util/hkt'
@@ -293,31 +293,6 @@ const makeContextInternal = async (
     authState,
     token,
   }
-}
-
-export const makeContext = async (
-  t: ExecutionContext<ContextType>,
-  options: Opts = opts
-) => {
-  await mkdir('.tmp', { recursive: true })
-  const dbName = `.tmp/test-${randomValue()}.db`
-  const db = new SqliteDatabase(dbName)
-  const adapter = new SqliteDatabaseAdapter(db)
-  const migrator = new SqliteBundleMigrator(adapter, sqliteMigrations)
-  makeContextInternal(t, dbName, adapter, migrator, options)
-}
-
-export const makePgContext = async (
-  t: ExecutionContext<ContextType>,
-  port: number,
-  options: Opts = opts
-) => {
-  const dbName = `test-${randomValue()}`
-  const { db, stop } = await makePgDatabase(dbName, port)
-  const adapter = new PgDatabaseAdapter(db)
-  const migrator = new PgBundleMigrator(adapter, pgMigrations)
-  makeContextInternal(t, dbName, adapter, migrator, options)
-  t.context.stop = stop
 }
 
 export const makeContext = async (

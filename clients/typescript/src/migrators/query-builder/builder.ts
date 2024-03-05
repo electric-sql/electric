@@ -327,13 +327,15 @@ export abstract class QueryBuilder {
    * @param columns columns that describe records
    * @param records records to be inserted
    * @param maxParameters max parameters this SQLite can accept - determines batching factor
+   * @param suffixSql optional SQL string to append to each insert statement
    * @returns array of statements ready to be executed by the adapter
    */
   prepareInsertBatchedStatements(
     baseSql: string,
     columns: string[],
     records: Record<string, SqlValue>[],
-    maxParameters: number
+    maxParameters: number,
+    suffixSql: string = '',
   ): Statement[] {
     const stmts: Statement[] = []
     const columnCount = columns.length
@@ -357,7 +359,8 @@ export abstract class QueryBuilder {
       const currentInsertCount = Math.min(recordCount - processed, batchMaxSize)
       const sql =
         baseSql +
-        Array.from({ length: currentInsertCount }, makeInsertPattern).join(',')
+        Array.from({ length: currentInsertCount }, makeInsertPattern).join(',') +
+        ' ' + suffixSql
       const args = records
         .slice(processed, processed + currentInsertCount)
         .flatMap((record) => columns.map((col) => record[col] as SqlValue))
