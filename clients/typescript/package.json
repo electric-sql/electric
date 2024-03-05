@@ -238,7 +238,7 @@
     "concurrently": "^8.2.2",
     "embedded-postgres": "16.1.1-beta.9",
     "eslint": "^8.22.0",
-    "expo-sqlite": "^13.0.0",
+    "expo-sqlite": "^13.1.0",
     "glob": "^10.3.10",
     "global-jsdom": "24.0.0",
     "husky": "^8.0.3",
