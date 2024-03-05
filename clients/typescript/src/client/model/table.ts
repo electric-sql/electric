@@ -48,7 +48,6 @@ import {
   transformFindUnique,
   transformUpdate,
   transformUpdateMany,
-  transformUpsert,
 } from '../conversions/input'
 
 type AnyTable = Table<any, any, any, any, any, any, any, any, any, HKT>
@@ -1439,7 +1438,10 @@ export class Table<
     continuation: (res: Kind<GetPayload, T>) => void,
     onError: (err: any) => void
   ) {
-    const data = transformUpsert(validate(i, this.upsertSchema), this._fields)
+    // validate but do not transform - upsert will call either
+    // create or update that will perform the appropriate transforms
+    validate(i, this.upsertSchema)
+
     // Check if the record exists
     this._findUnique(
       { where: i.where } as any,
@@ -1449,10 +1451,10 @@ export class Table<
           // Create the record
           return this._create(
             {
-              data: data.create,
-              select: data.select,
-              ...(notNullNotUndefined(data.include) && {
-                include: data.include,
+              data: i.create,
+              select: i.select,
+              ...(notNullNotUndefined(i.include) && {
+                include: i.include,
               }), // only add `include` property if it is defined
             } as any,
             db,
@@ -1463,11 +1465,11 @@ export class Table<
           // Update the record
           return this._update(
             {
-              data: data.update,
-              where: data.where,
-              select: data.select,
-              ...(notNullNotUndefined(data.include) && {
-                include: data.include,
+              data: i.update,
+              where: i.where,
+              select: i.select,
+              ...(notNullNotUndefined(i.include) && {
+                include: i.include,
               }), // only add `include` property if it is defined
             } as any,
             db,
