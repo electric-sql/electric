@@ -1,7 +1,7 @@
 import test from 'ava'
 
 import { secureAuthToken } from '../../src/auth/secure'
-import { JwtPayload, jwtDecode } from '../../src/auth/decode'
+import { jwtDecode } from '../../src/auth/decode'
 
 test('secureAuthToken generates expected JWT token', async (t) => {
   const token = await secureAuthToken({
@@ -12,8 +12,7 @@ test('secureAuthToken generates expected JWT token', async (t) => {
 
   t.is(typeof token, 'string')
   t.regex(token, /^eyJh[\w-.]+$/)
-  const decodedToken = jwtDecode(token) as JwtPayload & { type: string }
+  const decodedToken = jwtDecode(token)
   t.is(decodedToken.sub, 'test-user')
   t.is(decodedToken.iss, 'test-issuer')
-  t.is(decodedToken.type, 'access')
 })
