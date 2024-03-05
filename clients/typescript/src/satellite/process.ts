@@ -535,8 +535,6 @@ export class SatelliteProcess implements Satellite {
       ...Array.from(groupedChanges.values()).map((chg) => chg.table),
     ]
 
-    console.log(`Apply subs data: ${JSON.stringify(qualifiedTableNames)}`)
-
     // Disable trigger for all affected tables
     stmts.push(...this._disableTriggers(qualifiedTableNames))
 
@@ -1289,8 +1287,6 @@ export class SatelliteProcess implements Satellite {
     const lsn = transaction.lsn
     let firstDMLChunk = true
 
-    // switches off on transaction commit/abort
-    //stmts.push({ sql: this.builder.deferForeignKeys })
     // update lsn.
     stmts.push(this.updateLsnStmt(lsn))
     stmts.push(this._resetSeenAdditionalDataStmt())
@@ -1359,7 +1355,6 @@ export class SatelliteProcess implements Satellite {
       const createdQualifiedTables = Array.from(createdTables).map(
         QualifiedTablename.parse
       )
-      console.log(`createdTablenames IN TRANSACTION: ${createdTables}`)
       stmts.push(...this._disableTriggers(createdQualifiedTables))
       newTables = new Set([...newTables, ...createdTables])
     }
@@ -1381,10 +1376,8 @@ export class SatelliteProcess implements Satellite {
 
     // Now run the DML and DDL statements in-order in a transaction
     const tablenames = Array.from(tablenamesSet)
-    console.log(`tablenames IN TRANSACTION: ${tablenames}`)
     const qualifiedTables = tablenames.map(QualifiedTablename.parse)
     const notNewTableNames = tablenames.filter((t) => !newTables.has(t))
-    console.log(`notNewTablenames IN TRANSACTION: ${notNewTableNames}`)
     const notNewQualifiedTables = notNewTableNames.map(QualifiedTablename.parse)
 
     const allStatements = this._disableTriggers(notNewQualifiedTables)

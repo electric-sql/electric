@@ -28,20 +28,6 @@ import { makePgDatabase } from '../support/node-postgres'
 import { DatabaseAdapter as PgDatabaseAdapter } from '../../src/drivers/node-postgres/adapter'
 import { DatabaseAdapter } from '../../src/electric/adapter'
 
-export type Database = {
-  exec(statement: { sql: string }): Promise<unknown>
-}
-
-export function wrapDB(db: SqliteDB): Database {
-  const wrappedDB = {
-    exec: async ({ sql }: { sql: string }) => {
-      console.log('EXECCC:\n' + sql)
-      db.exec(sql)
-    },
-  }
-  return wrappedDB
-}
-
 export const dbDescription = new DbSchema(
   {
     child: {
