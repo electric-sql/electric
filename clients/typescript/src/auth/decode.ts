@@ -31,22 +31,15 @@ export function jwtDecode(token: string): JwtPayload {
     )
   }
 
-  let decoded: string
+  let decodeSuccess = false
   try {
-    decoded = base64.decode(part)
-  } catch (e) {
-    throw new InvalidTokenError(
-      `Invalid token specified: invalid base64 for part #${pos + 1} (${
-        (e as Error).message
-      })`
-    )
-  }
-
-  try {
+    const decoded = base64.decode(part)
+    decodeSuccess = true
     return JSON.parse(decoded) as JwtPayload
   } catch (e) {
+    const problem = decodeSuccess ? 'invalid json' : 'invalid base64'
     throw new InvalidTokenError(
-      `Invalid token specified: invalid json for part #${pos + 1} (${
+      `Invalid token specified: ${problem} for part #${pos + 1} (${
         (e as Error).message
       })`
     )
