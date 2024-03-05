@@ -666,7 +666,7 @@ export class Table<
     relationType: Arity,
     includeArg: true | FindInput<any, any, any, any, any>,
     db: DB,
-    onResult: (joinedRows: Kind<GetPayload, T>[]) => void,
+    onResult: () => void,
     onError: (err: any) => void
   ) {
     const otherTable = this._tables.get(relatedTable)!
@@ -687,7 +687,8 @@ export class Table<
       (relatedRows: object[]) => {
         // Now, join the original `rows` with the `relatedRows`
         // where `row.fromField == relatedRow.toField`
-        const join = this.joinObjects(
+        // (this mutates the original rows)
+        this.joinObjects(
           rows,
           relatedRows,
           fromField,
@@ -695,7 +696,7 @@ export class Table<
           relationField,
           relationType
         ) as Kind<GetPayload, T>[]
-        onResult(join)
+        onResult()
       },
       onError
     )
@@ -706,11 +707,11 @@ export class Table<
     relation: Relation,
     includeArg: boolean | FindInput<any, any, any, any, any>,
     db: DB,
-    onResult: (rows: Kind<GetPayload, T>[]) => void,
+    onResult: () => void,
     onError: (err: any) => void
   ) {
     if (includeArg === false) {
-      return onResult([])
+      return onResult()
     } else if (relation.isIncomingRelation()) {
       // incoming relation from the `fromField` in the other table
       // to the `toField` in this table
@@ -771,9 +772,6 @@ export class Table<
       return onResult(rows)
     else {
       const relationFields = Object.keys(include)
-      let includedRows: Kind<GetPayload, T>[] = []
-      // TODO: everywhere we use forEachCont we probably don't need continuation passing style!
-      //       so try to remove it there and then rename this one to `forEachCont`
       forEach(
         (relationField: string, cont: () => void) => {
           if (
@@ -796,22 +794,20 @@ export class Table<
             relationName
           )
 
+          // `fetchInclude` mutates the `rows` to include the related objects
           this.fetchInclude(
             rows,
             relation,
             include[relationField],
             db,
-            (fetchedRows) => {
-              includedRows = includedRows.concat(fetchedRows)
-              cont()
-            },
+            cont,
             onError
           )
         },
         relationFields,
         () => {
           // once the loop finished, call `onResult`
-          onResult(includedRows)
+          onResult(rows)
         }
       )
     }
