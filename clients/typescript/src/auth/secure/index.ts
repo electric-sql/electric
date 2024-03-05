@@ -41,7 +41,9 @@ export function mockSecureAuthToken(
   })
 }
 
-export function decodeToken(token: string): JwtPayload & { sub: string } {
+export function decodeToken(
+  token: string
+): JwtPayload & ({ sub: string } | { user_id: string }) {
   const decoded = jwtDecode(token)
   if (
     typeof decoded.sub === 'undefined' &&
@@ -52,6 +54,18 @@ export function decodeToken(token: string): JwtPayload & { sub: string } {
     )
   }
 
-  decoded.sub ??= decoded.user_id
-  return decoded as JwtPayload & { sub: string }
+  return decoded as JwtPayload & ({ sub: string } | { user_id: string })
+}
+
+/**
+ * Retrieves the user ID encoded in the JWT token
+ * @param token the encoded JWT token
+ * @returns {Uuid} the user ID found in the `sub` or `user_id` claim
+ */
+export function decodeUserIdFromToken(token: string): string {
+  const decoded = decodeToken(token)
+
+  // `sub` is the standard claim, but `user_id` is also used in the Electric service
+  // We first check for sub, and if it's not present, we use user_id
+  return (decoded.sub ?? decoded.user_id) as string
 }

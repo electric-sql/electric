@@ -75,7 +75,7 @@ import { backOff } from 'exponential-backoff'
 import { chunkBy, genUUID } from '../util'
 import { isFatal, isOutOfSyncError, isThrowable, wrapFatalError } from './error'
 import { inferRelationsFromSQLite } from '../util/relations'
-import { decodeToken } from '../auth/secure'
+import { decodeUserIdFromToken } from '../auth/secure'
 import { InvalidArgumentError } from '../client/validation/errors/invalidArgumentError'
 
 type ChangeAccumulator = {
@@ -697,10 +697,7 @@ export class SatelliteProcess implements Satellite {
    * @param token The JWT token.
    */
   setToken(token: string): void {
-    const { sub, user_id } = decodeToken(token)
-    // `sub` is the standard claim, but `user_id` is also used in the Electric service
-    // We first check for sub, and if it's not present, we use user_id
-    const newUserId = sub ?? user_id
+    const newUserId = decodeUserIdFromToken(token)
     const userId: string | undefined = this._authState?.userId
     if (typeof userId !== 'undefined' && newUserId !== userId) {
       // We must check that the new token is still using the same user ID.
