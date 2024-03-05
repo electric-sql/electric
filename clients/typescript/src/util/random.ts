@@ -1,3 +1,5 @@
+import { Uuid } from './types'
+
 export const randomValue = (): string => {
   return Math.random().toString(16).substring(2)
 }
@@ -5,7 +7,7 @@ export const randomValue = (): string => {
 // only warn about unsafe RNG once to avoid flooding logs
 let unsafeRandomWarned = false
 
-export const genUUID = (): string => {
+export const genUUID = (): Uuid => {
   // best case, `crypto.randomUUID` is available
   if (globalThis.crypto?.randomUUID) {
     return globalThis.crypto.randomUUID()
@@ -40,8 +42,7 @@ export const genUUID = (): string => {
     hexValues.push(byte.toString(16).padStart(2, '0'))
   })
 
-  return (
-    hexValues.slice(0, 4).join('') +
+  return (hexValues.slice(0, 4).join('') +
     '-' +
     hexValues.slice(4, 6).join('') +
     '-' +
@@ -49,6 +50,5 @@ export const genUUID = (): string => {
     '-' +
     hexValues.slice(8, 10).join('') +
     '-' +
-    hexValues.slice(10).join('')
-  )
+    hexValues.slice(10).join('')) as Uuid
 }

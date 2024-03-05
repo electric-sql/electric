@@ -38,6 +38,7 @@ import {
   Statement,
   Transaction,
   isDataChange,
+  Uuid,
 } from '../util/types'
 import { SatelliteOpts } from './config'
 import { Client, Satellite } from './index'
@@ -89,8 +90,6 @@ type ThrottleFunction = {
   cancel: () => void
   (): Promise<Date> | undefined
 }
-
-type Uuid = `${string}-${string}-${string}-${string}-${string}`
 
 type MetaEntries = {
   clientId: Uuid | ''
@@ -1472,7 +1471,7 @@ export class SatelliteProcess implements Satellite {
     let clientId = await this._getMeta(clientIdKey)
 
     if (clientId === '') {
-      clientId = genUUID() as Uuid
+      clientId = genUUID()
       await this._setMeta(clientIdKey, clientId)
     }
     return clientId
