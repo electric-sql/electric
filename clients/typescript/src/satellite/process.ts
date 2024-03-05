@@ -485,7 +485,7 @@ export class SatelliteProcess implements Satellite {
     const groupedChanges = new Map<
       string,
       {
-        columns: string[]
+        relation: Relation
         records: InitialDataChange['record'][]
         table: QualifiedTablename
       }
@@ -501,11 +501,10 @@ export class SatelliteProcess implements Satellite {
       const tableName = new QualifiedTablename('main', op.relation.table)
       const tableNameString = tableName.toString()
       if (groupedChanges.has(tableNameString)) {
-        const changeGroup = groupedChanges.get(tableNameString)!
-        changeGroup.dataChanges.push(op)
+        groupedChanges.get(tableName.toString())?.records.push(op.record)
       } else {
         groupedChanges.set(tableName.toString(), {
-          columns: op.relation.columns.map((x) => x.name),
+          relation: op.relation,
           records: [op.record],
           table: tableName,
         })
@@ -534,20 +533,23 @@ export class SatelliteProcess implements Satellite {
     stmts.push(...this._disableTriggers(qualifiedTableNames))
 
     // For each table, do a batched insert
-    for (const [_table, { relation, dataChanges, table }] of groupedChanges) {
-      const records = dataChanges.map((change) => change.record)
+    for (const [_table, { relation, records, table }] of groupedChanges) {
       const columnNames = relation.columns.map((col) => col.name)
       const qualifiedTableName = `"${table.namespace}"."${table.tablename}"`
-      const sqlBase = `INSERT OR IGNORE INTO ${qualifiedTableName} (${columnNames.join(
+      const orIgnore = this.builder.sqliteOnly('OR IGNORE')
+      const onConflictDoNothing = this.builder.pgOnly('ON CONFLICT DO NOTHING')
+      const sqlBase = `INSERT ${orIgnore} INTO ${qualifiedTableName} (${columnNames.join(
         ', '
       )}) VALUES `
+      // Must be an insert or ignore into
 
       stmts.push(
         ...this.builder.prepareInsertBatchedStatements(
           sqlBase,
           columnNames,
           records as Record<string, SqlValue>[],
-          this.maxSqlParameters
+          this.maxSqlParameters,
+          onConflictDoNothing
         )
       )
     }
@@ -581,18 +583,19 @@ export class SatelliteProcess implements Satellite {
       // because nobody uses them and we don't have the machinery to to a
       // `RETURNING` clause in the middle of `runInTransaction`.
       const notificationChanges: Change[] = []
-      groupedChanges.forEach(({ dataChanges, tableName, relation }) => {
+
+      groupedChanges.forEach(({ records, table, relation }) => {
         const primaryKeyColNames = relation.columns
           .filter((col) => col.primaryKey)
           .map((col) => col.name)
         notificationChanges.push({
-          qualifiedTablename: tableName,
+          qualifiedTablename: table,
           rowids: [],
-          recordChanges: dataChanges.map((change) => {
+          recordChanges: records.map((change) => {
             return {
               primaryKey: Object.fromEntries(
                 primaryKeyColNames.map((col_name) => {
-                  return [col_name, change.record[col_name]]
+                  return [col_name, change[col_name]]
                 })
               ),
               type: 'INITIAL',
