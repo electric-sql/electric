@@ -29,11 +29,11 @@ export const base64 = {
 
 export const textEncoder = {
   encode: (string: string): Uint8Array =>
-    'TextEncoder' in globalThis && !!globalThis.TextEncoder
+    globalThis.TextEncoder
       ? new TextEncoder().encode(string)
       : TextEncodeDecodeAlternative.encode(string),
   decode: (bytes: Uint8Array): string =>
-    'TextDecoder' in globalThis && !!globalThis.TextDecoder
+    globalThis.TextDecoder
       ? new TextDecoder().decode(bytes)
       : TextEncodeDecodeAlternative.decode(bytes),
 }

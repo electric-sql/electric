@@ -4,13 +4,13 @@ export const randomValue = (): string => {
 
 export const genUUID = (): string => {
   // best case, `crypto.randomUUID` is available
-  if (!!globalThis.crypto && !!globalThis.crypto.randomUUID) {
+  if (globalThis.crypto?.randomUUID) {
     return globalThis.crypto.randomUUID()
   }
 
   const bytes = new Uint8Array(16)
 
-  if (!!globalThis.crypto && !!globalThis.crypto.getRandomValues) {
+  if (globalThis.crypto?.getRandomValues) {
     // `crypto.getRandomValues` is available even in non-secure contexts
     globalThis.crypto.getRandomValues(bytes)
   } else {
