@@ -1,20 +1,21 @@
-import { SignJWT, decodeJwt, JWTPayload } from 'jose'
-
+import { jwtDecode, JwtPayload } from '../decode'
+import { textEncoder } from '../../util/common'
 import { TokenClaims } from '../index'
 import { InvalidArgumentError } from '../../client/validation/errors/invalidArgumentError'
 
-export function secureAuthToken(opts: {
+export async function secureAuthToken(opts: {
   claims: TokenClaims
   iss: string
   key: string
   alg?: string
   exp?: string
 }): Promise<string> {
+  const { SignJWT } = await import('jose')
   const algorithm = opts.alg ?? 'HS256'
   const expiration = opts.exp ?? '2h'
   const iat = Math.floor(Date.now() / 1000)
 
-  const encodedKey = new TextEncoder().encode(opts.key)
+  const encodedKey = textEncoder.encode(opts.key)
 
   return new SignJWT({ ...opts.claims, type: 'access' })
     .setIssuedAt(iat)
@@ -40,8 +41,10 @@ export function mockSecureAuthToken(
   })
 }
 
-export function decodeToken(token: string): JWTPayload & { sub: string } {
-  const decoded = decodeJwt(token)
+export function decodeToken(
+  token: string
+): JwtPayload & ({ sub: string } | { user_id: string }) {
+  const decoded = jwtDecode(token)
   if (
     typeof decoded.sub === 'undefined' &&
     typeof decoded.user_id === 'undefined'
@@ -50,5 +53,19 @@ export function decodeToken(token: string): JWTPayload & { sub: string } {
       'Token does not contain a sub or user_id claim'
     )
   }
-  return decoded as JWTPayload & { sub: string }
+
+  return decoded as JwtPayload & ({ sub: string } | { user_id: string })
+}
+
+/**
+ * Retrieves the user ID encoded in the JWT token
+ * @param token the encoded JWT token
+ * @returns {Uuid} the user ID found in the `sub` or `user_id` claim
+ */
+export function decodeUserIdFromToken(token: string): string {
+  const decoded = decodeToken(token)
+
+  // `sub` is the standard claim, but `user_id` is also used in the Electric service
+  // We first check for sub, and if it's not present, we use user_id
+  return (decoded.sub ?? decoded.user_id) as string
 }
