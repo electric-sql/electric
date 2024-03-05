@@ -5,7 +5,7 @@ import { satelliteDefaults } from '../../../src/satellite/config'
 import { migrateDb, personTable } from '../../satellite/common'
 import { pgBuilder } from '../../../src/migrators/query-builder'
 import { makePgDatabase } from '../../support/node-postgres'
-import { Database } from '../../../src/drivers/node-postgres'
+import { Database, DatabaseAdapter } from '../../../src/drivers/node-postgres'
 
 type Context = {
   db: Database
@@ -24,10 +24,11 @@ let port = 5300
 test.beforeEach(async (t) => {
   const dbName = `triggers-test-${i++}`
   const { db, stop } = await makePgDatabase(dbName, port++)
+  const adapter = new DatabaseAdapter(db)
 
   t.context = {
     db,
-    migrateDb: migrateDb.bind(null, db, personTable, pgBuilder),
+    migrateDb: migrateDb.bind(null, adapter, personTable, pgBuilder),
     stopPG: stop,
   }
 })
