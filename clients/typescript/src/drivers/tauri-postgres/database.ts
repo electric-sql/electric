@@ -30,22 +30,10 @@ export class ElectricDatabase implements Database {
   // Create a Database instance using the static `init` method instead.
   private constructor(public name: string, private invoke: Function) {}
 
-  /*
-  async tauri_init(name: string) {
-    this.invoke("tauri_init", { name });
-  }
-  */
-
   private tauriExec(statement: Statement): Promise<TauriQueryResult> {
     return this.invoke('tauri_exec_command', {
       sql: statement.sql,
-      values: statement.args ?? [], // TODO: have to modify the Rust code to expect just the values instead of bind params
-      /*
-        bind_params: {
-          keys: [],
-          values: statement.args ?? [],
-        }
-        */
+      values: statement.args ?? [],
     })
   }
 
