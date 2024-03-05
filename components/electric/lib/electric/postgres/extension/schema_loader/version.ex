@@ -121,6 +121,28 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Version do
     end
   end
 
+  def direct_fks(
+        %__MODULE__{} = version,
+        {_, _} = relation,
+        {target_schema, target_table} = target
+      ) do
+    with {:ok, table_schema} = table(version, relation) do
+      table_schema.constraints
+      |> Stream.filter(&match?({:foreign, _}, &1.constraint))
+      |> Enum.find(fn %{constraint: {:foreign, %{pk_table: %{schema: sname, name: tname}}}} ->
+        sname == target_schema && tname == target_table
+      end)
+      |> case do
+        nil ->
+          {:error,
+           "no foreign key found from #{Electric.Utils.inspect_relation(relation)} to #{Electric.Utils.inspect_relation(target)}"}
+
+        %{constraint: {:foreign, %{fk_cols: fk_cols, pk_cols: pk_cols}}} ->
+          {:ok, fk_cols, pk_cols}
+      end
+    end
+  end
+
   @spec fk_graph(t()) :: Graph.t()
   def fk_graph(%__MODULE__{fk_graph: fk_graph}) do
     fk_graph

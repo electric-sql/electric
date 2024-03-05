@@ -687,6 +687,14 @@ export interface SatPerms {
   userId: string;
   rules: SatPerms_Rules | undefined;
   roles: SatPerms_Role[];
+  /**
+   * `triggers` is the sql code to install these permissions as triggers in
+   * the local db.
+   * The assumption is that the entire message is compressed before sending
+   * over the wire so just include the trigger sql directly rather than
+   * compress it separately.
+   */
+  triggers: string;
 }
 
 export enum SatPerms_Privilege {
@@ -4312,7 +4320,7 @@ export const SatShapeDataEnd = {
 messageTypeRegistry.set(SatShapeDataEnd.$type, SatShapeDataEnd);
 
 function createBaseSatPerms(): SatPerms {
-  return { $type: "Electric.Satellite.SatPerms", id: Long.ZERO, userId: "", rules: undefined, roles: [] };
+  return { $type: "Electric.Satellite.SatPerms", id: Long.ZERO, userId: "", rules: undefined, roles: [], triggers: "" };
 }
 
 export const SatPerms = {
@@ -4330,6 +4338,9 @@ export const SatPerms = {
     }
     for (const v of message.roles) {
       SatPerms_Role.encode(v!, writer.uint32(34).fork()).ldelim();
+    }
+    if (message.triggers !== "") {
+      writer.uint32(42).string(message.triggers);
     }
     return writer;
   },
@@ -4369,6 +4380,13 @@ export const SatPerms = {
 
           message.roles.push(SatPerms_Role.decode(reader, reader.uint32()));
           continue;
+        case 5:
+          if (tag !== 42) {
+            break;
+          }
+
+          message.triggers = reader.string();
+          continue;
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -4390,6 +4408,7 @@ export const SatPerms = {
       ? SatPerms_Rules.fromPartial(object.rules)
       : undefined;
     message.roles = object.roles?.map((e) => SatPerms_Role.fromPartial(e)) || [];
+    message.triggers = object.triggers ?? "";
     return message;
   },
 };

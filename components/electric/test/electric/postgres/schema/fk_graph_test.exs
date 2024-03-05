@@ -15,16 +15,19 @@ defmodule Electric.Postgres.Schema.FkGraphTest do
 
   setup do
     graph =
-      FkGraph.new([
-        {@orders, @restaurants, ["restaurant_id"]},
-        {@order_riders, @orders, ["order_id"]},
-        {@order_riders, @riders, ["rider_id"]},
-        {@addresses, @users, ["user_id"]},
-        # very realistic many-to-many between wheels and bikes...
-        {@bikes, @riders, ["rider_id"]},
-        {@bike_wheels, @bikes, ["bike_id"]},
-        {@bike_wheels, @wheels, ["wheel_id"]}
-      ])
+      FkGraph.new(
+        [
+          {@orders, @restaurants, ["restaurant_id"]},
+          {@order_riders, @orders, ["order_id"]},
+          {@order_riders, @riders, ["rider_id"]},
+          {@addresses, @users, ["user_id"]},
+          # very realistic many-to-many between wheels and bikes...
+          {@bikes, @riders, ["rider_id"]},
+          {@bike_wheels, @bikes, ["bike_id"]},
+          {@bike_wheels, @wheels, ["wheel_id"]}
+        ],
+        %{}
+      )
 
     {:ok, graph: graph}
   end
@@ -59,9 +62,9 @@ defmodule Electric.Postgres.Schema.FkGraphTest do
     end
 
     test "returns nil if no fk is found on the table", cxt do
-      assert [] = FkGraph.foreign_keys(cxt.graph, @orders, @users)
+      refute FkGraph.foreign_keys(cxt.graph, @orders, @users)
       # @wheels does not have a fk, because of the many-to-many
-      assert [] = FkGraph.foreign_keys(cxt.graph, @orders, @wheels)
+      refute FkGraph.foreign_keys(cxt.graph, @orders, @wheels)
     end
   end
 end

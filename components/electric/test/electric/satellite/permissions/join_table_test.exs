@@ -6,6 +6,7 @@ defmodule Electric.Satellite.Permissions.JoinTableTest do
     Perms,
     Roles,
     Schema,
+    Server,
     Tree
   }
 
@@ -39,8 +40,12 @@ defmodule Electric.Satellite.Permissions.JoinTableTest do
     Tree.delete_vertex(tree, v)
   end
 
-  def add_order(tree, restaurant_id, order_id) do
-    Tree.add_edge(tree, {@orders, [order_id]}, {@restaurants, [restaurant_id]})
+  def add_order(module, tree, restaurant_id, order_id) do
+    module.apply_change(
+      tree,
+      [@restaurants],
+      Chgs.insert(@orders, %{"id" => order_id, "restaurant_id" => restaurant_id})
+    )
   end
 
   describe "simple join table" do
@@ -74,7 +79,7 @@ defmodule Electric.Satellite.Permissions.JoinTableTest do
 
       tree = Tree.new(data, schema_version)
 
-      tree = add_order(tree, "rt1", "or1")
+      tree = add_order(Server, tree, "rt1", "or1")
 
       {:ok, tree: tree, data: data, loader: loader, schema_version: schema_version}
     end
