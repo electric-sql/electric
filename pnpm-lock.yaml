@@ -53,9 +53,6 @@ importers:
       exponential-backoff:
         specifier: ^3.1.0
         version: 3.1.1
-      fastestsmallesttextencoderdecoder:
-        specifier: ^1.0.22
-        version: 1.0.22
       frame-stream:
         specifier: ^3.0.1
         version: 3.0.1
@@ -128,6 +125,9 @@ importers:
       tcp-port-used:
         specifier: ^1.0.2
         version: 1.0.2
+      text-encoder-lite:
+        specifier: ^2.0.0
+        version: 2.0.0
       ts-dedent:
         specifier: ^2.2.0
         version: 2.2.0
@@ -156,9 +156,6 @@ importers:
       '@types/decompress':
         specifier: ^4.2.4
         version: 4.2.4
-      '@types/fastestsmallesttextencoderdecoder':
-        specifier: ^1.0.2
-        version: 1.0.2
       '@types/lodash.flow':
         specifier: ^3.5.7
         version: 3.5.7
@@ -5072,10 +5069,6 @@ packages:
       '@types/node': 18.16.16
     dev: true
 
-  /@types/fastestsmallesttextencoderdecoder@1.0.2:
-    resolution: {integrity: sha512-0Md9qUxGnQ9uJ0NjsA70Y0NHIl3NwfBO1d8CGXK0zhczRL85CXJ3M0JZsmCNQ0WcAbt08FuT4U1G1mWQqgOsUg==}
-    dev: true
-
   /@types/glob@7.2.0:
     resolution: {integrity: sha512-ZUxbzKl0IfJILTS6t7ip5fQQM/J3TJYubDm3nMbgubNNYS62eXeUpoLUC8/7fJNiFYHTrGPQn7hspDUzIHX3UA==}
     dependencies:
@@ -9205,10 +9198,6 @@ packages:
   /fast-write-atomic@0.2.1:
     resolution: {integrity: sha512-WvJe06IfNYlr+6cO3uQkdKdy3Cb1LlCJSF8zRs2eT8yuhdbSlR9nIt+TgQ92RUxiRrQm+/S7RARnMfCs5iuAjw==}
     dev: true
-
-  /fastestsmallesttextencoderdecoder@1.0.22:
-    resolution: {integrity: sha512-Pb8d48e+oIuY4MaM64Cd7OW1gt4nxCHs7/ddPPZ/Ic3sg8yVGM7O9wDvZ7us6ScaUupzM+pfBolwtYhN1IxBIw==}
-    dev: false
 
   /fastq@1.15.0:
     resolution: {integrity: sha512-wBrocU2LCXXa+lWBt8RoIRD89Fi8OdABODa/kEnyeyjS5aZO5/GNvI5sEINADqP/h8M29UHTHUb53sUu5Ihqdw==}
@@ -15150,6 +15139,10 @@ packages:
       ansi-escapes: 4.3.2
       supports-hyperlinks: 2.3.0
     dev: true
+
+  /text-encoder-lite@2.0.0:
+    resolution: {integrity: sha512-bo08ND8LlBwPeU23EluRUcO3p2Rsb/eN5EIfOVqfRmblNDEVKK5IzM9Qfidvo+odT0hhV8mpXQcP/M5MMzABXw==}
+    dev: false
 
   /text-table@0.2.0:
     resolution: {integrity: sha512-N+8UisAXDGk8PFXP4HAzVR9nbfmVJ3zYLAWiTIoqC5v5isinhr+r5uaO8+7r3BMfuNIufIsA7RdpVgacC2cSpw==}

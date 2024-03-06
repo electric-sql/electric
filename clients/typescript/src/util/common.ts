@@ -1,7 +1,7 @@
-import BASE64 from 'base-64'
-import { default as TextEncodeDecodeAlternative } from 'fastestsmallesttextencoderdecoder'
-
 import { SatelliteError } from './types'
+import BASE64 from 'base-64'
+// @ts-ignore No type declarations available - check back to add
+import { TextEncoderLite, TextDecoderLite } from 'text-encoder-lite'
 
 export const typeDecoder = {
   bool: bytesToBool,
@@ -24,18 +24,21 @@ export const base64 = {
   toBytes: (string: string) =>
     Uint8Array.from(BASE64.decode(string), (c) => c.charCodeAt(0)),
   encode: (string: string) => base64.fromBytes(textEncoder.encode(string)),
-  decode: (string: string) => textEncoder.decode(base64.toBytes(string)),
+  decode: (string: string) => textDecoder.decode(base64.toBytes(string)),
 }
 
 export const textEncoder = {
   encode: (string: string): Uint8Array =>
     globalThis.TextEncoder
       ? new TextEncoder().encode(string)
-      : TextEncodeDecodeAlternative.encode(string),
+      : new TextEncoderLite('utf-8').encode(string),
+}
+
+export const textDecoder = {
   decode: (bytes: Uint8Array): string =>
     globalThis.TextDecoder
       ? new TextDecoder().decode(bytes)
-      : TextEncodeDecodeAlternative.decode(bytes),
+      : new TextDecoderLite('utf-8').decode(bytes),
 }
 
 export const DEFAULT_LOG_POS = numberToBytes(0)
@@ -75,7 +78,7 @@ export function bytesToNumber(bytes: Uint8Array) {
 }
 
 export function bytesToString(bytes: Uint8Array) {
-  return new TextDecoder().decode(bytes)
+  return textDecoder.decode(bytes)
 }
 
 /**
