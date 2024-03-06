@@ -1,7 +1,7 @@
 ---
 title: How to use
 description: Instructions for using Electric recipes
-sidebar_position: 10
+sidebar_position: 0
 ---
 
 If you're new to ElectricSQL, make sure to follow the [quickstart guide](../quickstart/index.md) to get set up and familiarize yourself with the basic concepts.

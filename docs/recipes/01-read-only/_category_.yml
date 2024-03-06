@@ -1,0 +1,4 @@
+label: Read-only
+customProps:
+  skipIndex: true
+collapsed: false

@@ -1,1 +1,1 @@
-Adapt the [schema and DDLX commands](./how-to-use#schema) below to match your specific use-case.
+Adapt the [schema and DDLX commands](/docs/recipes/how-to-use#schema) below to match your specific use-case.

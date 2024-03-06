@@ -7,9 +7,9 @@ sidebar_position: 40
 import useBaseUrl from '@docusaurus/useBaseUrl'
 import TOCInline from '@theme/TOCInline'
 
-import SchemaSection from './_section_schema.md'
-import DataAccessSection from './_section_data_access.md'
-import UsageSection from './_section_usage.md'
+import SchemaSection from '../_section_schema.md'
+import DataAccessSection from '../_section_data_access.md'
+import UsageSection from '../_section_usage.md'
 
 import Schema from '!!raw-loader!@site/submodules/electric/examples/recipes/db/migrations/04-monitoring_table.sql'
 import Hook from '!!raw-loader!@site/submodules/electric/examples/recipes/src/monitoring_metrics/use_monitoring_metrics.ts'
