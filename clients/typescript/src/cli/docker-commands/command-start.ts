@@ -68,7 +68,6 @@ export function start(options: StartSettings) {
       ...(options.withPostgres
         ? {
             COMPOSE_PROFILES: 'with-postgres',
-            COMPOSE_ELECTRIC_SERVICE: 'electric-with-postgres',
             DATABASE_URL: `postgresql://postgres:${
               env?.DATABASE_PASSWORD ?? 'pg_password'
             }@postgres:${env?.DATABASE_PORT ?? '5432'}/${

@@ -1,12 +1,7 @@
 import BASE64 from 'base-64'
-import { v4 as uuidv4 } from 'uuid'
+import { default as TextEncodeDecodeAlternative } from 'fastestsmallesttextencoderdecoder'
+
 import { SatelliteError } from './types'
-
-let uuidImpl: () => string = uuidv4
-
-export function setUUIDImpl(impl: () => string) {
-  uuidImpl = impl
-}
 
 export const typeDecoder = {
   bool: bytesToBool,
@@ -17,7 +12,7 @@ export const typeDecoder = {
 
 export const typeEncoder = {
   bool: boolToBytes,
-  text: (string: string) => new TextEncoder().encode(string),
+  text: (string: string) => textEncoder.encode(string),
   timetz: (string: string) => typeEncoder.text(stringToTimetzString(string)),
 }
 
@@ -28,6 +23,19 @@ export const base64 = {
     ),
   toBytes: (string: string) =>
     Uint8Array.from(BASE64.decode(string), (c) => c.charCodeAt(0)),
+  encode: (string: string) => base64.fromBytes(textEncoder.encode(string)),
+  decode: (string: string) => textEncoder.decode(base64.toBytes(string)),
+}
+
+export const textEncoder = {
+  encode: (string: string): Uint8Array =>
+    globalThis.TextEncoder
+      ? new TextEncoder().encode(string)
+      : TextEncodeDecodeAlternative.encode(string),
+  decode: (bytes: Uint8Array): string =>
+    globalThis.TextDecoder
+      ? new TextDecoder().decode(bytes)
+      : TextEncodeDecodeAlternative.decode(bytes),
 }
 
 export const DEFAULT_LOG_POS = numberToBytes(0)
@@ -105,10 +113,6 @@ function bytesToFloat(bytes: Uint8Array) {
  */
 function stringToTimetzString(str: string) {
   return `${str}+00`
-}
-
-export function uuid() {
-  return uuidImpl()
 }
 
 export type PromiseWithResolvers<T> = {

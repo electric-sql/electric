@@ -20,7 +20,6 @@ import {
   bytesToNumber,
   emptyPromise,
   getWaiter,
-  uuid,
 } from '../util/common'
 import { QualifiedTablename } from '../util/tablename'
 import {
@@ -39,6 +38,7 @@ import {
   Statement,
   Transaction,
   isDataChange,
+  Uuid,
 } from '../util/types'
 import { SatelliteOpts } from './config'
 import { Client, Satellite } from './index'
@@ -72,10 +72,10 @@ import {
   SubscriptionData,
 } from './shapes/types'
 import { backOff } from 'exponential-backoff'
-import { chunkBy } from '../util'
+import { chunkBy, genUUID } from '../util'
 import { isFatal, isOutOfSyncError, isThrowable, wrapFatalError } from './error'
 import { inferRelationsFromSQLite } from '../util/relations'
-import { decodeToken } from '../auth/secure'
+import { decodeUserIdFromToken } from '../auth/secure'
 import { InvalidArgumentError } from '../client/validation/errors/invalidArgumentError'
 
 type ChangeAccumulator = {
@@ -90,8 +90,6 @@ type ThrottleFunction = {
   cancel: () => void
   (): Promise<Date> | undefined
 }
-
-type Uuid = `${string}-${string}-${string}-${string}-${string}`
 
 type MetaEntries = {
   clientId: Uuid | ''
@@ -186,7 +184,7 @@ export class SatelliteProcess implements Satellite {
     )
     this.subscriptionNotifiers = {}
 
-    this.subscriptionIdGenerator = () => uuid()
+    this.subscriptionIdGenerator = () => genUUID()
     this.shapeRequestIdGenerator = this.subscriptionIdGenerator
 
     this._connectRetryHandler = connectRetryHandler
@@ -699,10 +697,7 @@ export class SatelliteProcess implements Satellite {
    * @param token The JWT token.
    */
   setToken(token: string): void {
-    const { sub, user_id } = decodeToken(token)
-    // `sub` is the standard claim, but `user_id` is also used in the Electric service
-    // We first check for sub, and if it's not present, we use user_id
-    const newUserId = sub ?? user_id
+    const newUserId = decodeUserIdFromToken(token)
     const userId: string | undefined = this._authState?.userId
     if (typeof userId !== 'undefined' && newUserId !== userId) {
       // We must check that the new token is still using the same user ID.
@@ -1473,7 +1468,7 @@ export class SatelliteProcess implements Satellite {
     let clientId = await this._getMeta(clientIdKey)
 
     if (clientId === '') {
-      clientId = uuid() as Uuid
+      clientId = genUUID()
       await this._setMeta(clientIdKey, clientId)
     }
     return clientId

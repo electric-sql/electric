@@ -481,6 +481,52 @@ test.serial('upsert transforms JS objects to SQLite', async (t) => {
   t.deepEqual(fetchRes, expected)
 })
 
+test.serial('upsert transforms JS JSON objects to SQLite', async (t) => {
+  const json1 = { test1: 1 }
+  const json2 = { test2: 2 }
+
+  // check upsert creation correctly serialises json
+  const upsertFirstCallRes = await tbl.upsert({
+    create: {
+      id: 1,
+      json: json1,
+    },
+    update: {
+      json: json2,
+    },
+    where: {
+      id: 1,
+    },
+  })
+
+  t.deepEqual(upsertFirstCallRes.json, json1)
+
+  // check upsert update correctly serialises json
+  const upsertSecondCallRes = await tbl.upsert({
+    create: {
+      id: 1,
+      json: json1,
+    },
+    update: {
+      json: json2,
+    },
+    where: {
+      id: 1,
+    },
+  })
+
+  t.deepEqual(upsertSecondCallRes.json, json2)
+
+  // check upsert has left json in de-serialisable state
+  const fetchRes = await tbl.findUnique({
+    where: {
+      id: 1,
+    },
+  })
+
+  t.deepEqual((fetchRes as any).json, json2)
+})
+
 test.serial('delete transforms JS objects to SQLite', async (t) => {
   const date1 = new Date('2023-09-13 23:33:04.271')
   const date2 = new Date('2023-09-12 23:33:04.271')

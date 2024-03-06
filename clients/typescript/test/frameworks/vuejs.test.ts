@@ -2,6 +2,7 @@ import 'global-jsdom/register'
 import anyTest, { TestFn } from 'ava'
 import {
   makeElectricDependencyInjector,
+  useConnectivityState,
   useLiveQuery,
 } from '../../src/frameworks/vuejs'
 import { mount, shallowMount, flushPromises } from '@vue/test-utils'
@@ -20,7 +21,7 @@ import { Migrator } from '../../src/migrators'
 import { SocketFactory } from '../../src/sockets'
 import { SatelliteOpts } from '../../src/satellite/config'
 import { Notifier } from '../../src/notifiers'
-import { createQueryResultSubscribeFunction } from '../../src/util/subscribe'
+import { createQueryResultSubscribeFunction } from '../../src/util'
 import EventEmitter from 'events'
 
 const { provideElectric, injectElectric } =
@@ -476,4 +477,109 @@ test('dependency injection works with deep reference to client but is proxy', as
   // consumer's instance will be a proxy
   t.assert(isProxy(electricInstance))
   wrapper.unmount()
+})
+
+test('useConnectivityState defaults to disconnected', async (t) => {
+  const { dal } = t.context
+
+  const ProviderComponent = defineComponent({
+    template: '<div v-if=show><slot/></div>',
+    setup() {
+      const client = shallowRef<Electric>(dal)
+      const show = computed(() => client.value !== undefined)
+      provideElectric(client)
+      return { show }
+    },
+  })
+
+  const ConsumerComponent = defineComponent({
+    template: '<div>status: {{ state.status }}</div>',
+    setup() {
+      const state = useConnectivityState()
+      return { state }
+    },
+  })
+
+  const wrapper = mount({
+    template: '<ProviderComponent><ConsumerComponent/></ProviderComponent>',
+    components: { ProviderComponent, ConsumerComponent },
+  })
+
+  await flushPromises()
+  t.is(wrapper.text(), 'status: disconnected')
+  wrapper.unmount()
+})
+
+test('useConnectivityState handles connectivity events', async (t) => {
+  const { dal, notifier } = t.context
+
+  const ProviderComponent = defineComponent({
+    template: '<div v-if=show><slot/></div>',
+    setup() {
+      const client = shallowRef<Electric>(dal)
+      const show = computed(() => client.value !== undefined)
+      provideElectric(client)
+      return { show }
+    },
+  })
+
+  const ConsumerComponent = defineComponent({
+    template: '<div>status: {{ state.status }}</div>',
+    setup() {
+      const state = useConnectivityState()
+      return { state }
+    },
+  })
+
+  const wrapper = mount({
+    template: '<ProviderComponent><ConsumerComponent/></ProviderComponent>',
+    components: { ProviderComponent, ConsumerComponent },
+  })
+
+  await flushPromises()
+  t.is(wrapper.text(), 'status: disconnected')
+
+  notifier.connectivityStateChanged('test.db', { status: 'connected' })
+  await flushPromises()
+  t.is(wrapper.text(), 'status: connected')
+
+  notifier.connectivityStateChanged('test.db', { status: 'disconnected' })
+  await flushPromises()
+  t.is(wrapper.text(), 'status: disconnected')
+})
+
+test('useConnectivityState ignores connectivity events after unmounting', async (t) => {
+  const { dal, notifier } = t.context
+
+  const ProviderComponent = defineComponent({
+    template: '<div v-if=show><slot/></div>',
+    setup() {
+      const client = shallowRef<Electric>(dal)
+      const show = computed(() => client.value !== undefined)
+      provideElectric(client)
+      return { show }
+    },
+  })
+
+  const ConsumerComponent = defineComponent({
+    template: '<div>status: {{ state.status }}</div>',
+    setup() {
+      const state = useConnectivityState()
+      return { state }
+    },
+  })
+
+  const wrapper = mount({
+    template: '<ProviderComponent><ConsumerComponent/></ProviderComponent>',
+    components: { ProviderComponent, ConsumerComponent },
+  })
+
+  await flushPromises()
+  t.is(wrapper.text(), 'status: disconnected')
+  wrapper.unmount()
+  notifier.connectivityStateChanged('test.db', { status: 'connected' })
+
+  await sleepAsync(200)
+  await flushPromises()
+  t.is(wrapper.text(), 'status: disconnected')
 })

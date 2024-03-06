@@ -205,3 +205,5 @@ export type ConnectivityState = {
   status: ConnectivityStatus
   reason?: SatelliteError // reason for `disconnected` status
 }
+
+export type Uuid = `${string}-${string}-${string}-${string}-${string}`

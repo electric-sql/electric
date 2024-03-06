@@ -34,6 +34,7 @@ import {
   parseTableNames,
   Row,
   Statement,
+  createQueryResultSubscribeFunction,
 } from '../../util'
 import { NarrowInclude } from '../input/inputNarrowing'
 import { IShapeManager } from './shapes'
@@ -47,9 +48,7 @@ import {
   transformFindUnique,
   transformUpdate,
   transformUpdateMany,
-  transformUpsert,
 } from '../conversions/input'
-import { createQueryResultSubscribeFunction } from '../../util/subscribe'
 
 type AnyTable = Table<any, any, any, any, any, any, any, any, any, HKT>
 
@@ -666,7 +665,7 @@ export class Table<
     relationType: Arity,
     includeArg: true | FindInput<any, any, any, any, any>,
     db: DB,
-    onResult: (joinedRows: Kind<GetPayload, T>[]) => void,
+    onResult: () => void,
     onError: (err: any) => void
   ) {
     const otherTable = this._tables.get(relatedTable)!
@@ -687,7 +686,8 @@ export class Table<
       (relatedRows: object[]) => {
         // Now, join the original `rows` with the `relatedRows`
         // where `row.fromField == relatedRow.toField`
-        const join = this.joinObjects(
+        // (this mutates the original rows)
+        this.joinObjects(
           rows,
           relatedRows,
           fromField,
@@ -695,7 +695,7 @@ export class Table<
           relationField,
           relationType
         ) as Kind<GetPayload, T>[]
-        onResult(join)
+        onResult()
       },
       onError
     )
@@ -706,11 +706,11 @@ export class Table<
     relation: Relation,
     includeArg: boolean | FindInput<any, any, any, any, any>,
     db: DB,
-    onResult: (rows: Kind<GetPayload, T>[]) => void,
+    onResult: () => void,
     onError: (err: any) => void
   ) {
     if (includeArg === false) {
-      return onResult([])
+      return onResult()
     } else if (relation.isIncomingRelation()) {
       // incoming relation from the `fromField` in the other table
       // to the `toField` in this table
@@ -771,9 +771,6 @@ export class Table<
       return onResult(rows)
     else {
       const relationFields = Object.keys(include)
-      let includedRows: Kind<GetPayload, T>[] = []
-      // TODO: everywhere we use forEachCont we probably don't need continuation passing style!
-      //       so try to remove it there and then rename this one to `forEachCont`
       forEach(
         (relationField: string, cont: () => void) => {
           if (
@@ -796,22 +793,20 @@ export class Table<
             relationName
           )
 
+          // `fetchInclude` mutates the `rows` to include the related objects
           this.fetchInclude(
             rows,
             relation,
             include[relationField],
             db,
-            (fetchedRows) => {
-              includedRows = includedRows.concat(fetchedRows)
-              cont()
-            },
+            cont,
             onError
           )
         },
         relationFields,
         () => {
           // once the loop finished, call `onResult`
-          onResult(includedRows)
+          onResult(rows)
         }
       )
     }
@@ -1443,7 +1438,10 @@ export class Table<
     continuation: (res: Kind<GetPayload, T>) => void,
     onError: (err: any) => void
   ) {
-    const data = transformUpsert(validate(i, this.upsertSchema), this._fields)
+    // validate but do not transform - upsert will call either
+    // create or update that will perform the appropriate transforms
+    validate(i, this.upsertSchema)
+
     // Check if the record exists
     this._findUnique(
       { where: i.where } as any,
@@ -1453,10 +1451,10 @@ export class Table<
           // Create the record
           return this._create(
             {
-              data: data.create,
-              select: data.select,
-              ...(notNullNotUndefined(data.include) && {
-                include: data.include,
+              data: i.create,
+              select: i.select,
+              ...(notNullNotUndefined(i.include) && {
+                include: i.include,
               }), // only add `include` property if it is defined
             } as any,
             db,
@@ -1467,11 +1465,11 @@ export class Table<
           // Update the record
           return this._update(
             {
-              data: data.update,
-              where: data.where,
-              select: data.select,
-              ...(notNullNotUndefined(data.include) && {
-                include: data.include,
+              data: i.update,
+              where: i.where,
+              select: i.select,
+              ...(notNullNotUndefined(i.include) && {
+                include: i.include,
               }), // only add `include` property if it is defined
             } as any,
             db,

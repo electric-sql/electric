@@ -3,6 +3,9 @@
 // alternative entrypoint in `./test` to avoid importing this.
 import { DbName } from '../../util/types'
 
+// Provide implementation for crypto.getRandomValues
+import 'react-native-get-random-values'
+
 import {
   ElectrifyOptions,
   electrify as baseElectrify,
@@ -13,16 +16,8 @@ import { ElectricConfig } from '../../config'
 import { WebSocketReactNative } from '../../sockets/react-native'
 import { Database } from './database'
 import { ElectricClient } from '../../client/model/client'
-import { setUUIDImpl } from '../../util/common'
 
 export type { Database }
-
-// Provide implementation for TextEncoder/TextDecoder
-import 'fastestsmallesttextencoderdecoder'
-
-// Provide implementation for uuid()
-import uuid from 'react-native-uuid'
-setUUIDImpl(uuid.v4 as () => string)
 
 import { DbSchema } from '../../client/model/schema'
 export { DatabaseAdapter }

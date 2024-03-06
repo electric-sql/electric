@@ -1,7 +1,7 @@
 import test from 'ava'
 
 import { MockDatabase } from '../../src/drivers/expo-sqlite/mock'
-import { DatabaseAdapter } from '../../src/drivers/expo-sqlite'
+import { DatabaseAdapter } from '../../src/drivers/expo-sqlite/adapter'
 import { QualifiedTablename } from '../../src/util'
 
 test('database adapter run works', async (t) => {

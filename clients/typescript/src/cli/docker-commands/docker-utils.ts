@@ -8,18 +8,25 @@ const composeFile = path.join(
   'compose.yaml'
 )
 
+const composeFileWithPostgres = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  'docker',
+  'compose-with-postgres.yaml'
+)
+
 export function dockerCompose(
   command: string,
   userArgs: string[] = [],
   containerName?: string,
   env: { [key: string]: string } = {}
 ) {
+  const withPostgres = env?.COMPOSE_PROFILES == 'with-postgres'
   const args = [
     'compose',
     '--ansi',
     'always',
     '-f',
-    composeFile,
+    withPostgres ? composeFileWithPostgres : composeFile,
     command,
     ...userArgs,
   ]
