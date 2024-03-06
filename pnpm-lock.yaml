@@ -192,9 +192,6 @@ importers:
       '@types/react-native-sqlite-storage':
         specifier: ^6.0.0
         version: 6.0.0
-      '@types/react-native-uuid':
-        specifier: ^2.0.0
-        version: 2.0.0
       '@types/tcp-port-used':
         specifier: ^1.0.2
         version: 1.0.2
@@ -5231,13 +5228,6 @@ packages:
 
   /@types/react-native-sqlite-storage@6.0.0:
     resolution: {integrity: sha512-bzZLc+DsfSQUcUtZUa5M1Ubi/ud88Pdd3k1nbUCQ1baHHzLg95S0DidCWscDHnnuGFB+18GBbcY7r97ivb0XpA==}
-    dev: true
-
-  /@types/react-native-uuid@2.0.0:
-    resolution: {integrity: sha512-EzREcBGsE6AeXWmXbWq0RFtzBh1RLjHWHU4uwirroQD9FVpFmKdqKW4r8mmTK40FGQiYAhhyWTnWV98ID3Ajow==}
-    deprecated: This is a stub types definition. react-native-uuid provides its own type definitions, so you do not need this installed.
-    dependencies:
-      react-native-uuid: 2.0.1
     dev: true
 
   /@types/react@18.2.7:
@@ -13682,11 +13672,6 @@ packages:
     dependencies:
       react-native: 0.68.0(@babel/core@7.23.9)(@babel/preset-env@7.22.4)(react@18.2.0)
     dev: false
-
-  /react-native-uuid@2.0.1:
-    resolution: {integrity: sha512-cptnoIbL53GTCrWlb/+jrDC6tvb7ypIyzbXNJcpR3Vab0mkeaaVd5qnB3f0whXYzS+SMoSQLcUUB0gEWqkPC0g==}
-    engines: {node: '>=10.0.0', npm: '>=6.0.0'}
-    dev: true
 
   /react-native@0.68.0(@babel/core@7.23.9)(@babel/preset-env@7.22.4)(react@18.2.0):
     resolution: {integrity: sha512-Qi8KpG9rqiU0hVp05GKkuRe8iAVhblYMwpnwG3wkBi99Z/X8iZ0jD1b1UW0/y6oesmCyGQAxpsB36imU8zg1AQ==}
