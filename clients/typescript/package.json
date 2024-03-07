@@ -64,6 +64,10 @@
     "./debug": "./dist/util/debug/index.js",
     "./client/model": "./dist/client/model/index.js",
     "./migrators/builder": "./dist/migrators/builder.js",
+    "./sockets/generic": "./dist/sockets/genericSocket.js",
+    "./sockets/node": "./dist/sockets/node.js",
+    "./sockets/react-native": "./dist/sockets/react-native.js",
+    "./sockets/web": "./dist/sockets/web.js",
     ".": "./dist/index.js",
     "./*": "./dist/*/index.js"
   },
@@ -116,6 +120,18 @@
       ],
       "migrators/builder": [
         "./dist/migrators/builder.d.ts"
+      ],
+      "sockets/generic": [
+        "./dist/sockets/genericSocket.d.ts"
+      ],
+      "sockets/node": [
+        "./dist/sockets/node.d.ts"
+      ],
+      "sockets/react-native": [
+        "./dist/sockets/react-native.d.ts"
+      ],
+      "sockets/web": [
+        "./dist/sockets/web.d.ts"
       ],
       "auth": [
         "./dist/auth/index.d.ts"
