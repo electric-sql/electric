@@ -973,12 +973,20 @@ export class SatelliteProcess implements Satellite {
       }
 
       // For each first oplog entry per element, set `clearTags` array to previous tags from the shadow table
+      // For the subsequent oplog entries per element, set the `clearTags` array to the current tag for this TX
+      // This is fine because only the first operation of the TX must override previous TXs
+      // and the rest of the operations in the TX just need to be aware of the current TX
+      // because conflict resolution on Electric happens on the level of TXs
       const q2: Statement = {
         sql: `
       UPDATE ${oplog}
-      SET clearTags = updates.tags
+      SET clearTags =
+            CASE WHEN rowid = updates.rowid_of_first_op_in_tx
+                 THEN updates.tags
+                 ELSE ? -- singleton array containing tag of thix TX
+            END
       FROM (
-        SELECT shadow.tags as tags, min(op.rowid) as op_rowid
+        SELECT shadow.tags as tags, min(op.rowid) as rowid_of_first_op_in_tx
         FROM ${shadow} AS shadow
         JOIN ${oplog} as op
           ON op.namespace = shadow.namespace
@@ -987,9 +995,13 @@ export class SatelliteProcess implements Satellite {
         WHERE op.timestamp = ?
         GROUP BY op.namespace, op.tablename, op.primaryKey
       ) AS updates
-      WHERE updates.op_rowid = ${oplog}.rowid
+      WHERE ${oplog}.timestamp = ? -- only update operations from this TX
       `,
-        args: [timestamp.toISOString()],
+        args: [
+          encodeTags([newTag]),
+          timestamp.toISOString(),
+          timestamp.toISOString(),
+        ],
       }
 
       // For each affected shadow row, set new tag array, unless the last oplog operation was a DELETE
