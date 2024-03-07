@@ -1,6 +1,5 @@
 import { SatelliteError } from './types'
 import BASE64 from 'base-64'
-// @ts-ignore No type declarations available - check back to add
 import { TextEncoderLite, TextDecoderLite } from 'text-encoder-lite'
 
 export const typeDecoder = {
@@ -31,14 +30,14 @@ export const textEncoder = {
   encode: (string: string): Uint8Array =>
     globalThis.TextEncoder
       ? new TextEncoder().encode(string)
-      : new TextEncoderLite('utf-8').encode(string),
+      : new TextEncoderLite().encode(string),
 }
 
 export const textDecoder = {
   decode: (bytes: Uint8Array): string =>
     globalThis.TextDecoder
       ? new TextDecoder().decode(bytes)
-      : new TextDecoderLite('utf-8').decode(bytes),
+      : new TextDecoderLite().decode(bytes),
 }
 
 export const DEFAULT_LOG_POS = numberToBytes(0)
