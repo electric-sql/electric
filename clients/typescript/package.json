@@ -221,7 +221,7 @@
     "@types/node": "^18.8.4",
     "@types/prompts": "^2.4.9",
     "@types/react": "^18.0.18",
-    "@types/react-native-sqlite-storage": "^6.0.0",
+    "@types/react-native-sqlite-storage": "^6.0.5",
     "@types/tcp-port-used": "^1.0.2",
     "@types/uuid": "^9.0.1",
     "@types/ws": "^8.5.3",
