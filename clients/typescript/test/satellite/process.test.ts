@@ -1367,7 +1367,8 @@ test('garbage collection is triggered when transaction from the same origin is r
   const { satellite } = t.context
   const { runMigrations, adapter, authState, token } = t.context
   await runMigrations()
-  await startSatellite(satellite, authState, token)
+  const conn = await startSatellite(satellite, authState, token)
+  await conn.connectionPromise
 
   adapter.run({
     sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', 1);`,
@@ -1894,6 +1895,26 @@ test("Garbage collecting the subscription doesn't generate oplog entries", async
 
   await satellite._performSnapshot()
   t.deepEqual(await satellite._getEntries(0), [])
+})
+
+test("snapshot while not fully connected doesn't throw", async (t) => {
+  const { adapter, runMigrations, satellite, authState, token } = t.context
+  await runMigrations()
+
+  // Add log entry while offline
+  await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
+
+  const conn = await startSatellite(satellite, authState, token)
+
+  // Performing a snapshot while the replication connection has not been stablished
+  // should not throw
+  await satellite._performSnapshot()
+
+  await conn.connectionPromise
+
+  await satellite._performSnapshot()
+
+  t.pass()
 })
 
 test('snapshots: generated oplog entries have the correct tags', async (t) => {

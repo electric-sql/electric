@@ -316,7 +316,7 @@ export class MockSatelliteClient
   }
 
   getOutboundReplicationStatus(): ReplicationStatus {
-    return this.isConnected()
+    return this.isConnected() && this.replicating
       ? ReplicationStatus.ACTIVE
       : ReplicationStatus.STOPPED
   }
@@ -396,6 +396,13 @@ export class MockSatelliteClient
   }
 
   enqueueTransaction(transaction: DataTransaction): void {
+    if (!this.replicating) {
+      throw new SatelliteError(
+        SatelliteErrorCode.REPLICATION_NOT_STARTED,
+        'enqueuing a transaction while outbound replication has not started'
+      )
+    }
+
     this.outboundSent = transaction.lsn
   }
 
