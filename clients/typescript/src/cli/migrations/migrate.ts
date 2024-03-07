@@ -26,7 +26,6 @@ import { withConfig } from '../configure/command-with-config'
 // We use the same method to resolve the path to `@electric-sql/prisma-generator`.
 const require = Module.createRequire(import.meta.url)
 const prismaPath = require.resolve('prisma')
-const prismaV5Path = require.resolve('prisma-v5')
 const generatorPath = path.join(
   path.dirname(require.resolve('@electric-sql/prisma-generator')),
   'bin.js'
@@ -585,12 +584,8 @@ async function generateElectricClient(prismaSchema: string): Promise<void> {
 }
 
 async function generatePrismaClient(prismaSchema: string): Promise<void> {
-  // Uses Prisma v5 to generate the Prisma client
-  // because of a bug in Prisma v4 that causes the Prisma client generator to crash
-  // if there is also a Prisma v5 in the node_modules folder
-  // (e.g. if the user's project includes Prisma v5)
   await executeShellCommand(
-    `node ${prismaV5Path} generate --schema="${prismaSchema}"`,
+    `node ${prismaPath} generate --schema="${prismaSchema}"`,
     'Generator script exited with error code: '
   )
 }
