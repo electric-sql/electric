@@ -1,11 +1,8 @@
 import { SerialDatabaseAdapter } from '.'
-import { AnyDatabase } from '..'
 import { RunResult } from '../../electric/adapter'
 import { Row, Statement } from '../../util'
 
 export class MockDatabaseAdapter extends SerialDatabaseAdapter {
-  readonly db: AnyDatabase = undefined as unknown as AnyDatabase // not used
-
   private expectRun: ((stmt: Statement) => Promise<RunResult>) | undefined
   private expectQuery: ((stmt: Statement) => Promise<Row[]>) | undefined
 

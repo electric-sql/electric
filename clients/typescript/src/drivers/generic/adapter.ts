@@ -6,7 +6,6 @@ import {
 } from '../../electric/adapter'
 import { Row, Statement } from '../../util'
 import { Mutex } from 'async-mutex'
-import { AnyDatabase } from '..'
 
 /**
  * A generic database adapter.
@@ -18,7 +17,6 @@ abstract class DatabaseAdapter
   extends TableNameImpl
   implements DatabaseAdapterInterface
 {
-  abstract readonly db: AnyDatabase
   protected txMutex: Mutex
 
   constructor() {
