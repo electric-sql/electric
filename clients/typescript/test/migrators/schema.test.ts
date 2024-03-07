@@ -2,7 +2,6 @@ import test from 'ava'
 import Database from 'better-sqlite3'
 
 import { rm as removeFile } from 'node:fs/promises'
-import { AnyDatabase } from '../../src/drivers'
 
 import { DatabaseAdapter } from '../../src/drivers/better-sqlite3/adapter'
 import { BundleMigrator } from '../../src/migrators/bundle'
@@ -15,7 +14,6 @@ import migrations from '../support/migrations/migrations.js'
 type Context = {
   dbName: string
   adapter: DatabaseAdapter
-  db: AnyDatabase
 }
 
 test.beforeEach((t) => {

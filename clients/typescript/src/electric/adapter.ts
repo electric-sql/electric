@@ -1,4 +1,3 @@
-import { AnyDatabase } from '../drivers/index'
 import { QualifiedTablename } from '../util/tablename'
 import { Row, Statement } from '../util/types'
 import { parseTableNames } from '../util'
@@ -6,8 +5,6 @@ import { parseTableNames } from '../util'
 // A `DatabaseAdapter` adapts a database client to provide the
 // normalised interface defined here.
 export interface DatabaseAdapter {
-  readonly db: AnyDatabase
-
   // Runs the provided sql statement
   run(statement: Statement): Promise<RunResult>
 
