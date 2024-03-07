@@ -57,7 +57,7 @@ abstract class DatabaseAdapter
       throw e
     }
 
-    return new Promise((resolve, reject) => {
+    return new Promise<T>((resolve, reject) => {
       const releaseAndReject = (err?: any) => {
         // if the tx is rolled back, release the lock and reject the promise
         release()
@@ -75,10 +75,20 @@ abstract class DatabaseAdapter
             resolve(res)
           })
           .catch((err) => {
-            release()
+            // Failed to commit
             reject(err)
           })
       })
+    }).catch((err) => {
+      // something went wrong
+      // let's roll back
+      return this._run({ sql: 'ROLLBACK' })
+        .then(() => {
+          throw err
+        }) // rethrow the error
+        .finally(() => {
+          release()
+        })
     })
   }
 
