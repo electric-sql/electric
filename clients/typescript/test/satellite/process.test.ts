@@ -1898,7 +1898,10 @@ test("Garbage collecting the subscription doesn't generate oplog entries", async
 })
 
 test("snapshot while not fully connected doesn't throw", async (t) => {
-  const { adapter, runMigrations, satellite, authState, token } = t.context
+  const { adapter, runMigrations, satellite, client, authState, token } =
+    t.context
+  client.setStartReplicationDelayMs(100)
+
   await runMigrations()
 
   // Add log entry while offline
