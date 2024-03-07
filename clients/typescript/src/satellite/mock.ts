@@ -31,8 +31,9 @@ import {
   subsDataErrorToSatelliteError,
   base64,
   AsyncEventEmitter,
+  genUUID,
 } from '../util'
-import { bytesToNumber, uuid } from '../util/common'
+import { bytesToNumber } from '../util/common'
 import { generateTag } from './oplog'
 import {
   ClientShapeDefinition,
@@ -234,7 +235,7 @@ export class MockSatelliteClient
             })
           })
         } else {
-          shapeReqToUuid[shape.requestId] = uuid()
+          shapeReqToUuid[shape.requestId] = genUUID()
           const records: DataRecord[] = this.relationData[tablename] ?? []
 
           for (const record of records) {

@@ -169,6 +169,18 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     ]
   end
 
+  def close do
+    %M.Close{}
+  end
+
+  def close_complete do
+    %M.CloseComplete{}
+  end
+
+  def sync do
+    %M.Sync{}
+  end
+
   def bind_execute() do
     bind_execute("", [])
   end

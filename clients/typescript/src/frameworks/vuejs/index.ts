@@ -1,2 +1,2 @@
 export * from './reactive'
-export * from './dependency-injection'
+export { makeElectricDependencyInjector } from './dependency-injection'

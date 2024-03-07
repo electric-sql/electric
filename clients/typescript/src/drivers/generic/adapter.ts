@@ -6,7 +6,6 @@ import {
 } from '../../electric/adapter'
 import { Row, Statement } from '../../util'
 import { Mutex } from 'async-mutex'
-import { AnyDatabase } from '..'
 
 /**
  * A generic database adapter.
@@ -18,7 +17,6 @@ abstract class DatabaseAdapter
   extends TableNameImpl
   implements DatabaseAdapterInterface
 {
-  abstract readonly db: AnyDatabase
   protected txMutex: Mutex
 
   constructor() {
@@ -57,7 +55,7 @@ abstract class DatabaseAdapter
       throw e
     }
 
-    return new Promise((resolve, reject) => {
+    return new Promise<T>((resolve, reject) => {
       const releaseAndReject = (err?: any) => {
         // if the tx is rolled back, release the lock and reject the promise
         release()
@@ -75,10 +73,20 @@ abstract class DatabaseAdapter
             resolve(res)
           })
           .catch((err) => {
-            release()
+            // Failed to commit
             reject(err)
           })
       })
+    }).catch((err) => {
+      // something went wrong
+      // let's roll back
+      return this._run({ sql: 'ROLLBACK' })
+        .then(() => {
+          throw err
+        }) // rethrow the error
+        .finally(() => {
+          release()
+        })
     })
   }
 
@@ -96,6 +104,10 @@ abstract class DatabaseAdapter
     return this.txMutex.runExclusive(() => {
       return this._query(stmt)
     })
+  }
+
+  get isLocked(): boolean {
+    return this.txMutex.isLocked()
   }
 }
 
@@ -131,26 +143,25 @@ export abstract class SerialDatabaseAdapter
   async runInTransaction(...statements: Statement[]): Promise<RunResult> {
     // Uses a mutex to ensure that transactions are not interleaved.
     const release = await this.txMutex.acquire()
-    let open = false
+    let transactionBegan = false
     let rowsAffected = 0
     try {
       await this._run({ sql: 'BEGIN' })
-      open = true
+      transactionBegan = true
       for (const stmt of statements) {
         const { rowsAffected: rowsModified } = await this._run(stmt)
         rowsAffected += rowsModified
       }
+      await this._run({ sql: 'COMMIT' })
       return {
         rowsAffected: rowsAffected,
       }
     } catch (error) {
-      await this._run({ sql: 'ROLLBACK' })
-      open = false
+      if (transactionBegan) {
+        await this._run({ sql: 'ROLLBACK' })
+      }
       throw error // rejects the promise with the reason for the rollback
     } finally {
-      if (open) {
-        await this._run({ sql: 'COMMIT' })
-      }
       release()
     }
   }

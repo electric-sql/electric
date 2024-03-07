@@ -37,10 +37,9 @@ services:
       - pg_data:/var/lib/postgresql/data
 
   electric:
-    extends:
-      file: compose-base.yaml
-      service: ${COMPOSE_ELECTRIC_SERVICE:-electric-no-postgres}
     image: '${ELECTRIC_IMAGE:-electricsql/electric:latest}'
+    init: true
+    stop_signal: SIGINT # use SIGINT as the more speedy alternative to SIGTERM
     ports:
       - ${HTTP_PORT:-5133}:${HTTP_PORT:-5133}
       - ${PG_PROXY_PORT_PARSED:-65432}:${PG_PROXY_PORT_PARSED:-65432}

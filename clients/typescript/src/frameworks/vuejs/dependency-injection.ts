@@ -45,3 +45,16 @@ export function makeElectricDependencyInjector<
     injectElectric,
   }
 }
+
+/**
+ * This "static" injector is used internally by our reactive methods
+ * to get access to the {@link ElectricClient}.
+ * It loses information about the actual types of the DB tables,
+ * but we don't need that information in our methods.
+ * However, users preferably don't lose this type information,
+ * therefore, they can use {@link makeElectricDependencyInjector}.
+ */
+const { injectElectric: injectElectricUntyped } =
+  makeElectricDependencyInjector()
+
+export { injectElectricUntyped }

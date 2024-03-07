@@ -46,7 +46,7 @@ export const ElectricWrapper = ({ children }) => {
   const [ electric, setElectric ] = useState<Electric>()
 
   useEffect(() => {
-    const isMounted = true
+    let isMounted = true
 
     const init = async () => {
       const conn = await ElectricDatabase.init('electric.db')
