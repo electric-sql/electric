@@ -53,9 +53,6 @@ importers:
       exponential-backoff:
         specifier: ^3.1.0
         version: 3.1.1
-      fastestsmallesttextencoderdecoder:
-        specifier: ^1.0.22
-        version: 1.0.22
       frame-stream:
         specifier: ^3.0.1
         version: 3.0.1
@@ -128,6 +125,9 @@ importers:
       tcp-port-used:
         specifier: ^1.0.2
         version: 1.0.2
+      text-encoder-lite:
+        specifier: ^2.0.0
+        version: 2.0.0
       ts-dedent:
         specifier: ^2.2.0
         version: 2.2.0
@@ -156,9 +156,6 @@ importers:
       '@types/decompress':
         specifier: ^4.2.4
         version: 4.2.4
-      '@types/fastestsmallesttextencoderdecoder':
-        specifier: ^1.0.2
-        version: 1.0.2
       '@types/lodash.flow':
         specifier: ^3.5.7
         version: 3.5.7
@@ -195,9 +192,6 @@ importers:
       '@types/react-native-sqlite-storage':
         specifier: ^6.0.0
         version: 6.0.0
-      '@types/react-native-uuid':
-        specifier: ^2.0.0
-        version: 2.0.0
       '@types/tcp-port-used':
         specifier: ^1.0.2
         version: 1.0.2
@@ -5072,10 +5066,6 @@ packages:
       '@types/node': 18.16.16
     dev: true
 
-  /@types/fastestsmallesttextencoderdecoder@1.0.2:
-    resolution: {integrity: sha512-0Md9qUxGnQ9uJ0NjsA70Y0NHIl3NwfBO1d8CGXK0zhczRL85CXJ3M0JZsmCNQ0WcAbt08FuT4U1G1mWQqgOsUg==}
-    dev: true
-
   /@types/glob@7.2.0:
     resolution: {integrity: sha512-ZUxbzKl0IfJILTS6t7ip5fQQM/J3TJYubDm3nMbgubNNYS62eXeUpoLUC8/7fJNiFYHTrGPQn7hspDUzIHX3UA==}
     dependencies:
@@ -5238,13 +5228,6 @@ packages:
 
   /@types/react-native-sqlite-storage@6.0.0:
     resolution: {integrity: sha512-bzZLc+DsfSQUcUtZUa5M1Ubi/ud88Pdd3k1nbUCQ1baHHzLg95S0DidCWscDHnnuGFB+18GBbcY7r97ivb0XpA==}
-    dev: true
-
-  /@types/react-native-uuid@2.0.0:
-    resolution: {integrity: sha512-EzREcBGsE6AeXWmXbWq0RFtzBh1RLjHWHU4uwirroQD9FVpFmKdqKW4r8mmTK40FGQiYAhhyWTnWV98ID3Ajow==}
-    deprecated: This is a stub types definition. react-native-uuid provides its own type definitions, so you do not need this installed.
-    dependencies:
-      react-native-uuid: 2.0.1
     dev: true
 
   /@types/react@18.2.7:
@@ -9205,10 +9188,6 @@ packages:
   /fast-write-atomic@0.2.1:
     resolution: {integrity: sha512-WvJe06IfNYlr+6cO3uQkdKdy3Cb1LlCJSF8zRs2eT8yuhdbSlR9nIt+TgQ92RUxiRrQm+/S7RARnMfCs5iuAjw==}
     dev: true
-
-  /fastestsmallesttextencoderdecoder@1.0.22:
-    resolution: {integrity: sha512-Pb8d48e+oIuY4MaM64Cd7OW1gt4nxCHs7/ddPPZ/Ic3sg8yVGM7O9wDvZ7us6ScaUupzM+pfBolwtYhN1IxBIw==}
-    dev: false
 
   /fastq@1.15.0:
     resolution: {integrity: sha512-wBrocU2LCXXa+lWBt8RoIRD89Fi8OdABODa/kEnyeyjS5aZO5/GNvI5sEINADqP/h8M29UHTHUb53sUu5Ihqdw==}
@@ -13694,11 +13673,6 @@ packages:
       react-native: 0.68.0(@babel/core@7.23.9)(@babel/preset-env@7.22.4)(react@18.2.0)
     dev: false
 
-  /react-native-uuid@2.0.1:
-    resolution: {integrity: sha512-cptnoIbL53GTCrWlb/+jrDC6tvb7ypIyzbXNJcpR3Vab0mkeaaVd5qnB3f0whXYzS+SMoSQLcUUB0gEWqkPC0g==}
-    engines: {node: '>=10.0.0', npm: '>=6.0.0'}
-    dev: true
-
   /react-native@0.68.0(@babel/core@7.23.9)(@babel/preset-env@7.22.4)(react@18.2.0):
     resolution: {integrity: sha512-Qi8KpG9rqiU0hVp05GKkuRe8iAVhblYMwpnwG3wkBi99Z/X8iZ0jD1b1UW0/y6oesmCyGQAxpsB36imU8zg1AQ==}
     engines: {node: '>=14'}
@@ -15150,6 +15124,10 @@ packages:
       ansi-escapes: 4.3.2
       supports-hyperlinks: 2.3.0
     dev: true
+
+  /text-encoder-lite@2.0.0:
+    resolution: {integrity: sha512-bo08ND8LlBwPeU23EluRUcO3p2Rsb/eN5EIfOVqfRmblNDEVKK5IzM9Qfidvo+odT0hhV8mpXQcP/M5MMzABXw==}
+    dev: false
 
   /text-table@0.2.0:
     resolution: {integrity: sha512-N+8UisAXDGk8PFXP4HAzVR9nbfmVJ3zYLAWiTIoqC5v5isinhr+r5uaO8+7r3BMfuNIufIsA7RdpVgacC2cSpw==}
