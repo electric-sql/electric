@@ -107,6 +107,10 @@ abstract class DatabaseAdapter
       return this._query(stmt)
     })
   }
+
+  get isLocked(): boolean {
+    return this.txMutex.isLocked()
+  }
 }
 
 /**

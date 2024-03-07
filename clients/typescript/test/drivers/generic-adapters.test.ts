@@ -28,9 +28,7 @@ test('runInTransaction works', async (t) => {
 
   const result = await adapter.runInTransaction(insert)
   t.is(result.rowsAffected, 1)
-
-  // @ts-ignore protected field but we're testing the internal mutex of the adapter
-  t.false(adapter.txMutex.isLocked())
+  t.false(adapter.isLocked)
 })
 
 test('runInTransaction rolls back if commit fails', async (t) => {
@@ -68,8 +66,7 @@ test('runInTransaction rolls back if commit fails', async (t) => {
     message: 'mocked commit failure',
   })
 
-  // @ts-ignore protected field but we're testing the internal mutex of the adapter
-  t.false(adapter.txMutex.isLocked())
+  t.false(adapter.isLocked)
 })
 
 test('interactive transactions work', async (t) => {
@@ -102,8 +99,7 @@ test('interactive transactions work', async (t) => {
   })
   t.is(result, 5)
 
-  // @ts-ignore protected field but we're testing the internal mutex of the adapter
-  t.false(adapter.txMutex.isLocked())
+  t.false(adapter.isLocked)
 })
 
 test('interactive transactions roll back if an error is thrown', async (t) => {
@@ -140,8 +136,7 @@ test('interactive transactions roll back if an error is thrown', async (t) => {
     }
   )
 
-  // @ts-ignore protected field but we're testing the internal mutex of the adapter
-  t.false(adapter.txMutex.isLocked())
+  t.false(adapter.isLocked)
 })
 
 test('interactive transactions roll back if commit fails', async (t) => {
@@ -185,6 +180,5 @@ test('interactive transactions roll back if commit fails', async (t) => {
     }
   )
 
-  // @ts-ignore protected field but we're testing the internal mutex of the adapter
-  t.false(adapter.txMutex.isLocked())
+  t.false(adapter.isLocked)
 })
