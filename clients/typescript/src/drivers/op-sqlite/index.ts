@@ -8,15 +8,6 @@ import {
 import { DatabaseAdapter } from './adapter'
 import { ElectricConfig } from '../../config'
 import { Database } from './database'
-import { setUUIDImpl } from '../../util/common'
-
-// Provide implementation for TextEncoder/TextDecoder
-import 'fastestsmallesttextencoderdecoder'
-
-// Provide implementation for uuid()
-import uuid from 'react-native-uuid'
-setUUIDImpl(uuid.v4 as () => string)
-
 import { ElectricClient } from '../../client/model/client'
 import { DbSchema } from '../../client/model/schema'
 import { WebSocketReactNative } from '../../sockets/react-native'
@@ -26,12 +17,11 @@ export type { Database }
 
 export const electrify = async <T extends Database, DB extends DbSchema<any>>(
   db: T,
-  dbName:DbName,
+  dbName: DbName,
   dbDescription: DB,
   config: ElectricConfig,
   opts?: ElectrifyOptions
 ): Promise<ElectricClient<DB>> => {
-
   const adapter = opts?.adapter || new DatabaseAdapter(db)
   const socketFactory = opts?.socketFactory || WebSocketReactNative
 
