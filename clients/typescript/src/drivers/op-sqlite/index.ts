@@ -26,11 +26,12 @@ export type { Database }
 
 export const electrify = async <T extends Database, DB extends DbSchema<any>>(
   db: T,
+  dbName:DbName,
   dbDescription: DB,
   config: ElectricConfig,
   opts?: ElectrifyOptions
 ): Promise<ElectricClient<DB>> => {
-  const dbName: DbName = db.dbName!
+
   const adapter = opts?.adapter || new DatabaseAdapter(db)
   const socketFactory = opts?.socketFactory || WebSocketReactNative
 

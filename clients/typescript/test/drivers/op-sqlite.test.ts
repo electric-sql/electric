@@ -2,7 +2,6 @@ import test from 'ava'
 
 import { DatabaseAdapter } from '../../src/drivers/op-sqlite/adapter'
 import { MockDatabase } from '../../src/drivers/op-sqlite/mock'
-import { SQLBatchTuple } from '@op-engineering/op-sqlite'
 
 test('database adapter run works', async (t) => {
   const db = new MockDatabase('test.db')
