@@ -200,18 +200,19 @@ defmodule Electric.Satellite.WebsocketServer do
   # client has connected which needs to perform the initial sync of migrations and the current database state before
   # subscribing to the replication stream.
   def handle_info({:perform_initial_sync_and_subscribe, msg}, %State{} = state) do
+    origin = Electric.Replication.Connectors.origin(state.connector_config)
+
     # Fetch the latest observed LSN from the cached WAL. We have to do it before fetching migrations.
     #
     # If we were to do it the other way around, we could miss a migration that is committed right after the call to
     # migrations_since() but before the client subscribes to the replication stream. If the migration was immediately
     # followed by another write in PG, we could have fetched the LSN of this last write with get_current_position() and
     # thus miss the migration committed just before it.
-    lsn = CachedWal.Api.get_current_position()
+    lsn = CachedWal.Api.get_current_position(origin)
 
-    _ = maybe_pause(lsn)
+    _ = maybe_pause(origin, lsn)
 
     %SatInStartReplicationReq{schema_version: schema_version} = msg
-    origin = Electric.Replication.Connectors.origin(state.connector_config)
     migrations = InitialSync.migrations_since(schema_version, origin, lsn)
 
     # We're ignoring actions here since we've "manufactured" migration events
@@ -411,12 +412,12 @@ defmodule Electric.Satellite.WebsocketServer do
   end
 
   if Mix.env() == :test do
-    defp maybe_pause(lsn) do
+    defp maybe_pause(origin, lsn) do
       with {client_ref, client_pid} <- Process.get(:pause_during_initial_sync) do
         Logger.debug("WebsocketServer pausing")
         send(client_pid, {client_ref, :server_paused})
 
-        {:ok, request_ref} = CachedWal.Api.request_notification(lsn)
+        {:ok, request_ref} = CachedWal.Api.request_notification(origin, lsn)
 
         receive do
           {:cached_wal_notification, ^request_ref, :new_segments_available} ->
@@ -431,7 +432,7 @@ defmodule Electric.Satellite.WebsocketServer do
 
     defp fetch_last_acked_client_lsn(_state), do: nil
   else
-    defp maybe_pause(_), do: :ok
+    defp maybe_pause(_, _), do: :ok
 
     def fetch_last_acked_client_lsn(state) do
       state.connector_config
