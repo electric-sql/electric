@@ -15,14 +15,13 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
   use GenStage
 
   alias Electric.Replication.Changes.Transaction
+  alias Electric.Replication.Connectors
   alias Electric.Postgres.Lsn
   alias Electric.Postgres.CachedWal.Api
 
   require Logger
 
   @behaviour Electric.Postgres.CachedWal.Api
-
-  @ets_table_name :ets_backed_cached_wal
 
   @typep state :: %{
            notification_requests: %{optional(reference()) => {Api.wal_pos(), pid()}},
@@ -34,12 +33,17 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
 
   # Public API
 
+  @spec name(Connectors.origin()) :: Electric.reg_name()
+  def name(origin) do
+    Electric.name(__MODULE__, origin)
+  end
+
   @doc """
   Start the cache. See module docs for options
   """
   def start_link(opts) do
-    # We're globally registering this process since ets table name is hardcoded anyway, so no two instances can be started.
-    GenStage.start_link(__MODULE__, opts, name: __MODULE__)
+    origin = Keyword.fetch!(opts, :origin)
+    GenStage.start_link(__MODULE__, opts, name: name(origin))
   end
 
   def clear_cache(stage) do
@@ -47,13 +51,15 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
   end
 
   @impl Api
-  def lsn_in_cached_window?(client_wal_pos) do
-    case :ets.first(@ets_table_name) do
+  def lsn_in_cached_window?(origin, client_wal_pos) do
+    table = ets_table_name(origin)
+
+    case :ets.first(table) do
       :"$end_of_table" ->
         false
 
       first_position ->
-        case :ets.last(@ets_table_name) do
+        case :ets.last(table) do
           :"$end_of_table" ->
             false
 
@@ -64,28 +70,28 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
   end
 
   @impl Api
-  def get_current_position do
-    with :"$end_of_table" <- :ets.last(@ets_table_name) do
+  def get_current_position(origin) do
+    with :"$end_of_table" <- :ets.last(ets_table_name(origin)) do
       nil
     end
   end
 
   @impl Api
-  def next_segment(wal_pos) do
-    case :ets.next(@ets_table_name, wal_pos) do
+  def next_segment(origin, wal_pos) do
+    case :ets.next(ets_table_name(origin), wal_pos) do
       :"$end_of_table" -> :latest
-      key -> {:ok, :ets.lookup_element(@ets_table_name, key, 2), key}
+      key -> {:ok, :ets.lookup_element(ets_table_name(origin), key, 2), key}
     end
   end
 
   @impl Api
-  def request_notification(wal_pos) do
-    GenStage.call(__MODULE__, {:request_notification, wal_pos})
+  def request_notification(origin, wal_pos) do
+    GenStage.call(name(origin), {:request_notification, wal_pos})
   end
 
   @impl Api
-  def cancel_notification_request(ref) do
-    GenStage.call(__MODULE__, {:cancel_notification, ref})
+  def cancel_notification_request(origin, ref) do
+    GenStage.call(name(origin), {:cancel_notification, ref})
   end
 
   @impl Api
@@ -100,8 +106,8 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
   end
 
   @impl Api
-  def telemetry_stats() do
-    GenStage.call(__MODULE__, :telemetry_stats)
+  def telemetry_stats(origin) do
+    GenStage.call(name(origin), :telemetry_stats)
   catch
     :exit, _ -> nil
   end
@@ -115,12 +121,14 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
 
   @impl GenStage
   def init(opts) do
-    set = :ets.new(@ets_table_name, [:named_table, :ordered_set])
+    origin = Keyword.fetch!(opts, :origin)
+
+    table = :ets.new(ets_table_name(origin), [:named_table, :ordered_set])
     Logger.metadata(component: "CachedWal.EtsBacked")
 
     state = %{
       notification_requests: %{},
-      table: set,
+      table: table,
       last_seen_wal_pos: 0,
       current_tx_count: 0,
       wal_window_size: Keyword.fetch!(opts, :wal_window_size)
@@ -130,6 +138,10 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
       nil -> {:consumer, state}
       subscription -> {:consumer, state, subscribe_to: subscription}
     end
+  end
+
+  defp ets_table_name(origin) do
+    String.to_atom(inspect(__MODULE__) <> ":" <> origin)
   end
 
   @impl GenStage

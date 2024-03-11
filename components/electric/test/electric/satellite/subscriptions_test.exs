@@ -63,12 +63,12 @@ defmodule Electric.Satellite.SubscriptionsTest do
          INSERT INTO public.users (id, name) VALUES ('#{uuid4()}', 'Garry');
          """
     test "The client can connect and immediately gets migrations but gets neither already inserted data, nor new inserts",
-         %{conn: pg_conn} = ctx do
+         %{conn: pg_conn, origin: origin} = ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
         start_replication_and_assert_response(conn, ctx.electrified_count)
 
-        position = CachedWal.Api.get_current_position()
-        {:ok, ref} = CachedWal.Api.request_notification(position)
+        position = CachedWal.Api.get_current_position(origin)
+        {:ok, ref} = CachedWal.Api.request_notification(origin, position)
 
         {:ok, 1} =
           :epgsql.equery(pg_conn, "INSERT INTO public.users (id, name) VALUES ($1, $2)", [
