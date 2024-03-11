@@ -33,7 +33,7 @@ defmodule Electric.Replication.InitialSyncTest do
 
       # Wait for electrification to propagate through Postgres' logical replication
       current_lsn = fetch_current_lsn(conn)
-      assert :ok == wait_for_cached_lsn_to_catch_up(current_lsn)
+      assert :ok == wait_for_cached_lsn_to_catch_up(origin, current_lsn)
 
       assert [
                %Transaction{
@@ -63,7 +63,7 @@ defmodule Electric.Replication.InitialSyncTest do
 
       # Wait for electrification to propagate through Postgres' logical replication
       current_lsn = fetch_current_lsn(conn)
-      assert :ok == wait_for_cached_lsn_to_catch_up(current_lsn)
+      assert :ok == wait_for_cached_lsn_to_catch_up(origin, current_lsn)
 
       assert [
                %Transaction{
@@ -161,15 +161,15 @@ defmodule Electric.Replication.InitialSyncTest do
   # order to make unit tests deterministic, we need to wait until the cached WAL implementation has seen the given
   # LSN and only then verify the stream of changes in the cached WAL.
 
-  defp wait_for_cached_lsn_to_catch_up(current_lsn) do
-    {:ok, ref} = CachedWal.Api.request_notification(current_lsn)
+  defp wait_for_cached_lsn_to_catch_up(origin, current_lsn) do
+    {:ok, ref} = CachedWal.Api.request_notification(origin, current_lsn)
 
     receive do
       {:cached_wal_notification, ^ref, :new_segments_available} -> :ok
     after
       @sleep_timeout ->
         flunk(
-          "Timed out while waiting to see #{current_lsn} in CachedWal, with it's position being #{inspect(CachedWal.Api.get_current_position())}"
+          "Timed out while waiting to see #{current_lsn} in CachedWal, with it's position being #{inspect(CachedWal.Api.get_current_position(origin))}"
         )
     end
   end
