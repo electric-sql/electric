@@ -21,24 +21,20 @@ Similarly, applications notify the sidecar of potential changes that need to be 
 
 ## Pre-reqs
 
-You need [NodeJS >= 16.11 and Docker Compose v2](https://electric-sql.com/docs/usage/installation/prereqs). Install `yarn` if you don't have it already:
-
-```shell
-npm -g install yarn
-```
+You need [NodeJS >= 16.11 and Docker Compose v2](https://electric-sql.com/docs/usage/installation/prereqs).
 
 ## Installing dependencies
 
 Install the sidecar's dependencies:
 ```sh
 cd sidecar
-yarn
+npm install
 ```
 
 Also install the application's dependencies:
 ```sh
 cd apps/node
-yarn
+npm install
 ```
 
 ## Quickstart
@@ -46,14 +42,14 @@ yarn
 Before you can run the application, you need to start Postgres and the Electric sync service:
 ```sh
 cd apps/node
-yarn backend:start # or backend:up to run in the background
+npm run backend:start # or backend:up to run in the background
 ```
 
 Open another terminal to migrate the Postgres database and generate an Electric client for the application: 
 ```sh
 cd apps/node
-yarn db:migrate
-yarn client:generate
+npm run db:migrate
+npm run client:generate
 ```
 
 Now, you can run the application and the sidecar with the following command (from the root folder):
@@ -69,7 +65,7 @@ Go ahead and add some items to the database. Check that the added items have bee
 
 ```sh
 cd apps/node
-yarn db:psql
+npm run db:psql
 ```
 
 Now add some new record to the `items` table directly on Postgres and see it reactively appear on the node application.
@@ -78,7 +74,7 @@ When you're done, you can tear down Postgres and the Electric sync service:
 
 ```sh
 cd apps/node
-yarn backend:down # or backend:up to run in the background
+npm run backend:down # or backend:up to run in the background
 ```
 
 ## Sidecar configuration

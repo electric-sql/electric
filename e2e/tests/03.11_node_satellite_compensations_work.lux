@@ -41,7 +41,7 @@
     ??[proto] recv: #SatOpLog
 
     # Disconnect the client
-    !db.notifier.connectivityStateChanged(db.notifier.dbName, { status: 'disconnected' })
+    !db.disconnect()
 
 [shell pg_1]
     # Concurrently, update and then delete the referenced row on the server
@@ -64,7 +64,7 @@
 
 [shell satellite_1]
     # Reconnect the client, expecting no errors to show up
-    !db.notifier.connectivityStateChanged(db.notifier.dbName, { status: 'available' })
+    !db.connect()
     ??[proto] send: #SatOpLog
     ??[proto] recv: #SatOpLog
 

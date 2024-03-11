@@ -1,9 +1,9 @@
-import { StyleSheet } from 'react-native'
+import {StyleSheet} from 'react-native';
 
 export const styles = StyleSheet.create({
   buttons: {
     flex: 1,
-    flexDirection: 'row'
+    flexDirection: 'row',
   },
   button: {
     alignItems: 'center',
@@ -15,19 +15,19 @@ export const styles = StyleSheet.create({
     backgroundColor: '#1e2123',
     color: '#f9fdff',
     width: '40%',
-    height: 50
+    height: 50,
   },
   iconContainer: {
     flex: 1,
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 20
+    marginTop: 20,
   },
   items: {
     flex: 1,
     flexDirection: 'column',
-    alignItems: 'top',
-    height: 140
+    alignItems: 'flex-start',
+    height: 140,
   },
   item: {
     fontSize: 16,
@@ -42,7 +42,7 @@ export const styles = StyleSheet.create({
     backgroundColor: '#1e2123',
     color: '#f9fdff',
     width: '90%',
-    textAlign: 'center'
+    textAlign: 'center',
   },
   text: {
     fontSize: 16,
@@ -51,4 +51,4 @@ export const styles = StyleSheet.create({
     letterSpacing: 0.25,
     color: '#f9fdff',
   },
-})
+});
