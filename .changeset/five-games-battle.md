@@ -1,5 +1,5 @@
 ---
-"electric-sql": minor
+"electric-sql": patch
 ---
 
 New adapter for supporting op-sqlite
