@@ -46,7 +46,7 @@ spec:
         ports:
         - name: satellite-http
           containerPort: 5133
-        - name: logical-publisher-tcp
+        - name: logical-pub-tcp
           containerPort: 5433
         - name: pg-proxy-tcp
           containerPort: 65432
