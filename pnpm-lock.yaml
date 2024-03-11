@@ -20,6 +20,9 @@ importers:
       '@electric-sql/prisma-generator':
         specifier: workspace:*
         version: link:../../generator
+      '@op-engineering/op-sqlite':
+        specifier: '>= 2.0.16'
+        version: 2.0.20(react-native@0.68.0)(react@18.2.0)
       '@prisma/client':
         specifier: 4.8.1
         version: 4.8.1(prisma@4.8.1)
@@ -4342,6 +4345,16 @@ packages:
   /@one-ini/wasm@0.1.1:
     resolution: {integrity: sha512-XuySG1E38YScSJoMlqovLru4KTUNSjgVTIjyh7qMX6aNN5HY5Ct5LhRJdxO79JtTzKfzV/bnWpz+zquYrISsvw==}
     dev: true
+
+  /@op-engineering/op-sqlite@2.0.20(react-native@0.68.0)(react@18.2.0):
+    resolution: {integrity: sha512-NdxjRIoDe6j9DL0FkoPdx4yZZqsQ9oIKsyKgrsEQ4/sDBV7xrY65DvUJ1zoslnvcgv3g7SXwxupr3p8VPG5hZw==}
+    peerDependencies:
+      react: '*'
+      react-native: '*'
+    dependencies:
+      react: 18.2.0
+      react-native: 0.68.0(@babel/core@7.23.9)(@babel/preset-env@7.22.4)(react@18.2.0)
+    dev: false
 
   /@opentelemetry/api@1.4.1:
     resolution: {integrity: sha512-O2yRJce1GOc6PAy3QxFM4NzFiWzvScDC1/5ihYBL6BUEVdq0XMWN01sppE+H6bBXbaFYipjwFLEWLg5PaSOThA==}

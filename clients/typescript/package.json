@@ -12,6 +12,7 @@
     "android",
     "better-sqlite3",
     "capacitor",
+    "op-sqlite",
     "cordova",
     "crdt",
     "crdts",
@@ -53,6 +54,7 @@
     "./capacitor": "./dist/drivers/capacitor-sqlite/index.js",
     "./expo": "./dist/drivers/expo-sqlite/index.js",
     "./expo-next": "./dist/drivers/expo-sqlite-next/index.js",
+    "./op-sqlite": "./dist/drivers/op-sqlite/index.js",
     "./generic": "./dist/drivers/generic/index.js",
     "./node": "./dist/drivers/better-sqlite3/index.js",
     "./react": "./dist/frameworks/react/index.js",
@@ -102,6 +104,9 @@
       ],
       "vuejs": [
         "./dist/frameworks/vuejs/index.d.ts"
+      ],
+      "op-sqlite": [
+        "./dist/drivers/op-sqlite/index.d.ts"
       ],
       "wa-sqlite": [
         "./dist/drivers/wa-sqlite/index.d.ts"
@@ -254,6 +259,7 @@
     "web-worker": "^1.2.0"
   },
   "peerDependencies": {
+    "@op-engineering/op-sqlite": ">= 2.0.16",
     "@capacitor-community/sqlite": ">= 5.4.1",
     "@tauri-apps/plugin-sql": "2.0.0-alpha.5",
     "cordova-sqlite-storage": ">= 5.0.0",
@@ -267,6 +273,9 @@
     "wa-sqlite": "rhashimoto/wa-sqlite#semver:^0.9.8"
   },
   "peerDependenciesMeta": {
+    "@op-engineering/op-sqlite": {
+      "optional": true
+    },
     "@capacitor-community/sqlite": {
       "optional": true
     },
