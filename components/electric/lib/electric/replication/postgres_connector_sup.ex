@@ -56,8 +56,8 @@ defmodule Electric.Replication.PostgresConnectorSup do
       else
         {Postgres.Writer, writer_config}
       end,
-      # Uses a globally registered name
       {CachedWal.EtsBacked,
+       origin: origin,
        subscribe_to: [{postgres_producer_consumer, []}],
        wal_window_size: Connectors.get_wal_window_opts(connector_config).in_memory_size},
       {Proxy, connector_config: connector_config}
