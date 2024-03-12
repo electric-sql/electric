@@ -24,10 +24,9 @@ export const useActivityEvents = ({
   const numberOfUnreadActivities =
     useLiveQuery(
       db.liveRawQuery({
-        sql: 'SELECT COUNT(*) FROM activity_events WHERE read_at IS NULL',
+        sql: 'SELECT COUNT(*) AS count FROM activity_events WHERE read_at IS NULL',
       }),
-    ).results?.[0]?.['COUNT(*)'] ?? 0
-
+    ).results?.[0]?.count ?? 0
   // Update individual activity's read status through its ID
   const markActivityAsRead = useCallback(
     (activityId: string) =>

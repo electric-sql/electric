@@ -29,17 +29,22 @@ export const useMonitoringMetric = ({
   >(
     db.liveRawQuery({
       sql: `
-    SELECT
-      timestamp,
-      AVG(value) as value_avg,
-      MAX(value) as value_max,
-      MIN(value) as value_min
-    FROM monitoring
-    WHERE CAST (strftime('%s', timestamp) AS INT) > ${oldestTimeToSelect}
-    AND type = '${metricType}'
-    GROUP BY strftime('%s', timestamp) / ${aggregationWindowSeconds}
-    ORDER BY timestamp ASC
-    `,
+        SELECT
+          timestamp,
+          AVG(value) as value_avg,
+          MAX(value) as value_max,
+          MIN(value) as value_min
+        FROM monitoring
+        WHERE CAST (strftime('%s', timestamp) AS INT) > ?
+        AND type = ?
+        GROUP BY strftime('%s', timestamp) / ?
+        ORDER BY timestamp ASC
+      `,
+      args: [
+        oldestTimeToSelect,
+        metricType,
+        aggregationWindowSeconds
+      ],
     }),
   )
 

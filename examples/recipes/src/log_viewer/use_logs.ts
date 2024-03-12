@@ -29,11 +29,14 @@ export const useLogs = ({
   const totalNumberOfLogs = useLiveQuery(
     db.liveRawQuery({
       sql: `
-      SELECT COUNT(*) FROM logs WHERE
-      content LIKE '%${searchFilter}%'
-      ${sourceId ? `AND source_id = ${sourceId}` : ''}
+        SELECT COUNT(*) AS count FROM logs WHERE
+        content LIKE ?
+        ${sourceId ? `AND source_id = ?` : ''}
       `,
-    }),
+      args: [
+        `%${searchFilter}%`,
+        ...(sourceId ? [sourceId] : []),
+      ],
   ).results?.[0]?.['COUNT(*)'] ?? 0
 
   return {

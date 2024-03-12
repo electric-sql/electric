@@ -46,23 +46,23 @@ export const useElectricQueryLog = ({
   >(
     db.liveRawQuery({
       sql: `
-    SELECT
-        r.timestamp AS requestTime,
-        r.path AS path,
-        r.method AS method,
-        r.data AS payload,
-        r.processing AS processing,
-        r.cancelled AS cancelled,
-        rs.timestamp AS responseTime,
-        rs.status_code AS responseStatus,
-        rs.data AS responseData
-    FROM requests r
-    LEFT JOIN responses rs ON r.id = rs.request_id
-    ${whereClause}
-    ORDER BY r.timestamp DESC
-    LIMIT ${pagination.pageSize}
-    OFFSET ${pagination.pageIndex * pagination.pageSize};
-    `,
+        SELECT
+            r.timestamp AS requestTime,
+            r.path AS path,
+            r.method AS method,
+            r.data AS payload,
+            r.processing AS processing,
+            r.cancelled AS cancelled,
+            rs.timestamp AS responseTime,
+            rs.status_code AS responseStatus,
+            rs.data AS responseData
+        FROM requests r
+        LEFT JOIN responses rs ON r.id = rs.request_id
+        ${whereClause}
+        ORDER BY r.timestamp DESC
+        LIMIT ${pagination.pageSize}
+        OFFSET ${pagination.pageIndex * pagination.pageSize};
+      `,
     }),
   )
 

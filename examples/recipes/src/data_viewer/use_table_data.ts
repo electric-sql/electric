@@ -49,12 +49,11 @@ export const useTableData = ({
     useLiveQuery(
       db.liveRawQuery({
         sql: `
-      SELECT COUNT(*) FROM commerce_orders
+      SELECT COUNT(*) AS count FROM commerce_orders
       WHERE ${whereClause};
     `,
       }),
-    ).results?.[0]?.['COUNT(*)'] ?? 0
-
+    ).results?.[0]?.count ?? 0
   return {
     orders,
     totalNumberOfOrders,
