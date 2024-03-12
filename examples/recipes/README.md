@@ -30,6 +30,10 @@ Example of viewing and querying data through something like an analytics dashboa
 
 - [Schema](db/migrations/07-data_viewer_table.sql) - defines a generic commerce/order table.
 
+- [useTableData](src/data_viewer/use_table_data.ts) hook - returns data in format appropriate for tabulation for given pagination, sorting, and filtering parameters.
+
+- [useChartData](src/data_viewer/use_chart_data.ts) hook - returns data in format appropriate for charting for given time and aggregation parameters.
+
 - [Data Viewer](src/data_viewer/DataViewer.tsx) - allows browsing, sorting, filtering, and charting tables.
 
 ### Activity Events
