@@ -37,8 +37,9 @@ export function deserialiseDate(v: string, pgType: PgDateType): Date {
   switch (pgType) {
     case PgDateType.PG_TIMESTAMP:
     case PgDateType.PG_TIMESTAMPTZ:
-    case PgDateType.PG_DATE:
       return parse(v)
+    case PgDateType.PG_DATE:
+      return parse(`${v} 00:00:00.000`)
 
     case PgDateType.PG_TIME:
       // interpret as local time

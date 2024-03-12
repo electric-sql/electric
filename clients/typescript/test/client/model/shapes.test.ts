@@ -64,7 +64,8 @@ async function makeContext(t: ExecutionContext<ContextType>) {
     adapter,
     notifier,
     satellite,
-    registry
+    registry,
+    'SQLite'
   )
   const Post = electric.db.Post
   const Items = electric.db.Items
