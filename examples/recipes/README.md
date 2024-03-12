@@ -64,13 +64,22 @@ Example of submitting and monitoring background jobs. Progress is updated by the
 
 - [Background Jobs](src/background_jobs/BackgroundJobs.tsx) - table UI for managing background jobs.
 
+- [Server-side Job Processing](backend/demo-server/src/background-job-service.ts) - example of how Postgres notifications can be used to process jobs in the backend.
+
 ### Request-Response
 
 Example of substituting regular API calls with submitting requests lcoally and and viewing responses as they come in. This has the main benefits of offline persistence - all requests made while offline will eventually get serviced once back onlline without needing retries and other mechanisms - as well as a full audit log of all requests made.
 
 - [Schema](db/migrations/03-request_response_tables.sql) - stores requests and responses with metadata like timestamps, statuses, etc and ties
 
+- [useElectricQuery](src/request_response/use_electric_query.ts) hook - write declarative query and get results as they come in.
+
+- [useElectricQueryLog](src/request_response/use_electric_query_log.ts) hook - retrieve a log of all requests made.
+
 - [Request Viewer](src/request_response/RequestResponse.tsx) - interface to submit new requests and view log of recent requests made and responses received.
+
+- [Server-side Request Listener](backend/demo-server/src/pg-request-listener.ts) - example of how Postgres notifications can be used to process requests streaming into the backend.
+
 
 ## How to run the app
 
