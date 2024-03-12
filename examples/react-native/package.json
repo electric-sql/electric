@@ -25,6 +25,7 @@
     "electric-sql": "file:./electric-sql-0.9.5.tgz",
     "react": "18.2.0",
     "react-native": "0.73.6",
+    "react-native-get-random-values": "^1.11.0",
     "react-native-url-polyfill": "^2.0.0"
   },
   "devDependencies": {
