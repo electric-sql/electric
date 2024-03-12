@@ -5,9 +5,14 @@ import * as z from 'zod'
 import { Row, Statement } from '../../util'
 import { Transformation, transformFields } from '../conversions/input'
 import { Fields } from '../model/schema'
+import { Converter } from '../conversions/converter'
 
 export class NonTransactionalDB implements DB {
-  constructor(private _adapter: DatabaseAdapter, private _fields: Fields) {}
+  constructor(
+    private _adapter: DatabaseAdapter,
+    private _fields: Fields,
+    private _converter: Converter
+  ) {}
 
   withTableSchema(fields: Fields) {
     return new NonTransactionalDB(this._adapter, fields)
@@ -18,7 +23,7 @@ export class NonTransactionalDB implements DB {
     successCallback?: (db: DB, res: RunResult) => void,
     errorCallback?: (error: any) => void
   ) {
-    const { text, values } = statement.toParam({ numberedParameters: false })
+    const { text, values } = statement.toParam() //{ numberedParameters: false })
     this._adapter
       .run({ sql: text, args: values })
       .then((res) => {
@@ -45,19 +50,20 @@ export class NonTransactionalDB implements DB {
     successCallback: (db: DB, res: Z[]) => void,
     errorCallback?: (error: any) => void
   ) {
-    const { text, values } = statement.toParam({ numberedParameters: false })
+    const { text, values } = statement.toParam() //{ numberedParameters: false })
     this._adapter
       .query({ sql: text, args: values })
       .then((rows) => {
         try {
           const objects = rows.map((row) => {
-            // convert SQLite values back to JS values
+            // convert SQLite/PG values back to JS values
             // and then parse the transformed object
             // with the Zod schema to validate it
             const transformedRow = transformFields(
               row,
               this._fields,
-              Transformation.Sqlite2Js
+              this._converter,
+              Transformation.Decode
             )
             return schema.parse(transformedRow)
           })

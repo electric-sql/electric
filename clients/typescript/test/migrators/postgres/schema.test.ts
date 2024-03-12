@@ -1,7 +1,6 @@
 import test from 'ava'
 
-import { AnyDatabase } from '../../../src/drivers'
-import { DatabaseAdapter } from '../../../src/drivers/node-postgres'
+import { Database, DatabaseAdapter } from '../../../src/drivers/node-postgres'
 import { PgBundleMigrator as BundleMigrator } from '../../../src/migrators/bundle'
 import { satelliteDefaults } from '../../../src/satellite/config'
 
@@ -13,7 +12,7 @@ import { makePgDatabase } from '../../support/node-postgres'
 type Context = {
   dbName: string
   adapter: DatabaseAdapter
-  db: AnyDatabase
+  db: Database
   stopPG: () => Promise<void>
 }
 

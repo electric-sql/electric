@@ -75,13 +75,15 @@ export const electrify = async <DB extends DbSchema<any>>(
     configWithDefaults
   )
 
+  const dialect = migrator.electricQueryBuilder.dialect
   const electric = ElectricClient.create(
     dbName,
     dbDescription,
     adapter,
     notifier,
     satellite,
-    registry
+    registry,
+    dialect
   )
 
   if (satellite.connectivityState !== undefined) {

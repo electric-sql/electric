@@ -1,15 +1,19 @@
-// TODO: fix the below
-//       was probably added because the driver does not support passing a BigInt
-//       and expects it to be passed as a string instead
-/*
-(BigInt.prototype as any).toJSON = function () {
-  return this.toString();
-};
-*/
-
+import pg from 'pg'
 import type { Client } from 'pg'
 import EmbeddedPostgres from 'embedded-postgres'
 import { Row, Statement } from '../../util'
+
+// Modify how 'pg' parses JSON values
+// simply return it as a string
+// our conversions will correctly parse it
+/*
+const parseJSON = (value: string) => {
+  return value
+}
+pg.types.setTypeParser(pg.types.builtins.JSON, parseJSON)
+pg.types.setTypeParser(pg.types.builtins.JSONB, parseJSON)
+*/
+const originalGetTypeParser = pg.types.getTypeParser
 
 export type QueryResult = {
   rows: Row[]
@@ -32,10 +36,24 @@ export class ElectricDatabase implements Database {
   ) {}
 
   async exec(statement: Statement): Promise<QueryResult> {
-    const { rows, rowCount } = await this.db.query<Row>(
-      statement.sql,
-      statement.args
-    )
+    const { rows, rowCount } = await this.db.query<Row>({
+      text: statement.sql,
+      values: statement.args,
+      types: {
+        // Modify the parser to not parse JSON values
+        // Instead, return them as strings
+        // our conversions will correctly parse them
+        getTypeParser: ((oid: number) => {
+          if (
+            oid === pg.types.builtins.JSON ||
+            oid === pg.types.builtins.JSONB
+          ) {
+            return (val) => val
+          }
+          return originalGetTypeParser(oid)
+        }) as typeof pg.types.getTypeParser,
+      },
+    })
     return {
       rows,
       rowsModified: rowCount ?? 0,

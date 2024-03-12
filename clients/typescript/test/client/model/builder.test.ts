@@ -11,7 +11,8 @@ const tbl = new Builder(
   'Post',
   ['id', 'title', 'contents', 'nbr'],
   shapeManager,
-  postTableDescription
+  postTableDescription,
+  'SQLite'
 )
 
 // Sync all shapes such that we don't get warnings on every query
