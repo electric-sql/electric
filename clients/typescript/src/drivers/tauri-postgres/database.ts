@@ -1,12 +1,3 @@
-// TODO: fix the below
-//       was probably added because the driver does not support passing a BigInt
-//       and expects it to be passed as a string instead
-/*
-(BigInt.prototype as any).toJSON = function () {
-  return this.toString();
-};
-*/
-
 import { Row, Statement } from '../../util'
 
 export type QueryResult = {

@@ -41,21 +41,13 @@ import {
 import { NarrowInclude } from '../input/inputNarrowing'
 import { IShapeManager } from './shapes'
 import { ShapeSubscription } from '../../satellite'
-import {
-  transformCreate,
-  transformCreateMany,
-  transformDelete,
-  transformDeleteMany,
-  transformFindNonUnique,
-  transformFindUnique,
-  transformUpdate,
-  transformUpdateMany,
-} from '../conversions/input'
 import { Rel, Shape } from '../../satellite/shapes/types'
 import {
   IReplicationTransformManager,
   transformTableRecord,
 } from './transforms'
+import { InputTransformer } from '../conversions/input'
+import { Dialect } from '../../migrators/query-builder/builder'
 
 type AnyTable = Table<any, any, any, any, any, any, any, any, any, HKT>
 
@@ -116,7 +108,9 @@ export class Table<
     private _notifier: Notifier,
     private _shapeManager: IShapeManager,
     private _replicationTransformManager: IReplicationTransformManager,
-    private _dbDescription: DbSchema<any>
+    private _dbDescription: DbSchema<any>,
+    private _transformer: InputTransformer,
+    public dialect: Dialect
   ) {
     this._fields = this._dbDescription.getFields(tableName)
     const fieldNames = this._dbDescription.getFieldNames(tableName)
@@ -124,10 +118,16 @@ export class Table<
     this._builder = new Builder(
       tableName,
       fieldNames,
-      _shapeManager,
-      tableDescription
+      this._shapeManager,
+      tableDescription,
+      this.dialect
     )
-    this._executor = new Executor(adapter, _notifier, this._fields)
+    this._executor = new Executor(
+      adapter,
+      _notifier,
+      this._fields,
+      this._transformer.converter
+    )
     this._qualifiedTableName = new QualifiedTablename('main', tableName)
     this._tables = new Map()
     this._schema = tableDescription.modelSchema
@@ -432,7 +432,7 @@ export class Table<
     continuation: (record: Kind<GetPayload, T> & Record<string, any>) => void,
     onError: (err: any) => void
   ) {
-    const validatedInput = transformCreate(
+    const validatedInput = this._transformer.transformCreate(
       validate(i, this.createSchema),
       this._fields
     )
@@ -588,7 +588,7 @@ export class Table<
     continuation: (res: BatchPayload) => void,
     onError: (err: any) => void
   ) {
-    const data = transformCreateMany(
+    const data = this._transformer.transformCreateMany(
       validate(i, this.createManySchema),
       this._fields
     )
@@ -608,7 +608,7 @@ export class Table<
     continuation: (res: Kind<GetPayload, T> | null) => void,
     onError: (err: any) => void
   ) {
-    const data = transformFindUnique(
+    const data = this._transformer.transformFindUnique(
       validate(i, this.findUniqueSchema),
       this._fields
     )
@@ -647,7 +647,7 @@ export class Table<
     continuation: (res: Kind<GetPayload, T> | null) => void,
     onError: (err: any) => void
   ) {
-    const data = transformFindNonUnique(
+    const data = this._transformer.transformFindNonUnique(
       validate(i ?? {}, this.findSchema),
       this._fields
     )
@@ -885,7 +885,7 @@ export class Table<
     continuation: (res: Kind<GetPayload, T>[]) => void,
     onError: (err: any) => void
   ) {
-    const data = transformFindNonUnique(
+    const data = this._transformer.transformFindNonUnique(
       validate(i ?? {}, this.findSchema),
       this._fields
     )
@@ -1311,7 +1311,10 @@ export class Table<
     continuation: (res: Kind<GetPayload, T>) => void,
     onError: (err: any) => void
   ) {
-    const data = transformUpdate(validate(i, this.updateSchema), this._fields)
+    const data = this._transformer.transformUpdate(
+      validate(i, this.updateSchema),
+      this._fields
+    )
 
     // Find the record and make sure it is unique
     this._findUnique(
@@ -1473,7 +1476,7 @@ export class Table<
     continuation: (res: BatchPayload) => void,
     onError: (err: any) => void
   ) {
-    const data = transformUpdateMany(
+    const data = this._transformer.transformUpdateMany(
       validate(i, this.updateManySchema),
       this._fields
     )
@@ -1548,7 +1551,10 @@ export class Table<
     continuation: (res: Kind<GetPayload, T>) => void,
     onError: (err: any) => void
   ) {
-    const data = transformDelete(validate(i, this.deleteSchema), this._fields)
+    const data = this._transformer.transformDelete(
+      validate(i, this.deleteSchema),
+      this._fields
+    )
     // Check that the record exists
     this._findUniqueWithoutAutoSelect(
       data as any,
@@ -1573,7 +1579,7 @@ export class Table<
     continuation: (res: BatchPayload) => void,
     onError: (err: any) => void
   ) {
-    const data = transformDeleteMany(
+    const data = this._transformer.transformDeleteMany(
       validate(i ?? {}, this.deleteManySchema),
       this._fields
     )

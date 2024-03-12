@@ -1,8 +1,9 @@
 import { ForeignKey } from '../triggers'
 import { QualifiedTablename, SqlValue, Statement } from '../../util'
 
+export type Dialect = 'SQLite' | 'Postgres'
 export abstract class QueryBuilder {
-  abstract readonly dialect: 'SQLite' | 'Postgres'
+  abstract readonly dialect: Dialect
   abstract readonly paramSign: '?' | '$'
 
   /**
