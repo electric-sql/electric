@@ -10,6 +10,8 @@ type TauriQueryResult = {
   rows_modified: number
 }
 
+type TauriInvokeFn = (cmd: string, params?: object) => Promise<any>
+
 export interface Database {
   name: string
   exec(statement: Statement): Promise<QueryResult>
@@ -19,7 +21,7 @@ export interface Database {
 export class ElectricDatabase implements Database {
   // Do not use this constructor directly.
   // Create a Database instance using the static `init` method instead.
-  private constructor(public name: string, private invoke: Function) {}
+  private constructor(public name: string, private invoke: TauriInvokeFn) {}
 
   private tauriExec(statement: Statement): Promise<TauriQueryResult> {
     return this.invoke('tauri_exec_command', {
@@ -58,7 +60,7 @@ export class ElectricDatabase implements Database {
     await this.invoke('tauri_stop_postgres')
   }
 
-  static async init(dbName: string, invoke: Function) {
+  static async init(dbName: string, invoke: TauriInvokeFn) {
     await invoke('tauri_init_command', { name: dbName })
     return new ElectricDatabase(dbName, invoke)
   }

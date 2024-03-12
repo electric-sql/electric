@@ -54,6 +54,19 @@ class SqliteBuilder extends QueryBuilder {
     )})`
   }
 
+  getLocalTableNames(notIn: string[] = []): Statement {
+    const ignore = this.metaTables.concat(notIn)
+    const tables = `
+      SELECT name FROM sqlite_master
+        WHERE type = 'table' AND
+              name NOT IN (${ignore.map(() => '?').join(',')})
+    `
+    return {
+      sql: tables,
+      args: ignore,
+    }
+  }
+
   insertOrIgnore(
     schema: string,
     table: string,

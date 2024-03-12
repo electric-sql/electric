@@ -26,7 +26,7 @@ export const electrify = async <T extends Database, DB extends DbSchema<any>>(
   const migrator =
     opts?.migrator || new PgBundleMigrator(adapter, dbDescription.pgMigrations)
   const socketFactory = opts?.socketFactory || WebSocketWeb
-  const prepare = async (_connection: DatabaseAdapterI) => {}
+  const prepare = async (_connection: DatabaseAdapterI) => undefined
 
   const client = await baseElectrify(
     dbName,
