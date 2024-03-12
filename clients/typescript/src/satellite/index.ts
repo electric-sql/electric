@@ -17,6 +17,7 @@ import {
   RelationCallback,
   OutboundStartedCallback,
   SatelliteError,
+  ReplicationStatus,
 } from '../util/types'
 import {
   ClientShapeDefinition,
@@ -84,6 +85,7 @@ export interface Client {
   shutdown(): void
   authenticate(authState: AuthState): Promise<AuthResponse>
   isConnected(): boolean
+  getOutboundReplicationStatus(): ReplicationStatus
   startReplication(
     lsn?: LSN,
     schemaVersion?: string,
