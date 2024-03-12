@@ -2,15 +2,15 @@ import anyTest, { TestFn } from 'ava'
 import Database from 'better-sqlite3'
 import type { Database as BetterSqlite3Database } from 'better-sqlite3'
 
-import { MockRegistry } from '../../../src/satellite/mock'
+import { MockRegistry } from '../../../../src/satellite/mock'
 
-import { electrify } from '../../../src/drivers/better-sqlite3'
+import { electrify } from '../../../../src/drivers/better-sqlite3'
 import {
   _NOT_UNIQUE_,
   _RECORD_NOT_FOUND_,
-} from '../../../src/client/validation/errors/messages'
-import { schema } from '../generated'
-import { ContextType, datatypeTests } from './datatype.test'
+} from '../../../../src/client/validation/errors/messages'
+import { schema } from '../../generated'
+import { ContextType, datatypeTests } from '../datatype'
 
 const test = anyTest as TestFn<
   ContextType & {
