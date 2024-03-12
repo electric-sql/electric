@@ -1,6 +1,9 @@
 import {StyleSheet} from 'react-native';
 
 export const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
   buttons: {
     flex: 1,
     flexDirection: 'row',
@@ -27,7 +30,6 @@ export const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'column',
     alignItems: 'flex-start',
-    height: 140,
   },
   item: {
     fontSize: 16,
