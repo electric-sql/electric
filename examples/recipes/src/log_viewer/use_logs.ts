@@ -18,7 +18,7 @@ export const useLogs = ({
     db.logs.liveMany({
       where: {
         content: { contains: searchFilter },
-        ...(sourceId && { source_id: sourceId })
+        ...(sourceId && { source_id: sourceId }),
       },
       orderBy: { timestamp: 'desc' },
       take: maxNumberOfLogs,
@@ -26,18 +26,17 @@ export const useLogs = ({
   )
 
   // Use raw SQL to count all logs matching filter
-  const totalNumberOfLogs = useLiveQuery(
-    db.liveRawQuery({
-      sql: `
+  const totalNumberOfLogs =
+    useLiveQuery(
+      db.liveRawQuery({
+        sql: `
         SELECT COUNT(*) AS count FROM logs WHERE
         content LIKE ?
         ${sourceId ? `AND source_id = ?` : ''}
       `,
-      args: [
-        `%${searchFilter}%`,
-        ...(sourceId ? [sourceId] : []),
-      ],
-  ).results?.[0]?.['COUNT(*)'] ?? 0
+        args: [`%${searchFilter}%`, ...(sourceId ? [sourceId] : [])],
+      }),
+    ).results?.[0]?.count ?? 0
 
   return {
     logs,
