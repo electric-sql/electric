@@ -148,4 +148,18 @@ defmodule Electric.Postgres.Dialect.Postgresql do
       unquoted_name(name)
     end
   end
+
+  def quote_ident({schema, name}), do: quote_ident(schema, name)
+
+  def quote_ident(name) do
+    ~s|"#{escape_quotes(name, ?")}"|
+  end
+
+  def quote_ident(schema, name) do
+    ~s|"#{escape_quotes(schema, ?")}"."#{escape_quotes(name, ?")}"|
+  end
+
+  def escape_quotes(str, q) do
+    :binary.replace(str, <<q>>, <<q, q>>, [:global])
+  end
 end

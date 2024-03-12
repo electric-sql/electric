@@ -5,6 +5,9 @@ defmodule Electric.Replication.Postgres.Client do
   Uses `:epgsql` for it's `start_replication` function. Note that epgsql
   doesn't support connecting via a unix socket.
   """
+
+  import Electric.Postgres.Dialect.Postgresql, only: [quote_ident: 1]
+
   alias Electric.Postgres.Extension
   alias Electric.Replication.Connectors
 
@@ -174,6 +177,27 @@ defmodule Electric.Replication.Postgres.Client do
        {:error, :error, "42601", :syntax_error,
         "syntax error at or near \"CREATE_REPLICATION_SLOT\"" = msg, _c_stacktrace}} ->
         {:error, {:create_replication_slot_syntax_error, msg}}
+    end
+  end
+
+  def create_publication(conn, name, []) do
+    create_publication(conn, name, "")
+  end
+
+  def create_publication(conn, name, tables) when is_list(tables) do
+    table_list =
+      tables
+      |> Enum.map(&quote_ident/1)
+      |> Enum.join(", ")
+
+    create_publication(conn, name, "FOR TABLE #{table_list}")
+  end
+
+  def create_publication(conn, name, table_spec) when is_binary(table_spec) do
+    case squery(conn, ~s|CREATE PUBLICATION "#{name}" #{table_spec}|) do
+      {:ok, _, _} -> {:ok, name}
+      # TODO: Verify that the publication has the correct tables
+      {:error, {_, _, _, :duplicate_object, _, _}} -> {:ok, name}
     end
   end
 

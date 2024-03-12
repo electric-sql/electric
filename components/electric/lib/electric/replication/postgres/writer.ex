@@ -1,6 +1,8 @@
 defmodule Electric.Replication.Postgres.Writer do
   use GenStage
 
+  import Electric.Postgres.Dialect.Postgresql, only: [quote_ident: 1, escape_quotes: 2]
+
   alias Electric.Postgres.Extension
   alias Electric.Postgres.ShadowTableTransformation
   alias Electric.Replication.Changes
@@ -148,10 +150,9 @@ defmodule Electric.Replication.Postgres.Writer do
   end
 
   defp change_to_statement(%Changes.NewRecord{record: data, relation: table}, relations) do
-    {table_schema, table_name} = table
     columns = relations[table].columns
 
-    table_sql = quote_ident(table_schema, table_name)
+    table_sql = quote_ident(table)
     columns_sql = Enum.map_join(columns, ",", &quote_ident(&1.name))
     values_sql = column_values(data, columns) |> encode_values()
 
@@ -191,19 +192,7 @@ defmodule Electric.Replication.Postgres.Writer do
   # necessary type casts.
   defp encode_value(str, _type), do: quote_string(str)
 
-  defp quote_ident(name) do
-    ~s|"#{escape_quotes(name, ?")}"|
-  end
-
-  defp quote_ident(schema, name) do
-    ~s|"#{escape_quotes(schema, ?")}"."#{escape_quotes(name, ?")}"|
-  end
-
   defp quote_string(str) do
     ~s|'#{escape_quotes(str, ?')}'|
-  end
-
-  defp escape_quotes(str, q) do
-    :binary.replace(str, <<q>>, <<q, q>>, [:global])
   end
 end
