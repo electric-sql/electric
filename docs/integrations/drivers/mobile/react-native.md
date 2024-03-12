@@ -3,17 +3,17 @@ title: React Native
 sidebar_position: 20
 ---
 
-ElectricSQL supports [React Native](https://reactnative.dev) via the [react-native-sqlite-storage](https://github.com/andpor/react-native-sqlite-storage) driver.
+ElectricSQL supports [React Native](https://reactnative.dev) via the [@op-engineering/op-sqlite](https://github.com/OP-Engineering/op-sqlite) driver.
 
 ## Dependencies
 
-Add `react-native-sqlite-storage` as a dependency to your app, e.g.:
+Add `@op-engineering/op-sqlite` as a dependency to your app, e.g.:
 
 ```shell
 npm install react-native-sqlite-storage
 ```
 
-See the [react-native-sqlite-storage README](https://github.com/andpor/react-native-sqlite-storage#installation) for additional steps -- basically you need
+See the [op-sqlite documentation](https://ospfranco.notion.site/Installation-Flags-93044890aa3d4d14b6c525ba4ba8686f) for additional steps -- basically you might need
 to configure the native modules for your target environments.
 
 ## Usage
@@ -21,8 +21,8 @@ to configure the native modules for your target environments.
 You can use react-native-sqlite-storage with or without the promise API enabled. The example below shows using it with promises enabled:
 
 ```tsx
-import SQLite from 'react-native-sqlite-storage'
-import { electrify } from 'electric-sql/react-native'
+import { open as openOPSQLiteConn } from '@op-engineering/op-sqlite'
+import { electrify } from 'electric-sql/op-sqlite'
 
 // Import your generated database schema.
 import { schema } from './generated/client'
@@ -32,20 +32,14 @@ const config = {
   url: 'https://example.com:5133'
 }
 
-// Enable the promise API. Note that we use the
-// `promisesEnabled` flag again below to tell the
-// driver adapter that we're using the promise API.
-const promisesEnabled = true
-SQLite.enablePromise(promisesEnabled)
-
-// Create the react-native-sqlite-storage database
-// connection. The first argument is your database
-// name. Changing this will create/use a new local
-// database file.
-const conn = await SQLite.openDatabase('electric.db')
+// Create the op-sqlite database connection.
+// The `name` argument is your database file name.
+// Changing this will create/use a new local database file.
+const dbName = 'electric.db'
+const conn = openOPSQLiteConn({ name: dbName })
 
 // Instantiate your electric client.
-const electric = await electrify(conn, schema, promisesEnabled, config)
+const electric = await electrify(conn, dbName, schema, promisesEnabled, config)
 
 // Connect to Electric, passing along your authentication token
 // See Usage -> Authentication for more details.
