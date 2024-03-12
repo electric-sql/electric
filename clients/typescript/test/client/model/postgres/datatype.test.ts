@@ -1,16 +1,16 @@
 import anyTest, { TestFn } from 'ava'
 
-import { MockRegistry } from '../../../src/satellite/mock'
+import { MockRegistry } from '../../../../src/satellite/mock'
 
-import { electrify } from '../../../src/drivers/node-postgres'
+import { electrify } from '../../../../src/drivers/node-postgres'
 import {
   _NOT_UNIQUE_,
   _RECORD_NOT_FOUND_,
-} from '../../../src/client/validation/errors/messages'
-import { schema } from '../generated'
-import { ContextType, datatypeTests } from './datatype.test'
-import { makePgDatabase } from '../../support/node-postgres'
-import { randomValue } from '../../../src/util'
+} from '../../../../src/client/validation/errors/messages'
+import { schema } from '../../generated'
+import { ContextType, datatypeTests } from '../datatype'
+import { makePgDatabase } from '../../../support/node-postgres'
+import { randomValue } from '../../../../src/util'
 
 // Run all tests in this file serially
 // because there are a lot of tests
