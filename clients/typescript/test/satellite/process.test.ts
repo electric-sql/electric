@@ -1463,12 +1463,12 @@ export const processTests = (test: TestFn<ContextType>) => {
     t.false(client.isConnected())
   })
 
-test('garbage collection is triggered when transaction from the same origin is replicated', async (t) => {
-  const { satellite } = t.context
-  const { runMigrations, adapter, authState, token } = t.context
-  await runMigrations()
-  const conn = await startSatellite(satellite, authState, token)
-  await conn.connectionPromise
+  test('garbage collection is triggered when transaction from the same origin is replicated', async (t) => {
+    const { satellite } = t.context
+    const { runMigrations, adapter, authState, token } = t.context
+    await runMigrations()
+    const conn = await startSatellite(satellite, authState, token)
+    await conn.connectionPromise
 
     adapter.run({
       sql: `INSERT INTO main.parent(id, value, other) VALUES (1, 'local', 1);`,
@@ -2036,28 +2036,28 @@ test('a subscription that failed to apply because of FK constraint triggers GC',
     } catch (error: any) {
       t.is(error.code, SatelliteErrorCode.TABLE_NOT_FOUND)
     }
-})
-  
+  })
+
   test("snapshot while not fully connected doesn't throw", async (t) => {
     const { adapter, runMigrations, satellite, client, authState, token } =
       t.context
     client.setStartReplicationDelayMs(100)
-  
+
     await runMigrations()
-  
+
     // Add log entry while offline
-    await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
-  
+    await adapter.run({ sql: `INSERT INTO main.parent(id) VALUES ('1'),('2')` })
+
     const conn = await startSatellite(satellite, authState, token)
-  
+
     // Performing a snapshot while the replication connection has not been stablished
     // should not throw
     await satellite._performSnapshot()
-  
+
     await conn.connectionPromise
-  
+
     await satellite._performSnapshot()
-  
+
     t.pass()
   })
 
