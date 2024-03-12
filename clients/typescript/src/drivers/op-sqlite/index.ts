@@ -1,5 +1,8 @@
 import { DbName } from '../../util/types'
 
+// Provide implementation for crypto.getRandomValues
+import 'react-native-get-random-values'
+
 import {
   ElectrifyOptions,
   electrify as baseElectrify,
