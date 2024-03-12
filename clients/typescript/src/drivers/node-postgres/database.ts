@@ -3,16 +3,6 @@ import type { Client } from 'pg'
 import EmbeddedPostgres from 'embedded-postgres'
 import { Row, Statement } from '../../util'
 
-// Modify how 'pg' parses JSON values
-// simply return it as a string
-// our conversions will correctly parse it
-/*
-const parseJSON = (value: string) => {
-  return value
-}
-pg.types.setTypeParser(pg.types.builtins.JSON, parseJSON)
-pg.types.setTypeParser(pg.types.builtins.JSONB, parseJSON)
-*/
 const originalGetTypeParser = pg.types.getTypeParser
 
 export type QueryResult = {
