@@ -8,5 +8,8 @@ CREATE TABLE IF NOT EXISTS chat_room (
   message TEXT NOT NULL
 );
 
+-- Index for timestamp column
+CREATE INDEX chat_room_idx_timestamp ON logs(timestamp);
+
 -- ⚡ Electrify the table
 ALTER TABLE chat_room ENABLE ELECTRIC;

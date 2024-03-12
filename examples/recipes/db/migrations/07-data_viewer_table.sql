@@ -13,10 +13,10 @@ CREATE TABLE IF NOT EXISTS commerce_orders (
 );
 
 -- Index for timestamp column in commerce_orders table
-CREATE INDEX idx_timestamp ON commerce_orders(timestamp);
+CREATE INDEX commerce_orders_idx_timestamp ON commerce_orders(timestamp);
 
 -- Index for country column in commerce_orders table
-CREATE INDEX idx_country ON commerce_orders(country);
+CREATE INDEX commerce_orders_idx_country ON commerce_orders(country);
 
 -- ⚡ Electrify the table
 ALTER TABLE commerce_orders ENABLE ELECTRIC;

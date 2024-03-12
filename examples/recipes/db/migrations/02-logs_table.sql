@@ -8,5 +8,8 @@ CREATE TABLE IF NOT EXISTS logs (
   content TEXT NOT NULL
 );
 
+-- Index for timestamp column
+CREATE INDEX logs_idx_timestamp ON logs(timestamp);
+
 -- ⚡ Electrify the table
 ALTER TABLE logs ENABLE ELECTRIC;

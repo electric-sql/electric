@@ -6,5 +6,8 @@ CREATE TABLE IF NOT EXISTS monitoring (
   value DOUBLE PRECISION NOT NULL
 );
 
+-- Index for type and timestamp columns
+CREATE INDEX monitoring_idx_type_timestamp ON monitoring(type, timestamp);
+
 -- ⚡ Electrify the table
 ALTER TABLE monitoring ENABLE ELECTRIC;
