@@ -1,5 +1,4 @@
 import { Statement } from '../util'
-import { dedent } from 'ts-dedent'
 import { QueryBuilder } from './query-builder'
 
 export type ForeignKey = {
