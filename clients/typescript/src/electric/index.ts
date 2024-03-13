@@ -11,7 +11,7 @@ import { ElectricClient } from '../client/model/client'
 import { DbSchema } from '../client/model/schema'
 
 export { ElectricNamespace }
-export type { DatabaseAdapter }
+export type * from './adapter'
 
 // These are the options that should be provided to the adapter's electrify
 // entrypoint. They are all optional to optionally allow different / mock
