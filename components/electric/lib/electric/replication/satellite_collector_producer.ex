@@ -12,15 +12,17 @@ defmodule Electric.Replication.SatelliteCollectorProducer do
 
   alias Electric.Postgres.Extension
   alias Electric.Replication.Changes.NewRecord
+  alias Electric.Replication.Connectors
 
   require Logger
 
-  def start_link(opts) do
-    GenStage.start_link(__MODULE__, opts, Keyword.take(opts, [:name]))
+  def start_link(connector_config) do
+    origin = Connectors.origin(connector_config)
+    GenStage.start_link(__MODULE__, connector_config, name: name(origin))
   end
 
-  def name(identifier \\ :default) do
-    {:via, :gproc, {:n, :l, {__MODULE__, identifier}}}
+  def name(origin) do
+    Electric.name(__MODULE__, origin)
   end
 
   def store_incoming_transactions(_, []), do: :ok
@@ -32,7 +34,7 @@ defmodule Electric.Replication.SatelliteCollectorProducer do
   # Internal API
 
   @impl GenStage
-  def init(opts) do
+  def init(connector_config) do
     table = ETS.Set.new!(ordered: true, keypos: 2)
 
     {:producer,
@@ -41,7 +43,7 @@ defmodule Electric.Replication.SatelliteCollectorProducer do
        next_key: 0,
        demand: 0,
        starting_from: -1,
-       write_to_pg_mode: Keyword.get(opts, :write_to_pg_mode, :logical_replication)
+       write_to_pg_mode: Connectors.write_to_pg_mode(connector_config)
      }}
   end
 

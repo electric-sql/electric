@@ -36,13 +36,12 @@ defmodule Electric.Replication.PostgresConnectorSup do
 
     writer_module_opts = [
       conn_config: connector_config,
-      producer: SatelliteCollectorProducer.name()
+      producer: SatelliteCollectorProducer.name(origin)
     ]
 
     children = [
       {SchemaCache, connector_config},
-      {SatelliteCollectorProducer,
-       name: SatelliteCollectorProducer.name(), write_to_pg_mode: write_to_pg_mode},
+      {SatelliteCollectorProducer, connector_config},
       {Postgres.LogicalReplicationProducer, connector_config},
       %{
         id: Postgres.MigrationConsumer,
