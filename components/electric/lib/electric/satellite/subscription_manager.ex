@@ -6,31 +6,41 @@ defmodule Electric.Satellite.SubscriptionManager do
   is tied to being able to resume from the PG cached WAL, which is neither persisted
   nor restored for now.
   """
-  use GenServer
-  require Logger
 
+  use GenServer
+
+  alias Electric.Replication.Connectors
   alias Electric.Replication.Shapes.ShapeRequest
 
-  @ets_table :saved_subscription_ids
+  require Logger
 
-  def start_link(_) do
-    GenServer.start_link(__MODULE__, [], name: __MODULE__)
+  def start_link(connector_config) do
+    origin = Connectors.origin(connector_config)
+    GenServer.start_link(__MODULE__, connector_config, name: name(origin))
+  end
+
+  def name(origin) do
+    Electric.name(__MODULE__, origin)
   end
 
   @doc """
   Saves the given shape requests under given subscription id for this client
   """
-  @spec save_subscription(String.t(), String.t(), [ShapeRequest.t()]) :: :ok
-  def save_subscription(client_id, subscription_id, shape_requests) do
-    GenServer.call(__MODULE__, {:save_subscription, {client_id, subscription_id}, shape_requests})
+  @spec save_subscription(Connectors.origin(), String.t(), String.t(), [ShapeRequest.t()]) :: :ok
+  def save_subscription(origin, client_id, subscription_id, shape_requests) do
+    GenServer.call(
+      name(origin),
+      {:save_subscription, {client_id, subscription_id}, shape_requests}
+    )
   end
 
   @doc """
   Finds the shape requests associated with a given subscription id for this client
   """
-  @spec fetch_subscription(String.t(), String.t()) :: {:ok, ShapeRequest.t()} | :error
-  def fetch_subscription(client_id, subscription_id) do
-    case :ets.lookup(@ets_table, {client_id, subscription_id}) do
+  @spec fetch_subscription(Connectors.origin(), String.t(), String.t()) ::
+          {:ok, ShapeRequest.t()} | :error
+  def fetch_subscription(origin, client_id, subscription_id) do
+    case :ets.lookup(ets_table_name(origin), {client_id, subscription_id}) do
       [] -> :error
       [{_key, data}] -> {:ok, data}
     end
@@ -39,26 +49,31 @@ defmodule Electric.Satellite.SubscriptionManager do
   @doc """
   Remove a subscription for a client
   """
-  @spec delete_subscription(String.t(), String.t()) :: :ok
-  def delete_subscription(client_id, subscription_id) do
-    GenServer.call(__MODULE__, {:delete_subscription, {client_id, subscription_id}})
+  @spec delete_subscription(Connectors.origin(), String.t(), String.t()) :: :ok
+  def delete_subscription(origin, client_id, subscription_id) do
+    GenServer.call(name(origin), {:delete_subscription, {client_id, subscription_id}})
   end
 
   @doc """
   Remove all subscriptions for a client
   """
-  @spec delete_all_subscriptions(String.t()) :: :ok
-  def delete_all_subscriptions(client_id) do
-    GenServer.call(__MODULE__, {:delete_all_subscriptions, client_id})
+  @spec delete_all_subscriptions(Connectors.origin(), String.t()) :: :ok
+  def delete_all_subscriptions(origin, client_id) do
+    GenServer.call(name(origin), {:delete_all_subscriptions, client_id})
   end
 
   # GenServer API
 
   @impl GenServer
-  def init(_) do
+  def init(connector_config) do
+    origin = Connectors.origin(connector_config)
     Logger.metadata(component: "SubscriptionManager")
-    table = :ets.new(@ets_table, [:named_table, :protected, :set])
-    {:ok, %{table: table}}
+    table = :ets.new(ets_table_name(origin), [:named_table, :protected, :set])
+    {:ok, %{table: table, connector_config: connector_config}}
+  end
+
+  defp ets_table_name(origin) do
+    String.to_atom(inspect(__MODULE__) <> ":" <> origin)
   end
 
   @impl GenServer
