@@ -793,6 +793,32 @@ test.serial('subscription succesful', async (t) => {
   t.is(res.subscriptionId, subscriptionId)
 })
 
+test.serial('RPC subscribe flow is not interleaved', async (t) => {
+  // SatSubsDataEnd cannot be received before SatSubsResp, otherwise
+  // we would get an error: 'Received subscribe response for unknown subscription <id>'
+  // On Github https://github.com/electric-sql/electric/pull/985
+  await connectAndAuth(t.context)
+  const { client, server } = t.context
+  await startReplication(client, server)
+
+  const shapeReq: ShapeRequest = {
+    requestId: 'fake',
+    definition: {
+      selects: [{ tablename: 'fake' }],
+    },
+  }
+
+  const subscriptionId = 'THE_ID'
+  const subsResp = Proto.SatSubsResp.fromPartial({ subscriptionId })
+  const beginSub = Proto.SatSubsDataBegin.fromPartial({ subscriptionId })
+  const endSub = Proto.SatSubsDataEnd.create()
+  // By not adding a delay in between messages we trigger the interleaving
+  server.nextRpcResponse('subscribe', [subsResp, beginSub, endSub])
+
+  const res = await client.subscribe(subscriptionId, [shapeReq])
+  t.is(res.subscriptionId, subscriptionId)
+})
+
 test.serial(
   'RPC correctly handles interleaved subscribe responses',
   async (t) => {
