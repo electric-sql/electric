@@ -44,6 +44,9 @@ defmodule Electric.Replication.PostgresConnectorMng do
           }
   end
 
+  @status_key :status
+  @connector_config_key :connector_config
+
   @spec start_link(Connectors.config()) :: {:ok, pid} | :ignore | {:error, term}
   def start_link(connector_config) do
     GenServer.start_link(__MODULE__, connector_config, [])
@@ -63,12 +66,15 @@ defmodule Electric.Replication.PostgresConnectorMng do
 
   @spec status(Connectors.origin()) :: State.status()
   def status(origin) do
-    GenServer.call(name(origin), :status)
+    case :ets.lookup(ets_table_name(origin), @status_key) do
+      [{@status_key, status}] -> status
+      [] -> :initialization
+    end
   end
 
   @spec connector_config(Connectors.origin()) :: Connectors.config()
   def connector_config(origin) do
-    GenServer.call(name(origin), :connector_config)
+    :ets.lookup_element(ets_table_name(origin), @connector_config_key, 2)
   end
 
   @impl GenServer
@@ -80,26 +86,46 @@ defmodule Electric.Replication.PostgresConnectorMng do
     Logger.metadata(origin: origin)
     Process.flag(:trap_exit, true)
 
-    connector_config = preflight_connector_config(connector_config)
+    # Use an ETS table to store data that are regularly looked up by other processes.
+    :ets.new(ets_table_name(origin), [:protected, :named_table, read_concurrency: true])
 
     state =
-      reset_state(%State{
-        origin: origin,
-        connector_config: connector_config,
-        conn_opts: Connectors.get_connection_opts(connector_config),
-        repl_opts: Connectors.get_replication_opts(connector_config),
-        write_to_pg_mode: Connectors.write_to_pg_mode(connector_config)
-      })
+      %State{origin: origin, connector_config: connector_config}
+      |> update_connector_config(&preflight_connector_config/1)
+      |> reset_state()
 
     {:ok, state, {:continue, :init}}
+  end
+
+  defp ets_table_name(origin) do
+    String.to_atom(inspect(__MODULE__) <> ":" <> origin)
   end
 
   defp reset_state(%State{} = state) do
     %State{
       state
       | backoff: {:backoff.init(1000, 10_000), nil},
-        status: :initialization,
         pg_connector_sup_monitor: nil
+    }
+    |> set_status(:initialization)
+  end
+
+  defp set_status(state, status) do
+    :ets.insert(ets_table_name(state.origin), {@status_key, status})
+    %{state | status: status}
+  end
+
+  defp update_connector_config(state, fun) do
+    connector_config = fun.(state.connector_config)
+
+    :ets.insert(ets_table_name(state.origin), {@connector_config_key, connector_config})
+
+    %{
+      state
+      | connector_config: connector_config,
+        conn_opts: Connectors.get_connection_opts(connector_config),
+        repl_opts: Connectors.get_replication_opts(connector_config),
+        write_to_pg_mode: Connectors.write_to_pg_mode(connector_config)
     }
   end
 
@@ -107,7 +133,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
   def handle_continue(:init, state) do
     case initialize_postgres(state) do
       :ok ->
-        state = %State{state | status: :establishing_repl_conn}
+        state = set_status(state, :establishing_repl_conn)
         {:noreply, state, {:continue, :establish_repl_conn}}
 
       {:error, {:ssl_negotiation_failed, _}} when state.conn_opts.ssl != :required ->
@@ -137,7 +163,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
         Logger.info("Successfully initialized Postgres connector #{inspect(state.origin)}.")
 
         ref = Process.monitor(sup_pid)
-        state = %State{state | status: :subscribing, pg_connector_sup_monitor: ref}
+        state = %State{state | pg_connector_sup_monitor: ref} |> set_status(:subscribing)
         {:noreply, state, {:continue, :subscribe}}
 
       :error ->
@@ -147,23 +173,14 @@ defmodule Electric.Replication.PostgresConnectorMng do
 
   def handle_continue(:subscribe, %State{write_to_pg_mode: :logical_replication} = state) do
     case start_subscription(state) do
-      :ok -> {:noreply, %State{state | status: :ready}}
+      :ok -> {:noreply, set_status(state, :ready)}
       {:error, _} -> {:noreply, schedule_retry(:subscribe, state)}
     end
   end
 
   def handle_continue(:subscribe, %State{write_to_pg_mode: :direct_writes} = state) do
     :ok = stop_subscription(state)
-    {:noreply, %State{state | status: :ready}}
-  end
-
-  @impl GenServer
-  def handle_call(:status, _from, state) do
-    {:reply, state.status, state}
-  end
-
-  def handle_call(:connector_config, _from, state) do
-    {:reply, state.connector_config, state}
+    {:noreply, set_status(state, :ready)}
   end
 
   @impl GenServer
@@ -352,13 +369,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
       "Falling back to trying an unencrypted connection to Postgres, since DATABASE_REQUIRE_SSL=false."
     )
 
-    connector_config = put_in(state.connector_config, [:connection, :ssl], false)
-
-    %State{
-      state
-      | connector_config: connector_config,
-        conn_opts: Connectors.get_connection_opts(connector_config)
-    }
+    update_connector_config(state, &put_in(&1, [:connection, :ssl], false))
   end
 
   defp extra_error_description(:invalid_authorization_specification) do
