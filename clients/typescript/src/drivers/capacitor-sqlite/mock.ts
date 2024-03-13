@@ -17,6 +17,10 @@ export class MockDatabase implements Database {
     })
   }
 
+  execute(): Promise<capSQLiteChanges> {
+    return this.run()
+  }
+
   query(): Promise<DBSQLiteValues> {
     return this.resolveIfNotFail({
       values: [
