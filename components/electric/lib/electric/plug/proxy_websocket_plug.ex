@@ -46,7 +46,7 @@ defmodule Electric.Plug.ProxyWebsocketPlug do
         )
 
       {:error, reason} ->
-        Logger.debug("Client WebSocket connection failed with reason: #{reason}")
+        Logger.warning("Client WebSocket connection failed with reason: #{reason}")
         send_resp(conn, 400, "Bad request")
     end
   end
