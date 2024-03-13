@@ -87,6 +87,35 @@ defmodule Electric.Replication.Shapes.ShapeRequest do
           layer_map: layer_map()
         }
 
+  defimpl Jason.Encoder do
+    def encode(shape_request, opts) do
+      shape_request
+      |> Electric.Replication.Shapes.ShapeRequest.to_json_map()
+      |> Jason.Encode.map(opts)
+    end
+  end
+
+  def to_json_map(%__MODULE__{} = shape_request) do
+    shape_request
+    |> Map.from_struct()
+    |> Map.update!(:included_tables, fn tables -> Enum.map(tables, &Tuple.to_list/1) end)
+  end
+
+  def to_json_maps(list) when is_list(list) do
+    Enum.map(list, &to_json_map/1)
+  end
+
+  def from_json_map(map) when is_map(map) do
+    struct(
+      __MODULE__,
+      Map.update!(map, :included_tables, fn tables -> Enum.map(tables, &List.to_tuple/1) end)
+    )
+  end
+
+  def from_json_maps(list) when is_list(list) do
+    Enum.map(list, &from_json_map/1)
+  end
+
   @doc """
   Convert shape request from Satellite to internal representation.
   """
