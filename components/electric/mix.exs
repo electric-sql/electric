@@ -54,7 +54,6 @@ defmodule Electric.MixProject do
       {:telemetry_poller, "~> 1.0"},
       {:telemetry_metrics, "~> 0.6"},
       {:joken, "~> 2.6"},
-      {:ets, "~> 0.9.0"},
       {:libgraph, "~> 0.16.0"},
       {:pathex, "~> 2.5.2"},
       {:stream_data, "~> 0.5", only: [:dev, :test]},
