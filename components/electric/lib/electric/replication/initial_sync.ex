@@ -102,7 +102,7 @@ defmodule Electric.Replication.InitialSync do
     origin = Connectors.origin(opts)
     {:ok, schema_version} = Extension.SchemaCache.load(origin)
 
-    start_readonly_txn_with_checkpoint(opts, {ref, parent}, marker, fn conn ->
+    start_readonly_txn_with_checkpoint(opts, {ref, parent}, marker, fn conn, _ ->
       Enum.reduce_while(requests, {Graph.new(), %{}, []}, fn request,
                                                              {acc_graph, results, req_ids} ->
         start = System.monotonic_time()
@@ -141,7 +141,7 @@ defmodule Electric.Replication.InitialSync do
     end)
   end
 
-  def query_after_move_in(move_in_ref, subquery_map, context,
+  def query_after_move_in(move_in_ref, {subquery_map, affected_txs}, context,
         reply_to: {ref, parent},
         connection: opts
       ) do
@@ -149,7 +149,7 @@ defmodule Electric.Replication.InitialSync do
     origin = Connectors.origin(opts)
     {:ok, schema_version} = Extension.SchemaCache.load(origin)
 
-    start_readonly_txn_with_checkpoint(opts, {ref, parent}, marker, fn conn ->
+    start_readonly_txn_with_checkpoint(opts, {ref, parent}, marker, fn conn, xmin ->
       Enum.reduce_while(subquery_map, {Graph.new(), %{}}, fn {layer, changes},
                                                              {acc_graph, results} ->
         case Shapes.ShapeRequest.query_moved_in_layer_data(
@@ -174,13 +174,13 @@ defmodule Electric.Replication.InitialSync do
           send(parent, {:move_in_query_failed, move_in_ref, reason})
 
         results ->
-          send(parent, {:move_in_query_data, move_in_ref, results})
+          send(parent, {:move_in_query_data, move_in_ref, xmin, results, affected_txs})
       end
     end)
   end
 
   defp start_readonly_txn_with_checkpoint(opts, {ref, parent}, marker, fun)
-       when is_function(fun, 1) do
+       when is_function(fun, 2) do
     Client.with_conn(Connectors.get_connection_opts(opts), fn conn ->
       Client.with_transaction(
         "ISOLATION LEVEL REPEATABLE READ READ ONLY",
@@ -199,7 +199,7 @@ defmodule Electric.Replication.InitialSync do
             )
 
           send(parent, {:data_insertion_point, ref, String.to_integer(xmin)})
-          fun.(conn)
+          fun.(conn, String.to_integer(xmin))
         end
       )
     end)

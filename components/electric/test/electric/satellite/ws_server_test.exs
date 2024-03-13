@@ -81,6 +81,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
       [:passthrough],
       get_current_position: fn -> @current_wal_pos end,
       lsn_in_cached_window?: fn num when is_integer(num) -> num > @current_wal_pos end,
+      stream_transactions: fn _, _ -> [] end,
       get_transactions: fn _ -> {:ok, []} end
     }
   ]) do
@@ -430,7 +431,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
         :ok =
           DownstreamProducerMock.produce(
             mocked_producer,
-            simple_transes(ctx.user_id, limit)
+            simple_transes(ctx.user_id, limit, 2)
           )
 
         assert {:ok, _} =
@@ -671,7 +672,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
         assert {["fake_id"], []} = receive_subscription_data(conn, sub_id)
 
         :ok =
-          DownstreamProducerMock.produce(mocked_producer, simple_transes(ctx.user_id, 10))
+          DownstreamProducerMock.produce(mocked_producer, simple_transes(ctx.user_id, 12, 1))
 
         # We've received 2 transactions at this point: migration and the first produced
         # we shouldn't receive more until we ack

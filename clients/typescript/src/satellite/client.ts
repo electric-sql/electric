@@ -121,6 +121,8 @@ type Events = {
   ) => Promise<void>
   additionalData: (data: AdditionalData, ack: () => void) => Promise<void>
   outbound_started: () => void
+  [SUBSCRIPTION_DELIVERED]: SubscriptionDeliveredCallback
+  [SUBSCRIPTION_ERROR]: SubscriptionErrorCallback
 }
 type EventEmitter = AsyncEventEmitter<Events>
 
@@ -170,6 +172,8 @@ export class SatelliteClient implements Client {
     startReplication: this.handleStartReq.bind(this),
     stopReplication: this.handleStopReq.bind(this),
   }
+
+  private listenerRemapping: Map<Function, Function> = new Map()
 
   constructor(
     dbDescription: DbSchema<any>,
@@ -228,6 +232,10 @@ export class SatelliteClient implements Client {
       ),
       additionalData: [],
       unseenAdditionalDataRefs: new Set(),
+      seenAdditionalDataSinceLastTx: {
+        dataRefs: [],
+        subscriptions: [],
+      },
     }
   }
 
@@ -322,7 +330,8 @@ export class SatelliteClient implements Client {
   startReplication(
     lsn?: LSN,
     schemaVersion?: string,
-    subscriptionIds?: string[]
+    subscriptionIds?: string[],
+    observedTransactionData?: Long[]
   ): Promise<StartReplicationResponse> {
     if (this.inbound.isReplicating !== ReplicationStatus.STOPPED) {
       return Promise.reject(
@@ -352,7 +361,11 @@ export class SatelliteClient implements Client {
           lsn
         )} subscriptions: ${subscriptionIds}`
       )
-      request = SatInStartReplicationReq.fromPartial({ lsn, subscriptionIds })
+      request = SatInStartReplicationReq.fromPartial({
+        lsn,
+        subscriptionIds,
+        observedTransactionData,
+      })
     }
 
     // Then set the replication state
@@ -478,22 +491,40 @@ export class SatelliteClient implements Client {
     successCallback: SubscriptionDeliveredCallback,
     errorCallback: SubscriptionErrorCallback
   ): void {
-    this.subscriptionsDataCache.on(SUBSCRIPTION_DELIVERED, successCallback)
-    this.subscriptionsDataCache.on(SUBSCRIPTION_ERROR, errorCallback)
+    const newCb: SubscriptionDeliveredCallback = async (data) => {
+      await successCallback(data)
+      this.inbound.seenAdditionalDataSinceLastTx.subscriptions.push(
+        data.subscriptionId
+      )
+      this.maybeSendAck('additionalData')
+    }
+
+    this.listenerRemapping.set(successCallback, newCb)
+
+    // We're remapping this callback to internal emitter to keep event queue correct -
+    // a delivered subscription processing should not interleave with next transaction processing
+    this.emitter.on(SUBSCRIPTION_DELIVERED, newCb)
+    this.subscriptionsDataCache.on(SUBSCRIPTION_DELIVERED, (data) =>
+      this.emitter.enqueueEmit(SUBSCRIPTION_DELIVERED, data)
+    )
+    this.emitter.on(SUBSCRIPTION_ERROR, errorCallback)
+    this.subscriptionsDataCache.on(SUBSCRIPTION_ERROR, (error) =>
+      this.emitter.enqueueEmit(SUBSCRIPTION_ERROR, error)
+    )
   }
 
   unsubscribeToSubscriptionEvents(
     successCallback: SubscriptionDeliveredCallback,
     errorCallback: SubscriptionErrorCallback
   ): void {
-    this.subscriptionsDataCache.removeListener(
+    this.emitter.removeListener(
       SUBSCRIPTION_DELIVERED,
-      successCallback
+      (this.listenerRemapping.get(successCallback) as any) || successCallback
     )
-    this.subscriptionsDataCache.removeListener(
-      SUBSCRIPTION_ERROR,
-      errorCallback
-    )
+    this.emitter.removeListener(SUBSCRIPTION_ERROR, errorCallback)
+
+    this.subscriptionsDataCache.removeAllListeners(SUBSCRIPTION_DELIVERED)
+    this.subscriptionsDataCache.removeAllListeners(SUBSCRIPTION_ERROR)
   }
 
   async subscribe(
@@ -986,6 +1017,10 @@ export class SatelliteClient implements Client {
           this.inbound.last_lsn = transaction.lsn
           this.inbound.lastTxId = transaction.id
           this.inbound.unackedTxs++
+          this.inbound.seenAdditionalDataSinceLastTx = {
+            dataRefs: [],
+            subscriptions: [],
+          }
           this.maybeSendAck()
         })
         replication.transactions.splice(lastTxnIdx)
@@ -1001,17 +1036,20 @@ export class SatelliteClient implements Client {
           throw new Error(
             'Unexpected additionalCommit message while not waiting for additionalData'
           )
+        const ref = op.additionalCommit!.ref
+
         // TODO: We need to include these in the ACKs as well
         this.emitter.enqueueEmit(
           'additionalData',
           replication.additionalData[lastDataIdx],
-          () => void 0
+          () => {
+            this.inbound.seenAdditionalDataSinceLastTx.dataRefs.push(ref)
+            this.maybeSendAck('additionalData')
+          }
         )
         replication.additionalData.splice(lastDataIdx)
         replication.incomplete = undefined
-        replication.unseenAdditionalDataRefs.delete(
-          op.additionalCommit.ref.toString()
-        )
+        replication.unseenAdditionalDataRefs.delete(ref.toString())
       }
 
       if (op.insert) {
@@ -1131,7 +1169,7 @@ export class SatelliteClient implements Client {
     return this.outbound.last_lsn ?? DEFAULT_LOG_POS
   }
 
-  private maybeSendAck(reason?: 'timeout') {
+  private maybeSendAck(reason?: 'timeout' | 'additionalData') {
     // Restart the timer regardless
     if (reason === 'timeout')
       this.inbound.ackTimer = setTimeout(
@@ -1151,6 +1189,9 @@ export class SatelliteClient implements Client {
       ackTimestamp: Long.UZERO.add(new Date().getTime()),
       lsn: this.inbound.last_lsn!,
       transactionId: this.inbound.lastTxId,
+      subscriptionIds: this.inbound.seenAdditionalDataSinceLastTx.subscriptions,
+      additionalDataSourceIds:
+        this.inbound.seenAdditionalDataSinceLastTx.dataRefs,
     }
 
     // Send acks earlier rather than later to keep the stream continuous -
@@ -1158,8 +1199,12 @@ export class SatelliteClient implements Client {
     const boundary = Math.floor(this.inbound.maxUnackedTxs * 0.7)
 
     // Send the ack if we're over the boundary, or wait to ack until the timer runs
-    // out to avoid making more traffic than required
-    if (this.inbound.unackedTxs >= boundary || reason == 'timeout') {
+    // out to avoid making more traffic than required, but we always try to ack on additional data
+    if (
+      this.inbound.unackedTxs >= boundary ||
+      reason == 'timeout' ||
+      reason == 'additionalData'
+    ) {
       this.sendMessage(msg)
       this.inbound.lastAckedTxId = msg.transactionId
     }

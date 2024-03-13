@@ -2,7 +2,7 @@ defmodule Electric.Satellite.Protocol do
   @moduledoc """
   Protocol for communication with Satellite
   """
-  alias Electric.Satellite.SentGraphManager
+  alias Electric.Satellite.ClientReconnectionInfo
   use Electric.Satellite.Protobuf
   import Electric.Satellite.Protobuf, only: [is_allowed_rpc_method: 1]
 
@@ -12,7 +12,6 @@ defmodule Electric.Satellite.Protocol do
 
   alias Electric.Postgres.CachedWal
 
-  alias Electric.Satellite.SubscriptionManager
   alias Electric.Replication.Connectors
   alias Electric.Utils
   alias SatSubsResp.SatSubsError
@@ -35,7 +34,7 @@ defmodule Electric.Satellite.Protocol do
 
   @type lsn() :: non_neg_integer
   @type deep_msg_list() :: PB.sq_pb_msg() | [deep_msg_list()]
-  @type actions() :: Shapes.subquery_actions()
+  @type actions() :: {Shapes.subquery_actions(), [non_neg_integer()]}
   @type outgoing() :: {deep_msg_list(), State.t()} | {:error, deep_msg_list(), State.t()}
   @type txn_processing() :: {deep_msg_list(), actions(), State.t()}
 
@@ -263,7 +262,7 @@ defmodule Electric.Satellite.Protocol do
       |> Map.put(:out_rep, out_rep)
       |> Map.update!(:subscriptions, &Map.drop(&1, ids))
 
-    for id <- ids, do: SubscriptionManager.delete_subscription(state.client_id, id)
+    for id <- ids, do: ClientReconnectionInfo.delete_subscription(state.client_id, id)
 
     if needs_unpausing? do
       {:force_unpause, %SatUnsubsResp{}, state}
@@ -442,8 +441,6 @@ defmodule Electric.Satellite.Protocol do
   end
 
   def process_message(%SatOpLogAck{} = msg, %State{} = state) do
-    Logger.debug("Client acknowledged transactions up to #{msg.transaction_id} (lsn #{msg.lsn})")
-
     case OutRep.ack_transactions(state.out_rep, msg.transaction_id) do
       :error ->
         %SatErrorResp{error_type: :INVALID_REQUEST, message: "Acknowledged unknown txn"}
@@ -453,13 +450,18 @@ defmodule Electric.Satellite.Protocol do
         state = %State{state | out_rep: out_rep}
         {:ok, sent_pos} = CachedWal.Api.parse_wal_position(msg.lsn)
 
-        if out_rep.unacked_transaction_count == 0 do
-          # If the client ack'd everything we've sent, then we can just store current graph
-          SentGraphManager.store_graph(state.client_id, sent_pos, out_rep.sent_rows_graph)
-        else
-          graph = advance_stored_graph(sent_pos, state)
-          SentGraphManager.store_graph(state.client_id, sent_pos, graph)
-        end
+        Logger.debug(
+          "Client acknowledged transactions up to #{msg.transaction_id} (lsn #{sent_pos})"
+        )
+
+        {:ok, _} =
+          ClientReconnectionInfo.advance_checkpoint(state.client_id,
+            ack_point: {sent_pos, msg.transaction_id},
+            including_data: msg.additional_data_source_ids,
+            including_subscriptions: msg.subscription_ids,
+            cached_wal_impl: CachedWal.EtsBacked,
+            advance_graph_using: {&advance_graph_by_tx/4, [state.auth.user_id]}
+          )
 
         if is_out_rep_suspended(state) do
           # If we were suspended, we didn't ask for more txs from WAL cache. Let's do that!
@@ -528,7 +530,7 @@ defmodule Electric.Satellite.Protocol do
 
   defp handle_start_replication_request(msg, lsn, state) do
     if CachedWal.Api.lsn_in_cached_window?(lsn) do
-      case restore_client_state(msg.subscription_ids, lsn, state) do
+      case restore_client_state(msg.subscription_ids, msg.observed_transaction_data, lsn, state) do
         {:ok, state} ->
           state =
             state
@@ -544,7 +546,7 @@ defmodule Electric.Satellite.Protocol do
       end
     else
       # Once the client is outside the WAL window, we are assuming the client will re-establish subscriptions, so we'll discard them
-      SubscriptionManager.delete_all_subscriptions(state.client_id)
+      ClientReconnectionInfo.clear_all_data(state.client_id)
 
       {:error,
        start_replication_error(:BEHIND_WINDOW, "Cannot catch up to the server's current state")}
@@ -564,7 +566,7 @@ defmodule Electric.Satellite.Protocol do
   end
 
   @spec handle_outgoing_txs([{Transaction.t(), term()}], State.t()) :: txn_processing()
-  def handle_outgoing_txs(events, state, acc \\ {[], %{}})
+  def handle_outgoing_txs(events, state, acc \\ {[], {%{}, []}})
 
   def handle_outgoing_txs([{tx, offset} | events], %State{} = state, {msgs_acc, actions_acc})
       when can_send_more_txs(state) do
@@ -580,10 +582,15 @@ defmodule Electric.Satellite.Protocol do
           |> Map.put(:original_operations, length(tx.changes))
         )
 
-        filtered_tx =
-          if actions != %{},
-            do: %Transaction{filtered_tx | additional_data_ref: state.out_rep.move_in_next_ref},
-            else: filtered_tx
+        {filtered_tx, actions_acc} =
+          if actions != %{} do
+            {
+              %Transaction{filtered_tx | additional_data_ref: state.out_rep.move_in_next_ref},
+              Shapes.merge_actions_for_tx(actions_acc, actions, tx.xid)
+            }
+          else
+            {filtered_tx, actions_acc}
+          end
 
         {relations, transaction, out_rep} = handle_outgoing_tx({filtered_tx, offset}, state)
 
@@ -591,8 +598,7 @@ defmodule Electric.Satellite.Protocol do
           %OutRep{out_rep | sent_rows_graph: new_graph}
           |> OutRep.add_unacked_transaction(filtered_tx.xid)
 
-        {out_rep,
-         {[msgs_acc, relations, transaction], Shapes.merge_actions(actions_acc, actions)}}
+        {out_rep, {[msgs_acc, relations, transaction], actions_acc}}
       else
         Logger.debug("Filtering transaction #{inspect(tx)} for user #{state.auth.user_id}")
         {state.out_rep, {msgs_acc, actions_acc}}
@@ -615,8 +621,6 @@ defmodule Electric.Satellite.Protocol do
       "Outgoing replication to the client is suspended because there are " <>
         "#{state.out_rep.unacked_transaction_count} unacked transactions"
     )
-
-    Logger.warning(inspect(events))
 
     {msgs_acc, actions_acc, state}
   end
@@ -698,6 +702,10 @@ defmodule Electric.Satellite.Protocol do
     Logger.debug("Received initial data for subscription #{id}")
 
     state = Telemetry.subscription_data_ready(state, id)
+    {graph_diff, _, _} = data
+
+    # Store this data in case of disconnect until acknowledged
+    ClientReconnectionInfo.store_subscription_data(state.client_id, id, graph_diff)
 
     if is_paused_on_subscription(state, id) do
       # We're currently waiting for data from this subscription, we can send it immediately
@@ -740,13 +748,26 @@ defmodule Electric.Satellite.Protocol do
           non_neg_integer(),
           Graph.t(),
           Shapes.Querying.results(),
+          non_neg_integer(),
+          [non_neg_integer(), ...],
           State.t()
         ) :: outgoing()
-  def move_in_data_received(ref, _, changes, state) do
+  def move_in_data_received(ref, graph_diff, changes, xmin, included_txns, state) do
     # It's a trade-off where to filter out already-sent changes. Current implementation
     # prefers copying more data into itself and filtering here. Maybe sending a MapSet
     # of already-sent IDs to the Task process that does the querying is more optimal,
     # but more testing is required.
+
+    # Store this data in case of disconnect until acknowledged
+    ClientReconnectionInfo.store_additional_tx_data(
+      state.client_id,
+      ref,
+      xmin,
+      ref,
+      included_txns,
+      graph_diff
+    )
+
     if is_paused_on_move_in(state, ref) do
       # We're paused waiting for this, send changes immediately
       send_additional_data_and_unpause({:move_in, ref}, changes, state)
@@ -802,7 +823,7 @@ defmodule Electric.Satellite.Protocol do
   acted upon with `perform_pending_actions` once entire batch is processed.
   """
   @spec unpause_and_send_pending_events(deep_msg_list(), actions(), State.t()) :: txn_processing()
-  def unpause_and_send_pending_events(msgs \\ [], actions \\ %{}, state) do
+  def unpause_and_send_pending_events(msgs \\ [], actions \\ {%{}, []}, state) do
     buffer = state.out_rep.outgoing_ops_buffer
 
     state =
@@ -819,10 +840,16 @@ defmodule Electric.Satellite.Protocol do
     {[msgs, next_msgs], Shapes.merge_actions(actions, more_actions), state}
   end
 
-  @spec send_additional_data_and_unpause(deep_msg_list(), term(), point, any(), State.t()) ::
+  @spec send_additional_data_and_unpause(deep_msg_list(), actions(), point, any(), State.t()) ::
           txn_processing()
         when point: {OutRep.pause_kind(), term()}
-  defp send_additional_data_and_unpause(msgs \\ [], actions \\ %{}, point, data, %State{} = state)
+  defp send_additional_data_and_unpause(
+         msgs \\ [],
+         actions \\ {%{}, []},
+         point,
+         data,
+         %State{} = state
+       )
        when is_tuple(point) and elem(point, 0) in [:subscription, :move_in] do
     state = Map.update!(state, :out_rep, &OutRep.remove_next_pause_point/1)
 
@@ -840,7 +867,7 @@ defmodule Electric.Satellite.Protocol do
   end
 
   @spec perform_pending_actions(txn_processing()) :: outgoing()
-  def perform_pending_actions({msgs, actions, state}) when actions == %{}, do: {msgs, state}
+  def perform_pending_actions({msgs, actions, state}) when actions == {%{}, []}, do: {msgs, state}
 
   def perform_pending_actions({msgs, actions, state}) do
     case query_move_in_data(actions, state) do
@@ -977,21 +1004,13 @@ defmodule Electric.Satellite.Protocol do
   defp process_transaction(tx, graph, state) do
     tx
     |> maybe_strip_migration_ddl(state.out_rep.last_migration_xid_at_initial_sync)
-    |> Changes.filter_changes_belonging_to_user(state.auth.user_id)
-    |> Shapes.process_transaction(graph, current_shapes(state))
+    |> advance_graph_by_tx(graph, current_shapes(state), state.auth.user_id)
   end
 
-  defp advance_stored_graph(target_pos, state) do
-    {:ok, {_, pos, graph}} = SentGraphManager.fetch_graph(state.client_id)
-    {:ok, txs} = CachedWal.Api.get_transactions(from: pos, to: target_pos)
-
-    Enum.reduce(txs, graph, fn tx, graph ->
-      # TODO: Here's assuming that this txn has been seen so no actions are needed.
-      #       This doesn't hold generally, since the client may have been disconnected
-      #       before seeing the effect of the actions cause by one of these.
-      {_tx, graph, _actions} = process_transaction(tx, graph, state)
-      graph
-    end)
+  defp advance_graph_by_tx(tx, graph, shapes, user_id) do
+    tx
+    |> Changes.filter_changes_belonging_to_user(user_id)
+    |> Shapes.process_transaction(graph, shapes)
   end
 
   @spec query_subscription_data(String.t(), [ShapeRequest.t(), ...], State.t()) ::
@@ -1029,12 +1048,23 @@ defmodule Electric.Satellite.Protocol do
           "Requested data for subscription #{id}, insertion point is at xmin = #{xmin}"
         )
 
-        SubscriptionManager.save_subscription(state.client_id, id, requests)
+        ClientReconnectionInfo.store_subscription(
+          state.client_id,
+          id,
+          xmin,
+          state.out_rep.move_in_next_ref,
+          requests
+        )
 
         state =
           state
           |> Pathex.force_set!(path(:subscriptions / id), requests)
-          |> Pathex.over!(path(:out_rep), &OutRep.add_pause_point(&1, {xmin, :subscription, id}))
+          |> Pathex.over!(
+            path(:out_rep),
+            &(&1
+              |> OutRep.add_pause_point({xmin, :subscription, id})
+              |> OutRep.increment_move_in_ref())
+          )
 
         {:reply, %SatSubsResp{subscription_id: id}, state}
     after
@@ -1105,20 +1135,24 @@ defmodule Electric.Satellite.Protocol do
     )
   end
 
-  defp restore_client_state(subscription_ids, lsn, %State{} = state) do
+  defp restore_client_state(subscription_ids, observed_txn_data, lsn, %State{} = state) do
     with {:ok, state} <- restore_subscriptions(subscription_ids, state) do
-      restore_graph(lsn, state)
+      restore_graph(lsn, observed_txn_data, state)
     end
   end
 
-  defp restore_graph(lsn, %State{} = state) do
-    with {:ok, {_, stored_lsn, _}} <- SentGraphManager.fetch_graph(state.client_id),
-         x when x != :lt <- CachedWal.Api.compare_positions(lsn, stored_lsn) do
-      graph = advance_stored_graph(lsn, state)
-      SentGraphManager.store_graph(state.client_id, lsn, graph)
+  defp restore_graph(lsn, observed_txn_data, %State{} = state) do
+    ClientReconnectionInfo.advance_checkpoint(state.client_id,
+      ack_point: {lsn, nil},
+      including_data: observed_txn_data,
+      including_subscriptions: Map.keys(state.subscriptions),
+      cached_wal_impl: CachedWal.EtsBacked,
+      advance_graph_using: {&advance_graph_by_tx/4, [state.auth.user_id]}
+    )
+    |> case do
+      {:ok, graph} ->
+        {:ok, %{state | out_rep: %{state.out_rep | sent_rows_graph: graph}}}
 
-      {:ok, %{state | out_rep: %{state.out_rep | sent_rows_graph: graph}}}
-    else
       _ ->
         Logger.info(
           "Client tried to connect with LSN that's prior to their latest ACK message, cannot honor the connection"
@@ -1131,7 +1165,7 @@ defmodule Electric.Satellite.Protocol do
 
   defp restore_subscriptions(subscription_ids, %State{} = state) do
     Enum.reduce_while(subscription_ids, {:ok, state}, fn id, {:ok, state} ->
-      case SubscriptionManager.fetch_subscription(state.client_id, id) do
+      case ClientReconnectionInfo.fetch_subscription(state.client_id, id) do
         {:ok, results} ->
           state = Map.update!(state, :subscriptions, &Map.put(&1, id, results))
           {:cont, {:ok, state}}

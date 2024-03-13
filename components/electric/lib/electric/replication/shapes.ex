@@ -110,8 +110,16 @@ defmodule Electric.Replication.Shapes do
     end
   end
 
-  @spec merge_actions(subquery_actions(), subquery_actions()) :: subquery_actions()
-  def merge_actions(a1, a2) do
-    Map.merge(a1, a2, fn _, v1, v2 -> v1 ++ v2 end)
+  @type action_context :: {actions :: subquery_actions(), source_tx_ids :: [non_neg_integer()]}
+
+  @spec merge_actions(action_context(), action_context()) :: action_context()
+  def merge_actions({a1, l1}, {a2, l2}) when is_list(l1) and is_list(l2) do
+    {Map.merge(a1, a2, fn _, v1, v2 -> v1 ++ v2 end), l1 ++ l2}
+  end
+
+  @spec merge_actions_for_tx(action_context(), subquery_actions(), non_neg_integer()) ::
+          action_context()
+  def merge_actions_for_tx({a1, l1}, a2, new_txid) when is_list(l1) and is_integer(new_txid) do
+    {Map.merge(a1, a2, fn _, v1, v2 -> v1 ++ v2 end), [new_txid | l1]}
   end
 end

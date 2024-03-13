@@ -78,6 +78,7 @@ import { isFatal, isOutOfSyncError, isThrowable, wrapFatalError } from './error'
 import { inferRelationsFromSQLite } from '../util/relations'
 import { decodeUserIdFromToken } from '../auth/secure'
 import { InvalidArgumentError } from '../client/validation/errors/invalidArgumentError'
+import Long from 'long'
 
 type ChangeAccumulator = {
   [key: string]: Change
@@ -97,6 +98,7 @@ type MetaEntries = {
   compensations: number
   lsn: string | null
   subscriptions: string
+  seenAdditionalData: string
 }
 
 type ConnectRetryHandler = (error: Error, attempt: number) => boolean
@@ -465,7 +467,11 @@ export class SatelliteProcess implements Satellite {
   // Applies initial data for a shape subscription. Current implementation
   // assumes there are no conflicts INSERTing new rows and only expects
   // subscriptions for entire tables.
-  async _applySubscriptionData(changes: InitialDataChange[], lsn: LSN) {
+  async _applySubscriptionData(
+    changes: InitialDataChange[],
+    lsn: LSN,
+    additionalStmts: Statement[] = []
+  ) {
     const stmts: Statement[] = []
     stmts.push({ sql: 'PRAGMA defer_foreign_keys = ON' })
 
@@ -558,7 +564,8 @@ export class SatelliteProcess implements Satellite {
     // Then update subscription state and LSN
     stmts.push(
       this._setMetaStatement('subscriptions', this.subscriptions.serialize()),
-      this.updateLsnStmt(lsn)
+      this.updateLsnStmt(lsn),
+      ...additionalStmts
     )
 
     try {
@@ -856,11 +863,16 @@ export class SatelliteProcess implements Satellite {
       // such that we can resume and inform Electric
       // about fulfilled subscriptions
       const subscriptionIds = this.subscriptions.getFulfilledSubscriptions()
+      const observedTransactionData = await this._getMeta('seenAdditionalData')
 
       const { error } = await this.client.startReplication(
         this._lsn,
         schemaVersion,
-        subscriptionIds.length > 0 ? subscriptionIds : undefined
+        subscriptionIds.length > 0 ? subscriptionIds : undefined,
+        observedTransactionData
+          .split(',')
+          .filter((x) => x !== '')
+          .map((x) => Long.fromString(x))
       )
 
       if (error) {
@@ -1281,6 +1293,7 @@ export class SatelliteProcess implements Satellite {
     stmts.push({ sql: 'PRAGMA defer_foreign_keys = ON' })
     // update lsn.
     stmts.push(this.updateLsnStmt(lsn))
+    stmts.push(this._resetSeenAdditionalDataStmt())
 
     const processDML = async (changes: DataChange[]) => {
       const tx = {
@@ -1385,7 +1398,9 @@ export class SatelliteProcess implements Satellite {
     // Server sends additional data on move-ins and tries to send only data
     // the client has never seen from its perspective. Because of this, we're writing this
     // data directly, like subscription data
-    this._applySubscriptionData(data.changes, this._lsn!)
+    return this._applySubscriptionData(data.changes, this._lsn!, [
+      this._addSeenAdditionalDataStmt(data.ref.toString()),
+    ])
   }
 
   private async maybeGarbageCollect(
@@ -1428,6 +1443,22 @@ export class SatelliteProcess implements Satellite {
         },
       ]
     else return []
+  }
+
+  _addSeenAdditionalDataStmt(ref: string): Statement {
+    const meta = this.opts.metaTable.toString()
+
+    const sql = `
+      INSERT INTO ${meta} (key, value) VALUES ('seenAdditionalData', ?)
+        ON CONFLICT (key) DO
+          UPDATE SET value = value || ',' || excluded.value
+    `
+    const args = [ref]
+    return { sql, args }
+  }
+
+  _resetSeenAdditionalDataStmt(): Statement {
+    return this._setMetaStatement('seenAdditionalData', '')
   }
 
   _setMetaStatement<K extends keyof MetaEntries>(
@@ -1511,11 +1542,7 @@ export class SatelliteProcess implements Satellite {
    */
   private updateLsnStmt(lsn: LSN): Statement {
     this._lsn = lsn
-    const lsn_base64 = base64.fromBytes(lsn)
-    return {
-      sql: `UPDATE ${this.opts.metaTable.tablename} set value = ? WHERE key = ?`,
-      args: [lsn_base64, 'lsn'],
-    }
+    return this._setMetaStatement('lsn', base64.fromBytes(lsn))
   }
 
   private async checkMaxSqlParameters() {

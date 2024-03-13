@@ -77,22 +77,39 @@ defmodule Electric.Postgres.CachedWal.Api do
 
   @spec get_transactions(module(), from: wal_pos(), to: wal_pos()) ::
           {:ok, [segment()]} | {:error, :lsn_too_old}
-  def get_transactions(module \\ default_module(), from: from_pos, to: to_pos),
-    do: do_get_transactions(module, from_pos, to_pos, [])
-
-  defp do_get_transactions(module, from_pos, to_pos, acc) do
-    case next_segment(module, from_pos) do
-      {:ok, segment, new_pos} ->
-        if module.compare_positions(new_pos, to_pos) != :gt,
-          do: do_get_transactions(module, new_pos, to_pos, [segment | acc]),
-          else: {:ok, Enum.reverse(acc)}
-
-      :latest ->
-        {:ok, Enum.reverse(acc)}
-
-      error ->
-        error
+  def get_transactions(module \\ default_module(), from: from_pos, to: to_pos) do
+    if lsn_in_cached_window?(module, from_pos) do
+      {:ok, Enum.to_list(stream_transactions(module, from: from_pos, to: to_pos))}
+    else
+      {:error, :lsn_too_old}
     end
+  end
+
+  # defp do_get_transactions(module, from_pos, to_pos, acc) do
+  #   case next_segment(module, from_pos) do
+  #     {:ok, segment, new_pos} ->
+  #       if module.compare_positions(new_pos, to_pos) != :gt,
+  #         do: do_get_transactions(module, new_pos, to_pos, [segment | acc]),
+  #         else: {:ok, Enum.reverse(acc)}
+
+  #     :latest ->
+  #       {:ok, Enum.reverse(acc)}
+
+  #     error ->
+  #       error
+  #   end
+  # end
+
+  def stream_transactions(module \\ default_module(), from: from_pos, to: to_pos) do
+    Stream.unfold(from_pos, fn from_pos ->
+      case next_segment(module, from_pos) do
+        {:ok, segment, new_pos} ->
+          if module.compare_positions(new_pos, to_pos) != :gt, do: {segment, new_pos}, else: nil
+
+        :latest ->
+          nil
+      end
+    end)
   end
 
   @doc """

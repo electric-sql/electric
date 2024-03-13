@@ -197,6 +197,10 @@ export interface InboundReplication extends Replication<ServerTransaction> {
   additionalData: AdditionalData[]
   unseenAdditionalDataRefs: Set<string>
   incomplete?: 'transaction' | 'additionalData'
+  seenAdditionalDataSinceLastTx: {
+    subscriptions: string[]
+    dataRefs: Long[]
+  }
 }
 
 export type Relation = {

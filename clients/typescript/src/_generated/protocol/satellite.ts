@@ -114,7 +114,14 @@ export interface SatInStartReplicationReq {
   /** the subscriptions identifiers the client wants to resume subscription */
   subscriptionIds: string[];
   /** The version of the most recent migration seen by the client. */
-  schemaVersion?: string | undefined;
+  schemaVersion?:
+    | string
+    | undefined;
+  /**
+   * List of transaction IDs for which the client
+   * didn't observe additional data before disconnect
+   */
+  observedTransactionData: Long[];
 }
 
 export enum SatInStartReplicationReq_Option {
@@ -233,6 +240,10 @@ export interface SatOpLogAck {
   lsn: Uint8Array;
   /** Transaction ID of the most recent incorporated transaction */
   transactionId: Long;
+  /** Subscription IDs for data that was received immediately after this transaction */
+  subscriptionIds: string[];
+  /** Transaction IDs for which additional data was received immediately after this transaction */
+  additionalDataSourceIds: Long[];
 }
 
 /**
@@ -1090,6 +1101,7 @@ function createBaseSatInStartReplicationReq(): SatInStartReplicationReq {
     options: [],
     subscriptionIds: [],
     schemaVersion: undefined,
+    observedTransactionData: [],
   };
 }
 
@@ -1111,6 +1123,11 @@ export const SatInStartReplicationReq = {
     if (message.schemaVersion !== undefined) {
       writer.uint32(42).string(message.schemaVersion);
     }
+    writer.uint32(50).fork();
+    for (const v of message.observedTransactionData) {
+      writer.uint64(v);
+    }
+    writer.ldelim();
     return writer;
   },
 
@@ -1159,6 +1176,23 @@ export const SatInStartReplicationReq = {
 
           message.schemaVersion = reader.string();
           continue;
+        case 6:
+          if (tag === 48) {
+            message.observedTransactionData.push(reader.uint64() as Long);
+
+            continue;
+          }
+
+          if (tag === 50) {
+            const end2 = reader.uint32() + reader.pos;
+            while (reader.pos < end2) {
+              message.observedTransactionData.push(reader.uint64() as Long);
+            }
+
+            continue;
+          }
+
+          break;
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1178,6 +1212,7 @@ export const SatInStartReplicationReq = {
     message.options = object.options?.map((e) => e) || [];
     message.subscriptionIds = object.subscriptionIds?.map((e) => e) || [];
     message.schemaVersion = object.schemaVersion ?? undefined;
+    message.observedTransactionData = object.observedTransactionData?.map((e) => Long.fromValue(e)) || [];
     return message;
   },
 };
@@ -1630,6 +1665,8 @@ function createBaseSatOpLogAck(): SatOpLogAck {
     ackTimestamp: Long.UZERO,
     lsn: new Uint8Array(),
     transactionId: Long.UZERO,
+    subscriptionIds: [],
+    additionalDataSourceIds: [],
   };
 }
 
@@ -1646,6 +1683,14 @@ export const SatOpLogAck = {
     if (!message.transactionId.isZero()) {
       writer.uint32(24).uint64(message.transactionId);
     }
+    for (const v of message.subscriptionIds) {
+      writer.uint32(34).string(v!);
+    }
+    writer.uint32(42).fork();
+    for (const v of message.additionalDataSourceIds) {
+      writer.uint64(v);
+    }
+    writer.ldelim();
     return writer;
   },
 
@@ -1677,6 +1722,30 @@ export const SatOpLogAck = {
 
           message.transactionId = reader.uint64() as Long;
           continue;
+        case 4:
+          if (tag !== 34) {
+            break;
+          }
+
+          message.subscriptionIds.push(reader.string());
+          continue;
+        case 5:
+          if (tag === 40) {
+            message.additionalDataSourceIds.push(reader.uint64() as Long);
+
+            continue;
+          }
+
+          if (tag === 42) {
+            const end2 = reader.uint32() + reader.pos;
+            while (reader.pos < end2) {
+              message.additionalDataSourceIds.push(reader.uint64() as Long);
+            }
+
+            continue;
+          }
+
+          break;
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1699,6 +1768,8 @@ export const SatOpLogAck = {
     message.transactionId = (object.transactionId !== undefined && object.transactionId !== null)
       ? Long.fromValue(object.transactionId)
       : Long.UZERO;
+    message.subscriptionIds = object.subscriptionIds?.map((e) => e) || [];
+    message.additionalDataSourceIds = object.additionalDataSourceIds?.map((e) => Long.fromValue(e)) || [];
     return message;
   },
 };

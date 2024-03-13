@@ -1,3 +1,4 @@
+import Long from 'long'
 import { AuthConfig, AuthState } from '../auth/index'
 import { InternalElectricConfig } from '../config/index'
 import { DatabaseAdapter } from '../electric/adapter'
@@ -88,7 +89,8 @@ export interface Client {
   startReplication(
     lsn?: LSN,
     schemaVersion?: string,
-    subscriptionIds?: string[]
+    subscriptionIds?: string[],
+    observedTransactionData?: Long[]
   ): Promise<StartReplicationResponse>
   stopReplication(): Promise<StopReplicationResponse>
   subscribeToRelations(callback: RelationCallback): void

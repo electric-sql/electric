@@ -127,6 +127,12 @@ message SatInStartReplicationReq {
     // The version of the most recent migration seen by the client.
     optional string schema_version = 5;
 
+    /**
+     * List of transaction IDs for which the client
+     * observed additional data before disconnect
+     */
+    repeated uint64 observed_transaction_data = 6;
+
     // Note:
     // - a client might resume replication only for a subset of previous subscriptions 
     // in case the application cancelled some subscriptions while disconnected from the
@@ -234,6 +240,10 @@ message SatOpLogAck {
     bytes lsn = 2;
     /** Transaction ID of the most recent incorporated transaction */
     uint64 transaction_id = 3;
+    /** Subscription IDs for data that was received immediately after this transaction */
+    repeated string subscription_ids = 4;
+    /** Transaction IDs for which additional data was received immediately after this transaction */
+    repeated uint64 additional_data_source_ids = 5;
 }
 
 // (Producer) Single operation, should be only send as part of the SatOplog

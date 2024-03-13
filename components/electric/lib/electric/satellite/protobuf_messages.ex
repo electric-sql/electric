@@ -3241,7 +3241,11 @@
   end,
   defmodule Electric.Satellite.SatInStartReplicationReq do
     @moduledoc false
-    defstruct lsn: "", options: [], subscription_ids: [], schema_version: nil
+    defstruct lsn: "",
+              options: [],
+              subscription_ids: [],
+              schema_version: nil,
+              observed_transaction_data: []
 
     (
       (
@@ -3261,6 +3265,7 @@
           |> encode_lsn(msg)
           |> encode_options(msg)
           |> encode_subscription_ids(msg)
+          |> encode_observed_transaction_data(msg)
         end
       )
 
@@ -3340,6 +3345,33 @@
           rescue
             ArgumentError ->
               reraise Protox.EncodingError.new(:schema_version, "invalid field value"),
+                      __STACKTRACE__
+          end
+        end,
+        defp encode_observed_transaction_data(acc, msg) do
+          try do
+            case msg.observed_transaction_data do
+              [] ->
+                acc
+
+              values ->
+                [
+                  acc,
+                  "2",
+                  (
+                    {bytes, len} =
+                      Enum.reduce(values, {[], 0}, fn value, {acc, len} ->
+                        value_bytes = :binary.list_to_bin([Protox.Encode.encode_uint64(value)])
+                        {[acc, value_bytes], len + byte_size(value_bytes)}
+                      end)
+
+                    [Protox.Varint.encode(len), bytes]
+                  )
+                ]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:observed_transaction_data, "invalid field value"),
                       __STACKTRACE__
           end
         end
@@ -3422,6 +3454,20 @@
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
                 {[schema_version: Protox.Decode.validate_string(delimited)], rest}
 
+              {6, 2, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+
+                {[
+                   observed_transaction_data:
+                     msg.observed_transaction_data ++
+                       Protox.Decode.parse_repeated_uint64([], delimited)
+                 ], rest}
+
+              {6, _, bytes} ->
+                {value, rest} = Protox.Decode.parse_uint64(bytes)
+                {[observed_transaction_data: msg.observed_transaction_data ++ [value]], rest}
+
               {tag, wire_type, rest} ->
                 {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
                 {[], rest}
@@ -3482,7 +3528,8 @@
           1 => {:lsn, {:scalar, ""}, :bytes},
           2 => {:options, :packed, {:enum, Electric.Satellite.SatInStartReplicationReq.Option}},
           4 => {:subscription_ids, :unpacked, :string},
-          5 => {:schema_version, {:oneof, :_schema_version}, :string}
+          5 => {:schema_version, {:oneof, :_schema_version}, :string},
+          6 => {:observed_transaction_data, :packed, :uint64}
         }
       end
 
@@ -3493,6 +3540,7 @@
       def defs_by_name() do
         %{
           lsn: {1, {:scalar, ""}, :bytes},
+          observed_transaction_data: {6, :packed, :uint64},
           options: {2, :packed, {:enum, Electric.Satellite.SatInStartReplicationReq.Option}},
           schema_version: {5, {:oneof, :_schema_version}, :string},
           subscription_ids: {4, :unpacked, :string}
@@ -3539,6 +3587,15 @@
             name: :schema_version,
             tag: 5,
             type: :string
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "observedTransactionData",
+            kind: :packed,
+            label: :repeated,
+            name: :observed_transaction_data,
+            tag: 6,
+            type: :uint64
           }
         ]
       end
@@ -3683,6 +3740,46 @@
              }}
           end
         ),
+        (
+          def field_def(:observed_transaction_data) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "observedTransactionData",
+               kind: :packed,
+               label: :repeated,
+               name: :observed_transaction_data,
+               tag: 6,
+               type: :uint64
+             }}
+          end
+
+          def field_def("observedTransactionData") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "observedTransactionData",
+               kind: :packed,
+               label: :repeated,
+               name: :observed_transaction_data,
+               tag: 6,
+               type: :uint64
+             }}
+          end
+
+          def field_def("observed_transaction_data") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "observedTransactionData",
+               kind: :packed,
+               label: :repeated,
+               name: :observed_transaction_data,
+               tag: 6,
+               type: :uint64
+             }}
+          end
+        ),
         def field_def(_) do
           {:error, :no_such_field}
         end
@@ -3717,6 +3814,9 @@
         {:error, :no_default_value}
       end,
       def default(:schema_version) do
+        {:error, :no_default_value}
+      end,
+      def default(:observed_transaction_data) do
         {:error, :no_default_value}
       end,
       def default(_) do
@@ -11363,7 +11463,11 @@
   end,
   defmodule Electric.Satellite.SatOpLogAck do
     @moduledoc false
-    defstruct ack_timestamp: 0, lsn: "", transaction_id: 0
+    defstruct ack_timestamp: 0,
+              lsn: "",
+              transaction_id: 0,
+              subscription_ids: [],
+              additional_data_source_ids: []
 
     (
       (
@@ -11378,7 +11482,12 @@
 
         @spec encode!(struct) :: iodata | no_return
         def encode!(msg) do
-          [] |> encode_ack_timestamp(msg) |> encode_lsn(msg) |> encode_transaction_id(msg)
+          []
+          |> encode_ack_timestamp(msg)
+          |> encode_lsn(msg)
+          |> encode_transaction_id(msg)
+          |> encode_subscription_ids(msg)
+          |> encode_additional_data_source_ids(msg)
         end
       )
 
@@ -11420,6 +11529,56 @@
           rescue
             ArgumentError ->
               reraise Protox.EncodingError.new(:transaction_id, "invalid field value"),
+                      __STACKTRACE__
+          end
+        end,
+        defp encode_subscription_ids(acc, msg) do
+          try do
+            case msg.subscription_ids do
+              [] ->
+                acc
+
+              values ->
+                [
+                  acc,
+                  Enum.reduce(values, [], fn value, acc ->
+                    [acc, "\"", Protox.Encode.encode_string(value)]
+                  end)
+                ]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:subscription_ids, "invalid field value"),
+                      __STACKTRACE__
+          end
+        end,
+        defp encode_additional_data_source_ids(acc, msg) do
+          try do
+            case msg.additional_data_source_ids do
+              [] ->
+                acc
+
+              values ->
+                [
+                  acc,
+                  "*",
+                  (
+                    {bytes, len} =
+                      Enum.reduce(values, {[], 0}, fn value, {acc, len} ->
+                        value_bytes = :binary.list_to_bin([Protox.Encode.encode_uint64(value)])
+                        {[acc, value_bytes], len + byte_size(value_bytes)}
+                      end)
+
+                    [Protox.Varint.encode(len), bytes]
+                  )
+                ]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(
+                        :additional_data_source_ids,
+                        "invalid field value"
+                      ),
                       __STACKTRACE__
           end
         end
@@ -11472,6 +11631,29 @@
               {3, _, bytes} ->
                 {value, rest} = Protox.Decode.parse_uint64(bytes)
                 {[transaction_id: value], rest}
+
+              {4, _, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+
+                {[
+                   subscription_ids:
+                     msg.subscription_ids ++ [Protox.Decode.validate_string(delimited)]
+                 ], rest}
+
+              {5, 2, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+
+                {[
+                   additional_data_source_ids:
+                     msg.additional_data_source_ids ++
+                       Protox.Decode.parse_repeated_uint64([], delimited)
+                 ], rest}
+
+              {5, _, bytes} ->
+                {value, rest} = Protox.Decode.parse_uint64(bytes)
+                {[additional_data_source_ids: msg.additional_data_source_ids ++ [value]], rest}
 
               {tag, wire_type, rest} ->
                 {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
@@ -11532,7 +11714,9 @@
         %{
           1 => {:ack_timestamp, {:scalar, 0}, :uint64},
           2 => {:lsn, {:scalar, ""}, :bytes},
-          3 => {:transaction_id, {:scalar, 0}, :uint64}
+          3 => {:transaction_id, {:scalar, 0}, :uint64},
+          4 => {:subscription_ids, :unpacked, :string},
+          5 => {:additional_data_source_ids, :packed, :uint64}
         }
       end
 
@@ -11543,7 +11727,9 @@
       def defs_by_name() do
         %{
           ack_timestamp: {1, {:scalar, 0}, :uint64},
+          additional_data_source_ids: {5, :packed, :uint64},
           lsn: {2, {:scalar, ""}, :bytes},
+          subscription_ids: {4, :unpacked, :string},
           transaction_id: {3, {:scalar, 0}, :uint64}
         }
       end
@@ -11578,6 +11764,24 @@
             label: :optional,
             name: :transaction_id,
             tag: 3,
+            type: :uint64
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "subscriptionIds",
+            kind: :unpacked,
+            label: :repeated,
+            name: :subscription_ids,
+            tag: 4,
+            type: :string
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "additionalDataSourceIds",
+            kind: :packed,
+            label: :repeated,
+            name: :additional_data_source_ids,
+            tag: 5,
             type: :uint64
           }
         ]
@@ -11694,6 +11898,86 @@
              }}
           end
         ),
+        (
+          def field_def(:subscription_ids) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "subscriptionIds",
+               kind: :unpacked,
+               label: :repeated,
+               name: :subscription_ids,
+               tag: 4,
+               type: :string
+             }}
+          end
+
+          def field_def("subscriptionIds") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "subscriptionIds",
+               kind: :unpacked,
+               label: :repeated,
+               name: :subscription_ids,
+               tag: 4,
+               type: :string
+             }}
+          end
+
+          def field_def("subscription_ids") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "subscriptionIds",
+               kind: :unpacked,
+               label: :repeated,
+               name: :subscription_ids,
+               tag: 4,
+               type: :string
+             }}
+          end
+        ),
+        (
+          def field_def(:additional_data_source_ids) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "additionalDataSourceIds",
+               kind: :packed,
+               label: :repeated,
+               name: :additional_data_source_ids,
+               tag: 5,
+               type: :uint64
+             }}
+          end
+
+          def field_def("additionalDataSourceIds") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "additionalDataSourceIds",
+               kind: :packed,
+               label: :repeated,
+               name: :additional_data_source_ids,
+               tag: 5,
+               type: :uint64
+             }}
+          end
+
+          def field_def("additional_data_source_ids") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "additionalDataSourceIds",
+               kind: :packed,
+               label: :repeated,
+               name: :additional_data_source_ids,
+               tag: 5,
+               type: :uint64
+             }}
+          end
+        ),
         def field_def(_) do
           {:error, :no_such_field}
         end
@@ -11726,6 +12010,12 @@
       end,
       def default(:transaction_id) do
         {:ok, 0}
+      end,
+      def default(:subscription_ids) do
+        {:error, :no_default_value}
+      end,
+      def default(:additional_data_source_ids) do
+        {:error, :no_default_value}
       end,
       def default(_) do
         {:error, :no_such_field}

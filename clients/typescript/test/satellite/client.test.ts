@@ -898,7 +898,7 @@ test.serial('listen to subscription events: error', async (t) => {
   })
   server.nextRpcResponse('subscribe', [subsResp, '50ms', subsData, subsError])
 
-  const success = () => t.fail()
+  const success = () => void t.fail()
   const error = () => t.pass()
 
   client.subscribeToSubscriptionEvents(success, error)

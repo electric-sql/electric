@@ -1018,7 +1018,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
                  %NewRecord{record: %{"id" => @entry_id}}
                ] = receive_txn_changes(conn, rel_map)
 
-        assert {1,
+        assert {2,
                 [
                   %NewRecord{relation: {"public", "comments"}},
                   %NewRecord{record: %{"id" => @john_doe_id}}

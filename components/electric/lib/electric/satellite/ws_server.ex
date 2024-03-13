@@ -28,7 +28,7 @@ defmodule Electric.Satellite.WebsocketServer do
   require Logger
   use Pathex, default_mod: :map
 
-  alias Electric.Satellite.SentGraphManager
+  alias Electric.Satellite.ClientReconnectionInfo
   alias Electric.Telemetry.Metrics
   use Electric.Satellite.Protobuf
   import Electric.Satellite.Protocol.State, only: :macros
@@ -216,14 +216,18 @@ defmodule Electric.Satellite.WebsocketServer do
 
     # We're ignoring actions here since we've "manufactured" migration events
     # which by definition aren't shape-dependent, so actions are always empty
-    {msgs, %{}, state} =
+    {msgs, {%{}, _}, state} =
       migrations
       |> Enum.map(&{&1, &1.lsn})
       |> Protocol.handle_outgoing_txs(state)
 
     max_txid = migrations |> Enum.map(& &1.xid) |> Enum.max(fn -> 0 end)
 
-    SentGraphManager.store_graph(state.client_id, lsn, state.out_rep.sent_rows_graph)
+    ClientReconnectionInfo.store_initial_checkpoint(
+      state.client_id,
+      lsn,
+      state.out_rep.sent_rows_graph
+    )
 
     state =
       state
@@ -252,8 +256,11 @@ defmodule Electric.Satellite.WebsocketServer do
     |> push()
   end
 
-  def handle_info({:move_in_query_data, ref, {graph_updates, changes}}, state) do
-    Protocol.move_in_data_received(ref, graph_updates, changes, state)
+  def handle_info(
+        {:move_in_query_data, ref, xmin, {graph_updates, changes}, included_txns},
+        state
+      ) do
+    Protocol.move_in_data_received(ref, graph_updates, changes, xmin, included_txns, state)
     |> push()
   end
 

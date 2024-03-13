@@ -8,7 +8,9 @@ export type SubscriptionId = string
 export type TableName = string
 export type ColumnName = string
 
-export type SubscriptionDeliveredCallback = (data: SubscriptionData) => void
+export type SubscriptionDeliveredCallback = (
+  data: SubscriptionData
+) => void | Promise<void>
 export type SubscriptionErrorCallback = (
   error: SatelliteError,
   subscriptionId?: SubscriptionId

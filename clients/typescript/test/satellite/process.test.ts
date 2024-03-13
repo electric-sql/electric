@@ -101,6 +101,7 @@ test('load metadata', async (t) => {
     lsn: '',
     clientId: '',
     subscriptions: '',
+    seenAdditionalData: null,
   })
 })
 
@@ -1614,9 +1615,9 @@ test('applied shape data will be acted upon correctly', async (t) => {
   }
 })
 
-test('additional data will be stored properly', async (t) => {
+test.only('additional data will be stored properly', async (t) => {
   const { client, satellite, adapter } = t.context
-  const { runMigrations, authState } = t.context
+  const { runMigrations, authState, token } = t.context
   await runMigrations()
   const tablename = 'parent'
 
@@ -1624,8 +1625,7 @@ test('additional data will be stored properly', async (t) => {
   client.setRelations(relations)
   client.setRelationData(tablename, parentRecord)
 
-  const conn = await satellite.start(authState)
-  await conn.connectionPromise
+  await startSatellite(satellite, authState, token)
 
   const shapeDef: Shape = {
     tablename,
@@ -1657,7 +1657,7 @@ test('additional data will be stored properly', async (t) => {
 
 test('GONE messages are applied as DELETEs', async (t) => {
   const { client, satellite, adapter } = t.context
-  const { runMigrations, authState } = t.context
+  const { runMigrations, authState, token } = t.context
   await runMigrations()
   const tablename = 'parent'
 
@@ -1665,8 +1665,7 @@ test('GONE messages are applied as DELETEs', async (t) => {
   client.setRelations(relations)
   client.setRelationData(tablename, parentRecord)
 
-  const conn = await satellite.start(authState)
-  await conn.connectionPromise
+  await startSatellite(satellite, authState, token)
 
   const shapeDef: Shape = {
     tablename,

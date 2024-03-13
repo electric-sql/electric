@@ -331,7 +331,7 @@ test.serial('synced promise is rejected on invalid shape', async (t) => {
 
 test.serial('nested shape is constructed', async (t) => {
   const { satellite, client } = t.context as ContextType
-  await satellite.start(config.auth)
+  await startSatellite(satellite, config.auth.token)
 
   client.setRelations(relations)
 
