@@ -128,11 +128,13 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
     change
   end
 
-  defp process_migrations(transactions, state) do
+  defp process_migrations(transactions, %{loader: loader} = state) do
+    {:ok, %{version: schema_version}} = SchemaLoader.load(loader)
+
     {state, num_applied_migrations} =
       transactions
-      |> Enum.flat_map(&transaction_changes_to_migrations(&1, state))
-      |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+      |> transactions_to_migrations(state)
+      |> skip_applied_migrations(schema_version)
       |> Enum.reduce({state, 0}, fn migration, {state, num_applied} ->
         {perform_migration(migration, state), num_applied + 1}
       end)
@@ -144,12 +146,22 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
     end
   end
 
+  defp transactions_to_migrations(transactions, state) do
+    transactions
+    |> Enum.flat_map(&transaction_changes_to_migrations(&1, state))
+    |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+  end
+
   defp transaction_changes_to_migrations(%Transaction{changes: changes}, state) do
     for %NewRecord{record: record, relation: relation} <- changes, is_ddl_relation(relation) do
       {:ok, version} = SchemaLoader.tx_version(state.loader, record)
       {:ok, sql} = Extension.extract_ddl_sql(record)
       {version, sql}
     end
+  end
+
+  defp skip_applied_migrations(migrations, schema_version) do
+    Enum.drop_while(migrations, fn {version, _stmts} -> version <= schema_version end)
   end
 
   defp perform_migration({version, stmts}, state) do
