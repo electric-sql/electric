@@ -456,7 +456,7 @@ defmodule Electric.Satellite.Protocol do
 
         {:ok, _} =
           ClientReconnectionInfo.advance_checkpoint(state.client_id,
-            ack_point: {sent_pos, msg.transaction_id},
+            ack_point: sent_pos,
             including_data: msg.additional_data_source_ids,
             including_subscriptions: msg.subscription_ids,
             cached_wal_impl: CachedWal.EtsBacked,
@@ -1142,16 +1142,22 @@ defmodule Electric.Satellite.Protocol do
   end
 
   defp restore_graph(lsn, observed_txn_data, %State{} = state) do
-    ClientReconnectionInfo.advance_checkpoint(state.client_id,
-      ack_point: {lsn, nil},
+    ClientReconnectionInfo.advance_on_reconnection(state.client_id,
+      ack_point: lsn,
       including_data: observed_txn_data,
       including_subscriptions: Map.keys(state.subscriptions),
       cached_wal_impl: CachedWal.EtsBacked,
       advance_graph_using: {&advance_graph_by_tx/4, [state.auth.user_id]}
     )
     |> case do
-      {:ok, graph} ->
+      # If no actions are "missing" after catch-up, then we don't need to do anything here.
+      {:ok, graph, {_, []}} ->
         {:ok, %{state | out_rep: %{state.out_rep | sent_rows_graph: graph}}}
+
+      {:ok, graph, actions} ->
+        state = %{state | out_rep: %{state.out_rep | sent_rows_graph: graph}}
+        # This returns an ok-tuple or a full replication error
+        query_move_in_data(actions, state)
 
       _ ->
         Logger.info(
