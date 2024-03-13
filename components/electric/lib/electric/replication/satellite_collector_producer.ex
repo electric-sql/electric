@@ -35,7 +35,7 @@ defmodule Electric.Replication.SatelliteCollectorProducer do
 
   @impl GenStage
   def init(connector_config) do
-    table = ETS.Set.new!(ordered: true, keypos: 2)
+    table = :ets.new(nil, [:ordered_set, keypos: 2])
 
     {:producer,
      %{
@@ -54,9 +54,9 @@ defmodule Electric.Replication.SatelliteCollectorProducer do
     |> maybe_update_acked_client_lsns(state.write_to_pg_mode)
     |> Stream.with_index(state.next_key)
     |> Enum.to_list()
-    |> then(&ETS.Set.put(state.table, &1))
+    |> then(&:ets.insert(state.table, &1))
 
-    next_key = ETS.Set.last!(state.table) + 1
+    next_key = :ets.last(state.table) + 1
 
     {:noreply, events, state} = send_events_from_ets(%{state | next_key: next_key})
 
@@ -89,16 +89,16 @@ defmodule Electric.Replication.SatelliteCollectorProducer do
 
   @impl GenStage
   def handle_info({:sent_all_up_to, key}, state) do
-    ETS.Set.select_delete!(state.table, [{{:_, :"$1"}, [{:"=<", :"$1", key}], [true]}])
+    :ets.select_delete(state.table, [{{:_, :"$1"}, [{:"=<", :"$1", key}], [true]}])
 
     {:noreply, [], state}
   end
 
   defp send_events_from_ets(%{demand: 0} = state), do: {:noreply, [], state}
 
-  defp send_events_from_ets(%{demand: demand, table: set, starting_from: from} = state) do
+  defp send_events_from_ets(%{demand: demand, table: table, starting_from: from} = state) do
     results =
-      case ETS.Set.select!(set, [{{:"$1", :"$2"}, [{:>, :"$2", from}], [:"$$"]}], demand) do
+      case :ets.select(table, [{{:"$1", :"$2"}, [{:>, :"$2", from}], [:"$$"]}], demand) do
         :"$end_of_table" -> []
         {results, _continuation} -> results
       end
