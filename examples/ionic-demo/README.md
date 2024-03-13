@@ -69,17 +69,16 @@ Generate your [type-safe client](https://electric-sql.com/docs/usage/data-access
 
 ```shell
 npm run client:generate
-# or `npm run client:watch`` to re-generate whenever the DB schema changes
+# or `npm run client:watch` to re-generate whenever the DB schema changes
 ```
 
-## Run the webapp
+## Run the web app
 
 The app is a React application, to run it:
 
 ```bash
-npm run start
-// or this if you have the ionic cli installed:
-ionic serve
+npm run dev
+# or `ionic serve` if you have the Ionic CLI installed
 ```
 
 The app displays the port on localhost where you can view the app.
@@ -88,7 +87,7 @@ The app displays the port on localhost where you can view the app.
 
 To build and run the app on an iOS device follow the prerequisites above and run:
 
-```
+```bash
 ionic capacitor build ios
 ```
 
@@ -96,7 +95,7 @@ Xcode should open ready for running in the simulator or on a tethered device.
 
 When testing in the iOS simulator, the device can see the Electric sync service on your `localhost`, however when running on another device you will need to build with an accessible `ELECTRIC_URL`. Note that as the app connects to the sync service with a web socket, when running on a different host you may have to use SSL (wss://). The easiest way to do this is with a service such as [ngrok](http://ngrok.com). For example:
 
-```
+```bash
 ngrok http 5133
 ```
 
@@ -108,8 +107,34 @@ ELECTRIC_URL=https://abcdef123456.ngrok.app ionic capacitor build ios
 
 ## Build and run the Android app
 
-To build and run the app on an iOS device follow the prerequisites above and run the following command, note you may have to expose your sync service on a an SSL enabled endpoint (see iOS instruction for an example with ngrok).
+To build and run the app on an Android device follow the prerequisites above and run the following command:
 
+```bash
+ionic capacitor build android
 ```
+
+You have to expose your sync service on a an SSL enabled endpoint (see iOS instruction for an example with ngrok).
+
+```bash
 ELECTRIC_URL=https://hostname.of.sync.service ionic capacitor build android
+```
+
+Alternatively you can enable cleartext and mixed content mode through th `capacitor.config.ts`:
+```ts
+const config: CapacitorConfig = {
+  ...
+  android: {
+    allowMixedContent: true,
+  },
+  server: {
+    androidScheme: 'https',
+    cleartext: true,
+  },
+  ...
+}
+```
+
+If running on an emulator, be mindful of [its networking](https://developer.android.com/studio/run/emulator-networking) as you might need to point to `10.0.2.2` rather than `localhost`:
+```bash
+ELECTRIC_URL=ws://10.0.2.2:5133 ionic capacitor build android
 ```
