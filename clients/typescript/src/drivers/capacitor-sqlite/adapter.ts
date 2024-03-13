@@ -26,11 +26,12 @@ export class DatabaseAdapter extends GenericDatabaseAdapter {
 
   async _run(statement: Statement): Promise<RunResult> {
     const wrapInTransaction = false
-    const result = await this.db.run(
-      statement.sql,
-      statement.args,
-      wrapInTransaction
-    )
+
+    // if no bind values are provided, use `execute` API which
+    // has less overhead and native side pre-processing
+    const result = await (statement.args && statement.args.length > 0
+      ? this.db.run(statement.sql, statement.args, wrapInTransaction)
+      : this.db.execute(statement.sql, wrapInTransaction))
 
     const rowsAffected = result.changes?.changes ?? 0
     return { rowsAffected: rowsAffected }
