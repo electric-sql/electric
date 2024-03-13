@@ -31,7 +31,16 @@ export let dbName: string
 
 export const initElectric = async () => {
   const { tabId } = uniqueTabId()
-  const electricUrl = ELECTRIC_URL ?? 'ws://localhost:5133'
+
+  let electricUrl = ELECTRIC_URL ?? 'ws://localhost:5133'
+
+  // NOTE: when running on an Android emulator, need to use the virtual
+  // address to your host loopback interface
+  // see: https://developer.android.com/studio/run/emulator-networking
+  if (Capacitor.getPlatform() === 'android') {
+    electricUrl = electricUrl.replace('://localhost', '://10.0.2.2')
+  }
+
   dbName = `${discriminator}-${LIB_VERSION}-${tabId}.db`
 
   const config = {

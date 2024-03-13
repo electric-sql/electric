@@ -112,8 +112,29 @@ To build and run the app on an Android device follow the prerequisites above and
 ```bash
 ionic capacitor build android
 ```
-Note you may have to expose your sync service on a an SSL enabled endpoint (see iOS instruction for an example with ngrok).
 
-```
+You have to expose your sync service on a an SSL enabled endpoint (see iOS instruction for an example with ngrok).
+
+```bash
 ELECTRIC_URL=https://hostname.of.sync.service ionic capacitor build android
+```
+
+Alternatively you can enable cleartext and mixed content mode through th `capacitor.config.ts`:
+```ts
+const config: CapacitorConfig = {
+  ...
+  android: {
+    allowMixedContent: true,
+  },
+  server: {
+    androidScheme: 'https',
+    cleartext: true,
+  },
+  ...
+}
+```
+
+If running on an emulator, be mindful of [its networking](https://developer.android.com/studio/run/emulator-networking) as you might need to point to `10.0.2.2` rather than `localhost`:
+```bash
+ELECTRIC_URL=ws://10.0.2.2:5133 ionic capacitor build android
 ```
