@@ -119,7 +119,7 @@ export interface SatInStartReplicationReq {
     | undefined;
   /**
    * List of transaction IDs for which the client
-   * didn't observe additional data before disconnect
+   * observed additional data before disconnect
    */
   observedTransactionData: Long[];
 }

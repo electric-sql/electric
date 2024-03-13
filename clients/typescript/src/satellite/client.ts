@@ -173,6 +173,11 @@ export class SatelliteClient implements Client {
     stopReplication: this.handleStopReq.bind(this),
   }
 
+  /* eslint-disable-next-line @typescript-eslint/ban-types --
+   * This remapping actually is generic from a function to a function of the same type,
+   * but there's no way to express that. It's needed because we're wrapping the original
+   * callback in our own, which makes `.removeListener` not work.
+   */
   private listenerRemapping: Map<Function, Function> = new Map()
 
   constructor(
