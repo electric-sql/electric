@@ -9,7 +9,7 @@ config.resolver = {
   // accidentally require module that assume node
   // libraries and APIs are present - specify expo/react-native
   // for info, see: https://metrobundler.dev/docs/package-exports/
-  unstable_conditionNames: ['expo', 'react-native'],
+  unstable_conditionNames: [],
 }
 
 module.exports = config
