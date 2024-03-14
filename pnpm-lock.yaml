@@ -38,9 +38,6 @@ importers:
       commander:
         specifier: ^11.1.0
         version: 11.1.0
-      cordova-sqlite-storage:
-        specifier: '>= 5.0.0'
-        version: 5.0.0
       cross-fetch:
         specifier: ^3.1.5
         version: 3.1.6
@@ -150,9 +147,6 @@ importers:
       '@types/better-sqlite3':
         specifier: 7.6.3
         version: 7.6.3
-      '@types/cordova-sqlite-storage':
-        specifier: ^1.5.5
-        version: 1.5.5
       '@types/decompress':
         specifier: ^4.2.4
         version: 4.2.4
@@ -5024,10 +5018,6 @@ packages:
     resolution: {integrity: sha512-mEo1sAde+UCE6b2hxn332f1g1E8WfYRu6p5SvTKr2ZKC1f7gFJXk4h5PyGP9Dt6gCaG8y8XhwnXWC6Iy2cmBng==}
     dev: true
 
-  /@types/cordova-sqlite-storage@1.5.5:
-    resolution: {integrity: sha512-6QoDJassFYYtdEeCOuThnN+Mr+nwowOCdZLUzpp6kyvpYRJ1aAM52CVJ7V76OoHrFFjIsZ2P6wOpqxzwZ0fe/Q==}
-    dev: true
-
   /@types/cross-spawn@6.0.2:
     resolution: {integrity: sha512-KuwNhp3eza+Rhu8IFI5HUXRP0LIhqH5cAjubUvGXXthh4YYBuP2ntwEX+Cz8GJoZUHlKo247wPWOfA9LYEq4cw==}
     dependencies:
@@ -7217,16 +7207,6 @@ packages:
   /copy-descriptor@0.1.1:
     resolution: {integrity: sha512-XgZ0pFcakEUlbwQEVNg3+QAis1FyTL3Qel9FYy8pSkQqoG3PNoT0bOCQtOXcOkur21r2Eq2kI+IE+gsmAEVlYw==}
     engines: {node: '>=0.10.0'}
-    dev: false
-
-  /cordova-sqlite-storage-dependencies@2.1.1:
-    resolution: {integrity: sha512-1lV5Pg1FttjBmGO8z4gxtuA4BbPKtgTfUEh1Vx4boa41inizyxaowRyTeaaqEhi5gmYAaX8sRTABm9U/XckRFg==}
-    dev: false
-
-  /cordova-sqlite-storage@5.0.0:
-    resolution: {integrity: sha512-AFb3t3yrdFZ0ZY16FKJupyx71bq+iKHSWHfHH1xmFjEuGK7VPbSHwGEf9hpypin42Z10OdkR1CgnTyvkWNtLlw==}
-    dependencies:
-      cordova-sqlite-storage-dependencies: 2.1.1
     dev: false
 
   /core-js-compat@3.30.2:

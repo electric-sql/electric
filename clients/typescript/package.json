@@ -13,7 +13,6 @@
     "better-sqlite3",
     "capacitor",
     "op-sqlite",
-    "cordova",
     "crdt",
     "crdts",
     "database",
@@ -50,7 +49,6 @@
   },
   "exports": {
     "./browser": "./dist/drivers/wa-sqlite/index.js",
-    "./cordova": "./dist/drivers/cordova-sqlite-storage/index.js",
     "./capacitor": "./dist/drivers/capacitor-sqlite/index.js",
     "./expo": "./dist/drivers/expo-sqlite/index.js",
     "./expo-next": "./dist/drivers/expo-sqlite-next/index.js",
@@ -77,9 +75,6 @@
     "*": {
       "browser": [
         "./dist/drivers/wa-sqlite/index.d.ts"
-      ],
-      "cordova": [
-        "./dist/drivers/cordova-sqlite-storage/index.d.ts"
       ],
       "capacitor": [
         "./dist/drivers/capacitor-sqlite/index.d.ts"
@@ -212,7 +207,6 @@
     "@testing-library/react": "^13.4.0",
     "@types/base-64": "^1.0.0",
     "@types/better-sqlite3": "7.6.3",
-    "@types/cordova-sqlite-storage": "^1.5.5",
     "@types/decompress": "^4.2.4",
     "@types/lodash.flow": "^3.5.7",
     "@types/lodash.groupby": "^4.6.7",
@@ -262,7 +256,6 @@
     "@op-engineering/op-sqlite": ">= 2.0.16",
     "@capacitor-community/sqlite": ">= 5.4.1",
     "@tauri-apps/plugin-sql": "2.0.0-alpha.5",
-    "cordova-sqlite-storage": ">= 5.0.0",
     "expo-sqlite": ">= 13.0.0",
     "react": ">= 16.8.0",
     "react-dom": ">= 16.8.0",
@@ -277,9 +270,6 @@
       "optional": true
     },
     "@capacitor-community/sqlite": {
-      "optional": true
-    },
-    "cordova-sqlite-storage": {
       "optional": true
     },
     "expo-sqlite": {
