@@ -64,6 +64,7 @@ export interface SatelliteClientOpts {
   ssl: boolean
   timeout: number
   pushPeriod?: number
+  dialect: 'SQLite' | 'Postgres'
 }
 
 export const validateConfig = (config: any) => {
