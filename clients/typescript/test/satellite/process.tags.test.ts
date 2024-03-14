@@ -79,6 +79,47 @@ test('basic rules for setting tags', async (t) => {
   t.not(txDate3, txDate4)
 })
 
+test('Tags are correctly set on multiple operations within snapshot/transaction', async (t) => {
+  const { adapter, runMigrations, satellite, authState } = t.context
+  await runMigrations()
+  const clientId = 'test_client'
+  satellite._setAuthState({ ...authState, clientId })
+
+  // Insert 4 items in separate snapshots
+  await adapter.run({
+    sql: `INSERT INTO parent (id, value) VALUES (1, 'val1')`,
+  })
+  const ts1 = await satellite._performSnapshot()
+  await adapter.run({
+    sql: `INSERT INTO parent (id, value) VALUES (2, 'val2')`,
+  })
+  const ts2 = await satellite._performSnapshot()
+  await adapter.run({
+    sql: `INSERT INTO parent (id, value) VALUES (3, 'val3')`,
+  })
+  const ts3 = await satellite._performSnapshot()
+  await adapter.run({
+    sql: `INSERT INTO parent (id, value) VALUES (4, 'val4')`,
+  })
+  const ts4 = await satellite._performSnapshot()
+
+  // Now delete them all in a single snapshot
+  await adapter.run({ sql: `DELETE FROM parent` })
+  const ts5 = await satellite._performSnapshot()
+
+  // Now check that each delete clears the correct tag
+  const entries = await satellite._getEntries(4)
+  t.deepEqual(
+    entries.map((x) => x.clearTags),
+    [
+      genEncodedTags(clientId, [ts5, ts1]),
+      genEncodedTags(clientId, [ts5, ts2]),
+      genEncodedTags(clientId, [ts5, ts3]),
+      genEncodedTags(clientId, [ts5, ts4]),
+    ]
+  )
+})
+
 test('Tags are correctly set on subsequent operations in a TX', async (t) => {
   const { adapter, runMigrations, satellite, authState } = t.context
 
