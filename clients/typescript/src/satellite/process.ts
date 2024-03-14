@@ -973,36 +973,21 @@ export class SatelliteProcess implements Satellite {
         args: [timestamp.toISOString()],
       }
 
-      // For each first oplog entry per element, set `clearTags` array to previous tags from the shadow table
-      // For the subsequent oplog entries per element, set the `clearTags` array to the current tag for this TX
-      // This is fine because only the first operation of the TX must override previous TXs
-      // and the rest of the operations in the TX just need to be aware of the current TX
-      // because conflict resolution on Electric happens on the level of TXs
+      // We're adding new tag to the shadow tags for this row
       const q2: Statement = {
         sql: `
       UPDATE ${oplog}
       SET clearTags =
-            CASE WHEN rowid = updates.rowid_of_first_op_in_tx
-                 THEN updates.tags
-                 ELSE ? -- singleton array containing tag of thix TX
-            END
-      FROM (
-        SELECT shadow.tags as tags, min(op.rowid) as rowid_of_first_op_in_tx
-        FROM ${shadow} AS shadow
-        JOIN ${oplog} as op
-          ON op.namespace = shadow.namespace
-            AND op.tablename = shadow.tablename
-            AND op.primaryKey = shadow.primaryKey
-        WHERE op.timestamp = ?
-        GROUP BY op.namespace, op.tablename, op.primaryKey
-      ) AS updates
-      WHERE ${oplog}.timestamp = ? -- only update operations from this TX
+          CASE WHEN shadow.tags = '[]' OR shadow.tags = ''
+               THEN '["' || ? || '"]'
+               ELSE '["' || ? || '",' || substring(shadow.tags, 2)
+          END
+      FROM ${shadow} AS shadow
+      WHERE ${oplog}.namespace = shadow.namespace
+          AND ${oplog}.tablename = shadow.tablename
+          AND ${oplog}.primaryKey = shadow.primaryKey AND ${oplog}.timestamp = ?
       `,
-        args: [
-          encodeTags([newTag]),
-          timestamp.toISOString(),
-          timestamp.toISOString(),
-        ],
+        args: [newTag, newTag, timestamp.toISOString()],
       }
 
       // For each affected shadow row, set new tag array, unless the last oplog operation was a DELETE
