@@ -1,5 +1,32 @@
 # electric-sql
 
+## 0.9.5
+
+### Patch Changes
+
+- 85daa6ed: CLI support for Docker compose version 2.24.6 by removing inheritance from docker-compose files.
+- eebd03cf: Fix bug in generic DB adapter that could lead to transaction lock not being released.
+- 3d160018: Remove `db` field from `DatabaseAdapter` and export it to aid in external database adapter creation.
+- 95dbb6b3: Fix Capacitor driver issue where `BEGIN` statements failed to run on Android by using driver's `execute` API.
+- 758173c9: New adapter for supporting op-sqlite
+- eae8a049: - Fix `react-native-sqlite-storage` implementation to use correct `dbname` attribtue
+  - Refactor `react-native-sqlite-storage` implementation to use SerialDatabaseAdapter
+- 595e8f99: Fix `upsert` causing double-serialization of JSON fields
+- f058ffc4: Remove `react-native-get-random-values` as included dependency - waring fired instead and polyfill left to library user
+- 55a0bf11: Export websocket implementations to enable use in custom drivers
+- b65f3edf: Add `useConnectivityState` API to Vue.js bindings
+- 5d95ce66: Fix TextEncoder and TextDecoder polyfills to work cross-platform
+- ece1f126: Reverted CLI to use Prisma v4 instead of v5 because Prisma v5 introduces breaking type changes in the generated client which caused type errors in the generated Electric client.
+- 95629057: Provide targeted polyfills for web API dependencies for compatibility with other runtimes
+- b0b863bf: Fix race condition in performSnapshot. Changes can only be sent to remote when the outbound replication status is active
+- a269b7cd: Fixes bug that would cause deleted rows to re-appear under specific conditions.
+- 31384af1: Remove unused React hook and clean up `useLiveQuery` hook
+- c30516ef: Fix issue with duplicate rows when including several relations.
+- 8bfacdbb: Remove comments from client SQLite trigger migrations for better compatibility with drivers (e.g. see [this driver issue](https://github.com/capacitor-community/sqlite/issues/521)).
+- a4d914ff: Remove `cordova-sqlite-storage` driver support
+- d995920b: Remove `react-native-sqlite-storage` driver support
+- 02ebef80: Bump minimum required version for `@capacitor-community/sqlite` driver to include fix to the [`executeSet` API issue](https://github.com/capacitor-community/sqlite/issues/521)
+
 ## 0.9.4
 
 ### Patch Changes
