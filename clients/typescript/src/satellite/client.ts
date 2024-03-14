@@ -26,6 +26,7 @@ import {
   Root,
   RootClientImpl,
   SatRpcRequest,
+  SatInStartReplicationReq_Dialect,
 } from '../_generated/protocol/satellite'
 import {
   getObjFromString,
@@ -131,6 +132,7 @@ type EventEmitter = AsyncEventEmitter<Events>
 
 export class SatelliteClient implements Client {
   private opts: Required<SatelliteClientOpts>
+  private dialect: SatInStartReplicationReq_Dialect
 
   private emitter: EventEmitter
 
@@ -194,6 +196,10 @@ export class SatelliteClient implements Client {
     this.emitter = new AsyncEventEmitter<Events>()
 
     this.opts = { ...satelliteClientDefaults, ...opts }
+    this.dialect =
+      opts.dialect === 'SQLite'
+        ? SatInStartReplicationReq_Dialect.SQLITE
+        : SatInStartReplicationReq_Dialect.POSTGRES
     this.socketFactory = socketFactory
 
     this.inbound = this.resetInboundReplication()
@@ -365,7 +371,10 @@ export class SatelliteClient implements Client {
           )
         )
       }
-      request = SatInStartReplicationReq.fromPartial({ schemaVersion })
+      request = SatInStartReplicationReq.fromPartial({
+        schemaVersion,
+        sqlDialect: this.dialect,
+      })
     } else {
       Log.info(
         `starting replication with lsn: ${base64.fromBytes(
@@ -376,6 +385,7 @@ export class SatelliteClient implements Client {
         lsn,
         subscriptionIds,
         observedTransactionData,
+        sqlDialect: this.dialect,
       })
     }
 

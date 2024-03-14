@@ -44,6 +44,10 @@ export interface ElectricConfig {
   connectionBackOffOptions?: ConnectionBackOffOptions
 }
 
+export type ElectricConfigWithDialect = ElectricConfig & {
+  dialect?: 'SQLite' | 'Postgres'
+}
+
 export type HydratedConfig = {
   auth: AuthConfig
   replication: {
@@ -51,6 +55,7 @@ export type HydratedConfig = {
     port: number
     ssl: boolean
     timeout: number
+    dialect: 'SQLite' | 'Postgres'
   }
   debug: boolean
   connectionBackOffOptions: ConnectionBackOffOptions
@@ -68,7 +73,9 @@ export type InternalElectricConfig = {
   connectionBackOffOptions?: ConnectionBackOffOptions
 }
 
-export const hydrateConfig = (config: ElectricConfig): HydratedConfig => {
+export const hydrateConfig = (
+  config: ElectricConfigWithDialect
+): HydratedConfig => {
   const auth = config.auth ?? {}
 
   const debug = config.debug ?? false
@@ -86,6 +93,7 @@ export const hydrateConfig = (config: ElectricConfig): HydratedConfig => {
     port: port,
     ssl: sslEnabled,
     timeout: config.timeout ?? 3000,
+    dialect: config.dialect ?? 'SQLite',
   }
 
   const {
