@@ -466,109 +466,109 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
 
   test('Tags are correctly set on subsequent operations in a TX', async (t) => {
     const { adapter, runMigrations, satellite, authState } = t.context
-  
+
     await runMigrations()
-  
+
     await adapter.run({
-      sql: `INSERT INTO parent(id, value) VALUES (1,'val1')`,
+      sql: `INSERT INTO main.parent(id, value) VALUES (1,'val1')`,
     })
-  
+
     // Since no snapshot was made yet
     // the timestamp in the oplog is not yet set
     const insertEntry = await adapter.query({
-      sql: `SELECT timestamp, clearTags FROM _electric_oplog WHERE rowid = 1`,
+      sql: `SELECT timestamp, "clearTags" FROM main._electric_oplog WHERE rowid = 1`,
     })
     t.is(insertEntry[0].timestamp, null)
     t.deepEqual(JSON.parse(insertEntry[0].clearTags as string), [])
-  
+
     await satellite._setAuthState(authState)
     await satellite._performSnapshot()
-  
+
     const parseDate = (date: string) => new Date(date).getTime()
-  
+
     // Now the timestamp is set
     const insertEntryAfterSnapshot = await adapter.query({
-      sql: `SELECT timestamp, clearTags FROM _electric_oplog WHERE rowid = 1`,
+      sql: `SELECT timestamp, "clearTags" FROM main._electric_oplog WHERE rowid = 1`,
     })
     t.assert(insertEntryAfterSnapshot[0].timestamp != null)
     const insertTimestamp = parseDate(
       insertEntryAfterSnapshot[0].timestamp as string
     )
     t.deepEqual(JSON.parse(insertEntryAfterSnapshot[0].clearTags as string), [])
-  
+
     // Now update the entry, then delete it, and then insert it again
     await adapter.run({
-      sql: `UPDATE parent SET value = 'val2' WHERE id=1`,
+      sql: `UPDATE main.parent SET value = 'val2' WHERE id=1`,
     })
-  
+
     await adapter.run({
-      sql: `DELETE FROM parent WHERE id=1`,
+      sql: `DELETE FROM main.parent WHERE id=1`,
     })
-  
+
     await adapter.run({
-      sql: `INSERT INTO parent(id, value) VALUES (1,'val3')`,
+      sql: `INSERT INTO main.parent(id, value) VALUES (1,'val3')`,
     })
-  
+
     // Since no snapshot has been taken for these operations
     // their timestamp and clearTags should not be set
     const updateEntry = await adapter.query({
-      sql: `SELECT timestamp, clearTags FROM _electric_oplog WHERE rowid = 2`,
+      sql: `SELECT timestamp, "clearTags" FROM main._electric_oplog WHERE rowid = 2`,
     })
-  
+
     t.is(updateEntry[0].timestamp, null)
     t.deepEqual(JSON.parse(updateEntry[0].clearTags as string), [])
-  
+
     const deleteEntry = await adapter.query({
-      sql: `SELECT timestamp, clearTags FROM _electric_oplog WHERE rowid = 3`,
+      sql: `SELECT timestamp, "clearTags" FROM main._electric_oplog WHERE rowid = 3`,
     })
-  
+
     t.is(deleteEntry[0].timestamp, null)
     t.deepEqual(JSON.parse(deleteEntry[0].clearTags as string), [])
-  
+
     const reinsertEntry = await adapter.query({
-      sql: `SELECT timestamp, clearTags FROM _electric_oplog WHERE rowid = 4`,
+      sql: `SELECT timestamp, "clearTags" FROM main._electric_oplog WHERE rowid = 4`,
     })
-  
+
     t.is(reinsertEntry[0].timestamp, null)
     t.deepEqual(JSON.parse(reinsertEntry[0].clearTags as string), [])
-  
+
     // Now take a snapshot for these operations
     await satellite._performSnapshot()
-  
+
     // Now the timestamps should be set
     // The first operation (update) should override
     // the original insert (i.e. clearTags must contain the timestamp of the insert)
     const updateEntryAfterSnapshot = await adapter.query({
-      sql: `SELECT timestamp, clearTags FROM _electric_oplog WHERE rowid = 2`,
+      sql: `SELECT timestamp, "clearTags" FROM main._electric_oplog WHERE rowid = 2`,
     })
-  
+
     const rawTimestampTx2 = updateEntryAfterSnapshot[0].timestamp
     t.assert(rawTimestampTx2 != null)
     const timestampTx2 = parseDate(rawTimestampTx2 as string)
-  
+
     t.is(
       updateEntryAfterSnapshot[0].clearTags,
       genEncodedTags(authState.clientId, [insertTimestamp])
     )
-  
+
     // The second operation (delete) should have the same timestamp
     // and should contain the tag of the TX in its clearTags
     const deleteEntryAfterSnapshot = await adapter.query({
-      sql: `SELECT timestamp, clearTags FROM _electric_oplog WHERE rowid = 3`,
+      sql: `SELECT timestamp, "clearTags" FROM main._electric_oplog WHERE rowid = 3`,
     })
-  
+
     t.assert(deleteEntryAfterSnapshot[0].timestamp === rawTimestampTx2)
     t.is(
       deleteEntryAfterSnapshot[0].clearTags,
       genEncodedTags(authState.clientId, [timestampTx2])
     )
-  
+
     // The third operation (reinsert) should have the same timestamp
     // and should contain the tag of the TX in its clearTags
     const reinsertEntryAfterSnapshot = await adapter.query({
-      sql: `SELECT timestamp, clearTags FROM _electric_oplog WHERE rowid = 4`,
+      sql: `SELECT timestamp, "clearTags" FROM main._electric_oplog WHERE rowid = 4`,
     })
-  
+
     t.assert(reinsertEntryAfterSnapshot[0].timestamp === rawTimestampTx2)
     t.is(
       reinsertEntryAfterSnapshot[0].clearTags,
