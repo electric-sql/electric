@@ -11,7 +11,7 @@ import useBaseUrl from '@docusaurus/useBaseUrl'
 
 Welcome to the ElectricSQL developer documentation.
 
-ElectricSQL is a local-first software platform. Use it to build super fast, collaborative, offline-capable apps directly on Postgres.
+ElectricSQL is a [local-first software platform](./reference/local-first.md). Use it to build super fast, collaborative, offline-capable apps directly on Postgres.
 
 ## New to ElectricSQL?
 
