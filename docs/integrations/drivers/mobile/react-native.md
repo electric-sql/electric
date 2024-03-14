@@ -10,7 +10,7 @@ ElectricSQL supports [React Native](https://reactnative.dev) via the [@op-engine
 Add `@op-engineering/op-sqlite` as a dependency to your app, e.g.:
 
 ```shell
-npm install react-native-sqlite-storage
+npm install @op-engineering/op-sqlite
 ```
 
 See the [op-sqlite documentation](https://ospfranco.notion.site/Installation-Flags-93044890aa3d4d14b6c525ba4ba8686f) for additional steps -- basically you might need
@@ -18,7 +18,7 @@ to configure the native modules for your target environments.
 
 ## Usage
 
-You can use react-native-sqlite-storage with or without the promise API enabled. The example below shows using it with promises enabled:
+The example below shows how to use the op-sqlite driver with Electric:
 
 ```tsx
 import { open as openOPSQLiteConn } from '@op-engineering/op-sqlite'
