@@ -1,4 +1,5 @@
 import { Uuid } from './types'
+import Log from 'loglevel'
 
 export const randomValue = (): string => {
   return Math.random().toString(16).substring(2)
@@ -21,7 +22,7 @@ export const genUUID = (): Uuid => {
   } else {
     // fallback to Math.random, if the Crypto API is completely missing
     if (!unsafeRandomWarned) {
-      console.warn(
+      Log.debug(
         'Crypto API is not available. ' +
           'Falling back to Math.random for UUID generation ' +
           'with weak uniqueness guarantees. ' +
