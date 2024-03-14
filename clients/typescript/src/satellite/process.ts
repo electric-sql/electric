@@ -1611,7 +1611,7 @@ export function generateTriggersForTable(tbl: MigrationTable): Statement[] {
       }
     }),
     columnTypes: Object.fromEntries(
-      tbl.columns.map((col) => [col.name, col.typeInfo.name.toUpperCase()])
+      tbl.columns.map((col) => [col.name, col.typeInfo!.name.toUpperCase()])
     ),
   }
   const fullTableName = table.namespace + '.' + table.tableName
