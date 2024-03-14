@@ -95,7 +95,9 @@ defmodule Electric.Postgres.TestConnection do
     origin = Map.fetch!(context, :origin)
 
     # Initialize the test DB to the state which Electric can work with.
-    setup_fun = fn _conn -> nil end
+    setup_fun = fn conn ->
+      :epgsql.squery(conn, "CREATE EXTENSION vector")
+    end
 
     # Dropping the subscription is necessary before the test DB can be removed.
     teardown_fun = fn conn ->

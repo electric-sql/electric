@@ -26,6 +26,7 @@ defmodule Electric.Postgres.OidDatabase do
     end
   end
 
+  # TODO: Save the public.vector type.
   def save_oids(server \\ __MODULE__, values) do
     GenServer.call(server, {:save_oids, Enum.map(values, &pg_type_from_tuple/1)})
   end

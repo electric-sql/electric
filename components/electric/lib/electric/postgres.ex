@@ -92,6 +92,7 @@ defmodule Electric.Postgres do
       timestamp timestamptz
       uuid
       varchar
+      vector
     ]a
   end
 end
