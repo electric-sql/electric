@@ -138,8 +138,10 @@ message SatInStartReplicationReq {
      */
     repeated uint64 observed_transaction_data = 6;
 
-    // The SQL dialect used by the client
-    // Defaults to SQLite if not specified
+    /**
+     * The SQL dialect used by the client
+     * Defaults to SQLite if not specified
+     */
     optional Dialect sql_dialect = 7;
 
     // Note:
