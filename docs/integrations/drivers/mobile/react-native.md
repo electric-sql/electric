@@ -3,6 +3,8 @@ title: React Native
 sidebar_position: 20
 ---
 
+
+
 ElectricSQL supports [React Native](https://reactnative.dev) via the [@op-engineering/op-sqlite](https://github.com/OP-Engineering/op-sqlite) driver.
 
 ## Dependencies
@@ -15,6 +17,10 @@ npm install @op-engineering/op-sqlite
 
 See the [op-sqlite documentation](https://ospfranco.notion.site/Installation-Flags-93044890aa3d4d14b6c525ba4ba8686f) for additional steps -- basically you might need
 to configure the native modules for your target environments.
+
+import CryptoPolyfillWarning from './_crypto_polyfill_warning.md'
+
+<CryptoPolyfillWarning />
 
 ## Usage
 
