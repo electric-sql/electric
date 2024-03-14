@@ -260,7 +260,7 @@
   },
   "peerDependencies": {
     "@op-engineering/op-sqlite": ">= 2.0.16",
-    "@capacitor-community/sqlite": ">= 5.4.1",
+    "@capacitor-community/sqlite": ">= 5.6.2",
     "@tauri-apps/plugin-sql": "2.0.0-alpha.5",
     "cordova-sqlite-storage": ">= 5.0.0",
     "expo-sqlite": ">= 13.0.0",
