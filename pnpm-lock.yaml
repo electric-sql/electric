@@ -107,9 +107,6 @@ importers:
       react-native:
         specifier: '>= 0.68.0'
         version: 0.68.0(@babel/core@7.23.9)(@babel/preset-env@7.22.4)(react@18.2.0)
-      react-native-get-random-values:
-        specifier: ^1.0.0
-        version: 1.10.0(react-native@0.68.0)
       squel:
         specifier: ^5.13.0
         version: 5.13.0
@@ -8929,10 +8926,6 @@ packages:
     engines: {node: '> 0.1.90'}
     dev: false
 
-  /fast-base64-decode@1.0.0:
-    resolution: {integrity: sha512-qwaScUgUGBYeDNRnbc/KyllVU88Jk1pRHPStuF/lO7B0/RTRLj7U0lkdTAutlBblY08rwZDff6tNU9cjv6j//Q==}
-    dev: false
-
   /fast-deep-equal@3.1.3:
     resolution: {integrity: sha512-f3qQ9oQy9j2AhBe/H9VC91wLmKBCCU/gDOnKNAYG5hswO7BLKj09Hc5HYNz9cGI++xlpDCIgDaitVs03ATR84Q==}
     dev: true
@@ -13318,15 +13311,6 @@ packages:
     transitivePeerDependencies:
       - '@babel/preset-env'
       - supports-color
-
-  /react-native-get-random-values@1.10.0(react-native@0.68.0):
-    resolution: {integrity: sha512-gZ1zbXhbb8+Jy9qYTV8c4Nf45/VB4g1jmXuavY5rPfUn7x3ok9Vl3FTl0dnE92Z4FFtfbUNNwtSfcmomdtWg+A==}
-    peerDependencies:
-      react-native: '>=0.56'
-    dependencies:
-      fast-base64-decode: 1.0.0
-      react-native: 0.68.0(@babel/core@7.23.9)(@babel/preset-env@7.22.4)(react@18.2.0)
-    dev: false
 
   /react-native-gradle-plugin@0.0.5(@babel/preset-env@7.22.4):
     resolution: {integrity: sha512-kGupXo+pD2mB6Z+Oyowor3qlCroiS32FNGoiGQdwU19u8o+NNhEZKwoKfC5Qt03bMZSmFlcAlTyf79vrS2BZKQ==}
