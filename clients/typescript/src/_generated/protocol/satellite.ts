@@ -114,12 +114,25 @@ export interface SatInStartReplicationReq {
   /** the subscriptions identifiers the client wants to resume subscription */
   subscriptionIds: string[];
   /** The version of the most recent migration seen by the client. */
-  schemaVersion?: string | undefined;
+  schemaVersion?:
+    | string
+    | undefined;
+  /**
+   * The SQL dialect used by the client
+   * Defaults to SQLite if not specified
+   */
+  sqlDialect?: SatInStartReplicationReq_Dialect | undefined;
 }
 
 export enum SatInStartReplicationReq_Option {
   /** NONE - Required by the Protobuf spec. */
   NONE = 0,
+  UNRECOGNIZED = -1,
+}
+
+export enum SatInStartReplicationReq_Dialect {
+  SQLITE = 0,
+  POSTGRES = 1,
   UNRECOGNIZED = -1,
 }
 
@@ -1019,6 +1032,7 @@ function createBaseSatInStartReplicationReq(): SatInStartReplicationReq {
     options: [],
     subscriptionIds: [],
     schemaVersion: undefined,
+    sqlDialect: undefined,
   };
 }
 
@@ -1039,6 +1053,9 @@ export const SatInStartReplicationReq = {
     }
     if (message.schemaVersion !== undefined) {
       writer.uint32(42).string(message.schemaVersion);
+    }
+    if (message.sqlDialect !== undefined) {
+      writer.uint32(48).int32(message.sqlDialect);
     }
     return writer;
   },
@@ -1088,6 +1105,13 @@ export const SatInStartReplicationReq = {
 
           message.schemaVersion = reader.string();
           continue;
+        case 6:
+          if (tag !== 48) {
+            break;
+          }
+
+          message.sqlDialect = reader.int32() as any;
+          continue;
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1107,6 +1131,7 @@ export const SatInStartReplicationReq = {
     message.options = object.options?.map((e) => e) || [];
     message.subscriptionIds = object.subscriptionIds?.map((e) => e) || [];
     message.schemaVersion = object.schemaVersion ?? undefined;
+    message.sqlDialect = object.sqlDialect ?? undefined;
     return message;
   },
 };

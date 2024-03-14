@@ -216,6 +216,80 @@
       )
     )
   end,
+  defmodule Electric.Satellite.SatInStartReplicationReq.Dialect do
+    @moduledoc false
+    (
+      defstruct []
+
+      (
+        @spec default() :: :SQLITE
+        def default() do
+          :SQLITE
+        end
+      )
+
+      @spec encode(atom() | String.t()) :: integer() | atom()
+      [
+        (
+          def encode(:SQLITE) do
+            0
+          end
+
+          def encode("SQLITE") do
+            0
+          end
+        ),
+        (
+          def encode(:POSTGRES) do
+            1
+          end
+
+          def encode("POSTGRES") do
+            1
+          end
+        )
+      ]
+
+      def encode(x) do
+        x
+      end
+
+      @spec decode(integer()) :: atom() | integer()
+      [
+        def decode(0) do
+          :SQLITE
+        end,
+        def decode(1) do
+          :POSTGRES
+        end
+      ]
+
+      def decode(x) do
+        x
+      end
+
+      @spec constants() :: [{integer(), atom()}]
+      def constants() do
+        [{0, :SQLITE}, {1, :POSTGRES}]
+      end
+
+      @spec has_constant?(any()) :: boolean()
+      (
+        [
+          def has_constant?(:SQLITE) do
+            true
+          end,
+          def has_constant?(:POSTGRES) do
+            true
+          end
+        ]
+
+        def has_constant?(_) do
+          false
+        end
+      )
+    )
+  end,
   defmodule Electric.Satellite.SatInStartReplicationReq.Option do
     @moduledoc false
     (
@@ -2824,7 +2898,7 @@
   end,
   defmodule Electric.Satellite.SatInStartReplicationReq do
     @moduledoc false
-    defstruct lsn: "", options: [], subscription_ids: [], schema_version: nil
+    defstruct lsn: "", options: [], subscription_ids: [], schema_version: nil, sql_dialect: nil
 
     (
       (
@@ -2841,6 +2915,7 @@
         def encode!(msg) do
           []
           |> encode_schema_version(msg)
+          |> encode_sql_dialect(msg)
           |> encode_lsn(msg)
           |> encode_options(msg)
           |> encode_subscription_ids(msg)
@@ -2925,6 +3000,27 @@
               reraise Protox.EncodingError.new(:schema_version, "invalid field value"),
                       __STACKTRACE__
           end
+        end,
+        defp encode_sql_dialect(acc, msg) do
+          try do
+            case msg.sql_dialect do
+              nil ->
+                [acc]
+
+              child_field_value ->
+                [
+                  acc,
+                  "0",
+                  child_field_value
+                  |> Electric.Satellite.SatInStartReplicationReq.Dialect.encode()
+                  |> Protox.Encode.encode_enum()
+                ]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:sql_dialect, "invalid field value"),
+                      __STACKTRACE__
+          end
         end
       ]
 
@@ -3005,6 +3101,15 @@
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
                 {[schema_version: Protox.Decode.validate_string(delimited)], rest}
 
+              {6, _, bytes} ->
+                {value, rest} =
+                  Protox.Decode.parse_enum(
+                    bytes,
+                    Electric.Satellite.SatInStartReplicationReq.Dialect
+                  )
+
+                {[sql_dialect: value], rest}
+
               {tag, wire_type, rest} ->
                 {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
                 {[], rest}
@@ -3065,7 +3170,10 @@
           1 => {:lsn, {:scalar, ""}, :bytes},
           2 => {:options, :packed, {:enum, Electric.Satellite.SatInStartReplicationReq.Option}},
           4 => {:subscription_ids, :unpacked, :string},
-          5 => {:schema_version, {:oneof, :_schema_version}, :string}
+          5 => {:schema_version, {:oneof, :_schema_version}, :string},
+          6 =>
+            {:sql_dialect, {:oneof, :_sql_dialect},
+             {:enum, Electric.Satellite.SatInStartReplicationReq.Dialect}}
         }
       end
 
@@ -3078,6 +3186,9 @@
           lsn: {1, {:scalar, ""}, :bytes},
           options: {2, :packed, {:enum, Electric.Satellite.SatInStartReplicationReq.Option}},
           schema_version: {5, {:oneof, :_schema_version}, :string},
+          sql_dialect:
+            {6, {:oneof, :_sql_dialect},
+             {:enum, Electric.Satellite.SatInStartReplicationReq.Dialect}},
           subscription_ids: {4, :unpacked, :string}
         }
       end
@@ -3122,6 +3233,15 @@
             name: :schema_version,
             tag: 5,
             type: :string
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "sqlDialect",
+            kind: {:oneof, :_sql_dialect},
+            label: :proto3_optional,
+            name: :sql_dialect,
+            tag: 6,
+            type: {:enum, Electric.Satellite.SatInStartReplicationReq.Dialect}
           }
         ]
       end
@@ -3266,6 +3386,46 @@
              }}
           end
         ),
+        (
+          def field_def(:sql_dialect) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "sqlDialect",
+               kind: {:oneof, :_sql_dialect},
+               label: :proto3_optional,
+               name: :sql_dialect,
+               tag: 6,
+               type: {:enum, Electric.Satellite.SatInStartReplicationReq.Dialect}
+             }}
+          end
+
+          def field_def("sqlDialect") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "sqlDialect",
+               kind: {:oneof, :_sql_dialect},
+               label: :proto3_optional,
+               name: :sql_dialect,
+               tag: 6,
+               type: {:enum, Electric.Satellite.SatInStartReplicationReq.Dialect}
+             }}
+          end
+
+          def field_def("sql_dialect") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "sqlDialect",
+               kind: {:oneof, :_sql_dialect},
+               label: :proto3_optional,
+               name: :sql_dialect,
+               tag: 6,
+               type: {:enum, Electric.Satellite.SatInStartReplicationReq.Dialect}
+             }}
+          end
+        ),
         def field_def(_) do
           {:error, :no_such_field}
         end
@@ -3300,6 +3460,9 @@
         {:error, :no_default_value}
       end,
       def default(:schema_version) do
+        {:error, :no_default_value}
+      end,
+      def default(:sql_dialect) do
         {:error, :no_default_value}
       end,
       def default(_) do
