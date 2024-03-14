@@ -1,22 +1,52 @@
-import Database from 'better-sqlite3'
+import fs from 'fs/promises'
+import pg from 'pg'
+import SQLiteDatabase from 'better-sqlite3'
 import { ElectricConfig } from 'electric-sql'
 import { mockSecureAuthToken } from 'electric-sql/auth/secure'
+import { ElectricDatabase } from 'electric-sql/node-postgres'
 import { setLogLevel } from 'electric-sql/debug'
-import { electrify } from 'electric-sql/node'
+import { electrify as electrifySqlite } from 'electric-sql/node'
+import { electrify as electrifyPg } from 'electric-sql/node-postgres'
 import { v4 as uuidv4 } from 'uuid'
 import { schema, Electric, ColorType as Color } from './generated/client'
 export { JsonNull } from './generated/client'
 import { globalRegistry } from 'electric-sql/satellite'
 import { SatelliteErrorCode } from 'electric-sql/util'
 import { Shape } from 'electric-sql/satellite'
+import { pgBuilder, sqliteBuilder, QueryBuilder } from 'electric-sql/migrators/builder'
 
 setLogLevel('DEBUG')
 
 let dbName: string
+let electrify = electrifySqlite
+let builder: QueryBuilder = sqliteBuilder
 
-export const make_db = (name: string): any => {
+async function makePgDatabase(): Promise<ElectricDatabase> {
+  const client = new pg.Client({
+    host: 'pg_1',
+    port: 5432,
+    database: dbName,
+    user: 'postgres',
+    password: 'password',
+  })
+
+  await client.connect()
+
+  //const stop = () => client.end()
+  const db = new ElectricDatabase(dbName, client)
+  return db //{ db, stop }
+}
+
+export const make_db = async (name: string): Promise<any> => {
   dbName = name
-  return new Database(name)
+  console.log("DIALECT: " + process.env.DIALECT)
+  if (process.env.DIALECT === 'Postgres') {
+    electrify = electrifyPg
+    builder = pgBuilder
+    return makePgDatabase()
+  }
+
+  return new SQLiteDatabase(name)
 }
 
 export const electrify_db = async (
@@ -98,11 +128,11 @@ export const lowLevelSubscribe = async (electric: Electric, shape: Shape) => {
 }
 
 export const get_tables = (electric: Electric) => {
-  return electric.db.rawQuery({ sql: `SELECT name FROM sqlite_master WHERE type='table';` })
+  return electric.db.rawQuery(builder.getLocalTableNames())
 }
 
 export const get_columns = (electric: Electric, table: string) => {
-  return electric.db.rawQuery({ sql: `SELECT * FROM pragma_table_info(?);`, args: [table] })
+  return electric.db.rawQuery(builder.getTableInfo(table))
 }
 
 export const get_rows = (electric: Electric, table: string) => {
@@ -264,7 +294,7 @@ export const get_json_raw = async (electric: Electric, id: string) => {
 
 export const get_jsonb_raw = async (electric: Electric, id: string) => {
   const res = await electric.db.rawQuery({
-    sql: `SELECT jsb FROM jsons WHERE id = ?;`,
+    sql: `SELECT jsb FROM jsons WHERE id = ${builder.paramSign};`,
     args: [id]
   }) as unknown as Array<{ jsb: string }>
   return res[0]?.jsb

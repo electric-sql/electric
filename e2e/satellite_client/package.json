@@ -20,6 +20,7 @@
     "better-sqlite3": "^8.4.0",
     "electric-sql": "workspace:*",
     "jsonwebtoken": "^9.0.0",
+    "pg": "^8.11.3",
     "uuid": "^9.0.0",
     "zod": "^3.21.4"
   },
