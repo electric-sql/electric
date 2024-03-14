@@ -1,9 +1,9 @@
 import React, {useEffect, useState} from 'react';
 import {Image, Pressable, Text, View} from 'react-native';
 
-import SQLite, {SQLiteDatabase} from 'react-native-sqlite-storage';
+import {open as openSQLiteConnection} from '@op-engineering/op-sqlite';
 
-import {electrify} from 'electric-sql/react-native';
+import {electrify} from 'electric-sql/op-sqlite';
 import {makeElectricContext, useLiveQuery} from 'electric-sql/react';
 import {genUUID} from 'electric-sql/util';
 
@@ -13,9 +13,6 @@ import {Electric, Items as Item, schema} from './generated/client';
 import {styles} from './styles';
 
 const {ElectricProvider, useElectric} = makeElectricContext<Electric>();
-
-const promisesEnabled = true;
-SQLite.enablePromise(promisesEnabled);
 
 export const Example = () => {
   const [electric, setElectric] = useState<Electric>();
@@ -29,11 +26,9 @@ export const Example = () => {
         url: ELECTRIC_URL,
       };
 
-      const conn = (await SQLite.openDatabase({
-        name: 'electric.db',
-      })) as SQLiteDatabase & {dbName: string};
-      conn.dbName = conn.dbname;
-      const client = await electrify(conn, schema, promisesEnabled, config);
+      const dbName = 'electric.db';
+      const conn = openSQLiteConnection({name: dbName});
+      const client = await electrify(conn, dbName, schema, config);
       await client.connect(authToken());
 
       if (!isMounted) {
@@ -92,7 +87,7 @@ const ExampleComponent = () => {
   const items: Item[] = results ?? [];
 
   return (
-    <View>
+    <View style={styles.container}>
       <View style={styles.iconContainer}>
         <Image source={require('../assets/icon.png')} />
       </View>

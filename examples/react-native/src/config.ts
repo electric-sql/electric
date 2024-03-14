@@ -1,3 +1,4 @@
+import 'react-native-url-polyfill/auto';
 import {NativeModules} from 'react-native';
 const {hostname} = new URL(NativeModules.SourceCode.scriptURL);
 
