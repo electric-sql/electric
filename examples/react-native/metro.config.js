@@ -7,7 +7,7 @@ config = {
     // accidentally require module that assume node
     // libraries and APIs are present - specify expo/react-native
     // for info, see: https://metrobundler.dev/docs/package-exports/
-    unstable_conditionNames: ['op-sqlite', 'react-native'],
+    unstable_conditionNames: [],
   },
 };
 
