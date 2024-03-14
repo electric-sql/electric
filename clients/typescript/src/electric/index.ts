@@ -1,4 +1,4 @@
-import { ElectricConfig, hydrateConfig } from '../config/index'
+import { ElectricConfigWithDialect, hydrateConfig } from '../config/index'
 import { DatabaseAdapter } from './adapter'
 import { BundleMigrator, Migrator } from '../migrators/index'
 import { EventNotifier, Notifier } from '../notifiers/index'
@@ -47,7 +47,7 @@ export const electrify = async <DB extends DbSchema<any>>(
   dbDescription: DB,
   adapter: DatabaseAdapter,
   socketFactory: SocketFactory,
-  config: ElectricConfig = {},
+  config: ElectricConfigWithDialect = {},
   opts?: Omit<ElectrifyOptions, 'adapter' | 'socketFactory'>
 ): Promise<ElectricClient<DB>> => {
   setLogLevel(config.debug ? 'TRACE' : 'WARN')
