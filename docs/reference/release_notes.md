@@ -35,7 +35,7 @@ Component | Version
 
 - The `react-native-get-random-values` package is no longer included as a dependency of the client. It is up to the developer to add it as a dependency to their app to use a better random number generator for UUIDs generated on the client.
 - The `cordova-sqlite-storage` driver support has been removed.
-- The `react-native-sqlite-storage` driver support has been removed.
+- The `react-native-sqlite-storage` driver support has been removed, replaced by the `op-sqlite` driver which is a better tested and more mature option for using SQLite with React Native.
 - The minimum required version for the `@capacitor-community/sqlite` driver has been bumped.
 
 ## 2024-02-22 - patch release
