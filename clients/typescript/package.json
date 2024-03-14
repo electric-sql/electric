@@ -189,7 +189,6 @@
     "prisma": "4.8.1",
     "prompts": "^2.4.2",
     "protobufjs": "^7.1.1",
-    "react-native-get-random-values": "^1.0.0",
     "squel": "^5.13.0",
     "tcp-port-used": "^1.0.2",
     "text-encoder-lite": "^2.0.0",
