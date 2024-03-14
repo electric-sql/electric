@@ -320,7 +320,8 @@ defmodule Electric.Config do
   defp parse_database("/", username), do: username
   defp parse_database("/" <> dbname, _username), do: dbname
 
-  @spec parse_human_readable_size(binary, pos_integer) :: {:ok, pos_integer} | {:error, binary}
+  @spec parse_human_readable_size(binary | nil, pos_integer) ::
+          {:ok, pos_integer} | {:error, binary}
 
   @doc """
   Parse human-readable memory/storage size string into bytes.
