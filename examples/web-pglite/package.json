@@ -1,0 +1,41 @@
+{
+  "name": "electric-sql-pglite-example",
+  "version": "0.9.3",
+  "author": "ElectricSQL",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "backend:start": "npx electric-sql start --with-postgres",
+    "backend:stop": "npx electric-sql stop",
+    "backend:up": "npx electric-sql start --with-postgres --detach",
+    "backend:down": "npx electric-sql stop --remove",
+    "client:generate": "npx electric-sql generate",
+    "client:watch": "npx electric-sql generate --watch",
+    "db:migrate": "npx electric-sql with-config \"npx pg-migrations apply --database {{ELECTRIC_PROXY}} --directory ./db/migrations\"",
+    "db:psql": "npx electric-sql psql",
+    "electric:start": "npx electric-sql start",
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.1.1",
+    "electric-sql": "file:../../clients/typescript/electric-sql-0.9.4.tgz",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@databases/pg-migrations": "^5.0.3",
+    "@types/react": "^18.2.57",
+    "@types/react-dom": "^18.2.19",
+    "@typescript-eslint/eslint-plugin": "^6.21.0",
+    "@typescript-eslint/parser": "^6.21.0",
+    "@vitejs/plugin-react": "^4.2.1",
+    "eslint": "^8.56.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-refresh": "^0.4.5",
+    "typescript": "^5.3.3",
+    "vite": "^5.1.4"
+  }
+}

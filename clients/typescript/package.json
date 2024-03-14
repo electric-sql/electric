@@ -61,6 +61,7 @@
     "./vuejs": "./dist/frameworks/vuejs/index.js",
     "./wa-sqlite": "./dist/drivers/wa-sqlite/index.js",
     "./tauri": "./dist/drivers/tauri-sqlite/index.js",
+    "./pglite": "./dist/drivers/pglite/index.js",
     "./config": "./dist/config/index.js",
     "./debug": "./dist/util/debug/index.js",
     "./client/model": "./dist/client/model/index.js",
@@ -100,6 +101,9 @@
       ],
       "tauri-postgres": [
         "./dist/drivers/tauri-postgres/index.d.ts"
+      ],
+      "pglite": [
+        "./dist/drivers/pglite/index.d.ts"
       ],
       "vuejs": [
         "./dist/frameworks/vuejs/index.d.ts"
@@ -212,6 +216,7 @@
     "zod": "3.21.1"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.1.1",
     "@electric-sql/prisma-generator": "workspace:*",
     "@op-engineering/op-sqlite": ">= 2.0.16",
     "@tauri-apps/plugin-sql": "2.0.0-alpha.5",
@@ -268,6 +273,7 @@
   },
   "peerDependencies": {
     "@capacitor-community/sqlite": ">= 5.6.2",
+    "@electric-sql/pglite": ">= 0.1.1",
     "@op-engineering/op-sqlite": ">= 2.0.16",
     "@tauri-apps/plugin-sql": "2.0.0-alpha.5",
     "embedded-postgres": "16.1.1-beta.9",
