@@ -15,6 +15,7 @@ defmodule Electric.Satellite.Protocol.State do
             subscriptions: %{},
             subscription_data_fun: nil,
             move_in_data_fun: nil,
+            sql_dialect: Electric.Postgres.Dialect.SQLite,
             telemetry: nil
 
   @type t() :: %__MODULE__{
@@ -30,6 +31,7 @@ defmodule Electric.Satellite.Protocol.State do
           subscriptions: map(),
           subscription_data_fun: fun(),
           move_in_data_fun: fun(),
+          sql_dialect: Electric.Postgres.Dialect.SQLite | Electric.Postgres.Dialect.Postgresql,
           telemetry: Telemetry.t() | nil
         }
 
