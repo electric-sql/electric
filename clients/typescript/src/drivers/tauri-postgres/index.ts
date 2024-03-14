@@ -27,12 +27,17 @@ export const electrify = async <T extends Database, DB extends DbSchema<any>>(
   const socketFactory = opts?.socketFactory || WebSocketWeb
   const prepare = async (_connection: DatabaseAdapterI) => undefined
 
+  const configWithDialect = {
+    ...config,
+    dialect: 'Postgres',
+  } as const
+
   const client = await baseElectrify(
     dbName,
     dbDescription,
     adapter,
     socketFactory,
-    config,
+    configWithDialect,
     {
       migrator,
       prepare,

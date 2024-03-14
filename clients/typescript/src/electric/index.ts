@@ -75,7 +75,7 @@ export const electrify = async <DB extends DbSchema<any>>(
     configWithDefaults
   )
 
-  const dialect = migrator.electricQueryBuilder.dialect
+  const dialect = configWithDefaults.replication.dialect
   const electric = ElectricClient.create(
     dbName,
     dbDescription,

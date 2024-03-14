@@ -3,7 +3,9 @@ import { SatOpMigrate } from '../_generated/protocol/satellite'
 import { base64, getProtocolVersion } from '../util'
 import { Migration } from './index'
 import { generateTriggersForTable } from '../satellite/process'
-import { QueryBuilder } from './query-builder'
+import { sqliteBuilder, pgBuilder, QueryBuilder } from './query-builder'
+
+export { sqliteBuilder, pgBuilder, QueryBuilder }
 
 const metaDataSchema = z
   .object({
