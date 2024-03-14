@@ -115,6 +115,11 @@ message SatInStartReplicationReq {
         NONE = 0;
     }
 
+    enum Dialect {
+        SQLITE = 0;
+        POSTGRES = 1;
+    }
+
     reserved 3;
 
     // LSN position of the log on the producer side
@@ -132,6 +137,12 @@ message SatInStartReplicationReq {
      * observed additional data before disconnect
      */
     repeated uint64 observed_transaction_data = 6;
+
+    /**
+     * The SQL dialect used by the client
+     * Defaults to SQLite if not specified
+     */
+    optional Dialect sql_dialect = 7;
 
     // Note:
     // - a client might resume replication only for a subset of previous subscriptions 
