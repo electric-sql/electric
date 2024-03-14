@@ -541,7 +541,7 @@ test('remote tx (INSERT) concurrently with 2 local txses (INSERT -> DELETE)', as
 
   //let entries= await satellite._getEntries()
   //console.log(entries)
-  const userTable = await adapter.query({ sql: `SELECT * FROM parent;` })
+  let userTable = await adapter.query({ sql: `SELECT * FROM parent;` })
   //console.log(table)
 
   // In both cases insert wins over delete, but
@@ -559,7 +559,7 @@ test('remote tx (INSERT) concurrently with local tx (INSERT -> UPDATE)', async (
   await runMigrations()
   await satellite._setAuthState(authState)
   const clientId = satellite._authState?.clientId ?? 'test_id'
-  const stmts: Statement[] = []
+  let stmts: Statement[] = []
 
   // For this key we will choose remote Tx, such that: Local TM > Remote TX
   stmts.push({
@@ -636,7 +636,7 @@ test('remote tx (INSERT) concurrently with local tx (INSERT -> UPDATE)', async (
   }
   await satellite._applyTransaction(nextTx)
 
-  const shadow = await getMatchingShadowEntries(adapter)
+  let shadow = await getMatchingShadowEntries(adapter)
   const expectedShadow = [
     {
       namespace: 'main',
@@ -659,7 +659,7 @@ test('remote tx (INSERT) concurrently with local tx (INSERT -> UPDATE)', async (
   ]
   t.deepEqual(shadow, expectedShadow)
 
-  const entries = await satellite._getEntries()
+  let entries = await satellite._getEntries()
   //console.log(entries)
 
   // Given that Insert and Update happen within the same transaction clear should not
@@ -669,7 +669,7 @@ test('remote tx (INSERT) concurrently with local tx (INSERT -> UPDATE)', async (
   t.is(entries[2].clearTags, encodeTags([]))
   t.is(entries[3].clearTags, encodeTags([]))
 
-  const userTable = await adapter.query({ sql: `SELECT * FROM parent;` })
+  let userTable = await adapter.query({ sql: `SELECT * FROM parent;` })
 
   // In both cases insert wins over delete, but
   // for id = 1 CR picks local data before delete, while
@@ -709,14 +709,14 @@ test('origin tx (INSERT) concurrently with local txses (INSERT -> DELETE)', asyn
   await adapter.runInTransaction(...stmts)
   await satellite._performSnapshot()
 
-  const entries = await satellite._getEntries()
+  let entries = await satellite._getEntries()
   t.assert(entries[0].newRow)
   t.assert(entries[1])
   t.assert(entries[1].newRow)
 
   // For this key we receive transaction which was older
   const electricEntrySameTs = new Date(entries[0].timestamp).getTime()
-  const electricEntrySame = generateRemoteOplogEntry(
+  let electricEntrySame = generateRemoteOplogEntry(
     tableInfo,
     entries[0].namespace,
     entries[0].tablename,
@@ -730,7 +730,7 @@ test('origin tx (INSERT) concurrently with local txses (INSERT -> DELETE)', asyn
   // For this key we had concurrent insert transaction from another node `remote`
   // with same timestamp
   const electricEntryConflictTs = new Date(entries[1].timestamp).getTime()
-  const electricEntryConflict = generateRemoteOplogEntry(
+  let electricEntryConflict = generateRemoteOplogEntry(
     tableInfo,
     entries[1].namespace,
     entries[1].tablename,
@@ -759,7 +759,7 @@ test('origin tx (INSERT) concurrently with local txses (INSERT -> DELETE)', asyn
   }
   await satellite._applyTransaction(tx)
 
-  const shadow = await getMatchingShadowEntries(adapter)
+  let shadow = await getMatchingShadowEntries(adapter)
   const expectedShadow = [
     {
       namespace: 'main',
@@ -770,7 +770,7 @@ test('origin tx (INSERT) concurrently with local txses (INSERT -> DELETE)', asyn
   ]
   t.deepEqual(shadow, expectedShadow)
 
-  const userTable = await adapter.query({ sql: `SELECT * FROM parent;` })
+  let userTable = await adapter.query({ sql: `SELECT * FROM parent;` })
   const expectedUserTable = [{ id: 2, value: 'local', other: null }]
   t.deepEqual(expectedUserTable, userTable)
 })
@@ -780,7 +780,7 @@ test('local (INSERT -> UPDATE -> DELETE) with remote equivalent', async (t) => {
   await runMigrations()
   await satellite._setAuthState(authState)
   const clientId = satellite._authState?.clientId ?? 'test_id'
-  const txDate1 = new Date().getTime()
+  let txDate1 = new Date().getTime()
 
   const insertEntry = generateRemoteOplogEntry(
     tableInfo,
@@ -845,6 +845,6 @@ test('local (INSERT -> UPDATE -> DELETE) with remote equivalent', async (t) => {
   shadow = await getMatchingShadowEntries(adapter)
   t.deepEqual([], shadow)
 
-  const entries = await satellite._getEntries(0)
+  let entries = await satellite._getEntries(0)
   t.deepEqual([], entries)
 })
