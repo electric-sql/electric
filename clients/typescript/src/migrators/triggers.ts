@@ -278,7 +278,12 @@ function joinColsForJSON(
   // to work around the bug in SQLite's `json_object` function
   const castIfNeeded = (col: string, targettedCol: string) => {
     const colType = colTypes[col]
-    if (colType === 'FLOAT4' || colType === 'REAL' || colType === 'INT8' || colType === 'BIGINT') {
+    if (
+      colType === 'FLOAT4' ||
+      colType === 'REAL' ||
+      colType === 'INT8' ||
+      colType === 'BIGINT'
+    ) {
       return `cast(${targettedCol} as TEXT)`
     } else {
       return targettedCol
