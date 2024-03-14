@@ -1,5 +1,12 @@
 # electric-sql
 
+## 0.9.6
+
+### Patch Changes
+
+- a395ca62: Remove `react-native-get-random-values` as included dependency - waring fired instead and polyfill left to library user
+- 0614254a: Fix clear tags not being set correctly resulting in wrong conflict resolution
+
 ## 0.9.5
 
 ### Patch Changes
