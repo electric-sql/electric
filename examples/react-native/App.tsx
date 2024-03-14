@@ -1,3 +1,4 @@
+import 'react-native-get-random-values';
 import React from 'react';
 import {SafeAreaView, ScrollView, StatusBar, StyleSheet} from 'react-native';
 
