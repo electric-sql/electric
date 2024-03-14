@@ -125,7 +125,8 @@ defmodule Electric.Satellite.Protocol do
         %State{} = state
       ) do
     Logger.debug(
-      "Received start replication request lsn: #{inspect(client_lsn)} with options: #{inspect(opts)} and dialect: #{inspect(msg.sql_dialect)}"
+      "Received start replication request lsn: #{inspect(client_lsn)} " <>
+        "with options: #{inspect(opts)} and dialect: #{inspect(msg.sql_dialect)}"
     )
 
     with :ok <- validate_schema_version(msg.schema_version),
