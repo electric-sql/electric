@@ -125,19 +125,34 @@ const createTable: SchemaChange = {
       {
         name: 'id',
         sqliteType: 'TEXT',
-        pgType: { $type: 'Electric.Satellite.SatOpMigrate.PgColumnType', name: 'TEXT', array: [], size: [] },
+        pgType: {
+          $type: 'Electric.Satellite.SatOpMigrate.PgColumnType',
+          name: 'TEXT',
+          array: [],
+          size: [],
+        },
         typeInfo: { name: 'TEXT', array: [], size: [] },
       },
       {
         name: 'foo',
         sqliteType: 'INTEGER',
-        pgType: { $type: 'Electric.Satellite.SatOpMigrate.PgColumnType', name: 'INTEGER', array: [], size: [] },
+        pgType: {
+          $type: 'Electric.Satellite.SatOpMigrate.PgColumnType',
+          name: 'INTEGER',
+          array: [],
+          size: [],
+        },
         typeInfo: { name: 'Integer', array: [], size: [] },
       },
       {
         name: 'bar',
         sqliteType: 'TEXT',
-        pgType: { $type: 'Electric.Satellite.SatOpMigrate.PgColumnType', name: 'TEXT', array: [], size: [] },
+        pgType: {
+          $type: 'Electric.Satellite.SatOpMigrate.PgColumnType',
+          name: 'TEXT',
+          array: [],
+          size: [],
+        },
         typeInfo: { name: 'TEXT', array: [], size: [] },
       },
     ],
@@ -160,25 +175,45 @@ const addColumn: SchemaChange = {
       {
         name: 'id',
         sqliteType: 'INTEGER',
-        pgType: { $type: 'Electric.Satellite.SatOpMigrate.PgColumnType', name: 'INTEGER', array: [], size: [] },
+        pgType: {
+          $type: 'Electric.Satellite.SatOpMigrate.PgColumnType',
+          name: 'INTEGER',
+          array: [],
+          size: [],
+        },
         typeInfo: { name: 'INTEGER', array: [], size: [] },
       },
       {
         name: 'value',
         sqliteType: 'TEXT',
-        pgType: { $type: 'Electric.Satellite.SatOpMigrate.PgColumnType', name: 'TEXT', array: [], size: [] },
+        pgType: {
+          $type: 'Electric.Satellite.SatOpMigrate.PgColumnType',
+          name: 'TEXT',
+          array: [],
+          size: [],
+        },
         typeInfo: { name: 'TEXT', array: [], size: [] },
       },
       {
         name: 'other',
         sqliteType: 'INTEGER',
-        pgType: { $type: 'Electric.Satellite.SatOpMigrate.PgColumnType', name: 'INTEGER', array: [], size: [] },
+        pgType: {
+          $type: 'Electric.Satellite.SatOpMigrate.PgColumnType',
+          name: 'INTEGER',
+          array: [],
+          size: [],
+        },
         typeInfo: { name: 'INTEGER', array: [], size: [] },
       },
       {
         name: 'baz',
         sqliteType: 'TEXT',
-        pgType: { $type: 'Electric.Satellite.SatOpMigrate.PgColumnType', name: 'TEXT', array: [], size: [] },
+        pgType: {
+          $type: 'Electric.Satellite.SatOpMigrate.PgColumnType',
+          name: 'TEXT',
+          array: [],
+          size: [],
+        },
         typeInfo: { name: 'TEXT', array: [], size: [] },
       },
     ],
@@ -711,7 +746,7 @@ test.serial('apply migration and concurrent transaction', async (t) => {
   // Now also check the row that was concurrently inserted
   t.assert(
     isequal(conflictingRow, extendRow(insertRowA)) ||
-    isequal(conflictingRow, extendRow(insertRowB))
+      isequal(conflictingRow, extendRow(insertRowB))
   )
 })
 
@@ -730,7 +765,12 @@ const migrationWithFKs: SchemaChange[] = [
         {
           name: 'id',
           sqliteType: 'TEXT',
-          pgType: { $type: 'Electric.Satellite.SatOpMigrate.PgColumnType', name: 'TEXT', array: [], size: [] },
+          pgType: {
+            $type: 'Electric.Satellite.SatOpMigrate.PgColumnType',
+            name: 'TEXT',
+            array: [],
+            size: [],
+          },
           typeInfo: { name: 'TEXT', array: [], size: [] },
         },
       ],
@@ -754,13 +794,23 @@ const migrationWithFKs: SchemaChange[] = [
         {
           name: 'id',
           sqliteType: 'TEXT',
-          pgType: { $type: 'Electric.Satellite.SatOpMigrate.PgColumnType', name: 'TEXT', array: [], size: [] },
+          pgType: {
+            $type: 'Electric.Satellite.SatOpMigrate.PgColumnType',
+            name: 'TEXT',
+            array: [],
+            size: [],
+          },
           typeInfo: { name: 'TEXT', array: [], size: [] },
         },
         {
           name: 'item_id',
           sqliteType: 'TEXT',
-          pgType: { $type: 'Electric.Satellite.SatOpMigrate.PgColumnType', name: 'TEXT', array: [], size: [] },
+          pgType: {
+            $type: 'Electric.Satellite.SatOpMigrate.PgColumnType',
+            name: 'TEXT',
+            array: [],
+            size: [],
+          },
           typeInfo: { name: 'TEXT', array: [], size: [] },
         },
       ],
