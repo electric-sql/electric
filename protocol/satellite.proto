@@ -22,7 +22,7 @@ package Electric.Satellite;
 message SatRpcRequest {
     string method = 1;
     uint32 request_id = 2;
-    
+
     bytes message = 3;
 }
 
@@ -30,7 +30,7 @@ message SatRpcRequest {
 message SatRpcResponse {
     string method = 1;
     uint32 request_id = 2;
-    
+
     oneof result {
         bytes message = 3;
         SatErrorResp error = 4;
@@ -49,7 +49,7 @@ service Root {
 /* RPC calls that the server makes to the client */
 service ClientRoot {
     rpc startReplication (SatInStartReplicationReq) returns (SatInStartReplicationResp);
-    rpc stopReplication (SatInStopReplicationReq) returns (SatInStopReplicationResp);    
+    rpc stopReplication (SatInStopReplicationReq) returns (SatInStopReplicationResp);
 }
 
 enum SatAuthHeader {
@@ -126,7 +126,7 @@ message SatInStartReplicationReq {
     bytes lsn = 1;
     repeated Option options = 2;
 
-    // the subscriptions identifiers the client wants to resume subscription    
+    // the subscriptions identifiers the client wants to resume subscription
     repeated string subscription_ids = 4;
 
     // The version of the most recent migration seen by the client.
@@ -137,7 +137,7 @@ message SatInStartReplicationReq {
     optional Dialect sql_dialect = 6;
 
     // Note:
-    // - a client might resume replication only for a subset of previous subscriptions 
+    // - a client might resume replication only for a subset of previous subscriptions
     // in case the application cancelled some subscriptions while disconnected from the
     // server. The server is responsible to keep/gc the remaining subscriptions.
     // - the server must ensure that if the client skips a portion of the replication
@@ -349,15 +349,17 @@ message SatOpMigrate {
         repeated int32 size = 3;
     }
     message Column {
-        //reserved 2, 3;
-
-        // deprecated
-        string sqlite_type = 2;    
-        // deprecated
-        PgColumnType pg_type = 3;
+        //reserved 2;
 
         string name = 1;
-        PgColumnType type_info = 4;
+
+        // deprecated
+        // leaving it here to avoid breaking TypeScript tests that have hard-coded,
+        // base64-encoded SatOpMigrate messages.
+        string sqlite_type = 2;
+
+        PgColumnType pg_type = 3;
+
     }
     message ForeignKey {
         // the columns in the child table that point to the parent
@@ -406,12 +408,12 @@ message SatSubsResp {
     // Error message returned by the Producer when it encounters
     // an error handling subscription request
     message SatSubsError {
-        
+
         // error code enum
         enum Code {
             // Required by the Protobuf spec.
             CODE_UNSPECIFIED = 0;
-            
+
             // DUPLICATE IDENTIFIER
             SUBSCRIPTION_ID_ALREADY_EXISTS = 1;
 
@@ -441,7 +443,7 @@ message SatSubsResp {
                 // Requested shape does not maintain referential integirty
                 REFERENTIAL_INTEGRITY_VIOLATION = 2;
 
-                // The shape request contains an empty shape definition 
+                // The shape request contains an empty shape definition
                 EMPTY_SHAPE_DEFINITION = 3;
 
                 // Attempt to request the same table more than once in one shape
@@ -467,7 +469,7 @@ message SatUnsubsReq {
 }
 
 // (Producer) Acknowledgment that the subscriptions were cancelled
-message SatUnsubsResp {    
+message SatUnsubsResp {
 }
 
 // Shape request

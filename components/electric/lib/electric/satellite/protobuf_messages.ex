@@ -7167,7 +7167,7 @@
   end,
   defmodule Electric.Satellite.SatOpMigrate.Column do
     @moduledoc false
-    defstruct name: "", sqlite_type: "", pg_type: nil, type_info: nil
+    defstruct name: "", sqlite_type: "", pg_type: nil
 
     (
       (
@@ -7182,11 +7182,7 @@
 
         @spec encode!(struct) :: iodata | no_return
         def encode!(msg) do
-          []
-          |> encode_name(msg)
-          |> encode_sqlite_type(msg)
-          |> encode_pg_type(msg)
-          |> encode_type_info(msg)
+          [] |> encode_name(msg) |> encode_sqlite_type(msg) |> encode_pg_type(msg)
         end
       )
 
@@ -7228,18 +7224,6 @@
           rescue
             ArgumentError ->
               reraise Protox.EncodingError.new(:pg_type, "invalid field value"), __STACKTRACE__
-          end
-        end,
-        defp encode_type_info(acc, msg) do
-          try do
-            if msg.type_info == nil do
-              acc
-            else
-              [acc, "\"", Protox.Encode.encode_message(msg.type_info)]
-            end
-          rescue
-            ArgumentError ->
-              reraise Protox.EncodingError.new(:type_info, "invalid field value"), __STACKTRACE__
           end
         end
       ]
@@ -7297,18 +7281,6 @@
                    pg_type:
                      Protox.MergeMessage.merge(
                        msg.pg_type,
-                       Electric.Satellite.SatOpMigrate.PgColumnType.decode!(delimited)
-                     )
-                 ], rest}
-
-              {4, _, bytes} ->
-                {len, bytes} = Protox.Varint.decode(bytes)
-                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-
-                {[
-                   type_info:
-                     Protox.MergeMessage.merge(
-                       msg.type_info,
                        Electric.Satellite.SatOpMigrate.PgColumnType.decode!(delimited)
                      )
                  ], rest}
@@ -7373,9 +7345,7 @@
           1 => {:name, {:scalar, ""}, :string},
           2 => {:sqlite_type, {:scalar, ""}, :string},
           3 =>
-            {:pg_type, {:scalar, nil}, {:message, Electric.Satellite.SatOpMigrate.PgColumnType}},
-          4 =>
-            {:type_info, {:scalar, nil}, {:message, Electric.Satellite.SatOpMigrate.PgColumnType}}
+            {:pg_type, {:scalar, nil}, {:message, Electric.Satellite.SatOpMigrate.PgColumnType}}
         }
       end
 
@@ -7387,8 +7357,7 @@
         %{
           name: {1, {:scalar, ""}, :string},
           pg_type: {3, {:scalar, nil}, {:message, Electric.Satellite.SatOpMigrate.PgColumnType}},
-          sqlite_type: {2, {:scalar, ""}, :string},
-          type_info: {4, {:scalar, nil}, {:message, Electric.Satellite.SatOpMigrate.PgColumnType}}
+          sqlite_type: {2, {:scalar, ""}, :string}
         }
       end
     )
@@ -7422,15 +7391,6 @@
             label: :optional,
             name: :pg_type,
             tag: 3,
-            type: {:message, Electric.Satellite.SatOpMigrate.PgColumnType}
-          },
-          %{
-            __struct__: Protox.Field,
-            json_name: "typeInfo",
-            kind: {:scalar, nil},
-            label: :optional,
-            name: :type_info,
-            tag: 4,
             type: {:message, Electric.Satellite.SatOpMigrate.PgColumnType}
           }
         ]
@@ -7547,46 +7507,6 @@
              }}
           end
         ),
-        (
-          def field_def(:type_info) do
-            {:ok,
-             %{
-               __struct__: Protox.Field,
-               json_name: "typeInfo",
-               kind: {:scalar, nil},
-               label: :optional,
-               name: :type_info,
-               tag: 4,
-               type: {:message, Electric.Satellite.SatOpMigrate.PgColumnType}
-             }}
-          end
-
-          def field_def("typeInfo") do
-            {:ok,
-             %{
-               __struct__: Protox.Field,
-               json_name: "typeInfo",
-               kind: {:scalar, nil},
-               label: :optional,
-               name: :type_info,
-               tag: 4,
-               type: {:message, Electric.Satellite.SatOpMigrate.PgColumnType}
-             }}
-          end
-
-          def field_def("type_info") do
-            {:ok,
-             %{
-               __struct__: Protox.Field,
-               json_name: "typeInfo",
-               kind: {:scalar, nil},
-               label: :optional,
-               name: :type_info,
-               tag: 4,
-               type: {:message, Electric.Satellite.SatOpMigrate.PgColumnType}
-             }}
-          end
-        ),
         def field_def(_) do
           {:error, :no_such_field}
         end
@@ -7618,9 +7538,6 @@
         {:ok, ""}
       end,
       def default(:pg_type) do
-        {:ok, nil}
-      end,
-      def default(:type_info) do
         {:ok, nil}
       end,
       def default(_) do

@@ -180,7 +180,6 @@ defmodule Electric.Postgres.Replication do
   defp replication_msg_table_col(%Proto.Column{} = column) do
     %SatOpMigrate.Column{
       name: column.name,
-      type_info: replication_msg_table_col_type(column.type),
       pg_type: replication_msg_table_col_type(column.type),
       sqlite_type: Dialect.type_name(column.type, Dialect.SQLite)
     }

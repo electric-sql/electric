@@ -108,14 +108,12 @@ defmodule Electric.PlugTest do
                     %SatOpMigrate.Column{
                       name: "id",
                       sqlite_type: "TEXT",
-                      pg_type: %SatOpMigrate.PgColumnType{name: "uuid"},
-                      type_info: %SatOpMigrate.PgColumnType{name: "uuid"}
+                      pg_type: %SatOpMigrate.PgColumnType{name: "uuid"}
                     },
                     %SatOpMigrate.Column{
                       name: "value",
                       sqlite_type: "TEXT",
-                      pg_type: %SatOpMigrate.PgColumnType{name: "text"},
-                      type_info: %SatOpMigrate.PgColumnType{name: "text"}
+                      pg_type: %SatOpMigrate.PgColumnType{name: "text"}
                     }
                   ],
                   fks: [],
@@ -180,14 +178,12 @@ defmodule Electric.PlugTest do
                     %SatOpMigrate.Column{
                       name: "id",
                       sqlite_type: "TEXT",
-                      pg_type: %SatOpMigrate.PgColumnType{name: "uuid"},
-                      type_info: %SatOpMigrate.PgColumnType{name: "uuid"}
+                      pg_type: %SatOpMigrate.PgColumnType{name: "uuid"}
                     },
                     %SatOpMigrate.Column{
                       name: "value",
                       sqlite_type: "TEXT",
-                      pg_type: %SatOpMigrate.PgColumnType{name: "text"},
-                      type_info: %SatOpMigrate.PgColumnType{name: "text"}
+                      pg_type: %SatOpMigrate.PgColumnType{name: "text"}
                     }
                   ],
                   fks: [],
