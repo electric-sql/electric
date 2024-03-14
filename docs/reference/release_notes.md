@@ -20,6 +20,24 @@ To see the complete change log for each new release, see the [Releases page](htt
 - @electric-sql/prisma-generator: [/generator/CHANGELOG.md](https://github.com/electric-sql/electric/blob/main/generator/CHANGELOG.md)
 
 
+## 2024-03-14 - patch release
+
+#### Updated components
+
+Component | Version
+--------- | -------
+[Sync service](https://hub.docker.com/r/electricsql/electric/tags) | [0.9.4](https://github.com/electric-sql/electric/blob/main/components/electric/CHANGELOG.md#094)
+[TypeScript client](https://www.npmjs.com/package/electric-sql) | [0.9.5](https://github.com/electric-sql/electric/blob/main/clients/typescript/CHANGELOG.md#095)
+
+#### Compatibility notes
+
+**TypeScript client**
+
+- The `react-native-get-random-values` package is no longer included as a dependency of the client. It is up to the developer to add it as a dependency to their app to use a better random number generator for UUIDs generated on the client.
+- The `cordova-sqlite-storage` driver support has been removed.
+- The `react-native-sqlite-storage` driver support has been removed, replaced by the `op-sqlite` driver which is a better tested and more mature option for using SQLite with React Native.
+- The minimum required version for the `@capacitor-community/sqlite` driver has been bumped.
+
 ## 2024-02-22 - patch release
 
 #### Updated components
