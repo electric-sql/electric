@@ -1,13 +1,13 @@
 import { DatabaseAdapter as DatabaseAdapterI } from '../../electric/adapter'
 import { DatabaseAdapter } from './adapter'
-import { Database, ElectricDatabase } from './database'
+import { Database, ElectricDatabase, createEmbeddedPostgres } from './database'
 import { ElectricConfig } from '../../config'
 import { electrify as baseElectrify, ElectrifyOptions } from '../../electric'
-import { WebSocketWeb } from '../../sockets/web'
+import { WebSocketNode } from '../../sockets/node'
 import { ElectricClient, DbSchema } from '../../client/model'
 import { PgBundleMigrator } from '../../migrators/bundle'
 
-export { DatabaseAdapter, ElectricDatabase }
+export { DatabaseAdapter, ElectricDatabase, createEmbeddedPostgres }
 export type { Database }
 
 /**
@@ -25,15 +25,20 @@ export const electrify = async <T extends Database, DB extends DbSchema<any>>(
   const adapter = opts?.adapter || new DatabaseAdapter(db)
   const migrator =
     opts?.migrator || new PgBundleMigrator(adapter, dbDescription.pgMigrations)
-  const socketFactory = opts?.socketFactory || WebSocketWeb
+  const socketFactory = opts?.socketFactory || WebSocketNode
   const prepare = async (_connection: DatabaseAdapterI) => undefined
+
+  const configWithDialect = {
+    ...config,
+    dialect: 'Postgres',
+  } as const
 
   const client = await baseElectrify(
     dbName,
     dbDescription,
     adapter,
     socketFactory,
-    config,
+    configWithDialect,
     {
       migrator,
       prepare,
