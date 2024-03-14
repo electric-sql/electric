@@ -876,8 +876,7 @@ export class SatelliteClient implements Client {
         'error',
         new SatelliteError(
           SatelliteErrorCode.UNEXPECTED_STATE,
-          `unexpected state ${
-            ReplicationStatus[this.inbound.isReplicating]
+          `unexpected state ${ReplicationStatus[this.inbound.isReplicating]
           } handling 'relation' message`
         )
       )
