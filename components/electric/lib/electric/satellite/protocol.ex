@@ -223,6 +223,7 @@ defmodule Electric.Satellite.Protocol do
               connector_config: [],
               subscriptions: %{},
               subscription_data_fun: nil,
+              sql_dialect: Electric.Postgres.Dialect.SQLite,
               telemetry: nil
 
     @type t() :: %__MODULE__{
@@ -237,6 +238,7 @@ defmodule Electric.Satellite.Protocol do
             connector_config: Keyword.t(),
             subscriptions: map(),
             subscription_data_fun: fun(),
+            sql_dialect: Electric.Postgres.Dialect.SQLite | Electric.Postgres.Dialect.Postgresql,
             telemetry: Telemetry.t() | nil
           }
   end
@@ -342,11 +344,12 @@ defmodule Electric.Satellite.Protocol do
         %State{} = state
       ) do
     Logger.debug(
-      "Received start replication request lsn: #{inspect(client_lsn)} with options: #{inspect(opts)}"
+      "Received start replication request lsn: #{inspect(client_lsn)} with options: #{inspect(opts)} and dialect: #{inspect(msg.sql_dialect)}"
     )
 
     with :ok <- validate_schema_version(msg.schema_version),
          {:ok, lsn} <- validate_lsn(client_lsn) do
+      state = %{state | sql_dialect: decode_sql_dialect(msg.sql_dialect)}
       handle_start_replication_request(msg, lsn, state)
     else
       {:error, :bad_schema_version} ->
@@ -790,11 +793,11 @@ defmodule Electric.Satellite.Protocol do
   # The offset here comes from the producer
   @spec handle_out_trans({Transaction.t(), any}, State.t()) ::
           {[%SatRelation{}], [%SatOpLog{}], OutRep.t()}
-  def handle_out_trans({trans, offset}, %State{out_rep: out_rep}) do
+  def handle_out_trans({trans, offset}, %State{out_rep: out_rep} = state) do
     Logger.debug("trans: #{inspect(trans)} with offset #{inspect(offset)}")
 
     {serialized_log, unknown_relations, known_relations} =
-      Serialization.serialize_trans(trans, offset, out_rep.relations)
+      Serialization.serialize_trans(trans, offset, out_rep.relations, state.sql_dialect)
 
     if unknown_relations != [],
       do: Logger.debug("Sending previously unseen relations: #{inspect(unknown_relations)}")
@@ -1108,4 +1111,9 @@ defmodule Electric.Satellite.Protocol do
     %State{state | expiration_timer: nil}
     |> schedule_auth_expiration(exp_time)
   end
+
+  defp decode_sql_dialect(default) when default in [nil, :SQLITE],
+    do: Electric.Postgres.Dialect.SQLite
+
+  defp decode_sql_dialect(:POSTGRES), do: Electric.Postgres.Dialect.Postgresql
 end
