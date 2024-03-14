@@ -346,10 +346,10 @@ export const personTable: Table = {
   primary: ['id'],
   foreignKeys: [],
   columnTypes: {
-    id: { sqliteType: 'REAL', pgType: PgBasicType.PG_REAL },
-    name: { sqliteType: 'TEXT', pgType: PgBasicType.PG_TEXT },
-    age: { sqliteType: 'INTEGER', pgType: PgBasicType.PG_INTEGER },
-    bmi: { sqliteType: 'REAL', pgType: PgBasicType.PG_REAL },
-    int8: { sqliteType: 'INTEGER', pgType: PgBasicType.PG_INT8 },
+    id: PgBasicType.PG_REAL,
+    name: PgBasicType.PG_TEXT,
+    age: PgBasicType.PG_INTEGER,
+    bmi: PgBasicType.PG_REAL,
+    int8: PgBasicType.PG_INT8,
   },
 }
