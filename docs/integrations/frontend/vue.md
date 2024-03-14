@@ -199,3 +199,20 @@ const { results } = useLiveQuery(
 
 // ...
 ```
+
+### `useConnectivityState`
+
+`useConnectivityState` binds the current connectivity status of the Satellite replication process for the electrified database client to a state variable:
+
+```vue
+<script lang="ts" setup>
+import { useConnectivityState } from 'electric-sql/vuejs'
+
+// assume Electric has been provided by a parent component
+const connectivityState = useConnectivityState()
+</script>
+
+<template>
+  <p> {{ connectivityState.status }} </p>
+</template>
+```
