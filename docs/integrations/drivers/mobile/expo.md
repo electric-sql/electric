@@ -18,6 +18,10 @@ npx expo install expo-sqlite
 
 This package includes both the regular and `next` drivers. See the [expo-sqlite docs](https://docs.expo.dev/versions/latest/sdk/sqlite/) or [expo-sqlite/next docs](https://docs.expo.dev/versions/latest/sdk/sqlite-next/) for more information.
 
+import CryptoPolyfillWarning from './_crypto_polyfill_warning.md'
+
+<CryptoPolyfillWarning />
+
 ## Usage
 
 <Tabs groupId="usage" queryString>
