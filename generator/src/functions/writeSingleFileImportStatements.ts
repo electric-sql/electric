@@ -24,4 +24,5 @@ export const writeSingleFileImportStatements: WriteStatements = (
   )
 
   writeImport(`migrations`, './migrations')
+  writeImport(`pgMigrations`, './pg-migrations')
 }

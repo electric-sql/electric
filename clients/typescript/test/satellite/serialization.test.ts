@@ -1,14 +1,23 @@
 import { SatRelation_RelationType } from '../../src/_generated/protocol/satellite'
 import { serializeRow, deserializeRow } from '../../src/satellite/client'
-import test from 'ava'
+import test, { ExecutionContext } from 'ava'
 import { Relation, Record } from '../../src/util/types'
 import { DbSchema, TableSchema } from '../../src/client/model/schema'
 import { PgBasicType } from '../../src/client/conversions/types'
 import { HKT } from '../../src/client/util/hkt'
 import Database from 'better-sqlite3'
-import { DatabaseAdapter } from '../../src/drivers/better-sqlite3'
-import { inferRelationsFromSQLite } from '../../src/util/relations'
+import { DatabaseAdapter as SQLiteDatabaseAdapter } from '../../src/drivers/better-sqlite3'
+import { DatabaseAdapter as PgDatabaseAdapter } from '../../src/drivers/node-postgres/adapter'
+import { DatabaseAdapter as DatabaseAdapterInterface } from '../../src/electric/adapter'
+import { inferRelationsFromDb } from '../../src/util/relations'
 import { satelliteDefaults } from '../../src/satellite/config'
+import {
+  QueryBuilder,
+  pgBuilder,
+  sqliteBuilder,
+} from '../../src/migrators/query-builder'
+import { makePgDatabase } from '../support/node-postgres'
+import { randomValue } from '../../src/util/random'
 
 test('serialize/deserialize row data', async (t) => {
   const rel: Relation = {
@@ -67,6 +76,7 @@ test('serialize/deserialize row data', async (t) => {
         HKT
       >,
     },
+    [],
     []
   )
 
@@ -200,6 +210,7 @@ test('Null mask uses bits as if they were a list', async (t) => {
         HKT
       >,
     },
+    [],
     []
   )
 
@@ -221,116 +232,139 @@ test('Null mask uses bits as if they were a list', async (t) => {
   t.is(mask, '1101000010000000')
 })
 
-test('Prioritize PG types in the schema before inferred SQLite types', async (t) => {
+type MaybePromise<T> = T | Promise<T>
+type SetupFn = (
+  t: ExecutionContext<unknown>
+) => MaybePromise<[DatabaseAdapterInterface, QueryBuilder]>
+const setupSqlite: SetupFn = (t: ExecutionContext<unknown>) => {
   const db = new Database(':memory:')
   t.teardown(() => db.close())
+  return [new SQLiteDatabaseAdapter(db), sqliteBuilder]
+}
 
-  const adapter = new DatabaseAdapter(db)
-  await adapter.run({
-    sql: 'CREATE TABLE bools (id INTEGER PRIMARY KEY, b INTEGER)',
+let port = 4800
+const setupPG: SetupFn = async (t: ExecutionContext<unknown>) => {
+  const dbName = `serialization-test-${randomValue()}`
+  const { db, stop } = await makePgDatabase(dbName, port++)
+  t.teardown(async () => await stop())
+  return [new PgDatabaseAdapter(db), pgBuilder]
+}
+
+;(
+  [
+    ['SQLite', setupSqlite],
+    ['Postgres', setupPG],
+  ] as const
+).forEach(([dialect, setup]) => {
+  test(`(${dialect}) Prioritize PG types in the schema before inferred SQLite types`, async (t) => {
+    const [adapter, builder] = await setup(t)
+
+    await adapter.run({
+      sql: 'CREATE TABLE bools (id INTEGER PRIMARY KEY, b INTEGER)',
+    })
+
+    const sqliteInferredRelations = await inferRelationsFromDb(
+      adapter,
+      satelliteDefaults,
+      builder
+    )
+    const boolsInferredRelation = sqliteInferredRelations['bools']
+
+    // Inferred types only support SQLite types, so the bool column is INTEGER
+    const boolColumn = boolsInferredRelation.columns[1]
+    t.is(boolColumn.name, 'b')
+    t.is(boolColumn.type, 'INTEGER')
+
+    // Db schema holds the correct Postgres types
+    const boolsDbDescription = new DbSchema(
+      {
+        bools: {
+          fields: new Map([
+            ['id', PgBasicType.PG_INTEGER],
+            ['b', PgBasicType.PG_BOOL],
+          ]),
+          relations: [],
+        } as unknown as TableSchema<
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+          HKT
+        >,
+      },
+      [],
+      []
+    )
+
+    const satOpRow = serializeRow(
+      { id: 5, b: 1 },
+      boolsInferredRelation,
+      boolsDbDescription
+    )
+
+    // Encoded values ["5", "t"]
+    t.deepEqual(satOpRow.values, [
+      new Uint8Array(['5'.charCodeAt(0)]),
+      new Uint8Array(['t'.charCodeAt(0)]),
+    ])
+
+    const deserializedRow = deserializeRow(
+      satOpRow,
+      boolsInferredRelation,
+      boolsDbDescription
+    )
+
+    t.deepEqual(deserializedRow, { id: 5, b: 1 })
   })
 
-  const sqliteInferredRelations = await inferRelationsFromSQLite(
-    adapter,
-    satelliteDefaults
-  )
-  const boolsInferredRelation = sqliteInferredRelations['bools']
+  test(`(${dialect}) Use incoming Relation types if not found in the schema`, async (t) => {
+    const [adapter, builder] = await setup(t)
 
-  // Inferred types only support SQLite types, so the bool column is INTEGER
-  const boolColumn = boolsInferredRelation.columns[1]
-  t.is(boolColumn.name, 'b')
-  t.is(boolColumn.type, 'INTEGER')
+    const inferredRelations = await inferRelationsFromDb(
+      adapter,
+      satelliteDefaults,
+      builder
+    )
+    // Empty database
+    t.is(Object.keys(inferredRelations).length, 0)
 
-  // Db schema holds the correct Postgres types
-  const boolsDbDescription = new DbSchema(
-    {
-      bools: {
-        fields: new Map([
-          ['id', PgBasicType.PG_INTEGER],
-          ['b', PgBasicType.PG_BOOL],
-        ]),
-        relations: [],
-      } as unknown as TableSchema<
-        any,
-        any,
-        any,
-        any,
-        any,
-        any,
-        any,
-        any,
-        any,
-        HKT
-      >,
-    },
-    []
-  )
+    // Empty Db schema
+    const testDbDescription = new DbSchema({}, [], [])
 
-  const satOpRow = serializeRow(
-    { id: 5, b: 1 },
-    boolsInferredRelation,
-    boolsDbDescription
-  )
+    const newTableRelation: Relation = {
+      id: 1,
+      schema: 'schema',
+      table: 'new_table',
+      tableType: SatRelation_RelationType.TABLE,
+      columns: [
+        { name: 'value', type: 'INTEGER', isNullable: true },
+        { name: 'color', type: 'COLOR', isNullable: true }, // at runtime, incoming SatRelation messages contain the name of the enum type
+      ],
+    }
 
-  // Encoded values ["5", "t"]
-  t.deepEqual(satOpRow.values, [
-    new Uint8Array(['5'.charCodeAt(0)]),
-    new Uint8Array(['t'.charCodeAt(0)]),
-  ])
+    const row = {
+      value: 6,
+      color: 'red',
+    }
 
-  const deserializedRow = deserializeRow(
-    satOpRow,
-    boolsInferredRelation,
-    boolsDbDescription
-  )
+    const satOpRow = serializeRow(row, newTableRelation, testDbDescription)
 
-  t.deepEqual(deserializedRow, { id: 5, b: 1 })
-})
+    t.deepEqual(
+      satOpRow.values.map((bytes) => new TextDecoder().decode(bytes)),
+      ['6', 'red']
+    )
 
-test('Use incoming Relation types if not found in the schema', async (t) => {
-  const db = new Database(':memory:')
-  t.teardown(() => db.close())
+    const deserializedRow = deserializeRow(
+      satOpRow,
+      newTableRelation,
+      testDbDescription
+    )
 
-  const adapter = new DatabaseAdapter(db)
-
-  const sqliteInferredRelations = await inferRelationsFromSQLite(
-    adapter,
-    satelliteDefaults
-  )
-  // Empty database
-  t.is(Object.keys(sqliteInferredRelations).length, 0)
-
-  // Empty Db schema
-  const testDbDescription = new DbSchema({}, [])
-
-  const newTableRelation: Relation = {
-    id: 1,
-    schema: 'schema',
-    table: 'new_table',
-    tableType: SatRelation_RelationType.TABLE,
-    columns: [
-      { name: 'value', type: 'INTEGER', isNullable: true },
-      { name: 'color', type: 'COLOR', isNullable: true }, // at runtime, incoming SatRelation messages contain the name of the enum type
-    ],
-  }
-
-  const row = {
-    value: 6,
-    color: 'red',
-  }
-
-  const satOpRow = serializeRow(row, newTableRelation, testDbDescription)
-
-  t.deepEqual(
-    satOpRow.values.map((bytes) => new TextDecoder().decode(bytes)),
-    ['6', 'red']
-  )
-
-  const deserializedRow = deserializeRow(
-    satOpRow,
-    newTableRelation,
-    testDbDescription
-  )
-
-  t.deepEqual(deserializedRow, row)
+    t.deepEqual(deserializedRow, row)
+  })
 })

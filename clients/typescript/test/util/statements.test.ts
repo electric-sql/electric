@@ -1,6 +1,9 @@
 import test from 'ava'
+import { sqliteBuilder } from '../../src/migrators/query-builder'
 
-import { prepareInsertBatchedStatements } from '../../src/util/statements'
+//import { prepareInsertBatchedStatements } from '../../src/util/statements'
+
+const builder = sqliteBuilder
 
 test('prepareInsertBatchedStatements correctly splits up data in batches', (t) => {
   const data = [
@@ -8,7 +11,7 @@ test('prepareInsertBatchedStatements correctly splits up data in batches', (t) =
     { a: 3, b: 4 },
     { a: 5, b: 6 },
   ]
-  const stmts = prepareInsertBatchedStatements(
+  const stmts = builder.prepareInsertBatchedStatements(
     'INSERT INTO test (a, b) VALUES',
     ['a', 'b'],
     data,
@@ -30,7 +33,7 @@ test('prepareInsertBatchedStatements respects column order', (t) => {
     { a: 3, b: 4 },
     { a: 5, b: 6 },
   ]
-  const stmts = prepareInsertBatchedStatements(
+  const stmts = builder.prepareInsertBatchedStatements(
     'INSERT INTO test (a, b) VALUES',
     ['b', 'a'],
     data,

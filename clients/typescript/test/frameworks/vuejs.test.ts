@@ -52,7 +52,8 @@ test.beforeEach((t) => {
     adapter,
     notifier,
     satellite,
-    registry
+    registry,
+    'SQLite'
   )
   dal.db.Items.sync()
 

@@ -38,6 +38,7 @@ test.beforeEach((t) => {
     timeout: 10000,
     ssl: false,
     pushPeriod: 100,
+    dialect: 'SQLite',
   })
   const clientId = '91eba0c8-28ba-4a86-a6e8-42731c2c6694'
 
@@ -282,6 +283,7 @@ test.serial('receive transaction over multiple messages', async (t) => {
         HKT
       >,
     },
+    [],
     []
   )
 
@@ -564,7 +566,6 @@ test.serial('send transaction', async (t) => {
   ]
 
   const transaction = toTransactions(opLogEntries, relations)
-  // console.log(transaction)
 
   t.plan(7) // We expect exactly 1 + 3 messages to be sent by the client, with 2 checks per non-relation message
 
@@ -693,6 +694,7 @@ test.serial('default and null test', async (t) => {
       table: tbl,
       Items: tbl,
     },
+    [],
     []
   )
 
@@ -1031,6 +1033,7 @@ test.serial('subscription correct protocol sequence with data', async (t) => {
       table: tbl,
       [tablename]: tbl,
     },
+    [],
     []
   )
 

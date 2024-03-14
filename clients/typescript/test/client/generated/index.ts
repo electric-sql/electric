@@ -3237,6 +3237,6 @@ export const tableSchemas = {
   >,
 }
 
-export const schema = new DbSchema(tableSchemas, [])
+export const schema = new DbSchema(tableSchemas, [], [])
 export type Electric = ElectricClient<typeof schema>
 export const JsonNull = { __is_electric_json_null__: true }

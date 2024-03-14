@@ -16,6 +16,7 @@ import Log from 'loglevel'
 import { ExtendedTableSchema } from './schema'
 import { PgBasicType } from '../conversions/types'
 import { HKT } from '../util/hkt'
+import { Dialect } from '../../migrators/query-builder/builder'
 
 const squelPostgres = squel.useFlavour('postgres')
 squelPostgres.registerValueHandler('bigint', function (bigint) {
@@ -25,6 +26,8 @@ squelPostgres.registerValueHandler('bigint', function (bigint) {
 type AnyFindInput = FindInput<any, any, any, any, any>
 
 export class Builder {
+  private _fullyQualifiedTableName: string
+
   constructor(
     private _tableName: string,
     private _fields: string[],
@@ -40,12 +43,29 @@ export class Builder {
       any,
       any,
       HKT
-    >
-  ) {}
+    >,
+    public dialect: Dialect
+  ) {
+    this._fullyQualifiedTableName = `"${this._tableName}"`
+    if (dialect === 'Postgres') {
+      squelPostgres.cls.DefaultQueryBuilderOptions.nameQuoteCharacter = '"'
+      //squelPostgres.cls.DefaultQueryBuilderOptions.autoQuoteTableNames = true
+      squelPostgres.cls.DefaultQueryBuilderOptions.autoQuoteFieldNames = true
+      squelPostgres.cls.DefaultQueryBuilderOptions.autoQuoteAliasNames = true
+      // need to register it, otherwise squel complains that the Date type is not registered
+      // as Squel does not support it out-of-the-box but our Postgres drivers do support it.
+      squelPostgres.registerValueHandler(Date, (date) => date)
+      //this._fullyQualifiedTableName = `public."${this._tableName}"`
+    } else {
+      // Don't use numbered parameters if dialect is SQLite
+      squelPostgres.cls.DefaultQueryBuilderOptions.numberedParameters = false
+      //this._fullyQualifiedTableName = `main."${this._tableName}"`
+    }
+  }
 
   create(i: CreateInput<any, any, any>): QueryBuilder {
     // Make a SQL query out of the data
-    const query = squelPostgres.insert().into(this._tableName).setFields(i.data)
+    const query = squelPostgres.insert().into(this._fullyQualifiedTableName).setFields(i.data)
 
     // Adds a `RETURNING` statement that returns all known fields
     const queryWithReturn = this.returnAllFields(query)
@@ -55,7 +75,7 @@ export class Builder {
   createMany(i: CreateManyInput<any>): QueryBuilder {
     const insert = squelPostgres
       .insert()
-      .into(this._tableName)
+      .into(this._fullyQualifiedTableName)
       .setFieldsRows(i.data)
     return i.skipDuplicates
       ? insert.onConflict() // adds "ON CONFLICT DO NOTHING" to the query
@@ -100,7 +120,7 @@ export class Builder {
     i: DeleteManyInput<any>,
     idRequired = false
   ): QueryBuilder {
-    const deleteQuery = squel.delete().from(this._tableName)
+    const deleteQuery = squel.delete().from(this._fullyQualifiedTableName)
     const whereObject = i.where // safe because the schema for `where` adds an empty object as default which is provided if the `where` field is absent
     const fields = this.getFields(whereObject, idRequired)
     return addFilters(fields, whereObject, deleteQuery)
@@ -123,7 +143,7 @@ export class Builder {
 
     const query = squelPostgres
       .update()
-      .table(this._tableName)
+      .table(this._fullyQualifiedTableName)
       .setFields(i.data)
 
     // Adds a `RETURNING` statement that returns all known fields
@@ -155,7 +175,7 @@ export class Builder {
     if (!this.shapeManager.hasBeenSubscribed(this._tableName))
       Log.debug('Reading from unsynced table ' + this._tableName)
 
-    const query = squelPostgres.select().from(this._tableName) // specify from which table to select
+    const query = squelPostgres.select().from(this._fullyQualifiedTableName) // specify from which table to select
     // only select the fields provided in `i.select` and the ones in `i.where`
     const addFieldSelectionP = this.addFieldSelection.bind(
       this,
@@ -228,7 +248,7 @@ export class Builder {
    */
   private castBigIntToText(field: string) {
     const pgType = this._tableDescription.fields.get(field)
-    if (pgType === PgBasicType.PG_INT8) {
+    if (pgType === PgBasicType.PG_INT8 && this.dialect === 'SQLite') {
       return `cast(${field} as TEXT) AS ${field}`
     }
     return field
@@ -281,8 +301,25 @@ export class Builder {
       // because not all adapters deal well with BigInts
       // the DAL will convert the string into a BigInt in the `fromSqlite` function from `../conversions/sqlite.ts`.
       const pgType = this._tableDescription.fields.get(field)
-      if (pgType === PgBasicType.PG_INT8) {
-        return query.returning(`cast(${field} as TEXT) AS ${field}`)
+      if (pgType === PgBasicType.PG_INT8 && this.dialect === 'SQLite') {
+        //squelPostgres.function('cast(?)', `"${field}" as TEXT`)
+        // FIXME: squel adds quotes around the entire cast...
+        //        tried to override squel's internal _formatFieldName to special case this field but it still quoted it
+        const f = `cast("${field}" as TEXT) AS "${field}"`
+        const res = query.returning(f) //, field)
+        /*
+        const returningBlock = query.blocks[query.blocks.length - 1]
+        const originalFormatter = returningBlock._formatFieldName.bind(returningBlock)
+        returningBlock._formatFieldName = (field, opts) => {
+          console.log(`formatting field name: ${field}`)
+          if (field === f) {
+            console.log(`returning field: ${field}`)
+            return field
+          }
+          else return originalFormatter(field, opts)
+        }
+        */
+        return res
       }
       return query.returning(field)
     }, query)
@@ -317,7 +354,7 @@ function makeFilter(
   if (fieldValue === null) return [{ sql: `${fieldName} IS NULL` }]
   else if (fieldName === 'AND' || fieldName === 'OR' || fieldName === 'NOT') {
     return [makeBooleanFilter(fieldName as 'AND' | 'OR' | 'NOT', fieldValue)]
-  } else if (typeof fieldValue === 'object') {
+  } else if (typeof fieldValue === 'object' && !(fieldValue instanceof Date)) {
     // an object containing filters is provided
     // e.g. users.findMany({ where: { id: { in: [1, 2, 3] } } })
     const fs = {

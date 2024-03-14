@@ -10,7 +10,7 @@
     ??$node
     # Set expiration time for the JWT to 5 seconds from now
     !exp="5s"
-    [invoke connect_to_electric electric_1 5133 "[]" true]
+    [invoke connect_to_electric electric_1 5133 "[]" true 1]
     # Subscribe to auth status changes
     #!client.subscribe_to_auth_status(db)
     #?New auth status: EXPIRED

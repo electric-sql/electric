@@ -1,3 +1,6 @@
+CREATE DATABASE e2e_client_1_db;
+CREATE DATABASE e2e_client_2_db;
+
 CREATE TABLE entries (
   id UUID PRIMARY KEY,
   content VARCHAR NOT NULL,

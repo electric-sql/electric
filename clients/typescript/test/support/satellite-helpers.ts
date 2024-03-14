@@ -1,5 +1,10 @@
 import { DatabaseAdapter } from '../../src/electric/adapter'
 import {
+  QueryBuilder,
+  pgBuilder,
+  sqliteBuilder,
+} from '../../src/migrators/query-builder'
+import {
   OplogEntry,
   OpType,
   OPTYPES,
@@ -42,7 +47,7 @@ export const loadSatelliteMetaTable = async (
   metaTableName = '_electric_meta'
 ): Promise<Row> => {
   const rows = await db.query({
-    sql: `SELECT key, value FROM ${metaTableName}`,
+    sql: `SELECT key, value FROM main.${metaTableName}`,
   })
   const entries = rows.map((x) => [x.key, x.value])
 
@@ -190,22 +195,23 @@ export const genEncodedTags = (
 }
 
 /**
- * List all shadow entires, or get just one if an `oplog` parameter is provided
+ * List all shadow entries, or get just one if an `oplog` parameter is provided
  */
 export async function getMatchingShadowEntries(
   adapter: DatabaseAdapter,
   oplog?: OplogEntry,
+  builder: QueryBuilder = sqliteBuilder,
   shadowTable = 'main._electric_shadow'
 ): Promise<ShadowEntry[]> {
   let query: Statement
-  let selectTags = `SELECT * FROM ${shadowTable}`
+  let selectTags = `SELECT namespace, tablename, "primaryKey", tags FROM ${shadowTable}`
   if (oplog != undefined) {
     selectTags =
       selectTags +
       ` WHERE
-        namespace = ? AND
-        tablename = ? AND
-        primaryKey = ?
+        namespace = ${builder.makePositionalParam(1)} AND
+        tablename = ${builder.makePositionalParam(2)} AND
+        "primaryKey" = ${builder.makePositionalParam(3)}
     `
     const args = [oplog.namespace, oplog.tablename, getShadowPrimaryKey(oplog)]
     query = { sql: selectTags, args: args }
@@ -214,4 +220,12 @@ export async function getMatchingShadowEntries(
   }
 
   return (await adapter.query(query)) as unknown as ShadowEntry[]
+}
+
+export async function getPgMatchingShadowEntries(
+  adapter: DatabaseAdapter,
+  oplog?: OplogEntry,
+  shadowTable = 'main._electric_shadow'
+): Promise<ShadowEntry[]> {
+  return getMatchingShadowEntries(adapter, oplog, pgBuilder, shadowTable)
 }

@@ -99,6 +99,7 @@ start_satellite_client_%:
 	docker compose -f ${DOCKER_COMPOSE_FILE} run \
 		--rm \
 		-e TERM=dumb \
+		-e DIALECT=${DIALECT} \
 		satellite_client_$*
 
 
@@ -134,3 +135,6 @@ single_test:
 
 single_test_debug:
 	${LUX} --debug ${TEST}
+
+single_test_pg:
+	DIALECT=Postgres ${LUX} --progress doc ${TEST}

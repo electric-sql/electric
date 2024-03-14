@@ -120,7 +120,16 @@ export class DbSchema<T extends TableSchemas> {
     Record<FieldName, Array<Relation>>
   >
 
-  constructor(public tables: T, public migrations: Migration[]) {
+  /**
+   * @param tables Description of the database tables
+   * @param migrations Bundled SQLite migrations
+   * @param pgMigrations Bundled Postgres migrations
+   */
+  constructor(
+    public tables: T,
+    public migrations: Migration[],
+    public pgMigrations: Migration[]
+  ) {
     this.extendedTables = this.extend(tables)
     this.incomingRelationsIndex = this.indexIncomingRelations()
   }

@@ -1,4 +1,5 @@
 import { InvalidArgumentError } from '../validation/errors/invalidArgumentError'
+import { Converter } from './converter'
 import { deserialiseBoolean, serialiseBoolean } from './datatypes/boolean'
 import { deserialiseDate, serialiseDate } from './datatypes/date'
 import { deserialiseJSON, serialiseJSON } from './datatypes/json'
@@ -12,7 +13,7 @@ import { PgBasicType, PgDateType, PgType } from './types'
  * When reading from the SQLite database, the string can be parsed back into a `Date` object.
  */
 
-export function toSqlite(v: any, pgType: PgType): any {
+function toSqlite(v: any, pgType: PgType): any {
   if (v === null) {
     // don't transform null values
     return v
@@ -45,7 +46,7 @@ export function toSqlite(v: any, pgType: PgType): any {
   }
 }
 
-export function fromSqlite(v: any, pgType: PgType): any {
+function fromSqlite(v: any, pgType: PgType): any {
   if (v === null) {
     // don't transform null values
     return v
@@ -85,18 +86,11 @@ export function fromSqlite(v: any, pgType: PgType): any {
   }
 }
 
-/**
- * Checks whether the provided value is a user-provided data object, e.g. a timestamp.
- * This is important because `input.ts` needs to distinguish between data objects and filter objects.
- * Data objects need to be converted to a SQLite storeable value, whereas filter objects need to be treated specially
- * as we have to transform the values of the filter's fields (cf. `transformFieldsAllowingFilters` in `input.ts`).
- * @param v The value to check
- * @returns True if it is a data object, false otherwise.
- */
-export function isDataObject(v: unknown): boolean {
-  return v instanceof Date
-}
-
 function isPgDateType(pgType: PgType): boolean {
   return (Object.values(PgDateType) as Array<string>).includes(pgType)
+}
+
+export const sqliteConverter: Converter = {
+  encode: toSqlite,
+  decode: fromSqlite,
 }

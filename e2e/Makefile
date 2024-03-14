@@ -10,6 +10,12 @@ test_only:
 
 test: deps pull test_only
 
+test_pg:
+	DIALECT=Postgres make test
+
+test_only_pg:
+	DIALECT=Postgres make test_only
+
 pull:
 	docker compose -f services_templates.yaml pull \
 		postgresql

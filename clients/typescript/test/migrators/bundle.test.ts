@@ -1,63 +1,52 @@
-import test from 'ava'
-import Database from 'better-sqlite3'
+import { TestFn } from 'ava'
 
-import { rm as removeFile } from 'node:fs/promises'
-
-import { DatabaseAdapter } from '../../src/drivers/better-sqlite3/adapter'
-import { BundleMigrator } from '../../src/migrators/bundle'
 import { makeStmtMigration } from '../../src/migrators'
+import { DatabaseAdapter } from '../../src/electric/adapter'
+import { Migration } from '../../src/migrators'
+import { BundleMigratorBase as BundleMigrator } from '../../src/migrators/bundle'
 
-import { randomValue } from '../../src/util/random'
+export type ContextType = {
+  dbName: string
+  adapter: DatabaseAdapter
+  migrations: Migration[]
+  BundleMigrator: new (
+    adapter: DatabaseAdapter,
+    migrations?: Migration[]
+  ) => BundleMigrator
+  stop: () => Promise<void>
+}
 
-import migrations from '../support/migrations/migrations.js'
+export const bundleTests = (test: TestFn<ContextType>) => {
+  test('run the bundle migrator', async (t) => {
+    const { adapter, BundleMigrator, migrations } = t.context as any
 
-test.beforeEach((t) => {
-  const dbName = `bundle-migrator-${randomValue()}.db`
-  const db = new Database(dbName)
-  const adapter = new DatabaseAdapter(db)
+    const migrator = new BundleMigrator(adapter, migrations)
+    t.is(await migrator.up(), 3)
+    t.is(await migrator.up(), 0)
+  })
 
-  t.context = {
-    adapter,
-    dbName,
-  }
-})
+  test('applyIfNotAlready applies new migrations', async (t) => {
+    const { adapter, BundleMigrator, migrations } = t.context as any
 
-test.afterEach.always(async (t) => {
-  const { dbName } = t.context as any
+    const allButLastMigrations = migrations.slice(0, -1)
+    const lastMigration = makeStmtMigration(migrations[migrations.length - 1])
 
-  await removeFile(dbName, { force: true })
-  await removeFile(`${dbName}-journal`, { force: true })
-})
+    const migrator = new BundleMigrator(adapter, allButLastMigrations)
+    t.is(await migrator.up(), 2)
 
-test('run the bundle migrator', async (t) => {
-  const { adapter } = t.context as any
+    const wasApplied = await migrator.applyIfNotAlready(lastMigration)
+    t.assert(wasApplied)
+  })
 
-  const migrator = new BundleMigrator(adapter, migrations)
-  t.is(await migrator.up(), 3)
-  t.is(await migrator.up(), 0)
-})
+  test('applyIfNotAlready ignores already applied migrations', async (t) => {
+    const { adapter, BundleMigrator, migrations } = t.context as any
 
-test('applyIfNotAlready applies new migrations', async (t) => {
-  const { adapter } = t.context as any
+    const migrator = new BundleMigrator(adapter, migrations)
+    t.is(await migrator.up(), 3)
 
-  const allButLastMigrations = migrations.slice(0, -1)
-  const lastMigration = makeStmtMigration(migrations[migrations.length - 1])
-
-  const migrator = new BundleMigrator(adapter, allButLastMigrations)
-  t.is(await migrator.up(), 2)
-
-  const wasApplied = await migrator.applyIfNotAlready(lastMigration)
-  t.assert(wasApplied)
-})
-
-test('applyIfNotAlready ignores already applied migrations', async (t) => {
-  const { adapter } = t.context as any
-
-  const migrator = new BundleMigrator(adapter, migrations)
-  t.is(await migrator.up(), 3)
-
-  const wasApplied = await migrator.applyIfNotAlready(
-    makeStmtMigration(migrations[0])
-  )
-  t.assert(!wasApplied)
-})
+    const wasApplied = await migrator.applyIfNotAlready(
+      makeStmtMigration(migrations[0])
+    )
+    t.assert(!wasApplied)
+  })
+}

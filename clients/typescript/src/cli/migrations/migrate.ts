@@ -16,6 +16,7 @@ import { getConfig, type Config } from '../config'
 import { start } from '../docker-commands/command-start'
 import { stop } from '../docker-commands/command-stop'
 import { withConfig } from '../configure/command-with-config'
+import { pgBuilder, sqliteBuilder } from '../../migrators/query-builder'
 
 // Rather than run `npx prisma` we resolve the path to the prisma binary so that
 // we can be sure we are using the same version of Prisma that is a dependency of
@@ -32,6 +33,8 @@ const generatorPath = path.join(
 )
 
 const appRoot = path.resolve() // path where the user ran `npx electric migrate`
+const sqliteMigrationsFileName = 'migrations.ts'
+const pgMigrationsFileName = 'pg-migrations.ts'
 
 export const defaultPollingInterval = 1000 // in ms
 
@@ -177,7 +180,7 @@ async function watchMigrations(opts: GeneratorOptions) {
 async function getLatestMigration(
   opts: Omit<GeneratorOptions, 'watch'>
 ): Promise<string | undefined> {
-  const migrationsFile = migrationsFilePath(opts)
+  const migrationsFile = migrationsFilePath(opts, sqliteMigrationsFileName)
 
   // Read the migrations file contents and parse it
   // need to strip the `export default` before parsing.
@@ -218,6 +221,33 @@ async function getLatestMigration(
   }
 }
 
+async function bundleMigrationsFor(
+  dialect: 'sqlite' | 'postgresql',
+  opts: Omit<GeneratorOptions, 'watch'>,
+  tmpFolder: string
+) {
+  const config = opts.config
+  const folder = dialect === 'sqlite' ? 'migrations' : 'pg-migrations'
+  const migrationsPath = path.join(tmpFolder, folder)
+  await fs.mkdir(migrationsPath)
+  const migrationEndpoint =
+    config.SERVICE + `/api/migrations?dialect=${dialect}`
+
+  const migrationsFolder = path.resolve(migrationsPath)
+  const migrationsFileName =
+    dialect === 'sqlite' ? sqliteMigrationsFileName : pgMigrationsFileName
+  const migrationsFile = migrationsFilePath(opts, migrationsFileName)
+
+  // Fetch the migrations from Electric endpoint and write them into `tmpFolder`
+  await fetchMigrations(migrationEndpoint, migrationsFolder, tmpFolder)
+
+  // Build the migrations
+  const builder = dialect === 'sqlite' ? sqliteBuilder : pgBuilder
+  return async () => {
+    await buildMigrations(migrationsFolder, migrationsFile, builder)
+  }
+}
+
 /**
  * This function migrates the application.
  * To this end, it fetches the migrations from Electric,
@@ -240,15 +270,16 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
   let generationFailed = false
 
   try {
-    const migrationsPath = path.join(tmpFolder, 'migrations')
-    await fs.mkdir(migrationsPath)
-    const migrationEndpoint = config.SERVICE + '/api/migrations?dialect=sqlite'
-
-    const migrationsFolder = path.resolve(migrationsPath)
-    const migrationsFile = migrationsFilePath(opts)
-
-    // Fetch the migrations from Electric endpoint and write them into `tmpFolder`
-    await fetchMigrations(migrationEndpoint, migrationsFolder, tmpFolder)
+    const buildSqliteMigrations = await bundleMigrationsFor(
+      'sqlite',
+      opts,
+      tmpFolder
+    )
+    const buildPgMigrations = await bundleMigrationsFor(
+      'postgresql',
+      opts,
+      tmpFolder
+    )
 
     const prismaSchema = await createIntrospectionSchema(tmpFolder, opts)
 
@@ -284,9 +315,9 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
     await keepOnlyPrismaTypings(config.CLIENT_PATH)
     console.log(`Successfully generated Electric client at: ./${relativePath}`)
 
-    // Build the migrations
     console.log('Building migrations...')
-    await buildMigrations(migrationsFolder, migrationsFile)
+    await buildSqliteMigrations()
+    await buildPgMigrations()
     console.log('Successfully built migrations')
 
     if (
@@ -658,9 +689,12 @@ async function fetchMigrations(
   return gotNewMigrations
 }
 
-function migrationsFilePath(opts: Omit<GeneratorOptions, 'watch'>) {
+function migrationsFilePath(
+  opts: Omit<GeneratorOptions, 'watch'>,
+  filename: string
+) {
   const outFolder = path.resolve(opts.config.CLIENT_PATH)
-  return path.join(outFolder, 'migrations.ts')
+  return path.join(outFolder, filename)
 }
 
 function capitaliseFirstLetter(word: string): string {
