@@ -15,8 +15,8 @@ importers:
   clients/typescript:
     dependencies:
       '@capacitor-community/sqlite':
-        specifier: '>= 5.4.1'
-        version: 5.4.1(@capacitor/core@5.4.2)
+        specifier: '>= 5.6.2'
+        version: 5.6.3(@capacitor/core@5.4.2)
       '@electric-sql/prisma-generator':
         specifier: workspace:*
         version: link:../../generator
@@ -2655,14 +2655,14 @@ packages:
       '@babel/helper-validator-identifier': 7.22.20
       to-fast-properties: 2.0.0
 
-  /@capacitor-community/sqlite@5.4.1(@capacitor/core@5.4.2):
-    resolution: {integrity: sha512-N2OKk4ja8tpcN6YJZ7JwRGLlZRpZi+zi7Plve/dRennIk7GXok13NlbHRlthwS+mmC8/SAHlQ0ZW2UGoEisgww==}
+  /@capacitor-community/sqlite@5.6.3(@capacitor/core@5.4.2):
+    resolution: {integrity: sha512-G0dc1JL3naXhNT066y+SuJ6vSQrhPmFSSS0FAW1Er8wParC1dd3ITBO/a3Em7eaZ2IGZybrpegzwdSXe/xRDaQ==}
     engines: {node: '>=16.0.0'}
     peerDependencies:
       '@capacitor/core': ^5.0.0
     dependencies:
       '@capacitor/core': 5.4.2
-      jeep-sqlite: 2.5.3
+      jeep-sqlite: 2.6.1
     dev: false
 
   /@capacitor/core@5.4.2:
@@ -4908,8 +4908,8 @@ packages:
     resolution: {integrity: sha512-Uy0+khmZqUrUGm5dmMqVlnvufZRSK0FbYzVgp0UMstm+F5+W2/jnEEQyc9vo1ZR/E5ZI/B1WjjoTqBqwJL6Krw==}
     dev: true
 
-  /@stencil/core@4.4.0:
-    resolution: {integrity: sha512-YlLyCqGBsMEuZb3XTO/STT0TX9eSwjoVhCJgtjVfQOF+ebIMVlojTh40CmDveWiWbth687cbr6S2heeussV8Sg==}
+  /@stencil/core@4.12.6:
+    resolution: {integrity: sha512-15JO2TdaxGVKNdLZb/2TtDa+juj3XGD/V0y/disgdzYYSnajgSh06nwODfdHz9eTUh1Hisz+KIo857I1rCZrfg==}
     engines: {node: '>=16.0.0', npm: '>=7.10.0'}
     hasBin: true
     dev: false
@@ -10727,14 +10727,14 @@ packages:
       '@pkgjs/parseargs': 0.11.0
     dev: true
 
-  /jeep-sqlite@2.5.3:
-    resolution: {integrity: sha512-kUH+2MlJWm1HTKffqaa9qL9NJli+BpvpVz2KlXBk0cr8i5DPcJ6mr8QsAumYE8RmQYgZZrl3h01x+v8Z+Pk2bQ==}
+  /jeep-sqlite@2.6.1:
+    resolution: {integrity: sha512-yB+oRbafCNX0r6gnvoiSAMl3ldkOCnw1IvQNXAvwVU06KvEcYscA1CCoP9QDJxpdN6wz/hHxUiizEiNG9xbWPg==}
     dependencies:
-      '@stencil/core': 4.4.0
+      '@stencil/core': 4.12.6
       browser-fs-access: 0.33.1
       jszip: 3.10.1
       localforage: 1.10.0
-      sql.js: 1.8.0
+      sql.js: 1.10.2
     dev: false
 
   /jest-get-type@26.3.0:
@@ -14641,8 +14641,8 @@ packages:
   /sprintf-js@1.0.3:
     resolution: {integrity: sha512-D9cPgkvLlV3t3IzL0D0YLvGA9Ahk4PcvVwUbN0dSGr1aP0Nrt4AEnTUbuGvquEC0mA64Gqt1fzirlRs5ibXx8g==}
 
-  /sql.js@1.8.0:
-    resolution: {integrity: sha512-3HD8pSkZL+5YvYUI8nlvNILs61ALqq34xgmF+BHpqxe68yZIJ1H+sIVIODvni25+CcxHUxDyrTJUL0lE/m7afw==}
+  /sql.js@1.10.2:
+    resolution: {integrity: sha512-jnKFtdHxuVUNgu1vHwFoTjjwfTuVDVqzGpw7H05Zq3YMNMDOpLFyFGvpgTRIQGd/mqcYntuMy7iygYCytD62jQ==}
     dev: false
 
   /squel@5.13.0:
