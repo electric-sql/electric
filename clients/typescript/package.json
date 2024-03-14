@@ -58,7 +58,6 @@
     "./generic": "./dist/drivers/generic/index.js",
     "./node": "./dist/drivers/better-sqlite3/index.js",
     "./react": "./dist/frameworks/react/index.js",
-    "./react-native": "./dist/drivers/react-native-sqlite-storage/index.js",
     "./vuejs": "./dist/frameworks/vuejs/index.js",
     "./wa-sqlite": "./dist/drivers/wa-sqlite/index.js",
     "./tauri": "./dist/drivers/tauri-sqlite/index.js",
@@ -98,9 +97,6 @@
       ],
       "react": [
         "./dist/frameworks/react/index.d.ts"
-      ],
-      "react-native": [
-        "./dist/drivers/react-native-sqlite-storage/index.d.ts"
       ],
       "vuejs": [
         "./dist/frameworks/vuejs/index.d.ts"
@@ -225,7 +221,6 @@
     "@types/node": "^18.8.4",
     "@types/prompts": "^2.4.9",
     "@types/react": "^18.0.18",
-    "@types/react-native-sqlite-storage": "^6.0.5",
     "@types/tcp-port-used": "^1.0.2",
     "@types/uuid": "^9.0.1",
     "@types/ws": "^8.5.3",
@@ -267,7 +262,6 @@
     "react": ">= 16.8.0",
     "react-dom": ">= 16.8.0",
     "react-native": ">= 0.68.0",
-    "react-native-sqlite-storage": ">= 6.0.0",
     "typeorm": ">=0.3.0",
     "vue": ">=3.0.0",
     "wa-sqlite": "rhashimoto/wa-sqlite#semver:^0.9.8"
@@ -292,9 +286,6 @@
       "optional": true
     },
     "react-native": {
-      "optional": true
-    },
-    "react-native-sqlite-storage": {
       "optional": true
     },
     "wa-sqlite": {
