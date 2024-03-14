@@ -40,7 +40,6 @@ const migrationMetaData = {
           columns: [
             SatOpMigrate_Column.fromPartial({
               name: 'id',
-              sqliteType: 'TEXT',
               pgType: SatOpMigrate_PgColumnType.fromPartial({
                 name: 'text',
                 array: [],
@@ -49,7 +48,6 @@ const migrationMetaData = {
             }),
             SatOpMigrate_Column.fromPartial({
               name: 'avatar_url',
-              sqliteType: 'TEXT',
               pgType: SatOpMigrate_PgColumnType.fromPartial({
                 name: 'text',
                 array: [],
@@ -58,7 +56,6 @@ const migrationMetaData = {
             }),
             SatOpMigrate_Column.fromPartial({
               name: 'name',
-              sqliteType: 'TEXT',
               pgType: SatOpMigrate_PgColumnType.fromPartial({
                 name: 'text',
                 array: [],
@@ -67,7 +64,6 @@ const migrationMetaData = {
             }),
             SatOpMigrate_Column.fromPartial({
               name: 'starred_at',
-              sqliteType: 'TEXT',
               pgType: SatOpMigrate_PgColumnType.fromPartial({
                 name: 'text',
                 array: [],
@@ -76,7 +72,6 @@ const migrationMetaData = {
             }),
             SatOpMigrate_Column.fromPartial({
               name: 'username',
-              sqliteType: 'TEXT',
               pgType: SatOpMigrate_PgColumnType.fromPartial({
                 name: 'text',
                 array: [],

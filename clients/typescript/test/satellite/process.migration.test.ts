@@ -124,17 +124,14 @@ const createTable: SchemaChange = {
     columns: [
       {
         name: 'id',
-        sqliteType: 'TEXT',
         pgType: { name: 'TEXT', array: [], size: [] },
       },
       {
         name: 'foo',
-        sqliteType: 'INTEGER',
         pgType: { name: 'INTEGER', array: [], size: [] },
       },
       {
         name: 'bar',
-        sqliteType: 'TEXT',
         pgType: { name: 'TEXT', array: [], size: [] },
       },
     ],
@@ -156,22 +153,18 @@ const addColumn: SchemaChange = {
     columns: [
       {
         name: 'id',
-        sqliteType: 'INTEGER',
         pgType: { name: 'INTEGER', array: [], size: [] },
       },
       {
         name: 'value',
-        sqliteType: 'TEXT',
         pgType: { name: 'TEXT', array: [], size: [] },
       },
       {
         name: 'other',
-        sqliteType: 'INTEGER',
         pgType: { name: 'INTEGER', array: [], size: [] },
       },
       {
         name: 'baz',
-        sqliteType: 'TEXT',
         pgType: { name: 'TEXT', array: [], size: [] },
       },
     ],
@@ -722,7 +715,6 @@ const migrationWithFKs: SchemaChange[] = [
       columns: [
         {
           name: 'id',
-          sqliteType: 'TEXT',
           pgType: { name: 'TEXT', array: [], size: [] },
         },
       ],
@@ -745,12 +737,10 @@ const migrationWithFKs: SchemaChange[] = [
       columns: [
         {
           name: 'id',
-          sqliteType: 'TEXT',
           pgType: { name: 'TEXT', array: [], size: [] },
         },
         {
           name: 'item_id',
-          sqliteType: 'TEXT',
           pgType: { name: 'TEXT', array: [], size: [] },
         },
       ],

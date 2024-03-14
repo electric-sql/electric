@@ -138,7 +138,10 @@ export type DataChange = {
   tags: Tag[]
 }
 
-export type SatOpMigrate_Col = Omit<SatOpMigrate_Column, '$type' | 'pgType'> & {
+export type SatOpMigrate_Col = Omit<
+  SatOpMigrate_Column,
+  '$type' | 'sqliteType' | 'pgType'
+> & {
   pgType: Omit<SatOpMigrate_PgColumnType, '$type'> | undefined
 }
 
