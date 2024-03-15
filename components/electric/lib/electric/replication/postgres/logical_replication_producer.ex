@@ -1,41 +1,19 @@
 defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   use GenStage
-  require Logger
 
-  alias Electric.Postgres.ShadowTableTransformation
   alias Electric.Postgres.Extension.SchemaLoader
   alias Electric.Postgres.Extension.SchemaCache
   alias Electric.Telemetry.Metrics
 
   alias Electric.Postgres.LogicalReplication
-  alias Electric.Postgres.LogicalReplication.Messages
-
-  alias Electric.Postgres.LogicalReplication.Messages.{
-    Begin,
-    Origin,
-    Commit,
-    Relation,
-    Insert,
-    Update,
-    Delete,
-    Truncate,
-    Type,
-    Message
-  }
-
   alias Electric.Postgres.Lsn
 
-  alias Electric.Replication.Changes.{
-    Transaction,
-    NewRecord,
-    UpdatedRecord,
-    DeletedRecord,
-    TruncatedRelation,
-    ReferencedRecord
-  }
-
+  alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.Connectors
   alias Electric.Replication.Postgres.Client
+  alias Electric.Replication.Postgres.LogicalMessages
+
+  require Logger
 
   defmodule State do
     defstruct repl_conn: nil,
@@ -45,9 +23,10 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
               queue_len: 0,
               relations: %{},
               transaction: nil,
-              publication: nil,
+              replication_context: %LogicalMessages.Context{},
               client: nil,
               origin: nil,
+              publication: nil,
               types: %{},
               span: nil,
               advance_timer: nil,
@@ -63,8 +42,9 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
             queue_len: non_neg_integer(),
             relations: %{Messages.relation_id() => %Relation{}},
             transaction: {Lsn.t(), %Transaction{}},
-            publication: binary(),
+            replication_context: LogicalMessages.Context.t(),
             origin: Connectors.origin(),
+            publication: binary(),
             types: %{},
             span: Metrics.t() | nil,
             advance_timer: reference() | nil,
@@ -155,13 +135,19 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
         %State{
           repl_conn: repl_conn,
           svc_conn: svc_conn,
-          publication: publication,
+          queue: :queue.new(),
           origin: origin,
+          publication: publication,
+          replication_context: %LogicalMessages.Context{
+            origin: origin,
+            publication: publication
+          },
           span: span,
           main_slot: main_slot,
           main_slot_lsn: main_slot_lsn,
           resumable_wal_window: wal_window_opts.resumable_size
         }
+        |> reset_replication_context()
         # The replication slot used by the replication connection prevents Postgres from
         # discarding WAL records created after slot's start LSN.  Any writes in Postgres cause
         # the WAL to grow, and, moreover, managed Postgres instances from any provider exhibit
@@ -193,6 +179,15 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     main_slot_lsn
   end
 
+  defp reset_replication_context(state) do
+    update_in(state.replication_context, &LogicalMessages.Context.reset_tx/1)
+  end
+
+  defp schedule_main_slot_advance(state) do
+    tref = :erlang.start_timer(@advance_timeout, self(), @advance_msg)
+    %State{state | advance_timer: tref}
+  end
+
   @impl true
   def terminate(_reason, state) do
     Metrics.stop_span(state.span)
@@ -200,9 +195,20 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
 
   @impl true
   def handle_info({:epgsql, _pid, {:x_log_data, _start_lsn, _end_lsn, binary_msg}}, state) do
-    binary_msg
-    |> LogicalReplication.decode_message()
-    |> process_message(state)
+    context =
+      binary_msg
+      |> LogicalReplication.decode_message()
+      |> LogicalMessages.process(state.replication_context)
+
+    case context.transaction do
+      nil ->
+        {:noreply, [], %{state | replication_context: context}}
+
+      %Transaction{} = tx ->
+        # When we have a new transaction, enqueue it and see if there's any
+        # pending demand we can meet by dispatching events.
+        enqueue_transaction(tx, state)
+    end
   end
 
   def handle_info({:DOWN, _, :process, conn, reason}, %State{repl_conn: conn} = state) do
@@ -224,148 +230,6 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   def handle_info(msg, state) do
     Logger.debug("Unexpected message #{inspect(msg)}")
     {:noreply, [], state}
-  end
-
-  defp process_message(
-         %Message{transactional?: true, prefix: "electric.fk_chain_touch", content: content},
-         state
-       ) do
-    received = Jason.decode!(content)
-
-    referenced = %ReferencedRecord{
-      relation: {received["schema"], received["table"]},
-      record: received["data"],
-      pk: received["pk"],
-      tags:
-        ShadowTableTransformation.convert_tag_list_pg_to_satellite(received["tags"], state.origin)
-    }
-
-    {lsn, txn} = state.transaction
-
-    {:noreply, [],
-     %{state | transaction: {lsn, Transaction.add_referenced_record(txn, referenced)}}}
-  end
-
-  defp process_message(%Message{} = msg, state) do
-    Logger.info("Got a message from PG via logical replication: #{inspect(msg)}")
-
-    {:noreply, [], state}
-  end
-
-  defp process_message(%Begin{} = msg, %State{} = state) do
-    tx = %Transaction{
-      xid: msg.xid,
-      changes: [],
-      commit_timestamp: msg.commit_timestamp,
-      origin: state.origin,
-      origin_type: :postgresql,
-      publication: state.publication
-    }
-
-    {:noreply, [], %{state | transaction: {msg.final_lsn, tx}}}
-  end
-
-  defp process_message(%Origin{} = msg, state) do
-    # If we got the "origin" message, it means that the Postgres sending back the transaction we sent from Electric
-    # We ignored those previously, when Vaxine was the source of truth, but now we need to fan out those processed messages
-    # to all the Satellites as their write has been "accepted"
-    Logger.debug("origin: #{inspect(msg.name)}")
-    {:noreply, [], state}
-  end
-
-  defp process_message(%Type{}, state), do: {:noreply, [], state}
-
-  defp process_message(%Relation{} = rel, state) do
-    state = Map.update!(state, :relations, &Map.put(&1, rel.id, rel))
-    {:noreply, [], state}
-  end
-
-  defp process_message(%Insert{} = msg, %State{} = state) do
-    relation = Map.get(state.relations, msg.relation_id)
-
-    data = data_tuple_to_map(relation.columns, msg.tuple_data)
-
-    new_record = %NewRecord{relation: {relation.namespace, relation.name}, record: data}
-
-    {lsn, txn} = state.transaction
-    txn = %{txn | changes: [new_record | txn.changes]}
-
-    {:noreply, [], %{state | transaction: {lsn, txn}}}
-  end
-
-  defp process_message(%Update{} = msg, %State{} = state) do
-    relation = Map.get(state.relations, msg.relation_id)
-
-    old_data = data_tuple_to_map(relation.columns, msg.old_tuple_data)
-    data = data_tuple_to_map(relation.columns, msg.tuple_data)
-
-    updated_record =
-      UpdatedRecord.new(
-        relation: {relation.namespace, relation.name},
-        old_record: old_data,
-        record: data
-      )
-
-    {lsn, txn} = state.transaction
-    txn = %{txn | changes: [updated_record | txn.changes]}
-
-    {:noreply, [], %{state | transaction: {lsn, txn}}}
-  end
-
-  defp process_message(%Delete{} = msg, %State{} = state) do
-    relation = Map.get(state.relations, msg.relation_id)
-
-    data =
-      data_tuple_to_map(
-        relation.columns,
-        msg.old_tuple_data || msg.changed_key_tuple_data
-      )
-
-    deleted_record = %DeletedRecord{
-      relation: {relation.namespace, relation.name},
-      old_record: data
-    }
-
-    {lsn, txn} = state.transaction
-    txn = %{txn | changes: [deleted_record | txn.changes]}
-
-    {:noreply, [], %{state | transaction: {lsn, txn}}}
-  end
-
-  defp process_message(%Truncate{} = msg, state) do
-    truncated_relations =
-      for truncated_relation <- msg.truncated_relations do
-        relation = Map.get(state.relations, truncated_relation)
-
-        %TruncatedRelation{
-          relation: {relation.namespace, relation.name}
-        }
-      end
-
-    {lsn, txn} = state.transaction
-    txn = %{txn | changes: Enum.reverse(truncated_relations) ++ txn.changes}
-
-    {:noreply, [], %{state | transaction: {lsn, txn}}}
-  end
-
-  # When we have a new event, enqueue it and see if there's any
-  # pending demand we can meet by dispatching events.
-
-  defp process_message(
-         %Commit{lsn: commit_lsn, end_lsn: end_lsn},
-         %State{transaction: {current_txn_lsn, txn}, queue: queue} = state
-       )
-       when commit_lsn == current_txn_lsn do
-    event =
-      %{txn | lsn: end_lsn}
-      |> ShadowTableTransformation.enrich_tx_from_shadow_ops()
-
-    Metrics.span_event(state.span, :transaction, Transaction.count_operations(event))
-
-    queue = :queue.in(event, queue)
-    state = %{state | queue: queue, queue_len: state.queue_len + 1, transaction: nil}
-
-    dispatch_events(state)
   end
 
   # When we have new demand, add it to any pending demand and see if we can
@@ -398,15 +262,6 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     {:noreply, :queue.to_list(to_emit), state}
   end
 
-  @spec data_tuple_to_map([Relation.Column.t()], list()) :: term()
-  defp data_tuple_to_map(_columns, nil), do: %{}
-
-  defp data_tuple_to_map(columns, tuple_data) do
-    columns
-    |> Enum.zip(tuple_data)
-    |> Map.new(fn {column, data} -> {column.name, data} end)
-  end
-
   @spec ack(Transaction.t(), State.t()) :: :ok
 
   if Mix.env() == :test do
@@ -418,6 +273,16 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   def ack(%Transaction{lsn: lsn}, state) do
     Logger.debug("Acknowledging #{lsn}", origin: state.origin)
     Client.acknowledge_lsn(state.repl_conn, lsn)
+  end
+
+  defp enqueue_transaction(%Transaction{} = tx, %State{} = state) do
+    Metrics.span_event(state.span, :transaction, Transaction.count_operations(tx))
+
+    %{state | queue: :queue.in(tx, state.queue, queue_len: state.queue_len + 1)}
+    |> reset_replication_context()
+    |> set_current_lsn(tx.lsn)
+    |> advance_main_slot()
+    |> dispatch_events()
   end
 
   # Advance the replication slot to let Postgres discard old WAL records.
@@ -437,10 +302,5 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     else
       state
     end
-  end
-
-  defp schedule_main_slot_advance(state) do
-    tref = :erlang.start_timer(@advance_timeout, self(), @advance_msg)
-    %State{state | advance_timer: tref}
   end
 end
