@@ -91,7 +91,7 @@ defmodule Electric.Satellite.SubscriptionManager do
       for {client_id, subscription_id, shape_requests_json} <- rows do
         shape_requests =
           shape_requests_json
-          |> Jason.decode!(keys: :atoms!)
+          |> Jason.decode!(keys: :atoms)
           |> ShapeRequest.from_json_maps()
 
         {{client_id, subscription_id}, shape_requests}
