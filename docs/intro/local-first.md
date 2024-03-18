@@ -7,9 +7,9 @@ pagination_next: intro/multi-user
 
 import InstantDemo from '!!raw-loader!@site/intro/src/demos/local-first/instant.jsx'
 
-In this introduction, we're going to walk through local-first development and the ElectricSQL system. You're going to see what's good and different about it, explore some of the challenges and see how ElectricSQL solves them.
+In this introduction, we're going to walk through [local-first development](../reference/local-first.md) and the ElectricSQL system. You're going to see what's good and different about it, explore some of the challenges and see how ElectricSQL solves them.
 
-Along the way, we hope you'll be convinced to stop building cloud-first systems and switch to [#lo-fi](https://localfirstweb.dev/) ⚡ as your preferred development approach instead.
+Along the way, we hope you'll be convinced to stop building cloud-first systems and switch to [#lo-fi](https://lofi.software/) ⚡ as your preferred development approach instead.
 
 ## Code along
 

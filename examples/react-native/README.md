@@ -14,7 +14,7 @@
 
 # ElectricSQL - React Native example
 
-This is an example mobile app using [React Native](https://reactnative.dev) with the [react-native-sqlite-storage](https://www.npmjs.com/package/react-native-sqlite-storage) driver.
+This is an example mobile app using [React Native](https://reactnative.dev) with the [@op-engineering/op-sqlite](https://github.com/OP-Engineering/op-sqlite) driver.
 
 ## Pre-reqs
 
@@ -41,7 +41,8 @@ Install the [pods](https://cocoapods.org) (if you get a `pod: command not found`
 npm run pods:install
 ```
 
-You may want to also check the [install section of the react-native-sqlite-storage driver README](https://github.com/andpor/react-native-sqlite-storage#installation).
+You may want to also check the [op-sqlite documentation](https://ospfranco.notion.site/Installation-Flags-93044890aa3d4d14b6c525ba4ba8686f) for additional steps you might need
+to configure the native modules for your target environments.
 
 ## Setup
 

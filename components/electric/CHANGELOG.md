@@ -1,5 +1,13 @@
 # @core/electric
 
+## 0.9.4
+
+### Patch Changes
+
+- 452361d5: Limit client connections when the sync service's Postgres connection is down.
+- 209192a3: [VAX-1664] Fix for prisma database introspection
+- 90735031: Create a publication in Postgres on startup. This would restore the replication stream from Postgres to Electric if the publication got deleted by accident.
+
 ## 0.9.3
 
 ### Patch Changes

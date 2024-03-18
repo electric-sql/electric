@@ -18,6 +18,7 @@ import {
   OutboundStartedCallback,
   TransactionCallback,
   SocketCloseReason,
+  ReplicationStatus,
 } from '../util/types'
 import { ElectricConfig } from '../config/index'
 
@@ -191,6 +192,12 @@ export class MockSatelliteClient
 
   deliverFirst = false
 
+  private startReplicationDelayMs: number | null = null
+
+  setStartReplicationDelayMs(delayMs: number | null) {
+    this.startReplicationDelayMs = delayMs
+  }
+
   setRelations(relations: RelationsCache): void {
     this.relations = relations
     if (this.relationsCb) {
@@ -314,6 +321,12 @@ export class MockSatelliteClient
     return !this.disconnected
   }
 
+  getOutboundReplicationStatus(): ReplicationStatus {
+    return this.isConnected() && this.replicating
+      ? ReplicationStatus.ACTIVE
+      : ReplicationStatus.STOPPED
+  }
+
   shutdown(): void {
     this.isDown = true
   }
@@ -339,7 +352,11 @@ export class MockSatelliteClient
   authenticate(_authState: AuthState): Promise<AuthResponse> {
     return Promise.resolve({})
   }
-  startReplication(lsn: LSN): Promise<StartReplicationResponse> {
+  async startReplication(lsn: LSN): Promise<StartReplicationResponse> {
+    if (this.startReplicationDelayMs) {
+      await sleepAsync(this.startReplicationDelayMs)
+    }
+
     this.replicating = true
     this.inboundAck = lsn
 
@@ -347,21 +364,21 @@ export class MockSatelliteClient
     this.timeouts.push(t)
 
     if (lsn && bytesToNumber(lsn) == MOCK_BEHIND_WINDOW_LSN) {
-      return Promise.resolve({
+      return {
         error: new SatelliteError(
           SatelliteErrorCode.BEHIND_WINDOW,
           'MOCK BEHIND_WINDOW_LSN ERROR'
         ),
-      })
+      }
     }
 
     if (lsn && bytesToNumber(lsn) == MOCK_INTERNAL_ERROR) {
-      return Promise.resolve({
+      return {
         error: new SatelliteError(
           SatelliteErrorCode.INTERNAL,
           'MOCK INTERNAL_ERROR'
         ),
-      })
+      }
     }
 
     return Promise.resolve({})
@@ -389,6 +406,13 @@ export class MockSatelliteClient
   }
 
   enqueueTransaction(transaction: DataTransaction): void {
+    if (!this.replicating) {
+      throw new SatelliteError(
+        SatelliteErrorCode.REPLICATION_NOT_STARTED,
+        'enqueuing a transaction while outbound replication has not started'
+      )
+    }
+
     this.outboundSent = transaction.lsn
   }
 

@@ -31,6 +31,7 @@ import {
   MigrationTable,
   Relation,
   RelationsCache,
+  ReplicationStatus,
   SatelliteError,
   SatelliteErrorCode,
   SchemaChange,
@@ -972,24 +973,21 @@ export class SatelliteProcess implements Satellite {
         args: [timestamp.toISOString()],
       }
 
-      // For each first oplog entry per element, set `clearTags` array to previous tags from the shadow table
+      // We're adding new tag to the shadow tags for this row
       const q2: Statement = {
         sql: `
       UPDATE ${oplog}
-      SET clearTags = updates.tags
-      FROM (
-        SELECT shadow.tags as tags, min(op.rowid) as op_rowid
-        FROM ${shadow} AS shadow
-        JOIN ${oplog} as op
-          ON op.namespace = shadow.namespace
-            AND op.tablename = shadow.tablename
-            AND op.primaryKey = shadow.primaryKey
-        WHERE op.timestamp = ?
-        GROUP BY op.namespace, op.tablename, op.primaryKey
-      ) AS updates
-      WHERE updates.op_rowid = ${oplog}.rowid
+      SET clearTags =
+          CASE WHEN shadow.tags = '[]' OR shadow.tags = ''
+               THEN '["' || ? || '"]'
+               ELSE '["' || ? || '",' || substring(shadow.tags, 2)
+          END
+      FROM ${shadow} AS shadow
+      WHERE ${oplog}.namespace = shadow.namespace
+          AND ${oplog}.tablename = shadow.tablename
+          AND ${oplog}.primaryKey = shadow.primaryKey AND ${oplog}.timestamp = ?
       `,
-        args: [timestamp.toISOString()],
+        args: [newTag, newTag, timestamp.toISOString()],
       }
 
       // For each affected shadow row, set new tag array, unless the last oplog operation was a DELETE
@@ -1045,7 +1043,9 @@ export class SatelliteProcess implements Satellite {
 
       if (oplogEntries.length > 0) this._notifyChanges(oplogEntries, 'local')
 
-      if (this.client.isConnected()) {
+      if (
+        this.client.getOutboundReplicationStatus() === ReplicationStatus.ACTIVE
+      ) {
         const enqueued = this.client.getLastSentLsn()
         const enqueuedLogPos = bytesToNumber(enqueued)
 
@@ -1112,8 +1112,9 @@ export class SatelliteProcess implements Satellite {
   }
 
   async _replicateSnapshotChanges(results: OplogEntry[]): Promise<void> {
-    // TODO: Don't try replicating when outbound is inactive
-    if (!this.client.isConnected()) {
+    if (
+      this.client.getOutboundReplicationStatus() != ReplicationStatus.ACTIVE
+    ) {
       return
     }
 

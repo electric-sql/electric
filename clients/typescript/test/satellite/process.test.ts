@@ -1367,7 +1367,8 @@ test('garbage collection is triggered when transaction from the same origin is r
   const { satellite } = t.context
   const { runMigrations, adapter, authState, token } = t.context
   await runMigrations()
-  await startSatellite(satellite, authState, token)
+  const conn = await startSatellite(satellite, authState, token)
+  await conn.connectionPromise
 
   adapter.run({
     sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', 1);`,
@@ -1896,6 +1897,29 @@ test("Garbage collecting the subscription doesn't generate oplog entries", async
   t.deepEqual(await satellite._getEntries(0), [])
 })
 
+test("snapshot while not fully connected doesn't throw", async (t) => {
+  const { adapter, runMigrations, satellite, client, authState, token } =
+    t.context
+  client.setStartReplicationDelayMs(100)
+
+  await runMigrations()
+
+  // Add log entry while offline
+  await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
+
+  const conn = await startSatellite(satellite, authState, token)
+
+  // Performing a snapshot while the replication connection has not been stablished
+  // should not throw
+  await satellite._performSnapshot()
+
+  await conn.connectionPromise
+
+  await satellite._performSnapshot()
+
+  t.pass()
+})
+
 test('snapshots: generated oplog entries have the correct tags', async (t) => {
   const {
     client,
@@ -1963,12 +1987,19 @@ test('snapshots: generated oplog entries have the correct tags', async (t) => {
   })
 
   await adapter.run({ sql: `DELETE FROM ${qualified} WHERE id = 2` })
-  await satellite._performSnapshot()
+  const deleteTx = await satellite._performSnapshot()
 
   const oplogs = await adapter.query({
     sql: `SELECT * FROM _electric_oplog`,
   })
-  t.is(oplogs[0].clearTags, genEncodedTags('remote', [expectedTs]))
+
+  t.is(
+    oplogs[0].clearTags,
+    encodeTags([
+      generateTag(satellite._authState!.clientId, deleteTx),
+      generateTag('remote', expectedTs),
+    ])
+  )
 })
 
 test('DELETE after DELETE sends clearTags', async (t) => {

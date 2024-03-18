@@ -277,6 +277,10 @@ export class SatelliteClient implements Client {
     return !!this.socketHandler
   }
 
+  getOutboundReplicationStatus(): ReplicationStatus {
+    return this.outbound.isReplicating
+  }
+
   shutdown(): void {
     this.disconnect()
     this.emitter.removeAllListeners()
@@ -468,9 +472,13 @@ export class SatelliteClient implements Client {
 
     this.subscriptionsDataCache.subscriptionRequest(request)
 
-    return this.service
-      .subscribe(request)
-      .then(this.handleSubscription.bind(this))
+    return this.delayIncomingMessages(
+      async () => {
+        const resp = await this.service.subscribe(request)
+        return this.handleSubscription(resp)
+      },
+      { allowedRpcResponses: ['subscribe'] }
+    )
   }
 
   unsubscribe(subscriptionIds: string[]): Promise<UnsubscribeResponse> {

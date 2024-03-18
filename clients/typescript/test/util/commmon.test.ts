@@ -1,6 +1,11 @@
 import test from 'ava'
 
-import { getWaiter, base64, textEncoder } from '../../src/util/common'
+import {
+  getWaiter,
+  base64,
+  textEncoder,
+  textDecoder,
+} from '../../src/util/common'
 import { SatelliteError, SatelliteErrorCode } from '../../src/util/types'
 
 const OriginalEncoder = globalThis['TextEncoder']
@@ -87,7 +92,7 @@ test('test textEncoder replacement decodes Unicode characters', (t) => {
   delete (globalThis as { TextDecoder?: unknown })['TextDecoder']
 
   const originalDecoded = new OriginalDecoder().decode(originalEncoded)
-  const alternativeDecoded = textEncoder.decode(originalEncoded)
+  const alternativeDecoded = textDecoder.decode(originalEncoded)
   t.is(alternativeDecoded, originalString)
   t.is(originalDecoded, alternativeDecoded)
 })

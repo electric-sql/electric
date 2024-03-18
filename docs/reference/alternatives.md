@@ -6,7 +6,7 @@ description: >-
 
 There are many alternative systems for developing local-first applications. We list a selection of them below.
 
-You can also find out more about local-first software development and discover other projects from a range of communities, including [localfirstweb.dev](https://localfirstweb.dev) and [crdt.tech](https://crdt.tech).
+You can also find out more about local-first software development and discover other projects from a range of communities, including [lofi.software](https://lofi.software), [localfirst.fm](https://www.localfirst.fm), [Local-first Conf](https://www.localfirstconf.com) and [crdt.tech](https://crdt.tech).
 
 :::note
 If you'd like to add your project to the list, please feel free to [make a pull request](https://github.com/electric-sql/electric/pulls).

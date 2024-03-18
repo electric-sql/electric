@@ -57,7 +57,7 @@ defmodule Electric.Replication.Changes do
     ]
 
     def count_operations(%__MODULE__{changes: changes}) do
-      base = %{operations: 0, inserts: 0, updates: 0, deletes: 0, compensations: 0}
+      base = %{operations: 0, inserts: 0, updates: 0, deletes: 0, compensations: 0, truncates: 0}
 
       Enum.reduce(changes, base, fn %module{}, acc ->
         key =
@@ -66,6 +66,7 @@ defmodule Electric.Replication.Changes do
             Changes.UpdatedRecord -> :updates
             Changes.DeletedRecord -> :deletes
             Changes.Compensation -> :compensations
+            Changes.TruncatedRelation -> :truncates
           end
 
         Map.update!(%{acc | operations: acc.operations + 1}, key, &(&1 + 1))

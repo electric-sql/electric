@@ -262,6 +262,15 @@ defmodule Electric.Postgres.Extension do
     end
   end
 
+  @electrified_tables_query "SELECT schema_name, table_name FROM #{@electrified_tracking_table}"
+
+  @spec electrified_tables(conn()) :: {:ok, [{String.t(), String.t()}]} | {:error, term}
+  def electrified_tables(conn) do
+    with {:ok, _, tables} <- :epgsql.squery(conn, @electrified_tables_query) do
+      {:ok, tables}
+    end
+  end
+
   def create_table_ddl(conn, %Proto.RangeVar{} = table_name) do
     name = to_string(table_name)
 

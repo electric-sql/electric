@@ -1,3 +1,4 @@
+/// <reference types="vitest" />
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
@@ -5,6 +6,9 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   envPrefix: 'ELECTRIC_',
   plugins: [react()],
+  optimizeDeps: {
+    exclude: ['wa-sqlite'],
+  },
   test: {
     globals: true,
     environment: 'jsdom',
