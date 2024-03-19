@@ -28,5 +28,5 @@ public/wa-sqlite-async.wasm
 public/wa-sqlite-async.mjs
 
 # Electric type-safe generated client
-src/generated
+# src/generated
 .electric_migrations_tmp*
