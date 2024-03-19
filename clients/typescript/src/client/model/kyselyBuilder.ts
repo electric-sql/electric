@@ -3,15 +3,14 @@ import { DeleteInput, DeleteManyInput } from '../input/deleteInput'
 import { FindInput, FindUniqueInput } from '../input/findInput'
 import { UpdateInput, UpdateManyInput } from '../input/updateInput'
 import {
-  Kysely,
+  ComparisonOperatorExpression,
   DummyDriver,
+  Kysely,
   SelectQueryBuilder,
   SqliteAdapter,
   SqliteIntrospector,
   SqliteQueryCompiler,
   WhereInterface,
-  ComparisonOperatorExpression,
-  sql, RawBuilder,
 } from 'kysely'
 import { IShapeManager } from './shapes'
 import { ExtendedTableSchema } from './schema'
@@ -50,12 +49,24 @@ const db = new Kysely<any>({
  *
  * args - The arguments for the SQL statement.
  */
-type Filter = {
+type RegularFilter = {
+  type: 'generic'
   sql: string
   op: ComparisonOperatorExpression
   args?: unknown[]
-  connective?: 'AND' | 'OR'
 }
+
+type ORFilter = {
+  type: 'or'
+  orStatements: RegularFilter[]
+}
+
+type NotFilter = {
+  type: 'not'
+  notStatements: RegularFilter[]
+}
+
+type Filter = RegularFilter | ORFilter | NotFilter
 
 export class KyselyBuilder {
   constructor(
@@ -315,22 +326,52 @@ function addFilters<T, Q extends WhereInterface<any, any>>(
   return fields.reduce<Q>((query: Q, fieldName: string) => {
     const fieldValue = whereObject[fieldName as keyof T]
     const filters = makeFilter(fieldValue, fieldName)
-    return filters.reduce((query, filterOrRawBuilder) => {
-      if (isRawBuilder(filterOrRawBuilder)) {
-        return query.where(filterOrRawBuilder) as Q
+    return filters.reduce((query, filter) => {
+      if (filter.type === 'or') {
+        return applyOrFilter(query, filter)
       }
-      const filter = filterOrRawBuilder as Filter
-      return query.where(filter.sql, filter.op, filter.args) as Q
+      if (filter.type === 'not') {
+        return applyNotFilter(query, filter)
+      }
+      return applyRegularFilter(query, filter)
     }, query)
   }, q)
 }
 
-function isRawBuilder(obj: any): obj is RawBuilder<any> {
-  return obj && typeof obj === 'object' && 'isRawBuilder' in obj;
+function applyOrFilter<Q extends WhereInterface<any, any>>(
+  query: Q,
+  filter: ORFilter
+): Q {
+  return query.where((eb) => {
+    const orStatements = filter.orStatements.map((orFilter) =>
+      eb(orFilter.sql, orFilter.op, orFilter.args)
+    )
+    return eb.or(orStatements)
+  }) as Q
 }
 
-function makeFilter(fieldValue: unknown, fieldName: string): Array<Filter> | Array<RawBuilder<any>> {
-  if (fieldValue === null) return [{ sql: fieldName, op: 'is', args: ['NULL'] }]
+function applyNotFilter<Q extends WhereInterface<any, any>>(
+  query: Q,
+  filter: NotFilter
+): Q {
+  return query.where((eb) => {
+    const notStatements = filter.notStatements.map((notFilter) =>
+      eb.not(eb(notFilter.sql, notFilter.op, notFilter.args))
+    )
+    return eb.and(notStatements)
+  }) as Q
+}
+
+function applyRegularFilter<Q extends WhereInterface<any, any>>(
+  query: Q,
+  filter: RegularFilter
+): Q {
+  return query.where(filter.sql, filter.op, filter.args) as Q
+}
+
+function makeFilter(fieldValue: unknown, fieldName: string): Array<Filter> {
+  if (fieldValue === null)
+    return [{ sql: fieldName, op: 'is', args: ['NULL'] } as RegularFilter]
   else if (fieldName === 'AND' || fieldName === 'OR' || fieldName === 'NOT') {
     return makeBooleanFilter(fieldName as 'AND' | 'OR' | 'NOT', fieldValue)
   } else if (typeof fieldValue === 'object') {
@@ -388,59 +429,53 @@ function makeFilter(fieldValue: unknown, fieldName: string): Array<Filter> | Arr
     return filters
   }
   // needed because `WHERE field = NULL` is not valid SQL
-  else return [{ sql: fieldName, op: '=', args: [fieldValue] }]
-}
-
-function joinStatements(
-  statements: Array<Filter>,
-  connective: 'OR' | 'AND'
-): Filter {
-  const sql = statements.map((s) => s.sql).join(` ${connective} `)
-  const args = statements
-    .map((s) => s.args)
-    .reduce((a1, a2) => (a1 ?? []).concat(a2 ?? []))
-  return { sql,, args }
+  else return [{ sql: fieldName, op: '=', args: [fieldValue] } as RegularFilter]
 }
 
 function makeBooleanFilter(
   fieldName: 'AND' | 'OR' | 'NOT',
   value: unknown
-): Array<RawBuilder<any>> {
+): Array<Filter> {
   const objects = Array.isArray(value) ? value : [value] // the value may be a single object or an array of objects connected by the provided connective (AND, OR, NOT)
-  const sqlStmts = objects.map((obj) => {
+  const sqlStmts = objects.flatMap((obj) => {
     // Make the necessary filters for this object:
     //  - a filter for each field of this object
     //  - connect those filters into 1 filter using AND
     const fields = Object.keys(obj)
-    const stmts = fields.reduce((stmts:  Array<RawBuilder<any>>, fieldName) => {
+    return fields.reduce((stmts: Array<Filter>, fieldName) => {
       const fieldValue = obj[fieldName as keyof typeof obj]
       const stmts2 = makeFilter(fieldValue, fieldName)
       return stmts.concat(stmts2)
     }, [])
-    return joinStatements(stmts, 'AND')
   })
+
+  if (fieldName === 'OR') {
+    return [
+      {
+        type: 'or',
+        orStatements: sqlStmts as RegularFilter[],
+      },
+    ]
+  }
 
   if (fieldName === 'NOT') {
     // Every statement in `sqlStmts` must be negated
     // and the negated statements must then be connected by a conjunction (i.e. using AND)
-    const statements = sqlStmts.map(({ sql, args }) => {
-      return {
-        sql: sqlStmts.length > 1 ? `(NOT ${sql})` : `NOT ${sql}`, // ternary if to avoid obsolete parentheses
-        args: args,
-      }
-    })
-    return joinStatements(statements, 'AND')
-  } else {
-    // Join all filters in `sqlStmts` using the requested connective (which is 'OR' or 'NOT')
-    return joinStatements(sqlStmts, fieldName)
+    return [
+      {
+        type: 'not',
+        notStatements: sqlStmts as RegularFilter[],
+      },
+    ]
   }
+  return sqlStmts
 }
 
 function makeEqualsFilter(
   fieldName: string,
   value: unknown | undefined
 ): Filter {
-  return { sql: fieldName, op: '=', args: [value] }
+  return { sql: fieldName, op: '=', args: [value] } as RegularFilter
 }
 
 function makeInFilter(
@@ -451,7 +486,7 @@ function makeInFilter(
     sql: fieldName,
     op: 'in',
     args: Array.isArray(values) ? values : [values],
-  }
+  } as RegularFilter
 }
 
 function makeNotInFilter(
@@ -462,44 +497,44 @@ function makeNotInFilter(
     sql: fieldName,
     op: 'not in',
     args: Array.isArray(values) ? values : [values],
-  }
+  } as RegularFilter
 }
 
 function makeNotFilter(fieldName: string, value: unknown): Filter {
   if (value === null) {
     // needed because `WHERE field != NULL` is not valid SQL
-    return { sql: fieldName, op: 'is not', args: [null] }
+    return { sql: fieldName, op: 'is not', args: [null] } as RegularFilter
   } else {
-    return { sql: fieldName, op: '!=', args: [value] }
+    return { sql: fieldName, op: '!=', args: [value] } as RegularFilter
   }
 }
 
 function makeLtFilter(fieldName: string, value: unknown): Filter {
-  return { sql: fieldName, op: '<', args: [value] }
+  return { sql: fieldName, op: '<', args: [value] } as RegularFilter
 }
 
 function makeLteFilter(fieldName: string, value: unknown): Filter {
-  return { sql: fieldName, op: '<=', args: [value] }
+  return { sql: fieldName, op: '<=', args: [value] } as RegularFilter
 }
 
 function makeGtFilter(fieldName: string, value: unknown): Filter {
-  return { sql: fieldName, op: '>', args: [value] }
+  return { sql: fieldName, op: '>', args: [value] } as RegularFilter
 }
 
 function makeGteFilter(fieldName: string, value: unknown): Filter {
-  return { sql: fieldName, op: '>=', args: [value] }
+  return { sql: fieldName, op: '>=', args: [value] } as RegularFilter
 }
 
 function makeStartsWithFilter(fieldName: string, value: unknown): Filter {
-  return { sql: fieldName, op: 'like', args: [`${value}%`] }
+  return { sql: fieldName, op: 'like', args: [`${value}%`] } as RegularFilter
 }
 
 function makeEndsWithFilter(fieldName: string, value: unknown): Filter {
-  return { sql: fieldName, op: 'like', args: [`%${value}`] }
+  return { sql: fieldName, op: 'like', args: [`%${value}`] } as RegularFilter
 }
 
 function makeContainsFilter(fieldName: string, value: unknown): Filter {
-  return { sql: fieldName, op: 'like', args: [`%${value}%`] }
+  return { sql: fieldName, op: 'like', args: [`%${value}%`] } as RegularFilter
 }
 
 function addOffset(

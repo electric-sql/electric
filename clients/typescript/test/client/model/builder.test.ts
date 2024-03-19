@@ -462,7 +462,7 @@ test('findMany supports boolean filters in where argument', (t) => {
 
   t.is(
     query.sql,
-    'select "nbr", "id", "title", "contents" from "Post" where ("title" like (?) or "title" = (?)) and (contents = (?) and "nbr" = (?)) and (not "title" = ? and not "title" = (?)) and "nbr" = (?)'
+    'select "nbr", "id", "title", "contents" from "Post" where ("title" like (?) or "title" = (?)) and "contents" = (?) and "nbr" = (?) and (not "title" = (?) and not "title" = (?)) and "nbr" = (?)'
   )
   t.deepEqual(query.parameters, [
     '%foo%',
@@ -475,37 +475,38 @@ test('findMany supports boolean filters in where argument', (t) => {
   ])
 })
 
-// test('findMany supports single AND filter and single NOT filter in where argument', (t) => {
-//   const query = tbl
-//     .findMany({
-//       where: {
-//         OR: [
-//           {
-//             title: {
-//               contains: 'foo',
-//             },
-//           },
-//           {
-//             title: 'bar',
-//           },
-//         ],
-//         AND: {
-//           contents: 'content',
-//         },
-//         NOT: {
-//           title: 'foobar',
-//         },
-//         nbr: 5,
-//       },
-//     })
-//     .toString()
-//
-//   t.is(
-//     query,
-//     "SELECT nbr, id, title, contents FROM Post WHERE (title LIKE '%foo%' OR title = 'bar') AND (contents = 'content') AND (NOT title = 'foobar') AND (nbr = 5)"
-//   )
-// })
-//
+test('findMany supports single AND filter and single NOT filter in where argument', (t) => {
+  const query = tbl
+    .findMany({
+      where: {
+        OR: [
+          {
+            title: {
+              contains: 'foo',
+            },
+          },
+          {
+            title: 'bar',
+          },
+        ],
+        AND: {
+          contents: 'content',
+        },
+        NOT: {
+          title: 'foobar',
+        },
+        nbr: 5,
+      },
+    })
+    .compile()
+
+  t.is(
+    query.sql,
+    'select "nbr", "id", "title", "contents" from "Post" where ("title" like (?) or "title" = (?)) and "contents" = (?) and not "title" = (?) and "nbr" = (?)'
+  )
+  t.deepEqual(query.parameters, ['%foo%', 'bar', 'content', 'foobar', 5])
+})
+
 test('update query', (t) => {
   const query = tbl
     .update({
