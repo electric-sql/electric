@@ -24,7 +24,7 @@ async function main(): Promise<void> {
   await waitForPostgresConnection(pgPool)
   void startListeningToPgRequests(pgPool, API_PORT)
   void startGeneratingWebServerLogs(pgPool)
-  void startGeneratingMonitoringMetrics(pgPool)
+  void startGeneratingMonitoringMetrics(pgPool, false)
   void startProcessingBackgroundJobs(pgPool)
   void startGeneratingChatLogBotMessages(pgPool)
   void startGeneratingActivityEvents(pgPool)
