@@ -20,15 +20,12 @@
   },
   "dependencies": {
     "base-64": "^1.0.0",
-    "electric-sql": "^0.9.4",
-    "expo": "^50.0.8",
-    "expo-crypto": "~12.8.1",
-    "expo-sqlite": "^13.2.2",
+    "electric-sql": "^0.9.6",
+    "expo": "^50.0.13",
+    "expo-sqlite": "^13.3.0",
     "expo-status-bar": "~1.11.1",
-    "fastestsmallesttextencoderdecoder": "^1.0.22",
     "react": "^18.2.0",
     "react-native": "0.73.4",
-    "react-native-base64": "^0.2.1",
     "react-native-get-random-values": "~1.8.0",
     "react-native-url-polyfill": "^2.0.0"
   },
