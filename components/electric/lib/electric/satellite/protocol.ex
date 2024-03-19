@@ -545,7 +545,7 @@ defmodule Electric.Satellite.Protocol do
           error
       end
     else
-      # Once the client is outside the WAL window, we are assuming the client will re-establish subscriptions, so we'll discard them
+      # Once the client is outside the WAL window, we are assuming the client will reset its local state, so we will too.
       ClientReconnectionInfo.clear_all_data(state.client_id)
 
       {:error,

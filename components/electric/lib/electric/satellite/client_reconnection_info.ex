@@ -460,17 +460,18 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
 
   defp pop_additional_data_before(client_id, transaction_id) do
     pattern = {{client_id, :"$1", :_, :"$2", :"$3"}, :"$4", :"$5"}
-    matchspec = [{pattern, [{:"=<", :"$1", transaction_id}], [{{:"$2", :"$3", :"$4", :"$5"}}]}]
+    guard = [{:"=<", :"$1", transaction_id}]
+    body = [{{:"$2", :"$3", :"$4", :"$5"}}]
 
-    results = :ets.select(@additional_data_ets, matchspec)
-    :ets.select_delete(@additional_data_ets, matchspec)
+    results = :ets.select(@additional_data_ets, [{pattern, guard, body}])
+    :ets.select_delete(@additional_data_ets, [{pattern, guard, [true]}])
 
     results
   end
 
   defp clear_stored_actions(client_id, txn_ids) do
     matchspec =
-      for id <- txn_ids, do: {{{client_id, id}, :_}, [], [:"$$"]}
+      for id <- txn_ids, do: {{{client_id, id}, :_}, [], [true]}
 
     :ets.select_delete(@actions_ets, matchspec)
   end

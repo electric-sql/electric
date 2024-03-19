@@ -81,8 +81,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
       [:passthrough],
       get_current_position: fn -> @current_wal_pos end,
       lsn_in_cached_window?: fn num when is_integer(num) -> num > @current_wal_pos end,
-      stream_transactions: fn _, _ -> [] end,
-      get_transactions: fn _ -> {:ok, []} end
+      stream_transactions: fn _, _ -> [] end
     }
   ]) do
     {:ok, %{}}
