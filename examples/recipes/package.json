@@ -30,7 +30,7 @@
     "@mui/system": "^5.15.11",
     "@mui/x-charts": "^6.19.5",
     "@react-querybuilder/material": "^6.5.5",
-    "electric-sql": "^0.9.4",
+    "electric-sql": "^0.9.6",
     "eslint-plugin-react": "^7.33.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
