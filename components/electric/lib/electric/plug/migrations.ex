@@ -46,6 +46,7 @@ defmodule Electric.Plug.Migrations do
   defp get_dialect(%{query_params: %{"dialect" => dialect_name}}) do
     case dialect_name do
       "sqlite" -> {:ok, Electric.Postgres.Dialect.SQLite}
+      "postgresql" -> {:ok, Electric.Postgres.Dialect.Postgresql}
       _ -> {:error, "unsupported dialect #{inspect(dialect_name)}"}
     end
   end

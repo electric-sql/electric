@@ -38,6 +38,7 @@ test.beforeEach((t) => {
     timeout: 10000,
     ssl: false,
     pushPeriod: 100,
+    dialect: 'SQLite',
   })
   const clientId = '91eba0c8-28ba-4a86-a6e8-42731c2c6694'
 
