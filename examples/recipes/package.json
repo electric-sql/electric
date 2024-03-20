@@ -15,7 +15,7 @@
     "db:migrate": "npx electric-sql with-config \"npx pg-migrations apply --database {{ELECTRIC_PROXY}} --directory ./db/migrations\"",
     "db:psql": "npx electric-sql psql",
     "dev": "vite",
-    "demo": "vite --force --mode demo",
+    "demo": "vite --mode demo",
     "build": "tsc && vite build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
