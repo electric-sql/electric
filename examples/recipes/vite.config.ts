@@ -9,7 +9,12 @@ export default defineConfig(({ mode }) => ({
   optimizeDeps: {
     // disable optimization for demo mode to resolve issues
     // when running in Web Containers
-    noDiscovery: mode === 'demo',
+    ...(mode === 'demo'
+      ? {
+          noDiscovery: true,
+          include: [],
+        }
+      : {}),
     exclude: ['wa-sqlite'],
   },
 }))
