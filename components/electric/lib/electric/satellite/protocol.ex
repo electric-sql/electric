@@ -12,9 +12,17 @@ defmodule Electric.Satellite.Protocol do
   alias Electric.Utils
   alias Electric.Replication.Changes.Transaction
   alias Electric.Postgres.Extension.SchemaCache
+  alias Electric.Postgres.Lsn
   alias Electric.Postgres.Schema
   alias Electric.Postgres.CachedWal
   alias Electric.Replication.Changes
+<<<<<<< HEAD
+=======
+  alias Electric.Replication.Connectors
+  alias Electric.Replication.Postgres.Client
+  alias Electric.Replication.Postgres.LogicalMessages
+  alias Electric.Replication.Postgres.LogicalReplicationProducer
+>>>>>>> e6f66bb2 (Stream WAL records from the replication slot)
   alias Electric.Replication.Shapes
   alias Electric.Replication.Shapes.ShapeRequest
   alias Electric.Satellite.Serialization
@@ -23,7 +31,7 @@ defmodule Electric.Satellite.Protocol do
   alias Electric.Satellite.ClientReconnectionInfo
   alias Electric.Telemetry.Metrics
 
-  alias Electric.Satellite.Protocol.{State, InRep, OutRep, Telemetry}
+  alias Electric.Satellite.Protocol.{State, InRep, OutRep, ResumeRep, Telemetry}
   import Electric.Satellite.Protocol.State, only: :macros
 
   require Logger
@@ -522,6 +530,7 @@ defmodule Electric.Satellite.Protocol do
   end
 
   defp handle_start_replication_request(msg, client_pos, state) do
+<<<<<<< HEAD
     case reserve_wal_position(state.origin, state.client_id, client_pos) do
       :cached ->
         # Fast path: the client can resume replication by consuming transactions cached in main memory.
@@ -549,19 +558,125 @@ defmodule Electric.Satellite.Protocol do
 
         {:error,
          start_replication_error(:BEHIND_WINDOW, "Cannot catch up to the server's current state")}
+=======
+    r1 =
+      restore_client_state(msg.subscription_ids, msg.observed_transaction_data, client_pos, state)
+
+    r2 = reserve_wal_position(state.origin, state.client_id, client_pos)
+
+    result =
+      case {r1, r2} do
+        {{:ok, state}, :cached} ->
+          # Fast path: the client can resume replication using WAL records cached in main memory.
+          {:ok, subscribe_client_to_replication_stream(state, client_pos)}
+
+        {{:ok, state}, :resumable} ->
+          # Slow path: stream missed WAL records from the database before subscribing the client to the stream.
+          client_lsn = CachedWal.EtsBacked.position_to_lsn(client_pos)
+          stream_transactions_from_wal(state, client_lsn)
+
+        {{:ok, _state}, :behind_window} ->
+          # Once the client is outside the WAL window, we are assuming the client will reset its local state, so we will too.
+          ClientReconnectionInfo.clear_all_data(state.client_id)
+
+          {:error,
+           start_replication_error(
+             :BEHIND_WINDOW,
+             "Cannot catch up to the server's current state"
+           )}
+
+        {:error, _} = error ->
+          error
+      end
+
+    with {:ok, state} <- result do
+      state = Telemetry.start_replication_span(state, subscriptions: length(msg.subscription_ids))
+
+      {:reply, %SatInStartReplicationResp{unacked_window_size: state.out_rep.allowed_unacked_txs},
+       state}
+>>>>>>> e6f66bb2 (Stream WAL records from the replication slot)
     end
   end
 
   defp reserve_wal_position(origin, client_id, client_pos) do
+    client_lsn = CachedWal.EtsBacked.position_to_lsn(client_pos)
+
     cond do
       CachedWal.Api.reserve_wal_position(origin, client_id, client_pos) == :ok ->
         :cached
+
+      LogicalReplicationProducer.reserve_wal_lsn(origin, client_id, client_lsn) == :ok ->
+        :resumable
 
       true ->
         :behind_window
     end
   end
 
+<<<<<<< HEAD
+=======
+  defp stream_transactions_from_wal(%{connector_config: connector_config} = state, client_lsn) do
+    main_slot = Connectors.get_replication_opts(connector_config).slot
+    tmp_slot = "electric_r_" <> String.replace(state.client_id, "-", "")
+
+    {:ok, first_cached_wal_pos} =
+      CachedWal.Api.reserve_wal_position(state.origin, state.client_id, :oldest)
+
+    conn_opts = Connectors.get_connection_opts(connector_config, replication: true)
+    publication = Connectors.get_replication_opts(connector_config).publication
+
+    with {:ok, conn} <- Client.connect(conn_opts),
+         {:ok, _slot_name, _slot_lsn} <-
+           Client.create_temporary_slot(conn, main_slot, tmp_slot),
+         :ok <- Client.set_display_settings_for_replication(conn),
+         :ok <- Client.start_replication(conn, publication, tmp_slot, client_lsn, self()) do
+      # Now that replication has started from the desired LSN, we can remove the reservation
+      # that was made made earlier.
+      LogicalReplicationProducer.cancel_reservation(state.origin, state.client_id)
+
+      repl_context = %LogicalMessages.Context{
+        origin: state.origin,
+        publication: publication
+      }
+
+      resume_rep = %ResumeRep{
+        repl_conn: conn,
+        repl_context: repl_context,
+        end_lsn: CachedWal.EtsBacked.position_to_lsn(first_cached_wal_pos)
+      }
+
+      {:ok, %{state | resume_rep: resume_rep}}
+    end
+  end
+
+  def handle_x_log_data(binary_msg, state) do
+    {tx, resume_rep} = ResumeRep.process_message(binary_msg, state.resume_rep)
+    state = %{state | resume_rep: resume_rep}
+
+    case tx do
+      nil ->
+        {[], state}
+
+      %Transaction{} = tx ->
+        reached_cached_lsn? = Lsn.compare(tx.lsn, resume_rep.end_lsn) in [:eq, :gt]
+
+        state =
+          if reached_cached_lsn? do
+            # This is the last transaction we wanted to stream from WAL.
+            Client.close(resume_rep.repl_conn)
+
+            start_wal_pos = CachedWal.EtsBacked.lsn_to_position(resume_rep.end_lsn)
+            subscribe_client_to_replication_stream(%{state | resume_rep: nil}, start_wal_pos)
+          else
+            state
+          end
+
+        wal_pos = CachedWal.EtsBacked.lsn_to_position(tx.lsn)
+        handle_outgoing_txs([{tx, wal_pos}], state)
+    end
+  end
+
+>>>>>>> e6f66bb2 (Stream WAL records from the replication slot)
   def send_downstream(%InRep{} = in_rep) do
     case Utils.fetch_demand_from_queue(in_rep.demand, in_rep.queue) do
       {_remaining_demand, [], _} ->

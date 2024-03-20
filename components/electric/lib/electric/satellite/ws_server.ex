@@ -266,6 +266,22 @@ defmodule Electric.Satellite.WebsocketServer do
     |> push()
   end
 
+  def handle_info(
+        {:epgsql, _pid, {:x_log_data, _start_lsn, _end_lsn, _binary_msg}},
+        %{resume_rep: nil} = state
+      ) do
+    # By this point, we have already stopped expecting replication messages from Postgres and
+    # the replication connection should have been closed.  This must be a leftover message that
+    # managed to slip in just before the connection closure.
+    {:ok, state}
+  end
+
+  def handle_info({:epgsql, _pid, {:x_log_data, _start_lsn, _end_lsn, binary_msg}}, state) do
+    binary_msg
+    |> Protocol.handle_x_log_data(state)
+    |> push()
+  end
+
   if Mix.env() == :test do
     def handle_info({:pause_during_initial_sync, ref, client_pid}, state) do
       Process.put(:pause_during_initial_sync, {ref, client_pid})
