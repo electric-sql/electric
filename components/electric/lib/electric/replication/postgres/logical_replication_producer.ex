@@ -51,6 +51,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
               span: nil,
               main_slot: "",
               main_slot_lsn: %Lsn{},
+              current_lsn: %Lsn{},
               resumable_wal_window: 1
 
     @type t() :: %__MODULE__{
@@ -66,9 +67,12 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
             span: Metrics.t() | nil,
             main_slot: binary(),
             main_slot_lsn: Lsn.t(),
+            current_lsn: Lsn.t(),
             resumable_wal_window: pos_integer()
           }
   end
+
+  @current_lsn_key :current_lsn
 
   @spec start_link(Connectors.config()) :: :ignore | {:error, any} | {:ok, pid}
   def start_link(connector_config) do
@@ -85,12 +89,19 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     Electric.name(__MODULE__, origin)
   end
 
+  @spec current_lsn(Connectors.origin()) :: Lsn.t()
+  def current_lsn(origin) do
+    :ets.lookup_element(ets_table_name(origin), @current_lsn_key, 2)
+  end
+
   @impl true
   def init(connector_config) do
     origin = Connectors.origin(connector_config)
     conn_opts = Connectors.get_connection_opts(connector_config, replication: true)
     repl_opts = Connectors.get_replication_opts(connector_config)
     wal_window_opts = Connectors.get_wal_window_opts(connector_config)
+
+    :ets.new(ets_table_name(origin), [:protected, :named_table, read_concurrency: true])
 
     publication = repl_opts.publication
     main_slot = repl_opts.slot
@@ -138,8 +149,18 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
          main_slot: main_slot,
          main_slot_lsn: main_slot_lsn,
          resumable_wal_window: wal_window_opts.resumable_size
-       }}
+       }
+       |> set_current_lsn(current_lsn)}
     end
+  end
+
+  defp ets_table_name(origin) do
+    String.to_atom(inspect(__MODULE__) <> ":" <> origin)
+  end
+
+  defp set_current_lsn(state, lsn) do
+    :ets.insert(ets_table_name(state.origin), {@current_lsn_key, lsn})
+    %{state | current_lsn: lsn}
   end
 
   # Calculate the starting point such that all of the available in-memory WAL cache is filled.
@@ -320,7 +341,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     Metrics.span_event(state.span, :transaction, Transaction.count_operations(event))
 
     %{state | queue: :queue.in(event, queue), transaction: nil}
-    |> advance_main_slot(end_lsn)
+    |> set_current_lsn(end_lsn)
+    |> advance_main_slot()
     |> dispatch_events([])
   end
 
@@ -394,8 +416,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   # connected client. See VAX-1552.
   #
   # TODO(optimization): do not run this after every consumed transaction.
-  defp advance_main_slot(state, end_lsn) do
-    min_in_window_lsn = Lsn.increment(end_lsn, -state.resumable_wal_window)
+  defp advance_main_slot(state) do
+    min_in_window_lsn = Lsn.increment(state.current_lsn, -state.resumable_wal_window)
 
     if Lsn.compare(state.main_slot_lsn, min_in_window_lsn) == :lt do
       :ok =
