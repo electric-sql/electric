@@ -27,7 +27,8 @@
     "check-styleguide": "prettier --check --loglevel warn . && eslint src --quiet",
     "format": "prettier --write --loglevel warn .",
     "preview": "vite preview",
-    "vite": "vite"
+    "vite": "vite",
+    "tauri": "tauri"
   },
   "dependencies": {
     "@firefox-devtools/react-contextmenu": "^5.1.0",
@@ -35,6 +36,8 @@
     "@svgr/plugin-jsx": "^8.1.0",
     "@svgr/plugin-svgo": "^8.1.0",
     "@tailwindcss/forms": "^0.5.6",
+    "@tauri-apps/api": "^2.0.0-beta.0",
+    "@tauri-apps/plugin-shell": "^2.0.0-beta.0",
     "@tiptap/extension-placeholder": "^2.1.8",
     "@tiptap/extension-table": "^2.1.8",
     "@tiptap/extension-table-cell": "^2.1.8",
@@ -68,6 +71,7 @@
     "@databases/pg": "^5.4.1",
     "@databases/pg-migrations": "^5.0.2",
     "@tailwindcss/typography": "^0.5.10",
+    "@tauri-apps/cli": "^2.0.0-beta.0",
     "@types/jest": "^29.5.4",
     "@types/lodash.debounce": "^4.0.7",
     "@types/node": "^20.5.9",

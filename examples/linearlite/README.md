@@ -20,6 +20,8 @@ It's built on top of the excellent clone of the Linear UI built by
 Tuan Nguyen [@tuan3w](https://github.com/tuan3w) - The original is here
 [https://github.com/tuan3w/linearapp_clone](https://github.com/tuan3w/linearapp_clone).
 
+It also includes a desktop app built with [Tauri](http://tauri.app).
+
 ## Prereqs
 
 You need Docker, Docker Compose v2 and Nodejs >= 16.14.
@@ -70,7 +72,7 @@ npm run client:generate
 # or `npm run client:watch`` to re-generate whenever the DB schema changes
 ```
 
-## Run
+## Run web app
 
 The app is a React application to install and run it:
 
@@ -79,3 +81,12 @@ npm run dev
 ```
 
 The app should be available on `localhost:5173`
+
+
+## Run Tauri app
+
+To run the Tauri desktop app:
+
+```bash
+npm run tauri dev
+```
