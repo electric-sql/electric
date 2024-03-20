@@ -30,7 +30,7 @@ defmodule Electric.Postgres.CachedWal.Api do
   @callback request_notification(Connectors.origin(), wal_pos()) ::
               {:ok, await_ref()} | {:error, term()}
   @callback cancel_notification_request(Connectors.origin(), await_ref()) :: :ok
-  @callback reserve_wal_position(Connectors.origin(), binary(), wal_pos()) ::
+  @callback reserve_wal_position(Connectors.origin(), binary(), wal_pos() | :oldest) ::
               {:ok, wal_pos()} | :error
   @callback cancel_reservation(Connectors.origin(), binary()) :: :ok
 
@@ -113,7 +113,7 @@ defmodule Electric.Postgres.CachedWal.Api do
 
   Returns nil if the cached WAL hasn't processed any non-empty transactions yet.
   """
-  @spec reserve_wal_position(module(), Connectors.origin(), binary(), wal_pos()) ::
+  @spec reserve_wal_position(module(), Connectors.origin(), binary(), wal_pos() | :oldest) ::
           {:ok, wal_pos()} | :error
   def reserve_wal_position(module \\ default_module(), origin, client_id, wal_pos) do
     module.reserve_wal_position(origin, client_id, wal_pos)
