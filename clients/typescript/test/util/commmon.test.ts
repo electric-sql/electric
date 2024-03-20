@@ -5,6 +5,7 @@ import {
   base64,
   textEncoder,
   textDecoder,
+  isObject,
 } from '../../src/util/common'
 import { SatelliteError, SatelliteErrorCode } from '../../src/util/types'
 
@@ -95,4 +96,12 @@ test('test textEncoder replacement decodes Unicode characters', (t) => {
   const alternativeDecoded = textDecoder.decode(originalEncoded)
   t.is(alternativeDecoded, originalString)
   t.is(originalDecoded, alternativeDecoded)
+})
+
+test('test isObject detects only objects and not arrays', (t) => {
+  t.true(isObject({}))
+  t.true(isObject({ field: 'value' }))
+  t.false(isObject([]))
+  t.false(isObject(new Uint8Array()))
+  t.false(isObject(new Int8Array()))
 })

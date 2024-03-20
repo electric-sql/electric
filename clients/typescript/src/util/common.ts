@@ -168,3 +168,18 @@ export function getWaiter(): Waiter {
     },
   }
 }
+
+/**
+ * Checks whether the provided value is an object and not an
+ * array of some sort
+ * @param value - value to check
+ * @returns {boolean} whether the `value` is an actual object
+ */
+export function isObject(value: any): value is object {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    !ArrayBuffer.isView(value)
+  )
+}
