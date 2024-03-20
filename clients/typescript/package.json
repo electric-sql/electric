@@ -158,7 +158,7 @@
     "lint": "eslint src --fix",
     "check-styleguide": "prettier --check --loglevel warn . && eslint src --quiet",
     "format": "prettier --write --loglevel warn .",
-    "release-canary": "pnpm version prerelease --preid canary && pnpm publish --tag canary --force"
+    "release-canary": "pnpm version prerelease --preid canary && pnpm publish --tag canary --access public --no-git-checks --force"
   },
   "lint-staged": {
     "**/*": "prettier --write --ignore-unknown"
