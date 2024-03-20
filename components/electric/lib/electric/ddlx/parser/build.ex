@@ -1,4 +1,7 @@
 defmodule Electric.DDLX.Parser.Build do
+  alias Electric.Satellite.SatPerms
+  alias Electric.DDLX.Command
+
   def default_schema(opts) do
     Keyword.get(opts, :default_schema, "public")
   end
@@ -89,5 +92,57 @@ defmodule Electric.DDLX.Parser.Build do
     else
       _ -> {:ok, []}
     end
+  end
+
+  def pb_table({table_schema, table_name}) do
+    pb_table(table_schema, table_name)
+  end
+
+  def pb_table(table_schema, table_name) do
+    %SatPerms.Table{schema: table_schema, name: table_name}
+  end
+
+  def pb_scope({ss, sn}) do
+    %SatPerms.Table{schema: ss, name: sn}
+  end
+
+  def pb_scope(_), do: nil
+
+  def pb_columns(nil, _ddlx) do
+    {:ok, nil}
+  end
+
+  def pb_columns([], ddlx) do
+    {:error,
+     %Command.Error{sql: ddlx, line: 1, position: 1, message: "Invalid empty column list"}}
+  end
+
+  def pb_columns(names, _ddlx) do
+    {:ok, %SatPerms.ColumnList{names: names}}
+  end
+
+  def pb_privs(privs) do
+    Enum.map(privs, &priv_to_pb/1)
+  end
+
+  defp priv_to_pb(p) do
+    case p do
+      "update" -> :UPDATE
+      "select" -> :SELECT
+      "delete" -> :DELETE
+      "insert" -> :INSERT
+    end
+  end
+
+  def pb_role(:AUTHENTICATED) do
+    %SatPerms.RoleName{role: {:predefined, :AUTHENTICATED}}
+  end
+
+  def pb_role(:ANYONE) do
+    %SatPerms.RoleName{role: {:predefined, :ANYONE}}
+  end
+
+  def pb_role(role) when is_binary(role) do
+    %SatPerms.RoleName{role: {:application, role}}
   end
 end

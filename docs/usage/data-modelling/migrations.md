@@ -34,12 +34,12 @@ For example, assuming you have an existing table called `projects`, you can elec
 ALTER TABLE projects
   ENABLE ELECTRIC;
 
-ELECTRIC ASSIGN 'projects:owner'
+ELECTRIC ASSIGN (projects, 'owner')
   TO projects.owner_id;
 
 ELECTRIC GRANT ALL
   ON projects
-  TO 'projects:owner';
+  TO (projects, 'owner');
 
 ELECTRIC GRANT SELECT
   ON projects

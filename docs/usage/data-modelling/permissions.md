@@ -22,11 +22,11 @@ In the example below, we grant `ALL` permissions on projects to the project owne
 ```sql
 ELECTRIC GRANT ALL
   ON projects
-  TO 'projects:owner';
+  TO (projects, 'owner');
 
 ELECTRIC GRANT SELECT
   ON projects
-  TO 'projects:member';
+  TO (projects, 'member');
 ```
 
 See <DocPageLink path="api/ddlx" /> for more details on how to grant and revoke permissions.
@@ -38,10 +38,10 @@ Assign **roles** to **users** using the [`ASSIGN`](../../api/ddlx.md#assign) sta
 In the example below, we assign the role of project owner to the user whose [authenticated `user_id`](../auth/index.md) matches the project's `owner_id` column. And we use a join table of `project_memberships` to assign the role of project member.
 
 ```sql
-ELECTRIC ASSIGN 'projects:owner'
+ELECTRIC ASSIGN (projects, 'owner')
   TO projects.owner_id;
 
-ELECTRIC ASSIGN 'projects:member'
+ELECTRIC ASSIGN (projects, 'member')
   TO project_memberships.user_id;
 ```
 
@@ -83,20 +83,15 @@ That's what **permission scopes** are for. They simplify your access rules in a 
 ```sql
 ELECTRIC GRANT ALL
   ON issues
-  TO 'projects:owner';
+  TO (projects, 'owner');
 
 ELECTRIC GRANT ALL
   ON comments
-  TO 'projects:owner'
-  USING issue_id/project_id;
+  TO (projects, 'owner');
 
-ELECTRIC GRANT READ
-  ON users
-  TO 'projects:owner'
-  USING comment_author_fkey/issue_id/project_id;
 ```
 
-Here the first statement assumes an unambiguous foreign key path between the `issues` and `projects` tables. The second statement demonstrates explicitly specifying the foreign key traversal path. The third demonstrates specifying part of the scope path using a named fkey (the `comment_author_fkey`, which belongs to the `comments` table not the `users` table).
+In both cases, there must exist an unambiguous foreign key path between both the `issues` and `comments` tables and `projects`. Electric will use this foreign key path to place updates to rows in both the `issues` and `comments` table into the scope of a particular project and then determine the current user's role within that project in order to determine the validity of a read or write.
 
 ## Directionality
 

@@ -31,6 +31,7 @@ defmodule Electric.DDLX.Parser.Tokenizer.Tokens do
   deftoken(:token, "UNASSIGN", do: :UNASSIGN)
   deftoken(:token, "UPDATE", do: :UPDATE)
   deftoken(:token, "USING", do: :USING)
+  deftoken(:token, "WHERE", do: :WHERE)
   deftoken(:token, "WRITE", do: :WRITE)
   def token(s), do: s
 end

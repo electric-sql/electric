@@ -14,7 +14,8 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
       proxy_ddlx_grant: true,
       proxy_ddlx_revoke: true,
       proxy_ddlx_assign: true,
-      proxy_ddlx_unassign: true
+      proxy_ddlx_unassign: true,
+      proxy_ddlx_sqlite: true
     )
 
     migrations = [
@@ -148,7 +149,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
               passthrough: ~s[CREATE TABLE "socks" ("id" uuid PRIMARY KEY, colour TEXT)],
               electric:
                 {~s[CALL electric.electrify('socks')],
-                 command: %Electric.DDLX.Command.Enable{table_name: ~s["public"."socks"]}},
+                 command: Electric.DDLX.Command.electric_enable({"public", "socks"})},
               capture:
                 {~s[ALTER TABLE "socks" ADD COLUMN size int2],
                  shadow_add_column: [

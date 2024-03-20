@@ -1,6 +1,8 @@
 defmodule Electric.DDLX.Command.Common do
+  alias Electric.Satellite.SatPerms
+
   def sql_repr(nil) do
-    "null"
+    "NULL"
   end
 
   def sql_repr(value) when is_binary(value) do
@@ -22,6 +24,10 @@ defmodule Electric.DDLX.Command.Common do
 
   def sql_repr({schema, table}) when is_binary(schema) and is_binary(table) do
     ~s['"#{schema}"."#{table}"']
+  end
+
+  def sql_repr(%SatPerms.Table{schema: schema, name: name}) do
+    sql_repr({schema, name})
   end
 
   defp escape_quotes(value) do

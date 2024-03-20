@@ -1,45 +1,18 @@
 defmodule Electric.DDLX.Command.SQLite do
   alias Electric.DDLX.Command
+  alias Electric.Satellite.SatPerms
 
   import Electric.DDLX.Parser.Build
 
-  @type t() :: %__MODULE__{
-          sqlite_statement: String.t()
-        }
-
-  @keys [
-    :sqlite_statement
-  ]
-
-  @enforce_keys @keys
-
-  defstruct @keys
-
-  def build(params, _opts) do
+  def build(params, _opts, ddlx) do
     with {:ok, stmt} <- fetch_attr(params, :statement) do
-      {:ok, %__MODULE__{sqlite_statement: stmt}}
+      {:ok,
+       %Command{
+         cmds: %SatPerms.DDLX{sqlite: [%SatPerms.Sqlite{stmt: stmt}]},
+         stmt: ddlx,
+         tables: [],
+         tag: "ELECTRIC SQLITE"
+       }}
     end
-  end
-
-  defimpl Command do
-    import Electric.DDLX.Command.Common
-
-    def pg_sql(sqlite) do
-      [
-        """
-        CALL electric.sqlite(sql => #{sql_repr(sqlite.sqlite_statement)});
-        """
-      ]
-    end
-
-    def table_name(_) do
-      ""
-    end
-
-    def tag(_) do
-      ""
-    end
-
-    def to_protobuf(_), do: []
   end
 end

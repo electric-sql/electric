@@ -5,14 +5,14 @@ defmodule Electric.Satellite.Permissions.Grant do
 
   alias Electric.Satellite.SatPerms
 
-  defstruct [:table, :role, :privileges, :columns, :scope, :check, :source, path: []]
+  defstruct [:table, :role, :privilege, :columns, :scope, :check, :source, path: []]
 
   @type relation() :: Electric.Postgres.relation()
 
   @type t() :: %__MODULE__{
           table: relation(),
           role: String.t() | :AUTHENTICATED | :ANYONE,
-          privileges: [Electric.Satellite.Permissions.privilege()],
+          privilege: Electric.Satellite.Permissions.privilege(),
           columns: :all | MapSet.t(),
           scope: relation(),
           check: String.t(),
@@ -25,7 +25,7 @@ defmodule Electric.Satellite.Permissions.Grant do
     %__MODULE__{
       table: make_relation(grant.table),
       role: make_role(grant.role),
-      privileges: grant.privileges,
+      privilege: grant.privilege,
       columns: make_columns(grant.columns),
       scope: make_relation(grant.scope),
       check: make_check(grant.check),
@@ -41,8 +41,7 @@ defmodule Electric.Satellite.Permissions.Grant do
 
   # no columns specified so defaults to all
   defp make_columns(nil), do: :all
-  defp make_columns(["*"]), do: :all
-  defp make_columns(columns), do: MapSet.new(columns)
+  defp make_columns(%SatPerms.ColumnList{names: columns}), do: MapSet.new(columns)
 
   defp make_path(empty) when empty in [nil, []], do: nil
   defp make_path(path), do: path
