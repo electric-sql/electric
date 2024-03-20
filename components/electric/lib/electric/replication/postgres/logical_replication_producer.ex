@@ -115,10 +115,6 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
 
     Logger.metadata(pg_producer: origin)
 
-    Logger.info(
-      "Starting replication with publication=#{publication} and slots=#{main_slot},#{tmp_slot}}"
-    )
-
     # The replication connection is used to consumer the logical replication stream from
     # Postgres and to send acknowledgements about received transactions back to Postgres,
     # allowing it to advance the replication slot forward and discard obsolete WAL records.
@@ -140,6 +136,11 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
          # maintenance statements. It is needed because Postgres does not allow regular
          # statements and queries on a replication connection once the replication has started.
          {:ok, svc_conn} <- Client.connect(conn_opts) do
+      Logger.info(
+        "Started replication with publication=#{publication} and slots=#{main_slot},#{tmp_slot} " <>
+          "at lsn=#{start_lsn} (current_lsn=#{current_lsn})"
+      )
+
       # Monitor the connection process to know when to stop the telemetry span created on the next line.
       Process.monitor(repl_conn)
 

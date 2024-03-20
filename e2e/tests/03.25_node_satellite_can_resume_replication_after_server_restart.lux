@@ -16,6 +16,15 @@
 
 [invoke setup]
 
+[shell electric]
+    ?Started replication with publication=electric_publication \
+        and slots=electric_replication_out_electric,electric_replication_out_electric_rc at \
+        lsn=(0/[0-9A-F]+)
+    [global start_lsn=$1]
+
+    ?Initializing first_wal_pos=(\d+)
+    [global first_wal_pos=$1]
+
 [shell proxy_1]
     [invoke migrate_items_table 001]
     [invoke migrate_other_items_table 002]
@@ -153,6 +162,12 @@
     ??Cached 0 client_additional_data records from the DB
     ??Cached 0 client_actions from the DB
 
+    ??Started replication with publication=electric_publication and \
+        slots=electric_replication_out_electric,electric_replication_out_electric_rc at \
+        lsn=$start_lsn
+
+    ??Initializing first_wal_pos=$first_wal_pos
+
 [shell satellite_1]
     ??Connectivity state changed: connected
 
@@ -193,6 +208,12 @@
     ??Cached 2 client_shape_subscriptions from the DB
     ??Cached 1 client_additional_data records from the DB
     ??Cached 1 client_actions from the DB
+
+    ??Started replication with publication=electric_publication and \
+        slots=electric_replication_out_electric,electric_replication_out_electric_rc at \
+        lsn=$start_lsn
+
+    ??Initializing first_wal_pos=$first_wal_pos
 
 [shell satellite_1]
     ??Connectivity state changed: connected

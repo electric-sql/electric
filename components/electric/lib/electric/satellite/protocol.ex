@@ -28,7 +28,6 @@ defmodule Electric.Satellite.Protocol do
 
   require Logger
 
-  @type lsn() :: non_neg_integer
   @type deep_msg_list() :: PB.sq_pb_msg() | [deep_msg_list()]
   @type actions() :: {Shapes.subquery_actions(), [non_neg_integer()]}
   @type outgoing() :: {deep_msg_list(), State.t()} | {:error, deep_msg_list(), State.t()}
@@ -121,16 +120,16 @@ defmodule Electric.Satellite.Protocol do
 
   # Satellite client request replication
   def handle_rpc_request(
-        %SatInStartReplicationReq{lsn: client_lsn, options: opts} = msg,
+        %SatInStartReplicationReq{lsn: client_pos, options: opts} = msg,
         %State{} = state
       ) do
     Logger.debug(
-      "Received start replication request lsn: #{inspect(client_lsn)} with options: #{inspect(opts)}"
+      "Received start replication request at client_pos: #{inspect(client_pos)} with options: #{inspect(opts)}"
     )
 
     with :ok <- validate_schema_version(msg.schema_version),
-         {:ok, lsn} <- validate_lsn(client_lsn) do
-      handle_start_replication_request(msg, lsn, state)
+         {:ok, client_pos} <- validate_client_pos(client_pos) do
+      handle_start_replication_request(msg, client_pos, state)
     else
       {:error, :bad_schema_version} ->
         Logger.warning("Unknown client schema version: #{inspect(msg.schema_version)}")
@@ -141,8 +140,8 @@ defmodule Electric.Satellite.Protocol do
            "Unknown schema version: #{inspect(msg.schema_version)}"
          )}
 
-      {:error, {:malformed_lsn, client_lsn}} ->
-        Logger.warning("Client has supplied invalid LSN in the request: #{inspect(client_lsn)}")
+      {:error, {:malformed_pos, client_pos}} ->
+        Logger.warning("Client has supplied invalid LSN in the request: #{inspect(client_pos)}")
 
         {:error,
          start_replication_error(:MALFORMED_LSN, "Could not validate start replication request")}
@@ -522,28 +521,44 @@ defmodule Electric.Satellite.Protocol do
      )}
   end
 
-  defp handle_start_replication_request(msg, lsn, state) do
-    if CachedWal.Api.lsn_in_cached_window?(state.origin, lsn) do
-      case restore_client_state(msg.subscription_ids, msg.observed_transaction_data, lsn, state) do
-        {:ok, state} ->
+  defp handle_start_replication_request(msg, client_pos, state) do
+    case reserve_wal_position(state.origin, state.client_id, client_pos) do
+      :cached ->
+        # Fast path: the client can resume replication by consuming transactions cached in main memory.
+        with {:ok, state} <-
+               restore_client_state(
+                 msg.subscription_ids,
+                 msg.observed_transaction_data,
+                 client_pos,
+                 state
+               ) do
           state =
             state
             |> Telemetry.start_replication_span(subscriptions: length(msg.subscription_ids))
-            |> subscribe_client_to_replication_stream(lsn)
+            |> subscribe_client_to_replication_stream(client_pos)
 
           {:reply,
            %SatInStartReplicationResp{unacked_window_size: state.out_rep.allowed_unacked_txs},
            state}
+        end
 
-        error ->
-          error
-      end
-    else
-      # Once the client is outside the WAL window, we are assuming the client will reset its local state, so we will too.
-      ClientReconnectionInfo.clear_all_data!(state.origin, state.client_id)
+      :behind_window ->
+        # Once the client is outside the WAL window, we are assuming the client will reset
+        # its local state, so we will too.
+        ClientReconnectionInfo.clear_all_data!(state.origin, state.client_id)
 
-      {:error,
-       start_replication_error(:BEHIND_WINDOW, "Cannot catch up to the server's current state")}
+        {:error,
+         start_replication_error(:BEHIND_WINDOW, "Cannot catch up to the server's current state")}
+    end
+  end
+
+  defp reserve_wal_position(origin, client_id, client_pos) do
+    cond do
+      CachedWal.Api.reserve_wal_position(origin, client_id, client_pos) == :ok ->
+        :cached
+
+      true ->
+        :behind_window
     end
   end
 
@@ -658,26 +673,28 @@ defmodule Electric.Satellite.Protocol do
     {serialize_unknown_relations(unknown_relations), serialized_log, out_rep}
   end
 
-  @spec subscribe_client_to_replication_stream(State.t(), any()) :: State.t()
-  def subscribe_client_to_replication_stream(%State{out_rep: out_rep} = state, lsn) do
+  @spec subscribe_client_to_replication_stream(State.t(), non_neg_integer()) :: State.t()
+  def subscribe_client_to_replication_stream(%State{out_rep: out_rep} = state, client_pos) do
     Metrics.satellite_replication_event(%{started: 1})
 
     {pid, ref} =
       Utils.GenStageHelpers.gproc_subscribe_self!(
         to: CachedWal.Producer.name(state.client_id),
-        start_subscription: lsn,
+        start_subscription: client_pos,
         min_demand: 5,
         max_demand: 10
       )
 
     Utils.GenStageHelpers.ask({pid, ref}, @producer_demand)
 
+    CachedWal.Api.cancel_reservation(state.origin, state.client_id)
+
     out_rep = %OutRep{
       out_rep
       | pid: pid,
         status: :active,
         stage_sub: ref,
-        last_seen_wal_pos: lsn
+        last_seen_wal_pos: client_pos
     }
 
     %State{state | out_rep: out_rep}
@@ -979,12 +996,12 @@ defmodule Electric.Satellite.Protocol do
     end
   end
 
-  defp validate_lsn(""), do: {:ok, :initial_sync}
+  defp validate_client_pos(""), do: {:ok, :initial_sync}
 
-  defp validate_lsn(client_lsn) do
-    case CachedWal.Api.parse_wal_position(client_lsn) do
+  defp validate_client_pos(client_pos) do
+    case CachedWal.Api.parse_wal_position(client_pos) do
       {:ok, value} -> {:ok, value}
-      :error -> {:error, {:malformed_lsn, client_lsn}}
+      :error -> {:error, {:malformed_pos, client_pos}}
     end
   end
 
@@ -1129,15 +1146,15 @@ defmodule Electric.Satellite.Protocol do
     )
   end
 
-  defp restore_client_state(subscription_ids, observed_txn_data, lsn, %State{} = state) do
+  defp restore_client_state(subscription_ids, observed_txn_data, client_pos, %State{} = state) do
     with {:ok, state} <- restore_subscriptions(subscription_ids, state) do
-      restore_graph(lsn, observed_txn_data, state)
+      restore_graph(client_pos, observed_txn_data, state)
     end
   end
 
-  defp restore_graph(lsn, observed_txn_data, %State{} = state) do
+  defp restore_graph(client_pos, observed_txn_data, %State{} = state) do
     ClientReconnectionInfo.advance_on_reconnection!(state.client_id,
-      ack_point: lsn,
+      ack_point: client_pos,
       including_data: observed_txn_data,
       including_subscriptions: Map.keys(state.subscriptions),
       cached_wal_impl: CachedWal.EtsBacked,
