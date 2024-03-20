@@ -26,11 +26,15 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
   @typep state :: %{
            origin: Connectors.origin(),
            notification_requests: %{optional(reference()) => {Api.wal_pos(), pid()}},
+           reservations: %{binary() => {Api.wal_pos(), integer() | nil}},
            table: :ets.table(),
+           first_wal_pos: Api.wal_pos(),
            last_seen_wal_pos: Api.wal_pos(),
            current_tx_count: non_neg_integer(),
            wal_window_size: non_neg_integer()
          }
+
+  @reservation_expiration_s 30
 
   # Public API
 
@@ -49,25 +53,6 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
 
   def clear_cache(stage) do
     GenStage.cast(stage, :clear_cache)
-  end
-
-  @impl Api
-  def lsn_in_cached_window?(origin, client_wal_pos) do
-    table = ets_table_name(origin)
-
-    case :ets.first(table) do
-      :"$end_of_table" ->
-        false
-
-      first_position ->
-        case :ets.last(table) do
-          :"$end_of_table" ->
-            false
-
-          last_position ->
-            first_position <= client_wal_pos and client_wal_pos <= last_position
-        end
-    end
   end
 
   @impl Api
@@ -93,6 +78,22 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
   @impl Api
   def cancel_notification_request(origin, ref) do
     GenStage.call(name(origin), {:cancel_notification, ref})
+  end
+
+  @impl Api
+  def reserve_wal_position(origin, client_id, wal_pos) do
+    with last_position when is_integer(last_position) <- :ets.last(ets_table_name(origin)),
+         # Sanity check to make sure client is not "in the future" relative to the cached WAL.
+         true <- wal_pos <= last_position do
+      GenStage.call(name(origin), {:reserve_wal_position, client_id, wal_pos})
+    else
+      _ -> :error
+    end
+  end
+
+  @impl Api
+  def cancel_reservation(origin, client_id) do
+    GenStage.cast(name(origin), {:cancel_reservation, client_id})
   end
 
   @impl Api
@@ -130,7 +131,9 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
     state = %{
       origin: origin,
       notification_requests: %{},
+      reservations: %{},
       table: table,
+      first_wal_pos: nil,
       last_seen_wal_pos: 0,
       current_tx_count: 0,
       wal_window_size: Keyword.fetch!(opts, :wal_window_size)
@@ -164,6 +167,15 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
     {:reply, :ok, [], state}
   end
 
+  def handle_call({:reserve_wal_position, client_id, wal_pos}, _from, state) do
+    if wal_pos >= state.first_wal_pos do
+      state = Map.update!(state, :reservations, &Map.put(&1, client_id, {wal_pos, nil}))
+      {:reply, :ok, [], state}
+    else
+      {:reply, :error, [], state}
+    end
+  end
+
   def handle_call(:telemetry_stats, _from, state) do
     oldest_timestamp =
       if tx = lookup_oldest_transaction(state.table) do
@@ -181,6 +193,21 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
   end
 
   @impl GenStage
+  def handle_cast({:cancel_reservation, client_id}, %{reservations: reservations} = state) do
+    # Retain client's reservation long enough for the client to consume cached
+    # transactions before they are removed during a cache cleanup pass.
+    reservations =
+      if Map.has_key?(reservations, client_id) do
+        Map.update!(reservations, client_id, fn {wal_pos, ts} ->
+          {wal_pos, ts || System.monotonic_time()}
+        end)
+      else
+        reservations
+      end
+
+    {:noreply, [], %{state | reservations: reservations}}
+  end
+
   def handle_cast(:clear_cache, state) do
     :ets.delete_all_objects(state.table)
 
@@ -230,6 +257,7 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
         state =
           state
           |> Map.put(:last_seen_wal_pos, position)
+          |> Map.update!(:first_wal_pos, &min(&1, position))
           |> fulfill_notification_requests()
           |> trim_cache()
 
@@ -257,23 +285,54 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
 
   def lsn_to_position(lsn), do: Lsn.to_integer(lsn)
 
-  # Drop all transactions from the cache whose position is less than the last transaction's
-  # position minus in-memory WAL window size.
-  #
-  # TODO: make sure we're not removing transactions that are about to be requested by a newly
-  # connected client.
+  # Drop all transactions from the cache whose position falls out of the cached window. The
+  # cached window's low bound is calculated by subtracting the configured in-memory WAL window
+  # size from the most recent cached transaction's position.
   #
   # NOTE(optimization): clean the cache up after every N new transactions.
   @spec trim_cache(state()) :: state()
   defp trim_cache(state) do
     first_in_window_pos = state.last_seen_wal_pos - state.wal_window_size
+    {min_reserved_pos, reservations} = prune_reservations(state.reservations)
 
-    :ets.select_delete(state.table, [
-      {{:"$1", :_}, [{:<, :"$1", first_in_window_pos}], [true]}
-    ])
+    # Note that `min_pos_to_keep` may be less than the calculated low bound of the cached
+    # window. That's exactly the point of reservations: letting clients hold on to a
+    # transaction that would have been removed from the cache otherwise.
+    min_pos_to_keep = min(first_in_window_pos, min_reserved_pos)
 
-    %{state | current_tx_count: :ets.info(state.table, :size)}
+    state =
+      if min_pos_to_keep > state.first_wal_pos do
+        :ets.select_delete(state.table, [
+          {{:"$1", :_}, [{:<, :"$1", min_pos_to_keep}], [true]}
+        ])
+
+        %{state | current_tx_count: :ets.info(state.table, :size), first_wal_pos: min_pos_to_keep}
+      else
+        state
+      end
+
+    %{state | reservations: reservations}
   end
+
+  # Remove reservations who 1) already have a timestamp and 2) whose timestamp is old enough to
+  # be expired.
+  defp prune_reservations(reservations) do
+    current_time = System.monotonic_time()
+
+    Enum.reduce(reservations, {nil, reservations}, fn
+      {_client_id, {wal_pos, nil}}, {min_wal_pos, reservations} ->
+        {min(wal_pos, min_wal_pos), reservations}
+
+      {client_id, {wal_pos, ts}}, {min_wal_pos, reservations} ->
+        if diff_seconds(current_time, ts) < @reservation_expiration_s do
+          {min(wal_pos, min_wal_pos), reservations}
+        else
+          {min_wal_pos, Map.delete(reservations, client_id)}
+        end
+    end)
+  end
+
+  defp diff_seconds(ts1, ts2), do: System.convert_time_unit(abs(ts1 - ts2), :native, :second)
 
   defp lookup_oldest_transaction(ets_table) do
     case :ets.match(ets_table, {:_, :"$1"}, 1) do
