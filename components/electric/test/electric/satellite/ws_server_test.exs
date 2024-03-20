@@ -92,9 +92,14 @@ defmodule Electric.Satellite.WebsocketServerTest do
       Electric.Postgres.CachedWal.Api,
       [:passthrough],
       get_current_position: fn _ -> @current_wal_pos end,
-      lsn_in_cached_window?: fn _origin, pos when is_integer(pos) ->
-        pos > @current_wal_pos
+      reserve_wal_position: fn "test-origin", _client_id, wal_pos ->
+        if wal_pos > @current_wal_pos + 10 do
+          :error
+        else
+          :ok
+        end
       end,
+      cancel_reservation: fn "test-origin", _client_id -> :ok end,
       stream_transactions: fn _, _, _ -> [] end
     }
   ]) do
@@ -803,12 +808,12 @@ defmodule Electric.Satellite.WebsocketServerTest do
       end)
     end
 
-    test "results in an error response when the client is outside of the cached WAL window",
+    test "results in an error response when the client is outside of the resumable WAL window",
          ctx do
       with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
         assert {:ok, %SatInStartReplicationResp{err: error}} =
                  MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{
-                   lsn: "1"
+                   lsn: "13"
                  })
 
         assert %SatInStartReplicationResp.ReplicationError{code: :BEHIND_WINDOW} = error
