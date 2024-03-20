@@ -30,7 +30,7 @@ defmodule Electric.Postgres.CachedWal.Api do
   @callback request_notification(Connectors.origin(), wal_pos()) ::
               {:ok, await_ref()} | {:error, term()}
   @callback cancel_notification_request(Connectors.origin(), await_ref()) :: :ok
-  @callback reserve_wal_position(Connectors.origin(), binary(), wal_pos()) ::
+  @callback reserve_wal_position(Connectors.origin(), binary(), wal_pos() | :oldest) ::
               {:ok, wal_pos()} | :error
   @callback cancel_reservation(Connectors.origin(), binary()) :: :ok
 
@@ -115,7 +115,12 @@ defmodule Electric.Postgres.CachedWal.Api do
 
   If `wal_pos` is behind the cached window, `:error` is returned.
   """
+<<<<<<< HEAD
   @spec reserve_wal_position(module(), Connectors.origin(), binary(), wal_pos()) :: :ok | :error
+=======
+  @spec reserve_wal_position(module(), Connectors.origin(), binary(), wal_pos() | :oldest) ::
+          {:ok, wal_pos()} | :error
+>>>>>>> e6f66bb2 (Stream WAL records from the replication slot)
   def reserve_wal_position(module \\ default_module(), origin, client_id, wal_pos) do
     module.reserve_wal_position(origin, client_id, wal_pos)
   end

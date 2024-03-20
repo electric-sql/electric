@@ -167,8 +167,13 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
     {:reply, :ok, [], state}
   end
 
+<<<<<<< HEAD
   def handle_call({:reserve_wal_position, client_id, wal_pos}, _from, state) do
     if wal_pos >= state.first_wal_pos do
+=======
+  def handle_call({:reserve_wal_position, client_id, client_wal_pos}, _from, state) do
+    if wal_pos = wal_pos_to_reserve(client_wal_pos, state.first_wal_pos) do
+>>>>>>> e6f66bb2 (Stream WAL records from the replication slot)
       state = Map.update!(state, :reservations, &Map.put(&1, client_id, {wal_pos, nil}))
       {:reply, :ok, [], state}
     else
@@ -284,6 +289,7 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
   end
 
   def lsn_to_position(lsn), do: Lsn.to_integer(lsn)
+  def position_to_lsn(wal_pos), do: Lsn.from_integer(wal_pos)
 
   # Drop all transactions from the cache whose position falls out of the cached window. The
   # cached window's low bound is calculated by subtracting the configured in-memory WAL window
@@ -333,6 +339,12 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
   end
 
   defp diff_seconds(ts1, ts2), do: System.convert_time_unit(abs(ts1 - ts2), :native, :second)
+
+  defp wal_pos_to_reserve(:oldest, first_wal_pos), do: first_wal_pos
+
+  defp wal_pos_to_reserve(wal_pos, first_wal_pos) do
+    if wal_pos >= first_wal_pos, do: wal_pos
+  end
 
   defp lookup_oldest_transaction(ets_table) do
     case :ets.match(ets_table, {:_, :"$1"}, 1) do
