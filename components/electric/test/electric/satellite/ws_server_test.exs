@@ -36,12 +36,13 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
   setup ctx do
     ctx =
-      Map.update(
-        ctx,
+      ctx
+      |> Map.update(
         :subscription_data_fun,
         &mock_data_function/2,
         fn {name, opts} -> &apply(__MODULE__, name, [&1, &2, opts]) end
       )
+      |> Map.put_new(:allowed_unacked_txs, 30)
 
     port = 55133
 
@@ -49,7 +50,8 @@ defmodule Electric.Satellite.WebsocketServerTest do
       {Electric.Plug.SatelliteWebsocketPlug,
        auth_provider: Auth.provider(),
        connector_config: [origin: "fake_origin"],
-       subscription_data_fun: ctx.subscription_data_fun}
+       subscription_data_fun: ctx.subscription_data_fun,
+       allowed_unacked_txs: ctx.allowed_unacked_txs}
 
     start_link_supervised!({Bandit, port: port, plug: plug})
 
@@ -78,7 +80,8 @@ defmodule Electric.Satellite.WebsocketServerTest do
       Electric.Postgres.CachedWal.Api,
       [:passthrough],
       get_current_position: fn -> @current_wal_pos end,
-      lsn_in_cached_window?: fn num when is_integer(num) -> num > @current_wal_pos end
+      lsn_in_cached_window?: fn num when is_integer(num) -> num > @current_wal_pos end,
+      stream_transactions: fn _, _ -> [] end
     }
   ]) do
     {:ok, %{}}
@@ -89,7 +92,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
     on_exit(fn -> clean_connections() end)
 
     user_id = "a5408365-7bf4-48b1-afe2-cb8171631d7c"
-    client_id = "device-id-0000"
+    client_id = "device-id-#{Enum.random(100_000..999_999)}"
     token = Auth.Secure.create_token(user_id)
 
     {:ok, user_id: user_id, client_id: client_id, token: token}
@@ -379,7 +382,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
         # The real data function would have made a magic write which we're emulating here
         DownstreamProducerMock.produce(mocked_producer, build_events([], 1))
-        assert %{"fake_id" => []} = receive_subscription_data(conn, sub_id)
+        assert {["fake_id"], []} = receive_subscription_data(conn, sub_id)
 
         :ok =
           DownstreamProducerMock.produce(
@@ -401,14 +404,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
       limit = 10
 
       with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
-        # Skip initial sync
-        lsn = to_string(@current_wal_pos + 1)
-
-        assert {:ok, _} =
-                 MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{
-                   lsn: lsn
-                 })
-
+        start_replication_and_assert_response(conn, 1)
         [{client_name, _client_pid}] = active_clients()
         mocked_producer = Producer.name(client_name)
 
@@ -429,12 +425,12 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
         # The real data function would have made a magic write which we're emulating here
         DownstreamProducerMock.produce(mocked_producer, build_events([], 1))
-        assert %{"fake_id" => []} = receive_subscription_data(conn, sub_id)
+        assert {["fake_id"], []} = receive_subscription_data(conn, sub_id)
 
         :ok =
           DownstreamProducerMock.produce(
             mocked_producer,
-            simple_transes(ctx.user_id, limit)
+            simple_transes(ctx.user_id, limit, 2)
           )
 
         assert {:ok, _} =
@@ -536,10 +532,42 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
         DownstreamProducerMock.produce(mocked_producer, simple_transes(ctx.user_id, 1))
         refute_receive {^conn, %SatOpLog{}}
-        assert %{"fake_id" => []} = receive_subscription_data(conn, sub_id, expecting_lsn: "1")
+        assert {["fake_id"], []} = receive_subscription_data(conn, sub_id, expecting_lsn: "1")
         assert_receive {^conn, %SatOpLog{ops: [_, %{op: {:insert, insert}}, _]}}
         assert %SatOpInsert{row_data: %{values: ["fakeid", user_id, "a"]}} = insert
         assert user_id == ctx.user_id
+      end)
+    end
+
+    @tag subscription_data_fun: {:mock_data_function, data_delay_ms: 500}
+    @tag with_migrations: [@test_migration]
+    test "empty transactions that came from this client are propagated back", ctx do
+      with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->
+        start_replication_and_assert_response(conn, 1)
+
+        [{client_name, _client_pid}] = active_clients()
+        mocked_producer = Producer.name(client_name)
+
+        request = %SatSubsReq{
+          subscription_id: "00000000-0000-0000-0000-000000000000",
+          shape_requests: [
+            %SatShapeReq{
+              request_id: "fake_id",
+              shape_definition: %SatShapeDef{
+                selects: [%SatShapeDef.Select{tablename: @test_table}]
+              }
+            }
+          ]
+        }
+
+        assert {:ok, %SatSubsResp{subscription_id: sub_id, err: nil}} =
+                 MockClient.make_rpc_call(conn, "subscribe", request)
+
+        # No changes in the txn, but still should be sent
+        DownstreamProducerMock.produce(mocked_producer, build_events([], 1, ctx.client_id))
+        refute_receive {^conn, %SatOpLog{}}
+        assert {["fake_id"], []} = receive_subscription_data(conn, sub_id, expecting_lsn: "1")
+        assert_receive {^conn, %SatOpLog{ops: [_, _]}}
       end)
     end
 
@@ -548,13 +576,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
     test "changes before the insertion point of a subscription are not sent if no prior subscriptions exist",
          ctx do
       with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->
-        # Skip initial sync
-        lsn = to_string(@current_wal_pos + 1)
-
-        assert {:ok, _} =
-                 MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{
-                   lsn: lsn
-                 })
+        start_replication_and_assert_response(conn, 1)
 
         [{client_name, _client_pid}] = active_clients()
         mocked_producer = Producer.name(client_name)
@@ -577,7 +599,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
         DownstreamProducerMock.produce(mocked_producer, simple_transes(ctx.user_id, 10))
 
         # Expected LSN is the one BEFORE the insertion point
-        assert %{"fake_id" => []} = receive_subscription_data(conn, sub_id, expecting_lsn: "3")
+        assert {["fake_id"], []} = receive_subscription_data(conn, sub_id, expecting_lsn: "3")
 
         for _ <- 4..10, do: assert_receive({^conn, %SatOpLog{}})
         refute_receive {^conn, %SatOpLog{}}
@@ -589,14 +611,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
     test "unsubscribing works even on not-yet-fulfilled subscriptions",
          ctx do
       with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->
-        # Skip initial sync
-        lsn = to_string(@current_wal_pos + 1)
-
-        assert {:ok, _} =
-                 MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{
-                   lsn: lsn
-                 })
-
+        start_replication_and_assert_response(conn, 1)
         [{client_name, _client_pid}] = active_clients()
         mocked_producer = Producer.name(client_name)
         subscription_id = "00000000-0000-0000-0000-000000000000"
@@ -624,6 +639,61 @@ defmodule Electric.Satellite.WebsocketServerTest do
         DownstreamProducerMock.produce(mocked_producer, simple_transes(ctx.user_id, 10))
         refute_receive {^conn, %SatSubsDataBegin{}}
         refute_receive {^conn, %SatOpLog{}}
+      end)
+    end
+
+    @tag with_migrations: [@test_migration]
+    @tag allowed_unacked_txs: 2
+    test "replication stream is suspended until the client acks transactions", ctx do
+      with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->
+        start_replication_and_assert_response(conn, 1)
+
+        [{client_name, _client_pid}] = active_clients()
+        mocked_producer = Producer.name(client_name)
+
+        request = %SatSubsReq{
+          subscription_id: "00000000-0000-0000-0000-000000000000",
+          shape_requests: [
+            %SatShapeReq{
+              request_id: "fake_id",
+              shape_definition: %SatShapeDef{
+                selects: [%SatShapeDef.Select{tablename: @test_table}]
+              }
+            }
+          ]
+        }
+
+        assert {:ok, %SatSubsResp{subscription_id: sub_id, err: nil}} =
+                 MockClient.make_rpc_call(conn, "subscribe", request)
+
+        # The real data function would have made a magic write which we're emulating here
+        DownstreamProducerMock.produce(mocked_producer, build_events([], 1))
+        assert {["fake_id"], []} = receive_subscription_data(conn, sub_id)
+
+        :ok =
+          DownstreamProducerMock.produce(mocked_producer, simple_transes(ctx.user_id, 12, 1))
+
+        # We've received 2 transactions at this point: migration and the first produced
+        # we shouldn't receive more until we ack
+        assert_receive {^conn,
+                        %SatOpLog{ops: [%{op: {:begin, %{lsn: lsn, transaction_id: id}}}, _, _]}}
+
+        refute_receive {^conn, %SatOpLog{ops: [_, _, _]}}
+
+        # After we ACK, we should get 2 more transactions
+        MockClient.send_data(conn, %SatOpLogAck{lsn: lsn, transaction_id: id})
+
+        assert_receive {^conn,
+                        %SatOpLog{ops: [%{op: {:begin, %{lsn: lsn, transaction_id: id}}}, _, _]}}
+
+        assert_receive {^conn, %SatOpLog{ops: [_, _, _]}}
+        refute_receive {^conn, %SatOpLog{ops: [_, _, _]}}
+
+        # If we ACK using a not-last transaction, we should receive just one more tx
+        MockClient.send_data(conn, %SatOpLogAck{lsn: lsn, transaction_id: id})
+
+        assert_receive {^conn, %SatOpLog{ops: [_, _, _]}}
+        refute_receive {^conn, %SatOpLog{ops: [_, _, _]}}
       end)
     end
   end
@@ -740,11 +810,11 @@ defmodule Electric.Satellite.WebsocketServerTest do
       ) do
     insertion_point = Keyword.get(opts, :insertion_point, 0)
     data_delay_ms = Keyword.get(opts, :data_delay_ms, 0)
-    send(pid, {:subscription_insertion_point, ref, insertion_point})
+    send(pid, {:data_insertion_point, ref, insertion_point})
 
     Process.send_after(
       pid,
-      {:subscription_data, id, Enum.map(requests, &{&1.id, []})},
+      {:subscription_data, id, {Graph.new(), %{}, Enum.map(requests, & &1.id)}},
       data_delay_ms
     )
   end
@@ -825,11 +895,12 @@ defmodule Electric.Satellite.WebsocketServerTest do
     end)
   end
 
-  defp build_events(changes, lsn) do
+  defp build_events(changes, lsn, origin \\ nil) do
     [
       {%Changes.Transaction{
          changes: List.wrap(changes),
          commit_timestamp: DateTime.utc_now(),
+         origin: origin,
          # The LSN here is faked and a number, so we're using the same monotonically growing value as xid to emulate PG
          xid: lsn
        }, lsn}

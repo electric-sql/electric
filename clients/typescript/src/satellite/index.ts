@@ -1,3 +1,4 @@
+import Long from 'long'
 import { AuthConfig, AuthState } from '../auth/index'
 import { InternalElectricConfig } from '../config/index'
 import { DatabaseAdapter } from '../electric/adapter'
@@ -18,9 +19,10 @@ import {
   OutboundStartedCallback,
   SatelliteError,
   ReplicationStatus,
+  AdditionalDataCallback,
 } from '../util/types'
 import {
-  ClientShapeDefinition,
+  Shape,
   ShapeRequest,
   SubscribeResponse,
   SubscriptionDeliveredCallback,
@@ -73,9 +75,7 @@ export interface Satellite {
   disconnect(error?: SatelliteError): void
   clientDisconnect(): void
   authenticate(token: string): Promise<void>
-  subscribe(
-    shapeDefinitions: ClientShapeDefinition[]
-  ): Promise<ShapeSubscription>
+  subscribe(shapeDefinitions: Shape[]): Promise<ShapeSubscription>
   unsubscribe(shapeUuid: string): Promise<void>
 }
 
@@ -89,13 +89,16 @@ export interface Client {
   startReplication(
     lsn?: LSN,
     schemaVersion?: string,
-    subscriptionIds?: string[]
+    subscriptionIds?: string[],
+    observedTransactionData?: Long[]
   ): Promise<StartReplicationResponse>
   stopReplication(): Promise<StopReplicationResponse>
   subscribeToRelations(callback: RelationCallback): void
   unsubscribeToRelations(callback: RelationCallback): void
   subscribeToTransactions(callback: TransactionCallback): void
   unsubscribeToTransactions(callback: TransactionCallback): void
+  subscribeToAdditionalData(callback: AdditionalDataCallback): void
+  unsubscribeToAdditionalData(callback: AdditionalDataCallback): void
   enqueueTransaction(transaction: DataTransaction): void
   getLastSentLsn(): LSN
   subscribeToOutboundStarted(callback: OutboundStartedCallback): void

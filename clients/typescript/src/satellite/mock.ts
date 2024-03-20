@@ -19,6 +19,7 @@ import {
   TransactionCallback,
   SocketCloseReason,
   ReplicationStatus,
+  AdditionalDataCallback,
 } from '../util/types'
 import { ElectricConfig } from '../config/index'
 
@@ -36,7 +37,7 @@ import {
 import { bytesToNumber } from '../util/common'
 import { generateTag } from './oplog'
 import {
-  ClientShapeDefinition,
+  Shape,
   InitialDataChange,
   SUBSCRIPTION_DELIVERED,
   SUBSCRIPTION_ERROR,
@@ -83,9 +84,7 @@ export class MockSatelliteProcess implements Satellite {
     this.socketFactory = socketFactory
     this.opts = opts
   }
-  subscribe(
-    _shapeDefinitions: ClientShapeDefinition[]
-  ): Promise<ShapeSubscription> {
+  subscribe(_shapeDefinitions: Shape[]): Promise<ShapeSubscription> {
     return Promise.resolve({
       synced: Promise.resolve(),
     })
@@ -187,6 +186,7 @@ export class MockSatelliteClient
   relations: RelationsCache = {}
   relationsCb?: (relation: Relation) => void
   transactionsCb?: TransactionCallback
+  additionalDataCb?: AdditionalDataCallback
 
   relationData: Record<string, DataRecord[]> = {}
 
@@ -226,32 +226,31 @@ export class MockSatelliteClient
     const shapeReqToUuid: Record<string, string> = {}
 
     for (const shape of shapes) {
-      for (const { tablename } of shape.definition.selects) {
-        if (tablename === 'failure' || tablename === 'Items') {
-          return Promise.resolve({
+      const { tablename } = shape.definition
+      if (tablename === 'failure' || tablename === 'Items') {
+        return Promise.resolve({
+          subscriptionId,
+          error: new SatelliteError(SatelliteErrorCode.TABLE_NOT_FOUND),
+        })
+      }
+      if (tablename === 'another' || tablename === 'User') {
+        return new Promise((resolve) => {
+          this.sendErrorAfterTimeout(subscriptionId, 1)
+          resolve({
             subscriptionId,
-            error: new SatelliteError(SatelliteErrorCode.TABLE_NOT_FOUND),
           })
-        }
-        if (tablename === 'another' || tablename === 'User') {
-          return new Promise((resolve) => {
-            this.sendErrorAfterTimeout(subscriptionId, 1)
-            resolve({
-              subscriptionId,
-            })
-          })
-        } else {
-          shapeReqToUuid[shape.requestId] = genUUID()
-          const records: DataRecord[] = this.relationData[tablename] ?? []
+        })
+      } else {
+        shapeReqToUuid[shape.requestId] = genUUID()
+        const records: DataRecord[] = this.relationData[tablename] ?? []
 
-          for (const record of records) {
-            const dataChange: InitialDataChange = {
-              relation: this.relations[tablename],
-              record,
-              tags: [generateTag('remote', new Date())],
-            }
-            data.push(dataChange)
+        for (const record of records) {
+          const dataChange: InitialDataChange = {
+            relation: this.relations[tablename],
+            record,
+            tags: [generateTag('remote', new Date())],
           }
+          data.push(dataChange)
         }
       }
     }
@@ -402,6 +401,14 @@ export class MockSatelliteClient
   }
 
   unsubscribeToTransactions(): void {
+    throw new Error('Method not implemented.')
+  }
+
+  subscribeToAdditionalData(callback: AdditionalDataCallback): void {
+    this.additionalDataCb = callback
+  }
+
+  unsubscribeToAdditionalData(_cb: AdditionalDataCallback): void {
     throw new Error('Method not implemented.')
   }
 

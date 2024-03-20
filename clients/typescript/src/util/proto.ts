@@ -84,6 +84,10 @@ const subsErrorShapeReqErrorToSatError: Record<
   [Pb.SatSubsResp_SatSubsError_ShapeReqError_Code
     .DUPLICATE_TABLE_IN_SHAPE_DEFINITION]:
     SatelliteErrorCode.DUPLICATE_TABLE_IN_SHAPE_DEFINITION,
+  [Pb.SatSubsResp_SatSubsError_ShapeReqError_Code.INVALID_WHERE_CLAUSE]:
+    SatelliteErrorCode.INVALID_WHERE_CLAUSE_IN_SHAPE_DEFINITION,
+  [Pb.SatSubsResp_SatSubsError_ShapeReqError_Code.INVALID_INCLUDE_TREE]:
+    SatelliteErrorCode.INVALID_INCLUDE_TREE_IN_SHAPE_DEFINITION,
 }
 
 const subsDataErrorToSatError: Record<
@@ -122,6 +126,7 @@ const msgtypetuples: MappingTuples = {
   SatShapeDataEnd: [18, Pb.SatShapeDataEnd],
   SatRpcRequest: [21, Pb.SatRpcRequest],
   SatRpcResponse: [22, Pb.SatRpcResponse],
+  SatOpLogAck: [23, Pb.SatOpLogAck],
 }
 
 const msgtypemapping = Object.fromEntries(
@@ -172,6 +177,7 @@ export type SatPbMsg =
   | Pb.SatSubsDataEnd
   | Pb.SatShapeDataBegin
   | Pb.SatShapeDataEnd
+  | Pb.SatOpLogAck
 
 export type SatPbMsgObj<
   Msg extends { $type: string },
@@ -303,14 +309,11 @@ export function shapeRequestToSatShapeReq(
   const shapeReqs: Pb.SatShapeReq[] = []
   for (const sr of shapeRequests) {
     const requestId = sr.requestId
-    const selects = sr.definition.selects.map((s) => ({
-      tablename: s.tablename,
-    }))
-    const shapeDefinition = { selects }
-
     const req = Pb.SatShapeReq.fromPartial({
       requestId,
-      shapeDefinition,
+      shapeDefinition: {
+        selects: [sr.definition],
+      },
     })
     shapeReqs.push(req)
   }
@@ -407,6 +410,10 @@ export function msgToString(message: MessageOfInterest): string {
       return `#SatRpcResponse{method: ${message.method}, requestId: ${
         message.requestId
       }${message.error ? ', error: ' + msgToString(message.error) : ''}}`
+    case 'Electric.Satellite.SatOpLogAck':
+      return `#SatOpLogAck{lsn: ${base64.fromBytes(message.lsn)}, txid: ${
+        message.transactionId
+      }}`
   }
 }
 
@@ -436,12 +443,20 @@ function opToString(op: Pb.SatTransOp): string {
     }], old: [${
       op.delete.oldRowData ? rowToString(op.delete.oldRowData) : ''
     }]}`
+  if (op.gone)
+    return `#Gone{for: ${op.gone.relationId}, pk: ${rowToString(
+      op.gone.pkData!
+    )}}`
   if (op.migrate)
     return `#Migrate{vsn: ${op.migrate.version}, for: ${
       op.migrate.table?.name
     }, stmts: [${op.migrate.stmts
       .map((x) => x.sql.replaceAll('\n', '\\n'))
       .join('; ')}]}`
+  if (op.additionalBegin)
+    return `#AdditionalBegin{ref: ${op.additionalBegin.ref}}`
+  if (op.additionalCommit)
+    return `#AdditionalCommit{ref: ${op.additionalCommit.ref}}`
   return ''
 }
 

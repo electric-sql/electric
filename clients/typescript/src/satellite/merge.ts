@@ -58,13 +58,20 @@ export function mergeEntries(
       }
       const [_, localChanges] = localInfo
 
-      const changes = mergeChangesLastWriteWins(
-        localOrigin,
-        localChanges.changes,
-        incomingOrigin,
-        incomingChanges.changes,
-        incomingChanges.fullRow
-      )
+      let changes: OplogColumnChanges
+
+      if (incomingChanges.optype === 'GONE') {
+        changes = localChanges.changes
+      } else {
+        changes = mergeChangesLastWriteWins(
+          localOrigin,
+          localChanges.changes,
+          incomingOrigin,
+          incomingChanges.changes,
+          incomingChanges.fullRow
+        )
+      }
+
       let optype
 
       const tags = mergeOpTags(localChanges, incomingChanges)
@@ -147,6 +154,13 @@ function mergeOpTags(
   local: OplogEntryChanges,
   remote: ShadowEntryChanges
 ): Tag[] {
+  // When the server sends a GONE message, it means we need to delete this row from our side as no further
+  // updates will come through. Server doesn't keep track of seen tags, however, so we make the GONE operation
+  // have a higher priority than anything else.
+
+  // TODO: Does deleting on GONE make sense at all?
+  if (remote.optype === 'GONE') return []
+
   return calculateTags(local.tag, remote.tags, local.clearTags)
 }
 

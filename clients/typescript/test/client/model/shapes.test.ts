@@ -7,7 +7,7 @@ import { SatelliteProcess } from '../../../src/satellite/process'
 import { MockRegistry, MockSatelliteClient } from '../../../src/satellite/mock'
 import { BundleMigrator } from '../../../src/migrators'
 import { MockNotifier } from '../../../src/notifiers'
-import { randomValue } from '../../../src/util'
+import { RelationsCache, randomValue } from '../../../src/util'
 import { ElectricClient } from '../../../src/client/model/client'
 import { cleanAndStopSatellite } from '../../satellite/common'
 import { satelliteDefaults } from '../../../src/satellite/config'
@@ -176,31 +176,31 @@ const relations = {
         name: 'id',
         type: 'INTEGER',
         isNullable: false,
-        primaryKey: true,
+        primaryKey: 1,
       },
       {
         name: 'title',
         type: 'TEXT',
         isNullable: true,
-        primaryKey: false,
+        primaryKey: undefined,
       },
       {
         name: 'contents',
         type: 'TEXT',
         isNullable: true,
-        primaryKey: false,
+        primaryKey: undefined,
       },
       {
         name: 'nbr',
         type: 'INTEGER',
         isNullable: true,
-        primaryKey: false,
+        primaryKey: undefined,
       },
       {
         name: 'authorId',
         type: 'INTEGER',
         isNullable: true,
-        primaryKey: false,
+        primaryKey: undefined,
       },
     ],
   },
@@ -214,23 +214,23 @@ const relations = {
         name: 'id',
         type: 'INTEGER',
         isNullable: false,
-        primaryKey: true,
+        primaryKey: 1,
       },
       {
         name: 'bio',
         type: 'TEXT',
         isNullable: true,
-        primaryKey: false,
+        primaryKey: undefined,
       },
       {
         name: 'userId',
         type: 'INTEGER',
         isNullable: true,
-        primaryKey: false,
+        primaryKey: undefined,
       },
     ],
   },
-}
+} satisfies RelationsCache
 
 const post = {
   id: 1,
@@ -327,4 +327,53 @@ test.serial('synced promise is rejected on invalid shape', async (t) => {
     t.assert(loadingPromResolved)
     t.pass()
   }
+})
+
+test.serial('nested shape is constructed', async (t) => {
+  const { satellite, client } = t.context as ContextType
+  await startSatellite(satellite, config.auth.token)
+
+  client.setRelations(relations)
+
+  const { Post } = t.context as ContextType
+  const input = {
+    where: {
+      OR: [{ id: 5 }, { id: 42 }],
+      NOT: [{ id: 1 }, { id: 2 }],
+      AND: [{ nbr: 6 }, { nbr: 7 }],
+      title: 'foo',
+      contents: "important'",
+    },
+    include: {
+      author: {
+        include: {
+          profile: true,
+        },
+      },
+    },
+  }
+
+  // @ts-ignore `computeShape` is a protected method
+  const shape = Post.computeShape(input)
+  t.deepEqual(shape, {
+    tablename: 'Post',
+    where:
+      "this.title = 'foo' AND this.contents = 'important''' AND this.nbr = 6 AND this.nbr = 7 AND ((this.id = 5) OR (this.id = 42)) AND NOT ((this.id = 1) OR (this.id = 2))",
+    include: [
+      {
+        foreignKey: ['authorId'],
+        select: {
+          tablename: 'User',
+          include: [
+            {
+              foreignKey: ['userId'],
+              select: {
+                tablename: 'Profile',
+              },
+            },
+          ],
+        },
+      },
+    ],
+  })
 })
