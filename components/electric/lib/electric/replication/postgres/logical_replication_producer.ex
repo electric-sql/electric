@@ -30,6 +30,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
               main_slot: "",
               main_slot_lsn: %Lsn{},
               current_lsn: %Lsn{},
+              reservations: %{},
               resumable_wal_window: 1
 
     @type t() :: %__MODULE__{
@@ -45,6 +46,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
             main_slot: binary(),
             main_slot_lsn: Lsn.t(),
             current_lsn: Lsn.t(),
+            reservations: %{binary() => {Api.wal_pos(), integer() | nil}},
             resumable_wal_window: pos_integer()
           }
   end
@@ -69,6 +71,20 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   @spec current_lsn(Connectors.origin()) :: Lsn.t()
   def current_lsn(origin) do
     :ets.lookup_element(ets_table_name(origin), @current_lsn_key, 2)
+  end
+
+  def reserve_wal_lsn(origin, client_id, client_lsn) do
+    # Sanity check to make sure client is not "in the future" relative to the latest Postgres
+    # state.
+    if Lsn.compare(client_lsn, current_lsn(origin)) != :gt do
+      GenStage.call(name(origin), {:reserve_wal_lsn, client_id, client_lsn})
+    else
+      :error
+    end
+  end
+
+  def cancel_reservation(origin, client_id) do
+    GenStage.cast(name(origin), {:cancel_reservation, client_id})
   end
 
   @impl true
@@ -167,6 +183,22 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   @impl true
   def terminate(_reason, state) do
     Metrics.stop_span(state.span)
+  end
+
+  @impl true
+  def handle_call({:reserve_wal_lsn, client_id, client_lsn}, _from, state) do
+    if Lsn.compare(client_lsn, state.main_slot_lsn) == :lt do
+      {:reply, :error, [], state}
+    else
+      state = Map.update!(state, :reservations, &Map.put(&1, client_id, {client_lsn, nil}))
+      {:reply, :ok, [], state}
+    end
+  end
+
+  @impl true
+  def handle_cast({:cancel_reservation, client_id}, %{reservations: reservations} = state) do
+    reservations = Map.delete(reservations, client_id)
+    {:noreply, [], %{state | reservations: reservations}}
   end
 
   @impl true
@@ -270,16 +302,34 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   # TODO(optimization): do not run this after every consumed transaction.
   defp advance_main_slot(state) do
     min_in_window_lsn = Lsn.increment(state.current_lsn, -state.resumable_wal_window)
+    min_lsn_to_keep = min_lsn(min_in_window_lsn, min_reserved_lsn(state))
 
-    if Lsn.compare(state.main_slot_lsn, min_in_window_lsn) == :lt do
+    if Lsn.compare(state.main_slot_lsn, min_lsn_to_keep) == :lt do
       :ok =
         Client.with_conn(state.conn_opts, fn conn ->
-          Client.advance_replication_slot(conn, state.main_slot, min_in_window_lsn)
+          Client.advance_replication_slot(conn, state.main_slot, min_lsn_to_keep)
         end)
 
-      %{state | main_slot_lsn: min_in_window_lsn}
+      %{state | main_slot_lsn: min_lsn_to_keep}
     else
       state
+    end
+  end
+
+  defp min_reserved_lsn(%{reservations: reservations}) when map_size(reservations) == 0, do: nil
+
+  defp min_reserved_lsn(%{reservations: reservations}) do
+    {_client_id, lsn} = Enum.min_by(reservations, fn {_client_id, lsn} -> Lsn.to_integer(lsn) end)
+    lsn
+  end
+
+  defp min_lsn(%Lsn{} = lsn, nil), do: lsn
+
+  defp min_lsn(%Lsn{} = lsn1, %Lsn{} = lsn2) do
+    if Lsn.compare(lsn1, lsn2) == :lt do
+      lsn1
+    else
+      lsn2
     end
   end
 end

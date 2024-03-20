@@ -12,10 +12,18 @@ defmodule Electric.Satellite.Protocol do
   alias Electric.Utils
   alias Electric.Replication.Changes.Transaction
   alias Electric.Postgres.Extension.SchemaCache
+  alias Electric.Postgres.LogicalReplication
+  alias Electric.Postgres.Lsn
   alias Electric.Postgres.Schema
   alias Electric.Postgres.CachedWal
   alias Electric.Replication.Changes
+<<<<<<< HEAD
   alias Electric.Replication.Connectors
+=======
+  alias Electric.Replication.Postgres.Client
+  alias Electric.Replication.Postgres.LogicalMessages
+  alias Electric.Replication.Postgres.LogicalReplicationProducer
+>>>>>>> 822510396 (Stream WAL records from the replication slot)
   alias Electric.Replication.Shapes
   alias Electric.Replication.Shapes.ShapeRequest
   alias Electric.Satellite.Serialization
@@ -36,6 +44,261 @@ defmodule Electric.Satellite.Protocol do
 
   @producer_demand 5
 
+<<<<<<< HEAD
+=======
+  defmodule Telemetry do
+    defstruct connection_span: nil,
+              replication_span: nil,
+              subscription_spans: %{}
+
+    @type t() :: %__MODULE__{
+            connection_span: Metrics.t(),
+            replication_span: Metrics.t() | nil,
+            subscription_spans: %{optional(subscription_id :: String.t()) => Metrics.t()}
+          }
+
+    @spec start_subscription_span(t(), String.t(), map(), map()) :: t()
+    def start_subscription_span(
+          %__MODULE__{replication_span: parent} = telemetry,
+          subscription_id,
+          measurements,
+          metadata
+        ) do
+      span =
+        Metrics.start_child_span(
+          parent,
+          [:satellite, :replication, :new_subscription],
+          measurements,
+          Map.put(metadata, :subscription_id, subscription_id)
+        )
+
+      put_in(telemetry.subscription_spans[subscription_id], span)
+    end
+
+    @spec subscription_data_ready(t(), String.t()) :: t()
+    def subscription_data_ready(%__MODULE__{} = telemetry, id) do
+      put_in(
+        telemetry.subscription_spans[id].intermediate_measurements[:data_ready_monotonic_time],
+        System.monotonic_time()
+      )
+    end
+
+    @spec stop_subscription_span(t(), String.t()) :: t()
+    def stop_subscription_span(%__MODULE__{} = telemetry, id) do
+      {span, telemetry} = pop_in(telemetry.subscription_spans[id])
+      monotonic_time = System.monotonic_time()
+      data_time = span.intermediate_measurements.data_ready_monotonic_time
+
+      Metrics.stop_span(span, %{
+        monotonic_time: monotonic_time,
+        data_ready_monotonic_time: data_time,
+        data_ready_duration: data_time - span.start_time,
+        send_lag: monotonic_time - data_time
+      })
+
+      telemetry
+    end
+  end
+
+  defmodule InRep do
+    defstruct lsn: "",
+              status: nil,
+              pid: nil,
+              stage_sub: nil,
+              relations: %{},
+              incomplete_trans: nil,
+              demand: 0,
+              sub_retry: nil,
+              queue: :queue.new(),
+              rpc_request_id: 0
+
+    @typedoc """
+    Incoming replication Satellite -> PG
+    """
+    @type t() :: %__MODULE__{
+            pid: pid() | nil,
+            lsn: String.t(),
+            status: nil | :active | :paused | :requested,
+            # retry is only used when there is an active consumer
+            sub_retry: nil | reference(),
+            stage_sub: GenStage.subscription_tag() | nil,
+            relations: %{
+              optional(PB.relation_id()) => %{
+                :schema => String.t(),
+                :table => String.t(),
+                :columns => [String.t()]
+              }
+            },
+            incomplete_trans: nil | Transaction.t(),
+            demand: non_neg_integer(),
+            queue: :queue.queue(Transaction.t()),
+            rpc_request_id: non_neg_integer()
+          }
+
+    @spec add_to_queue(t(), [Transaction.t()]) :: t()
+    def add_to_queue(%__MODULE__{queue: queue} = rep, events),
+      do: %__MODULE__{rep | queue: Utils.add_events_to_queue(events, queue)}
+  end
+
+  defmodule OutRep do
+    defstruct lsn: "",
+              status: nil,
+              pid: nil,
+              stage_sub: nil,
+              relations: %{},
+              last_seen_wal_pos: 0,
+              subscription_pause_queue: {nil, :queue.new()},
+              outgoing_ops_buffer: :queue.new(),
+              subscription_data_to_send: %{},
+              last_migration_xid_at_initial_sync: 0
+
+    @typedoc """
+    Insertion point for data coming from a subscription fulfillment.
+    """
+    @type subscription_insert_point :: {xmin :: non_neg_integer(), subscription_id :: binary()}
+
+    @typedoc """
+    Outgoing replication PG -> Satellite
+    """
+    @type t() :: %__MODULE__{
+            pid: pid() | nil,
+            lsn: String.t(),
+            status: nil | :active | :paused,
+            stage_sub: GenStage.subscription_tag() | nil,
+            relations: %{Changes.relation() => PB.relation_id()},
+            last_seen_wal_pos: non_neg_integer,
+            # The first element of the tuple is the head of the queue, which is pulled out to be available in guards/pattern matching
+            subscription_pause_queue:
+              {subscription_insert_point() | nil, :queue.queue(subscription_insert_point())},
+            outgoing_ops_buffer: :queue.queue(),
+            subscription_data_to_send: %{optional(String.t()) => term()},
+            last_migration_xid_at_initial_sync: non_neg_integer
+          }
+
+    def add_pause_point(%__MODULE__{subscription_pause_queue: queue} = out, new),
+      do: %{out | subscription_pause_queue: add_pause_point(queue, new)}
+
+    def add_pause_point({nil, queue}, new), do: {new, queue}
+    def add_pause_point({head, queue}, new), do: {head, :queue.in(new, queue)}
+
+    def remove_next_pause_point(%__MODULE__{subscription_pause_queue: queue} = out),
+      do: %{out | subscription_pause_queue: remove_next_pause_point(queue)}
+
+    def remove_next_pause_point({_, queue}) do
+      case :queue.out(queue) do
+        {{:value, item}, queue} -> {item, queue}
+        {:empty, queue} -> {nil, queue}
+      end
+    end
+
+    def remove_pause_point(%__MODULE__{subscription_pause_queue: queue} = out, subscription_id),
+      do: %{out | subscription_pause_queue: remove_pause_point(queue, subscription_id)}
+
+    def remove_pause_point({nil, _} = queue, _), do: queue
+    def remove_pause_point({{_, id}, _} = queue, id), do: remove_next_pause_point(queue)
+
+    def remove_pause_point({head, queue}, id),
+      do: {head, :queue.delete_with(&match?({_, ^id}, &1), queue)}
+
+    def set_status(%__MODULE__{} = out, status) when status in [nil, :active, :paused],
+      do: %{out | status: status}
+
+    def store_subscription_data(%__MODULE__{} = out, id, data),
+      do: %{out | subscription_data_to_send: Map.put(out.subscription_data_to_send, id, data)}
+
+    def add_events_to_buffer(%__MODULE__{} = out, events),
+      do: %{out | outgoing_ops_buffer: Utils.add_events_to_queue(events, out.outgoing_ops_buffer)}
+
+    def set_event_buffer(%__MODULE__{} = out, buffer) when is_list(buffer),
+      do: %{out | outgoing_ops_buffer: :queue.from_list(buffer)}
+
+    def set_event_buffer(%__MODULE__{} = out, {_, _} = buffer),
+      do: %{out | outgoing_ops_buffer: buffer}
+
+    def subscription_pending?(_, %__MODULE__{subscription_pause_queue: {nil, _}}), do: false
+    def subscription_pending?(id, %__MODULE__{subscription_pause_queue: {{_, id}, _}}), do: true
+
+    def subscription_pending?(id, %__MODULE__{subscription_pause_queue: {_, queue}}),
+      do: :queue.any(&match?({_, ^id}, &1), queue)
+  end
+
+  defmodule ResumeRep do
+    defstruct [:repl_conn, :repl_context, :end_lsn]
+
+    @type t :: %__MODULE__{
+            repl_conn: :epgsql.connection(),
+            repl_context: LogicalMessages.Context.t(),
+            end_lsn: Lsn.t()
+          }
+
+    def process_message(binary_msg, %ResumeRep{} = rep) do
+      rep =
+        update_in(rep.repl_context, fn context ->
+          binary_msg
+          |> LogicalReplication.decode_message()
+          |> LogicalMessages.process(context)
+        end)
+
+      case rep.repl_context.transaction do
+        nil -> {nil, rep}
+        %Transaction{} = tx -> {tx, reset_tx(rep)}
+      end
+    end
+
+    defp reset_tx(%ResumeRep{} = rep) do
+      update_in(rep.repl_context, &LogicalMessages.Context.reset_tx/1)
+    end
+  end
+
+  defmodule State do
+    alias Electric.Replication.Shapes.ShapeRequest
+
+    defstruct auth_passed: false,
+              auth: nil,
+              last_msg_time: nil,
+              client_id: nil,
+              expiration_timer: nil,
+              in_rep: %InRep{},
+              out_rep: %OutRep{},
+              resume_rep: nil,
+              auth_provider: nil,
+              connector_config: nil,
+              origin: nil,
+              subscriptions: %{},
+              subscription_data_fun: nil,
+              telemetry: nil
+
+    @type t() :: %__MODULE__{
+            auth_passed: boolean(),
+            auth: nil | Electric.Satellite.Auth.t(),
+            last_msg_time: :erlang.timestamp() | nil | :ping_sent,
+            client_id: String.t() | nil,
+            expiration_timer: {reference(), reference()} | nil,
+            in_rep: InRep.t(),
+            out_rep: OutRep.t(),
+            resume_rep: ResumeRep.t() | nil,
+            auth_provider: Electric.Satellite.Auth.provider(),
+            connector_config: Connectors.config(),
+            origin: Connectors.origin(),
+            subscriptions: map(),
+            subscription_data_fun: fun(),
+            telemetry: Telemetry.t() | nil
+          }
+  end
+
+  defguard auth_passed?(state) when state.auth_passed == true
+  defguard in_rep?(state) when state.in_rep.status == :active
+  defguard is_out_rep_active(state) when state.out_rep.status == :active
+  defguard is_out_rep_paused(state) when state.out_rep.status == :paused
+
+  defguard is_pending_subscription(state, subscription_id)
+           when is_tuple(elem(state.out_rep.subscription_pause_queue, 0)) and
+                  elem(elem(state.out_rep.subscription_pause_queue, 0), 1) == subscription_id
+
+  defguard no_pending_subscriptions(state)
+           when is_nil(elem(state.out_rep.subscription_pause_queue, 0))
+
+>>>>>>> 822510396 (Stream WAL records from the replication slot)
   @spec handle_rpc_request(PB.rpc_req(), State.t()) ::
           {:error, %SatErrorResp{} | PB.rpc_resp()}
           | {:reply, PB.rpc_resp(), State.t()}
@@ -559,6 +822,13 @@ defmodule Electric.Satellite.Protocol do
             {:ok, subscribe_client_to_replication_stream(state, client_pos)}
           end
 
+        :resumable ->
+          # Slow path: stream missed WAL records from the database before subscribing the client to the stream.
+          with {:ok, state} <- try_restoring_subscriptions(msg.subscription_ids, state) do
+            client_lsn = CachedWal.EtsBacked.position_to_lsn(client_pos)
+            stream_transactions_from_wal(state, client_lsn)
+          end
+
         :behind_window ->
           # The client is outside of the resumable WAL window. It will clear its local state and re-establish
           # subscriptions, so we'll discard them here.
@@ -583,9 +853,14 @@ defmodule Electric.Satellite.Protocol do
   end
 
   defp reserve_wal_position(origin, client_id, client_pos) do
+    client_lsn = CachedWal.EtsBacked.position_to_lsn(client_pos)
+
     cond do
       CachedWal.Api.reserve_wal_position(origin, client_id, client_pos) == {:ok, client_pos} ->
         :cached
+
+      LogicalReplicationProducer.reserve_wal_lsn(origin, client_id, client_lsn) == :ok ->
+        :resumable
 
       true ->
         :behind_window
@@ -600,6 +875,67 @@ defmodule Electric.Satellite.Protocol do
 
       {:error, bad_id} ->
         {:error, {:subscription_not_found, bad_id}}
+    end
+  end
+
+  defp stream_transactions_from_wal(%{connector_config: connector_config} = state, client_lsn) do
+    main_slot = Connectors.get_replication_opts(connector_config).slot
+    tmp_slot = "electric_r_" <> String.replace(state.client_id, "-", "")
+
+    {:ok, first_cached_wal_pos} =
+      CachedWal.Api.reserve_wal_position(state.origin, state.client_id, :oldest)
+
+    conn_opts = Connectors.get_connection_opts(connector_config, replication: true)
+    publication = Connectors.get_replication_opts(connector_config).publication
+
+    with {:ok, conn} <- Client.connect(conn_opts),
+         {:ok, _slot_name, _slot_lsn} <-
+           Client.create_temporary_slot(conn, main_slot, tmp_slot),
+         :ok <- Client.set_display_settings_for_replication(conn),
+         :ok <- Client.start_replication(conn, publication, tmp_slot, client_lsn, self()) do
+      # Now that replication has started from the desired LSN, we can remove the reservation
+      # that was made made earlier.
+      LogicalReplicationProducer.cancel_reservation(state.origin, state.client_id)
+
+      repl_context = %LogicalMessages.Context{
+        origin: state.origin,
+        publication: publication
+      }
+
+      resume_rep = %ResumeRep{
+        repl_conn: conn,
+        repl_context: repl_context,
+        end_lsn: CachedWal.EtsBacked.position_to_lsn(first_cached_wal_pos)
+      }
+
+      {:ok, %{state | resume_rep: resume_rep}}
+    end
+  end
+
+  def handle_x_log_data(binary_msg, state) do
+    {tx, resume_rep} = ResumeRep.process_message(binary_msg, state.resume_rep)
+    state = %{state | resume_rep: resume_rep}
+
+    case tx do
+      nil ->
+        {[], state}
+
+      %Transaction{} = tx ->
+        reached_cached_lsn? = Lsn.compare(tx.lsn, resume_rep.end_lsn) in [:eq, :gt]
+
+        state =
+          if reached_cached_lsn? do
+            # This is the last transaction we wanted to stream from WAL.
+            Client.close(resume_rep.repl_conn)
+
+            start_wal_pos = CachedWal.EtsBacked.lsn_to_position(resume_rep.end_lsn)
+            subscribe_client_to_replication_stream(%{state | resume_rep: nil}, start_wal_pos)
+          else
+            state
+          end
+
+        wal_pos = CachedWal.EtsBacked.lsn_to_position(tx.lsn)
+        handle_outgoing_txs([{tx, wal_pos}], state)
     end
   end
 
@@ -734,13 +1070,8 @@ defmodule Electric.Satellite.Protocol do
       out_rep
       | pid: pid,
         status: :active,
-<<<<<<< HEAD
         stage_sub: ref,
         last_seen_wal_pos: client_pos
-=======
-        stage_sub: sub_ref,
-        last_seen_wal_pos: client_pos
->>>>>>> 55760581c (Reserve cached WAL position to prevent its removal during cache cleanup)
     }
 
     %State{state | out_rep: out_rep}
