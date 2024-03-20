@@ -201,7 +201,7 @@ defmodule Electric.Replication.Shapes.Querying do
 
   defp wrap_values(value_list), do: Enum.map(value_list, &quote_escape/1)
   defp quote_escape(nil), do: "NULL"
-  defp quote_escape(str), do: [?', :binary.replace(str, "'", "''"), ?']
+  defp quote_escape(str), do: [?', :binary.replace(str, "'", "''", [:global]), ?']
 
   # TODO: This uses implicit knowledge of graph vertex generation, should be extracted to the same point where id generation lies
   @spec get_join_values(Layer.t(), [map()]) :: [[String.t(), ...]]
@@ -284,7 +284,7 @@ defmodule Electric.Replication.Shapes.Querying do
     ownership_column = Ownership.id_column_name()
 
     if context[:user_id] && Enum.any?(table.columns, &(&1.name == ownership_column)) do
-      escaped = :binary.replace(context[:user_id], "'", "''")
+      escaped = :binary.replace(context[:user_id], "'", "''", [:global])
 
       ["this.", ownership_column, " = '", escaped, ?']
     end
