@@ -4,6 +4,7 @@ import { fromSqlite, toSqlite, isDataObject } from './sqlite'
 import { InvalidArgumentError } from '../validation/errors/invalidArgumentError'
 import { mapObject } from '../util/functions'
 import { PgType } from './types'
+import { isObject } from '../../util'
 
 export enum Transformation {
   Js2Sqlite,
@@ -304,10 +305,6 @@ function transformFieldsAllowingFilters(
   }
 
   return toSqlite(value, pgType)
-}
-
-function isObject(v: any): boolean {
-  return typeof v === 'object' && !Array.isArray(v) && v !== null
 }
 
 function isFilterObject(value: any): boolean {

@@ -1,12 +1,12 @@
 import * as z from 'zod'
 import { InvalidArgumentError } from './errors/invalidArgumentError'
+import { isObject } from '../../util'
 
 function deepOmit(obj: Record<string, any>) {
   Object.keys(obj).forEach((key) => {
     const v = obj[key]
     if (v === undefined) delete obj[key]
-    else if (typeof v === 'object' && !Array.isArray(v) && v !== null)
-      deepOmit(v)
+    else if (isObject(v)) deepOmit(v)
   })
 }
 

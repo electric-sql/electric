@@ -1,4 +1,7 @@
 // not the most precise JSON type
+
+import { isObject } from '../../../util'
+
 // but good enough for serialising/deserialising
 type JSON = string | number | boolean | Array<any> | Record<string, any>
 
@@ -18,10 +21,8 @@ export function deserialiseJSON(v: string): JSON {
 
 function isJsonNull(v: JSON): boolean {
   return (
-    typeof v === 'object' &&
-    !Array.isArray(v) &&
-    v !== null &&
+    isObject(v) &&
     Object.hasOwn(v, '__is_electric_json_null__') &&
-    v['__is_electric_json_null__']
+    (v as Record<string, any>)['__is_electric_json_null__']
   )
 }
