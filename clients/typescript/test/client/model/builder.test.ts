@@ -1,6 +1,5 @@
 import test from 'ava'
 import { ShapeManagerMock } from '../../../src/client/model/shapes'
-// import {ZodError} from 'zod'
 import { schema } from '../generated'
 import { KyselyBuilder } from '../../../src/client/model/kyselyBuilder'
 import { ZodError } from 'zod'
@@ -100,42 +99,44 @@ test('createMany query', (t) => {
   t.deepEqual(query2.parameters, ['i1', 't1', 'c1', 18, 'i2', 't2', 'c2', 21])
 })
 
-// test('findUnique query', async (t) => {
-//   const query = tbl
-//     .findUnique({
-//       where: {
-//         id: 'i2',
-//         nbr: 21,
-//       },
-//     })
-//     .toString()
-//
-//   t.is(
-//     query,
-//     "SELECT id, nbr, title, contents FROM Post WHERE (id = 'i2') AND (nbr = 21) LIMIT 2"
-//   )
-// })
-//
-// test('findUnique query with selection', (t) => {
-//   const query = tbl
-//     .findUnique({
-//       where: {
-//         id: 'i2',
-//         nbr: 21,
-//       },
-//       select: {
-//         title: true,
-//         contents: false,
-//       },
-//     })
-//     .toString()
-//
-//   t.is(
-//     query,
-//     "SELECT id, nbr, title FROM Post WHERE (id = 'i2') AND (nbr = 21) LIMIT 2"
-//   )
-// })
-//
+test('findUnique query', async (t) => {
+  const query = tbl
+    .findUnique({
+      where: {
+        id: 'i2',
+        nbr: 21,
+      },
+    })
+    .compile()
+
+  t.is(
+    query.sql,
+    'select "id", "nbr", "title", "contents" from "Post" where "id" = (?) and "nbr" = (?) limit ?'
+  )
+  t.deepEqual(query.parameters, ['i2', 21, 2])
+})
+
+test('findUnique query with selection', (t) => {
+  const query = tbl
+    .findUnique({
+      where: {
+        id: 'i2',
+        nbr: 21,
+      },
+      select: {
+        title: true,
+        contents: false,
+      },
+    })
+    .compile()
+
+  t.is(
+    query.sql,
+    'select "id", "nbr", "title" from "Post" where "id" = (?) and "nbr" = (?) limit ?'
+  )
+  t.deepEqual(query.parameters, ['i2', 21, 2])
+})
+
 test('findUnique query with selection of NULL value', (t) => {
   const query = tbl
     .findUnique({

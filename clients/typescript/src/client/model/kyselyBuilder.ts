@@ -50,7 +50,7 @@ const db = new Kysely<any>({
  * args - The arguments for the SQL statement.
  */
 type RegularFilter = {
-  type: 'generic'
+  type: 'regular'
   sql: string
   op: ComparisonOperatorExpression
   args?: unknown[]
