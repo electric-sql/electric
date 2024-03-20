@@ -24,13 +24,15 @@ defmodule Electric.Postgres.CachedWal.Api do
           cache_memory_total: non_neg_integer()
         }
 
-  @callback lsn_in_cached_window?(Connectors.origin(), wal_pos) :: boolean
-  @callback get_current_position(Connectors.origin()) :: wal_pos | nil
+  @callback get_current_position(Connectors.origin()) :: wal_pos() | nil
   @callback next_segment(Connectors.origin(), wal_pos()) ::
               {:ok, segment(), new_position :: wal_pos()} | :latest | {:error, term()}
   @callback request_notification(Connectors.origin(), wal_pos()) ::
               {:ok, await_ref()} | {:error, term()}
   @callback cancel_notification_request(Connectors.origin(), await_ref()) :: :ok
+  @callback reserve_wal_position(Connectors.origin(), binary(), wal_pos()) ::
+              {:ok, wal_pos()} | :error
+  @callback cancel_reservation(Connectors.origin(), binary()) :: :ok
 
   @callback serialize_wal_position(wal_pos()) :: binary()
   @callback parse_wal_position(binary()) :: {:ok, wal_pos()} | :error
@@ -40,17 +42,6 @@ defmodule Electric.Postgres.CachedWal.Api do
 
   def default_module,
     do: Application.fetch_env!(:electric, __MODULE__) |> Keyword.fetch!(:adapter)
-
-  @doc """
-  Check if the given LSN falls into the caching window maintained by the cached WAL implementation.
-
-  This checks needs to be done for every client. If their LSN is outside of the caching window, we won't be able to
-  guarantee data consistency via the replication stream alone.
-  """
-  @spec lsn_in_cached_window?(module(), Connectors.origin(), wal_pos) :: boolean
-  def lsn_in_cached_window?(module \\ default_module(), origin, lsn) do
-    module.lsn_in_cached_window?(origin, lsn)
-  end
 
   @doc """
   Get the latest LSN that the cached WAL has seen.
@@ -115,6 +106,26 @@ defmodule Electric.Postgres.CachedWal.Api do
   @spec cancel_notification_request(module(), Connectors.origin(), await_ref()) :: :ok
   def cancel_notification_request(module \\ default_module(), origin, await_ref) do
     module.cancel_notification_request(origin, await_ref)
+  end
+
+  @doc """
+  Reserve the given wal pos to prevent its garbage collection.
+
+  The reservation is held until a matching `cancel_reservation/3` call.
+
+  If `wal_pos` is behind the cached window, `:error` is returned.
+  """
+  @spec reserve_wal_position(module(), Connectors.origin(), binary(), wal_pos()) :: :ok | :error
+  def reserve_wal_position(module \\ default_module(), origin, client_id, wal_pos) do
+    module.reserve_wal_position(origin, client_id, wal_pos)
+  end
+
+  @doc """
+  Release the reservation previously made with `reserve_wal_position/4`.
+  """
+  @spec cancel_reservation(module(), Connectors.origin(), binary()) :: :ok
+  def cancel_reservation(module \\ default_module(), origin, client_id) do
+    module.cancel_reservation(origin, client_id)
   end
 
   @spec parse_wal_position(module(), binary()) :: {:ok, wal_pos()} | :error
