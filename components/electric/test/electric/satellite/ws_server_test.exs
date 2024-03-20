@@ -8,6 +8,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
   alias Electric.Replication.SatelliteConnector
   alias Electric.Postgres.CachedWal.Producer
+  alias Electric.Postgres.Lsn
 
   alias Satellite.TestWsClient, as: MockClient
 
@@ -101,7 +102,22 @@ defmodule Electric.Satellite.WebsocketServerTest do
       end,
       cancel_reservation: fn "fake_origin", _client_id -> :ok end,
       stream_transactions: fn _, _, _ -> [] end
-    }
+    },
+    {
+      Electric.Replication.Postgres.LogicalReplicationProducer,
+      [:passthrough],
+      reserve_wal_lsn: fn "fake_origin", _client_id, client_lsn ->
+        if Lsn.to_integer(client_lsn) > @current_wal_pos + 10 do
+          :error
+        else
+          :ok
+        end
+      end
+    },
+    {Electric.Satellite.SubscriptionManager, [:passthrough],
+     save_subscription: fn "fake_origin", _client_id, _subscription_id, _shape_requests -> :ok end,
+     delete_subscription: fn "fake_origin", _client_id, _subscription_id -> :ok end,
+     delete_all_subscriptions: fn "fake_origin", _client_id -> :ok end}
   ]) do
     %{}
   end
