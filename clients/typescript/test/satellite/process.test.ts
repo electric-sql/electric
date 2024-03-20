@@ -101,7 +101,7 @@ test('load metadata', async (t) => {
     lsn: '',
     clientId: '',
     subscriptions: '',
-    seenAdditionalData: null,
+    seenAdditionalData: '',
   })
 })
 

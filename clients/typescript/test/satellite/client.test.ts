@@ -807,7 +807,7 @@ test.serial('RPC subscribe flow is not interleaved', async (t) => {
   const shapeReq: ShapeRequest = {
     requestId: 'fake',
     definition: {
-      selects: [{ tablename: 'fake' }],
+      tablename: 'fake',
     },
   }
 
