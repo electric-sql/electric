@@ -18,7 +18,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
 
     setup(ctx) do
       user_id = "a5408365-7bf4-48b1-afe2-cb8171631d7c"
-      client_id = "device-id-0000"
+      client_id = "device-id-0000" <> uuid4()
       port = 55133
 
       plug =
@@ -31,6 +31,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
 
       on_exit(fn ->
         drain_pids(active_clients())
+        Electric.Satellite.ClientReconnectionInfo.clear_all_data(client_id)
       end)
 
       {:ok, user_id: user_id, client_id: client_id, token: token, port: port}
@@ -1124,6 +1125,169 @@ defmodule Electric.Satellite.SubscriptionsTest do
                           ]
                         }},
                        100
+      end)
+    end
+
+    @other_entry_id uuid4()
+
+    @tag with_sql: """
+         INSERT INTO public.users (id, name) VALUES ('#{@john_doe_id}', 'John Doe');
+         INSERT INTO public.users (id, name) VALUES ('#{@jane_doe_id}', 'Jane Doe');
+         INSERT INTO public.authored_entries (id, author_id, content) VALUES ('#{@entry_id}', '#{@john_doe_id}', 'Hello world');
+         INSERT INTO public.authored_entries (id, author_id, content) VALUES ('#{@other_entry_id}', '#{@jane_doe_id}', 'Goodbye world');
+         INSERT INTO public.comments (id, entry_id, content, author_id) VALUES ('#{uuid4()}', '#{@other_entry_id}', 'Comment 3', '#{@john_doe_id}');
+         """
+    test "Client reconnection works with partial acknowledgment of additional data",
+         %{conn: pg_conn} = ctx do
+      sub_id = uuid4()
+
+      {last_lsn, rel_map} =
+        MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
+          rel_map = start_replication_and_assert_response(conn, ctx.electrified_count)
+          request_id = uuid4()
+
+          request =
+            ProtocolHelpers.subscription_request(
+              sub_id,
+              {request_id,
+               users: [
+                 where: "this.id = '#{@john_doe_id}'",
+                 include: [
+                   authored_entries: [
+                     over: "author_id",
+                     include: [comments: [over: "entry_id"]]
+                   ]
+                 ]
+               ]}
+            )
+
+          assert {:ok, %SatSubsResp{err: nil}} =
+                   MockClient.make_rpc_call(conn, "subscribe", request)
+
+          assert {lsn,
+                  {[^request_id],
+                   [
+                     %{row_data: %{values: [_, "John Doe"]}},
+                     %{row_data: %{values: [_, "Hello world", _]}}
+                   ]}} = receive_subscription_data(conn, sub_id, returning_lsn: true)
+
+          # Insert a row that's in shape for this client
+          {:ok, 1} =
+            :epgsql.equery(
+              pg_conn,
+              "INSERT INTO public.comments (id, content, entry_id, author_id) VALUES ($1, $2, $3, $4)",
+              [uuid4(), "Comment 1", @entry_id, @john_doe_id]
+            )
+
+          assert [%NewRecord{record: %{"content" => "Comment 1"}}] =
+                   receive_txn_changes(conn, rel_map)
+
+          # Disconnect, but keep subscription LSN
+          {lsn, rel_map}
+        end)
+
+      {last_lsn, xid} =
+        MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
+          # Reconnect at a point in the past
+          assert {:ok, _} =
+                   MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{
+                     lsn: last_lsn,
+                     subscription_ids: [sub_id]
+                   })
+
+          # Assert that we immediately receive the data that falls into the continued subscription
+          # and is part of the shape based on the graph information
+          assert [%NewRecord{record: %{"content" => "Comment 1"}}] =
+                   receive_txn_changes(conn, rel_map)
+
+          # Update an entry to move it in
+          {:ok, 1} =
+            :epgsql.equery(
+              pg_conn,
+              "UPDATE public.authored_entries SET author_id = $1 WHERE id = $2",
+              [@john_doe_id, @other_entry_id]
+            )
+
+          assert %{
+                   changes: [
+                     %NewRecord{record: %{"id" => @other_entry_id}}
+                   ],
+                   lsn: lsn,
+                   additional_data_ref: ref,
+                   xid: xid
+                 } = receive_txn(conn, rel_map)
+
+          assert {^ref,
+                  [
+                    %NewRecord{record: %{"content" => "Comment 3"}}
+                  ]} = receive_additional_changes(conn, rel_map)
+
+          # Return lsn to reconnect "not having seen" additional changes
+          {lsn, xid}
+        end)
+
+      MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
+        # Reconnect at a point in the past without
+        assert {:ok, _} =
+                 MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{
+                   lsn: last_lsn,
+                   subscription_ids: [sub_id]
+                 })
+
+        # The server should refetch and resend additional data at this point
+        assert {_, [%NewRecord{record: %{"content" => "Comment 3"}}]} =
+                 receive_additional_changes(conn, rel_map)
+      end)
+
+      MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
+        # Reconnecting at the same point is idempotent
+        assert {:ok, _} =
+                 MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{
+                   lsn: last_lsn,
+                   subscription_ids: [sub_id]
+                 })
+
+        # The server should refetch and resend additional data at this point
+        assert {_, [%NewRecord{record: %{"content" => "Comment 3"}}]} =
+                 receive_additional_changes(conn, rel_map)
+      end)
+
+      MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
+        # But once you've "seen" additional data, you won't see it any more
+        assert {:ok, _} =
+                 MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{
+                   lsn: last_lsn,
+                   subscription_ids: [sub_id],
+                   observed_transaction_data: [xid]
+                 })
+
+        # Unrelated insert to make sure we definitely didn't see that additional data
+        {:ok, 1} =
+          :epgsql.equery(
+            pg_conn,
+            "INSERT INTO public.comments (id, content, entry_id, author_id) VALUES ($1, $2, $3, $4)",
+            [uuid4(), "Comment 2", @entry_id, @john_doe_id]
+          )
+
+        assert [%NewRecord{record: %{"content" => "Comment 2"}}] =
+                 receive_txn_changes(conn, rel_map)
+
+        refute_received {^conn, %SatOpLog{ops: [%{op: {:additional_begin, _}} | _]}}
+      end)
+
+      MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
+        # And a reconnect won't change the fact you've "seen" it
+        assert {:ok, _} =
+                 MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{
+                   lsn: last_lsn,
+                   subscription_ids: [sub_id],
+                   observed_transaction_data: []
+                 })
+
+        assert [%NewRecord{record: %{"content" => "Comment 2"}}] =
+                 receive_txn_changes(conn, rel_map)
+
+        refute_received {^conn, %SatOpLog{ops: [%{op: {:additional_begin, _}} | _]}}
       end)
     end
   end

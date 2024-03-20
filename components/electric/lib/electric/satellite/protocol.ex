@@ -2,29 +2,26 @@ defmodule Electric.Satellite.Protocol do
   @moduledoc """
   Protocol for communication with Satellite
   """
-  alias Electric.Satellite.ClientReconnectionInfo
   use Electric.Satellite.Protobuf
-  import Electric.Satellite.Protobuf, only: [is_allowed_rpc_method: 1]
-
   use Pathex
-
+  import Electric.Satellite.Protobuf, only: [is_allowed_rpc_method: 1]
   import Electric.Postgres.Extension, only: [is_migration_relation: 1]
 
-  alias Electric.Postgres.CachedWal
-
-  alias Electric.Replication.Connectors
-  alias Electric.Utils
   alias SatSubsResp.SatSubsError
 
+  alias Electric.Utils
   alias Electric.Replication.Changes.Transaction
   alias Electric.Postgres.Extension.SchemaCache
   alias Electric.Postgres.Schema
+  alias Electric.Postgres.CachedWal
   alias Electric.Replication.Changes
+  alias Electric.Replication.Connectors
   alias Electric.Replication.Shapes
   alias Electric.Replication.Shapes.ShapeRequest
   alias Electric.Satellite.Serialization
   alias Electric.Satellite.ClientManager
   alias Electric.Satellite.WriteValidation
+  alias Electric.Satellite.ClientReconnectionInfo
   alias Electric.Telemetry.Metrics
 
   alias Electric.Satellite.Protocol.{State, InRep, OutRep, Telemetry}
@@ -919,8 +916,7 @@ defmodule Electric.Satellite.Protocol do
        relations,
        %SatSubsDataBegin{
          subscription_id: id,
-         lsn:
-           Electric.Postgres.CachedWal.Api.serialize_wal_position(state.out_rep.last_seen_wal_pos)
+         lsn: CachedWal.Api.serialize_wal_position(state.out_rep.last_seen_wal_pos)
        },
        [messages, more_msgs],
        %SatSubsDataEnd{}

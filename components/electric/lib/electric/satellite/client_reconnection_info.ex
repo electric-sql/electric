@@ -111,27 +111,32 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   Client cannot reconnect before their last checkpoint - this guarantees garbage collection
   opportunity for the server. When the client reconnects with a list of subscriptions,
   we fetch the sent rows graph at the checkpoint. After that:
-  1. If the client has sent less subscriptions when we established, then we clean the graph up
+  1. If the client has sent less subscriptions than we established, then we clean the graph up
      as if the client unsubscribed
-  2. The client sends a set of transaction IDs for which it hadn't seen additional data.
-     Any "wrong" ID in this case will be ignored.
+  2. The client sends a set of transaction IDs for which it had seen additional data.
+     Any "wrong" ID in this case will be ignored. Only transactions whose data
+     arrived immediately after the last acknowledged transaction matters - all
+     others will be considered received because of insertion point ordering.
   3. The client sends continuation LSN
   4. Transactions are fetched from checkpoint to continuation LSN, and then applied to the
-     sent rows graph. If any subscription
+     sent rows graph. Any subscription established is applied at a point where the initial
+     data was sent. Any seen additional data is cleared.
+  5. If the client has seen the transaction, but not the additional data for it, then we
+     redo the query for that transaction and act as if the client had just reached that txn.
 
   ## Implementation details
 
   Again, we're storing, uniquely identified by the client ID:
-  1. A single checkpoint - LSN, txid, and a set of still-missing additional data points
-     that the client has acknowledged>, LSN, txid of a last "fully acknowledged" transaction,
-     and a sent rows graph valid for this transaction. We consider a transaction fully
-     acknowledged when both the transaction and additional data has been received. This
-     is important to correctly either replay additional data changes or re-query additional
-     data.
+  1. A single checkpoint - LSN for an acknowledged transaction and a sent rows graph valid
+     for this transaction.
   2. A list of fully established subscriptions with data insertion points (xmin)
   3. A set of additional data insertion points (both subscription and transaction) with
      a graph diff additional data produced. Insertion points need to have xmin and the
      insertion reason - transaction ID.
+  4. A set of "actions" - structures describing a query to be executed in order to get
+     additional data for a transaction - for transactions that have been acknowledged,
+     but additional data for them hadn't.
+
 
   It's quite important to store only a graph diff and not a full new graph because
   ETS - what's likely to always act as a fast cache here - does full object copy on
@@ -187,6 +192,15 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     GenServer.start_link(__MODULE__, [], name: __MODULE__)
   end
 
+  @doc """
+  Remove all stored data about client reconnection.
+
+  Current implementation deletes a bunch of stuff from ETS without
+  doing `:ets.safe_fixtable/2` because it carries an assumption
+  that only one process will concurrently edit info for a particular
+  client. This is ensured by `Electric.Satellite.ClientManager` allowing
+  at most one WebSocket process with the same client id.
+  """
   def clear_all_data(client_id) do
     :ets.match_delete(@actions_ets, {{client_id, :_}, :_})
     :ets.match_delete(@subscriptions_ets, {{client_id, :_}, :_, :_, :_})
@@ -405,12 +419,32 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
         # No additional data left for the client, great!
         graph
 
-      {_client_id, _xmin, _order, kind, id} = key ->
-        if MapSet.member?(acknowledged, {kind, id}) do
-          # Client has seen this! Use it to advance the graph and delete it as confirmed.
+      {_client_id, _xmin, _order, :subscription, id} = key ->
+        if MapSet.member?(acknowledged, {:subscription, id}) do
+          # Client has seen this subscription! Use it to advance the graph and delete it as confirmed.
           diff = :ets.lookup_element(@additional_data_ets, key, 2)
           graph = merge_in_graph_diff(graph, diff)
           :ets.delete(@additional_data_ets, key)
+          # See if we can do one more
+          advance_by_additional_data(graph, client_id, acknowledged)
+        else
+          # Client hasn't seen this, so we're done here
+          graph
+        end
+
+      {_client_id, _xmin, _order, :transaction, _} = key ->
+        # We're this lookup here and additional one below to avoid copying in a graph if we don't need it.
+        # Full key lookups are fast enough for this.
+        covered_txns = :ets.lookup_element(@additional_data_ets, key, 3)
+
+        # It's impossible for the client to see additional data for only one transaction out of a covered set,
+        # since it's sent all in bulk without separation as to which transaction caused what exactly.
+        if Enum.any?(covered_txns, &MapSet.member?(acknowledged, {:transaction, &1})) do
+          # Client has seen this additional data blob!
+          diff = :ets.lookup_element(@additional_data_ets, key, 2)
+          graph = merge_in_graph_diff(graph, diff)
+          :ets.delete(@additional_data_ets, key)
+          clear_stored_actions(client_id, covered_txns)
           # See if we can do one more
           advance_by_additional_data(graph, client_id, acknowledged)
         else

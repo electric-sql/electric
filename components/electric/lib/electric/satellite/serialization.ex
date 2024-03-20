@@ -52,7 +52,8 @@ defmodule Electric.Satellite.Serialization do
       lsn: lsn,
       origin: trans.origin,
       transaction_id: trans.xid,
-      is_migration: state.is_migration
+      is_migration: state.is_migration,
+      additional_data_ref: trans.additional_data_ref
     }
 
     tx_commit = %SatOpCommit{
@@ -398,7 +399,8 @@ defmodule Electric.Satellite.Serialization do
           publication: "",
           commit_timestamp: dt,
           lsn: op.lsn,
-          ack_fn: fn -> ack_fun.(op.lsn) end
+          ack_fn: fn -> ack_fun.(op.lsn) end,
+          additional_data_ref: op.additional_data_ref
         }
 
         {trans, complete}

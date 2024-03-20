@@ -7,6 +7,20 @@ defmodule ElectricTest.SatelliteHelpers do
 
   alias Satellite.TestWsClient, as: MockClient
 
+  @type col_info :: %{
+          name: String.t(),
+          type: atom(),
+          nullable?: boolean(),
+          pk_position: pos_integer() | nil
+        }
+  @type cached_rels :: %{
+          optional(non_neg_integer()) => %{
+            columns: [col_info()],
+            schema: binary(),
+            table: binary()
+          }
+        }
+
   @doc """
   Starts the replication and then asserts that the server sends all messages
   that it should to `Satellite.TestWsClient` after replication request has been sent.
@@ -15,6 +29,7 @@ defmodule ElectricTest.SatelliteHelpers do
   there is only one migration that includes all tables. If you need more granular control over
   this response -- don't use this function.
   """
+  @spec start_replication_and_assert_response(term(), non_neg_integer()) :: cached_rels()
   def start_replication_and_assert_response(conn, table_count) do
     assert {:ok, _} =
              MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{})
@@ -67,20 +82,25 @@ defmodule ElectricTest.SatelliteHelpers do
     end
   end
 
-  def receive_txn_changes(conn, cached_relations, timeout \\ 1000) do
+  def receive_txn(conn, cached_relations, timeout \\ 1000) do
     assert_receive {^conn, %SatOpLog{} = oplog}, timeout
 
     assert {nil, [%Transaction{} = txn]} =
              Serialization.deserialize_trans("postgres_1", oplog, nil, cached_relations, & &1)
 
-    Enum.sort_by(txn.changes, &{&1.__struct__, &1.relation})
+    %{txn | changes: Enum.sort_by(txn.changes, &{&1.__struct__, &1.relation})}
   end
+
+  def receive_txn_changes(conn, cached_relations, timeout \\ 1000),
+    do: Map.fetch!(receive_txn(conn, cached_relations, timeout), :changes)
 
   def receive_additional_changes(conn, cached_relations, timeout \\ 1000) do
     assert_receive {^conn, %SatOpLog{} = oplog}, timeout
 
     assert {nil, [{:additional_data, ref, changes}]} =
              Serialization.deserialize_trans("postgres_1", oplog, nil, cached_relations, & &1)
+
+    assert is_integer(ref)
 
     {ref, Enum.sort_by(changes, &{&1.__struct__, &1.relation})}
   end
@@ -139,7 +159,7 @@ defmodule ElectricTest.SatelliteHelpers do
   and verifies their order. Returns a tuple, with first element being all the mentioned request IDs, and the second being all the data.
   """
   @spec receive_subscription_data(term(), String.t(), [
-          {:timeout, non_neg_integer()} | {:expecting_lsn, String.t()}
+          {:timeout, non_neg_integer()} | {:expecting_lsn, String.t()} | {:returning_lsn, true}
         ]) :: {[String.t()], [%SatOpInsert{}]}
   def receive_subscription_data(conn, subscription_id, opts \\ []) do
     # TODO: Addition of shapes complicated initial data sending for multiple requests due to records
@@ -155,8 +175,11 @@ defmodule ElectricTest.SatelliteHelpers do
           _ -> nil
         end
 
-        receive_rest_of_subscription_data(conn, [])
-        |> assert_subscription_data_format({[], []})
+        result =
+          receive_rest_of_subscription_data(conn, [])
+          |> assert_subscription_data_format({[], []})
+
+        if Keyword.has_key?(opts, :returning_lsn), do: {received_lsn, result}, else: result
     after
       first_message_timeout ->
         {:messages, messages} = :erlang.process_info(self(), :messages)
