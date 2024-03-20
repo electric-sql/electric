@@ -71,3 +71,18 @@ jobs:
         run: make build
       - name: Run tests
         run: make tests
+  maybe_publish:
+    runs-on: ubuntu-latest
+    needs: [test, check_types, verify_formatting]
+    if: ${{ github.ref_name == 'main' }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 8
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: pnpm
+      - run: make deps
+      - run: pnpm run release-canary
