@@ -8,6 +8,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
   alias Electric.Replication.SatelliteConnector
   alias Electric.Postgres.CachedWal.Producer
+  alias Electric.Postgres.Lsn
 
   alias Satellite.TestWsClient, as: MockClient
 
@@ -80,11 +81,31 @@ defmodule Electric.Satellite.WebsocketServerTest do
       Electric.Postgres.CachedWal.Api,
       [:passthrough],
       get_current_position: fn _ -> @current_wal_pos end,
-      lsn_in_cached_window?: fn _origin, pos when is_integer(pos) ->
-        pos > @current_wal_pos
+      reserve_wal_position: fn "fake_origin", _client_id, wal_pos ->
+        if wal_pos > @current_wal_pos + 10 do
+          :error
+        else
+          {:ok, wal_pos}
+        end
       end,
+      cancel_reservation: fn "fake_origin", _client_id -> :ok end,
       stream_transactions: fn _, _, _ -> [] end
-    }
+    },
+    {
+      Electric.Replication.Postgres.LogicalReplicationProducer,
+      [:passthrough],
+      reserve_wal_lsn: fn "fake_origin", _client_id, client_lsn ->
+        if Lsn.to_integer(client_lsn) > @current_wal_pos + 10 do
+          :error
+        else
+          :ok
+        end
+      end
+    },
+    {Electric.Satellite.SubscriptionManager, [:passthrough],
+     save_subscription: fn "fake_origin", _client_id, _subscription_id, _shape_requests -> :ok end,
+     delete_subscription: fn "fake_origin", _client_id, _subscription_id -> :ok end,
+     delete_all_subscriptions: fn "fake_origin", _client_id -> :ok end}
   ]) do
     {:ok, %{}}
   end
@@ -791,12 +812,12 @@ defmodule Electric.Satellite.WebsocketServerTest do
       end)
     end
 
-    test "results in an error response when the client is outside of the cached WAL window",
+    test "results in an error response when the client is outside of the resumable WAL window",
          ctx do
       with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
         assert {:ok, %SatInStartReplicationResp{err: error}} =
                  MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{
-                   lsn: "1"
+                   lsn: "13"
                  })
 
         assert %SatInStartReplicationResp.ReplicationError{code: :BEHIND_WINDOW} = error
