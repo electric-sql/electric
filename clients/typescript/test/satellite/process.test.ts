@@ -1615,7 +1615,7 @@ test('applied shape data will be acted upon correctly', async (t) => {
   }
 })
 
-test.only('additional data will be stored properly', async (t) => {
+test('additional data will be stored properly', async (t) => {
   const { client, satellite, adapter } = t.context
   const { runMigrations, authState, token } = t.context
   await runMigrations()
