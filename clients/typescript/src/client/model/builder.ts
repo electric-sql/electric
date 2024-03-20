@@ -22,6 +22,9 @@ const squelPostgres = squel.useFlavour('postgres')
 squelPostgres.registerValueHandler('bigint', function (bigint) {
   return bigint.toString()
 })
+squelPostgres.registerValueHandler(Uint8Array, function (uint8) {
+  return uint8
+})
 
 type AnyFindInput = FindInput<any, any, any, any, any>
 
