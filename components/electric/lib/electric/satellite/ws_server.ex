@@ -35,6 +35,7 @@ defmodule Electric.Satellite.WebsocketServer do
 
   alias Electric.Utils
   alias Electric.Postgres.CachedWal
+  alias Electric.Replication.Connectors
   alias Electric.Replication.InitialSync
   alias Electric.Satellite.Protocol
   alias Electric.Satellite.Protocol.State
@@ -51,11 +52,14 @@ defmodule Electric.Satellite.WebsocketServer do
 
   @impl WebSock
   def init(opts) do
+    connector_config = Keyword.fetch!(opts, :connector_config)
+
     {:ok,
      schedule_ping(%State{
        last_msg_time: :erlang.timestamp(),
        auth_provider: Keyword.fetch!(opts, :auth_provider),
-       connector_config: Keyword.fetch!(opts, :connector_config),
+       connector_config: connector_config,
+       origin: Connectors.origin(connector_config),
        subscription_data_fun: Keyword.fetch!(opts, :subscription_data_fun),
        move_in_data_fun: Keyword.fetch!(opts, :move_in_data_fun),
        out_rep: %OutRep{allowed_unacked_txs: Keyword.get(opts, :allowed_unacked_txs, 30)},
@@ -199,9 +203,7 @@ defmodule Electric.Satellite.WebsocketServer do
   # While processing the SatInStartReplicationReq message, Protocol has determined that a new
   # client has connected which needs to perform the initial sync of migrations and the current database state before
   # subscribing to the replication stream.
-  def handle_info({:perform_initial_sync_and_subscribe, msg}, %State{} = state) do
-    origin = Electric.Replication.Connectors.origin(state.connector_config)
-
+  def handle_info({:perform_initial_sync_and_subscribe, msg}, %State{origin: origin} = state) do
     # Fetch the latest observed LSN from the cached WAL. We have to do it before fetching migrations.
     #
     # If we were to do it the other way around, we could miss a migration that is committed right after the call to
