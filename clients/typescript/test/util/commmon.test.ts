@@ -6,6 +6,8 @@ import {
   textEncoder,
   textDecoder,
   isObject,
+  blobToHexString,
+  hexStringToBlob,
 } from '../../src/util/common'
 import { SatelliteError, SatelliteErrorCode } from '../../src/util/types'
 
@@ -108,6 +110,18 @@ test('test textEncoder replacement decodes Unicode characters', (t) => {
   const alternativeDecoded = textDecoder.decode(originalEncoded)
   t.is(alternativeDecoded, originalString)
   t.is(originalDecoded, alternativeDecoded)
+})
+
+test.only('test type encoding/decoding works for arbitrary bytestrings', (t) => {
+  const blob = new Uint8Array([0, 1, 255, 245, 5, 155])
+  const expectedEncoding = '0001fff5059b'
+
+  t.deepEqual(blobToHexString(blob), expectedEncoding)
+  t.deepEqual(hexStringToBlob(expectedEncoding), blob)
+
+  // should also handle empty bytestring
+  t.deepEqual(blobToHexString(new Uint8Array([])), '')
+  t.deepEqual(hexStringToBlob(''), new Uint8Array([]))
 })
 
 test('test isObject detects only objects and not arrays', (t) => {
