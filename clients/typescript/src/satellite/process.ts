@@ -23,6 +23,7 @@ import {
 } from '../util/common'
 import { QualifiedTablename } from '../util/tablename'
 import {
+  AdditionalData,
   ConnectivityState,
   ConnectivityStatus,
   DataChange,
@@ -64,11 +65,10 @@ import { mergeEntries } from './merge'
 import { SubscriptionsManager } from './shapes'
 import { InMemorySubscriptionsManager } from './shapes/manager'
 import {
-  ClientShapeDefinition,
+  Shape,
   InitialDataChange,
   ShapeDefinition,
   ShapeRequest,
-  ShapeSelect,
   SubscribeResponse,
   SubscriptionData,
 } from './shapes/types'
@@ -78,6 +78,7 @@ import { isFatal, isOutOfSyncError, isThrowable, wrapFatalError } from './error'
 import { inferRelationsFromSQLite } from '../util/relations'
 import { decodeUserIdFromToken } from '../auth/secure'
 import { InvalidArgumentError } from '../client/validation/errors/invalidArgumentError'
+import Long from 'long'
 
 type ChangeAccumulator = {
   [key: string]: Change
@@ -97,6 +98,7 @@ type MetaEntries = {
   compensations: number
   lsn: string | null
   subscriptions: string
+  seenAdditionalData: string
 }
 
 type ConnectRetryHandler = (error: Error, attempt: number) => boolean
@@ -135,7 +137,7 @@ export class SatelliteProcess implements Satellite {
 
   relations: RelationsCache
 
-  previousShapeSubscriptions: ClientShapeDefinition[]
+  previousShapeSubscriptions: Shape[]
   subscriptions: SubscriptionsManager
   subscriptionNotifiers: Record<string, ReturnType<typeof emptyPromise<void>>>
   subscriptionIdGenerator: (...args: any) => string
@@ -294,8 +296,8 @@ export class SatelliteProcess implements Satellite {
     // reverts to off on commit/abort
     stmts.push({ sql: 'PRAGMA defer_foreign_keys = ON' })
     shapeDefs
-      .flatMap((def: ShapeDefinition) => def.definition.selects)
-      .map((select: ShapeSelect) => {
+      .flatMap((def: ShapeDefinition) => def.definition)
+      .map((select: Shape) => {
         tablenames.push('main.' + select.tablename)
         return 'main.' + select.tablename
       }) // We need "fully qualified" table names in the next calls
@@ -320,6 +322,7 @@ export class SatelliteProcess implements Satellite {
     this.client.subscribeToError(this._handleClientError.bind(this))
     this.client.subscribeToRelations(this._updateRelations.bind(this))
     this.client.subscribeToTransactions(this._applyTransaction.bind(this))
+    this.client.subscribeToAdditionalData(this._applyAdditionalData.bind(this))
     this.client.subscribeToOutboundStarted(this._throttledSnapshot.bind(this))
 
     this.client.subscribeToSubscriptionEvents(
@@ -365,9 +368,7 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  async subscribe(
-    shapeDefinitions: ClientShapeDefinition[]
-  ): Promise<ShapeSubscription> {
+  async subscribe(shapeDefinitions: Shape[]): Promise<ShapeSubscription> {
     // Await for client to be ready before doing anything else
     await this.initializing?.waitOn()
 
@@ -466,7 +467,11 @@ export class SatelliteProcess implements Satellite {
   // Applies initial data for a shape subscription. Current implementation
   // assumes there are no conflicts INSERTing new rows and only expects
   // subscriptions for entire tables.
-  async _applySubscriptionData(changes: InitialDataChange[], lsn: LSN) {
+  async _applySubscriptionData(
+    changes: InitialDataChange[],
+    lsn: LSN,
+    additionalStmts: Statement[] = []
+  ) {
     const stmts: Statement[] = []
     stmts.push({ sql: 'PRAGMA defer_foreign_keys = ON' })
 
@@ -528,7 +533,9 @@ export class SatelliteProcess implements Satellite {
     for (const [table, { relation, dataChanges }] of groupedChanges) {
       const records = dataChanges.map((change) => change.record)
       const columnNames = relation.columns.map((col) => col.name)
-      const sqlBase = `INSERT INTO ${table} (${columnNames.join(', ')}) VALUES `
+      const sqlBase = `INSERT OR IGNORE INTO ${table} (${columnNames.join(
+        ', '
+      )}) VALUES `
 
       stmts.push(
         ...prepareInsertBatchedStatements(
@@ -557,7 +564,8 @@ export class SatelliteProcess implements Satellite {
     // Then update subscription state and LSN
     stmts.push(
       this._setMetaStatement('subscriptions', this.subscriptions.serialize()),
-      this.updateLsnStmt(lsn)
+      this.updateLsnStmt(lsn),
+      ...additionalStmts
     )
 
     try {
@@ -605,7 +613,7 @@ export class SatelliteProcess implements Satellite {
     const subscriptionIds = this.subscriptions.getFulfilledSubscriptions()
 
     if (opts?.keepSubscribedShapes) {
-      const shapeDefs: ClientShapeDefinition[] = subscriptionIds
+      const shapeDefs: Shape[] = subscriptionIds
         .map((subId) => this.subscriptions.shapesForActiveSubscription(subId))
         .filter((s): s is ShapeDefinition[] => s !== undefined)
         .flatMap((s: ShapeDefinition[]) => s.map((i) => i.definition))
@@ -855,11 +863,16 @@ export class SatelliteProcess implements Satellite {
       // such that we can resume and inform Electric
       // about fulfilled subscriptions
       const subscriptionIds = this.subscriptions.getFulfilledSubscriptions()
+      const observedTransactionData = await this._getMeta('seenAdditionalData')
 
       const { error } = await this.client.startReplication(
         this._lsn,
         schemaVersion,
-        subscriptionIds.length > 0 ? subscriptionIds : undefined
+        subscriptionIds.length > 0 ? subscriptionIds : undefined,
+        observedTransactionData
+          .split(',')
+          .filter((x) => x !== '')
+          .map((x) => Long.fromString(x))
       )
 
       if (error) {
@@ -1152,6 +1165,7 @@ export class SatelliteProcess implements Satellite {
         }
 
         switch (entryChanges.optype) {
+          case OPTYPES.gone:
           case OPTYPES.delete:
             stmts.push(_applyDeleteOperation(entryChanges, tablenameStr))
             stmts.push(this._deleteShadowTagsStatement(shadowEntry))
@@ -1279,6 +1293,7 @@ export class SatelliteProcess implements Satellite {
     stmts.push({ sql: 'PRAGMA defer_foreign_keys = ON' })
     // update lsn.
     stmts.push(this.updateLsnStmt(lsn))
+    stmts.push(this._resetSeenAdditionalDataStmt())
 
     const processDML = async (changes: DataChange[]) => {
       const tx = {
@@ -1379,6 +1394,15 @@ export class SatelliteProcess implements Satellite {
     await this._notifyChanges(opLogEntries, 'remote')
   }
 
+  async _applyAdditionalData(data: AdditionalData) {
+    // Server sends additional data on move-ins and tries to send only data
+    // the client has never seen from its perspective. Because of this, we're writing this
+    // data directly, like subscription data
+    return this._applySubscriptionData(data.changes, this._lsn!, [
+      this._addSeenAdditionalDataStmt(data.ref.toString()),
+    ])
+  }
+
   private async maybeGarbageCollect(
     origin: string,
     commitTimestamp: Date
@@ -1419,6 +1443,22 @@ export class SatelliteProcess implements Satellite {
         },
       ]
     else return []
+  }
+
+  _addSeenAdditionalDataStmt(ref: string): Statement {
+    const meta = this.opts.metaTable.toString()
+
+    const sql = `
+      INSERT INTO ${meta} (key, value) VALUES ('seenAdditionalData', ?)
+        ON CONFLICT (key) DO
+          UPDATE SET value = value || ',' || excluded.value
+    `
+    const args = [ref]
+    return { sql, args }
+  }
+
+  _resetSeenAdditionalDataStmt(): Statement {
+    return this._setMetaStatement('seenAdditionalData', '')
   }
 
   _setMetaStatement<K extends keyof MetaEntries>(
@@ -1502,11 +1542,7 @@ export class SatelliteProcess implements Satellite {
    */
   private updateLsnStmt(lsn: LSN): Statement {
     this._lsn = lsn
-    const lsn_base64 = base64.fromBytes(lsn)
-    return {
-      sql: `UPDATE ${this.opts.metaTable.tablename} set value = ? WHERE key = ?`,
-      args: [lsn_base64, 'lsn'],
-    }
+    return this._setMetaStatement('lsn', base64.fromBytes(lsn))
   }
 
   private async checkMaxSqlParameters() {

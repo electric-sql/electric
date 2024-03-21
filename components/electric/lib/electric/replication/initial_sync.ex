@@ -6,6 +6,7 @@ defmodule Electric.Replication.InitialSync do
   history, etc.
   """
 
+  alias Electric.Utils
   alias Electric.Telemetry.Metrics
   alias Electric.Replication.Shapes
   alias Electric.Postgres.{CachedWal, Extension}
@@ -69,7 +70,7 @@ defmodule Electric.Replication.InitialSync do
 
   This function is expected to send two messages to `parent` process which is the satellite websocket:
 
-  1. `{:subscription_insertion_point, ^ref, xmin}` is sent immediately to know where to insert
+  1. `{:data_insertion_point, ^ref, xmin}` is sent immediately to know where to insert
      results when they are ready. That message **has** to be sent ASAP since if we send the results
      at the end, we might have already skipped the point where the data is relevant.
   2. `{:subscription_data, subscription_id, data}` is when we've collected all the data.
@@ -97,10 +98,90 @@ defmodule Electric.Replication.InitialSync do
         connection: opts,
         telemetry_span: span
       ) do
-    Client.with_conn(Connectors.get_connection_opts(opts), fn conn ->
-      origin = Connectors.origin(opts)
-      {:ok, schema_version} = Extension.SchemaCache.load(origin)
+    marker = "subscription:" <> subscription_id
+    origin = Connectors.origin(opts)
+    {:ok, schema_version} = Extension.SchemaCache.load(origin)
 
+    start_readonly_txn_with_checkpoint(opts, {ref, parent}, marker, fn conn, _ ->
+      Enum.reduce_while(requests, {Graph.new(), %{}, []}, fn request,
+                                                             {acc_graph, results, req_ids} ->
+        start = System.monotonic_time()
+
+        case Shapes.ShapeRequest.query_initial_data(
+               request,
+               conn,
+               schema_version,
+               origin,
+               context
+             ) do
+          {:ok, data, graph} ->
+            Metrics.span_event(
+              span,
+              :shape_data,
+              %{duration: System.monotonic_time() - start},
+              %{shape_hash: request.hash}
+            )
+
+            {:cont,
+             {Utils.merge_graph_edges(acc_graph, graph),
+              Map.merge(results, data, fn _, {change, v1}, {_, v2} -> {change, v1 ++ v2} end),
+              [request.id | req_ids]}}
+
+          {:error, reason} ->
+            {:halt, {:error, reason}}
+        end
+      end)
+      |> case do
+        {:error, reason} ->
+          send(parent, {:subscription_init_failed, subscription_id, reason})
+
+        results ->
+          send(parent, {:subscription_data, subscription_id, results})
+      end
+    end)
+  end
+
+  def query_after_move_in(move_in_ref, {subquery_map, affected_txs}, context,
+        reply_to: {ref, parent},
+        connection: opts
+      ) do
+    marker = "tx_subquery:#{:erlang.monotonic_time()}"
+    origin = Connectors.origin(opts)
+    {:ok, schema_version} = Extension.SchemaCache.load(origin)
+
+    start_readonly_txn_with_checkpoint(opts, {ref, parent}, marker, fn conn, xmin ->
+      Enum.reduce_while(subquery_map, {Graph.new(), %{}}, fn {layer, changes},
+                                                             {acc_graph, results} ->
+        case Shapes.ShapeRequest.query_moved_in_layer_data(
+               conn,
+               layer,
+               changes,
+               schema_version,
+               origin,
+               context
+             ) do
+          {:ok, _, data, graph} ->
+            {:cont,
+             {Utils.merge_graph_edges(acc_graph, graph),
+              Map.merge(results, data, fn _, {change, v1}, {_, v2} -> {change, v1 ++ v2} end)}}
+
+          {:error, reason} ->
+            {:halt, {:error, reason}}
+        end
+      end)
+      |> case do
+        {:error, reason} ->
+          send(parent, {:move_in_query_failed, move_in_ref, reason})
+
+        results ->
+          send(parent, {:move_in_query_data, move_in_ref, xmin, results, affected_txs})
+      end
+    end)
+  end
+
+  defp start_readonly_txn_with_checkpoint(opts, {ref, parent}, marker, fun)
+       when is_function(fun, 2) do
+    Client.with_conn(Connectors.get_connection_opts(opts), fn conn ->
       Client.with_transaction(
         "ISOLATION LEVEL REPEATABLE READ READ ONLY",
         conn,
@@ -109,7 +190,7 @@ defmodule Electric.Replication.InitialSync do
           # 1. after the transaction had started, and
           # 2. in a separate transaction (thus on a different connection), and
           # 3. before the potentially big read queries to ensure this arrives ASAP on any data size
-          Task.start(fn -> perform_magic_write(opts, subscription_id) end)
+          Task.start(fn -> perform_magic_write(opts, marker) end)
 
           {:ok, _, [{xmin}]} =
             :epgsql.squery(
@@ -117,49 +198,16 @@ defmodule Electric.Replication.InitialSync do
               "SELECT pg_snapshot_xmin(pg_current_snapshot());"
             )
 
-          send(parent, {:subscription_insertion_point, ref, String.to_integer(xmin)})
-
-          Enum.reduce_while(requests, [], fn request, results ->
-            start = System.monotonic_time()
-
-            case Shapes.ShapeRequest.query_initial_data(
-                   request,
-                   conn,
-                   schema_version,
-                   origin,
-                   context
-                 ) do
-              {:ok, num_records, data} ->
-                Metrics.span_event(
-                  span,
-                  :shape_data,
-                  %{duration: System.monotonic_time() - start, row_count: num_records},
-                  %{shape_hash: Shapes.ShapeRequest.hash(request)}
-                )
-
-                {:cont, [{request.id, data} | results]}
-
-              {:error, reason} ->
-                {:halt, {:error, reason}}
-            end
-          end)
-          |> case do
-            {:error, reason} ->
-              send(parent, {:subscription_init_failed, subscription_id, reason})
-
-            results ->
-              send(parent, {:subscription_data, subscription_id, results})
-          end
+          send(parent, {:data_insertion_point, ref, String.to_integer(xmin)})
+          fun.(conn, String.to_integer(xmin))
         end
       )
     end)
   end
 
-  defp perform_magic_write(opts, subscription_id) do
+  defp perform_magic_write(opts, marker) do
     opts
     |> Connectors.get_connection_opts()
-    |> Client.with_conn(
-      &Extension.update_transaction_marker(&1, "subscription:" <> subscription_id)
-    )
+    |> Client.with_conn(&Extension.update_transaction_marker(&1, marker))
   end
 end

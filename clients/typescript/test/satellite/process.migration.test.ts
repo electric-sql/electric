@@ -10,6 +10,7 @@ import { generateTag } from '../../src/satellite/oplog'
 import {
   DataChange,
   DataChangeType,
+  Relation,
   Row,
   SchemaChange,
   Statement,
@@ -192,28 +193,28 @@ const addColumnRelation = {
       name: 'id',
       type: 'INTEGER',
       isNullable: false,
-      primaryKey: true,
+      primaryKey: 1,
     },
     {
       name: 'value',
       type: 'TEXT',
       isNullable: true,
-      primaryKey: false,
+      primaryKey: undefined,
     },
     {
       name: 'other',
       type: 'INTEGER',
       isNullable: true,
-      primaryKey: false,
+      primaryKey: undefined,
     },
     {
       name: 'baz',
       type: 'TEXT',
       isNullable: true,
-      primaryKey: false,
+      primaryKey: undefined,
     },
   ],
-}
+} satisfies Relation
 const newTableRelation = {
   id: 2001, // doesn't matter
   schema: 'public',
@@ -224,22 +225,22 @@ const newTableRelation = {
       name: 'id',
       type: 'TEXT',
       isNullable: false,
-      primaryKey: true,
+      primaryKey: 1,
     },
     {
       name: 'foo',
       type: 'INTEGER',
       isNullable: true,
-      primaryKey: false,
+      primaryKey: undefined,
     },
     {
       name: 'bar',
       type: 'TEXT',
       isNullable: true,
-      primaryKey: false,
+      primaryKey: undefined,
     },
   ],
-}
+} satisfies Relation
 
 async function checkMigrationIsApplied(t: ExecutionContext<CurrentContext>) {
   await assertDbHasTables(t, 'parent', 'child', 'NewTable')

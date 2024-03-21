@@ -11,12 +11,13 @@ defmodule Satellite.ProtocolHelpers do
 
   def subscription_request(id \\ nil, shape_requests) do
     shape_requests
+    |> List.wrap()
     |> Enum.map(fn
-      {id, tables: tables} ->
+      {id, tables} ->
         %SatShapeReq{
           request_id: to_string(id),
           shape_definition: %SatShapeDef{
-            selects: tables |> Enum.map(&%SatShapeDef.Select{tablename: &1})
+            selects: Enum.map(tables, &unwrap_tables/1)
           }
         }
     end)
@@ -26,6 +27,57 @@ defmodule Satellite.ProtocolHelpers do
         shape_requests: &1
       }
     )
+  end
+
+  def simple_sub_request(tables) when is_list(tables) do
+    subscription_id = Electric.Utils.uuid4()
+    request_id = Electric.Utils.uuid4()
+
+    {subscription_id, request_id,
+     %SatSubsReq{
+       subscription_id: subscription_id,
+       shape_requests: [
+         %SatShapeReq{
+           request_id: request_id,
+           shape_definition: %SatShapeDef{
+             selects: Enum.map(tables, &unwrap_tables/1)
+           }
+         }
+       ]
+     }}
+  end
+
+  defp unwrap_tables(table) when is_binary(table), do: unwrap_tables({table, []})
+
+  defp unwrap_tables({table, kw_list}) do
+    base_select =
+      %SatShapeDef.Select{
+        tablename: to_string(table),
+        where: Keyword.get(kw_list, :where, ""),
+        include:
+          Enum.map(Keyword.get(kw_list, :include, []), fn x ->
+            case unwrap_tables(x) do
+              %SatShapeDef.Relation{} = rel ->
+                rel
+
+              _ ->
+                raise ArgumentError,
+                  message:
+                    "nested tables need an `:over` key in their kw list that specifies an FK to follow"
+            end
+          end)
+      }
+
+    case Keyword.fetch(kw_list, :over) do
+      {:ok, fk} ->
+        %SatShapeDef.Relation{
+          foreign_key: Enum.map(List.wrap(fk), &to_string/1),
+          select: base_select
+        }
+
+      :error ->
+        base_select
+    end
   end
 
   def schema("public.entries") do
@@ -119,8 +171,8 @@ defmodule Satellite.ProtocolHelpers do
         do: commit_time,
         else: DateTime.to_unix(commit_time, :millisecond)
 
-    begin = {:begin, %SatOpBegin{commit_timestamp: commit_time, lsn: lsn, trans_id: ""}}
-    commit = {:commit, %SatOpCommit{commit_timestamp: commit_time, lsn: lsn, trans_id: ""}}
+    begin = {:begin, %SatOpBegin{commit_timestamp: commit_time, lsn: lsn}}
+    commit = {:commit, %SatOpCommit{commit_timestamp: commit_time, lsn: lsn}}
     ops = [begin] ++ List.wrap(op_or_ops) ++ [commit]
 
     ops =

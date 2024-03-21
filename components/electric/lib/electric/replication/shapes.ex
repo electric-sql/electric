@@ -2,27 +2,79 @@ defmodule Electric.Replication.Shapes do
   @moduledoc """
   Context to work with replication shapes.
   """
-  import Electric.Postgres.Extension, only: [is_migration_relation: 1]
-  alias Electric.Utils
+
+  alias Electric.Replication.Shapes.ShapeRequest.Layer
+  alias Electric.Replication.Changes
+  alias Electric.Satellite.SatShapeReq
+  alias Electric.Postgres.Extension.SchemaCache
+  alias Electric.Postgres.Extension.SchemaLoader.Version, as: SchemaVersion
   alias Electric.Replication.Changes.Transaction
-  alias Electric.Postgres.Extension.{SchemaCache, SchemaLoader}
   alias Electric.Replication.Shapes.ShapeRequest
-  use Electric.Satellite.Protobuf
+  alias Electric.Replication.Shapes.ChangeProcessing.Reduction
+  alias Electric.Replication.Shapes.ChangeProcessing
 
-  @doc """
-  Remove all changes from a transaction which do not belong to any of the
-  requested shapes.
+  import Electric.Postgres.Extension
 
-  May result in a transaction with no changes.
-  """
-  @spec filter_changes_from_tx(Transaction.t(), [term()]) :: Transaction.t()
-  def filter_changes_from_tx(%Transaction{changes: changes} = tx, shapes) do
-    %{tx | changes: Enum.filter(changes, &change_belongs_to_any_shape?(&1, shapes))}
+  @type subquery_actions :: %{optional(Layer.t()) => [{Layer.graph_key(), Changes.change()}]}
+
+  @spec process_transaction(Transaction.t(), Graph.t(), [ShapeRequest.t()]) ::
+          {Transaction.t(), Graph.t(), subquery_actions()}
+  def process_transaction(%Transaction{} = tx, graph, shapes) do
+    state = Reduction.new(graph)
+
+    referenced =
+      Enum.flat_map(tx.referenced_records, fn {rel, items} ->
+        Enum.map(items, fn {pk, referenced} ->
+          {{rel, pk},
+           %Changes.UpdatedRecord{
+             relation: referenced.relation,
+             record: referenced.record,
+             old_record: referenced.record,
+             tags: referenced.tags
+           }}
+        end)
+      end)
+
+    state =
+      Enum.reduce(tx.changes, state, fn
+        %{relation: relation} = change, state when is_migration_relation(relation) ->
+          # For DDL changes, we let them through by always adding them to the resulting changes
+          Reduction.add_passthrough_operation(state, change)
+
+        change, state ->
+          process_change_using_shapes(shapes, change, state)
+      end)
+
+    {graph, changes, actions} =
+      Enum.reduce(referenced, state, fn {id, change}, state ->
+        if Reduction.graph_includes_id?(state, id) do
+          state
+        else
+          process_change_using_shapes(shapes, change, state)
+        end
+      end)
+      |> ChangeProcessing.finalize_process()
+      |> Reduction.unwrap()
+
+    {%Transaction{tx | changes: changes}, graph, actions}
   end
 
-  defp change_belongs_to_any_shape?(change, shapes) do
-    is_migration_relation(change.relation) or
-      Enum.any?(shapes, &ShapeRequest.change_belongs_to_shape?(&1, change))
+  @doc """
+  Process changes that didn't come in the form of a full transaction, but still need to be
+  filtered and incorporated into the graph.
+  """
+  @spec process_additional_changes(Enumerable.t(Changes.change()), Graph.t(), [ShapeRequest.t()]) ::
+          {Graph.t(), [Changes.change()], subquery_actions()}
+  def process_additional_changes(changes, graph, shapes) do
+    Enum.reduce(changes, Reduction.new(graph), &process_change_using_shapes(shapes, &1, &2))
+    |> ChangeProcessing.finalize_process()
+    |> Reduction.unwrap()
+  end
+
+  defp process_change_using_shapes(shapes, change, state) do
+    shapes
+    |> Enum.flat_map(&ShapeRequest.relevant_layers(&1, change))
+    |> Enum.reduce(state, &ChangeProcessing.process(change, &1, &2))
   end
 
   @doc """
@@ -42,10 +94,15 @@ defmodule Electric.Replication.Shapes do
           {:ok, [ShapeRequest.t(), ...]} | {:error, [{String.t(), atom(), String.t()}]}
   def validate_requests(shape_requests, origin) do
     {:ok, schema_version} = SchemaCache.load(origin)
-    graph = SchemaLoader.Version.fk_graph(schema_version)
+    graph = SchemaVersion.fk_graph(schema_version)
 
     shape_requests
-    |> Enum.map(&validate_request(&1, graph))
+    |> Enum.map(fn req ->
+      case ShapeRequest.from_satellite(req, graph, schema_version) do
+        {:ok, %ShapeRequest{} = result} -> result
+        {:error, {code, message}} -> {req.request_id, code, message}
+      end
+    end)
     |> Enum.split_with(&is_struct(&1, ShapeRequest))
     |> case do
       {results, []} -> {:ok, results}
@@ -53,63 +110,16 @@ defmodule Electric.Replication.Shapes do
     end
   end
 
-  @spec validate_request(%SatShapeReq{}, Graph.t()) ::
-          ShapeRequest.t() | {String.t(), atom(), String.t()}
-  defp validate_request(%SatShapeReq{shape_definition: shape} = request, graph) do
-    with :ok <- request_cannot_be_empty(shape),
-         :ok <- table_names_are_valid(shape),
-         :ok <- tables_should_exist(shape, graph),
-         :ok <- tables_should_not_duplicate(shape),
-         :ok <- all_fks_should_be_included(shape, graph) do
-      ShapeRequest.from_satellite_request(request)
-    else
-      {code, message} -> {request.request_id, code, message}
-    end
+  @type action_context :: {actions :: subquery_actions(), source_tx_ids :: [non_neg_integer()]}
+
+  @spec merge_actions(action_context(), action_context()) :: action_context()
+  def merge_actions({a1, l1}, {a2, l2}) when is_list(l1) and is_list(l2) do
+    {Map.merge(a1, a2, fn _, v1, v2 -> v1 ++ v2 end), l1 ++ l2}
   end
 
-  defp request_cannot_be_empty(%SatShapeDef{selects: []}),
-    do: {:EMPTY_SHAPE_DEFINITION, "Empty shape requests are not allowed"}
-
-  defp request_cannot_be_empty(_), do: :ok
-
-  defp table_names_are_valid(%SatShapeDef{selects: selects}) do
-    if Enum.all?(
-         selects,
-         &(String.length(&1.tablename) in 1..64 and String.printable?(&1.tablename))
-       ) do
-      :ok
-    else
-      {:TABLE_NOT_FOUND, "Invalid table name"}
-    end
-  end
-
-  defp tables_should_exist(%SatShapeDef{selects: selects}, graph) do
-    tables = Enum.map(selects, & &1.tablename)
-
-    case Enum.reject(tables, &Graph.has_vertex?(graph, &1)) do
-      [] -> :ok
-      unknowns -> {:TABLE_NOT_FOUND, "Unknown tables: #{Enum.join(unknowns, ",")}"}
-    end
-  end
-
-  defp tables_should_not_duplicate(%SatShapeDef{selects: selects}) do
-    if Utils.has_duplicates_by?(selects, & &1.tablename) do
-      {:DUPLICATE_TABLE_IN_SHAPE_DEFINITION, "Cannot select same table twice"}
-    else
-      :ok
-    end
-  end
-
-  defp all_fks_should_be_included(%SatShapeDef{selects: selects}, graph) do
-    queried_tables = Enum.map(selects, & &1.tablename)
-
-    case Graph.reachable(graph, queried_tables) -- queried_tables do
-      [] ->
-        :ok
-
-      missing_reachable ->
-        {:REFERENTIAL_INTEGRITY_VIOLATION,
-         "Some tables are missing from the shape request, but are referenced by FKs on the requested tables: #{Enum.join(missing_reachable, ",")}"}
-    end
+  @spec merge_actions_for_tx(action_context(), subquery_actions(), non_neg_integer()) ::
+          action_context()
+  def merge_actions_for_tx({a1, l1}, a2, new_txid) when is_list(l1) and is_integer(new_txid) do
+    {Map.merge(a1, a2, fn _, v1, v2 -> v1 ++ v2 end), [new_txid | l1]}
   end
 end

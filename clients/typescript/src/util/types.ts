@@ -80,6 +80,8 @@ export enum SatelliteErrorCode {
   REFERENTIAL_INTEGRITY_VIOLATION,
   EMPTY_SHAPE_DEFINITION,
   DUPLICATE_TABLE_IN_SHAPE_DEFINITION,
+  INVALID_WHERE_CLAUSE_IN_SHAPE_DEFINITION,
+  INVALID_INCLUDE_TREE_IN_SHAPE_DEFINITION,
 
   // shape data errors
   SHAPE_DELIVERY_ERROR,
@@ -112,6 +114,16 @@ export type Transaction = {
   migrationVersion?: string // the Postgres version number if this is a migration
 }
 
+export type ServerTransaction = Transaction & {
+  id: Long
+  additionalDataRef?: Long
+}
+
+export interface AdditionalData {
+  ref: Long
+  changes: DataInsert[]
+}
+
 // A transaction whose changes are only DML statements
 // i.e. the transaction does not contain migrations
 export type DataTransaction = Omit<
@@ -126,6 +138,7 @@ export enum DataChangeType {
   UPDATE = 'UPDATE',
   DELETE = 'DELETE',
   COMPENSATION = 'COMPENSATION',
+  GONE = 'GONE',
 }
 
 export type Change = DataChange | SchemaChange
@@ -135,6 +148,13 @@ export type DataChange = {
   type: DataChangeType
   record?: Record
   oldRecord?: Record
+  tags: Tag[]
+}
+
+export type DataInsert = {
+  relation: Relation
+  type: DataChangeType.INSERT
+  record: Record
   tags: Tag[]
 }
 
@@ -167,6 +187,22 @@ export type Replication<TransactionType> = {
   transactions: TransactionType[]
 }
 
+export interface InboundReplication extends Replication<ServerTransaction> {
+  lastTxId: Long | undefined
+  lastAckedTxId: Long | undefined
+  unackedTxs: number
+  maxUnackedTxs: number
+  ackTimer: ReturnType<typeof setTimeout>
+  ackPeriod: number
+  additionalData: AdditionalData[]
+  unseenAdditionalDataRefs: Set<string>
+  incomplete?: 'transaction' | 'additionalData'
+  seenAdditionalDataSinceLastTx: {
+    subscriptions: string[]
+    dataRefs: Long[]
+  }
+}
+
 export type Relation = {
   id: number
   schema: string
@@ -179,7 +215,7 @@ export type RelationColumn = {
   name: string
   type: string
   isNullable: boolean
-  primaryKey?: boolean
+  primaryKey?: number
 }
 
 export type RelationsCache = { [k: string]: Relation }
@@ -193,7 +229,12 @@ export enum ReplicationStatus {
 
 export type ErrorCallback = (error: SatelliteError) => void
 export type RelationCallback = (relation: Relation) => void
-export type TransactionCallback = (transaction: Transaction) => Promise<void>
+export type AdditionalDataCallback = (
+  data: AdditionalData
+) => void | Promise<void>
+export type TransactionCallback = (
+  transaction: ServerTransaction
+) => Promise<void>
 export type IncomingTransactionCallback = (
   transaction: DataTransaction,
   AckCb: () => void

@@ -13,7 +13,7 @@ defmodule Electric.Postgres.PBTest do
     test "message for transaction" do
       begin = %SatOpBegin{
         commit_timestamp: :os.system_time(:millisecond),
-        trans_id: "",
+        transaction_id: 10,
         lsn: "234234"
       }
 
@@ -47,7 +47,7 @@ defmodule Electric.Postgres.PBTest do
 
       commit = %SatOpCommit{
         commit_timestamp: :os.system_time(:millisecond),
-        trans_id: "",
+        transaction_id: 10,
         lsn: "245242342"
       }
 

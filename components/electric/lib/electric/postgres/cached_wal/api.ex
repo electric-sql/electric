@@ -30,6 +30,7 @@ defmodule Electric.Postgres.CachedWal.Api do
 
   @callback serialize_wal_position(wal_pos()) :: binary()
   @callback parse_wal_position(binary()) :: {:ok, wal_pos()} | :error
+  @callback compare_positions(wal_pos(), wal_pos()) :: :lt | :eq | :gt
 
   @callback telemetry_stats() :: stats() | nil
 
@@ -69,6 +70,33 @@ defmodule Electric.Postgres.CachedWal.Api do
           {:ok, segment(), new_position :: wal_pos()} | :latest | {:error, :lsn_too_old}
   def next_segment(module \\ default_module(), wal_pos) do
     module.next_segment(wal_pos)
+  end
+
+  def compare_positions(module \\ default_module(), wal_pos_1, wal_pos_2),
+    do: module.compare_positions(wal_pos_1, wal_pos_2)
+
+  @spec get_transactions(module(), from: wal_pos(), to: wal_pos()) ::
+          {:ok, [{segment(), wal_pos()}]} | {:error, :lsn_too_old}
+  def get_transactions(module \\ default_module(), from: from_pos, to: to_pos) do
+    if lsn_in_cached_window?(module, from_pos) do
+      {:ok, Enum.to_list(stream_transactions(module, from: from_pos, to: to_pos))}
+    else
+      {:error, :lsn_too_old}
+    end
+  end
+
+  @spec stream_transactions([{:from, any()} | {:to, any()}, ...]) ::
+          Enumerable.t({segment(), wal_pos()})
+  def stream_transactions(module \\ default_module(), from: from_pos, to: to_pos) do
+    Stream.unfold(from_pos, fn from_pos ->
+      case next_segment(module, from_pos) do
+        {:ok, segment, new_pos} ->
+          if module.compare_positions(new_pos, to_pos) != :gt, do: {segment, new_pos}, else: nil
+
+        :latest ->
+          nil
+      end
+    end)
   end
 
   @doc """

@@ -203,6 +203,18 @@ export class DbSchema<T extends TableSchemas> {
     return relation.relatedTable
   }
 
+  getForeignKey(table: TableName, field: FieldName): FieldName {
+    const relationName = this.getRelationName(table, field)
+    const relation = this.getRelation(table, relationName)
+    if (relation.isOutgoingRelation()) {
+      return relation.fromField
+    }
+    // it's an incoming relation
+    // we need to fetch the `fromField` from the outgoing relation
+    const oppositeRelation = relation.getOppositeRelation(this)
+    return oppositeRelation.fromField
+  }
+
   // Profile.post <-> Post.profile (from: profileId, to: id)
   getRelations(table: TableName): Relation[] {
     return this.extendedTables[table].relations

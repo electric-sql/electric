@@ -145,14 +145,14 @@ defmodule Electric.Postgres.Schema do
     graph =
       tables
       |> Enum.filter(&(&1.name.schema == @public_schema))
-      |> Enum.map(& &1.name.name)
+      |> Enum.map(&{@public_schema, &1.name.name})
       |> then(&Graph.add_vertices(Graph.new(), &1))
 
     Enum.reduce(tables, graph, fn %Proto.Table{constraints: constraints, name: name}, graph ->
       constraints
       |> Enum.filter(&match?(%{constraint: {:foreign, _}}, &1))
       |> Enum.map(fn %{constraint: {:foreign, fk}} ->
-        {name.name, fk.pk_table.name, label: fk.fk_cols}
+        {{@public_schema, name.name}, {@public_schema, fk.pk_table.name}, label: fk.fk_cols}
       end)
       |> then(&Graph.add_edges(graph, &1))
     end)
@@ -170,6 +170,18 @@ defmodule Electric.Postgres.Schema do
       nil -> nil
       enum -> enum.values
     end
+  end
+
+  @spec table_info!(t(), {name(), name()} | integer()) :: Replication.Table.t()
+  def table_info!(schema, oid_or_tuple) do
+    {:ok, table_info} = table_info(schema, oid_or_tuple)
+    table_info
+  end
+
+  @spec table_info!(t(), name(), name()) :: Replication.Table.t()
+  def table_info!(schema, pg_schema, table_name) do
+    {:ok, table_info} = table_info(schema, pg_schema, table_name)
+    table_info
   end
 
   @doc """

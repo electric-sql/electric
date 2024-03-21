@@ -451,6 +451,8 @@ test.serial('migration transaction contains all information', async (t) => {
       t.deepEqual(transaction, {
         commit_timestamp: commit.commitTimestamp,
         lsn: begin.lsn,
+        id: undefined,
+        additionalDataRef: undefined,
         changes: [
           {
             migrationType: Proto.SatOpMigrate_Type.CREATE_TABLE,
@@ -781,7 +783,8 @@ test.serial('subscription succesful', async (t) => {
   const shapeReq: ShapeRequest = {
     requestId: 'fake',
     definition: {
-      selects: [{ tablename: 'fake' }],
+      tablename: 'fake',
+      include: [{ foreignKey: ['foreign_id'], select: { tablename: 'other' } }],
     },
   }
 
@@ -804,7 +807,7 @@ test.serial('RPC subscribe flow is not interleaved', async (t) => {
   const shapeReq: ShapeRequest = {
     requestId: 'fake',
     definition: {
-      selects: [{ tablename: 'fake' }],
+      tablename: 'fake',
     },
   }
 
@@ -829,14 +832,14 @@ test.serial(
     const shapeReq1: ShapeRequest = {
       requestId: 'fake1',
       definition: {
-        selects: [{ tablename: 'fake1' }],
+        tablename: 'fake1',
       },
     }
 
     const shapeReq2: ShapeRequest = {
       requestId: 'fake2',
       definition: {
-        selects: [{ tablename: 'fake2' }],
+        tablename: 'fake2',
       },
     }
 
@@ -878,7 +881,7 @@ test.serial('listen to subscription events: error', async (t) => {
   const shapeReq: ShapeRequest = {
     requestId: 'fake',
     definition: {
-      selects: [{ tablename: 'fake' }],
+      tablename: 'fake',
     },
   }
 
@@ -895,7 +898,7 @@ test.serial('listen to subscription events: error', async (t) => {
   })
   server.nextRpcResponse('subscribe', [subsResp, '50ms', subsData, subsError])
 
-  const success = () => t.fail()
+  const success = () => void t.fail()
   const error = () => t.pass()
 
   client.subscribeToSubscriptionEvents(success, error)
@@ -916,7 +919,7 @@ test.serial('subscription incorrect protocol sequence', async (t) => {
   const shapeReq: ShapeRequest = {
     requestId,
     definition: {
-      selects: [{ tablename }],
+      tablename,
     },
   }
 
@@ -1062,14 +1065,14 @@ test.serial('subscription correct protocol sequence with data', async (t) => {
   const shapeReq1: ShapeRequest = {
     requestId: requestId1,
     definition: {
-      selects: [{ tablename }],
+      tablename,
     },
   }
 
   const shapeReq2: ShapeRequest = {
     requestId: requestId2,
     definition: {
-      selects: [{ tablename }],
+      tablename,
     },
   }
 
@@ -1124,6 +1127,136 @@ test.serial('subscription correct protocol sequence with data', async (t) => {
   await client.subscribe(subscriptionId, [shapeReq1, shapeReq2])
 
   await promise
+})
+
+test.serial('client correctly handles additional data messages', async (t) => {
+  await connectAndAuth(t.context)
+  const { client, server } = t.context
+
+  const dbDescription = new DbSchema(
+    {
+      table: {
+        fields: new Map([
+          ['name1', PgBasicType.PG_TEXT],
+          ['name2', PgBasicType.PG_TEXT],
+        ]),
+        relations: [],
+      } as unknown as TableSchema<
+        any,
+        any,
+        any,
+        any,
+        any,
+        any,
+        any,
+        any,
+        any,
+        HKT
+      >,
+    },
+    []
+  )
+
+  client['dbDescription'] = dbDescription
+
+  const start = Proto.SatInStartReplicationResp.create()
+  const begin = Proto.SatOpBegin.create({
+    commitTimestamp: Long.ZERO,
+    additionalDataRef: 10,
+  })
+  const commit = Proto.SatOpCommit.create({ additionalDataRef: 10 })
+
+  const rel: Relation = {
+    id: 1,
+    schema: 'schema',
+    table: 'table',
+    tableType: Proto.SatRelation_RelationType.TABLE,
+    columns: [
+      { name: 'name1', type: 'TEXT', isNullable: true },
+      { name: 'name2', type: 'TEXT', isNullable: true },
+    ],
+  }
+
+  const relation = Proto.SatRelation.fromPartial({
+    relationId: 1,
+    schemaName: 'schema',
+    tableName: 'table',
+    tableType: Proto.SatRelation_RelationType.TABLE,
+    columns: [
+      Proto.SatRelationColumn.fromPartial({
+        name: 'name1',
+        type: 'TEXT',
+        isNullable: true,
+      }),
+      Proto.SatRelationColumn.fromPartial({
+        name: 'name2',
+        type: 'TEXT',
+        isNullable: true,
+      }),
+    ],
+  })
+
+  const insertOp = Proto.SatOpInsert.fromPartial({
+    relationId: 1,
+    rowData: serializeRow({ name1: 'Foo', name2: 'Bar' }, rel, dbDescription),
+  })
+
+  const secondInsertOp = Proto.SatOpInsert.fromPartial({
+    relationId: 1,
+    rowData: serializeRow({ name1: 'More', name2: 'Data' }, rel, dbDescription),
+  })
+
+  const firstOpLogMessage = Proto.SatOpLog.fromPartial({
+    ops: [
+      Proto.SatTransOp.fromPartial({ begin }),
+      Proto.SatTransOp.fromPartial({ insert: insertOp }),
+      Proto.SatTransOp.fromPartial({ commit }),
+    ],
+  })
+
+  const secondOpLogMessage = Proto.SatOpLog.fromPartial({
+    ops: [
+      Proto.SatTransOp.fromPartial({
+        additionalBegin: Proto.SatOpAdditionalBegin.create({ ref: 10 }),
+      }),
+      Proto.SatTransOp.fromPartial({ insert: secondInsertOp }),
+      Proto.SatTransOp.fromPartial({
+        additionalCommit: Proto.SatOpAdditionalCommit.create({ ref: 10 }),
+      }),
+    ],
+  })
+
+  const stop = Proto.SatInStopReplicationResp.create()
+
+  server.nextRpcResponse('startReplication', [
+    start,
+    relation,
+    firstOpLogMessage,
+    '100ms',
+    secondOpLogMessage,
+  ])
+  server.nextRpcResponse('stopReplication', [stop])
+
+  await new Promise<void>((res) => {
+    let txnSeen = false
+
+    client.subscribeToTransactions(async (transaction) => {
+      t.is(transaction.changes.length, 1)
+      t.assert(transaction.additionalDataRef?.eq(10))
+
+      txnSeen = true
+    })
+
+    client.subscribeToAdditionalData(async (data) => {
+      t.assert(data.ref.eq(10))
+      t.is(data.changes.length, 1)
+      t.like(data.changes[0].record, { name1: 'More' })
+
+      if (txnSeen) res()
+    })
+
+    return client.startReplication()
+  })
 })
 
 test.serial('unsubscribe successfull', async (t) => {

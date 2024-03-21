@@ -1,5 +1,5 @@
 import { mkdir, rm as removeFile } from 'node:fs/promises'
-import { randomValue } from '../../src/util'
+import { RelationsCache, randomValue } from '../../src/util'
 import Database from 'better-sqlite3'
 import type { Database as SqliteDB } from 'better-sqlite3'
 import { DatabaseAdapter } from '../../src/drivers/better-sqlite3'
@@ -51,13 +51,13 @@ export const relations = {
         name: 'id',
         type: 'INTEGER',
         isNullable: false,
-        primaryKey: true,
+        primaryKey: 1,
       },
       {
         name: 'parent',
         type: 'INTEGER',
         isNullable: true,
-        primaryKey: false,
+        primaryKey: undefined,
       },
     ],
   },
@@ -71,19 +71,19 @@ export const relations = {
         name: 'id',
         type: 'INTEGER',
         isNullable: false,
-        primaryKey: true,
+        primaryKey: 1,
       },
       {
         name: 'value',
         type: 'TEXT',
         isNullable: true,
-        primaryKey: false,
+        primaryKey: undefined,
       },
       {
         name: 'other',
         type: 'INTEGER',
         isNullable: true,
-        primaryKey: false,
+        primaryKey: undefined,
       },
     ],
   },
@@ -97,7 +97,7 @@ export const relations = {
         name: 'id',
         type: 'INTEGER',
         isNullable: false,
-        primaryKey: true,
+        primaryKey: 1,
       },
     ],
   },
@@ -111,25 +111,25 @@ export const relations = {
         name: 'id',
         type: 'INTEGER',
         isNullable: false,
-        primaryKey: true,
+        primaryKey: 1,
       },
       {
         name: 'real',
         type: 'REAL',
         isNullable: true,
-        primaryKey: false,
+        primaryKey: undefined,
       },
       {
         name: 'int8',
         type: 'INT8',
         isNullable: true,
-        primaryKey: false,
+        primaryKey: undefined,
       },
       {
         name: 'bigint',
         type: 'BIGINT',
         isNullable: true,
-        primaryKey: false,
+        primaryKey: undefined,
       },
     ],
   },
@@ -143,31 +143,31 @@ export const relations = {
         name: 'id',
         type: 'REAL',
         isNullable: false,
-        primaryKey: true,
+        primaryKey: 1,
       },
       {
         name: 'name',
         type: 'TEXT',
         isNullable: true,
-        primaryKey: false,
+        primaryKey: undefined,
       },
       {
         name: 'age',
         type: 'INTEGER',
         isNullable: true,
-        primaryKey: false,
+        primaryKey: undefined,
       },
       {
         name: 'bmi',
         type: 'REAL',
         isNullable: true,
-        primaryKey: false,
+        primaryKey: undefined,
       },
       {
         name: 'int8',
         type: 'INT8',
         isNullable: true,
-        primaryKey: false,
+        primaryKey: undefined,
       },
     ],
   },
@@ -181,11 +181,11 @@ export const relations = {
         name: 'value',
         type: 'INT8',
         isNullable: false,
-        primaryKey: true,
+        primaryKey: 1,
       },
     ],
   },
-}
+} satisfies RelationsCache
 
 import migrations from '../support/migrations/migrations.js'
 import { ExecutionContext } from 'ava'

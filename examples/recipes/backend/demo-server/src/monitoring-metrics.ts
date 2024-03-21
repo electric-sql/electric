@@ -43,7 +43,10 @@ function simulateHighCpuLoadOverTime({
   simulate()
 }
 
-export async function startGeneratingMonitoringMetrics(pgPool: Pool): Promise<void> {
+export async function startGeneratingMonitoringMetrics(
+  pgPool: Pool,
+  simulateHighCpuLoad: boolean = false,
+): Promise<void> {
   await startGeneratingData({
     pgPool: pgPool,
     tableName: 'monitoring',
@@ -53,6 +56,5 @@ export async function startGeneratingMonitoringMetrics(pgPool: Pool): Promise<vo
       return [uuidv4(), new Date(), 'CPU', cpuUsage]
     },
   })
-
-  simulateHighCpuLoadOverTime({})
+  if (simulateHighCpuLoad) simulateHighCpuLoadOverTime({})
 }

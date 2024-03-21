@@ -86,14 +86,14 @@
 
 [macro elixir_client_subscribe tables]
     """!
-    {:ok, %{err: nil}} = TestWsClient.make_rpc_call(conn, "subscribe", ProtocolHelpers.subscription_request(request_1: [tables: ~w|$tables|]))
+    {:ok, %{err: nil}} = TestWsClient.make_rpc_call(conn, "subscribe", ProtocolHelpers.subscription_request(request_1: ~w|$tables|))
     """
     ?$eprompt
 [endmacro]
 
 [macro elixir_client_subscribe_with_id id tables]
     """!
-    {:ok, %{err: nil}} = TestWsClient.make_rpc_call(conn,  "subscribe", ProtocolHelpers.subscription_request("$id", request_1: [tables: ~w|$tables|]))
+    {:ok, %{err: nil}} = TestWsClient.make_rpc_call(conn,  "subscribe", ProtocolHelpers.subscription_request("$id", request_1: ~w|$tables|))
     """
     ?$eprompt
 [endmacro]
