@@ -15,7 +15,6 @@ defmodule Electric.Satellite.Protocol do
   alias Electric.Postgres.Schema
   alias Electric.Postgres.CachedWal
   alias Electric.Replication.Changes
-  alias Electric.Replication.Connectors
   alias Electric.Replication.Shapes
   alias Electric.Replication.Shapes.ShapeRequest
   alias Electric.Satellite.Serialization
@@ -53,11 +52,9 @@ defmodule Electric.Satellite.Protocol do
     # succeed as well
     reg_name = Electric.Satellite.WebsocketServer.reg_name(client_id)
 
-    origin = Connectors.origin(state.connector_config)
-
     with {:ok, auth} <- Electric.Satellite.Auth.validate_token(token, state.auth_provider),
          true <- Electric.safe_reg(reg_name, 1000),
-         :ok <- ClientManager.register_client(client_id, reg_name, origin) do
+         :ok <- ClientManager.register_client(client_id, reg_name, state.origin) do
       Logger.metadata(user_id: auth.user_id)
       Logger.info("Successfully authenticated the client")
       Metrics.satellite_connection_event(%{authorized_connection: 1})
@@ -227,7 +224,7 @@ defmodule Electric.Satellite.Protocol do
          }, state}
 
       true ->
-        case Shapes.validate_requests(requests, Connectors.origin(state.connector_config)) do
+        case Shapes.validate_requests(requests, state.origin) do
           {:ok, requests} ->
             query_subscription_data(id, requests, state)
 
@@ -401,10 +398,7 @@ defmodule Electric.Satellite.Protocol do
         {incomplete, complete} ->
           complete = Enum.reverse(complete)
 
-          case WriteValidation.validate_transactions!(
-                 complete,
-                 {SchemaCache, Connectors.origin(state.connector_config)}
-               ) do
+          case WriteValidation.validate_transactions!(complete, {SchemaCache, state.origin}) do
             {:ok, accepted} ->
               {nil, send_transactions(accepted, incomplete, state)}
 
@@ -459,7 +453,7 @@ defmodule Electric.Satellite.Protocol do
             including_data: msg.additional_data_source_ids,
             including_subscriptions: msg.subscription_ids,
             cached_wal_impl: CachedWal.EtsBacked,
-            origin: Connectors.origin(state.connector_config),
+            origin: state.origin,
             advance_graph_using: {&advance_graph_by_tx/4, [state.auth.user_id]}
           )
 
@@ -529,9 +523,7 @@ defmodule Electric.Satellite.Protocol do
   end
 
   defp handle_start_replication_request(msg, lsn, state) do
-    origin = Connectors.origin(state.connector_config)
-
-    if CachedWal.Api.lsn_in_cached_window?(origin, lsn) do
+    if CachedWal.Api.lsn_in_cached_window?(state.origin, lsn) do
       case restore_client_state(msg.subscription_ids, msg.observed_transaction_data, lsn, state) do
         {:ok, state} ->
           state =
@@ -1148,7 +1140,7 @@ defmodule Electric.Satellite.Protocol do
       including_data: observed_txn_data,
       including_subscriptions: Map.keys(state.subscriptions),
       cached_wal_impl: CachedWal.EtsBacked,
-      origin: Connectors.origin(state.connector_config),
+      origin: state.origin,
       advance_graph_using: {&advance_graph_by_tx/4, [state.auth.user_id]}
     )
     |> case do
