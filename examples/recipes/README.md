@@ -1,6 +1,6 @@
-# Electric SQL Recipes
+# ElectricSQL Recipes
 
-A web app demonstrating common patterns and recipes implemented using Electric SQL.
+A web app demonstrating common patterns and recipes implemented using ElectricSQL.
 
 ## Recipes
 
