@@ -1,4 +1,5 @@
 defmodule Electric.Satellite.Protocol.State do
+  alias Electric.Replication.Connectors
   alias Electric.Satellite.Protocol.InRep
   alias Electric.Satellite.Protocol.OutRep
   alias Electric.Satellite.Protocol.Telemetry
@@ -12,6 +13,7 @@ defmodule Electric.Satellite.Protocol.State do
             out_rep: %OutRep{},
             auth_provider: nil,
             connector_config: [],
+            origin: "",
             subscriptions: %{},
             subscription_data_fun: nil,
             move_in_data_fun: nil,
@@ -27,6 +29,7 @@ defmodule Electric.Satellite.Protocol.State do
           out_rep: OutRep.t(),
           auth_provider: Electric.Satellite.Auth.provider(),
           connector_config: Keyword.t(),
+          origin: Connectors.origin(),
           subscriptions: map(),
           subscription_data_fun: fun(),
           move_in_data_fun: fun(),
