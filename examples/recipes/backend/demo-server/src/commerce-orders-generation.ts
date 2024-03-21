@@ -40,6 +40,13 @@ export async function batchInsertOrders(pgPool: Pool, numOrders: number = 10000)
   const client = await pgPool.connect()
 
   try {
+    // Check whether orders have already been populated
+    const result = await client.query('SELECT * FROM commerce_orders LIMIT 1;')
+    if (result.rowCount) {
+      console.log('Commerce orders table already populated.')
+      return
+    }
+
     console.log(`Generating ${numOrders} random commerce orders.`)
     // Generate orders
     const orders = []

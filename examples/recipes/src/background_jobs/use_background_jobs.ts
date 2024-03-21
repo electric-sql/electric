@@ -32,7 +32,7 @@ export const useBackgroundJobs = ({ maxNumJobs }: { maxNumJobs?: number }) => {
     (jobId: string) =>
       db.background_jobs.update({
         data: { cancelled: true },
-        where: { id: jobId, completed: false },
+        where: { id: jobId },
       }),
     [db.background_jobs],
   )
