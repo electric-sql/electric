@@ -1321,7 +1321,7 @@ function calculateNumBytes(column_num: number): number {
 function deserializeColumnData(
   column: Uint8Array,
   columnType: PgType
-): string | number {
+): string | number | Uint8Array {
   switch (columnType) {
     case PgBasicType.PG_BOOL:
       return typeDecoder.bool(column)
@@ -1336,6 +1336,8 @@ function deserializeColumnData(
       return typeDecoder.float(column)
     case PgDateType.PG_TIMETZ:
       return typeDecoder.timetz(column)
+    case PgBasicType.PG_BYTEA:
+      return column
     default:
       // also covers user-defined enumeration types
       return typeDecoder.text(column)
@@ -1352,6 +1354,8 @@ function serializeColumnData(
       return typeEncoder.bool(columnValue as number)
     case PgDateType.PG_TIMETZ:
       return typeEncoder.timetz(columnValue as string)
+    case PgBasicType.PG_BYTEA:
+      return columnValue as Uint8Array
     default:
       return typeEncoder.text(columnValue as string)
   }
