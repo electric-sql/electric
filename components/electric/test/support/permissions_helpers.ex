@@ -49,9 +49,10 @@ defmodule ElectricTest.PermissionsHelpers do
       Permissions.new(auth, Transient.name())
     end
 
-    def update(perms, ddlx, roles) do
+    def update(perms, schema_version, ddlx, roles) do
       Permissions.update(
         perms,
+        schema_version,
         to_rules(ddlx),
         roles
       )
@@ -111,7 +112,9 @@ defmodule ElectricTest.PermissionsHelpers do
   end
 
   defmodule Chgs do
+    alias Electric.DDLX.Command
     alias Electric.Replication.Changes
+    alias Electric.Postgres.Extension
 
     def tx(changes, attrs \\ []) do
       %Changes.Transaction{changes: changes}
@@ -137,6 +140,23 @@ defmodule ElectricTest.PermissionsHelpers do
       |> put_change_attrs(attrs)
     end
 
+    def ddlx(attrs) when is_list(attrs) do
+      attrs
+      |> Command.ddlx()
+      |> ddlx()
+    end
+
+    def ddlx(ddlx) do
+      bytes = Protox.encode!(ddlx) |> IO.iodata_to_binary()
+
+      %Changes.NewRecord{
+        relation: Extension.ddlx_relation(),
+        record: %{
+          "ddlx" => bytes
+        }
+      }
+    end
+
     defp put_tx_attrs(tx, attrs) do
       Map.put(tx, :lsn, LSN.new(attrs[:lsn]))
     end
@@ -151,17 +171,20 @@ defmodule ElectricTest.PermissionsHelpers do
   defmodule Roles do
     alias Electric.Satellite.SatPerms, as: P
 
-    def role(role_name) do
-      %P.Role{role: role_name}
+    def role(role_name, assign_id) do
+      %P.Role{role: role_name, assign_id: assign_id}
     end
 
-    def role(role_name, table, id, attrs \\ []) do
-      %P.Role{
-        assign_id: attrs[:assign_id],
-        role: role_name,
-        user_id: Keyword.get(attrs, :user_id, Auth.user_id()),
-        scope: %P.Scope{table: relation(table), id: List.wrap(id)}
-      }
+    def role(role_name, table, id, assign_id, attrs \\ []) do
+      struct(
+        %P.Role{
+          assign_id: assign_id,
+          role: role_name,
+          user_id: Keyword.get(attrs, :user_id, Auth.user_id()),
+          scope: %P.Scope{table: relation(table), id: List.wrap(id)}
+        },
+        attrs
+      )
     end
 
     defp relation({schema, name}) do
@@ -373,11 +396,6 @@ defmodule ElectricTest.PermissionsHelpers do
       end
     end
 
-    @impl Electric.Satellite.Permissions.Graph
-    def relation_path({_graph, fks}, root, relation) do
-      fk_path(fks, root, relation)
-    end
-
     defp fk_path(_fks, root, root) do
       [root]
     end
@@ -391,17 +409,24 @@ defmodule ElectricTest.PermissionsHelpers do
     Electric.Utils.inspect_relation(relation)
   end
 
-  def perms_build(grants, roles, attrs \\ []) do
+  def perms_build(cxt, grants, roles, attrs \\ []) do
+    %{schema_version: schema_version} = cxt
+
     attrs
     |> Perms.new()
-    |> Perms.update(grants, roles)
+    |> Perms.update(schema_version, grants, roles)
   end
 
   defmodule Proto do
+    alias Electric.DDLX.Command
     alias Electric.Satellite.SatPerms
 
     def table(schema \\ "public", name) do
       %SatPerms.Table{schema: schema, name: name}
+    end
+
+    def scope(schema \\ "public", name) do
+      table(schema, name)
     end
 
     def role(name) do
@@ -414,6 +439,30 @@ defmodule ElectricTest.PermissionsHelpers do
 
     def anyone() do
       %SatPerms.RoleName{role: {:predefined, :ANYONE}}
+    end
+
+    def assign(attrs) do
+      SatPerms.Assign |> struct(attrs) |> Command.put_id()
+    end
+
+    def unassign(attrs) do
+      SatPerms.Unassign |> struct(attrs) |> Command.put_id()
+    end
+
+    def grant(attrs) do
+      SatPerms.Grant |> struct(attrs) |> Command.put_id()
+    end
+
+    def revoke(attrs) do
+      SatPerms.Revoke |> struct(attrs) |> Command.put_id()
+    end
+
+    def sqlite(stmt) do
+      %SatPerms.Sqlite{stmt: stmt} |> Command.put_id()
+    end
+
+    def encode(struct) do
+      Protox.encode!(struct) |> IO.iodata_to_binary()
     end
   end
 end

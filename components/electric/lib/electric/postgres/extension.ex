@@ -21,14 +21,13 @@ defmodule Electric.Postgres.Extension do
 
   @version_relation "migration_versions"
   @ddl_relation "ddl_commands"
-  @schema_relation "schema"
   @electrified_table_relation "electrified"
   @acked_client_lsn_relation "acknowledged_client_lsns"
 
-  @grants_relation "grants"
-  @roles_relation "roles"
-  @assignments_relation "assignments"
+  # permissions storage and management
   @ddlx_commands_relation "ddlx_commands"
+  @global_perms_relation "global_perms_state"
+  @user_perms_relation "user_perms_state"
 
   electric = &to_string([?", @schema, ?", ?., ?", &1, ?"])
 
@@ -40,10 +39,9 @@ defmodule Electric.Postgres.Extension do
   @transaction_marker_table electric.("transaction_marker")
   @acked_client_lsn_table electric.(@acked_client_lsn_relation)
 
-  @grants_table electric.(@grants_relation)
-  @roles_table electric.(@roles_relation)
-  @assignments_table electric.(@assignments_relation)
   @ddlx_table electric.(@ddlx_commands_relation)
+  @global_perms_table electric.(@global_perms_relation)
+  @user_perms_table electric.(@user_perms_relation)
 
   @all_schema_query ~s(SELECT "schema", "version", "migration_ddl" FROM #{@schema_table} ORDER BY "version" ASC)
   @current_schema_query ~s(SELECT "schema", "version" FROM #{@schema_table} ORDER BY "id" DESC LIMIT 1)
@@ -110,14 +108,13 @@ defmodule Electric.Postgres.Extension do
   def transaction_marker_table, do: @transaction_marker_table
   def acked_client_lsn_table, do: @acked_client_lsn_table
 
-  def grants_table, do: @grants_table
-  def roles_table, do: @roles_table
-  def assignments_table, do: @assignments_table
   def ddlx_table, do: @ddlx_table
+  def global_perms_table, do: @global_perms_table
+  def user_perms_table, do: @user_perms_table
 
   def ddl_relation, do: {@schema, @ddl_relation}
   def version_relation, do: {@schema, @version_relation}
-  def schema_relation, do: {@schema, @schema_relation}
+  def ddlx_relation, do: {@schema, @ddlx_commands_relation}
   def acked_client_lsn_relation, do: {@schema, @acked_client_lsn_relation}
   def publication_name, do: @publication_name
   def slot_name, do: @slot_name
@@ -324,7 +321,6 @@ defmodule Electric.Postgres.Extension do
       Migrations.Migration_20230605141256_ElectrifyFunction,
       Migrations.Migration_20230715000000_UtilitiesTable,
       Migrations.Migration_20230814170123_RenameDDLX,
-      Migrations.Migration_20230814170745_ElectricDDL,
       Migrations.Migration_20230829000000_AcknowledgedClientLsnsTable,
       Migrations.Migration_20230918115714_DDLCommandUniqueConstraint,
       Migrations.Migration_20230921161045_DropEventTriggers,
@@ -336,7 +332,8 @@ defmodule Electric.Postgres.Extension do
       Migrations.Migration_20240110110200_DropUnusedFunctions,
       Migrations.Migration_20240205141200_ReinstallTriggerFunctionWriteCorrectMaxTag,
       Migrations.Migration_20240213160300_DropGenerateElectrifiedSqlFunction,
-      Migrations.Migration_20240212161153_DDLXCommands
+      Migrations.Migration_20240212161153_DDLXCommands,
+      Migrations.Migration_20240214131615_PermissionsState
     ]
   end
 

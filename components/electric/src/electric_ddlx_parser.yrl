@@ -9,6 +9,8 @@ Nonterminals
    sqlite_stmt
    table_ident
    identifier
+   record
+   field_access
    scoped_role
    grant_scoped_role
    scope
@@ -38,7 +40,7 @@ Terminals
    'GRANT' 'ON' 'USING' 'SELECT' 'INSERT' 'UPDATE' 'DELETE' 'ALL' 'READ' 'WRITE' 'WHERE'
    'REVOKE' 'FROM' 'SQLITE'
    'AUTHENTICATED' 'ANYONE' 'PRIVILEGES'
-   string  int float
+   string  integer float
    unquoted_identifier quoted_identifier
    '=' '>' '<' '<=' '>=' '!=' '<>' '+' '/' '*' '-'
    'AND' 'IS' 'NOT' 'OR'
@@ -100,6 +102,10 @@ table_ident -> identifier '.' identifier : [{table_schema, '$1'}, {table_name, '
 identifier -> unquoted_identifier : unquoted_identifier('$1').
 identifier -> quoted_identifier : unwrap('$1').
 
+%% upcase the record name, so e.g. it's always `AUTH.user_id`, `NEW.field_name` etc
+record -> unquoted_identifier : 'Elixir.String':upcase(unwrap('$1')).
+record -> quoted_identifier : 'Elixir.String':upcase(unwrap('$1')).
+
 grant_scoped_role -> 'AUTHENTICATED' : [{role_name, 'AUTHENTICATED'}].
 grant_scoped_role -> 'ANYONE' : [{role_name, 'ANYONE'}].
 grant_scoped_role -> scoped_role : '$1'.
@@ -128,6 +134,7 @@ if_expr -> '(' expr ')' : [{'if', erlang:iolist_to_binary('$2')}].
 
 expr -> '(' expr ')' : ["(", '$2', ")"].
 expr -> expr op expr : ['$1', " ", '$2', " ", '$3']. %[{expr, [{op, '$2'}, {left, '$1'}, {right, '$3'}]}].
+expr -> field_access : ['$1'].
 expr -> identifier '(' func_args ')' : ['$1', "(", '$3', ")"]. % [{func_call, '$1', '$3'}].
 expr -> identifier : ['$1']. % [{name, '$1'}].
 expr -> const : ['$1']. % [{const, '$1'}].
@@ -148,8 +155,10 @@ op -> 'OR' : ["OR"].
 op -> 'NOT' : ["NOT"].
 op -> 'IS' : ["IS"].
 
+field_access -> record '.' identifier : ['$1', ".", '$3'].
+
 const -> string : ["'", unwrap('$1'), "'"]. 
-const -> int : erlang:integer_to_list(unwrap('$1')). 
+const -> integer : erlang:integer_to_list(unwrap('$1')).
 const -> float : erlang:float_to_list(unwrap('$1')). 
 
 func_args -> '$empty' : [].

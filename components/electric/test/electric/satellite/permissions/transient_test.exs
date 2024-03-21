@@ -116,12 +116,12 @@ defmodule Electric.Satellite.Permissions.TransientTest do
 
       role_grants =
         [
-          Roles.role("editor", @projects, "p1", assign_id: "assign-01"),
-          Roles.role("editor", @projects, "p2", assign_id: "assign-01"),
-          Roles.role("editor", @projects, "p3", assign_id: "assign-01"),
-          Roles.role("reader", @projects, "p1", assign_id: "assign-02"),
-          Roles.role("reader", @projects, "p2", assign_id: "assign-02"),
-          Roles.role("reader", @projects, "p3", assign_id: "assign-02")
+          Roles.role("editor", @projects, "p1", "assign-01"),
+          Roles.role("editor", @projects, "p2", "assign-01"),
+          Roles.role("editor", @projects, "p3", "assign-01"),
+          Roles.role("reader", @projects, "p1", "assign-02"),
+          Roles.role("reader", @projects, "p2", "assign-02"),
+          Roles.role("reader", @projects, "p3", "assign-02")
         ]
         |> Enum.map(&%RoleGrant{role: Role.new(&1)})
 

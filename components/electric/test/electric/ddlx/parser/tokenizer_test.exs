@@ -181,6 +181,21 @@ defmodule Electric.DDLX.Parser.TokenizerTest do
              ] = tokens
     end
 
+    test "field accesses" do
+      tokens =
+        Tokenizer.tokens(~s[ROW.user_id = AUTH.user_id])
+
+      assert [
+               {:unquoted_identifier, {1, 0, nil}, "ROW"},
+               {:., {1, 3, nil}},
+               {:unquoted_identifier, {1, 4, nil}, "user_id"},
+               {:=, {1, 12, nil}},
+               {:unquoted_identifier, {1, 14, nil}, "AUTH"},
+               {:., {1, 18, nil}},
+               {:unquoted_identifier, {1, 19, nil}, "user_id"}
+             ] = tokens
+    end
+
     test "comments" do
       src = """
       -- this is my first comment

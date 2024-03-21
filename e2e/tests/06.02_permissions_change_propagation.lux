@@ -1,0 +1,96 @@
+[doc Permissions changes are propagated to client connection]
+[include _shared.luxinc]
+
+[invoke setup]
+
+[global migration_version_1=20231109154018]
+[global migration_version_2=20240226114300]
+[global user_id1=95f21e62-4b90-49c3-874a-174eb17e58cf]
+[global user_id2=31377df9-c659-493e-b26f-1ce5fbb0b2df]
+[global session_id=004d3e42-d072-4a60-9513-93ddd843d478]
+[global project_id=99adf0a5-b3c6-45d7-9986-582e76db4556]
+
+
+[shell proxy_1]
+    [invoke log "run migration $migration_version_1 on postgres"]
+    """!
+    BEGIN;
+      CALL electric.migration_version('$migration_version_1');
+      CREATE TABLE "projects" (
+          id uuid NOT NULL PRIMARY KEY
+      );
+      CREATE TABLE "issues" (
+          id uuid NOT NULL PRIMARY KEY,
+          project_id uuid NOT NULL REFERENCES projects (id)
+      );
+      CREATE TABLE "users" (
+          id uuid NOT NULL PRIMARY KEY
+      );
+      CREATE TABLE "project_memberships" (
+          id uuid NOT NULL PRIMARY KEY,
+          project_id uuid NOT NULL REFERENCES projects (id),
+          user_id uuid NOT NULL REFERENCES users (id),
+          role text NOT NULL
+      );
+
+      ALTER TABLE "projects" ENABLE ELECTRIC;
+      ALTER TABLE "issues" ENABLE ELECTRIC;
+      ALTER TABLE "users" ENABLE ELECTRIC;
+      ALTER TABLE "project_memberships" ENABLE ELECTRIC;
+
+      INSERT INTO users (id) VALUES ('$user_id1');
+      INSERT INTO users (id) VALUES ('$user_id2');
+      INSERT INTO projects (id) VALUES ('$project_id');
+    COMMIT;
+    """
+    ?$psql
+
+
+[shell electric]
+    ?? [info] Applying migration $migration_version_1
+
+[newshell user_1_ws1]
+    -$fail_pattern
+    [invoke start_elixir_test 1]
+    [invoke client_session $user_id1 $session_id]
+    
+    !alias Electric.Satellite.{SatRelation, SatRelationColumn, SatOpInsert, SatOpUpdate, SatOpRow}
+    ?$eprompt
+
+[shell proxy_1]
+    [invoke log "run migration $migration_version_1 on postgres"]
+    """!
+    BEGIN;
+      CALL electric.migration_version('$migration_version_2');
+      ELECTRIC ASSIGN (projects, project_memberships.role) TO project_memberships.user_id;
+      ELECTRIC GRANT ALL ON projects TO (projects, 'member');
+      ELECTRIC GRANT ALL ON issues TO (projects, 'member');
+    COMMIT;
+    """
+    ?$psql
+
+[shell electric]
+    ?user_id=$user_id1 .+ Global permissions updated for connection
+
+[shell pg_1]
+    !INSERT INTO project_memberships (id, project_id, user_id, role) VALUES ('c197a4ef-0f22-4af1-acb1-bf7200e64900', '$project_id', '$user_id1', 'member');
+    ?$psql
+
+[shell electric]
+    ?user_id=$user_id1 .+ User permissions updated for connection
+
+## role for non-connected user isn't being accepted by connection
+[shell pg_1]
+    !INSERT INTO project_memberships (id, project_id, user_id, role) VALUES ('386fff23-181e-4386-85a2-9a430795a23c', '$project_id', '$user_id2', 'member');
+    ?$psql
+
+[shell electric]
+    -user_id=$user_id2 .+ User permissions updated for connection
+    ?%Electric.Replication.Changes.NewRecord{relation: {"public", "project_memberships"}, \
+       record: %{"id" => "386fff23-181e-4386-85a2-9a430795a23c", \
+       "project_id" => "99adf0a5-b3c6-45d7-9986-582e76db4556", \
+       "role" => "member", \
+       "user_id" => "$user_id2"}
+
+[cleanup]
+   [invoke teardown]

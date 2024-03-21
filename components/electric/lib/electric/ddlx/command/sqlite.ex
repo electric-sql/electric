@@ -8,7 +8,7 @@ defmodule Electric.DDLX.Command.SQLite do
     with {:ok, stmt} <- fetch_attr(params, :statement) do
       {:ok,
        %Command{
-         cmds: %SatPerms.DDLX{sqlite: [%SatPerms.Sqlite{stmt: stmt}]},
+         cmds: Command.ddlx(sqlite: [%SatPerms.Sqlite{stmt: stmt}]),
          stmt: ddlx,
          tables: [],
          tag: "ELECTRIC SQLITE"

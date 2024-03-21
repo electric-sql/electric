@@ -107,22 +107,26 @@ defmodule Electric.Satellite.Permissions.WriteBuffer do
     {__MODULE__, state(state, roles: roles, deleted_roles: deleted, role_grants: role_grants)}
   end
 
-  defp update_intermediate_role({:insert, {relation, id}, role}, {roles, deleted}) do
+  defp update_intermediate_role({:insert, role}, {roles, deleted}) do
+    key = role_key(role)
+
     {
-      Map.put(roles, {relation, id}, role),
-      MapSet.delete(deleted, role_key(role))
+      Map.put(roles, key, role),
+      MapSet.delete(deleted, key)
     }
   end
 
-  defp update_intermediate_role({:update, {relation, id}, role}, {roles, deleted}) do
-    {Map.put(roles, {relation, id}, role), deleted}
+  defp update_intermediate_role({:update, role}, {roles, deleted}) do
+    {Map.put(roles, role_key(role), role), deleted}
   end
 
-  defp update_intermediate_role({:delete, {relation, id}, role}, {roles, deleted}) do
-    case Map.pop(roles, {relation, id}) do
+  defp update_intermediate_role({:delete, role}, {roles, deleted}) do
+    key = role_key(role)
+
+    case Map.pop(roles, key) do
       {nil, roles} ->
         # deleting a role that we haven't just written
-        {roles, MapSet.put(deleted, role_key(role))}
+        {roles, MapSet.put(deleted, key)}
 
       {%{}, roles} ->
         {roles, deleted}
@@ -134,7 +138,7 @@ defmodule Electric.Satellite.Permissions.WriteBuffer do
   end
 
   defp role_key(role) do
-    {role.scope, role.assign_id, role.user_id, role.role}
+    {role.assign_id, role.id}
   end
 
   @moduledoc """
@@ -257,10 +261,5 @@ defmodule Electric.Satellite.Permissions.WriteBuffer do
   @impl Permissions.Graph
   def modified_fks(state(upstream: upstream), root, update) do
     Permissions.Graph.modified_fks(upstream, root, update)
-  end
-
-  @impl Permissions.Graph
-  def relation_path(state(upstream: upstream), root, relation) do
-    Permissions.Graph.relation_path(upstream, root, relation)
   end
 end

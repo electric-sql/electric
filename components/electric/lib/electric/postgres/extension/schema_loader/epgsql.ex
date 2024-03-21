@@ -65,8 +65,8 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
 
   @pool_timeout 5_000
 
-  @impl true
-  def connect(conn_config, _opts) do
+  @impl SchemaLoader
+  def connect(_opts, conn_config) do
     {:ok, _pool} =
       NimblePool.start_link(
         worker: {ConnectionPool, conn_config},
@@ -88,7 +88,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
     )
   end
 
-  @impl true
+  @impl SchemaLoader
   def load(pool) do
     checkout!(pool, fn conn ->
       with {:ok, version, schema} <- Extension.current_schema(conn) do
@@ -97,7 +97,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
     end)
   end
 
-  @impl true
+  @impl SchemaLoader
   def load(pool, version) do
     checkout!(pool, fn conn ->
       with {:ok, version, schema} <- Extension.schema_version(conn, version) do
@@ -106,7 +106,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
     end)
   end
 
-  @impl true
+  @impl SchemaLoader
   def save(pool, version, schema, stmts) do
     checkout!(pool, fn conn ->
       with :ok <- Extension.save_schema(conn, version, schema, stmts) do
@@ -115,7 +115,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
     end)
   end
 
-  @impl true
+  @impl SchemaLoader
   def relation_oid(_conn, :trigger, _schema, _table) do
     raise RuntimeError, message: "oid lookup for triggers no implemented"
   end
@@ -126,7 +126,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
     end)
   end
 
-  @impl true
+  @impl SchemaLoader
   def refresh_subscription(pool, name) do
     checkout!(pool, fn conn ->
       query = ~s|ALTER SUBSCRIPTION "#{name}" REFRESH PUBLICATION WITH (copy_data = false)|
@@ -147,21 +147,21 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
     end)
   end
 
-  @impl true
+  @impl SchemaLoader
   def migration_history(pool, version) do
     checkout!(pool, fn conn ->
       Extension.migration_history(conn, version)
     end)
   end
 
-  @impl true
+  @impl SchemaLoader
   def known_migration_version?(pool, version) do
     checkout!(pool, fn conn ->
       Extension.known_migration_version?(conn, version)
     end)
   end
 
-  @impl true
+  @impl SchemaLoader
   def internal_schema(pool) do
     checkout!(pool, fn conn ->
       oid_loader = &Client.relation_oid(conn, &1, &2, &3)
@@ -172,24 +172,74 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
     end)
   end
 
-  @impl true
+  @impl SchemaLoader
   def table_electrified?(pool, {schema, name}) do
     checkout!(pool, fn conn ->
       Extension.electrified?(conn, schema, name)
     end)
   end
 
-  @impl true
+  @impl SchemaLoader
   def index_electrified?(pool, {schema, name}) do
     checkout!(pool, fn conn ->
       Extension.index_electrified?(conn, schema, name)
     end)
   end
 
-  @impl true
+  @impl SchemaLoader
   def tx_version(pool, row) do
     checkout!(pool, fn conn ->
       Extension.tx_version(conn, row)
+    end)
+  end
+
+  @impl SchemaLoader
+  def global_permissions(pool) do
+    checkout!(pool, fn conn ->
+      Extension.Permissions.global(conn)
+    end)
+  end
+
+  @impl SchemaLoader
+  def global_permissions(pool, id) do
+    checkout!(pool, fn conn ->
+      Extension.Permissions.global(conn, id)
+    end)
+  end
+
+  @impl SchemaLoader
+  def save_global_permissions(pool, permissions) do
+    checkout!(pool, fn conn ->
+      with :ok <- Extension.Permissions.save_global(conn, permissions) do
+        {:ok, pool}
+      end
+    end)
+  end
+
+  @impl SchemaLoader
+  def user_permissions(pool, user_id) do
+    checkout!(pool, fn conn ->
+      with {:ok, perms} <- Extension.Permissions.user(conn, user_id) do
+        {:ok, pool, perms}
+      end
+    end)
+  end
+
+  @impl SchemaLoader
+  def user_permissions(pool, user_id, perms_id) do
+    checkout!(pool, fn conn ->
+      with {:ok, perms} <- Extension.Permissions.user(conn, user_id, perms_id) do
+        {:ok, perms}
+      end
+    end)
+  end
+
+  @impl SchemaLoader
+  def save_user_permissions(pool, user_id, roles) do
+    checkout!(pool, fn conn ->
+      with {:ok, perms} <- Extension.Permissions.save_user(conn, user_id, roles) do
+        {:ok, pool, perms}
+      end
     end)
   end
 end
