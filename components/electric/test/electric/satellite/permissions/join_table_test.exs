@@ -5,6 +5,8 @@ defmodule Electric.Satellite.Permissions.JoinTableTest do
     Chgs,
     Perms,
     Roles,
+    Schema,
+    Server,
     Tree
   }
 
@@ -18,7 +20,6 @@ defmodule Electric.Satellite.Permissions.JoinTableTest do
   @addresses {"public", "addresses"}
   @customers {"public", "customers"}
   @dishes {"public", "dishes"}
-  @order_dishes {"public", "order_dishes"}
   @order_riders {"public", "order_riders"}
   @orders {"public", "orders"}
   @restaurants {"public", "restaurants"}
@@ -39,52 +40,48 @@ defmodule Electric.Satellite.Permissions.JoinTableTest do
     Tree.delete_vertex(tree, v)
   end
 
-  def add_order(tree, restaurant_id, order_id) do
-    Tree.add_edge(tree, {@orders, [order_id]}, {@restaurants, [restaurant_id]})
+  def add_order(module, tree, restaurant_id, order_id) do
+    module.apply_change(
+      tree,
+      [@restaurants],
+      Chgs.insert(@orders, %{"id" => order_id, "restaurant_id" => restaurant_id})
+    )
   end
 
   describe "simple join table" do
     setup do
-      loader_spec =
-        MockSchemaLoader.backend_spec(
-          migrations: [
-            {"01",
-             [
-               "create table restaurants (id uuid primary key)",
-               "create table orders (id uuid primary key)",
-               "create table riders (id uuid primary key)",
-               """
-               create table order_riders (
-                  id uuid primary key,
-                  order_id uuid not null references orders (id),
-                  rider_id uuid not null references riders (id)
-               )
-               """
-             ]}
-          ]
-        )
+      migrations = [
+        {"01",
+         [
+           "create table restaurants (id uuid primary key)",
+           "create table orders (id uuid primary key, restaurant_id uuid not null references restaurants (id))",
+           "create table riders (id uuid primary key)",
+           """
+           create table order_riders (
+              id uuid primary key,
+              order_id uuid not null references orders (id),
+              rider_id uuid not null references riders (id)
+           )
+           """
+         ]}
+      ]
 
-      {:ok, loader} = SchemaLoader.connect(loader_spec, [])
+      data = [
+        {@restaurants, "rt1", []},
+        {@orders, "or1", []},
+        {@orders, "or2", []},
+        {@riders, "rd1", []},
+        {@riders, "rd2", []}
+      ]
+
+      {:ok, loader} = Schema.loader(migrations)
       {:ok, schema_version} = SchemaLoader.load(loader)
 
-      tree =
-        Tree.new(
-          [
-            {@restaurants, "rt1", []},
-            {@orders, "or1", []},
-            {@orders, "or2", []},
-            {@riders, "rd1", []},
-            {@riders, "rd2", []}
-          ],
-          [
-            {@orders, @restaurants, ["restaurant_id"]},
-            {@order_riders, @orders, ["order_id"]},
-            {@order_riders, @riders, ["rider_id"]}
-          ]
-        )
+      tree = Tree.new(data, schema_version)
 
-      tree = add_order(tree, "rt1", "or1")
-      {:ok, tree: tree, loader: loader, schema_version: schema_version}
+      tree = add_order(Server, tree, "rt1", "or1")
+
+      {:ok, tree: tree, data: data, loader: loader, schema_version: schema_version}
     end
 
     test "scope_id resolves across join tables", cxt do
@@ -214,17 +211,7 @@ defmodule Electric.Satellite.Permissions.JoinTableTest do
             {@riders, "d2", []},
             {@riders, "d3", []}
           ],
-          [
-            {@addresses, @customers, ["customer_id"]},
-            {@dishes, @restaurants, ["restaurant_id"]},
-            {@order_dishes, @dishes, ["dish_id"]},
-            {@order_dishes, @orders, ["order_id"]},
-            {@order_riders, @orders, ["order_id"]},
-            {@order_riders, @riders, ["rider_id"]},
-            {@orders, @addresses, ["address_id"]},
-            {@orders, @customers, ["customer_id"]},
-            {@orders, @restaurants, ["restaurant_id"]}
-          ]
+          schema_version
         )
 
       {:ok, _} = start_supervised(Perms.Transient)

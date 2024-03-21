@@ -16,9 +16,6 @@ defmodule Electric.Satellite.Permissions.TriggerTest do
 
   @workspaces {"public", "workspaces"}
   @projects {"public", "projects"}
-  @issues {"public", "issues"}
-  @comments {"public", "comments"}
-  @reactions {"public", "reactions"}
   @project_memberships {"public", "project_memberships"}
 
   setup do
@@ -58,13 +55,7 @@ defmodule Electric.Satellite.Permissions.TriggerTest do
              {@projects, "p3", []}
            ]}
         ],
-        [
-          {@comments, @issues, ["issue_id"]},
-          {@issues, @projects, ["project_id"]},
-          {@project_memberships, @projects, ["project_id"]},
-          {@projects, @workspaces, ["workspace_id"]},
-          {@reactions, @comments, ["comment_id"]}
-        ]
+        schema_version
       )
 
     {:ok, _} = start_supervised(Perms.Transient)

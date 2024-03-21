@@ -60,4 +60,16 @@ defmodule Electric.Satellite.Permissions.Grant do
   def columns_valid?(%__MODULE__{columns: allowed}, %MapSet{} = columns) do
     MapSet.subset?(columns, allowed)
   end
+
+  def for_table(grants, {_, _} = table) do
+    Enum.filter(grants, &(&1.table == table))
+  end
+
+  def for_privilege(grants, priv) do
+    Enum.filter(grants, &(&1.privilege == priv))
+  end
+
+  def for_scope(grants, {_, _} = scope) do
+    Enum.filter(grants, &(&1.scope == scope))
+  end
 end

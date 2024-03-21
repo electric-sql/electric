@@ -348,6 +348,15 @@ defmodule Electric.Satellite.Permissions do
   end
 
   @doc """
+  Generate list of `#{Permissions.Role}` structs for all our currently assigned roles plus the
+  `Anyone` and `Authenticated` roles (if applicable).
+  """
+  @spec assigned_roles(t()) :: [Role.t()]
+  def assigned_roles(perms) do
+    build_roles(perms.source.roles, perms.auth, perms.source.rules.assigns)
+  end
+
+  @doc """
   Pass the transaction to the write buffer so it can reset itself when its pending writes have
   completed the loop back from pg and are now in the underlying shape graph.
   """
@@ -684,7 +693,7 @@ defmodule Electric.Satellite.Permissions do
       end
 
     {:error,
-     "user does not have permission to " <>
+     "permissions: user does not have permission to " <>
        action <> Electric.Utils.inspect_relation(relation)}
   end
 

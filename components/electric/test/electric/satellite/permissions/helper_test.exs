@@ -3,7 +3,8 @@ defmodule Electric.Satellite.Permissions.HelperTest do
 
   alias ElectricTest.PermissionsHelpers.{
     Chgs,
-    Tree
+    Tree,
+    Schema
   }
 
   alias Electric.Satellite.{Permissions.Graph}
@@ -16,11 +17,12 @@ defmodule Electric.Satellite.Permissions.HelperTest do
   @issues {"public", "issues"}
   @comments {"public", "comments"}
   @reactions {"public", "reactions"}
-  @project_memberships {"public", "project_memberships"}
   @tags {"public", "tags"}
   @issue_tags {"public", "issue_tags"}
 
   setup do
+    {:ok, schema_version} = Schema.load()
+
     tree =
       Tree.new(
         [
@@ -55,17 +57,7 @@ defmodule Electric.Satellite.Permissions.HelperTest do
           {@tags, "t1", [{@issue_tags, "it1", []}, {@issue_tags, "it2", []}]},
           {@tags, "t2", []}
         ],
-        [
-          {@comments, @issues, ["issue_id"]},
-          {@issues, @projects, ["project_id"]},
-          {@offices, @regions, ["region_id"]},
-          {@project_memberships, @projects, ["project_id"]},
-          {@projects, @workspaces, ["workspace_id"]},
-          {@reactions, @comments, ["comment_id"]},
-          # tasty join table
-          {@issue_tags, @tags, ["tag_id"]},
-          {@issue_tags, @issues, ["issue_id"]}
-        ]
+        schema_version
       )
 
     {:ok, tree: tree}
