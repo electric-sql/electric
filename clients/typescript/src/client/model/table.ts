@@ -10,7 +10,6 @@ import {
 import { UpdateInput, UpdateManyInput } from '../input/updateInput'
 import { DeleteInput, DeleteManyInput } from '../input/deleteInput'
 import { DatabaseAdapter } from '../../electric/adapter'
-import { Builder } from './builder'
 import { Executor } from '../execution/executor'
 import { BatchPayload } from '../output/batchPayload'
 import { InvalidArgumentError } from '../validation/errors/invalidArgumentError'
@@ -50,6 +49,7 @@ import {
   transformUpdateMany,
 } from '../conversions/input'
 import { Rel, Shape } from '../../satellite/shapes/types'
+import { KyselyBuilder } from './kyselyBuilder'
 
 type AnyTable = Table<any, any, any, any, any, any, any, any, any, HKT>
 
@@ -77,7 +77,7 @@ export class Table<
       GetPayload
     >
 {
-  private _builder: Builder
+  private _builder: KyselyBuilder
   private _executor: Executor
   private _shapeManager: IShapeManager
   private _qualifiedTableName: QualifiedTablename
@@ -114,7 +114,7 @@ export class Table<
     this._fields = this._dbDescription.getFields(tableName)
     const fieldNames = this._dbDescription.getFieldNames(tableName)
     const tableDescription = this._dbDescription.getTableDescription(tableName)
-    this._builder = new Builder(
+    this._builder = new KyselyBuilder(
       tableName,
       fieldNames,
       shapeManager,
