@@ -375,7 +375,7 @@ import EnvVarConfig from '@site/src/components/EnvVarConfig'
 #### ELECTRIC_IMAGE
 
 <EnvVarConfig
-    name="ELECTRIC_PG_PROXY_PASSWORD"
+    name="ELECTRIC_IMAGE"
     defaultValue="electricsql/electric:{version-tag}"
     example="electricsql/electric:0.8"
 >
