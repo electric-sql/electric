@@ -4,9 +4,11 @@ import { FindInput, FindUniqueInput } from '../input/findInput'
 import { UpdateInput, UpdateManyInput } from '../input/updateInput'
 import {
   ComparisonOperatorExpression,
+  Compilable,
   DummyDriver,
   Kysely,
   SelectQueryBuilder,
+  sql,
   SqliteAdapter,
   SqliteIntrospector,
   SqliteQueryCompiler,
@@ -53,7 +55,7 @@ type RegularFilter = {
   type: 'regular'
   sql: string
   op: ComparisonOperatorExpression
-  args?: unknown[]
+  args?: unknown[] | unknown
 }
 
 type ORFilter = {
@@ -67,6 +69,11 @@ type NotFilter = {
 }
 
 type Filter = RegularFilter | ORFilter | NotFilter
+
+export type KyselyStatement = {
+  sql: string
+  parameters: any[]
+}
 
 export class KyselyBuilder {
   constructor(
@@ -87,15 +94,18 @@ export class KyselyBuilder {
     >
   ) {}
 
-  create(i: CreateInput<any, any, any>) {
+  create(i: CreateInput<any, any, any>): KyselyStatement {
     const insert = db.insertInto(this._tableName).values(i.data)
     const fields = this.returnAllFields()
-    return insert.returning(fields)
+    return compileQuery(insert.returning(fields))
   }
 
   createMany(i: CreateManyInput<any>) {
     const insert = db.insertInto(this._tableName).values(i.data)
-    return i.skipDuplicates ? insert.onConflict((oc) => oc.doNothing()) : insert
+    const insertQueryBuilder = i.skipDuplicates
+      ? insert.onConflict((oc) => oc.doNothing())
+      : insert
+    return compileQuery(insertQueryBuilder)
   }
 
   findUnique(i: FindUniqueInput<any, any, any>) {
@@ -136,7 +146,7 @@ export class KyselyBuilder {
     const deleteQuery = db.deleteFrom(this._tableName)
     const whereObject = i.where // safe because the schema for `where` adds an empty object as default which is provided if the `where` field is absent
     const fields = this.getFields(whereObject, idRequired)
-    return addFilters(fields, whereObject, deleteQuery)
+    return compileQuery(addFilters(fields, whereObject, deleteQuery))
   }
 
   updateInternal(i: UpdateManyInput<any, any>, idRequired = false) {
@@ -158,7 +168,7 @@ export class KyselyBuilder {
 
     const whereObject = i.where // safe because the schema for `where` adds an empty object as default which is provided if the `where` field is absent
     const fields = this.getFields(whereObject, idRequired)
-    return addFilters(fields, whereObject, queryWithReturn)
+    return compileQuery(addFilters(fields, whereObject, queryWithReturn))
   }
 
   /**
@@ -171,7 +181,7 @@ export class KyselyBuilder {
     i: FindInput<any, any, any, any, any>,
     idRequired = false,
     selectWhereFields = true
-  ) {
+  ): KyselyStatement {
     if ('cursor' in i && typeof i.cursor !== 'undefined') {
       throw new InvalidArgumentError('Unsupported cursor argument.')
     }
@@ -195,13 +205,15 @@ export class KyselyBuilder {
     const addOffsetP = addOffset.bind(null, i)
     const addDistinctP = addDistinct.bind(null, i)
     const addOrderByP = this.addOrderBy.bind(this, i)
+    const compileQueryP = compileQuery.bind(null)
     const buildQuery = flow(
       addFieldSelectionP,
       addFiltersP,
       addLimitP,
       addOffsetP,
       addDistinctP,
-      addOrderByP
+      addOrderByP,
+      compileQueryP
     )
     return buildQuery(query)
   }
@@ -371,7 +383,9 @@ function applyRegularFilter<Q extends WhereInterface<any, any>>(
 
 function makeFilter(fieldValue: unknown, fieldName: string): Array<Filter> {
   if (fieldValue === null)
-    return [{ sql: fieldName, op: 'is', args: ['NULL'] } as RegularFilter]
+    return [
+      { sql: fieldName, op: 'is', args: sql.raw('NULL') } as RegularFilter,
+    ]
   else if (fieldName === 'AND' || fieldName === 'OR' || fieldName === 'NOT') {
     return makeBooleanFilter(fieldName as 'AND' | 'OR' | 'NOT', fieldValue)
   } else if (typeof fieldValue === 'object') {
@@ -503,7 +517,11 @@ function makeNotInFilter(
 function makeNotFilter(fieldName: string, value: unknown): Filter {
   if (value === null) {
     // needed because `WHERE field != NULL` is not valid SQL
-    return { sql: fieldName, op: 'is not', args: [null] } as RegularFilter
+    return {
+      sql: fieldName,
+      op: 'is not',
+      args: sql.raw('NULL'),
+    } as RegularFilter
   } else {
     return { sql: fieldName, op: '!=', args: [value] } as RegularFilter
   }
@@ -569,4 +587,12 @@ function addDistinct(
  */
 function getSelectedFields(obj: object): string[] {
   return Object.keys(obj).filter((key) => obj[key as keyof object])
+}
+
+function compileQuery(q: Compilable): KyselyStatement {
+  const compiled = q.compile()
+  return {
+    sql: compiled.sql,
+    parameters: compiled.parameters as any[],
+  }
 }

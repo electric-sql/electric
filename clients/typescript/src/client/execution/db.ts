@@ -1,7 +1,7 @@
 import { RunResult } from '../../electric/adapter'
-import { QueryBuilder } from 'squel'
 import * as z from 'zod'
 import { Row, Statement } from '../../util'
+import { KyselyStatement } from '../model/kyselyBuilder'
 
 /**
  * Interface that must be implemented by DB implementations.
@@ -13,12 +13,12 @@ import { Row, Statement } from '../../util'
  */
 export interface DB {
   run(
-    statement: QueryBuilder,
+    statement: KyselyStatement,
     successCallback?: (tx: DB, res: RunResult) => void,
     errorCallback?: (error: any) => void
   ): void
   query<Z>(
-    statement: QueryBuilder,
+    statement: KyselyStatement,
     schema: z.ZodType<Z>,
     successCallback: (tx: DB, res: Z[]) => void,
     errorCallback?: (error: any) => void

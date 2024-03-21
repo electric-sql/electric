@@ -38,16 +38,14 @@ const post2 = {
  */
 
 test('null values are inserted as NULL', (t) => {
-  const query = tbl
-    .create({
-      data: {
-        id: 'i1',
-        title: 't1',
-        contents: 'c1',
-        nbr: null,
-      },
-    })
-    .compile()
+  const query = tbl.create({
+    data: {
+      id: 'i1',
+      title: 't1',
+      contents: 'c1',
+      nbr: null,
+    },
+  })
 
   t.is(
     query.sql,
@@ -58,11 +56,9 @@ test('null values are inserted as NULL', (t) => {
 
 // Test that we can make a create query
 test('create query', (t) => {
-  const query = tbl
-    .create({
-      data: post1,
-    })
-    .compile()
+  const query = tbl.create({
+    data: post1,
+  })
 
   t.is(
     query.sql,
@@ -72,11 +68,9 @@ test('create query', (t) => {
 })
 
 test('createMany query', (t) => {
-  const query = tbl
-    .createMany({
-      data: [post1, post2],
-    })
-    .compile()
+  const query = tbl.createMany({
+    data: [post1, post2],
+  })
 
   t.is(
     query.sql,
@@ -85,12 +79,10 @@ test('createMany query', (t) => {
 
   t.deepEqual(query.parameters, ['i1', 't1', 'c1', 18, 'i2', 't2', 'c2', 21])
 
-  const query2 = tbl
-    .createMany({
-      data: [post1, post2],
-      skipDuplicates: true,
-    })
-    .compile()
+  const query2 = tbl.createMany({
+    data: [post1, post2],
+    skipDuplicates: true,
+  })
 
   t.is(
     query2.sql,
@@ -100,14 +92,12 @@ test('createMany query', (t) => {
 })
 
 test('findUnique query', async (t) => {
-  const query = tbl
-    .findUnique({
-      where: {
-        id: 'i2',
-        nbr: 21,
-      },
-    })
-    .compile()
+  const query = tbl.findUnique({
+    where: {
+      id: 'i2',
+      nbr: 21,
+    },
+  })
 
   t.is(
     query.sql,
@@ -117,18 +107,16 @@ test('findUnique query', async (t) => {
 })
 
 test('findUnique query with selection', (t) => {
-  const query = tbl
-    .findUnique({
-      where: {
-        id: 'i2',
-        nbr: 21,
-      },
-      select: {
-        title: true,
-        contents: false,
-      },
-    })
-    .compile()
+  const query = tbl.findUnique({
+    where: {
+      id: 'i2',
+      nbr: 21,
+    },
+    select: {
+      title: true,
+      contents: false,
+    },
+  })
 
   t.is(
     query.sql,
@@ -138,60 +126,54 @@ test('findUnique query with selection', (t) => {
 })
 
 test('findUnique query with selection of NULL value', (t) => {
-  const query = tbl
-    .findUnique({
-      where: {
-        id: 'i2',
-        nbr: null,
-      },
-      select: {
-        title: true,
-        contents: false,
-      },
-    })
-    .compile()
+  const query = tbl.findUnique({
+    where: {
+      id: 'i2',
+      nbr: null,
+    },
+    select: {
+      title: true,
+      contents: false,
+    },
+  })
 
   t.is(
     query.sql,
-    'select "id", "nbr", "title" from "Post" where "id" = (?) and "nbr" is (?) limit ?'
+    'select "id", "nbr", "title" from "Post" where "id" = (?) and "nbr" is NULL limit ?'
   )
-  t.deepEqual(query.parameters, ['i2', 'NULL', 2])
+  t.deepEqual(query.parameters, ['i2', 2])
 })
 
 test('findUnique query with selection of non-NULL value', (t) => {
-  const query = tbl
-    .findUnique({
-      where: {
-        id: 'i2',
-        nbr: { not: null },
-      },
-      select: {
-        title: true,
-        contents: false,
-      },
-    })
-    .compile()
+  const query = tbl.findUnique({
+    where: {
+      id: 'i2',
+      nbr: { not: null },
+    },
+    select: {
+      title: true,
+      contents: false,
+    },
+  })
 
   t.is(
     query.sql,
-    'select "id", "nbr", "title" from "Post" where "id" = (?) and "nbr" is not (?) limit ?'
+    'select "id", "nbr", "title" from "Post" where "id" = (?) and "nbr" is not NULL limit ?'
   )
-  t.deepEqual(query.parameters, ['i2', null, 2])
+  t.deepEqual(query.parameters, ['i2', 2])
 })
 
 test('findUnique query with selection of row that does not equal a value', (t) => {
-  const query = tbl
-    .findUnique({
-      where: {
-        id: 'i2',
-        nbr: { not: 5 },
-      },
-      select: {
-        title: true,
-        contents: false,
-      },
-    })
-    .compile()
+  const query = tbl.findUnique({
+    where: {
+      id: 'i2',
+      nbr: { not: 5 },
+    },
+    select: {
+      title: true,
+      contents: false,
+    },
+  })
 
   t.is(
     query.sql,
@@ -201,14 +183,12 @@ test('findUnique query with selection of row that does not equal a value', (t) =
 })
 
 test('findUnique query supports several filters', (t) => {
-  const query = tbl
-    .findUnique({
-      where: {
-        id: 'i2',
-        nbr: { not: 5, in: [1, 2, 3] },
-      },
-    })
-    .compile()
+  const query = tbl.findUnique({
+    where: {
+      id: 'i2',
+      nbr: { not: 5, in: [1, 2, 3] },
+    },
+  })
 
   t.is(
     query.sql,
@@ -241,16 +221,14 @@ test('findUnique query with no filters throws an error', (t) => {
 })
 
 test('findMany allows results to be ordered on one field', (t) => {
-  const query = tbl
-    .findMany({
-      // `where` argument must not be provided when using the actual API because it is added as default by the validator
-      // but since we directly use the query builder we need to provide it
-      where: {},
-      orderBy: {
-        id: 'asc',
-      },
-    })
-    .compile()
+  const query = tbl.findMany({
+    // `where` argument must not be provided when using the actual API because it is added as default by the validator
+    // but since we directly use the query builder we need to provide it
+    where: {},
+    orderBy: {
+      id: 'asc',
+    },
+  })
 
   t.is(
     query.sql,
@@ -259,21 +237,19 @@ test('findMany allows results to be ordered on one field', (t) => {
 })
 
 test('findMany allows results to be ordered on several fields', (t) => {
-  const query = tbl
-    .findMany({
-      // `where` argument must not be provided when using the actual API because it is added as default by the validator
-      // but since we directly use the query builder we need to provide it
-      where: {},
-      orderBy: [
-        {
-          id: 'asc',
-        },
-        {
-          title: 'desc',
-        },
-      ],
-    })
-    .compile()
+  const query = tbl.findMany({
+    // `where` argument must not be provided when using the actual API because it is added as default by the validator
+    // but since we directly use the query builder we need to provide it
+    where: {},
+    orderBy: [
+      {
+        id: 'asc',
+      },
+      {
+        title: 'desc',
+      },
+    ],
+  })
 
   t.is(
     query.sql,
@@ -282,15 +258,13 @@ test('findMany allows results to be ordered on several fields', (t) => {
 })
 
 test('findMany supports pagination', (t) => {
-  const query = tbl
-    .findMany({
-      // `where` argument must not be provided when using the actual API because it is added as default by the validator
-      // but since we directly use the query builder we need to provide it
-      where: {},
-      take: 1,
-      skip: 1,
-    })
-    .compile()
+  const query = tbl.findMany({
+    // `where` argument must not be provided when using the actual API because it is added as default by the validator
+    // but since we directly use the query builder we need to provide it
+    where: {},
+    take: 1,
+    skip: 1,
+  })
 
   t.is(
     query.sql,
@@ -300,14 +274,12 @@ test('findMany supports pagination', (t) => {
 })
 
 test('findMany supports distinct results', (t) => {
-  const query = tbl
-    .findMany({
-      // `where` argument must not be provided when using the actual API because it is added as default by the validator
-      // but since we directly use the query builder we need to provide it
-      where: {},
-      distinct: ['nbr'],
-    })
-    .compile()
+  const query = tbl.findMany({
+    // `where` argument must not be provided when using the actual API because it is added as default by the validator
+    // but since we directly use the query builder we need to provide it
+    where: {},
+    distinct: ['nbr'],
+  })
 
   t.is(
     query.sql,
@@ -316,15 +288,13 @@ test('findMany supports distinct results', (t) => {
 })
 
 test('findMany supports IN filters in where argument', (t) => {
-  const query = tbl
-    .findMany({
-      where: {
-        nbr: {
-          in: [1, 5, 18],
-        },
+  const query = tbl.findMany({
+    where: {
+      nbr: {
+        in: [1, 5, 18],
       },
-    })
-    .compile()
+    },
+  })
 
   t.is(
     query.sql,
@@ -334,15 +304,13 @@ test('findMany supports IN filters in where argument', (t) => {
 })
 
 test('findMany supports NOT IN filters in where argument', (t) => {
-  const query = tbl
-    .findMany({
-      where: {
-        nbr: {
-          notIn: [1, 5, 18],
-        },
+  const query = tbl.findMany({
+    where: {
+      nbr: {
+        notIn: [1, 5, 18],
       },
-    })
-    .compile()
+    },
+  })
 
   t.is(
     query.sql,
@@ -352,18 +320,16 @@ test('findMany supports NOT IN filters in where argument', (t) => {
 })
 
 test('findMany supports lt, lte, gt, gte filters in where argument', (t) => {
-  const query = tbl
-    .findMany({
-      where: {
-        nbr: {
-          lt: 11,
-          lte: 10,
-          gt: 4,
-          gte: 5,
-        },
+  const query = tbl.findMany({
+    where: {
+      nbr: {
+        lt: 11,
+        lte: 10,
+        gt: 4,
+        gte: 5,
       },
-    })
-    .compile()
+    },
+  })
 
   t.is(
     query.sql,
@@ -373,15 +339,13 @@ test('findMany supports lt, lte, gt, gte filters in where argument', (t) => {
 })
 
 test('findMany supports startsWith filter in where argument', (t) => {
-  const query = tbl
-    .findMany({
-      where: {
-        title: {
-          startsWith: 'foo',
-        },
+  const query = tbl.findMany({
+    where: {
+      title: {
+        startsWith: 'foo',
       },
-    })
-    .compile()
+    },
+  })
 
   t.is(
     query.sql,
@@ -391,15 +355,13 @@ test('findMany supports startsWith filter in where argument', (t) => {
 })
 
 test('findMany supports endsWith filter in where argument', (t) => {
-  const query = tbl
-    .findMany({
-      where: {
-        title: {
-          endsWith: 'foo',
-        },
+  const query = tbl.findMany({
+    where: {
+      title: {
+        endsWith: 'foo',
       },
-    })
-    .compile()
+    },
+  })
 
   t.is(
     query.sql,
@@ -409,15 +371,13 @@ test('findMany supports endsWith filter in where argument', (t) => {
 })
 
 test('findMany supports contains filter in where argument', (t) => {
-  const query = tbl
-    .findMany({
-      where: {
-        title: {
-          contains: 'foo',
-        },
+  const query = tbl.findMany({
+    where: {
+      title: {
+        contains: 'foo',
       },
-    })
-    .compile()
+    },
+  })
 
   t.is(
     query.sql,
@@ -427,39 +387,37 @@ test('findMany supports contains filter in where argument', (t) => {
 })
 
 test('findMany supports boolean filters in where argument', (t) => {
-  const query = tbl
-    .findMany({
-      where: {
-        OR: [
-          {
-            title: {
-              contains: 'foo',
-            },
+  const query = tbl.findMany({
+    where: {
+      OR: [
+        {
+          title: {
+            contains: 'foo',
           },
-          {
-            title: 'bar',
-          },
-        ],
-        AND: [
-          {
-            contents: 'content',
-          },
-          {
-            nbr: 6,
-          },
-        ],
-        NOT: [
-          {
-            title: 'foobar',
-          },
-          {
-            title: 'barfoo',
-          },
-        ],
-        nbr: 5,
-      },
-    })
-    .compile()
+        },
+        {
+          title: 'bar',
+        },
+      ],
+      AND: [
+        {
+          contents: 'content',
+        },
+        {
+          nbr: 6,
+        },
+      ],
+      NOT: [
+        {
+          title: 'foobar',
+        },
+        {
+          title: 'barfoo',
+        },
+      ],
+      nbr: 5,
+    },
+  })
 
   t.is(
     query.sql,
@@ -477,29 +435,27 @@ test('findMany supports boolean filters in where argument', (t) => {
 })
 
 test('findMany supports single AND filter and single NOT filter in where argument', (t) => {
-  const query = tbl
-    .findMany({
-      where: {
-        OR: [
-          {
-            title: {
-              contains: 'foo',
-            },
+  const query = tbl.findMany({
+    where: {
+      OR: [
+        {
+          title: {
+            contains: 'foo',
           },
-          {
-            title: 'bar',
-          },
-        ],
-        AND: {
-          contents: 'content',
         },
-        NOT: {
-          title: 'foobar',
+        {
+          title: 'bar',
         },
-        nbr: 5,
+      ],
+      AND: {
+        contents: 'content',
       },
-    })
-    .compile()
+      NOT: {
+        title: 'foobar',
+      },
+      nbr: 5,
+    },
+  })
 
   t.is(
     query.sql,
@@ -509,12 +465,10 @@ test('findMany supports single AND filter and single NOT filter in where argumen
 })
 
 test('update query', (t) => {
-  const query = tbl
-    .update({
-      data: { title: 'Foo', contents: 'Bar' },
-      where: { id: '1' },
-    })
-    .compile()
+  const query = tbl.update({
+    data: { title: 'Foo', contents: 'Bar' },
+    where: { id: '1' },
+  })
 
   t.is(
     query.sql,
@@ -524,14 +478,12 @@ test('update query', (t) => {
 })
 
 test('updateMany query', (t) => {
-  const query1 = tbl
-    .updateMany({
-      data: { title: 'Foo', contents: 'Bar' },
-      // `where` argument must not be provided when using the actual API because it is added as default by the validator
-      // but since we directly use the query builder we need to provide it
-      where: {},
-    })
-    .compile()
+  const query1 = tbl.updateMany({
+    data: { title: 'Foo', contents: 'Bar' },
+    // `where` argument must not be provided when using the actual API because it is added as default by the validator
+    // but since we directly use the query builder we need to provide it
+    where: {},
+  })
 
   const sql =
     'update "Post" set "title" = ?, "contents" = ? returning "id", "title", "contents", "nbr"'
@@ -541,33 +493,27 @@ test('updateMany query', (t) => {
 })
 
 test('delete query', (t) => {
-  const query = tbl
-    .delete({
-      where: { id: 'Foo', title: 'Bar' },
-    })
-    .compile()
+  const query = tbl.delete({
+    where: { id: 'Foo', title: 'Bar' },
+  })
 
   t.is(query.sql, 'delete from "Post" where "id" = (?) and "title" = (?)')
   t.deepEqual(query.parameters, ['Foo', 'Bar'])
 })
 
 test('deleteMany query', (t) => {
-  const query1 = tbl
-    .deleteMany({
-      where: { id: 'Foo', title: 'Bar' },
-    })
-    .compile()
+  const query1 = tbl.deleteMany({
+    where: { id: 'Foo', title: 'Bar' },
+  })
 
   t.is(query1.sql, 'delete from "Post" where "id" = (?) and "title" = (?)')
   t.deepEqual(query1.parameters, ['Foo', 'Bar'])
 
-  const query2 = tbl
-    .deleteMany({
-      // `where` argument is not required when using the actual API because it is added as default by the validator
-      // but since we directly use the query builder we need to provide it
-      where: {},
-    })
-    .compile()
+  const query2 = tbl.deleteMany({
+    // `where` argument is not required when using the actual API because it is added as default by the validator
+    // but since we directly use the query builder we need to provide it
+    where: {},
+  })
 
   const sql = 'delete from "Post"'
   t.is(query2.sql, sql)

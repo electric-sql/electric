@@ -1,19 +1,20 @@
 import { RunResult, Transaction } from '../../electric/adapter'
-import { QueryBuilder } from 'squel'
 import { DB } from './db'
 import * as z from 'zod'
 import { Row, Statement } from '../../util'
 import { Fields } from '../model/schema'
 import { Transformation, transformFields } from '../conversions/input'
+import { KyselyStatement } from '../model/kyselyBuilder'
 
 export class TransactionalDB implements DB {
   constructor(private _tx: Transaction, private _fields: Fields) {}
+
   run(
-    statement: QueryBuilder,
+    statement: KyselyStatement,
     successCallback?: (db: DB, res: RunResult) => void,
     errorCallback?: (error: any) => void
   ): void {
-    const { text, values } = statement.toParam({ numberedParameters: false })
+    const { sql: text, parameters: values } = statement
     this._tx.run(
       { sql: text, args: values },
       (tx, res) => {
@@ -25,12 +26,13 @@ export class TransactionalDB implements DB {
   }
 
   query<Z>(
-    statement: QueryBuilder,
+    statement: KyselyStatement,
     schema: z.ZodType<Z>,
     successCallback: (db: DB, res: Z[]) => void,
     errorCallback?: (error: any) => void
   ): void {
-    const { text, values } = statement.toParam({ numberedParameters: false })
+    const text = statement.sql
+    const values = statement.parameters
     this._tx.query(
       { sql: text, args: values },
       (tx, rows) => {
