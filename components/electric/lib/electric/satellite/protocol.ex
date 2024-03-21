@@ -459,6 +459,7 @@ defmodule Electric.Satellite.Protocol do
             including_data: msg.additional_data_source_ids,
             including_subscriptions: msg.subscription_ids,
             cached_wal_impl: CachedWal.EtsBacked,
+            origin: state.origin,
             advance_graph_using: {&advance_graph_by_tx/4, [state.auth.user_id]}
           )
 
@@ -1147,6 +1148,7 @@ defmodule Electric.Satellite.Protocol do
       including_data: observed_txn_data,
       including_subscriptions: Map.keys(state.subscriptions),
       cached_wal_impl: CachedWal.EtsBacked,
+      origin: state.origin,
       advance_graph_using: {&advance_graph_by_tx/4, [state.auth.user_id]}
     )
     |> case do
