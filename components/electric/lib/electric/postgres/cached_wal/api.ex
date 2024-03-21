@@ -79,16 +79,6 @@ defmodule Electric.Postgres.CachedWal.Api do
   def compare_positions(module \\ default_module(), wal_pos_1, wal_pos_2),
     do: module.compare_positions(wal_pos_1, wal_pos_2)
 
-  @spec get_transactions(module(), from: wal_pos(), to: wal_pos()) ::
-          {:ok, [{segment(), wal_pos()}]} | {:error, :lsn_too_old}
-  def get_transactions(module \\ default_module(), from: from_pos, to: to_pos) do
-    if lsn_in_cached_window?(module, from_pos) do
-      {:ok, Enum.to_list(stream_transactions(module, from: from_pos, to: to_pos))}
-    else
-      {:error, :lsn_too_old}
-    end
-  end
-
   @spec stream_transactions([{:from, any()} | {:to, any()}, ...]) ::
           Enumerable.t({segment(), wal_pos()})
   def stream_transactions(module \\ default_module(), from: from_pos, to: to_pos) do
