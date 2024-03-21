@@ -71,23 +71,13 @@ defmodule Electric.Postgres.CachedWal.Api do
   to query source database directly to catch up.
   """
   @spec next_segment(module(), Connectors.origin(), wal_pos()) ::
-          {:ok, segment(), new_position :: wal_pos()} | :latest | {:error, :lsn_too_old}
+          {:ok, segment(), new_position :: wal_pos()} | :latest
   def next_segment(module \\ default_module(), origin, wal_pos) do
     module.next_segment(origin, wal_pos)
   end
 
   def compare_positions(module \\ default_module(), wal_pos_1, wal_pos_2),
     do: module.compare_positions(wal_pos_1, wal_pos_2)
-
-  @spec get_transactions(module(), from: wal_pos(), to: wal_pos()) ::
-          {:ok, [{segment(), wal_pos()}]} | {:error, :lsn_too_old}
-  def get_transactions(module \\ default_module(), from: from_pos, to: to_pos) do
-    if lsn_in_cached_window?(module, from_pos) do
-      {:ok, Enum.to_list(stream_transactions(module, from: from_pos, to: to_pos))}
-    else
-      {:error, :lsn_too_old}
-    end
-  end
 
   @spec stream_transactions([{:from, any()} | {:to, any()}, ...]) ::
           Enumerable.t({segment(), wal_pos()})
