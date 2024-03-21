@@ -265,6 +265,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
         txn_id_list = Keyword.fetch!(opts, :including_data)
         subscription_id_list = Keyword.fetch!(opts, :including_subscriptions)
         cached_wal_impl = Keyword.get(opts, :cached_wal_impl, CachedWal.EtsBacked)
+        origin = Keyword.fetch!(opts, :origin)
         advance_graph_fn = Keyword.fetch!(opts, :advance_graph_using)
 
         if CachedWal.Api.compare_positions(cached_wal_impl, acked_lsn, new_lsn) != :gt do
@@ -277,6 +278,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
             |> advance_up_to_new_lsn(
               client_id,
               cached_wal_impl,
+              origin,
               advance_graph_fn,
               acked_lsn,
               new_lsn
@@ -340,6 +342,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
          graph,
          client_id,
          cached_wal_impl,
+         origin,
          advance_graph_fn,
          full_acked_lsn,
          new_lsn
@@ -350,7 +353,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
 
     {graph, pending_actions, count} =
       cached_wal_impl
-      |> CachedWal.Api.stream_transactions(from: full_acked_lsn, to: new_lsn)
+      |> CachedWal.Api.stream_transactions(origin, from: full_acked_lsn, to: new_lsn)
       |> Enum.reduce(state, fn %Transaction{} = txn, {graph, pending_actions, count} ->
         {graph, pending_actions} =
           client_id
