@@ -83,7 +83,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
       lsn_in_cached_window?: fn _origin, pos when is_integer(pos) ->
         pos > @current_wal_pos
       end,
-      stream_transactions: fn _, _ -> [] end
+      stream_transactions: fn _, _, _ -> [] end
     }
   ]) do
     {:ok, %{}}

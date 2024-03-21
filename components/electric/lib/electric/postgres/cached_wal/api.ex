@@ -79,11 +79,14 @@ defmodule Electric.Postgres.CachedWal.Api do
   def compare_positions(module \\ default_module(), wal_pos_1, wal_pos_2),
     do: module.compare_positions(wal_pos_1, wal_pos_2)
 
-  @spec stream_transactions([{:from, any()} | {:to, any()}, ...]) ::
+  @spec stream_transactions(module(), Connectors.origin(), [{:from, any()} | {:to, any()}, ...]) ::
           Enumerable.t({segment(), wal_pos()})
-  def stream_transactions(module \\ default_module(), from: from_pos, to: to_pos) do
+  def stream_transactions(module \\ default_module(), origin, opts) do
+    from_pos = Keyword.fetch!(opts, :from)
+    to_pos = Keyword.fetch!(opts, :to)
+
     Stream.unfold(from_pos, fn from_pos ->
-      case next_segment(module, from_pos) do
+      case next_segment(module, origin, from_pos) do
         {:ok, segment, new_pos} ->
           if module.compare_positions(new_pos, to_pos) != :gt, do: {segment, new_pos}, else: nil
 
