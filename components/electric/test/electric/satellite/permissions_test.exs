@@ -1,6 +1,8 @@
 defmodule Electric.Satellite.PermissionsTest do
   use ExUnit.Case, async: true
 
+  alias ElectricTest.PermissionsHelpers
+
   alias ElectricTest.PermissionsHelpers.{
     Auth,
     Chgs,
@@ -11,12 +13,13 @@ defmodule Electric.Satellite.PermissionsTest do
   }
 
   alias Electric.Postgres.Extension.SchemaLoader
-  alias Electric.Postgres.MockSchemaLoader
   alias Electric.Satellite.{Permissions, Permissions.MoveOut}
   alias Electric.Replication.Changes
 
   import ElectricTest.PermissionsHelpers
 
+  @comments {"public", "comments"}
+  @issues {"public", "issues"}
   @users {"public", "users"}
   @regions {"public", "regions"}
   @offices {"public", "offices"}
@@ -25,106 +28,78 @@ defmodule Electric.Satellite.PermissionsTest do
   @issues {"public", "issues"}
   @comments {"public", "comments"}
   @reactions {"public", "reactions"}
+  @site_admins {"public", "site_admins"}
   @project_memberships {"public", "project_memberships"}
+
+  @compound_root {"public", "compound_root"}
+  @compound_level1 {"public", "compound_level1"}
+  @compound_level2 {"public", "compound_level2"}
+
   @projects_assign ~s[ELECTRIC ASSIGN (#{table(@projects)}, #{table(@project_memberships)}.role) TO #{table(@project_memberships)}.user_id]
   @global_assign ~s[ELECTRIC ASSIGN #{table(@users)}.role TO #{table(@users)}.id]
 
-  setup do
-    loader_spec =
-      MockSchemaLoader.backend_spec(
-        migrations: [
-          {"01",
-           [
-             "create table regions (id uuid primary key)",
-             "create table offices (id uuid primary key, region_id uuid not null references regions (id))",
-             "create table workspaces (id uuid primary key)",
-             "create table projects (id uuid primary key, workspace_id uuid not null references workspaces (id))",
-             "create table issues (id uuid primary key, project_id uuid not null references projects (id))",
-             "create table comments (id uuid primary key, issue_id uuid not null references issues (id))",
-             "create table reactions (id uuid primary key, comment_id uuid not null references comments (id))",
-             "create table users (id uuid primary key, role text not null default 'normie')",
-             "create table teams (id uuid primary key)",
-             """
-             create table project_memberships (
-                id uuid primary key,
-                user_id uuid not null references users (id),
-                project_id uuid not null references projects (id),
-                project_role text not null
-             )
-             """,
-             """
-             create table team_memberships (
-                id uuid primary key,
-                user_id uuid not null references users (id),
-                team_id uuid not null references teams (id),
-                team_role text not null
-             )
-             """,
-             """
-             create table site_admins (
-                id uuid primary key,
-                user_id uuid not null references users (id),
-                site_role text not null
-             )
-             """,
-             """
-             create table my_default.admin_users (
-                id uuid primary key,
-                user_id uuid not null references users (id)
-             )
-             """
-           ]}
-        ]
-      )
+  defmacrop assert_write_rejected(test) do
+    # permissions failure messages are prefixed with `"permissions:"` so we're double checking
+    # that the error is caused by the permissions checks themselves, not by some other data error
+    # this is particularly important for the sqlite backed tests
+    quote do
+      assert {:error, "permissions:" <> _} = unquote(test)
+    end
+  end
 
-    {:ok, loader} = SchemaLoader.connect(loader_spec, [])
+  setup do
+    {:ok, loader} = PermissionsHelpers.Schema.loader()
     {:ok, schema_version} = SchemaLoader.load(loader)
 
-    tree =
-      Tree.new(
-        [
-          {@regions, "r1", [{@offices, "o1"}, {@offices, "o2"}]},
-          {@regions, "r2", [{@offices, "o3"}, {@offices, "o4"}]},
-          {@workspaces, "w1",
-           [
-             {@projects, "p1",
-              [
-                {@issues, "i1",
-                 [
-                   {@comments, "c1",
-                    [{@reactions, "r1"}, {@reactions, "r2"}, {@reactions, "r3"}]},
-                   {@comments, "c2", [{@reactions, "r4"}]}
-                 ]},
-                {@issues, "i2", [{@comments, "c5"}]},
-                {@project_memberships, "pm1", []}
-              ]},
-             {@projects, "p2",
-              [
-                {@issues, "i3",
-                 [
-                   {@comments, "c3",
-                    [{@reactions, "r5"}, {@reactions, "r6"}, {@reactions, "r7"}]},
-                   {@comments, "c4", [{@reactions, "r8"}]}
-                 ]},
-                {@issues, "i4"}
-              ]},
-             {@projects, "p3", [{@issues, "i5", []}]},
-             {@projects, "p4", [{@issues, "i6", []}]}
-           ]}
-        ],
-        [
-          {@comments, @issues, ["issue_id"]},
-          {@issues, @projects, ["project_id"]},
-          {@offices, @regions, ["region_id"]},
-          {@project_memberships, @projects, ["project_id"]},
-          {@projects, @workspaces, ["workspace_id"]},
-          {@reactions, @comments, ["comment_id"]}
-        ]
-      )
+    data = [
+      {@regions, "rg1", [{@offices, "o1"}, {@offices, "o2"}]},
+      {@regions, "rg2", [{@offices, "o3"}, {@offices, "o4"}]},
+      {@workspaces, "w1",
+       [
+         {@projects, "p1",
+          [
+            {@issues, "i1",
+             [
+               {@comments, "c1", [{@reactions, "r1"}, {@reactions, "r2"}, {@reactions, "r3"}]},
+               {@comments, "c2", [{@reactions, "r4"}]}
+             ]},
+            {@issues, "i2", [{@comments, "c5"}]},
+            {@project_memberships, "pm1", %{"user_id" => Auth.user_id(), "role" => "member"}, []}
+          ]},
+         {@projects, "p2",
+          [
+            {@issues, "i3",
+             [
+               {@comments, "c3", [{@reactions, "r5"}, {@reactions, "r6"}, {@reactions, "r7"}]},
+               {@comments, "c4", [{@reactions, "r8"}]}
+             ]},
+            {@issues, "i4"}
+          ]},
+         {@projects, "p3", [{@issues, "i5", [{@comments, "c6"}]}]},
+         {@projects, "p4", [{@issues, "i6", []}]}
+       ]},
+      {@compound_root, ["cmr1_1", "cmr2_1"],
+       [
+         {
+           @compound_level1,
+           ["cml1_1", "cml2_1"],
+           [{@compound_level2, ["cmll1_1", "cmll2_1"], []}]
+         }
+       ]},
+      {@users, [Auth.user_id()]},
+      {@site_admins, ["sa1"], %{"role" => "site.admin", "user_id" => Auth.user_id()}, []}
+    ]
+
+    tree = Tree.new(data, schema_version)
 
     {:ok, _} = start_supervised(Perms.Transient)
 
-    {:ok, tree: tree, loader: loader, schema_version: schema_version}
+    {:ok,
+     tree: tree,
+     loader: loader,
+     schema_version: schema_version,
+     data: data,
+     migrations: PermissionsHelpers.Schema.migrations()}
   end
 
   describe "validate_write/3" do
@@ -875,6 +850,225 @@ defmodule Electric.Satellite.PermissionsTest do
     end
   end
 
+  # TODO: implement where clauses on client side
+  for module <- [PermissionsHelpers.Server] do
+    describe "#{module.name()}: where clauses" do
+      setup(cxt) do
+        {:ok, cxt} = unquote(module).setup(cxt)
+        {:ok, Map.put(Map.new(cxt), :module, unquote(module))}
+      end
+
+      test "simple user_id", cxt do
+        perms =
+          cxt.module.perms(
+            cxt,
+            [
+              ~s[GRANT ALL ON #{table(@comments)} TO AUTHENTICATED WHERE (row.author_id::text = auth.user_id)]
+            ],
+            []
+          )
+
+        assert_write_rejected(
+          cxt.module.validate_write(
+            perms,
+            cxt.tree,
+            Chgs.tx([
+              Chgs.insert(@comments, %{
+                "id" => "c100",
+                "issue_id" => "i3",
+                "author_id" => "78c4d92e-a0a7-4c6a-b25a-44e26eb33e4c"
+              })
+            ])
+          )
+        )
+
+        assert {:ok, _perms} =
+                 cxt.module.validate_write(
+                   perms,
+                   cxt.tree,
+                   Chgs.tx([
+                     Chgs.insert(@comments, %{
+                       "id" => "c100",
+                       "issue_id" => "i3",
+                       "author_id" => Auth.user_id()
+                     })
+                   ])
+                 )
+
+        assert {:ok, _perms} =
+                 cxt.module.validate_write(
+                   perms,
+                   cxt.tree,
+                   # issue i3 belongs to project p2
+                   Chgs.tx([
+                     Chgs.update(
+                       @comments,
+                       %{"id" => "c4", "issue_id" => "i3", "author_id" => Auth.user_id()},
+                       %{
+                         "comment" => "changed"
+                       }
+                     )
+                   ])
+                 )
+
+        assert_write_rejected(
+          cxt.module.validate_write(
+            perms,
+            cxt.tree,
+            # issue i3 belongs to project p2
+            Chgs.tx([
+              Chgs.update(
+                @comments,
+                %{"id" => "c4", "issue_id" => "i3", "author_id" => Auth.user_id()},
+                %{
+                  "author_id" => "a5158d97-8e45-408d-81c9-f28e2fe4f54c"
+                }
+              )
+            ])
+          )
+        )
+      end
+
+      test "local role granting", cxt do
+        # if an assign has a where clause then local roles should honour that
+        # and only grant the role if the where clause passes
+        # reset the db because we're repeating the permissions setup
+        cxt = cxt.module.reset(cxt)
+
+        perms =
+          cxt.module.perms(
+            cxt,
+            [
+              # project level perms
+              ~s[GRANT ALL ON #{table(@issues)} TO (#{table(@projects)}, 'manager')],
+              ~s[GRANT ALL ON #{table(@comments)} TO (#{table(@projects)}, 'manager')],
+              # read only to viewer
+              ~s[GRANT READ ON #{table(@issues)} TO (#{table(@projects)}, 'viewer')],
+              ~s[GRANT READ ON #{table(@comments)} TO (#{table(@projects)}, 'viewer')],
+              # global roles allowing create project and assign members
+              ~s[GRANT ALL ON #{table(@projects)} TO 'admin'],
+              ~s[GRANT ALL ON #{table(@project_memberships)} TO 'admin'],
+              ~s[GRANT ALL ON site_admins TO 'admin'],
+
+              # global roles with a join table
+              ~s[GRANT ALL ON #{table(@regions)} TO 'site.admin'],
+              ~s[GRANT ALL ON #{table(@offices)} TO 'site.admin'],
+              ~s[ELECTRIC ASSIGN (#{table(@projects)}, #{table(@project_memberships)}.role) TO #{table(@project_memberships)}.user_id IF (ROW.valid)],
+              ~s[ELECTRIC ASSIGN 'site.admin' TO #{table(@project_memberships)}.user_id IF (ROW.role = 'site.admin')],
+              @global_assign,
+              ~s[ASSIGN site_admins.role TO site_admins.user_id]
+            ],
+            [
+              Roles.role("admin", "assign-2")
+            ]
+          )
+
+        assert_write_rejected(
+          cxt.module.validate_write(
+            perms,
+            cxt.tree,
+            Chgs.tx([
+              Chgs.insert(@issues, %{
+                "id" => "i100",
+                "project_id" => "p1"
+              })
+            ])
+          )
+        )
+
+        assert_write_rejected(
+          cxt.module.validate_write(
+            perms,
+            cxt.tree,
+            Chgs.tx([
+              Chgs.insert(@project_memberships, %{
+                "id" => "pm100",
+                "user_id" => Auth.user_id(),
+                "project_id" => "p1",
+                "role" => "manager",
+                "valid" => false
+              }),
+              Chgs.insert(@issues, %{
+                "id" => "i100",
+                "project_id" => "p1"
+              })
+            ])
+          )
+        )
+
+        assert {:ok, perms} =
+                 cxt.module.validate_write(
+                   perms,
+                   cxt.tree,
+                   Chgs.tx([
+                     Chgs.insert(@project_memberships, %{
+                       "id" => "pm100",
+                       "user_id" => Auth.user_id(),
+                       "project_id" => "p1",
+                       "role" => "manager",
+                       "valid" => true
+                     }),
+                     Chgs.insert(@issues, %{
+                       "id" => "i100",
+                       "project_id" => "p1"
+                     })
+                   ])
+                 )
+
+        assert_write_rejected(
+          cxt.module.validate_write(
+            perms,
+            cxt.tree,
+            Chgs.tx([
+              Chgs.delete(@project_memberships, %{
+                "id" => "pm100",
+                "user_id" => Auth.user_id(),
+                "project_id" => "p1",
+                "role" => "manager",
+                "valid" => true
+              }),
+              Chgs.insert(@issues, %{
+                "id" => "i101",
+                "project_id" => "p1"
+              })
+            ])
+          )
+        )
+
+        assert_write_rejected(
+          cxt.module.validate_write(
+            perms,
+            cxt.tree,
+            Chgs.tx([
+              Chgs.insert(@regions, %{
+                "id" => "rg200"
+              })
+            ])
+          )
+        )
+
+        assert {:ok, _perms} =
+                 cxt.module.validate_write(
+                   perms,
+                   cxt.tree,
+                   Chgs.tx([
+                     # insert a special 'site.admin' role
+                     Chgs.insert(@project_memberships, %{
+                       "id" => "pm100",
+                       "user_id" => Auth.user_id(),
+                       "project_id" => "p1",
+                       "role" => "site.admin",
+                       "valid" => false
+                     }),
+                     Chgs.insert(@regions, %{
+                       "id" => "rg200"
+                     })
+                   ])
+                 )
+      end
+    end
+  end
+
   describe "transient permissions" do
     setup(cxt) do
       perms =
@@ -1206,6 +1400,78 @@ defmodule Electric.Satellite.PermissionsTest do
       {filtered_tx, []} = Permissions.filter_read(perms, cxt.tree, Chgs.tx(changes))
 
       assert filtered_tx.changes == expected_changes
+    end
+
+    test "where clauses on grant", cxt do
+      perms =
+        perms_build(
+          cxt,
+          [
+            ~s[GRANT ALL ON #{table(@issues)} TO (#{table(@projects)}, 'editor') ],
+            ~s[GRANT ALL ON #{table(@comments)} TO (#{table(@projects)}, 'editor') WHERE (ROW.author_id = auth.user_id)],
+            ~s[GRANT ALL ON #{table(@reactions)} TO (#{table(@projects)}, 'editor') WHERE (ROW.is_public)],
+            @projects_assign
+          ],
+          [
+            Roles.role("editor", @projects, "p1", "assign-1"),
+            Roles.role("editor", @projects, "p2", "assign-1")
+          ]
+        )
+
+      changes = [
+        Chgs.update(@issues, %{"id" => "i1", "project_id" => "p1"}, %{"text" => "updated"}),
+        Chgs.insert(@issues, %{"id" => "i100", "project_id" => "p1"}),
+        Chgs.insert(@issues, %{"id" => "i101", "project_id" => "p2"}),
+        # author_id is us
+        Chgs.update(
+          @comments,
+          %{"id" => "c1", "issue_id" => "i1", "author_id" => Auth.user_id()},
+          %{"text" => "updated"}
+        ),
+        # author is not us, so should be filtered
+        Chgs.update(
+          @comments,
+          %{"id" => "c2", "issue_id" => "i1", "author_id" => Auth.not_user_id()},
+          %{"text" => "updated"}
+        ),
+        # matches the is_public clause
+        Chgs.update(@reactions, %{"id" => "r1", "comment_id" => "c1", "is_public" => true}, %{
+          "text" => "updated"
+        }),
+        # change of is_public fails ROW.is_public test which tests old and new values
+        Chgs.update(@reactions, %{"id" => "r2", "comment_id" => "c1", "is_public" => true}, %{
+          "text" => "updated",
+          "is_public" => false
+        }),
+        Chgs.insert(@reactions, %{"id" => "r200", "comment_id" => "c1", "is_public" => true})
+      ]
+
+      {filtered_tx, []} = Permissions.filter_read(perms, cxt.tree, Chgs.tx(changes))
+
+      assert filtered_tx.changes == [
+               Chgs.update(@issues, %{"id" => "i1", "project_id" => "p1"}, %{"text" => "updated"}),
+               Chgs.insert(@issues, %{"id" => "i100", "project_id" => "p1"}),
+               Chgs.insert(@issues, %{"id" => "i101", "project_id" => "p2"}),
+               # author_id is us
+               Chgs.update(
+                 @comments,
+                 %{"id" => "c1", "issue_id" => "i1", "author_id" => Auth.user_id()},
+                 %{"text" => "updated"}
+               ),
+               # matches the is_public clause
+               Chgs.update(
+                 @reactions,
+                 %{"id" => "r1", "comment_id" => "c1", "is_public" => true},
+                 %{
+                   "text" => "updated"
+                 }
+               ),
+               Chgs.insert(@reactions, %{
+                 "id" => "r200",
+                 "comment_id" => "c1",
+                 "is_public" => true
+               })
+             ]
     end
   end
 end

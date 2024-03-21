@@ -1,6 +1,7 @@
 defmodule Electric.Satellite.Permissions.Role do
   alias Electric.Satellite.SatPerms
   alias Electric.Satellite.Permissions
+  alias Electric.Satellite.Permissions.Grant
 
   defmodule Anyone do
     defstruct []
@@ -52,15 +53,15 @@ defmodule Electric.Satellite.Permissions.Role do
 
   def matching_grants(%Anyone{}, grants) do
     Enum.filter(grants, fn
-      %{role: %{role: {:predefined, :ANYONE}}} -> true
-      _ -> false
+      %Grant{role: :ANYONE} -> true
+      %Grant{role: _} -> false
     end)
   end
 
   def matching_grants(%Authenticated{}, grants) do
     Enum.filter(grants, fn
-      %{role: %{role: {:predefined, :AUTHENTICATED}}} -> true
-      _ -> false
+      %Grant{role: :AUTHENTICATED} -> true
+      %Grant{role: _} -> false
     end)
   end
 
@@ -69,7 +70,7 @@ defmodule Electric.Satellite.Permissions.Role do
     %{role: role_name} = role
 
     grants
-    |> Stream.filter(&reject_predefined/1)
+    |> Stream.reject(&predefined/1)
     |> Stream.filter(&is_nil(&1.scope))
     |> Enum.filter(&matching_role(&1, role_name))
   end
@@ -79,21 +80,18 @@ defmodule Electric.Satellite.Permissions.Role do
     %{role: role_name, scope: {role_scope, _id}} = role
 
     grants
-    |> Stream.filter(&reject_predefined/1)
+    |> Stream.reject(&predefined/1)
     |> Stream.filter(&matching_scope(&1, role_scope))
     |> Enum.filter(&matching_role(&1, role_name))
   end
 
-  defp reject_predefined(%{role: %{role: {:predefined, _}}}), do: false
-  defp reject_predefined(_grant), do: true
+  defp predefined(%Grant{role: role}), do: role in [:ANYONE, :AUTHENTICATED]
 
-  defp matching_role(%{role: %{role: {:application, role}}}, role), do: true
-  defp matching_role(_grant, _role), do: false
+  defp matching_role(%Grant{role: role}, role), do: true
+  defp matching_role(%Grant{}, _role), do: false
 
-  defp matching_scope(%{scope: %SatPerms.Table{schema: schema, name: name}}, {schema, name}),
-    do: true
-
-  defp matching_scope(_, _), do: false
+  defp matching_scope(%Grant{scope: {schema, name}}, {schema, name}), do: true
+  defp matching_scope(%Grant{}, _), do: false
 
   defp make_scope(nil), do: nil
   defp make_scope(%SatPerms.Scope{table: %{schema: s, name: n}, id: id}), do: {{s, n}, id}

@@ -19,7 +19,16 @@ defmodule Electric.Replication.Eval.Parser do
   end
 
   defmodule Func do
-    defstruct [:args, :type, :implementation, :name, strict?: true, immutable?: true, location: 0]
+    defstruct [
+      :args,
+      :type,
+      :implementation,
+      :name,
+      strict?: true,
+      immutable?: true,
+      location: 0,
+      cast: nil
+    ]
   end
 
   @valid_types (Electric.Postgres.supported_types() ++
@@ -439,7 +448,8 @@ defmodule Electric.Replication.Eval.Parser do
            type: target_type,
            args: [arg],
            implementation: impl,
-           name: "#{type}_to_#{target_type}"
+           name: "#{type}_to_#{target_type}",
+           cast: {type, target_type}
          }}
 
       :error ->
