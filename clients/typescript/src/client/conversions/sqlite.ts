@@ -1,6 +1,6 @@
 import { InvalidArgumentError } from '../validation/errors/invalidArgumentError'
 import { deserialiseBoolean, serialiseBoolean } from './datatypes/boolean'
-import { deserialiseBytes, serialiseBytes } from './datatypes/bytes'
+import { deserialiseBlob, serialiseBlob } from './datatypes/blob'
 import { deserialiseDate, serialiseDate } from './datatypes/date'
 import { deserialiseJSON, serialiseJSON } from './datatypes/json'
 import { PgBasicType, PgDateType, PgType } from './types'
@@ -42,7 +42,7 @@ export function toSqlite(v: any, pgType: PgType): any {
   ) {
     return serialiseJSON(v)
   } else if (pgType === PgBasicType.PG_BYTEA) {
-    return serialiseBytes(v)
+    return serialiseBlob(v)
   } else {
     return v
   }
@@ -84,7 +84,7 @@ export function fromSqlite(v: any, pgType: PgType): any {
     // it's serialised JSON
     return deserialiseJSON(v)
   } else if (pgType === PgBasicType.PG_BYTEA) {
-    return deserialiseBytes(v)
+    return deserialiseBlob(v)
   } else {
     return v
   }
