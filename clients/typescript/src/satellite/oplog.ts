@@ -11,7 +11,7 @@ import {
   Relation,
 } from '../util/types'
 import { union } from '../util/sets'
-import { numberToBytes } from '../util/common'
+import { numberToBytes, blobToHexString, hexStringToBlob } from '../util/common'
 
 // format: UUID@timestamp_in_milliseconds
 export type Timestamp = string
@@ -309,6 +309,7 @@ export const remoteOperationsToTableChanges = (
 /**
  * Serialises a row that is represented by a record.
  * `NaN`, `+Inf`, and `-Inf` are transformed to their string equivalent.
+ * Bytestrings are encoded as hex strings
  * @param record The row to serialise.
  */
 function serialiseRow(row?: Rec): string {
@@ -325,6 +326,10 @@ function serialiseRow(row?: Rec): string {
     if (typeof value === 'bigint') {
       return value.toString()
     }
+
+    if (value instanceof Uint8Array) {
+      return blobToHexString(value)
+    }
     return value
   })
 }
@@ -333,6 +338,7 @@ function serialiseRow(row?: Rec): string {
  * Deserialises a row back into a record.
  * `"NaN"`, `"+Inf"`, and `"-Inf"` are transformed back into their numeric equivalent
  * if the column type is a float.
+ * Hex encoded bytestrings are transformed back to `Uint8Array` instances
  * @param str The row to deserialise.
  * @param rel The relation for the table to which this row belongs.
  */
@@ -360,6 +366,10 @@ function deserialiseRow(str: string, rel: Pick<Relation, 'columns'>): Rec {
     if (columnType === 'INT8' || columnType === 'BIGINT') {
       return BigInt(value)
     }
+    if (columnType === 'BYTEA' && typeof value === 'string') {
+      return hexStringToBlob(value)
+    }
+
     return value
   })
 }
@@ -490,7 +500,9 @@ export const opLogEntryToChange = (
  * @param primaryKeyObj object representing all columns of a primary key
  * @returns a stringified JSON with stable sorting on column names
  */
-export const primaryKeyToStr = <T extends Record<string, string | number>>(
+export const primaryKeyToStr = <
+  T extends Record<string, string | number | Uint8Array>
+>(
   primaryKeyObj: T
 ): string => {
   // Sort the keys then insert them in order in a fresh object

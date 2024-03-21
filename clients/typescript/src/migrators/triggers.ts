@@ -234,6 +234,7 @@ export function generateTriggers(tables: Tables): Statement[] {
  * that can be used to build a JSON object in a SQLite `json_object` function call.
  * Values of type REAL are cast to text to avoid a bug in SQLite's `json_object` function (see below).
  * Similarly, values of type INT8 (i.e. BigInts) are cast to text because JSON does not support BigInts.
+ * All BLOB or BYTEA bytestrings are also encoded as hex strings to make them part of a JSON
  *
  * NOTE: There is a bug with SQLite's `json_object` function up to version 3.41.2
  *       that causes it to return an invalid JSON object if some value is +Infinity or -Infinity.
@@ -279,28 +280,34 @@ function joinColsForJSON(
   colTypes: ColumnTypes,
   target?: 'new' | 'old'
 ) {
-  // casts the value to TEXT if it is of type REAL
-  // to work around the bug in SQLite's `json_object` function
-  const castIfNeeded = (col: string, targettedCol: string) => {
+  // Perform transformations on some columns to ensure consistent
+  // serializability into JSON
+  const transformIfNeeded = (col: string, targetedCol: string) => {
     const tpes = colTypes[col]
     const sqliteType = tpes.sqliteType
     const pgType = tpes.pgType
+
+    // cast REALs, INT8s, BIGINTs to TEXT to work around SQLite's `json_object` bug
     if (sqliteType === 'REAL' || pgType === 'INT8' || pgType === 'BIGINT') {
-      return `cast(${targettedCol} as TEXT)`
-    } else {
-      return targettedCol
+      return `cast(${targetedCol} as TEXT)`
     }
+
+    // transform blobs/bytestrings into hexadecimal strings for JSON encoding
+    if (sqliteType === 'BLOB' || pgType === 'BYTEA') {
+      return `hex(${targetedCol})`
+    }
+    return targetedCol
   }
 
   if (typeof target === 'undefined') {
     return cols
       .sort()
-      .map((col) => `'${col}', ${castIfNeeded(col, `"${col}"`)}`)
+      .map((col) => `'${col}', ${transformIfNeeded(col, `"${col}"`)}`)
       .join(', ')
   } else {
     return cols
       .sort()
-      .map((col) => `'${col}', ${castIfNeeded(col, `${target}."${col}"`)}`)
+      .map((col) => `'${col}', ${transformIfNeeded(col, `${target}."${col}"`)}`)
       .join(', ')
   }
 }
