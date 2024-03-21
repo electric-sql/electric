@@ -937,7 +937,7 @@ test.serial('support BLOB type', async (t) => {
     },
   })
 
-  t.deepEqual(res.bytea, blob)
+  t.deepEqual(new Uint8Array(res.bytea), blob)
 
   const fetchRes = await tbl.findUnique({
     where: {
@@ -945,7 +945,7 @@ test.serial('support BLOB type', async (t) => {
     },
   })
 
-  t.deepEqual(fetchRes?.bytea, blob)
+  t.deepEqual(new Uint8Array(fetchRes?.bytea), blob)
 })
 
 test.serial('support null values for BLOB type', async (t) => {

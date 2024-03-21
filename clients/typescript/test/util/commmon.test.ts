@@ -112,7 +112,7 @@ test('test textEncoder replacement decodes Unicode characters', (t) => {
   t.is(originalDecoded, alternativeDecoded)
 })
 
-test.only('test type encoding/decoding works for arbitrary bytestrings', (t) => {
+test('test type encoding/decoding works for arbitrary bytestrings', (t) => {
   const blob = new Uint8Array([0, 1, 255, 245, 5, 155])
   const expectedEncoding = '0001fff5059b'
 
