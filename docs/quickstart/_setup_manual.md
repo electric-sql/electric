@@ -7,7 +7,7 @@ ElectricSQL works with any Postgres that has logical replication enabled. [Crunc
 ```shell
 docker run \
     -e "POSTGRES_PASSWORD=..." \
-    -c "wal_level=logical" \
+    -e "wal_level=logical" \
     -p 5432:5432 \
     postgres
 ```
