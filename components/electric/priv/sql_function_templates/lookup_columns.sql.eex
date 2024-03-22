@@ -26,5 +26,6 @@ LANGUAGE SQL AS $$
         attrelid = search_oid
         AND attnum > 0
         AND (include_hidden_columns OR attname NOT LIKE '\_%')
+        AND NOT attisdropped
     ORDER BY attnum
 $$;
