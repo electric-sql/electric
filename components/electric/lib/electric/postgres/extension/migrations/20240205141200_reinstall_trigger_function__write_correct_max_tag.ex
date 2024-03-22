@@ -9,6 +9,7 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20240205141200_Reinst
   @impl true
   def up(schema) do
     [
+      Extension.Functions.by_name(:lookup_columns),
       Extension.Functions.by_name(:"function_installers.reinstall_trigger_function"),
       Extension.Functions.by_name(:"function_installers.utils"),
       Extension.Functions.by_name(:install_function__write_correct_max_tag),

@@ -41,7 +41,7 @@ BEGIN
     SELECT <%= schema() %>.__primary_key_list(table_oid) INTO primary_key_list;
 
     SELECT array_agg(c.col_name) INTO non_pk_column_list
-        FROM electric.lookup_columns(table_oid) c WHERE NOT col_primary;
+        FROM <%= schema() %>.lookup_columns(table_oid) c WHERE NOT col_primary;
 
     /*
     We regenerate column-dependent functions, but not the triggers themselves

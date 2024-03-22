@@ -1,29 +1,3 @@
-
--- This function returns information about columns of the table based on it's oid, skipping any columns starting with an underscore
-CREATE OR REPLACE FUNCTION electric.lookup_columns(search_oid oid, include_hidden_columns boolean DEFAULT false)
-    RETURNS TABLE (col_name name, col_type text, col_not_null boolean, col_default text, col_primary boolean)
-    STABLE PARALLEL SAFE
-    RETURNS NULL ON NULL INPUT
-    ROWS 10
-    LANGUAGE SQL AS $$
-        SELECT
-            attname AS col_name,
-            pg_catalog.format_type(atttypid, atttypmod) AS col_type,
-            attnotnull AS col_not_null,
-            pg_get_expr(adbin, adrelid) AS col_default,
-            indexrelid IS NOT NULL AS col_primary
-        FROM pg_attribute
-        LEFT JOIN pg_attrdef
-            ON attrelid = adrelid AND attnum = adnum
-        LEFT JOIN pg_index
-            ON attrelid = indrelid AND attnum = ANY(indkey) AND indisprimary
-        WHERE
-            attrelid = search_oid
-            AND attnum > 0
-            AND (include_hidden_columns OR attname NOT LIKE '\_%')
-        ORDER BY attnum
-    $$;
-
 -- This function creates or updates shadow tables for conflict resolution
 CREATE OR REPLACE FUNCTION electric.ddlx_make_or_update_shadow_tables(tag text, schema_name text, target_oid oid)
     RETURNS VOID
