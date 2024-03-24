@@ -101,7 +101,13 @@ export class ElectricDatabase {
     const sqlite3 = SQLite.Factory(SQLiteAsyncModule)
 
     // Register a Virtual File System with the SQLite runtime
-    sqlite3.vfs_register(new IDBBatchAtomicVFS(dbName))
+    const vfs = new IDBBatchAtomicVFS(dbName)
+    // Ensure that the maximum path length is sufficient for the database name.
+    // The default maximum path length is 64 bytes, see: 'wa-sqlite/src/VFS.js'.
+    // N.B. SQLite adds 8 bytes to the length of the database name, see:
+    // https://github.com/sqlite/sqlite/blob/254729edb7b7e704b95af059e91bc4b3e11e9e4e/src/main.c#L3205
+    vfs.mxPathName = dbName.length + 8
+    sqlite3.vfs_register(vfs)
 
     // Open the DB connection
     // see: https://rhashimoto.github.io/wa-sqlite/docs/interfaces/SQLiteAPI.html#open_v2
