@@ -447,6 +447,10 @@ function opToString(op: Pb.SatTransOp): string {
     return `#Gone{for: ${op.gone.relationId}, pk: ${rowToString(
       op.gone.pkData!
     )}}`
+  if (op.compensation)
+    return `#Compensation{for: ${op.compensation.relationId}, pk: ${rowToString(
+      op.compensation.pkData!
+    )}, tags: [${op.compensation.tags}]}`
   if (op.migrate)
     return `#Migrate{vsn: ${op.migrate.version}, for: ${
       op.migrate.table?.name
