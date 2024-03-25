@@ -3,6 +3,8 @@ defmodule Electric.Postgres.Extension do
   Manages our pseudo-extension code
   """
 
+  import Electric.Postgres.Dialect.Postgresql, only: [quote_ident: 2]
+
   alias Electric.Postgres.{Schema, Schema.Proto, Extension.Functions, Extension.Migration, Types}
   alias Electric.Replication.Postgres.Client
   alias Electric.Utils
@@ -22,21 +24,22 @@ defmodule Electric.Postgres.Extension do
   @version_relation "migration_versions"
   @ddl_relation "ddl_commands"
   @schema_relation "schema"
-  @electrified_table_relation "electrified"
+  @electrified_tracking_relation "electrified"
+  @transaction_marker_relation "transaction_marker"
   @acked_client_lsn_relation "acknowledged_client_lsns"
 
   @grants_relation "grants"
   @roles_relation "roles"
   @assignments_relation "assignments"
 
-  electric = &to_string([?", @schema, ?", ?., ?", &1, ?"])
+  electric = &quote_ident(@schema, &1)
 
   @migration_table electric.("schema_migrations")
   @version_table electric.(@version_relation)
   @ddl_table electric.(@ddl_relation)
   @schema_table electric.("schema")
-  @electrified_tracking_table electric.(@electrified_table_relation)
-  @transaction_marker_table electric.("transaction_marker")
+  @electrified_tracking_table electric.(@electrified_tracking_relation)
+  @transaction_marker_table electric.(@transaction_marker_relation)
   @acked_client_lsn_table electric.(@acked_client_lsn_relation)
 
   @grants_table electric.(@grants_relation)
@@ -103,7 +106,6 @@ defmodule Electric.Postgres.Extension do
   def ddl_table, do: @ddl_table
   def schema_table, do: @schema_table
   def version_table, do: @version_table
-  def electrified_tracking_relation, do: @electrified_table_relation
   def electrified_tracking_table, do: @electrified_tracking_table
   def transaction_marker_table, do: @transaction_marker_table
   def acked_client_lsn_table, do: @acked_client_lsn_table
@@ -115,7 +117,9 @@ defmodule Electric.Postgres.Extension do
   def ddl_relation, do: {@schema, @ddl_relation}
   def version_relation, do: {@schema, @version_relation}
   def schema_relation, do: {@schema, @schema_relation}
+  def electrified_tracking_relation, do: {@schema, @electrified_tracking_relation}
   def acked_client_lsn_relation, do: {@schema, @acked_client_lsn_relation}
+
   def publication_name, do: @publication_name
   def slot_name, do: @slot_name
   def subscription_name, do: @subscription_name
@@ -268,6 +272,34 @@ defmodule Electric.Postgres.Extension do
   def electrified_tables(conn) do
     with {:ok, _, tables} <- :epgsql.squery(conn, @electrified_tables_query) do
       {:ok, tables}
+    end
+  end
+
+  # These are tables in the "electric" schema, each of which was added to the publication in
+  # one of the extension migrations. They can be found by searching the codebase for
+  # "add_table_to_publication_sql".
+  @published_extension_tables [
+    {@schema, @ddl_relation},
+    {@schema, @electrified_tracking_relation},
+    {@schema, @transaction_marker_relation},
+    {@schema, @grants_relation},
+    {@schema, @roles_relation},
+    {@schema, @assignments_relation},
+    {@schema, @acked_client_lsn_relation}
+  ]
+
+  @doc """
+  The list of fully-qualified table identifiers that should be included in "#{@publication_name}".
+
+  This includes extension tables and all user tables that have been electrified, along with
+  their shadow tables.
+  """
+  @spec published_tables(conn()) :: {:ok, [{String.t(), String.t()}]} | {:error, term}
+  def published_tables(conn) do
+    with {:ok, tables} <- electrified_tables(conn) do
+      tables_with_shadows = Enum.flat_map(tables, &[&1, shadow_of(&1)])
+      published_tables = Enum.concat(tables_with_shadows, @published_extension_tables)
+      {:ok, published_tables}
     end
   end
 
@@ -471,10 +503,13 @@ defmodule Electric.Postgres.Extension do
     ~s|ALTER PUBLICATION "#{@publication_name}" ADD TABLE #{table}#{column_list}|
   end
 
+  @shadow_prefix "shadow__"
+  @tombstone_prefix "tombstone__"
+
   @doc """
   Returns a relation that is the shadow table of the passed-in relation.
   """
-  def shadow_of({schema, table}), do: {@schema, "shadow__#{schema}__#{table}"}
+  def shadow_of({schema, table}), do: {@schema, @shadow_prefix <> schema <> "__" <> table}
 
   @doc """
   Returns true if a given relation is a shadow table under current naming convention.
@@ -482,7 +517,7 @@ defmodule Electric.Postgres.Extension do
   defguard is_shadow_relation(relation)
            when elem(relation, 0) == @schema and is_binary(elem(relation, 1)) and
                   byte_size(elem(relation, 1)) >= 8 and
-                  binary_part(elem(relation, 1), 0, 8) == "shadow__"
+                  binary_part(elem(relation, 1), 0, 8) == @shadow_prefix
 
   @doc """
   Returns true if a given relation is a tombstone table under current naming convention.
@@ -490,7 +525,7 @@ defmodule Electric.Postgres.Extension do
   defguard is_tombstone_relation(relation)
            when elem(relation, 0) == @schema and is_binary(elem(relation, 1)) and
                   byte_size(elem(relation, 1)) >= 11 and
-                  binary_part(elem(relation, 1), 0, 11) == "tombstone__"
+                  binary_part(elem(relation, 1), 0, 11) == @tombstone_prefix
 
   @doc """
   Returns primary keys list for a given shadow record.
