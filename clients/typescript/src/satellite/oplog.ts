@@ -366,7 +366,10 @@ function deserialiseRow(str: string, rel: Pick<Relation, 'columns'>): Rec {
     if (columnType === 'INT8' || columnType === 'BIGINT') {
       return BigInt(value)
     }
-    if (columnType === 'BYTEA' && typeof value === 'string') {
+    if (
+      (columnType === 'BYTEA' || columnType === 'BLOB') &&
+      typeof value === 'string'
+    ) {
       return hexStringToBlob(value)
     }
 
