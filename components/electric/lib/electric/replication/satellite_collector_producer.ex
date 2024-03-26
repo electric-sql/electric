@@ -12,15 +12,17 @@ defmodule Electric.Replication.SatelliteCollectorProducer do
 
   alias Electric.Postgres.Extension
   alias Electric.Replication.Changes.NewRecord
+  alias Electric.Replication.Connectors
 
   require Logger
 
-  def start_link(opts) do
-    GenStage.start_link(__MODULE__, opts, Keyword.take(opts, [:name]))
+  def start_link(connector_config) do
+    origin = Connectors.origin(connector_config)
+    GenStage.start_link(__MODULE__, connector_config, name: name(origin))
   end
 
-  def name(identifier \\ :default) do
-    {:via, :gproc, {:n, :l, {__MODULE__, identifier}}}
+  def name(origin) do
+    Electric.name(__MODULE__, origin)
   end
 
   def store_incoming_transactions(_, []), do: :ok
@@ -32,8 +34,8 @@ defmodule Electric.Replication.SatelliteCollectorProducer do
   # Internal API
 
   @impl GenStage
-  def init(opts) do
-    table = ETS.Set.new!(ordered: true, keypos: 2)
+  def init(connector_config) do
+    table = :ets.new(nil, [:ordered_set, keypos: 2])
 
     {:producer,
      %{
@@ -41,7 +43,7 @@ defmodule Electric.Replication.SatelliteCollectorProducer do
        next_key: 0,
        demand: 0,
        starting_from: -1,
-       write_to_pg_mode: Keyword.get(opts, :write_to_pg_mode, :logical_replication)
+       write_to_pg_mode: Connectors.write_to_pg_mode(connector_config)
      }}
   end
 
@@ -52,9 +54,9 @@ defmodule Electric.Replication.SatelliteCollectorProducer do
     |> maybe_update_acked_client_lsns(state.write_to_pg_mode)
     |> Stream.with_index(state.next_key)
     |> Enum.to_list()
-    |> then(&ETS.Set.put(state.table, &1))
+    |> then(&:ets.insert(state.table, &1))
 
-    next_key = ETS.Set.last!(state.table) + 1
+    next_key = :ets.last(state.table) + 1
 
     {:noreply, events, state} = send_events_from_ets(%{state | next_key: next_key})
 
@@ -87,16 +89,16 @@ defmodule Electric.Replication.SatelliteCollectorProducer do
 
   @impl GenStage
   def handle_info({:sent_all_up_to, key}, state) do
-    ETS.Set.select_delete!(state.table, [{{:_, :"$1"}, [{:"=<", :"$1", key}], [true]}])
+    :ets.select_delete(state.table, [{{:_, :"$1"}, [{:"=<", :"$1", key}], [true]}])
 
     {:noreply, [], state}
   end
 
   defp send_events_from_ets(%{demand: 0} = state), do: {:noreply, [], state}
 
-  defp send_events_from_ets(%{demand: demand, table: set, starting_from: from} = state) do
+  defp send_events_from_ets(%{demand: demand, table: table, starting_from: from} = state) do
     results =
-      case ETS.Set.select!(set, [{{:"$1", :"$2"}, [{:>, :"$2", from}], [:"$$"]}], demand) do
+      case :ets.select(table, [{{:"$1", :"$2"}, [{:>, :"$2", from}], [:"$$"]}], demand) do
         :"$end_of_table" -> []
         {results, _continuation} -> results
       end
