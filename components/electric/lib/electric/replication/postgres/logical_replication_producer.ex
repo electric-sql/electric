@@ -35,7 +35,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   }
 
   defmodule State do
-    defstruct conn: nil,
+    defstruct repl_conn: nil,
+              svc_conn: nil,
               demand: 0,
               queue: nil,
               relations: %{},
@@ -47,7 +48,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
               span: nil
 
     @type t() :: %__MODULE__{
-            conn: pid(),
+            repl_conn: pid(),
+            svc_conn: pid(),
             demand: non_neg_integer(),
             queue: :queue.queue(),
             relations: %{Messages.relation_id() => %Relation{}},
@@ -76,7 +78,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   @impl true
   def init(connector_config) do
     origin = Connectors.origin(connector_config)
-    conn_opts = Connectors.get_connection_opts(connector_config, replication: true)
+    conn_opts = Connectors.get_connection_opts(connector_config)
+    repl_conn_opts = Connectors.get_connection_opts(connector_config, replication: true)
     repl_opts = Connectors.get_replication_opts(connector_config)
 
     :gproc.reg(name(origin))
@@ -87,15 +90,25 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     Logger.debug("#{__MODULE__}.init: publication: '#{publication}', slot: '#{slot}'")
 
     Logger.info("Starting replication from #{origin}")
-    Logger.info("#{inspect(__MODULE__)}.init(#{inspect(Client.sanitize_conn_opts(conn_opts))})")
 
-    with {:ok, conn} <- Client.connect(conn_opts),
-         {:ok, _} <- Client.create_slot(conn, slot),
-         :ok <- Client.set_display_settings_for_replication(conn),
-         {:ok, {short, long, cluster}} <- Client.get_server_versions(conn),
+    Logger.info(
+      "#{inspect(__MODULE__)}.init(#{inspect(Client.sanitize_conn_opts(repl_conn_opts))})"
+    )
+
+    # The replication connection is used to consumer the logical replication stream from
+    # Postgres and to send acknowledgements about received transactions back to Postgres,
+    # allowing it to advance the replication slot forward and discard obsolete WAL records.
+    with {:ok, repl_conn} <- Client.connect(repl_conn_opts),
+         {:ok, _} <- Client.create_slot(repl_conn, slot),
+         :ok <- Client.set_display_settings_for_replication(repl_conn),
+         {:ok, {short, long, cluster}} <- Client.get_server_versions(repl_conn),
          {:ok, table_count} <- SchemaLoader.count_electrified_tables({SchemaCache, origin}),
-         :ok <- Client.start_replication(conn, publication, slot, self()) do
-      Process.monitor(conn)
+         :ok <- Client.start_replication(repl_conn, publication, slot, self()),
+         # The service connection is opened alongside the replication connection to execute
+         # maintenance statements. It is needed because Postgres does not allow regular
+         # statements and queries on a replication connection once the replication has started.
+         {:ok, svc_conn} <- Client.connect(conn_opts) do
+      Process.monitor(repl_conn)
 
       Logger.metadata(pg_producer: origin)
 
@@ -108,7 +121,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
 
       {:producer,
        %State{
-         conn: conn,
+         repl_conn: repl_conn,
+         svc_conn: svc_conn,
          queue: :queue.new(),
          publication: publication,
          origin: origin,
@@ -129,14 +143,18 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     |> process_message(state)
   end
 
-  def handle_info({:DOWN, _, :process, conn, reason}, %State{conn: conn} = state) do
+  def handle_info({:DOWN, _, :process, conn, reason}, %State{repl_conn: conn} = state) do
     Logger.warning("PostgreSQL closed the replication connection")
     Metrics.stop_span(state.span)
-
     {:stop, reason, state}
   end
 
-  @impl true
+  def handle_info({:DOWN, _, :process, conn, reason}, %State{svc_conn: conn} = state) do
+    Logger.warning("PostgreSQL closed the persistent connection")
+    Metrics.stop_span(state.span)
+    {:stop, reason, state}
+  end
+
   def handle_info(msg, state) do
     Logger.debug("Unexpected message #{inspect(msg)}")
     {:noreply, [], state}
@@ -334,7 +352,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   end
 
   defp build_message(%Transaction{} = transaction, end_lsn, %State{} = state) do
-    conn = state.conn
+    repl_conn = state.repl_conn
     origin = state.origin
 
     %Transaction{
@@ -342,13 +360,13 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
       | lsn: end_lsn,
         # Make sure not to pass state.field into ack function, as this
         # will create a copy of the whole state in memory when sending a message
-        ack_fn: fn -> ack(conn, origin, end_lsn) end
+        ack_fn: fn -> ack(repl_conn, origin, end_lsn) end
     }
   end
 
   @spec ack(pid(), Connectors.origin(), Electric.Postgres.Lsn.t()) :: :ok
-  def ack(conn, origin, lsn) do
+  def ack(repl_conn, origin, lsn) do
     Logger.debug("Acknowledging #{lsn}", origin: origin)
-    Client.acknowledge_lsn(conn, lsn)
+    Client.acknowledge_lsn(repl_conn, lsn)
   end
 end
