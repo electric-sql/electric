@@ -45,7 +45,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
               client: nil,
               origin: nil,
               types: %{},
-              span: nil
+              span: nil,
+              magic_write_timer: nil
 
     @type t() :: %__MODULE__{
             repl_conn: pid(),
@@ -57,9 +58,18 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
             publication: String.t(),
             origin: Connectors.origin(),
             types: %{},
-            span: Metrics.t() | nil
+            span: Metrics.t() | nil,
+            magic_write_timer: reference() | nil
           }
   end
+
+  # Period of magic writes, in milliseconds.
+  #
+  # 30 seconds is long enough to not put any noticeable load on the database and short enough
+  # for Postgres to discard obsolete WAL records before they register on a disk usage chart
+  # that can be displayed on a managed Postgres provider's dashboard.
+  @magic_write_timeout 30_000
+  @magic_write_msg :magic_write
 
   @spec start_link(Connectors.config()) :: :ignore | {:error, any} | {:ok, pid}
   def start_link(connector_config) do
@@ -119,15 +129,18 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
           long_version: long
         })
 
-      {:producer,
-       %State{
-         repl_conn: repl_conn,
-         svc_conn: svc_conn,
-         queue: :queue.new(),
-         publication: publication,
-         origin: origin,
-         span: span
-       }}
+      state =
+        %State{
+          repl_conn: repl_conn,
+          svc_conn: svc_conn,
+          queue: :queue.new(),
+          publication: publication,
+          origin: origin,
+          span: span
+        }
+        |> schedule_magic_write()
+
+      {:producer, state}
     end
   end
 
@@ -153,6 +166,12 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     Logger.warning("PostgreSQL closed the persistent connection")
     Metrics.stop_span(state.span)
     {:stop, reason, state}
+  end
+
+  def handle_info({:timeout, tref, @magic_write_msg}, %State{magic_write_timer: tref} = state) do
+    marker = "postgres_replication_producer:#{System.monotonic_time()}"
+    Electric.Replication.InitialSync.perform_magic_write(state.svc_conn, marker)
+    {:noreply, [], schedule_magic_write(%State{state | magic_write_timer: nil})}
   end
 
   def handle_info(msg, state) do
@@ -368,5 +387,10 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   def ack(repl_conn, origin, lsn) do
     Logger.debug("Acknowledging #{lsn}", origin: origin)
     Client.acknowledge_lsn(repl_conn, lsn)
+  end
+
+  defp schedule_magic_write(state) do
+    tref = :erlang.start_timer(@magic_write_timeout, self(), @magic_write_msg)
+    %State{state | magic_write_timer: tref}
   end
 end

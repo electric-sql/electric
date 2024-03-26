@@ -135,7 +135,7 @@ defmodule Electric.Replication.InitialSync do
         reply_to: {ref, parent},
         connection: opts
       ) do
-    marker = "tx_subquery:#{:erlang.monotonic_time()}"
+    marker = "tx_subquery:#{System.monotonic_time()}"
     origin = Connectors.origin(opts)
     {:ok, schema_version} = Extension.SchemaCache.load(origin)
 
@@ -208,7 +208,11 @@ defmodule Electric.Replication.InitialSync do
   # starting a REPEATABLE READ transaction. xid for this write transaction will definitely be
   # >= xmin, so even in the absence of user writes to electrified tables, Electric will at
   # least observe this magic write.
-  defp perform_magic_write(conn_opts, marker) do
-    Client.with_conn(conn_opts, &Extension.update_transaction_marker(&1, marker))
+  def perform_magic_write(conn_opts, marker) when is_map(conn_opts) do
+    Client.with_conn(conn_opts, &perform_magic_write(&1, marker))
+  end
+
+  def perform_magic_write(conn, marker) when is_pid(conn) do
+    Extension.update_transaction_marker(conn, marker)
   end
 end
