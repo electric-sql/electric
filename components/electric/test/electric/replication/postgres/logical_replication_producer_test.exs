@@ -27,7 +27,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
     {Connectors, [:passthrough],
      [
        get_replication_opts: fn _ -> %{publication: "mock_pub", slot: "mock_slot"} end,
-       get_connection_opts: fn _, _ -> %{ip_addr: {0, 0, 0, 1}} end
+       get_connection_opts: fn _ -> %{ip_addr: {0, 0, 0, 1}} end,
+       get_connection_opts: fn _, _ -> %{ip_addr: {0, 0, 0, 2}} end
      ]},
     {SchemaLoader, [:passthrough],
      [
