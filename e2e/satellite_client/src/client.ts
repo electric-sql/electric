@@ -9,9 +9,7 @@ import { schema, Electric, ColorType as Color } from './generated/client'
 export { JsonNull } from './generated/client'
 import { globalRegistry } from 'electric-sql/satellite'
 import { SatelliteErrorCode } from 'electric-sql/util'
-import { DbSchema, ElectricClient } from 'electric-sql/client/model'
-import { AuthStatus } from 'electric-sql/auth'
-import { Shape } from 'electric-sql/dist/satellite/shapes/types'
+import { Shape } from 'electric-sql/satellite/shapes/types'
 
 setLogLevel('DEBUG')
 
