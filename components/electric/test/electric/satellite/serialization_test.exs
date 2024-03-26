@@ -82,6 +82,44 @@ defmodule Electric.Satellite.SerializationTest do
                nulls_bitmask: <<0>>
              } == Serialization.map_to_row(data, columns)
     end
+
+    test "converts bytea values from encoded format to raw" do
+      data = %{
+        "blob" => "\\x0001ff",
+        "empty_blob" => "\\x",
+        "null_blob" => nil
+      }
+
+      columns = [
+        %{name: "blob", type: :bytea},
+        %{name: "empty_blob", type: :bytea},
+        %{name: "null_blob", type: :bytea}
+      ]
+
+      assert %SatOpRow{
+               values: [
+                 <<0, 1, 255>>,
+                 <<>>,
+                 <<>>
+               ],
+               nulls_bitmask: <<0b00100000>>
+             } == Serialization.map_to_row(data, columns)
+
+      # Escape formatting not yet supported
+      try do
+        Serialization.map_to_row(%{"escape_blob" => "\\000\\047"}, [
+          %{name: "escape_blob", type: :bytea}
+        ])
+      rescue
+        error ->
+          assert match?(
+                   %{message: "bytea escape output format not supported - please use hex format"},
+                   error
+                 )
+      else
+        val -> flunk("Expected map_to_row() to raise but it returned #{inspect(val)}")
+      end
+    end
   end
 
   describe "decode_record!" do
