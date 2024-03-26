@@ -110,9 +110,9 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
            ] = transaction.changes
   end
 
-  test "Producer schedules the magic write timer" do
-    %LogicalReplicationProducer.State{magic_write_timer: tref} = initialize_producer()
-    assert_receive {:timeout, ^tref, :magic_write}, 2_000
+  test "Producer schedules a timer for advancing the main slot" do
+    %LogicalReplicationProducer.State{advance_timer: tref} = initialize_producer()
+    assert_receive {:timeout, ^tref, :advance_main_slot}, 2_000
   end
 
   def initialize_producer(demand \\ 100) do
