@@ -91,8 +91,7 @@ defmodule Electric.Postgres.TestConnection do
   end
 
   def setup_replicated_db(context) do
-    context = Map.put_new(context, :origin, "test-origin")
-    origin = Map.fetch!(context, :origin)
+    context = %{origin: origin} = Map.put_new(context, :origin, "test-origin")
 
     # Initialize the test DB to the state which Electric can work with.
     setup_fun = fn _conn -> nil end
@@ -110,15 +109,13 @@ defmodule Electric.Postgres.TestConnection do
     end
 
     context = Map.merge(context, create_test_db(setup_fun, teardown_fun))
-
-    connector_config =
-      context
-      |> pg_connector_config()
-      |> Keyword.put(:origin, "#{origin}")
+    connector_config = pg_connector_config(context)
 
     {:ok, _} = PostgresConnector.start_link(connector_config)
     assert :ready == wait_for_postgres_initialization(origin)
 
+    # The connector config may be updated post-initialization, so we replace the static config
+    # in the context with the dynamic one fetched from the PostgresConnector.
     Map.put(context, :connector_config, PostgresConnector.connector_config(origin))
   end
 
@@ -268,7 +265,7 @@ defmodule Electric.Postgres.TestConnection do
   # Utility functions
   ###
 
-  defp pg_connector_config(%{pg_config: pg_config}) do
+  defp pg_connector_config(%{pg_config: pg_config, origin: origin}) do
     [
       producer: Electric.Replication.Postgres.LogicalReplicationProducer,
       connection:
@@ -286,7 +283,12 @@ defmodule Electric.Postgres.TestConnection do
       proxy: [
         listen: [port: 65432],
         password: "password"
-      ]
+      ],
+      wal_window: [
+        in_memory_size: 1_000_000,
+        resumable_size: 1_000_000
+      ],
+      origin: origin
     ]
   end
 
