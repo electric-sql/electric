@@ -11,6 +11,8 @@ type UnwrapTuple<Tuple extends readonly unknown[]> = {
   [K in keyof Tuple]: K extends `${number}` ? Tuple[K] extends PrismaPromise<infer X> ? X : UnwrapPromise<Tuple[K]> : UnwrapPromise<Tuple[K]>
 };
 
+type Buffer = Omit<Uint8Array, 'set'>
+
 
 /**
  * Model Items
@@ -86,7 +88,7 @@ export type DataTypes = {
    */
   float8: number | null
   json: Prisma.JsonValue | null
-  bytea: Uint8Array | null
+  bytea: Buffer | null
   relatedId: number | null
 }
 
@@ -374,7 +376,7 @@ export namespace Prisma {
    *
    * @see https://www.prisma.io/docs/concepts/components/prisma-client/working-with-fields/working-with-json-fields#filtering-by-null-values
    */
-  export type InputJsonValue = string | number | boolean | InputJsonObject | InputJsonArray
+  export type InputJsonValue = null | string | number | boolean | InputJsonObject | InputJsonArray
 
   /**
    * Types of the values used to represent different kinds of `null` values when working with JSON fields.
@@ -5079,7 +5081,7 @@ export namespace Prisma {
     int8: bigint | null
     float4: number | null
     float8: number | null
-    bytea: Uint8Array | null
+    bytea: Buffer | null
     relatedId: number | null
   }
 
@@ -5097,7 +5099,7 @@ export namespace Prisma {
     int8: bigint | null
     float4: number | null
     float8: number | null
-    bytea: Uint8Array | null
+    bytea: Buffer | null
     relatedId: number | null
   }
 
@@ -5305,7 +5307,7 @@ export namespace Prisma {
     float4: number | null
     float8: number | null
     json: JsonValue | null
-    bytea: Uint8Array | null
+    bytea: Buffer | null
     relatedId: number | null
     _count: DataTypesCountAggregateOutputType | null
     _avg: DataTypesAvgAggregateOutputType | null
@@ -7492,7 +7494,7 @@ export namespace Prisma {
     float4?: FloatNullableFilter | number | null
     float8?: FloatNullableFilter | number | null
     json?: JsonNullableFilter
-    bytea?: BytesNullableFilter | Uint8Array | null
+    bytea?: BytesNullableFilter | Buffer | null
     relatedId?: IntNullableFilter | number | null
     related?: XOR<DummyRelationFilter, DummyWhereInput> | null
   }
@@ -7564,7 +7566,7 @@ export namespace Prisma {
     float4?: FloatNullableWithAggregatesFilter | number | null
     float8?: FloatNullableWithAggregatesFilter | number | null
     json?: JsonNullableWithAggregatesFilter
-    bytea?: BytesNullableWithAggregatesFilter | Uint8Array | null
+    bytea?: BytesNullableWithAggregatesFilter | Buffer | null
     relatedId?: IntNullableWithAggregatesFilter | number | null
   }
 
@@ -7794,7 +7796,7 @@ export namespace Prisma {
     float4?: number | null
     float8?: number | null
     json?: NullableJsonNullValueInput | InputJsonValue
-    bytea?: Uint8Array | null
+    bytea?: Buffer | null
     related?: DummyCreateNestedOneWithoutDatatypeInput
   }
 
@@ -7813,7 +7815,7 @@ export namespace Prisma {
     float4?: number | null
     float8?: number | null
     json?: NullableJsonNullValueInput | InputJsonValue
-    bytea?: Uint8Array | null
+    bytea?: Buffer | null
     relatedId?: number | null
   }
 
@@ -7832,7 +7834,7 @@ export namespace Prisma {
     float4?: NullableFloatFieldUpdateOperationsInput | number | null
     float8?: NullableFloatFieldUpdateOperationsInput | number | null
     json?: NullableJsonNullValueInput | InputJsonValue
-    bytea?: NullableBytesFieldUpdateOperationsInput | Uint8Array | null
+    bytea?: NullableBytesFieldUpdateOperationsInput | Buffer | null
     related?: DummyUpdateOneWithoutDatatypeNestedInput
   }
 
@@ -7851,7 +7853,7 @@ export namespace Prisma {
     float4?: NullableFloatFieldUpdateOperationsInput | number | null
     float8?: NullableFloatFieldUpdateOperationsInput | number | null
     json?: NullableJsonNullValueInput | InputJsonValue
-    bytea?: NullableBytesFieldUpdateOperationsInput | Uint8Array | null
+    bytea?: NullableBytesFieldUpdateOperationsInput | Buffer | null
     relatedId?: NullableIntFieldUpdateOperationsInput | number | null
   }
 
@@ -7870,7 +7872,7 @@ export namespace Prisma {
     float4?: number | null
     float8?: number | null
     json?: NullableJsonNullValueInput | InputJsonValue
-    bytea?: Uint8Array | null
+    bytea?: Buffer | null
     relatedId?: number | null
   }
 
@@ -7889,7 +7891,7 @@ export namespace Prisma {
     float4?: NullableFloatFieldUpdateOperationsInput | number | null
     float8?: NullableFloatFieldUpdateOperationsInput | number | null
     json?: NullableJsonNullValueInput | InputJsonValue
-    bytea?: NullableBytesFieldUpdateOperationsInput | Uint8Array | null
+    bytea?: NullableBytesFieldUpdateOperationsInput | Buffer | null
   }
 
   export type DataTypesUncheckedUpdateManyInput = {
@@ -7907,7 +7909,7 @@ export namespace Prisma {
     float4?: NullableFloatFieldUpdateOperationsInput | number | null
     float8?: NullableFloatFieldUpdateOperationsInput | number | null
     json?: NullableJsonNullValueInput | InputJsonValue
-    bytea?: NullableBytesFieldUpdateOperationsInput | Uint8Array | null
+    bytea?: NullableBytesFieldUpdateOperationsInput | Buffer | null
     relatedId?: NullableIntFieldUpdateOperationsInput | number | null
   }
 
@@ -8273,10 +8275,10 @@ export namespace Prisma {
   }
 
   export type BytesNullableFilter = {
-    equals?: Uint8Array | null
-    in?: Enumerable<Uint8Array> | null
-    notIn?: Enumerable<Uint8Array> | null
-    not?: NestedBytesNullableFilter | Uint8Array | null
+    equals?: Buffer | null
+    in?: Enumerable<Buffer> | null
+    notIn?: Enumerable<Buffer> | null
+    not?: NestedBytesNullableFilter | Buffer | null
   }
 
   export type DummyRelationFilter = {
@@ -8454,10 +8456,10 @@ export namespace Prisma {
   }
 
   export type BytesNullableWithAggregatesFilter = {
-    equals?: Uint8Array | null
-    in?: Enumerable<Uint8Array> | null
-    notIn?: Enumerable<Uint8Array> | null
-    not?: NestedBytesNullableWithAggregatesFilter | Uint8Array | null
+    equals?: Buffer | null
+    in?: Enumerable<Buffer> | null
+    notIn?: Enumerable<Buffer> | null
+    not?: NestedBytesNullableWithAggregatesFilter | Buffer | null
     _count?: NestedIntNullableFilter
     _min?: NestedBytesNullableFilter
     _max?: NestedBytesNullableFilter
@@ -8657,7 +8659,7 @@ export namespace Prisma {
   }
 
   export type NullableBytesFieldUpdateOperationsInput = {
-    set?: Uint8Array | null
+    set?: Buffer | null
   }
 
   export type DummyUpdateOneWithoutDatatypeNestedInput = {
@@ -8889,10 +8891,10 @@ export namespace Prisma {
   }
 
   export type NestedBytesNullableFilter = {
-    equals?: Uint8Array | null
-    in?: Enumerable<Uint8Array> | null
-    notIn?: Enumerable<Uint8Array> | null
-    not?: NestedBytesNullableFilter | Uint8Array | null
+    equals?: Buffer | null
+    in?: Enumerable<Buffer> | null
+    notIn?: Enumerable<Buffer> | null
+    not?: NestedBytesNullableFilter | Buffer | null
   }
 
   export type NestedDateTimeNullableWithAggregatesFilter = {
@@ -8986,10 +8988,10 @@ export namespace Prisma {
   }
 
   export type NestedBytesNullableWithAggregatesFilter = {
-    equals?: Uint8Array | null
-    in?: Enumerable<Uint8Array> | null
-    notIn?: Enumerable<Uint8Array> | null
-    not?: NestedBytesNullableWithAggregatesFilter | Uint8Array | null
+    equals?: Buffer | null
+    in?: Enumerable<Buffer> | null
+    notIn?: Enumerable<Buffer> | null
+    not?: NestedBytesNullableWithAggregatesFilter | Buffer | null
     _count?: NestedIntNullableFilter
     _min?: NestedBytesNullableFilter
     _max?: NestedBytesNullableFilter
@@ -9189,7 +9191,7 @@ export namespace Prisma {
     float4?: number | null
     float8?: number | null
     json?: NullableJsonNullValueInput | InputJsonValue
-    bytea?: Uint8Array | null
+    bytea?: Buffer | null
   }
 
   export type DataTypesUncheckedCreateWithoutRelatedInput = {
@@ -9207,7 +9209,7 @@ export namespace Prisma {
     float4?: number | null
     float8?: number | null
     json?: NullableJsonNullValueInput | InputJsonValue
-    bytea?: Uint8Array | null
+    bytea?: Buffer | null
   }
 
   export type DataTypesCreateOrConnectWithoutRelatedInput = {
@@ -9254,7 +9256,7 @@ export namespace Prisma {
     float4?: FloatNullableFilter | number | null
     float8?: FloatNullableFilter | number | null
     json?: JsonNullableFilter
-    bytea?: BytesNullableFilter | Uint8Array | null
+    bytea?: BytesNullableFilter | Buffer | null
     relatedId?: IntNullableFilter | number | null
   }
 
@@ -9301,7 +9303,7 @@ export namespace Prisma {
     float4?: number | null
     float8?: number | null
     json?: NullableJsonNullValueInput | InputJsonValue
-    bytea?: Uint8Array | null
+    bytea?: Buffer | null
   }
 
   export type DataTypesUpdateWithoutRelatedInput = {
@@ -9319,7 +9321,7 @@ export namespace Prisma {
     float4?: NullableFloatFieldUpdateOperationsInput | number | null
     float8?: NullableFloatFieldUpdateOperationsInput | number | null
     json?: NullableJsonNullValueInput | InputJsonValue
-    bytea?: NullableBytesFieldUpdateOperationsInput | Uint8Array | null
+    bytea?: NullableBytesFieldUpdateOperationsInput | Buffer | null
   }
 
   export type DataTypesUncheckedUpdateWithoutRelatedInput = {
@@ -9337,7 +9339,7 @@ export namespace Prisma {
     float4?: NullableFloatFieldUpdateOperationsInput | number | null
     float8?: NullableFloatFieldUpdateOperationsInput | number | null
     json?: NullableJsonNullValueInput | InputJsonValue
-    bytea?: NullableBytesFieldUpdateOperationsInput | Uint8Array | null
+    bytea?: NullableBytesFieldUpdateOperationsInput | Buffer | null
   }
 
   export type DataTypesUncheckedUpdateManyWithoutDatatypeInput = {
@@ -9355,7 +9357,7 @@ export namespace Prisma {
     float4?: NullableFloatFieldUpdateOperationsInput | number | null
     float8?: NullableFloatFieldUpdateOperationsInput | number | null
     json?: NullableJsonNullValueInput | InputJsonValue
-    bytea?: NullableBytesFieldUpdateOperationsInput | Uint8Array | null
+    bytea?: NullableBytesFieldUpdateOperationsInput | Buffer | null
   }
 
 
