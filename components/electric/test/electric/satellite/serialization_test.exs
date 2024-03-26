@@ -24,7 +24,8 @@ defmodule Electric.Satellite.SerializationTest do
         "id" => uuid,
         "date" => "2024-12-24",
         "time" => "12:01:00.123",
-        "bool" => "t"
+        "bool" => "t",
+        "blob" => "\\x0001ff"
       }
 
       columns = [
@@ -37,7 +38,8 @@ defmodule Electric.Satellite.SerializationTest do
         %{name: "real", type: :float8},
         %{name: "date", type: :date},
         %{name: "time", type: :time},
-        %{name: "bool", type: :bool}
+        %{name: "bool", type: :bool},
+        %{name: "blob", type: :bytea}
       ]
 
       assert %SatOpRow{
@@ -51,7 +53,8 @@ defmodule Electric.Satellite.SerializationTest do
                  "-3.14",
                  "2024-12-24",
                  "12:01:00.123",
-                 "t"
+                 "t",
+                 <<0, 1, 255>>
                ],
                nulls_bitmask: <<0b11000000, 0>>
              } == Serialization.map_to_row(data, columns)
@@ -84,11 +87,12 @@ defmodule Electric.Satellite.SerializationTest do
   describe "decode_record!" do
     test "decodes a SatOpRow struct into a map" do
       row = %SatOpRow{
-        nulls_bitmask: <<0b00100001, 0>>,
+        nulls_bitmask: <<0b00100000, 0b10000000>>,
         values: [
           "256",
           "hello",
           "",
+          <<0, 1, 255, 174>>,
           "5.4",
           "-1.0e124",
           "2023-08-15 17:20:31",
@@ -104,6 +108,7 @@ defmodule Electric.Satellite.SerializationTest do
         %{name: "int", type: :int2},
         %{name: "text", type: :text},
         %{name: "null", type: :bytea},
+        %{name: "blob", type: :bytea},
         %{name: "real1", type: :float8},
         %{name: "real2", type: :float8},
         %{name: "t", type: :timestamp},
@@ -118,6 +123,7 @@ defmodule Electric.Satellite.SerializationTest do
                "int" => "256",
                "text" => "hello",
                "null" => nil,
+               "blob" => "\\x0001ffae",
                "real1" => "5.4",
                "real2" => "-1.0e124",
                "t" => "2023-08-15 17:20:31",

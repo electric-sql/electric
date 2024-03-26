@@ -288,6 +288,27 @@ defmodule Electric.Satellite.Serialization do
     DateTime.to_string(dt)
   end
 
+  # Values of tyep `bytea` are coming over Postgres' logical replication stream encoded using either
+  # a regular hex encoding or Postgres' legacy escape format, see:
+  # https://www.postgresql.org/docs/current/datatype-binary.html
+  #
+  # We "encode" bytea values by actually decoding them into raw byte arrays to send over the wire,
+  # which avoids any additional size from encoding and having to coordinate with receivers on
+  # the encoding format - what they see is what they get.
+  defp encode_column_value(val, :bytea) do
+    case val do
+      "\\x" <> hex_encoded_bytes ->
+        case Base.decode16(hex_encoded_bytes, case: :lower) do
+          {:ok, decoded_bytes} -> decoded_bytes
+          _ -> raise ArgumentError, message: "Invalid hex encoded bytea value: #{val}"
+        end
+
+      _ ->
+        raise ArgumentError,
+          message: "bytea escape output format not supported - please use hex format"
+    end
+  end
+
   # No-op encoding for the rest of supported types
   defp encode_column_value(val, _type), do: val
 
@@ -529,8 +550,16 @@ defmodule Electric.Satellite.Serialization do
     raise "Unexpected value for bool column: #{inspect(val)}"
   end
 
-  def decode_column_value!(val, type) when type in [:bytea, :text, :varchar] do
+  def decode_column_value!(val, type) when type in [:text, :varchar] do
     val
+  end
+
+  # Assume bytea columns received from a Satellite client are raw byte arrays and not encoded in
+  # any way (e.g. hex or base64), so "decoding" them involves turning them into hex strings
+  # such that Postgres can ingest them, see:
+  # https://www.postgresql.org/docs/current/datatype-binary.html
+  def decode_column_value!(val, :bytea) do
+    "\\x" <> Base.encode16(val, case: :lower)
   end
 
   def decode_column_value!(val, :date) do

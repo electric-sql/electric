@@ -448,6 +448,7 @@ defmodule Electric.Postgres.ExtensionTest do
                  t TIME,
                  flag BOOLEAN,
                  jb JSONB,
+                 blob BYTEA,
                  shape shapes
                );
 
