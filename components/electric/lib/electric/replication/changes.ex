@@ -73,6 +73,7 @@ defmodule Electric.Replication.Changes do
             updates: non_neg_integer(),
             deletes: non_neg_integer(),
             compensations: non_neg_integer(),
+            truncates: non_neg_integer(),
             gone: non_neg_integer()
           }
     def count_operations(%__MODULE__{changes: changes}) do
