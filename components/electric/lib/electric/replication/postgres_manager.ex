@@ -257,9 +257,9 @@ defmodule Electric.Replication.PostgresConnectorMng do
 
     Client.with_conn(conn_opts, fn conn ->
       with {:ok, versions} <- Extension.migrate(conn),
-           {:ok, electrified_tables} <- Extension.electrified_tables(conn),
+           {:ok, published_tables} <- Extension.published_tables(conn),
            {:ok, _name} <-
-             Client.create_publication(conn, Extension.publication_name(), electrified_tables),
+             Client.create_publication(conn, Extension.publication_name(), published_tables),
            :ok <- maybe_create_subscription(conn, state.write_to_pg_mode, state.repl_opts),
            :ok <- OidDatabase.update_oids(conn) do
         Logger.info(
