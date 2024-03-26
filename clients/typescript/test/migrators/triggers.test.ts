@@ -32,7 +32,7 @@ test('generateTableTriggers should create correct triggers for a table', (t) => 
        WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == 'personTable')
     BEGIN
       INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
-      VALUES ('main', 'personTable', 'INSERT', json_object('id', cast(new."id" as TEXT)), json_object('age', new."age", 'blob', hex(new."blob"), 'bmi', cast(new."bmi" as TEXT), 'id', cast(new."id" as TEXT), 'int8', cast(new."int8" as TEXT), 'name', new."name"), NULL, NULL);
+      VALUES ('main', 'personTable', 'INSERT', json_object('id', cast(new."id" as TEXT)), json_object('age', new."age", 'blob', CASE WHEN new."blob" IS NOT NULL THEN hex(new."blob") ELSE NULL END, 'bmi', cast(new."bmi" as TEXT), 'id', cast(new."id" as TEXT), 'int8', cast(new."int8" as TEXT), 'name', new."name"), NULL, NULL);
     END;
     `
     )
@@ -46,7 +46,7 @@ test('generateTableTriggers should create correct triggers for a table', (t) => 
        WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == 'personTable')
     BEGIN
       INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
-      VALUES ('main', 'personTable', 'UPDATE', json_object('id', cast(new."id" as TEXT)), json_object('age', new."age", 'blob', hex(new."blob"), 'bmi', cast(new."bmi" as TEXT), 'id', cast(new."id" as TEXT), 'int8', cast(new."int8" as TEXT), 'name', new."name"), json_object('age', old."age", 'blob', hex(old."blob"), 'bmi', cast(old."bmi" as TEXT), 'id', cast(old."id" as TEXT), 'int8', cast(old."int8" as TEXT), 'name', old."name"), NULL);
+      VALUES ('main', 'personTable', 'UPDATE', json_object('id', cast(new."id" as TEXT)), json_object('age', new."age", 'blob', CASE WHEN new."blob" IS NOT NULL THEN hex(new."blob") ELSE NULL END, 'bmi', cast(new."bmi" as TEXT), 'id', cast(new."id" as TEXT), 'int8', cast(new."int8" as TEXT), 'name', new."name"), json_object('age', old."age", 'blob', CASE WHEN old."blob" IS NOT NULL THEN hex(old."blob") ELSE NULL END, 'bmi', cast(old."bmi" as TEXT), 'id', cast(old."id" as TEXT), 'int8', cast(old."int8" as TEXT), 'name', old."name"), NULL);
     END;
     `
     )
@@ -60,7 +60,7 @@ test('generateTableTriggers should create correct triggers for a table', (t) => 
        WHEN 1 == (SELECT flag from _electric_trigger_settings WHERE tablename == 'personTable')
     BEGIN
       INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
-      VALUES ('main', 'personTable', 'DELETE', json_object('id', cast(old."id" as TEXT)), NULL, json_object('age', old."age", 'blob', hex(old."blob"), 'bmi', cast(old."bmi" as TEXT), 'id', cast(old."id" as TEXT), 'int8', cast(old."int8" as TEXT), 'name', old."name"), NULL);
+      VALUES ('main', 'personTable', 'DELETE', json_object('id', cast(old."id" as TEXT)), NULL, json_object('age', old."age", 'blob', CASE WHEN old."blob" IS NOT NULL THEN hex(old."blob") ELSE NULL END, 'bmi', cast(old."bmi" as TEXT), 'id', cast(old."id" as TEXT), 'int8', cast(old."int8" as TEXT), 'name', old."name"), NULL);
     END;
     `
     )
@@ -151,4 +151,26 @@ test('oplog trigger should handle Infinity values correctly', (t) => {
     rowid: 1,
     clearTags: '[]',
   })
+})
+
+test('oplog trigger should separate null blobs from empty blobs', (t) => {
+  const { db, migrateDb } = t.context
+  const tableName = personTable.tableName
+
+  // Migrate the DB with the necessary tables and triggers
+  migrateDb()
+
+  // Insert null and empty rows in the table
+  const insertRowNullSQL = `INSERT INTO ${tableName} (id, name, age, bmi, int8, blob) VALUES (1, 'John Doe', 30, 25.5, 7, NULL)`
+  const insertRowEmptySQL = `INSERT INTO ${tableName} (id, name, age, bmi, int8, blob) VALUES (2, 'John Doe', 30, 25.5, 7, x'')`
+  db.exec(insertRowNullSQL)
+  db.exec(insertRowEmptySQL)
+
+  // Check that the oplog table contains an entry for the inserted row
+  const oplogRows = db
+    .prepare(`SELECT * FROM ${satelliteDefaults.oplogTable}`)
+    .all()
+  t.is(oplogRows.length, 2)
+  t.regex(oplogRows[0].newRow, /,"blob":null,/)
+  t.regex(oplogRows[1].newRow, /,"blob":"",/)
 })

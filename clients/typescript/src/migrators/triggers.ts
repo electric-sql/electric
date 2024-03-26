@@ -294,7 +294,7 @@ function joinColsForJSON(
 
     // transform blobs/bytestrings into hexadecimal strings for JSON encoding
     if (sqliteType === 'BLOB' || pgType === 'BYTEA') {
-      return `hex(${targetedCol})`
+      return `CASE WHEN ${targetedCol} IS NOT NULL THEN hex(${targetedCol}) ELSE NULL END`
     }
     return targetedCol
   }
