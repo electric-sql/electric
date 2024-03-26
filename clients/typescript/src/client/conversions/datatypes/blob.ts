@@ -4,8 +4,9 @@ export function serialiseBlob(v: Uint8Array): Uint8Array {
   return v
 }
 
-// No-op deserialisation for bytes - SQLite should be returning them
-// as they are
+// Casting byte array to Uint8Array for consistency as some drivers might
+// return a Node Buffer or other Uint8Array extension - not strictly
+// necessary but improved DX for testing, debugging, and asserting
 export function deserialiseBlob(v: Uint8Array): Uint8Array {
-  return v
+  return new Uint8Array(v)
 }
