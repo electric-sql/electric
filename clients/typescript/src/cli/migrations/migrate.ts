@@ -280,6 +280,11 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
     // Modify the type of JSON input values in the generated Prisma client
     // because we deviate from Prisma's typing for JSON values
     await extendJsonType(config.CLIENT_PATH)
+
+    // Replace the type of byte array input values in the generated Prisma client
+    // from `Buffer` to `Uint8Array` for better cross-environment support
+    await replaceByteArrayType(config.CLIENT_PATH)
+
     // Delete all files generated for the Prisma client, except the typings
     await keepOnlyPrismaTypings(config.CLIENT_PATH)
     console.log(`Successfully generated Electric client at: ./${relativePath}`)
@@ -748,6 +753,18 @@ function extendJsonType(prismaDir: string): Promise<void> {
   const inputJsonValueRegex = /^\s*export\s*type\s*InputJsonValue\s*(=)\s*/gm
   const replacement = 'export type InputJsonValue = null | '
   return findAndReplaceInFile(inputJsonValueRegex, replacement, prismaTypings)
+}
+
+/*
+ * Replaces Prisma's `Buffer` type for byte arrays to the more generic `Uint8Array`
+ */
+function replaceByteArrayType(prismaDir: string): Promise<void> {
+  const prismaTypings = path.join(prismaDir, 'index.d.ts')
+  return fs.appendFile(
+    prismaTypings,
+    // omit 'set' property as it conflicts with the DAL setter prop name
+    "\n\ntype Buffer = Omit<Uint8Array | 'set'>\n"
+  )
 }
 
 async function keepOnlyPrismaTypings(prismaDir: string): Promise<void> {
