@@ -24,7 +24,7 @@ defmodule Electric.Replication.PostgresConnectorSup do
     name = name(origin)
     Electric.reg(name)
 
-    postgres_producer = Postgres.LogicalReplicationProducer.get_name(origin)
+    postgres_producer = Postgres.LogicalReplicationProducer.name(origin)
     postgres_producer_consumer = Postgres.MigrationConsumer.name(origin)
     write_to_pg_mode = Connectors.write_to_pg_mode(connector_config)
 
