@@ -20,15 +20,18 @@ defmodule Electric.Postgres.CachedWal.Producer do
   end
 
   def name(param) do
-    {:via, :gproc, {:n, :l, {__MODULE__, param}}}
+    Electric.name(__MODULE__, param)
   end
 
   @impl GenStage
   def init(opts) do
     Logger.metadata(component: "CachedWal.Producer")
 
+    origin = Keyword.fetch!(opts, :origin)
+
     {:producer,
      %{
+       origin: origin,
        cached_wal_module: Keyword.get(opts, :cached_wal_module, CachedWal.Api.default_module()),
        current_position: nil,
        demand: 0
@@ -56,17 +59,19 @@ defmodule Electric.Postgres.CachedWal.Producer do
 
   defp send_events_from_cache(state, events \\ [])
 
-  defp send_events_from_cache(%{demand: demand} = state, events) when demand == 0,
+  defp send_events_from_cache(%{demand: 0} = state, events),
     do: {:noreply, Enum.reverse(events), state}
 
-  defp send_events_from_cache(%{demand: demand} = state, events) do
-    case CachedWal.Api.next_segment(state.cached_wal_module, state.current_position) do
+  defp send_events_from_cache(state, events) do
+    %{cached_wal_module: module, origin: origin, current_position: pos, demand: demand} = state
+
+    case CachedWal.Api.next_segment(module, origin, pos) do
       {:ok, segment, new_position} ->
         %{state | current_position: new_position, demand: demand - 1}
         |> send_events_from_cache([{segment, new_position} | events])
 
       :latest ->
-        CachedWal.Api.request_notification(state.cached_wal_module, state.current_position)
+        CachedWal.Api.request_notification(module, origin, pos)
         {:noreply, Enum.reverse(events), state}
     end
   end

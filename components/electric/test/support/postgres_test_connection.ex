@@ -136,7 +136,7 @@ defmodule Electric.Postgres.TestConnection do
     |> Electric.Replication.Connectors.get_connection_opts()
   end
 
-  def setup_electrified_tables(%{conn: conn}) do
+  def setup_electrified_tables(%{conn: conn, origin: origin}) do
     {:ok, [], []} =
       :epgsql.squery(conn, """
       CREATE TABLE public.users (
@@ -201,7 +201,7 @@ defmodule Electric.Postgres.TestConnection do
     Stream.resource(
       fn -> 0 end,
       fn pos ->
-        case Electric.Postgres.CachedWal.EtsBacked.next_segment(pos) do
+        case Electric.Postgres.CachedWal.EtsBacked.next_segment(origin, pos) do
           :latest ->
             Process.sleep(100)
             {[], pos}
