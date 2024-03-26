@@ -60,8 +60,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   end
 
   @spec start_link(Connectors.config()) :: :ignore | {:error, any} | {:ok, pid}
-  def start_link(conn_config) do
-    GenStage.start_link(__MODULE__, conn_config)
+  def start_link(connector_config) do
+    GenStage.start_link(__MODULE__, connector_config)
   end
 
   @spec get_name(Connectors.origin()) :: Electric.reg_name()
@@ -74,10 +74,10 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   end
 
   @impl true
-  def init(conn_config) do
-    origin = Connectors.origin(conn_config)
-    conn_opts = Connectors.get_connection_opts(conn_config, replication: true)
-    repl_opts = Connectors.get_replication_opts(conn_config)
+  def init(connector_config) do
+    origin = Connectors.origin(connector_config)
+    conn_opts = Connectors.get_connection_opts(connector_config, replication: true)
+    repl_opts = Connectors.get_replication_opts(connector_config)
 
     :gproc.reg(name(origin))
 
