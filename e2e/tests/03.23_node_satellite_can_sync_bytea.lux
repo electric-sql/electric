@@ -50,7 +50,7 @@
 
     !SELECT * FROM public.blobs;
     ??row1 | \x0001ff4a
-    ??row2 | \x
+    ??row2 | <NULL>
     ??row3 | \x
     ??row4 | \x0001ffb6
 
