@@ -9,8 +9,6 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
 
   alias Electric.Postgres.LogicalReplication
   alias Electric.Postgres.LogicalReplication.Messages
-  alias Electric.Replication.Postgres.Client
-  alias Electric.Replication.Connectors
 
   alias Electric.Postgres.LogicalReplication.Messages.{
     Begin,
@@ -25,6 +23,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     Message
   }
 
+  alias Electric.Postgres.Lsn
+
   alias Electric.Replication.Changes.{
     Transaction,
     NewRecord,
@@ -33,6 +33,9 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     TruncatedRelation,
     ReferencedRecord
   }
+
+  alias Electric.Replication.Connectors
+  alias Electric.Replication.Postgres.Client
 
   defmodule State do
     defstruct repl_conn: nil,
@@ -46,7 +49,10 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
               origin: nil,
               types: %{},
               span: nil,
-              magic_write_timer: nil
+              magic_write_timer: nil,
+              main_slot: "",
+              main_slot_lsn: %Lsn{},
+              resumable_wal_window: 1
 
     @type t() :: %__MODULE__{
             repl_conn: pid(),
@@ -54,12 +60,15 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
             demand: non_neg_integer(),
             queue: :queue.queue(),
             relations: %{Messages.relation_id() => %Relation{}},
-            transaction: {Electric.Postgres.Lsn.t(), %Transaction{}},
-            publication: String.t(),
+            transaction: {Lsn.t(), %Transaction{}},
+            publication: binary(),
             origin: Connectors.origin(),
             types: %{},
             span: Metrics.t() | nil,
-            magic_write_timer: reference() | nil
+            magic_write_timer: reference() | nil,
+            main_slot: binary(),
+            main_slot_lsn: Lsn.t(),
+            resumable_wal_window: pos_integer()
           }
   end
 
@@ -77,16 +86,17 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
 
   @spec start_link(Connectors.config()) :: :ignore | {:error, any} | {:ok, pid}
   def start_link(connector_config) do
-    GenStage.start_link(__MODULE__, connector_config)
+    GenStage.start_link(__MODULE__, connector_config, name: name(connector_config))
   end
 
-  @spec get_name(Connectors.origin()) :: Electric.reg_name()
-  def get_name(name) do
-    {:via, :gproc, name(name)}
+  @spec name(Connectors.config()) :: Electric.reg_name()
+  def name(connector_config) when is_list(connector_config) do
+    name(Connectors.origin(connector_config))
   end
 
-  defp name(name) do
-    {:n, :l, {__MODULE__, name}}
+  @spec name(Connectors.origin()) :: Electric.reg_name()
+  def name(origin) when is_binary(origin) do
+    Electric.name(__MODULE__, origin)
   end
 
   @impl true
@@ -95,36 +105,42 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     conn_opts = Connectors.get_connection_opts(connector_config)
     repl_conn_opts = Connectors.get_connection_opts(connector_config, replication: true)
     repl_opts = Connectors.get_replication_opts(connector_config)
-
-    :gproc.reg(name(origin))
+    wal_window_opts = Connectors.get_wal_window_opts(connector_config)
 
     publication = repl_opts.publication
-    slot = repl_opts.slot
+    main_slot = repl_opts.slot
+    tmp_slot = main_slot <> "_rc"
 
-    Logger.debug("#{__MODULE__}.init: publication: '#{publication}', slot: '#{slot}'")
-
-    Logger.info("Starting replication from #{origin}")
+    Logger.metadata(pg_producer: origin)
 
     Logger.info(
-      "#{inspect(__MODULE__)}.init(#{inspect(Client.sanitize_conn_opts(repl_conn_opts))})"
+      "Starting replication with publication=#{publication} and slots=#{main_slot},#{tmp_slot}}"
     )
 
     # The replication connection is used to consumer the logical replication stream from
     # Postgres and to send acknowledgements about received transactions back to Postgres,
     # allowing it to advance the replication slot forward and discard obsolete WAL records.
     with {:ok, repl_conn} <- Client.connect(repl_conn_opts),
-         {:ok, _} <- Client.create_slot(repl_conn, slot),
+         # Refactoring note: make sure that both slots are created first thing after a
+         # connection is opened. In particular, trying to call `Client.get_server_versions()` before
+         # creating the main slot results in the replication stream not delivering transactions from
+         # Postgres when Electric is running in the direct_writes mode, which manifests as a
+         # failure of e2e/tests/02.02_migrations_get_streamed_to_satellite.lux.
+         {:ok, _slot_name} <- Client.create_main_slot(repl_conn, main_slot),
+         {:ok, _slot_name, main_slot_lsn} <-
+           Client.create_temporary_slot(repl_conn, main_slot, tmp_slot),
          :ok <- Client.set_display_settings_for_replication(repl_conn),
          {:ok, {short, long, cluster}} <- Client.get_server_versions(repl_conn),
          {:ok, table_count} <- SchemaLoader.count_electrified_tables({SchemaCache, origin}),
-         :ok <- Client.start_replication(repl_conn, publication, slot, self()),
+         {:ok, current_lsn} <- Client.current_lsn(repl_conn),
+         start_lsn = start_lsn(main_slot_lsn, current_lsn, wal_window_opts),
+         :ok <- Client.start_replication(repl_conn, publication, tmp_slot, start_lsn, self()),
          # The service connection is opened alongside the replication connection to execute
          # maintenance statements. It is needed because Postgres does not allow regular
          # statements and queries on a replication connection once the replication has started.
          {:ok, svc_conn} <- Client.connect(conn_opts) do
+      # Monitor the connection process to know when to stop the telemetry span created on the next line.
       Process.monitor(repl_conn)
-
-      Logger.metadata(pg_producer: origin)
 
       span =
         Metrics.start_span([:postgres, :replication_from], %{electrified_tables: table_count}, %{
@@ -140,12 +156,34 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
           queue: :queue.new(),
           publication: publication,
           origin: origin,
-          span: span
+          span: span,
+          main_slot: main_slot,
+          main_slot_lsn: main_slot_lsn,
+          resumable_wal_window: wal_window_opts.resumable_size
         }
         |> schedule_magic_write()
 
       {:producer, state}
     end
+  end
+
+  # The current implementation is trivial for one reason: we don't know how many transactions
+  # that touch electrified tables ("etxns" from now on) there are between `main_slot_lsn` and
+  # `current_lsn`. As an extreme example, there could be one such transaction among thousands
+  # of transactions that Electric won't see. So there's no sensible way of choosing the start LSN
+  # such that we would stream in precisely as many etxns as can fit into the in-memory cache.
+  #
+  # Right now, the only way to preload all recent etxns into memory is to start streaming from
+  # the slot's starting point and rely on the in-memory cache's garbage collection to discard
+  # old transactions when it overflows.
+  #
+  # Going forward, we should look into writing etxns to a custom file format on disk as we
+  # are reading them from the logical replication stream. That will allow us to start
+  # replication from the last observed LSN, stream transactions until we reach the current LSN
+  # in Postgres and then fill the remaining cache space with older transactions from the file
+  # on disk.
+  defp start_lsn(main_slot_lsn, _current_lsn, _wal_window_opts) do
+    main_slot_lsn
   end
 
   @impl true
@@ -387,7 +425,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     }
   end
 
-  @spec ack(pid(), Connectors.origin(), Electric.Postgres.Lsn.t()) :: :ok
+  @spec ack(pid(), Connectors.origin(), Lsn.t()) :: :ok
   def ack(repl_conn, origin, lsn) do
     Logger.debug("Acknowledging #{lsn}", origin: origin)
     Client.acknowledge_lsn(repl_conn, lsn)
