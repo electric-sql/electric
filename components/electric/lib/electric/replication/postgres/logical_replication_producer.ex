@@ -49,7 +49,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
               origin: nil,
               types: %{},
               span: nil,
-              magic_write_timer: nil,
+              advance_timer: nil,
               main_slot: "",
               main_slot_lsn: %Lsn{},
               resumable_wal_window: 1
@@ -65,23 +65,23 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
             origin: Connectors.origin(),
             types: %{},
             span: Metrics.t() | nil,
-            magic_write_timer: reference() | nil,
+            advance_timer: reference() | nil,
             main_slot: binary(),
             main_slot_lsn: Lsn.t(),
             resumable_wal_window: pos_integer()
           }
   end
 
-  # Period of magic writes, in milliseconds.
+  # How often to check whether the the replication slot needs to be advanced, in milliseconds.
   #
   # 30 seconds is long enough to not put any noticeable load on the database and short enough
-  # for Postgres to discard obsolete WAL records before they register on a disk usage chart
-  # that can be displayed on a managed Postgres provider's dashboard.
-  @magic_write_timeout 30_000
-  @magic_write_msg :magic_write
+  # for Postgres to discard obsolete WAL records such that disk usage metrics remain constant
+  # once the configured limit of the resumable WAL window is reached.
+  @advance_timeout 30_000
+  @advance_msg :advance_main_slot
 
   if Mix.env() == :test do
-    @magic_write_timeout 1_000
+    @advance_timeout 1_000
   end
 
   @spec start_link(Connectors.config()) :: :ignore | {:error, any} | {:ok, pid}
@@ -161,7 +161,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
           main_slot_lsn: main_slot_lsn,
           resumable_wal_window: wal_window_opts.resumable_size
         }
-        |> schedule_magic_write()
+        |> schedule_main_slot_advance()
 
       {:producer, state}
     end
@@ -210,10 +210,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     {:stop, reason, state}
   end
 
-  def handle_info({:timeout, tref, @magic_write_msg}, %State{magic_write_timer: tref} = state) do
-    marker = "postgres_replication_producer:#{System.monotonic_time()}"
-    Electric.Replication.InitialSync.perform_magic_write(state.svc_conn, marker)
-    {:noreply, [], schedule_magic_write(%State{state | magic_write_timer: nil})}
+  def handle_info({:timeout, tref, @advance_msg}, %State{advance_timer: tref} = state) do
+    {:noreply, [], state |> advance_main_slot() |> schedule_main_slot_advance()}
   end
 
   def handle_info(msg, state) do
@@ -431,8 +429,27 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     Client.acknowledge_lsn(repl_conn, lsn)
   end
 
-  defp schedule_magic_write(state) do
-    tref = :erlang.start_timer(@magic_write_timeout, self(), @magic_write_msg)
-    %State{state | magic_write_timer: tref}
+  # Advance the replication slot to let Postgres discard old WAL records.
+  #
+  # TODO: make sure we're not removing transactions that are about to be requested by a newly
+  # connected client. See VAX-1552.
+  defp advance_main_slot(state) do
+    {:ok, current_lsn} = Client.current_lsn(state.svc_conn)
+    min_in_window_lsn = Lsn.increment(current_lsn, -state.resumable_wal_window)
+
+    if Lsn.compare(state.main_slot_lsn, min_in_window_lsn) == :lt do
+      # The sliding window that has the size `state.resumable_wal_window` and ends at
+      # `current_lsn` has moved forward. Advance the replication slot's starting point to let
+      # Postgres discard older WAL records.
+      :ok = Client.advance_replication_slot(state.svc_conn, state.main_slot, min_in_window_lsn)
+      %{state | main_slot_lsn: min_in_window_lsn}
+    else
+      state
+    end
+  end
+
+  defp schedule_main_slot_advance(state) do
+    tref = :erlang.start_timer(@advance_timeout, self(), @advance_msg)
+    %State{state | advance_timer: tref}
   end
 end

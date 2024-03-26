@@ -309,6 +309,19 @@ defmodule Electric.Replication.Postgres.Client do
     end
   end
 
+  @doc """
+  Advance the earliest accessible lsn of the given slot to `to_lsn`.
+
+  After a slot is advanced there is no way for it to be rewound back to an earlier lsn.
+  """
+  @spec advance_replication_slot(connection, String.t(), Lsn.t()) :: :ok | {:error, term}
+  def advance_replication_slot(conn, slot_name, to_lsn) do
+    with {:ok, _, _} <-
+           squery(conn, "SELECT pg_replication_slot_advance('#{slot_name}', '#{to_lsn}')") do
+      :ok
+    end
+  end
+
   @relkind %{table: ["r"], index: ["i"], view: ["v", "m"]}
 
   @pg_class_query """
