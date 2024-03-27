@@ -45,9 +45,9 @@ defmodule Electric.Postgres.Types.Bytea do
 
   @spec from_postgres_serialized(String.t()) :: binary()
   def from_postgres_serialized(serialized_bytes) do
-    case serialized_bytes do
-      "\\x" <> _ -> from_postgres_hex(serialized_bytes)
-      _ -> from_postgres_escape(serialized_bytes)
+    case postgres_hex_encoded?(serialized_bytes) do
+      true -> from_postgres_hex(serialized_bytes)
+      false -> from_postgres_escape(serialized_bytes)
     end
   end
 
@@ -61,8 +61,14 @@ defmodule Electric.Postgres.Types.Bytea do
 
   def postgres_hex_encoded?(str) do
     case str do
-      "\\x" <> _ -> true
-      _ -> false
+      "\\x" <> rest ->
+        case Base.decode16(rest, case: :mixed) do
+          {:ok, _} -> true
+          _ -> false
+        end
+
+      _ ->
+        false
     end
   end
 end
