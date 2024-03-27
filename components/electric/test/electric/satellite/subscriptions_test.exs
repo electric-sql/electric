@@ -16,7 +16,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
   describe "Handling of real subscriptions" do
     setup :setup_replicated_db
 
-    setup(ctx) do
+    setup ctx do
       user_id = "a5408365-7bf4-48b1-afe2-cb8171631d7c"
       client_id = "device-id-0000" <> uuid4()
       port = 55133
@@ -29,12 +29,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
 
       token = Electric.Satellite.Auth.Secure.create_token(user_id)
 
-      on_exit(fn ->
-        drain_pids(active_clients())
-        Electric.Satellite.ClientReconnectionInfo.clear_all_data(client_id)
-      end)
-
-      {:ok, user_id: user_id, client_id: client_id, token: token, port: port}
+      %{user_id: user_id, client_id: client_id, token: token, port: port}
     end
 
     setup :setup_electrified_tables
@@ -1299,33 +1294,6 @@ defmodule Electric.Satellite.SubscriptionsTest do
 
         refute_received {^conn, %SatOpLog{ops: [%{op: {:additional_begin, _}} | _]}}
       end)
-    end
-  end
-
-  defp active_clients() do
-    Electric.Satellite.ClientManager.get_clients()
-    |> Enum.flat_map(fn {client_name, client_pid} ->
-      if Process.alive?(client_pid) do
-        [{client_name, client_pid}]
-      else
-        []
-      end
-    end)
-  end
-
-  defp drain_pids([]) do
-    :ok
-  end
-
-  defp drain_pids([{_client_name, client_pid} | list]) do
-    ref = Process.monitor(client_pid)
-
-    receive do
-      {:DOWN, ^ref, :process, ^client_pid, _} ->
-        drain_pids(list)
-    after
-      1000 ->
-        flunk("tcp client process didn't termivate")
     end
   end
 end

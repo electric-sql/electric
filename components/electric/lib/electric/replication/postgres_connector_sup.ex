@@ -40,6 +40,7 @@ defmodule Electric.Replication.PostgresConnectorSup do
     ]
 
     children = [
+      {Electric.Satellite.ClientReconnectionInfo, connector_config},
       {SchemaCache, connector_config},
       {SatelliteCollectorProducer, connector_config},
       {Postgres.LogicalReplicationProducer, connector_config},
