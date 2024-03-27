@@ -147,14 +147,16 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   and is cleared up to a new checkpoint when a new checkpoint is made.
   """
 
+  use GenServer
+
+  alias Electric.Postgres.CachedWal
+  alias Electric.Replication.Connectors
+  alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.Shapes
   alias Electric.Replication.Shapes.ShapeRequest
   alias Electric.Utils
-  alias Electric.Replication.Changes.Transaction
-  alias Electric.Postgres.CachedWal
 
   require Logger
-  use GenServer
 
   @type client_id :: String.t()
 
@@ -188,8 +190,13 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
            source_txns :: [non_neg_integer(), ...]}
   @type additional_data_row :: additional_data_sub_row() | additional_data_txn_row()
 
-  def start_link(_) do
-    GenServer.start_link(__MODULE__, [], name: __MODULE__)
+  def start_link(connector_config) do
+    origin = Connectors.origin(connector_config)
+    GenServer.start_link(__MODULE__, connector_config, name: name(origin))
+  end
+
+  def name(origin) do
+    Electric.name(__MODULE__, origin)
   end
 
   @doc """
@@ -304,7 +311,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
 
   If the transaction wasn't observed at all -- we discard the action that
   came from the transaction and additional data graph diff. The client
-  will observe the transaction as a new one from WAL. If the both were observed,
+  will observe the transaction as a new one from WAL. If both were observed,
   then we discard the action and additional data graph diff while advancing
   the checkpoint as usual.
 
@@ -436,7 +443,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
         end
 
       {_client_id, _xmin, _order, :transaction, _} = key ->
-        # We're this lookup here and additional one below to avoid copying in a graph if we don't need it.
+        # We have this lookup here and additional one below to avoid copying in a graph if we don't need it.
         # Full key lookups are fast enough for this.
         covered_txns = :ets.lookup_element(@additional_data_ets, key, 3)
 
@@ -514,7 +521,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   end
 
   @impl GenServer
-  def init(_) do
+  def init(_connector_config) do
     Logger.metadata(component: "ClientReconnectionInfo")
     table1 = :ets.new(@checkpoint_ets, [:named_table, :public, :set])
     table2 = :ets.new(@subscriptions_ets, [:named_table, :public, :ordered_set])
