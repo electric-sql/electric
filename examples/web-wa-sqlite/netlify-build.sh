@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -ex
+set -x
 
 # https://stackoverflow.com/a/2173421
 # kill all child processes when terminating
@@ -8,7 +8,7 @@ trap "trap - SIGTERM && kill -- -$$ 2>/dev/null || true" SIGINT SIGTERM EXIT
 
 tunnel_port="65333"
 
-yarn
+yarn || exit 1
 
 npx electric-sql proxy-tunnel --local-port "${tunnel_port}" &
 
@@ -23,9 +23,9 @@ done
 
 yarn client:generate \
     --service "${ELECTRIC_SERVICE}" \
-    --proxy "postgresql://postgres:${PG_PROXY_PASSWORD}@localhost:${tunnel_port}/postgres"
+    --proxy "postgresql://postgres:${PG_PROXY_PASSWORD}@localhost:${tunnel_port}/postgres" || exit 1
 
-yarn build
+yarn build || exit 1
 
 kill "${tunnel_pid}"
 wait "${tunnel_pid}"
