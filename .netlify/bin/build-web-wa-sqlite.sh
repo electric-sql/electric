@@ -21,7 +21,7 @@ while ! python -c "$proxy_test"; do
 done
 
 
-npm run client:generate \
+npm run client:generate -- \
     --service "${ELECTRIC_SERVICE}" \
     --proxy "postgresql://postgres:${PG_PROXY_PASSWORD}@localhost:${tunnel_port}/postgres" || exit 1
 
