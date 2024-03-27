@@ -211,7 +211,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   def clear_all_data(client_id) do
     :ets.match_delete(@actions_ets, {{client_id, :_}, :_})
     :ets.match_delete(@subscriptions_ets, {{client_id, :_}, :_, :_, :_})
-    :ets.match_delete(@additional_data_ets, {{client_id, :_, :_, :_, :_}, :_})
+    :ets.match_delete(@additional_data_ets, {{client_id, :_, :_, :_, :_}, :_, :_})
     :ets.delete(@checkpoint_ets, client_id)
   end
 
@@ -227,7 +227,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
 
     :ets.match_delete(
       @additional_data_ets,
-      {{client_id, :_, :_, :subscription, subscription_id}, :_}
+      {{client_id, :_, :_, :subscription, subscription_id}, :_, :_}
     )
   end
 
@@ -331,7 +331,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
       # while additional data diffs are stored as soon as they were received, and
       # acknowledged additional data is removed while advancing. So we can just
       # delete all additional data here and return all the actions.
-      :ets.match_delete(@additional_data_ets, {{client_id, :_, :_, :_, :_}, :_})
+      :ets.match_delete(@additional_data_ets, {{client_id, :_, :_, :_, :_}, :_, :_})
 
       actions =
         @actions_ets
