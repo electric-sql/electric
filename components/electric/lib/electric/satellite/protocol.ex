@@ -1042,6 +1042,7 @@ defmodule Electric.Satellite.Protocol do
         )
 
         ClientReconnectionInfo.store_subscription(
+          state.origin,
           state.client_id,
           id,
           xmin,
