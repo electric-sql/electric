@@ -2,6 +2,10 @@
 
 set -x
 
+# https://stackoverflow.com/a/2173421
+# kill all child processes when terminating
+trap "trap - SIGTERM && kill -- -$$" SIGINT SIGTERM EXIT
+
 tunnel_port="65333"
 
 yarn || exit 1
