@@ -212,6 +212,9 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     :ets.match_delete(@subscriptions_ets, {{client_id, :_}, :_, :_, :_})
     :ets.match_delete(@additional_data_ets, {{client_id, :_, :_, :_, :_}, :_, :_})
     :ets.delete(@checkpoint_ets, client_id)
+
+    # transaction
+    "delete FROM subscriptions WHERE client_id = $1"
   end
 
   def fetch_subscription(client_id, subscription_id) do
@@ -467,8 +470,19 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   Store a subscription with information as to where the data will fit in,
   and what were the requests issued as part of that subscription.
   """
-  def store_subscription(_origin, client_id, subscription_id, xmin, pos, requests) do
+  def store_subscription(origin, client_id, subscription_id, xmin, pos, requests) do
     :ets.insert(@subscriptions_ets, {{client_id, subscription_id}, xmin, requests, pos})
+
+    {:ok, 1} =
+      query(origin, @insert_equery, [
+        client_id,
+        subscription_id,
+        xmin,
+        pos,
+        :erlang.term_to_binary(requests)
+      ])
+
+    :ok
   end
 
   defp list_subscriptions(client_id) do
@@ -535,4 +549,46 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
        actions_table: table4
      }}
   end
+
+  defp populate_client_subscriptions_cache(state) do
+    {:ok, _, rows} =
+      query(state, "SELECT * FROM #{Extension.client_shape_subscriptions_table()}")
+
+    subscriptions =
+      for {client_id, subscription_id, shape_requests_json} <- rows do
+        shape_requests =
+          shape_requests_json
+          |> Jason.decode!(keys: :atoms!)
+          |> ShapeRequest.from_json_maps()
+
+        {{client_id, subscription_id}, shape_requests}
+      end
+
+    :ets.insert(state.table, subscriptions)
+  end
+
+  @insert_equery """
+  INSERT INTO
+    #{Extension.client_shape_subscriptions_table()}
+  VALUES
+    ($1, $2, $3)
+  ON CONFLICT
+    (client_id, subscription_id)
+  DO UPDATE
+    SET shape_requests = excluded.shape_requests
+  """
+
+  @delete_equery """
+  DELETE FROM
+    #{Extension.client_shape_subscriptions_table()}
+  WHERE
+    client_id = $1 AND subscription_id = $2
+  """
+
+  @delete_all_equery """
+  DELETE FROM
+    #{Extension.client_shape_subscriptions_table()}
+  WHERE
+    client_id = $1
+  """
 end

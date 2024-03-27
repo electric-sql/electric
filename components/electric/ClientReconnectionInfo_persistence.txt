@@ -2,7 +2,9 @@
   Column   │ Type  │ Collation │ Nullable │ Default 
 ───────────┼───────┼───────────┼──────────┼─────────
  client_id │ text  │           │ not null │ 
- lsn       │ bytea │           │ not null │ 
+ lsn       │ bytea │           │ not null │
+ wal_pos   | int   |
+ graph     | bytea |
 
 
 Checkpoint table:
