@@ -182,8 +182,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
           {client_id(), xmin :: non_neg_integer(), order :: non_neg_integer(), :subscription,
            sub_id :: String.t()}
   @type additional_data_txn_key ::
-          {client_id(), xmin :: non_neg_integer(), order :: non_neg_integer(), :transaction,
-           ref :: non_neg_integer()}
+          {client_id(), xmin :: non_neg_integer(), order :: non_neg_integer(), :transaction, nil}
   @type additional_data_sub_row :: {additional_data_sub_key(), graph_diff :: Graph.t(), []}
   @type additional_data_txn_row ::
           {additional_data_txn_key(), graph_diff :: Graph.t(),
@@ -366,7 +365,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
           client_id
           |> pop_additional_data_before(txn.xid)
           |> Enum.reduce({graph, pending_actions}, fn
-            {:transaction, _, diff, included_txns}, {graph, pending_actions} ->
+            {:transaction, diff, included_txns}, {graph, pending_actions} ->
               graph = merge_in_graph_diff(graph, diff)
               clear_stored_actions(client_id, included_txns)
 
@@ -375,7 +374,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
 
               {graph, pending_actions}
 
-            {:subscription, _id, diff, []}, {graph, pending_actions} ->
+            {:subscription, diff, []}, {graph, pending_actions} ->
               graph = merge_in_graph_diff(graph, diff)
               {graph, pending_actions}
           end)
@@ -442,7 +441,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
           graph
         end
 
-      {_client_id, _xmin, _order, :transaction, _} = key ->
+      {_client_id, _xmin, _order, :transaction, nil} = key ->
         # We have this lookup here and additional one below to avoid copying in a graph if we don't need it.
         # Full key lookups are fast enough for this.
         covered_txns = :ets.lookup_element(@additional_data_ets, key, 3)
@@ -495,17 +494,17 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   Store graph diff for additional data that was queried from PostgreSQL in
   response to a set of transactions.
   """
-  def store_additional_txn_data(client_id, ref, xmin, pos, included_txns, graph_diff) do
+  def store_additional_txn_data(client_id, xmin, pos, included_txns, graph_diff) do
     :ets.insert(
       @additional_data_ets,
-      {{client_id, xmin, pos, :transaction, ref}, graph_diff, included_txns}
+      {{client_id, xmin, pos, :transaction, nil}, graph_diff, included_txns}
     )
   end
 
   defp pop_additional_data_before(client_id, txid) do
-    pattern = {{client_id, :"$1", :_, :"$2", :"$3"}, :"$4", :"$5"}
+    pattern = {{client_id, :"$1", :_, :"$2", :_}, :"$3", :"$4"}
     guard = [{:"=<", :"$1", txid}]
-    body = [{{:"$2", :"$3", :"$4", :"$5"}}]
+    body = [{{:"$2", :"$3", :"$4"}}]
 
     results = :ets.select(@additional_data_ets, [{pattern, guard, body}])
     :ets.select_delete(@additional_data_ets, [{pattern, guard, [true]}])

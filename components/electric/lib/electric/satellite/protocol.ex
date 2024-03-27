@@ -754,7 +754,6 @@ defmodule Electric.Satellite.Protocol do
     # Store this data in case of disconnect until acknowledged
     ClientReconnectionInfo.store_additional_txn_data(
       state.client_id,
-      ref,
       xmin,
       ref,
       included_txns,
