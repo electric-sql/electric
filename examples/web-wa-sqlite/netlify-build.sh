@@ -8,6 +8,8 @@ yarn
 
 npx electric-sql proxy-tunnel --local-port "${tunnel_port}" &
 
+tunnel_pid=$!
+
 proxy_test="import socket; import sys; sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM); result = sock.connect_ex((\"127.0.0.1\",${tunnel_port})); sock.close(); sys.exit(result)"
 
 while ! python -c "$proxy_test"; do
@@ -21,3 +23,5 @@ yarn client:generate \
 
 yarn build
 
+kill "${tunnel_pid}"
+wait "${tunnel_pid}"
