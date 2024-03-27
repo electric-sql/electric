@@ -269,16 +269,16 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
 
       [{_, acked_lsn, graph}] ->
         new_lsn = Keyword.fetch!(opts, :ack_point)
-        txn_id_list = Keyword.fetch!(opts, :including_data)
-        subscription_id_list = Keyword.fetch!(opts, :including_subscriptions)
+        txids = Keyword.fetch!(opts, :including_data)
+        subscription_ids = Keyword.fetch!(opts, :including_subscriptions)
         cached_wal_impl = Keyword.get(opts, :cached_wal_impl, CachedWal.EtsBacked)
         origin = Keyword.fetch!(opts, :origin)
         advance_graph_fn = Keyword.fetch!(opts, :advance_graph_using)
 
         if CachedWal.Api.compare_positions(cached_wal_impl, acked_lsn, new_lsn) != :gt do
           received_data =
-            MapSet.new(txn_id_list, &{:transaction, &1})
-            |> MapSet.union(MapSet.new(subscription_id_list, &{:subscription, &1}))
+            MapSet.new(txids, &{:transaction, &1})
+            |> MapSet.union(MapSet.new(subscription_ids, &{:subscription, &1}))
 
           new_graph =
             graph
@@ -336,8 +336,8 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
       actions =
         @actions_ets
         |> :ets.match({{client_id, :"$1"}, :"$2"})
-        |> Enum.reduce({%{}, []}, fn [xid, actions], acc ->
-          Shapes.merge_actions_for_tx(acc, actions, xid)
+        |> Enum.reduce({%{}, []}, fn [txid, actions], acc ->
+          Shapes.merge_actions_for_tx(acc, actions, txid)
         end)
 
       {:ok, new_graph, actions}
@@ -502,9 +502,9 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     )
   end
 
-  defp pop_additional_data_before(client_id, transaction_id) do
+  defp pop_additional_data_before(client_id, txid) do
     pattern = {{client_id, :"$1", :_, :"$2", :"$3"}, :"$4", :"$5"}
-    guard = [{:"=<", :"$1", transaction_id}]
+    guard = [{:"=<", :"$1", txid}]
     body = [{{:"$2", :"$3", :"$4", :"$5"}}]
 
     results = :ets.select(@additional_data_ets, [{pattern, guard, body}])
@@ -513,9 +513,9 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     results
   end
 
-  defp clear_stored_actions(client_id, txn_ids) do
+  defp clear_stored_actions(client_id, txids) do
     matchspec =
-      for id <- txn_ids, do: {{{client_id, id}, :_}, [], [true]}
+      for txid <- txids, do: {{{client_id, txid}, :_}, [], [true]}
 
     :ets.select_delete(@actions_ets, matchspec)
   end
