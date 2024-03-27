@@ -10,6 +10,8 @@ defmodule Electric.Postgres.Types.Bytea do
   https://www.postgresql.org/docs/current/datatype-binary.html#id-1.5.7.12.9
   """
 
+  @type format :: :hex | :escape
+
   def to_postgres_hex(bin) do
     for <<bbbb::4 <- bin>>, into: "\\x", do: <<to_hex_digit(bbbb)>>
   end
@@ -28,4 +30,32 @@ defmodule Electric.Postgres.Types.Bytea do
   defp decode_hex_char(char) when char in ?0..?9, do: char - ?0
   defp decode_hex_char(char) when char in ?a..?f, do: char - ?a + 10
   defp decode_hex_char(char) when char in ?A..?F, do: char - ?A + 10
+
+  def from_postgres_escape(_escape_str) do
+    raise(ArgumentError,
+      message: "bytea escape output format not supported - please use hex format"
+    )
+  end
+
+  def to_postgres_escape(_bin) do
+    raise(ArgumentError,
+      message: "bytea escape output format not supported - please use hex format"
+    )
+  end
+
+  @spec from_postgres_serialized(String.t()) :: binary()
+  def from_postgres_serialized(serialized_bytes) do
+    case serialized_bytes do
+      "\\x" <> _ -> from_postgres_hex(serialized_bytes)
+      _ -> from_postgres_escape(serialized_bytes)
+    end
+  end
+
+  @spec to_postgres_serialized(binary(), format()) :: String.t()
+  def to_postgres_serialized(bin, format) do
+    case format do
+      :hex -> to_postgres_hex(bin)
+      :escape -> to_postgres_escape(bin)
+    end
+  end
 end
