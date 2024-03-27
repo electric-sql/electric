@@ -4,7 +4,7 @@ set -x
 
 # https://stackoverflow.com/a/2173421
 # kill all child processes when terminating
-trap "trap - SIGTERM && kill -- -$$" SIGINT SIGTERM EXIT
+trap "trap - SIGTERM && kill -- -$$ 2>/dev/null || true" SIGINT SIGTERM EXIT
 
 tunnel_port="65333"
 
