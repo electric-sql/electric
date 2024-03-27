@@ -534,14 +534,13 @@ defmodule Electric.Postgres.ExtensionTest do
                        CALL electric.electrify('public.t1');
                        """)
 
-              assert error_msg ==
-                       """
-                       Cannot electrify t1 because some of its columns have CHECK, UNIQUE, EXCLUDE or user-defined constraints which are not currently supported by Electric:
-                         "Ts"
-                         t1
-                         uu
-                       """
-                       |> String.trim()
+              # order insensitive testing for cols
+              assert "Cannot electrify t1 because some of its columns have CHECK, UNIQUE, EXCLUDE or user-defined constraints which are not currently supported by Electric:" <>
+                       column_names = error_msg
+
+              for col <- ["t1", ~s("Ts"), "uu"] do
+                assert column_names =~ ~r/#{col}/
+              end
             end
 
     test_tx "rejects tables with missing primary key", fn conn ->

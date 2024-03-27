@@ -73,5 +73,7 @@ defmodule Electric.DDLX.Command.Revoke do
     end
 
     def tag(_a), do: "ELECTRIC REVOKE"
+
+    def to_protobuf(_), do: []
   end
 end

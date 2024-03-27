@@ -10,6 +10,14 @@ defmodule Electric.DDLX do
     Parser.parse(statement, opts)
   end
 
+  @spec parse!(String.t(), Parser.opts()) :: Command.t() | no_return()
+  def parse!(statement, opts \\ []) do
+    case parse(statement, opts) do
+      {:ok, cmd} -> cmd
+      {:error, error} -> raise error
+    end
+  end
+
   @doc """
   Turns Electric.DDLX.Commands.Command structs into PostgreSQL
   """

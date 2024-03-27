@@ -10,6 +10,7 @@ Nonterminals
    table_ident
    identifier
    scoped_role
+   grant_scoped_role
    scope
    role
    column_ident
@@ -19,6 +20,7 @@ Nonterminals
    const
    func_args
    permissions
+   privilege
    privileges
    using_clause
    scope_path
@@ -36,6 +38,7 @@ Terminals
    'ALTER' 'TABLE' 'DISABLE' 'ENABLE' 'ELECTRIC' 'NULL' 'UNASSIGN' 'ASSIGN' 'TO' 'IF'
    'GRANT' 'ON' 'USING' 'SELECT' 'INSERT' 'UPDATE' 'DELETE' 'ALL' 'READ' 'WRITE' 'CHECK'
    'REVOKE' 'FROM' 'SQLITE'
+   'AUTHENTICATED' 'ANYONE' 'PRIVILEGES'
    string  int float
    unquoted_identifier quoted_identifier
    '=' '>' '<' '<=' '>=' '!=' '<>' '+' '/' '*' '-'
@@ -81,10 +84,10 @@ assign_stmt -> 'ELECTRIC' 'ASSIGN' scoped_role 'TO' column_ident 'IF' if_expr : 
 unassign_stmt -> 'ELECTRIC' 'UNASSIGN' scoped_role 'FROM' column_ident : unassign_cmd('$3' ++ '$5').
 
 % ELECTRIC GRANT
-grant_stmt -> 'ELECTRIC' 'GRANT' permissions 'ON' table_ident 'TO' scoped_role using_clause check_clause : grant_cmd('$3' ++ '$5' ++ '$7' ++ '$8' ++ '$9').
+grant_stmt -> 'ELECTRIC' 'GRANT' permissions 'ON' table_ident 'TO' grant_scoped_role using_clause check_clause : grant_cmd('$3' ++ '$5' ++ '$7' ++ '$8' ++ '$9').
 
 % ELECTRIC REVOKE
-revoke_stmt -> 'ELECTRIC' 'REVOKE' permissions 'ON' table_ident 'FROM' scoped_role : revoke_cmd('$3' ++ '$5' ++ '$7').
+revoke_stmt -> 'ELECTRIC' 'REVOKE' permissions 'ON' table_ident 'FROM' grant_scoped_role : revoke_cmd('$3' ++ '$5' ++ '$7').
 
 % ELECTRIC SQLITE
 sqlite_stmt -> 'ELECTRIC' 'SQLITE' string : sqlite_cmd(unwrap('$3')).
@@ -98,9 +101,13 @@ table_ident -> identifier '.' identifier : [{table_schema, '$1'}, {table_name, '
 identifier -> unquoted_identifier : unquoted_identifier('$1').
 identifier -> quoted_identifier : unwrap('$1').
 
-scoped_role -> role : [{scope, nil}] ++ '$1'.
-scoped_role -> scope ':' role : '$1' ++ '$3'.
+grant_scoped_role -> 'AUTHENTICATED' : [{role_name, 'AUTHENTICATED'}].
+grant_scoped_role -> 'ANYONE' : [{role_name, 'ANYONE'}].
+grant_scoped_role -> scoped_role : '$1'.
+
 scoped_role -> '(' scope ',' role ')' : '$2' ++ '$4'.
+scoped_role -> scope ':' role : '$1' ++ '$3'.
+scoped_role -> role : [{scope, nil}] ++ '$1'.
 
 role -> string : [{role_name, unwrap('$1')}].
 role -> identifier '.' identifier : [{role_table_name, '$1'}, {role_table_column, '$3'}].
@@ -152,13 +159,18 @@ func_args -> expr ',' func_args : ['$1', "," , '$3'].
 
 permissions -> privileges column_list : [{privilege, '$1'}] ++ '$2'.
 
-privileges -> 'SELECT' : [<<"select">>].
-privileges -> 'INSERT' : [<<"insert">>].
-privileges -> 'UPDATE' : [<<"update">>].
-privileges -> 'DELETE' : [<<"delete">>].
+privileges -> '$empty' : [].
 privileges -> 'ALL' :  [<<"select">>, <<"insert">>, <<"update">>, <<"delete">>].
-privileges -> 'READ' :  [<<"select">>].
-privileges -> 'WRITE' :  [<<"insert">>, <<"update">>, <<"delete">>].
+privileges -> 'ALL' 'PRIVILEGES' :  [<<"select">>, <<"insert">>, <<"update">>, <<"delete">>].
+privileges -> privilege : '$1'.
+privileges -> privilege ',' privileges : lists:uniq('$1' ++ '$3').
+
+privilege -> 'SELECT' : [<<"select">>].
+privilege -> 'INSERT' : [<<"insert">>].
+privilege -> 'UPDATE' : [<<"update">>].
+privilege -> 'DELETE' : [<<"delete">>].
+privilege -> 'READ' :  [<<"select">>].
+privilege -> 'WRITE' :  [<<"insert">>, <<"update">>, <<"delete">>].
 
 column_list -> '$empty' : [].
 column_list -> '(' columns ')' : [{column_names, '$2'}] .

@@ -42,6 +42,8 @@ defmodule Electric.DDLX.Command.Assign do
   end
 
   defimpl Command do
+    alias Electric.Satellite.SatPerms, as: P
+
     import Electric.DDLX.Command.Common
 
     def pg_sql(assign) do
@@ -64,5 +66,30 @@ defmodule Electric.DDLX.Command.Assign do
     end
 
     def tag(_a), do: "ELECTRIC ASSIGN"
+
+    def to_protobuf(assign) do
+      %{table_name: {table_schema, table_name}} = assign
+
+      scope =
+        case assign do
+          %{scope: {scope_schema, scope_name}} ->
+            %P.Table{schema: scope_schema, name: scope_name}
+
+          %{scope: nil} ->
+            nil
+        end
+
+      [
+        %P.Assign{
+          # id: assign.id,
+          table: %P.Table{schema: table_schema, name: table_name},
+          user_column: assign.user_column,
+          role_column: assign.role_column,
+          role_name: assign.role_name,
+          scope: scope,
+          if: assign.if_statement
+        }
+      ]
+    end
   end
 end

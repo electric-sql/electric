@@ -62,5 +62,7 @@ defmodule Electric.DDLX.Command.Unassign do
     end
 
     def tag(_a), do: "ELECTRIC UNASSIGN"
+
+    def to_protobuf(_), do: []
   end
 end

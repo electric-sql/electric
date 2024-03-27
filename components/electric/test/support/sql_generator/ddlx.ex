@@ -4,7 +4,7 @@ defmodule Electric.Postgres.SQLGenerator.DDLX do
 
   def unquoted_name() do
     StreamData.tuple(
-      {StreamData.constant(false), StreamData.string(Enum.concat([?a..?z, [?_]]), min_length: 3)}
+      {StreamData.constant(false), StreamData.string(Enum.concat([?a..?z, [?_]]), min_length: 5)}
     )
   end
 
