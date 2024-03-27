@@ -15,12 +15,12 @@
     "db:psql": "npx electric-sql psql",
     "electric:start": "npx electric-sql start",
     "dev": "vite",
-    "build": "npx vite build",
+    "build": "vite build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
   },
   "dependencies": {
-    "electric-sql": "^0.9.4",
+    "electric-sql": "^0.9.6",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "wa-sqlite": "github:rhashimoto/wa-sqlite#semver:^0.9.8"

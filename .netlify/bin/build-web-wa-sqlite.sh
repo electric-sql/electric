@@ -8,7 +8,7 @@ trap "trap - SIGTERM && kill -- -$$ 2>/dev/null || true" SIGINT SIGTERM EXIT
 
 tunnel_port="65333"
 
-yarn || exit 1
+npm install || exit 1
 
 npx electric-sql proxy-tunnel --local-port "${tunnel_port}" &
 
