@@ -1,5 +1,5 @@
 BEGIN;
-  SELECT electric.migration_version('1689167402');
+  CALL electric.migration_version('1689167402');
   SET SEARCH_PATH = public;
 
   -- Demos are instances of the demo applications.
