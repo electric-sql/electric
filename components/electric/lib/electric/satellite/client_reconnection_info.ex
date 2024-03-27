@@ -375,7 +375,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
 
               {graph, pending_actions}
 
-            {:subscription, _id, diff, _}, {graph, pending_actions} ->
+            {:subscription, _id, diff, []}, {graph, pending_actions} ->
               graph = merge_in_graph_diff(graph, diff)
               {graph, pending_actions}
           end)
