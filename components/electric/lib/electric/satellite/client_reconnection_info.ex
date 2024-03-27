@@ -247,7 +247,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   Once the client acknowledges a transaction, we can advance the graph, deleting the previous
   version. We may have sent additional data to the client (both as subscription data and as
   additional data for transactions), and that was stored using `store_subscription_data/3`
-  and `store_additional_tx_data/6`. This is useful in case the client reconnects having seen
+  and `store_additional_txn_data/6`. This is useful in case the client reconnects having seen
   the data - we can correctly advance the graph using both transactions and additional data.
 
   To accommodate a case where the client reconnects **not** having seen data for some transaction,
@@ -495,7 +495,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   Store graph diff for additional data that was queried from PostgreSQL in
   response to a set of transactions.
   """
-  def store_additional_tx_data(client_id, ref, xmin, pos, included_txns, graph_diff) do
+  def store_additional_txn_data(client_id, ref, xmin, pos, included_txns, graph_diff) do
     :ets.insert(
       @additional_data_ets,
       {{client_id, xmin, pos, :transaction, ref}, graph_diff, included_txns}
