@@ -203,9 +203,7 @@ defmodule Electric.Satellite.WebsocketServer do
   # While processing the SatInStartReplicationReq message, Protocol has determined that a new
   # client has connected which needs to perform the initial sync of migrations and the current database state before
   # subscribing to the replication stream.
-  def handle_info({:perform_initial_sync_and_subscribe, msg}, %State{} = state) do
-    origin = Electric.Replication.Connectors.origin(state.connector_config)
-
+  def handle_info({:perform_initial_sync_and_subscribe, msg}, %State{origin: origin} = state) do
     # Fetch the latest observed LSN from the cached WAL. We have to do it before fetching migrations.
     #
     # If we were to do it the other way around, we could miss a migration that is committed right after the call to
