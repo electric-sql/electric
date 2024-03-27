@@ -172,8 +172,15 @@ defmodule Electric.Replication.Postgres.Writer do
   defp encode_value("t", :bool), do: "true"
   defp encode_value("f", :bool), do: "false"
 
-  defp encode_value(bin, :bytea),
-    do: bin |> Electric.Postgres.Types.Bytea.to_postgres_hex() |> quote_string()
+  # Possible to receive both hex encoded and raw byte arrays so
+  # we have to differentiate between the two
+  defp encode_value(bin, :bytea) do
+    case Electric.Postgres.Types.Bytea.postgres_hex_encoded?(bin) do
+      true -> bin
+      false -> Electric.Postgres.Types.Bytea.to_postgres_hex(bin)
+    end
+    |> quote_string()
+  end
 
   defp encode_value(val, float_type) when float_type in [:float4, :float8] do
     case Float.parse(val) do

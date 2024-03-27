@@ -58,4 +58,11 @@ defmodule Electric.Postgres.Types.Bytea do
       :escape -> to_postgres_escape(bin)
     end
   end
+
+  def postgres_hex_encoded?(str) do
+    case str do
+      "\\x" <> _ -> true
+      _ -> false
+    end
+  end
 end
