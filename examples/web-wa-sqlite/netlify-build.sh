@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
-set -ex
+set -x
 
 tunnel_port="65333"
 
-yarn
+yarn || exit 1
 
 npx electric-sql proxy-tunnel --local-port "${tunnel_port}" &
 
@@ -19,9 +19,11 @@ done
 
 yarn client:generate \
     --service "${ELECTRIC_SERVICE}" \
-    --proxy "postgresql://postgres:${PG_PROXY_PASSWORD}@localhost:${tunnel_port}/postgres"
+    --proxy "postgresql://postgres:${PG_PROXY_PASSWORD}@localhost:${tunnel_port}/postgres" || exit 1
 
-yarn build
+yarn build || exit 1
 
 kill "${tunnel_pid}"
 wait "${tunnel_pid}"
+
+exit 0
