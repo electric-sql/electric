@@ -1,0 +1,32 @@
+     Table "electric.acknowledged_client_lsns"
+  Column   │ Type  │ Collation │ Nullable │ Default 
+───────────┼───────┼───────────┼──────────┼─────────
+ client_id │ text  │           │ not null │ 
+ lsn       │ bytea │           │ not null │ 
+
+
+Checkpoint table:
+client_id | wal_pos | Graph{}
+
+AUG Subscriptions table:
+client_id | subscription_id | [ShapeRequest{}] | xmin | order | Graph{}
+
+Actions table:
+client_id | xid | Shape.subquery_actions() (recursive layers)
+
+AUG Transactions table:
+client_id | xmin | order | Graph{} | [integer]
+
+move_in_next_ref
+
+
+
+
+
+LEGACY:
+
+Subscriptions table:
+client_id | subscription_id | xmin | [ShapeRequest{}] | order
+
+Additional data table:
+client_id | xmin | order | subscription or transaction | id (string or integer) | Graph{} | [integer]
