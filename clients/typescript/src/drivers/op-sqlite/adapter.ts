@@ -15,7 +15,14 @@ export class DatabaseAdapter extends GenericDatabaseAdapter {
 
   async _query(statement: Statement): Promise<Row[]> {
     const result = await this.db.executeAsync(statement.sql, statement.args)
-    return result.rows!._array
+
+    // the results returned are HostObjects and not regular JS objects and
+    // do not work in the same way - we shallow clone them to a regular JS
+    // object as the code makes use of Object APIs like Object.entries to
+    // work properly. See:
+    // https://ospfranco.notion.site/Gotchas-bedf4f3e9dc1444480fc687d8917751a
+    // https://github.com/OP-Engineering/op-sqlite/issues/65
+    return result.rows!._array.map(shallowClone)
   }
   async _run(statement: Statement): Promise<RunResult> {
     const result = await this.db.executeAsync(statement.sql, statement.args)
@@ -32,4 +39,12 @@ export class DatabaseAdapter extends GenericDatabaseAdapter {
 
     return { rowsAffected: result.rowsAffected! }
   }
+}
+
+function shallowClone(obj: Record<string, any>) {
+  const clonedObj: Record<string, any> = {}
+  for (const key in obj) {
+    clonedObj[key] = obj[key]
+  }
+  return clonedObj
 }

@@ -102,7 +102,7 @@ const ExampleComponent = () => {
       <View style={styles.items}>
         {items.map((item: Item, index: number) => (
           <Text key={index} style={styles.item}>
-            Item {index + 1}
+            {item.value}
           </Text>
         ))}
       </View>
