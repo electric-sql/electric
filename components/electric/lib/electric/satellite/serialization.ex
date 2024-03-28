@@ -288,15 +288,16 @@ defmodule Electric.Satellite.Serialization do
     DateTime.to_string(dt)
   end
 
-  # Values of type `bytea` are coming over Postgres' logical replication stream encoded using either
-  # a regular hex encoding or Postgres' legacy escape format, see:
+  # NOTE: Values of type `bytea` are coming over Postgres' logical replication stream encoded using either
+  # a regular hex encoding or Postgres' legacy escape format, but we're ensuring that they come in encoded
+  # in hex format by setting the `bytea_output` parameter before starting the replication stream, see:
   # https://www.postgresql.org/docs/current/datatype-binary.html
   #
   # We "encode" bytea values by actually decoding them into raw byte arrays to send over the wire,
   # which avoids any additional size from encoding and having to coordinate with receivers on
   # the encoding format - what they see is what they get.
   defp encode_column_value(val, :bytea) do
-    Electric.Postgres.Types.Bytea.from_postgres_serialized(val)
+    Electric.Postgres.Types.Bytea.from_postgres_hex(val)
   end
 
   # No-op encoding for the rest of supported types
@@ -549,7 +550,7 @@ defmodule Electric.Satellite.Serialization do
   # such that Postgres can ingest them, see:
   # https://www.postgresql.org/docs/current/datatype-binary.html
   def decode_column_value!(val, :bytea) do
-    Electric.Postgres.Types.Bytea.to_postgres_serialized(val, :hex)
+    Electric.Postgres.Types.Bytea.to_postgres_hex(val)
   end
 
   def decode_column_value!(val, :date) do
