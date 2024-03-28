@@ -1,5 +1,11 @@
 # electric-sql
 
+## 0.9.7
+
+### Patch Changes
+
+- 179e9945: Fix `op-sqlite` driver integration using HostObjects and failing to return results
+
 ## 0.9.6
 
 ### Patch Changes
