@@ -91,7 +91,7 @@ defmodule Electric.Postgres.TestConnection do
   end
 
   def setup_replicated_db(context) do
-    context = Map.put_new(context, :origin, "tmp-test-subscription")
+    context = Map.put_new(context, :origin, "test-origin")
     origin = Map.fetch!(context, :origin)
 
     # Initialize the test DB to the state which Electric can work with.

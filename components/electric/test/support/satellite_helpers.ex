@@ -30,7 +30,9 @@ defmodule ElectricTest.SatelliteHelpers do
   this response -- don't use this function.
   """
   @spec start_replication_and_assert_response(term(), non_neg_integer()) :: cached_rels()
-  def start_replication_and_assert_response(conn, table_count) do
+  @spec start_replication_and_assert_response(term(), non_neg_integer(), non_neg_integer()) ::
+          cached_rels()
+  def start_replication_and_assert_response(conn, table_count, extra_table_count \\ 0) do
     assert {:ok, _} =
              MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{})
 
@@ -64,16 +66,20 @@ defmodule ElectricTest.SatelliteHelpers do
            }}
         end
 
-      assert_receive {^conn,
-                      %SatOpLog{
-                        ops: ops
-                      }},
-                     300
+      assert_receive {^conn, %SatOpLog{ops: ops}}, 300
 
       assert length(ops) == 2 + table_count
       assert [_begin | ops] = ops
       {migrates, [_end]} = Enum.split(ops, table_count)
       Enum.each(migrates, fn op -> assert %SatTransOp{op: {:migrate, _}} = op end)
+
+      if extra_table_count > 0 do
+        for _ <- 1..extra_table_count do
+          assert_receive {^conn, %SatRelation{}}, 500
+          assert_receive {^conn, %SatOpLog{ops: ops}}, 300
+          assert length(ops) == 3
+        end
+      end
 
       # We shouldn't receive anything else without subscriptions
       refute_receive {^conn, %SatOpLog{}}
