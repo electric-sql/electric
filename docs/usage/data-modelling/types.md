@@ -48,6 +48,7 @@ We are actively working on building out data type support. If you need a type we
 
 - `boolean`
 - `enum` (any user-defined [enumerated type](https://www.postgresql.org/docs/current/datatype-enum.html))
+- `bytea`
 - `jsonb`
 - `uuid`
 
