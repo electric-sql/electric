@@ -31,7 +31,7 @@ test.beforeEach((_t) => {
   )
   db.exec('DROP TABLE IF EXISTS User')
   db.exec(
-    "CREATE TABLE IF NOT EXISTS User('id' int PRIMARY KEY, 'name' varchar);"
+    "CREATE TABLE IF NOT EXISTS User('id' int PRIMARY KEY, 'name' varchar, 'meta' varchar);"
   )
 })
 
