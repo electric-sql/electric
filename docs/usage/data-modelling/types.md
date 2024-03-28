@@ -48,7 +48,7 @@ We are actively working on building out data type support. If you need a type we
 
 - `boolean`
 - `enum` (any user-defined [enumerated type](https://www.postgresql.org/docs/current/datatype-enum.html))
-- `bytea`
+- `bytea` (see [supported SQLite drivers](#bytea-driver-support))
 - `jsonb`
 - `uuid`
 
@@ -58,14 +58,14 @@ Electric defaults to a Last-Writer-Wins strategy. For JSON this is across the wh
 In future we plan to support more fine grained merge strategies for JSON data.
 :::
 
-:::info BYTEA support
-ElectricSQL supports storing and syncing `bytea` data but not all SQLite drivers are capable of reading/writing blobs - see table below:
+:::info BYTEA support <a name="bytea-driver-support"></a>
+ElectricSQL supports `bytea` data but not all SQLite drivers are capable of reading/writing blobs - see table below:
 
 | [wa-sqlite](../../integrations/drivers/web/wa-sqlite.md) | [better-sqlite3](../../integrations/drivers/server/node.md) | [expo-sqlite](../../integrations/drivers/mobile/expo.md?usage=expo-sqlite) | [expo-sqlite/next](../../integrations/drivers/mobile/expo.md?usage=expo-sqlite-next)| [op-sqlite](../../integrations/drivers/mobile/react-native.md) |
-|-----------|----------------|-------------|------------------|-----------|
-| ✅︎*       | ✅︎             | ❌          | ✅︎*              | ✅︎        |
+|:---------:|:--------------:|:-----------:|:----------------:|:---------:|
+| ✅︎†       | ✅︎             | ❌          | ✅︎†              | ✅︎        |
 
-\* Does not support reading/writing empty byte arrays, e.g. `new Uint8Array([])`
+† Does not support reading/writing empty byte arrays, e.g. `new Uint8Array([])`
 :::
 
 :::caution Enum type caveats
