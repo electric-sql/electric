@@ -76,7 +76,7 @@ export interface PendingChanges {
   }
 }
 
-export type OpType = 'DELETE' | 'INSERT' | 'UPDATE' | 'GONE'
+export type OpType = 'DELETE' | 'INSERT' | 'UPDATE' | 'COMPENSATION' | 'GONE'
 
 export type ChangesOpType = 'DELETE' | 'UPSERT' | 'GONE'
 
@@ -85,12 +85,14 @@ export const OPTYPES: {
   update: 'UPDATE'
   delete: 'DELETE'
   upsert: 'UPSERT'
+  compensation: 'COMPENSATION'
   gone: 'GONE'
 } = {
   insert: 'INSERT',
   update: 'UPDATE',
   delete: 'DELETE',
   upsert: 'UPSERT',
+  compensation: 'COMPENSATION',
   gone: 'GONE',
 }
 
@@ -111,6 +113,8 @@ export const stringToOpType = (opTypeStr: string): OpType => {
       return OPTYPES.update
     case 'DELETE':
       return OPTYPES.delete
+    case 'COMPENSATION':
+      return OPTYPES.compensation
     case 'GONE':
       return OPTYPES.gone
   }
@@ -205,6 +209,8 @@ function optypeToShadow(optype: OpType): ChangesOpType {
     case 'INSERT':
     case 'UPDATE':
       return 'UPSERT'
+    default:
+      throw new Error(`Unexpected optype: ${optype}`)
   }
 }
 
