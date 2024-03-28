@@ -61,7 +61,7 @@ In future we plan to support more fine grained merge strategies for JSON data.
 :::info BYTEA support
 ElectricSQL supports storing and syncing `bytea` data but not all SQLite drivers are capable of reading/writing blobs - see table below:
 
-| [wa-sqlite](../../integrations/drivers/web/wa-sqlite.md) | [better-sqlite3](../../integrations/drivers/server/node.md) | [expo-sqlite](../../integrations/drivers/mobile/expo.md) | [expo-sqlite/next](../../integrations/drivers/mobile/expo.md)| [op-sqlite](../../integrations/drivers/mobile/react-native.md) |
+| [wa-sqlite](../../integrations/drivers/web/wa-sqlite.md) | [better-sqlite3](../../integrations/drivers/server/node.md) | [expo-sqlite](../../integrations/drivers/mobile/expo.md?usage=expo-sqlite) | [expo-sqlite/next](../../integrations/drivers/mobile/expo.md?usage=expo-sqlite-next)| [op-sqlite](../../integrations/drivers/mobile/react-native.md) |
 |-----------|----------------|-------------|------------------|-----------|
 | ✅︎*       | ✅︎             | ❌          | ✅︎*              | ✅︎        |
 
