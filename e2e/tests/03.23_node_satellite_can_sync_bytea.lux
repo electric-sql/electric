@@ -1,0 +1,76 @@
+[doc NodeJS Satellite correctly syncs blob values from and to Electric]
+[include _shared.luxinc]
+[include _satellite_macros.luxinc]
+
+[invoke setup]
+
+[shell proxy_1]
+    [local sql=
+        """
+        CREATE TABLE public.blobs (
+            id  TEXT PRIMARY KEY,
+            blob BYTEA
+        );
+        ALTER TABLE public.blobs ENABLE ELECTRIC;
+        """]
+    [invoke migrate_pg 20230908 $sql]
+
+[invoke setup_client 1 electric_1 5133]
+
+[shell satellite_1]
+    [invoke node_await_table "blobs"]
+    [invoke node_sync_table "blobs"]
+
+[shell pg_1]
+    !INSERT INTO public.blobs (id, blob) VALUES ('row1', '\x0001ff4a');
+    ??INSERT 0 1
+
+[shell satellite_1]
+    # Wait for the rows to arrive
+    [invoke node_await_get_blob "row1"]
+
+    # read raw blob that is stored in the DB
+    [invoke node_get_blob "row1" "Uint8Array(4) [ 0, 1, 255, 74 ]"]
+
+    # write and read null values
+    [invoke node_write_blob "row2" "null"]
+    [invoke node_get_blob "row2" "null"]
+
+    # write and read empty byte arrays
+    [invoke node_write_blob "row3" "new Uint8Array([])"]
+    [invoke node_get_blob "row3" "Uint8Array(0) []"]
+
+    # write regular bytestring values
+    [invoke node_write_blob "row4" "new Uint8Array([0, 1, 255, 182])"]
+    [invoke node_get_blob "row4" "Uint8Array(4) [ 0, 1, 255, 182 ]"]
+
+
+[shell pg_1]
+    [invoke wait-for "SELECT * FROM public.blobs;" "row4" 10 $psql]
+
+    !SELECT * FROM public.blobs;
+    ??row1 | \x0001ff4a
+    ??row2 | <NULL>
+    ??row3 | \x
+    ??row4 | \x0001ffb6
+
+# Start a new Satellite client and verify that it receives all rows
+[invoke setup_client 2 electric_1 5133]
+
+[shell satellite_2]
+    [invoke node_await_table "blobs"]
+    [invoke node_sync_table "blobs"]
+
+    # Wait for the rows to arrive
+    [invoke node_await_get_blob "row4"]
+
+    # Check that rows have arrived intact
+    [invoke node_get_blob "row1" "Uint8Array(4) [ 0, 1, 255, 74 ]"]
+
+    # Check that null, empty, and regular bytestring values are stored correctly
+    [invoke node_get_blob "row2" "null"]
+    [invoke node_get_blob "row3" "Uint8Array(0) []"]
+    [invoke node_get_blob "row4" "Uint8Array(4) [ 0, 1, 255, 182 ]"]
+
+[cleanup]
+  [invoke teardown]

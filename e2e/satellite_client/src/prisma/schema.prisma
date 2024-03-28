@@ -85,6 +85,12 @@ model Enums {
   c  Color?
 }
 
+model Blobs {
+  id  String @id
+  blob  Bytes?
+  @@map("blobs")
+}
+
 enum Color {
   RED
   GREEN

@@ -169,6 +169,12 @@ export const relations = {
         isNullable: true,
         primaryKey: undefined,
       },
+      {
+        name: 'blob',
+        type: 'BYTEA',
+        isNullable: true,
+        primaryKey: undefined,
+      },
     ],
   },
   bigIntTable: {
@@ -182,6 +188,20 @@ export const relations = {
         type: 'INT8',
         isNullable: false,
         primaryKey: 1,
+      },
+    ],
+  },
+  blobTable: {
+    id: 6,
+    schema: 'public',
+    table: 'blobTable',
+    tableType: 0,
+    columns: [
+      {
+        name: 'value',
+        type: 'BYTEA',
+        isNullable: false,
+        primaryKey: undefined,
       },
     ],
   },
@@ -321,7 +341,7 @@ export const cleanAndStopSatellite = async (
 export function migrateDb(db: SqliteDB, table: Table) {
   const tableName = table.tableName
   // Create the table in the database
-  const createTableSQL = `CREATE TABLE ${tableName} (id REAL PRIMARY KEY, name TEXT, age INTEGER, bmi REAL, int8 INTEGER)`
+  const createTableSQL = `CREATE TABLE ${tableName} (id REAL PRIMARY KEY, name TEXT, age INTEGER, bmi REAL, int8 INTEGER, blob BLOB)`
   db.exec(createTableSQL)
 
   // Apply the initial migration on the database
@@ -342,7 +362,7 @@ export function migrateDb(db: SqliteDB, table: Table) {
 export const personTable: Table = {
   namespace: 'main',
   tableName: 'personTable',
-  columns: ['id', 'name', 'age', 'bmi', 'int8'],
+  columns: ['id', 'name', 'age', 'bmi', 'int8', 'blob'],
   primary: ['id'],
   foreignKeys: [],
   columnTypes: {
@@ -351,5 +371,6 @@ export const personTable: Table = {
     age: { sqliteType: 'INTEGER', pgType: PgBasicType.PG_INTEGER },
     bmi: { sqliteType: 'REAL', pgType: PgBasicType.PG_REAL },
     int8: { sqliteType: 'INTEGER', pgType: PgBasicType.PG_INT8 },
+    blob: { sqliteType: 'BLOB', pgType: PgBasicType.PG_BYTEA },
   },
 }

@@ -27,7 +27,7 @@ await tbl.sync()
 function setupDB() {
   db.exec('DROP TABLE IF EXISTS DataTypes')
   db.exec(
-    "CREATE TABLE DataTypes('id' int PRIMARY KEY, 'date' varchar, 'time' varchar, 'timetz' varchar, 'timestamp' varchar, 'timestamptz' varchar, 'bool' int, 'uuid' varchar, 'int2' int2, 'int4' int4, 'int8' int8, 'float4' real, 'float8' real, 'json' varchar, 'relatedId' int);"
+    "CREATE TABLE DataTypes('id' int PRIMARY KEY, 'date' varchar, 'time' varchar, 'timetz' varchar, 'timestamp' varchar, 'timestamptz' varchar, 'bool' int, 'uuid' varchar, 'int2' int2, 'int4' int4, 'int8' int8, 'float4' real, 'float8' real, 'json' varchar, 'bytea' blob, 'relatedId' int);"
   )
 }
 
@@ -922,6 +922,58 @@ test.serial('support null values for JSON type', async (t) => {
     select: {
       id: true,
       json: true,
+    },
+  })
+
+  t.deepEqual(fetchRes, expectedRes)
+})
+
+test.serial('support BLOB type', async (t) => {
+  const blob = new Uint8Array([1, 2, 3, 4, 5])
+  const res = await tbl.create({
+    data: {
+      id: 1,
+      bytea: blob,
+    },
+  })
+
+  t.deepEqual(res.bytea, blob)
+
+  const fetchRes = await tbl.findUnique({
+    where: {
+      id: 1,
+    },
+  })
+
+  t.deepEqual(fetchRes?.bytea, blob)
+})
+
+test.serial('support null values for BLOB type', async (t) => {
+  const expectedRes = {
+    id: 1,
+    bytea: null,
+  }
+
+  const res = await tbl.create({
+    data: {
+      id: 1,
+      bytea: null,
+    },
+    select: {
+      id: true,
+      bytea: true,
+    },
+  })
+
+  t.deepEqual(res, expectedRes)
+
+  const fetchRes = await tbl.findUnique({
+    where: {
+      id: 1,
+    },
+    select: {
+      id: true,
+      bytea: true,
     },
   })
 

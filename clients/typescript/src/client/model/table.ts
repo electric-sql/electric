@@ -35,6 +35,7 @@ import {
   Row,
   Statement,
   createQueryResultSubscribeFunction,
+  isObject,
 } from '../../util'
 import { NarrowInclude } from '../input/inputNarrowing'
 import { IShapeManager } from './shapes'
@@ -221,11 +222,7 @@ export class Table<
       const extendedTable = includedTables.add(relatedTable)
       // And follow nested includes
       const includedObj = (include as any)[field]
-      if (
-        typeof includedObj === 'object' &&
-        !Array.isArray(includedObj) &&
-        includedObj !== null
-      ) {
+      if (isObject(includedObj)) {
         // There is a nested include, follow it
         const nestedTables = relatedTable.getIncludedTables(includedObj)
         nestedTables.forEach((tbl) => extendedTable.add(tbl))

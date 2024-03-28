@@ -14,6 +14,7 @@ export enum PgBasicType {
   PG_UUID = 'UUID',
   PG_JSON = 'JSON',
   PG_JSONB = 'JSONB',
+  PG_BYTEA = 'BYTEA',
 }
 
 /**
