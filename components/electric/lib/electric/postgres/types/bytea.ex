@@ -7,7 +7,7 @@ defmodule Electric.Postgres.Types.Bytea do
   Electric, we have to encode the raw binary into one of Postgres' input encodings for BYTEA, of which the Hex
   encoding is the simpler one.
 
-  https://www.postgresql.org/docs/current/datatype-binary.html#id-1.5.7.12.9
+  https://www.postgresql.org/docs/current/datatype-binary.html#DATATYPE-BINARY-BYTEA-HEX-FORMAT
   """
 
   @type format :: :hex | :escape
@@ -18,17 +18,4 @@ defmodule Electric.Postgres.Types.Bytea do
 
   # Hex format: "\\xffa001"
   def from_postgres_hex("\\x" <> hex_str), do: Base.decode16!(hex_str, case: :mixed)
-
-  def postgres_hex_encoded?(str) do
-    case str do
-      "\\x" <> rest ->
-        case Base.decode16(rest, case: :mixed) do
-          {:ok, _} -> true
-          _ -> false
-        end
-
-      _ ->
-        false
-    end
-  end
 end
