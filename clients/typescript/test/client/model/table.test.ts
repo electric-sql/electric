@@ -288,6 +288,43 @@ test.serial('create query', async (t) => {
   clear()
 })
 
+test.serial(
+  'create query supports nested objects with same column names different types',
+  async (t) => {
+    const res = await profileTable.create({
+      data: {
+        id: 4012,
+        bio: 'test',
+        meta: { bar: 'test' },
+        user: {
+          create: {
+            id: 4013,
+            name: 'kevin',
+            meta: 'invalid json',
+          },
+        },
+      },
+      include: {
+        user: true,
+      },
+    })
+
+    t.deepEqual(res, {
+      id: 4012,
+      bio: 'test',
+      meta: { bar: 'test' },
+      userId: 4013,
+      user: {
+        id: 4013,
+        name: 'kevin',
+        meta: 'invalid json',
+      },
+    })
+
+    clear()
+  }
+)
+
 test.serial('create query supports include argument', async (t) => {
   await userTable.createMany({
     data: [author1, author2],
@@ -1086,6 +1123,36 @@ test.serial(
         user: author2,
       },
     ])
+  }
+)
+
+test.serial(
+  'update query can handle related objects with fields of same name and different type',
+  async (t) => {
+    await populate()
+    const res = await profileTable.update({
+      where: { id: 2 },
+      data: {
+        meta: { bar: 3 },
+        user: {
+          update: {
+            meta: 'invalid json',
+          },
+        },
+      },
+      include: {
+        user: true,
+      },
+    })
+
+    t.deepEqual(res, {
+      ...profile2,
+      meta: { bar: 3 },
+      user: {
+        ...author2,
+        meta: 'invalid json',
+      },
+    })
   }
 )
 
