@@ -81,13 +81,18 @@ defmodule Electric.Satellite.SubscriptionsTest do
       end)
     end
 
+    # The ordering of the SQL statements below is very intentional. The INSERT must precede the
+    # electrification call so that the test can verify that rows present in the table prior to
+    # electrification are included in the initial subscription data.
     @tag with_sql: """
-         INSERT INTO public.users (id, name) VALUES ('#{uuid4()}', 'John');
+         CREATE TABLE public.clients (id UUID PRIMARY KEY, name TEXT NOT NULL);
+         INSERT INTO public.clients (id, name) VALUES ('#{uuid4()}', 'John');
+         CALL electric.electrify('public.clients');
          """
     test "The client can connect and subscribe, and he gets data upon subscription and thereafter",
          %{conn: pg_conn} = ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
-        start_replication_and_assert_response(conn, ctx.electrified_count)
+        start_replication_and_assert_response(conn, ctx.electrified_count, 1)
 
         request_id = uuid4()
         sub_id = uuid4()
@@ -98,7 +103,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
             %SatShapeReq{
               request_id: request_id,
               shape_definition: %SatShapeDef{
-                selects: [%SatShapeDef.Select{tablename: "users"}]
+                selects: [%SatShapeDef.Select{tablename: "clients"}]
               }
             }
           ]
@@ -108,7 +113,12 @@ defmodule Electric.Satellite.SubscriptionsTest do
                  MockClient.make_rpc_call(conn, "subscribe", request)
 
         assert {[^request_id], data} = receive_subscription_data(conn, sub_id)
-        assert [%SatOpInsert{row_data: %{values: [_, "John"]}}] = data
+        assert [%SatOpInsert{row_data: %{values: [_, "John"]}, tags: [tag]}] = data
+
+        # The @0 part means that the tag's timestamp is exactly the Unix epoch. This confirms
+        # the fact that the tag comes not from a shadow row but is the default value used for
+        # rows that don't have shadow rows.
+        assert ctx.origin <> "@0" == tag
 
         {:ok, 1} =
           :epgsql.equery(pg_conn, "INSERT INTO public.my_entries (id, content) VALUES ($1, $2)", [
@@ -117,7 +127,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
           ])
 
         {:ok, 1} =
-          :epgsql.equery(pg_conn, "INSERT INTO public.users (id, name) VALUES ($1, $2)", [
+          :epgsql.equery(pg_conn, "INSERT INTO public.clients (id, name) VALUES ($1, $2)", [
             uuid4(),
             "Garry"
           ])

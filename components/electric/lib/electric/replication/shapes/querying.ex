@@ -80,13 +80,20 @@ defmodule Electric.Replication.Shapes.Querying do
 
     where = if where_clauses != [], do: ["WHERE ", where_clauses], else: ""
 
+    {shadow_schema, shadow_table} = Schema.shadow_table_name(table.schema, table.name)
+
+    # Postgres will evaluate 'epoch' in the query below to the 1970-01-01 00:00:00+00Z timestamp.
+    # This ensures that this tag is ordered strictly before any any tag subsequently generated
+    # by clients or Postgres.
     query =
       IO.iodata_to_binary([
         """
-        SELECT shadow."_tags", #{columns}
-          FROM #{Schema.name(table.schema)}.#{Schema.name(table.name)} as this
-          JOIN electric."shadow__#{table.schema}__#{table.name}" as shadow
-            ON #{pk_clause}
+        SELECT
+          coalesce(shadow."_tags", '{"(epoch,)"}'), #{columns}
+        FROM
+          #{Schema.name(table.schema)}.#{Schema.name(table.name)} as this
+        LEFT JOIN
+          #{Schema.name(shadow_schema)}.#{Schema.name(shadow_table)} as shadow ON #{pk_clause}
         """,
         where
       ])

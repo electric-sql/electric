@@ -530,8 +530,11 @@ defmodule Electric.Postgres.Schema do
   """
   @spec shadow_table_name(name(), name()) :: namespaced_name()
   def shadow_table_name(schema, table) do
-    {@schema, "shadow__#{schema}__#{table}"}
+    {@schema, "shadow__#{unwrap_quotes(schema)}__#{unwrap_quotes(table)}"}
   end
+
+  defp unwrap_quotes("\"" <> _ = name), do: String.slice(name, 1..-2//1)
+  defp unwrap_quotes(name) when is_binary(name), do: name
 
   @doc """
   Returns the schema and name of the tombstone table for the given table.
