@@ -66,22 +66,26 @@ const post3 = {
 const author1 = {
   id: 1,
   name: 'alice',
+  meta: null,
 }
 
 const profile1 = {
   id: 1,
   bio: 'bio 1',
+  meta: null,
   userId: 1,
 }
 
 const author2 = {
   id: 2,
   name: 'bob',
+  meta: 'information',
 }
 
 const profile2 = {
   id: 2,
   bio: 'bio 2',
+  meta: { foo: 3 },
   userId: 2,
 }
 
@@ -96,11 +100,11 @@ function clear() {
   )
   db.exec('DROP TABLE IF EXISTS User')
   db.exec(
-    "CREATE TABLE IF NOT EXISTS User('id' int PRIMARY KEY, 'name' varchar);"
+    "CREATE TABLE IF NOT EXISTS User('id' int PRIMARY KEY, 'name' varchar, 'meta' varchar);"
   )
   db.exec('DROP TABLE IF EXISTS Profile')
   db.exec(
-    "CREATE TABLE IF NOT EXISTS Profile('id' int PRIMARY KEY, 'bio' varchar, 'userId' int);"
+    "CREATE TABLE IF NOT EXISTS Profile('id' int PRIMARY KEY, 'bio' varchar, 'meta' json, 'userId' int);"
   )
 }
 
@@ -208,6 +212,7 @@ test.serial('create query with nested object for outgoing FK', async (t) => {
   t.deepEqual(relatedUser, {
     id: 1094,
     name: 'kevin',
+    meta: null,
   })
 
   clear()
@@ -238,6 +243,7 @@ test.serial('create query with nested objects for incoming FK', async (t) => {
   t.deepEqual(res, {
     id: 1094,
     name: 'kevin',
+    meta: null,
   })
 
   const relatedPost1 = await postTable.findUnique({
@@ -1064,6 +1070,24 @@ async function populate() {
     data: [profile1, profile2],
   })
 }
+
+test.serial(
+  'findMany can handle related objects with fields of same name and different type',
+  async (t) => {
+    await populate()
+    const res = await profileTable.findMany({
+      where: { id: 2 },
+      include: { user: true },
+    })
+
+    t.deepEqual(res, [
+      {
+        ...profile2,
+        user: author2,
+      },
+    ])
+  }
+)
 
 test.serial(
   'update query can update related object for outgoing FK',
