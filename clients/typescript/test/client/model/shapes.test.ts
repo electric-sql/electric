@@ -337,13 +337,8 @@ test.serial('nested shape is constructed', async (t) => {
 
   const { Post } = t.context as ContextType
   const input = {
-    where: {
-      OR: [{ id: 5 }, { id: 42 }],
-      NOT: [{ id: 1 }, { id: 2 }],
-      AND: [{ nbr: 6 }, { nbr: 7 }],
-      title: 'foo',
-      contents: "important'",
-    },
+    where:
+      "this.title = 'foo' AND this.contents = 'important''' AND this.nbr = 6 AND this.nbr = 7 AND ((this.id = 5) OR (this.id = 42)) AND NOT ((this.id = 1) OR (this.id = 2))",
     include: {
       author: {
         include: {
@@ -364,6 +359,7 @@ test.serial('nested shape is constructed', async (t) => {
         foreignKey: ['authorId'],
         select: {
           tablename: 'User',
+          where: undefined,
           include: [
             {
               foreignKey: ['userId'],

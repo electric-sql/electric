@@ -403,7 +403,9 @@ export function msgToString(message: MessageOfInterest): string {
     case 'Electric.Satellite.SatUnsubsResp':
       return `#SatUnsubsResp{}`
     case 'Electric.Satellite.SatOpLog':
-      return `#SatOpLog{ops: [${message.ops.map(opToString).join(', ')}]}`
+      return `#SatOpLog{ops: [\n  ${message.ops
+        .map(opToString)
+        .join(',\n  ')}]}`
     case 'Electric.Satellite.SatRpcRequest':
       return `#SatRpcRequest{method: ${message.method}, requestId: ${message.requestId}}`
     case 'Electric.Satellite.SatRpcResponse':

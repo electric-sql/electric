@@ -1,4 +1,4 @@
-export interface SyncInput<Include, Where> {
+export interface SyncInput<Include, _Where> {
   include?: Include
-  where?: Where
+  where?: string
 }
