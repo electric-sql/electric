@@ -1,7 +1,6 @@
 import Database from 'better-sqlite3'
 import { ElectricConfig } from 'electric-sql'
 import { mockSecureAuthToken } from 'electric-sql/auth/secure'
-
 import { setLogLevel } from 'electric-sql/debug'
 import { electrify } from 'electric-sql/node'
 import { v4 as uuidv4 } from 'uuid'
@@ -9,8 +8,6 @@ import { schema, Electric, ColorType as Color } from './generated/client'
 export { JsonNull } from './generated/client'
 import { globalRegistry } from 'electric-sql/satellite'
 import { SatelliteErrorCode } from 'electric-sql/util'
-import { DbSchema, ElectricClient } from 'electric-sql/client/model'
-import { AuthStatus } from 'electric-sql/auth'
 import { Shape } from 'electric-sql/dist/satellite/shapes/types'
 
 setLogLevel('DEBUG')
@@ -39,7 +36,7 @@ export const electrify_db = async (
   const result = await electrify(db, schema, config)
   const token = await mockSecureAuthToken(exp)
   
-  result.notifier.subscribeToConnectivityStateChanges((x) => console.log(`Connectivity state changed: ${x.connectivityState.status}`))
+  result.notifier.subscribeToConnectivityStateChanges((x: any) => console.log(`Connectivity state changed: ${x.connectivityState.status}`))
   if (connectToElectric) {
     await result.connect(token) // connect to Electric
   }
@@ -55,7 +52,7 @@ export const reconnect = async (electric: Electric, exp: string) => {
 
 export const check_token_expiration = (electric: Electric, minimalTime: number) => {
   const start = Date.now()
-  const unsubscribe = electric.notifier.subscribeToConnectivityStateChanges((x) => {
+  const unsubscribe = electric.notifier.subscribeToConnectivityStateChanges((x: any) => {
     if (x.connectivityState.status === 'disconnected' && x.connectivityState.reason?.code === SatelliteErrorCode.AUTH_EXPIRED) {
       const delta = Date.now() - start
       if (delta >= minimalTime) {
@@ -70,15 +67,15 @@ export const check_token_expiration = (electric: Electric, minimalTime: number) 
 }
 
 export const set_subscribers = (db: Electric) => {
-  db.notifier.subscribeToAuthStateChanges((x) => {
+  db.notifier.subscribeToAuthStateChanges((x: any) => {
     console.log('auth state changes: ')
     console.log(x)
   })
-  db.notifier.subscribeToPotentialDataChanges((x) => {
+  db.notifier.subscribeToPotentialDataChanges((x: any) => {
     console.log('potential data change: ')
     console.log(x)
   })
-  db.notifier.subscribeToDataChanges((x) => {
+  db.notifier.subscribeToDataChanges((x: any) => {
     console.log('data changes: ')
     console.log(JSON.stringify(x))
   })
@@ -322,6 +319,23 @@ export const write_enum = (electric: Electric, id: string, c: Color | null) => {
     data: {
       id,
       c,
+    }
+  })
+}
+
+export const get_blob = async (electric: Electric, id: string) => {
+  return electric.db.blobs.findUnique({
+    where: {
+      id: id
+    }
+  })
+}
+
+export const write_blob = (electric: Electric, id: string, blob: Uint8Array | null) => {
+  return electric.db.blobs.create({
+    data: {
+      id,
+      blob,
     }
   })
 }

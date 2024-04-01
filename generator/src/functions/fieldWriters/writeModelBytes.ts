@@ -9,7 +9,7 @@ export const writeBytes = ({
   writer
     .conditionalWrite(field.omitInModel(), '// omitted: ')
     .write(`${field.formattedNames.original}: `)
-    .write(`z.instanceof(Buffer)`)
+    .write(`z.instanceof(Uint8Array)`)
 
   writeFieldAdditions({ writer, field, writeOptionalDefaults })
 }

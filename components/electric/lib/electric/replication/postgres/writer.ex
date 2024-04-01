@@ -138,7 +138,14 @@ defmodule Electric.Replication.Postgres.Writer do
   defp acked_client_lsn_statement(tx) do
     client_id = tx.origin
     lsn = tx.lsn
-    values_sql = encode_values([{client_id, :text}, {lsn, :bytea}])
+
+    values_sql =
+      encode_values([
+        {client_id, :text},
+        # Byte arrays are serialized to hex when ingested at the satellite replication layer,
+        # so we serialize the LSN here for consistency
+        {Electric.Postgres.Types.Bytea.to_postgres_hex(lsn), :bytea}
+      ])
 
     """
     INSERT INTO #{Extension.acked_client_lsn_table()} AS t
@@ -171,9 +178,6 @@ defmodule Electric.Replication.Postgres.Writer do
 
   defp encode_value("t", :bool), do: "true"
   defp encode_value("f", :bool), do: "false"
-
-  defp encode_value(bin, :bytea),
-    do: bin |> Electric.Postgres.Types.Bytea.to_postgres_hex() |> quote_string()
 
   defp encode_value(val, float_type) when float_type in [:float4, :float8] do
     case Float.parse(val) do

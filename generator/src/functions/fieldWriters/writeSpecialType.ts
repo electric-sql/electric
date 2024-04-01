@@ -86,7 +86,7 @@ export const writeSpecialType: WriteTypeFunction<WriteTypeOptions> = (
 
   if (inputType.isBytesType) {
     return writer
-      .write(`z.instanceof(Buffer)`)
+      .write(`z.instanceof(Uint8Array)`)
       .conditionalWrite(inputType.isList, `.array()`)
       .conditionalWrite(isOptional, `.optional()`)
       .conditionalWrite(isNullable, `.nullable()`)
