@@ -207,6 +207,13 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     client_id = $1
   """
 
+  @delete_checkpoint_query """
+  DELETE FROM
+    #{Extension.client_checkpoints_table()}
+  WHERE
+    client_id = $1
+  """
+
   @doc """
   Remove all stored data about client reconnection.
 
@@ -223,6 +230,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     :ets.delete(@checkpoint_ets, client_id)
 
     {:ok, _} = query(origin, @delete_subscriptions_query, [client_id])
+    {:ok, _} = query(origin, @delete_checkpoint_query, [client_id])
 
     :ok
   end
@@ -258,10 +266,28 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   Store initial checkpoint for the client after first connection and sent
   "shared" rows and/or migrations.
   """
-  def store_initial_checkpoint(origin, client_id, lsn, sent_rows_graph) do
+  def store_initial_checkpoint(origin, client_id, wal_pos, sent_rows_graph) do
     clear_all_data(origin, client_id)
+    store_client_checkpoint(origin, client_id, wal_pos, sent_rows_graph)
+  end
 
-    :ets.insert(@checkpoint_ets, {client_id, lsn, sent_rows_graph})
+  @upsert_checkpoint_query """
+  INSERT INTO
+    #{Extension.client_checkpoints_table()}(client_id, pg_wal_pos, sent_rows_graph)
+  VALUES
+    ($1, $2, $3)
+  ON CONFLICT
+    (client_id)
+  DO UPDATE SET
+    pg_wal_pos = excluded.pg_wal_pos,
+    sent_rows_graph = excluded.sent_rows_graph
+  """
+
+  defp store_client_checkpoint(origin, client_id, wal_pos, sent_rows_graph) do
+    :ets.insert(@checkpoint_ets, {client_id, wal_pos, sent_rows_graph})
+    sent_rows_graph_bin = :erlang.term_to_binary(sent_rows_graph)
+    {:ok, 1} = query(origin, @upsert_checkpoint_query, [client_id, wal_pos, sent_rows_graph_bin])
+    :ok
   end
 
   @doc """
@@ -290,37 +316,37 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
       [] ->
         {:error, :client_not_initialized}
 
-      [{_, acked_lsn, graph}] ->
-        new_lsn = Keyword.fetch!(opts, :ack_point)
+      [{_, acked_wal_pos, graph}] ->
+        new_wal_pos = Keyword.fetch!(opts, :ack_point)
         txids = Keyword.fetch!(opts, :including_data)
         subscription_ids = Keyword.fetch!(opts, :including_subscriptions)
         cached_wal_impl = Keyword.get(opts, :cached_wal_impl, CachedWal.EtsBacked)
         origin = Keyword.fetch!(opts, :origin)
         advance_graph_fn = Keyword.fetch!(opts, :advance_graph_using)
 
-        if CachedWal.Api.compare_positions(cached_wal_impl, acked_lsn, new_lsn) != :gt do
+        if CachedWal.Api.compare_positions(cached_wal_impl, acked_wal_pos, new_wal_pos) != :gt do
           received_data =
             MapSet.new(txids, &{:transaction, &1})
             |> MapSet.union(MapSet.new(subscription_ids, &{:subscription, &1}))
 
           new_graph =
             graph
-            |> advance_up_to_new_lsn(
+            |> advance_up_to_new_wal_pos(
               client_id,
               cached_wal_impl,
               origin,
               advance_graph_fn,
-              acked_lsn,
-              new_lsn
+              acked_wal_pos,
+              new_wal_pos
             )
             |> advance_by_additional_data(client_id, received_data)
 
-          :ets.insert(@checkpoint_ets, {client_id, new_lsn, new_graph})
+          store_client_checkpoint(origin, client_id, new_wal_pos, new_graph)
 
           {:ok, new_graph}
         else
           # Can't advance backwards
-          {:error, {:lsn_before_checkpoint, acked_lsn, new_lsn}}
+          {:error, {:wal_pos_before_checkpoint, acked_wal_pos, new_wal_pos}}
         end
     end
   end
@@ -368,14 +394,14 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   end
 
   # We're essentially advancing the graph until next fully acknowledged transaction + subscription data
-  defp advance_up_to_new_lsn(
+  defp advance_up_to_new_wal_pos(
          graph,
          client_id,
          cached_wal_impl,
          origin,
          advance_graph_fn,
-         full_acked_lsn,
-         new_lsn
+         full_acked_wal_pos,
+         new_wal_pos
        ) do
     state = {graph, %{}, 0}
 
@@ -383,7 +409,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
 
     {graph, pending_actions, count} =
       cached_wal_impl
-      |> CachedWal.Api.stream_transactions(origin, from: full_acked_lsn, to: new_lsn)
+      |> CachedWal.Api.stream_transactions(origin, from: full_acked_wal_pos, to: new_wal_pos)
       |> Enum.reduce(state, fn %Transaction{} = txn, {graph, pending_actions, count} ->
         {graph, pending_actions} =
           client_id
@@ -419,7 +445,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
       end)
 
     Logger.debug(
-      "Advancing graph for #{inspect(client_id)} from #{inspect(full_acked_lsn)} to #{inspect(new_lsn)} by #{count} txns"
+      "Advancing graph for #{inspect(client_id)} from #{inspect(full_acked_wal_pos)} to #{inspect(new_wal_pos)} by #{count} txns"
     )
 
     :ets.insert(@actions_ets, Enum.to_list(pending_actions))
@@ -577,16 +603,29 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   def init(connector_config) do
     Logger.metadata(component: "ClientReconnectionInfo")
 
-    _checkpoint_table = :ets.new(@checkpoint_ets, [:named_table, :public, :set])
+    checkpoint_table = :ets.new(@checkpoint_ets, [:named_table, :public, :set])
     subscriptions_table = :ets.new(@subscriptions_ets, [:named_table, :public, :ordered_set])
     _additional_data_table = :ets.new(@additional_data_ets, [:named_table, :public, :ordered_set])
     _actions_table = :ets.new(@actions_ets, [:named_table, :public, :set])
 
     origin = Connectors.origin(connector_config)
 
+    restore_checkpoint_cache(origin, checkpoint_table)
     restore_subscriptions_cache(origin, subscriptions_table)
 
     {:ok, nil}
+  end
+
+  defp restore_checkpoint_cache(origin, checkpoint_table) do
+    {:ok, _, rows} =
+      query(origin, "SELECT * FROM #{Extension.client_checkpoints_table()}", [])
+
+    checkpoints =
+      for {client_id, wal_pos, sent_rows_graph} <- rows do
+        {client_id, wal_pos, :erlang.binary_to_term(sent_rows_graph)}
+      end
+
+    :ets.insert(checkpoint_table, checkpoints)
   end
 
   defp restore_subscriptions_cache(origin, subscriptions_table) do
