@@ -149,6 +149,12 @@ const generateClient = async (
   return generatedClientPath
 }
 
+test.before(() => {
+  if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir)
+  }
+})
+
 test('should generate valid TS client for simple schema', async (t) => {
   const clientPath = await generateClient(simpleSchema, 'simple')
   t.true(checkGeneratedClientCompiles(clientPath))
