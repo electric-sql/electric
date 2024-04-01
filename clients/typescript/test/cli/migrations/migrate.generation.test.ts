@@ -27,15 +27,79 @@ const defaultTsCompilerOptions: ts.CompilerOptions = {
   noFallthroughCasesInSwitch: true,
 }
 
-const simpleSchema = `
+const dbSnippet = `
 datasource db {
   provider = "postgresql"
   url      = env("PRISMA_DB_URL")
 }
+`
+
+const simpleSchema = `
+${dbSnippet}
+model Items {
+  value String @id
+}
+`
+
+const relationalSchema = `
+${dbSnippet}
 
 model Items {
   value String @id
-  @@map("items")
+  nbr   Int?
+}
+
+model User {
+  id      Int      @id
+  name    String?
+  posts   Post[]
+  profile Profile?
+}
+
+model Post {
+  id        Int    @id
+  title     String @unique
+  contents  String
+  nbr       Int?
+  authorId  Int
+  author    User?  @relation(fields: [authorId], references: [id])
+}
+
+model Profile {
+  id     Int    @id
+  bio    String
+  userId Int    @unique
+  user   User?  @relation(fields: [userId], references: [id])
+}
+`
+
+const dataTypesSchema = `
+${dbSnippet}
+
+model DataTypes {
+  id          Int       @id
+  date        DateTime? @db.Date
+  time        DateTime? @db.Time(3)
+  timetz      DateTime? @db.Timetz(3)
+  timestamp   DateTime? @unique @db.Timestamp(3)
+  timestamptz DateTime? @db.Timestamptz(3)
+  bool        Boolean?
+  uuid        String?   @db.Uuid 
+  int2        Int?      @db.SmallInt
+  int4        Int?
+  int8        BigInt?
+  float4      Float?    @db.Real
+  float8      Float?    @db.DoublePrecision
+  json        Json?
+  bytea       Bytes?
+  relatedId   Int?
+  related     Dummy?    @relation(fields: [relatedId], references: [id])
+}
+
+model Dummy {
+  id          Int        @id
+  timestamp   DateTime?  @db.Timestamp(3)
+  datatype    DataTypes[]
 }
 `
 
@@ -87,3 +151,19 @@ test.serial('should generate valid TS client for simple schema', async (t) => {
   await generateClient(simpleSchema)
   t.true(checkGeneratedClientCompiles())
 })
+
+test.serial(
+  'should generate valid TS client for relational schema',
+  async (t) => {
+    await generateClient(relationalSchema)
+    t.true(checkGeneratedClientCompiles())
+  }
+)
+
+test.serial(
+  'should generate valid TS client for schema with all data types',
+  async (t) => {
+    await generateClient(dataTypesSchema)
+    t.true(checkGeneratedClientCompiles())
+  }
+)
