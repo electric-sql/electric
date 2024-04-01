@@ -27,6 +27,14 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20240401134100_Client
         pg_wal_pos BIGINT NOT NULL,
         sent_rows_graph BYTEA NOT NULL
       )
+      """,
+      """
+      CREATE TABLE #{Extension.client_actions_table()} (
+        client_id VARCHAR(64),
+        txid #{txid_type} NOT NULL,
+        subquery_actions BYTEA NOT NULL,
+        PRIMARY KEY (client_id, txid)
+      )
       """
     ]
   end

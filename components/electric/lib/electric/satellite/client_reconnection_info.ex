@@ -214,6 +214,13 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     client_id = $1
   """
 
+  @delete_actions_query """
+  DELETE FROM
+    #{Extension.client_actions_table()}
+  WHERE
+    client_id = $1
+  """
+
   @doc """
   Remove all stored data about client reconnection.
 
@@ -231,6 +238,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
 
     {:ok, _} = query(origin, @delete_subscriptions_query, [client_id])
     {:ok, _} = query(origin, @delete_checkpoint_query, [client_id])
+    {:ok, _} = query(origin, @delete_actions_query, [client_id])
 
     :ok
   end
@@ -339,7 +347,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
               acked_wal_pos,
               new_wal_pos
             )
-            |> advance_by_additional_data(client_id, received_data)
+            |> advance_by_additional_data(client_id, received_data, origin)
 
           store_client_checkpoint(origin, client_id, new_wal_pos, new_graph)
 
@@ -417,7 +425,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
           |> Enum.reduce({graph, pending_actions}, fn
             {:transaction, diff, included_txns}, {graph, pending_actions} ->
               graph = merge_in_graph_diff(graph, diff)
-              clear_stored_actions(client_id, included_txns)
+              clear_stored_actions(origin, client_id, included_txns)
 
               pending_actions =
                 Map.drop(pending_actions, Enum.map(included_txns, &{client_id, &1}))
@@ -448,9 +456,37 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
       "Advancing graph for #{inspect(client_id)} from #{inspect(full_acked_wal_pos)} to #{inspect(new_wal_pos)} by #{count} txns"
     )
 
-    :ets.insert(@actions_ets, Enum.to_list(pending_actions))
+    if map_size(pending_actions) > 0 do
+      :ets.insert(@actions_ets, Enum.to_list(pending_actions))
+      :ok = persist_actions(origin, pending_actions)
+    end
 
     graph
+  end
+
+  defp persist_actions(origin, actions_map) do
+    values =
+      Enum.flat_map(actions_map, fn {{client_id, txid}, actions} ->
+        [client_id, txid, :erlang.term_to_binary(actions)]
+      end)
+
+    {:ok, 1} = query(origin, store_actions_query(map_size(actions_map)), values)
+
+    :ok
+  end
+
+  defp store_actions_query(num_txns) do
+    param_placeholders =
+      Stream.iterate(1, &(&1 + 1))
+      |> Stream.chunk_every(3)
+      |> Stream.map(fn [n1, n2, n3] ->
+        "($#{n1}, $#{n2}, $#{n3})"
+      end)
+      |> Stream.take(num_txns)
+      |> Enum.join(", ")
+
+    "INSERT INTO #{Extension.client_actions_table()}(client_id, txid, subquery_actions) VALUES " <>
+      param_placeholders
   end
 
   defp get_active_shapes_for_txid(all_subs, txid) do
@@ -461,11 +497,13 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
 
   defp merge_in_graph_diff(graph, diff), do: Utils.merge_graph_edges(graph, diff)
 
-  @spec advance_by_additional_data(Graph.t(), String.t(), MapSet.t()) :: Graph.t()
+  @spec advance_by_additional_data(Graph.t(), String.t(), MapSet.t(), Connectors.origin()) ::
+          Graph.t()
   defp advance_by_additional_data(
          graph,
          client_id,
-         %MapSet{} = acknowledged
+         %MapSet{} = acknowledged,
+         origin
        ) do
     # This gives us next unused additional data piece for this client, and we're
     # looking to know if it's been acknowledged. Since `xmin`s (second value in the
@@ -485,7 +523,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
           graph = merge_in_graph_diff(graph, diff)
           :ets.delete(@additional_data_ets, key)
           # See if we can do one more
-          advance_by_additional_data(graph, client_id, acknowledged)
+          advance_by_additional_data(graph, client_id, acknowledged, origin)
         else
           # Client hasn't seen this, so we're done here
           graph
@@ -503,9 +541,9 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
           diff = :ets.lookup_element(@additional_data_ets, key, 2)
           graph = merge_in_graph_diff(graph, diff)
           :ets.delete(@additional_data_ets, key)
-          clear_stored_actions(client_id, covered_txns)
+          clear_stored_actions(origin, client_id, covered_txns)
           # See if we can do one more
-          advance_by_additional_data(graph, client_id, acknowledged)
+          advance_by_additional_data(graph, client_id, acknowledged, origin)
         else
           # Client hasn't seen this, so we're done here
           graph
@@ -592,11 +630,22 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     results
   end
 
-  defp clear_stored_actions(client_id, txids) do
+  @delete_actions_for_xids_query """
+  DELETE FROM
+    #{Extension.client_actions_table()}
+  WHERE
+    client_id = $1 AND txid = ANY($2)
+  """
+
+  defp clear_stored_actions(origin, client_id, txids) do
     matchspec =
       for txid <- txids, do: {{{client_id, txid}, :_}, [], [true]}
 
     :ets.select_delete(@actions_ets, matchspec)
+
+    {:ok, _} = query(origin, @delete_actions_for_xids_query, [client_id, txids])
+
+    :ok
   end
 
   @impl GenServer
@@ -606,12 +655,13 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     checkpoint_table = :ets.new(@checkpoint_ets, [:named_table, :public, :set])
     subscriptions_table = :ets.new(@subscriptions_ets, [:named_table, :public, :ordered_set])
     _additional_data_table = :ets.new(@additional_data_ets, [:named_table, :public, :ordered_set])
-    _actions_table = :ets.new(@actions_ets, [:named_table, :public, :set])
+    actions_table = :ets.new(@actions_ets, [:named_table, :public, :set])
 
     origin = Connectors.origin(connector_config)
 
     restore_checkpoint_cache(origin, checkpoint_table)
     restore_subscriptions_cache(origin, subscriptions_table)
+    restore_actions_cache(origin, actions_table)
 
     {:ok, nil}
   end
@@ -639,6 +689,18 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
       end
 
     :ets.insert(subscriptions_table, subscriptions)
+  end
+
+  defp restore_actions_cache(origin, actions_table) do
+    {:ok, _, rows} =
+      query(origin, "SELECT * FROM #{Extension.client_actions_table()}", [])
+
+    actions =
+      for {client_id, txid, actions_bin} <- rows do
+        {{client_id, String.to_integer(txid)}, :erlang.binary_to_term(actions_bin)}
+      end
+
+    :ets.insert(actions_table, actions)
   end
 
   defp query(origin, query, params) when is_binary(query) and is_list(params) do
