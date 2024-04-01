@@ -3,7 +3,7 @@ import fs from 'fs'
 import ts from 'typescript'
 import { _testing } from '../../../src/cli/migrations/migrate'
 
-const temporaryDir = `.tmp`
+const tempDir = `.tmp`
 
 const defaultTsCompilerOptions: ts.CompilerOptions = {
   target: ts.ScriptTarget.ES2020,
@@ -140,8 +140,8 @@ const generateClient = async (
   inlinePrismaSchema: string,
   token: string
 ): Promise<string> => {
-  const schemaFilePath = `.tmp/_generation_test_schema_${token}.prisma`
-  const generatedClientPath = `.tmp/_generation_test_client_${token}`
+  const schemaFilePath = `${tempDir}/_generation_test_schema_${token}.prisma`
+  const generatedClientPath = `${tempDir}/_generation_test_client_${token}`
   const migrationsPath = `${generatedClientPath}/migrations.ts`
   fs.writeFileSync(schemaFilePath, inlinePrismaSchema)
   await _testing.generateClient(schemaFilePath, generatedClientPath)
