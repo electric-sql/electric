@@ -3,9 +3,7 @@ import fs from 'fs'
 import ts from 'typescript'
 import { _testing } from '../../../src/cli/migrations/migrate'
 
-const schemaFilePath = `.tmp/_generation_test_schema.prisma`
-const generatedClientPath = `.tmp/_generation_test_client`
-const migrationsPath = `${generatedClientPath}/migrations.ts`
+const temporaryDir = `.tmp`
 
 const defaultTsCompilerOptions: ts.CompilerOptions = {
   target: ts.ScriptTarget.ES2020,
@@ -110,12 +108,13 @@ model Dummy {
  * @returns {boolean} whether the generated client compiles successfully
  */
 function checkGeneratedClientCompiles(
+  clientPath: string,
   options: ts.CompilerOptions = defaultTsCompilerOptions
 ) {
   const sourceFiles = fs
-    .readdirSync(generatedClientPath)
+    .readdirSync(clientPath)
     .filter((file) => file.endsWith('.ts'))
-    .map((file) => `${generatedClientPath}/${file}`)
+    .map((file) => `${clientPath}/${file}`)
   const program = ts.createProgram({
     rootNames: sourceFiles,
     options,
@@ -134,36 +133,33 @@ function checkGeneratedClientCompiles(
  * Generates the type-safe TS client for the specified Prisma schema,
  * following all steps performed by the CLI generation process.
  * @param inlinePrismaSchema the inline Prisma schema to generate the client for
+ * @param token unique token to use for the generated schema and client dirs
+ * @returns {Promise<string>} the path to the generated client
  */
-const generateClient = async (inlinePrismaSchema: string) => {
+const generateClient = async (
+  inlinePrismaSchema: string,
+  token: string
+): Promise<string> => {
+  const schemaFilePath = `.tmp/_generation_test_schema_${token}.prisma`
+  const generatedClientPath = `.tmp/_generation_test_client_${token}`
+  const migrationsPath = `${generatedClientPath}/migrations.ts`
   fs.writeFileSync(schemaFilePath, inlinePrismaSchema)
   await _testing.generateClient(schemaFilePath, generatedClientPath)
   await fs.writeFileSync(migrationsPath, 'export default []')
+  return generatedClientPath
 }
 
-test.serial.afterEach.always(async () => {
-  // clean-up schema file and client after test
-  fs.rmSync(schemaFilePath, { force: true })
-  fs.rmSync(generatedClientPath, { recursive: true, force: true })
+test('should generate valid TS client for simple schema', async (t) => {
+  const clientPath = await generateClient(simpleSchema, 'simple')
+  t.true(checkGeneratedClientCompiles(clientPath))
 })
 
-test.serial('should generate valid TS client for simple schema', async (t) => {
-  await generateClient(simpleSchema)
-  t.true(checkGeneratedClientCompiles())
+test('should generate valid TS client for relational schema', async (t) => {
+  const clientPath = await generateClient(relationalSchema, 'relational')
+  t.true(checkGeneratedClientCompiles(clientPath))
 })
 
-test.serial(
-  'should generate valid TS client for relational schema',
-  async (t) => {
-    await generateClient(relationalSchema)
-    t.true(checkGeneratedClientCompiles())
-  }
-)
-
-test.serial(
-  'should generate valid TS client for schema with all data types',
-  async (t) => {
-    await generateClient(dataTypesSchema)
-    t.true(checkGeneratedClientCompiles())
-  }
-)
+test('should generate valid TS client for schema with all data types', async (t) => {
+  const clientPath = await generateClient(dataTypesSchema, 'datatypes')
+  t.true(checkGeneratedClientCompiles(clientPath))
+})
