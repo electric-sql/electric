@@ -698,7 +698,7 @@ defmodule Electric.Satellite.Protocol do
     {graph_diff, _, _} = data
 
     # Store this data in case of disconnect until acknowledged
-    ClientReconnectionInfo.store_subscription_data(state.client_id, id, graph_diff)
+    ClientReconnectionInfo.store_subscription_data(state.origin, state.client_id, id, graph_diff)
 
     if is_paused_on_subscription(state, id) do
       # We're currently waiting for data from this subscription, we can send it immediately
@@ -753,6 +753,7 @@ defmodule Electric.Satellite.Protocol do
 
     # Store this data in case of disconnect until acknowledged
     ClientReconnectionInfo.store_additional_txn_data(
+      state.origin,
       state.client_id,
       xmin,
       ref,

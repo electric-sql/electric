@@ -8,6 +8,7 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20240401134100_Client
 
   @impl true
   def up(_schema) do
+    additional_data_subject_enum = Extension.client_additional_data_subject_type()
     txid_type = Extension.txid_type()
 
     [
@@ -34,6 +35,24 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20240401134100_Client
         txid #{txid_type} NOT NULL,
         subquery_actions BYTEA NOT NULL,
         PRIMARY KEY (client_id, txid)
+      )
+      """,
+      """
+      CREATE TYPE #{additional_data_subject_enum} AS ENUM (
+        'transaction',
+        'subscription'
+      )
+      """,
+      """
+      CREATE TABLE #{Extension.client_additional_data_table()} (
+        client_id VARCHAR(64),
+        min_txid #{txid_type} NOT NULL,
+        ord BIGINT NOT NULL,
+        subject #{additional_data_subject_enum} NOT NULL,
+        subscription_id UUID,
+        graph_diff BYTEA NOT NULL,
+        included_txns BIGINT[] NOT NULL,
+        PRIMARY KEY (client_id, ord)
       )
       """
     ]
