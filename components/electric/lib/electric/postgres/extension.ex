@@ -30,6 +30,7 @@ defmodule Electric.Postgres.Extension do
   @client_actions_relation "client_actions"
   @client_shape_subscriptions_relation "client_shape_subscriptions"
   @client_checkpoints_relation "client_checkpoints"
+  @client_additional_data_relation "client_additional_data"
 
   @grants_relation "grants"
   @roles_relation "roles"
@@ -47,10 +48,13 @@ defmodule Electric.Postgres.Extension do
   @client_actions_table electric.(@client_actions_relation)
   @client_shape_subscriptions_table electric.(@client_shape_subscriptions_relation)
   @client_checkpoints_table electric.(@client_checkpoints_relation)
+  @client_additional_data_table electric.(@client_additional_data_relation)
 
   @grants_table electric.(@grants_relation)
   @roles_table electric.(@roles_relation)
   @assignments_table electric.(@assignments_relation)
+
+  @client_additional_data_subject_type electric.("client_additional_data_subject")
 
   @all_schema_query ~s(SELECT "schema", "version", "migration_ddl" FROM #{@schema_table} ORDER BY "version" ASC)
   @current_schema_query ~s(SELECT "schema", "version" FROM #{@schema_table} ORDER BY "id" DESC LIMIT 1)
@@ -118,6 +122,7 @@ defmodule Electric.Postgres.Extension do
   def client_actions_table, do: @client_actions_table
   def client_shape_subscriptions_table, do: @client_shape_subscriptions_table
   def client_checkpoints_table, do: @client_checkpoints_table
+  def client_additional_data_table, do: @client_additional_data_table
 
   def grants_table, do: @grants_table
   def roles_table, do: @roles_table
@@ -132,6 +137,8 @@ defmodule Electric.Postgres.Extension do
   def publication_name, do: @publication_name
   def slot_name, do: @slot_name
   def subscription_name, do: @subscription_name
+
+  def client_additional_data_subject_type, do: @client_additional_data_subject_type
 
   defguard is_extension_relation(relation) when elem(relation, 0) == @schema
 

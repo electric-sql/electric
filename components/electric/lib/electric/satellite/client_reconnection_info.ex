@@ -221,6 +221,13 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     client_id = $1
   """
 
+  @delete_additional_data_for_client_query """
+  DELETE FROM
+    #{Extension.client_additional_data_table()}
+  WHERE
+    client_id = $1
+  """
+
   @doc """
   Remove all stored data about client reconnection.
 
@@ -239,6 +246,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     {:ok, _} = query(origin, @delete_subscriptions_query, [client_id])
     {:ok, _} = query(origin, @delete_checkpoint_query, [client_id])
     {:ok, _} = query(origin, @delete_actions_query, [client_id])
+    {:ok, _} = query(origin, @delete_additional_data_for_client_query, [client_id])
 
     :ok
   end
@@ -257,6 +265,13 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     client_id = $1 AND subscription_id = $2
   """
 
+  @delete_subscription_data_query """
+  DELETE FROM
+    #{Extension.client_additional_data_table()}
+  WHERE
+    client_id = $1 AND subscription_id = $2
+  """
+
   def delete_subscription(origin, client_id, subscription_id) do
     :ets.delete(@subscriptions_ets, {client_id, subscription_id})
 
@@ -266,6 +281,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     )
 
     {:ok, 1} = query(origin, @delete_subscription_query, [client_id, subscription_id])
+    {:ok, 1} = query(origin, @delete_subscription_data_query, [client_id, subscription_id])
 
     :ok
   end
@@ -303,7 +319,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
 
   Once the client acknowledges a transaction, we can advance the graph, deleting the previous
   version. We may have sent additional data to the client (both as subscription data and as
-  additional data for transactions), and that was stored using `store_subscription_data/3`
+  additional data for transactions), and that was stored using `store_subscription_data/4`
   and `store_additional_txn_data/6`. This is useful in case the client reconnects having seen
   the data - we can correctly advance the graph using both transactions and additional data.
 
@@ -389,6 +405,9 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
       # acknowledged additional data is removed while advancing. So we can just
       # delete all additional data here and return all the actions.
       :ets.match_delete(@additional_data_ets, {{client_id, :_, :_, :_, :_}, :_, :_})
+
+      origin = Keyword.fetch!(opts, :origin)
+      {:ok, _} = query(origin, @delete_additional_data_for_client_query, [client_id])
 
       actions =
         @actions_ets
@@ -521,7 +540,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
           # Client has seen this subscription! Use it to advance the graph and delete it as confirmed.
           diff = :ets.lookup_element(@additional_data_ets, key, 2)
           graph = merge_in_graph_diff(graph, diff)
-          :ets.delete(@additional_data_ets, key)
+          :ok = delete_additional_data(origin, key)
           # See if we can do one more
           advance_by_additional_data(graph, client_id, acknowledged, origin)
         else
@@ -540,7 +559,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
           # Client has seen this additional data blob!
           diff = :ets.lookup_element(@additional_data_ets, key, 2)
           graph = merge_in_graph_diff(graph, diff)
-          :ets.delete(@additional_data_ets, key)
+          :ok = delete_additional_data(origin, key)
           clear_stored_actions(origin, client_id, covered_txns)
           # See if we can do one more
           advance_by_additional_data(graph, client_id, acknowledged, origin)
@@ -549,6 +568,21 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
           graph
         end
     end
+  end
+
+  @delete_additional_data_for_key_query """
+  DELETE FROM
+    #{Extension.client_additional_data_table()}
+  WHERE
+    client_id = $1 AND ord = $2
+  """
+
+  defp delete_additional_data(origin, {client_id, _xmin, order, _subject, _subscription_id} = key) do
+    :ets.delete(@additional_data_ets, key)
+
+    {:ok, 1} = query(origin, @delete_additional_data_for_key_query, [client_id, order])
+
+    :ok
   end
 
   @insert_subscription_query """
@@ -595,10 +629,25 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     ])
   end
 
+  @insert_subscription_data_query """
+  INSERT INTO
+    #{Extension.client_additional_data_table()}(
+    client_id,
+    min_txid,
+    ord,
+    subject,
+    subscription_id,
+    graph_diff,
+    included_txns
+  )
+  VALUES
+    ($1, $2, $3, 'subscription', $4, $5, '{}')
+  """
+
   @doc """
   Store subscription graph diff once it had arrived.
   """
-  def store_subscription_data(client_id, subscription_id, graph_diff) do
+  def store_subscription_data(origin, client_id, subscription_id, graph_diff) do
     xmin = :ets.lookup_element(@subscriptions_ets, {client_id, subscription_id}, 2)
     pos = :ets.lookup_element(@subscriptions_ets, {client_id, subscription_id}, 4)
 
@@ -606,17 +655,53 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
       @additional_data_ets,
       {{client_id, xmin, pos, :subscription, subscription_id}, graph_diff, []}
     )
+
+    {:ok, 1} =
+      query(origin, @insert_subscription_data_query, [
+        client_id,
+        xmin,
+        pos,
+        subscription_id,
+        :erlang.term_to_binary(graph_diff)
+      ])
+
+    :ok
   end
+
+  @insert_transaction_data_query """
+  INSERT INTO
+    #{Extension.client_additional_data_table()}(
+    client_id,
+    min_txid,
+    ord,
+    subject,
+    graph_diff,
+    included_txns
+  )
+  VALUES
+    ($1, $2, $3, 'transaction', $4, $5)
+  """
 
   @doc """
   Store graph diff for additional data that was queried from PostgreSQL in
   response to a set of transactions.
   """
-  def store_additional_txn_data(client_id, xmin, pos, included_txns, graph_diff) do
+  def store_additional_txn_data(origin, client_id, xmin, pos, included_txns, graph_diff) do
     :ets.insert(
       @additional_data_ets,
       {{client_id, xmin, pos, :transaction, nil}, graph_diff, included_txns}
     )
+
+    {:ok, 1} =
+      query(origin, @insert_transaction_data_query, [
+        client_id,
+        xmin,
+        pos,
+        :erlang.term_to_binary(graph_diff),
+        included_txns
+      ])
+
+    :ok
   end
 
   defp pop_additional_data_before(client_id, txid) do
@@ -654,13 +739,14 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
 
     checkpoint_table = :ets.new(@checkpoint_ets, [:named_table, :public, :set])
     subscriptions_table = :ets.new(@subscriptions_ets, [:named_table, :public, :ordered_set])
-    _additional_data_table = :ets.new(@additional_data_ets, [:named_table, :public, :ordered_set])
+    additional_data_table = :ets.new(@additional_data_ets, [:named_table, :public, :ordered_set])
     actions_table = :ets.new(@actions_ets, [:named_table, :public, :set])
 
     origin = Connectors.origin(connector_config)
 
     restore_checkpoint_cache(origin, checkpoint_table)
     restore_subscriptions_cache(origin, subscriptions_table)
+    restore_additional_data_cache(origin, additional_data_table)
     restore_actions_cache(origin, actions_table)
 
     {:ok, nil}
@@ -689,6 +775,19 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
       end
 
     :ets.insert(subscriptions_table, subscriptions)
+  end
+
+  defp restore_additional_data_cache(origin, additional_data_table) do
+    {:ok, _, rows} =
+      query(origin, "SELECT * FROM #{Extension.client_additional_data_table()}", [])
+
+    records =
+      for {client_id, xmin, pos, subject, subscription_id, graph_diff, included_txns} <- rows do
+        {{client_id, String.to_integer(xmin), pos, String.to_existing_atom(subject),
+          subscription_id}, :erlang.binary_to_term(graph_diff), included_txns}
+      end
+
+    :ets.insert(additional_data_table, records)
   end
 
   defp restore_actions_cache(origin, actions_table) do
