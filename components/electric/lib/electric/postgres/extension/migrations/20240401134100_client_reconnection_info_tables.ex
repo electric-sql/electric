@@ -20,6 +20,13 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20240401134100_Client
         shape_requests BYTEA NOT NULL,
         PRIMARY KEY (client_id, subscription_id)
       )
+      """,
+      """
+      CREATE TABLE #{Extension.client_checkpoints_table()} (
+        client_id VARCHAR(64) PRIMARY KEY,
+        pg_wal_pos BIGINT NOT NULL,
+        sent_rows_graph BYTEA NOT NULL
+      )
       """
     ]
   end
