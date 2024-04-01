@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import type { Prisma } from './prismaClient';
-import { type TableSchema, DbSchema, Relation, ElectricClient, type HKT } from 'electric-sql/client/model';
+import type { Prisma } from '../generated/client';
+import { type TableSchema, DbSchema, Relation, ElectricClient, type HKT } from '../../../src/client/model';
 
 /////////////////////////////////////////
 // HELPER FUNCTIONS
