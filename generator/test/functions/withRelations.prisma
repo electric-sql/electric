@@ -1,0 +1,19 @@
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+model Item {
+  value             String @id
+  relatedItems      RelatedItem[]
+}
+
+model RelatedItem {
+  value             String @id
+  relatedItemValue  String
+  relatedItem       Item  @relation(fields: [relatedItemValue], references: [value])
+}

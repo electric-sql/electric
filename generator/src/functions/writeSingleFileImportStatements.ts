@@ -18,10 +18,19 @@ export const writeSingleFileImportStatements: WriteStatements = (
     })
   }
 
-  writeImport(
-    `{ type TableSchema, DbSchema, Relation, ElectricClient, type HKT }`,
-    'electric-sql/client/model'
+  const hasRelations = dmmf.datamodel.models.some(
+    (model) => model.hasRelationFields
   )
+
+  const imports = [
+    'type TableSchema',
+    'DbSchema',
+    ...(hasRelations ? ['Relation'] : []),
+    'ElectricClient',
+    'type HKT',
+  ]
+
+  writeImport(`{ ${imports.join(', ')} }`, 'electric-sql/client/model')
 
   writeImport(`migrations`, './migrations')
 }
