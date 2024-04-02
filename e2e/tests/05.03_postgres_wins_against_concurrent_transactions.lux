@@ -45,7 +45,7 @@
     ??"content" => "updated on client 1"
 
     # Wait for the roundtrip of the insert back to Electric
-    ?component=CachedWal.EtsBacked \[debug\] Saving transaction \d+ at \d+/[\dA-F]+ with changes \
+    ?component=CachedWal.EtsBacked origin=postgres_1 \[debug\] Saving transaction \d+ at \d+/[\dA-F]+ with changes \
       \[%Electric.Replication.Changes.UpdatedRecord\{\
           relation: \{"public", "entries"\}, \
           old_record: %\{"content" => "original value", "content_b" => nil, "id" => "00000000-0000-0000-0000-000000000000"\}, \

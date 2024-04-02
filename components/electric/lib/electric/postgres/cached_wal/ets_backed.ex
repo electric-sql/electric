@@ -24,6 +24,7 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
   @behaviour Electric.Postgres.CachedWal.Api
 
   @typep state :: %{
+           origin: Connectors.origin(),
            notification_requests: %{optional(reference()) => {Api.wal_pos(), pid()}},
            table: :ets.table(),
            last_seen_wal_pos: Api.wal_pos(),
@@ -124,9 +125,10 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
     origin = Keyword.fetch!(opts, :origin)
 
     table = :ets.new(ets_table_name(origin), [:named_table, :ordered_set])
-    Logger.metadata(component: "CachedWal.EtsBacked")
+    Logger.metadata(origin: origin, component: "CachedWal.EtsBacked")
 
     state = %{
+      origin: origin,
       notification_requests: %{},
       table: table,
       last_seen_wal_pos: 0,
