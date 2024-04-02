@@ -20,6 +20,7 @@ import {
   SatelliteError,
   ReplicationStatus,
   AdditionalDataCallback,
+  Record,
 } from '../util/types'
 import {
   Shape,
@@ -31,6 +32,7 @@ import {
 } from './shapes/types'
 import { ShapeSubscription } from './process'
 import { DbSchema } from '../client/model/schema'
+import { QualifiedTablename } from '../util'
 
 export { SatelliteProcess } from './process'
 export { GlobalRegistry, globalRegistry } from './registry'
@@ -77,6 +79,12 @@ export interface Satellite {
   authenticate(token: string): Promise<void>
   subscribe(shapeDefinitions: Shape[]): Promise<ShapeSubscription>
   unsubscribe(shapeUuid: string): Promise<void>
+
+  setReplicationTransform(
+    tableName: QualifiedTablename,
+    transformInbound: (row: Record) => Record,
+    transformOutbound: (row: Record) => Record
+  ): void
 }
 
 export interface Client {

@@ -41,6 +41,7 @@ import {
   Transaction,
   isDataChange,
   Uuid,
+  Record as RowRecord,
 } from '../util/types'
 import { SatelliteOpts } from './config'
 import { Client, Satellite } from './index'
@@ -82,6 +83,11 @@ import Long from 'long'
 
 type ChangeAccumulator = {
   [key: string]: Change
+}
+
+type ReplicationHandler = {
+  transformInbound: (row: RowRecord) => RowRecord
+  transformOutbound: (row: RowRecord) => RowRecord
 }
 
 export type ShapeSubscription = {
@@ -152,6 +158,8 @@ export class SatelliteProcess implements Satellite {
   private maxSqlParameters: 999 | 32766 = 999
   private snapshotMutex: Mutex = new Mutex()
   private performingSnapshot = false
+
+  private replicationTransforms: Map<string, ReplicationHandler> = new Map()
 
   private _connectRetryHandler: ConnectRetryHandler
   private initializing?: Waiter
@@ -1133,6 +1141,10 @@ export class SatelliteProcess implements Satellite {
 
     const transactions = toTransactions(results, this.relations)
     for (const txn of transactions) {
+      // apply any specified transforms to the data changes
+      txn.changes = txn.changes.map((dc) =>
+        this._applyDataChangeTransform(dc, 'outbound')
+      )
       this.client.enqueueTransaction(txn)
     }
   }
@@ -1298,7 +1310,10 @@ export class SatelliteProcess implements Satellite {
     const processDML = async (changes: DataChange[]) => {
       const tx = {
         ...transaction,
-        changes: changes,
+        // apply any specified inbound data change transforms
+        changes: changes.map((dc) =>
+          this._applyDataChangeTransform(dc, 'inbound')
+        ),
       }
       const entries = fromTransaction(tx, this.relations)
 
@@ -1392,6 +1407,23 @@ export class SatelliteProcess implements Satellite {
     }
 
     await this._notifyChanges(opLogEntries, 'remote')
+  }
+
+  private _applyDataChangeTransform(
+    dataChange: DataChange,
+    dataFlow: 'inbound' | 'outbound'
+  ): DataChange {
+    const transforms = this.replicationTransforms.get(dataChange.relation.table)
+    if (!transforms) return dataChange
+    const transformToUse =
+      dataFlow === 'inbound'
+        ? transforms.transformInbound
+        : transforms.transformOutbound
+    return {
+      ...dataChange,
+      record: dataChange.record && transformToUse(dataChange.record),
+      oldRecord: dataChange.oldRecord && transformToUse(dataChange.oldRecord),
+    }
   }
 
   async _applyAdditionalData(data: AdditionalData) {
@@ -1554,6 +1586,17 @@ export class SatelliteProcess implements Satellite {
 
     if (major === 3 && minor >= 32) this.maxSqlParameters = 32766
     else this.maxSqlParameters = 999
+  }
+
+  public setReplicationTransform(
+    tableName: QualifiedTablename,
+    transformInbound: (row: RowRecord) => RowRecord,
+    transformOutbound: (row: RowRecord) => RowRecord
+  ): void {
+    this.replicationTransforms.set(tableName.toString(), {
+      transformInbound: transformInbound,
+      transformOutbound: transformOutbound,
+    })
   }
 }
 
