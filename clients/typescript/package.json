@@ -165,7 +165,7 @@
   },
   "dependencies": {
     "@electric-sql/prisma-generator": "workspace:*",
-    "@prisma/client": "4.8.1",
+    "@prisma/client": "4.16.0",
     "async-mutex": "^0.4.0",
     "base-64": "^1.0.0",
     "better-sqlite3": "^8.4.0",
@@ -190,7 +190,7 @@
     "long": "^5.2.0",
     "object.hasown": "^1.1.2",
     "ohash": "^1.1.2",
-    "prisma": "4.8.1",
+    "prisma": "4.16.0",
     "prompts": "^2.4.2",
     "protobufjs": "^7.1.1",
     "squel": "^5.13.0",

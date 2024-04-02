@@ -144,6 +144,8 @@ const generateClient = async (
   const generatedClientPath = `${tempDir}/_generation_test_client_${token}`
   const migrationsPath = `${generatedClientPath}/migrations.ts`
   fs.writeFileSync(schemaFilePath, inlinePrismaSchema)
+  // clean up the generated client if present
+  fs.rmSync(generatedClientPath, { recursive: true, force: true })
   await _testing.generateClient(schemaFilePath, generatedClientPath)
   await fs.writeFileSync(migrationsPath, 'export default []')
   return generatedClientPath
