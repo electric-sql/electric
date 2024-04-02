@@ -98,9 +98,6 @@ importers:
       prisma:
         specifier: 4.15.0
         version: 4.15.0
-      prisma-latest:
-        specifier: npm:prisma@4.15.0
-        version: /prisma@4.15.0
       prompts:
         specifier: ^2.4.2
         version: 2.4.2
@@ -371,7 +368,7 @@ importers:
   generator:
     dependencies:
       '@prisma/generator-helper':
-        specifier: ^4.16.2
+        specifier: ^4.15.0
         version: 4.16.2
       code-block-writer:
         specifier: ^11.0.3
@@ -384,7 +381,7 @@ importers:
         version: 3.21.1
     devDependencies:
       '@prisma/internals':
-        specifier: ^4.16.2
+        specifier: ^4.15.0
         version: 4.16.2
       '@types/lodash':
         specifier: ^4.14.191
