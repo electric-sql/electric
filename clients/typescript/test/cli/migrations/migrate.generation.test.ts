@@ -90,6 +90,7 @@ model DataTypes {
   float8      Float?    @db.DoublePrecision
   json        Json?
   bytea       Bytes?
+  enum        KindOfCategory?
   relatedId   Int?
   related     Dummy?    @relation(fields: [relatedId], references: [id])
 }
@@ -98,6 +99,12 @@ model Dummy {
   id          Int        @id
   timestamp   DateTime?  @db.Timestamp(3)
   datatype    DataTypes[]
+}
+
+enum KindOfCategory {
+  FIRST
+  SECOND
+  RANDOM
 }
 `
 
