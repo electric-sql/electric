@@ -68,8 +68,9 @@ defmodule Electric.MixProject do
       {:req, "~> 0.4"},
       {:pg_protocol, github: "electric-sql/pg_protocol"},
       {:nimble_parsec, "~> 1.4"},
-      {:postgrex, "~> 0.17", only: [:test]},
-      {:ecto_sql, "~> 3.11", only: [:test]},
+      {:postgrex, "~> 0.17"},
+      {:ecto_sql, "~> 3.11"},
+      {:ecto, "~> 3.11"},
       {:dotenvy, "~> 0.8"},
       {:timex, "~> 3.7"}
     ]
