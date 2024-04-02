@@ -8,7 +8,7 @@ defmodule Electric.Replication.Postgres.Client do
 
   import Electric.Postgres.Dialect.Postgresql, only: [quote_ident: 1]
 
-  alias Electric.Postgres.{Extension, Lsn}
+  alias Electric.Postgres.{Extension, Lsn, Repo}
   alias Electric.Replication.Connectors
 
   require Logger
@@ -25,6 +25,45 @@ defmodule Electric.Replication.Postgres.Client do
       Connectors.pop_extraneous_conn_opts(conn_opts)
 
     :epgsql.connect(ip_addr, username, password, epgsql_conn_opts)
+  end
+
+  @doc """
+  Execute the given function using a pooled DB connection.
+
+  The pool is managed by `Electric.Postgres.Repo` and so the passed function should use the
+  repo module's API for querying and executing SQL statements instead of `epgsql`. See
+  `pooled_query!/3` and `query!/2` below for a high-level API built on top of the Ecto repo.
+  """
+  @spec with_pool(Connectors.origin(), (-> any)) :: any
+  def with_pool(origin, fun) when is_binary(origin) and is_function(fun, 0) do
+    Repo.put_dynamic_repo(Repo.name(origin))
+    Repo.checkout(fun)
+  end
+
+  @doc """
+  Execute the given SQL query/statement using a pooled DB connection.
+
+  The pool is managed by `Electric.Postgres.Repo` and the query is executed by invoking `query!/2`.
+  """
+  @spec pooled_query!(Connectors.origin(), String.t(), [term]) :: {[String.t()], [tuple()]}
+  def pooled_query!(origin, query_str, params) when is_binary(origin) do
+    with_pool(origin, fn -> query!(query_str, params) end)
+  end
+
+  @doc """
+  Execute the given SQL query/statement in the context of a checked-out DB connection.
+
+  This function assumes a connection has been checked out from a pool managed by
+  `Electric.Postgres.Repo` and will fail if that's not the case. Use this to issue multiple
+  queries/statements on a single DB connection by wrapping them in an anonymous function and
+  passing it to `with_pool/2`.
+  """
+  @spec query!(String.t(), [term]) :: {[String.t()], [tuple()]}
+  def query!(query_str, params \\ []) when is_binary(query_str) and is_list(params) do
+    true = Repo.checked_out?()
+
+    %Postgrex.Result{columns: columns, rows: rows} = Repo.query!(query_str, params)
+    {columns, rows}
   end
 
   @spec with_conn(Connectors.connection_opts(), fun()) :: term() | {:error, term()}
