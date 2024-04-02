@@ -11,8 +11,6 @@ type UnwrapTuple<Tuple extends readonly unknown[]> = {
   [K in keyof Tuple]: K extends `${number}` ? Tuple[K] extends PrismaPromise<infer X> ? X : UnwrapPromise<Tuple[K]> : UnwrapPromise<Tuple[K]>
 };
 
-type Buffer = Omit<Uint8Array, 'set'>
-
 
 /**
  * Model Items
@@ -20,6 +18,9 @@ type Buffer = Omit<Uint8Array, 'set'>
  */
 export type Items = {
   value: string
+  /**
+   * @zod.number.int().gte(-2147483648).lte(2147483647)
+   */
   nbr: number | null
 }
 
@@ -28,6 +29,9 @@ export type Items = {
  * 
  */
 export type User = {
+  /**
+   * @zod.number.int().gte(-2147483648).lte(2147483647)
+   */
   id: number
   name: string | null
   meta: string | null
@@ -38,10 +42,19 @@ export type User = {
  * 
  */
 export type Post = {
+  /**
+   * @zod.number.int().gte(-2147483648).lte(2147483647)
+   */
   id: number
   title: string
   contents: string
+  /**
+   * @zod.number.int().gte(-2147483648).lte(2147483647)
+   */
   nbr: number | null
+  /**
+   * @zod.number.int().gte(-2147483648).lte(2147483647)
+   */
   authorId: number
 }
 
@@ -50,9 +63,15 @@ export type Post = {
  * 
  */
 export type Profile = {
+  /**
+   * @zod.number.int().gte(-2147483648).lte(2147483647)
+   */
   id: number
   bio: string
   meta: Prisma.JsonValue | null
+  /**
+   * @zod.number.int().gte(-2147483648).lte(2147483647)
+   */
   userId: number
 }
 
@@ -61,6 +80,9 @@ export type Profile = {
  * 
  */
 export type DataTypes = {
+  /**
+   * @zod.number.int().gte(-2147483648).lte(2147483647)
+   */
   id: number
   date: Date | null
   time: Date | null
@@ -91,6 +113,9 @@ export type DataTypes = {
   float8: number | null
   json: Prisma.JsonValue | null
   bytea: Buffer | null
+  /**
+   * @zod.number.int().gte(-2147483648).lte(2147483647)
+   */
   relatedId: number | null
 }
 
@@ -99,6 +124,9 @@ export type DataTypes = {
  * 
  */
 export type Dummy = {
+  /**
+   * @zod.number.int().gte(-2147483648).lte(2147483647)
+   */
   id: number
   timestamp: Date | null
 }
@@ -378,7 +406,7 @@ export namespace Prisma {
    *
    * @see https://www.prisma.io/docs/concepts/components/prisma-client/working-with-fields/working-with-json-fields#filtering-by-null-values
    */
-  export type InputJsonValue = null | string | number | boolean | InputJsonObject | InputJsonArray
+export type InputJsonValue = null | string | number | boolean | InputJsonObject | InputJsonArray
 
   /**
    * Types of the values used to represent different kinds of `null` values when working with JSON fields.
@@ -9429,3 +9457,5 @@ export namespace Prisma {
    */
   export const dmmf: runtime.BaseDMMF
 }
+
+type Buffer = Omit<Uint8Array, 'set'>
