@@ -71,6 +71,10 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   @magic_write_timeout 30_000
   @magic_write_msg :magic_write
 
+  if Mix.env() == :test do
+    @magic_write_timeout 1_000
+  end
+
   @spec start_link(Connectors.config()) :: :ignore | {:error, any} | {:ok, pid}
   def start_link(connector_config) do
     GenStage.start_link(__MODULE__, connector_config)
