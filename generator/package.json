@@ -37,7 +37,7 @@
     "check-styleguide": "eslint --ext ts,tsx,js,jsx --quiet ."
   },
   "devDependencies": {
-    "@prisma/internals": "^4.15.0",
+    "@prisma/internals": "^4.11.0",
     "@types/lodash": "^4.14.191",
     "@typescript-eslint/eslint-plugin": "^5.54.1",
     "@typescript-eslint/parser": "^5.54.1",
@@ -51,7 +51,7 @@
     "vitest": "^0.24.5"
   },
   "dependencies": {
-    "@prisma/generator-helper": "^4.15.0",
+    "@prisma/generator-helper": "^4.11.0",
     "code-block-writer": "^11.0.3",
     "lodash": "^4.17.21",
     "zod": "3.21.1"
