@@ -5,6 +5,7 @@ import * as z from 'zod'
 import { Row, Statement } from '../../util'
 import { Transformation, transformFields } from '../conversions/input'
 import { Fields } from '../model/schema'
+import { KyselyStatement } from '../model/kyselyBuilder'
 
 export class NonTransactionalDB implements DB {
   constructor(private _adapter: DatabaseAdapter, private _fields: Fields) {}
@@ -14,11 +15,11 @@ export class NonTransactionalDB implements DB {
   }
 
   run(
-    statement: QueryBuilder,
+    statement: KyselyStatement,
     successCallback?: (db: DB, res: RunResult) => void,
     errorCallback?: (error: any) => void
   ) {
-    const { text, values } = statement.toParam({ numberedParameters: false })
+    const { sql: text, parameters: values } = statement
     this._adapter
       .run({ sql: text, args: values })
       .then((res) => {
@@ -40,12 +41,12 @@ export class NonTransactionalDB implements DB {
   }
 
   query<Z>(
-    statement: QueryBuilder,
+    statement: KyselyStatement,
     schema: z.ZodType<Z>,
     successCallback: (db: DB, res: Z[]) => void,
     errorCallback?: (error: any) => void
   ) {
-    const { text, values } = statement.toParam({ numberedParameters: false })
+    const { sql: text, parameters: values } = statement
     this._adapter
       .query({ sql: text, args: values })
       .then((rows) => {
