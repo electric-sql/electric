@@ -9,6 +9,10 @@ import { Fields } from '../model/schema'
 export class NonTransactionalDB implements DB {
   constructor(private _adapter: DatabaseAdapter, private _fields: Fields) {}
 
+  withTableSchema(fields: Fields) {
+    return new NonTransactionalDB(this._adapter, fields)
+  }
+
   run(
     statement: QueryBuilder,
     successCallback?: (db: DB, res: RunResult) => void,

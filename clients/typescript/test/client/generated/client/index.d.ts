@@ -30,6 +30,7 @@ export type Items = {
 export type User = {
   id: number
   name: string | null
+  meta: string | null
 }
 
 /**
@@ -51,6 +52,7 @@ export type Post = {
 export type Profile = {
   id: number
   bio: string
+  meta: Prisma.JsonValue | null
   userId: number
 }
 
@@ -1987,16 +1989,19 @@ export namespace Prisma {
   export type UserMinAggregateOutputType = {
     id: number | null
     name: string | null
+    meta: string | null
   }
 
   export type UserMaxAggregateOutputType = {
     id: number | null
     name: string | null
+    meta: string | null
   }
 
   export type UserCountAggregateOutputType = {
     id: number
     name: number
+    meta: number
     _all: number
   }
 
@@ -2012,16 +2017,19 @@ export namespace Prisma {
   export type UserMinAggregateInputType = {
     id?: true
     name?: true
+    meta?: true
   }
 
   export type UserMaxAggregateInputType = {
     id?: true
     name?: true
+    meta?: true
   }
 
   export type UserCountAggregateInputType = {
     id?: true
     name?: true
+    meta?: true
     _all?: true
   }
 
@@ -2120,6 +2128,7 @@ export namespace Prisma {
   export type UserGroupByOutputType = {
     id: number
     name: string | null
+    meta: string | null
     _count: UserCountAggregateOutputType | null
     _avg: UserAvgAggregateOutputType | null
     _sum: UserSumAggregateOutputType | null
@@ -2144,6 +2153,7 @@ export namespace Prisma {
   export type UserSelect = {
     id?: boolean
     name?: boolean
+    meta?: boolean
     posts?: boolean | User$postsArgs
     profile?: boolean | ProfileArgs
     _count?: boolean | UserCountOutputTypeArgs
@@ -4062,6 +4072,7 @@ export namespace Prisma {
   export type ProfileCountAggregateOutputType = {
     id: number
     bio: number
+    meta: number
     userId: number
     _all: number
   }
@@ -4092,6 +4103,7 @@ export namespace Prisma {
   export type ProfileCountAggregateInputType = {
     id?: true
     bio?: true
+    meta?: true
     userId?: true
     _all?: true
   }
@@ -4191,6 +4203,7 @@ export namespace Prisma {
   export type ProfileGroupByOutputType = {
     id: number
     bio: string
+    meta: JsonValue | null
     userId: number
     _count: ProfileCountAggregateOutputType | null
     _avg: ProfileAvgAggregateOutputType | null
@@ -4216,6 +4229,7 @@ export namespace Prisma {
   export type ProfileSelect = {
     id?: boolean
     bio?: boolean
+    meta?: boolean
     userId?: boolean
     user?: boolean | UserArgs
   }
@@ -7265,6 +7279,7 @@ export namespace Prisma {
   export const ProfileScalarFieldEnum: {
     id: 'id',
     bio: 'bio',
+    meta: 'meta',
     userId: 'userId'
   };
 
@@ -7299,7 +7314,8 @@ export namespace Prisma {
 
   export const UserScalarFieldEnum: {
     id: 'id',
-    name: 'name'
+    name: 'name',
+    meta: 'meta'
   };
 
   export type UserScalarFieldEnum = (typeof UserScalarFieldEnum)[keyof typeof UserScalarFieldEnum]
@@ -7351,6 +7367,7 @@ export namespace Prisma {
     NOT?: Enumerable<UserWhereInput>
     id?: IntFilter | number
     name?: StringNullableFilter | string | null
+    meta?: StringNullableFilter | string | null
     posts?: PostListRelationFilter
     profile?: XOR<ProfileRelationFilter, ProfileWhereInput> | null
   }
@@ -7358,6 +7375,7 @@ export namespace Prisma {
   export type UserOrderByWithRelationInput = {
     id?: SortOrder
     name?: SortOrder
+    meta?: SortOrder
     posts?: PostOrderByRelationAggregateInput
     profile?: ProfileOrderByWithRelationInput
   }
@@ -7369,6 +7387,7 @@ export namespace Prisma {
   export type UserOrderByWithAggregationInput = {
     id?: SortOrder
     name?: SortOrder
+    meta?: SortOrder
     _count?: UserCountOrderByAggregateInput
     _avg?: UserAvgOrderByAggregateInput
     _max?: UserMaxOrderByAggregateInput
@@ -7382,6 +7401,7 @@ export namespace Prisma {
     NOT?: Enumerable<UserScalarWhereWithAggregatesInput>
     id?: IntWithAggregatesFilter | number
     name?: StringNullableWithAggregatesFilter | string | null
+    meta?: StringNullableWithAggregatesFilter | string | null
   }
 
   export type PostWhereInput = {
@@ -7440,6 +7460,7 @@ export namespace Prisma {
     NOT?: Enumerable<ProfileWhereInput>
     id?: IntFilter | number
     bio?: StringFilter | string
+    meta?: JsonNullableFilter
     userId?: IntFilter | number
     user?: XOR<UserRelationFilter, UserWhereInput> | null
   }
@@ -7447,6 +7468,7 @@ export namespace Prisma {
   export type ProfileOrderByWithRelationInput = {
     id?: SortOrder
     bio?: SortOrder
+    meta?: SortOrder
     userId?: SortOrder
     user?: UserOrderByWithRelationInput
   }
@@ -7459,6 +7481,7 @@ export namespace Prisma {
   export type ProfileOrderByWithAggregationInput = {
     id?: SortOrder
     bio?: SortOrder
+    meta?: SortOrder
     userId?: SortOrder
     _count?: ProfileCountOrderByAggregateInput
     _avg?: ProfileAvgOrderByAggregateInput
@@ -7473,6 +7496,7 @@ export namespace Prisma {
     NOT?: Enumerable<ProfileScalarWhereWithAggregatesInput>
     id?: IntWithAggregatesFilter | number
     bio?: StringWithAggregatesFilter | string
+    meta?: JsonNullableWithAggregatesFilter
     userId?: IntWithAggregatesFilter | number
   }
 
@@ -7645,6 +7669,7 @@ export namespace Prisma {
   export type UserCreateInput = {
     id: number
     name?: string | null
+    meta?: string | null
     posts?: PostCreateNestedManyWithoutAuthorInput
     profile?: ProfileCreateNestedOneWithoutUserInput
   }
@@ -7652,6 +7677,7 @@ export namespace Prisma {
   export type UserUncheckedCreateInput = {
     id: number
     name?: string | null
+    meta?: string | null
     posts?: PostUncheckedCreateNestedManyWithoutAuthorInput
     profile?: ProfileUncheckedCreateNestedOneWithoutUserInput
   }
@@ -7659,6 +7685,7 @@ export namespace Prisma {
   export type UserUpdateInput = {
     id?: IntFieldUpdateOperationsInput | number
     name?: NullableStringFieldUpdateOperationsInput | string | null
+    meta?: NullableStringFieldUpdateOperationsInput | string | null
     posts?: PostUpdateManyWithoutAuthorNestedInput
     profile?: ProfileUpdateOneWithoutUserNestedInput
   }
@@ -7666,6 +7693,7 @@ export namespace Prisma {
   export type UserUncheckedUpdateInput = {
     id?: IntFieldUpdateOperationsInput | number
     name?: NullableStringFieldUpdateOperationsInput | string | null
+    meta?: NullableStringFieldUpdateOperationsInput | string | null
     posts?: PostUncheckedUpdateManyWithoutAuthorNestedInput
     profile?: ProfileUncheckedUpdateOneWithoutUserNestedInput
   }
@@ -7673,16 +7701,19 @@ export namespace Prisma {
   export type UserCreateManyInput = {
     id: number
     name?: string | null
+    meta?: string | null
   }
 
   export type UserUpdateManyMutationInput = {
     id?: IntFieldUpdateOperationsInput | number
     name?: NullableStringFieldUpdateOperationsInput | string | null
+    meta?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type UserUncheckedUpdateManyInput = {
     id?: IntFieldUpdateOperationsInput | number
     name?: NullableStringFieldUpdateOperationsInput | string | null
+    meta?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type PostCreateInput = {
@@ -7743,41 +7774,48 @@ export namespace Prisma {
   export type ProfileCreateInput = {
     id: number
     bio: string
+    meta?: NullableJsonNullValueInput | InputJsonValue
     user?: UserCreateNestedOneWithoutProfileInput
   }
 
   export type ProfileUncheckedCreateInput = {
     id: number
     bio: string
+    meta?: NullableJsonNullValueInput | InputJsonValue
     userId: number
   }
 
   export type ProfileUpdateInput = {
     id?: IntFieldUpdateOperationsInput | number
     bio?: StringFieldUpdateOperationsInput | string
+    meta?: NullableJsonNullValueInput | InputJsonValue
     user?: UserUpdateOneWithoutProfileNestedInput
   }
 
   export type ProfileUncheckedUpdateInput = {
     id?: IntFieldUpdateOperationsInput | number
     bio?: StringFieldUpdateOperationsInput | string
+    meta?: NullableJsonNullValueInput | InputJsonValue
     userId?: IntFieldUpdateOperationsInput | number
   }
 
   export type ProfileCreateManyInput = {
     id: number
     bio: string
+    meta?: NullableJsonNullValueInput | InputJsonValue
     userId: number
   }
 
   export type ProfileUpdateManyMutationInput = {
     id?: IntFieldUpdateOperationsInput | number
     bio?: StringFieldUpdateOperationsInput | string
+    meta?: NullableJsonNullValueInput | InputJsonValue
   }
 
   export type ProfileUncheckedUpdateManyInput = {
     id?: IntFieldUpdateOperationsInput | number
     bio?: StringFieldUpdateOperationsInput | string
+    meta?: NullableJsonNullValueInput | InputJsonValue
     userId?: IntFieldUpdateOperationsInput | number
   }
 
@@ -8079,6 +8117,7 @@ export namespace Prisma {
   export type UserCountOrderByAggregateInput = {
     id?: SortOrder
     name?: SortOrder
+    meta?: SortOrder
   }
 
   export type UserAvgOrderByAggregateInput = {
@@ -8088,11 +8127,13 @@ export namespace Prisma {
   export type UserMaxOrderByAggregateInput = {
     id?: SortOrder
     name?: SortOrder
+    meta?: SortOrder
   }
 
   export type UserMinOrderByAggregateInput = {
     id?: SortOrder
     name?: SortOrder
+    meta?: SortOrder
   }
 
   export type UserSumOrderByAggregateInput = {
@@ -8173,10 +8214,33 @@ export namespace Prisma {
     nbr?: SortOrder
     authorId?: SortOrder
   }
+  export type JsonNullableFilter = 
+    | PatchUndefined<
+        Either<Required<JsonNullableFilterBase>, Exclude<keyof Required<JsonNullableFilterBase>, 'path'>>,
+        Required<JsonNullableFilterBase>
+      >
+    | OptionalFlat<Omit<Required<JsonNullableFilterBase>, 'path'>>
+
+  export type JsonNullableFilterBase = {
+    equals?: InputJsonValue | JsonNullValueFilter
+    path?: Array<string>
+    string_contains?: string
+    string_starts_with?: string
+    string_ends_with?: string
+    array_contains?: InputJsonValue | null
+    array_starts_with?: InputJsonValue | null
+    array_ends_with?: InputJsonValue | null
+    lt?: InputJsonValue
+    lte?: InputJsonValue
+    gt?: InputJsonValue
+    gte?: InputJsonValue
+    not?: InputJsonValue | JsonNullValueFilter
+  }
 
   export type ProfileCountOrderByAggregateInput = {
     id?: SortOrder
     bio?: SortOrder
+    meta?: SortOrder
     userId?: SortOrder
   }
 
@@ -8200,6 +8264,31 @@ export namespace Prisma {
   export type ProfileSumOrderByAggregateInput = {
     id?: SortOrder
     userId?: SortOrder
+  }
+  export type JsonNullableWithAggregatesFilter = 
+    | PatchUndefined<
+        Either<Required<JsonNullableWithAggregatesFilterBase>, Exclude<keyof Required<JsonNullableWithAggregatesFilterBase>, 'path'>>,
+        Required<JsonNullableWithAggregatesFilterBase>
+      >
+    | OptionalFlat<Omit<Required<JsonNullableWithAggregatesFilterBase>, 'path'>>
+
+  export type JsonNullableWithAggregatesFilterBase = {
+    equals?: InputJsonValue | JsonNullValueFilter
+    path?: Array<string>
+    string_contains?: string
+    string_starts_with?: string
+    string_ends_with?: string
+    array_contains?: InputJsonValue | null
+    array_starts_with?: InputJsonValue | null
+    array_ends_with?: InputJsonValue | null
+    lt?: InputJsonValue
+    lte?: InputJsonValue
+    gt?: InputJsonValue
+    gte?: InputJsonValue
+    not?: InputJsonValue | JsonNullValueFilter
+    _count?: NestedIntNullableFilter
+    _min?: NestedJsonNullableFilter
+    _max?: NestedJsonNullableFilter
   }
 
   export type DateTimeNullableFilter = {
@@ -8250,28 +8339,6 @@ export namespace Prisma {
     gt?: number
     gte?: number
     not?: NestedFloatNullableFilter | number | null
-  }
-  export type JsonNullableFilter = 
-    | PatchUndefined<
-        Either<Required<JsonNullableFilterBase>, Exclude<keyof Required<JsonNullableFilterBase>, 'path'>>,
-        Required<JsonNullableFilterBase>
-      >
-    | OptionalFlat<Omit<Required<JsonNullableFilterBase>, 'path'>>
-
-  export type JsonNullableFilterBase = {
-    equals?: InputJsonValue | JsonNullValueFilter
-    path?: Array<string>
-    string_contains?: string
-    string_starts_with?: string
-    string_ends_with?: string
-    array_contains?: InputJsonValue | null
-    array_starts_with?: InputJsonValue | null
-    array_ends_with?: InputJsonValue | null
-    lt?: InputJsonValue
-    lte?: InputJsonValue
-    gt?: InputJsonValue
-    gte?: InputJsonValue
-    not?: InputJsonValue | JsonNullValueFilter
   }
 
   export type BytesNullableFilter = {
@@ -8428,31 +8495,6 @@ export namespace Prisma {
     _sum?: NestedFloatNullableFilter
     _min?: NestedFloatNullableFilter
     _max?: NestedFloatNullableFilter
-  }
-  export type JsonNullableWithAggregatesFilter = 
-    | PatchUndefined<
-        Either<Required<JsonNullableWithAggregatesFilterBase>, Exclude<keyof Required<JsonNullableWithAggregatesFilterBase>, 'path'>>,
-        Required<JsonNullableWithAggregatesFilterBase>
-      >
-    | OptionalFlat<Omit<Required<JsonNullableWithAggregatesFilterBase>, 'path'>>
-
-  export type JsonNullableWithAggregatesFilterBase = {
-    equals?: InputJsonValue | JsonNullValueFilter
-    path?: Array<string>
-    string_contains?: string
-    string_starts_with?: string
-    string_ends_with?: string
-    array_contains?: InputJsonValue | null
-    array_starts_with?: InputJsonValue | null
-    array_ends_with?: InputJsonValue | null
-    lt?: InputJsonValue
-    lte?: InputJsonValue
-    gt?: InputJsonValue
-    gte?: InputJsonValue
-    not?: InputJsonValue | JsonNullValueFilter
-    _count?: NestedIntNullableFilter
-    _min?: NestedJsonNullableFilter
-    _max?: NestedJsonNullableFilter
   }
 
   export type BytesNullableWithAggregatesFilter = {
@@ -8851,6 +8893,28 @@ export namespace Prisma {
     _min?: NestedStringNullableFilter
     _max?: NestedStringNullableFilter
   }
+  export type NestedJsonNullableFilter = 
+    | PatchUndefined<
+        Either<Required<NestedJsonNullableFilterBase>, Exclude<keyof Required<NestedJsonNullableFilterBase>, 'path'>>,
+        Required<NestedJsonNullableFilterBase>
+      >
+    | OptionalFlat<Omit<Required<NestedJsonNullableFilterBase>, 'path'>>
+
+  export type NestedJsonNullableFilterBase = {
+    equals?: InputJsonValue | JsonNullValueFilter
+    path?: Array<string>
+    string_contains?: string
+    string_starts_with?: string
+    string_ends_with?: string
+    array_contains?: InputJsonValue | null
+    array_starts_with?: InputJsonValue | null
+    array_ends_with?: InputJsonValue | null
+    lt?: InputJsonValue
+    lte?: InputJsonValue
+    gt?: InputJsonValue
+    gte?: InputJsonValue
+    not?: InputJsonValue | JsonNullValueFilter
+  }
 
   export type NestedDateTimeNullableFilter = {
     equals?: Date | string | null
@@ -8964,28 +9028,6 @@ export namespace Prisma {
     _min?: NestedFloatNullableFilter
     _max?: NestedFloatNullableFilter
   }
-  export type NestedJsonNullableFilter = 
-    | PatchUndefined<
-        Either<Required<NestedJsonNullableFilterBase>, Exclude<keyof Required<NestedJsonNullableFilterBase>, 'path'>>,
-        Required<NestedJsonNullableFilterBase>
-      >
-    | OptionalFlat<Omit<Required<NestedJsonNullableFilterBase>, 'path'>>
-
-  export type NestedJsonNullableFilterBase = {
-    equals?: InputJsonValue | JsonNullValueFilter
-    path?: Array<string>
-    string_contains?: string
-    string_starts_with?: string
-    string_ends_with?: string
-    array_contains?: InputJsonValue | null
-    array_starts_with?: InputJsonValue | null
-    array_ends_with?: InputJsonValue | null
-    lt?: InputJsonValue
-    lte?: InputJsonValue
-    gt?: InputJsonValue
-    gte?: InputJsonValue
-    not?: InputJsonValue | JsonNullValueFilter
-  }
 
   export type NestedBytesNullableWithAggregatesFilter = {
     equals?: Buffer | null
@@ -9024,11 +9066,13 @@ export namespace Prisma {
   export type ProfileCreateWithoutUserInput = {
     id: number
     bio: string
+    meta?: NullableJsonNullValueInput | InputJsonValue
   }
 
   export type ProfileUncheckedCreateWithoutUserInput = {
     id: number
     bio: string
+    meta?: NullableJsonNullValueInput | InputJsonValue
   }
 
   export type ProfileCreateOrConnectWithoutUserInput = {
@@ -9071,22 +9115,26 @@ export namespace Prisma {
   export type ProfileUpdateWithoutUserInput = {
     id?: IntFieldUpdateOperationsInput | number
     bio?: StringFieldUpdateOperationsInput | string
+    meta?: NullableJsonNullValueInput | InputJsonValue
   }
 
   export type ProfileUncheckedUpdateWithoutUserInput = {
     id?: IntFieldUpdateOperationsInput | number
     bio?: StringFieldUpdateOperationsInput | string
+    meta?: NullableJsonNullValueInput | InputJsonValue
   }
 
   export type UserCreateWithoutPostsInput = {
     id: number
     name?: string | null
+    meta?: string | null
     profile?: ProfileCreateNestedOneWithoutUserInput
   }
 
   export type UserUncheckedCreateWithoutPostsInput = {
     id: number
     name?: string | null
+    meta?: string | null
     profile?: ProfileUncheckedCreateNestedOneWithoutUserInput
   }
 
@@ -9103,24 +9151,28 @@ export namespace Prisma {
   export type UserUpdateWithoutPostsInput = {
     id?: IntFieldUpdateOperationsInput | number
     name?: NullableStringFieldUpdateOperationsInput | string | null
+    meta?: NullableStringFieldUpdateOperationsInput | string | null
     profile?: ProfileUpdateOneWithoutUserNestedInput
   }
 
   export type UserUncheckedUpdateWithoutPostsInput = {
     id?: IntFieldUpdateOperationsInput | number
     name?: NullableStringFieldUpdateOperationsInput | string | null
+    meta?: NullableStringFieldUpdateOperationsInput | string | null
     profile?: ProfileUncheckedUpdateOneWithoutUserNestedInput
   }
 
   export type UserCreateWithoutProfileInput = {
     id: number
     name?: string | null
+    meta?: string | null
     posts?: PostCreateNestedManyWithoutAuthorInput
   }
 
   export type UserUncheckedCreateWithoutProfileInput = {
     id: number
     name?: string | null
+    meta?: string | null
     posts?: PostUncheckedCreateNestedManyWithoutAuthorInput
   }
 
@@ -9137,12 +9189,14 @@ export namespace Prisma {
   export type UserUpdateWithoutProfileInput = {
     id?: IntFieldUpdateOperationsInput | number
     name?: NullableStringFieldUpdateOperationsInput | string | null
+    meta?: NullableStringFieldUpdateOperationsInput | string | null
     posts?: PostUpdateManyWithoutAuthorNestedInput
   }
 
   export type UserUncheckedUpdateWithoutProfileInput = {
     id?: IntFieldUpdateOperationsInput | number
     name?: NullableStringFieldUpdateOperationsInput | string | null
+    meta?: NullableStringFieldUpdateOperationsInput | string | null
     posts?: PostUncheckedUpdateManyWithoutAuthorNestedInput
   }
 
