@@ -255,38 +255,10 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
     // Introspect the created DB to update the Prisma schema
     await introspectDB(prismaSchema)
 
-    // Add custom validators (such as uuid) to the Prisma schema
-    await addValidators(prismaSchema)
-
-    // Modify snake_case table names to PascalCase
-    await capitaliseTableNames(prismaSchema)
-
-    // Read the contents of the Prisma schema
-    const introspectedSchema = await fs.readFile(prismaSchema, 'utf8')
-
-    // Add a generator for the Electric client to the Prisma schema
-    await createElectricClientSchema(introspectedSchema, prismaSchema, opts)
-
-    // Generate the Electric client from the Prisma schema
-    await generateElectricClient(prismaSchema)
-
-    // Add a generator for the Prisma client to the Prisma schema
-    await createPrismaClientSchema(introspectedSchema, prismaSchema, opts)
-
-    // Generate the Prisma client from the Prisma schema
-    await generatePrismaClient(prismaSchema)
+    // Generate the Electric client from the given introspected schema
+    await generateClient(prismaSchema, config.CLIENT_PATH)
 
     const relativePath = path.relative(appRoot, config.CLIENT_PATH)
-    // Modify the type of JSON input values in the generated Prisma client
-    // because we deviate from Prisma's typing for JSON values
-    await extendJsonType(config.CLIENT_PATH)
-
-    // Replace the type of byte array input values in the generated Prisma client
-    // from `Buffer` to `Uint8Array` for better cross-environment support
-    await replaceByteArrayType(config.CLIENT_PATH)
-
-    // Delete all files generated for the Prisma client, except the typings
-    await keepOnlyPrismaTypings(config.CLIENT_PATH)
     console.log(`Successfully generated Electric client at: ./${relativePath}`)
 
     // Build the migrations
@@ -312,6 +284,58 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
     // In case of process exit, make sure to run after folder removal
     if (generationFailed && opts.exitOnError) process.exit(1)
   }
+}
+
+/**
+ * Generates the Electric client and the Prisma clients based off of the provided
+ * introspected Prisma schema.
+ * NOTE: exported for testing purposes only, not intended for external uses
+ * @param prismaSchema path to the introspected Prisma schema
+ * @param clientPath path to the directory where the client should be generated
+ */
+export async function generateClient(prismaSchema: string, clientPath: string) {
+  // Add custom validators (such as uuid) to the Prisma schema
+  await addValidators(prismaSchema)
+
+  // Modify snake_case table names to PascalCase
+  await capitaliseTableNames(prismaSchema)
+
+  // Read the contents of the Prisma schema
+  const introspectedSchema = await fs.readFile(prismaSchema, 'utf8')
+
+  // Add a generator for the Electric client to the Prisma schema
+  await createElectricClientSchema(introspectedSchema, prismaSchema, clientPath)
+
+  // Generate the Electric client from the Prisma schema
+  await generateElectricClient(prismaSchema)
+
+  // Add a generator for the Prisma client to the Prisma schema
+  await createPrismaClientSchema(introspectedSchema, prismaSchema, clientPath)
+
+  // Generate the Prisma client from the Prisma schema
+  await generatePrismaClient(prismaSchema)
+
+  // Perform necessary modifications to the generated client, like
+  // augmenting types, removing unused files, etc
+  await augmentGeneratedClient(clientPath)
+}
+
+/**
+ * Performs any necessary modifications to the generated client such
+ * as augmenting types, removing unused files, etc.
+ * @param clientPath Path to the generated client directory
+ */
+async function augmentGeneratedClient(clientPath: string) {
+  // Modify the type of JSON input values in the generated Prisma client
+  // because we deviate from Prisma's typing for JSON values
+  await extendJsonType(clientPath)
+
+  // Replace the type of byte array input values in the generated Prisma client
+  // from `Buffer` to `Uint8Array` for better cross-environment support
+  await replaceByteArrayType(clientPath)
+
+  // Delete all files generated for the Prisma client, except the typings
+  await keepOnlyPrismaTypings(clientPath)
 }
 
 /**
@@ -369,10 +393,9 @@ async function createIntrospectionSchema(
 async function createElectricClientSchema(
   introspectedSchema: string,
   prismaSchemaFile: string,
-  opts: GeneratorOptions
+  clientPath: string
 ) {
-  const config = opts.config
-  const output = path.resolve(config.CLIENT_PATH)
+  const output = path.resolve(clientPath)
 
   const schema = dedent`
     generator electric {
@@ -397,10 +420,9 @@ async function createElectricClientSchema(
 async function createPrismaClientSchema(
   introspectedSchema: string,
   prismaSchemaFile: string,
-  opts: GeneratorOptions
+  clientPath: string
 ) {
-  const config = opts.config
-  const output = path.resolve(config.CLIENT_PATH)
+  const output = path.resolve(clientPath)
 
   const schema = dedent`
     generator client {
@@ -763,7 +785,7 @@ function replaceByteArrayType(prismaDir: string): Promise<void> {
   return fs.appendFile(
     prismaTypings,
     // omit 'set' property as it conflicts with the DAL setter prop name
-    "\n\ntype Buffer = Omit<Uint8Array | 'set'>\n"
+    "\n\ntype Buffer = Omit<Uint8Array, 'set'>\n"
   )
 }
 

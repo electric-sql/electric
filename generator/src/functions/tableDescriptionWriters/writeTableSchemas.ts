@@ -44,7 +44,15 @@ export function writeTableSchemas(
           .writeLine(
             `readonly _A?: boolean | null | undefined | Prisma.${modelName}Args`
           )
-          .writeLine(`readonly type: Prisma.${modelName}GetPayload<this['_A']>`)
+
+          // NOTE: This is a hack to get around a limitation in the TypeScript >=5.4 compiler
+          // that enforces stricter conditional type constraints, see:
+          // https://devblogs.microsoft.com/typescript/announcing-typescript-5-4/#notable-behavioral-changes
+          // The issue is resolved with Prisma >=4.16.0, we can remove once we update
+          // .writeLine(`readonly type: Prisma.${modelName}GetPayload<this['_A']>`)
+          .writeLine(
+            `readonly type: Omit<Prisma.${modelName}GetPayload<this['_A']>, "Please either choose \`select\` or \`include\`">`
+          )
       })
       .blankLine()
   })

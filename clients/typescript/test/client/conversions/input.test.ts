@@ -8,8 +8,7 @@ import {
   _NOT_UNIQUE_,
   _RECORD_NOT_FOUND_,
 } from '../../../src/client/validation/errors/messages'
-import { JsonNull, schema } from '../generated'
-import { DataTypes, Dummy } from '../generated/client'
+import { JsonNull, schema, DataTypes, Dummy } from '../generated'
 
 const db = new Database(':memory:')
 const electric = await electrify(
