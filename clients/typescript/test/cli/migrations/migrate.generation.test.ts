@@ -2,8 +2,10 @@ import test from 'ava'
 import fs from 'fs'
 import ts from 'typescript'
 import { _testing } from '../../../src/cli/migrations/migrate'
+import path from 'path'
 
 const tempDir = `.tmp`
+const generatedFilePrefix = '_generation_test'
 
 const defaultTsCompilerOptions: ts.CompilerOptions = {
   target: ts.ScriptTarget.ES2020,
@@ -110,30 +112,25 @@ enum KindOfCategory {
 
 /**
  * Checks if the generated client from the Prisma schema can
- * be compile using TypeScript without emitting any errors.
- * @param {ts.CompilerOptions} options compiler options to use
- * @returns {boolean} whether the generated client compiles successfully
+ * be compiled using TypeScript without emitting any errors.
+ * @param options compiler options to use
+ * @returns whether the generated client compiles successfully
  */
 function checkGeneratedClientCompiles(
   clientPath: string,
   options: ts.CompilerOptions = defaultTsCompilerOptions
 ) {
   const sourceFiles = fs
-    .readdirSync(clientPath)
-    .filter((file) => file.endsWith('.ts'))
-    .map((file) => `${clientPath}/${file}`)
+    .readdirSync(clientPath, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.ts'))
+    .map((file) => path.join(clientPath, file.name))
   const program = ts.createProgram({
     rootNames: sourceFiles,
     options,
   })
   // Check if the program compiles successfully
   const diagnostics = ts.getPreEmitDiagnostics(program)
-  if (diagnostics.length === 0) return true
-
-  diagnostics.forEach((diagnostic) => {
-    console.error(diagnostic.messageText)
-  })
-  return false
+  return diagnostics.length === 0
 }
 
 /**
@@ -141,15 +138,21 @@ function checkGeneratedClientCompiles(
  * following all steps performed by the CLI generation process.
  * @param inlinePrismaSchema the inline Prisma schema to generate the client for
  * @param token unique token to use for the generated schema and client dirs
- * @returns {Promise<string>} the path to the generated client
+ * @returns the path to the generated client
  */
 const generateClient = async (
   inlinePrismaSchema: string,
   token: string
 ): Promise<string> => {
-  const schemaFilePath = `${tempDir}/_generation_test_schema_${token}.prisma`
-  const generatedClientPath = `${tempDir}/_generation_test_client_${token}`
-  const migrationsPath = `${generatedClientPath}/migrations.ts`
+  const schemaFilePath = path.join(
+    tempDir,
+    `${generatedFilePrefix}_schema_${token}.prisma`
+  )
+  const generatedClientPath = path.join(
+    tempDir,
+    `${generatedFilePrefix}_client_${token}`
+  )
+  const migrationsPath = path.join(generatedClientPath, 'migrations.ts')
   fs.writeFileSync(schemaFilePath, inlinePrismaSchema)
   // clean up the generated client if present
   fs.rmSync(generatedClientPath, { recursive: true, force: true })
@@ -161,6 +164,17 @@ const generateClient = async (
 test.before(() => {
   if (!fs.existsSync(tempDir)) {
     fs.mkdirSync(tempDir)
+  }
+})
+
+test.after(() => {
+  // avoid deleting whole temp directory as it might be used by
+  // other tests as well
+  const files = fs.readdirSync(tempDir)
+  for (const file of files) {
+    if (file.startsWith(generatedFilePrefix)) {
+      fs.rmSync(path.join(tempDir, file), { recursive: true, force: true })
+    }
   }
 })
 
