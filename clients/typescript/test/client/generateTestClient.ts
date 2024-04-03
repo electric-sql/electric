@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'url'
-import { _testing } from '../../src/cli/migrations/migrate'
+import { generateClient } from '../../src/cli/migrations/migrate'
 import fs from 'fs'
 import path from 'path'
 
@@ -83,7 +83,7 @@ if (!fs.existsSync(prismaSchemaDir)) {
 fs.writeFileSync(prismaSchemaPath, prismaSchema)
 
 // enhance schema and generate client along with mock migrations
-await _testing.generateClient(prismaSchemaPath, generatedClientDir)
+await generateClient(prismaSchemaPath, generatedClientDir)
 fs.writeFileSync(migrationsPath, 'export default []')
 
 // fix the generated client import path to point to local schema

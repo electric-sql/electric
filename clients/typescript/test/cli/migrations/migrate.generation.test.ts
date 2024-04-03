@@ -1,7 +1,7 @@
 import test from 'ava'
 import fs from 'fs'
 import ts from 'typescript'
-import { _testing } from '../../../src/cli/migrations/migrate'
+import { generateClient } from '../../../src/cli/migrations/migrate'
 import path from 'path'
 
 const tempDir = `.tmp`
@@ -140,7 +140,7 @@ function checkGeneratedClientCompiles(
  * @param token unique token to use for the generated schema and client dirs
  * @returns the path to the generated client
  */
-const generateClient = async (
+const generateClientFromPrismaSchema = async (
   inlinePrismaSchema: string,
   token: string
 ): Promise<string> => {
@@ -156,7 +156,7 @@ const generateClient = async (
   fs.writeFileSync(schemaFilePath, inlinePrismaSchema)
   // clean up the generated client if present
   fs.rmSync(generatedClientPath, { recursive: true, force: true })
-  await _testing.generateClient(schemaFilePath, generatedClientPath)
+  await generateClient(schemaFilePath, generatedClientPath)
   await fs.writeFileSync(migrationsPath, 'export default []')
   return generatedClientPath
 }
@@ -179,16 +179,25 @@ test.after(() => {
 })
 
 test('should generate valid TS client for simple schema', async (t) => {
-  const clientPath = await generateClient(simpleSchema, 'simple')
+  const clientPath = await generateClientFromPrismaSchema(
+    simpleSchema,
+    'simple'
+  )
   t.true(checkGeneratedClientCompiles(clientPath))
 })
 
 test('should generate valid TS client for relational schema', async (t) => {
-  const clientPath = await generateClient(relationalSchema, 'relational')
+  const clientPath = await generateClientFromPrismaSchema(
+    relationalSchema,
+    'relational'
+  )
   t.true(checkGeneratedClientCompiles(clientPath))
 })
 
 test('should generate valid TS client for schema with all data types', async (t) => {
-  const clientPath = await generateClient(dataTypesSchema, 'datatypes')
+  const clientPath = await generateClientFromPrismaSchema(
+    dataTypesSchema,
+    'datatypes'
+  )
   t.true(checkGeneratedClientCompiles(clientPath))
 })

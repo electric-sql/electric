@@ -289,10 +289,11 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
 /**
  * Generates the Electric client and the Prisma clients based off of the provided
  * introspected Prisma schema.
+ * NOTE: exported for testing purposes only, not intended for external uses
  * @param prismaSchema path to the introspected Prisma schema
  * @param clientPath path to the directory where the client should be generated
  */
-async function generateClient(prismaSchema: string, clientPath: string) {
+export async function generateClient(prismaSchema: string, clientPath: string) {
   // Add custom validators (such as uuid) to the Prisma schema
   await addValidators(prismaSchema)
 
@@ -834,8 +835,4 @@ function stripPasswordFromUrl(url: string): string {
     parsed.password = '********'
   }
   return parsed.toString()
-}
-
-export const _testing = {
-  generateClient,
 }
