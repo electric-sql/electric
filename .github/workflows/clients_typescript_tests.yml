@@ -86,4 +86,4 @@ jobs:
           cache: pnpm
       - run: make deps
       - run: pnpm config set '//registry.npmjs.org/:_authToken' "${{ secrets.NPM_TOKEN }}"
-      - run: pnpm run release-canary
+      - run: make publish-canary
