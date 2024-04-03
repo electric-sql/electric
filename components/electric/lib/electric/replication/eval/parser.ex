@@ -208,9 +208,14 @@ defmodule Electric.Replication.Eval.Parser do
       {:AEXPR_LIKE, _} -> handle_binary_operator(expr, refs, env)
       {:AEXPR_ILIKE, _} -> handle_binary_operator(expr, refs, env)
       {:AEXPR_DISTINCT, _} -> handle_distinct(expr, refs, env)
-      _ -> {:error, {loc, "expression #{identifier(expr.name)} is not currently supported"}}
+      {:AEXPR_IN, _} -> handle_in(expr, refs, env)
+      _ -> {:error, {loc, "expression #{identifier(dbg(expr).name)} is not currently supported"}}
     end
   end
+
+  # Explicitly fail on "sublinks" - subqueries are not allowed in any context here
+  defp do_parse_and_validate_tree(%PgQuery.SubLink{location: loc}, _, _),
+    do: {:error, {loc, "subqueries are not supported"}}
 
   # If nothing matched, fail
   defp do_parse_and_validate_tree(%type_module{} = node, _, _),
@@ -267,6 +272,51 @@ defmodule Electric.Replication.Eval.Parser do
         strict?: false
       })
     end
+  end
+
+  defp handle_in(%PgQuery.A_Expr{name: [name]} = expr, refs, env) do
+    # This is "=" if it's `IN`, and "<>" if it's `NOT IN`.
+    name = unwrap_node_string(name)
+
+    # It can only be a list here because that's how PG parses SQL. It it's a subquery, then it wouldn't be `A_Expr`.
+    {:list, %PgQuery.List{items: items}} = expr.rexpr.node
+
+    with {:ok, comparisons} <-
+           Utils.map_while_ok(
+             items,
+             &find_operator_func(["="], [expr.lexpr, &1], expr.location, refs, env)
+           ),
+         {:ok, comparisons} <- Utils.map_while_ok(comparisons, &maybe_reduce/1),
+         {:ok, reduced} <- build_or_chain(comparisons, expr.location) do
+      # x NOT IN y is exactly equivalent to NOT (x IN y)
+      if name == "=",
+        do: {:ok, reduced},
+        else:
+          maybe_reduce(%Func{
+            implementation: &Kernel.not/1,
+            name: "not",
+            type: :bool,
+            args: [reduced],
+            location: expr.location
+          })
+    end
+  end
+
+  defp build_or_chain([head | tail], location) do
+    Enum.reduce_while(tail, {:ok, head}, fn comparison, {:ok, acc} ->
+      %Func{
+        implementation: &Kernel.or/2,
+        name: "or",
+        type: :bool,
+        args: [acc, comparison],
+        location: location
+      }
+      |> maybe_reduce()
+      |> case do
+        {:ok, reduced} -> {:cont, {:ok, reduced}}
+        error -> {:halt, error}
+      end
+    end)
   end
 
   # Returns an unreduced function so that caller has access to args
