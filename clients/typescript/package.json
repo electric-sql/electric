@@ -152,6 +152,7 @@
     "build": "shx rm -rf dist && npm run build:copy-docker && concurrently \"tsup\" \"tsc -p tsconfig.build.json\" && node scripts/fix-imports.js",
     "build:copy-docker": "shx mkdir -p ./dist/cli/docker-commands/docker && shx cp -r ./src/cli/docker-commands/docker ./dist/cli/docker-commands",
     "test": "ava",
+    "generate-test-client": "npx tsx ./test/client/generateTestClient.ts",
     "typecheck": "tsc -p tsconfig.json",
     "posttest": "npm run typecheck",
     "prepublishOnly": "pnpm run build",

@@ -20,7 +20,7 @@ function App() {
         <Link href="https://electric-sql.com" target="_blank" rel="noreferrer">
           <ElectricLogo size={132} fill={theme.palette.primary.main} />
         </Link>
-        <h1>Electric SQL Recipes</h1>
+        <h1>ElectricSQL Recipes</h1>
         {links.map((linkData, idx) => (
           <Link key={idx} component={RouterLink} to={linkData.path} underline="hover">
             {linkData.text}

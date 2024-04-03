@@ -34,6 +34,7 @@ import {
   Row,
   Statement,
   createQueryResultSubscribeFunction,
+  isObject,
 } from '../../util'
 import { NarrowInclude } from '../input/inputNarrowing'
 import { IShapeManager } from './shapes'
@@ -221,11 +222,7 @@ export class Table<
       const extendedTable = includedTables.add(relatedTable)
       // And follow nested includes
       const includedObj = (include as any)[field]
-      if (
-        typeof includedObj === 'object' &&
-        !Array.isArray(includedObj) &&
-        includedObj !== null
-      ) {
+      if (isObject(includedObj)) {
         // There is a nested include, follow it
         const nestedTables = relatedTable.getIncludedTables(includedObj)
         nestedTables.forEach((tbl) => extendedTable.add(tbl))
@@ -453,7 +450,7 @@ export class Table<
         const relatedTbl = this._tables.get(relatedTable)!
         relatedTbl._create(
           { data: relatedObject },
-          db,
+          db.withTableSchema(relatedTbl._fields),
           (createdRelatedObject) => {
             delete data[relationField] // remove the relation field
             data[fromField] = createdRelatedObject[toField] // fill in the FK
@@ -505,7 +502,7 @@ export class Table<
             relatedObject[fromField] = obj[toField] // fill in FK
             relatedTbl._create(
               { data: relatedObject },
-              db,
+              db.withTableSchema(relatedTbl._fields),
               () => {
                 oldMakeRelatedObjects(obj, cont)
               },
@@ -734,7 +731,7 @@ export class Table<
           },
         },
       },
-      db,
+      db.withTableSchema(otherTable._fields),
       (relatedRows: object[]) => {
         // Now, join the original `rows` with the `relatedRows`
         // where `row.fromField == relatedRow.toField`
@@ -969,7 +966,7 @@ export class Table<
             data: obj.data,
             where: whereArg,
           },
-          db,
+          db.withTableSchema(relatedTbl._fields),
           cont,
           onError
         )
@@ -984,7 +981,7 @@ export class Table<
               [toField]: fromFieldValue,
             },
           },
-          db,
+          db.withTableSchema(relatedTbl._fields),
           cont,
           onError
         )
@@ -1052,7 +1049,7 @@ export class Table<
                   [fromField]: originalObject[toField],
                 },
               },
-              db,
+              db.withTableSchema(relatedTable._fields),
               cont,
               onError
             )

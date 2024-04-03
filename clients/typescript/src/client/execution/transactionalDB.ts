@@ -9,6 +9,10 @@ import { KyselyStatement } from '../model/kyselyBuilder'
 export class TransactionalDB implements DB {
   constructor(private _tx: Transaction, private _fields: Fields) {}
 
+
+  withTableSchema(fields: Fields) {
+    return new TransactionalDB(this._tx, fields)
+  }
   run(
     statement: KyselyStatement,
     successCallback?: (db: DB, res: RunResult) => void,

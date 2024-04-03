@@ -108,6 +108,34 @@ function bytesToFloat(bytes: Uint8Array) {
 }
 
 /**
+ * Converts an arbitrary blob (or bytestring) into a hex encoded string, which
+ * is also the `bytea` PG string.
+ * @param bytes - the blob to encode
+ * @returns the blob as a hex encoded string
+ */
+export function blobToHexString(bytes: Uint8Array) {
+  let hexString = ''
+  for (const byte of bytes.values()) {
+    hexString += byte.toString(16).padStart(2, '0')
+  }
+  return hexString
+}
+
+/**
+ * Converts a hex encoded string into a `Uint8Array` blob.
+ * @param bytes - the blob to encode
+ * @returns the blob as a hex encoded string
+ */
+export function hexStringToBlob(hexString: string) {
+  const byteArray = new Uint8Array(hexString.length / 2)
+  for (let i = 0; i < hexString.length; i += 2) {
+    const byte = parseInt(hexString.substring(i, i + 2), 16)
+    byteArray[i / 2] = byte
+  }
+  return byteArray
+}
+
+/**
  * Converts a SQLite string representing a `timetz` value to a PG string.
  * e.g. '18:28:35.42108' -> '18:28:35.42108+00'
  * @param str The SQLite string representing a `timetz` value.
@@ -167,4 +195,19 @@ export function getWaiter(): Waiter {
       return finished
     },
   }
+}
+
+/**
+ * Checks whether the provided value is an object and not an
+ * array of some sort
+ * @param value - value to check
+ * @returns {boolean} whether the `value` is an actual object
+ */
+export function isObject(value: any): value is object {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    !ArrayBuffer.isView(value)
+  )
 }

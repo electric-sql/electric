@@ -10,6 +10,10 @@ import { KyselyStatement } from '../model/kyselyBuilder'
 export class NonTransactionalDB implements DB {
   constructor(private _adapter: DatabaseAdapter, private _fields: Fields) {}
 
+  withTableSchema(fields: Fields) {
+    return new NonTransactionalDB(this._adapter, fields)
+  }
+
   run(
     statement: KyselyStatement,
     successCallback?: (db: DB, res: RunResult) => void,

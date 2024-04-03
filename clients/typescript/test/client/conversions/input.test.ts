@@ -8,8 +8,7 @@ import {
   _NOT_UNIQUE_,
   _RECORD_NOT_FOUND_,
 } from '../../../src/client/validation/errors/messages'
-import { JsonNull, schema } from '../generated'
-import { DataTypes, Dummy } from '../generated/client'
+import { JsonNull, schema, DataTypes, Dummy } from '../generated'
 
 const db = new Database(':memory:')
 const electric = await electrify(
@@ -26,7 +25,7 @@ await tbl.sync()
 function setupDB() {
   db.exec('DROP TABLE IF EXISTS DataTypes')
   db.exec(
-    "CREATE TABLE DataTypes('id' int PRIMARY KEY, 'date' varchar, 'time' varchar, 'timetz' varchar, 'timestamp' varchar, 'timestamptz' varchar, 'bool' int, 'uuid' varchar, 'int2' int2, 'int4' int4, 'int8' int8, 'float4' real, 'float8' real, 'json' varchar, 'relatedId' int);"
+    "CREATE TABLE DataTypes('id' int PRIMARY KEY, 'date' varchar, 'time' varchar, 'timetz' varchar, 'timestamp' varchar, 'timestamptz' varchar, 'bool' int, 'uuid' varchar, 'int2' int2, 'int4' int4, 'int8' int8, 'float4' real, 'float8' real, 'json' varchar, 'bytea' blob, 'relatedId' int);"
   )
 
   db.exec('DROP TABLE IF EXISTS Dummy')
@@ -252,6 +251,7 @@ const dateNulls = {
   float8: null,
   uuid: null,
   json: null,
+  bytea: null,
 }
 
 const nulls = {

@@ -16,10 +16,14 @@ import Log from 'loglevel'
 import { ExtendedTableSchema } from './schema'
 import { PgBasicType } from '../conversions/types'
 import { HKT } from '../util/hkt'
+import { isObject } from '../../util'
 
 const squelPostgres = squel.useFlavour('postgres')
 squelPostgres.registerValueHandler('bigint', function (bigint) {
   return bigint.toString()
+})
+squelPostgres.registerValueHandler(Uint8Array, function (uint8) {
+  return uint8
 })
 
 type AnyFindInput = FindInput<any, any, any, any, any>
@@ -109,7 +113,7 @@ export class Builder {
   ): QueryBuilder {
     const unsupportedEntry = Object.entries(i.data).find((entry) => {
       const [_key, value] = entry
-      return typeof value === 'object' && value !== null
+      return isObject(value)
     })
     if (unsupportedEntry)
       throw new InvalidArgumentError(
@@ -312,7 +316,7 @@ function makeFilter(
   if (fieldValue === null) return [{ sql: `${fieldName} IS NULL` }]
   else if (fieldName === 'AND' || fieldName === 'OR' || fieldName === 'NOT') {
     return [makeBooleanFilter(fieldName as 'AND' | 'OR' | 'NOT', fieldValue)]
-  } else if (typeof fieldValue === 'object') {
+  } else if (isObject(fieldValue)) {
     // an object containing filters is provided
     // e.g. users.findMany({ where: { id: { in: [1, 2, 3] } } })
     const fs = {

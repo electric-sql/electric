@@ -1,6 +1,7 @@
 import { RunResult } from '../../electric/adapter'
 import * as z from 'zod'
 import { Row, Statement } from '../../util'
+import { Fields } from '../model/schema'
 import { KyselyStatement } from '../model/kyselyBuilder'
 
 /**
@@ -28,4 +29,10 @@ export interface DB {
     successCallback: (tx: DB, res: Row[]) => void,
     errorCallback?: (error: any) => void
   ): void
+
+  /**
+   * Get instance with provided table schema for field
+   * transformation and validation purposes
+   */
+  withTableSchema(fields: Fields): DB
 }
