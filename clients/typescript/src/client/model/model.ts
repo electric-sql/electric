@@ -185,6 +185,11 @@ export interface Model<
   deleteMany<T extends DeleteManyInput<Where>>(
     i: SelectSubset<T, DeleteManyInput<Where>>
   ): Promise<BatchPayload>
+
+  setReplicationTransform<T extends UpdateData>(
+    transformInbound: (row: T) => T,
+    transformOutbound: (row: T) => T
+  ): void
 }
 
 export interface LiveResultContext<T> {
