@@ -296,6 +296,28 @@ test.serial('create query with nested objects for incoming FK', async (t) => {
   clear()
 })
 
+test.serial('create query with nullable FK', async (t) => {
+  const res = await profileTable.create({
+    data: {
+      id: 1094,
+      bio: 'whatever',
+      userId: 1,
+      imageId: null,
+    },
+    include: { image: true },
+  })
+
+  t.deepEqual(res, {
+    id: 1094,
+    bio: 'whatever',
+    meta: null,
+    imageId: null,
+    userId: 1,
+  })
+
+  clear()
+})
+
 // Test that we can make a create query
 test.serial('create query', async (t) => {
   const res = await tbl.create({
