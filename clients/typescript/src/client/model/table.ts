@@ -36,21 +36,26 @@ import {
   Statement,
   createQueryResultSubscribeFunction,
   isObject,
+  Record as RowRecord,
 } from '../../util'
 import { NarrowInclude } from '../input/inputNarrowing'
 import { IShapeManager } from './shapes'
 import { ShapeSubscription } from '../../satellite'
 import {
+  Transformation,
   transformCreate,
   transformCreateMany,
   transformDelete,
   transformDeleteMany,
+  transformFields,
   transformFindNonUnique,
   transformFindUnique,
   transformUpdate,
   transformUpdateMany,
 } from '../conversions/input'
 import { Rel, Shape } from '../../satellite/shapes/types'
+import { IReplicationTransformManager } from './transforms'
+import { ReplicationTransformInput } from '../input/replicationTransformInput'
 
 type AnyTable = Table<any, any, any, any, any, any, any, any, any, HKT>
 
@@ -67,6 +72,7 @@ export class Table<
   GetPayload extends HKT
 > implements
     Model<
+      T,
       CreateData,
       UpdateData,
       Select,
@@ -81,6 +87,7 @@ export class Table<
   private _builder: Builder
   private _executor: Executor
   private _shapeManager: IShapeManager
+  private _replicationTransformManager: IReplicationTransformManager
   private _qualifiedTableName: QualifiedTablename
   private _tables: Map<TableName, AnyTable>
   private _fields: Fields
@@ -110,6 +117,7 @@ export class Table<
     adapter: DatabaseAdapter,
     private _notifier: Notifier,
     shapeManager: IShapeManager,
+    replicationTransformManager: IReplicationTransformManager,
     private _dbDescription: DbSchema<any>
   ) {
     this._fields = this._dbDescription.getFields(tableName)
@@ -123,6 +131,7 @@ export class Table<
     )
     this._executor = new Executor(adapter, _notifier, this._fields)
     this._shapeManager = shapeManager
+    this._replicationTransformManager = replicationTransformManager
     this._qualifiedTableName = new QualifiedTablename('main', tableName)
     this._tables = new Map()
     this._schema = tableDescription.modelSchema
@@ -148,6 +157,27 @@ export class Table<
       include: true,
       where: true,
     })
+  }
+
+  setReplicationTransform(i: ReplicationTransformInput<T>): void {
+    const relations = this._dbDescription.getRelations(this.tableName)
+    const immutableFields = relations.map((r) => r.relationField)
+    const liftTableReplicationTransform = (transform: (row: T) => T) =>
+      liftReplicationTransform(
+        transform,
+        this._fields,
+        this._schema,
+        immutableFields
+      )
+    this._replicationTransformManager.setTableTransform(
+      this.tableName,
+      liftTableReplicationTransform(i.transformInbound),
+      liftTableReplicationTransform(i.transformOutbound)
+    )
+  }
+
+  clearReplicationTransform(): void {
+    this._replicationTransformManager.clearTableTransform(this.tableName)
   }
 
   setTables(tables: Map<TableName, AnyTable>) {
@@ -1688,4 +1718,41 @@ function makeSqlWhereClause(where: object): string {
     .join(' AND ')
   const clauses = [fieldSqlClause, andSqlClause, orSqlClause, notSqlClause]
   return clauses.filter((clause) => clause !== '').join(' AND ')
+}
+
+function liftReplicationTransform<T extends Record<string, unknown>>(
+  transformRow: (row: T) => T,
+  fields: Fields,
+  schema: z.ZodTypeAny,
+  immutableFields: string[]
+): (row: RowRecord) => RowRecord {
+  return (row: RowRecord) => {
+    // parse raw record according to specified fields
+    const parsedRow = transformFields(
+      row,
+      fields,
+      Transformation.Sqlite2Js
+    ) as T
+
+    // apply specified transformation
+    const transformedParsedRow = transformRow(parsedRow as Readonly<T>)
+
+    // validate transformed row and convert back to raw record
+    const validatedTransformedParsedRow = validate(transformedParsedRow, schema)
+    const transformedRow = transformFields(
+      validatedTransformedParsedRow,
+      fields,
+      Transformation.Js2Sqlite
+    ) as RowRecord
+
+    // check if any of the immutable fields were modified
+    immutableFields.forEach((f) => {
+      if (row[f] !== transformedRow[f]) {
+        throw new Error(
+          'Replication transform cannot modify primary or foreign keys'
+        )
+      }
+    })
+    return transformedRow
+  }
 }

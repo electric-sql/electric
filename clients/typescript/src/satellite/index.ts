@@ -32,7 +32,6 @@ import {
 } from './shapes/types'
 import { ShapeSubscription } from './process'
 import { DbSchema } from '../client/model/schema'
-import { QualifiedTablename } from '../util'
 
 export { SatelliteProcess } from './process'
 export { GlobalRegistry, globalRegistry } from './registry'
@@ -81,10 +80,11 @@ export interface Satellite {
   unsubscribe(shapeUuid: string): Promise<void>
 
   setReplicationTransform(
-    tableName: QualifiedTablename,
+    tableName: string,
     transformInbound: (row: Record) => Record,
     transformOutbound: (row: Record) => Record
   ): void
+  clearReplicationTransform(tableName: string): void
 }
 
 export interface Client {

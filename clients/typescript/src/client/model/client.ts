@@ -7,6 +7,7 @@ import { Notifier } from '../../notifiers'
 import { DatabaseAdapter } from '../../electric/adapter'
 import { GlobalRegistry, Registry, Satellite } from '../../satellite'
 import { ShapeManager } from './shapes'
+import { ReplicationTransformManager } from './transforms'
 
 export type ClientTables<DB extends DbSchema<any>> = {
   [Tbl in keyof DB['tables']]: DB['tables'][Tbl] extends TableSchema<
@@ -135,6 +136,9 @@ export class ElectricClient<
   ): ElectricClient<DB> {
     const tables = dbDescription.extendedTables
     const shapeManager = new ShapeManager(satellite)
+    const replicationTransformManager = new ReplicationTransformManager(
+      satellite
+    )
 
     const createTable = (tableName: string) => {
       return new Table(
@@ -142,6 +146,7 @@ export class ElectricClient<
         adapter,
         notifier,
         shapeManager,
+        replicationTransformManager,
         dbDescription
       )
     }
