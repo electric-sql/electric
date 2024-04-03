@@ -720,7 +720,9 @@ export class Table<
     const otherTable = this._tables.get(relatedTable)!
     const args = includeArg === true ? {} : includeArg
     const where = typeof args.where === 'undefined' ? {} : args.where
-    const foreignKeys = rows.map((row) => row[fromField as keyof typeof row])
+    const foreignKeys = rows
+      .map((row) => row[fromField as keyof typeof row])
+      .filter((fk) => fk !== null && fk !== undefined)
     otherTable._findMany(
       {
         ...args,
