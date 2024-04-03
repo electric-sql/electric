@@ -89,6 +89,10 @@ const profile2 = {
   userId: 2,
 }
 
+// An invalid JSON that will throw if `JSON.parse()` is called
+// on it - the valid string literal would be "'invalid json"'
+const invalidJson = 'invalid json'
+
 const sortById = <T extends { id: number }>(arr: Array<T>) =>
   arr.sort((a, b) => b.id - a.id)
 
@@ -300,7 +304,7 @@ test.serial(
           create: {
             id: 4013,
             name: 'kevin',
-            meta: 'invalid json',
+            meta: invalidJson,
           },
         },
       },
@@ -317,7 +321,7 @@ test.serial(
       user: {
         id: 4013,
         name: 'kevin',
-        meta: 'invalid json',
+        meta: invalidJson,
       },
     })
 
@@ -1136,7 +1140,7 @@ test.serial(
         meta: { bar: 3 },
         user: {
           update: {
-            meta: 'invalid json',
+            meta: invalidJson,
           },
         },
       },
@@ -1150,7 +1154,7 @@ test.serial(
       meta: { bar: 3 },
       user: {
         ...author2,
-        meta: 'invalid json',
+        meta: invalidJson,
       },
     })
   }
