@@ -35,7 +35,6 @@ describe('writeSingleFileImportStatements', () => {
       writeSingleFileImportStatements(dmmf, writer)
     )
 
-    console.log(fileString)
     expect(fileString).toContain(
       "import { type TableSchema, DbSchema, ElectricClient, type HKT } from 'electric-sql/client/model';"
     )
