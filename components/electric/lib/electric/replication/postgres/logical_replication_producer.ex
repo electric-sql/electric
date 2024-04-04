@@ -142,6 +142,13 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
           origin: origin,
           span: span
         }
+        # The replication slot used by the replication connection prevents Postgres from
+        # discarding old WAL records until Electric sees a write to an electrified table.
+        # However, any writes in Postgres cause the WAL to grow, and, moreover, managed
+        # Postgres instances from any provider exhibit some background write rate even when the
+        # user application is idle. To keep WAL's disk usage in check, we issue a periodic no-op
+        # write that gets delivered to Electric over the replications stream, allowing it to
+        # ack the latest WAL position and let Postgres discard older records.
         |> schedule_magic_write()
 
       {:producer, state}
