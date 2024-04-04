@@ -20,6 +20,7 @@ import {
   SocketCloseReason,
   ReplicationStatus,
   AdditionalDataCallback,
+  ConnectivityState,
 } from '../util/types'
 import { ElectricConfig } from '../config/index'
 
@@ -33,6 +34,7 @@ import {
   base64,
   AsyncEventEmitter,
   genUUID,
+  QualifiedTablename,
 } from '../util'
 import { bytesToNumber } from '../util/common'
 import { generateTag } from './oplog'
@@ -84,6 +86,7 @@ export class MockSatelliteProcess implements Satellite {
     this.socketFactory = socketFactory
     this.opts = opts
   }
+  connectivityState?: ConnectivityState | undefined
   subscribe(_shapeDefinitions: Shape[]): Promise<ShapeSubscription> {
     return Promise.resolve({
       synced: Promise.resolve(),
@@ -124,6 +127,14 @@ export class MockSatelliteProcess implements Satellite {
   async stop(): Promise<void> {
     await sleepAsync(50)
   }
+
+  setReplicationTransform(
+    _tableName: QualifiedTablename,
+    _transformInbound: (row: DataRecord) => DataRecord,
+    _transformOutbound: (row: DataRecord) => DataRecord
+  ): void {}
+
+  clearReplicationTransform(_tableName: QualifiedTablename): void {}
 }
 
 export class MockRegistry extends BaseRegistry {
