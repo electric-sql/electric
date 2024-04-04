@@ -4,7 +4,7 @@ defmodule Electric.Satellite.Permissions.TransientTest do
   alias Electric.Satellite.Permissions.{Role, RoleGrant, Transient}
 
   alias ElectricTest.PermissionsHelpers.{
-    LSN,
+    XID,
     Perms,
     Roles
   }
@@ -26,21 +26,21 @@ defmodule Electric.Satellite.Permissions.TransientTest do
           target_relation: @issues,
           target_id: "i3",
           scope_id: "p1",
-          valid_to: LSN.new(100)
+          valid_to: XID.new(100)
         ),
         Perms.transient(
           assign_id: "assign-01",
           target_relation: @issues,
           target_id: "i4",
           scope_id: "p2",
-          valid_to: LSN.new(100)
+          valid_to: XID.new(100)
         ),
         Perms.transient(
           assign_id: "assign-02",
           target_relation: @issues,
           target_id: "i3",
           scope_id: "p1",
-          valid_to: LSN.new(100)
+          valid_to: XID.new(100)
         )
       ]
 
@@ -50,14 +50,14 @@ defmodule Electric.Satellite.Permissions.TransientTest do
           target_relation: @issues,
           target_id: "i3",
           scope_id: "p1",
-          valid_to: LSN.new(100)
+          valid_to: XID.new(100)
         ),
         Perms.transient(
           assign_id: "assign-01",
           target_relation: @issues,
           target_id: "i6",
           scope_id: "p9",
-          valid_to: LSN.new(100)
+          valid_to: XID.new(100)
         )
       ]
 
@@ -74,7 +74,7 @@ defmodule Electric.Satellite.Permissions.TransientTest do
         ]
         |> Enum.map(&%RoleGrant{role: Role.new(&1)})
 
-      lsn = LSN.new(100)
+      lsn = XID.new(100)
 
       perms = Transient.for_roles(role_grants, lsn, cxt.name)
 
@@ -91,7 +91,7 @@ defmodule Electric.Satellite.Permissions.TransientTest do
           target_relation: @issues,
           target_id: "i3",
           scope_id: "p1",
-          valid_to: LSN.new(101)
+          valid_to: XID.new(101)
         )
       ]
 
@@ -101,14 +101,14 @@ defmodule Electric.Satellite.Permissions.TransientTest do
           target_relation: @issues,
           target_id: "i4",
           scope_id: "p2",
-          valid_to: LSN.new(99)
+          valid_to: XID.new(99)
         ),
         Perms.transient(
           assign_id: "assign-02",
           target_relation: @issues,
           target_id: "i3",
           scope_id: "p1",
-          valid_to: LSN.new(99)
+          valid_to: XID.new(99)
         )
       ]
 
@@ -125,7 +125,7 @@ defmodule Electric.Satellite.Permissions.TransientTest do
         ]
         |> Enum.map(&%RoleGrant{role: Role.new(&1)})
 
-      lsn = LSN.new(100)
+      lsn = XID.new(100)
 
       perms = Transient.for_roles(role_grants, lsn, cxt.name)
 

@@ -63,7 +63,8 @@ defmodule Electric.Satellite.WebsocketServerTest do
       )
       |> Map.put_new(:allowed_unacked_txs, 30)
 
-    connector_config = [origin: "test-origin", connection: []]
+    origin = "test-origin"
+    connector_config = [origin: origin, connection: []]
     port = 55133
 
     plug =
@@ -71,7 +72,8 @@ defmodule Electric.Satellite.WebsocketServerTest do
        auth_provider: Auth.provider(),
        connector_config: connector_config,
        subscription_data_fun: ctx.subscription_data_fun,
-       allowed_unacked_txs: ctx.allowed_unacked_txs}
+       allowed_unacked_txs: ctx.allowed_unacked_txs,
+       schema_loader: grant_all_permissions_loader(origin)}
 
     start_link_supervised!({Bandit, port: port, plug: plug})
 
@@ -79,7 +81,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
     start_link_supervised!({Electric.Satellite.ClientReconnectionInfo, connector_config})
 
-    %{port: port, server_id: server_id}
+    %{port: port, server_id: server_id, origin: origin}
   end
 
   setup_with_mocks([
@@ -879,7 +881,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
   # -------------------------------------------------------------------------------
   def mock_data_function(
         {id, requests, _context},
-        [reply_to: {ref, pid}, connection: _, telemetry_span: _],
+        [reply_to: {ref, pid}, connection: _, telemetry_span: _, relation_loader: _],
         opts \\ []
       ) do
     insertion_point = Keyword.get(opts, :insertion_point, 0)

@@ -15,6 +15,7 @@ defmodule Electric.Replication.Changes do
   require Logger
 
   @type db_identifier() :: Electric.Postgres.name()
+  @type xid() :: Electric.Postgres.xid()
   @type relation() :: {schema :: db_identifier(), table :: db_identifier()}
   @type record() :: %{(column_name :: db_identifier()) => column_data :: binary()}
   @type relation_id() :: non_neg_integer
@@ -46,7 +47,7 @@ defmodule Electric.Replication.Changes do
           }
 
     @type t() :: %__MODULE__{
-            xid: non_neg_integer() | nil,
+            xid: Changes.xid() | nil,
             changes: [Changes.change()],
             referenced_records: referenced_records(),
             commit_timestamp: DateTime.t(),
@@ -287,27 +288,6 @@ defmodule Electric.Replication.Changes do
         sqlite: Electric.Postgres.Dialect.SQLite
       ]
     end
-  end
-
-  @spec filter_changes_belonging_to_user(Transaction.t(), binary()) :: Transaction.t()
-  def filter_changes_belonging_to_user(
-        %Transaction{changes: changes, referenced_records: referenced} = tx,
-        user_id
-      ) do
-    %Transaction{
-      tx
-      | changes: Enum.filter(changes, &Changes.Ownership.change_belongs_to_user?(&1, user_id)),
-        referenced_records: filter_referenced_belonging_to_user(referenced, user_id)
-    }
-  end
-
-  defp filter_referenced_belonging_to_user(referenced_map, user_id) do
-    Map.new(referenced_map, fn {rel, items} ->
-      {rel,
-       Map.filter(items, fn {_pk, ref} ->
-         Changes.Ownership.change_belongs_to_user?(ref, user_id)
-       end)}
-    end)
   end
 
   @spec generateTag(Transaction.t()) :: binary()

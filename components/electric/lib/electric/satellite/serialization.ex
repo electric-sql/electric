@@ -2,7 +2,8 @@ defmodule Electric.Satellite.Serialization do
   alias Electric.Satellite.Protocol
   alias Electric.Satellite.SatOpGone
   alias Electric.Replication.Changes.Gone
-  alias Electric.Postgres.{Extension, Replication}
+  alias Electric.Postgres.Extension.SchemaLoader
+  alias Electric.Postgres.Replication
   alias Electric.Replication.Changes
 
   alias Electric.Replication.Changes.{
@@ -29,9 +30,14 @@ defmodule Electric.Satellite.Serialization do
   @doc """
   Serialize from internal format to Satellite PB format
   """
-  @spec serialize_trans(Transaction.t(), term(), relation_mapping()) ::
+  @spec serialize_trans(
+          Transaction.t(),
+          term(),
+          relation_mapping(),
+          SchemaLoader.relation_loader()
+        ) ::
           {[%SatOpLog{}], [Changes.relation()], relation_mapping()}
-  def serialize_trans(%Transaction{} = trans, offset, known_relations) do
+  def serialize_trans(%Transaction{} = trans, offset, known_relations, relation_loader) do
     tm = DateTime.to_unix(trans.commit_timestamp, :millisecond)
     lsn = Electric.Postgres.CachedWal.Api.serialize_wal_position(offset)
 
@@ -42,7 +48,8 @@ defmodule Electric.Satellite.Serialization do
       migration_version: nil,
       schema: nil,
       new_relations: [],
-      known_relations: known_relations
+      known_relations: known_relations,
+      relation_loader: relation_loader
     }
 
     state = Enum.reduce(trans.changes, state, &serialize_change/2)
@@ -72,11 +79,12 @@ defmodule Electric.Satellite.Serialization do
     }
   end
 
-  def serialize_move_in_data_as_tx(ref, changes, known_relations) do
+  def serialize_move_in_data_as_tx(ref, changes, known_relations, relation_loader) do
     begin_op = %SatTransOp{op: {:additional_begin, %SatOpAdditionalBegin{ref: ref}}}
     commit_op = %SatTransOp{op: {:additional_commit, %SatOpAdditionalCommit{ref: ref}}}
 
     state = %{
+      relation_loader: relation_loader,
       ops: [commit_op],
       new_relations: [],
       known_relations: known_relations
@@ -88,8 +96,9 @@ defmodule Electric.Satellite.Serialization do
     {[%SatOpLog{ops: [begin_op | state.ops]}], state.new_relations, state.known_relations}
   end
 
-  def serialize_shape_data_as_tx(changes, known_relations) do
+  def serialize_shape_data_as_tx(changes, known_relations, relation_loader) do
     state = %{
+      relation_loader: relation_loader,
       ops: [],
       new_relations: [],
       known_relations: known_relations
@@ -107,7 +116,7 @@ defmodule Electric.Satellite.Serialization do
     known_relations =
       Enum.reduce(migration.relations, state.known_relations, fn relation, known ->
         {_relation_id, _columns, _, known} =
-          load_new_relation(relation, known)
+          load_new_relation(state.relation_loader, relation, known)
 
         known
       end)
@@ -145,7 +154,7 @@ defmodule Electric.Satellite.Serialization do
     relation = record.relation
 
     {rel_id, rel_cols, rel_pks, new_relations, known_relations} =
-      case fetch_relation_id(relation, known_relations) do
+      case fetch_relation_id(state.relation_loader, relation, known_relations) do
         {:new, {relation_id, columns, pks, known_relations}} ->
           {relation_id, columns, pks, [relation | new_relations], known_relations}
 
@@ -279,23 +288,25 @@ defmodule Electric.Satellite.Serialization do
     end
   end
 
-  def fetch_relation_id(relation, known_relations) do
+  def fetch_relation_id(relation_loader, relation, known_relations) do
     case Map.get(known_relations, relation) do
       nil ->
-        {:new, load_new_relation(relation, known_relations)}
+        {:new, load_new_relation(relation_loader, relation, known_relations)}
 
       {relation_id, columns, pks} ->
         {:existing, {relation_id, columns, pks}}
     end
   end
 
-  defp load_new_relation(relation, known_relations) do
-    %{oid: relation_id, columns: columns, primary_keys: pks} = fetch_relation(relation)
+  defp load_new_relation(relation_loader, relation, known_relations) do
+    %{oid: relation_id, columns: columns, primary_keys: pks} =
+      fetch_relation(relation_loader, relation)
+
     {relation_id, columns, pks, Map.put(known_relations, relation, {relation_id, columns, pks})}
   end
 
-  defp fetch_relation(relation) do
-    Extension.SchemaCache.Global.relation!(relation)
+  defp fetch_relation(relation_loader, relation) do
+    relation_loader.(relation)
   end
 
   @doc """
@@ -493,6 +504,13 @@ defmodule Electric.Satellite.Serialization do
   @spec decode_column_value!(binary, atom) :: binary
 
   def decode_column_value!(val, :bool) when val in ["t", "f"], do: val
+  # because we're now receiving boolean data added via the additional records mechanism,
+  # which encodes data as JSON, not using the pg protocol, we also receive booleans
+  # encoded as `"true"`.
+  #
+  # See `Electric.Replication.Postgres.LogicalReplicationProducer.process_message/2`
+  def decode_column_value!("true", :bool), do: "t"
+  def decode_column_value!("false", :bool), do: "f"
 
   def decode_column_value!(val, :bool) do
     raise "Unexpected value for bool column: #{inspect(val)}"

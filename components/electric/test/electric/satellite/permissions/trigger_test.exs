@@ -17,6 +17,7 @@ defmodule Electric.Satellite.Permissions.TriggerTest do
   @workspaces {"public", "workspaces"}
   @projects {"public", "projects"}
   @project_memberships {"public", "project_memberships"}
+  @users {"public", "users"}
 
   setup do
     loader_spec =
@@ -349,6 +350,34 @@ defmodule Electric.Satellite.Permissions.TriggerTest do
         })
 
       assert {{:delete, _role}, ^change} = fun.(change, :loader)
+    end
+
+    test "assign based on same table", cxt do
+      assign =
+        assign("assign (users, 'self') to #{table(@users)}.id")
+
+      assert {@users, fun} =
+               Trigger.for_assign(assign, cxt.schema_version, &callback/3)
+
+      assert is_function(fun, 2)
+
+      %{id: assign_id} = assign
+      user_id = Auth.user_id()
+
+      change = Chgs.insert(@users, %{"id" => user_id})
+
+      assert {{:insert, role}, ^change} = fun.(change, :loader)
+
+      assert %SatPerms.Role{
+               row_id: [^user_id],
+               role: "self",
+               assign_id: ^assign_id,
+               user_id: ^user_id,
+               scope: %SatPerms.Scope{
+                 table: %SatPerms.Table{schema: "public", name: "users"},
+                 id: [^user_id]
+               }
+             } = role
     end
   end
 end

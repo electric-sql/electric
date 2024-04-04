@@ -5,7 +5,7 @@ defmodule Electric.Satellite.SerializationTest do
 
   use Electric.Satellite.Protobuf
 
-  alias Electric.Postgres.{Lsn, Schema, Extension.SchemaCache}
+  alias Electric.Postgres.{Lsn, Schema, Extension.SchemaCache, Extension.SchemaLoader}
   alias Electric.Replication.Changes.Transaction
   alias Electric.Satellite.Serialization
   alias Electric.Postgres.MockSchemaLoader
@@ -244,8 +244,6 @@ defmodule Electric.Satellite.SerializationTest do
         {"016003", :time},
         {"00:00:00.", :time},
         {"00:00:00.1234567", :time},
-        {"true", :bool},
-        {"false", :bool},
         {"yes", :bool},
         {"no", :bool},
         {"-1", :bool},
@@ -453,12 +451,14 @@ defmodule Electric.Satellite.SerializationTest do
           origin_type: :postgresql
         }
 
+      relation_loader = &SchemaLoader.relation!(cxt.loader, &1, version)
+
       assert {oplog,
               [
                 {"public", "other_thing"},
                 {"public", "something_else"},
                 {"public", "yet_another_thing"}
-              ], %{}} = Serialization.serialize_trans(tx, 1, %{})
+              ], %{}} = Serialization.serialize_trans(tx, 1, %{}, relation_loader)
 
       assert [%SatOpLog{ops: ops}] = oplog
 
@@ -563,7 +563,9 @@ defmodule Electric.Satellite.SerializationTest do
 
       migrate_schema(tx, version, cxt)
 
-      {oplog, [], %{}} = Serialization.serialize_trans(tx, 1, %{})
+      relation_loader = &SchemaLoader.relation!(cxt.loader, &1, version)
+
+      {oplog, [], %{}} = Serialization.serialize_trans(tx, 1, %{}, relation_loader)
 
       assert [%{ops: [%{op: {:begin, _}}, %{op: {:commit, _}}]}] = oplog
     end
@@ -616,7 +618,9 @@ defmodule Electric.Satellite.SerializationTest do
 
       migrate_schema(tx, version, cxt)
 
-      {oplog, [], %{}} = Serialization.serialize_trans(tx, 1, %{})
+      relation_loader = &SchemaLoader.relation!(cxt.loader, &1, version)
+
+      {oplog, [], %{}} = Serialization.serialize_trans(tx, 1, %{}, relation_loader)
 
       assert [%{ops: [%{op: {:begin, _}}, %{op: {:commit, _}}]}] = oplog
     end

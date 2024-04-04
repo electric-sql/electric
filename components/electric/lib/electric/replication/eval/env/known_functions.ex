@@ -51,8 +51,18 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
   defcompare "timestamp", using: &NaiveDateTime.compare/2
   defcompare "timestamptz", using: &DateTime.compare/2
 
-  defpostgres "bool = bool -> bool", delegate: &Kernel.==/2
-  defpostgres "bool <> bool -> bool", delegate: &Kernel.!=/2
+  defpostgres "bool = bool -> bool" do
+    def bool_equal(l, r) do
+      Casting.cast_bool(l) == Casting.cast_bool(r)
+    end
+  end
+
+  defpostgres "bool <> bool -> bool" do
+    def bool_not_equal(l, r) do
+      Casting.cast_bool(l) != Casting.cast_bool(r)
+    end
+  end
+
   defpostgres "interval = interval -> bool", delegate: &Kernel.==/2
   defpostgres "interval <> interval -> bool", delegate: &Kernel.!=/2
 

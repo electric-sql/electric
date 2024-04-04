@@ -12,13 +12,20 @@ defmodule Electric.Replication.Shapes.QueryingTest do
   describe "query_layer/6" do
     setup [:setup_replicated_db, :setup_electrified_tables, :setup_with_sql_execute, :load_schema]
 
+    setup(cxt) do
+      %{
+        relation_loader:
+          &Electric.Postgres.Extension.SchemaLoader.Version.table_info!(cxt.schema, &1)
+      }
+    end
+
     @tag with_sql: """
          INSERT INTO public.my_entries (id, content) VALUES (gen_random_uuid(), 'test content');
          """
     test "should return one-level data", %{
       origin: origin,
       conn: conn,
-      schema: schema
+      relation_loader: relation_loader
     } do
       layer = %Layer{
         target_table: {"public", "my_entries"},
@@ -29,7 +36,7 @@ defmodule Electric.Replication.Shapes.QueryingTest do
       }
 
       assert {:ok, results, %Graph{} = graph} =
-               Querying.query_layer(conn, layer, schema, origin, %{})
+               Querying.query_layer(conn, layer, relation_loader, origin, %{})
 
       assert [{{"public", "my_entries"}, [id]}] = Map.keys(results)
 
@@ -56,7 +63,7 @@ defmodule Electric.Replication.Shapes.QueryingTest do
     test "should follow one-to-many relations when querying", %{
       origin: origin,
       conn: conn,
-      schema: schema
+      relation_loader: relation_loader
     } do
       layer = %Layer{
         target_table: {"public", "users"},
@@ -77,10 +84,9 @@ defmodule Electric.Replication.Shapes.QueryingTest do
         ]
       }
 
-      assert {:ok, results, graph} = Querying.query_layer(conn, layer, schema, origin)
+      assert {:ok, results, graph} = Querying.query_layer(conn, layer, relation_loader, origin)
 
       assert [
-               %NewRecord{relation: {"public", "users"}, record: %{"name" => "John Doe"}},
                %NewRecord{
                  relation: {"public", "authored_entries"},
                  record: %{"content" => "First", "id" => id1}
@@ -88,7 +94,8 @@ defmodule Electric.Replication.Shapes.QueryingTest do
                %NewRecord{
                  relation: {"public", "authored_entries"},
                  record: %{"content" => "Second", "id" => id2}
-               }
+               },
+               %NewRecord{relation: {"public", "users"}, record: %{"name" => "John Doe"}}
              ] = results_to_changes(results)
 
       user_id = {{"public", "users"}, [@john_doe_id]}
@@ -111,7 +118,8 @@ defmodule Electric.Replication.Shapes.QueryingTest do
     test "should follow one-to-many relations over multiple levels when querying", %{
       origin: origin,
       conn: conn,
-      schema: schema
+      schema: schema,
+      relation_loader: relation_loader
     } do
       {:ok, where} =
         Validation.validate_where("this.id = '#{@john_doe_id}'",
@@ -153,10 +161,9 @@ defmodule Electric.Replication.Shapes.QueryingTest do
       }
 
       # We're NOT seeing either "Jane Doe", or her authored entry, or the filtered out "second comment"
-      assert {:ok, results, graph} = Querying.query_layer(conn, layer, schema, origin)
+      assert {:ok, results, graph} = Querying.query_layer(conn, layer, relation_loader, origin)
 
       assert [
-               %NewRecord{relation: {"public", "users"}, record: %{"name" => "John Doe"}},
                %NewRecord{
                  relation: {"public", "authored_entries"},
                  record: %{"content" => "First"}
@@ -165,6 +172,7 @@ defmodule Electric.Replication.Shapes.QueryingTest do
                  relation: {"public", "authored_entries"},
                  record: %{"content" => "Second", "id" => id2}
                },
+               %NewRecord{relation: {"public", "users"}, record: %{"name" => "John Doe"}},
                %NewRecord{
                  relation: {"public", "comments"},
                  record: %{"content" => "comment", "id" => id3}
@@ -187,7 +195,7 @@ defmodule Electric.Replication.Shapes.QueryingTest do
     test "should follow many-to-one relations when querying", %{
       origin: origin,
       conn: conn,
-      schema: schema
+      relation_loader: relation_loader
     } do
       layer = %Layer{
         target_table: {"public", "authored_entries"},
@@ -208,14 +216,14 @@ defmodule Electric.Replication.Shapes.QueryingTest do
         ]
       }
 
-      assert {:ok, results, graph} = Querying.query_layer(conn, layer, schema, origin)
+      assert {:ok, results, graph} = Querying.query_layer(conn, layer, relation_loader, origin)
 
       assert [
-               %NewRecord{relation: {"public", "users"}, record: %{"name" => "John Doe"}},
                %NewRecord{
                  relation: {"public", "authored_entries"},
                  record: %{"content" => "First"}
-               }
+               },
+               %NewRecord{relation: {"public", "users"}, record: %{"name" => "John Doe"}}
              ] = results_to_changes(results)
 
       user_id = {{"public", "users"}, [@john_doe_id]}

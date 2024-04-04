@@ -9,8 +9,23 @@
 
 # Create two migrations with electrified tables on the server.
 [shell proxy_1]
-  [invoke migrate_pg $migration1_vsn "CREATE TABLE public.foo (id TEXT PRIMARY KEY);ALTER TABLE public.foo ENABLE ELECTRIC;"]
-  [invoke migrate_pg $migration2_vsn "CREATE TABLE public.bar (id TEXT PRIMARY KEY);ALTER TABLE public.bar ENABLE ELECTRIC;"]
+  [local migration=
+    """
+      CREATE TABLE public.foo (id TEXT PRIMARY KEY);
+      ALTER TABLE public.foo ENABLE ELECTRIC;
+      ELECTRIC GRANT ALL ON public.foo TO AUTHENTICATED;
+    """]
+
+  [invoke migrate_pg $migration1_vsn $migration]
+
+  [local migration=
+    """
+      CREATE TABLE public.bar (id TEXT PRIMARY KEY);
+      ALTER TABLE public.bar ENABLE ELECTRIC;
+      ELECTRIC GRANT ALL ON public.bar TO AUTHENTICATED;
+    """]
+
+  [invoke migrate_pg $migration2_vsn $migration]
 
 [invoke setup_client 1 "electric_1" 5133]
 

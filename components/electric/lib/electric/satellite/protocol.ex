@@ -4,27 +4,29 @@ defmodule Electric.Satellite.Protocol do
   """
   use Electric.Satellite.Protobuf
   use Pathex
-  import Electric.Satellite.Protobuf, only: [is_allowed_rpc_method: 1]
-  import Electric.Postgres.Extension, only: [is_migration_relation: 1]
 
   alias SatSubsResp.SatSubsError
 
   alias Electric.Postgres.CachedWal
   alias Electric.Postgres.Extension.SchemaCache
+  alias Electric.Postgres.Extension.SchemaLoader
   alias Electric.Postgres.Schema
   alias Electric.Replication.Changes
   alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.Shapes
   alias Electric.Replication.Shapes.ShapeRequest
-  alias Electric.Satellite.Serialization
   alias Electric.Satellite.ClientManager
-  alias Electric.Satellite.WriteValidation
   alias Electric.Satellite.ClientReconnectionInfo
+  alias Electric.Satellite.Permissions
+  alias Electric.Satellite.Protocol.{State, InRep, OutRep, Telemetry}
+  alias Electric.Satellite.Serialization
+  alias Electric.Satellite.WriteValidation
   alias Electric.Telemetry.Metrics
   alias Electric.Utils
 
-  alias Electric.Satellite.Protocol.{State, InRep, OutRep, Telemetry}
   import Electric.Satellite.Protocol.State, only: :macros
+  import Electric.Satellite.Protobuf, only: [is_allowed_rpc_method: 1]
+  import Electric.Postgres.Extension, only: [is_migration_relation: 1]
 
   require Logger
 
@@ -128,8 +130,9 @@ defmodule Electric.Satellite.Protocol do
       "Received start replication request lsn: #{inspect(client_lsn)} with options: #{inspect(opts)}"
     )
 
-    with :ok <- validate_schema_version(msg.schema_version),
+    with {:ok, schema_version} <- validate_schema_version(msg.schema_version, state),
          {:ok, lsn} <- validate_lsn(client_lsn) do
+      state = load_permissions(schema_version, %{state | schema_version: schema_version.version})
       handle_start_replication_request(msg, lsn, state)
     else
       {:error, :bad_schema_version} ->
@@ -348,11 +351,11 @@ defmodule Electric.Satellite.Protocol do
     # Even though the server may have applied migrations to the schema that the client hasn't seen yet,
     # we can still look up column types on it due our migrations being additive-only and backwards-compatible.
     %{columns: columns, primary_keys: pks} =
-      SchemaCache.Global.relation!({msg.schema_name, msg.table_name})
+      load_relation(state, {msg.schema_name, msg.table_name})
 
     relation_columns = Map.new(columns, &{&1.name, &1.type})
 
-    enums = SchemaCache.Global.enums()
+    {:ok, enums} = SchemaLoader.enums(state.schema_loader, state.schema_version)
 
     columns =
       for %SatRelationColumn{name: name} = col <- msg.columns do
@@ -453,7 +456,7 @@ defmodule Electric.Satellite.Protocol do
             including_subscriptions: msg.subscription_ids,
             cached_wal_impl: CachedWal.EtsBacked,
             origin: state.origin,
-            advance_graph_using: {&advance_graph_by_tx/4, [state.auth.user_id]}
+            advance_graph_using: {&advance_graph_by_tx/4, [state.permissions]}
           )
 
         if is_out_rep_suspended(state) do
@@ -564,10 +567,12 @@ defmodule Electric.Satellite.Protocol do
 
   def handle_outgoing_txs([{tx, offset} | events], %State{} = state, {msgs_acc, actions_acc})
       when can_send_more_txs(state) do
-    {tx, state} = manage_permissions_changes(tx, state)
+    {tx, state} = update_state_from_txn(tx, state)
 
     {%Transaction{} = filtered_tx, new_graph, actions} =
       process_transaction(tx, state.out_rep.sent_rows_graph, state)
+
+    state = Map.update!(state, :permissions, &Permissions.receive_transaction(&1, tx))
 
     {out_rep, acc} =
       if filtered_tx.changes != [] or filtered_tx.origin == state.client_id do
@@ -625,31 +630,79 @@ defmodule Electric.Satellite.Protocol do
     {msgs_acc, actions_acc, state}
   end
 
-  defp manage_permissions_changes(tx, state) do
-    %{auth: %{user_id: user_id}} = state
-
+  defp update_state_from_txn(tx, state) do
     {changes, state} =
-      Enum.flat_map_reduce(
-        tx.changes,
-        state,
-        fn
-          %Changes.UpdatedPermissions{type: :user, permissions: %{user_id: ^user_id}}, state ->
-            Logger.debug(fn -> "User permissions updated for connection" end)
-            {[], state}
-
-          %Changes.UpdatedPermissions{type: :user}, state ->
-            {[], state}
-
-          %Changes.UpdatedPermissions{type: :global}, state ->
-            Logger.debug(fn -> "Global permissions updated for connection" end)
-            {[], state}
-
-          change, state ->
-            {[change], state}
-        end
-      )
+      {tx.changes, state}
+      |> apply_permissions()
+      |> apply_migrations()
 
     {%{tx | changes: changes}, state}
+  end
+
+  defp apply_migrations({changes, state}) do
+    Enum.flat_map_reduce(changes, state, fn
+      %Changes.Migration{} = migration, state ->
+        state =
+          update_permissions(%{state | schema_version: migration.version},
+            schema: migration.schema
+          )
+
+        {[migration], after_permissions_change(state)}
+
+      change, state ->
+        {[change], state}
+    end)
+  end
+
+  defp apply_permissions({changes, state}) do
+    %{auth: %{user_id: user_id}, permissions: %{id: current_id}} = state
+
+    # TODO(magnetised): the permissions change message needs to get sent to the client
+    Enum.flat_map_reduce(changes, state, fn
+      %Changes.UpdatedPermissions{type: :user, permissions: user_permissions}, state ->
+        case user_permissions do
+          %{user_id: ^user_id, permissions: %{id: new_id} = permissions}
+          when new_id > current_id ->
+            state = update_permissions(state, perms: permissions)
+
+            Logger.debug(fn ->
+              "User permissions updated for connection, id: #{permissions.id}"
+            end)
+
+            {[], after_permissions_change(state)}
+
+          %{user_id: ^user_id} ->
+            # perms for this user but older than the current permissions
+            {[], state}
+
+          _other_user ->
+            {[], state}
+        end
+
+      %Changes.UpdatedPermissions{type: :global, permissions: %{permissions_id: id}}, state ->
+        Logger.debug(fn -> "Global permissions updated for connection" end)
+
+        {:ok, loader, %{rules: %{id: ^id}} = perms} =
+          SchemaLoader.user_permissions(state.schema_loader, user_id)
+
+        state = update_permissions(%{state | schema_loader: loader}, perms: perms)
+
+        Logger.debug(fn -> "Loaded updated user permissions id: #{perms.id}" end)
+
+        {[], after_permissions_change(state)}
+
+      change, state ->
+        {[change], state}
+    end)
+  end
+
+  defp update_permissions(state, attrs) do
+    Map.update!(state, :permissions, &Permissions.update!(&1, attrs))
+  end
+
+  defp after_permissions_change(state) do
+    # TODO(magnetised): updated permissions must be applied to the shapes
+    state
   end
 
   # If the client received at least one migration during the initial sync, the value of
@@ -673,18 +726,18 @@ defmodule Electric.Satellite.Protocol do
   # The offset here comes from the producer
   @spec handle_outgoing_tx({Transaction.t(), any}, State.t()) ::
           {[%SatRelation{}], [%SatOpLog{}], OutRep.t()}
-  defp handle_outgoing_tx({tx, offset}, %State{out_rep: out_rep}) do
+  defp handle_outgoing_tx({tx, offset}, %State{out_rep: out_rep} = state) do
     Logger.debug("trans: #{inspect(tx)} with offset #{inspect(offset)}")
 
     {serialized_log, unknown_relations, known_relations} =
-      Serialization.serialize_trans(tx, offset, out_rep.relations)
+      Serialization.serialize_trans(tx, offset, out_rep.relations, relation_loader(state))
 
     if unknown_relations != [],
       do: Logger.debug("Sending previously unseen relations: #{inspect(unknown_relations)}")
 
     out_rep = %OutRep{out_rep | relations: known_relations}
 
-    {serialize_unknown_relations(unknown_relations), serialized_log, out_rep}
+    {serialize_unknown_relations(unknown_relations, state), serialized_log, out_rep}
   end
 
   @spec subscribe_client_to_replication_stream(State.t(), any()) :: State.t()
@@ -720,8 +773,7 @@ defmodule Electric.Satellite.Protocol do
   end
 
   @spec subscription_data_received(String.t(), term(), State.t()) :: outgoing()
-  def subscription_data_received(id, data, state)
-      when is_map_key(state.subscriptions, id) do
+  def subscription_data_received(id, data, state) when is_map_key(state.subscriptions, id) do
     Logger.debug("Received initial data for subscription #{id}")
 
     state = Telemetry.subscription_data_ready(state, id)
@@ -732,7 +784,8 @@ defmodule Electric.Satellite.Protocol do
 
     if is_paused_on_subscription(state, id) do
       # We're currently waiting for data from this subscription, we can send it immediately
-      send_additional_data_and_unpause({:subscription, id}, data, state)
+      {:subscription, id}
+      |> send_additional_data_and_unpause(data, state)
       |> perform_pending_actions()
     else
       # We're not blocked on waiting for this data yet, store & continue
@@ -927,7 +980,7 @@ defmodule Electric.Satellite.Protocol do
       data
       |> Stream.reject(fn {id, _} -> State.row_sent?(state, id) end)
       |> Stream.map(fn {_id, {change, _req_ids}} -> change end)
-      |> handle_shape_request_data(req_id, state.out_rep)
+      |> handle_shape_request_data(req_id, state)
 
     state = %State{state | out_rep: OutRep.merge_in_graph(out_rep, graph)}
 
@@ -949,15 +1002,15 @@ defmodule Electric.Satellite.Protocol do
      ], state}
   end
 
-  defp handle_shape_request_data(changes, request_id, out_rep) do
+  defp handle_shape_request_data(changes, request_id, %{out_rep: out_rep} = state) do
     # TODO: This serializes entire shape data (i.e. entire table) as a transaction.
     #       I don't like that we're websocket-framing this much data, this should be split up
     #       but I'm not sure if we've implemented the collection
     {serialized_log, unknown_relations, known_relations} =
-      Serialization.serialize_shape_data_as_tx(changes, out_rep.relations)
+      Serialization.serialize_shape_data_as_tx(changes, out_rep.relations, relation_loader(state))
 
     {
-      serialize_unknown_relations(unknown_relations),
+      serialize_unknown_relations(unknown_relations, state),
       [%SatShapeDataBegin{request_id: request_id}, serialized_log, %SatShapeDataEnd{}],
       %{out_rep | relations: known_relations}
     }
@@ -974,11 +1027,16 @@ defmodule Electric.Satellite.Protocol do
     out_rep = state.out_rep
 
     {msgs, unknown_relations, known_relations} =
-      Serialization.serialize_move_in_data_as_tx(ref, changes, out_rep.relations)
+      Serialization.serialize_move_in_data_as_tx(
+        ref,
+        changes,
+        out_rep.relations,
+        relation_loader(state)
+      )
 
     out_rep = %OutRep{out_rep | sent_rows_graph: graph, relations: known_relations}
 
-    {[serialize_unknown_relations(unknown_relations), msgs], %{state | out_rep: out_rep}}
+    {[serialize_unknown_relations(unknown_relations, state), msgs], %{state | out_rep: out_rep}}
   end
 
   @spec start_replication_from_client(binary(), State.t()) :: {[PB.sq_pb_msg()], State.t()}
@@ -1000,11 +1058,26 @@ defmodule Electric.Satellite.Protocol do
     {stop_msgs ++ start_msgs, state}
   end
 
-  defp validate_schema_version(version) do
-    if is_nil(version) or SchemaCache.Global.known_migration_version?(version) do
-      :ok
-    else
-      {:error, :bad_schema_version}
+  defp relation_loader(%{schema_loader: schema_loader, schema_version: schema_version}) do
+    &SchemaLoader.relation!(schema_loader, &1, schema_version)
+  end
+
+  defp load_relation(state, relation) do
+    state
+    |> relation_loader()
+    |> apply([relation])
+  end
+
+  defp validate_schema_version(version, state) do
+    cond do
+      is_nil(version) ->
+        SchemaLoader.load(state.schema_loader)
+
+      SchemaLoader.known_migration_version?(state.schema_loader, version) ->
+        SchemaLoader.load(state.schema_loader, version)
+
+      true ->
+        {:error, :bad_schema_version}
     end
   end
 
@@ -1026,13 +1099,28 @@ defmodule Electric.Satellite.Protocol do
   defp process_transaction(tx, graph, state) do
     tx
     |> maybe_strip_migration_ddl(state.out_rep.last_migration_xid_at_initial_sync)
-    |> advance_graph_by_tx(graph, current_shapes(state), state.auth.user_id)
+    |> apply_permissions_and_shapes(graph, current_shapes(state), state.permissions)
   end
 
-  defp advance_graph_by_tx(tx, graph, shapes, user_id) do
+  defp apply_permissions_and_shapes(tx, graph, shapes, permissions) do
+    {filtered_tx, _rejected_changes, moves_out} =
+      Permissions.filter_read(permissions, Electric.Replication.ScopeGraph.impl(graph), tx)
+
+    Shapes.process_transaction(filtered_tx, moves_out, graph, shapes)
+  end
+
+  # This is used to update the connection state on reconnection etc so must do extra work to
+  # remove permissions update messages. Rather than filtering the permissions update messages in
+  # the permissions filter, I'm doing it here to keep the handling of those messages in the
+  # protocol.
+  defp advance_graph_by_tx(tx, graph, shapes, permissions) do
     tx
-    |> Changes.filter_changes_belonging_to_user(user_id)
-    |> Shapes.process_transaction(graph, shapes)
+    |> filter_internal_messages()
+    |> apply_permissions_and_shapes(graph, shapes, permissions)
+  end
+
+  defp filter_internal_messages(%{changes: changes} = tx) do
+    %{tx | changes: Enum.reject(changes, &is_struct(&1, Changes.UpdatedPermissions))}
   end
 
   @spec query_subscription_data(String.t(), [ShapeRequest.t(), ...], State.t()) ::
@@ -1042,13 +1130,7 @@ defmodule Electric.Satellite.Protocol do
     parent = self()
 
     state = Telemetry.start_subscription_span(state, id, requests)
-
-    shape_requests = List.flatten(Map.values(state.subscriptions))
-
-    context =
-      shape_requests
-      |> ShapeRequest.prepare_filtering_context()
-      |> Map.put(:user_id, Pathex.get(state, path(:auth / :user_id)))
+    context = shape_request_context(state)
 
     # I'm dereferencing these here because calling this in Task implies copying over entire `state` just for two fields.
     fun = state.subscription_data_fun
@@ -1060,7 +1142,8 @@ defmodule Electric.Satellite.Protocol do
       fun.({id, requests, context},
         reply_to: {ref, parent},
         connection: state.connector_config,
-        telemetry_span: span
+        telemetry_span: span,
+        relation_loader: relation_loader(state)
       )
     end)
 
@@ -1104,23 +1187,19 @@ defmodule Electric.Satellite.Protocol do
   defp query_move_in_data(actions, %State{} = state) do
     ref = make_ref()
     parent = self()
-    shape_requests = List.flatten(Map.values(state.subscriptions))
-
-    context =
-      shape_requests
-      |> ShapeRequest.prepare_filtering_context()
-      |> Map.put(:user_id, Pathex.get(state, path(:auth / :user_id)))
+    context = shape_request_context(state)
 
     # I'm dereferencing these here because calling this in Task implies copying over entire `state` just for two fields.
     fun = state.move_in_data_fun
     move_in_ref = state.out_rep.move_in_next_ref
 
     Task.start(fn ->
-      # This is `InitialSync.query_move_in_data/4` by default, but can be overridden for tests.
+      # This is `InitialSync.query_after_move_in/4` by default, but can be overridden for tests.
       # Please see documentation on that function for context on the next `receive` block.
       fun.(move_in_ref, actions, context,
         reply_to: {ref, parent},
-        connection: state.connector_config
+        connection: state.connector_config,
+        relation_loader: relation_loader(state)
       )
     end)
 
@@ -1147,12 +1226,23 @@ defmodule Electric.Satellite.Protocol do
     end
   end
 
-  defp serialize_unknown_relations(unknown_relations) do
+  defp shape_request_context(state) do
+    state.subscriptions
+    |> Map.values()
+    |> List.flatten()
+    |> ShapeRequest.prepare_filtering_context()
+    |> Map.merge(%{
+      user_id: Pathex.get(state, path(:auth / :user_id)),
+      perms: state.permissions
+    })
+  end
+
+  defp serialize_unknown_relations(unknown_relations, state) do
     Enum.map(
       unknown_relations,
       fn relation ->
-        relation
-        |> SchemaCache.Global.relation!()
+        state
+        |> load_relation(relation)
         |> Serialization.serialize_relation()
       end
     )
@@ -1171,7 +1261,7 @@ defmodule Electric.Satellite.Protocol do
       including_subscriptions: Map.keys(state.subscriptions),
       cached_wal_impl: CachedWal.EtsBacked,
       origin: state.origin,
-      advance_graph_using: {&advance_graph_by_tx/4, [state.auth.user_id]}
+      advance_graph_using: {&advance_graph_by_tx/4, [state.permissions]}
     )
     |> case do
       # If no actions are "missing" after catch-up, then we don't need to do anything here.
@@ -1250,5 +1340,18 @@ defmodule Electric.Satellite.Protocol do
 
     %State{state | expiration_timer: nil}
     |> schedule_auth_expiration(exp_time)
+  end
+
+  defp load_permissions(schema_version, state) do
+    # TODO(magnetised): load specific permissions version
+    {:ok, schema_loader, sat_perms} =
+      SchemaLoader.user_permissions(state.schema_loader, State.user_id(state))
+
+    perms =
+      state.auth
+      |> Permissions.new()
+      |> Permissions.update!(schema_version, sat_perms)
+
+    %{state | schema_loader: schema_loader, permissions: perms}
   end
 end

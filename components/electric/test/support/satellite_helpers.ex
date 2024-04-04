@@ -232,4 +232,113 @@ defmodule ElectricTest.SatelliteHelpers do
 
     assert_subscription_data_format(messages, {[id | ids], data ++ oplogs})
   end
+
+  defmodule GrantAllPermissions do
+    @moduledoc """
+    A SchemaLoader implementation that overrides the permissions loading function
+    with a "grant all on all tables" implementation.
+    """
+
+    alias Electric.Postgres.Extension.SchemaCache
+    alias Electric.Satellite.SatPerms
+    alias ElectricTest.PermissionsHelpers.Proto, as: ProtoHelpers
+
+    defstruct [:user_id, :version]
+
+    # Partial implementation of Electric.Postgres.Extension.SchemaLoader
+    def connect(opts, _conn_config) do
+      {:ok, Map.new(opts)}
+    end
+
+    def user_permissions(state, user_id) do
+      with {:ok, schema_version} <- SchemaCache.load(state.origin),
+           {:ok, perms} <- state.perms_func.(user_id, schema_version) do
+        {:ok, state, perms}
+      end
+    end
+
+    def user_permissions(_state, user_id, version) do
+      {:ok, %__MODULE__{user_id: user_id, version: version}}
+    end
+
+    def load(state) do
+      SchemaCache.load(state.origin)
+    end
+
+    def load(state, version) do
+      SchemaCache.load(state.origin, version)
+    end
+
+    def tx_version(state, row) do
+      SchemaCache.tx_version(state.origin, row)
+    end
+
+    def all_permissions(user_id, schema_version) do
+      role =
+        case user_id do
+          user_id when is_binary(user_id) ->
+            ProtoHelpers.authenticated()
+
+          nil ->
+            ProtoHelpers.anyone()
+        end
+
+      grants =
+        schema_version.tables
+        |> Enum.filter(fn {{s, _}, _} -> s == "public" end)
+        |> Enum.flat_map(fn {relation, _table} ->
+          for p <- [:DELETE, :INSERT, :SELECT, :UPDATE] do
+            %SatPerms.Grant{
+              table: ProtoHelpers.table(relation),
+              privilege: p,
+              role: role
+            }
+          end
+        end)
+
+      rules = %SatPerms.Rules{grants: grants, assigns: []}
+
+      {:ok, %SatPerms{user_id: user_id, rules: rules, roles: []}}
+    end
+  end
+
+  def grant_all_permissions_loader(origin) do
+    {GrantAllPermissions, [origin: origin, perms_func: &GrantAllPermissions.all_permissions/2]}
+  end
+
+  def grant_specific_permissions_loader(origin, perms_func) when is_function(perms_func, 2) do
+    {GrantAllPermissions, [origin: origin, perms_func: perms_func]}
+  end
+
+  def drain_pids do
+    active_clients()
+    |> drain_active_pids()
+  end
+
+  defp active_clients() do
+    Electric.Satellite.ClientManager.get_clients()
+    |> Enum.flat_map(fn {client_name, client_pid} ->
+      if Process.alive?(client_pid) do
+        [{client_name, client_pid}]
+      else
+        []
+      end
+    end)
+  end
+
+  defp drain_active_pids([]) do
+    :ok
+  end
+
+  defp drain_active_pids([{_client_name, client_pid} | list]) do
+    ref = Process.monitor(client_pid)
+
+    receive do
+      {:DOWN, ^ref, :process, ^client_pid, _} ->
+        drain_active_pids(list)
+    after
+      1000 ->
+        flunk("tcp client process didn't termivate")
+    end
+  end
 end

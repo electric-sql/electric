@@ -130,6 +130,8 @@
     ?electric=\*#
     !ALTER TABLE ${table_name} ENABLE ELECTRIC;
     ?electric=\*#
+    !ELECTRIC GRANT ALL ON ${table_name} TO AUTHENTICATED;
+    ?electric=\*#
     !COMMIT;
     ?electric=#
 [endmacro]

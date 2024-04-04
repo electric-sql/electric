@@ -1,33 +1,36 @@
 defmodule Electric.Replication.Shapes.Querying do
-  import Electric.Postgres.Dialect.Postgresql, only: [quote_ident: 1]
-
   alias Electric.Postgres.Extension
-  alias Electric.Postgres.Extension.SchemaLoader.Version, as: SchemaVersion
-  alias Electric.Postgres.Replication
-  alias Electric.Postgres.Schema
+  alias Electric.Postgres.Extension.SchemaLoader
   alias Electric.Postgres.ShadowTableTransformation
-
   alias Electric.Replication.Changes
-  alias Electric.Replication.Changes.Ownership
   alias Electric.Replication.Eval
   alias Electric.Replication.Shapes.ChangeProcessing
   alias Electric.Replication.Shapes.ShapeRequest.Layer
-
+  alias Electric.Satellite.Permissions
   alias Electric.Utils
 
+  import Electric.Postgres.Dialect.Postgresql, only: [quote_ident: 1]
+
+  require Logger
+
   @type results :: %{Layer.graph_key() => {Changes.change(), [String.t(), ...]}}
+  @type filtering_context() :: map()
 
   @doc """
   Query PostgreSQL for data which corresponds to this layer.
 
   Each layer requires a different initial dataset, so this function
   encapsulates that. The arguments, apart from the layer itself, are:
+
   - `conn` - the `:epgsql` connection to use for queries.
+
   - `schema` - the `%SchemaLoader.Version{}` struct, used to get
     columns and other information required to build queries
+
   - `origin` - PG origin that's used to convert PG tags to Satellite tags.
     See `Electric.Postgres.ShadowTableTransformation.convert_tag_list_pg_to_satellite/2`
     for details.
+
   - `filtering_context` - additional information that needs to be taken into consideration
     when building a query, like permissions or rows that need to be ignored
 
@@ -42,36 +45,43 @@ defmodule Electric.Replication.Shapes.Querying do
   @spec query_layer(
           term(),
           Layer.t(),
-          SchemaVersion.t(),
+          SchemaLoader.relation_loader(),
           String.t(),
-          map(),
+          filtering_context(),
           [[String.t(), ...]] | nil
         ) ::
           {:ok, results(), Graph.t()} | {:error, term()}
-  def query_layer(conn, %Layer{} = layer, schema, origin, context \\ %{}, from \\ nil) do
-    case do_query_layer(conn, layer, schema, origin, context, from) do
-      {:ok, _, changes, graph} -> {:ok, changes, graph}
-      {:error, _} = error -> error
+  def query_layer(
+        conn,
+        %Layer{} = layer,
+        relation_loader,
+        origin,
+        filtering_context \\ %{},
+        from \\ nil
+      ) do
+    case do_query_layer(conn, layer, relation_loader, origin, filtering_context, from) do
+      {:ok, _, changes, graph} ->
+        {filtered_changes, filtered_graph} = apply_permissions(changes, graph, filtering_context)
+
+        {:ok, filtered_changes, filtered_graph}
+
+      {:error, _} = error ->
+        error
     end
   end
 
   @spec do_query_layer(
           term(),
           Layer.t(),
-          SchemaVersion.t(),
+          SchemaLoader.relation_loader(),
           String.t(),
-          map(),
+          filtering_context(),
           [[String.t(), ...]] | nil
-        ) ::
-          {:ok, [Changes.NewRecord.t()], results(), Graph.t()}
-          | {:error, term()}
-  defp do_query_layer(conn, %Layer{} = layer, schema_version, origin, context, from) do
+        ) :: {:ok, [Changes.NewRecord.t()], results(), Graph.t()} | {:error, term()}
+  defp do_query_layer(conn, %Layer{} = layer, relation_loader, origin, context, from) do
     target_table = layer.target_table
 
-    table_info =
-      schema_version
-      |> SchemaVersion.table!(target_table)
-      |> Schema.single_table_info(schema_version.schema)
+    table_info = relation_loader.(target_table)
 
     columns = Enum.map_join(table_info.columns, ", ", &~s|this."#{&1.name}"|)
     pk_clause = Enum.map_join(layer.target_pk, " AND ", &~s|this."#{&1}" = shadow."#{&1}"|)
@@ -79,8 +89,7 @@ defmodule Electric.Replication.Shapes.Querying do
     where =
       [
         where_target(layer.where_target),
-        parent_pseudo_join(layer, from),
-        context_filters(table_info, context, layer)
+        parent_pseudo_join(layer, from)
       ]
       |> Enum.reject(&(is_nil(&1) or &1 == ""))
       |> Enum.intersperse(" AND ")
@@ -114,7 +123,7 @@ defmodule Electric.Replication.Shapes.Querying do
       query_next_layers(
         conn,
         layer,
-        schema_version,
+        relation_loader,
         origin,
         context,
         curr_records,
@@ -127,7 +136,7 @@ defmodule Electric.Replication.Shapes.Querying do
   def query_next_layers(
         conn,
         layer,
-        schema_version,
+        relation_loader,
         origin,
         context,
         curr_records,
@@ -141,7 +150,7 @@ defmodule Electric.Replication.Shapes.Querying do
   def query_next_layers(
         conn,
         %Layer{} = layer,
-        schema_version,
+        relation_loader,
         origin,
         context,
         curr_records,
@@ -154,7 +163,7 @@ defmodule Electric.Replication.Shapes.Querying do
       fn next_layer, {:ok, curr_records, acc_records, acc_graph} ->
         pseudo_join = get_join_values(next_layer, curr_records)
 
-        case do_query_layer(conn, next_layer, schema_version, origin, context, pseudo_join) do
+        case do_query_layer(conn, next_layer, relation_loader, origin, context, pseudo_join) do
           {:ok, next_records, all_records, graph} ->
             acc_graph =
               graph
@@ -181,14 +190,20 @@ defmodule Electric.Replication.Shapes.Querying do
          %Layer{direction: :first_layer, key: key},
          records
        ) do
-    Enum.reduce(
-      records,
-      graph,
-      fn {id, _}, graph -> Graph.add_edge(graph, :root, id, label: key) end
-    )
+    fill_graph_layer(graph, records, key)
   end
 
   defp maybe_fill_first_graph_layer(%Graph{} = graph, %Layer{}, _), do: graph
+
+  defp fill_graph_layer(graph, records, key) do
+    Enum.reduce(
+      records,
+      graph,
+      fn {{_relation, _pk} = id, _change}, graph ->
+        Graph.add_edge(graph, :root, id, label: key)
+      end
+    )
+  end
 
   @spec parent_pseudo_join(Layer.t(), [[String.t(), ...]] | nil) :: iodata()
   defp parent_pseudo_join(%Layer{direction: :first_layer}, nil), do: nil
@@ -223,21 +238,16 @@ defmodule Electric.Replication.Shapes.Querying do
   defp get_join_values(%Layer{direction: :many_to_one, fk: cols}, records),
     do: Enum.map(records, &record_to_key(elem(&1, 1), cols))
 
-  defp fill_graph(
-         graph,
-         %Layer{direction: :one_to_many} = layer,
-         _source_changes,
-         target_changes
-       ) do
-    target_changes
-    |> Enum.reduce(graph, fn {target_node, change}, graph ->
+  defp fill_graph(graph, %Layer{direction: :one_to_many} = layer, _source_changes, target_changes) do
+    Enum.reduce(target_changes, graph, fn {target_node, change}, graph ->
       source_node = ChangeProcessing.id(change.record, layer.source_table, layer.fk)
 
       Graph.add_edge(graph, source_node, target_node, label: layer.key)
     end)
   end
 
-  # `where_target: nil` should be guaranteed by the layer validation for now, but it's included in the guard here in case we lift the constraint later, since it's an assumption here.
+  # `where_target: nil` should be guaranteed by the layer validation for now, but it's included in
+  # the guard here in case we lift the constraint later, since it's an assumption here.
   defp fill_graph(
          graph,
          %Layer{direction: :many_to_one, fk: fk, where_target: nil} = layer,
@@ -292,13 +302,25 @@ defmodule Electric.Replication.Shapes.Querying do
     end)
   end
 
-  defp context_filters(%Replication.Table{} = table, context, %Layer{} = _layer) do
-    ownership_column = Ownership.id_column_name()
+  defp apply_permissions(changes, graph, filtering_context) do
+    case filtering_context do
+      %{perms: perms, xid: xid} ->
+        {accepted_changes, rejected_changes} =
+          Permissions.Read.filter_shape_data(perms, graph, changes, xid)
 
-    if context[:user_id] && Enum.any?(table.columns, &(&1.name == ownership_column)) do
-      escaped = :binary.replace(context[:user_id], "'", "''", [:global])
+        filtered_graph =
+          Enum.reduce(rejected_changes, graph, fn {vertex, _change}, graph ->
+            Graph.delete_vertex(graph, vertex)
+          end)
 
-      ["this.", ownership_column, " = '", escaped, ?']
+        {Map.new(accepted_changes), filtered_graph}
+
+      _ ->
+        Logger.warning(
+          "Not applying permissions to shape information: missing filtering context configuration"
+        )
+
+        {changes, graph}
     end
   end
 end

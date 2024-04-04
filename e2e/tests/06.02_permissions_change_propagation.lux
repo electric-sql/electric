@@ -38,6 +38,11 @@
       ALTER TABLE "users" ENABLE ELECTRIC;
       ALTER TABLE "project_memberships" ENABLE ELECTRIC;
 
+      ELECTRIC GRANT ALL ON "projects" TO AUTHENTICATED;
+      ELECTRIC GRANT ALL ON "issues" TO AUTHENTICATED;
+      ELECTRIC GRANT ALL ON "users" TO AUTHENTICATED;
+      ELECTRIC GRANT ALL ON "project_memberships" TO AUTHENTICATED;
+
       INSERT INTO users (id) VALUES ('$user_id1');
       INSERT INTO users (id) VALUES ('$user_id2');
       INSERT INTO projects (id) VALUES ('$project_id');
