@@ -163,21 +163,25 @@ defmodule Electric.Satellite.Permissions.WriteBuffer do
        # buffer in the permissions without a danger of inconsistencies
        perms = Permissions.receive_transaction(perms, txn)
   """
-  def receive_transaction({__MODULE__, state}, scopes, %Changes.Transaction{} = txn) do
-    {__MODULE__, receive_transaction(state, scopes, txn)}
+  def receive_transaction({__MODULE__, state}, structure, %Changes.Transaction{} = txn) do
+    {__MODULE__, receive_transaction(state, structure, txn)}
   end
 
-  def receive_transaction(state(empty: true) = state, _scopes, %Changes.Transaction{} = _txn) do
+  def receive_transaction(
+        state(empty: true) = state,
+        _structure,
+        %Changes.Transaction{} = _txn
+      ) do
     state
   end
 
-  def receive_transaction(state, scopes, %Changes.Transaction{} = txn) do
+  def receive_transaction(state, structure, %Changes.Transaction{} = txn) do
     txn.changes
     |> Enum.reduce(state, fn change, state(tags: tags) = state ->
       state(state, tags: Enum.reduce(change.tags, tags, &MapSet.delete(&2, &1)))
     end)
     |> detect_empty()
-    |> apply_transaction(scopes, txn)
+    |> apply_transaction(structure, txn)
   end
 
   defp detect_empty(state(tags: tags, upstream: upstream, user_id: user_id) = state) do
@@ -190,12 +194,12 @@ defmodule Electric.Satellite.Permissions.WriteBuffer do
 
   # if the tx has the right tags to clear the buffer, then don't apply the changes
   # as this will just result in a full buffer again
-  defp apply_transaction(state(empty: true) = state, _scopes, _txn) do
+  defp apply_transaction(state(empty: true) = state, _structure, _txn) do
     state
   end
 
-  defp apply_transaction(state, scopes, txn) do
-    Enum.reduce(txn.changes, state, &do_apply_change(&2, scopes, &1))
+  defp apply_transaction(state, structure, txn) do
+    Enum.reduce(txn.changes, state, &do_apply_change(&2, structure, &1))
   end
 
   def upstream_graph({__MODULE__, state(upstream: upstream)}) do
@@ -203,38 +207,33 @@ defmodule Electric.Satellite.Permissions.WriteBuffer do
   end
 
   @impl Permissions.Graph
-  def scope_path(state(empty: true, upstream: upstream), root, relation, record) do
-    Permissions.Graph.scope_path(upstream, root, relation, record)
+  def scope_path(state(empty: true, upstream: upstream), structure, root, relation, record) do
+    Permissions.Graph.scope_path(upstream, structure, root, relation, record)
   end
 
-  def scope_path(state, root, relation, id) when is_list(id) do
+  def scope_path(state, structure, root, relation, id) when is_list(id) do
     state(graph: graph) = state
 
-    Permissions.Graph.scope_path(graph, root, relation, id)
+    Permissions.Graph.scope_path(graph, structure, root, relation, id)
   end
 
   @impl Permissions.Graph
-  def parent(state(upstream: upstream), root, relation, record) do
-    Permissions.Graph.parent(upstream, root, relation, record)
-  end
-
-  @impl Permissions.Graph
-  def apply_change(state, roots, change) do
+  def apply_change(state, structure, change) do
     state
-    |> do_apply_change(roots, change)
+    |> do_apply_change(structure, change)
     |> state(empty: false)
     |> apply_tags(change)
     |> log_state()
   end
 
-  defp do_apply_change(state, roots, change) do
+  defp do_apply_change(state, structure, change) do
     graph =
       case state do
         state(empty: true, upstream: upstream) -> upstream
         state(graph: graph) -> graph
       end
 
-    state(state, graph: Permissions.Graph.apply_change(graph, roots, change))
+    state(state, graph: Permissions.Graph.apply_change(graph, structure, change))
   end
 
   defp apply_tags(state(tags: tags, ops: ops) = state, %{tags: change_tags}) do
@@ -251,15 +250,5 @@ defmodule Electric.Satellite.Permissions.WriteBuffer do
 
   defp log_state(state) do
     state
-  end
-
-  @impl Permissions.Graph
-  def primary_key(state(upstream: upstream), relation, record) do
-    Permissions.Graph.primary_key(upstream, relation, record)
-  end
-
-  @impl Permissions.Graph
-  def modified_fks(state(upstream: upstream), root, update) do
-    Permissions.Graph.modified_fks(upstream, root, update)
   end
 end

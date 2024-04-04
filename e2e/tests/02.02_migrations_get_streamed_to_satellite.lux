@@ -18,6 +18,7 @@
     CALL electric.migration_version('$migration_version');
     CREATE TABLE mtable1 (id uuid PRIMARY KEY);
     ALTER TABLE mtable1 ENABLE ELECTRIC;
+    ELECTRIC GRANT ALL ON mtable1 TO AUTHENTICATED;
     COMMIT;
     """
     ?$psql

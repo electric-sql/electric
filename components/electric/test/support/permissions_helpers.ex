@@ -1,73 +1,74 @@
 defmodule ElectricTest.PermissionsHelpers do
+  alias Electric.Postgres.Extension.SchemaLoader
+
   defmodule Schema do
     alias Electric.Postgres.MockSchemaLoader
-    alias Electric.Postgres.Extension.SchemaLoader
 
     def migrations do
       [
         {"01",
          [
-           "create table regions (id uuid primary key, name text)",
-           "create table offices (id uuid primary key, region_id uuid not null references regions (id))",
-           "create table workspaces (id uuid primary key)",
-           "create table projects (id uuid primary key, workspace_id uuid not null references workspaces (id))",
-           "create table issues (id uuid primary key, project_id uuid not null references projects (id), description text)",
-           "create table comments (id uuid primary key, issue_id uuid not null references issues (id), comment text, owner text, author_id uuid references users (id))",
-           "create table reactions (id uuid primary key, comment_id uuid not null references comments (id), is_public bool)",
-           "create table users (id uuid primary key, role text not null default 'normie')",
-           "create table teams (id uuid primary key)",
-           "create table tags (id uuid primary key, tag text not null)",
-           "create table addresses (id uuid primary key, user_id uuid not null references users (id), address text)",
+           "create table users (id text primary key, name text, role text not null default 'normie')",
+           "create table regions (id text primary key, name text)",
+           "create table offices (id text primary key, region_id text not null references regions (id))",
+           "create table workspaces (id text primary key)",
+           "create table projects (id text primary key, workspace_id text not null references workspaces (id))",
+           "create table issues (id text primary key, project_id text not null references projects (id), description text)",
+           "create table comments (id text primary key, issue_id text not null references issues (id), comment text, owner text, author_id text references users (id))",
+           "create table reactions (id text primary key, comment_id text not null references comments (id), is_public bool)",
+           "create table teams (id text primary key)",
+           "create table tags (id text primary key, tag text not null)",
+           "create table addresses (id text primary key, user_id text not null references users (id), address text)",
            """
            create table issue_tags (
-              id uuid primary key,
-              issue_id uuid not null references issues (id),
-              tag_id uuid not null references tags (id)
+              id text primary key,
+              issue_id text not null references issues (id),
+              tag_id text not null references tags (id)
            )
            """,
            """
            create table project_memberships (
-              id uuid primary key,
-              user_id uuid not null references users (id),
-              project_id uuid not null references projects (id),
+              id text primary key,
+              user_id text not null references users (id),
+              project_id text not null references projects (id),
               role text not null,
               valid bool
            )
            """,
            """
            create table team_memberships (
-              id uuid primary key,
-              user_id uuid not null references users (id),
-              team_id uuid not null references teams (id),
+              id text primary key,
+              user_id text not null references users (id),
+              team_id text not null references teams (id),
               team_role text not null
            )
            """,
            """
            create table site_admins (
-              id uuid primary key,
-              user_id uuid not null references users (id),
+              id text primary key,
+              user_id text not null references users (id),
               role text not null
            )
            """,
            """
            create table admin_users (
-              id uuid primary key,
-              user_id uuid not null references users (id)
+              id text primary key,
+              user_id text not null references users (id)
            )
            """,
            """
            create table compound_root (
-              id1 uuid,
-              id2 uuid,
+              id1 text,
+              id2 text,
               primary key (id1, id2)
            )
            """,
            """
            create table compound_level1 (
-              id1 uuid,
-              id2 uuid,
-              root_id1 uuid not null,
-              root_id2 uuid not null,
+              id1 text,
+              id2 text,
+              root_id1 text not null,
+              root_id2 text not null,
               value1 text,
               value2 text,
               primary key (id1, id2),
@@ -76,10 +77,10 @@ defmodule ElectricTest.PermissionsHelpers do
            """,
            """
            create table compound_level2 (
-              id1 uuid,
-              id2 uuid,
-              level1_id1 uuid not null,
-              level1_id2 uuid not null,
+              id1 text,
+              id2 text,
+              level1_id1 text not null,
+              level1_id2 text not null,
               value1 text,
               value2 text,
               primary key (id1, id2),
@@ -88,19 +89,19 @@ defmodule ElectricTest.PermissionsHelpers do
            """,
            """
            create table compound_memberships (
-              id uuid primary key,
-              root_id1 uuid not null,
-              root_id2 uuid not null,
-              user_id uuid not null references users (id),
+              id text primary key,
+              root_id1 text not null,
+              root_id2 text not null,
+              user_id text not null references users (id),
               role text not null,
               foreign key (root_id1, root_id2) references compound_root (id1, id2)
            )
            """,
            """
            create table lotsoftypes (
-             id uuid primary key,
-             user_id uuid not null,
-             parent_id uuid not null,
+             id text primary key,
+             user_id text not null,
+             parent_id text not null,
              name text,
              value text,
              amount integer,
@@ -192,6 +193,15 @@ defmodule ElectricTest.PermissionsHelpers do
       )
     end
 
+    def update!(perms, schema_version, ddlx, roles) do
+      Permissions.update!(
+        perms,
+        schema_version,
+        to_rules(ddlx),
+        roles
+      )
+    end
+
     def transient(attrs) do
       Permissions.Transient.new(attrs)
     end
@@ -203,12 +213,7 @@ defmodule ElectricTest.PermissionsHelpers do
 
     def to_rules(ddlx) do
       ddlx
-      |> List.wrap()
-      |> Enum.map(fn
-        "ELECTRIC " <> _ = ddlx -> ddlx
-        ddl -> "ELECTRIC " <> ddl
-      end)
-      |> Enum.map(&Electric.DDLX.parse!/1)
+      |> make_ddlx()
       |> Enum.reduce(
         {%P.Rules{}, {1, 1}},
         fn %{action: %{assigns: assigns, grants: grants}}, {rules, {assign_id, grant_id}} ->
@@ -233,11 +238,21 @@ defmodule ElectricTest.PermissionsHelpers do
       )
       |> then(&elem(&1, 0))
     end
+
+    def make_ddlx(ddlx) do
+      ddlx
+      |> List.wrap()
+      |> Enum.map(fn
+        "ELECTRIC " <> _ = ddlx -> ddlx
+        ddl -> "ELECTRIC " <> ddl
+      end)
+      |> Enum.map(&Electric.DDLX.parse!/1)
+    end
   end
 
-  defmodule LSN do
-    def new(lsn) when is_integer(lsn) do
-      Electric.Postgres.Lsn.from_integer(lsn)
+  defmodule XID do
+    def new(xid) when is_integer(xid) do
+      xid
     end
 
     def new(nil) do
@@ -291,8 +306,57 @@ defmodule ElectricTest.PermissionsHelpers do
       }
     end
 
+    def migration(attrs \\ []) do
+      attrs =
+        attrs
+        |> Keyword.put_new(:version, "20240425")
+
+      struct(Changes.Migration, attrs)
+    end
+
     defp put_tx_attrs(tx, attrs) do
-      Map.put(tx, :lsn, LSN.new(attrs[:lsn]))
+      tx
+      |> Map.put(:xid, XID.new(attrs[:xid]))
+      |> Map.put(
+        :referenced_records,
+        attrs |> Access.get(:referenced_records, []) |> referenced_records()
+      )
+    end
+
+    def referenced_records(rrs) when is_list(rrs) do
+      rrs
+      |> Enum.map(&referenced_record/1)
+      |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+      |> Enum.map(fn {relation, rr} -> {relation, Map.new(rr)} end)
+      |> Map.new()
+    end
+
+    defp referenced_record({relation, record}) when is_map(record) do
+      pk = [Map.fetch!(record, "id")]
+
+      {
+        relation,
+        {pk,
+         %Changes.ReferencedRecord{
+           relation: relation,
+           record: record,
+           pk: pk,
+           tags: []
+         }}
+      }
+    end
+
+    defp referenced_record({relation, [id] = pk}) do
+      {
+        relation,
+        {pk,
+         %Changes.ReferencedRecord{
+           relation: relation,
+           record: %{"id" => id},
+           pk: pk,
+           tags: []
+         }}
+      }
     end
 
     defp put_change_attrs(change, attrs) do
@@ -331,19 +395,16 @@ defmodule ElectricTest.PermissionsHelpers do
     Simple implementation of the `Electric.Satellite.Permissions.Graph` behaviour using graphs
     """
 
-    @behaviour Electric.Satellite.Permissions.Graph
-
-    alias Electric.Postgres.Extension.SchemaLoader
-    alias Electric.Replication.Changes
     alias Electric.Satellite.Permissions
     alias Electric.Postgres.Schema.FkGraph
+    alias Electric.Replication.ScopeGraph
 
     @type vertex() :: {{String.t(), String.t()}, String.t(), [vertex()]}
 
-    @root :__root__
+    @root :root
 
     def new(vs, schema) do
-      {__MODULE__, {data_tree(vs), fk_graph(schema), schema}}
+      ScopeGraph.impl(data_tree(vs, fk_graph(schema)))
     end
 
     defp fk_graph(%SchemaLoader.Version{schema: schema}) do
@@ -354,39 +415,57 @@ defmodule ElectricTest.PermissionsHelpers do
       Permissions.Graph.graph(attrs)
     end
 
-    def add_vertex({__MODULE__, {graph, fks, schema}}, v) do
+    def add_vertex({module, {graph, schema}}, v) do
       graph = Graph.add_vertex(graph, v)
-      {__MODULE__, {graph, fks, schema}}
+      {module, {graph, schema}}
     end
 
-    def delete_vertex({__MODULE__, {graph, fks, schema}}, v) do
+    def delete_vertex({module, {graph, schema}}, v) do
       graph = Graph.delete_vertex(graph, v)
-      {__MODULE__, {graph, fks, schema}}
+      {module, {graph, schema}}
     end
 
-    def add_edge({__MODULE__, {graph, fks, schema}}, a, b) do
+    def add_edge({module, {graph, schema}}, a, b) do
       graph = Graph.add_edge(graph, a, b)
-      {__MODULE__, {graph, fks, schema}}
+      {module, {graph, schema}}
     end
 
-    defp data_tree(vs) do
-      {_, graph} = Enum.reduce(vs, {@root, graph()}, &build_data_tree/2)
+    defp data_tree(vs, fks) do
+      {_, graph} = Enum.reduce(vs, {@root, graph()}, &build_data_tree(&1, &2, fks))
 
       graph
     end
 
-    defp build_data_tree({table, id, children}, {parent, graph}) when is_list(children) do
-      build_data_tree({table, id, %{}, children}, {parent, graph})
+    defp build_data_tree({table, id, children}, {parent, graph}, fks) when is_list(children) do
+      build_data_tree({table, id, %{}, children}, {parent, graph}, fks)
     end
 
-    defp build_data_tree({table, id}, {parent, graph}) do
-      build_data_tree({table, id, %{}, []}, {parent, graph})
+    defp build_data_tree({table, id}, {parent, graph}, fks) do
+      build_data_tree({table, id, %{}, []}, {parent, graph}, fks)
     end
 
-    defp build_data_tree({_table, _id, _attrs, children} = v, {parent, graph}) do
-      graph = Graph.add_edge(graph, v(v), v(parent))
+    defp build_data_tree({table, _id, attrs, children} = v, {parent, graph}, fks) do
+      foreign_keys =
+        case parent do
+          {parent_table, _id, _attrs, _children} ->
+            fks
+            |> FkGraph.foreign_keys(table)
+            |> Map.drop([parent_table])
+            |> Enum.map(fn {table, cols} ->
+              {table, Enum.map(cols, &Map.get(attrs, &1, nil))}
+            end)
+            |> Enum.reject(fn {_table, cols} -> Enum.any?(cols, &is_nil/1) end)
 
-      {_v, graph} = Enum.reduce(children, {v, graph}, &build_data_tree/2)
+          @root ->
+            []
+        end
+
+      graph =
+        Enum.reduce(foreign_keys ++ [v(parent)], graph, fn e, g ->
+          Graph.add_edge(g, v(v), e)
+        end)
+
+      {_v, graph} = Enum.reduce(children, {v, graph}, &build_data_tree(&1, &2, fks))
       {parent, graph}
     end
 
@@ -395,183 +474,31 @@ defmodule ElectricTest.PermissionsHelpers do
     defp v({table, id, _attrs, _children}) do
       {table, List.wrap(id)}
     end
-
-    def scope_id(_state, {_, _} = root, {_, _} = root, id) when is_list(id) do
-      [{id, [{root, id}]}]
-    end
-
-    def scope_id({graph, fks, _schema}, {_, _} = root, {_, _} = relation, id) when is_list(id) do
-      graph
-      |> Permissions.Graph.traverse_fks(fk_path(fks, root, relation), relation, id)
-      |> Enum.flat_map(fn
-        {{^root, id}, path} -> [{id, path}]
-        _other -> []
-      end)
-    end
-
-    @impl Electric.Satellite.Permissions.Graph
-    def scope_path({graph, fks, _schema}, {_, _} = root, {_, _} = relation, id)
-        when is_list(id) do
-      graph
-      |> Permissions.Graph.traverse_fks(fk_path(fks, root, relation), relation, id)
-      |> Enum.flat_map(fn
-        [{^root, _id} | _] = path -> [Enum.map(path, fn {relation, id} -> {relation, id, []} end)]
-        _other -> []
-      end)
-    end
-
-    @impl Electric.Satellite.Permissions.Graph
-    def modified_fks(
-          {_graph, fks, _schema} = state,
-          {_, _} = root,
-          %Changes.UpdatedRecord{} = update
-        ) do
-      %Changes.UpdatedRecord{
-        changed_columns: changed_columns,
-        old_record: old,
-        record: new,
-        relation: relation
-      } = update
-
-      case FkGraph.foreign_keys(fks, root, relation) do
-        nil ->
-          []
-
-        foreign_keys ->
-          path = FkGraph.path(fks, root, relation)
-
-          foreign_keys
-          |> Stream.filter(fn {_fk_relation, fk_cols} ->
-            Enum.any?(fk_cols, &MapSet.member?(changed_columns, &1))
-          end)
-          |> Enum.map(fn {fk_relation, fk_cols} ->
-            if fk_relation in path do
-              # the change affects this row, that is fk changes pointing "up" the tree (towards
-              # `root`)
-              {relation, primary_key(state, relation, old), primary_key(state, relation, new)}
-            else
-              # the change affects a table "down" the tree, away from the `root` we're not
-              # checking that the relation is in the scope because it *has* to be if the
-              # update relation is
-              {fk_relation, Enum.map(fk_cols, &Map.fetch!(old, &1)),
-               Enum.map(fk_cols, &Map.fetch!(new, &1))}
-            end
-          end)
-      end
-    end
-
-    @impl Electric.Satellite.Permissions.Graph
-    def primary_key(_state, _relation, record) do
-      [Map.fetch!(record, "id")]
-    end
-
-    @impl Electric.Satellite.Permissions.Graph
-    def parent({_graph, fks, _schema}, {_, _} = root, relation, record) when is_map(record) do
-      with [^relation, parent_rel | _] <- FkGraph.path(fks, root, relation),
-           [_ | _] = relations <- FkGraph.foreign_keys(fks, root, relation),
-           {^parent_rel, fk_cols} <- Enum.find(relations, &match?({^parent_rel, _}, &1)) do
-        {parent_rel, Enum.map(fk_cols, &Map.get(record, &1, nil))}
-      else
-        _ -> nil
-      end
-    end
-
-    @impl Electric.Satellite.Permissions.Graph
-    def apply_change({graph, fks, schema} = state, roots, change) do
-      updated =
-        Enum.reduce(roots, graph, fn root, graph ->
-          case change do
-            %Changes.DeletedRecord{relation: relation, old_record: old} ->
-              {:ok, pk_cols} = SchemaLoader.Version.primary_keys(schema, relation)
-              pks = Enum.map(pk_cols, &Map.fetch!(old, &1))
-
-              Graph.delete_vertex(graph, {relation, pks})
-
-            %Changes.NewRecord{relation: relation, record: record} ->
-              {:ok, pk_cols} = SchemaLoader.Version.primary_keys(schema, relation)
-              pks = Enum.map(pk_cols, &Map.fetch!(record, &1))
-
-              case parent(state, root, relation, record) do
-                nil ->
-                  Graph.add_vertex(graph, {relation, pks})
-
-                parent ->
-                  validate_fk!(graph, parent)
-
-                  Graph.add_edge(graph, {relation, pks}, parent)
-              end
-
-            # we copy the satellite and treat all updates as upserts
-            %Changes.UpdatedRecord{} = change ->
-              %{relation: relation, old_record: old, record: new} = change
-
-              case modified_fks(state, root, change) do
-                [] ->
-                  graph
-
-                modified_keys ->
-                  {:ok, pk_cols} = SchemaLoader.Version.primary_keys(schema, relation)
-                  pks = Enum.map(pk_cols, &Map.fetch!(old, &1))
-                  child = {relation, pks}
-
-                  Enum.reduce(modified_keys, graph, fn
-                    {^relation, _old_id, _new_id}, graph ->
-                      old_parent = parent(state, root, relation, old)
-                      new_parent = parent(state, root, relation, new)
-
-                      validate_fk!(graph, new_parent)
-
-                      graph
-                      |> Graph.delete_edge(child, old_parent)
-                      |> Graph.add_edge(child, new_parent)
-
-                    {fk_relation, old_id, new_id}, graph ->
-                      old_parent = {fk_relation, old_id}
-                      new_parent = {fk_relation, new_id}
-                      validate_fk!(graph, new_parent)
-
-                      graph
-                      |> Graph.delete_edge(child, old_parent)
-                      |> Graph.add_edge(child, new_parent)
-                  end)
-              end
-          end
-        end)
-
-      {updated, fks, schema}
-    end
-
-    defp validate_fk!(graph, parent) do
-      unless Graph.has_vertex?(graph, parent) do
-        raise Permissions.Graph.Error,
-          message: "foreign key reference to non-existent record #{inspect(parent)}"
-      end
-    end
-
-    defp fk_path(_fks, root, root) do
-      [root]
-    end
-
-    defp fk_path(fks, root, relation) do
-      FkGraph.path(fks, root, relation)
-    end
   end
 
   def table(relation) do
     Electric.Utils.inspect_relation(relation)
   end
 
-  def perms_build(cxt, grants, roles, attrs \\ []) do
-    %{schema_version: schema_version} = cxt
+  def perms_build(cxt, grants, roles, attrs \\ [])
 
+  def perms_build(%{schema_version: schema_version}, grants, roles, attrs) do
+    perms_build(schema_version, grants, roles, attrs)
+  end
+
+  def perms_build(%SchemaLoader.Version{} = schema_version, grants, roles, attrs) do
     attrs
     |> Perms.new()
-    |> Perms.update(schema_version, grants, roles)
+    |> Perms.update!(schema_version, grants, roles)
   end
 
   defmodule Proto do
     alias Electric.DDLX.Command
     alias Electric.Satellite.SatPerms
+
+    def table({schema, name}) do
+      %SatPerms.Table{schema: schema, name: name}
+    end
 
     def table(schema \\ "public", name) do
       %SatPerms.Table{schema: schema, name: name}
@@ -652,9 +579,9 @@ defmodule ElectricTest.PermissionsHelpers do
       Electric.Utils.inspect_relation(relation)
     end
 
-    def apply_change({Tree, tree}, roots, tx) do
-      tree = Tree.apply_change(tree, roots, tx)
-      {Tree, tree}
+    def apply_change({module, state}, relations, tx) do
+      state = module.apply_change(state, relations, tx)
+      {module, state}
     end
 
     def validate_write(perms, tree, tx) do

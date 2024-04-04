@@ -11,8 +11,8 @@ defmodule Electric.Plug.SatelliteWebsocketPlug do
 
   def init(handler_opts), do: handler_opts
 
-  defp build_websocket_opts(base_opts, client_version),
-    do:
+  defp build_websocket_opts(base_opts, client_version) do
+    opts =
       base_opts
       |> Keyword.put(:client_version, client_version)
       |> Keyword.put_new_lazy(:auth_provider, fn -> Electric.Satellite.Auth.provider() end)
@@ -25,6 +25,15 @@ defmodule Electric.Plug.SatelliteWebsocketPlug do
         :move_in_data_fun,
         &InitialSync.query_after_move_in/4
       )
+
+    {:ok, connector_config} = Keyword.fetch(opts, :connector_config)
+
+    Keyword.put_new(
+      opts,
+      :schema_loader,
+      {Electric.Postgres.Extension.SchemaCache, connector_config}
+    )
+  end
 
   @currently_supported_versions ">= 0.10.0 and <= #{%{Electric.vsn() | pre: []}}"
 

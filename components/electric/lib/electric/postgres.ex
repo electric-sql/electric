@@ -2,6 +2,7 @@ defmodule Electric.Postgres do
   alias PgQuery
 
   @type name() :: String.t()
+  @type xid() :: non_neg_integer()
   @type oid() :: non_neg_integer()
   @type relation() :: {name(), name()}
   @type pk() :: binary()

@@ -1,21 +1,29 @@
 defmodule Electric.Satellite.SubscriptionsTest do
   use ExUnit.Case, async: false
+  use Electric.Satellite.Protobuf
 
-  alias Electric.Satellite.ClientReconnectionInfo
-  alias Electric.Replication.Changes.UpdatedRecord
-  alias Satellite.ProtocolHelpers
-  alias Electric.Replication.Postgres.Client
+  alias Electric.Postgres.CachedWal
   alias Electric.Replication.Changes.Gone
   alias Electric.Replication.Changes.NewRecord
-  use Electric.Satellite.Protobuf
+  alias Electric.Replication.Changes.UpdatedRecord
+  alias Electric.Replication.Postgres.Client
+  alias Electric.Satellite.ClientReconnectionInfo
+
+  alias Satellite.ProtocolHelpers
+  alias Satellite.TestWsClient, as: MockClient
+
   import Electric.Postgres.TestConnection
   import Electric.Utils, only: [uuid4: 0]
   import ElectricTest.SatelliteHelpers
-  alias Satellite.TestWsClient, as: MockClient
-  alias Electric.Postgres.CachedWal
 
   describe "Handling of real subscriptions" do
-    setup :setup_replicated_db
+    setup [
+      :setup_replicated_db,
+      :setup_electrified_tables,
+      :setup_open_permissions,
+      :setup_with_sql_execute,
+      :setup_with_ddlx
+    ]
 
     setup ctx do
       user_id = "a5408365-7bf4-48b1-afe2-cb8171631d7c"
@@ -23,8 +31,11 @@ defmodule Electric.Satellite.SubscriptionsTest do
       port = 55133
 
       plug =
-        {Electric.Plug.SatelliteWebsocketPlug,
-         auth_provider: Electric.Satellite.Auth.provider(), connector_config: ctx.connector_config}
+        {
+          Electric.Plug.SatelliteWebsocketPlug,
+          auth_provider: Electric.Satellite.Auth.provider(),
+          connector_config: ctx.connector_config
+        }
 
       start_link_supervised!({Bandit, port: port, plug: plug})
 
@@ -32,9 +43,6 @@ defmodule Electric.Satellite.SubscriptionsTest do
 
       %{user_id: user_id, client_id: client_id, token: token, port: port}
     end
-
-    setup :setup_electrified_tables
-    setup :setup_with_sql_execute
 
     test "client immediately gets migrations", ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
@@ -84,7 +92,10 @@ defmodule Electric.Satellite.SubscriptionsTest do
          CREATE TABLE public.clients (id UUID PRIMARY KEY, name TEXT NOT NULL);
          INSERT INTO public.clients (id, name) VALUES ('#{uuid4()}', 'John');
          CALL electric.electrify('public.clients');
-         """
+         """,
+         ddlx: [
+           "GRANT ALL ON public.clients TO AUTHENTICATED"
+         ]
     test "client receives initial data upon subscription and streams changes thereafter",
          %{conn: pg_conn} = ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
@@ -250,7 +261,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
                  MockClient.make_rpc_call(conn, "subscribe", request)
 
         assert {[^request_id2, ^request_id1], data} = receive_subscription_data(conn, sub_id)
-        assert [%SatOpInsert{row_data: %{values: [_, "John"]}}] = data
+        assert [%SatOpInsert{row_data: %{values: [_, "John", ""]}}] = data
 
         {:ok, 1} =
           :epgsql.equery(pg_conn, "INSERT INTO public.my_entries (id, content) VALUES ($1, $2)", [
@@ -269,7 +280,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
                         %SatOpLog{
                           ops: [
                             %{op: {:begin, _}},
-                            %{op: {:insert, %{row_data: %{values: [_, "Garry"]}}}},
+                            %{op: {:insert, %{row_data: %{values: [_, "Garry", ""]}}}},
                             %{op: {:commit, _}}
                           ]
                         }},
@@ -313,7 +324,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
                  MockClient.make_rpc_call(conn, "subscribe", request)
 
         assert {[^request_id1], data} = receive_subscription_data(conn, sub_id1)
-        assert [%SatOpInsert{row_data: %{values: [_, "John"]}}] = data
+        assert [%SatOpInsert{row_data: %{values: [_, "John", ""]}}] = data
 
         sub_id2 = uuid4()
         request_id2 = uuid4()
@@ -353,7 +364,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
                         %SatOpLog{
                           ops: [
                             _begin,
-                            %{op: {:insert, %{row_data: %{values: [_, "Garry"]}}}},
+                            %{op: {:insert, %{row_data: %{values: [_, "Garry", ""]}}}},
                             _commit
                           ]
                         }},
@@ -396,7 +407,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
                  MockClient.make_rpc_call(conn, "subscribe", request)
 
         assert {[^request_id1], data} = receive_subscription_data(conn, sub_id1)
-        assert [%SatOpInsert{row_data: %{values: [_, "John"]}}] = data
+        assert [%SatOpInsert{row_data: %{values: [_, "John", ""]}}] = data
 
         sub_id2 = uuid4()
         request_id2 = uuid4()
@@ -437,7 +448,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
                         %SatOpLog{
                           ops: [
                             _begin,
-                            %{op: {:insert, %{row_data: %{values: [_, "Garry"]}}}},
+                            %{op: {:insert, %{row_data: %{values: [_, "Garry", ""]}}}},
                             _commit
                           ]
                         }},
@@ -483,7 +494,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
                         %SatOpLog{
                           ops: [
                             %{op: {:begin, _}},
-                            %{op: {:insert, %{row_data: %{values: [_, "Garry"]}}}},
+                            %{op: {:insert, %{row_data: %{values: [_, "Garry", ""]}}}},
                             %{op: {:commit, _}}
                           ]
                         }},
@@ -545,7 +556,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
                           %SatOpLog{
                             ops: [
                               %{op: {:begin, _}},
-                              %{op: {:insert, %{row_data: %{values: [_, "Garry"]}}}},
+                              %{op: {:insert, %{row_data: %{values: [_, "Garry", ""]}}}},
                               %{op: {:commit, %{lsn: lsn}}}
                             ]
                           }},
@@ -574,7 +585,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
                         %SatOpLog{
                           ops: [
                             %{op: {:begin, _}},
-                            %{op: {:insert, %{row_data: %{values: [_, "Bobby"]}}}},
+                            %{op: {:insert, %{row_data: %{values: [_, "Bobby", ""]}}}},
                             %{op: {:commit, _}}
                           ]
                         }},
@@ -597,7 +608,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
                  MockClient.make_rpc_call(conn, "subscribe", request)
 
         assert {[^request_id], data} = receive_subscription_data(conn, sub_id)
-        assert [%SatOpInsert{row_data: %{values: [_, "John Doe"]}}] = data
+        assert [%SatOpInsert{row_data: %{values: [_, "John Doe", _]}}] = data
 
         jane_nobody_uuid = uuid4()
 
@@ -624,7 +635,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
                         %SatOpLog{
                           ops: [
                             %{op: {:begin, _}},
-                            %{op: {:insert, %{row_data: %{values: [_, "Jane Doe"]}}}},
+                            %{op: {:insert, %{row_data: %{values: [_, "Jane Doe", ""]}}}},
                             %{op: {:commit, _}}
                           ]
                         }},
@@ -652,7 +663,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
                         %SatOpLog{
                           ops: [
                             %{op: {:begin, _}},
-                            %{op: {:insert, %{row_data: %{values: [_, "Jane New Doe"]}}}},
+                            %{op: {:insert, %{row_data: %{values: [_, "Jane New Doe", ""]}}}},
                             %{op: {:commit, _}}
                           ]
                         }},
@@ -670,7 +681,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
                         %SatOpLog{
                           ops: [
                             %{op: {:begin, _}},
-                            %{op: {:gone, %{pk_data: %{values: [^jane_nobody_uuid, _]}}}},
+                            %{op: {:gone, %{pk_data: %{values: [^jane_nobody_uuid, _, _]}}}},
                             %{op: {:commit, _}}
                           ]
                         }},
@@ -692,7 +703,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
                  MockClient.make_rpc_call(conn, "subscribe", request)
 
         assert {[^request_id1], data} = receive_subscription_data(conn, sub_id1)
-        assert [%SatOpInsert{row_data: %{values: [_, "John Doe"]}}] = data
+        assert [%SatOpInsert{row_data: %{values: [_, "John Doe", _]}}] = data
 
         {sub_id2, request_id2, request} =
           ProtocolHelpers.simple_sub_request(users: [where: "this.name ILIKE '%doe'"])
@@ -720,7 +731,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
                         %SatOpLog{
                           ops: [
                             _begin,
-                            %{op: {:insert, %{row_data: %{values: [_, "Jane doe"]}}}},
+                            %{op: {:insert, %{row_data: %{values: [_, "Jane doe", _]}}}},
                             _commit
                           ]
                         }},
@@ -757,7 +768,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
         assert {[^request_id], data} = receive_subscription_data(conn, sub_id)
 
         assert [
-                 %SatOpInsert{row_data: %{values: [@john_doe_id, "John Doe"]}},
+                 %SatOpInsert{row_data: %{values: [@john_doe_id, "John Doe", _]}},
                  %SatOpInsert{row_data: %{values: [@entry_id, "Hello world", @john_doe_id]}}
                ] = data
 
@@ -819,8 +830,8 @@ defmodule Electric.Satellite.SubscriptionsTest do
 
         # There are no guarantees on consistent data ordering from the server
         assert [
-                 %SatOpInsert{row_data: %{values: [@jane_doe_id, "Jane Doe"]}},
-                 %SatOpInsert{row_data: %{values: [@john_doe_id, "John Doe"]}},
+                 %SatOpInsert{row_data: %{values: [@jane_doe_id, "Jane Doe", _]}},
+                 %SatOpInsert{row_data: %{values: [@john_doe_id, "John Doe", _]}},
                  %SatOpInsert{row_data: %{values: [@entry_id, "Hello world", @john_doe_id]}},
                  %SatOpInsert{
                    row_data: %{values: [comment_1_id, "Comment 1", @entry_id, @john_doe_id]}
@@ -1152,8 +1163,8 @@ defmodule Electric.Satellite.SubscriptionsTest do
                           %SatOpLog{
                             ops: [
                               %{op: {:begin, _}},
-                              %{op: {:insert, %{row_data: %{values: [_, "John Doe"]}}}},
                               %{op: {:insert, %{row_data: %{values: [_, "Entry", _]}}}},
+                              %{op: {:insert, %{row_data: %{values: [_, "John Doe", _]}}}},
                               %{op: {:commit, %{lsn: lsn}}}
                             ]
                           }},
@@ -1231,7 +1242,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
           assert {lsn,
                   {[^request_id],
                    [
-                     %{row_data: %{values: [_, "John Doe"]}},
+                     %{row_data: %{values: [_, "John Doe", _]}},
                      %{row_data: %{values: [_, "Hello world", _]}}
                    ]}} = receive_subscription_data(conn, sub_id, returning_lsn: true)
 

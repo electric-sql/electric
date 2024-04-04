@@ -29,6 +29,10 @@
         ALTER TABLE public.projects ENABLE ELECTRIC;
         ALTER TABLE public.issues ENABLE ELECTRIC;
         ALTER TABLE public.comments ENABLE ELECTRIC;
+
+        ELECTRIC GRANT ALL ON public.projects TO AUTHENTICATED;
+        ELECTRIC GRANT ALL ON public.issues TO AUTHENTICATED;
+        ELECTRIC GRANT ALL ON public.comments TO AUTHENTICATED;
         """]
     [invoke migrate_pg 20240130000000 $sql]
 

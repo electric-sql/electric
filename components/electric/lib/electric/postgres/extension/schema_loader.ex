@@ -18,6 +18,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   @type table() :: Electric.Postgres.Replication.Table.t()
   @type t() :: {module(), state()}
   @type tx_fk_row() :: %{binary() => integer() | binary()}
+  @type relation_loader() :: (relation() -> table())
 
   @callback connect(term(), Connectors.config()) :: {:ok, state()}
   @callback load(state()) :: {:ok, Version.t()} | {:error, binary()}
@@ -155,6 +156,12 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   end
 
   @impl true
+  def user_permissions({_module, _state} = loader, nil) do
+    with {:ok, rules} <- global_permissions(loader) do
+      {:ok, loader, %SatPerms{id: rules.id, user_id: nil, rules: rules, roles: []}}
+    end
+  end
+
   def user_permissions({module, state}, user_id) do
     with {:ok, state, perms} <- module.user_permissions(state, user_id) do
       {:ok, {module, state}, perms}
@@ -162,6 +169,12 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   end
 
   @impl true
+  def user_permissions({_module, _state} = loader, nil, perms_id) do
+    with {:ok, rules} <- global_permissions(loader, perms_id) do
+      {:ok, %SatPerms{id: rules.id, user_id: nil, rules: rules, roles: []}}
+    end
+  end
+
   def user_permissions({module, state}, user_id, perms_id) do
     with {:ok, perms} <- module.user_permissions(state, user_id, perms_id) do
       {:ok, perms}
@@ -172,6 +185,53 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   def save_user_permissions({module, state}, user_id, roles) do
     with {:ok, state, perms} <- module.save_user_permissions(state, user_id, roles) do
       {:ok, {module, state}, perms}
+    end
+  end
+
+  def relation({_module, _state} = impl, oid_or_relation) do
+    with {:ok, schema_version} <- load(impl) do
+      Schema.table_info(schema_version.schema, oid_or_relation)
+    end
+  end
+
+  def relation({_module, _state} = impl, oid_or_relation, version) do
+    with {:ok, schema_version} <- load(impl, version) do
+      Schema.table_info(schema_version.schema, oid_or_relation)
+    end
+  end
+
+  def relation!({_module, _state} = impl, oid_or_relation) do
+    case relation(impl, oid_or_relation) do
+      {:ok, table} ->
+        table
+
+      error ->
+        raise ArgumentError,
+          message: "unknown relation #{inspect(oid_or_relation)}: #{inspect(error)}"
+    end
+  end
+
+  def relation!({_module, _state} = impl, oid_or_relation, version) do
+    case relation(impl, oid_or_relation, version) do
+      {:ok, table} ->
+        table
+
+      error ->
+        raise ArgumentError,
+          message:
+            "unknown relation #{inspect(oid_or_relation)} for version #{inspect(version)}: #{inspect(error)}"
+    end
+  end
+
+  def enums({_module, _state} = impl) do
+    with {:ok, schema_version} <- load(impl) do
+      Version.enums(schema_version)
+    end
+  end
+
+  def enums({_module, _state} = impl, version) do
+    with {:ok, schema_version} <- load(impl, version) do
+      Version.enums(schema_version)
     end
   end
 end

@@ -68,5 +68,12 @@ defmodule Electric.Replication.Eval.RunnerTest do
                |> Parser.parse_and_validate_expression!(%{["test"] => :uuid})
                |> Runner.execute(%{["test"] => "b06d507c-4e08-4a7f-896a-5c3c6c5dc332"})
     end
+
+    test "should correctly cast booleans" do
+      assert {:ok, true} =
+               ~S|new.valid = true|
+               |> Parser.parse_and_validate_expression!(%{["new", "valid"] => :bool})
+               |> Runner.execute(%{["new", "valid"] => "t"})
+    end
   end
 end

@@ -231,13 +231,17 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
        ) do
     received = Jason.decode!(content)
 
-    referenced = %ReferencedRecord{
-      relation: {received["schema"], received["table"]},
-      record: received["data"],
-      pk: received["pk"],
-      tags:
-        ShadowTableTransformation.convert_tag_list_pg_to_satellite(received["tags"], state.origin)
-    }
+    referenced =
+      %ReferencedRecord{
+        relation: {received["schema"], received["table"]},
+        record: received["data"],
+        pk: received["pk"],
+        tags:
+          ShadowTableTransformation.convert_tag_list_pg_to_satellite(
+            received["tags"],
+            state.origin
+          )
+      }
 
     {lsn, txn} = state.transaction
 

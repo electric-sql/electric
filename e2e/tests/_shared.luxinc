@@ -141,6 +141,7 @@
             intvalue_null_default integer
         );
         ALTER TABLE public.items ENABLE ELECTRIC;
+        ELECTRIC GRANT ALL ON public.items TO AUTHENTICATED;
         """]
     [invoke migrate_pg $version $sql]
 [endmacro]
@@ -154,6 +155,7 @@
             item_id UUID REFERENCES public.items(id)
         );
         ALTER TABLE public.other_items ENABLE ELECTRIC;
+        ELECTRIC GRANT ALL ON public.other_items TO AUTHENTICATED;
         """]
     [invoke migrate_pg $version $sql]
 [endmacro]

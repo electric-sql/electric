@@ -33,15 +33,16 @@ defmodule Electric.Satellite.WebsocketServer do
   use Electric.Satellite.Protobuf
   import Electric.Satellite.Protocol.State, only: :macros
 
-  alias Electric.Utils
   alias Electric.Postgres.CachedWal
   alias Electric.Replication.Connectors
+  alias Electric.Postgres.Extension.SchemaLoader
   alias Electric.Replication.InitialSync
   alias Electric.Satellite.Protocol
-  alias Electric.Satellite.Protocol.State
-  alias Electric.Satellite.Protocol.OutRep
   alias Electric.Satellite.Protocol.InRep
+  alias Electric.Satellite.Protocol.OutRep
+  alias Electric.Satellite.Protocol.State
   alias Electric.Satellite.Protocol.Telemetry
+  alias Electric.Utils
 
   # in milliseconds
   @ping_interval 5_000
@@ -53,6 +54,8 @@ defmodule Electric.Satellite.WebsocketServer do
   @impl WebSock
   def init(opts) do
     connector_config = Keyword.fetch!(opts, :connector_config)
+    {_module, _opts} = loader_config = Keyword.fetch!(opts, :schema_loader)
+    {:ok, schema_loader} = SchemaLoader.connect(loader_config, connector_config)
 
     {:ok,
      schedule_ping(%State{
@@ -60,6 +63,7 @@ defmodule Electric.Satellite.WebsocketServer do
        auth_provider: Keyword.fetch!(opts, :auth_provider),
        connector_config: connector_config,
        origin: Connectors.origin(connector_config),
+       schema_loader: schema_loader,
        subscription_data_fun: Keyword.fetch!(opts, :subscription_data_fun),
        move_in_data_fun: Keyword.fetch!(opts, :move_in_data_fun),
        out_rep: %OutRep{allowed_unacked_txs: Keyword.get(opts, :allowed_unacked_txs, 30)},
@@ -313,7 +317,8 @@ defmodule Electric.Satellite.WebsocketServer do
        when is_out_rep_active(state) do
     GenStage.ask(from, 1)
 
-    Protocol.send_events_and_maybe_pause(events, state)
+    events
+    |> Protocol.send_events_and_maybe_pause(state)
     |> Protocol.perform_pending_actions()
     |> push()
   end

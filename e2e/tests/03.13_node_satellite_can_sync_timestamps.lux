@@ -13,6 +13,7 @@
             updated_at TIMESTAMPTZ NOT NULL
         );
         ALTER TABLE public.timestamps ENABLE ELECTRIC;
+        ELECTRIC GRANT ALL ON public.timestamps TO AUTHENTICATED;
         """]
     [invoke migrate_pg 20230823 $sql]
 
