@@ -6,6 +6,7 @@ import {
   omitCountFromSelectAndIncludeSchema,
   parseNestedUpdate,
   validate,
+  validateRecordTransformation,
 } from '../validation/validation'
 import { UpdateInput, UpdateManyInput } from '../input/updateInput'
 import { DeleteInput, DeleteManyInput } from '../input/deleteInput'
@@ -157,27 +158,6 @@ export class Table<
       include: true,
       where: true,
     })
-  }
-
-  setReplicationTransform(i: ReplicationTransformInput<T>): void {
-    const relations = this._dbDescription.getRelations(this.tableName)
-    const immutableFields = relations.map((r) => r.relationField)
-    const liftTableReplicationTransform = (transform: (row: T) => T) =>
-      liftReplicationTransform(
-        transform,
-        this._fields,
-        this._schema,
-        immutableFields
-      )
-    this._replicationTransformManager.setTableTransform(
-      this.tableName,
-      liftTableReplicationTransform(i.transformInbound),
-      liftTableReplicationTransform(i.transformOutbound)
-    )
-  }
-
-  clearReplicationTransform(): void {
-    this._replicationTransformManager.clearTableTransform(this.tableName)
   }
 
   setTables(tables: Map<TableName, AnyTable>) {
@@ -1628,6 +1608,31 @@ export class Table<
     result.sourceQuery = i
     return result
   }
+
+  setReplicationTransform(i: ReplicationTransformInput<T>): void {
+    // forbid transforming relation keys to avoid breaking
+    // referential integrity
+    const relations = this._dbDescription.getRelations(this.tableName)
+    const immutableFields = relations.map((r) => r.relationField)
+
+    const liftTableReplicationTransform = (transform: (row: T) => T) =>
+      liftReplicationTransform(
+        transform,
+        this._fields,
+        this._schema,
+        immutableFields
+      )
+
+    this._replicationTransformManager.setTableTransform(
+      this.tableName,
+      liftTableReplicationTransform(i.transformInbound),
+      liftTableReplicationTransform(i.transformOutbound)
+    )
+  }
+
+  clearReplicationTransform(): void {
+    this._replicationTransformManager.clearTableTransform(this.tableName)
+  }
 }
 
 export function unsafeExec(
@@ -1720,6 +1725,17 @@ function makeSqlWhereClause(where: object): string {
   return clauses.filter((clause) => clause !== '').join(' AND ')
 }
 
+/**
+ * Lifts a typed record transformation {@link transformRow} into a transformation of
+ * raw records, applying appropriate parsing and validation, including forbidding
+ * changes to specified {@link immutableFields}
+ *
+ * @param transformRow transformation of record of type {@link T}
+ * @param fields fields to specify the transformation from raw record to record of type {@link T}
+ * @param schema schema to parse/validate raw record to record of type {@link T}
+ * @param immutableFields - fields that cannot be modified by {@link transformRow}
+ * @return transformation of raw record
+ */
 function liftReplicationTransform<T extends Record<string, unknown>>(
   transformRow: (row: T) => T,
   fields: Fields,
@@ -1746,13 +1762,12 @@ function liftReplicationTransform<T extends Record<string, unknown>>(
     ) as RowRecord
 
     // check if any of the immutable fields were modified
-    immutableFields.forEach((f) => {
-      if (row[f] !== transformedRow[f]) {
-        throw new Error(
-          'Replication transform cannot modify primary or foreign keys'
-        )
-      }
-    })
-    return transformedRow
+    const validatedTransformedRow = validateRecordTransformation(
+      row,
+      transformedRow,
+      immutableFields
+    )
+
+    return validatedTransformedRow
   }
 }
