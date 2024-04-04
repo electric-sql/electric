@@ -21,12 +21,10 @@
     # Wait for the items table migration and sync the table
     ??[rpc] recv: #SatInStartReplicationResp
     ??Connectivity state changed: connected
-    [invoke node_await_table "items"]
     [invoke node_sync_table "items"]
 
 [shell satellite_2]
     ??[rpc] recv: #SatInStartReplicationResp
-    [invoke node_await_table "items"]
     [invoke node_sync_table "items"]
 
 [invoke log "PG & Satellites migrated and ready"]
