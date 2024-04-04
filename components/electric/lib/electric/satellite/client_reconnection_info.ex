@@ -150,8 +150,10 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   use GenServer
 
   alias Electric.Postgres.CachedWal
+  alias Electric.Postgres.Extension
   alias Electric.Replication.Connectors
   alias Electric.Replication.Changes.Transaction
+  alias Electric.Replication.Postgres.Client
   alias Electric.Replication.Shapes
   alias Electric.Replication.Shapes.ShapeRequest
   alias Electric.Utils
@@ -198,6 +200,13 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     Electric.name(__MODULE__, origin)
   end
 
+  @delete_subscriptions_query """
+  DELETE FROM
+    #{Extension.client_shape_subscriptions_table()}
+  WHERE
+    client_id = $1
+  """
+
   @doc """
   Remove all stored data about client reconnection.
 
@@ -207,11 +216,15 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   client. This is ensured by `Electric.Satellite.ClientManager` allowing
   at most one WebSocket process with the same client id.
   """
-  def clear_all_data(client_id) do
+  def clear_all_data(origin, client_id) do
     :ets.match_delete(@actions_ets, {{client_id, :_}, :_})
     :ets.match_delete(@subscriptions_ets, {{client_id, :_}, :_, :_, :_})
     :ets.match_delete(@additional_data_ets, {{client_id, :_, :_, :_, :_}, :_, :_})
     :ets.delete(@checkpoint_ets, client_id)
+
+    {:ok, _} = query(origin, @delete_subscriptions_query, [client_id])
+
+    :ok
   end
 
   def fetch_subscription(client_id, subscription_id) do
@@ -221,21 +234,32 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     end
   end
 
-  def delete_subscription(client_id, subscription_id) do
+  @delete_subscription_query """
+  DELETE FROM
+    #{Extension.client_shape_subscriptions_table()}
+  WHERE
+    client_id = $1 AND subscription_id = $2
+  """
+
+  def delete_subscription(origin, client_id, subscription_id) do
     :ets.delete(@subscriptions_ets, {client_id, subscription_id})
 
     :ets.match_delete(
       @additional_data_ets,
       {{client_id, :_, :_, :subscription, subscription_id}, :_, :_}
     )
+
+    {:ok, 1} = query(origin, @delete_subscription_query, [client_id, subscription_id])
+
+    :ok
   end
 
   @doc """
   Store initial checkpoint for the client after first connection and sent
   "shared" rows and/or migrations.
   """
-  def store_initial_checkpoint(client_id, lsn, sent_rows_graph) do
-    clear_all_data(client_id)
+  def store_initial_checkpoint(origin, client_id, lsn, sent_rows_graph) do
+    clear_all_data(origin, client_id)
 
     :ets.insert(@checkpoint_ets, {client_id, lsn, sent_rows_graph})
   end
@@ -463,12 +487,42 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     end
   end
 
+  @insert_subscription_query """
+  INSERT INTO
+    #{Extension.client_shape_subscriptions_table()}(
+      client_id,
+      subscription_id,
+      min_txid,
+      ord,
+      shape_requests
+    )
+  VALUES
+    ($1, $2, $3, $4, $5)
+  ON CONFLICT
+    (client_id, subscription_id)
+  DO UPDATE SET
+    min_txid = excluded.min_txid,
+    ord = excluded.ord,
+    shape_requests = excluded.shape_requests
+  """
+
   @doc """
   Store a subscription with information as to where the data will fit in,
   and what were the requests issued as part of that subscription.
   """
-  def store_subscription(client_id, subscription_id, xmin, pos, requests) do
+  def store_subscription(origin, client_id, subscription_id, xmin, pos, requests) do
     :ets.insert(@subscriptions_ets, {{client_id, subscription_id}, xmin, requests, pos})
+
+    {:ok, 1} =
+      query(origin, @insert_subscription_query, [
+        client_id,
+        subscription_id,
+        xmin,
+        pos,
+        :erlang.term_to_binary(requests)
+      ])
+
+    :ok
   end
 
   defp list_subscriptions(client_id) do
@@ -520,19 +574,42 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   end
 
   @impl GenServer
-  def init(_connector_config) do
+  def init(connector_config) do
     Logger.metadata(component: "ClientReconnectionInfo")
-    table1 = :ets.new(@checkpoint_ets, [:named_table, :public, :set])
-    table2 = :ets.new(@subscriptions_ets, [:named_table, :public, :ordered_set])
-    table3 = :ets.new(@additional_data_ets, [:named_table, :public, :ordered_set])
-    table4 = :ets.new(@actions_ets, [:named_table, :public, :set])
 
-    {:ok,
-     %{
-       checkpoint_table: table1,
-       subscriptions_table: table2,
-       additional_data_table: table3,
-       actions_table: table4
-     }}
+    _checkpoint_table = :ets.new(@checkpoint_ets, [:named_table, :public, :set])
+    subscriptions_table = :ets.new(@subscriptions_ets, [:named_table, :public, :ordered_set])
+    _additional_data_table = :ets.new(@additional_data_ets, [:named_table, :public, :ordered_set])
+    _actions_table = :ets.new(@actions_ets, [:named_table, :public, :set])
+
+    origin = Connectors.origin(connector_config)
+
+    restore_subscriptions_cache(origin, subscriptions_table)
+
+    {:ok, nil}
+  end
+
+  defp restore_subscriptions_cache(origin, subscriptions_table) do
+    {:ok, _, rows} =
+      query(origin, "SELECT * FROM #{Extension.client_shape_subscriptions_table()}", [])
+
+    subscriptions =
+      for {client_id, subscription_id, xmin, pos, shape_requests_bin} <- rows do
+        {{client_id, subscription_id}, String.to_integer(xmin),
+         :erlang.binary_to_term(shape_requests_bin), pos}
+      end
+
+    :ets.insert(subscriptions_table, subscriptions)
+  end
+
+  defp query(origin, query, params) when is_binary(query) and is_list(params) do
+    origin
+    |> connector_config()
+    |> Connectors.get_connection_opts()
+    |> Client.with_conn(fn conn -> :epgsql.equery(conn, query, params) end)
+  end
+
+  defp connector_config(origin) do
+    # TODO
   end
 end

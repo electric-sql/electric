@@ -258,7 +258,7 @@ defmodule Electric.Satellite.Protocol do
       |> Map.put(:out_rep, out_rep)
       |> Map.update!(:subscriptions, &Map.drop(&1, ids))
 
-    for id <- ids, do: ClientReconnectionInfo.delete_subscription(state.client_id, id)
+    Enum.each(ids, &ClientReconnectionInfo.delete_subscription(state.origin, state.client_id, &1))
 
     if needs_unpausing? do
       {:force_unpause, %SatUnsubsResp{}, state}
@@ -539,7 +539,7 @@ defmodule Electric.Satellite.Protocol do
       end
     else
       # Once the client is outside the WAL window, we are assuming the client will reset its local state, so we will too.
-      ClientReconnectionInfo.clear_all_data(state.client_id)
+      ClientReconnectionInfo.clear_all_data(state.origin, state.client_id)
 
       {:error,
        start_replication_error(:BEHIND_WINDOW, "Cannot catch up to the server's current state")}
@@ -1040,6 +1040,7 @@ defmodule Electric.Satellite.Protocol do
         )
 
         ClientReconnectionInfo.store_subscription(
+          state.origin,
           state.client_id,
           id,
           xmin,
