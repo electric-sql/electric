@@ -231,3 +231,91 @@ test('setReplicationTransform transforms inbound INSERTs and UPDATEs', async (t)
   t.is(transformedRecords[2], plainRecords[2])
   t.is(transformedRecords[2] as unknown, undefined)
 })
+
+test('setReplicationTransform overrides previous transform', async (t) => {
+  const { adapter, runMigrations, satellite, authState, client, token } =
+    t.context
+
+  await runMigrations()
+  await startSatellite(satellite, authState, token)
+
+  t.deepEqual(client.outboundTransactionsEnqueued, [])
+
+  // set transform first time
+  satellite.setReplicationTransform(
+    new QualifiedTablename('main', 'parent'),
+    (row) => ({
+      ...row,
+      value: 'transformed_inbound_' + row.value,
+    }),
+    (row) => ({
+      ...row,
+      value: 'transformed_outbound_' + row.value,
+    })
+  )
+
+  // set transform second time
+  satellite.setReplicationTransform(
+    new QualifiedTablename('main', 'parent'),
+    (row) => ({
+      ...row,
+      value: 'override_transformed_inbound_' + row.value,
+    }),
+    (row) => ({
+      ...row,
+      value: 'override_transformed_outbound_' + row.value,
+      other: ((row.other ?? 0) as number) + 1,
+    })
+  )
+
+  await adapter.run({
+    sql: `INSERT INTO parent (id, value, other) VALUES (?, ?, ?);`,
+    args: [1, 'local', 3],
+  })
+  await satellite._performSnapshot()
+  const transformedChange = client.outboundTransactionsEnqueued[0].changes[0]
+
+  // second trnasform should be the applied one
+  t.deepEqual(transformedChange.record, {
+    id: 1,
+    value: 'override_transformed_outbound_local',
+    other: 4,
+  })
+})
+
+test('clearReplicationTransform removes any transform present', async (t) => {
+  const { adapter, runMigrations, satellite, authState, client, token } =
+    t.context
+
+  await runMigrations()
+  await startSatellite(satellite, authState, token)
+
+  t.deepEqual(client.outboundTransactionsEnqueued, [])
+
+  satellite.setReplicationTransform(
+    new QualifiedTablename('main', 'parent'),
+    (row) => ({
+      ...row,
+      value: 'transformed_inbound_' + row.value,
+    }),
+    (row) => ({
+      ...row,
+      value: 'transformed_outbound_' + row.value,
+    })
+  )
+  satellite.clearReplicationTransform(new QualifiedTablename('main', 'parent'))
+
+  await adapter.run({
+    sql: `INSERT INTO parent (id, value, other) VALUES (?, ?, ?);`,
+    args: [1, 'local', null],
+  })
+  await satellite._performSnapshot()
+  const plainChange = client.outboundTransactionsEnqueued[0].changes[0]
+
+  // record should not have been transformed
+  t.deepEqual(plainChange.record, {
+    id: 1,
+    value: 'local',
+    other: null,
+  })
+})
