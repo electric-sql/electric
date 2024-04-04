@@ -1645,6 +1645,7 @@ export function liveRawQuery(
   return result
 }
 
+/** Compile Prisma-like where-clause object into a SQL where clause that the server can understand. */
 function makeSqlWhereClause(where: string | Record<string, any>): string {
   if (typeof where === 'string') return where
 
@@ -1652,10 +1653,11 @@ function makeSqlWhereClause(where: string | Record<string, any>): string {
     .flatMap(([key, value]) => makeFilter(value, key, 'this.'))
     .map(interpolateArgs)
 
-  if (statements.length < 2) return statements.join('')
+  if (statements.length < 2) return statements[0] ?? ''
   else return statements.map((x) => '(' + x + ')').join(' AND ')
 }
 
+/** Replace all `?` parameter placeholders in SQL with provided args. */
 function interpolateArgs({
   sql,
   args,
@@ -1667,11 +1669,16 @@ function interpolateArgs({
 
   let matchPos = 0
   const argsLength = args.length
+  /* We're looking for any `?` in the provided sql statement that aren't preceded by a word character
+     This is how `builder.ts#makeFilter` builds SQL statements, but we need to interpolate them before
+     sending to the server. SQL here shouldn't contain any user strings, only placeholders, so it's safe.
+  */
   return sql.replaceAll(/(?<!\w)\?/g, (match) =>
     matchPos < argsLength ? quoteValue(args[matchPos++]) : match
   )
 }
 
+/** Quote a JS value to be inserted in a PostgreSQL where query for the server. */
 function quoteValue(value: unknown): string {
   if (typeof value === 'string') return `'${value.replaceAll("'", "''")}'`
   if (typeof value === 'number') return value.toString()
