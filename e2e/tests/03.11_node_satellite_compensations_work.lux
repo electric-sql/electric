@@ -10,21 +10,10 @@
 
 [shell proxy_1]
     [invoke migrate_items_table 001]
-
-    [local sql=
-        """
-        CREATE TABLE public.other_items (
-            id TEXT PRIMARY KEY,
-            content TEXT NOT NULL,
-            item_id UUID REFERENCES public.items(id)
-        );
-        ALTER TABLE public.other_items ENABLE ELECTRIC;
-        """]
-    [invoke migrate_pg 002 $sql]
+    [invoke migrate_other_items_table 002]
 
 [shell satellite_1]
     ??[rpc] recv: #SatInStartReplicationResp
-    [invoke node_await_table "other_items"]
     [invoke node_sync_table "other_items"]
     ??[proto] recv: #SatSubsDataEnd
     !await db.db.unsafeExec({sql: "UPDATE _electric_meta SET value = 1 WHERE key = 'compensations' RETURNING *"})

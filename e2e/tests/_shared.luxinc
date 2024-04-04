@@ -143,3 +143,16 @@
         """]
     [invoke migrate_pg $version $sql]
 [endmacro]
+
+[macro migrate_other_items_table version]
+    [local sql=
+        """
+        CREATE TABLE public.other_items (
+            id TEXT PRIMARY KEY,
+            content TEXT NOT NULL,
+            item_id UUID REFERENCES public.items(id)
+        );
+        ALTER TABLE public.other_items ENABLE ELECTRIC;
+        """]
+    [invoke migrate_pg $version $sql]
+[endmacro]
