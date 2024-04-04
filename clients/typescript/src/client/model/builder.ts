@@ -69,7 +69,10 @@ export class Builder {
 
   create(i: CreateInput<any, any, any>): QueryBuilder {
     // Make a SQL query out of the data
-    const query = squelPostgres.insert().into(this._fullyQualifiedTableName).setFields(i.data)
+    const query = squelPostgres
+      .insert()
+      .into(this._fullyQualifiedTableName)
+      .setFields(i.data)
 
     // Adds a `RETURNING` statement that returns all known fields
     const queryWithReturn = this.returnAllFields(query)

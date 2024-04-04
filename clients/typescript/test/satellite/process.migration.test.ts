@@ -195,28 +195,28 @@ export const processMigrationTests = (test: TestFn<ContextType>) => {
         name: 'id',
         type: 'INTEGER',
         isNullable: false,
-        primaryKey: true,
+        primaryKey: 1,
       },
       {
         name: 'value',
         type: 'TEXT',
         isNullable: true,
-        primaryKey: false,
+        primaryKey: undefined,
       },
       {
         name: 'other',
         type: 'INTEGER',
         isNullable: true,
-        primaryKey: false,
+        primaryKey: undefined,
       },
       {
         name: 'baz',
         type: 'TEXT',
         isNullable: true,
-        primaryKey: false,
+        primaryKey: undefined,
       },
     ],
-  }
+  } satisfies Relation
   const newTableRelation = {
     id: 2001, // doesn't matter
     schema: 'public',
@@ -227,22 +227,22 @@ export const processMigrationTests = (test: TestFn<ContextType>) => {
         name: 'id',
         type: 'TEXT',
         isNullable: false,
-        primaryKey: true,
+        primaryKey: 1,
       },
       {
         name: 'foo',
         type: 'INTEGER',
         isNullable: true,
-        primaryKey: false,
+        primaryKey: undefined,
       },
       {
         name: 'bar',
         type: 'TEXT',
         isNullable: true,
-        primaryKey: false,
+        primaryKey: undefined,
       },
     ],
-  }
+  } satisfies Relation
 
   async function checkMigrationIsApplied(t: ExecutionContext<ContextType>) {
     await assertDbHasTables(t, 'parent', 'child', 'NewTable')

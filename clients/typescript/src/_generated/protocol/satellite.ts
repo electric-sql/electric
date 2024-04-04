@@ -1147,7 +1147,7 @@ export const SatInStartReplicationReq = {
     }
     writer.ldelim();
     if (message.sqlDialect !== undefined) {
-      writer.uint32(48).int32(message.sqlDialect);
+      writer.uint32(56).int32(message.sqlDialect);
     }
     return writer;
   },
@@ -1214,7 +1214,8 @@ export const SatInStartReplicationReq = {
           }
 
           break;
-          if (tag !== 48) {
+        case 7:
+          if (tag !== 56) {
             break;
           }
 

@@ -46,7 +46,13 @@ export class ElectricDatabase implements Database {
         rowsModified: rowCount ?? 0,
       }
     } catch (e) {
-      console.log("EXEC failed: " + JSON.stringify(e) + "\n" + "Statement was: " + JSON.stringify(statement))
+      console.log(
+        'EXEC failed: ' +
+          JSON.stringify(e) +
+          '\n' +
+          'Statement was: ' +
+          JSON.stringify(statement)
+      )
       throw e
     }
   }
@@ -57,7 +63,9 @@ type StopFn = () => Promise<void>
 /**
  * Creates and opens a DB backed by Postgres
  */
-export async function createEmbeddedPostgres(config: PostgresConfig): Promise<{ db: ElectricDatabase, stop: StopFn }> {
+export async function createEmbeddedPostgres(
+  config: PostgresConfig
+): Promise<{ db: ElectricDatabase; stop: StopFn }> {
   const EmbeddedPostgres = (await import('embedded-postgres')).default
   // Initialize Postgres
   const pg = new EmbeddedPostgres({
@@ -78,7 +86,7 @@ export async function createEmbeddedPostgres(config: PostgresConfig): Promise<{ 
   // because it uniquely identifies the DB
   return {
     db: new ElectricDatabase(config.databaseDir, db),
-    stop: () => pg.stop()
+    stop: () => pg.stop(),
   }
 }
 

@@ -15,7 +15,7 @@ export class NonTransactionalDB implements DB {
   ) {}
 
   withTableSchema(fields: Fields) {
-    return new NonTransactionalDB(this._adapter, fields)
+    return new NonTransactionalDB(this._adapter, fields, this._converter)
   }
 
   run(

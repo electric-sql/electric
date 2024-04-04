@@ -428,7 +428,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
     await runMigrations()
     const clientId = 'test_client'
     satellite._setAuthState({ ...authState, clientId })
-  
+
     // Insert 4 items in separate snapshots
     await adapter.run({
       sql: `INSERT INTO parent (id, value) VALUES (1, 'val1')`,
@@ -446,11 +446,11 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
       sql: `INSERT INTO parent (id, value) VALUES (4, 'val4')`,
     })
     const ts4 = await satellite._performSnapshot()
-  
+
     // Now delete them all in a single snapshot
     await adapter.run({ sql: `DELETE FROM parent` })
     const ts5 = await satellite._performSnapshot()
-  
+
     // Now check that each delete clears the correct tag
     const entries = await satellite._getEntries(4)
     t.deepEqual(

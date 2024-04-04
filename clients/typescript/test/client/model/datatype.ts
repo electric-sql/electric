@@ -942,15 +942,15 @@ export const datatypeTests = (test: TestFn<ContextType>) => {
         bytea: blob,
       },
     })
-  
+
     t.deepEqual(res.bytea, blob)
-  
+
     const fetchRes = await tbl.findUnique({
       where: {
         id: 1,
       },
     })
-  
+
     t.deepEqual(fetchRes?.bytea, blob)
   })
 
