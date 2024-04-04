@@ -382,10 +382,6 @@ function isFilterObject(value: any): boolean {
   return isObject(value) && !isDataObject(value)
 }
 
-function isObject(v: any): boolean {
-  return typeof v === 'object' && !Array.isArray(v) && v !== null
-}
-
 /**
  * Filters out all properties that are not fields (i.e. columns) of this table.
  * e.g. it removes related fields or filters like `lt`, `equals`, etc.

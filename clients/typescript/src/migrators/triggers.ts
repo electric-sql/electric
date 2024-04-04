@@ -252,17 +252,22 @@ function joinColsForJSON(
   // Perform transformations on some columns to ensure consistent
   // serializability into JSON
   const transformIfNeeded = (col: string, targetedCol: string) => {
-    const tpes = colTypes[col]
-    const sqliteType = tpes.sqliteType
-    const pgType = tpes.pgType
+    const colType = colTypes[col]
 
     // cast REALs, INT8s, BIGINTs to TEXT to work around SQLite's `json_object` bug
-    if (sqliteType === 'REAL' || pgType === 'INT8' || pgType === 'BIGINT') {
+    if (
+      colType === 'FLOAT4' ||
+      colType === 'REAL' ||
+      colType === 'DOUBLE PRECISION' ||
+      colType === 'FLOAT8' ||
+      colType === 'INT8' ||
+      colType === 'BIGINT'
+    ) {
       return `cast(${targetedCol} as TEXT)`
     }
 
     // transform blobs/bytestrings into hexadecimal strings for JSON encoding
-    if (sqliteType === 'BLOB' || pgType === 'BYTEA') {
+    if (colType === 'BYTEA') {
       return `CASE WHEN ${targetedCol} IS NOT NULL THEN hex(${targetedCol}) ELSE NULL END`
     }
     return targetedCol

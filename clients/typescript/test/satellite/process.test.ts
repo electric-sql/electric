@@ -36,7 +36,6 @@ import {
   SatelliteErrorCode,
 } from '../../src/util/types'
 import { opts, relations, ContextType as CommonContextType } from './common'
-import { DEFAULT_LOG_POS, numberToBytes, base64 } from '../../src/util/common'
 
 import {
   DEFAULT_LOG_POS,
@@ -343,21 +342,21 @@ export const processTests = (test: TestFn<ContextType>) => {
 
   test('snapshot of INSERT with blob/Uint8Array', async (t) => {
     const { adapter, runMigrations, satellite, authState } = t.context
-  
+
     await runMigrations()
-  
+
     const blob = new Uint8Array([1, 2, 255, 244, 160, 1])
-  
+
     await adapter.run({
       sql: `INSERT INTO blobTable(value) VALUES (?)`,
       args: [blob],
     })
-  
+
     await satellite._setAuthState(authState)
     await satellite._performSnapshot()
     const entries = await satellite._getEntries()
     const clientId = satellite._authState!.clientId
-  
+
     const merged = localOperationsToTableChanges(
       entries,
       (timestamp: Date) => {
@@ -1718,92 +1717,92 @@ export const processTests = (test: TestFn<ContextType>) => {
     }
   })
 
-test('additional data will be stored properly', async (t) => {
-  const { client, satellite, adapter } = t.context
-  const { runMigrations, authState, token } = t.context
-  await runMigrations()
-  const tablename = 'parent'
+  test('additional data will be stored properly', async (t) => {
+    const { client, satellite, adapter } = t.context
+    const { runMigrations, authState, token } = t.context
+    await runMigrations()
+    const tablename = 'parent'
 
-  // relations must be present at subscription delivery
-  client.setRelations(relations)
-  client.setRelationData(tablename, parentRecord)
+    // relations must be present at subscription delivery
+    client.setRelations(relations)
+    client.setRelationData(tablename, parentRecord)
 
-  await startSatellite(satellite, authState, token)
+    await startSatellite(satellite, authState, token)
 
-  const shapeDef: Shape = {
-    tablename,
-  }
+    const shapeDef: Shape = {
+      tablename,
+    }
 
-  satellite!.relations = relations
-  const { synced } = await satellite.subscribe([shapeDef])
-  await synced
-  await satellite._performSnapshot()
+    satellite!.relations = relations
+    const { synced } = await satellite.subscribe([shapeDef])
+    await synced
+    await satellite._performSnapshot()
 
-  // Send additional data
-  await client.additionalDataCb!({
-    ref: new Long(10),
-    changes: [
-      {
-        relation: relations.parent,
-        tags: ['server@' + Date.now()],
-        type: DataChangeType.INSERT,
-        record: { id: 100, value: 'new_value' },
-      },
-    ],
+    // Send additional data
+    await client.additionalDataCb!({
+      ref: new Long(10),
+      changes: [
+        {
+          relation: relations.parent,
+          tags: ['server@' + Date.now()],
+          type: DataChangeType.INSERT,
+          record: { id: 100, value: 'new_value' },
+        },
+      ],
+    })
+
+    const [result] = await adapter.query({
+      sql: 'SELECT * FROM main.parent WHERE id = 100',
+    })
+    t.deepEqual(result, { id: 100, value: 'new_value', other: null })
   })
 
-  const [result] = await adapter.query({
-    sql: 'SELECT * FROM main.parent WHERE id = 100',
+  test('GONE messages are applied as DELETEs', async (t) => {
+    const { client, satellite, adapter } = t.context
+    const { runMigrations, authState, token } = t.context
+    await runMigrations()
+    const tablename = 'parent'
+
+    // relations must be present at subscription delivery
+    client.setRelations(relations)
+    client.setRelationData(tablename, parentRecord)
+
+    await startSatellite(satellite, authState, token)
+
+    const shapeDef: Shape = {
+      tablename,
+    }
+
+    satellite!.relations = relations
+    const { synced } = await satellite.subscribe([shapeDef])
+    await synced
+    await satellite._performSnapshot()
+
+    // Send additional data
+    await client.transactionsCb!({
+      commit_timestamp: Long.fromNumber(new Date().getTime()),
+      id: new Long(10),
+      lsn: new Uint8Array(),
+      changes: [
+        {
+          relation: relations.parent,
+          tags: [],
+          type: DataChangeType.GONE,
+          record: { id: 1 },
+        },
+      ],
+    })
+
+    const results = await adapter.query({
+      sql: 'SELECT * FROM main.parent',
+    })
+    t.deepEqual(results, [])
   })
-  t.deepEqual(result, { id: 100, value: 'new_value', other: null })
-})
 
-test('GONE messages are applied as DELETEs', async (t) => {
-  const { client, satellite, adapter } = t.context
-  const { runMigrations, authState, token } = t.context
-  await runMigrations()
-  const tablename = 'parent'
-
-  // relations must be present at subscription delivery
-  client.setRelations(relations)
-  client.setRelationData(tablename, parentRecord)
-
-  await startSatellite(satellite, authState, token)
-
-  const shapeDef: Shape = {
-    tablename,
-  }
-
-  satellite!.relations = relations
-  const { synced } = await satellite.subscribe([shapeDef])
-  await synced
-  await satellite._performSnapshot()
-
-  // Send additional data
-  await client.transactionsCb!({
-    commit_timestamp: Long.fromNumber(new Date().getTime()),
-    id: new Long(10),
-    lsn: new Uint8Array(),
-    changes: [
-      {
-        relation: relations.parent,
-        tags: [],
-        type: DataChangeType.GONE,
-        record: { id: 1 },
-      },
-    ],
-  })
-
-  const results = await adapter.query({
-    sql: 'SELECT * FROM main.parent',
-  })
-  t.deepEqual(results, [])
-})
-
-test('a subscription that failed to apply because of FK constraint triggers GC', async (t) => {
-  const { client, satellite, adapter, runMigrations, authState, token } =
-    t.context
-  await runMigrations()
+  test('a subscription that failed to apply because of FK constraint triggers GC', async (t) => {
+    const { client, satellite, adapter, runMigrations, authState, token } =
+      t.context
+    await runMigrations()
 
     const tablename = 'child'
     const namespace = 'main'
@@ -2013,7 +2012,7 @@ test('a subscription that failed to apply because of FK constraint triggers GC',
     const shapeDef1: Shape = {
       tablename: tablename,
     }
-  
+
     const shapeDef2: Shape = {
       tablename: 'failure',
     }
@@ -2119,7 +2118,7 @@ test('a subscription that failed to apply because of FK constraint triggers GC',
     t.is((await satellite._getEntries(0)).length, 0)
 
     satellite._garbageCollectShapeHandler([
-      { uuid: '', definition: { selects: [{ tablename: 'parent' }] } },
+      { uuid: '', definition: { tablename: 'parent' } },
     ])
 
     await satellite._performSnapshot()

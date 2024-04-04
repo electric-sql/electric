@@ -17,7 +17,9 @@ export async function inferRelationsFromDb(
   const schema = 'public' // TODO
   for (const table of tableNames) {
     const tableName = table.name
-    const columnsForTable = (await adapter.query(builder.getTableInfo(tableName))) as {
+    const columnsForTable = (await adapter.query(
+      builder.getTableInfo(tableName)
+    )) as {
       name: string
       type: string
       notnull: number

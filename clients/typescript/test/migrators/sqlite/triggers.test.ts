@@ -153,12 +153,12 @@ test('oplog trigger should handle Infinity values correctly', async (t) => {
   })
 })
 
-test('oplog trigger should separate null blobs from empty blobs', (t) => {
+test('oplog trigger should separate null blobs from empty blobs', async (t) => {
   const { db, migrateDb } = t.context
   const tableName = personTable.tableName
 
   // Migrate the DB with the necessary tables and triggers
-  migrateDb()
+  await migrateDb()
 
   // Insert null and empty rows in the table
   const insertRowNullSQL = `INSERT INTO ${tableName} (id, name, age, bmi, int8, blob) VALUES (1, 'John Doe', 30, 25.5, 7, NULL)`
@@ -168,7 +168,9 @@ test('oplog trigger should separate null blobs from empty blobs', (t) => {
 
   // Check that the oplog table contains an entry for the inserted row
   const oplogRows = db
-    .prepare(`SELECT * FROM ${satelliteDefaults.oplogTable}`)
+    .prepare(
+      `SELECT * FROM "${satelliteDefaults.oplogTable.namespace}"."${satelliteDefaults.oplogTable.tablename}"`
+    )
     .all()
   t.is(oplogRows.length, 2)
   t.regex(oplogRows[0].newRow, /,"blob":null,/)

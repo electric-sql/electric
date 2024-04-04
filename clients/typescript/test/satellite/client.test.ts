@@ -1165,6 +1165,7 @@ test.serial('client correctly handles additional data messages', async (t) => {
         HKT
       >,
     },
+    [],
     []
   )
 

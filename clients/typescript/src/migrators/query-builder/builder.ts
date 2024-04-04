@@ -336,7 +336,7 @@ export abstract class QueryBuilder {
     columns: string[],
     records: Record<string, SqlValue>[],
     maxParameters: number,
-    suffixSql: string = '',
+    suffixSql: string = ''
   ): Statement[] {
     const stmts: Statement[] = []
     const columnCount = columns.length
@@ -358,10 +358,14 @@ export abstract class QueryBuilder {
     while (processed < recordCount) {
       positionalParam = 1 // start counting parameters from 1 again
       const currentInsertCount = Math.min(recordCount - processed, batchMaxSize)
-      const sql =
+      let sql =
         baseSql +
-        Array.from({ length: currentInsertCount }, makeInsertPattern).join(',') +
-        ' ' + suffixSql
+        Array.from({ length: currentInsertCount }, makeInsertPattern).join(',')
+
+      if (suffixSql !== '') {
+        sql += ' ' + suffixSql
+      }
+
       const args = records
         .slice(processed, processed + currentInsertCount)
         .flatMap((record) => columns.map((col) => record[col] as SqlValue))

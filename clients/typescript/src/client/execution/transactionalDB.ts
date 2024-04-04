@@ -12,8 +12,8 @@ export class TransactionalDB implements DB {
     private _tx: Transaction,
     private _fields: Fields,
     private _converter: Converter
-  ) { }
-  
+  ) {}
+
   withTableSchema(fields: Fields) {
     return new TransactionalDB(this._tx, fields, this._converter)
   }
