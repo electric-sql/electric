@@ -1,4 +1,4 @@
 export interface ReplicationTransformInput<Row> {
-  transformInbound: (row: Row) => Row
-  transformOutbound: (row: Row) => Row
+  transformInbound: (row: Readonly<Row>) => Row
+  transformOutbound: (row: Readonly<Row>) => Row
 }
