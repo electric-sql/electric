@@ -37,6 +37,10 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
   defpostgres "text = text -> bool", delegate: &Kernel.==/2
   defpostgres "uuid = uuid -> bool", delegate: &Kernel.==/2
   defpostgres "bool = bool -> bool", delegate: &Kernel.==/2
+  defpostgres "*numeric_type* <> *numeric_type* -> bool", delegate: &Kernel.!=/2
+  defpostgres "text <> text -> bool", delegate: &Kernel.!=/2
+  defpostgres "uuid <> uuid -> bool", delegate: &Kernel.!=/2
+  defpostgres "bool <> bool -> bool", delegate: &Kernel.!=/2
 
   ## Numeric functions
 

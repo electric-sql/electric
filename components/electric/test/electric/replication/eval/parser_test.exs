@@ -260,5 +260,52 @@ defmodule Electric.Replication.Eval.ParserTest do
 
       assert %Const{value: true, type: :bool} = result
     end
+
+    test "should work with IN clauses" do
+      env = Env.new()
+
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(~S|1 IN (1, 2, 3)|, %{}, env)
+
+      assert %Const{value: true, type: :bool} = result
+    end
+
+    test "should work with NOT IN clauses" do
+      env = Env.new()
+
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(
+                 ~S|'test' NOT IN ('hello', 'world')|,
+                 %{},
+                 env
+               )
+
+      assert %Const{value: true, type: :bool} = result
+    end
+
+    test "should work with IN clauses when one of the options is NULL (by converting everything to NULL)" do
+      # https://www.postgresql.org/docs/current/functions-comparisons.html#FUNCTIONS-COMPARISONS-IN-SCALAR
+      env = Env.new()
+
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(
+                 ~S|'test' IN ('hello', NULL)|,
+                 %{},
+                 env
+               )
+
+      assert %Const{value: nil, type: :bool} = result
+    end
+
+    test "should not allow subqueries in IN clauses" do
+      env = Env.new()
+
+      assert {:error, "At location 5: subqueries are not supported"} =
+               Parser.parse_and_validate_expression(
+                 ~S|test IN (SELECT val FROM tester)|,
+                 %{["test"] => :int4},
+                 env
+               )
+    end
   end
 end

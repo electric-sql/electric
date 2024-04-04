@@ -147,6 +147,7 @@ defmodule Electric.Replication.Eval.Lookups do
     type_categories =
       [args | Enum.map(choices, & &1.args)]
       |> Enum.zip()
+      |> Enum.map(&Tuple.to_list/1)
       |> Enum.map(fn
         [:unknown | arg_lists] ->
           arg_lists
