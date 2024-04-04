@@ -1006,15 +1006,19 @@ export class SatelliteProcess implements Satellite {
       const q2: Statement = {
         sql: `
       UPDATE ${oplog}
-      SET clearTags =
+      SET "clearTags" =
           CASE WHEN shadow.tags = '[]' OR shadow.tags = ''
-               THEN '["' || ? || '"]'
-               ELSE '["' || ? || '",' || substring(shadow.tags, 2)
+               THEN '["' || ${this.builder.makePositionalParam(1)} || '"]'
+               ELSE '["' || ${this.builder.makePositionalParam(
+                 2
+               )} || '",' || substring(shadow.tags, 2)
           END
       FROM ${shadow} AS shadow
       WHERE ${oplog}.namespace = shadow.namespace
           AND ${oplog}.tablename = shadow.tablename
-          AND ${oplog}.primaryKey = shadow.primaryKey AND ${oplog}.timestamp = ?
+          AND ${oplog}."primaryKey" = shadow."primaryKey" AND ${oplog}.timestamp = ${this.builder.makePositionalParam(
+          3
+        )}
       `,
         args: [newTag, newTag, timestamp.toISOString()],
       }
