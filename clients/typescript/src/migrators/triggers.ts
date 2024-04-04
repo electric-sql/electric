@@ -43,10 +43,10 @@ export function generateOplogTriggers(
 ): Statement[] {
   const { tableName, namespace, columns, primary, columnTypes } = table
 
-  const newPKs = joinColsForJSON(primary, columnTypes, 'new')
-  const oldPKs = joinColsForJSON(primary, columnTypes, 'old')
-  const newRows = joinColsForJSON(columns, columnTypes, 'new')
-  const oldRows = joinColsForJSON(columns, columnTypes, 'old')
+  const newPKs = joinColsForJSON(primary, columnTypes, builder, 'new')
+  const oldPKs = joinColsForJSON(primary, columnTypes, builder, 'old')
+  const newRows = joinColsForJSON(columns, columnTypes, builder, 'new')
+  const oldRows = joinColsForJSON(columns, columnTypes, builder, 'old')
 
   const [dropFkTrigger, ...createFkTrigger] =
     builder.createOrReplaceNoFkUpdateTrigger(namespace, tableName, primary)
@@ -119,9 +119,13 @@ function generateCompensationTriggers(
     // so we need to pass an object containing the column type of the parent key.
     // We can construct that object because the type of the parent key must be the same
     // as the type of the child key that is pointing to it.
-    const joinedFkPKs = joinColsForJSON([fkTablePK], {
-      [fkTablePK]: columnTypes[foreignKey.childKey],
-    })
+    const joinedFkPKs = joinColsForJSON(
+      [fkTablePK],
+      {
+        [fkTablePK]: columnTypes[foreignKey.childKey],
+      },
+      builder
+    )
 
     const [dropInsertTrigger, ...createInsertTrigger] =
       builder.createOrReplaceInsertCompensationTrigger(
@@ -247,6 +251,7 @@ export function generateTriggers(
 function joinColsForJSON(
   cols: string[],
   colTypes: ColumnTypes,
+  builder: QueryBuilder,
   target?: 'new' | 'old'
 ) {
   // Perform transformations on some columns to ensure consistent
@@ -268,7 +273,9 @@ function joinColsForJSON(
 
     // transform blobs/bytestrings into hexadecimal strings for JSON encoding
     if (colType === 'BYTEA') {
-      return `CASE WHEN ${targetedCol} IS NOT NULL THEN hex(${targetedCol}) ELSE NULL END`
+      return `CASE WHEN ${targetedCol} IS NOT NULL THEN ${builder.toHex(
+        targetedCol
+      )} ELSE NULL END`
     }
     return targetedCol
   }

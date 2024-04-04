@@ -173,6 +173,6 @@ test('oplog trigger should separate null blobs from empty blobs', async (t) => {
     )
     .all()
   t.is(oplogRows.length, 2)
-  t.regex(oplogRows[0].newRow, /,"blob":null,/)
-  t.regex(oplogRows[1].newRow, /,"blob":"",/)
+  t.regex(oplogRows[0].newRow, /,\s*"blob":\s*null\s*,/)
+  t.regex(oplogRows[1].newRow, /,\s*"blob":\s*""\s*,/)
 })

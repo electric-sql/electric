@@ -60,6 +60,11 @@ export abstract class QueryBuilder {
   abstract countTablesIn(countName: string, tables: string[]): Statement
 
   /**
+   * Converts a column value to a hexidecimal string.
+   */
+  abstract toHex(column: string): string
+
+  /**
    * Create an index on a table.
    */
   abstract createIndex(
