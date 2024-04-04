@@ -187,7 +187,7 @@ test('oplog insertion trigger should insert row into oplog table', async (t) => 
   await migrateDb()
 
   // Insert a row in the table
-  const insertRowSQL = `INSERT INTO ${qualifiedPersonTable} (id, name, age, bmi, int8) VALUES (1, 'John Doe', 30, 25.5, 7)`
+  const insertRowSQL = `INSERT INTO ${qualifiedPersonTable} (id, name, age, bmi, int8, blob) VALUES (1, 'John Doe', 30, 25.5, 7, '\\x0001ff')`
   await db.exec({ sql: insertRowSQL })
 
   // Check that the oplog table contains an entry for the inserted row
@@ -208,7 +208,7 @@ test('oplog insertion trigger should insert row into oplog table', async (t) => 
     // by the `deserialiseRow` function in `src/satellite/oplog.ts`
     primaryKey: '{"id":"1"}',
     newRow:
-      '{"id": "1", "age": 30, "bmi": "25.5", "int8": "7", "name": "John Doe"}', // BigInts are serialized as strings in the oplog
+      '{"id": "1", "age": 30, "bmi": "25.5", "blob": "0001ff", "int8": "7", "name": "John Doe"}', // BigInts are serialized as strings in the oplog
     oldRow: null,
     timestamp: null,
     rowid: 1,
@@ -245,7 +245,7 @@ test('oplog trigger should handle Infinity values correctly', async (t) => {
     // by the `deserialiseRow` function in `src/satellite/oplog.ts`
     primaryKey: '{"id":"-Infinity"}',
     newRow:
-      '{"id": "-Infinity", "age": 30, "bmi": "Infinity", "int8": "7", "name": "John Doe"}', // BigInts are serialized as strings in the oplog
+      '{"id": "-Infinity", "age": 30, "bmi": "Infinity", "blob": null, "int8": "7", "name": "John Doe"}', // BigInts are serialized as strings in the oplog
     oldRow: null,
     timestamp: null,
     rowid: 1,
