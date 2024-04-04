@@ -1419,10 +1419,17 @@ export class SatelliteProcess implements Satellite {
       dataFlow === 'inbound'
         ? transforms.transformInbound
         : transforms.transformOutbound
-    return {
-      ...dataChange,
-      record: dataChange.record && transformToUse(dataChange.record),
-      oldRecord: dataChange.oldRecord && transformToUse(dataChange.oldRecord),
+    try {
+      return {
+        ...dataChange,
+        record: dataChange.record && transformToUse(dataChange.record),
+        oldRecord: dataChange.oldRecord && transformToUse(dataChange.oldRecord),
+      }
+    } catch (err: any) {
+      throw new SatelliteError(
+        SatelliteErrorCode.REPLICATION_TRANSFORM_ERROR,
+        err.message
+      )
     }
   }
 

@@ -319,3 +319,75 @@ test('clearReplicationTransform removes any transform present', async (t) => {
     other: null,
   })
 })
+
+test('failing outbound transform should result in failed snapshot', async (t) => {
+  const { adapter, runMigrations, satellite, authState, client, token } =
+    t.context
+
+  await runMigrations()
+  await startSatellite(satellite, authState, token)
+
+  t.deepEqual(client.outboundTransactionsEnqueued, [])
+
+  satellite.setReplicationTransform(
+    new QualifiedTablename('main', 'parent'),
+    (row) => row,
+    (_) => {
+      throw new Error('Outbound transform failed')
+    }
+  )
+
+  await adapter.run({
+    sql: `INSERT INTO parent (id, value, other) VALUES (?, ?, ?);`,
+    args: [1, 'local', null],
+  })
+
+  await t.throwsAsync(() => satellite._performSnapshot(), {
+    message: 'Outbound transform failed',
+  })
+
+  t.deepEqual(client.outboundTransactionsEnqueued, [])
+})
+
+test('failing inbound transform should terminate replication', async (t) => {
+  const { adapter, runMigrations, satellite, authState, client, token } =
+    t.context
+
+  await runMigrations()
+  await startSatellite(satellite, authState, token)
+
+  satellite.setReplicationTransform(
+    new QualifiedTablename('main', 'parent'),
+
+    (_) => {
+      throw new Error('Inbound transform failed')
+    },
+    (row) => row
+  )
+
+  await adapter.run({
+    sql: `INSERT INTO parent (id, value, other) VALUES (?, ?, ?);`,
+    args: [1, 'local', null],
+  })
+
+  client.transactionsCb?.({
+    commit_timestamp: Long.fromNumber(new Date().getTime()),
+    id: new Long(10),
+    lsn: new Uint8Array(),
+    changes: [
+      {
+        relation: relations.parent,
+        record: {
+          id: 1,
+          value: 'local',
+          other: null,
+        },
+        tags: [],
+        type: DataChangeType.INSERT,
+      },
+    ],
+  })
+
+  await new Promise((res) => setTimeout(res, 100))
+  t.is(satellite.connectivityState?.status, 'disconnected')
+})

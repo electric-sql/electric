@@ -86,6 +86,9 @@ export enum SatelliteErrorCode {
   // shape data errors
   SHAPE_DELIVERY_ERROR,
   SHAPE_SIZE_LIMIT_EXCEEDED,
+
+  // replication transform errors
+  REPLICATION_TRANSFORM_ERROR,
 }
 
 export type SocketCloseReason =
