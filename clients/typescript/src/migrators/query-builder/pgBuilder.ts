@@ -86,16 +86,21 @@ class PgBuilder extends QueryBuilder {
             ELSE 1
           END AS notnull,
           c.column_default AS dflt_value,
-          EXISTS (
-            SELECT pg_class.relname, pg_attribute.attname
-            FROM pg_class, pg_attribute, pg_index
-            WHERE pg_class.oid = pg_attribute.attrelid AND
-                pg_class.oid = pg_index.indrelid AND
-                pg_attribute.attnum = ANY(pg_index.indkey) AND
-                pg_index.indisprimary = 't' AND
-                pg_class.relname = $1 AND
-                pg_attribute.attname = c.column_name
-          ) :: INTEGER AS pk
+          (
+              SELECT CASE
+                       -- if the column is not part of the primary key
+                       -- then return 0
+                       WHEN NOT pg_attribute.attnum = ANY(pg_index.indkey) THEN 0
+                       -- else, return the position of the column in the primary key
+                       -- pg_index.indkey is indexed from 0 so we add 1
+                       ELSE array_position(pg_index.indkey, pg_attribute.attnum) + 1
+                     END AS pk
+              FROM pg_class, pg_attribute, pg_index
+              WHERE pg_class.oid = pg_attribute.attrelid AND
+                  pg_class.oid = pg_index.indrelid AND
+                  pg_class.relname = $1 AND
+                  pg_attribute.attname = c.column_name
+            )
         FROM information_schema.columns AS c
         WHERE
           c.table_name = $1;
