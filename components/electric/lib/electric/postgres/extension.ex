@@ -27,6 +27,7 @@ defmodule Electric.Postgres.Extension do
   @electrified_tracking_relation "electrified"
   @transaction_marker_relation "transaction_marker"
   @acked_client_lsn_relation "acknowledged_client_lsns"
+  @client_shape_subscriptions_relation "client_shape_subscriptions"
 
   @grants_relation "grants"
   @roles_relation "roles"
@@ -41,6 +42,7 @@ defmodule Electric.Postgres.Extension do
   @electrified_tracking_table electric.(@electrified_tracking_relation)
   @transaction_marker_table electric.(@transaction_marker_relation)
   @acked_client_lsn_table electric.(@acked_client_lsn_relation)
+  @client_shape_subscriptions_table electric.(@client_shape_subscriptions_relation)
 
   @grants_table electric.(@grants_relation)
   @roles_table electric.(@roles_relation)
@@ -109,6 +111,7 @@ defmodule Electric.Postgres.Extension do
   def electrified_tracking_table, do: @electrified_tracking_table
   def transaction_marker_table, do: @transaction_marker_table
   def acked_client_lsn_table, do: @acked_client_lsn_table
+  def client_shape_subscriptions_table, do: @client_shape_subscriptions_table
 
   def grants_table, do: @grants_table
   def roles_table, do: @roles_table
@@ -362,7 +365,8 @@ defmodule Electric.Postgres.Extension do
       Migrations.Migration_20231206130400_ConvertReplicaTriggersToAlways,
       Migrations.Migration_20240110110200_DropUnusedFunctions,
       Migrations.Migration_20240205141200_ReinstallTriggerFunctionWriteCorrectMaxTag,
-      Migrations.Migration_20240213160300_DropGenerateElectrifiedSqlFunction
+      Migrations.Migration_20240213160300_DropGenerateElectrifiedSqlFunction,
+      Migrations.Migration_20240401134100_ClientReconnectionInfoTables
     ]
   end
 
