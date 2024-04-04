@@ -10,7 +10,7 @@ import {
 import { UpdateInput, UpdateManyInput } from '../input/updateInput'
 import { DeleteInput, DeleteManyInput } from '../input/deleteInput'
 import { DatabaseAdapter } from '../../electric/adapter'
-import { Builder } from './builder'
+import { Builder, makeFilter } from './builder'
 import { Executor } from '../execution/executor'
 import { BatchPayload } from '../output/batchPayload'
 import { InvalidArgumentError } from '../validation/errors/invalidArgumentError'
@@ -157,7 +157,7 @@ export class Table<
   protected computeShape<T extends SyncInput<Include, Where>>(i: T): Shape {
     // Recursively go over the included fields
     const include = i.include ?? {}
-    const where = i.where ?? {}
+    const where = i.where ?? ''
     const includedFields = Object.keys(include)
     const includedTables = includedFields.map((field: string): Rel => {
       // Fetch the table that is included
@@ -1645,47 +1645,49 @@ export function liveRawQuery(
   return result
 }
 
-function makeSqlWhereClause(where: object): string {
-  // we wrap it in an array and then flatten it
-  // in case the user provided an object instead of an array of objects
-  const orConnectedObjects = [
-    (where as { OR?: object | object[] })['OR'] ?? [],
-  ].flat()
-  const orSqlClause =
-    orConnectedObjects.length === 0
-      ? ''
-      : '(' +
-        orConnectedObjects
-          .map((o) => `(${makeSqlWhereClause(o)})`)
-          .join(' OR ') +
-        ')'
-  const notConnector = [
-    (where as { NOT?: object | object[] })['NOT'] ?? [],
-  ].flat()
-  const notSqlClause =
-    notConnector.length === 0
-      ? ''
-      : 'NOT (' +
-        notConnector.map((o) => `(${makeSqlWhereClause(o)})`).join(' OR ') +
-        ')'
-  const andConnector = [
-    (where as { AND?: object | object[] })['AND'] ?? [],
-  ].flat()
-  const andSqlClause = andConnector.map(makeSqlWhereClause).join(' AND ')
-  const fieldSqlClause = Object.entries(where)
-    .filter(([key, _]) => !['AND', 'OR', 'NOT'].includes(key))
-    .map(([key, value]) => {
-      if (typeof value === 'string') {
-        return `this.${key} = '${value.replace("'", "''")}'`
-      } else if (typeof value === 'number' || typeof value === 'bigint') {
-        return `this.${key} = ${value}`
-      } else {
-        throw new Error(
-          'Current implementation does not support non-string comparisons'
-        )
-      }
-    })
-    .join(' AND ')
-  const clauses = [fieldSqlClause, andSqlClause, orSqlClause, notSqlClause]
-  return clauses.filter((clause) => clause !== '').join(' AND ')
+/** Compile Prisma-like where-clause object into a SQL where clause that the server can understand. */
+function makeSqlWhereClause(where: string | Record<string, any>): string {
+  if (typeof where === 'string') return where
+
+  const statements = Object.entries(where)
+    .flatMap(([key, value]) => makeFilter(value, key, 'this.'))
+    .map(interpolateArgs)
+
+  if (statements.length < 2) return statements[0] ?? ''
+  else return statements.map((x) => '(' + x + ')').join(' AND ')
+}
+
+/** Replace all `?` parameter placeholders in SQL with provided args. */
+function interpolateArgs({
+  sql,
+  args,
+}: {
+  sql: string
+  args?: unknown[]
+}): string {
+  if (args === undefined) return sql
+
+  let matchPos = 0
+  const argsLength = args.length
+  /* We're looking for any `?` in the provided sql statement that aren't preceded by a word character
+     This is how `builder.ts#makeFilter` builds SQL statements, but we need to interpolate them before
+     sending to the server. SQL here shouldn't contain any user strings, only placeholders, so it's safe.
+  */
+  return sql.replaceAll(/(?<!\w)\?/g, (match) =>
+    matchPos < argsLength ? quoteValue(args[matchPos++]) : match
+  )
+}
+
+/** Quote a JS value to be inserted in a PostgreSQL where query for the server. */
+function quoteValue(value: unknown): string {
+  if (typeof value === 'string') return `'${value.replaceAll("'", "''")}'`
+  if (typeof value === 'number') return value.toString()
+  if (value instanceof Date && !isNaN(value.valueOf()))
+    return `'${value.toISOString()}'`
+  if (typeof value === 'boolean') return value.toString()
+  if (Array.isArray(value)) return `(${value.map(quoteValue).join(', ')})`
+
+  throw new Error(
+    `Sorry! We currently cannot handle where clauses using value ${value}. You can try serializing it to a string yourself. \nPlease leave a feature request at https://github.com/electric-sql/electric/issues.`
+  )
 }

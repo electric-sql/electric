@@ -338,7 +338,12 @@ test.serial('nested shape is constructed', async (t) => {
   const { Post } = t.context as ContextType
   const input = {
     where: {
-      OR: [{ id: 5 }, { id: 42 }],
+      OR: [
+        {
+          id: { in: [3, 'test'] },
+        },
+        { test: { startsWith: '%hello' } },
+      ],
       NOT: [{ id: 1 }, { id: 2 }],
       AND: [{ nbr: 6 }, { nbr: 7 }],
       title: 'foo',
@@ -346,6 +351,11 @@ test.serial('nested shape is constructed', async (t) => {
     },
     include: {
       author: {
+        // This is not allowed on the server (no filtering of many-to-one relations), but we're just testing that `where`
+        // clauses on nested objects are parsed correctly
+        where: {
+          value: { lt: new Date('2024-01-01 00:00:00Z') },
+        },
         include: {
           profile: true,
         },
@@ -358,11 +368,12 @@ test.serial('nested shape is constructed', async (t) => {
   t.deepEqual(shape, {
     tablename: 'Post',
     where:
-      "this.title = 'foo' AND this.contents = 'important''' AND this.nbr = 6 AND this.nbr = 7 AND ((this.id = 5) OR (this.id = 42)) AND NOT ((this.id = 1) OR (this.id = 2))",
+      "(this.id IN (3, 'test') OR this.test LIKE '\\%hello%') AND ((NOT this.id = 1) AND (NOT this.id = 2)) AND (this.nbr = 6 AND this.nbr = 7) AND (this.title = 'foo') AND (this.contents = 'important''')",
     include: [
       {
         foreignKey: ['authorId'],
         select: {
+          where: "this.value < '2024-01-01T00:00:00.000Z'",
           tablename: 'User',
           include: [
             {
