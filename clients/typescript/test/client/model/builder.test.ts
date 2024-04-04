@@ -52,7 +52,7 @@ test('null values are inserted as NULL', (t) => {
 
   t.is(
     query,
-    "INSERT INTO Post (id, title, contents, nbr) VALUES ('i1', 't1', 'c1', NULL) RETURNING id, title, contents, nbr"
+    `INSERT INTO "Post" (id, title, contents, nbr) VALUES ('i1', 't1', 'c1', NULL) RETURNING id, title, contents, nbr`
   )
 })
 
@@ -66,7 +66,7 @@ test('create query', (t) => {
 
   t.is(
     query,
-    "INSERT INTO Post (id, title, contents, nbr) VALUES ('i1', 't1', 'c1', 18) RETURNING id, title, contents, nbr"
+    `INSERT INTO "Post" (id, title, contents, nbr) VALUES ('i1', 't1', 'c1', 18) RETURNING id, title, contents, nbr`
   )
 })
 
@@ -79,7 +79,7 @@ test('createMany query', (t) => {
 
   t.is(
     query,
-    "INSERT INTO Post (id, title, contents, nbr) VALUES ('i1', 't1', 'c1', 18), ('i2', 't2', 'c2', 21)"
+    `INSERT INTO "Post" (id, title, contents, nbr) VALUES ('i1', 't1', 'c1', 18), ('i2', 't2', 'c2', 21)`
   )
 
   const query2 = tbl
@@ -91,7 +91,7 @@ test('createMany query', (t) => {
 
   t.is(
     query2,
-    "INSERT INTO Post (id, title, contents, nbr) VALUES ('i1', 't1', 'c1', 18), ('i2', 't2', 'c2', 21) ON CONFLICT DO NOTHING"
+    `INSERT INTO "Post" (id, title, contents, nbr) VALUES ('i1', 't1', 'c1', 18), ('i2', 't2', 'c2', 21) ON CONFLICT DO NOTHING`
   )
 })
 
@@ -107,7 +107,7 @@ test('findUnique query', async (t) => {
 
   t.is(
     query,
-    "SELECT id, nbr, title, contents FROM Post WHERE (id = 'i2') AND (nbr = 21) LIMIT 2"
+    `SELECT id, nbr, title, contents FROM "Post" WHERE (id = 'i2') AND (nbr = 21) LIMIT 2`
   )
 })
 
@@ -127,7 +127,7 @@ test('findUnique query with selection', (t) => {
 
   t.is(
     query,
-    "SELECT id, nbr, title FROM Post WHERE (id = 'i2') AND (nbr = 21) LIMIT 2"
+    `SELECT id, nbr, title FROM "Post" WHERE (id = 'i2') AND (nbr = 21) LIMIT 2`
   )
 })
 
@@ -147,7 +147,7 @@ test('findUnique query with selection of NULL value', (t) => {
 
   t.is(
     query,
-    "SELECT id, nbr, title FROM Post WHERE (id = 'i2') AND (nbr IS NULL) LIMIT 2"
+    `SELECT id, nbr, title FROM "Post" WHERE (id = 'i2') AND (nbr IS NULL) LIMIT 2`
   )
 })
 
@@ -167,7 +167,7 @@ test('findUnique query with selection of non-NULL value', (t) => {
 
   t.is(
     query,
-    "SELECT id, nbr, title FROM Post WHERE (id = 'i2') AND (nbr IS NOT NULL) LIMIT 2"
+    `SELECT id, nbr, title FROM "Post" WHERE (id = 'i2') AND (nbr IS NOT NULL) LIMIT 2`
   )
 })
 
@@ -187,7 +187,7 @@ test('findUnique query with selection of row that does not equal a value', (t) =
 
   t.is(
     query,
-    "SELECT id, nbr, title FROM Post WHERE (id = 'i2') AND (nbr != 5) LIMIT 2"
+    `SELECT id, nbr, title FROM "Post" WHERE (id = 'i2') AND (nbr != 5) LIMIT 2`
   )
 })
 
@@ -203,7 +203,7 @@ test('findUnique query supports several filters', (t) => {
 
   t.is(
     query,
-    "SELECT id, nbr, title, contents FROM Post WHERE (id = 'i2') AND (nbr IN (1, 2, 3)) AND (nbr != 5) LIMIT 2"
+    `SELECT id, nbr, title, contents FROM "Post" WHERE (id = 'i2') AND (nbr IN (1, 2, 3)) AND (nbr != 5) LIMIT 2`
   )
 })
 
@@ -242,7 +242,7 @@ test('findMany allows results to be ordered on one field', (t) => {
     })
     .toString()
 
-  t.is(query, 'SELECT id, title, contents, nbr FROM Post ORDER BY id ASC')
+  t.is(query, 'SELECT id, title, contents, nbr FROM "Post" ORDER BY id ASC')
 })
 
 test('findMany allows results to be ordered on several fields', (t) => {
@@ -264,7 +264,7 @@ test('findMany allows results to be ordered on several fields', (t) => {
 
   t.is(
     query,
-    'SELECT id, title, contents, nbr FROM Post ORDER BY id ASC, title DESC'
+    'SELECT id, title, contents, nbr FROM "Post" ORDER BY id ASC, title DESC'
   )
 })
 
@@ -279,7 +279,7 @@ test('findMany supports pagination', (t) => {
     })
     .toString()
 
-  t.is(query, 'SELECT id, title, contents, nbr FROM Post LIMIT 1 OFFSET 1')
+  t.is(query, 'SELECT id, title, contents, nbr FROM "Post" LIMIT 1 OFFSET 1')
 })
 
 test('findMany supports distinct results', (t) => {
@@ -292,7 +292,7 @@ test('findMany supports distinct results', (t) => {
     })
     .toString()
 
-  t.is(query, 'SELECT DISTINCT ON (nbr) id, title, contents, nbr FROM Post')
+  t.is(query, 'SELECT DISTINCT ON (nbr) id, title, contents, nbr FROM "Post"')
 })
 
 test('findMany supports IN filters in where argument', (t) => {
@@ -308,7 +308,7 @@ test('findMany supports IN filters in where argument', (t) => {
 
   t.is(
     query,
-    'SELECT nbr, id, title, contents FROM Post WHERE (nbr IN (1, 5, 18))'
+    'SELECT nbr, id, title, contents FROM "Post" WHERE (nbr IN (1, 5, 18))'
   )
 })
 
@@ -325,7 +325,7 @@ test('findMany supports NOT IN filters in where argument', (t) => {
 
   t.is(
     query,
-    'SELECT nbr, id, title, contents FROM Post WHERE (nbr NOT IN (1, 5, 18))'
+    'SELECT nbr, id, title, contents FROM "Post" WHERE (nbr NOT IN (1, 5, 18))'
   )
 })
 
@@ -345,7 +345,7 @@ test('findMany supports lt, lte, gt, gte filters in where argument', (t) => {
 
   t.is(
     query,
-    'SELECT nbr, id, title, contents FROM Post WHERE (nbr < 11) AND (nbr <= 10) AND (nbr > 4) AND (nbr >= 5)'
+    'SELECT nbr, id, title, contents FROM "Post" WHERE (nbr < 11) AND (nbr <= 10) AND (nbr > 4) AND (nbr >= 5)'
   )
 })
 
@@ -362,7 +362,7 @@ test('findMany supports startsWith filter in where argument', (t) => {
 
   t.is(
     query,
-    "SELECT title, id, contents, nbr FROM Post WHERE (title LIKE 'foo%')"
+    `SELECT title, id, contents, nbr FROM "Post" WHERE (title LIKE 'foo%')`
   )
 })
 
@@ -379,7 +379,7 @@ test('findMany supports endsWith filter in where argument', (t) => {
 
   t.is(
     query,
-    "SELECT title, id, contents, nbr FROM Post WHERE (title LIKE '%foo')"
+    `SELECT title, id, contents, nbr FROM "Post" WHERE (title LIKE '%foo')`
   )
 })
 
@@ -396,7 +396,7 @@ test('findMany supports contains filter in where argument', (t) => {
 
   t.is(
     query,
-    "SELECT title, id, contents, nbr FROM Post WHERE (title LIKE '%foo%')"
+    `SELECT title, id, contents, nbr FROM "Post" WHERE (title LIKE '%foo%')`
   )
 })
 
@@ -437,7 +437,7 @@ test('findMany supports boolean filters in where argument', (t) => {
 
   t.is(
     query,
-    "SELECT nbr, id, title, contents FROM Post WHERE (title LIKE '%foo%' OR title = 'bar') AND (contents = 'content' AND nbr = 6) AND ((NOT title = 'foobar') AND (NOT title = 'barfoo')) AND (nbr = 5)"
+    `SELECT nbr, id, title, contents FROM "Post" WHERE (title LIKE '%foo%' OR title = 'bar') AND (contents = 'content' AND nbr = 6) AND ((NOT title = 'foobar') AND (NOT title = 'barfoo')) AND (nbr = 5)`
   )
 })
 
@@ -468,7 +468,7 @@ test('findMany supports single AND filter and single NOT filter in where argumen
 
   t.is(
     query,
-    "SELECT nbr, id, title, contents FROM Post WHERE (title LIKE '%foo%' OR title = 'bar') AND (contents = 'content') AND (NOT title = 'foobar') AND (nbr = 5)"
+    `SELECT nbr, id, title, contents FROM "Post" WHERE (title LIKE '%foo%' OR title = 'bar') AND (contents = 'content') AND (NOT title = 'foobar') AND (nbr = 5)`
   )
 })
 
@@ -482,7 +482,7 @@ test('update query', (t) => {
 
   t.is(
     query,
-    "UPDATE Post SET title = 'Foo', contents = 'Bar' WHERE (id = '1') RETURNING id, title, contents, nbr"
+    `UPDATE "Post" SET title = 'Foo', contents = 'Bar' WHERE (id = '1') RETURNING id, title, contents, nbr`
   )
 })
 
@@ -496,8 +496,7 @@ test('updateMany query', (t) => {
     })
     .toString()
 
-  const sql =
-    "UPDATE Post SET title = 'Foo', contents = 'Bar' RETURNING id, title, contents, nbr"
+  const sql = `UPDATE "Post" SET title = 'Foo', contents = 'Bar' RETURNING id, title, contents, nbr`
 
   t.is(query1, sql)
 })
@@ -509,7 +508,7 @@ test('delete query', (t) => {
     })
     .toString()
 
-  t.is(query, "DELETE FROM Post WHERE (id = 'Foo') AND (title = 'Bar')")
+  t.is(query, `DELETE FROM "Post" WHERE (id = 'Foo') AND (title = 'Bar')`)
 })
 
 test('deleteMany query', (t) => {
@@ -519,7 +518,7 @@ test('deleteMany query', (t) => {
     })
     .toString()
 
-  t.is(query1, "DELETE FROM Post WHERE (id = 'Foo') AND (title = 'Bar')")
+  t.is(query1, `DELETE FROM "Post" WHERE (id = 'Foo') AND (title = 'Bar')`)
 
   const query2 = tbl
     .deleteMany({
@@ -529,6 +528,6 @@ test('deleteMany query', (t) => {
     })
     .toString()
 
-  const sql = 'DELETE FROM Post'
+  const sql = 'DELETE FROM "Post"'
   t.is(query2, sql)
 })

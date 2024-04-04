@@ -75,7 +75,7 @@ test('generateTableTriggers should create correct triggers for a table', (t) => 
               'personTable',
               'INSERT',
               json_strip_nulls(json_build_object('id', cast(new."id" as TEXT))),
-              jsonb_build_object('age', new."age", 'bmi', cast(new."bmi" as TEXT), 'id', cast(new."id" as TEXT), 'int8', cast(new."int8" as TEXT), 'name', new."name"),
+              jsonb_build_object('age', new."age", 'blob', CASE WHEN new."blob" IS NOT NULL THEN encode(new."blob"::bytea, 'hex') ELSE NULL END, 'bmi', cast(new."bmi" as TEXT), 'id', cast(new."id" as TEXT), 'int8', cast(new."int8" as TEXT), 'name', new."name"),
               NULL,
               NULL
             );
