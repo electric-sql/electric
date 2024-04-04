@@ -292,7 +292,7 @@ export function writeTableDescriptionType(
   fileWriter.writer
     .write('TableSchema<')
     .newLine()
-    .writeLine(`  z.infer<typeof ${modelName}CreateInputSchema>,`)
+    .writeLine(`  z.infer<typeof ${modelName}UncheckedCreateInputSchema>,`)
     .writeLine(`  Prisma.${modelName}CreateArgs['data'],`)
     .writeLine(`  Prisma.${modelName}UpdateArgs['data'],`)
     .writeLine(`  Prisma.${modelName}FindFirstArgs['select'],`)
