@@ -6,7 +6,6 @@ import {
   omitCountFromSelectAndIncludeSchema,
   parseNestedUpdate,
   validate,
-  validateRecordTransformation,
 } from '../validation/validation'
 import { UpdateInput, UpdateManyInput } from '../input/updateInput'
 import { DeleteInput, DeleteManyInput } from '../input/deleteInput'
@@ -37,25 +36,25 @@ import {
   Statement,
   createQueryResultSubscribeFunction,
   isObject,
-  Record as RowRecord,
 } from '../../util'
 import { NarrowInclude } from '../input/inputNarrowing'
 import { IShapeManager } from './shapes'
 import { ShapeSubscription } from '../../satellite'
 import {
-  Transformation,
   transformCreate,
   transformCreateMany,
   transformDelete,
   transformDeleteMany,
-  transformFields,
   transformFindNonUnique,
   transformFindUnique,
   transformUpdate,
   transformUpdateMany,
 } from '../conversions/input'
 import { Rel, Shape } from '../../satellite/shapes/types'
-import { IReplicationTransformManager } from './transforms'
+import {
+  IReplicationTransformManager,
+  liftReplicationTransform,
+} from './transforms'
 import { ReplicationTransformInput } from '../input/replicationTransformInput'
 
 type AnyTable = Table<any, any, any, any, any, any, any, any, any, HKT>
@@ -1723,51 +1722,4 @@ function makeSqlWhereClause(where: object): string {
     .join(' AND ')
   const clauses = [fieldSqlClause, andSqlClause, orSqlClause, notSqlClause]
   return clauses.filter((clause) => clause !== '').join(' AND ')
-}
-
-/**
- * Lifts a typed record transformation {@link transformRow} into a transformation of
- * raw records, applying appropriate parsing and validation, including forbidding
- * changes to specified {@link immutableFields}
- *
- * @param transformRow transformation of record of type {@link T}
- * @param fields fields to specify the transformation from raw record to record of type {@link T}
- * @param schema schema to parse/validate raw record to record of type {@link T}
- * @param immutableFields - fields that cannot be modified by {@link transformRow}
- * @return transformation of raw record
- */
-function liftReplicationTransform<T extends Record<string, unknown>>(
-  transformRow: (row: T) => T,
-  fields: Fields,
-  schema: z.ZodTypeAny,
-  immutableFields: string[]
-): (row: RowRecord) => RowRecord {
-  return (row: RowRecord) => {
-    // parse raw record according to specified fields
-    const parsedRow = transformFields(
-      row,
-      fields,
-      Transformation.Sqlite2Js
-    ) as T
-
-    // apply specified transformation
-    const transformedParsedRow = transformRow(parsedRow as Readonly<T>)
-
-    // validate transformed row and convert back to raw record
-    const validatedTransformedParsedRow = validate(transformedParsedRow, schema)
-    const transformedRow = transformFields(
-      validatedTransformedParsedRow,
-      fields,
-      Transformation.Js2Sqlite
-    ) as RowRecord
-
-    // check if any of the immutable fields were modified
-    const validatedTransformedRow = validateRecordTransformation(
-      row,
-      transformedRow,
-      immutableFields
-    )
-
-    return validatedTransformedRow
-  }
 }
