@@ -189,7 +189,7 @@ export class MockSatelliteClient
   disconnected = true
   inboundAck: Uint8Array = DEFAULT_LOG_POS
 
-  outboundSent: Uint8Array = DEFAULT_LOG_POS
+  outboundTransactionsEnqueued: DataTransaction[] = []
 
   // to clear any pending timeouts
   timeouts: NodeJS.Timeout[] = []
@@ -342,7 +342,11 @@ export class MockSatelliteClient
   }
 
   getLastSentLsn(): Uint8Array {
-    return this.outboundSent
+    return (
+      this.outboundTransactionsEnqueued[
+        this.outboundTransactionsEnqueued.length - 1
+      ]?.lsn ?? DEFAULT_LOG_POS
+    )
   }
   connect(): Promise<void> {
     if (this.isDown) {
@@ -431,7 +435,7 @@ export class MockSatelliteClient
       )
     }
 
-    this.outboundSent = transaction.lsn
+    this.outboundTransactionsEnqueued.push(transaction)
   }
 
   subscribeToOutboundStarted(callback: OutboundStartedCallback): void {

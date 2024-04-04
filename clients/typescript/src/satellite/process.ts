@@ -1593,14 +1593,14 @@ export class SatelliteProcess implements Satellite {
     transformInbound: (row: RowRecord) => RowRecord,
     transformOutbound: (row: RowRecord) => RowRecord
   ): void {
-    this.replicationTransforms.set(tableName.toString(), {
+    this.replicationTransforms.set(tableName.tablename, {
       transformInbound: transformInbound,
       transformOutbound: transformOutbound,
     })
   }
 
   public clearReplicationTransform(tableName: QualifiedTablename): void {
-    this.replicationTransforms.delete(tableName.tablename.toString())
+    this.replicationTransforms.delete(tableName.tablename)
   }
 }
 
