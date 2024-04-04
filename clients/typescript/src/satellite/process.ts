@@ -1598,6 +1598,10 @@ export class SatelliteProcess implements Satellite {
       transformOutbound: transformOutbound,
     })
   }
+
+  public clearReplicationTransform(tableName: QualifiedTablename): void {
+    this.replicationTransforms.delete(tableName.tablename.toString())
+  }
 }
 
 function _applyDeleteOperation(

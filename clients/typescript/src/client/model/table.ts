@@ -1623,14 +1623,16 @@ export class Table<
       )
 
     this._replicationTransformManager.setTableTransform(
-      this.tableName,
+      this._qualifiedTableName,
       liftTableReplicationTransform(i.transformInbound),
       liftTableReplicationTransform(i.transformOutbound)
     )
   }
 
   clearReplicationTransform(): void {
-    this._replicationTransformManager.clearTableTransform(this.tableName)
+    this._replicationTransformManager.clearTableTransform(
+      this._qualifiedTableName
+    )
   }
 }
 
