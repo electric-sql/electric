@@ -16,9 +16,10 @@ type Context = {
   stopPG: () => Promise<void>
 }
 
+let port = 2934
 test.beforeEach(async (t) => {
   const dbName = `schema-migrations-${randomValue()}`
-  const { db, stop } = await makePgDatabase(dbName, 5432)
+  const { db, stop } = await makePgDatabase(dbName, port++)
   const adapter = new DatabaseAdapter(db)
 
   t.context = {
