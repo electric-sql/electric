@@ -1,6 +1,5 @@
 import { mkdir, rm as removeFile } from 'node:fs/promises'
 import { RelationsCache, randomValue } from '../../src/util'
-import Database from 'better-sqlite3'
 import type { Database as SqliteDB } from 'better-sqlite3'
 import SqliteDatabase from 'better-sqlite3'
 import { DatabaseAdapter as SqliteDatabaseAdapter } from '../../src/drivers/better-sqlite3'
@@ -389,7 +388,8 @@ export async function migrateDb(
   const namespace = table.namespace
   const tableName = table.tableName
   // Create the table in the database on the given namespace
-  const createTableSQL = `CREATE TABLE "${namespace}"."${tableName}" (id REAL PRIMARY KEY, name TEXT, age INTEGER, bmi REAL, int8 INTEGER, blob BLOB)`
+  const blobType = builder.dialect === 'SQLite' ? 'BLOB' : 'BYTEA'
+  const createTableSQL = `CREATE TABLE "${namespace}"."${tableName}" (id REAL PRIMARY KEY, name TEXT, age INTEGER, bmi REAL, int8 INTEGER, blob ${blobType})`
   await db.run({ sql: createTableSQL })
 
   // Apply the initial migration on the database

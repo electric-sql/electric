@@ -387,7 +387,7 @@ function deserialiseRow(str: string, rel: Pick<Relation, 'columns'>): Rec {
 
 export const fromTransaction = (
   transaction: DataTransaction,
-  relations: RelationsCache,
+  relations: RelationsCache
 ): OplogEntry[] => {
   return transaction.changes.map((t) => {
     const columnValues = t.record ? t.record : t.oldRecord!
