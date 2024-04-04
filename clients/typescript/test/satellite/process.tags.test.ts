@@ -137,7 +137,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
     t.is(0, shadowEntry2.length)
     // clearTags contains previous shadowTag
     t.like(localEntries2[1], {
-      clearTags: tag1,
+      clearTags: genEncodedTags(clientId, [txDate2, txDate1]),
       timestamp: txDate2.toISOString(),
     })
 
