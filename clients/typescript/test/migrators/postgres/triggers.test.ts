@@ -263,7 +263,7 @@ test('oplog trigger should separate null blobs from empty blobs', async (t) => {
 
   // Insert null and empty rows in the table
   const insertRowNullSQL = `INSERT INTO "${namespace}"."${tableName}" (id, name, age, bmi, int8, blob) VALUES (1, 'John Doe', 30, 25.5, 7, NULL)`
-  const insertRowEmptySQL = `INSERT INTO "${namespace}"."${tableName}" (id, name, age, bmi, int8, blob) VALUES (2, 'John Doe', 30, 25.5, 7, x'')`
+  const insertRowEmptySQL = `INSERT INTO "${namespace}"."${tableName}" (id, name, age, bmi, int8, blob) VALUES (2, 'John Doe', 30, 25.5, 7, '\\x')`
   await db.exec({ sql: insertRowNullSQL })
   await db.exec({ sql: insertRowEmptySQL })
 
@@ -272,6 +272,6 @@ test('oplog trigger should separate null blobs from empty blobs', async (t) => {
     sql: `SELECT * FROM "${satelliteDefaults.oplogTable.namespace}"."${satelliteDefaults.oplogTable.tablename}"`,
   })
   t.is(oplogRows.length, 2)
-  t.regex(oplogRows[0].newRow as string, /,"blob":null,/)
-  t.regex(oplogRows[1].newRow as string, /,"blob":"",/)
+  t.regex(oplogRows[0].newRow as string, /,\s*"blob":\s*null\s*,/)
+  t.regex(oplogRows[1].newRow as string, /,\s*"blob":\s*""\s*,/)
 })

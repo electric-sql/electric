@@ -45,6 +45,10 @@ class SqliteBuilder extends QueryBuilder {
     }
   }
 
+  toHex(column: string): string {
+    return `hex(${column})`
+  }
+
   getTableInfo(tablename: string): Statement {
     return {
       sql: `SELECT name, type, "notnull", dflt_value, pk FROM pragma_table_info(?)`,
