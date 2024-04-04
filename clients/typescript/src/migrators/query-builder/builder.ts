@@ -65,6 +65,11 @@ export abstract class QueryBuilder {
   abstract toHex(column: string): string
 
   /**
+   * Converts a hexidecimal string to a hex value.
+   */
+  abstract hexValue(hexString: string): string
+
+  /**
    * Create an index on a table.
    */
   abstract createIndex(
