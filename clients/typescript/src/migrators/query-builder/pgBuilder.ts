@@ -47,6 +47,10 @@ class PgBuilder extends QueryBuilder {
     return `encode(${column}::bytea, 'hex')`
   }
 
+  hexValue(hexString: string): string {
+    return `'\\x${hexString}'`
+  }
+
   createIndex(
     indexName: string,
     onTable: QualifiedTablename,

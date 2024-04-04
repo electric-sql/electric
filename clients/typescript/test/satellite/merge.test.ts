@@ -208,7 +208,11 @@ const setupPG: SetupFn = async (t: ExecutionContext<unknown>) => {
     await migrateDb(adapter, personTable, builder)
 
     // Insert a row in the table
-    const insertRowSQL = `INSERT INTO "${personTable.namespace}"."${personTable.tableName}" (id, name, age, bmi, int8, blob) VALUES (54321, 'John Doe', 30, 25.5, 7, x'0001ff')`
+    const insertRowSQL = `INSERT INTO "${personTable.namespace}"."${
+      personTable.tableName
+    }" (id, name, age, bmi, int8, blob) VALUES (54321, 'John Doe', 30, 25.5, 7, ${builder.hexValue(
+      '0001ff'
+    )})`
     await adapter.run({ sql: insertRowSQL })
 
     // Fetch the oplog entry for the inserted row
