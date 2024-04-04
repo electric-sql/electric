@@ -253,7 +253,7 @@ export const makeContext = async (
   const db = new Database(dbName)
   const adapter = new DatabaseAdapter(db)
   const migrator = new BundleMigrator(adapter, migrations)
-  const notifier = new MockNotifier(dbName)
+  const notifier = new MockNotifier(dbName, new EventEmitter())
   const client = new MockSatelliteClient()
   const satellite = new SatelliteProcess(
     dbName,
