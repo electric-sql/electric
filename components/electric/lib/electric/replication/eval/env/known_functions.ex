@@ -43,6 +43,8 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
   defcompare "text", :using_kernel
   defcompare "uuid", :using_kernel
   defcompare "date", using: &Date.compare/2
+  defcompare "time", using: &Time.compare/2
+  defcompare "timestamp", using: &NaiveDateTime.compare/2
 
   defpostgres "bool = bool -> bool", delegate: &Kernel.==/2
   defpostgres "bool <> bool -> bool", delegate: &Kernel.!=/2
@@ -86,10 +88,12 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
 
   ## Date functions
   defpostgres "date + int8 -> date", delegate: &Date.add/2
+  defpostgres "int8 + date -> date", delegate: &Date.add/2
+  defpostgres "date - date -> int8", delegate: &Date.diff/2
 
   defpostgres "date - int8 -> date" do
     def date_subtract(date, int), do: Date.add(date, -int)
   end
 
-  defpostgres "date - date -> int8", delegate: &Date.diff/2
+  defpostgres "date + time -> timestamp", delegate: &NaiveDateTime.new!/2
 end
