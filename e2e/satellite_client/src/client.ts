@@ -81,15 +81,20 @@ export const set_subscribers = (db: Electric) => {
   })
 }
 
-export const syncTable = async (electric: Electric, table: string) => {
-  if (table === 'other_items') {
-    const { synced } = await electric.db.other_items.sync()
-    return await synced
-  } else {
-    const satellite = globalRegistry.satellites[dbName]
-    const { synced } = await satellite.subscribe([{tablename: table}])
-    return await synced
-  }
+export const syncItemsTable = async (electric: Electric, shapeFilter: string) => {
+  const { synced } = await electric.db.items.sync({ where: shapeFilter })
+  return await synced
+}
+
+export const syncOtherItemsTable = async (electric: Electric, shapeFilter: string) => {
+  const { synced } = await electric.db.other_items.sync({ where: shapeFilter })
+  return await synced
+}
+
+export const syncTable = async (table: string) => {
+  const satellite = globalRegistry.satellites[dbName]
+  const { synced } = await satellite.subscribe([{ tablename: table }])
+  return await synced
 }
 
 export const lowLevelSubscribe = async (electric: Electric, shape: Shape) => {

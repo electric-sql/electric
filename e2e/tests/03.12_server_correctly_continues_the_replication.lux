@@ -11,7 +11,7 @@
 
 [shell satellite_1]
   ??[rpc] recv: #SatInStartReplicationResp
-  [invoke node_sync_table "items"]
+  [invoke node_sync_items ""]
 
   # First write gets propagated
   [invoke node_await_insert "['hello from satellite - first']"]
@@ -29,7 +29,7 @@
 
 [shell satellite_2]
   ??[rpc] recv: #SatInStartReplicationResp
-  [invoke node_sync_table "items"]
+  [invoke node_sync_items ""]
 
   # Perform multiple writes to bump the LSN repeatedly
   [invoke node_await_insert "['hello from satellite - client 2 - a']"]
