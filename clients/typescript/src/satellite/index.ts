@@ -35,6 +35,7 @@ import { DbSchema } from '../client/model/schema'
 export { SatelliteProcess } from './process'
 export { GlobalRegistry, globalRegistry } from './registry'
 export type { ShapeSubscription } from './process'
+export type { Shape, Rel } from './shapes/types'
 
 // `Registry` that starts one Satellite process per database.
 export interface Registry {
