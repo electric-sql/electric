@@ -32,19 +32,6 @@ defmodule Electric.Postgres.Schema do
     end)
   end
 
-  def name(%{name: name}) when is_binary(name) do
-    name(name)
-  end
-
-  # don't double quote things
-  def name("\"" <> _rest = name) when is_binary(name) do
-    name
-  end
-
-  def name(name) when is_binary(name) do
-    "\"" <> name <> "\""
-  end
-
   def num_electrified_tables(schema) do
     Enum.count(schema.tables, fn %{name: name} ->
       not is_extension_relation({name.schema, name.name})

@@ -6,11 +6,12 @@ defmodule Electric.Postgres.SQLGenerator do
 
   defmacro __using__(_opts \\ []) do
     quote do
+      import Electric.Postgres.Dialect.Postgresql, only: [quote_ident: 1]
+      import Electric.Postgres.SQLGenerator
+      import StreamData
+
       alias Electric.Postgres.{AST, Schema, Schema.Proto}
       alias Electric.Postgres.SQLGenerator.Table
-
-      import StreamData
-      import Electric.Postgres.SQLGenerator
     end
   end
 
