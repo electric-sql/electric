@@ -78,6 +78,90 @@ defmodule Electric.Replication.Eval.KnownDefinition do
     end
   end
 
+  defmacro defcompare(datatype, opts) when is_binary(datatype) do
+    case opts do
+      [using: compare_fn] ->
+        validate_ampersand_fn(compare_fn, 2, __CALLER__, ":using")
+        {definitions, insertions} = build_compare_operator(datatype, compare_fn, __CALLER__)
+
+        quote do
+          for definition <- unquote(Macro.escape(definitions)) do
+            Module.put_attribute(__MODULE__, :known_postgres_implementations, definition)
+          end
+
+          unquote(insertions)
+        end
+
+      :using_kernel ->
+        for op <- ~w|= != < > <= >=|a do
+          kernel_op = if(op == :=, do: :==, else: op)
+
+          quote do
+            map = %{
+              kind: :operator,
+              name: ~s|"#{unquote(op)}"|,
+              arity: 2,
+              args: [String.to_atom(unquote(datatype)), String.to_atom(unquote(datatype))],
+              returns: :bool,
+              defined_at: unquote(__CALLER__.line),
+              immutable?: true,
+              strict?: true,
+              implementation: &(Kernel.unquote(kernel_op) / 2)
+            }
+
+            for definition <- unquote(__MODULE__).expand_categories(map) do
+              Module.put_attribute(__MODULE__, :known_postgres_implementations, definition)
+            end
+          end
+        end
+
+      _ ->
+        raise CompileError,
+          line: __CALLER__.line,
+          description:
+            "defcompare must either specify `:using_kernel` to use Kernel comparison functions, or `using: &Module.fn/2` to use a comparison function that returns `:lt`, `:eq`, or `:gt`."
+    end
+  end
+
+  defp build_compare_operator(datatype, func_ast, caller) do
+    truth_table = %{
+      =: [:eq],
+      <: [:lt],
+      <=: [:lt, :eq],
+      >=: [:eq, :gt],
+      >: [:gt],
+      !=: [:lt, :gt]
+    }
+
+    {module, compare_fn, _} = ampersand_to_mfa(func_ast)
+
+    for {op, expected_values} <- truth_table do
+      func_name = :"__comparison_operator_#{datatype}_#{op}"
+
+      op = %{
+        kind: :operator,
+        name: ~s|"#{op}"|,
+        arity: 2,
+        args: [String.to_atom(datatype), String.to_atom(datatype)],
+        returns: :bool,
+        defined_at: caller.line,
+        immutable?: true,
+        strict?: true,
+        implementation: {caller.module, func_name}
+      }
+
+      definition =
+        quote do
+          def unquote(func_name)(arg1, arg2) do
+            unquote(module).unquote(compare_fn)(arg1, arg2) in unquote(expected_values)
+          end
+        end
+
+      {op, definition}
+    end
+    |> Enum.unzip()
+  end
+
   # e.g.: + int4 -> int4
   @unary_op_regex ~r/^(?<operator>[+\-*\/<>=~!@#%^&|`?]+) (?<type>[[:alnum:]*_]+) -> (?<return_type>[[:alnum:]*_]+)$/
   # e.g.: int4 + int4 -> int4
@@ -155,7 +239,7 @@ defmodule Electric.Replication.Eval.KnownDefinition do
     {implementation, insertion} =
       case opts do
         [delegate: delegate] ->
-          ampersand_to_mfa(delegate, map.arity, caller)
+          validate_ampersand_fn(delegate, map.arity, caller)
 
         [do: do_block] ->
           do_block_to_mfa(do_block, map.arity, caller)
@@ -180,10 +264,13 @@ defmodule Electric.Replication.Eval.KnownDefinition do
 
   defp replace_category(arg, with: new), do: if(type_category_atom?(arg), do: new, else: arg)
 
-  defp ampersand_to_mfa(
+  defp validate_ampersand_fn(ast, arity, caller, key \\ ":delegate")
+
+  defp validate_ampersand_fn(
          {:&, _, [{:/, _, [{{:., _, [_, _]}, _, _}, arity]}]} = ast,
          target_arity,
-         caller
+         caller,
+         _
        ) do
     if arity == target_arity do
       {ast, []}
@@ -194,17 +281,17 @@ defmodule Electric.Replication.Eval.KnownDefinition do
     end
   end
 
-  defp ampersand_to_mfa({:&, _, _} = ast, _, caller) do
+  defp validate_ampersand_fn({:&, _, _} = ast, _, caller, key) do
     raise CompileError,
       line: caller.line,
       description:
-        "`:delegate` must be a &Mod.fun/1 function pointer to an external module, got #{Macro.to_string(ast)}"
+        "`#{key}` must be a &Mod.fun/1 function pointer to an external module, got #{Macro.to_string(ast)}"
   end
 
-  defp ampersand_to_mfa(_, _, caller) do
+  defp validate_ampersand_fn(_, _, caller, key) do
     raise CompileError,
       line: caller.line,
-      description: "`:delegate` must be a &Mod.fun/1 function pointer"
+      description: "`#{key}` must be a &Mod.fun/1 function pointer"
   end
 
   defp do_block_to_mfa({:__block__, _, contents} = do_block, target_arity, caller) do
@@ -265,4 +352,8 @@ defmodule Electric.Replication.Eval.KnownDefinition do
     do: {fun, length(args), context}
 
   defp get_fun_name_arity({:def, context, [{fun, _, args} | _]}), do: {fun, length(args), context}
+
+  defp ampersand_to_mfa({:&, _, [{:/, _, [{{:., _, [module, function]}, _, _}, arity]}]}) do
+    {module, function, arity}
+  end
 end
