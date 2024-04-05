@@ -112,11 +112,6 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
           Logger.debug("---- Filtering #{inspect(change)}")
           false
 
-        # TODO: VAX-680 remove this special casing of schema_migrations table
-        # once we are selectivley replicating tables
-        %{relation: {"public", "schema_migrations"}} ->
-          false
-
         _change ->
           true
       end)
