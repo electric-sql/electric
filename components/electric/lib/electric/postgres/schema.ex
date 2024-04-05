@@ -1,12 +1,13 @@
 defmodule Electric.Postgres.Schema do
-  alias Electric.Postgres.Schema.Proto
+  import Electric.Postgres.Extension, only: [is_extension_relation: 1]
+  import Electric.Postgres.Schema.Proto, only: [is_unique_constraint: 1]
+
+  alias Electric.Postgres.Extension
   alias Electric.Postgres.Replication
+  alias Electric.Postgres.Schema.Proto
   alias PgQuery, as: Pg
 
   require Logger
-
-  import Electric.Postgres.Extension, only: [is_extension_relation: 1]
-  import Electric.Postgres.Schema.Proto, only: [is_unique_constraint: 1]
 
   @public_schema "public"
   @search_paths [nil, @public_schema]
@@ -509,7 +510,7 @@ defmodule Electric.Postgres.Schema do
         &Map.update!(&1, :name, fn n -> String.slice("__reordered_#{n}", 0..63) end)
       )
 
-    {schema, table_name} = shadow_table_name(main.name.schema, main.name.name)
+    {schema, table_name} = Extension.shadow_of({main.name.schema, main.name.name})
 
     {:ok, oid} = oid_loader.(:table, @schema, table_name)
 
@@ -523,21 +524,5 @@ defmodule Electric.Postgres.Schema do
       constraints: Enum.filter(main.constraints, &match?(%{constraint: {:primary, _}}, &1)),
       indexes: []
     }
-  end
-
-  @doc """
-  Returns the schema and name of the shadow table for the given table.
-  """
-  @spec shadow_table_name(name(), name()) :: namespaced_name()
-  def shadow_table_name(schema, table) do
-    {@schema, "shadow__#{schema}__#{table}"}
-  end
-
-  @doc """
-  Returns the schema and name of the tombstone table for the given table.
-  """
-  @spec tombstone_table_name(name(), name()) :: namespaced_name()
-  def tombstone_table_name(schema, table) do
-    {@schema, "tombstone__#{schema}__#{table}"}
   end
 end

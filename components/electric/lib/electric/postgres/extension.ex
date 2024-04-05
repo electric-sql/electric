@@ -507,9 +507,16 @@ defmodule Electric.Postgres.Extension do
   @tombstone_prefix "tombstone__"
 
   @doc """
-  Returns a relation that is the shadow table of the passed-in relation.
+  Returns a relation that is the shadow table of the given relation.
   """
+  @spec shadow_of({binary, binary}) :: {binary, binary}
   def shadow_of({schema, table}), do: {@schema, @shadow_prefix <> schema <> "__" <> table}
+
+  @doc """
+  Returns a relation that is the tombstone table of the given relation.
+  """
+  @spec tombstone_of({binary, binary}) :: {binary, binary}
+  def tombstone_of({schema, table}), do: {@schema, @tombstone_prefix <> schema <> "__" <> table}
 
   @doc """
   Returns true if a given relation is a shadow table under current naming convention.
