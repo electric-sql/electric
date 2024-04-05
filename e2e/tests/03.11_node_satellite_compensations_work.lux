@@ -14,7 +14,7 @@
 
 [shell satellite_1]
     ??[rpc] recv: #SatInStartReplicationResp
-    [invoke node_sync_table "other_items"]
+    [invoke node_sync_other_items ""]
     ??[proto] recv: #SatSubsDataEnd
     !await db.db.unsafeExec({sql: "UPDATE _electric_meta SET value = 1 WHERE key = 'compensations' RETURNING *"})
     ?$node

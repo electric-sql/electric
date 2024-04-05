@@ -210,8 +210,16 @@
     ??$node
 [endmacro]
 
+[macro node_sync_items filter]
+    !await client.syncItemsTable(db, "${filter}")
+[endmacro]
+
+[macro node_sync_other_items filter]
+    !await client.syncOtherItemsTable(db, "${filter}")
+[endmacro]
+
 [macro node_sync_table table]
-    !await client.syncTable(db, "${table}")
+    !await client.syncTable("${table}")
 [endmacro]
 
 # Makes both satellites and PG write rows
