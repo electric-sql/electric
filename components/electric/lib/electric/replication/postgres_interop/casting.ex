@@ -47,6 +47,8 @@ defmodule Electric.Replication.PostgresInterop.Casting do
     value
   end
 
+  def parse_date("epoch"), do: Date.from_iso8601!("1970-01-01")
+
   def parse_date(maybe_date) do
     case Date.from_iso8601!(String.trim(maybe_date)) do
       # PG doesn't support years <= 0, so neither do we
@@ -74,6 +76,12 @@ defmodule Electric.Replication.PostgresInterop.Casting do
           {%Time{hour: hour} = time, "PM"} when hour <= 12 -> Time.add(time, 12, :hour)
         end
     end
+  end
+
+  def parse_timestamp("epoch"), do: DateTime.from_unix!(0) |> DateTime.to_naive()
+
+  def parse_timestamp(maybe_timestamp) do
+    NaiveDateTime.from_iso8601!(maybe_timestamp)
   end
 
   @doc """
