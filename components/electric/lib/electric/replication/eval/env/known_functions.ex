@@ -33,13 +33,11 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
 
   ## Equality functions
 
-  defpostgres "*numeric_type* = *numeric_type* -> bool", delegate: &Kernel.==/2
-  defpostgres "text = text -> bool", delegate: &Kernel.==/2
-  defpostgres "uuid = uuid -> bool", delegate: &Kernel.==/2
+  defcompare "*numeric_type*", :using_kernel
+  defcompare "text", :using_kernel
+  defcompare "uuid", :using_kernel
+
   defpostgres "bool = bool -> bool", delegate: &Kernel.==/2
-  defpostgres "*numeric_type* <> *numeric_type* -> bool", delegate: &Kernel.!=/2
-  defpostgres "text <> text -> bool", delegate: &Kernel.!=/2
-  defpostgres "uuid <> uuid -> bool", delegate: &Kernel.!=/2
   defpostgres "bool <> bool -> bool", delegate: &Kernel.!=/2
 
   ## Numeric functions
@@ -48,10 +46,6 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
   defpostgres "- *numeric_type* -> *numeric_type*", delegate: &Kernel.-/1
   defpostgres "*numeric_type* + *numeric_type* -> *numeric_type*", delegate: &Kernel.+/2
   defpostgres "*numeric_type* - *numeric_type* -> *numeric_type*", delegate: &Kernel.-/2
-  defpostgres "*numeric_type* > *numeric_type* -> bool", delegate: &Kernel.>/2
-  defpostgres "*numeric_type* >= *numeric_type* -> bool", delegate: &Kernel.>=/2
-  defpostgres "*numeric_type* < *numeric_type* -> bool", delegate: &Kernel.</2
-  defpostgres "*numeric_type* <= *numeric_type* -> bool", delegate: &Kernel.<=/2
   defpostgres "*integral_type* / *integral_type* -> bool", delegate: &Kernel.div/2
   defpostgres "float8 / float8 -> bool", delegate: &Kernel.//2
   defpostgres "numeric ^ numeric -> numeric", delegate: &Float.pow/2
