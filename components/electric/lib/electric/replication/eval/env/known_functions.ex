@@ -15,6 +15,7 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
   defpostgres "bool(text) -> bool", delegate: &Casting.parse_bool/1
   defpostgres "uuid(text) -> uuid", delegate: &Casting.parse_uuid/1
   defpostgres "date(text) -> date", delegate: &Casting.parse_date/1
+  defpostgres "time(text) -> time", delegate: &Casting.parse_time/1
 
   ## "output" functions
 
@@ -25,6 +26,7 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
   defpostgres "float8out(float8) -> text", delegate: &Float.to_string/1
   defpostgres "numericout(numeric) -> text", delegate: &Float.to_string/1
   defpostgres "dateout(date) -> text", delegate: &Date.to_iso8601/1
+  defpostgres "timeout(time) -> text", delegate: &Time.to_iso8601/1
 
   defpostgres "boolout(bool) -> text" do
     def bool_out(true), do: "t"
