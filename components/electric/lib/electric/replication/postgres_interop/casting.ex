@@ -47,6 +47,13 @@ defmodule Electric.Replication.PostgresInterop.Casting do
     value
   end
 
+  def parse_date(maybe_date) do
+    case Date.from_iso8601!(String.trim(maybe_date)) do
+      # PG doesn't support years <= 0, so neither do we
+      %Date{year: year} = date when year > 0 -> date
+    end
+  end
+
   @doc """
   LIKE function from SQL. Case sensitive by default.
 

@@ -18,6 +18,10 @@ defmodule Electric.Replication.Eval.Env.BasicTypes do
   | name                    | string   |            |
   | text                    | string   | t          |
   | varchar                 | string   |            |
+  | date                    | datetime |            |
+  | time                    | datetime |            |
+  | timestamp               | datetime |            |
+  | timestamptz             | datetime | t          |
   | unknown                 | unknown  |            |
   | bytea                   | user     |            |
   | uuid                    | user     |            |

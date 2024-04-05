@@ -14,6 +14,7 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
   defpostgres "numeric(text) -> numeric", delegate: &Casting.parse_float8/1
   defpostgres "bool(text) -> bool", delegate: &Casting.parse_bool/1
   defpostgres "uuid(text) -> uuid", delegate: &Casting.parse_uuid/1
+  defpostgres "date(text) -> date", delegate: &Casting.parse_date/1
 
   ## "output" functions
 
@@ -23,6 +24,7 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
   defpostgres "float4out(float4) -> text", delegate: &Float.to_string/1
   defpostgres "float8out(float8) -> text", delegate: &Float.to_string/1
   defpostgres "numericout(numeric) -> text", delegate: &Float.to_string/1
+  defpostgres "dateout(date) -> text", delegate: &Date.to_iso8601/1
 
   defpostgres "boolout(bool) -> text" do
     def bool_out(true), do: "t"
@@ -31,11 +33,12 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
 
   defpostgres "uuidout(uuid) -> text", delegate: &BasicTypes.noop/1
 
-  ## Equality functions
+  ## Comparison functions
 
   defcompare "*numeric_type*", :using_kernel
   defcompare "text", :using_kernel
   defcompare "uuid", :using_kernel
+  defcompare "date", using: &Date.compare/2
 
   defpostgres "bool = bool -> bool", delegate: &Kernel.==/2
   defpostgres "bool <> bool -> bool", delegate: &Kernel.!=/2
@@ -76,4 +79,14 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
   defpostgres "text !~~* text -> bool" do
     def not_ilike?(text1, text2), do: not Casting.ilike?(text1, text2)
   end
+
+  ## Date functions
+
+  defpostgres "date + int8 -> date", delegate: &Date.add/2
+
+  defpostgres "date - int8 -> date" do
+    def date_subtract(date, int), do: Date.add(date, -int)
+  end
+
+  defpostgres "date - date -> int8", delegate: &Date.diff/2
 end
