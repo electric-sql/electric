@@ -13,7 +13,7 @@ const config = {}
 const { notifier, adapter, db } = await electrify(conn, schema, config, {
   registry: new MockRegistry(),
 })
-await db.Items.sync({ where: "this.id IN (1, 2, 3)"}) // sync the Items table
+await db.Items.sync({ where: 'this.id IN (1, 2, 3)' }) // sync the Items table
 
 async function runAndCheckNotifications(f: () => Promise<void>) {
   let notifications = 0
