@@ -273,7 +273,9 @@ For many applications you can simply define the data you want to sync up-front, 
 
 #### Updating shapes
 
-:::danger Potential foot-gun in development :::
+:::danger Potential foot-gun in development
+We're working to fix this limitation
+:::
 
 Once a subscription is established, it remains statefully in SQLite database even when you change the code. For example, doing `db.projects.sync({ where: { id: 1 }})`, starting the application, then changing the code to `db.projects.sync({ where: { id: 2 }})` will result in **2 subscriptions** established, with both projects synced to the device. We're working on lifting this limitation.
 
