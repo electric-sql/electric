@@ -7,7 +7,7 @@ sidebar_position: 30
 
 Shapes are the core primitive for controlling sync in the ElectricSQL system.
 
-Local apps ask the server for a specific set of related data that gets synced to the local device. The central Postgres instance will always have too much data to fit on any one device, so shapes allow us to sync only a required subset of data onto the device. There is a balance between local data availability and storage usage on the device that is unique to every application, and shapes allow you to balance those properties while maintaining required guarantees.
+Local apps ask the server for a specific set of related data that gets synced to the local device. The central Postgres instance will often have too much data to fit on any one device, so shapes allow us to sync only a required subset of data onto the device. There is a balance between local data availability and storage usage on the device that is unique to every application, and shapes allow you to balance those properties while maintaining required guarantees.
 
 :::caution Work in progress
 Shapes are being actively developed, so see the list of [limitations](#limitations-and-issues) at the bottom of the page.
