@@ -57,10 +57,9 @@
 
 [shell electric]
     [invoke start_electric 1]
+    ??Successfully initialized Postgres connector "postgres_1"
 
 [shell pg_1]
-    !SELECT * FROM electric.schema;
-
     !SELECT schemaname, tablename FROM pg_publication_tables \
          WHERE pubname = 'electric_publication' ORDER BY tablename;
     ??electric   | acknowledged_client_lsns
