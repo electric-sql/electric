@@ -790,6 +790,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
       end)
 
     :ets.insert(checkpoint_table, checkpoints)
+    Logger.debug("Cached #{length(checkpoints)} client_checkpoints from the DB")
   end
 
   defp restore_subscriptions_cache(subscriptions_table) do
@@ -802,6 +803,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
       end)
 
     :ets.insert(subscriptions_table, subscriptions)
+    Logger.debug("Cached #{length(subscriptions)} client_shape_subscriptions from the DB")
   end
 
   defp restore_additional_data_cache(additional_data_table) do
@@ -822,6 +824,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
       end)
 
     :ets.insert(additional_data_table, records)
+    Logger.debug("Cached #{length(records)} client_additional_data records from the DB")
   end
 
   defp restore_actions_cache(actions_table) do
@@ -833,6 +836,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
       end)
 
     :ets.insert(actions_table, actions)
+    Logger.debug("Cached #{length(actions)} client_actions from the DB")
   end
 
   # The encode_uuid() and decode_uuid() functions are needed here due to incomplete adoption

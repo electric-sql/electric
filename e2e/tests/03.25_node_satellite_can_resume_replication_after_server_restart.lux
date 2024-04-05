@@ -1,0 +1,211 @@
+[doc NodeJS Satellite can resume replication after the sync service restarts]
+
+# The focus in this test is the correct state restoration on the server when it restarts.
+#
+# The test scenario implemented below can be summarized as follows:
+#
+# - Create two tables with a foreign-key relationship "other_items" -> "items".
+# - Insert rows into both tables, some connected via an FK, others standalone.
+# - Start two clients that initiate different subscriptions.
+# - Verify that actions such as disconnecting one of the clients, stopping and starting the
+#   server do not lead to clients resetting their local state and that both clients don't miss
+#   transactions that are visible under their subscribed shapes.
+
+[include _shared.luxinc]
+[include _satellite_macros.luxinc]
+
+[invoke setup]
+
+[shell proxy_1]
+    [invoke migrate_items_table 001]
+    [invoke migrate_other_items_table 002]
+
+[invoke setup_client 1 electric_1 5133]
+
+[shell satellite_1]
+    ?\[rpc\] send: #SatAuthReq\{id: ([a-f0-9-]{36})
+    [global client_1_id=$1]
+
+[shell electric]
+    ??initial sync for client $client_1_id
+
+[shell pg_1]
+    !INSERT INTO items (id, content) VALUES \
+       ('00000000-0000-0000-0000-000000000001', 'items-1'), \
+       ('00000000-0000-0000-0000-000000000002', 'items-2-'), \
+       ('00000000-0000-0000-0000-000000000003', 'items-3-');
+    ??INSERT 0 3
+
+    !INSERT INTO other_items VALUES \
+       ('1', 'first', '00000000-0000-0000-0000-000000000001'), \
+       ('2', 'second', '00000000-0000-0000-0000-000000000002'), \
+       ('3', '', NULL);
+    ??INSERT 0 3
+
+[shell satellite_1]
+    # Subscribe to "other_items"
+    [invoke node_sync_other_items "this.content not like ''"]
+
+    ?send: #SatSubsReq\{id: ([a-f0-9-]{36})
+    [global client_1_subs_id=$1]
+
+[shell electric]
+    ??Received initial data for subscription $client_1_subs_id
+
+[shell satellite_1]
+    # Wait for the rows from "other_items" to arrive
+    [invoke node_await_get_from_table "other_items" "first"]
+    [invoke node_await_get_from_table "other_items" "second"]
+
+    # Wait for the rows from "items" to arrive, via an FK link
+    [invoke node_await_get "items-1"]
+    [invoke node_await_get "items-2"]
+
+# Start a new Satellite client that has a different set of subscriptions
+[invoke setup_client 2 electric_1 5133]
+
+[shell satellite_2]
+    ?\[rpc\] send: #SatAuthReq\{id: ([a-f0-9-]{36})
+    [global client_2_id=$1]
+
+[shell electric]
+    ??initial sync for client $client_2_id
+
+[shell satellite_2]
+    # Subscribe to "items" and include "other_items"
+    !const { synced } = await db.db.items.sync({ \
+       where: "this.content like 'items-_-'", \
+       include: { other_items: true } \
+     }); await synced
+
+    ?send: #SatSubsReq\{id: ([a-f0-9-]{36})
+    [global client_2_subs_id=$1]
+
+[shell electric]
+    ??Received initial data for subscription $client_2_subs_id
+
+[shell satellite_2]
+    # Wait for the rows from "items" to arrive
+    [invoke node_await_get "items-2-"]
+    [invoke node_await_get "items-3-"]
+
+    # Wait for the rows from "other_items" to arrive, via an FK link
+    [invoke node_await_get_from_table "other_items" "second"]
+
+    # Disconnect the client so that it does not see the next batch of updates
+    [invoke client_disconnect]
+
+[shell pg_1]
+    !INSERT INTO items (id, content) VALUES \
+       ('00000000-0000-0000-0000-000000000004', 'items-4'), \
+       ('00000000-0000-0000-0000-000000000005', 'items-5-'), \
+       ('00000000-0000-0000-0000-000000000006', 'items-6');
+    ??INSERT 0 3
+
+    !INSERT INTO other_items VALUES \
+       ('4', '', NULL), \
+       ('5', '', NULL), \
+       ('6', '', NULL), \
+       ('7', '', NULL);
+    ??INSERT 0 4
+
+[shell satellite_1]
+    [invoke node_await_insert_extended "{content: 'items-a-', id: '10000000-0000-0000-0000-000000000001'}"]
+
+    ?send: #SatOpLog\{ops: \[#Begin\{[^}]+\}, \
+       #Insert\{[^}]*new: \["10000000-0000-0000-0000-000000000001", "items-a-"
+
+    # Reset the failure pattern
+    -resetting client state
+
+[shell satellite_2]
+    # Reset the failure pattern
+    -resetting client state
+
+# Stop the server to restart it later.
+[shell log]
+    [invoke stop_electric 1]
+
+[shell satellite_1]
+    [invoke node_await_insert_extended "{content: 'items-b-', id: '10000000-0000-0000-0000-000000000002'}"]
+
+[shell pg_1]
+    !UPDATE items SET content = 'items-1-' WHERE id = '00000000-0000-0000-0000-000000000001';
+    ??UPDATE 1
+    !UPDATE other_items SET content = 'third', item_id = '10000000-0000-0000-0000-000000000001' WHERE id = '3';
+    ??UPDATE 1
+    !UPDATE other_items SET content = 'fourth', item_id = '00000000-0000-0000-0000-000000000004' WHERE id = '4';
+    ??UPDATE 1
+    !UPDATE other_items SET content = 'fifth', item_id = '00000000-0000-0000-0000-000000000005' WHERE id = '5';
+    ??UPDATE 1
+    !UPDATE other_items SET content = 'sixth', item_id = '00000000-0000-0000-0000-000000000006' WHERE id = '6';
+    ??UPDATE 1
+    !UPDATE other_items SET content = 'seventh', item_id = '00000000-0000-0000-0000-000000000005' WHERE id = '7';
+    ??UPDATE 1
+
+# Now restart the server, verify that both clients reconnect and are able to
+# to catch up to the latest server state.
+[shell electric]
+    [invoke start_electric 1]
+
+    ??Cached 2 client_checkpoints from the DB
+    ??Cached 2 client_shape_subscriptions from the DB
+    ??Cached 0 client_additional_data records from the DB
+    ??Cached 0 client_actions from the DB
+
+[shell satellite_1]
+    ??Connectivity state changed: connected
+
+    [invoke node_await_get_from_table "other_items" "fourth"]
+    [invoke node_await_get_from_table "other_items" "fifth"]
+    [invoke node_await_get_from_table "other_items" "sixth"]
+    [invoke node_await_get_from_table "other_items" "seventh"]
+
+[shell satellite_2]
+    [invoke client_reconnect]
+
+    ??Connectivity state changed: connected
+
+    [invoke node_await_get "items-1-"]
+    [invoke node_await_get "items-a-"]
+    [invoke node_await_get "items-b-"]
+    [invoke node_await_get_from_table "other_items" "first"]
+    [invoke node_await_get_from_table "other_items" "third"]
+
+# Stop the server and verify that it persists client_actions and client_additional_data.
+[shell log]
+    [invoke stop_electric 1]
+
+[shell pg_1]
+    !SELECT * FROM electric.client_actions;
+    ?$client_2_id \|  \d+ \| \\x
+
+    !SELECT * FROM electric.client_additional_data;
+    ?$client_2_id \|      \d+ \|   1 \| transaction \| <NULL>          \| \\x
+
+# Restart the server and verify that it cleans up client_actions and client_additional_data.
+[shell electric]
+    -initial sync|initial data
+
+    [invoke start_electric 1]
+
+    ??Cached 2 client_checkpoints from the DB
+    ??Cached 2 client_shape_subscriptions from the DB
+    ??Cached 1 client_additional_data records from the DB
+    ??Cached 1 client_actions from the DB
+
+[shell satellite_1]
+    ??Connectivity state changed: connected
+
+[shell satellite_2]
+    ??Connectivity state changed: connected
+
+[shell pg_1]
+    !SELECT * FROM electric.client_actions;
+    ??(0 rows)
+
+    !SELECT * FROM electric.client_additional_data;
+    ??(0 rows)
+
+[cleanup]
+  [invoke teardown]

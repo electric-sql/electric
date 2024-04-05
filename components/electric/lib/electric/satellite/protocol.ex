@@ -508,6 +508,7 @@ defmodule Electric.Satellite.Protocol do
     #
     # Sending a message to self() here ensures that the SatInStartReplicationResp message is delivered to the
     # client first, followed by the initial migrations.
+    Logger.debug("Performing initial sync for client #{state.client_id}")
     send(self(), {:perform_initial_sync_and_subscribe, msg})
 
     {:reply, %SatInStartReplicationResp{unacked_window_size: state.out_rep.allowed_unacked_txs},

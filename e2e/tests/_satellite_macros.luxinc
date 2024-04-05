@@ -34,6 +34,15 @@
     [invoke connect_to_electric $electric $port $migrations $connectToElectric]
 [endmacro]
 
+[macro client_disconnect]
+    !await client.disconnect(db)
+    ??$node
+[endmacro]
+
+[macro client_reconnect]
+    !await client.reconnect(db)
+[endmacro]
+
 [macro setup_client satellite_number electric port]
     [invoke setup_client_with_migrations $satellite_number $electric $port "[]" "true"]
 [endmacro]
@@ -186,13 +195,13 @@
     ??$node
 [endmacro]
 
-[macro node_await_insert_extended keys]
-    !await client.insert_extended_item(db, ${keys})
+[macro node_await_insert_extended obj]
+    !await client.insert_extended_item(db, ${obj})
     ??$node
 [endmacro]
 
-[macro node_await_insert_extended_into table keys]
-    !await client.insert_extended_into(db, '${table}', ${keys})
+[macro node_await_insert_extended_into table obj]
+    !await client.insert_extended_into(db, '${table}', ${obj})
     ??$node
 [endmacro]
 
@@ -201,12 +210,12 @@
 [endmacro]
 
 [macro node_await_insert_other keys]
-    !client.insert_other_item(db, ${keys})
+    !await client.insert_other_item(db, ${keys})
     ??$node
 [endmacro]
 
 [macro node_set_item_replication_transform]
-    !client.set_item_replication_transform(db)
+    !await client.set_item_replication_transform(db)
     ??$node
 [endmacro]
 
