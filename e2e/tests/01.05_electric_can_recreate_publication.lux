@@ -1,0 +1,82 @@
+[doc Electric correctly recreates the publication at startup if it was deleted]
+[include _shared.luxinc]
+
+[invoke setup]
+
+[shell proxy_1]
+    [invoke migrate_items_table 001]
+
+    [local sql=
+        """
+        CREATE TABLE foo(id TEXT PRIMARY KEY);
+        CREATE TABLE bar(id TEXT PRIMARY KEY);
+        CREATE TABLE baz(id TEXT PRIMARY KEY);
+
+        ALTER TABLE foo ENABLE ELECTRIC;
+        """]
+    [invoke migrate_pg 002 $sql]
+    [invoke migrate_pg 003 "ALTER TABLE baz ENABLE ELECTRIC;"]
+
+[shell pg_1]
+    !SELECT schemaname, tablename FROM pg_publication_tables \
+         WHERE pubname = 'electric_publication' ORDER BY tablename;
+    ??electric   | acknowledged_client_lsns
+    ??electric   | assignments
+    ??public     | baz
+    ??electric   | ddl_commands
+    ??electric   | electrified
+    ??public     | foo
+    ??electric   | grants
+    ??public     | items
+    ??electric   | roles
+    ??electric   | shadow__public__baz
+    ??electric   | shadow__public__foo
+    ??electric   | shadow__public__items
+    ??electric   | transaction_marker
+    ??(13 rows)
+
+# Make sure Electric consumes all migrations from the replication stream before stopping it.
+[shell electric]
+    ?component=CachedWal.EtsBacked \[debug\] Saving transaction\
+       .+ with changes \[%Electric.Replication.Changes.NewRecord\{\
+       relation: \{"electric", "ddl_commands"\}, \
+       record: %\{.*"query" => "CREATE TABLE baz
+
+[shell log]
+    [invoke stop_electric 1]
+
+[shell pg_1]
+    !DROP PUBLICATION electric_publication;
+    ??DROP PUBLICATION
+
+    !SELECT * FROM pg_publication;
+    ??(0 rows)
+
+    !SELECT * FROM pg_publication_tables;
+    ??(0 rows)
+
+[shell electric]
+    [invoke start_electric 1]
+
+[shell pg_1]
+    !SELECT * FROM electric.schema;
+
+    !SELECT schemaname, tablename FROM pg_publication_tables \
+         WHERE pubname = 'electric_publication' ORDER BY tablename;
+    ??electric   | acknowledged_client_lsns
+    ??electric   | assignments
+    ??public     | baz
+    ??electric   | ddl_commands
+    ??electric   | electrified
+    ??public     | foo
+    ??electric   | grants
+    ??public     | items
+    ??electric   | roles
+    ??electric   | shadow__public__baz
+    ??electric   | shadow__public__foo
+    ??electric   | shadow__public__items
+    ??electric   | transaction_marker
+    ??(13 rows)
+
+[cleanup]
+    [invoke teardown]
