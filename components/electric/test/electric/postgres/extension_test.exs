@@ -422,6 +422,47 @@ defmodule Electric.Postgres.ExtensionTest do
                )
     end
 
+    test_tx "does not include dropped columns in the shadow table", fn conn ->
+      sql1 = "CREATE TABLE public.buttercup (id int4 GENERATED ALWAYS AS IDENTITY PRIMARY KEY)"
+      sql2 = "ALTER TABLE public.buttercup ADD COLUMN foo1 text"
+      sql3 = "ALTER TABLE public.buttercup ADD COLUMN foo2 text"
+      sql4 = "ALTER TABLE public.buttercup DROP COLUMN foo1"
+      sql5 = "CALL electric.electrify('buttercup')"
+
+      for sql <- [sql1, sql2, sql3, sql4, sql5] do
+        {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
+      end
+
+      sql =
+        """
+        SELECT
+          attname, format_type(atttypid, atttypmod)
+        FROM
+          pg_attribute
+        WHERE
+          attrelid = 'electric.shadow__public__buttercup'::regclass
+          AND attnum > 0
+        ORDER BY
+          attnum
+        """
+
+      assert {:ok, _, columns} = :epgsql.squery(conn, sql)
+
+      assert [
+               {"_tags", "electric.tag[]"},
+               {"_last_modified", "bigint"},
+               {"_is_a_delete_operation", "boolean"},
+               {"_tag", "electric.tag"},
+               {"_observed_tags", "electric.tag[]"},
+               {"_modified_columns_bit_mask", "boolean[]"},
+               {"_resolved", "boolean"},
+               {"_currently_reordering", "boolean"},
+               {"__reordered_foo2", "text"},
+               {"id", "integer"},
+               {"_tag_foo2", "electric.tag"}
+             ] == columns
+    end
+
     test_tx "successfully validates column types", fn conn ->
       assert [{:ok, [], []}, {:ok, [], []}, {:ok, [], []}] ==
                :epgsql.squery(conn, """
