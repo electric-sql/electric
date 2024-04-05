@@ -146,7 +146,11 @@ export class Table<
     //       and also change the field types to expect the value type and no nested filter schema allowed
     this.syncSchema = (tableDescription.findSchema as z.AnyZodObject).pick({
       include: true,
-      where: true,
+    })
+    const shape = (tableDescription.findSchema as z.AnyZodObject).shape.where
+
+    this.syncSchema = (this.syncSchema as any).extend({
+      where: shape.or(z.string().optional()),
     })
   }
 
