@@ -1,0 +1,42 @@
+[doc Correct processing of FK relationships for rows insert into the table prior to electrification]
+[include _shared.luxinc]
+
+[invoke setup]
+
+[global project_id=99adf0a5-b3c6-45d7-9986-582e76db4556]
+[global member_id=c197a4ef-0f22-4af1-acb1-bf7200e64900]
+
+[shell proxy_1]
+    # When a row is inserted into the "project_memberships" table further down, that
+    # causes an "electric.fk_chain_touch" message to be sent from Postgres to Electric over the
+    # logical replication stream, with the "tags" field containing tags from the referenced
+    # relation's shadow row. For that reason, it is key to have the INSERT executed before
+    # electrifying the "projects" table in the migration below. This is how we verify that the
+    # message includes valid (default) "tags" even in the absence of a corresponding shadow row.
+    [local sql=
+        """
+        CREATE TABLE projects (
+            id uuid NOT NULL PRIMARY KEY
+        );
+        CREATE TABLE project_memberships (
+            id uuid NOT NULL PRIMARY KEY,
+            project_id uuid NOT NULL REFERENCES projects (id)
+        );
+
+        INSERT INTO projects (id) VALUES ('$project_id');
+
+        ALTER TABLE projects ENABLE ELECTRIC;
+        ALTER TABLE project_memberships ENABLE ELECTRIC;
+        """]
+    [invoke migrate_pg 001 $sql]
+
+[shell pg_1]
+    !INSERT INTO project_memberships (id, project_id) VALUES ('$member_id', '$project_id');
+    ??INSERT 0 1
+
+[shell electric]
+    ??%Electric.Replication.Changes.NewRecord{relation: {"public", "project_memberships"}, \
+       record: %{"id" => "$member_id", "project_id" => "$project_id"
+
+[cleanup]
+   [invoke teardown]
