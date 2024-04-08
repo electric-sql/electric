@@ -2070,11 +2070,11 @@ export const processTests = (test: TestFn<ContextType>) => {
   test('unsubscribing all subscriptions does not trigger FK violations', async (t) => {
     const { satellite, runMigrations, builder } = t.context
 
+    await runMigrations() // because the meta tables need to exist for shape GC
+
     satellite._garbageCollectShapeHandler([
       { uuid: '', definition: { tablename: 'parent' } },
     ])
-
-    await runMigrations() // because the meta tables need to exist for shape GC
 
     const subsManager = new MockSubscriptionsManager(
       satellite._garbageCollectShapeHandler.bind(satellite)
