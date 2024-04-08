@@ -2199,12 +2199,18 @@ export const processTests = (test: TestFn<ContextType>) => {
     })
 
     await adapter.run({ sql: `DELETE FROM ${qualified} WHERE id = 2` })
-    await satellite._performSnapshot()
+    const deleteTx = await satellite._performSnapshot()
 
     const oplogs = await adapter.query({
       sql: `SELECT * FROM main._electric_oplog`,
     })
-    t.is(oplogs[0].clearTags, genEncodedTags('remote', [expectedTs]))
+    t.is(
+      oplogs[0].clearTags,
+      encodeTags([
+        generateTag(satellite._authState!.clientId, deleteTx),
+        generateTag('remote', expectedTs),
+      ])
+    )
   })
 
   test('DELETE after DELETE sends clearTags', async (t) => {
