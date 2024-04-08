@@ -1,8 +1,69 @@
 defmodule Electric do
   @moduledoc false
 
+  alias Electric.Replication.Connectors
+
+  @type connector :: Connectors.config() | Connectors.origin()
   @type reg_name :: {:via, :gproc, {:n, :l, term()}}
   @type write_to_pg_mode :: :logical_replication | :direct_writes
+
+  defmacro __using__(proc_type) do
+    proc_module = proc_module(proc_type)
+
+    quote do
+      use unquote(proc_module)
+
+      alias Electric.Replication.Connectors
+
+      @spec start_link(Connectors.config()) :: Supervisor.on_start()
+      def start_link(connector_config) do
+        name = static_name(connector_config)
+        unquote(proc_module).start_link(__MODULE__, connector_config, name: name)
+      end
+
+      @spec reg(Electric.connector()) :: true
+      def reg(connector) do
+        connector
+        |> reg_name()
+        |> Electric.reg()
+      end
+
+      @spec reg_name(Electric.connector()) :: Electric.reg_name()
+      def reg_name(connector) do
+        Electric.name(__MODULE__, connector)
+      end
+
+      @spec static_name(Electric.connector()) :: atom
+      def static_name(connector) do
+        Electric.static_name(__MODULE__, connector)
+      end
+
+      @spec ets_table_name(Electric.connector()) :: atom
+      defp ets_table_name(connector) do
+        static_name(connector)
+      end
+
+      defoverridable start_link: 1
+    end
+  end
+
+  defp proc_module(:supervisor), do: Supervisor
+  defp proc_module(:gen_server), do: GenServer
+  defp proc_module(:gen_stage), do: GenStage
+
+  def static_name(module) do
+    String.to_atom(trim_module_name(module))
+  end
+
+  def static_name(module, connector) do
+    String.to_atom(trim_module_name(module) <> ":" <> origin(connector))
+  end
+
+  defp trim_module_name(module) do
+    module
+    |> inspect()
+    |> String.replace_leading("Electric.", "")
+  end
 
   @doc """
   Register process with the given name
@@ -57,13 +118,28 @@ defmodule Electric do
     end
   end
 
+  def await_reg({:via, :gproc, name}, timeout) do
+    :gproc.await(name, timeout)
+  end
+
   @doc """
   Helper function for gproc registration
   """
-  @spec name(module(), term()) :: reg_name
-  def name(module, term) do
+  @spec name(module, connector) :: reg_name
+  def name(module, connector) do
+    {:via, :gproc, {:n, :l, {module, origin(connector)}}}
+  end
+
+  @spec gen_name(module, term) :: reg_name
+  def gen_name(module, term) do
     {:via, :gproc, {:n, :l, {module, term}}}
   end
+
+  @spec origin(connector) :: Connectors.origin()
+  def origin(origin) when is_binary(origin), do: origin
+
+  def origin(connector_config) when is_list(connector_config),
+    do: Connectors.origin(connector_config)
 
   @doc """
   Helper function to lookup pid that corresponds to registered gproc name

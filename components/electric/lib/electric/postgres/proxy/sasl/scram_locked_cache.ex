@@ -14,8 +14,12 @@ defmodule Electric.Postgres.Proxy.SASL.SCRAMLockedCache do
   #
   use GenServer
 
-  @name __MODULE__
+  @ets_name __MODULE__
   @timeout :infinity
+
+  def static_name do
+    Electric.static_name(__MODULE__)
+  end
 
   @doc """
   Reads the cache key.
@@ -33,18 +37,18 @@ defmodule Electric.Postgres.Proxy.SASL.SCRAMLockedCache do
       hard_read(key)
     catch
       :error, :badarg ->
-        case GenServer.call(@name, {:lock, key}, @timeout) do
+        case GenServer.call(static_name(), {:lock, key}, @timeout) do
           {:uncached, ref} ->
             try do
               fun.()
             catch
               kind, reason ->
-                GenServer.cast(@name, {:uncached, ref})
+                GenServer.cast(static_name(), {:uncached, ref})
                 :erlang.raise(kind, reason, __STACKTRACE__)
             else
               result ->
                 write(key, result)
-                GenServer.cast(@name, {:cached, ref})
+                GenServer.cast(static_name(), {:cached, ref})
                 result
             end
 
@@ -54,13 +58,15 @@ defmodule Electric.Postgres.Proxy.SASL.SCRAMLockedCache do
     end
   end
 
-  defp init(), do: :ets.new(@name, [:public, :set, :named_table, read_concurrency: true])
-  defp write(key, value), do: :ets.insert(@name, {key, value})
-  defp hard_read(key), do: :ets.lookup_element(@name, key, 2)
+  defp create_table,
+    do: :ets.new(@ets_name, [:public, :set, :named_table, read_concurrency: true])
+
+  defp write(key, value), do: :ets.insert(@ets_name, {key, value})
+  defp hard_read(key), do: :ets.lookup_element(@ets_name, key, 2)
 
   defp soft_read(key) do
     try do
-      :ets.lookup_element(@name, key, 2)
+      :ets.lookup_element(@ets_name, key, 2)
     catch
       :error, :badarg -> nil
     end
@@ -70,12 +76,12 @@ defmodule Electric.Postgres.Proxy.SASL.SCRAMLockedCache do
 
   @doc false
   def start_link(_opts) do
-    GenServer.start_link(__MODULE__, :ok, name: @name)
+    GenServer.start_link(__MODULE__, :ok, name: static_name())
   end
 
   @impl true
   def init(:ok) do
-    init()
+    create_table()
     {:ok, %{keys: %{}, ref_to_key: %{}}}
   end
 

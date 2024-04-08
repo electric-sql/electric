@@ -1,5 +1,5 @@
 defmodule Electric.Replication.PostgresConnectorSup do
-  use Supervisor
+  use Electric, :supervisor
 
   alias Electric.Replication.Connectors
   alias Electric.Replication.Postgres
@@ -9,23 +9,29 @@ defmodule Electric.Replication.PostgresConnectorSup do
 
   require Logger
 
-  @spec start_link(Connectors.config()) :: :ignore | {:error, any} | {:ok, pid}
-  def start_link(connector_config) do
-    origin = Connectors.origin(connector_config)
-    Supervisor.start_link(__MODULE__, connector_config, name: name(origin))
-  end
-
-  @spec name(Connectors.origin()) :: Electric.reg_name()
-  def name(origin) when is_binary(origin) do
-    Electric.name(__MODULE__, origin)
-  end
-
   @impl Supervisor
   def init(connector_config) do
+    reg(connector_config)
+
     origin = Connectors.origin(connector_config)
 
-    logical_replication_producer = Postgres.LogicalReplicationProducer.name(origin)
-    migration_consumer = Postgres.MigrationConsumer.name(origin)
+    conn_opts = Connectors.get_connection_opts(connector_config)
+
+    repo_config =
+      [
+        name: Electric.Postgres.Repo.name(origin),
+        hostname: conn_opts.host,
+        port: conn_opts.port,
+        username: conn_opts.username,
+        password: conn_opts.password,
+        database: conn_opts.database,
+        ssl: conn_opts.ssl == :required,
+        pool_size: 10,
+        log: false
+      ]
+
+    logical_replication_producer = Postgres.LogicalReplicationProducer.reg_name(origin)
+    migration_consumer = Postgres.MigrationConsumer.reg_name(origin)
 
     write_to_pg_mode = Connectors.write_to_pg_mode(connector_config)
 
@@ -34,10 +40,7 @@ defmodule Electric.Replication.PostgresConnectorSup do
       refresh_subscription: write_to_pg_mode == :logical_replication
     ]
 
-    writer_module_opts = [
-      conn_config: connector_config,
-      producer: SatelliteCollectorProducer.name(origin)
-    ]
+    writer_module_args = {connector_config, producer: SatelliteCollectorProducer.reg_name(origin)}
 
     children = [
       {Electric.Postgres.Repo, Electric.Postgres.Repo.config(connector_config, [])},
@@ -47,9 +50,9 @@ defmodule Electric.Replication.PostgresConnectorSup do
       {Postgres.LogicalReplicationProducer, connector_config},
       {Postgres.MigrationConsumer, {connector_config, migration_consumer_opts}},
       if write_to_pg_mode == :logical_replication do
-        {Postgres.SlotServer, writer_module_opts}
+        {Postgres.SlotServer, writer_module_args}
       else
-        {Postgres.Writer, writer_module_opts}
+        {Postgres.Writer, writer_module_args}
       end,
       {CachedWal.EtsBacked,
        origin: origin,

@@ -1,5 +1,5 @@
 defmodule Electric.Replication.PostgresConnectorMng do
-  use GenServer
+  use Electric, :gen_server
 
   alias Electric.Postgres.Extension
   alias Electric.Replication.Postgres.Client
@@ -47,23 +47,6 @@ defmodule Electric.Replication.PostgresConnectorMng do
   @status_key :status
   @connector_config_key :connector_config
 
-  @spec start_link(Connectors.config()) :: {:ok, pid} | :ignore | {:error, term}
-  def start_link(connector_config) do
-    GenServer.start_link(__MODULE__, connector_config, [])
-  end
-
-  @spec name(Connectors.config()) :: Electric.reg_name()
-  def name(connector_config) when is_list(connector_config) do
-    connector_config
-    |> Connectors.origin()
-    |> name()
-  end
-
-  @spec name(Connectors.origin()) :: Electric.reg_name()
-  def name(origin) do
-    Electric.name(__MODULE__, origin)
-  end
-
   @spec status(Connectors.origin()) :: State.status()
   def status(origin) do
     case :ets.lookup(ets_table_name(origin), @status_key) do
@@ -79,9 +62,9 @@ defmodule Electric.Replication.PostgresConnectorMng do
 
   @impl GenServer
   def init(connector_config) do
+    reg(connector_config)
+
     origin = Connectors.origin(connector_config)
-    name = name(origin)
-    Electric.reg(name)
 
     Logger.metadata(origin: origin)
     Process.flag(:trap_exit, true)
@@ -95,10 +78,6 @@ defmodule Electric.Replication.PostgresConnectorMng do
       |> reset_state()
 
     {:ok, state, {:continue, :init}}
-  end
-
-  defp ets_table_name(origin) do
-    String.to_atom(inspect(__MODULE__) <> ":" <> origin)
   end
 
   defp reset_state(%State{} = state) do

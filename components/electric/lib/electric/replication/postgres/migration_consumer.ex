@@ -2,7 +2,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
   @moduledoc """
   Holds state information about a postgres db instance, stored in tables within the db itself.
   """
-  use GenStage
+  use Electric, :gen_stage
 
   import Electric.Postgres.Extension, only: [is_ddl_relation: 1, is_extension_relation: 1]
 
@@ -22,30 +22,21 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
 
   require Logger
 
-  @spec name(Connectors.config()) :: Electric.reg_name()
-  def name(conn_config) when is_list(conn_config) do
-    name(Connectors.origin(conn_config))
+  def start_link({connector_config, opts}) do
+    start_link(connector_config, opts)
   end
 
-  @spec name(Connectors.origin()) :: Electric.reg_name()
-  def name(origin) when is_binary(origin) do
-    Electric.name(__MODULE__, origin)
-  end
-
-  def start_link({conn_config, opts}) do
-    start_link(conn_config, opts)
-  end
-
-  def start_link(conn_config, opts \\ []) do
-    GenStage.start_link(__MODULE__, {conn_config, opts}, name: name(conn_config))
+  def start_link(connector_config, opts \\ []) do
+    GenStage.start_link(__MODULE__, {connector_config, opts}, name: static_name(connector_config))
   end
 
   @impl GenStage
-  def init({conn_config, opts}) do
-    origin = Connectors.origin(conn_config)
+  def init({connector_config, opts}) do
+    reg(connector_config)
+    origin = Connectors.origin(connector_config)
 
     %{publication: publication, subscription: subscription} =
-      Connectors.get_replication_opts(conn_config)
+      Connectors.get_replication_opts(connector_config)
 
     Logger.metadata(pg_producer: origin)
 
@@ -56,7 +47,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
     {:ok, loader} =
       opts
       |> SchemaLoader.get(:backend, SchemaCache)
-      |> SchemaLoader.connect(conn_config)
+      |> SchemaLoader.connect(connector_config)
 
     refresh_sub? = Keyword.get(opts, :refresh_subscription, true)
 
@@ -71,7 +62,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
       opts: opts,
       refresh_subscription: refresh_sub?,
       refresh_enum_types: Keyword.get(opts, :refresh_enum_types, true),
-      conn_opts: Connectors.get_connection_opts(conn_config)
+      conn_opts: Connectors.get_connection_opts(connector_config)
     }
 
     {:producer_consumer, state}

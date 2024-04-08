@@ -4,7 +4,7 @@ defmodule Electric.Telemetry do
   import Telemetry.Metrics
 
   def start_link(init_arg) do
-    Supervisor.start_link(__MODULE__, init_arg, name: __MODULE__)
+    Supervisor.start_link(__MODULE__, init_arg, name: Electric.static_name(__MODULE__))
   end
 
   def init(_) do
@@ -14,7 +14,10 @@ defmodule Electric.Telemetry do
 
     children
     |> add_call_home_reporter(Application.fetch_env!(:electric, :telemetry))
-    |> Supervisor.init(strategy: :one_for_one)
+    |> Supervisor.init(
+      strategy: :one_for_one,
+      name: Electric.static_name(__MODULE__, "telemetry_poller")
+    )
   end
 
   defp add_call_home_reporter(children, :enabled) do

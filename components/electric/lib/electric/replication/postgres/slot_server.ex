@@ -10,7 +10,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
   Postgres via the outgoing logical replication stream.
   """
 
-  use GenStage
+  use Electric, :gen_stage
 
   require Logger
   alias Electric.Telemetry.Metrics
@@ -75,23 +75,17 @@ defmodule Electric.Replication.Postgres.SlotServer do
 
   # Public interface
 
-  @spec start_link([opts(), ...]) :: GenServer.on_start()
-  def start_link(opts) do
-    GenStage.start_link(__MODULE__, opts)
+  def start_link({connector_config, opts}) do
+    start_link(connector_config, opts)
   end
 
-  @spec get_name(String.t()) :: Electric.reg_name()
-  def get_name(name) do
-    {:via, :gproc, name(name)}
+  def start_link(connector_config, opts \\ []) do
+    GenStage.start_link(__MODULE__, {connector_config, opts}, name: static_name(connector_config))
   end
 
   @spec get_slot_reg(slot_name()) :: Electric.reg_name()
   def get_slot_reg(slot_name) do
-    {:via, :gproc, name({:slot_name, slot_name})}
-  end
-
-  defp name(name) do
-    {:n, :l, {__MODULE__, name}}
+    {:via, :gproc, reg_name({:slot_name, slot_name})}
   end
 
   defp subscription_opts() do
@@ -130,26 +124,25 @@ defmodule Electric.Replication.Postgres.SlotServer do
   # Server callbacks
 
   @impl true
-  def init(opts) do
-    conn_config = Keyword.fetch!(opts, :conn_config)
+  def init({connector_config, opts}) do
     {:via, :gproc, producer} = Keyword.fetch!(opts, :producer)
 
-    origin = Connectors.origin(conn_config)
-    replication_opts = Connectors.get_replication_opts(conn_config)
+    origin = Connectors.origin(connector_config)
+    replication_opts = Connectors.get_replication_opts(connector_config)
     slot = replication_opts.subscription
 
-    :gproc.reg(name(origin))
-    :gproc.reg(name({:slot_name, slot}))
+    reg(origin)
+    reg(reg_name({:slot_name, slot}))
 
     Logger.metadata(origin: origin, pg_slot: slot)
 
     Logger.debug(
-      "slot server started, registered as #{inspect(name(origin))} and #{inspect(name({:slot_name, slot}))}"
+      "slot server started, registered as #{inspect(reg_name(origin))} and #{inspect(reg_name({:slot_name, slot}))}"
     )
 
     {:consumer,
      %State{
-       config: conn_config,
+       config: connector_config,
        slot_name: slot,
        origin: origin,
        producer_name: producer,

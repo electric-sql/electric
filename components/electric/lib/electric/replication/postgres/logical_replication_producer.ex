@@ -1,6 +1,5 @@
 defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
-  use GenStage
-  require Logger
+  use Electric, :gen_stage
 
   alias Electric.Postgres.ShadowTableTransformation
   alias Electric.Postgres.Extension.SchemaLoader
@@ -36,6 +35,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
 
   alias Electric.Replication.Connectors
   alias Electric.Replication.Postgres.Client
+
+  require Logger
 
   defmodule State do
     defstruct repl_conn: nil,
@@ -86,23 +87,10 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     @advance_timeout 1_000
   end
 
-  @spec start_link(Connectors.config()) :: :ignore | {:error, any} | {:ok, pid}
-  def start_link(connector_config) do
-    GenStage.start_link(__MODULE__, connector_config, name: name(connector_config))
-  end
-
-  @spec name(Connectors.config()) :: Electric.reg_name()
-  def name(connector_config) when is_list(connector_config) do
-    name(Connectors.origin(connector_config))
-  end
-
-  @spec name(Connectors.origin()) :: Electric.reg_name()
-  def name(origin) when is_binary(origin) do
-    Electric.name(__MODULE__, origin)
-  end
-
   @impl true
   def init(connector_config) do
+    reg(connector_config)
+
     origin = Connectors.origin(connector_config)
     conn_opts = Connectors.get_connection_opts(connector_config)
     repl_conn_opts = Connectors.get_connection_opts(connector_config, replication: true)

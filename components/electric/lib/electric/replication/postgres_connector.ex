@@ -1,5 +1,5 @@
 defmodule Electric.Replication.PostgresConnector do
-  use Supervisor
+  use Electric, :supervisor
 
   require Logger
 
@@ -7,16 +7,9 @@ defmodule Electric.Replication.PostgresConnector do
   alias Electric.Replication.PostgresConnectorMng
   alias Electric.Replication.PostgresConnectorSup
 
-  @spec start_link(Connectors.config()) :: Supervisor.on_start()
-  def start_link(connector_config) do
-    Supervisor.start_link(__MODULE__, connector_config)
-  end
-
   @impl Supervisor
   def init(connector_config) do
-    origin = Connectors.origin(connector_config)
-    name = name(origin)
-    Electric.reg(name)
+    reg(connector_config)
 
     children = [%{id: :mng, start: {PostgresConnectorMng, :start_link, [connector_config]}}]
     Supervisor.init(children, strategy: :one_for_all)
@@ -24,11 +17,8 @@ defmodule Electric.Replication.PostgresConnector do
 
   @spec start_children(Connectors.config()) :: {:ok, pid} | :error
   def start_children(connector_config) do
-    origin = Connectors.origin(connector_config)
-    connector = name(origin)
-
     Supervisor.start_child(
-      connector,
+      reg_name(connector_config),
       %{
         id: :sup,
         start: {PostgresConnectorSup, :start_link, [connector_config]},
@@ -41,8 +31,7 @@ defmodule Electric.Replication.PostgresConnector do
 
   @spec stop_children(Connectors.origin()) :: :ok | {:error, :not_found}
   def stop_children(origin) do
-    connector = name(origin)
-    Supervisor.terminate_child(connector, :sup)
+    Supervisor.terminate_child(reg_name(origin), :sup)
   end
 
   @doc """
@@ -51,11 +40,6 @@ defmodule Electric.Replication.PostgresConnector do
   @spec connectors() :: [String.t()]
   def connectors() do
     Electric.reg_names(__MODULE__)
-  end
-
-  @spec name(Connectors.origin()) :: Electric.reg_name()
-  def name(origin) when is_binary(origin) do
-    Electric.name(__MODULE__, origin)
   end
 
   def connector_config do

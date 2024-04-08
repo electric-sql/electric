@@ -1,5 +1,5 @@
 defmodule Electric.Replication.Postgres.Writer do
-  use GenStage
+  use Electric, :gen_stage
 
   import Electric.Postgres.Dialect.Postgresql, only: [quote_ident: 1, escape_quotes: 2]
 
@@ -15,8 +15,12 @@ defmodule Electric.Replication.Postgres.Writer do
   # Public interface
   ###
 
-  def start_link(opts) do
-    GenStage.start_link(__MODULE__, opts)
+  def start_link({connector_config, opts}) do
+    start_link(connector_config, opts)
+  end
+
+  def start_link(connector_config, opts \\ []) do
+    GenStage.start_link(__MODULE__, {connector_config, opts}, name: static_name(connector_config))
   end
 
   ###
@@ -24,15 +28,14 @@ defmodule Electric.Replication.Postgres.Writer do
   ###
 
   @impl true
-  def init(opts) do
-    conn_config = Keyword.fetch!(opts, :conn_config)
-    origin = Connectors.origin(conn_config)
-    name = name(origin)
-    Electric.reg(name)
+  def init({connector_config, opts}) do
+    origin = Connectors.origin(connector_config)
+
+    reg(origin)
 
     Logger.metadata(origin: origin)
 
-    conn_opts = Connectors.get_connection_opts(conn_config)
+    conn_opts = Connectors.get_connection_opts(connector_config)
     {:ok, conn} = Client.connect(conn_opts)
 
     # Set a [custom option][1] so that the conflict resolution triggers fire even though we'll doing direct

@@ -21,7 +21,7 @@ defmodule Electric.Postgres.Proxy.UpstreamConnection do
 
   @spec name(pos_integer) :: Electric.reg_name()
   def name(session_id) when is_integer(session_id) and session_id > 0 do
-    Electric.name(__MODULE__, session_id)
+    Electric.gen_name(__MODULE__, session_id)
   end
 
   @impl GenServer
