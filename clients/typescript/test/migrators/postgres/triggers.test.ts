@@ -120,8 +120,8 @@ test('generateTableTriggers should create correct triggers for a table', (t) => 
               'personTable',
               'UPDATE',
               json_strip_nulls(json_build_object('id', cast(new."id" as TEXT))),
-              jsonb_build_object('age', new."age", 'bmi', cast(new."bmi" as TEXT), 'id', cast(new."id" as TEXT), 'int8', cast(new."int8" as TEXT), 'name', new."name"),
-              jsonb_build_object('age', old."age", 'bmi', cast(old."bmi" as TEXT), 'id', cast(old."id" as TEXT), 'int8', cast(old."int8" as TEXT), 'name', old."name"),
+              jsonb_build_object('age', new."age", 'blob', CASE WHEN new."blob" IS NOT NULL THEN encode(new."blob"::bytea, 'hex') ELSE NULL END, 'bmi', cast(new."bmi" as TEXT), 'id', cast(new."id" as TEXT), 'int8', cast(new."int8" as TEXT), 'name', new."name"),
+              jsonb_build_object('age', old."age", 'blob', CASE WHEN old."blob" IS NOT NULL THEN encode(old."blob"::bytea, 'hex') ELSE NULL END, 'bmi', cast(old."bmi" as TEXT), 'id', cast(old."id" as TEXT), 'int8', cast(old."int8" as TEXT), 'name', old."name"),
               NULL
             );
           END IF;
@@ -166,7 +166,7 @@ test('generateTableTriggers should create correct triggers for a table', (t) => 
               'DELETE',
               json_strip_nulls(json_build_object('id', cast(old."id" as TEXT))),
               NULL,
-              jsonb_build_object('age', old."age", 'bmi', cast(old."bmi" as TEXT), 'id', cast(old."id" as TEXT), 'int8', cast(old."int8" as TEXT), 'name', old."name"),
+              jsonb_build_object('age', old."age", 'blob', CASE WHEN old."blob" IS NOT NULL THEN encode(old."blob"::bytea, 'hex') ELSE NULL END, 'bmi', cast(old."bmi" as TEXT), 'id', cast(old."id" as TEXT), 'int8', cast(old."int8" as TEXT), 'name', old."name"),
               NULL
             );
           END IF;
