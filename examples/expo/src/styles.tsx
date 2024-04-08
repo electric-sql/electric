@@ -1,9 +1,14 @@
 import { StyleSheet } from 'react-native'
 
 export const styles = StyleSheet.create({
+  container: {
+    backgroundColor: 'rgb(19,17,23)',
+    color: '#f5f5f5',
+    flex: 1,
+  },
   buttons: {
     flex: 1,
-    flexDirection: 'row'
+    flexDirection: 'row',
   },
   button: {
     alignItems: 'center',
@@ -15,19 +20,18 @@ export const styles = StyleSheet.create({
     backgroundColor: '#1e2123',
     color: '#f9fdff',
     width: '40%',
-    height: 50
+    height: 50,
   },
   iconContainer: {
     flex: 1,
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 20
+    marginTop: 20,
   },
   items: {
     flex: 1,
     flexDirection: 'column',
-    alignItems: 'top',
-    height: '100%'
+    height: '100%',
   },
   item: {
     fontSize: 16,
@@ -42,7 +46,7 @@ export const styles = StyleSheet.create({
     backgroundColor: '#1e2123',
     color: '#f9fdff',
     width: '90%',
-    textAlign: 'center'
+    textAlign: 'center',
   },
   text: {
     fontSize: 16,
