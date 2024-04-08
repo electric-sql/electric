@@ -22,13 +22,6 @@ See the React Native CLI Quickstart section at [reactnative.dev/docs/environment
 
 ## Install
 
-Clone the [electric-sql/electric](https://github.com/electric-sql/electric) mono-repo and change directory into this example folder:
-
-```sh
-git clone https://github.com/electric-sql/electric
-cd electric/examples/react-native
-```
-
 Install the dependencies:
 
 ```sh
