@@ -10,8 +10,10 @@ defmodule Electric.Replication.Shapes.Querying do
   alias Electric.Replication.Changes
   alias Electric.Replication.Changes.Ownership
   alias Electric.Replication.Eval
+  alias Electric.Replication.Postgres.Client
   alias Electric.Replication.Shapes.ChangeProcessing
   alias Electric.Replication.Shapes.ShapeRequest.Layer
+  alias Electric.Utils
 
   alias Electric.Utils
 
@@ -22,7 +24,6 @@ defmodule Electric.Replication.Shapes.Querying do
 
   Each layer requires a different initial dataset, so this function
   encapsulates that. The arguments, apart from the layer itself, are:
-  - `conn` - the `:epgsql` connection to use for queries.
   - `schema` - the `%SchemaLoader.Version{}` struct, used to get
     columns and other information required to build queries
   - `origin` - PG origin that's used to convert PG tags to Satellite tags.
@@ -40,7 +41,6 @@ defmodule Electric.Replication.Shapes.Querying do
   for details.)
   """
   @spec query_layer(
-          term(),
           Layer.t(),
           SchemaVersion.t(),
           String.t(),
@@ -48,15 +48,14 @@ defmodule Electric.Replication.Shapes.Querying do
           [[String.t(), ...]] | nil
         ) ::
           {:ok, results(), Graph.t()} | {:error, term()}
-  def query_layer(conn, %Layer{} = layer, schema, origin, context \\ %{}, from \\ nil) do
-    case do_query_layer(conn, layer, schema, origin, context, from) do
+  def query_layer(%Layer{} = layer, schema, origin, context \\ %{}, from \\ nil) do
+    case do_query_layer(layer, schema, origin, context, from) do
       {:ok, _, changes, graph} -> {:ok, changes, graph}
       {:error, _} = error -> error
     end
   end
 
   @spec do_query_layer(
-          term(),
           Layer.t(),
           SchemaVersion.t(),
           String.t(),
@@ -65,7 +64,7 @@ defmodule Electric.Replication.Shapes.Querying do
         ) ::
           {:ok, [Changes.NewRecord.t()], results(), Graph.t()}
           | {:error, term()}
-  defp do_query_layer(conn, %Layer{} = layer, schema_version, origin, context, from) do
+  defp do_query_layer(%Layer{} = layer, schema_version, origin, context, from) do
     target_table = layer.target_table
 
     table_info =
@@ -73,7 +72,7 @@ defmodule Electric.Replication.Shapes.Querying do
       |> SchemaVersion.table!(target_table)
       |> Schema.single_table_info(schema_version.schema)
 
-    columns = Enum.map_join(table_info.columns, ", ", &~s|this."#{&1.name}"|)
+    columns = Enum.map_join(table_info.columns, ", ", &~s|this."#{&1.name}"::text|)
     pk_clause = Enum.map_join(layer.target_pk, " AND ", &~s|this."#{&1}" = shadow."#{&1}"|)
 
     where =
@@ -92,7 +91,7 @@ defmodule Electric.Replication.Shapes.Querying do
     query =
       """
       SELECT
-        coalesce(shadow."_tags", '{"(epoch,)"}'), #{columns}
+        coalesce(shadow."_tags", '{"(epoch,)"}')::text, #{columns}
       FROM
         #{quote_ident(target_table)} as this
       LEFT JOIN
@@ -102,7 +101,7 @@ defmodule Electric.Replication.Shapes.Querying do
 
     # Important reason for `squery` usage here (as opposed to what might be more reasonable `equery`) is that we need
     # string representation of all fields, so we don't want to do double-conversion inside epgsql and back
-    with {:ok, _, rows} <- :epgsql.squery(conn, query) do
+    with {["one", "two"], rows} <- Client.query!(query) do
       curr_records =
         rows_to_changes_with_tags(rows, Enum.map(table_info.columns, & &1.name), layer, origin)
 
@@ -112,7 +111,6 @@ defmodule Electric.Replication.Shapes.Querying do
         Map.new(curr_records, fn {id, change} -> {id, {change, [layer.request_id]}} end)
 
       query_next_layers(
-        conn,
         layer,
         schema_version,
         origin,
@@ -125,7 +123,6 @@ defmodule Electric.Replication.Shapes.Querying do
   end
 
   def query_next_layers(
-        conn,
         layer,
         schema_version,
         origin,
@@ -135,11 +132,10 @@ defmodule Electric.Replication.Shapes.Querying do
         results_map \\ %{}
       )
 
-  def query_next_layers(_, _, _, _, _, [], graph, results_map),
+  def query_next_layers(_, _, _, _, [], graph, results_map),
     do: {:ok, [], results_map, graph}
 
   def query_next_layers(
-        conn,
         %Layer{} = layer,
         schema_version,
         origin,
@@ -154,7 +150,7 @@ defmodule Electric.Replication.Shapes.Querying do
       fn next_layer, {:ok, curr_records, acc_records, acc_graph} ->
         pseudo_join = get_join_values(next_layer, curr_records)
 
-        case do_query_layer(conn, next_layer, schema_version, origin, context, pseudo_join) do
+        case do_query_layer(next_layer, schema_version, origin, context, pseudo_join) do
           {:ok, next_records, all_records, graph} ->
             acc_graph =
               graph

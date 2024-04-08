@@ -104,14 +104,6 @@ defmodule Electric.Postgres.Extension do
     """
   end
 
-  def transaction_marker_update_equery do
-    """
-    UPDATE #{transaction_marker_table()}
-    SET content = jsonb_build_object('xid', pg_current_xact_id(), 'caused_by', $1::text)
-    WHERE id = 'magic write'
-    """
-  end
-
   def schema, do: @schema
   def ddl_table, do: @ddl_table
   def schema_table, do: @schema_table
@@ -582,25 +574,6 @@ defmodule Electric.Postgres.Extension do
   end
 
   defp known_shadow_column?(_), do: false
-
-  @doc """
-  Perform a mostly no-op update to a transaction marker query to make sure
-  there is at least one write to Postgres after this point.
-
-  Second argument, `caused_by`, is any string which will be written in this
-  write, which may be useful for debugging.
-
-  This uses an extended query syntax, and thus cannot be used in a `replication: true`
-  connection.
-  """
-  def update_transaction_marker(conn, caused_by) when is_binary(caused_by) do
-    {:ok, 1} =
-      :epgsql.equery(
-        conn,
-        transaction_marker_update_equery(),
-        [caused_by]
-      )
-  end
 
   @last_acked_client_lsn_equery "SELECT lsn FROM #{@acked_client_lsn_table} WHERE client_id = $1"
   @spec fetch_last_acked_client_lsn(pid(), binary()) :: {:ok, binary() | nil} | {:error, term()}
