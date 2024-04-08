@@ -34,6 +34,13 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
   import Mock
 
+  setup_with_mocks([
+    {Electric.Replication.Postgres.Client, [:passthrough],
+     with_pool: fn _, _ -> :ok end, pooled_query!: fn _, _, _ -> :ok end}
+  ]) do
+    %{}
+  end
+
   setup ctx do
     ctx =
       ctx
@@ -44,12 +51,13 @@ defmodule Electric.Satellite.WebsocketServerTest do
       )
       |> Map.put_new(:allowed_unacked_txs, 30)
 
+    connector_config = [origin: "test-origin", connection: []]
     port = 55133
 
     plug =
       {Electric.Plug.SatelliteWebsocketPlug,
        auth_provider: Auth.provider(),
-       connector_config: [origin: "fake_origin"],
+       connector_config: connector_config,
        subscription_data_fun: ctx.subscription_data_fun,
        allowed_unacked_txs: ctx.allowed_unacked_txs}
 
@@ -57,7 +65,9 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
     server_id = Electric.instance_id()
 
-    {:ok, port: port, server_id: server_id}
+    start_link_supervised!({Electric.Satellite.ClientReconnectionInfo, connector_config})
+
+    %{port: port, server_id: server_id}
   end
 
   setup_with_mocks([
@@ -83,7 +93,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
       stream_transactions: fn _, _, _ -> [] end
     }
   ]) do
-    {:ok, %{}}
+    %{}
   end
 
   # make sure server is cleaning up connections
