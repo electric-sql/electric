@@ -1,0 +1,39 @@
+[doc NodeJS Satellite correctly transforms values at replication boundary from and to Electric]
+[include _shared.luxinc]
+[include _satellite_macros.luxinc]
+
+[invoke setup]
+
+[invoke setup_client 1 electric_1 5133]
+[invoke setup_client 2 electric_1 5133]
+
+[shell proxy_1]
+    [invoke migrate_items_table 20230504114018]
+
+[shell satellite_1]
+    ??[rpc] recv: #SatInStartReplicationResp
+    [invoke node_set_item_replication_transform]
+    [invoke node_await_table "items"]
+    [invoke node_sync_table "items"]
+    
+[shell satellite_2]
+    ??[rpc] recv: #SatInStartReplicationResp
+    [invoke node_set_item_replication_transform]
+    [invoke node_await_table "items"]
+    [invoke node_sync_table "items"]
+
+[shell satellite_1]
+    # should write and store plaintext values and encrypt at replication
+    [invoke node_await_insert "['private@email.com']"]
+    [invoke wait-for "await client.get_items(db)" "private@email.com" 10 $node]
+
+[shell pg_1]
+    # should sync the cipher encrypted value
+    [invoke wait-for "SELECT * FROM public.items;" "qsjwbufAfnbjm/dpn" 10 $psql]
+
+[shell satellite_2]
+    # should read plaintext values after decrypting from replication
+    [invoke wait-for "await client.get_items(db)" "private@email.com" 10 $node]
+
+[cleanup]
+  [invoke teardown]

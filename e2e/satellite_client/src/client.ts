@@ -420,6 +420,20 @@ export const delete_other_item = async (electric: Electric, keys: [string]) => {
   }
 }
 
+export const set_item_replication_transform = (electric: Electric) => {
+  electric.db.items.setReplicationTransform({
+    transformOutbound: (item) => ({
+      ...item,
+      content: item.content.split('').map((char) => String.fromCharCode(char.charCodeAt(0) + 1)).join('')
+    }),
+    transformInbound: (item) => ({
+      ...item,
+      content: item.content.split('').map((char) => String.fromCharCode(char.charCodeAt(0) - 1)).join('')
+    })
+
+  })
+}
+
 export const stop = async () => {
   await globalRegistry.stopAll()
 }
