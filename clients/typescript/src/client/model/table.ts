@@ -53,7 +53,7 @@ import {
 import { Rel, Shape } from '../../satellite/shapes/types'
 import {
   IReplicationTransformManager,
-  liftReplicationTransform,
+  transformTableRecord,
 } from './transforms'
 import { ReplicationTransformInput } from '../input/replicationTransformInput'
 
@@ -1609,19 +1609,24 @@ export class Table<
     // referential integrity
     const relations = this._dbDescription.getRelations(this.tableName)
     const immutableFields = relations.map((r) => r.relationField)
-
-    const liftTableReplicationTransform = (transform: (row: T) => T) =>
-      liftReplicationTransform(
-        transform,
-        this._fields,
-        this._schema,
-        immutableFields
-      )
-
     this._replicationTransformManager.setTableTransform(
       this._qualifiedTableName,
-      liftTableReplicationTransform(i.transformInbound),
-      liftTableReplicationTransform(i.transformOutbound)
+      (record) =>
+        transformTableRecord(
+          record,
+          i.transformInbound,
+          this._fields,
+          this._schema,
+          immutableFields
+        ),
+      (record) =>
+        transformTableRecord(
+          record,
+          i.transformOutbound,
+          this._fields,
+          this._schema,
+          immutableFields
+        )
     )
   }
 

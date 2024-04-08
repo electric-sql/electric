@@ -40,48 +40,47 @@ export class ReplicationTransformManager
 }
 
 /**
- * Lifts a typed record transformation {@link transformRow} into a transformation of
- * raw records, applying appropriate parsing and validation, including forbidding
+ * Transform a raw record with the given typed row transformation {@link transformRow}
+ * by applying appropriate parsing and validation, including forbidding
  * changes to specified {@link immutableFields}
  *
  * @param transformRow transformation of record of type {@link T}
  * @param fields fields to specify the transformation from raw record to record of type {@link T}
  * @param schema schema to parse/validate raw record to record of type {@link T}
  * @param immutableFields - fields that cannot be modified by {@link transformRow}
- * @return transformation of raw record
+ * @return the transformed raw record
  */
-export function liftReplicationTransform<T extends Record<string, unknown>>(
+export function transformTableRecord<T extends Record<string, unknown>>(
+  record: RowRecord,
   transformRow: (row: T) => T,
   fields: Fields,
   schema: z.ZodTypeAny,
   immutableFields: string[]
-): (row: RowRecord) => RowRecord {
-  return (row: RowRecord) => {
-    // parse raw record according to specified fields
-    const parsedRow = transformFields(
-      row,
-      fields,
-      Transformation.Sqlite2Js
-    ) as T
+): RowRecord {
+  // parse raw record according to specified fields
+  const parsedRow = transformFields(
+    record,
+    fields,
+    Transformation.Sqlite2Js
+  ) as T
 
-    // apply specified transformation
-    const transformedParsedRow = transformRow(parsedRow as Readonly<T>)
+  // apply specified transformation
+  const transformedParsedRow = transformRow(parsedRow as Readonly<T>)
 
-    // validate transformed row and convert back to raw record
-    const validatedTransformedParsedRow = validate(transformedParsedRow, schema)
-    const transformedRow = transformFields(
-      validatedTransformedParsedRow,
-      fields,
-      Transformation.Js2Sqlite
-    ) as RowRecord
+  // validate transformed row and convert back to raw record
+  const validatedTransformedParsedRow = validate(transformedParsedRow, schema)
+  const transformedRecord = transformFields(
+    validatedTransformedParsedRow,
+    fields,
+    Transformation.Js2Sqlite
+  ) as RowRecord
 
-    // check if any of the immutable fields were modified
-    const validatedTransformedRow = validateRecordTransformation(
-      row,
-      transformedRow,
-      immutableFields
-    )
+  // check if any of the immutable fields were modified
+  const validatedTransformedRecord = validateRecordTransformation(
+    record,
+    transformedRecord,
+    immutableFields
+  )
 
-    return validatedTransformedRow
-  }
+  return validatedTransformedRecord
 }
