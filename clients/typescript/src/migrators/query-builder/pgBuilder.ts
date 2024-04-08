@@ -397,47 +397,6 @@ class PgBuilder extends QueryBuilder {
     ]
   }
 
-  setClearTagsForTimestamp(
-    oplogTable: QualifiedTablename,
-    shadowTable: QualifiedTablename
-  ): string {
-    const oplog = `"${oplogTable.namespace}"."${oplogTable.tablename}"`
-    const shadow = `"${shadowTable.namespace}"."${shadowTable.tablename}"`
-    /*
-    return dedent`
-      UPDATE ${oplog}
-      SET "clearTags" =
-            CASE WHEN rowid = updates.rowid_of_first_op_in_tx
-                 THEN updates.tags
-                 ELSE $1 -- singleton array containing tag of thix TX
-            END
-      FROM (
-        SELECT shadow.tags as tags, rowid_of_first_op_in_tx
-        FROM (
-          SELECT min(op.rowid) as rowid_of_first_op_in_tx
-          FROM ${shadow} AS shadow
-          JOIN ${oplog} as op
-            ON op.namespace = shadow.namespace
-              AND op.tablename = shadow.tablename
-              AND op."primaryKey" = shadow."primaryKey"
-          WHERE op.timestamp = $2
-          GROUP BY op.namespace, op.tablename, op."primaryKey"
-        ) t JOIN ${oplog} s ON s.rowid = t.rowid_of_first_op_in_tx
-      ) AS updates
-      WHERE ${oplog}.timestamp = $3 -- only update operations from this TX
-    `
-    */
-    return dedent`
-      UPDATE ${oplog}
-        SET "clearTags" = ${shadow}.tags
-        FROM ${shadow}
-        WHERE ${oplog}.namespace = ${shadow}.namespace
-          AND ${oplog}.tablename = ${shadow}.tablename
-          AND ${shadow}."primaryKey"::jsonb @> ${oplog}."primaryKey"::jsonb AND ${shadow}."primaryKey"::jsonb <@ ${oplog}."primaryKey"::jsonb
-          AND ${oplog}.timestamp = $1
-    `
-  }
-
   setTagsForShadowRows(
     oplogTable: QualifiedTablename,
     shadowTable: QualifiedTablename
