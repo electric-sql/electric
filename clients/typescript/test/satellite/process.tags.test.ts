@@ -75,9 +75,9 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
 
     const entries = await satellite._getEntries()
     t.is(entries[0].clearTags, encodeTags([]))
-    t.is(entries[1].clearTags, genEncodedTags(clientId, [txDate1]))
-    t.is(entries[2].clearTags, genEncodedTags(clientId, [txDate2]))
-    t.is(entries[3].clearTags, genEncodedTags(clientId, [txDate3]))
+    t.is(entries[1].clearTags, genEncodedTags(clientId, [txDate2, txDate1]))
+    t.is(entries[2].clearTags, genEncodedTags(clientId, [txDate3, txDate2]))
+    t.is(entries[3].clearTags, genEncodedTags(clientId, [txDate4, txDate3]))
 
     t.not(txDate1, txDate2)
     t.not(txDate2, txDate3)
@@ -548,7 +548,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
 
     t.is(
       updateEntryAfterSnapshot[0].clearTags,
-      genEncodedTags(authState.clientId, [insertTimestamp])
+      genEncodedTags(authState.clientId, [timestampTx2, insertTimestamp])
     )
 
     // The second operation (delete) should have the same timestamp
@@ -560,7 +560,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
     t.assert(deleteEntryAfterSnapshot[0].timestamp === rawTimestampTx2)
     t.is(
       deleteEntryAfterSnapshot[0].clearTags,
-      genEncodedTags(authState.clientId, [timestampTx2])
+      genEncodedTags(authState.clientId, [timestampTx2, insertTimestamp])
     )
 
     // The third operation (reinsert) should have the same timestamp
@@ -572,7 +572,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
     t.assert(reinsertEntryAfterSnapshot[0].timestamp === rawTimestampTx2)
     t.is(
       reinsertEntryAfterSnapshot[0].clearTags,
-      genEncodedTags(authState.clientId, [timestampTx2])
+      genEncodedTags(authState.clientId, [timestampTx2, insertTimestamp])
     )
   })
 

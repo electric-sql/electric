@@ -20,11 +20,14 @@ export default [
       'CREATE TABLE IF NOT EXISTS main."bigIntTable" (\n  value BIGINT PRIMARY KEY NOT NULL\n);',
       'CREATE TABLE IF NOT EXISTS main.parent (\n  id INTEGER PRIMARY KEY NOT NULL,\n  value TEXT,\n  other INTEGER DEFAULT 0\n);',
       'CREATE TABLE IF NOT EXISTS main.child (\n  id INTEGER PRIMARY KEY NOT NULL,\n  parent INTEGER NOT NULL,\n  FOREIGN KEY(parent) REFERENCES main.parent(id) DEFERRABLE INITIALLY IMMEDIATE\n);',
+      'CREATE TABLE "main"."blobTable" (value bytea NOT NULL, CONSTRAINT "blobTable_pkey" PRIMARY KEY (value)\n);',
       'DROP TABLE IF EXISTS main._electric_trigger_settings;',
       'CREATE TABLE main._electric_trigger_settings(namespace TEXT, tablename TEXT, flag INTEGER, PRIMARY KEY (namespace, tablename));',
       "INSERT INTO main._electric_trigger_settings(namespace, tablename,flag) VALUES ('main', 'child', 1);",
       "INSERT INTO main._electric_trigger_settings(namespace, tablename,flag) VALUES ('main', 'items', 1);",
       "INSERT INTO main._electric_trigger_settings(namespace, tablename,flag) VALUES ('main', 'parent', 1);",
+      "INSERT INTO main._electric_trigger_settings(namespace, tablename,flag) VALUES ('main', 'bigIntTable', 1);",
+      "INSERT INTO main._electric_trigger_settings(namespace, tablename,flag) VALUES ('main', 'blobTable', 1);",
 
       'DROP TRIGGER IF EXISTS update_ensure_main_child_primarykey ON main.child;',
       `
@@ -587,6 +590,18 @@ export default [
           FOR EACH ROW
             EXECUTE FUNCTION delete_main_bigIntTable_into_oplog_function();
       `,
+      'DROP TRIGGER IF EXISTS update_ensure_main_blobTable_primarykey ON "main"."blobTable";',
+      'CREATE OR REPLACE FUNCTION update_ensure_main_blobTable_primarykey_function()\nRETURNS TRIGGER AS $$\nBEGIN\n  IF OLD."value" IS DISTINCT FROM NEW."value" THEN\n    RAISE EXCEPTION \'Cannot change the value of column value as it belongs to the primary key\';\n  END IF;\n  RETURN NEW;\nEND;\n$$ LANGUAGE plpgsql;',
+      'CREATE TRIGGER update_ensure_main_blobTable_primarykey\n  BEFORE UPDATE ON "main"."blobTable"\n    FOR EACH ROW\n      EXECUTE FUNCTION update_ensure_main_blobTable_primarykey_function();',
+      'DROP TRIGGER IF EXISTS insert_main_blobTable_into_oplog ON "main"."blobTable";',
+      "CREATE OR REPLACE FUNCTION insert_main_blobTable_into_oplog_function()\n    RETURNS TRIGGER AS $$\n    BEGIN\n      DECLARE\n        flag_value INTEGER;\n      BEGIN\n        -- Get the flag value from _electric_trigger_settings\n        SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE namespace = 'main' AND tablename = 'blobTable';\n\n        IF flag_value = 1 THEN\n          -- Insert into _electric_oplog\n          INSERT INTO main._electric_oplog (namespace, tablename, optype, \"primaryKey\", \"newRow\", \"oldRow\", timestamp)\n          VALUES (\n            'main',\n            'blobTable',\n            'INSERT',\n            json_strip_nulls(json_build_object('value', CASE WHEN new.\"value\" IS NOT NULL THEN encode(new.\"value\"::bytea, 'hex') ELSE NULL END)),\n            jsonb_build_object('value', CASE WHEN new.\"value\" IS NOT NULL THEN encode(new.\"value\"::bytea, 'hex') ELSE NULL END),\n            NULL,\n            NULL\n          );\n        END IF;\n\n        RETURN NEW;\n      END;\n    END;\n    $$ LANGUAGE plpgsql;",
+      'CREATE TRIGGER insert_main_blobTable_into_oplog\n  AFTER INSERT ON "main"."blobTable"\n    FOR EACH ROW\n      EXECUTE FUNCTION insert_main_blobTable_into_oplog_function();',
+      'DROP TRIGGER IF EXISTS update_main_blobTable_into_oplog ON "main"."blobTable";',
+      "CREATE OR REPLACE FUNCTION update_main_blobTable_into_oplog_function()\n    RETURNS TRIGGER AS $$\n    BEGIN\n      DECLARE\n        flag_value INTEGER;\n      BEGIN\n        -- Get the flag value from _electric_trigger_settings\n        SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE namespace = 'main' AND tablename = 'blobTable';\n\n        IF flag_value = 1 THEN\n          -- Insert into _electric_oplog\n          INSERT INTO main._electric_oplog (namespace, tablename, optype, \"primaryKey\", \"newRow\", \"oldRow\", timestamp)\n          VALUES (\n            'main',\n            'blobTable',\n            'UPDATE',\n            json_strip_nulls(json_build_object('value', CASE WHEN new.\"value\" IS NOT NULL THEN encode(new.\"value\"::bytea, 'hex') ELSE NULL END)),\n            jsonb_build_object('value', CASE WHEN new.\"value\" IS NOT NULL THEN encode(new.\"value\"::bytea, 'hex') ELSE NULL END),\n            jsonb_build_object('value', CASE WHEN old.\"value\" IS NOT NULL THEN encode(old.\"value\"::bytea, 'hex') ELSE NULL END),\n            NULL\n          );\n        END IF;\n\n        RETURN NEW;\n      END;\n    END;\n    $$ LANGUAGE plpgsql;",
+      'CREATE TRIGGER update_main_blobTable_into_oplog\n  AFTER UPDATE ON "main"."blobTable"\n    FOR EACH ROW\n      EXECUTE FUNCTION update_main_blobTable_into_oplog_function();',
+      'DROP TRIGGER IF EXISTS delete_main_blobTable_into_oplog ON "main"."blobTable";',
+      "CREATE OR REPLACE FUNCTION delete_main_blobTable_into_oplog_function()\n    RETURNS TRIGGER AS $$\n    BEGIN\n      DECLARE\n        flag_value INTEGER;\n      BEGIN\n        -- Get the flag value from _electric_trigger_settings\n        SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE namespace = 'main' AND tablename = 'blobTable';\n\n        IF flag_value = 1 THEN\n          -- Insert into _electric_oplog\n          INSERT INTO main._electric_oplog (namespace, tablename, optype, \"primaryKey\", \"newRow\", \"oldRow\", timestamp)\n          VALUES (\n            'main',\n            'blobTable',\n            'DELETE',\n            json_strip_nulls(json_build_object('value', CASE WHEN old.\"value\" IS NOT NULL THEN encode(old.\"value\"::bytea, 'hex') ELSE NULL END)),\n            NULL,\n            jsonb_build_object('value', CASE WHEN old.\"value\" IS NOT NULL THEN encode(old.\"value\"::bytea, 'hex') ELSE NULL END),\n            NULL\n          );\n        END IF;\n\n        RETURN NEW;\n      END;\n    END;\n    $$ LANGUAGE plpgsql;",
+      'CREATE TRIGGER delete_main_blobTable_into_oplog\n  AFTER DELETE ON "main"."blobTable"\n    FOR EACH ROW\n      EXECUTE FUNCTION delete_main_blobTable_into_oplog_function();',
     ],
     version: '2',
   },

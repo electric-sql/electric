@@ -122,6 +122,7 @@ export const processTests = (test: TestFn<ContextType>) => {
       lsn: '',
       clientId: '',
       subscriptions: '',
+      seenAdditionalData: '',
     })
   })
 
@@ -341,14 +342,16 @@ export const processTests = (test: TestFn<ContextType>) => {
   })
 
   test('snapshot of INSERT with blob/Uint8Array', async (t) => {
-    const { adapter, runMigrations, satellite, authState } = t.context
+    const { adapter, runMigrations, satellite, authState, builder } = t.context
 
     await runMigrations()
 
     const blob = new Uint8Array([1, 2, 255, 244, 160, 1])
 
     await adapter.run({
-      sql: `INSERT INTO blobTable(value) VALUES (?)`,
+      sql: `INSERT INTO "main"."blobTable"(value) VALUES (${builder.makePositionalParam(
+        1
+      )})`,
       args: [blob],
     })
 
@@ -364,8 +367,12 @@ export const processTests = (test: TestFn<ContextType>) => {
       },
       relations
     )
+    const qualifiedBlobTable = new QualifiedTablename(
+      'main',
+      'blobTable'
+    ).toString()
     const [_, keyChanges] =
-      merged['main.blobTable'][`{"value":"${blobToHexString(blob)}"}`]
+      merged[qualifiedBlobTable][`{"value":"${blobToHexString(blob)}"}`]
     const resultingValue = keyChanges.changes.value.value
     t.deepEqual(resultingValue, blob)
   })
