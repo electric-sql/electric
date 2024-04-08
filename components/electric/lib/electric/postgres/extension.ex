@@ -575,23 +575,6 @@ defmodule Electric.Postgres.Extension do
 
   defp known_shadow_column?(_), do: false
 
-  @last_acked_client_lsn_equery "SELECT lsn FROM #{@acked_client_lsn_table} WHERE client_id = $1"
-  @spec fetch_last_acked_client_lsn(pid(), binary()) :: {:ok, binary() | nil} | {:error, term()}
-  def fetch_last_acked_client_lsn(conn, client_id) do
-    case :epgsql.equery(conn, @last_acked_client_lsn_equery, [client_id]) do
-      {:ok, _, [{lsn}]} ->
-        # No need for a decoding step here because :epgsql.equery() uses Postgres' binary protocol, so a BYTEA value
-        # is returned as a raw binary.
-        {:ok, lsn}
-
-      {:ok, _, []} ->
-        {:ok, nil}
-
-      {:error, _} = error ->
-        error
-    end
-  end
-
   @doc """
   Try inserting a new cluster id into PostgreSQL to persist, but return
   the already-existing value on conflict.
