@@ -943,7 +943,10 @@ export const datatypeTests = (test: TestFn<ContextType>) => {
       },
     })
 
-    t.deepEqual(res.bytea, blob)
+    t.deepEqual(
+      new Uint8Array(res.bytea!), // convert to Uint8Array for comparison because PG returns a Buffer (which is a subclass of Uint8Array but won't compare equal to it)
+      blob
+    )
 
     const fetchRes = await tbl.findUnique({
       where: {
@@ -951,7 +954,7 @@ export const datatypeTests = (test: TestFn<ContextType>) => {
       },
     })
 
-    t.deepEqual(fetchRes?.bytea, blob)
+    t.deepEqual(new Uint8Array(fetchRes?.bytea!), blob)
   })
 
   test('support null values for BLOB type', async (t) => {
