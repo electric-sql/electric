@@ -1470,12 +1470,14 @@ export class SatelliteProcess implements Satellite {
   }
 
   _addSeenAdditionalDataStmt(ref: string): Statement {
-    const meta = this.opts.metaTable.toString()
+    const meta = `"${this.opts.metaTable.namespace}"."${this.opts.metaTable.tablename}"`
 
     const sql = `
-      INSERT INTO ${meta} (key, value) VALUES ('seenAdditionalData', ?)
+      INSERT INTO ${meta} (key, value) VALUES ('seenAdditionalData', ${this.builder.makePositionalParam(
+      1
+    )})
         ON CONFLICT (key) DO
-          UPDATE SET value = value || ',' || excluded.value
+          UPDATE SET value = ${meta}.value || ',' || excluded.value
     `
     const args = [ref]
     return { sql, args }
