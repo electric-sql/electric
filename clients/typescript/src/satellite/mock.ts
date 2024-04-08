@@ -463,4 +463,15 @@ export class MockSatelliteClient
       this.enqueueEmit(SUBSCRIPTION_ERROR, satError, subscriptionId)
     }, timeout)
   }
+
+  setReplicationTransform(
+    _tableName: QualifiedTablename,
+    _transformInbound: (row: DataRecord) => DataRecord,
+    _transformOutbound: (row: DataRecord) => DataRecord
+  ): void {
+    throw new Error('Method not implemented.')
+  }
+  clearReplicationTransform(_tableName: QualifiedTablename): void {
+    throw new Error('Method not implemented.')
+  }
 }

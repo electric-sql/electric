@@ -68,6 +68,8 @@ import {
   AdditionalData,
   DataInsert,
   AdditionalDataCallback,
+  DataChange,
+  isDataChange,
 } from '../util/types'
 import {
   base64,
@@ -95,7 +97,7 @@ import { RPC, rpcRespond, withRpcRequestLogging } from './RPC'
 import { Mutex } from 'async-mutex'
 import { DbSchema } from '../client/model'
 import { PgBasicType, PgDateType, PgType } from '../client/conversions/types'
-import { AsyncEventEmitter } from '../util'
+import { AsyncEventEmitter, QualifiedTablename } from '../util'
 import { AuthState } from '../auth'
 import Long from 'long'
 
@@ -111,6 +113,11 @@ const subscriptionError = [
   SatelliteErrorCode.SUBSCRIPTION_NOT_FOUND,
   SatelliteErrorCode.SHAPE_DELIVERY_ERROR,
 ]
+
+type ReplicationHandler = {
+  transformInbound: (row: Record) => Record
+  transformOutbound: (row: Record) => Record
+}
 
 type Events = {
   error: (error: SatelliteError) => void
@@ -139,6 +146,8 @@ export class SatelliteClient implements Client {
 
   // can only handle a single subscription at a time
   private subscriptionsDataCache: SubscriptionsDataCache
+
+  private replicationTransforms: Map<string, ReplicationHandler> = new Map()
 
   private socketHandler?: (any: any) => void
   private throttledPushTransaction?: () => void
@@ -451,6 +460,11 @@ export class SatelliteClient implements Client {
         'enqueuing a transaction while outbound replication has not started'
       )
     }
+
+    // apply any specified transforms to the data changes
+    transaction.changes = transaction.changes.map((dc) =>
+      this._applyDataChangeTransform(dc, 'outbound')
+    )
 
     this.outbound.transactions.push(transaction)
     this.outbound.last_lsn = transaction.lsn
@@ -1007,10 +1021,17 @@ export class SatelliteClient implements Client {
 
         const { commit_timestamp, lsn, changes, origin, migrationVersion, id } =
           replication.transactions[lastTxnIdx]
+
+        // apply any specified transforms to the data changes
+        const transformedChanges = changes.map((change) => {
+          if (!isDataChange(change)) return change
+          return this._applyDataChangeTransform(change, 'inbound')
+        })
+
         const transaction: ServerTransaction = {
           commit_timestamp,
           lsn,
-          changes,
+          changes: transformedChanges,
           origin,
           migrationVersion,
           id,
@@ -1212,6 +1233,45 @@ export class SatelliteClient implements Client {
     ) {
       this.sendMessage(msg)
       this.inbound.lastAckedTxId = msg.transactionId
+    }
+  }
+
+  public setReplicationTransform(
+    tableName: QualifiedTablename,
+    transformInbound: (row: Record) => Record,
+    transformOutbound: (row: Record) => Record
+  ): void {
+    this.replicationTransforms.set(tableName.tablename, {
+      transformInbound: transformInbound,
+      transformOutbound: transformOutbound,
+    })
+  }
+
+  public clearReplicationTransform(tableName: QualifiedTablename): void {
+    this.replicationTransforms.delete(tableName.tablename)
+  }
+
+  private _applyDataChangeTransform(
+    dataChange: DataChange,
+    dataFlow: 'inbound' | 'outbound'
+  ): DataChange {
+    const transforms = this.replicationTransforms.get(dataChange.relation.table)
+    if (!transforms) return dataChange
+    const transformToUse =
+      dataFlow === 'inbound'
+        ? transforms.transformInbound
+        : transforms.transformOutbound
+    try {
+      return {
+        ...dataChange,
+        record: dataChange.record && transformToUse(dataChange.record),
+        oldRecord: dataChange.oldRecord && transformToUse(dataChange.oldRecord),
+      }
+    } catch (err: any) {
+      throw new SatelliteError(
+        SatelliteErrorCode.REPLICATION_TRANSFORM_ERROR,
+        err.message
+      )
     }
   }
 }

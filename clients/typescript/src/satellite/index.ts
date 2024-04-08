@@ -126,4 +126,11 @@ export interface Client {
     successCallback: SubscriptionDeliveredCallback,
     errorCallback: SubscriptionErrorCallback
   ): void
+
+  setReplicationTransform(
+    tableName: QualifiedTablename,
+    transformInbound: (row: Record) => Record,
+    transformOutbound: (row: Record) => Record
+  ): void
+  clearReplicationTransform(tableName: QualifiedTablename): void
 }
