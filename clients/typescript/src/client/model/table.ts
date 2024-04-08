@@ -86,8 +86,6 @@ export class Table<
 {
   private _builder: Builder
   private _executor: Executor
-  private _shapeManager: IShapeManager
-  private _replicationTransformManager: IReplicationTransformManager
   private _qualifiedTableName: QualifiedTablename
   private _tables: Map<TableName, AnyTable>
   private _fields: Fields
@@ -116,8 +114,8 @@ export class Table<
     public tableName: string,
     adapter: DatabaseAdapter,
     private _notifier: Notifier,
-    shapeManager: IShapeManager,
-    replicationTransformManager: IReplicationTransformManager,
+    private _shapeManager: IShapeManager,
+    private _replicationTransformManager: IReplicationTransformManager,
     private _dbDescription: DbSchema<any>
   ) {
     this._fields = this._dbDescription.getFields(tableName)
@@ -126,12 +124,10 @@ export class Table<
     this._builder = new Builder(
       tableName,
       fieldNames,
-      shapeManager,
+      _shapeManager,
       tableDescription
     )
     this._executor = new Executor(adapter, _notifier, this._fields)
-    this._shapeManager = shapeManager
-    this._replicationTransformManager = replicationTransformManager
     this._qualifiedTableName = new QualifiedTablename('main', tableName)
     this._tables = new Map()
     this._schema = tableDescription.modelSchema
