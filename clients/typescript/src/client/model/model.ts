@@ -10,7 +10,7 @@ import { HKT, Kind } from '../util/hkt'
 import { SyncInput } from '../input/syncInput'
 import { ShapeSubscription } from '../../satellite/process'
 import { LiveResultSubscribeFunction } from '../../util/subscribe'
-import { ReplicationTransformInput } from '../input/replicationTransformInput'
+import { ReplicationRowTransformer } from '../../util'
 
 /**
  * Interface that is implemented by Electric clients.
@@ -202,7 +202,7 @@ export interface Model<
    *
    * @param i - Object that determines transforms to apply
    */
-  setReplicationTransform(i: ReplicationTransformInput<Schema>): void
+  setReplicationTransform(i: ReplicationRowTransformer<Schema>): void
 
   /**
    * Clears any replication transforms set using {@link setReplicationTransform}

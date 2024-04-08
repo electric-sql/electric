@@ -21,6 +21,7 @@ import {
   ReplicationStatus,
   AdditionalDataCallback,
   Record,
+  ReplicationRowTransformer,
 } from '../util/types'
 import {
   Shape,
@@ -82,8 +83,7 @@ export interface Satellite {
 
   setReplicationTransform(
     tableName: QualifiedTablename,
-    transformInbound: (row: Record) => Record,
-    transformOutbound: (row: Record) => Record
+    replicationRowTransformer: ReplicationRowTransformer<Record>
   ): void
   clearReplicationTransform(tableName: QualifiedTablename): void
 }
@@ -129,8 +129,7 @@ export interface Client {
 
   setReplicationTransform(
     tableName: QualifiedTablename,
-    transformInbound: (row: Record) => Record,
-    transformOutbound: (row: Record) => Record
+    transformer: ReplicationRowTransformer<Record>
   ): void
   clearReplicationTransform(tableName: QualifiedTablename): void
 }

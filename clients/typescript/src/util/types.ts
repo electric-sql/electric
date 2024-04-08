@@ -232,6 +232,11 @@ export enum ReplicationStatus {
   ACTIVE,
 }
 
+export type ReplicationRowTransformer<RowType> = {
+  transformInbound: (row: Readonly<RowType>) => RowType
+  transformOutbound: (row: Readonly<RowType>) => RowType
+}
+
 export type ErrorCallback = (error: SatelliteError) => void
 export type RelationCallback = (relation: Relation) => void
 export type AdditionalDataCallback = (

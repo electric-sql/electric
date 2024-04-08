@@ -1295,17 +1295,16 @@ test.serial(
     const { client, server } = t.context
     await client.connect()
     // set replication transform and perform same operations for replication
-    client.setReplicationTransform(
-      new QualifiedTablename('main', 'parent'),
-      (row) => ({
+    client.setReplicationTransform(new QualifiedTablename('main', 'parent'), {
+      transformInbound: (row) => ({
         ...row,
         value: 'transformed_inbound_' + row.value,
       }),
-      (row) => ({
+      transformOutbound: (row) => ({
         ...row,
         value: 'transformed_outbound_' + row.value,
-      })
-    )
+      }),
+    })
 
     const startResp = Proto.SatInStartReplicationResp.create()
 
@@ -1442,17 +1441,16 @@ test.serial(
     await client.connect()
 
     // set replication transform and perform same operations for replication
-    client.setReplicationTransform(
-      new QualifiedTablename('main', 'parent'),
-      (row) => ({
+    client.setReplicationTransform(new QualifiedTablename('main', 'parent'), {
+      transformInbound: (row) => ({
         ...row,
         value: 'transformed_inbound_' + row.value,
       }),
-      (row) => ({
+      transformOutbound: (row) => ({
         ...row,
         value: 'transformed_outbound_' + row.value,
-      })
-    )
+      }),
+    })
 
     const start = Proto.SatInStartReplicationResp.create()
     const begin = Proto.SatOpBegin.fromPartial({ commitTimestamp: Long.ZERO })
@@ -1668,28 +1666,32 @@ test.serial(
           // set initial transform
           client.setReplicationTransform(
             new QualifiedTablename('main', 'parent'),
-            (row) => ({
-              ...row,
-              value: 'transformed_inbound_' + row.value,
-            }),
-            (row) => ({
-              ...row,
-              value: 'transformed_outbound_' + row.value,
-            })
+            {
+              transformInbound: (row) => ({
+                ...row,
+                value: 'transformed_inbound_' + row.value,
+              }),
+              transformOutbound: (row) => ({
+                ...row,
+                value: 'transformed_outbound_' + row.value,
+              }),
+            }
           )
           client.enqueueTransaction(transactions[0])
 
           // set override transform
           client.setReplicationTransform(
             new QualifiedTablename('main', 'parent'),
-            (row) => ({
-              ...row,
-              value: 'transformed_differently_inbound_' + row.value,
-            }),
-            (row) => ({
-              ...row,
-              value: 'transformed_differently_outbound_' + row.value,
-            })
+            {
+              transformInbound: (row) => ({
+                ...row,
+                value: 'transformed_differently_inbound_' + row.value,
+              }),
+              transformOutbound: (row) => ({
+                ...row,
+                value: 'transformed_differently_outbound_' + row.value,
+              }),
+            }
           )
           client.enqueueTransaction(transactions[1])
 
@@ -1711,15 +1713,14 @@ test.serial(
     await client.connect()
 
     // set failing transform
-    client.setReplicationTransform(
-      new QualifiedTablename('main', 'parent'),
-      (_) => {
+    client.setReplicationTransform(new QualifiedTablename('main', 'parent'), {
+      transformInbound: (_) => {
         throw new Error('Inbound transform error')
       },
-      (_) => {
+      transformOutbound: (_) => {
         throw new Error('Outbound transform error')
-      }
-    )
+      },
+    })
 
     const startResp = Proto.SatInStartReplicationResp.create()
 
@@ -1763,15 +1764,14 @@ test.serial(
     await client.connect()
 
     // set failing transform
-    client.setReplicationTransform(
-      new QualifiedTablename('main', 'parent'),
-      (_) => {
+    client.setReplicationTransform(new QualifiedTablename('main', 'parent'), {
+      transformInbound: (_) => {
         throw new Error('Inbound transform error')
       },
-      (_) => {
+      transformOutbound: (_) => {
         throw new Error('Outbound transform error')
-      }
-    )
+      },
+    })
 
     const start = Proto.SatInStartReplicationResp.create()
     const begin = Proto.SatOpBegin.fromPartial({ commitTimestamp: Long.ZERO })

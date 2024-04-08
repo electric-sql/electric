@@ -70,6 +70,7 @@ import {
   AdditionalDataCallback,
   DataChange,
   isDataChange,
+  ReplicationRowTransformer,
 } from '../util/types'
 import {
   base64,
@@ -114,11 +115,6 @@ const subscriptionError = [
   SatelliteErrorCode.SHAPE_DELIVERY_ERROR,
 ]
 
-type ReplicationHandler = {
-  transformInbound: (row: Record) => Record
-  transformOutbound: (row: Record) => Record
-}
-
 type Events = {
   error: (error: SatelliteError) => void
   relation: (relation: Relation) => void
@@ -147,7 +143,10 @@ export class SatelliteClient implements Client {
   // can only handle a single subscription at a time
   private subscriptionsDataCache: SubscriptionsDataCache
 
-  private replicationTransforms: Map<string, ReplicationHandler> = new Map()
+  private replicationTransforms: Map<
+    string,
+    ReplicationRowTransformer<Record>
+  > = new Map()
 
   private socketHandler?: (any: any) => void
   private throttledPushTransaction?: () => void
@@ -1238,13 +1237,12 @@ export class SatelliteClient implements Client {
 
   public setReplicationTransform(
     tableName: QualifiedTablename,
-    transformInbound: (row: Record) => Record,
-    transformOutbound: (row: Record) => Record
+    replicationRowTransformer: ReplicationRowTransformer<Record>
   ): void {
-    this.replicationTransforms.set(tableName.tablename, {
-      transformInbound: transformInbound,
-      transformOutbound: transformOutbound,
-    })
+    this.replicationTransforms.set(
+      tableName.tablename,
+      replicationRowTransformer
+    )
   }
 
   public clearReplicationTransform(tableName: QualifiedTablename): void {

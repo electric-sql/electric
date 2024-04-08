@@ -36,6 +36,7 @@ import {
   Statement,
   createQueryResultSubscribeFunction,
   isObject,
+  ReplicationRowTransformer,
 } from '../../util'
 import { NarrowInclude } from '../input/inputNarrowing'
 import { IShapeManager } from './shapes'
@@ -55,7 +56,6 @@ import {
   IReplicationTransformManager,
   transformTableRecord,
 } from './transforms'
-import { ReplicationTransformInput } from '../input/replicationTransformInput'
 
 type AnyTable = Table<any, any, any, any, any, any, any, any, any, HKT>
 
@@ -1604,29 +1604,32 @@ export class Table<
     return result
   }
 
-  setReplicationTransform(i: ReplicationTransformInput<T>): void {
+  setReplicationTransform(i: ReplicationRowTransformer<T>): void {
     // forbid transforming relation keys to avoid breaking
     // referential integrity
     const relations = this._dbDescription.getRelations(this.tableName)
     const immutableFields = relations.map((r) => r.relationField)
     this._replicationTransformManager.setTableTransform(
       this._qualifiedTableName,
-      (record) =>
-        transformTableRecord(
-          record,
-          i.transformInbound,
-          this._fields,
-          this._schema,
-          immutableFields
-        ),
-      (record) =>
-        transformTableRecord(
-          record,
-          i.transformOutbound,
-          this._fields,
-          this._schema,
-          immutableFields
-        )
+      {
+        transformInbound: (record) =>
+          transformTableRecord(
+            record,
+            i.transformInbound,
+            this._fields,
+            this._schema,
+            immutableFields
+          ),
+
+        transformOutbound: (record) =>
+          transformTableRecord(
+            record,
+            i.transformOutbound,
+            this._fields,
+            this._schema,
+            immutableFields
+          ),
+      }
     )
   }
 

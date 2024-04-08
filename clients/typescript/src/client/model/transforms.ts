@@ -1,5 +1,9 @@
 import { Satellite } from '../../satellite'
-import { QualifiedTablename, Record as RowRecord } from '../../util'
+import {
+  QualifiedTablename,
+  ReplicationRowTransformer,
+  Record as RowRecord,
+} from '../../util'
 import { Transformation, transformFields } from '../conversions/input'
 import {
   validate,
@@ -11,8 +15,7 @@ import * as z from 'zod'
 export interface IReplicationTransformManager {
   setTableTransform(
     tableName: QualifiedTablename,
-    transformInbound: (row: RowRecord) => RowRecord,
-    transformOtbound: (row: RowRecord) => RowRecord
+    transform: ReplicationRowTransformer<RowRecord>
   ): void
   clearTableTransform(tableName: QualifiedTablename): void
 }
@@ -24,14 +27,9 @@ export class ReplicationTransformManager
 
   setTableTransform(
     tableName: QualifiedTablename,
-    transformInbound: (row: RowRecord) => RowRecord,
-    transformOtbound: (row: RowRecord) => RowRecord
+    transform: ReplicationRowTransformer<RowRecord>
   ): void {
-    this.satellite.setReplicationTransform(
-      tableName,
-      transformInbound,
-      transformOtbound
-    )
+    this.satellite.setReplicationTransform(tableName, transform)
   }
 
   clearTableTransform(tableName: QualifiedTablename): void {
