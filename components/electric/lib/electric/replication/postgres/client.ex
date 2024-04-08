@@ -121,6 +121,9 @@ defmodule Electric.Replication.Postgres.Client do
       t.oid
   """
 
+  def types_query(kinds),
+    do: {@types_query, Enum.map(kinds, &Electric.Postgres.OidDatabase.PgType.encode_kind/1)}
+
   def query_oids(conn, kinds \\ [:BASE, :DOMAIN, :ENUM]) do
     typtypes = Enum.map(kinds, &Electric.Postgres.OidDatabase.PgType.encode_kind/1)
     {:ok, _, type_data} = :epgsql.equery(conn, @types_query, [typtypes])

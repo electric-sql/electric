@@ -239,7 +239,9 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
     {:ok, loader, schema_version} = SchemaLoader.save(loader, version, schema, stmts)
 
     if state.refresh_enum_types and schema.enums != old_enums do
-      Client.with_conn(state.conn_opts, fn conn -> OidDatabase.update_oids(conn, [:ENUM]) end)
+      {sql, params} = Client.types_query([:ENUM])
+      {[], rows} = Client.pooled_query!(state.conn_opts, sql, params)
+      OidDatabase.save_oids(rows)
     end
 
     {:ok, loader, schema_version}
