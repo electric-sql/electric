@@ -153,11 +153,13 @@ const generateClientFromPrismaSchema = async (
     `${generatedFilePrefix}_client_${token}`
   )
   const migrationsPath = path.join(generatedClientPath, 'migrations.ts')
+  const pgMigrationsPath = path.join(generatedClientPath, 'pg-migrations.ts')
   fs.writeFileSync(schemaFilePath, inlinePrismaSchema)
   // clean up the generated client if present
   fs.rmSync(generatedClientPath, { recursive: true, force: true })
   await generateClient(schemaFilePath, generatedClientPath)
   await fs.writeFileSync(migrationsPath, 'export default []')
+  await fs.writeFileSync(pgMigrationsPath, 'export default []')
   return generatedClientPath
 }
 
