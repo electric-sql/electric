@@ -302,15 +302,6 @@ export abstract class QueryBuilder {
     this.createOrReplaceFkCompensationTrigger.bind(this, 'UPDATE')
 
   /**
-   * For each first oplog entry per element,
-   * sets `clearTags` array to previous tags from the shadow table
-   */
-  abstract setClearTagsForTimestamp(
-    oplogTable: QualifiedTablename,
-    shadowTable: QualifiedTablename
-  ): string
-
-  /**
    * For each affected shadow row, set new tag array, unless the last oplog operation was a DELETE
    */
   abstract setTagsForShadowRows(

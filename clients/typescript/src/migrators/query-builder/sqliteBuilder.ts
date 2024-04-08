@@ -279,33 +279,6 @@ class SqliteBuilder extends QueryBuilder {
     ]
   }
 
-  setClearTagsForTimestamp(
-    oplogTable: QualifiedTablename,
-    shadowTable: QualifiedTablename
-  ): string {
-    const oplog = `"${oplogTable.namespace}"."${oplogTable.tablename}"`
-    const shadow = `"${shadowTable.namespace}"."${shadowTable.tablename}"`
-    return dedent`
-      UPDATE ${oplog}
-      SET clearTags =
-            CASE WHEN rowid = updates.rowid_of_first_op_in_tx
-                 THEN updates.tags
-                 ELSE ? -- singleton array containing tag of thix TX
-            END
-      FROM (
-        SELECT shadow.tags as tags, min(op.rowid) as rowid_of_first_op_in_tx
-        FROM ${shadow} AS shadow
-        JOIN ${oplog} as op
-          ON op.namespace = shadow.namespace
-            AND op.tablename = shadow.tablename
-            AND op.primaryKey = shadow.primaryKey
-        WHERE op.timestamp = ?
-        GROUP BY op.namespace, op.tablename, op.primaryKey
-      ) AS updates
-      WHERE ${oplog}.timestamp = ? -- only update operations from this TX
-    `
-  }
-
   setTagsForShadowRows(
     oplogTable: QualifiedTablename,
     shadowTable: QualifiedTablename
