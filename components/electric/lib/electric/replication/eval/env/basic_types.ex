@@ -39,13 +39,7 @@ defmodule Electric.Replication.Eval.Env.BasicTypes do
   """
 
   @known_types @moduledoc
-               |> String.split("## Known types")
-               |> List.last()
-               |> String.split("--- |\n")
-               |> List.last()
-               |> String.split("\n", trim: true)
-               |> Enum.map(&String.split(&1, "|", trim: true))
-               |> Enum.map(&Enum.map(&1, fn x -> String.trim(x) end))
+               |> Electric.Utils.parse_md_table(after: "## Known types")
                |> Map.new(fn [type, category, preferred] ->
                  {String.to_atom(type),
                   %{category: String.to_atom(category), preferred?: preferred == "t"}}

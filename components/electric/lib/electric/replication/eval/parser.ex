@@ -188,7 +188,8 @@ defmodule Electric.Replication.Eval.Parser do
     with {:ok, choices} <- find_available_functions(call, env),
          {:ok, args} <- Utils.map_while_ok(args, &do_parse_and_validate_tree(&1, refs, env)),
          {:ok, concrete} <- Lookups.pick_concrete_function_overload(choices, args, env),
-         {:ok, args} <- cast_unknowns(args, concrete.args, env) do
+         {:ok, args} <- cast_unknowns(args, concrete.args, env),
+         {:ok, args} <- cast_implicit(args, concrete.args, env) do
       concrete
       |> from_concrete(args)
       |> maybe_reduce()
@@ -329,7 +330,8 @@ defmodule Electric.Replication.Eval.Parser do
     with {:ok, choices} <- find_available_operators(name, arity, location, env),
          {:ok, args} <- Utils.map_while_ok(args, &do_parse_and_validate_tree(&1, refs, env)),
          {:ok, concrete} <- Lookups.pick_concrete_operator_overload(choices, args, env),
-         {:ok, args} <- cast_unknowns(args, concrete.args, env) do
+         {:ok, args} <- cast_unknowns(args, concrete.args, env),
+         {:ok, args} <- cast_implicit(args, concrete.args, env) do
       {:ok, from_concrete(concrete, args)}
     else
       {:error, {_loc, _msg}} = error -> error
@@ -375,32 +377,39 @@ defmodule Electric.Replication.Eval.Parser do
     end
   end
 
-  defp find_cast_function(%Env{} = env, from_type, :text) do
-    out_func = {"#{from_type}out", 1}
-
-    case Map.fetch(env.implicit_casts, {from_type, :text}) do
-      {:ok, :as_is} ->
-        {:ok, :as_is}
-
-      :error ->
-        with {:ok, [%{args: [^from_type]} = impl]} <- Map.fetch(env.funcs, out_func) do
-          {:ok, impl}
-        end
-    end
-  end
-
   defp find_cast_function(%Env{} = env, from_type, to_type) do
-    # I know this looks like a no-op `with`, but I want this function to encapsulate the access
     case Map.fetch(env.implicit_casts, {from_type, to_type}) do
       {:ok, :as_is} ->
         {:ok, :as_is}
 
+      {:ok, {module, fun}} ->
+        {:ok, {module, fun}}
+
       :error ->
-        with {:ok, {module, fun}} <- Map.fetch(env.explicit_casts, {from_type, to_type}) do
-          {:ok, {module, fun}}
+        case {from_type, to_type} do
+          {:text, to_type} -> find_cast_in_function(env, to_type)
+          {from_type, :text} -> find_cast_out_function(env, from_type)
+          {from_type, to_type} -> find_explicit_cast(env, from_type, to_type)
         end
     end
   end
+
+  defp find_cast_in_function(env, to_type) do
+    case Map.fetch(env.funcs, {"#{to_type}", 1}) do
+      {:ok, [%{args: [:text], implementation: impl}]} -> {:ok, impl}
+      _ -> :error
+    end
+  end
+
+  defp find_cast_out_function(env, to_type) do
+    case Map.fetch(env.funcs, {"#{to_type}out", 1}) do
+      {:ok, [%{args: [^to_type], implementation: impl}]} -> {:ok, impl}
+      _ -> :error
+    end
+  end
+
+  defp find_explicit_cast(env, from_type, to_type),
+    do: Map.fetch(env.explicit_casts, {from_type, to_type})
 
   @spec as_dynamic_cast(tree_part(), Env.pg_type(), Env.t()) ::
           {:ok, tree_part()} | {:error, {non_neg_integer(), String.t()}}
@@ -422,6 +431,36 @@ defmodule Electric.Replication.Eval.Parser do
       :error ->
         {:error, {loc, "unknown cast from type #{type} to type #{target_type}"}}
     end
+  end
+
+  defp cast_implicit(processed_args, arg_list, env) do
+    {:ok,
+     Enum.zip_with(processed_args, arg_list, fn
+       %{type: type} = arg, type ->
+         arg
+
+       %{type: from_type} = arg, to_type ->
+         case Map.fetch!(env.implicit_casts, {from_type, to_type}) do
+           :as_is ->
+             arg
+
+           impl ->
+             %Func{
+               location: arg.location,
+               type: to_type,
+               args: [arg],
+               implementation: impl,
+               name: "#{from_type}_to_#{to_type}"
+             }
+             |> maybe_reduce()
+             |> case do
+               {:ok, val} -> val
+               error -> throw(error)
+             end
+         end
+     end)}
+  catch
+    {:error, {_loc, _message}} = error -> error
   end
 
   defp cast_unknowns(processed_args, arg_list, env) do
