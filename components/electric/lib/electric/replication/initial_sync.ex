@@ -170,27 +170,18 @@ defmodule Electric.Replication.InitialSync do
 
   defp run_in_readonly_txn_with_checkpoint(opts, {ref, parent}, marker, fun)
        when is_function(fun, 2) do
-    conn_opts = Connectors.get_connection_opts(opts)
+    origin = Connectors.origin(opts)
 
-    Client.with_conn(conn_opts, fn conn ->
-      Client.with_transaction(
-        "ISOLATION LEVEL REPEATABLE READ READ ONLY",
-        conn,
-        fn conn ->
-          # It's important that this magic write
-          # 1. is made after the current transaction has started
-          # 2. is in a separate transaction (thus on a different connection)
-          # 3. is before the potentially big read queries to ensure this arrives ASAP on any data size
-          Task.start(fn -> perform_magic_write(conn_opts, marker) end)
+    Client.pooled_transaction(origin, "ISOLATION LEVEL REPEATABLE READ READ ONLY", fn ->
+      # It's important that this magic write
+      # 1. is made after the current transaction has started
+      # 2. is in a separate transaction (thus on a different connection)
+      # 3. is before the potentially big read queries to ensure this arrives ASAP on any data size
+      Task.start(fn -> perform_magic_write(origin, marker) end)
 
-          {:ok, _, [{xmin_str}]} =
-            :epgsql.squery(conn, "SELECT pg_snapshot_xmin(pg_current_snapshot())")
-
-          xmin = String.to_integer(xmin_str)
-          send(parent, {:data_insertion_point, ref, xmin})
-          fun.(conn, xmin)
-        end
-      )
+      %{rows: [{xmin}]} = Client.query!("SELECT pg_snapshot_xmin(pg_current_snapshot())")
+      send(parent, {:data_insertion_point, ref, xmin})
+      fun.(nil, xmin)
     end)
   end
 
@@ -207,8 +198,8 @@ defmodule Electric.Replication.InitialSync do
   # starting a REPEATABLE READ transaction. xid for this write transaction will definitely be
   # >= xmin, so even in the absence of user writes to electrified tables, Electric will at
   # least observe this magic write.
-  def perform_magic_write(conn_opts, marker) when is_map(conn_opts) do
-    Client.with_conn(conn_opts, &perform_magic_write(&1, marker))
+  def perform_magic_write(origin, marker) when is_binary(origin) do
+    Client.pooled_query!(origin, fn -> perform_magic_write(nil, marker) end)
   end
 
   def perform_magic_write(conn, marker) when is_pid(conn) do

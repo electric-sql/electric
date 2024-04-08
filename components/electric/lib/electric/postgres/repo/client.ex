@@ -28,9 +28,15 @@ defmodule Electric.Postgres.Repo.Client do
 
   The pool is managed by `Electric.Postgres.Repo`, see `checkout/2` for more info.
   """
-  def pooled_transaction(origin, fun) when is_binary(origin) and is_function(fun, 0) do
+  @spec pooled_transaction(Connectors.origin(), binary() | nil, (-> any)) :: any
+  def pooled_transaction(origin, mode \\ nil, fun)
+      when is_binary(origin) and is_function(fun, 0) do
     Repo.put_dynamic_repo(Repo.name(origin))
-    Repo.transaction(fun)
+
+    Repo.transaction(fn ->
+      if mode, do: Repo.query!("SET TRANSACTION #{mode}")
+      fun.()
+    end)
   end
 
   @doc """
