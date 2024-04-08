@@ -2,7 +2,7 @@ import { Satellite } from '../../satellite'
 import {
   QualifiedTablename,
   ReplicationRowTransformer,
-  Record as RowRecord,
+  Record as DataRecord,
 } from '../../util'
 import { Transformation, transformFields } from '../conversions/input'
 import {
@@ -15,7 +15,7 @@ import * as z from 'zod'
 export interface IReplicationTransformManager {
   setTableTransform(
     tableName: QualifiedTablename,
-    transform: ReplicationRowTransformer<RowRecord>
+    transform: ReplicationRowTransformer<DataRecord>
   ): void
   clearTableTransform(tableName: QualifiedTablename): void
 }
@@ -27,7 +27,7 @@ export class ReplicationTransformManager
 
   setTableTransform(
     tableName: QualifiedTablename,
-    transform: ReplicationRowTransformer<RowRecord>
+    transform: ReplicationRowTransformer<DataRecord>
   ): void {
     this.satellite.setReplicationTransform(tableName, transform)
   }
@@ -49,12 +49,12 @@ export class ReplicationTransformManager
  * @return the transformed raw record
  */
 export function transformTableRecord<T extends Record<string, unknown>>(
-  record: RowRecord,
+  record: DataRecord,
   transformRow: (row: T) => T,
   fields: Fields,
   schema: z.ZodTypeAny,
   immutableFields: string[]
-): RowRecord {
+): DataRecord {
   // parse raw record according to specified fields
   const parsedRow = transformFields(
     record,
@@ -71,7 +71,7 @@ export function transformTableRecord<T extends Record<string, unknown>>(
     validatedTransformedParsedRow,
     fields,
     Transformation.Js2Sqlite
-  ) as RowRecord
+  ) as DataRecord
 
   // check if any of the immutable fields were modified
   const validatedTransformedRecord = validateRecordTransformation(

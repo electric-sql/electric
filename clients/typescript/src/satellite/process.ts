@@ -41,7 +41,7 @@ import {
   Transaction,
   isDataChange,
   Uuid,
-  Record as RowRecord,
+  Record as DataRecord,
   ReplicationRowTransformer,
 } from '../util/types'
 import { SatelliteOpts } from './config'
@@ -1560,7 +1560,7 @@ export class SatelliteProcess implements Satellite {
 
   public setReplicationTransform(
     tableName: QualifiedTablename,
-    transform: ReplicationRowTransformer<RowRecord>
+    transform: ReplicationRowTransformer<DataRecord>
   ): void {
     this.client.setReplicationTransform(tableName, transform)
   }

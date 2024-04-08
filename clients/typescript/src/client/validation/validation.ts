@@ -1,6 +1,6 @@
 import * as z from 'zod'
 import { InvalidArgumentError } from './errors/invalidArgumentError'
-import { Record as RowRecord, isObject } from '../../util'
+import { Record as DataRecord, isObject } from '../../util'
 import { InvalidRecordTransformationError } from './errors/invalidRecordTransformationError'
 
 function deepOmit(obj: Record<string, any>) {
@@ -103,7 +103,7 @@ export function omitCountFromSelectAndIncludeSchema<T extends z.ZodTypeAny>(
  * @throws {@link InvalidRecordTransformationError}
  * Thrown if record transformation changed any of the specified {@link immutableFields}
  */
-export function validateRecordTransformation<T extends RowRecord>(
+export function validateRecordTransformation<T extends DataRecord>(
   originalRecord: Readonly<T>,
   transformedRecord: Readonly<T>,
   immutableFields: string[]
