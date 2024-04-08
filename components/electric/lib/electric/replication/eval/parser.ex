@@ -472,10 +472,15 @@ defmodule Electric.Replication.Eval.Parser do
   end
 
   defp from_concrete(concrete, args) do
+    # Commutative overload is an operator overload that accepts same arguments
+    # as normal overload but in reverse order. This only matters/happens when
+    # arguments are of different types (e.g. `date + int8`)
+    commutative_overload? = Map.get(concrete, :commutative_overload?, false)
+
     %Func{
       implementation: concrete.implementation,
       name: concrete.name,
-      args: args,
+      args: if(commutative_overload?, do: Enum.reverse(args), else: args),
       type: concrete.returns,
       # These two fields are always set by macro generation, but not always in tests
       strict?: Map.get(concrete, :strict?, true),

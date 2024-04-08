@@ -218,6 +218,32 @@ defmodule Electric.Replication.Eval.ParserTest do
       assert %Const{value: 2, type: :int4} = result
     end
 
+    test "should correctly apply a commutative overload operator by reversing the arguments" do
+      env =
+        Env.empty(
+          operators: %{
+            {~s|"+"|, 2} => [
+              %{
+                name: "create timestamp",
+                args: [:time, :date],
+                commutative_overload?: true,
+                returns: :timestamp,
+                implementation: &NaiveDateTime.new!/2
+              }
+            ]
+          }
+        )
+
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(
+                 ~S|time '20:00:00' + date '2024-01-01'|,
+                 %{["test"] => :int4},
+                 env
+               )
+
+      assert %Const{value: ~N[2024-01-01 20:00:00], type: :timestamp} = result
+    end
+
     test "should work with IS DISTINCT FROM clauses" do
       env =
         Env.empty(
