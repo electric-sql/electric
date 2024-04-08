@@ -74,10 +74,16 @@ npm run client:generate
 
 ## Run
 
-Run in the iOS simulator:
+Run on the iOS simulator:
 
 ```shell
 npm run start:ios
+```
+
+Run on the Android emulator:
+
+```shell
+npm run start:android
 ```
 
 ## More information

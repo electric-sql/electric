@@ -27,14 +27,14 @@ const ElectricProviderComponent = ({
       }
 
       const conn = SQLite.openDatabaseSync('electric.db')
-      const electric = await electrify(conn, schema, config)
-      await electric.connect(authToken())
+      const client = await electrify(conn, schema, config)
+      await client.connect(authToken())
 
       if (!isMounted) {
         return
       }
 
-      setElectric(electric)
+      setElectric(client)
     }
 
     init()
@@ -44,7 +44,10 @@ const ElectricProviderComponent = ({
     }
   }, [])
 
-  if (electric === undefined) return null
+  if (electric === undefined) {
+    return null
+  }
+
   return <ElectricProvider db={electric}>{children}</ElectricProvider>
 }
 
