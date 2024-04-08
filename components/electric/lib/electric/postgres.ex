@@ -95,4 +95,6 @@ defmodule Electric.Postgres do
       varchar
     ]a
   end
+
+  def supported_types_only_in_functions, do: ~w|interval|a
 end

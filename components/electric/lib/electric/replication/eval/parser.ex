@@ -22,7 +22,9 @@ defmodule Electric.Replication.Eval.Parser do
     defstruct [:args, :type, :implementation, :name, strict?: true, immutable?: true, location: 0]
   end
 
-  @valid_types Electric.Postgres.supported_types() |> Enum.map(&Atom.to_string/1)
+  @valid_types (Electric.Postgres.supported_types() ++
+                  Electric.Postgres.supported_types_only_in_functions())
+               |> Enum.map(&Atom.to_string/1)
 
   @type tree_part :: %Const{} | %Ref{} | %Func{}
   @type refs_map :: %{optional([String.t(), ...]) => Env.pg_type()}
@@ -210,7 +212,7 @@ defmodule Electric.Replication.Eval.Parser do
       {:AEXPR_ILIKE, _} -> handle_binary_operator(expr, refs, env)
       {:AEXPR_DISTINCT, _} -> handle_distinct(expr, refs, env)
       {:AEXPR_IN, _} -> handle_in(expr, refs, env)
-      _ -> {:error, {loc, "expression #{identifier(dbg(expr).name)} is not currently supported"}}
+      _ -> {:error, {loc, "expression #{identifier(expr.name)} is not currently supported"}}
     end
   end
 

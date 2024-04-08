@@ -333,5 +333,18 @@ defmodule Electric.Replication.Eval.ParserTest do
                  env
                )
     end
+
+    test "should support complex operations with dates" do
+      env = Env.new()
+
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(
+                 ~S|date '2024-01-01' < interval '1 month 1 hour' + date '2023-12-01'|,
+                 %{},
+                 env
+               )
+
+      assert %Const{value: true, type: :bool} = result
+    end
   end
 end
