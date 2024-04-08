@@ -431,24 +431,24 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
 
     // Insert 4 items in separate snapshots
     await adapter.run({
-      sql: `INSERT INTO parent (id, value) VALUES (1, 'val1')`,
+      sql: `INSERT INTO main.parent (id, value) VALUES (1, 'val1')`,
     })
     const ts1 = await satellite._performSnapshot()
     await adapter.run({
-      sql: `INSERT INTO parent (id, value) VALUES (2, 'val2')`,
+      sql: `INSERT INTO main.parent (id, value) VALUES (2, 'val2')`,
     })
     const ts2 = await satellite._performSnapshot()
     await adapter.run({
-      sql: `INSERT INTO parent (id, value) VALUES (3, 'val3')`,
+      sql: `INSERT INTO main.parent (id, value) VALUES (3, 'val3')`,
     })
     const ts3 = await satellite._performSnapshot()
     await adapter.run({
-      sql: `INSERT INTO parent (id, value) VALUES (4, 'val4')`,
+      sql: `INSERT INTO main.parent (id, value) VALUES (4, 'val4')`,
     })
     const ts4 = await satellite._performSnapshot()
 
     // Now delete them all in a single snapshot
-    await adapter.run({ sql: `DELETE FROM parent` })
+    await adapter.run({ sql: `DELETE FROM main.parent` })
     const ts5 = await satellite._performSnapshot()
 
     // Now check that each delete clears the correct tag
