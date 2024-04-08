@@ -36,7 +36,7 @@ import {
   Statement,
   createQueryResultSubscribeFunction,
   isObject,
-  ReplicationRowTransformer,
+  ReplicatedRowTransformer,
 } from '../../util'
 import { NarrowInclude } from '../input/inputNarrowing'
 import { IShapeManager } from './shapes'
@@ -1604,7 +1604,7 @@ export class Table<
     return result
   }
 
-  setReplicationTransform(i: ReplicationRowTransformer<T>): void {
+  setReplicationTransform(i: ReplicatedRowTransformer<T>): void {
     // forbid transforming relation keys to avoid breaking
     // referential integrity
     const relations = this._dbDescription.getRelations(this.tableName)

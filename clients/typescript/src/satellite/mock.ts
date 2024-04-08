@@ -21,7 +21,7 @@ import {
   ReplicationStatus,
   AdditionalDataCallback,
   ConnectivityState,
-  ReplicationRowTransformer,
+  ReplicatedRowTransformer,
 } from '../util/types'
 import { ElectricConfig } from '../config/index'
 
@@ -131,7 +131,7 @@ export class MockSatelliteProcess implements Satellite {
 
   setReplicationTransform(
     _tableName: QualifiedTablename,
-    _replicationRowTransformer: ReplicationRowTransformer<DataRecord>
+    _transform: ReplicatedRowTransformer<DataRecord>
   ): void {}
 
   clearReplicationTransform(_tableName: QualifiedTablename): void {}
@@ -466,7 +466,7 @@ export class MockSatelliteClient
 
   setReplicationTransform(
     _tableName: QualifiedTablename,
-    _transform: ReplicationRowTransformer<DataRecord>
+    _transform: ReplicatedRowTransformer<DataRecord>
   ): void {
     throw new Error('Method not implemented.')
   }

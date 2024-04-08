@@ -21,7 +21,7 @@ import {
   ReplicationStatus,
   AdditionalDataCallback,
   Record,
-  ReplicationRowTransformer,
+  ReplicatedRowTransformer,
 } from '../util/types'
 import {
   Shape,
@@ -83,7 +83,7 @@ export interface Satellite {
 
   setReplicationTransform(
     tableName: QualifiedTablename,
-    replicationRowTransformer: ReplicationRowTransformer<Record>
+    transform: ReplicatedRowTransformer<Record>
   ): void
   clearReplicationTransform(tableName: QualifiedTablename): void
 }
@@ -129,7 +129,7 @@ export interface Client {
 
   setReplicationTransform(
     tableName: QualifiedTablename,
-    transformer: ReplicationRowTransformer<Record>
+    transformer: ReplicatedRowTransformer<Record>
   ): void
   clearReplicationTransform(tableName: QualifiedTablename): void
 }

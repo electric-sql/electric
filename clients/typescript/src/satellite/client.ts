@@ -70,7 +70,7 @@ import {
   AdditionalDataCallback,
   DataChange,
   isDataChange,
-  ReplicationRowTransformer,
+  ReplicatedRowTransformer,
 } from '../util/types'
 import {
   base64,
@@ -143,10 +143,8 @@ export class SatelliteClient implements Client {
   // can only handle a single subscription at a time
   private subscriptionsDataCache: SubscriptionsDataCache
 
-  private replicationTransforms: Map<
-    string,
-    ReplicationRowTransformer<Record>
-  > = new Map()
+  private replicationTransforms: Map<string, ReplicatedRowTransformer<Record>> =
+    new Map()
 
   private socketHandler?: (any: any) => void
   private throttledPushTransaction?: () => void
@@ -1237,12 +1235,9 @@ export class SatelliteClient implements Client {
 
   public setReplicationTransform(
     tableName: QualifiedTablename,
-    replicationRowTransformer: ReplicationRowTransformer<Record>
+    transform: ReplicatedRowTransformer<Record>
   ): void {
-    this.replicationTransforms.set(
-      tableName.tablename,
-      replicationRowTransformer
-    )
+    this.replicationTransforms.set(tableName.tablename, transform)
   }
 
   public clearReplicationTransform(tableName: QualifiedTablename): void {

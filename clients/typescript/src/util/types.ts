@@ -232,7 +232,7 @@ export enum ReplicationStatus {
   ACTIVE,
 }
 
-export type ReplicationRowTransformer<RowType> = {
+export type ReplicatedRowTransformer<RowType> = {
   transformInbound: (row: Readonly<RowType>) => RowType
   transformOutbound: (row: Readonly<RowType>) => RowType
 }
