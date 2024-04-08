@@ -73,6 +73,16 @@ export type Profile = {
    * @zod.number.int().gte(-2147483648).lte(2147483647)
    */
   userId: number
+  imageId: string | null
+}
+
+/**
+ * Model ProfileImage
+ * 
+ */
+export type ProfileImage = {
+  id: string
+  image: Buffer
 }
 
 /**
@@ -288,6 +298,16 @@ export class PrismaClient<
     * ```
     */
   get profile(): Prisma.ProfileDelegate<GlobalReject>;
+
+  /**
+   * `prisma.profileImage`: Exposes CRUD operations for the **ProfileImage** model.
+    * Example usage:
+    * ```ts
+    * // Fetch zero or more ProfileImages
+    * const profileImages = await prisma.profileImage.findMany()
+    * ```
+    */
+  get profileImage(): Prisma.ProfileImageDelegate<GlobalReject>;
 
   /**
    * `prisma.dataTypes`: Exposes CRUD operations for the **DataTypes** model.
@@ -796,6 +816,7 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
     User: 'User',
     Post: 'Post',
     Profile: 'Profile',
+    ProfileImage: 'ProfileImage',
     DataTypes: 'DataTypes',
     Dummy: 'Dummy'
   };
@@ -4089,12 +4110,14 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
     id: number | null
     bio: string | null
     userId: number | null
+    imageId: string | null
   }
 
   export type ProfileMaxAggregateOutputType = {
     id: number | null
     bio: string | null
     userId: number | null
+    imageId: string | null
   }
 
   export type ProfileCountAggregateOutputType = {
@@ -4102,6 +4125,7 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
     bio: number
     meta: number
     userId: number
+    imageId: number
     _all: number
   }
 
@@ -4120,12 +4144,14 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
     id?: true
     bio?: true
     userId?: true
+    imageId?: true
   }
 
   export type ProfileMaxAggregateInputType = {
     id?: true
     bio?: true
     userId?: true
+    imageId?: true
   }
 
   export type ProfileCountAggregateInputType = {
@@ -4133,6 +4159,7 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
     bio?: true
     meta?: true
     userId?: true
+    imageId?: true
     _all?: true
   }
 
@@ -4233,6 +4260,7 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
     bio: string
     meta: JsonValue | null
     userId: number
+    imageId: string | null
     _count: ProfileCountAggregateOutputType | null
     _avg: ProfileAvgAggregateOutputType | null
     _sum: ProfileSumAggregateOutputType | null
@@ -4260,11 +4288,14 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
     meta?: boolean
     userId?: boolean
     user?: boolean | UserArgs
+    imageId?: boolean
+    image?: boolean | ProfileImageArgs
   }
 
 
   export type ProfileInclude = {
     user?: boolean | UserArgs
+    image?: boolean | ProfileImageArgs
   } 
 
   export type ProfileGetPayload<S extends boolean | null | undefined | ProfileArgs> =
@@ -4274,12 +4305,14 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
     S extends { include: any } & (ProfileArgs | ProfileFindManyArgs)
     ? Profile  & {
     [P in TruthyKeys<S['include']>]:
-        P extends 'user' ? UserGetPayload<S['include'][P]> | null :  never
+        P extends 'user' ? UserGetPayload<S['include'][P]> | null :
+        P extends 'image' ? ProfileImageGetPayload<S['include'][P]> | null :  never
   } 
     : S extends { select: any } & (ProfileArgs | ProfileFindManyArgs)
       ? {
     [P in TruthyKeys<S['select']>]:
-        P extends 'user' ? UserGetPayload<S['select'][P]> | null :  P extends keyof Profile ? Profile[P] : never
+        P extends 'user' ? UserGetPayload<S['select'][P]> | null :
+        P extends 'image' ? ProfileImageGetPayload<S['select'][P]> | null :  P extends keyof Profile ? Profile[P] : never
   } 
       : Profile
 
@@ -4654,6 +4687,8 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
     readonly [Symbol.toStringTag]: 'PrismaClientPromise';
 
     user<T extends UserArgs= {}>(args?: Subset<T, UserArgs>): Prisma__UserClient<UserGetPayload<T> | Null>;
+
+    image<T extends ProfileImageArgs= {}>(args?: Subset<T, ProfileImageArgs>): Prisma__ProfileImageClient<ProfileImageGetPayload<T> | Null>;
 
     private get _document();
     /**
@@ -5072,6 +5107,970 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
      * 
     **/
     include?: ProfileInclude | null
+  }
+
+
+
+  /**
+   * Model ProfileImage
+   */
+
+
+  export type AggregateProfileImage = {
+    _count: ProfileImageCountAggregateOutputType | null
+    _min: ProfileImageMinAggregateOutputType | null
+    _max: ProfileImageMaxAggregateOutputType | null
+  }
+
+  export type ProfileImageMinAggregateOutputType = {
+    id: string | null
+    image: Buffer | null
+  }
+
+  export type ProfileImageMaxAggregateOutputType = {
+    id: string | null
+    image: Buffer | null
+  }
+
+  export type ProfileImageCountAggregateOutputType = {
+    id: number
+    image: number
+    _all: number
+  }
+
+
+  export type ProfileImageMinAggregateInputType = {
+    id?: true
+    image?: true
+  }
+
+  export type ProfileImageMaxAggregateInputType = {
+    id?: true
+    image?: true
+  }
+
+  export type ProfileImageCountAggregateInputType = {
+    id?: true
+    image?: true
+    _all?: true
+  }
+
+  export type ProfileImageAggregateArgs = {
+    /**
+     * Filter which ProfileImage to aggregate.
+     * 
+    **/
+    where?: ProfileImageWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ProfileImages to fetch.
+     * 
+    **/
+    orderBy?: Enumerable<ProfileImageOrderByWithRelationInput>
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the start position
+     * 
+    **/
+    cursor?: ProfileImageWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ProfileImages from the position of the cursor.
+     * 
+    **/
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ProfileImages.
+     * 
+    **/
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Count returned ProfileImages
+    **/
+    _count?: true | ProfileImageCountAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the minimum value
+    **/
+    _min?: ProfileImageMinAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the maximum value
+    **/
+    _max?: ProfileImageMaxAggregateInputType
+  }
+
+  export type GetProfileImageAggregateType<T extends ProfileImageAggregateArgs> = {
+        [P in keyof T & keyof AggregateProfileImage]: P extends '_count' | 'count'
+      ? T[P] extends true
+        ? number
+        : GetScalarType<T[P], AggregateProfileImage[P]>
+      : GetScalarType<T[P], AggregateProfileImage[P]>
+  }
+
+
+
+
+  export type ProfileImageGroupByArgs = {
+    where?: ProfileImageWhereInput
+    orderBy?: Enumerable<ProfileImageOrderByWithAggregationInput>
+    by: Array<ProfileImageScalarFieldEnum>
+    having?: ProfileImageScalarWhereWithAggregatesInput
+    take?: number
+    skip?: number
+    _count?: ProfileImageCountAggregateInputType | true
+    _min?: ProfileImageMinAggregateInputType
+    _max?: ProfileImageMaxAggregateInputType
+  }
+
+
+  export type ProfileImageGroupByOutputType = {
+    id: string
+    image: Buffer
+    _count: ProfileImageCountAggregateOutputType | null
+    _min: ProfileImageMinAggregateOutputType | null
+    _max: ProfileImageMaxAggregateOutputType | null
+  }
+
+  type GetProfileImageGroupByPayload<T extends ProfileImageGroupByArgs> = PrismaPromise<
+    Array<
+      PickArray<ProfileImageGroupByOutputType, T['by']> &
+        {
+          [P in ((keyof T) & (keyof ProfileImageGroupByOutputType))]: P extends '_count'
+            ? T[P] extends boolean
+              ? number
+              : GetScalarType<T[P], ProfileImageGroupByOutputType[P]>
+            : GetScalarType<T[P], ProfileImageGroupByOutputType[P]>
+        }
+      >
+    >
+
+
+  export type ProfileImageSelect = {
+    id?: boolean
+    image?: boolean
+    profile?: boolean | ProfileArgs
+  }
+
+
+  export type ProfileImageInclude = {
+    profile?: boolean | ProfileArgs
+  } 
+
+  export type ProfileImageGetPayload<S extends boolean | null | undefined | ProfileImageArgs> =
+    S extends { select: any, include: any } ? 'Please either choose `select` or `include`' :
+    S extends true ? ProfileImage :
+    S extends undefined ? never :
+    S extends { include: any } & (ProfileImageArgs | ProfileImageFindManyArgs)
+    ? ProfileImage  & {
+    [P in TruthyKeys<S['include']>]:
+        P extends 'profile' ? ProfileGetPayload<S['include'][P]> | null :  never
+  } 
+    : S extends { select: any } & (ProfileImageArgs | ProfileImageFindManyArgs)
+      ? {
+    [P in TruthyKeys<S['select']>]:
+        P extends 'profile' ? ProfileGetPayload<S['select'][P]> | null :  P extends keyof ProfileImage ? ProfileImage[P] : never
+  } 
+      : ProfileImage
+
+
+  type ProfileImageCountArgs = Merge<
+    Omit<ProfileImageFindManyArgs, 'select' | 'include'> & {
+      select?: ProfileImageCountAggregateInputType | true
+    }
+  >
+
+  export interface ProfileImageDelegate<GlobalRejectSettings extends Prisma.RejectOnNotFound | Prisma.RejectPerOperation | false | undefined> {
+    /**
+     * Find zero or one ProfileImage that matches the filter.
+     * @param {ProfileImageFindUniqueArgs} args - Arguments to find a ProfileImage
+     * @example
+     * // Get one ProfileImage
+     * const profileImage = await prisma.profileImage.findUnique({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+    **/
+    findUnique<T extends ProfileImageFindUniqueArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
+      args: SelectSubset<T, ProfileImageFindUniqueArgs>
+    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findUnique', 'ProfileImage'> extends True ? Prisma__ProfileImageClient<ProfileImageGetPayload<T>> : Prisma__ProfileImageClient<ProfileImageGetPayload<T> | null, null>
+
+    /**
+     * Find one ProfileImage that matches the filter or throw an error  with `error.code='P2025'` 
+     *     if no matches were found.
+     * @param {ProfileImageFindUniqueOrThrowArgs} args - Arguments to find a ProfileImage
+     * @example
+     * // Get one ProfileImage
+     * const profileImage = await prisma.profileImage.findUniqueOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+    **/
+    findUniqueOrThrow<T extends ProfileImageFindUniqueOrThrowArgs>(
+      args?: SelectSubset<T, ProfileImageFindUniqueOrThrowArgs>
+    ): Prisma__ProfileImageClient<ProfileImageGetPayload<T>>
+
+    /**
+     * Find the first ProfileImage that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ProfileImageFindFirstArgs} args - Arguments to find a ProfileImage
+     * @example
+     * // Get one ProfileImage
+     * const profileImage = await prisma.profileImage.findFirst({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+    **/
+    findFirst<T extends ProfileImageFindFirstArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
+      args?: SelectSubset<T, ProfileImageFindFirstArgs>
+    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findFirst', 'ProfileImage'> extends True ? Prisma__ProfileImageClient<ProfileImageGetPayload<T>> : Prisma__ProfileImageClient<ProfileImageGetPayload<T> | null, null>
+
+    /**
+     * Find the first ProfileImage that matches the filter or
+     * throw `NotFoundError` if no matches were found.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ProfileImageFindFirstOrThrowArgs} args - Arguments to find a ProfileImage
+     * @example
+     * // Get one ProfileImage
+     * const profileImage = await prisma.profileImage.findFirstOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+    **/
+    findFirstOrThrow<T extends ProfileImageFindFirstOrThrowArgs>(
+      args?: SelectSubset<T, ProfileImageFindFirstOrThrowArgs>
+    ): Prisma__ProfileImageClient<ProfileImageGetPayload<T>>
+
+    /**
+     * Find zero or more ProfileImages that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ProfileImageFindManyArgs=} args - Arguments to filter and select certain fields only.
+     * @example
+     * // Get all ProfileImages
+     * const profileImages = await prisma.profileImage.findMany()
+     * 
+     * // Get first 10 ProfileImages
+     * const profileImages = await prisma.profileImage.findMany({ take: 10 })
+     * 
+     * // Only select the `id`
+     * const profileImageWithIdOnly = await prisma.profileImage.findMany({ select: { id: true } })
+     * 
+    **/
+    findMany<T extends ProfileImageFindManyArgs>(
+      args?: SelectSubset<T, ProfileImageFindManyArgs>
+    ): PrismaPromise<Array<ProfileImageGetPayload<T>>>
+
+    /**
+     * Create a ProfileImage.
+     * @param {ProfileImageCreateArgs} args - Arguments to create a ProfileImage.
+     * @example
+     * // Create one ProfileImage
+     * const ProfileImage = await prisma.profileImage.create({
+     *   data: {
+     *     // ... data to create a ProfileImage
+     *   }
+     * })
+     * 
+    **/
+    create<T extends ProfileImageCreateArgs>(
+      args: SelectSubset<T, ProfileImageCreateArgs>
+    ): Prisma__ProfileImageClient<ProfileImageGetPayload<T>>
+
+    /**
+     * Create many ProfileImages.
+     *     @param {ProfileImageCreateManyArgs} args - Arguments to create many ProfileImages.
+     *     @example
+     *     // Create many ProfileImages
+     *     const profileImage = await prisma.profileImage.createMany({
+     *       data: {
+     *         // ... provide data here
+     *       }
+     *     })
+     *     
+    **/
+    createMany<T extends ProfileImageCreateManyArgs>(
+      args?: SelectSubset<T, ProfileImageCreateManyArgs>
+    ): PrismaPromise<BatchPayload>
+
+    /**
+     * Delete a ProfileImage.
+     * @param {ProfileImageDeleteArgs} args - Arguments to delete one ProfileImage.
+     * @example
+     * // Delete one ProfileImage
+     * const ProfileImage = await prisma.profileImage.delete({
+     *   where: {
+     *     // ... filter to delete one ProfileImage
+     *   }
+     * })
+     * 
+    **/
+    delete<T extends ProfileImageDeleteArgs>(
+      args: SelectSubset<T, ProfileImageDeleteArgs>
+    ): Prisma__ProfileImageClient<ProfileImageGetPayload<T>>
+
+    /**
+     * Update one ProfileImage.
+     * @param {ProfileImageUpdateArgs} args - Arguments to update one ProfileImage.
+     * @example
+     * // Update one ProfileImage
+     * const profileImage = await prisma.profileImage.update({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+    **/
+    update<T extends ProfileImageUpdateArgs>(
+      args: SelectSubset<T, ProfileImageUpdateArgs>
+    ): Prisma__ProfileImageClient<ProfileImageGetPayload<T>>
+
+    /**
+     * Delete zero or more ProfileImages.
+     * @param {ProfileImageDeleteManyArgs} args - Arguments to filter ProfileImages to delete.
+     * @example
+     * // Delete a few ProfileImages
+     * const { count } = await prisma.profileImage.deleteMany({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     * 
+    **/
+    deleteMany<T extends ProfileImageDeleteManyArgs>(
+      args?: SelectSubset<T, ProfileImageDeleteManyArgs>
+    ): PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more ProfileImages.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ProfileImageUpdateManyArgs} args - Arguments to update one or more rows.
+     * @example
+     * // Update many ProfileImages
+     * const profileImage = await prisma.profileImage.updateMany({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+    **/
+    updateMany<T extends ProfileImageUpdateManyArgs>(
+      args: SelectSubset<T, ProfileImageUpdateManyArgs>
+    ): PrismaPromise<BatchPayload>
+
+    /**
+     * Create or update one ProfileImage.
+     * @param {ProfileImageUpsertArgs} args - Arguments to update or create a ProfileImage.
+     * @example
+     * // Update or create a ProfileImage
+     * const profileImage = await prisma.profileImage.upsert({
+     *   create: {
+     *     // ... data to create a ProfileImage
+     *   },
+     *   update: {
+     *     // ... in case it already exists, update
+     *   },
+     *   where: {
+     *     // ... the filter for the ProfileImage we want to update
+     *   }
+     * })
+    **/
+    upsert<T extends ProfileImageUpsertArgs>(
+      args: SelectSubset<T, ProfileImageUpsertArgs>
+    ): Prisma__ProfileImageClient<ProfileImageGetPayload<T>>
+
+    /**
+     * Count the number of ProfileImages.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ProfileImageCountArgs} args - Arguments to filter ProfileImages to count.
+     * @example
+     * // Count the number of ProfileImages
+     * const count = await prisma.profileImage.count({
+     *   where: {
+     *     // ... the filter for the ProfileImages we want to count
+     *   }
+     * })
+    **/
+    count<T extends ProfileImageCountArgs>(
+      args?: Subset<T, ProfileImageCountArgs>,
+    ): PrismaPromise<
+      T extends _Record<'select', any>
+        ? T['select'] extends true
+          ? number
+          : GetScalarType<T['select'], ProfileImageCountAggregateOutputType>
+        : number
+    >
+
+    /**
+     * Allows you to perform aggregations operations on a ProfileImage.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ProfileImageAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @example
+     * // Ordered by age ascending
+     * // Where email contains prisma.io
+     * // Limited to the 10 users
+     * const aggregations = await prisma.user.aggregate({
+     *   _avg: {
+     *     age: true,
+     *   },
+     *   where: {
+     *     email: {
+     *       contains: "prisma.io",
+     *     },
+     *   },
+     *   orderBy: {
+     *     age: "asc",
+     *   },
+     *   take: 10,
+     * })
+    **/
+    aggregate<T extends ProfileImageAggregateArgs>(args: Subset<T, ProfileImageAggregateArgs>): PrismaPromise<GetProfileImageAggregateType<T>>
+
+    /**
+     * Group by ProfileImage.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ProfileImageGroupByArgs} args - Group by arguments.
+     * @example
+     * // Group by city, order by createdAt, get count
+     * const result = await prisma.user.groupBy({
+     *   by: ['city', 'createdAt'],
+     *   orderBy: {
+     *     createdAt: true
+     *   },
+     *   _count: {
+     *     _all: true
+     *   },
+     * })
+     * 
+    **/
+    groupBy<
+      T extends ProfileImageGroupByArgs,
+      HasSelectOrTake extends Or<
+        Extends<'skip', Keys<T>>,
+        Extends<'take', Keys<T>>
+      >,
+      OrderByArg extends True extends HasSelectOrTake
+        ? { orderBy: ProfileImageGroupByArgs['orderBy'] }
+        : { orderBy?: ProfileImageGroupByArgs['orderBy'] },
+      OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
+      ByFields extends TupleToUnion<T['by']>,
+      ByValid extends Has<ByFields, OrderFields>,
+      HavingFields extends GetHavingFields<T['having']>,
+      HavingValid extends Has<ByFields, HavingFields>,
+      ByEmpty extends T['by'] extends never[] ? True : False,
+      InputErrors extends ByEmpty extends True
+      ? `Error: "by" must not be empty.`
+      : HavingValid extends False
+      ? {
+          [P in HavingFields]: P extends ByFields
+            ? never
+            : P extends string
+            ? `Error: Field "${P}" used in "having" needs to be provided in "by".`
+            : [
+                Error,
+                'Field ',
+                P,
+                ` in "having" needs to be provided in "by"`,
+              ]
+        }[HavingFields]
+      : 'take' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "take", you also need to provide "orderBy"'
+      : 'skip' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "skip", you also need to provide "orderBy"'
+      : ByValid extends True
+      ? {}
+      : {
+          [P in OrderFields]: P extends ByFields
+            ? never
+            : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+        }[OrderFields]
+    >(args: SubsetIntersection<T, ProfileImageGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetProfileImageGroupByPayload<T> : PrismaPromise<InputErrors>
+
+  }
+
+  /**
+   * The delegate class that acts as a "Promise-like" for ProfileImage.
+   * Why is this prefixed with `Prisma__`?
+   * Because we want to prevent naming conflicts as mentioned in
+   * https://github.com/prisma/prisma-client-js/issues/707
+   */
+  export class Prisma__ProfileImageClient<T, Null = never> implements PrismaPromise<T> {
+    [prisma]: true;
+    private readonly _dmmf;
+    private readonly _fetcher;
+    private readonly _queryType;
+    private readonly _rootField;
+    private readonly _clientMethod;
+    private readonly _args;
+    private readonly _dataPath;
+    private readonly _errorFormat;
+    private readonly _measurePerformance?;
+    private _isList;
+    private _callsite;
+    private _requestPromise?;
+    constructor(_dmmf: runtime.DMMFClass, _fetcher: PrismaClientFetcher, _queryType: 'query' | 'mutation', _rootField: string, _clientMethod: string, _args: any, _dataPath: string[], _errorFormat: ErrorFormat, _measurePerformance?: boolean | undefined, _isList?: boolean);
+    readonly [Symbol.toStringTag]: 'PrismaClientPromise';
+
+    profile<T extends ProfileArgs= {}>(args?: Subset<T, ProfileArgs>): Prisma__ProfileClient<ProfileGetPayload<T> | Null>;
+
+    private get _document();
+    /**
+     * Attaches callbacks for the resolution and/or rejection of the Promise.
+     * @param onfulfilled The callback to execute when the Promise is resolved.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of which ever callback is executed.
+     */
+    then<TResult1 = T, TResult2 = never>(onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null, onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null): Promise<TResult1 | TResult2>;
+    /**
+     * Attaches a callback for only the rejection of the Promise.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of the callback.
+     */
+    catch<TResult = never>(onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null): Promise<T | TResult>;
+    /**
+     * Attaches a callback that is invoked when the Promise is settled (fulfilled or rejected). The
+     * resolved value cannot be modified from the callback.
+     * @param onfinally The callback to execute when the Promise is settled (fulfilled or rejected).
+     * @returns A Promise for the completion of the callback.
+     */
+    finally(onfinally?: (() => void) | undefined | null): Promise<T>;
+  }
+
+
+
+  // Custom InputTypes
+
+  /**
+   * ProfileImage base type for findUnique actions
+   */
+  export type ProfileImageFindUniqueArgsBase = {
+    /**
+     * Select specific fields to fetch from the ProfileImage
+     * 
+    **/
+    select?: ProfileImageSelect | null
+    /**
+     * Choose, which related nodes to fetch as well.
+     * 
+    **/
+    include?: ProfileImageInclude | null
+    /**
+     * Filter, which ProfileImage to fetch.
+     * 
+    **/
+    where: ProfileImageWhereUniqueInput
+  }
+
+  /**
+   * ProfileImage findUnique
+   */
+  export interface ProfileImageFindUniqueArgs extends ProfileImageFindUniqueArgsBase {
+   /**
+    * Throw an Error if query returns no results
+    * @deprecated since 4.0.0: use `findUniqueOrThrow` method instead
+    */
+    rejectOnNotFound?: RejectOnNotFound
+  }
+      
+
+  /**
+   * ProfileImage findUniqueOrThrow
+   */
+  export type ProfileImageFindUniqueOrThrowArgs = {
+    /**
+     * Select specific fields to fetch from the ProfileImage
+     * 
+    **/
+    select?: ProfileImageSelect | null
+    /**
+     * Choose, which related nodes to fetch as well.
+     * 
+    **/
+    include?: ProfileImageInclude | null
+    /**
+     * Filter, which ProfileImage to fetch.
+     * 
+    **/
+    where: ProfileImageWhereUniqueInput
+  }
+
+
+  /**
+   * ProfileImage base type for findFirst actions
+   */
+  export type ProfileImageFindFirstArgsBase = {
+    /**
+     * Select specific fields to fetch from the ProfileImage
+     * 
+    **/
+    select?: ProfileImageSelect | null
+    /**
+     * Choose, which related nodes to fetch as well.
+     * 
+    **/
+    include?: ProfileImageInclude | null
+    /**
+     * Filter, which ProfileImage to fetch.
+     * 
+    **/
+    where?: ProfileImageWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ProfileImages to fetch.
+     * 
+    **/
+    orderBy?: Enumerable<ProfileImageOrderByWithRelationInput>
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for ProfileImages.
+     * 
+    **/
+    cursor?: ProfileImageWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ProfileImages from the position of the cursor.
+     * 
+    **/
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ProfileImages.
+     * 
+    **/
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of ProfileImages.
+     * 
+    **/
+    distinct?: Enumerable<ProfileImageScalarFieldEnum>
+  }
+
+  /**
+   * ProfileImage findFirst
+   */
+  export interface ProfileImageFindFirstArgs extends ProfileImageFindFirstArgsBase {
+   /**
+    * Throw an Error if query returns no results
+    * @deprecated since 4.0.0: use `findFirstOrThrow` method instead
+    */
+    rejectOnNotFound?: RejectOnNotFound
+  }
+      
+
+  /**
+   * ProfileImage findFirstOrThrow
+   */
+  export type ProfileImageFindFirstOrThrowArgs = {
+    /**
+     * Select specific fields to fetch from the ProfileImage
+     * 
+    **/
+    select?: ProfileImageSelect | null
+    /**
+     * Choose, which related nodes to fetch as well.
+     * 
+    **/
+    include?: ProfileImageInclude | null
+    /**
+     * Filter, which ProfileImage to fetch.
+     * 
+    **/
+    where?: ProfileImageWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ProfileImages to fetch.
+     * 
+    **/
+    orderBy?: Enumerable<ProfileImageOrderByWithRelationInput>
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for ProfileImages.
+     * 
+    **/
+    cursor?: ProfileImageWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ProfileImages from the position of the cursor.
+     * 
+    **/
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ProfileImages.
+     * 
+    **/
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of ProfileImages.
+     * 
+    **/
+    distinct?: Enumerable<ProfileImageScalarFieldEnum>
+  }
+
+
+  /**
+   * ProfileImage findMany
+   */
+  export type ProfileImageFindManyArgs = {
+    /**
+     * Select specific fields to fetch from the ProfileImage
+     * 
+    **/
+    select?: ProfileImageSelect | null
+    /**
+     * Choose, which related nodes to fetch as well.
+     * 
+    **/
+    include?: ProfileImageInclude | null
+    /**
+     * Filter, which ProfileImages to fetch.
+     * 
+    **/
+    where?: ProfileImageWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ProfileImages to fetch.
+     * 
+    **/
+    orderBy?: Enumerable<ProfileImageOrderByWithRelationInput>
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for listing ProfileImages.
+     * 
+    **/
+    cursor?: ProfileImageWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ProfileImages from the position of the cursor.
+     * 
+    **/
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ProfileImages.
+     * 
+    **/
+    skip?: number
+    distinct?: Enumerable<ProfileImageScalarFieldEnum>
+  }
+
+
+  /**
+   * ProfileImage create
+   */
+  export type ProfileImageCreateArgs = {
+    /**
+     * Select specific fields to fetch from the ProfileImage
+     * 
+    **/
+    select?: ProfileImageSelect | null
+    /**
+     * Choose, which related nodes to fetch as well.
+     * 
+    **/
+    include?: ProfileImageInclude | null
+    /**
+     * The data needed to create a ProfileImage.
+     * 
+    **/
+    data: XOR<ProfileImageCreateInput, ProfileImageUncheckedCreateInput>
+  }
+
+
+  /**
+   * ProfileImage createMany
+   */
+  export type ProfileImageCreateManyArgs = {
+    /**
+     * The data used to create many ProfileImages.
+     * 
+    **/
+    data: Enumerable<ProfileImageCreateManyInput>
+    skipDuplicates?: boolean
+  }
+
+
+  /**
+   * ProfileImage update
+   */
+  export type ProfileImageUpdateArgs = {
+    /**
+     * Select specific fields to fetch from the ProfileImage
+     * 
+    **/
+    select?: ProfileImageSelect | null
+    /**
+     * Choose, which related nodes to fetch as well.
+     * 
+    **/
+    include?: ProfileImageInclude | null
+    /**
+     * The data needed to update a ProfileImage.
+     * 
+    **/
+    data: XOR<ProfileImageUpdateInput, ProfileImageUncheckedUpdateInput>
+    /**
+     * Choose, which ProfileImage to update.
+     * 
+    **/
+    where: ProfileImageWhereUniqueInput
+  }
+
+
+  /**
+   * ProfileImage updateMany
+   */
+  export type ProfileImageUpdateManyArgs = {
+    /**
+     * The data used to update ProfileImages.
+     * 
+    **/
+    data: XOR<ProfileImageUpdateManyMutationInput, ProfileImageUncheckedUpdateManyInput>
+    /**
+     * Filter which ProfileImages to update
+     * 
+    **/
+    where?: ProfileImageWhereInput
+  }
+
+
+  /**
+   * ProfileImage upsert
+   */
+  export type ProfileImageUpsertArgs = {
+    /**
+     * Select specific fields to fetch from the ProfileImage
+     * 
+    **/
+    select?: ProfileImageSelect | null
+    /**
+     * Choose, which related nodes to fetch as well.
+     * 
+    **/
+    include?: ProfileImageInclude | null
+    /**
+     * The filter to search for the ProfileImage to update in case it exists.
+     * 
+    **/
+    where: ProfileImageWhereUniqueInput
+    /**
+     * In case the ProfileImage found by the `where` argument doesn't exist, create a new ProfileImage with this data.
+     * 
+    **/
+    create: XOR<ProfileImageCreateInput, ProfileImageUncheckedCreateInput>
+    /**
+     * In case the ProfileImage was found with the provided `where` argument, update it with this data.
+     * 
+    **/
+    update: XOR<ProfileImageUpdateInput, ProfileImageUncheckedUpdateInput>
+  }
+
+
+  /**
+   * ProfileImage delete
+   */
+  export type ProfileImageDeleteArgs = {
+    /**
+     * Select specific fields to fetch from the ProfileImage
+     * 
+    **/
+    select?: ProfileImageSelect | null
+    /**
+     * Choose, which related nodes to fetch as well.
+     * 
+    **/
+    include?: ProfileImageInclude | null
+    /**
+     * Filter which ProfileImage to delete.
+     * 
+    **/
+    where: ProfileImageWhereUniqueInput
+  }
+
+
+  /**
+   * ProfileImage deleteMany
+   */
+  export type ProfileImageDeleteManyArgs = {
+    /**
+     * Filter which ProfileImages to delete
+     * 
+    **/
+    where?: ProfileImageWhereInput
+  }
+
+
+  /**
+   * ProfileImage without action
+   */
+  export type ProfileImageArgs = {
+    /**
+     * Select specific fields to fetch from the ProfileImage
+     * 
+    **/
+    select?: ProfileImageSelect | null
+    /**
+     * Choose, which related nodes to fetch as well.
+     * 
+    **/
+    include?: ProfileImageInclude | null
   }
 
 
@@ -7304,11 +8303,20 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
   export type PostScalarFieldEnum = (typeof PostScalarFieldEnum)[keyof typeof PostScalarFieldEnum]
 
 
+  export const ProfileImageScalarFieldEnum: {
+    id: 'id',
+    image: 'image'
+  };
+
+  export type ProfileImageScalarFieldEnum = (typeof ProfileImageScalarFieldEnum)[keyof typeof ProfileImageScalarFieldEnum]
+
+
   export const ProfileScalarFieldEnum: {
     id: 'id',
     bio: 'bio',
     meta: 'meta',
-    userId: 'userId'
+    userId: 'userId',
+    imageId: 'imageId'
   };
 
   export type ProfileScalarFieldEnum = (typeof ProfileScalarFieldEnum)[keyof typeof ProfileScalarFieldEnum]
@@ -7491,6 +8499,8 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
     meta?: JsonNullableFilter
     userId?: IntFilter | number
     user?: XOR<UserRelationFilter, UserWhereInput> | null
+    imageId?: StringNullableFilter | string | null
+    image?: XOR<ProfileImageRelationFilter, ProfileImageWhereInput> | null
   }
 
   export type ProfileOrderByWithRelationInput = {
@@ -7499,11 +8509,14 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
     meta?: SortOrder
     userId?: SortOrder
     user?: UserOrderByWithRelationInput
+    imageId?: SortOrder
+    image?: ProfileImageOrderByWithRelationInput
   }
 
   export type ProfileWhereUniqueInput = {
     id?: number
     userId?: number
+    imageId?: string
   }
 
   export type ProfileOrderByWithAggregationInput = {
@@ -7511,6 +8524,7 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
     bio?: SortOrder
     meta?: SortOrder
     userId?: SortOrder
+    imageId?: SortOrder
     _count?: ProfileCountOrderByAggregateInput
     _avg?: ProfileAvgOrderByAggregateInput
     _max?: ProfileMaxOrderByAggregateInput
@@ -7526,6 +8540,42 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
     bio?: StringWithAggregatesFilter | string
     meta?: JsonNullableWithAggregatesFilter
     userId?: IntWithAggregatesFilter | number
+    imageId?: StringNullableWithAggregatesFilter | string | null
+  }
+
+  export type ProfileImageWhereInput = {
+    AND?: Enumerable<ProfileImageWhereInput>
+    OR?: Enumerable<ProfileImageWhereInput>
+    NOT?: Enumerable<ProfileImageWhereInput>
+    id?: StringFilter | string
+    image?: BytesFilter | Buffer
+    profile?: XOR<ProfileRelationFilter, ProfileWhereInput> | null
+  }
+
+  export type ProfileImageOrderByWithRelationInput = {
+    id?: SortOrder
+    image?: SortOrder
+    profile?: ProfileOrderByWithRelationInput
+  }
+
+  export type ProfileImageWhereUniqueInput = {
+    id?: string
+  }
+
+  export type ProfileImageOrderByWithAggregationInput = {
+    id?: SortOrder
+    image?: SortOrder
+    _count?: ProfileImageCountOrderByAggregateInput
+    _max?: ProfileImageMaxOrderByAggregateInput
+    _min?: ProfileImageMinOrderByAggregateInput
+  }
+
+  export type ProfileImageScalarWhereWithAggregatesInput = {
+    AND?: Enumerable<ProfileImageScalarWhereWithAggregatesInput>
+    OR?: Enumerable<ProfileImageScalarWhereWithAggregatesInput>
+    NOT?: Enumerable<ProfileImageScalarWhereWithAggregatesInput>
+    id?: StringWithAggregatesFilter | string
+    image?: BytesWithAggregatesFilter | Buffer
   }
 
   export type DataTypesWhereInput = {
@@ -7804,6 +8854,7 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
     bio: string
     meta?: NullableJsonNullValueInput | InputJsonValue
     user?: UserCreateNestedOneWithoutProfileInput
+    image?: ProfileImageCreateNestedOneWithoutProfileInput
   }
 
   export type ProfileUncheckedCreateInput = {
@@ -7811,6 +8862,7 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
     bio: string
     meta?: NullableJsonNullValueInput | InputJsonValue
     userId: number
+    imageId?: string | null
   }
 
   export type ProfileUpdateInput = {
@@ -7818,6 +8870,7 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
     bio?: StringFieldUpdateOperationsInput | string
     meta?: NullableJsonNullValueInput | InputJsonValue
     user?: UserUpdateOneWithoutProfileNestedInput
+    image?: ProfileImageUpdateOneWithoutProfileNestedInput
   }
 
   export type ProfileUncheckedUpdateInput = {
@@ -7825,6 +8878,7 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
     bio?: StringFieldUpdateOperationsInput | string
     meta?: NullableJsonNullValueInput | InputJsonValue
     userId?: IntFieldUpdateOperationsInput | number
+    imageId?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type ProfileCreateManyInput = {
@@ -7832,6 +8886,7 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
     bio: string
     meta?: NullableJsonNullValueInput | InputJsonValue
     userId: number
+    imageId?: string | null
   }
 
   export type ProfileUpdateManyMutationInput = {
@@ -7845,6 +8900,46 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
     bio?: StringFieldUpdateOperationsInput | string
     meta?: NullableJsonNullValueInput | InputJsonValue
     userId?: IntFieldUpdateOperationsInput | number
+    imageId?: NullableStringFieldUpdateOperationsInput | string | null
+  }
+
+  export type ProfileImageCreateInput = {
+    id: string
+    image: Buffer
+    profile?: ProfileCreateNestedOneWithoutImageInput
+  }
+
+  export type ProfileImageUncheckedCreateInput = {
+    id: string
+    image: Buffer
+    profile?: ProfileUncheckedCreateNestedOneWithoutImageInput
+  }
+
+  export type ProfileImageUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    image?: BytesFieldUpdateOperationsInput | Buffer
+    profile?: ProfileUpdateOneWithoutImageNestedInput
+  }
+
+  export type ProfileImageUncheckedUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    image?: BytesFieldUpdateOperationsInput | Buffer
+    profile?: ProfileUncheckedUpdateOneWithoutImageNestedInput
+  }
+
+  export type ProfileImageCreateManyInput = {
+    id: string
+    image: Buffer
+  }
+
+  export type ProfileImageUpdateManyMutationInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    image?: BytesFieldUpdateOperationsInput | Buffer
+  }
+
+  export type ProfileImageUncheckedUpdateManyInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    image?: BytesFieldUpdateOperationsInput | Buffer
   }
 
   export type DataTypesCreateInput = {
@@ -8265,11 +9360,17 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
     not?: InputJsonValue | JsonNullValueFilter
   }
 
+  export type ProfileImageRelationFilter = {
+    is?: ProfileImageWhereInput | null
+    isNot?: ProfileImageWhereInput | null
+  }
+
   export type ProfileCountOrderByAggregateInput = {
     id?: SortOrder
     bio?: SortOrder
     meta?: SortOrder
     userId?: SortOrder
+    imageId?: SortOrder
   }
 
   export type ProfileAvgOrderByAggregateInput = {
@@ -8281,12 +9382,14 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
     id?: SortOrder
     bio?: SortOrder
     userId?: SortOrder
+    imageId?: SortOrder
   }
 
   export type ProfileMinOrderByAggregateInput = {
     id?: SortOrder
     bio?: SortOrder
     userId?: SortOrder
+    imageId?: SortOrder
   }
 
   export type ProfileSumOrderByAggregateInput = {
@@ -8317,6 +9420,38 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
     _count?: NestedIntNullableFilter
     _min?: NestedJsonNullableFilter
     _max?: NestedJsonNullableFilter
+  }
+
+  export type BytesFilter = {
+    equals?: Buffer
+    in?: Enumerable<Buffer>
+    notIn?: Enumerable<Buffer>
+    not?: NestedBytesFilter | Buffer
+  }
+
+  export type ProfileImageCountOrderByAggregateInput = {
+    id?: SortOrder
+    image?: SortOrder
+  }
+
+  export type ProfileImageMaxOrderByAggregateInput = {
+    id?: SortOrder
+    image?: SortOrder
+  }
+
+  export type ProfileImageMinOrderByAggregateInput = {
+    id?: SortOrder
+    image?: SortOrder
+  }
+
+  export type BytesWithAggregatesFilter = {
+    equals?: Buffer
+    in?: Enumerable<Buffer>
+    notIn?: Enumerable<Buffer>
+    not?: NestedBytesWithAggregatesFilter | Buffer
+    _count?: NestedIntFilter
+    _min?: NestedBytesFilter
+    _max?: NestedBytesFilter
   }
 
   export type DateTimeNullableFilter = {
@@ -8688,6 +9823,12 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
     connect?: UserWhereUniqueInput
   }
 
+  export type ProfileImageCreateNestedOneWithoutProfileInput = {
+    create?: XOR<ProfileImageCreateWithoutProfileInput, ProfileImageUncheckedCreateWithoutProfileInput>
+    connectOrCreate?: ProfileImageCreateOrConnectWithoutProfileInput
+    connect?: ProfileImageWhereUniqueInput
+  }
+
   export type UserUpdateOneWithoutProfileNestedInput = {
     create?: XOR<UserCreateWithoutProfileInput, UserUncheckedCreateWithoutProfileInput>
     connectOrCreate?: UserCreateOrConnectWithoutProfileInput
@@ -8696,6 +9837,52 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
     delete?: boolean
     connect?: UserWhereUniqueInput
     update?: XOR<UserUpdateWithoutProfileInput, UserUncheckedUpdateWithoutProfileInput>
+  }
+
+  export type ProfileImageUpdateOneWithoutProfileNestedInput = {
+    create?: XOR<ProfileImageCreateWithoutProfileInput, ProfileImageUncheckedCreateWithoutProfileInput>
+    connectOrCreate?: ProfileImageCreateOrConnectWithoutProfileInput
+    upsert?: ProfileImageUpsertWithoutProfileInput
+    disconnect?: boolean
+    delete?: boolean
+    connect?: ProfileImageWhereUniqueInput
+    update?: XOR<ProfileImageUpdateWithoutProfileInput, ProfileImageUncheckedUpdateWithoutProfileInput>
+  }
+
+  export type ProfileCreateNestedOneWithoutImageInput = {
+    create?: XOR<ProfileCreateWithoutImageInput, ProfileUncheckedCreateWithoutImageInput>
+    connectOrCreate?: ProfileCreateOrConnectWithoutImageInput
+    connect?: ProfileWhereUniqueInput
+  }
+
+  export type ProfileUncheckedCreateNestedOneWithoutImageInput = {
+    create?: XOR<ProfileCreateWithoutImageInput, ProfileUncheckedCreateWithoutImageInput>
+    connectOrCreate?: ProfileCreateOrConnectWithoutImageInput
+    connect?: ProfileWhereUniqueInput
+  }
+
+  export type BytesFieldUpdateOperationsInput = {
+    set?: Buffer
+  }
+
+  export type ProfileUpdateOneWithoutImageNestedInput = {
+    create?: XOR<ProfileCreateWithoutImageInput, ProfileUncheckedCreateWithoutImageInput>
+    connectOrCreate?: ProfileCreateOrConnectWithoutImageInput
+    upsert?: ProfileUpsertWithoutImageInput
+    disconnect?: boolean
+    delete?: boolean
+    connect?: ProfileWhereUniqueInput
+    update?: XOR<ProfileUpdateWithoutImageInput, ProfileUncheckedUpdateWithoutImageInput>
+  }
+
+  export type ProfileUncheckedUpdateOneWithoutImageNestedInput = {
+    create?: XOR<ProfileCreateWithoutImageInput, ProfileUncheckedCreateWithoutImageInput>
+    connectOrCreate?: ProfileCreateOrConnectWithoutImageInput
+    upsert?: ProfileUpsertWithoutImageInput
+    disconnect?: boolean
+    delete?: boolean
+    connect?: ProfileWhereUniqueInput
+    update?: XOR<ProfileUpdateWithoutImageInput, ProfileUncheckedUpdateWithoutImageInput>
   }
 
   export type DummyCreateNestedOneWithoutDatatypeInput = {
@@ -8944,6 +10131,23 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
     not?: InputJsonValue | JsonNullValueFilter
   }
 
+  export type NestedBytesFilter = {
+    equals?: Buffer
+    in?: Enumerable<Buffer>
+    notIn?: Enumerable<Buffer>
+    not?: NestedBytesFilter | Buffer
+  }
+
+  export type NestedBytesWithAggregatesFilter = {
+    equals?: Buffer
+    in?: Enumerable<Buffer>
+    notIn?: Enumerable<Buffer>
+    not?: NestedBytesWithAggregatesFilter | Buffer
+    _count?: NestedIntFilter
+    _min?: NestedBytesFilter
+    _max?: NestedBytesFilter
+  }
+
   export type NestedDateTimeNullableFilter = {
     equals?: Date | string | null
     in?: Enumerable<Date> | Enumerable<string> | null
@@ -9095,12 +10299,14 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
     id: number
     bio: string
     meta?: NullableJsonNullValueInput | InputJsonValue
+    image?: ProfileImageCreateNestedOneWithoutProfileInput
   }
 
   export type ProfileUncheckedCreateWithoutUserInput = {
     id: number
     bio: string
     meta?: NullableJsonNullValueInput | InputJsonValue
+    imageId?: string | null
   }
 
   export type ProfileCreateOrConnectWithoutUserInput = {
@@ -9144,12 +10350,14 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
     id?: IntFieldUpdateOperationsInput | number
     bio?: StringFieldUpdateOperationsInput | string
     meta?: NullableJsonNullValueInput | InputJsonValue
+    image?: ProfileImageUpdateOneWithoutProfileNestedInput
   }
 
   export type ProfileUncheckedUpdateWithoutUserInput = {
     id?: IntFieldUpdateOperationsInput | number
     bio?: StringFieldUpdateOperationsInput | string
     meta?: NullableJsonNullValueInput | InputJsonValue
+    imageId?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type UserCreateWithoutPostsInput = {
@@ -9209,6 +10417,21 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
     create: XOR<UserCreateWithoutProfileInput, UserUncheckedCreateWithoutProfileInput>
   }
 
+  export type ProfileImageCreateWithoutProfileInput = {
+    id: string
+    image: Buffer
+  }
+
+  export type ProfileImageUncheckedCreateWithoutProfileInput = {
+    id: string
+    image: Buffer
+  }
+
+  export type ProfileImageCreateOrConnectWithoutProfileInput = {
+    where: ProfileImageWhereUniqueInput
+    create: XOR<ProfileImageCreateWithoutProfileInput, ProfileImageUncheckedCreateWithoutProfileInput>
+  }
+
   export type UserUpsertWithoutProfileInput = {
     update: XOR<UserUpdateWithoutProfileInput, UserUncheckedUpdateWithoutProfileInput>
     create: XOR<UserCreateWithoutProfileInput, UserUncheckedCreateWithoutProfileInput>
@@ -9226,6 +10449,59 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
     name?: NullableStringFieldUpdateOperationsInput | string | null
     meta?: NullableStringFieldUpdateOperationsInput | string | null
     posts?: PostUncheckedUpdateManyWithoutAuthorNestedInput
+  }
+
+  export type ProfileImageUpsertWithoutProfileInput = {
+    update: XOR<ProfileImageUpdateWithoutProfileInput, ProfileImageUncheckedUpdateWithoutProfileInput>
+    create: XOR<ProfileImageCreateWithoutProfileInput, ProfileImageUncheckedCreateWithoutProfileInput>
+  }
+
+  export type ProfileImageUpdateWithoutProfileInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    image?: BytesFieldUpdateOperationsInput | Buffer
+  }
+
+  export type ProfileImageUncheckedUpdateWithoutProfileInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    image?: BytesFieldUpdateOperationsInput | Buffer
+  }
+
+  export type ProfileCreateWithoutImageInput = {
+    id: number
+    bio: string
+    meta?: NullableJsonNullValueInput | InputJsonValue
+    user?: UserCreateNestedOneWithoutProfileInput
+  }
+
+  export type ProfileUncheckedCreateWithoutImageInput = {
+    id: number
+    bio: string
+    meta?: NullableJsonNullValueInput | InputJsonValue
+    userId: number
+  }
+
+  export type ProfileCreateOrConnectWithoutImageInput = {
+    where: ProfileWhereUniqueInput
+    create: XOR<ProfileCreateWithoutImageInput, ProfileUncheckedCreateWithoutImageInput>
+  }
+
+  export type ProfileUpsertWithoutImageInput = {
+    update: XOR<ProfileUpdateWithoutImageInput, ProfileUncheckedUpdateWithoutImageInput>
+    create: XOR<ProfileCreateWithoutImageInput, ProfileUncheckedCreateWithoutImageInput>
+  }
+
+  export type ProfileUpdateWithoutImageInput = {
+    id?: IntFieldUpdateOperationsInput | number
+    bio?: StringFieldUpdateOperationsInput | string
+    meta?: NullableJsonNullValueInput | InputJsonValue
+    user?: UserUpdateOneWithoutProfileNestedInput
+  }
+
+  export type ProfileUncheckedUpdateWithoutImageInput = {
+    id?: IntFieldUpdateOperationsInput | number
+    bio?: StringFieldUpdateOperationsInput | string
+    meta?: NullableJsonNullValueInput | InputJsonValue
+    userId?: IntFieldUpdateOperationsInput | number
   }
 
   export type DummyCreateWithoutDatatypeInput = {

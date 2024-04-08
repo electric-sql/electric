@@ -31,11 +31,15 @@ const tbl = electric.db.Post
 const postTable = tbl
 const userTable = electric.db.User
 const profileTable = electric.db.Profile
+const imageTable = electric.db.ProfileImage
 
 // Sync all shapes such that we don't get warnings on every query
-await postTable.sync()
-await userTable.sync()
-await profileTable.sync()
+await Promise.all([
+  postTable.sync(),
+  userTable.sync(),
+  profileTable.sync(),
+  imageTable.sync(),
+])
 
 const post1 = {
   id: 1,
@@ -74,6 +78,7 @@ const profile1 = {
   bio: 'bio 1',
   meta: null,
   userId: 1,
+  imageId: null,
 }
 
 const author2 = {
@@ -82,11 +87,17 @@ const author2 = {
   meta: 'information',
 }
 
+const image1 = {
+  id: 'image-1',
+  image: new Uint8Array([1, 2, 3]),
+}
+
 const profile2 = {
   id: 2,
   bio: 'bio 2',
   meta: { foo: 3 },
   userId: 2,
+  imageId: image1.id,
 }
 
 // An invalid JSON that will throw if `JSON.parse()` is called
@@ -108,7 +119,11 @@ function clear() {
   )
   db.exec('DROP TABLE IF EXISTS Profile')
   db.exec(
-    "CREATE TABLE IF NOT EXISTS Profile('id' int PRIMARY KEY, 'bio' varchar, 'meta' json, 'userId' int);"
+    "CREATE TABLE IF NOT EXISTS Profile('id' int PRIMARY KEY, 'bio' varchar, 'meta' json, 'userId' int, 'imageId' varchar);"
+  )
+  db.exec('DROP TABLE IF EXISTS ProfileImage')
+  db.exec(
+    "CREATE TABLE IF NOT EXISTS ProfileImage('id' varchar PRIMARY KEY, 'image' blob);"
   )
 }
 
@@ -281,6 +296,28 @@ test.serial('create query with nested objects for incoming FK', async (t) => {
   clear()
 })
 
+test.serial('create query with nullable FK', async (t) => {
+  const res = await profileTable.create({
+    data: {
+      id: 1094,
+      bio: 'whatever',
+      userId: 1,
+      imageId: null,
+    },
+    include: { image: true },
+  })
+
+  t.deepEqual(res, {
+    id: 1094,
+    bio: 'whatever',
+    meta: null,
+    imageId: null,
+    userId: 1,
+  })
+
+  clear()
+})
+
 // Test that we can make a create query
 test.serial('create query', async (t) => {
   const res = await tbl.create({
@@ -323,6 +360,7 @@ test.serial(
         name: 'kevin',
         meta: invalidJson,
       },
+      imageId: null,
     })
 
     clear()
@@ -1110,6 +1148,10 @@ async function populate() {
   await profileTable.createMany({
     data: [profile1, profile2],
   })
+
+  await imageTable.createMany({
+    data: [image1],
+  })
 }
 
 test.serial(
@@ -1117,7 +1159,7 @@ test.serial(
   async (t) => {
     await populate()
     const res = await profileTable.findMany({
-      where: { id: 2 },
+      where: { id: profile2.id },
       include: { user: true },
     })
 
@@ -1129,6 +1171,15 @@ test.serial(
     ])
   }
 )
+
+test.serial('findMany can handle nullable foreign keys', async (t) => {
+  await populate()
+  const res = await profileTable.findMany({
+    include: { image: true },
+  })
+
+  t.deepEqual(res, [profile1, { ...profile2, image: image1 }])
+})
 
 test.serial(
   'update query can handle related objects with fields of same name and different type',

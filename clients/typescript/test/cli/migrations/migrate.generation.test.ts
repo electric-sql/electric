@@ -167,7 +167,7 @@ test.before(() => {
   }
 })
 
-test.after(() => {
+test.after.always(() => {
   // avoid deleting whole temp directory as it might be used by
   // other tests as well
   const files = fs.readdirSync(tempDir)

@@ -37,6 +37,14 @@ model Profile {
   meta   Json?
   userId Int    @unique
   user   User?  @relation(fields: [userId], references: [id])
+  imageId  String? @unique
+  image    ProfileImage? @relation(fields: [imageId], references: [id])
+}
+
+model ProfileImage {
+  id        String    @id
+  image     Bytes
+  profile   Profile?
 }
 
 model DataTypes {
