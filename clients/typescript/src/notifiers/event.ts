@@ -123,7 +123,15 @@ export class EventNotifier implements Notifier {
     changes: Change[],
     origin: ChangeOrigin
   ): void {
-    Log.info('actually changed notifier')
+    const tables = [
+      ...new Set(
+        changes.map((e) => {
+          return e.qualifiedTablename.tablename
+        })
+      ),
+    ]
+
+    Log.info(`actually changed notifier. Changed tables: [${tables}]`)
     if (!this._hasDbName(dbName)) {
       return
     }
