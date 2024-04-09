@@ -37,7 +37,7 @@
 
 # Make sure Electric consumes all migrations from the replication stream before stopping it.
 [shell electric]
-    ?component=CachedWal.EtsBacked \[debug\] Saving transaction\
+    ?component=CachedWal.EtsBacked origin=postgres_1 \[debug\] Saving transaction\
        .+ with changes \[%Electric.Replication.Changes.NewRecord\{\
        relation: \{"electric", "ddl_commands"\}, \
        record: %\{.*"query" => "CREATE TABLE baz
