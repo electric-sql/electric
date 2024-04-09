@@ -16,9 +16,7 @@
         -$fail_pattern
 
     [newshell electric]
-        !make start_electric_1
-        -$fail_pattern
-        ??Successfully initialized Postgres connector "postgres_1"
+        [invoke start_electric 1]
         [progress setup finished]
 
     [shell postgres_logs]
@@ -33,6 +31,17 @@
         [invoke start_proxy pg_1 electric_1]
         -$fail_pattern
 
+[endmacro]
+
+[macro start_electric n]
+    !make start_electric_${n}
+    -$fail_pattern
+    ??Successfully initialized Postgres connector "postgres_1"
+[endmacro]
+
+[macro stop_electric n]
+    !make stop_electric_${n}
+    [invoke ok]
 [endmacro]
 
 [macro teardown]
