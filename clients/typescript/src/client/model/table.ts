@@ -42,10 +42,7 @@ import { NarrowInclude } from '../input/inputNarrowing'
 import { IShapeManager } from './shapes'
 import { ShapeSubscription } from '../../satellite'
 import { Rel, Shape } from '../../satellite/shapes/types'
-import {
-  IReplicationTransformManager,
-  transformTableRecord,
-} from './transforms'
+import { IReplicationTransformManager } from './transforms'
 import { InputTransformer } from '../conversions/input'
 import { Dialect } from '../../migrators/query-builder/builder'
 
@@ -1625,7 +1622,7 @@ export class Table<
       this._qualifiedTableName,
       {
         transformInbound: (record) =>
-          transformTableRecord(
+          this._replicationTransformManager.transformTableRecord(
             record,
             i.transformInbound,
             this._fields,
@@ -1634,7 +1631,7 @@ export class Table<
           ),
 
         transformOutbound: (record) =>
-          transformTableRecord(
+          this._replicationTransformManager.transformTableRecord(
             record,
             i.transformOutbound,
             this._fields,

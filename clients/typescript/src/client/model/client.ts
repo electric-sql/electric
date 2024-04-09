@@ -141,10 +141,11 @@ export class ElectricClient<
   ): ElectricClient<DB> {
     const tables = dbDescription.extendedTables
     const shapeManager = new ShapeManager(satellite)
-    const replicationTransformManager = new ReplicationTransformManager(
-      satellite
-    )
     const converter = dialect === 'SQLite' ? sqliteConverter : postgresConverter
+    const replicationTransformManager = new ReplicationTransformManager(
+      satellite,
+      converter
+    )
     const inputTransformer = new InputTransformer(converter)
 
     const createTable = (tableName: string) => {

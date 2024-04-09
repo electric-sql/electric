@@ -8,6 +8,7 @@ import { schema, Post } from '../generated'
 import { transformTableRecord } from '../../../src/client/model/transforms'
 import { InvalidRecordTransformationError } from '../../../src/client/validation/errors/invalidRecordTransformationError'
 import { Record } from '../../../src/util'
+import { sqliteConverter } from '../../../src/client/conversions/sqlite'
 
 const tableName = 'Post'
 const fields = schema.getFields(tableName)
@@ -24,7 +25,14 @@ const post1 = {
 
 test('transformTableRecord should validate the input', (t) => {
   const liftedTransform = (r: Record) =>
-    transformTableRecord(r, (row: Post) => row, fields, modelSchema, [])
+    transformTableRecord(
+      r,
+      (row: Post) => row,
+      fields,
+      modelSchema,
+      sqliteConverter,
+      []
+    )
 
   // should not throw for properly typed input
   t.notThrows(() => liftedTransform(post1))
@@ -52,6 +60,7 @@ test('transformTableRecord should validate the output', (t) => {
       }),
       fields,
       modelSchema,
+      sqliteConverter,
       []
     )
   // should throw for improperly typed input
@@ -68,6 +77,7 @@ test('transformTableRecord should validate output does not modify immutable fiel
       }),
       fields,
       modelSchema,
+      sqliteConverter,
       ['title']
     )
   t.throws(() => liftedTransform(post1), {
