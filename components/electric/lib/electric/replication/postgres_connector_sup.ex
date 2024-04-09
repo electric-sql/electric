@@ -43,11 +43,7 @@ defmodule Electric.Replication.PostgresConnectorSup do
       {SchemaCache, connector_config},
       {SatelliteCollectorProducer, connector_config},
       {Postgres.LogicalReplicationProducer, connector_config},
-      %{
-        id: Postgres.MigrationConsumer,
-        start:
-          {Postgres.MigrationConsumer, :start_link, [connector_config, migration_consumer_opts]}
-      },
+      {Postgres.MigrationConsumer, {connector_config, migration_consumer_opts}},
       if write_to_pg_mode == :logical_replication do
         {Postgres.SlotServer, writer_module_opts}
       else
