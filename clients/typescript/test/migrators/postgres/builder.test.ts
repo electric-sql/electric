@@ -39,7 +39,7 @@ test('load migration from meta data', async (t) => {
     sql: `
     SELECT table_name
       FROM information_schema.tables
-      WHERE table_schema = 'main' AND table_name = 'stars';`,
+      WHERE table_schema = 'public' AND table_name = 'stars';`,
   })
 
   const starIdx = tables.findIndex((tbl) => tbl.table_name === 'stars')

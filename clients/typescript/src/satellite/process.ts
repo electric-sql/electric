@@ -298,9 +298,10 @@ export class SatelliteProcess implements Satellite {
   async _garbageCollectShapeHandler(
     shapeDefs: ShapeDefinition[]
   ): Promise<void> {
+    const namespace = this.builder.defaultNamespace
     const allTables = shapeDefs
       .map((def: ShapeDefinition) => def.definition)
-      .flatMap((x) => getAllTablesForShape(x))
+      .flatMap((x) => getAllTablesForShape(x, namespace))
     const tables = uniqWith(allTables, (a, b) => a.isEqual(b))
 
     // TODO: table and schema warrant escaping here too, but they aren't in the triggers table.
@@ -477,6 +478,7 @@ export class SatelliteProcess implements Satellite {
     lsn: LSN,
     additionalStmts: Statement[] = []
   ) {
+    const namespace = this.builder.defaultNamespace
     const stmts: Statement[] = []
     stmts.push({ sql: this.builder.deferForeignKeys })
 
@@ -503,7 +505,7 @@ export class SatelliteProcess implements Satellite {
 
     // Group all changes by table name to be able to insert them all together
     for (const op of changes) {
-      const tableName = new QualifiedTablename('main', op.relation.table)
+      const tableName = new QualifiedTablename(namespace, op.relation.table)
       const tableNameString = tableName.toString()
       if (groupedChanges.has(tableNameString)) {
         groupedChanges.get(tableName.toString())?.records.push(op.record)
@@ -523,7 +525,7 @@ export class SatelliteProcess implements Satellite {
       }, {} as Record<string, string | number>)
 
       allArgsForShadowInsert.push({
-        namespace: 'main',
+        namespace,
         tablename: op.relation.table,
         primaryKey: primaryKeyToStr(primaryKeyCols),
         tags: encodeTags(op.tags),
@@ -564,13 +566,13 @@ export class SatelliteProcess implements Satellite {
 
     // Then do a batched insert for the shadow table
     const batchedShadowInserts = this.builder.batchedInsertOrReplace(
-      this.opts.shadowTable.namespace,
       this.opts.shadowTable.tablename,
       ['namespace', 'tablename', 'primaryKey', 'tags'],
       allArgsForShadowInsert,
       ['namespace', 'tablename', 'primaryKey'],
       ['namespace', 'tablename', 'tags'],
-      this.maxSqlParameters
+      this.maxSqlParameters,
+      this.opts.shadowTable.namespace
     )
     stmts.push(...batchedShadowInserts)
 
@@ -1227,12 +1229,12 @@ export class SatelliteProcess implements Satellite {
 
   _updateShadowTagsStatement(shadow: ShadowEntry): Statement {
     return this.builder.insertOrReplace(
-      this.opts.shadowTable.namespace,
       this.opts.shadowTable.tablename,
       ['namespace', 'tablename', 'primaryKey', 'tags'],
       [shadow.namespace, shadow.tablename, shadow.primaryKey, shadow.tags],
       ['namespace', 'tablename', 'primaryKey'],
-      ['tags']
+      ['tags'],
+      this.opts.shadowTable.namespace
     )
   }
 
@@ -1271,6 +1273,7 @@ export class SatelliteProcess implements Satellite {
 
   async _applyTransaction(transaction: Transaction) {
     console.log('APPLY TX: ' + JSON.stringify(transaction))
+    const namespace = this.builder.defaultNamespace
     const origin = transaction.origin!
     const commitTimestamp = new Date(transaction.commit_timestamp.toNumber())
 
@@ -1304,7 +1307,7 @@ export class SatelliteProcess implements Satellite {
         ...transaction,
         changes,
       }
-      const entries = fromTransaction(tx, this.relations)
+      const entries = fromTransaction(tx, this.relations, namespace)
 
       // Before applying DML statements we need to assign a timestamp to pending operations.
       // This only needs to be done once, even if there are several DML chunks
@@ -1340,7 +1343,7 @@ export class SatelliteProcess implements Satellite {
           // so store it in `tablenamesSet` such that those
           // triggers can be disabled while executing the transaction
           const affectedTable = new QualifiedTablename(
-            'main',
+            namespace,
             change.table.name
           ).toString()
           // store the table information to generate the triggers after this `forEach`
@@ -1620,22 +1623,22 @@ export class SatelliteProcess implements Satellite {
 
     if (updateColumnStmts.length > 0) {
       return this.builder.insertOrReplaceWith(
-        qualifiedTableName.namespace,
         qualifiedTableName.tablename,
         columnNames,
         columnValues,
         ['id'],
         updateColumnStmts,
-        updateColumnStmts.map((col) => fullRow[col])
+        updateColumnStmts.map((col) => fullRow[col]),
+        qualifiedTableName.namespace
       )
     }
 
     // no changes, can ignore statement if exists
     return this.builder.insertOrIgnore(
-      qualifiedTableName.namespace,
       qualifiedTableName.tablename,
       columnNames,
-      columnValues
+      columnValues,
+      qualifiedTableName.namespace
     )
   }
 
@@ -1662,7 +1665,7 @@ export function generateTriggersForTable(
 ): Statement[] {
   const table = {
     tableName: tbl.name,
-    namespace: 'main',
+    namespace: builder.defaultNamespace,
     columns: tbl.columns.map((col) => col.name),
     primary: tbl.pks,
     foreignKeys: tbl.fks.map((fk) => {

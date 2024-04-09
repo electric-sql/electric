@@ -108,24 +108,31 @@ export type Shadow = Selectable<ShadowTable>
 export type NewShadow = Insertable<ShadowTable>
 export type ShadowUpdate = Updateable<ShadowTable>
 
-export const satelliteDefaults: SatelliteOpts = {
-  metaTable: new QualifiedTablename('main', _electric_meta),
-  migrationsTable: new QualifiedTablename('main', _electric_migrations),
-  oplogTable: new QualifiedTablename('main', _electric_oplog),
-  triggersTable: new QualifiedTablename('main', _electric_trigger_settings),
-  shadowTable: new QualifiedTablename('main', _electric_shadow),
-  pollingInterval: 2000,
-  minSnapshotWindow: 40,
-  clearOnBehindWindow: true,
-  connectionBackOffOptions: {
-    delayFirstAttempt: false,
-    startingDelay: 1000,
-    jitter: 'full',
-    maxDelay: 10000,
-    numOfAttempts: 50,
-    timeMultiple: 2,
-  },
-  debug: false,
+export const satelliteDefaults: (namespace: string) => SatelliteOpts = (
+  namespace: string
+) => {
+  return {
+    metaTable: new QualifiedTablename(namespace, _electric_meta),
+    migrationsTable: new QualifiedTablename(namespace, _electric_migrations),
+    oplogTable: new QualifiedTablename(namespace, _electric_oplog),
+    triggersTable: new QualifiedTablename(
+      namespace,
+      _electric_trigger_settings
+    ),
+    shadowTable: new QualifiedTablename(namespace, _electric_shadow),
+    pollingInterval: 2000,
+    minSnapshotWindow: 40,
+    clearOnBehindWindow: true,
+    connectionBackOffOptions: {
+      delayFirstAttempt: false,
+      startingDelay: 1000,
+      jitter: 'full',
+      maxDelay: 10000,
+      numOfAttempts: 50,
+      timeMultiple: 2,
+    },
+    debug: false,
+  }
 }
 
 export const satelliteClientDefaults = {

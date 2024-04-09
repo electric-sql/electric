@@ -25,17 +25,17 @@ interface TableSchema {
   columns: string[]
 }
 
-export const initTableInfo = (): TableInfo => {
+export const initTableInfo = (namespace: string): TableInfo => {
   return {
-    'main.parent': {
+    [`${namespace}.parent`]: {
       primaryKey: ['id'],
       columns: ['id', 'value', 'other'],
     },
-    'main.child': {
+    [`${namespace}.child`]: {
       primaryKey: ['id'],
       columns: ['id', 'parent'],
     },
-    'main.Items': {
+    [`${namespace}.Items`]: {
       primaryKey: ['value'],
       columns: ['value', 'other'],
     },
@@ -44,10 +44,11 @@ export const initTableInfo = (): TableInfo => {
 
 export const loadSatelliteMetaTable = async (
   db: DatabaseAdapter,
+  namespace: string,
   metaTableName = '_electric_meta'
 ): Promise<Row> => {
   const rows = await db.query({
-    sql: `SELECT key, value FROM main.${metaTableName}`,
+    sql: `SELECT key, value FROM "${namespace}"."${metaTableName}"`,
   })
   const entries = rows.map((x) => [x.key, x.value])
 
@@ -201,7 +202,8 @@ export async function getMatchingShadowEntries(
   adapter: DatabaseAdapter,
   oplog?: OplogEntry,
   builder: QueryBuilder = sqliteBuilder,
-  shadowTable = 'main._electric_shadow'
+  namespace: string = builder.defaultNamespace,
+  shadowTable = `"${namespace}"._electric_shadow`
 ): Promise<ShadowEntry[]> {
   let query: Statement
   let selectTags = `SELECT namespace, tablename, "primaryKey", tags FROM ${shadowTable}`
@@ -225,7 +227,14 @@ export async function getMatchingShadowEntries(
 export async function getPgMatchingShadowEntries(
   adapter: DatabaseAdapter,
   oplog?: OplogEntry,
-  shadowTable = 'main._electric_shadow'
+  namespace: string = 'public',
+  shadowTable = `"${namespace}"._electric_shadow`
 ): Promise<ShadowEntry[]> {
-  return getMatchingShadowEntries(adapter, oplog, pgBuilder, shadowTable)
+  return getMatchingShadowEntries(
+    adapter,
+    oplog,
+    pgBuilder,
+    namespace,
+    shadowTable
+  )
 }

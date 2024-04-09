@@ -4,13 +4,18 @@ import { Database } from 'better-sqlite3'
 import testAny, { TestFn } from 'ava'
 import { generateTableTriggers } from '../../../src/migrators/triggers'
 import { satelliteDefaults } from '../../../src/satellite/config'
-import { migrateDb, personTable } from '../../satellite/common'
+import {
+  migrateDb,
+  personTable as getPersonTable,
+} from '../../satellite/common'
 import { sqliteBuilder } from '../../../src/migrators/query-builder'
 import { DatabaseAdapter } from '../../../src/drivers/better-sqlite3'
 
 type Context = { db: Database; migrateDb: () => Promise<void> }
 const test = testAny as TestFn<Context>
-const oplogTable = `"${satelliteDefaults.oplogTable.namespace}"."${satelliteDefaults.oplogTable.tablename}"`
+const defaults = satelliteDefaults('main')
+const oplogTable = `"${defaults.oplogTable.namespace}"."${defaults.oplogTable.tablename}"`
+const personTable = getPersonTable('main')
 
 test.beforeEach(async (t) => {
   const db = new OriginalDatabase(':memory:')
@@ -169,7 +174,7 @@ test('oplog trigger should separate null blobs from empty blobs', async (t) => {
   // Check that the oplog table contains an entry for the inserted row
   const oplogRows = db
     .prepare(
-      `SELECT * FROM "${satelliteDefaults.oplogTable.namespace}"."${satelliteDefaults.oplogTable.tablename}"`
+      `SELECT * FROM "${defaults.oplogTable.namespace}"."${defaults.oplogTable.tablename}"`
     )
     .all()
   t.is(oplogRows.length, 2)

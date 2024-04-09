@@ -12,7 +12,8 @@ const test = testAny as TestFn<ContextType>
 
 let port = 5000
 test.beforeEach(async (t) => {
-  await makePgContext(t, port++)
+  const namespace = 'public'
+  await makePgContext(t, port++, namespace)
   t.context.getMatchingShadowEntries = getPgMatchingShadowEntries
   t.context.builder = pgBuilder
   await commonSetup(t)

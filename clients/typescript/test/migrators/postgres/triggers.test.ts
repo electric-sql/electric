@@ -2,7 +2,10 @@ import { dedent } from 'ts-dedent'
 import testAny, { TestFn } from 'ava'
 import { generateTableTriggers } from '../../../src/migrators/triggers'
 import { satelliteDefaults } from '../../../src/satellite/config'
-import { migrateDb, personTable } from '../../satellite/common'
+import {
+  migrateDb,
+  personTable as getPersonTable,
+} from '../../satellite/common'
 import { pgBuilder } from '../../../src/migrators/query-builder'
 import { makePgDatabase } from '../../support/node-postgres'
 import { Database, DatabaseAdapter } from '../../../src/drivers/node-postgres'
@@ -13,8 +16,10 @@ type Context = {
   stopPG: () => Promise<void>
 }
 const test = testAny as TestFn<Context>
-const oplogTable = `"${satelliteDefaults.oplogTable.namespace}"."${satelliteDefaults.oplogTable.tablename}"`
+const defaults = satelliteDefaults('public')
+const oplogTable = `"${defaults.oplogTable.namespace}"."${defaults.oplogTable.tablename}"`
 
+const personTable = getPersonTable('public')
 const personNamespace = personTable.namespace
 const personTableName = personTable.tableName
 const qualifiedPersonTable = `"${personNamespace}"."${personTableName}"`
@@ -47,10 +52,10 @@ test('generateTableTriggers should create correct triggers for a table', (t) => 
   t.assert(
     triggersSQL.includes(
       dedent`
-        CREATE TRIGGER insert_main_personTable_into_oplog
-          AFTER INSERT ON "main"."personTable"
+        CREATE TRIGGER insert_public_personTable_into_oplog
+          AFTER INSERT ON "public"."personTable"
             FOR EACH ROW
-              EXECUTE FUNCTION insert_main_personTable_into_oplog_function();
+              EXECUTE FUNCTION insert_public_personTable_into_oplog_function();
       `
     )
   )
@@ -58,20 +63,20 @@ test('generateTableTriggers should create correct triggers for a table', (t) => 
   t.assert(
     triggersSQL.includes(
       dedent`
-      CREATE OR REPLACE FUNCTION insert_main_personTable_into_oplog_function()
+      CREATE OR REPLACE FUNCTION insert_public_personTable_into_oplog_function()
       RETURNS TRIGGER AS $$
       BEGIN
         DECLARE
           flag_value INTEGER;
         BEGIN
           -- Get the flag value from _electric_trigger_settings
-          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE namespace = 'main' AND tablename = 'personTable';
+          SELECT flag INTO flag_value FROM "public"._electric_trigger_settings WHERE namespace = 'public' AND tablename = 'personTable';
   
           IF flag_value = 1 THEN
             -- Insert into _electric_oplog
-            INSERT INTO main._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
+            INSERT INTO "public"._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
             VALUES (
-              'main',
+              'public',
               'personTable',
               'INSERT',
               json_strip_nulls(json_build_object('id', cast(new."id" as TEXT))),
@@ -92,10 +97,10 @@ test('generateTableTriggers should create correct triggers for a table', (t) => 
   t.assert(
     triggersSQL.includes(
       dedent`
-        CREATE TRIGGER update_main_personTable_into_oplog
-          AFTER UPDATE ON "main"."personTable"
+        CREATE TRIGGER update_public_personTable_into_oplog
+          AFTER UPDATE ON "public"."personTable"
             FOR EACH ROW
-              EXECUTE FUNCTION update_main_personTable_into_oplog_function();
+              EXECUTE FUNCTION update_public_personTable_into_oplog_function();
       `
     )
   )
@@ -103,20 +108,20 @@ test('generateTableTriggers should create correct triggers for a table', (t) => 
   t.assert(
     triggersSQL.includes(
       dedent`
-      CREATE OR REPLACE FUNCTION update_main_personTable_into_oplog_function()
+      CREATE OR REPLACE FUNCTION update_public_personTable_into_oplog_function()
       RETURNS TRIGGER AS $$
       BEGIN
         DECLARE
           flag_value INTEGER;
         BEGIN
           -- Get the flag value from _electric_trigger_settings
-          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE namespace = 'main' AND tablename = 'personTable';
+          SELECT flag INTO flag_value FROM "public"._electric_trigger_settings WHERE namespace = 'public' AND tablename = 'personTable';
   
           IF flag_value = 1 THEN
             -- Insert into _electric_oplog
-            INSERT INTO main._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
+            INSERT INTO "public"._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
             VALUES (
-              'main',
+              'public',
               'personTable',
               'UPDATE',
               json_strip_nulls(json_build_object('id', cast(new."id" as TEXT))),
@@ -137,10 +142,10 @@ test('generateTableTriggers should create correct triggers for a table', (t) => 
   t.assert(
     triggersSQL.includes(
       dedent`
-        CREATE TRIGGER delete_main_personTable_into_oplog
-          AFTER DELETE ON "main"."personTable"
+        CREATE TRIGGER delete_public_personTable_into_oplog
+          AFTER DELETE ON "public"."personTable"
             FOR EACH ROW
-              EXECUTE FUNCTION delete_main_personTable_into_oplog_function();
+              EXECUTE FUNCTION delete_public_personTable_into_oplog_function();
       `
     )
   )
@@ -148,20 +153,20 @@ test('generateTableTriggers should create correct triggers for a table', (t) => 
   t.assert(
     triggersSQL.includes(
       dedent`
-      CREATE OR REPLACE FUNCTION delete_main_personTable_into_oplog_function()
+      CREATE OR REPLACE FUNCTION delete_public_personTable_into_oplog_function()
       RETURNS TRIGGER AS $$
       BEGIN
         DECLARE
           flag_value INTEGER;
         BEGIN
           -- Get the flag value from _electric_trigger_settings
-          SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE namespace = 'main' AND tablename = 'personTable';
+          SELECT flag INTO flag_value FROM "public"._electric_trigger_settings WHERE namespace = 'public' AND tablename = 'personTable';
   
           IF flag_value = 1 THEN
             -- Insert into _electric_oplog
-            INSERT INTO main._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
+            INSERT INTO "public"._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
             VALUES (
-              'main',
+              'public',
               'personTable',
               'DELETE',
               json_strip_nulls(json_build_object('id', cast(old."id" as TEXT))),
@@ -196,7 +201,7 @@ test('oplog insertion trigger should insert row into oplog table', async (t) => 
   })
   t.is(oplogRows.length, 1)
   t.deepEqual(oplogRows[0], {
-    namespace: 'main',
+    namespace: 'public',
     tablename: personTableName,
     optype: 'INSERT',
     // `id` and `bmi` values are stored as strings
@@ -233,7 +238,7 @@ test('oplog trigger should handle Infinity values correctly', async (t) => {
   })
   t.is(oplogRows.length, 1)
   t.deepEqual(oplogRows[0], {
-    namespace: 'main',
+    namespace: 'public',
     tablename: tableName,
     optype: 'INSERT',
     // `id` and `bmi` values are stored as strings
@@ -269,7 +274,7 @@ test('oplog trigger should separate null blobs from empty blobs', async (t) => {
 
   // Check that the oplog table contains an entry for the inserted row
   const { rows: oplogRows } = await db.exec({
-    sql: `SELECT * FROM "${satelliteDefaults.oplogTable.namespace}"."${satelliteDefaults.oplogTable.tablename}"`,
+    sql: `SELECT * FROM "${defaults.oplogTable.namespace}"."${defaults.oplogTable.tablename}"`,
   })
   t.is(oplogRows.length, 2)
   t.regex(oplogRows[0].newRow as string, /,\s*"blob":\s*null\s*,/)

@@ -7,7 +7,8 @@ import { getMatchingShadowEntries } from '../../support/satellite-helpers'
 
 const test = anyTest as TestFn<ContextType>
 test.beforeEach(async (t) => {
-  await makeContext(t)
+  const namespace = 'main'
+  await makeContext(t, namespace)
   t.context.getMatchingShadowEntries = getMatchingShadowEntries
 })
 test.afterEach.always(cleanAndStopSatellite)

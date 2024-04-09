@@ -31,7 +31,9 @@ export const makeMigrationMetaData = (builder: QueryBuilder) => {
           stmts: [
             SatOpMigrate_Stmt.fromPartial({
               type: SatOpMigrate_Type.CREATE_TABLE,
-              sql: `CREATE TABLE "main"."stars" (\n  "id" TEXT NOT NULL PRIMARY KEY,\n  "avatar_url" TEXT NOT NULL,\n  "name" TEXT,\n  "starred_at" TEXT NOT NULL,\n  "username" TEXT NOT NULL\n)${builder.sqliteOnly(
+              sql: `CREATE TABLE "${
+                builder.defaultNamespace
+              }"."stars" (\n  "id" TEXT NOT NULL PRIMARY KEY,\n  "avatar_url" TEXT NOT NULL,\n  "name" TEXT,\n  "starred_at" TEXT NOT NULL,\n  "username" TEXT NOT NULL\n)${builder.sqliteOnly(
                 ' WITHOUT ROWID'
               )};\n`,
             }),
@@ -122,7 +124,9 @@ export const bundleTests = (test: TestFn<ContextType>) => {
     t.is(migration.version, migrationMetaData.version)
     t.is(
       migration.statements[0],
-      `CREATE TABLE "main"."stars" (\n  "id" TEXT NOT NULL PRIMARY KEY,\n  "avatar_url" TEXT NOT NULL,\n  "name" TEXT,\n  "starred_at" TEXT NOT NULL,\n  "username" TEXT NOT NULL\n)${builder.sqliteOnly(
+      `CREATE TABLE "${
+        builder.defaultNamespace
+      }"."stars" (\n  "id" TEXT NOT NULL PRIMARY KEY,\n  "avatar_url" TEXT NOT NULL,\n  "name" TEXT,\n  "starred_at" TEXT NOT NULL,\n  "username" TEXT NOT NULL\n)${builder.sqliteOnly(
         ' WITHOUT ROWID'
       )};\n`
     )
@@ -130,14 +134,14 @@ export const bundleTests = (test: TestFn<ContextType>) => {
     if (builder.dialect === 'SQLite') {
       t.is(
         migration.statements[3],
-        'CREATE TRIGGER update_ensure_main_stars_primarykey\n  BEFORE UPDATE ON "main"."stars"\nBEGIN\n  SELECT\n    CASE\n      WHEN old."id" != new."id" THEN\n      \t\tRAISE (ABORT, \'cannot change the value of column id as it belongs to the primary key\')\n    END;\nEND;'
+        `CREATE TRIGGER update_ensure_${builder.defaultNamespace}_stars_primarykey\n  BEFORE UPDATE ON "${builder.defaultNamespace}"."stars"\nBEGIN\n  SELECT\n    CASE\n      WHEN old."id" != new."id" THEN\n      \t\tRAISE (ABORT, 'cannot change the value of column id as it belongs to the primary key')\n    END;\nEND;`
       )
     } else {
       // Postgres
       t.is(
         migration.statements[3],
         dedent`
-        CREATE OR REPLACE FUNCTION update_ensure_main_stars_primarykey_function()
+        CREATE OR REPLACE FUNCTION update_ensure_${builder.defaultNamespace}_stars_primarykey_function()
         RETURNS TRIGGER AS $$
         BEGIN
           IF OLD."id" IS DISTINCT FROM NEW."id" THEN
@@ -152,10 +156,10 @@ export const bundleTests = (test: TestFn<ContextType>) => {
       t.is(
         migration.statements[4],
         dedent`
-        CREATE TRIGGER update_ensure_main_stars_primarykey
-          BEFORE UPDATE ON "main"."stars"
+        CREATE TRIGGER update_ensure_${builder.defaultNamespace}_stars_primarykey
+          BEFORE UPDATE ON "${builder.defaultNamespace}"."stars"
             FOR EACH ROW
-              EXECUTE FUNCTION update_ensure_main_stars_primarykey_function();
+              EXECUTE FUNCTION update_ensure_${builder.defaultNamespace}_stars_primarykey_function();
       `
       )
     }
@@ -178,7 +182,7 @@ export const bundleTests = (test: TestFn<ContextType>) => {
             stmts: [
               SatOpMigrate_Stmt.fromPartial({
                 type: 0,
-                sql: 'CREATE TABLE "main"."tenants" (\n  "id" TEXT NOT NULL,\n  "name" TEXT NOT NULL,\n  CONSTRAINT "tenants_pkey" PRIMARY KEY ("id")\n) WITHOUT ROWID;\n',
+                sql: `CREATE TABLE "${builder.defaultNamespace}"."tenants" (\n  "id" TEXT NOT NULL,\n  "name" TEXT NOT NULL,\n  CONSTRAINT "tenants_pkey" PRIMARY KEY ("id")\n) WITHOUT ROWID;\n`,
               }),
             ],
             table: SatOpMigrate_Table.fromPartial({
@@ -216,7 +220,7 @@ export const bundleTests = (test: TestFn<ContextType>) => {
             stmts: [
               SatOpMigrate_Stmt.fromPartial({
                 type: 0,
-                sql: 'CREATE TABLE "main"."users" (\n  "id" TEXT NOT NULL,\n  "name" TEXT NOT NULL,\n  "email" TEXT NOT NULL,\n  "password_hash" TEXT NOT NULL,\n  CONSTRAINT "users_pkey" PRIMARY KEY ("id")\n) WITHOUT ROWID;\n',
+                sql: `CREATE TABLE "${builder.defaultNamespace}"."users" (\n  "id" TEXT NOT NULL,\n  "name" TEXT NOT NULL,\n  "email" TEXT NOT NULL,\n  "password_hash" TEXT NOT NULL,\n  CONSTRAINT "users_pkey" PRIMARY KEY ("id")\n) WITHOUT ROWID;\n`,
               }),
             ],
             table: SatOpMigrate_Table.fromPartial({
@@ -270,7 +274,7 @@ export const bundleTests = (test: TestFn<ContextType>) => {
             stmts: [
               SatOpMigrate_Stmt.fromPartial({
                 type: 0,
-                sql: 'CREATE TABLE "main"."tenant_users" (\n  "tenant_id" TEXT NOT NULL,\n  "user_id" TEXT NOT NULL,\n  CONSTRAINT "tenant_users_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "tenants" ("id") ON DELETE CASCADE,\n  CONSTRAINT "tenant_users_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users" ("id") ON DELETE CASCADE,\n  CONSTRAINT "tenant_users_pkey" PRIMARY KEY ("tenant_id", "user_id")\n) WITHOUT ROWID;\n',
+                sql: `CREATE TABLE "${builder.defaultNamespace}"."tenant_users" (\n  "tenant_id" TEXT NOT NULL,\n  "user_id" TEXT NOT NULL,\n  CONSTRAINT "tenant_users_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "tenants" ("id") ON DELETE CASCADE,\n  CONSTRAINT "tenant_users_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users" ("id") ON DELETE CASCADE,\n  CONSTRAINT "tenant_users_pkey" PRIMARY KEY ("tenant_id", "user_id")\n) WITHOUT ROWID;\n`,
               }),
             ],
             table: SatOpMigrate_Table.fromPartial({

@@ -45,7 +45,7 @@ export interface ElectricConfig {
 }
 
 export type ElectricConfigWithDialect = ElectricConfig & {
-  dialect?: 'SQLite' | 'Postgres'
+  dialect?: 'SQLite' | 'Postgres' // defaults to SQLite
 }
 
 export type HydratedConfig = {
@@ -59,6 +59,7 @@ export type HydratedConfig = {
   }
   debug: boolean
   connectionBackOffOptions: ConnectionBackOffOptions
+  namespace: string
 }
 
 export type InternalElectricConfig = {
@@ -88,6 +89,8 @@ export const hydrateConfig = (
   const portInt = parseInt(url.port, 10)
   const port = Number.isNaN(portInt) ? defaultPort : portInt
 
+  const defaultNamespace = config.dialect === 'Postgres' ? 'public' : 'main'
+
   const replication = {
     host: url.hostname,
     port: port,
@@ -105,7 +108,7 @@ export const hydrateConfig = (
     timeMultiple,
   } =
     config.connectionBackOffOptions ??
-    satelliteDefaults.connectionBackOffOptions
+    satelliteDefaults(defaultNamespace).connectionBackOffOptions
 
   const connectionBackOffOptions = {
     delayFirstAttempt,
@@ -121,5 +124,6 @@ export const hydrateConfig = (
     replication,
     debug,
     connectionBackOffOptions,
+    namespace: defaultNamespace,
   }
 }
