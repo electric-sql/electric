@@ -1,7 +1,7 @@
 CREATE OR REPLACE FUNCTION <%= schema() %>.list_foreign_keys(target_schema_name TEXT, target_table_name TEXT)
     RETURNS TABLE (constraint_name TEXT, fk_columns TEXT[], referenced_columns TEXT[], referenced_table_oid TEXT, referenced_schema TEXT, referenced_table TEXT)
     LANGUAGE SQL
-    STABLE LEAKPROOF STRICT
+    STABLE STRICT
     PARALLEL SAFE
     AS $$
     SELECT
