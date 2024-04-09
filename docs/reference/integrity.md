@@ -6,11 +6,11 @@ description: >-
 
 import useBaseUrl from '@docusaurus/useBaseUrl'
 
-This page provides information on invariants that can be maintained with Rich-CRDTs and anomalies that can occur with different local-first different database technologies.
+This page provides information on invariants that can be maintained with Rich-CRDTs and anomalies that can occur with different local-first database technologies.
 
 ## Anomalies
 
-Reactive, local-first applications can deliver a fast and responsive user experience. However, it's important to make sure that interactions feel natural and enjoyable by avoiding anomalies. Espeically when you have user actions coming from different sources.
+Reactive, local-first applications can deliver a fast and responsive user experience. However, it's important to make sure that interactions feel natural and enjoyable by avoiding anomalies. Especially when you have user actions coming from different sources.
 
 The following table summarises the anomalies that can occur with different database technologies and illustrates how ElectricSQL's model of [Rich-CRDTs](/blog/2022/05/03/introducing-rich-crdts) with [transactional causal+ consistency (TCC+)](/docs/reference/consistency):
 
