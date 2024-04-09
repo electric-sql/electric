@@ -55,7 +55,7 @@ async function makeContext(t: ExecutionContext<ContextType>) {
     migrator,
     notifier,
     client,
-    satelliteDefaults
+    satelliteDefaults(migrator.electricQueryBuilder.defaultNamespace)
   )
 
   const electric = ElectricClient.create(

@@ -48,14 +48,17 @@ export abstract class BundleMigratorBase implements Migrator {
     adapter: DatabaseAdapter,
     migrations: Migration[] = [],
     queryBuilderConfig: KyselyConfig,
-    public electricQueryBuilder: QueryBuilder
+    public electricQueryBuilder: QueryBuilder,
+    private namespace: string = electricQueryBuilder.defaultNamespace
   ) {
     this.adapter = adapter
     const baseMigration = makeBaseMigration(electricQueryBuilder)
     this.migrations = [...baseMigration.migrations, ...migrations].map(
       makeStmtMigration
     )
-    this.queryBuilder = new Kysely<ElectricSchema>(queryBuilderConfig)
+    this.queryBuilder = new Kysely<ElectricSchema>(
+      queryBuilderConfig
+    ).withSchema(namespace)
     this.eb = expressionBuilder<ElectricSchema, typeof _electric_migrations>()
   }
 
@@ -86,7 +89,11 @@ export abstract class BundleMigratorBase implements Migrator {
   async migrationsTableExists(): Promise<boolean> {
     // If this is the first time we're running migrations, then the
     // migrations table won't exist.
-    const tableExists = this.createTableExistsStatement('main', this.tableName)
+    const namespace = this.electricQueryBuilder.defaultNamespace
+    const tableExists = this.createTableExistsStatement(
+      namespace,
+      this.tableName
+    )
     const tables = await this.adapter.query(tableExists)
     return tables.length > 0
   }
@@ -97,7 +104,7 @@ export abstract class BundleMigratorBase implements Migrator {
     }
 
     const existingRecords = `
-      SELECT version FROM "main"."${this.tableName}"
+      SELECT version FROM "${this.namespace}"."${this.tableName}"
         ORDER BY id ASC
     `
 
@@ -114,7 +121,7 @@ export abstract class BundleMigratorBase implements Migrator {
     // The hard-coded version '0' below corresponds to the version of the internal migration defined in `schema.ts`.
     // We're ignoring it because this function is supposed to return the application schema version.
     const schemaVersion = `
-      SELECT version FROM "main"."${this.tableName}"
+      SELECT version FROM "${this.namespace}"."${this.tableName}"
         WHERE version != '0'
         ORDER BY version DESC
         LIMIT 1
@@ -166,7 +173,7 @@ export abstract class BundleMigratorBase implements Migrator {
     }
 
     const { sql, parameters } = raw`
-      INSERT INTO "main".${this.eb.table(
+      INSERT INTO ${this.eb.table(
         this.tableName
       )} (version, applied_at) VALUES (${version}, ${Date.now().toString()})
     `.compile(this.queryBuilder)
@@ -185,7 +192,7 @@ export abstract class BundleMigratorBase implements Migrator {
    */
   async applyIfNotAlready(migration: StmtMigration): Promise<boolean> {
     const { sql, parameters } = raw`
-      SELECT 1 FROM "main".${this.eb.table(this.tableName)}
+      SELECT 1 FROM ${this.eb.table(this.tableName)}
         WHERE version = ${migration.version}
     `.compile(this.queryBuilder)
 

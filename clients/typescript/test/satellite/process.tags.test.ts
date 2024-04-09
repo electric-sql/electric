@@ -39,7 +39,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
     const clientId = satellite._authState?.clientId ?? 'test_client'
 
     await adapter.run({
-      sql: `INSERT INTO main.parent(id, value, other) VALUES (1, 'local', null)`,
+      sql: `INSERT INTO parent(id, value, other) VALUES (1, 'local', null)`,
     })
 
     const txDate1 = await satellite._performSnapshot()
@@ -48,7 +48,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
     t.is(shadow[0].tags, genEncodedTags(clientId, [txDate1]))
 
     await adapter.run({
-      sql: `UPDATE main.parent SET value = 'local1', other = 3 WHERE id = 1`,
+      sql: `UPDATE parent SET value = 'local1', other = 3 WHERE id = 1`,
     })
 
     const txDate2 = await satellite._performSnapshot()
@@ -57,7 +57,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
     t.is(shadow[0].tags, genEncodedTags(clientId, [txDate2]))
 
     await adapter.run({
-      sql: `UPDATE main.parent SET value = 'local2', other = 4 WHERE id = 1`,
+      sql: `UPDATE parent SET value = 'local2', other = 4 WHERE id = 1`,
     })
 
     const txDate3 = await satellite._performSnapshot()
@@ -66,7 +66,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
     t.is(shadow[0].tags, genEncodedTags(clientId, [txDate3]))
 
     await adapter.run({
-      sql: `DELETE FROM main.parent WHERE id = 1`,
+      sql: `DELETE FROM parent WHERE id = 1`,
     })
 
     const txDate4 = await satellite._performSnapshot()
@@ -92,6 +92,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
       tableInfo,
       authState,
       getMatchingShadowEntries,
+      namespace,
     } = t.context
     await runMigrations()
     await satellite._setAuthState(authState)
@@ -100,7 +101,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
 
     // Local INSERT
     const stmts1 = {
-      sql: `INSERT INTO main.parent (id, value, other) VALUES ('1', 'local', null)`,
+      sql: `INSERT INTO parent (id, value, other) VALUES ('1', 'local', null)`,
     }
     await adapter.runInTransaction(stmts1)
     const txDate1 = await satellite._performSnapshot()
@@ -122,7 +123,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
 
     // Local DELETE
     const stmts2 = {
-      sql: `DELETE FROM main.parent WHERE id='1'`,
+      sql: `DELETE FROM parent WHERE id='1'`,
     }
     await adapter.runInTransaction(stmts2)
     const txDate2 = await satellite._performSnapshot()
@@ -143,7 +144,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
 
     // Local INSERT
     const stmts3 = {
-      sql: `INSERT INTO main.parent (id, value, other) VALUES ('1', 'local', null)`,
+      sql: `INSERT INTO parent (id, value, other) VALUES ('1', 'local', null)`,
     }
     await adapter.runInTransaction(stmts3)
     const txDate3 = await satellite._performSnapshot()
@@ -166,7 +167,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
     // apply incomig operation (local operation ack)
     const ackEntry = generateRemoteOplogEntry(
       tableInfo,
-      'main',
+      namespace,
       'parent',
       OPTYPES.insert,
       txDate1.getTime(),
@@ -210,6 +211,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
       tableInfo,
       authState,
       getMatchingShadowEntries,
+      namespace,
     } = t.context
     await runMigrations()
     await satellite._setAuthState(authState)
@@ -218,14 +220,14 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
 
     // For this key we will choose remote Tx, such that: Local TM > Remote TX
     stmts.push({
-      sql: `INSERT INTO main.parent (id, value, other) VALUES ('1', 'local', null);`,
+      sql: `INSERT INTO parent (id, value, other) VALUES ('1', 'local', null);`,
     })
-    stmts.push({ sql: `DELETE FROM main.parent WHERE id = 1` })
+    stmts.push({ sql: `DELETE FROM parent WHERE id = 1` })
     // For this key we will choose remote Tx, such that: Local TM < Remote TX
     stmts.push({
-      sql: `INSERT INTO main.parent (id, value, other) VALUES ('2', 'local', null);`,
+      sql: `INSERT INTO parent (id, value, other) VALUES ('2', 'local', null);`,
     })
-    stmts.push({ sql: `DELETE FROM main.parent WHERE id = 2` })
+    stmts.push({ sql: `DELETE FROM parent WHERE id = 2` })
     await adapter.runInTransaction(...stmts)
 
     const txDate1 = await satellite._performSnapshot()
@@ -235,7 +237,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
 
     const prevEntry = generateRemoteOplogEntry(
       tableInfo,
-      'main',
+      namespace,
       'parent',
       OPTYPES.insert,
       prevTs,
@@ -249,7 +251,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
     )
     const nextEntry = generateRemoteOplogEntry(
       tableInfo,
-      'main',
+      namespace,
       'parent',
       OPTYPES.insert,
       nextTs,
@@ -285,13 +287,13 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
     const shadow = await getMatchingShadowEntries(adapter)
     const expectedShadow = [
       {
-        namespace: 'main',
+        namespace,
         tablename: 'parent',
         primaryKey: '{"id":1}',
         tags: genEncodedTags('remote', [prevTs]),
       },
       {
-        namespace: 'main',
+        namespace,
         tablename: 'parent',
         primaryKey: '{"id":2}',
         tags: genEncodedTags('remote', [nextTs]),
@@ -299,7 +301,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
     ]
     t.deepEqual(shadow, expectedShadow)
 
-    const userTable = await adapter.query({ sql: `SELECT * FROM main.parent;` })
+    const userTable = await adapter.query({ sql: `SELECT * FROM parent;` })
 
     // In both cases insert wins over delete, but
     // for id = 1 CR picks local data before delete, while
@@ -319,6 +321,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
       tableInfo,
       authState,
       getMatchingShadowEntries,
+      namespace,
     } = t.context
     await runMigrations()
     await satellite._setAuthState(authState)
@@ -327,18 +330,18 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
 
     // For this key we will choose remote Tx, such that: Local TM > Remote TX
     stmts.push({
-      sql: `INSERT INTO main.parent (id, value, other) VALUES ('1', 'local', null);`,
+      sql: `INSERT INTO parent (id, value, other) VALUES ('1', 'local', null);`,
     })
     stmts.push({
-      sql: `INSERT INTO main.parent (id, value, other) VALUES ('2', 'local', null);`,
+      sql: `INSERT INTO parent (id, value, other) VALUES ('2', 'local', null);`,
     })
     await adapter.runInTransaction(...stmts)
     const txDate1 = await satellite._performSnapshot()
 
     stmts = []
     // For this key we will choose remote Tx, such that: Local TM < Remote TX
-    stmts.push({ sql: `DELETE FROM main.parent WHERE id = 1` })
-    stmts.push({ sql: `DELETE FROM main.parent WHERE id = 2` })
+    stmts.push({ sql: `DELETE FROM parent WHERE id = 1` })
+    stmts.push({ sql: `DELETE FROM parent WHERE id = 2` })
     await adapter.runInTransaction(...stmts)
     await satellite._performSnapshot()
 
@@ -347,7 +350,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
 
     const prevEntry = generateRemoteOplogEntry(
       tableInfo,
-      'main',
+      namespace,
       'parent',
       OPTYPES.insert,
       prevTs,
@@ -361,7 +364,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
     )
     const nextEntry = generateRemoteOplogEntry(
       tableInfo,
-      'main',
+      namespace,
       'parent',
       OPTYPES.insert,
       nextTs,
@@ -397,13 +400,13 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
     const shadow = await getMatchingShadowEntries(adapter)
     const expectedShadow = [
       {
-        namespace: 'main',
+        namespace,
         tablename: 'parent',
         primaryKey: '{"id":1}',
         tags: genEncodedTags('remote', [prevTs]),
       },
       {
-        namespace: 'main',
+        namespace,
         tablename: 'parent',
         primaryKey: '{"id":2}',
         tags: genEncodedTags('remote', [nextTs]),
@@ -411,7 +414,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
     ]
     t.deepEqual(shadow, expectedShadow)
 
-    let userTable = await adapter.query({ sql: `SELECT * FROM main.parent;` })
+    let userTable = await adapter.query({ sql: `SELECT * FROM parent;` })
 
     // In both cases insert wins over delete, but
     // for id = 1 CR picks local data before delete, while
@@ -431,24 +434,24 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
 
     // Insert 4 items in separate snapshots
     await adapter.run({
-      sql: `INSERT INTO main.parent (id, value) VALUES (1, 'val1')`,
+      sql: `INSERT INTO parent (id, value) VALUES (1, 'val1')`,
     })
     const ts1 = await satellite._performSnapshot()
     await adapter.run({
-      sql: `INSERT INTO main.parent (id, value) VALUES (2, 'val2')`,
+      sql: `INSERT INTO parent (id, value) VALUES (2, 'val2')`,
     })
     const ts2 = await satellite._performSnapshot()
     await adapter.run({
-      sql: `INSERT INTO main.parent (id, value) VALUES (3, 'val3')`,
+      sql: `INSERT INTO parent (id, value) VALUES (3, 'val3')`,
     })
     const ts3 = await satellite._performSnapshot()
     await adapter.run({
-      sql: `INSERT INTO main.parent (id, value) VALUES (4, 'val4')`,
+      sql: `INSERT INTO parent (id, value) VALUES (4, 'val4')`,
     })
     const ts4 = await satellite._performSnapshot()
 
     // Now delete them all in a single snapshot
-    await adapter.run({ sql: `DELETE FROM main.parent` })
+    await adapter.run({ sql: `DELETE FROM parent` })
     const ts5 = await satellite._performSnapshot()
 
     // Now check that each delete clears the correct tag
@@ -470,13 +473,13 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
     await runMigrations()
 
     await adapter.run({
-      sql: `INSERT INTO main.parent(id, value) VALUES (1,'val1')`,
+      sql: `INSERT INTO parent(id, value) VALUES (1,'val1')`,
     })
 
     // Since no snapshot was made yet
     // the timestamp in the oplog is not yet set
     const insertEntry = await adapter.query({
-      sql: `SELECT timestamp, "clearTags" FROM main._electric_oplog WHERE rowid = 1`,
+      sql: `SELECT timestamp, "clearTags" FROM _electric_oplog WHERE rowid = 1`,
     })
     t.is(insertEntry[0].timestamp, null)
     t.deepEqual(JSON.parse(insertEntry[0].clearTags as string), [])
@@ -488,7 +491,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
 
     // Now the timestamp is set
     const insertEntryAfterSnapshot = await adapter.query({
-      sql: `SELECT timestamp, "clearTags" FROM main._electric_oplog WHERE rowid = 1`,
+      sql: `SELECT timestamp, "clearTags" FROM _electric_oplog WHERE rowid = 1`,
     })
     t.assert(insertEntryAfterSnapshot[0].timestamp != null)
     const insertTimestamp = parseDate(
@@ -498,35 +501,35 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
 
     // Now update the entry, then delete it, and then insert it again
     await adapter.run({
-      sql: `UPDATE main.parent SET value = 'val2' WHERE id=1`,
+      sql: `UPDATE parent SET value = 'val2' WHERE id=1`,
     })
 
     await adapter.run({
-      sql: `DELETE FROM main.parent WHERE id=1`,
+      sql: `DELETE FROM parent WHERE id=1`,
     })
 
     await adapter.run({
-      sql: `INSERT INTO main.parent(id, value) VALUES (1,'val3')`,
+      sql: `INSERT INTO parent(id, value) VALUES (1,'val3')`,
     })
 
     // Since no snapshot has been taken for these operations
     // their timestamp and clearTags should not be set
     const updateEntry = await adapter.query({
-      sql: `SELECT timestamp, "clearTags" FROM main._electric_oplog WHERE rowid = 2`,
+      sql: `SELECT timestamp, "clearTags" FROM _electric_oplog WHERE rowid = 2`,
     })
 
     t.is(updateEntry[0].timestamp, null)
     t.deepEqual(JSON.parse(updateEntry[0].clearTags as string), [])
 
     const deleteEntry = await adapter.query({
-      sql: `SELECT timestamp, "clearTags" FROM main._electric_oplog WHERE rowid = 3`,
+      sql: `SELECT timestamp, "clearTags" FROM _electric_oplog WHERE rowid = 3`,
     })
 
     t.is(deleteEntry[0].timestamp, null)
     t.deepEqual(JSON.parse(deleteEntry[0].clearTags as string), [])
 
     const reinsertEntry = await adapter.query({
-      sql: `SELECT timestamp, "clearTags" FROM main._electric_oplog WHERE rowid = 4`,
+      sql: `SELECT timestamp, "clearTags" FROM _electric_oplog WHERE rowid = 4`,
     })
 
     t.is(reinsertEntry[0].timestamp, null)
@@ -539,7 +542,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
     // The first operation (update) should override
     // the original insert (i.e. clearTags must contain the timestamp of the insert)
     const updateEntryAfterSnapshot = await adapter.query({
-      sql: `SELECT timestamp, "clearTags" FROM main._electric_oplog WHERE rowid = 2`,
+      sql: `SELECT timestamp, "clearTags" FROM _electric_oplog WHERE rowid = 2`,
     })
 
     const rawTimestampTx2 = updateEntryAfterSnapshot[0].timestamp
@@ -554,7 +557,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
     // The second operation (delete) should have the same timestamp
     // and should contain the tag of the TX in its clearTags
     const deleteEntryAfterSnapshot = await adapter.query({
-      sql: `SELECT timestamp, "clearTags" FROM main._electric_oplog WHERE rowid = 3`,
+      sql: `SELECT timestamp, "clearTags" FROM _electric_oplog WHERE rowid = 3`,
     })
 
     t.assert(deleteEntryAfterSnapshot[0].timestamp === rawTimestampTx2)
@@ -566,7 +569,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
     // The third operation (reinsert) should have the same timestamp
     // and should contain the tag of the TX in its clearTags
     const reinsertEntryAfterSnapshot = await adapter.query({
-      sql: `SELECT timestamp, "clearTags" FROM main._electric_oplog WHERE rowid = 4`,
+      sql: `SELECT timestamp, "clearTags" FROM _electric_oplog WHERE rowid = 4`,
     })
 
     t.assert(reinsertEntryAfterSnapshot[0].timestamp === rawTimestampTx2)
@@ -584,6 +587,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
       tableInfo,
       authState,
       getMatchingShadowEntries,
+      namespace,
     } = t.context
     await runMigrations()
     await satellite._setAuthState(authState)
@@ -592,17 +596,17 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
 
     // For this key we will choose remote Tx, such that: Local TM > Remote TX
     stmts.push({
-      sql: `INSERT INTO main.parent (id, value, other) VALUES ('1', 'local', null);`,
+      sql: `INSERT INTO parent (id, value, other) VALUES ('1', 'local', null);`,
     })
     stmts.push({
-      sql: `UPDATE main.parent SET value = 'local', other = 999 WHERE id = 1`,
+      sql: `UPDATE parent SET value = 'local', other = 999 WHERE id = 1`,
     })
     // For this key we will choose remote Tx, such that: Local TM < Remote TX
     stmts.push({
-      sql: `INSERT INTO main.parent (id, value, other) VALUES ('2', 'local', null);`,
+      sql: `INSERT INTO parent (id, value, other) VALUES ('2', 'local', null);`,
     })
     stmts.push({
-      sql: `UPDATE main.parent SET value = 'local', other = 999 WHERE id = 1`,
+      sql: `UPDATE parent SET value = 'local', other = 999 WHERE id = 1`,
     })
     await adapter.runInTransaction(...stmts)
 
@@ -613,7 +617,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
 
     const prevEntry = generateRemoteOplogEntry(
       tableInfo,
-      'main',
+      namespace,
       'parent',
       OPTYPES.insert,
       prevTs,
@@ -628,7 +632,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
 
     const nextEntry = generateRemoteOplogEntry(
       tableInfo,
-      'main',
+      namespace,
       'parent',
       OPTYPES.insert,
       nextTs,
@@ -664,7 +668,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
     let shadow = await getMatchingShadowEntries(adapter)
     const expectedShadow = [
       {
-        namespace: 'main',
+        namespace,
         tablename: 'parent',
         primaryKey: '{"id":1}',
         tags: encodeTags([
@@ -673,7 +677,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
         ]),
       },
       {
-        namespace: 'main',
+        namespace,
         tablename: 'parent',
         primaryKey: '{"id":2}',
         tags: encodeTags([
@@ -693,7 +697,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
     t.is(entries[2].clearTags, encodeTags([]))
     t.is(entries[3].clearTags, encodeTags([]))
 
-    let userTable = await adapter.query({ sql: `SELECT * FROM main.parent;` })
+    let userTable = await adapter.query({ sql: `SELECT * FROM parent;` })
 
     // In both cases insert wins over delete, but
     // for id = 1 CR picks local data before delete, while
@@ -714,6 +718,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
       tableInfo,
       authState,
       getMatchingShadowEntries,
+      namespace,
     } = t.context
     await runMigrations()
     await satellite._setAuthState(authState)
@@ -723,18 +728,18 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
 
     // For this key we will choose remote Tx, such that: Local TM > Remote TX
     stmts.push({
-      sql: `INSERT INTO main.parent (id, value, other) VALUES ('1', 'local', null);`,
+      sql: `INSERT INTO parent (id, value, other) VALUES ('1', 'local', null);`,
     })
     stmts.push({
-      sql: `INSERT INTO main.parent (id, value, other) VALUES ('2', 'local', null);`,
+      sql: `INSERT INTO parent (id, value, other) VALUES ('2', 'local', null);`,
     })
     await adapter.runInTransaction(...stmts)
     const txDate1 = await satellite._performSnapshot()
 
     stmts = []
     // For this key we will choose remote Tx, such that: Local TM < Remote TX
-    stmts.push({ sql: `DELETE FROM main.parent WHERE id = 1` })
-    stmts.push({ sql: `DELETE FROM main.parent WHERE id = 2` })
+    stmts.push({ sql: `DELETE FROM parent WHERE id = 1` })
+    stmts.push({ sql: `DELETE FROM parent WHERE id = 2` })
     await adapter.runInTransaction(...stmts)
     await satellite._performSnapshot()
 
@@ -794,7 +799,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
     let shadow = await getMatchingShadowEntries(adapter)
     const expectedShadow = [
       {
-        namespace: 'main',
+        namespace,
         tablename: 'parent',
         primaryKey: '{"id":2}',
         tags: genEncodedTags('remote', [txDate1]),
@@ -802,7 +807,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
     ]
     t.deepEqual(shadow, expectedShadow)
 
-    let userTable = await adapter.query({ sql: `SELECT * FROM main.parent;` })
+    let userTable = await adapter.query({ sql: `SELECT * FROM parent;` })
     const expectedUserTable = [{ id: 2, value: 'local', other: null }]
     t.deepEqual(expectedUserTable, userTable)
   })
@@ -815,6 +820,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
       authState,
       adapter,
       getMatchingShadowEntries,
+      namespace,
     } = t.context
     await runMigrations()
     await satellite._setAuthState(authState)
@@ -823,7 +829,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
 
     const insertEntry = generateRemoteOplogEntry(
       tableInfo,
-      'main',
+      namespace,
       'parent',
       OPTYPES.update,
       txDate1,
@@ -838,7 +844,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
     const deleteDate = txDate1 + 1
     const deleteEntry = generateRemoteOplogEntry(
       tableInfo,
-      'main',
+      namespace,
       'parent',
       OPTYPES.delete,
       deleteDate,
@@ -864,7 +870,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
     let shadow = await getMatchingShadowEntries(adapter)
     const expectedShadow = [
       {
-        namespace: 'main',
+        namespace,
         tablename: 'parent',
         primaryKey: '{"id":1}',
         tags: genEncodedTags('remote', [txDate1]),

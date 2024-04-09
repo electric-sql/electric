@@ -9,7 +9,8 @@ let port = 5100
 
 const test = anyTest as TestFn<ContextType>
 test.beforeEach(async (t) => {
-  await makePgContext(t, port++)
+  const namespace = 'public'
+  await makePgContext(t, port++, namespace)
   t.context.getMatchingShadowEntries = getPgMatchingShadowEntries
 })
 test.afterEach.always(cleanAndStopSatellite)

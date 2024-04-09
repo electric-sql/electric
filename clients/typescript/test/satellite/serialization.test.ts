@@ -10,7 +10,7 @@ import { DatabaseAdapter as SQLiteDatabaseAdapter } from '../../src/drivers/bett
 import { DatabaseAdapter as PgDatabaseAdapter } from '../../src/drivers/node-postgres/adapter'
 import { DatabaseAdapter as DatabaseAdapterInterface } from '../../src/electric/adapter'
 import { inferRelationsFromDb } from '../../src/util/relations'
-import { satelliteDefaults } from '../../src/satellite/config'
+import { SatelliteOpts } from '../../src/satellite/config'
 import {
   QueryBuilder,
   pgBuilder,
@@ -18,6 +18,7 @@ import {
 } from '../../src/migrators/query-builder'
 import { makePgDatabase } from '../support/node-postgres'
 import { randomValue } from '../../src/util/random'
+import { opts } from './common'
 
 test('serialize/deserialize row data', async (t) => {
   const rel: Relation = {
@@ -276,11 +277,12 @@ test('Null mask uses bits as if they were a list', async (t) => {
 type MaybePromise<T> = T | Promise<T>
 type SetupFn = (
   t: ExecutionContext<unknown>
-) => MaybePromise<[DatabaseAdapterInterface, QueryBuilder]>
+) => MaybePromise<[DatabaseAdapterInterface, QueryBuilder, SatelliteOpts]>
 const setupSqlite: SetupFn = (t: ExecutionContext<unknown>) => {
   const db = new Database(':memory:')
   t.teardown(() => db.close())
-  return [new SQLiteDatabaseAdapter(db), sqliteBuilder]
+  const namespace = 'main'
+  return [new SQLiteDatabaseAdapter(db), sqliteBuilder, opts(namespace)]
 }
 
 let port = 4800
@@ -288,7 +290,8 @@ const setupPG: SetupFn = async (t: ExecutionContext<unknown>) => {
   const dbName = `serialization-test-${randomValue()}`
   const { db, stop } = await makePgDatabase(dbName, port++)
   t.teardown(async () => await stop())
-  return [new PgDatabaseAdapter(db), pgBuilder]
+  const namespace = 'public'
+  return [new PgDatabaseAdapter(db), pgBuilder, opts(namespace)]
 }
 
 ;(
@@ -298,7 +301,7 @@ const setupPG: SetupFn = async (t: ExecutionContext<unknown>) => {
   ] as const
 ).forEach(([dialect, setup]) => {
   test(`(${dialect}) Prioritize PG types in the schema before inferred SQLite types`, async (t) => {
-    const [adapter, builder] = await setup(t)
+    const [adapter, builder, defaults] = await setup(t)
 
     await adapter.run({
       sql: 'CREATE TABLE bools (id INTEGER PRIMARY KEY, b INTEGER)',
@@ -306,7 +309,7 @@ const setupPG: SetupFn = async (t: ExecutionContext<unknown>) => {
 
     const sqliteInferredRelations = await inferRelationsFromDb(
       adapter,
-      satelliteDefaults,
+      defaults,
       builder
     )
     const boolsInferredRelation = sqliteInferredRelations['bools']
@@ -364,11 +367,11 @@ const setupPG: SetupFn = async (t: ExecutionContext<unknown>) => {
   })
 
   test(`(${dialect}) Use incoming Relation types if not found in the schema`, async (t) => {
-    const [adapter, builder] = await setup(t)
+    const [adapter, builder, defaults] = await setup(t)
 
     const inferredRelations = await inferRelationsFromDb(
       adapter,
-      satelliteDefaults,
+      defaults,
       builder
     )
     // Empty database

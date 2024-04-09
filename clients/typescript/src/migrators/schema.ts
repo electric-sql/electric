@@ -2,16 +2,13 @@ import { satelliteDefaults } from '../satellite/config'
 import { QueryBuilder } from './query-builder'
 export type { ElectricSchema } from '../satellite/config'
 
-const { metaTable, migrationsTable, oplogTable, triggersTable, shadowTable } =
-  satelliteDefaults
-
 export const buildInitialMigration = (builder: QueryBuilder) => {
+  const { metaTable, migrationsTable, oplogTable, triggersTable, shadowTable } =
+    satelliteDefaults(builder.defaultNamespace)
   const data = {
     migrations: [
       {
         statements: [
-          // The main schema,
-          ...builder.pgOnlyQuery(`CREATE SCHEMA IF NOT EXISTS "main"`),
           //`-- The ops log table\n`,
           `CREATE TABLE IF NOT EXISTS "${oplogTable.namespace}"."${oplogTable.tablename}" (\n  "rowid" ${builder.AUTOINCREMENT_PK},\n  "namespace" TEXT NOT NULL,\n  "tablename" TEXT NOT NULL,\n  "optype" TEXT NOT NULL,\n  "primaryKey" TEXT NOT NULL,\n  "newRow" TEXT,\n  "oldRow" TEXT,\n  "timestamp" TEXT,  "clearTags" TEXT DEFAULT '[]' NOT NULL\n);`,
           // Add an index for the oplog
