@@ -10,11 +10,13 @@ import { HKT, Kind } from '../util/hkt'
 import { SyncInput } from '../input/syncInput'
 import { ShapeSubscription } from '../../satellite/process'
 import { LiveResultSubscribeFunction } from '../../util/subscribe'
+import { ReplicatedRowTransformer } from '../../util'
 
 /**
  * Interface that is implemented by Electric clients.
  */
 export interface Model<
+  Schema extends Record<string, any>,
   CreateData extends object,
   UpdateData extends object,
   Select,
@@ -185,6 +187,27 @@ export interface Model<
   deleteMany<T extends DeleteManyInput<Where>>(
     i: SelectSubset<T, DeleteManyInput<Where>>
   ): Promise<BatchPayload>
+
+  /**
+   * Puts transforms in place such that any data being replicated
+   * to or from this table is first handled appropriately while
+   * retaining type consistency.
+   *
+   * Can be used to encrypt sensitive fields before they are
+   * replicated outside of their secure local source.
+   *
+   * NOTE: usage is discouraged, but ensure transforms are
+   * set before replication is initiated using {@link sync}
+   * to avoid partially transformed tables.
+   *
+   * @param i - Object that determines transforms to apply
+   */
+  setReplicationTransform(i: ReplicatedRowTransformer<Schema>): void
+
+  /**
+   * Clears any replication transforms set using {@link setReplicationTransform}
+   */
+  clearReplicationTransform(): void
 }
 
 export interface LiveResultContext<T> {

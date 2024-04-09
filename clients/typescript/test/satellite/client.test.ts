@@ -10,9 +10,17 @@ import {
 import { OplogEntry, toTransactions } from '../../src/satellite/oplog'
 import { ShapeRequest } from '../../src/satellite/shapes/types'
 import { WebSocketNode } from '../../src/sockets/node'
-import { sleepAsync } from '../../src/util'
-import { base64, bytesToNumber } from '../../src/util/common'
-import { Relation, SatelliteErrorCode, Transaction } from '../../src/util/types'
+import { QualifiedTablename, sleepAsync } from '../../src/util'
+import { base64, bytesToNumber, numberToBytes } from '../../src/util/common'
+import {
+  DataChangeType,
+  DataTransaction,
+  isDataChange,
+  Relation,
+  SatelliteError,
+  SatelliteErrorCode,
+  Transaction,
+} from '../../src/util/types'
 import { dbDescription, relations } from './common'
 import { RpcResponse, SatelliteWSServerStub } from './server_ws_stub'
 import { DbSchema, TableSchema } from '../../src/client/model/schema'
@@ -136,14 +144,14 @@ test.serial('replication start sends empty', async (t) => {
 
   t.plan(1)
 
-  return new Promise(async (resolve) => {
+  return new Promise((resolve) => {
     server.nextRpcResponse('startReplication', (data) => {
       const req = Proto.SatInStartReplicationReq.decode(data)
       t.deepEqual(req.lsn, new Uint8Array())
       resolve()
       return [Proto.SatInStartReplicationResp.create()]
     })
-    await client.startReplication()
+    return client.startReplication()
   })
 })
 
@@ -153,14 +161,14 @@ test.serial('replication start sends schemaVersion', async (t) => {
 
   t.plan(1)
 
-  return new Promise(async (resolve) => {
+  return new Promise((resolve) => {
     server.nextRpcResponse('startReplication', (data) => {
       const req = Proto.SatInStartReplicationReq.decode(data)
       t.assert(req.schemaVersion === '20230711')
       resolve()
       return [Proto.SatInStartReplicationResp.create()]
     })
-    await client.startReplication(new Uint8Array(), '20230711')
+    return client.startReplication(new Uint8Array(), '20230711')
   })
 })
 
@@ -570,7 +578,7 @@ test.serial('send transaction', async (t) => {
 
   t.plan(7) // We expect exactly 1 + 3 messages to be sent by the client, with 2 checks per non-relation message
 
-  return new Promise(async (res, rej) => {
+  return new Promise((res, rej) => {
     server.nextRpcResponse('startReplication', [startResp])
     server.nextMsgExpect('SatRpcResponse', [])
 
@@ -619,14 +627,14 @@ test.serial('send transaction', async (t) => {
       )
     }, 300)
 
-    await client.startReplication()
-
-    // wait a little for replication to start in the opposite direction
-    setTimeout(() => {
-      client.enqueueTransaction(transaction[0])
-      client.enqueueTransaction(transaction[1])
-      client.enqueueTransaction(transaction[2])
-    }, 100)
+    client.startReplication().then(() => {
+      // wait a little for replication to start in the opposite direction
+      setTimeout(() => {
+        client.enqueueTransaction(transaction[0])
+        client.enqueueTransaction(transaction[1])
+        client.enqueueTransaction(transaction[2])
+      }, 100)
+    })
   })
 })
 
@@ -1280,3 +1288,542 @@ async function startReplication(
   server.nextRpcResponse('startReplication', [startResp])
   await client.startReplication()
 }
+
+test.serial(
+  'setReplicationTransform transforms outbound INSERTs, UPDATEs, and DELETEs',
+  async (t) => {
+    const { client, server } = t.context
+    await client.connect()
+    // set replication transform and perform same operations for replication
+    client.setReplicationTransform(new QualifiedTablename('main', 'parent'), {
+      transformInbound: (row) => ({
+        ...row,
+        value: 'transformed_inbound_' + row.value,
+      }),
+      transformOutbound: (row) => ({
+        ...row,
+        value: 'transformed_outbound_' + row.value,
+      }),
+    })
+
+    const startResp = Proto.SatInStartReplicationResp.create()
+
+    const transaction: DataTransaction = {
+      commit_timestamp: Long.UZERO.add(3000),
+      lsn: numberToBytes(0),
+      changes: [
+        {
+          relation: relations.parent,
+          record: {
+            id: 1,
+            value: 'local',
+            other: null,
+          },
+          tags: [],
+          type: DataChangeType.INSERT,
+        },
+        {
+          relation: relations.parent,
+          record: {
+            id: 1,
+            value: 'different',
+            other: 2,
+          },
+          oldRecord: {
+            id: 1,
+            value: 'local',
+            other: null,
+          },
+          tags: [],
+          type: DataChangeType.UPDATE,
+        },
+        {
+          relation: relations.parent,
+          oldRecord: {
+            id: 1,
+            value: 'different',
+            other: 2,
+          },
+          tags: [],
+          type: DataChangeType.DELETE,
+        },
+      ],
+    }
+
+    t.plan(5) // num messages, insert, update old + new, delete
+
+    return new Promise((res, rej) => {
+      server.nextRpcResponse('startReplication', [startResp])
+      server.nextMsgExpect('SatRpcResponse', [])
+      server.nextMsgExpect('SatRelation', [])
+      server.nextMsgExpect('SatOpLog', (data) => {
+        const satOpLog = data.ops
+
+        // should have 2 + 3 messages (begin + insert + update + delete + commit)
+        t.is(satOpLog.length, 5)
+
+        t.deepEqual(
+          deserializeRow(
+            satOpLog[1].insert?.rowData,
+            relations.parent,
+            dbDescription
+          ),
+          {
+            id: 1,
+            value: 'transformed_outbound_local',
+            other: null,
+          }
+        )
+
+        t.deepEqual(
+          deserializeRow(
+            satOpLog[2].update?.rowData,
+            relations.parent,
+            dbDescription
+          ),
+          {
+            id: 1,
+            value: 'transformed_outbound_different',
+            other: 2,
+          }
+        )
+
+        t.deepEqual(
+          deserializeRow(
+            satOpLog[2].update?.oldRowData,
+            relations.parent,
+            dbDescription
+          ),
+          {
+            id: 1,
+            value: 'transformed_outbound_local',
+            other: null,
+          }
+        )
+
+        t.deepEqual(
+          deserializeRow(
+            satOpLog[3].delete?.oldRowData,
+            relations.parent,
+            dbDescription
+          ),
+          {
+            id: 1,
+            value: 'transformed_outbound_different',
+            other: 2,
+          }
+        )
+
+        res()
+      })
+
+      setTimeout(() => {
+        rej()
+        t.fail(
+          `Timed out while waiting for server to get all expected requests`
+        )
+      }, 300)
+
+      client.startReplication().then(() => {
+        // wait a little for replication to start in the opposite direction
+        setTimeout(() => {
+          client.enqueueTransaction(transaction)
+        }, 100)
+      })
+    })
+  }
+)
+
+test.serial(
+  'setReplicationTransform transforms inbound INSERTs, UPDATEs, and DELETEs',
+  async (t) => {
+    const { client, server } = t.context
+    await client.connect()
+
+    // set replication transform and perform same operations for replication
+    client.setReplicationTransform(new QualifiedTablename('main', 'parent'), {
+      transformInbound: (row) => ({
+        ...row,
+        value: 'transformed_inbound_' + row.value,
+      }),
+      transformOutbound: (row) => ({
+        ...row,
+        value: 'transformed_outbound_' + row.value,
+      }),
+    })
+
+    const start = Proto.SatInStartReplicationResp.create()
+    const begin = Proto.SatOpBegin.fromPartial({ commitTimestamp: Long.ZERO })
+    const relation = Proto.SatRelation.fromPartial({
+      relationId: relations.parent.id,
+      schemaName: relations.parent.schema,
+      tableName: relations.parent.table,
+      tableType: Proto.SatRelation_RelationType.TABLE,
+      columns: relations.parent.columns.map((c) =>
+        Proto.SatRelationColumn.fromPartial({
+          name: c.name,
+          type: c.type,
+          isNullable: c.isNullable,
+        })
+      ),
+    })
+    const commit = Proto.SatOpCommit.create()
+    const stop = Proto.SatInStopReplicationResp.create()
+
+    const insertOp = Proto.SatOpInsert.fromPartial({
+      relationId: 1,
+      rowData: serializeRow(
+        {
+          id: 1,
+          value: 'remote',
+          other: null,
+        },
+        relations.parent,
+        dbDescription
+      ),
+    })
+
+    const updateOp = Proto.SatOpUpdate.fromPartial({
+      relationId: 1,
+      rowData: serializeRow(
+        {
+          id: 1,
+          value: 'different',
+          other: 2,
+        },
+        relations.parent,
+        dbDescription
+      ),
+      oldRowData: serializeRow(
+        {
+          id: 1,
+          value: 'remote',
+          other: null,
+        },
+        relations.parent,
+        dbDescription
+      ),
+    })
+
+    const deleteOp = Proto.SatOpDelete.fromPartial({
+      relationId: 1,
+      oldRowData: serializeRow(
+        {
+          id: 1,
+          value: 'different',
+          other: 2,
+        },
+        relations.parent,
+        dbDescription
+      ),
+    })
+
+    const opLogMessage = Proto.SatOpLog.fromPartial({
+      ops: [
+        Proto.SatTransOp.fromPartial({ begin }),
+        Proto.SatTransOp.fromPartial({ insert: insertOp }),
+        Proto.SatTransOp.fromPartial({ update: updateOp }),
+        Proto.SatTransOp.fromPartial({ delete: deleteOp }),
+        Proto.SatTransOp.fromPartial({ commit }),
+      ],
+    })
+
+    server.nextRpcResponse('startReplication', [start, relation, opLogMessage])
+    server.nextRpcResponse('stopReplication', [stop])
+
+    // assert insert, update old + new, delete
+    t.plan(4)
+
+    await new Promise<void>((res) => {
+      client.subscribeToTransactions(async (transaction) => {
+        const changes = transaction.changes.filter(isDataChange)
+        t.deepEqual(changes[0].record, {
+          id: 1,
+          value: 'transformed_inbound_remote',
+          other: null,
+        })
+        t.deepEqual(changes[1].record, {
+          id: 1,
+          value: 'transformed_inbound_different',
+          other: 2,
+        })
+        t.deepEqual(changes[1].oldRecord, {
+          id: 1,
+          value: 'transformed_inbound_remote',
+          other: null,
+        })
+        t.deepEqual(changes[2].oldRecord, {
+          id: 1,
+          value: 'transformed_inbound_different',
+          other: 2,
+        })
+        res()
+      })
+
+      return client.startReplication()
+    })
+  }
+)
+
+test.serial(
+  'setReplicationTransform can be overridden and cleared with clearReplicationTransform',
+  async (t) => {
+    const { client, server } = t.context
+    await client.connect()
+
+    const startResp = Proto.SatInStartReplicationResp.create()
+
+    const change = {
+      relation: relations.parent,
+      record: {
+        id: 1,
+        value: 'local',
+        other: null,
+      },
+      tags: [],
+      type: DataChangeType.INSERT,
+    }
+
+    const transactions: DataTransaction[] = [
+      {
+        commit_timestamp: Long.UZERO.add(3000),
+        lsn: numberToBytes(0),
+        changes: [change],
+      },
+      {
+        commit_timestamp: Long.UZERO.add(3000),
+        lsn: numberToBytes(1),
+        changes: [change],
+      },
+      {
+        commit_timestamp: Long.UZERO.add(3000),
+        lsn: numberToBytes(2),
+        changes: [change],
+      },
+    ]
+
+    t.plan(3) // assert three differently transformed inserts
+
+    return new Promise((res, rej) => {
+      server.nextRpcResponse('startReplication', [startResp])
+      server.nextMsgExpect('SatRpcResponse', [])
+      server.nextMsgExpect('SatRelation', [])
+
+      // should have first transformation
+      server.nextMsgExpect('SatOpLog', (data) => {
+        t.deepEqual(
+          deserializeRow(
+            data.ops[1].insert?.rowData,
+            relations.parent,
+            dbDescription
+          ),
+          {
+            ...change.record,
+            value: 'transformed_outbound_local',
+          }
+        )
+      })
+
+      // should have overridden transformation
+      server.nextMsgExpect('SatOpLog', (data) => {
+        t.deepEqual(
+          deserializeRow(
+            data.ops[1].insert?.rowData,
+            relations.parent,
+            dbDescription
+          ),
+          {
+            ...change.record,
+            value: 'transformed_differently_outbound_local',
+          }
+        )
+      })
+
+      // should have no transformation
+      server.nextMsgExpect('SatOpLog', (data) => {
+        t.deepEqual(
+          deserializeRow(
+            data.ops[1].insert?.rowData,
+            relations.parent,
+            dbDescription
+          ),
+          change.record
+        )
+
+        res()
+      })
+
+      setTimeout(() => {
+        rej()
+        t.fail(
+          `Timed out while waiting for server to get all expected requests`
+        )
+      }, 300)
+
+      client.startReplication().then(() => {
+        // wait a little for replication to start in the opposite direction
+        setTimeout(() => {
+          // set initial transform
+          client.setReplicationTransform(
+            new QualifiedTablename('main', 'parent'),
+            {
+              transformInbound: (row) => ({
+                ...row,
+                value: 'transformed_inbound_' + row.value,
+              }),
+              transformOutbound: (row) => ({
+                ...row,
+                value: 'transformed_outbound_' + row.value,
+              }),
+            }
+          )
+          client.enqueueTransaction(transactions[0])
+
+          // set override transform
+          client.setReplicationTransform(
+            new QualifiedTablename('main', 'parent'),
+            {
+              transformInbound: (row) => ({
+                ...row,
+                value: 'transformed_differently_inbound_' + row.value,
+              }),
+              transformOutbound: (row) => ({
+                ...row,
+                value: 'transformed_differently_outbound_' + row.value,
+              }),
+            }
+          )
+          client.enqueueTransaction(transactions[1])
+
+          // clear transform
+          client.clearReplicationTransform(
+            new QualifiedTablename('main', 'parent')
+          )
+          client.enqueueTransaction(transactions[2])
+        }, 100)
+      })
+    })
+  }
+)
+
+test.serial(
+  'failing outbound transform should throw satellite error',
+  async (t) => {
+    const { client, server } = t.context
+    await client.connect()
+
+    // set failing transform
+    client.setReplicationTransform(new QualifiedTablename('main', 'parent'), {
+      transformInbound: (_) => {
+        throw new Error('Inbound transform error')
+      },
+      transformOutbound: (_) => {
+        throw new Error('Outbound transform error')
+      },
+    })
+
+    const startResp = Proto.SatInStartReplicationResp.create()
+
+    const transaction: DataTransaction = {
+      commit_timestamp: Long.UZERO.add(3000),
+      lsn: numberToBytes(0),
+      changes: [
+        {
+          relation: relations.parent,
+          record: {
+            id: 1,
+            value: 'local',
+            other: null,
+          },
+          tags: [],
+          type: DataChangeType.INSERT,
+        },
+      ],
+    }
+
+    return new Promise((res) => {
+      server.nextRpcResponse('startReplication', [startResp])
+      client.startReplication().then(() => {
+        setTimeout(() => {
+          t.throws(() => client.enqueueTransaction(transaction), {
+            instanceOf: SatelliteError,
+            code: SatelliteErrorCode.REPLICATION_TRANSFORM_ERROR,
+            message: 'Outbound transform error',
+          })
+          res()
+        }, 100)
+      })
+    })
+  }
+)
+
+test.serial(
+  'failing inbound transform should emit satellite error',
+  async (t) => {
+    const { client, server } = t.context
+    await client.connect()
+
+    // set failing transform
+    client.setReplicationTransform(new QualifiedTablename('main', 'parent'), {
+      transformInbound: (_) => {
+        throw new Error('Inbound transform error')
+      },
+      transformOutbound: (_) => {
+        throw new Error('Outbound transform error')
+      },
+    })
+
+    const start = Proto.SatInStartReplicationResp.create()
+    const begin = Proto.SatOpBegin.fromPartial({ commitTimestamp: Long.ZERO })
+    const relation = Proto.SatRelation.fromPartial({
+      relationId: relations.parent.id,
+      schemaName: relations.parent.schema,
+      tableName: relations.parent.table,
+      tableType: Proto.SatRelation_RelationType.TABLE,
+      columns: relations.parent.columns.map((c) =>
+        Proto.SatRelationColumn.fromPartial({
+          name: c.name,
+          type: c.type,
+          isNullable: c.isNullable,
+        })
+      ),
+    })
+    const commit = Proto.SatOpCommit.create()
+    const stop = Proto.SatInStopReplicationResp.create()
+
+    const insertOp = Proto.SatOpInsert.fromPartial({
+      relationId: relations.parent.id,
+      rowData: serializeRow(
+        {
+          id: 1,
+          value: 'remote',
+          other: null,
+        },
+        relations.parent,
+        dbDescription
+      ),
+    })
+
+    const opLogMessage = Proto.SatOpLog.fromPartial({
+      ops: [
+        Proto.SatTransOp.fromPartial({ begin }),
+        Proto.SatTransOp.fromPartial({ insert: insertOp }),
+        Proto.SatTransOp.fromPartial({ commit }),
+      ],
+    })
+
+    server.nextRpcResponse('startReplication', [start, relation, opLogMessage])
+    server.nextRpcResponse('stopReplication', [stop])
+
+    t.plan(2)
+    await new Promise<void>((res) => {
+      client.subscribeToError((error) => {
+        t.is(error.message, 'Inbound transform error')
+        t.is(error.code, SatelliteErrorCode.REPLICATION_TRANSFORM_ERROR)
+        res()
+      })
+
+      return client.startReplication()
+    })
+  }
+)

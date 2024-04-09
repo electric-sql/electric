@@ -8,6 +8,7 @@ const throwErrors = [
   SatelliteErrorCode.INTERNAL,
   SatelliteErrorCode.FATAL_ERROR,
   SatelliteErrorCode.CONNECTION_CANCELLED_BY_DISCONNECT,
+  SatelliteErrorCode.REPLICATION_TRANSFORM_ERROR,
 ]
 
 const fatalErrors = [

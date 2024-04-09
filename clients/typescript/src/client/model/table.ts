@@ -36,6 +36,7 @@ import {
   Statement,
   createQueryResultSubscribeFunction,
   isObject,
+  ReplicatedRowTransformer,
 } from '../../util'
 import { NarrowInclude } from '../input/inputNarrowing'
 import { IShapeManager } from './shapes'
@@ -51,6 +52,10 @@ import {
   transformUpdateMany,
 } from '../conversions/input'
 import { Rel, Shape } from '../../satellite/shapes/types'
+import {
+  IReplicationTransformManager,
+  transformTableRecord,
+} from './transforms'
 
 type AnyTable = Table<any, any, any, any, any, any, any, any, any, HKT>
 
@@ -67,6 +72,7 @@ export class Table<
   GetPayload extends HKT
 > implements
     Model<
+      T,
       CreateData,
       UpdateData,
       Select,
@@ -80,7 +86,6 @@ export class Table<
 {
   private _builder: Builder
   private _executor: Executor
-  private _shapeManager: IShapeManager
   private _qualifiedTableName: QualifiedTablename
   private _tables: Map<TableName, AnyTable>
   private _fields: Fields
@@ -109,7 +114,8 @@ export class Table<
     public tableName: string,
     adapter: DatabaseAdapter,
     private _notifier: Notifier,
-    shapeManager: IShapeManager,
+    private _shapeManager: IShapeManager,
+    private _replicationTransformManager: IReplicationTransformManager,
     private _dbDescription: DbSchema<any>
   ) {
     this._fields = this._dbDescription.getFields(tableName)
@@ -118,11 +124,10 @@ export class Table<
     this._builder = new Builder(
       tableName,
       fieldNames,
-      shapeManager,
+      _shapeManager,
       tableDescription
     )
     this._executor = new Executor(adapter, _notifier, this._fields)
-    this._shapeManager = shapeManager
     this._qualifiedTableName = new QualifiedTablename('main', tableName)
     this._tables = new Map()
     this._schema = tableDescription.modelSchema
@@ -1603,6 +1608,41 @@ export class Table<
     )
     result.sourceQuery = i
     return result
+  }
+
+  setReplicationTransform(i: ReplicatedRowTransformer<T>): void {
+    // forbid transforming relation keys to avoid breaking
+    // referential integrity
+    const relations = this._dbDescription.getRelations(this.tableName)
+    const immutableFields = relations.map((r) => r.relationField)
+    this._replicationTransformManager.setTableTransform(
+      this._qualifiedTableName,
+      {
+        transformInbound: (record) =>
+          transformTableRecord(
+            record,
+            i.transformInbound,
+            this._fields,
+            this._schema,
+            immutableFields
+          ),
+
+        transformOutbound: (record) =>
+          transformTableRecord(
+            record,
+            i.transformOutbound,
+            this._fields,
+            this._schema,
+            immutableFields
+          ),
+      }
+    )
+  }
+
+  clearReplicationTransform(): void {
+    this._replicationTransformManager.clearTableTransform(
+      this._qualifiedTableName
+    )
   }
 }
 

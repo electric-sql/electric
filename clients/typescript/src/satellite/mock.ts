@@ -20,6 +20,8 @@ import {
   SocketCloseReason,
   ReplicationStatus,
   AdditionalDataCallback,
+  ConnectivityState,
+  ReplicatedRowTransformer,
 } from '../util/types'
 import { ElectricConfig } from '../config/index'
 
@@ -33,6 +35,7 @@ import {
   base64,
   AsyncEventEmitter,
   genUUID,
+  QualifiedTablename,
 } from '../util'
 import { bytesToNumber } from '../util/common'
 import { generateTag } from './oplog'
@@ -84,6 +87,7 @@ export class MockSatelliteProcess implements Satellite {
     this.socketFactory = socketFactory
     this.opts = opts
   }
+  connectivityState?: ConnectivityState | undefined
   subscribe(_shapeDefinitions: Shape[]): Promise<ShapeSubscription> {
     return Promise.resolve({
       synced: Promise.resolve(),
@@ -124,6 +128,13 @@ export class MockSatelliteProcess implements Satellite {
   async stop(): Promise<void> {
     await sleepAsync(50)
   }
+
+  setReplicationTransform(
+    _tableName: QualifiedTablename,
+    _transform: ReplicatedRowTransformer<DataRecord>
+  ): void {}
+
+  clearReplicationTransform(_tableName: QualifiedTablename): void {}
 }
 
 export class MockRegistry extends BaseRegistry {
@@ -179,6 +190,7 @@ export class MockSatelliteClient
   inboundAck: Uint8Array = DEFAULT_LOG_POS
 
   outboundSent: Uint8Array = DEFAULT_LOG_POS
+  outboundTransactionsEnqueued: DataTransaction[] = []
 
   // to clear any pending timeouts
   timeouts: NodeJS.Timeout[] = []
@@ -420,6 +432,7 @@ export class MockSatelliteClient
       )
     }
 
+    this.outboundTransactionsEnqueued.push(transaction)
     this.outboundSent = transaction.lsn
   }
 
@@ -449,5 +462,15 @@ export class MockSatelliteClient
       const satError = subsDataErrorToSatelliteError(satSubsError)
       this.enqueueEmit(SUBSCRIPTION_ERROR, satError, subscriptionId)
     }, timeout)
+  }
+
+  setReplicationTransform(
+    _tableName: QualifiedTablename,
+    _transform: ReplicatedRowTransformer<DataRecord>
+  ): void {
+    throw new Error('Method not implemented.')
+  }
+  clearReplicationTransform(_tableName: QualifiedTablename): void {
+    throw new Error('Method not implemented.')
   }
 }

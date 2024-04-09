@@ -86,6 +86,9 @@ export enum SatelliteErrorCode {
   // shape data errors
   SHAPE_DELIVERY_ERROR,
   SHAPE_SIZE_LIMIT_EXCEEDED,
+
+  // replication transform errors
+  REPLICATION_TRANSFORM_ERROR,
 }
 
 export type SocketCloseReason =
@@ -227,6 +230,11 @@ export enum ReplicationStatus {
   STARTING,
   STOPPING,
   ACTIVE,
+}
+
+export type ReplicatedRowTransformer<RowType> = {
+  transformInbound: (row: Readonly<RowType>) => RowType
+  transformOutbound: (row: Readonly<RowType>) => RowType
 }
 
 export type ErrorCallback = (error: SatelliteError) => void

@@ -205,6 +205,11 @@
     ??$node
 [endmacro]
 
+[macro node_set_item_replication_transform]
+    !client.set_item_replication_transform(db)
+    ??$node
+[endmacro]
+
 [macro node_sync_table table]
     !await client.syncTable(db, "${table}")
 [endmacro]

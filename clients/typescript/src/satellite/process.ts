@@ -41,6 +41,8 @@ import {
   Transaction,
   isDataChange,
   Uuid,
+  Record as DataRecord,
+  ReplicatedRowTransformer,
 } from '../util/types'
 import { SatelliteOpts } from './config'
 import { Client, Satellite } from './index'
@@ -1298,7 +1300,7 @@ export class SatelliteProcess implements Satellite {
     const processDML = async (changes: DataChange[]) => {
       const tx = {
         ...transaction,
-        changes: changes,
+        changes,
       }
       const entries = fromTransaction(tx, this.relations)
 
@@ -1554,6 +1556,17 @@ export class SatelliteProcess implements Satellite {
 
     if (major === 3 && minor >= 32) this.maxSqlParameters = 32766
     else this.maxSqlParameters = 999
+  }
+
+  public setReplicationTransform(
+    tableName: QualifiedTablename,
+    transform: ReplicatedRowTransformer<DataRecord>
+  ): void {
+    this.client.setReplicationTransform(tableName, transform)
+  }
+
+  public clearReplicationTransform(tableName: QualifiedTablename): void {
+    this.client.clearReplicationTransform(tableName)
   }
 }
 
