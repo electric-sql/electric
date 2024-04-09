@@ -52,25 +52,16 @@ defmodule Electric.Replication.Eval.Env.ExplicitCasts do
 
   # Convert the table from moduledoc into a map
   @implicit_casts @moduledoc
-                  |> String.split("## List of explicit casts")
-                  |> List.last()
-                  |> String.split("---- |\n")
-                  |> List.last()
-                  |> String.split("\n", trim: true)
-                  |> Enum.flat_map(fn line ->
-                    [from, to, function_name] =
-                      line
-                      |> String.split("|", trim: true)
-                      |> Enum.map(&String.trim/1)
+                  |> Electric.Utils.parse_md_table(after: "## List of explicit casts")
+                  |> Enum.flat_map(fn
+                    [_, _, ""] ->
+                      []
 
-                    if function_name != "" do
+                    [from, to, function_name] ->
                       [
                         {{String.to_atom(from), String.to_atom(to)},
                          {__MODULE__, String.to_existing_atom(function_name)}}
                       ]
-                    else
-                      []
-                    end
                   end)
                   |> Map.new()
 

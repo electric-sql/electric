@@ -59,7 +59,7 @@ defmodule Electric.MixProject do
       {:pathex, "~> 2.5.2"},
       {:stream_data, "~> 0.5", only: [:dev, :test]},
       {:exqlite, "~> 0.19", only: [:dev, :test]},
-      {:tzdata, "~> 1.1", only: [:dev, :test]},
+      {:tzdata, "~> 1.1"},
       {:pg_query_ex, github: "electric-sql/pg_query_ex"},
       {:nimble_pool, "~> 1.0"},
       {:bandit, "~> 1.1"},
@@ -71,7 +71,8 @@ defmodule Electric.MixProject do
       {:nimble_parsec, "~> 1.4"},
       {:postgrex, "~> 0.17", only: [:test]},
       {:ecto_sql, "~> 3.11", only: [:test]},
-      {:dotenvy, "~> 0.8"}
+      {:dotenvy, "~> 0.8"},
+      {:timex, "~> 3.7"}
     ]
   end
 

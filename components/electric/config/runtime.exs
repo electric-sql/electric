@@ -5,6 +5,7 @@ import Dotenvy
 ### Static configuration ###
 ############################
 
+config :elixir, :time_zone_database, Tzdata.TimeZoneDatabase
 config :ssl, protocol_version: [:"tlsv1.3", :"tlsv1.2"]
 
 config :logger,

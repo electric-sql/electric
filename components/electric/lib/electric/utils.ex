@@ -314,4 +314,31 @@ defmodule Electric.Utils do
   def inspect_relation({schema, name}) do
     "#{inspect(schema)}.#{inspect(name)}"
   end
+
+  @doc """
+  Parse a markdown table from a string
+
+  Options:
+  - `after:` - taking a first table that comes right after a given substring.
+  """
+  @spec parse_md_table(String.t(), [{:after, String.t()}]) :: [[String.t(), ...]]
+  def parse_md_table(string, opts) do
+    string =
+      case Keyword.fetch(opts, :after) do
+        {:ok, split_on} -> List.last(String.split(string, split_on))
+        :error -> string
+      end
+
+    string
+    |> String.split("\n", trim: true)
+    |> Enum.drop_while(&(not String.starts_with?(&1, "|")))
+    |> Enum.take_while(&String.starts_with?(&1, "|"))
+    # Header and separator
+    |> Enum.drop(2)
+    |> Enum.map(fn line ->
+      line
+      |> String.split("|", trim: true)
+      |> Enum.map(&String.trim/1)
+    end)
+  end
 end

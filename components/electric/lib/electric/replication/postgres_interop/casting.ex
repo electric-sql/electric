@@ -47,6 +47,50 @@ defmodule Electric.Replication.PostgresInterop.Casting do
     value
   end
 
+  def parse_date("epoch"), do: Date.from_iso8601!("1970-01-01")
+
+  def parse_date(maybe_date) do
+    case Date.from_iso8601!(String.trim(maybe_date)) do
+      # PG doesn't support years <= 0, so neither do we
+      %Date{year: year} = date when year > 0 -> date
+    end
+  end
+
+  def parse_time(maybe_time) do
+    trimmed = maybe_time |> String.trim() |> String.upcase()
+
+    case Time.from_iso8601(trimmed) do
+      {:ok, time} ->
+        time
+
+      {:error, :invalid_format} ->
+        parse_am_pm_time(trimmed)
+    end
+  end
+
+  defp parse_am_pm_time(maybe_time) do
+    case String.split_at(maybe_time, -2) do
+      {time, x} when x in ["AM", "PM"] ->
+        case {Time.from_iso8601!(String.trim(time)), x} do
+          {%Time{hour: hour} = time, "AM"} when hour <= 12 -> time
+          {%Time{hour: hour} = time, "PM"} when hour <= 12 -> Time.add(time, 12, :hour)
+        end
+    end
+  end
+
+  def parse_timestamp("epoch"), do: DateTime.from_unix!(0) |> DateTime.to_naive()
+
+  def parse_timestamp(maybe_timestamp) do
+    NaiveDateTime.from_iso8601!(maybe_timestamp)
+  end
+
+  def parse_timestamptz("epoch"), do: DateTime.from_unix!(0) |> DateTime.to_naive()
+
+  def parse_timestamptz(maybe_timestamp) do
+    {:ok, datetime, _} = DateTime.from_iso8601(maybe_timestamp)
+    datetime
+  end
+
   @doc """
   LIKE function from SQL. Case sensitive by default.
 

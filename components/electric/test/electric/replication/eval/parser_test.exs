@@ -218,6 +218,32 @@ defmodule Electric.Replication.Eval.ParserTest do
       assert %Const{value: 2, type: :int4} = result
     end
 
+    test "should correctly apply a commutative overload operator by reversing the arguments" do
+      env =
+        Env.empty(
+          operators: %{
+            {~s|"+"|, 2} => [
+              %{
+                name: "create timestamp",
+                args: [:time, :date],
+                commutative_overload?: true,
+                returns: :timestamp,
+                implementation: &NaiveDateTime.new!/2
+              }
+            ]
+          }
+        )
+
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(
+                 ~S|time '20:00:00' + date '2024-01-01'|,
+                 %{["test"] => :int4},
+                 env
+               )
+
+      assert %Const{value: ~N[2024-01-01 20:00:00], type: :timestamp} = result
+    end
+
     test "should work with IS DISTINCT FROM clauses" do
       env =
         Env.empty(
@@ -306,6 +332,41 @@ defmodule Electric.Replication.Eval.ParserTest do
                  %{["test"] => :int4},
                  env
                )
+    end
+
+    test "should support complex operations with dates" do
+      env = Env.new()
+
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(
+                 ~S|date '2024-01-01' < interval '1 month 1 hour' + date '2023-12-01'|,
+                 %{},
+                 env
+               )
+
+      assert %Const{value: true, type: :bool} = result
+    end
+
+    test "should support `AT TIME ZONE`" do
+      env = Env.new()
+
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(
+                 ~S|timestamp '2001-02-16 20:38:40' at time zone 'America/Denver' = '2001-02-17 03:38:40+00'|,
+                 %{},
+                 env
+               )
+
+      assert %Const{value: true, type: :bool} = result
+
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(
+                 ~S|timestamp with time zone '2001-02-16 20:38:40+03' at time zone 'America/Denver' = '2001-02-16 10:38:40'|,
+                 %{},
+                 env
+               )
+
+      assert %Const{value: true, type: :bool} = result
     end
   end
 end

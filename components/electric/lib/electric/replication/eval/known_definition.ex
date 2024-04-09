@@ -13,6 +13,16 @@ defmodule Electric.Replication.Eval.KnownDefinition do
     end
   end
 
+  @known_definition_keys [
+    :args,
+    :returns,
+    :strict?,
+    :immutable?,
+    :commutative_overload?,
+    :implementation,
+    :name
+  ]
+
   defmacro before_compile(env) do
     %{operator: operators, function: functions} =
       Module.get_attribute(env.module, :known_postgres_implementations)
@@ -20,7 +30,7 @@ defmodule Electric.Replication.Eval.KnownDefinition do
       |> Enum.group_by(fn {{kind, _, _}, _} -> kind end, fn {{_, name, arity}, overloads} ->
         overloads =
           Enum.map(overloads, fn overloads ->
-            Map.take(overloads, [:args, :returns, :strict?, :immutable?, :implementation, :name])
+            Map.take(overloads, @known_definition_keys)
           end)
 
         {{name, arity}, overloads}
@@ -57,6 +67,7 @@ defmodule Electric.Replication.Eval.KnownDefinition do
   defmacro defpostgres(operator_or_func, opts, do_block \\ []) when is_binary(operator_or_func) do
     {immutable?, opts} = Keyword.pop(opts ++ do_block, :immutable?, true)
     {strict?, opts} = Keyword.pop(opts, :strict?, true)
+    {commutative?, opts} = Keyword.pop(opts, :commutative?, false)
 
     {map, impl, insertion} =
       operator_or_func
@@ -64,11 +75,15 @@ defmodule Electric.Replication.Eval.KnownDefinition do
       |> Map.put(:defined_at, __CALLER__.line)
       |> Map.put(:immutable?, immutable?)
       |> Map.put(:strict?, strict?)
+      |> Map.put(:commutative_overload?, false)
       |> validate_at_most_one_category()
       |> put_implementation_function(opts, __CALLER__)
 
+    maps = build_commutative_definitions(map, commutative?, __CALLER__)
+
     quote do
-      for definition <- unquote(__MODULE__).expand_categories(unquote(Macro.escape(map))) do
+      for map <- unquote(Macro.escape(maps)),
+          definition <- unquote(__MODULE__).expand_categories(map) do
         definition
         |> Map.put(:implementation, unquote(impl))
         |> then(&Module.put_attribute(__MODULE__, :known_postgres_implementations, &1))
@@ -76,6 +91,92 @@ defmodule Electric.Replication.Eval.KnownDefinition do
 
       unquote(insertion)
     end
+  end
+
+  defmacro defcompare(datatype, opts) when is_binary(datatype) do
+    case Macro.expand_literals(opts, __CALLER__) do
+      [using: Kernel] ->
+        for op <- ~w|= != < > <= >=|a do
+          kernel_op = if(op == :=, do: :==, else: op)
+
+          quote do
+            map = %{
+              kind: :operator,
+              name: ~s|"#{unquote(op)}"|,
+              arity: 2,
+              args: [String.to_atom(unquote(datatype)), String.to_atom(unquote(datatype))],
+              returns: :bool,
+              defined_at: unquote(__CALLER__.line),
+              immutable?: true,
+              strict?: true,
+              commutative_overload?: false,
+              implementation: &(Kernel.unquote(kernel_op) / 2)
+            }
+
+            for definition <- unquote(__MODULE__).expand_categories(map) do
+              Module.put_attribute(__MODULE__, :known_postgres_implementations, definition)
+            end
+          end
+        end
+
+      [using: compare_fn] ->
+        validate_ampersand_fn(compare_fn, 2, __CALLER__, ":using")
+        {definitions, insertions} = build_compare_operator(datatype, compare_fn, __CALLER__)
+
+        quote do
+          for definition <- unquote(Macro.escape(definitions)) do
+            Module.put_attribute(__MODULE__, :known_postgres_implementations, definition)
+          end
+
+          unquote(insertions)
+        end
+
+      _ ->
+        raise CompileError,
+          line: __CALLER__.line,
+          description:
+            "defcompare must either specify `using: Kernel` to use Kernel comparison functions, or `using: &Module.fn/2` to use a comparison function that returns `:lt`, `:eq`, or `:gt`."
+    end
+  end
+
+  defp build_compare_operator(datatype, func_ast, caller) do
+    truth_table = %{
+      =: [:eq],
+      <: [:lt],
+      <=: [:lt, :eq],
+      >=: [:eq, :gt],
+      >: [:gt],
+      !=: [:lt, :gt]
+    }
+
+    {module, compare_fn, _} = ampersand_to_mfa(func_ast)
+
+    for {op, expected_values} <- truth_table do
+      func_name = :"__comparison_operator_#{datatype}_#{op}"
+
+      op = %{
+        kind: :operator,
+        name: ~s|"#{op}"|,
+        arity: 2,
+        args: [String.to_atom(datatype), String.to_atom(datatype)],
+        returns: :bool,
+        defined_at: caller.line,
+        immutable?: true,
+        strict?: true,
+        commutative_overload?: false,
+        implementation: {caller.module, func_name}
+      }
+
+      definition =
+        quote do
+          def unquote(func_name)(arg1, arg2) do
+            unquote(module).unquote(compare_fn)(arg1, arg2) in unquote(expected_values)
+          end
+        end
+
+      {op, definition}
+    end
+    |> Enum.unzip()
   end
 
   # e.g.: + int4 -> int4
@@ -155,7 +256,7 @@ defmodule Electric.Replication.Eval.KnownDefinition do
     {implementation, insertion} =
       case opts do
         [delegate: delegate] ->
-          ampersand_to_mfa(delegate, map.arity, caller)
+          validate_ampersand_fn(delegate, map.arity, caller)
 
         [do: do_block] ->
           do_block_to_mfa(do_block, map.arity, caller)
@@ -180,10 +281,13 @@ defmodule Electric.Replication.Eval.KnownDefinition do
 
   defp replace_category(arg, with: new), do: if(type_category_atom?(arg), do: new, else: arg)
 
-  defp ampersand_to_mfa(
+  defp validate_ampersand_fn(ast, arity, caller, key \\ ":delegate")
+
+  defp validate_ampersand_fn(
          {:&, _, [{:/, _, [{{:., _, [_, _]}, _, _}, arity]}]} = ast,
          target_arity,
-         caller
+         caller,
+         _
        ) do
     if arity == target_arity do
       {ast, []}
@@ -194,17 +298,17 @@ defmodule Electric.Replication.Eval.KnownDefinition do
     end
   end
 
-  defp ampersand_to_mfa({:&, _, _} = ast, _, caller) do
+  defp validate_ampersand_fn({:&, _, _} = ast, _, caller, key) do
     raise CompileError,
       line: caller.line,
       description:
-        "`:delegate` must be a &Mod.fun/1 function pointer to an external module, got #{Macro.to_string(ast)}"
+        "`#{key}` must be a &Mod.fun/1 function pointer to an external module, got #{Macro.to_string(ast)}"
   end
 
-  defp ampersand_to_mfa(_, _, caller) do
+  defp validate_ampersand_fn(_, _, caller, key) do
     raise CompileError,
       line: caller.line,
-      description: "`:delegate` must be a &Mod.fun/1 function pointer"
+      description: "`#{key}` must be a &Mod.fun/1 function pointer"
   end
 
   defp do_block_to_mfa({:__block__, _, contents} = do_block, target_arity, caller) do
@@ -265,4 +369,34 @@ defmodule Electric.Replication.Eval.KnownDefinition do
     do: {fun, length(args), context}
 
   defp get_fun_name_arity({:def, context, [{fun, _, args} | _]}), do: {fun, length(args), context}
+
+  defp ampersand_to_mfa({:&, _, [{:/, _, [{{:., _, [module, function]}, _, _}, arity]}]}) do
+    {module, function, arity}
+  end
+
+  defp build_commutative_definitions(map, false, _caller), do: [map]
+
+  defp build_commutative_definitions(%{kind: :function}, true, caller),
+    do:
+      raise(CompileError,
+        line: caller.line,
+        description: "functions cannot be commutative, only operators can"
+      )
+
+  defp build_commutative_definitions(%{arity: x}, true, caller) when x != 2,
+    do:
+      raise(CompileError,
+        line: caller.line,
+        description: "operator with arity #{x} cannot be commutative"
+      )
+
+  defp build_commutative_definitions(%{args: [arg, arg]}, true, caller),
+    do:
+      raise(CompileError,
+        line: caller.line,
+        description: "operators with same argument types are implicitly commutative"
+      )
+
+  defp build_commutative_definitions(%{args: [arg1, arg2]} = map, true, _caller),
+    do: [map, %{map | args: [arg2, arg1], commutative_overload?: true}]
 end
