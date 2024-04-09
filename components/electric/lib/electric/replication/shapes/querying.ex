@@ -66,15 +66,17 @@ defmodule Electric.Replication.Shapes.Querying do
           {:ok, [Changes.NewRecord.t()], results(), Graph.t()}
           | {:error, term()}
   defp do_query_layer(conn, %Layer{} = layer, schema_version, origin, context, from) do
+    target_table = layer.target_table
+
     table_info =
       schema_version
-      |> SchemaVersion.table!(layer.target_table)
+      |> SchemaVersion.table!(target_table)
       |> Schema.single_table_info(schema_version.schema)
 
     columns = Enum.map_join(table_info.columns, ", ", &~s|this."#{&1.name}"|)
     pk_clause = Enum.map_join(layer.target_pk, " AND ", &~s|this."#{&1}" = shadow."#{&1}"|)
 
-    where_clauses =
+    where =
       [
         where_target(layer.where_target),
         parent_pseudo_join(layer, from),
@@ -82,27 +84,21 @@ defmodule Electric.Replication.Shapes.Querying do
       ]
       |> Enum.reject(&(is_nil(&1) or &1 == ""))
       |> Enum.intersperse(" AND ")
-
-    where = if where_clauses != [], do: ["WHERE ", where_clauses], else: ""
-
-    user_table = {table_info.schema, table_info.name}
-    shadow_table = Extension.shadow_of(user_table)
+      |> where_clause()
 
     # Postgres will evaluate 'epoch' in the query below to the 1970-01-01 00:00:00+00Z timestamp.
     # This ensures that this tag is ordered strictly before any any tag subsequently generated
     # by clients or Postgres.
     query =
-      IO.iodata_to_binary([
-        """
-        SELECT
-          coalesce(shadow."_tags", '{"(epoch,)"}'), #{columns}
-        FROM
-          #{quote_ident(user_table)} as this
-        LEFT JOIN
-          #{quote_ident(shadow_table)} as shadow ON #{pk_clause}
-        """,
-        where
-      ])
+      """
+      SELECT
+        coalesce(shadow."_tags", '{"(epoch,)"}'), #{columns}
+      FROM
+        #{quote_ident(target_table)} as this
+      LEFT JOIN
+        #{quote_ident(Extension.shadow_of(target_table))} as shadow ON #{pk_clause}
+      #{where}
+      """
 
     # Important reason for `squery` usage here (as opposed to what might be more reasonable `equery`) is that we need
     # string representation of all fields, so we don't want to do double-conversion inside epgsql and back
@@ -176,6 +172,9 @@ defmodule Electric.Replication.Shapes.Querying do
 
   defp where_target(nil), do: nil
   defp where_target(%Eval.Expr{query: query}), do: query
+
+  defp where_clause([]), do: ""
+  defp where_clause(exprs), do: ["WHERE " | exprs]
 
   defp maybe_fill_first_graph_layer(
          %Graph{} = graph,
