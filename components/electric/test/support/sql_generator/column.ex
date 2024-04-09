@@ -1,5 +1,7 @@
 defmodule Electric.Postgres.SQLGenerator.Column do
   use Electric.Postgres.SQLGenerator
+
+  import Electric.Postgres.Dialect.Postgresql, only: [quote_ident: 1]
   import Electric.Postgres.Schema.Proto, only: [is_unique_constraint: 1]
 
   @classes [:int, :str, :bit, :byte, :float, :date, :time, :timestamp, :timetz, :timestamptz]
@@ -496,7 +498,7 @@ defmodule Electric.Postgres.SQLGenerator.Column do
 
       cols ->
         bind(member_of(cols), fn {table_name, column} ->
-          table_reference_to(table_name, Schema.name(column))
+          table_reference_to(table_name, quote_ident(column.name))
         end)
     end
   end

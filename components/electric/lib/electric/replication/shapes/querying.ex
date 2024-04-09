@@ -1,14 +1,19 @@
 defmodule Electric.Replication.Shapes.Querying do
-  alias Electric.Utils
-  alias Electric.Replication.Changes.Ownership
-  alias Electric.Postgres.Replication
-  alias Electric.Replication.Shapes.ChangeProcessing
-  alias Electric.Postgres.ShadowTableTransformation
+  import Electric.Postgres.Dialect.Postgresql, only: [quote_ident: 1]
+
+  alias Electric.Postgres.Extension
   alias Electric.Postgres.Extension.SchemaLoader.Version, as: SchemaVersion
+  alias Electric.Postgres.Replication
   alias Electric.Postgres.Schema
+  alias Electric.Postgres.ShadowTableTransformation
+
   alias Electric.Replication.Changes
+  alias Electric.Replication.Changes.Ownership
   alias Electric.Replication.Eval
+  alias Electric.Replication.Shapes.ChangeProcessing
   alias Electric.Replication.Shapes.ShapeRequest.Layer
+
+  alias Electric.Utils
 
   @type results :: %{Layer.graph_key() => {Changes.change(), [String.t(), ...]}}
 
@@ -61,41 +66,45 @@ defmodule Electric.Replication.Shapes.Querying do
           {:ok, [Changes.NewRecord.t()], results(), Graph.t()}
           | {:error, term()}
   defp do_query_layer(conn, %Layer{} = layer, schema_version, origin, context, from) do
-    table =
+    target_table = layer.target_table
+
+    table_info =
       schema_version
-      |> SchemaVersion.table!(layer.target_table)
+      |> SchemaVersion.table!(target_table)
       |> Schema.single_table_info(schema_version.schema)
 
-    columns = Enum.map_join(table.columns, ", ", &~s|this."#{&1.name}"|)
+    columns = Enum.map_join(table_info.columns, ", ", &~s|this."#{&1.name}"|)
     pk_clause = Enum.map_join(layer.target_pk, " AND ", &~s|this."#{&1}" = shadow."#{&1}"|)
 
-    where_clauses =
+    where =
       [
         where_target(layer.where_target),
         parent_pseudo_join(layer, from),
-        context_filters(table, context, layer)
+        context_filters(table_info, context, layer)
       ]
       |> Enum.reject(&(is_nil(&1) or &1 == ""))
       |> Enum.intersperse(" AND ")
+      |> where_clause()
 
-    where = if where_clauses != [], do: ["WHERE ", where_clauses], else: ""
-
+    # Postgres will evaluate 'epoch' in the query below to the 1970-01-01 00:00:00+00Z timestamp.
+    # This ensures that this tag is ordered strictly before any any tag subsequently generated
+    # by clients or Postgres.
     query =
-      IO.iodata_to_binary([
-        """
-        SELECT shadow."_tags", #{columns}
-          FROM #{Schema.name(table.schema)}.#{Schema.name(table.name)} as this
-          JOIN electric."shadow__#{table.schema}__#{table.name}" as shadow
-            ON #{pk_clause}
-        """,
-        where
-      ])
+      """
+      SELECT
+        coalesce(shadow."_tags", '{"(epoch,)"}'), #{columns}
+      FROM
+        #{quote_ident(target_table)} as this
+      LEFT JOIN
+        #{quote_ident(Extension.shadow_of(target_table))} as shadow ON #{pk_clause}
+      #{where}
+      """
 
     # Important reason for `squery` usage here (as opposed to what might be more reasonable `equery`) is that we need
     # string representation of all fields, so we don't want to do double-conversion inside epgsql and back
     with {:ok, _, rows} <- :epgsql.squery(conn, query) do
       curr_records =
-        rows_to_changes_with_tags(rows, Enum.map(table.columns, & &1.name), layer, origin)
+        rows_to_changes_with_tags(rows, Enum.map(table_info.columns, & &1.name), layer, origin)
 
       graph = maybe_fill_first_graph_layer(Graph.new(), layer, curr_records)
 
@@ -163,6 +172,9 @@ defmodule Electric.Replication.Shapes.Querying do
 
   defp where_target(nil), do: nil
   defp where_target(%Eval.Expr{query: query}), do: query
+
+  defp where_clause([]), do: ""
+  defp where_clause(exprs), do: ["WHERE " | exprs]
 
   defp maybe_fill_first_graph_layer(
          %Graph{} = graph,

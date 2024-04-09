@@ -53,7 +53,7 @@ CREATE OR REPLACE FUNCTION <%= schema() %>.install_function__send_self_and_refer
 
                 PERFORM <%= schema() %>.__tx_store_touched_row('%3$s', '%4$s', __serialized_pk);
 
-                __message := json_build_object('schema', '%3$s', 'table', '%4$s', 'tags', __tags::text, 'data', json_build_object(%9$s), 'pk', array_to_json(%5$s))::text;
+                __message := json_build_object('schema', '%3$s', 'table', '%4$s', 'tags', coalesce(__tags, '{"(epoch,)"}'::electric.tag[])::text, 'data', json_build_object(%9$s), 'pk', array_to_json(%5$s))::text;
 
                 PERFORM pg_logical_emit_message(true, '<%= schema() %>.fk_chain_touch', __message);
                 -- RAISE NOTICE '%%', format('%3$I.%4$I:%%s', row_to_json(__this_row)::text);

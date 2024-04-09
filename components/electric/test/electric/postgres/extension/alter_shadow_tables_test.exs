@@ -2,7 +2,7 @@ defmodule Electric.Postgres.Extension.AlterShadowTablesTest do
   use Electric.Extension.Case,
     async: false
 
-  alias Electric.Postgres.Schema
+  alias Electric.Postgres.Extension
 
   require Record
 
@@ -30,12 +30,12 @@ defmodule Electric.Postgres.Extension.AlterShadowTablesTest do
   )
 
   def get_tombstone_schema(conn, schema, table) do
-    {tombstone_schema, tombstone_table} = Schema.tombstone_table_name(schema, table)
+    {tombstone_schema, tombstone_table} = Extension.tombstone_of({schema, table})
     get_table_schema(conn, tombstone_schema, tombstone_table)
   end
 
   def get_shadow_schema(conn, schema, table) do
-    {shadow_schema, shadow_table} = Schema.shadow_table_name(schema, table)
+    {shadow_schema, shadow_table} = Extension.shadow_of({schema, table})
     get_table_schema(conn, shadow_schema, shadow_table)
   end
 
