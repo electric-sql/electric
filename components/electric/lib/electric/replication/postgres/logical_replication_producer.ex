@@ -41,7 +41,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     defstruct repl_conn: nil,
               svc_conn: nil,
               demand: 0,
-              queue: nil,
+              queue: :queue.new(),
+              queue_len: 0,
               relations: %{},
               transaction: nil,
               publication: nil,
@@ -59,6 +60,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
             svc_conn: pid(),
             demand: non_neg_integer(),
             queue: :queue.queue(),
+            queue_len: non_neg_integer(),
             relations: %{Messages.relation_id() => %Relation{}},
             transaction: {Lsn.t(), %Transaction{}},
             publication: binary(),
@@ -153,7 +155,6 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
         %State{
           repl_conn: repl_conn,
           svc_conn: svc_conn,
-          queue: :queue.new(),
           publication: publication,
           origin: origin,
           span: span,
@@ -363,9 +364,9 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     Metrics.span_event(state.span, :transaction, Transaction.count_operations(event))
 
     queue = :queue.in(event, queue)
-    state = %{state | queue: queue, transaction: nil}
+    state = %{state | queue: queue, queue_len: state.queue_len + 1, transaction: nil}
 
-    dispatch_events(state, [])
+    dispatch_events(state)
   end
 
   # When we have new demand, add it to any pending demand and see if we can
@@ -374,37 +375,24 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   def handle_demand(incoming_demand, %{demand: pending_demand} = state) do
     state = %{state | demand: incoming_demand + pending_demand}
 
-    dispatch_events(state, [])
+    dispatch_events(state)
   end
 
-  # When we're done exhausting demand, emit events.
-  defp dispatch_events(%{demand: 0} = state, events) do
-    emit_events(state, events)
-  end
-
-  defp dispatch_events(%{demand: demand, queue: queue} = state, events) do
-    case :queue.out(queue) do
-      # If the queue has events, recurse to accumulate them
-      # as long as there is demand.
-      {{:value, event}, queue} ->
-        state = %{state | demand: demand - 1, queue: queue}
-
-        dispatch_events(state, [event | events])
-
-      # When the queue is empty, emit any accumulated events.
-      {:empty, queue} ->
-        state = %{state | queue: queue}
-
-        emit_events(state, events)
-    end
-  end
-
-  defp emit_events(state, []) do
+  defp dispatch_events(%{demand: demand, queue_len: queue_len} = state)
+       when demand == 0 or queue_len == 0 do
     {:noreply, [], state}
   end
 
-  defp emit_events(state, events) do
-    {:noreply, Enum.reverse(events), state}
+  defp dispatch_events(%{demand: demand, queue: queue, queue_len: queue_len} = state)
+       when demand >= queue_len do
+    state = %{state | queue: :queue.new(), queue_len: 0, demand: demand - queue_len}
+    {:noreply, :queue.to_list(queue), state}
+  end
+
+  defp dispatch_events(%{demand: demand, queue: queue, queue_len: queue_len} = state) do
+    {to_emit, queue_remaining} = :queue.split(demand, queue)
+    state = %{state | queue: queue_remaining, queue_len: queue_len - demand, demand: 0}
+    {:noreply, :queue.to_list(to_emit), state}
   end
 
   @spec data_tuple_to_map([Relation.Column.t()], list()) :: term()
