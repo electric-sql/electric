@@ -224,10 +224,11 @@ export const relations = {
 } satisfies RelationsCache
 
 // Speed up the intervals for testing.
-export const opts = Object.assign({}, satelliteDefaults, {
-  minSnapshotWindow: 40,
-  pollingInterval: 200,
-})
+export const opts = (namespace: string) =>
+  Object.assign({}, satelliteDefaults(namespace), {
+    minSnapshotWindow: 40,
+    pollingInterval: 200,
+  })
 
 type Opts = SatelliteOpts & {
   minSnapshotWindow: number
@@ -249,6 +250,8 @@ export type ContextType<Extra = {}> = {
   timestamp: number
   authState: AuthState
   token: string
+  opts: Opts
+  namespace: string
   stop?: () => Promise<void>
 } & Extra
 
@@ -257,7 +260,8 @@ const makeContextInternal = async (
   dbName: string,
   adapter: DatabaseAdapter,
   migrator: BundleMigratorBase,
-  options: Opts = opts
+  namespace: string,
+  options: Opts = opts(namespace)
 ) => {
   const notifier = new MockNotifier(dbName, new EventEmitter())
   const client = new MockSatelliteClient()
@@ -270,7 +274,7 @@ const makeContextInternal = async (
     options
   )
 
-  const tableInfo = initTableInfo()
+  const tableInfo = initTableInfo(namespace)
   const timestamp = new Date().getTime()
 
   const runMigrations = async () => {
@@ -281,6 +285,7 @@ const makeContextInternal = async (
   const token = insecureAuthToken({ sub: 'test-user' })
 
   t.context = {
+    ...t.context,
     dbName,
     adapter,
     notifier,
@@ -291,38 +296,43 @@ const makeContextInternal = async (
     timestamp,
     authState,
     token,
+    namespace,
+    opts: options,
   }
 }
 
 export const makeContext = async (
   t: ExecutionContext<ContextType>,
-  options: Opts = opts
+  namespace: string,
+  options: Opts = opts(namespace)
 ) => {
   await mkdir('.tmp', { recursive: true })
   const dbName = `.tmp/test-${randomValue()}.db`
   const db = new SqliteDatabase(dbName)
   const adapter = new SqliteDatabaseAdapter(db)
   const migrator = new SqliteBundleMigrator(adapter, sqliteMigrations)
-  makeContextInternal(t, dbName, adapter, migrator, options)
+  makeContextInternal(t, dbName, adapter, migrator, namespace, options)
 }
 
 export const makePgContext = async (
   t: ExecutionContext<ContextType>,
   port: number,
-  options: Opts = opts
+  namespace: string,
+  options: Opts = opts(namespace)
 ) => {
   const dbName = `test-${randomValue()}`
   const { db, stop } = await makePgDatabase(dbName, port)
   const adapter = new PgDatabaseAdapter(db)
   const migrator = new PgBundleMigrator(adapter, pgMigrations)
-  makeContextInternal(t, dbName, adapter, migrator, options)
+  makeContextInternal(t, dbName, adapter, migrator, namespace, options)
   t.context.stop = stop
 }
 
 export const mockElectricClient = async (
   db: SqliteDB,
   registry: Registry | GlobalRegistry,
-  options: Opts = opts
+  namespace: string = 'main',
+  options: Opts = opts(namespace)
 ): Promise<ElectricClient<any>> => {
   const dbName = db.name
   const adapter = new SqliteDatabaseAdapter(db)
@@ -406,8 +416,10 @@ export async function migrateDb(
   }
 }
 
-export const personTable: Table = {
-  namespace: 'main',
+export const personTable: (namespace: string) => Table = (
+  namespace: string
+) => ({
+  namespace,
   tableName: 'personTable',
   columns: ['id', 'name', 'age', 'bmi', 'int8', 'blob'],
   primary: ['id'],
@@ -420,4 +432,4 @@ export const personTable: Table = {
     int8: PgBasicType.PG_INT8,
     blob: PgBasicType.PG_BYTEA,
   },
-}
+})

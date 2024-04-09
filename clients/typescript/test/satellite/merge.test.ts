@@ -12,9 +12,9 @@ import {
   QualifiedTablename,
 } from '../../src/util'
 import Long from 'long'
-import { relations, migrateDb, personTable } from './common'
+import { relations, migrateDb, personTable as getPersonTable } from './common'
 import Database from 'better-sqlite3'
-import { satelliteDefaults } from '../../src/satellite/config'
+import { SatelliteOpts, satelliteDefaults } from '../../src/satellite/config'
 import {
   QueryBuilder,
   pgBuilder,
@@ -162,8 +162,8 @@ function _mergeTableTest(
 
   // we go through `fromTransaction` on purpose
   // in order to also test serialisation/deserialisation of the rows
-  const entry1: OplogEntry[] = fromTransaction(tx1, relations)
-  const entry2: OplogEntry[] = fromTransaction(tx2, relations)
+  const entry1: OplogEntry[] = fromTransaction(tx1, relations, 'main')
+  const entry2: OplogEntry[] = fromTransaction(tx2, relations, 'main')
 
   const merged = mergeEntries('local', entry1, 'remote', entry2, relations)
 
@@ -180,11 +180,15 @@ function _mergeTableTest(
 type MaybePromise<T> = T | Promise<T>
 type SetupFn = (
   t: ExecutionContext<unknown>
-) => MaybePromise<[DatabaseAdapterInterface, QueryBuilder]>
+) => MaybePromise<
+  [DatabaseAdapterInterface, QueryBuilder, string, SatelliteOpts]
+>
 const setupSqlite: SetupFn = (t: ExecutionContext<unknown>) => {
   const db = new Database(':memory:')
   t.teardown(() => db.close())
-  return [new SQLiteDatabaseAdapter(db), sqliteBuilder]
+  const namespace = 'main'
+  const defaults = satelliteDefaults(namespace)
+  return [new SQLiteDatabaseAdapter(db), sqliteBuilder, namespace, defaults]
 }
 
 let port = 4800
@@ -192,7 +196,9 @@ const setupPG: SetupFn = async (t: ExecutionContext<unknown>) => {
   const dbName = `merge-test-${randomValue()}`
   const { db, stop } = await makePgDatabase(dbName, port++)
   t.teardown(async () => await stop())
-  return [new PgDatabaseAdapter(db), pgBuilder]
+  const namespace = 'public'
+  const defaults = satelliteDefaults(namespace)
+  return [new PgDatabaseAdapter(db), pgBuilder, namespace, defaults]
 }
 
 ;(
@@ -202,9 +208,10 @@ const setupPG: SetupFn = async (t: ExecutionContext<unknown>) => {
   ] as const
 ).forEach(([dialect, setup]) => {
   test(`(${dialect}) merge works on oplog entries`, async (t) => {
-    const [adapter, builder] = await setup(t)
+    const [adapter, builder, namespace, defaults] = await setup(t)
 
     // Migrate the DB with the necessary tables and triggers
+    const personTable = getPersonTable(namespace)
     await migrateDb(adapter, personTable, builder)
 
     // Insert a row in the table
@@ -216,7 +223,7 @@ const setupPG: SetupFn = async (t: ExecutionContext<unknown>) => {
     await adapter.run({ sql: insertRowSQL })
 
     // Fetch the oplog entry for the inserted row
-    const oplogTable = `"${satelliteDefaults.oplogTable.namespace}"."${satelliteDefaults.oplogTable.tablename}"`
+    const oplogTable = `"${defaults.oplogTable.namespace}"."${defaults.oplogTable.tablename}"`
     const oplogRows = await adapter.query({
       sql: `SELECT * FROM ${oplogTable}`,
     })
@@ -253,7 +260,7 @@ const setupPG: SetupFn = async (t: ExecutionContext<unknown>) => {
       'local',
       [oplogEntry],
       'remote',
-      fromTransaction(tx, relations),
+      fromTransaction(tx, relations, namespace),
       relations
     )
 

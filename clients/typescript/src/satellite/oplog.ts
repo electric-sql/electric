@@ -385,7 +385,8 @@ function deserialiseRow(str: string, rel: Pick<Relation, 'columns'>): Rec {
 
 export const fromTransaction = (
   transaction: DataTransaction,
-  relations: RelationsCache
+  relations: RelationsCache,
+  namespace: string
 ): OplogEntry[] => {
   return transaction.changes.map((t) => {
     const columnValues = t.record ? t.record : t.oldRecord!
@@ -398,7 +399,7 @@ export const fromTransaction = (
     )
 
     return {
-      namespace: 'main', // TODO: how?
+      namespace,
       tablename: t.relation.table,
       optype: stringToOpType(t.type),
       newRow: serialiseRow(t.record),

@@ -72,10 +72,10 @@ const populateDB = async (t: ExecutionContext<ContextType>) => {
   const stmts: Statement[] = []
 
   stmts.push({
-    sql: `INSERT INTO main.parent (id, value, other) VALUES (1, 'local', null);`,
+    sql: `INSERT INTO parent (id, value, other) VALUES (1, 'local', null);`,
   })
   stmts.push({
-    sql: `INSERT INTO main.parent (id, value, other) VALUES (2, 'local', null);`,
+    sql: `INSERT INTO parent (id, value, other) VALUES (2, 'local', null);`,
   })
   await adapter.runInTransaction(...stmts)
 }
@@ -105,7 +105,7 @@ export const processMigrationTests = (test: TestFn<ContextType>) => {
   test.serial('setup populates DB', async (t) => {
     const adapter = t.context.adapter
 
-    const sql = 'SELECT * FROM main.parent'
+    const sql = `SELECT * FROM parent`
     const rows = await adapter.query({ sql })
     t.deepEqual(rows, [
       {
@@ -145,12 +145,12 @@ export const processMigrationTests = (test: TestFn<ContextType>) => {
       pks: ['id'],
     },
     migrationType: SatOpMigrate_Type.CREATE_TABLE,
-    sql: 'CREATE TABLE main."NewTable"(\
+    sql: `CREATE TABLE "NewTable"(\
          id TEXT NOT NULL,\
          foo INTEGER,\
          bar TEXT,\
          PRIMARY KEY(id)\
-       );',
+       );`,
   }
 
   const addColumn: SchemaChange = {
@@ -182,7 +182,7 @@ export const processMigrationTests = (test: TestFn<ContextType>) => {
       pks: ['id'],
     },
     migrationType: SatOpMigrate_Type.ALTER_ADD_COLUMN,
-    sql: 'ALTER TABLE main.parent ADD baz TEXT',
+    sql: 'ALTER TABLE parent ADD baz TEXT',
   }
 
   const addColumnRelation = {
@@ -281,7 +281,7 @@ export const processMigrationTests = (test: TestFn<ContextType>) => {
 
   const fetchParentRows = async (adapter: DatabaseAdapter): Promise<Row[]> => {
     return adapter.query({
-      sql: 'SELECT * FROM main.parent',
+      sql: 'SELECT * FROM parent',
     })
   }
 
@@ -510,7 +510,7 @@ export const processMigrationTests = (test: TestFn<ContextType>) => {
 
       // Check the row that was inserted in the new table
       const newTableRows = await adapter.query({
-        sql: 'SELECT * FROM main."NewTable"',
+        sql: 'SELECT * FROM "NewTable"',
       })
 
       t.is(newTableRows.length, 1)
@@ -534,7 +534,7 @@ export const processMigrationTests = (test: TestFn<ContextType>) => {
 
       // Locally update row with id 1
       await adapter.runInTransaction({
-        sql: `UPDATE main.parent SET value = 'still local', other = 5 WHERE id = 1;`,
+        sql: `UPDATE parent SET value = 'still local', other = 5 WHERE id = 1;`,
       })
 
       await satellite._performSnapshot()
@@ -722,7 +722,7 @@ export const processMigrationTests = (test: TestFn<ContextType>) => {
     {
       migrationType: SatOpMigrate_Type.CREATE_TABLE,
       sql: `
-    CREATE TABLE main."test_items" (
+    CREATE TABLE "test_items" (
       "id" TEXT NOT NULL,
       CONSTRAINT "test_items_pkey" PRIMARY KEY ("id")
     );
@@ -743,7 +743,7 @@ export const processMigrationTests = (test: TestFn<ContextType>) => {
     {
       migrationType: SatOpMigrate_Type.CREATE_TABLE,
       sql: `
-    CREATE TABLE main."test_other_items" (
+    CREATE TABLE "test_other_items" (
       "id" TEXT NOT NULL,
       "item_id" TEXT,
       -- CONSTRAINT "test_other_items_item_id_fkey" FOREIGN KEY ("item_id") REFERENCES "test_items" ("id"),

@@ -49,19 +49,19 @@ export function generateOplogTriggers(
   const oldRows = joinColsForJSON(columns, columnTypes, builder, 'old')
 
   const [dropFkTrigger, ...createFkTrigger] =
-    builder.createOrReplaceNoFkUpdateTrigger(namespace, tableName, primary)
+    builder.createOrReplaceNoFkUpdateTrigger(tableName, primary, namespace)
   const [dropInsertTrigger, ...createInsertTrigger] =
     builder.createOrReplaceInsertTrigger(
-      namespace,
       tableName,
       newPKs,
       newRows,
-      oldRows
+      oldRows,
+      namespace
     )
 
   return [
     // Toggles for turning the triggers on and off
-    builder.setTriggerSetting(namespace, tableName, 1),
+    builder.setTriggerSetting(tableName, 1, namespace),
     // Triggers for table ${tableName}
     // ensures primary key is immutable
     dropFkTrigger,
@@ -70,18 +70,18 @@ export function generateOplogTriggers(
     dropInsertTrigger,
     ...createInsertTrigger,
     ...builder.createOrReplaceUpdateTrigger(
-      namespace,
       tableName,
       newPKs,
       newRows,
-      oldRows
+      oldRows,
+      namespace
     ),
     ...builder.createOrReplaceDeleteTrigger(
-      namespace,
       tableName,
       oldPKs,
       newRows,
-      oldRows
+      oldRows,
+      namespace
     ),
   ].map(mkStatement)
 }
@@ -109,7 +109,7 @@ function generateCompensationTriggers(
   const makeTriggers = (foreignKey: ForeignKey) => {
     const { childKey } = foreignKey
 
-    const fkTableNamespace = 'main' // currently, Electric always uses the 'main' namespace
+    const fkTableNamespace = builder.defaultNamespace // currently, Electric always uses the DB's default namespace
     const fkTableName = foreignKey.table
     const fkTablePK = foreignKey.parentKey // primary key of the table pointed at by the FK.
 
@@ -129,13 +129,13 @@ function generateCompensationTriggers(
 
     const [dropInsertTrigger, ...createInsertTrigger] =
       builder.createOrReplaceInsertCompensationTrigger(
-        namespace,
         tableName,
         childKey,
-        fkTableNamespace,
         fkTableName,
         joinedFkPKs,
-        foreignKey
+        foreignKey,
+        namespace,
+        fkTableNamespace
       )
 
     return [
@@ -146,13 +146,13 @@ function generateCompensationTriggers(
       dropInsertTrigger,
       ...createInsertTrigger,
       ...builder.createOrReplaceUpdateCompensationTrigger(
-        namespace,
         tableName,
         foreignKey.childKey,
-        fkTableNamespace,
         fkTableName,
         joinedFkPKs,
-        foreignKey
+        foreignKey,
+        namespace,
+        fkTableNamespace
       ),
     ].map(mkStatement)
   }
@@ -192,9 +192,11 @@ export function generateTriggers(
   })
 
   const stmts = [
-    { sql: 'DROP TABLE IF EXISTS main._electric_trigger_settings;' },
     {
-      sql: 'CREATE TABLE main._electric_trigger_settings(namespace TEXT, tablename TEXT, flag INTEGER, PRIMARY KEY(namespace, tablename));',
+      sql: `DROP TABLE IF EXISTS "${builder.defaultNamespace}"._electric_trigger_settings;`,
+    },
+    {
+      sql: `CREATE TABLE "${builder.defaultNamespace}"._electric_trigger_settings(namespace TEXT, tablename TEXT, flag INTEGER, PRIMARY KEY(namespace, tablename));`,
     },
     ...tableTriggers,
   ]

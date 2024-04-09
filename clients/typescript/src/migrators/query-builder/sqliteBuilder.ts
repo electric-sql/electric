@@ -11,6 +11,7 @@ class SqliteBuilder extends QueryBuilder {
   readonly getVersion = 'SELECT sqlite_version() AS version'
   readonly maxSqlParameters = 65535
   readonly paramSign = '?'
+  readonly defaultNamespace = 'main'
   readonly metaTables = [
     'sqlite_schema',
     'sqlite_sequence',
@@ -86,10 +87,10 @@ class SqliteBuilder extends QueryBuilder {
   }
 
   insertOrIgnore(
-    schema: string,
     table: string,
     columns: string[],
-    values: SqlValue[]
+    values: SqlValue[],
+    schema: string = this.defaultNamespace
   ): Statement {
     return {
       sql: dedent`
@@ -101,12 +102,12 @@ class SqliteBuilder extends QueryBuilder {
   }
 
   insertOrReplace(
-    schema: string,
     table: string,
     columns: string[],
     values: Array<SqlValue>,
     _conflictCols: string[],
-    _updateCols: string[]
+    _updateCols: string[],
+    schema: string = this.defaultNamespace
   ): Statement {
     return {
       sql: dedent`
@@ -118,21 +119,21 @@ class SqliteBuilder extends QueryBuilder {
   }
 
   insertOrReplaceWith(
-    schema: string,
     table: string,
     columns: string[],
     values: Array<SqlValue>,
     conflictCols: string[],
     updateCols: string[],
-    updateVals: SqlValue[]
+    updateVals: SqlValue[],
+    schema: string = this.defaultNamespace
   ): Statement {
     const { sql: baseSql, args } = this.insertOrReplace(
-      schema,
       table,
       columns,
       values,
       conflictCols,
-      updateCols
+      updateCols,
+      schema
     )
     return {
       sql:
@@ -145,13 +146,13 @@ class SqliteBuilder extends QueryBuilder {
   }
 
   batchedInsertOrReplace(
-    schema: string,
     table: string,
     columns: string[],
     records: Array<Record<string, SqlValue>>,
     _conflictCols: string[],
     _updateCols: string[],
-    maxSqlParameters: number
+    maxSqlParameters: number,
+    schema: string = this.defaultNamespace
   ): Statement[] {
     const baseSql = `INSERT OR REPLACE INTO ${schema}.${table} (${columns.join(
       ', '
@@ -166,16 +167,16 @@ class SqliteBuilder extends QueryBuilder {
 
   dropTriggerIfExists(
     triggerName: string,
-    _namespace: string,
-    _tablename: string
+    _tablename: string,
+    _namespace?: string
   ) {
     return `DROP TRIGGER IF EXISTS ${triggerName};`
   }
 
   createNoFkUpdateTrigger(
-    namespace: string,
     tablename: string,
-    pk: string[]
+    pk: string[],
+    namespace: string = this.defaultNamespace
   ): string[] {
     return [
       dedent`
@@ -211,20 +212,20 @@ class SqliteBuilder extends QueryBuilder {
   }
 
   setTriggerSetting(
-    namespace: string,
     tableName: string,
-    value: 0 | 1
+    value: 0 | 1,
+    namespace: string = this.defaultNamespace
   ): string {
     return `INSERT OR IGNORE INTO _electric_trigger_settings (namespace, tablename, flag) VALUES ('${namespace}', '${tableName}', ${value});`
   }
 
   createOplogTrigger(
     opType: 'INSERT' | 'UPDATE' | 'DELETE',
-    namespace: string,
     tableName: string,
     newPKs: string,
     newRows: string,
-    oldRows: string
+    oldRows: string,
+    namespace: string = this.defaultNamespace
   ): string[] {
     const opTypeLower = opType.toLowerCase()
     const pk = this.createPKJsonObject(newPKs)
@@ -251,13 +252,13 @@ class SqliteBuilder extends QueryBuilder {
 
   createFkCompensationTrigger(
     opType: 'INSERT' | 'UPDATE',
-    namespace: string,
     tableName: string,
     childKey: string,
-    fkTableNamespace: string,
     fkTableName: string,
     joinedFkPKs: string,
-    foreignKey: ForeignKey
+    foreignKey: ForeignKey,
+    namespace: string = this.defaultNamespace,
+    fkTableNamespace: string = this.defaultNamespace
   ): string[] {
     const opTypeLower = opType.toLowerCase()
     return [

@@ -11,7 +11,8 @@ import {
 const test = testAny as TestFn<ContextType>
 
 test.beforeEach(async (t) => {
-  await makeContext(t)
+  const namespace = 'main'
+  await makeContext(t, namespace)
   t.context.getMatchingShadowEntries = getSQLiteMatchingShadowEntries
   t.context.builder = sqliteBuilder
   await commonSetup(t)

@@ -12,6 +12,7 @@ class PgBuilder extends QueryBuilder {
   readonly deferForeignKeys = 'SET CONSTRAINTS ALL DEFERRED;'
   readonly getVersion = 'SELECT version();'
   readonly paramSign = '$'
+  readonly defaultNamespace = 'public'
 
   pgOnly(query: string) {
     return query
@@ -100,7 +101,7 @@ class PgBuilder extends QueryBuilder {
                        -- then return 0
                        WHEN NOT pg_attribute.attnum = ANY(pg_index.indkey) THEN 0
                        -- else, return the position of the column in the primary key
-                       -- pg_index.indkey is indexed from 0 so we add 1
+                       -- pg_index.indkey is indexed from 0 so we do + 1
                        ELSE array_position(pg_index.indkey, pg_attribute.attnum) + 1
                      END AS pk
               FROM pg_class, pg_attribute, pg_index
@@ -118,10 +119,10 @@ class PgBuilder extends QueryBuilder {
   }
 
   insertOrIgnore(
-    schema: string,
     table: string,
     columns: string[],
-    values: SqlValue[]
+    values: SqlValue[],
+    schema: string = this.defaultNamespace
   ): Statement {
     return {
       sql: dedent`
@@ -134,12 +135,12 @@ class PgBuilder extends QueryBuilder {
   }
 
   insertOrReplace(
-    schema: string,
     table: string,
     columns: string[],
     values: Array<SqlValue>,
     conflictCols: string[],
-    updateCols: string[]
+    updateCols: string[],
+    schema: string = this.defaultNamespace
   ): Statement {
     return {
       sql: dedent`
@@ -155,13 +156,13 @@ class PgBuilder extends QueryBuilder {
   }
 
   insertOrReplaceWith(
-    schema: string,
     table: string,
     columns: string[],
     values: Array<SqlValue>,
     conflictCols: string[],
     updateCols: string[],
-    updateVals: SqlValue[]
+    updateVals: SqlValue[],
+    schema: string = this.defaultNamespace
   ): Statement {
     return {
       sql: dedent`
@@ -177,13 +178,13 @@ class PgBuilder extends QueryBuilder {
   }
 
   batchedInsertOrReplace(
-    schema: string,
     table: string,
     columns: string[],
     records: Array<Record<string, SqlValue>>,
     conflictCols: string[],
     updateCols: string[],
-    maxSqlParameters: number
+    maxSqlParameters: number,
+    schema: string = this.defaultNamespace
   ): Statement[] {
     const baseSql = `INSERT INTO "${schema}"."${table}" (${columns
       .map(quote)
@@ -208,16 +209,16 @@ class PgBuilder extends QueryBuilder {
 
   dropTriggerIfExists(
     triggerName: string,
-    namespace: string,
-    tablename: string
+    tablename: string,
+    namespace: string = this.defaultNamespace
   ) {
     return `DROP TRIGGER IF EXISTS ${triggerName} ON "${namespace}"."${tablename}";`
   }
 
   createNoFkUpdateTrigger(
-    namespace: string,
     tablename: string,
-    pk: string[]
+    pk: string[],
+    namespace: string = this.defaultNamespace
   ): string[] {
     return [
       dedent`
@@ -274,12 +275,12 @@ class PgBuilder extends QueryBuilder {
   }
 
   setTriggerSetting(
-    namespace: string,
     tableName: string,
-    value: 0 | 1
+    value: 0 | 1,
+    namespace: string = this.defaultNamespace
   ): string {
     return dedent`
-      INSERT INTO "main"."_electric_trigger_settings" ("namespace", "tablename", "flag")
+      INSERT INTO "${namespace}"."_electric_trigger_settings" ("namespace", "tablename", "flag")
         VALUES ('${namespace}', '${tableName}', ${value})
         ON CONFLICT DO NOTHING;
     `
@@ -287,11 +288,11 @@ class PgBuilder extends QueryBuilder {
 
   createOplogTrigger(
     opType: 'INSERT' | 'UPDATE' | 'DELETE',
-    namespace: string,
     tableName: string,
     newPKs: string,
     newRows: string,
-    oldRows: string
+    oldRows: string,
+    namespace: string = this.defaultNamespace
   ): string[] {
     const opTypeLower = opType.toLowerCase()
     const pk = this.createPKJsonObject(newPKs)
@@ -312,11 +313,11 @@ class PgBuilder extends QueryBuilder {
             flag_value INTEGER;
           BEGIN
             -- Get the flag value from _electric_trigger_settings
-            SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE namespace = '${namespace}' AND tablename = '${tableName}';
+            SELECT flag INTO flag_value FROM "${namespace}"._electric_trigger_settings WHERE namespace = '${namespace}' AND tablename = '${tableName}';
     
             IF flag_value = 1 THEN
               -- Insert into _electric_oplog
-              INSERT INTO main._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
+              INSERT INTO "${namespace}"._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
               VALUES (
                 '${namespace}',
                 '${tableName}',
@@ -344,13 +345,13 @@ class PgBuilder extends QueryBuilder {
 
   createFkCompensationTrigger(
     opType: 'INSERT' | 'UPDATE',
-    namespace: string,
     tableName: string,
     childKey: string,
-    fkTableNamespace: string,
     fkTableName: string,
     joinedFkPKs: string,
-    foreignKey: ForeignKey
+    foreignKey: ForeignKey,
+    namespace: string = this.defaultNamespace,
+    fkTableNamespace: string = this.defaultNamespace
   ): string[] {
     const opTypeLower = opType.toLowerCase()
 
@@ -363,12 +364,12 @@ class PgBuilder extends QueryBuilder {
             flag_value INTEGER;
             meta_value INTEGER;
           BEGIN
-            SELECT flag INTO flag_value FROM main._electric_trigger_settings WHERE namespace = '${fkTableNamespace}' AND tablename = '${fkTableName}';
+            SELECT flag INTO flag_value FROM "${namespace}"._electric_trigger_settings WHERE namespace = '${fkTableNamespace}' AND tablename = '${fkTableName}';
     
-            SELECT value INTO meta_value FROM main._electric_meta WHERE key = 'compensations';
+            SELECT value INTO meta_value FROM "${namespace}"._electric_meta WHERE key = 'compensations';
     
             IF flag_value = 1 AND meta_value = 1 THEN
-              INSERT INTO main._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
+              INSERT INTO "${namespace}"._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
               SELECT
                 '${fkTableNamespace}',
                 '${fkTableName}',
