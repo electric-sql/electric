@@ -366,28 +366,22 @@ defmodule Electric.Satellite.Serialization do
   @doc """
   Deserialize from Satellite PB format to internal format
   """
-  @spec deserialize_trans(
-          String.t(),
-          %SatOpLog{},
-          %Transaction{} | nil,
-          cached_relations(),
-          (term -> any)
-        ) ::
+  @spec deserialize_trans(String.t(), %SatOpLog{}, %Transaction{} | nil, cached_relations()) ::
           {
             incomplete :: %Transaction{} | nil,
             # Complete transactions are send in reverse order
             complete :: [%Transaction{} | additional_data()]
           }
-  def deserialize_trans(origin, %SatOpLog{} = op_log, nil, relations, ack_fun) do
-    deserialize_op_log(origin, op_log, {nil, []}, relations, ack_fun)
+  def deserialize_trans(origin, %SatOpLog{} = op_log, nil, relations) do
+    deserialize_op_log(origin, op_log, {nil, []}, relations)
   end
 
-  def deserialize_trans(origin, %SatOpLog{} = op_log, %Transaction{} = trans, relations, ack_fun)
+  def deserialize_trans(origin, %SatOpLog{} = op_log, %Transaction{} = trans, relations)
       when origin !== "" do
-    deserialize_op_log(origin, op_log, {trans, []}, relations, ack_fun)
+    deserialize_op_log(origin, op_log, {trans, []}, relations)
   end
 
-  defp deserialize_op_log(origin, %SatOpLog{} = msg, incomplete, relations, ack_fun) do
+  defp deserialize_op_log(origin, %SatOpLog{} = msg, incomplete, relations) do
     Enum.reduce(msg.ops, incomplete, fn
       %SatTransOp{op: {:additional_begin, %SatOpAdditionalBegin{}}}, {nil, complete} ->
         {{:additional_data, []}, complete}
@@ -411,7 +405,6 @@ defmodule Electric.Satellite.Serialization do
           publication: "",
           commit_timestamp: dt,
           lsn: op.lsn,
-          ack_fn: fn -> ack_fun.(op.lsn) end,
           additional_data_ref: op.additional_data_ref
         }
 

@@ -357,9 +357,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
        )
        when commit_lsn == current_txn_lsn do
     event =
-      txn
+      %{txn | lsn: end_lsn}
       |> ShadowTableTransformation.enrich_tx_from_shadow_ops()
-      |> build_message(end_lsn, state)
 
     Metrics.span_event(state.span, :transaction, Transaction.count_operations(event))
 
@@ -385,12 +384,16 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
 
   defp dispatch_events(%{demand: demand, queue: queue, queue_len: queue_len} = state)
        when demand >= queue_len do
+    queue |> :queue.last() |> ack(state)
+
     state = %{state | queue: :queue.new(), queue_len: 0, demand: demand - queue_len}
     {:noreply, :queue.to_list(queue), state}
   end
 
   defp dispatch_events(%{demand: demand, queue: queue, queue_len: queue_len} = state) do
     {to_emit, queue_remaining} = :queue.split(demand, queue)
+    to_emit |> :queue.last() |> ack(state)
+
     state = %{state | queue: queue_remaining, queue_len: queue_len - demand, demand: 0}
     {:noreply, :queue.to_list(to_emit), state}
   end
@@ -404,23 +407,10 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     |> Map.new(fn {column, data} -> {column.name, data} end)
   end
 
-  defp build_message(%Transaction{} = transaction, end_lsn, %State{} = state) do
-    repl_conn = state.repl_conn
-    origin = state.origin
-
-    %Transaction{
-      transaction
-      | lsn: end_lsn,
-        # Make sure not to pass state.field into ack function, as this
-        # will create a copy of the whole state in memory when sending a message
-        ack_fn: fn -> ack(repl_conn, origin, end_lsn) end
-    }
-  end
-
-  @spec ack(pid(), Connectors.origin(), Lsn.t()) :: :ok
-  def ack(repl_conn, origin, lsn) do
-    Logger.debug("Acknowledging #{lsn}", origin: origin)
-    Client.acknowledge_lsn(repl_conn, lsn)
+  @spec ack(Transaction.t(), State.t()) :: :ok
+  def ack(%Transaction{lsn: lsn}, state) do
+    Logger.debug("Acknowledging #{lsn}", origin: state.origin)
+    Client.acknowledge_lsn(state.repl_conn, lsn)
   end
 
   # Advance the replication slot to let Postgres discard old WAL records.

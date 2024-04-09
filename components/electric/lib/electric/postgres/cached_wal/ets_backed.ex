@@ -182,7 +182,6 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
   @spec handle_events([Transaction.t()], term(), state()) :: {:noreply, [], any}
   def handle_events(events, _, state) do
     events
-    |> Stream.each(& &1.ack_fn.())
     # TODO: We're currently storing & streaming empty transactions to Satellite, which is not ideal, but we need
     #       to be aware of all transaction IDs and LSNs that happen, otherwise flakiness begins. I don't like that,
     #       so we probably want to be able to store a shallower pair than a full transaction object and handle that
@@ -206,9 +205,7 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
         "Saving transaction #{&1.xid} at #{&1.lsn} with changes #{inspect(&1.changes)}"
       )
     )
-    |> Stream.map(fn %Transaction{lsn: lsn} = tx ->
-      {lsn_to_position(lsn), %{tx | ack_fn: nil}}
-    end)
+    |> Stream.map(fn %Transaction{} = tx -> {lsn_to_position(tx.lsn), tx} end)
     |> Enum.to_list()
     |> tap(&ETS.Set.put(state.table, &1))
     |> Electric.Utils.list_last_and_length()

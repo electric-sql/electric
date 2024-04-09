@@ -66,10 +66,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
        start_link: fn %{name: name, producer: producer} ->
          Supervisor.start_link(
            [
-             {Electric.DummyConsumer,
-              subscribe_to: [{producer, []}],
-              run_on_each_event: & &1.ack_fn.(),
-              name: :dummy_consumer},
+             {Electric.DummyConsumer, subscribe_to: [{producer, []}], name: :dummy_consumer},
              {DownstreamProducerMock, Producer.name(name)}
            ],
            strategy: :one_for_one
