@@ -94,20 +94,8 @@ defmodule Electric.Replication.Eval.KnownDefinition do
   end
 
   defmacro defcompare(datatype, opts) when is_binary(datatype) do
-    case opts do
-      [using: compare_fn] ->
-        validate_ampersand_fn(compare_fn, 2, __CALLER__, ":using")
-        {definitions, insertions} = build_compare_operator(datatype, compare_fn, __CALLER__)
-
-        quote do
-          for definition <- unquote(Macro.escape(definitions)) do
-            Module.put_attribute(__MODULE__, :known_postgres_implementations, definition)
-          end
-
-          unquote(insertions)
-        end
-
-      :using_kernel ->
+    case Macro.expand_literals(opts, __CALLER__) do
+      [using: Kernel] ->
         for op <- ~w|= != < > <= >=|a do
           kernel_op = if(op == :=, do: :==, else: op)
 
@@ -131,11 +119,23 @@ defmodule Electric.Replication.Eval.KnownDefinition do
           end
         end
 
+      [using: compare_fn] ->
+        validate_ampersand_fn(compare_fn, 2, __CALLER__, ":using")
+        {definitions, insertions} = build_compare_operator(datatype, compare_fn, __CALLER__)
+
+        quote do
+          for definition <- unquote(Macro.escape(definitions)) do
+            Module.put_attribute(__MODULE__, :known_postgres_implementations, definition)
+          end
+
+          unquote(insertions)
+        end
+
       _ ->
         raise CompileError,
           line: __CALLER__.line,
           description:
-            "defcompare must either specify `:using_kernel` to use Kernel comparison functions, or `using: &Module.fn/2` to use a comparison function that returns `:lt`, `:eq`, or `:gt`."
+            "defcompare must either specify `using: Kernel` to use Kernel comparison functions, or `using: &Module.fn/2` to use a comparison function that returns `:lt`, `:eq`, or `:gt`."
     end
   end
 

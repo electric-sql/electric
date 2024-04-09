@@ -43,9 +43,9 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
 
   ## Comparison functions
 
-  defcompare "*numeric_type*", :using_kernel
-  defcompare "text", :using_kernel
-  defcompare "uuid", :using_kernel
+  defcompare "*numeric_type*", using: Kernel
+  defcompare "text", using: Kernel
+  defcompare "uuid", using: Kernel
   defcompare "date", using: &Date.compare/2
   defcompare "time", using: &Time.compare/2
   defcompare "timestamp", using: &NaiveDateTime.compare/2
