@@ -4,6 +4,7 @@ import {
   ReplicatedRowTransformer,
   Record as DataRecord,
 } from '../../util'
+import { Converter } from '../conversions/converter'
 import { Transformation, transformFields } from '../conversions/input'
 import {
   validate,
@@ -18,12 +19,20 @@ export interface IReplicationTransformManager {
     transform: ReplicatedRowTransformer<DataRecord>
   ): void
   clearTableTransform(tableName: QualifiedTablename): void
+
+  transformTableRecord<T extends Record<string, unknown>>(
+    record: DataRecord,
+    transformRow: (row: T) => T,
+    fields: Fields,
+    schema: z.ZodTypeAny,
+    immutableFields: string[]
+  ): DataRecord
 }
 
 export class ReplicationTransformManager
   implements IReplicationTransformManager
 {
-  constructor(private satellite: Satellite) {}
+  constructor(private satellite: Satellite, private converter: Converter) {}
 
   setTableTransform(
     tableName: QualifiedTablename,
@@ -34,6 +43,23 @@ export class ReplicationTransformManager
 
   clearTableTransform(tableName: QualifiedTablename): void {
     this.satellite.clearReplicationTransform(tableName)
+  }
+
+  transformTableRecord<T extends Record<string, unknown>>(
+    record: DataRecord,
+    transformRow: (row: T) => T,
+    fields: Fields,
+    schema: z.ZodTypeAny,
+    immutableFields: string[]
+  ): DataRecord {
+    return transformTableRecord(
+      record,
+      transformRow,
+      fields,
+      schema,
+      this.converter,
+      immutableFields
+    )
   }
 }
 
@@ -53,13 +79,15 @@ export function transformTableRecord<T extends Record<string, unknown>>(
   transformRow: (row: T) => T,
   fields: Fields,
   schema: z.ZodTypeAny,
+  converter: Converter,
   immutableFields: string[]
 ): DataRecord {
   // parse raw record according to specified fields
   const parsedRow = transformFields(
     record,
     fields,
-    Transformation.Sqlite2Js
+    converter,
+    Transformation.Decode
   ) as T
 
   // apply specified transformation
@@ -70,7 +98,8 @@ export function transformTableRecord<T extends Record<string, unknown>>(
   const transformedRecord = transformFields(
     validatedTransformedParsedRow,
     fields,
-    Transformation.Js2Sqlite
+    converter,
+    Transformation.Encode
   ) as DataRecord
 
   // check if any of the immutable fields were modified
