@@ -188,16 +188,28 @@ defmodule Electric.Replication.Eval.Parser do
          env
        ) do
     with {:ok, choices} <- find_available_functions(call, env),
-         {:ok, args} <- Utils.map_while_ok(args, &do_parse_and_validate_tree(&1, refs, env)),
-         {:ok, concrete} <- Lookups.pick_concrete_function_overload(choices, args, env),
-         {:ok, args} <- cast_unknowns(args, concrete.args, env),
-         {:ok, args} <- cast_implicit(args, concrete.args, env) do
-      concrete
-      |> from_concrete(args)
-      |> maybe_reduce()
-    else
-      {:error, {_loc, _msg}} = error -> error
-      :error -> {:error, {call.location, "Could not select a function overload"}}
+         {:ok, args} <- Utils.map_while_ok(args, &do_parse_and_validate_tree(&1, refs, env)) do
+      with {:ok, concrete} <- Lookups.pick_concrete_function_overload(choices, args, env),
+           {:ok, args} <- cast_unknowns(args, concrete.args, env),
+           {:ok, args} <- cast_implicit(args, concrete.args, env) do
+        concrete
+        |> from_concrete(args)
+        |> maybe_reduce()
+      else
+        {:error, {_loc, _msg}} = error ->
+          error
+
+        :error ->
+          arg_list =
+            Enum.map_join(args, ", ", fn
+              %UnknownConst{} -> "unknown"
+              %{type: type} -> to_string(type)
+            end)
+
+          {:error,
+           {call.location,
+            "Could not select a function overload for #{identifier(call.funcname)}(#{arg_list})"}}
+      end
     end
   end
 
@@ -567,12 +579,19 @@ defmodule Electric.Replication.Eval.Parser do
 
     {:ok, %Const{value: value, type: func.type, location: func.location}}
   rescue
-    _ -> {:error, {func.location, "Failed to apply function to constant arguments"}}
+    e ->
+      IO.puts(Exception.format(:error, e, __STACKTRACE__))
+      {:error, {func.location, "Failed to apply function to constant arguments"}}
   end
 
   defp unwrap_node_string(%PgQuery.Node{node: {:string, %PgQuery.String{sval: val}}}), do: val
 
-  defp identifier(ref), do: Enum.map_join(ref, ".", &wrap_identifier/1)
+  defp identifier(ref) do
+    case Enum.map(ref, &wrap_identifier/1) do
+      ["pg_catalog", func] -> func
+      identifier -> Enum.join(identifier, ".")
+    end
+  end
 
   defp wrap_identifier(ref) do
     ref = if is_struct(ref, PgQuery.Node), do: unwrap_node_string(ref), else: ref

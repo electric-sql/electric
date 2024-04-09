@@ -110,8 +110,12 @@ defmodule PgInterop.Interval do
       )
   end
 
-  def subtract_from_date(%NaiveDateTime{} = date, %Interval{} = interval) do
-    %NaiveDateTime{} =
+  def subtract_from_date(%Date{} = date, %Interval{} = interval),
+    do: date |> NaiveDateTime.new!(~T[00:00:00]) |> subtract_from_date(interval)
+
+  def subtract_from_date(%m{} = date, %Interval{} = interval)
+      when m in [DateTime, NaiveDateTime] do
+    %^m{} =
       Timex.shift(date,
         months: -interval.months,
         days: -interval.days,
@@ -158,12 +162,31 @@ defmodule PgInterop.Interval do
     |> add(from_months(m * by))
   end
 
+  @day_in_us 3_600_000_000 * 24
+
   def datetime_diff(%NaiveDateTime{} = d1, %NaiveDateTime{} = d2) do
     %Interval{
       days: NaiveDateTime.diff(d1, d2, :day),
-      microseconds: NaiveDateTime.diff(d1, d2, :microsecond) |> rem(3_600_000_000 * 24)
+      microseconds: NaiveDateTime.diff(d1, d2, :microsecond) |> rem(@day_in_us)
     }
   end
+
+  def datetime_diff(%DateTime{} = d1, %DateTime{} = d2) do
+    %Interval{
+      days: DateTime.diff(d1, d2, :day),
+      microseconds: DateTime.diff(d1, d2, :microsecond) |> rem(@day_in_us)
+    }
+  end
+
+  def justify_hours(%Interval{months: m, days: d, microseconds: us}) do
+    %Interval{months: m, days: d + div(us, @day_in_us), microseconds: rem(us, @day_in_us)}
+  end
+
+  def justify_days(%Interval{months: m, days: d, microseconds: us}) do
+    %Interval{months: m + div(d, 30), days: rem(d, 30), microseconds: us}
+  end
+
+  def justify_interval(%Interval{} = i), do: i |> justify_hours() |> justify_days()
 end
 
 defimpl Inspect, for: PgInterop.Interval do

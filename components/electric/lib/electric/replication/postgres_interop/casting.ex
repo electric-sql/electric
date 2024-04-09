@@ -84,6 +84,13 @@ defmodule Electric.Replication.PostgresInterop.Casting do
     NaiveDateTime.from_iso8601!(maybe_timestamp)
   end
 
+  def parse_timestamptz("epoch"), do: DateTime.from_unix!(0) |> DateTime.to_naive()
+
+  def parse_timestamptz(maybe_timestamp) do
+    {:ok, datetime, _} = DateTime.from_iso8601(maybe_timestamp)
+    datetime
+  end
+
   @doc """
   LIKE function from SQL. Case sensitive by default.
 

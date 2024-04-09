@@ -346,5 +346,27 @@ defmodule Electric.Replication.Eval.ParserTest do
 
       assert %Const{value: true, type: :bool} = result
     end
+
+    test "should support `AT TIME ZONE`" do
+      env = Env.new()
+
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(
+                 ~S|timestamp '2001-02-16 20:38:40' at time zone 'America/Denver' = '2001-02-17 03:38:40+00'|,
+                 %{},
+                 env
+               )
+
+      assert %Const{value: true, type: :bool} = result
+
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(
+                 ~S|timestamp with time zone '2001-02-16 20:38:40+03' at time zone 'America/Denver' = '2001-02-16 10:38:40'|,
+                 %{},
+                 env
+               )
+
+      assert %Const{value: true, type: :bool} = result
+    end
   end
 end

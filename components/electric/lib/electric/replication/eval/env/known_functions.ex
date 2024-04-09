@@ -18,6 +18,7 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
   defpostgres "date(text) -> date", delegate: &Casting.parse_date/1
   defpostgres "time(text) -> time", delegate: &Casting.parse_time/1
   defpostgres "timestamp(text) -> timestamp", delegate: &Casting.parse_timestamp/1
+  defpostgres "timestamptz(text) -> timestamp", delegate: &Casting.parse_timestamptz/1
   defpostgres "interval(text) -> interval", delegate: &Interval.parse!/1
 
   ## "output" functions
@@ -48,6 +49,7 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
   defcompare "date", using: &Date.compare/2
   defcompare "time", using: &Time.compare/2
   defcompare "timestamp", using: &NaiveDateTime.compare/2
+  defcompare "timestamptz", using: &DateTime.compare/2
 
   defpostgres "bool = bool -> bool", delegate: &Kernel.==/2
   defpostgres "bool <> bool -> bool", delegate: &Kernel.!=/2
@@ -110,10 +112,29 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
     commutative?: true,
     delegate: &Interval.add_to_date/2
 
+  defpostgres "timestamptz + interval -> timestamptz",
+    commutative?: true,
+    delegate: &Interval.add_to_date/2
+
   defpostgres "time + interval -> time", commutative?: true, delegate: &Interval.add_to_time/2
   defpostgres "date - interval -> timestamp", delegate: &Interval.subtract_from_date/2
   defpostgres "timestamp - interval -> timestamp", delegate: &Interval.subtract_from_date/2
+  defpostgres "timestamptz - interval -> timestamptz", delegate: &Interval.subtract_from_date/2
   defpostgres "interval - interval -> interval", delegate: &Interval.subtract/2
   defpostgres "timestamp - timestamp -> interval", delegate: &Interval.datetime_diff/2
+  defpostgres "timestamptz - timestamptz -> interval", delegate: &Interval.datetime_diff/2
   defpostgres "interval * float8 -> interval", commutative?: true, delegate: &Interval.scale/2
+
+  defpostgres "justify_days(interval) -> interval", delegate: &Interval.justify_days/1
+  defpostgres "justify_hours(interval) -> interval", delegate: &Interval.justify_hours/1
+  defpostgres "justify_interval(interval) -> interval", delegate: &Interval.justify_interval/1
+
+  defpostgres "timezone(text, timestamp) -> timestamptz" do
+    def timestamptz_from_naive(tz, datetime), do: DateTime.from_naive!(datetime, tz)
+  end
+
+  defpostgres "timezone(text, timestamptz) -> timestamp" do
+    def naive_from_timestamptz(tz, datetime),
+      do: datetime |> DateTime.shift_zone!(tz) |> DateTime.to_naive()
+  end
 end
