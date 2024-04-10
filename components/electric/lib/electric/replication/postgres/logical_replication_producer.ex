@@ -408,6 +408,13 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   end
 
   @spec ack(Transaction.t(), State.t()) :: :ok
+
+  if Mix.env() == :test do
+    def ack(%Transaction{}, %State{repl_conn: :conn}) do
+      :ok
+    end
+  end
+
   def ack(%Transaction{lsn: lsn}, state) do
     Logger.debug("Acknowledging #{lsn}", origin: state.origin)
     Client.acknowledge_lsn(state.repl_conn, lsn)
