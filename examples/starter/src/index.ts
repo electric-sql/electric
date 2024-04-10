@@ -10,7 +10,7 @@ import ora from 'ora'
 import portUsed from 'tcp-port-used'
 import prompt from 'prompt'
 import { TemplateType, getTemplateDirectory, validTemplates } from './templates'
-import { findAndReplaceInFile } from './file-utils'
+import { findAndReplaceInFile, replacePackageJson } from './file-utils'
 
 // Regex to check that a number is between 0 and 65535
 const portRegex =
@@ -166,21 +166,8 @@ await fs.rename(
   path.join(projectDir, '.gitignore')
 )
 
-// read package.json file and parse it as JSON
-// we could import it but then we get a warning
-// that importing JSON is an experimental feature
-// we can hide that warning using the --no-warnings flag
-// with nodeJS but the parsing of that flag
-// leads to problems on certain env implementations
 const packageJsonFile = path.join(projectDir, 'package.json')
-const projectPackageJson = JSON.parse(
-  await fs.readFile(packageJsonFile, 'utf8')
-)
-
-// Update the project's package.json with the new project name
-projectPackageJson.name = projectName
-
-await fs.writeFile(packageJsonFile, JSON.stringify(projectPackageJson, null, 2))
+await replacePackageJson(packageJsonFile, { projectName })
 
 // Update the project's title in the index.html file
 const indexFile = path.join(projectDir, 'index.html')

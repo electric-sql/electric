@@ -13,3 +13,31 @@ export async function findAndReplaceInFile(
   const replacedContent = content.replace(find, replace)
   await fs.writeFile(file, replacedContent)
 }
+
+
+
+export interface PackageJsonOptions {
+  projectName: string
+}
+
+
+/**
+ * Replaces the package.json file with the given project name
+ * @param packageJsonFile path to package.json file
+ */
+export async function replacePackageJson(packageJsonFile: string, options: PackageJsonOptions) {
+  // read package.json file and parse it as JSON
+  // we could import it but then we get a warning
+  // that importing JSON is an experimental feature
+  // we can hide that warning using the --no-warnings flag
+  // with nodeJS but the parsing of that flag
+  // leads to problems on certain env implementations
+  const projectPackageJson = JSON.parse(
+    await fs.readFile(packageJsonFile, 'utf8')
+  )
+
+  // Update the project's package.json with the new project name
+  projectPackageJson.name = options.projectName
+
+  await fs.writeFile(packageJsonFile, JSON.stringify(projectPackageJson, null, 2))
+}
