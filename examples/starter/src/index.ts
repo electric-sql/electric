@@ -12,7 +12,12 @@ import prompt from 'prompt'
 import { getTemplateDirectory } from './templates'
 import { findAndReplaceInFile, replacePackageJson } from './file-utils'
 import { PORT_REGEX } from './parse'
-import { CLIOptions, DefaultCLIOptions, getCLIOptions } from './input'
+import {
+  checkPort,
+  CLIOptions,
+  DefaultCLIOptions,
+  getCLIOptions,
+} from './input'
 
 const defaultOptions: DefaultCLIOptions = {
   templateType: 'react',
@@ -44,12 +49,15 @@ try {
   options.electricPort = await checkPort(
     options.electricPort,
     'Electric',
-    defaultOptions.electricPort
+    defaultOptions.electricPort,
+    () => spinner.stop()
   )
+  spinner.start()
   options.electricProxyPort = await checkPort(
     options.electricProxyPort,
-    "Electric's proxy",
-    defaultOptions.electricProxyPort
+    'Electric',
+    defaultOptions.electricProxyPort,
+    () => spinner.stop()
   )
 
   spinner.text = 'Creating project structure'
@@ -131,47 +139,3 @@ proc.on('close', async (code) => {
     `Navigate to your app folder \`cd ${options.appName}\` and follow the instructions in the README.md.`
   )
 })
-
-/**
- * Checks if the given port is open.
- * If not, it will ask the user if
- * they want to choose another port.
- * @returns The chosen port.
- */
-async function checkPort(
-  port: number,
-  process: string,
-  defaultPort: number
-): Promise<number> {
-  const portOccupied = await portUsed.check(port)
-  if (!portOccupied) {
-    return port
-  }
-
-  spinner.stop()
-
-  // Warn the user that the chosen port is occupied
-  console.warn(`Port ${port} for ${process} is already in use.`)
-  // Propose user to change port
-  prompt.start()
-
-  const { port: newPort } = await prompt.get({
-    properties: {
-      port: {
-        description: 'Hit Enter to keep it or enter a different port number',
-        type: 'number',
-        pattern: PORT_REGEX,
-        message: 'Please choose a port between 0 and 65535',
-        default: port,
-      },
-    },
-  })
-
-  if (newPort === port) {
-    // user chose not to change port
-    return newPort
-  } else {
-    // user changed port, check that it is free
-    return checkPort(newPort, process, defaultPort)
-  }
-}
