@@ -39,7 +39,7 @@ async function modifyJsonFile(
 
 /**
  * Modifies the package.json file to use the given project name
- * 
+ *
  * @param projectDir path to the project directory
  * @param options options object containing 'appName'
  */
@@ -57,7 +57,7 @@ async function modifyPackageJson(
 
 /**
  * Modifies the Expo app.json file to use the given project name and slug
- * 
+ *
  * @param projectDir path to the project directory
  * @param options options object containing 'appName'
  */
@@ -84,6 +84,20 @@ async function modifyExpoAppJson(
 }
 
 /**
+ * Modifies the README file to have "starter template" title
+ *
+ * @param projectDir path to the project directory
+ */
+async function modifyReadmeFile(projectDir: string) {
+  const readmeFile = path.join(projectDir, 'README.md')
+  await findAndReplaceInFile(
+    /^#[\w\s]+$/,
+    '# Welcome to your ElectricSQL app!',
+    readmeFile
+  )
+}
+
+/**
  * Renames the "dot_gitignore" file to ".gitignore" in the
  * specified project directory - this is required for npmjs.com
  * as they seem to remove .gitignore files from published packages
@@ -100,7 +114,7 @@ async function renameDotIgnoreFile(projectDir: string) {
 
 /**
  * Create a .env.local file with specified configuration
- * 
+ *
  * @param projectDir the directory where the file will be created
  * @param options the options used to determine env vars to include
  */
@@ -117,7 +131,6 @@ async function generateEnvFile(
     ].join('\n')
   )
 }
-
 
 /**
  * Generate a project from a template.
@@ -144,7 +157,6 @@ export async function generateProjectFromTemplate(
   return projectDir
 }
 
-
 /**
  * Modifies template files based on the provided project directory and CLI options.
  * Performs various operations like renaming configuration and README files.
@@ -157,9 +169,11 @@ export async function modifyTemplateFiles(
   options: CLIOptions
 ) {
   await renameDotIgnoreFile(projectDir)
+  await modifyReadmeFile(projectDir)
   await generateEnvFile(projectDir, options)
 
   // currently all templates have a package.json, so modify here
+  // instead of in the switch template
   await modifyPackageJson(projectDir, options)
 
   switch (options.templateType) {
@@ -182,7 +196,7 @@ export async function modifyTemplateFiles(
 
 /**
  * Asynchronously installs dependencies for a project directory.
- * 
+ *
  * @param projectDir the directory path of the project
  */
 export async function installDependencies(projectDir: string): Promise<void> {
