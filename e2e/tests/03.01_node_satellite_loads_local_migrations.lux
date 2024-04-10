@@ -20,6 +20,8 @@
     ]
     """]
 
+[invoke setup]
+
 [invoke setup_client_with_migrations 1 "electric_1" 5133 $migrations "false"]
 
 [shell satellite_1]
