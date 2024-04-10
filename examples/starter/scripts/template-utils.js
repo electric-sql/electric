@@ -13,7 +13,14 @@ import { join } from 'path'
 
 // do not copy over the following files and directories when
 // copying the template directories
-const ignoreDirs = ['node_modules', 'dist', 'generated', '.git']
+const ignoreDirs = [
+  'node_modules',
+  'dist',
+  'generated',
+  '.git',
+  'ios',
+  'android',
+]
 const ignoreFiles = ['package-lock.json']
 
 /*
@@ -37,7 +44,6 @@ async function modifyJsonFile(jsonFilePath, modify) {
   const modifiedJson = modify(parsedJson)
   await writeFile(jsonFilePath, JSON.stringify(modifiedJson, null, 2))
 }
-
 
 /**
  * Checks if a file exists
@@ -133,13 +139,22 @@ async function copyTemplateOverlayFiles(
     return packageJson
   })
 
-  // change app.json name if present (Expo only)
+  // change app.json name if present (Expo and RN only)
   const appJsonPath = join(templateTargetDir, 'app.json')
   if (await fileExists(appJsonPath)) {
     await modifyJsonFile(appJsonPath, (appJson) => {
-      appJson.expo.name = 'my-electric-app'
-      appJson.expo.slug = 'my-electric-app'
-      delete appJson.expo['owner']
+      // for Expo app.json
+      if ('expo' in appJson) {
+        appJson.expo.name = 'my-electric-app'
+        appJson.expo.slug = 'My Electric App'
+        delete appJson.expo['owner']
+      }
+
+      // for React Native app.json
+      if ('name' in appJson) {
+        appJson.name = 'MyElectricApp'
+        appJson.displayName = 'My Electric App'
+      }
       return appJson
     })
   }

@@ -9,6 +9,7 @@ import {
   generateProjectFromTemplate,
   installDependencies,
   modifyTemplateFiles,
+  regenerateReactNativePlatformProjects,
 } from './file-utils'
 import {
   checkPort,
@@ -44,7 +45,6 @@ const error = (err: string) => {
 
 try {
   let options: CLIOptions = { appName: '', ...defaultOptions }
-
 
   spinner.stop()
   options = await getCLIOptions(process.argv, defaultOptions)
@@ -84,6 +84,14 @@ try {
   spinner.start()
   try {
     await installDependencies(projectDir)
+
+    // Extra step for React Native to generate native projects
+    if (options.templateType === 'react-native') {
+      spinner.text =
+        'Generating native iOS and Android projects (may take some time)...'
+      await regenerateReactNativePlatformProjects(projectDir)
+    }
+
     spinner.stop()
     console.log(`⚡️ Your ElectricSQL app is ready at \`./${options.appName}\``)
   } catch (err) {

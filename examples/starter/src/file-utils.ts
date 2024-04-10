@@ -79,6 +79,28 @@ async function modifyExpoAppJson(
   })
 }
 
+/**
+ * Modifies the React Native app.json file to use the given project name
+ *
+ * @param projectDir path to the project directory
+ * @param options options object containing 'appName'
+ */
+async function modifyReactNativeAppJson(
+  projectDir: string,
+  options: Pick<CLIOptions, 'appName'>,
+) {
+  const expoAppJsonFile = path.join(projectDir, 'app.json')
+  await modifyJsonFile(expoAppJsonFile, (rnAppJson) => {
+    // Update the project's app.json with the new project name
+    // use capitalised for valid android naming
+    const splitCapitalisedName = options.appName
+      .split('-')
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    rnAppJson.name = splitCapitalisedName.join('')
+    rnAppJson.displayName = splitCapitalisedName.join(' ')
+    return rnAppJson
+  })
+}
 
 /**
  * Renames the "dot_gitignore" file to ".gitignore" in the
@@ -173,6 +195,10 @@ export async function modifyTemplateFiles(
     case 'expo':
       await modifyExpoAppJson(projectDir, options)
       break
+
+    case 'react-native':
+      await modifyReactNativeAppJson(projectDir, options)
+      break
   }
 }
 
@@ -191,6 +217,44 @@ export async function installDependencies(projectDir: string): Promise<void> {
       cwd: projectDir,
       shell: true,
     })
+
+    let errors: Uint8Array[] = []
+    proc.stderr.on('data', (data) => {
+      errors = errors.concat(data)
+    })
+
+    proc.on('close', async (code) => {
+      if (code === 0) {
+        res()
+      } else {
+        const errStr = Buffer.concat(errors).toString()
+        rej(errStr)
+      }
+    })
+  })
+}
+
+/**
+ * Regenerates the React Native platform projects by "ejecting"
+ * the native files from the root of the project using
+ * react-native-eject: https://www.npmjs.com/package/react-native-eject
+ * 
+ * @param projectDir the directory of the project
+ */
+export async function regenerateReactNativePlatformProjects(
+  projectDir: string
+) {
+  // recreate a react native project from scratch
+  await new Promise<void>((res, rej) => {
+    const proc = spawn(
+      `npm install -D react-native-eject && npx react-native eject`,
+      [],
+      {
+        stdio: ['ignore', 'ignore', 'pipe'],
+        cwd: projectDir,
+        shell: true,
+      },
+    )
 
     let errors: Uint8Array[] = []
     proc.stderr.on('data', (data) => {
