@@ -586,15 +586,19 @@ defmodule Electric.Postgres.Extension do
   end
 
   @last_acked_client_lsn_equery "SELECT lsn FROM #{@acked_client_lsn_table} WHERE client_id = $1"
+  @spec fetch_last_acked_client_lsn(pid(), binary()) :: {:ok, binary() | nil} | {:error, term()}
   def fetch_last_acked_client_lsn(conn, client_id) do
     case :epgsql.equery(conn, @last_acked_client_lsn_equery, [client_id]) do
       {:ok, _, [{lsn}]} ->
         # No need for a decoding step here because :epgsql.equery() uses Postgres' binary protocol, so a BYTEA value
         # is returned as a raw binary.
-        lsn
+        {:ok, lsn}
 
       {:ok, _, []} ->
-        nil
+        {:ok, nil}
+
+      {:error, _} = error ->
+        error
     end
   end
 
