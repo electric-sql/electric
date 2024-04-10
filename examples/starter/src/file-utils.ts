@@ -44,6 +44,25 @@ export async function generateProjectFromTemplate(
 }
 
 /**
+ * Modifies a JSON file with the given function
+ *
+ * NOTE: importing JSON files is an experimental feature
+ * and it's not guaranteed to work on all env implementations
+ * which is we we opt for this approach
+ *
+ * @param jsonFilePath path to the JSON file
+ * @param modify function that modifies the JSON
+ */
+async function modifyJsonFile(
+  jsonFilePath: string,
+  modify: (json: any) => any
+) {
+  const parsedJson = JSON.parse(await fs.readFile(jsonFilePath, 'utf8'))
+  const modifiedJson = modify(parsedJson)
+  await fs.writeFile(jsonFilePath, JSON.stringify(modifiedJson, null, 2))
+}
+
+/**
  * Replaces the package.json file with the given project name
  * @param projectDir path to the project directory
  */
@@ -51,24 +70,34 @@ async function replacePackageJson(
   projectDir: string,
   options: Pick<CLIOptions, 'appName'>
 ) {
-  // read package.json file and parse it as JSON
-  // we could import it but then we get a warning
-  // that importing JSON is an experimental feature
-  // we can hide that warning using the --no-warnings flag
-  // with nodeJS but the parsing of that flag
-  // leads to problems on certain env implementations
   const packageJsonFile = path.join(projectDir, 'package.json')
-  const projectPackageJson = JSON.parse(
-    await fs.readFile(packageJsonFile, 'utf8')
-  )
+  await modifyJsonFile(packageJsonFile, (packageJson) => {
+    // Update the project's package.json with the new project name
+    packageJson.name = options.appName
+    return packageJson
+  })
+}
 
-  // Update the project's package.json with the new project name
-  projectPackageJson.name = options.appName
+async function replaceExpoAppJson(
+  projectDir: string,
+  options: Pick<CLIOptions, 'appName'>
+) {
+  const expoAppJsonFile = path.join(projectDir, 'app.json')
+  await modifyJsonFile(expoAppJsonFile, (expoAppJson) => {
+    // Update the project's app.json with the new project name
+    expoAppJson.name = options.appName
 
-  await fs.writeFile(
-    packageJsonFile,
-    JSON.stringify(projectPackageJson, null, 2)
-  )
+    // Update the slug, making sure it's in the right format
+    expoAppJson.slug = options.appName
+      .toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/[^\w-]+/g, '')
+
+    // Remove any "owner" property
+    delete expoAppJson.owner
+
+    return expoAppJson
+  })
 }
 
 async function renameDotIgnoreFile(projectDir: string) {
@@ -115,6 +144,8 @@ export async function modifyTemplateFiles(
       break
 
     case 'expo':
+      await replaceExpoAppJson(projectDir, options)
+      break
   }
 }
 
