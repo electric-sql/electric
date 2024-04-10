@@ -1,6 +1,8 @@
 defmodule Electric.Replication.PostgresConnectorMng do
   use GenServer
 
+  import Electric.Postgres.Dialect.Postgresql, only: [quote_ident: 1]
+
   alias Electric.Postgres.Extension
   alias Electric.Replication.Postgres.Client
   alias Electric.Replication.PostgresConnector
@@ -220,9 +222,17 @@ defmodule Electric.Replication.PostgresConnectorMng do
     end
   end
 
-  defp start_subscription(%State{origin: origin, conn_opts: conn_opts, repl_opts: repl_opts}) do
-    Client.with_conn(conn_opts, fn conn ->
-      Client.start_subscription(conn, repl_opts.subscription)
+  defp start_subscription(%State{origin: origin, repl_opts: repl_opts}) do
+    subs_name = quote_ident(repl_opts.subscription)
+
+    Client.with_pool(origin, fn ->
+      with {[], []} <- Client.query!("ALTER SUBSCRIPTION #{subs_name} ENABLE"),
+           {[], []} <-
+             Client.query!(
+               "ALTER SUBSCRIPTION #{subs_name} REFRESH PUBLICATION WITH (copy_data = false)"
+             ) do
+        :ok
+      end
     end)
     |> case do
       :ok ->
@@ -235,19 +245,21 @@ defmodule Electric.Replication.PostgresConnectorMng do
     end
   end
 
-  defp stop_subscription(%State{origin: origin, conn_opts: conn_opts, repl_opts: repl_opts}) do
-    Client.with_conn(conn_opts, fn conn ->
-      Client.stop_subscription(conn, repl_opts.subscription)
-    end)
-    |> case do
-      :ok ->
-        Logger.notice("subscription stopped for #{origin}")
-        :ok
+  defp stop_subscription(%State{origin: origin, repl_opts: repl_opts}) do
+    subs_name = quote_ident(repl_opts.subscription)
 
-      {:error, {:error, :error, code, _reason, description, _c_stacktrace}} ->
-        Logger.warning("couldn't stop postgres subscription: #{description} (code: #{code})")
-        :ok
-    end
+    Client.with_pool(origin, fn ->
+      Client.query!("ALTER SUBSCRIPTION #{subs_name} DISABLE")
+      |> case do
+        :ok ->
+          Logger.notice("subscription stopped for #{origin}")
+          :ok
+
+        {:error, {:error, :error, code, _reason, description, _c_stacktrace}} ->
+          Logger.warning("couldn't stop postgres subscription: #{description} (code: #{code})")
+          :ok
+      end
+    end)
   end
 
   def initialize_postgres(%State{origin: origin, conn_opts: conn_opts} = state) do

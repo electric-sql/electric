@@ -130,24 +130,6 @@ defmodule Electric.Replication.Postgres.Client do
     {:ok, type_data}
   end
 
-  def start_subscription(conn, name) do
-    with {:ok, _, _} <- squery(conn, ~s|ALTER SUBSCRIPTION "#{name}" ENABLE|),
-         {:ok, _, _} <-
-           squery(
-             conn,
-             ~s|ALTER SUBSCRIPTION "#{name}" REFRESH PUBLICATION WITH (copy_data = false)|
-           ) do
-      :ok
-    end
-  end
-
-  @spec stop_subscription(connection, String.t()) :: :ok
-  def stop_subscription(conn, name) do
-    with {:ok, _, _} <- squery(conn, ~s|ALTER SUBSCRIPTION "#{name}" DISABLE|) do
-      :ok
-    end
-  end
-
   defp squery(conn, query) do
     Logger.debug("#{__MODULE__}: #{query}")
     :epgsql.squery(conn, query)
