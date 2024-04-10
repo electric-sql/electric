@@ -123,6 +123,10 @@ export class EventNotifier implements Notifier {
     changes: Change[],
     origin: ChangeOrigin
   ): void {
+    if (!this._hasDbName(dbName) || !changes.length) {
+      return
+    }
+
     const tables = [
       ...new Set(
         changes.map((e) => {
@@ -132,9 +136,6 @@ export class EventNotifier implements Notifier {
     ]
 
     Log.info(`actually changed notifier. Changed tables: [${tables}]`)
-    if (!this._hasDbName(dbName)) {
-      return
-    }
 
     this._emitActualChange(dbName, changes, origin)
   }
