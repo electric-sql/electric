@@ -344,17 +344,27 @@ defmodule Electric.Satellite.WebsocketServer do
       _pid -> Process.monitor(pid)
     end
 
-    lsn = fetch_last_acked_client_lsn(state) || ""
+    case fetch_last_acked_client_lsn(state) do
+      {:ok, lsn} ->
+        lsn = lsn || ""
 
-    {msgs, state} =
-      case in_rep.status do
-        :requested -> {[], state}
-        :active -> Protocol.restart_replication_from_client(lsn, state)
-        st when st in [nil, :paused] -> Protocol.start_replication_from_client(lsn, state)
-      end
+        {msgs, state} =
+          case in_rep.status do
+            :requested -> {[], state}
+            :active -> Protocol.restart_replication_from_client(lsn, state)
+            st when st in [nil, :paused] -> Protocol.start_replication_from_client(lsn, state)
+          end
 
-    in_rep = %InRep{in_rep | stage_sub: sub_tag, pid: pid, status: :requested}
-    push({msgs, %State{state | in_rep: in_rep}})
+        in_rep = %InRep{in_rep | stage_sub: sub_tag, pid: pid, status: :requested}
+        push({msgs, %State{state | in_rep: in_rep}})
+
+      error ->
+        Logger.error(
+          "Fetching last written client LSN from Postgres failed. Closing the connection. Error: #{inspect(error)}"
+        )
+
+        push({:error, [%SatErrorResp{message: "Postgres is unavailable"}], state})
+    end
   end
 
   defp handle_consumer_msg(
@@ -429,7 +439,7 @@ defmodule Electric.Satellite.WebsocketServer do
       end
     end
 
-    defp fetch_last_acked_client_lsn(_state), do: nil
+    defp fetch_last_acked_client_lsn(_state), do: {:ok, nil}
   else
     defp maybe_pause(_), do: :ok
 
