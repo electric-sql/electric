@@ -10,6 +10,7 @@ import ora from 'ora'
 import portUsed from 'tcp-port-used'
 import prompt from 'prompt'
 import { TemplateType, getTemplateDirectory, validTemplates } from './templates'
+import { findAndReplaceInFile } from './file-utils'
 
 // Regex to check that a number is between 0 and 65535
 const portRegex =
@@ -230,19 +231,6 @@ proc.on('close', async (code) => {
   )
 })
 
-/*
- * Replaces the first occurence of `find` by `replace` in the file `file`.
- * If `find` is a regular expression that sets the `g` flag, then it replaces all occurences.
- */
-async function findAndReplaceInFile(
-  find: string | RegExp,
-  replace: string,
-  file: string
-) {
-  const content = await fs.readFile(file, 'utf8')
-  const replacedContent = content.replace(find, replace)
-  await fs.writeFile(file, replacedContent)
-}
 
 /**
  * Checks if the given port is open.
