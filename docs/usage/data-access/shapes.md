@@ -281,10 +281,10 @@ For many applications you can simply define the data you want to sync up-front, 
 
 Shape-based sync is under active development, and we're aware of some issues with it. We're working on fixing the bugs and lifting limitations as we go.
 
-- `.sync` method has a wider type signature in TypeScript than what's really supported. In particular, `limit`, `sort` and other keywords under `include` should not be there.
+- [`.sync`](../../api/clients/typescript.md#sync) method has a wider type signature in TypeScript than what's really supported. In particular, `limit`, `sort` and other keywords under `include` should not be there.
 - `DELETE` of the top row on the client without having synced all the children may not result in a `DELETE` on the server and the row will be restored
 - Recursive and mutually recursive tables are not supported at all for now. A foreign key loop will prevent the shape subscription from being established.
-- Shape unsubscribe is not available, which means any `.sync` method (in development in particular) is going to be statefully persisted regardless of code changes.
+- Shape unsubscribe is not available, which means any shape subscription established by calling `.sync()` (in development in particular) is going to be statefully persisted regardless of code changes.
 
 ### Foreign key and query consistency
 
