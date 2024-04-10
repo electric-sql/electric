@@ -13,6 +13,14 @@ export interface CLIOptions {
 
 export type DefaultCLIOptions = Omit<CLIOptions, 'appName'>
 
+
+// The default options for the CLI
+export const defaultOptions: DefaultCLIOptions = {
+  templateType: 'react',
+  electricPort: 5133,
+  electricProxyPort: 65432,
+} as const
+
 function parseCLIOptions(
   args: string[],
   defaults: DefaultCLIOptions

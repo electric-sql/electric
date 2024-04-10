@@ -1,10 +1,9 @@
-import { CLIUserError } from "./error"
-import { TemplateType, validTemplates } from "./templates"
+import { CLIUserError } from './error'
+import { TemplateType, validTemplates } from './templates'
 
 // Regex to check that a number is between 0 and 65535
 export const PORT_REGEX =
   /^([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$/
-
 
 // Validate the project name to follow
 // the restrictions for Docker compose project names.
@@ -26,7 +25,9 @@ export function parseAppName(appName: string): string {
 
 export function parsePort(port: string): number {
   if (!PORT_REGEX.test(port)) {
-    throw new CLIUserError(`Invalid port '${port}. Port should be between 0 and 65535.'`)
+    throw new CLIUserError(
+      `Invalid port '${port}. Port should be between 0 and 65535.'`
+    )
   }
   return Number.parseInt(port)
 }
