@@ -68,34 +68,17 @@ async function modifyExpoAppJson(
   const expoAppJsonFile = path.join(projectDir, 'app.json')
   await modifyJsonFile(expoAppJsonFile, (expoAppJson) => {
     // Update the project's app.json with the new project name
-    expoAppJson.name = options.appName
+    expoAppJson.expo.name = options.appName
 
     // Update the slug, making sure it's in the right format
-    expoAppJson.slug = options.appName
+    expoAppJson.expo.slug = options.appName
       .toLowerCase()
       .replace(/\s+/g, '-')
       .replace(/[^\w-]+/g, '')
-
-    // Remove any "owner" property
-    delete expoAppJson.owner
-
     return expoAppJson
   })
 }
 
-/**
- * Modifies the README file to have "starter template" title
- *
- * @param projectDir path to the project directory
- */
-async function modifyReadmeFile(projectDir: string) {
-  const readmeFile = path.join(projectDir, 'README.md')
-  await findAndReplaceInFile(
-    /^#[\w\s]+$/,
-    '# Welcome to your ElectricSQL app!',
-    readmeFile,
-  )
-}
 
 /**
  * Renames the "dot_gitignore" file to ".gitignore" in the
@@ -169,7 +152,6 @@ export async function modifyTemplateFiles(
   options: CLIOptions,
 ) {
   await renameDotIgnoreFile(projectDir)
-  await modifyReadmeFile(projectDir)
   await generateEnvFile(projectDir, options)
 
   // currently all templates have a package.json, so modify here

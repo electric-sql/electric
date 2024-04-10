@@ -1,6 +1,7 @@
 import {
   readdir,
   stat,
+  access,
   copyFile,
   mkdir,
   rename,
@@ -14,6 +15,47 @@ import { join } from 'path'
 // copying the template directories
 const ignoreDirs = ['node_modules', 'dist', 'generated', '.git']
 const ignoreFiles = ['package-lock.json']
+
+/*
+ * Replaces the first occurence of `find` by `replace` in the file `file`.
+ * If `find` is a regular expression that sets the `g` flag, then it replaces all occurences.
+ */
+async function findAndReplaceInFile(find, replace, file) {
+  const content = await readFile(file, 'utf8')
+  const replacedContent = content.replace(find, replace)
+  await writeFile(file, replacedContent)
+}
+
+/**
+ * Modifies a JSON file with the given function
+ *
+ * @param {string} jsonFilePath path to the JSON file
+ * @param {(any) => any} modify function that modifies the JSON
+ */
+async function modifyJsonFile(jsonFilePath, modify) {
+  const parsedJson = JSON.parse(await readFile(jsonFilePath, 'utf8'))
+  const modifiedJson = modify(parsedJson)
+  await writeFile(jsonFilePath, JSON.stringify(modifiedJson, null, 2))
+}
+
+
+/**
+ * Checks if a file exists
+ *
+ * @param {string} filePath
+ * @returns {Promise<boolean>}
+ */
+async function fileExists(filePath) {
+  try {
+    await access(filePath)
+    return true
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      return false
+    }
+    throw err
+  }
+}
 
 async function copyFiles(sourceDir, destinationDir) {
   try {
@@ -74,15 +116,33 @@ async function copyTemplateOverlayFiles(
     join(templateTargetDir, 'dot_gitignore'),
   )
 
-  // change package name and version
-  const packageJsonPath = join(templateTargetDir, 'package.json')
-  const packageJson = JSON.parse(
-    await readFile(packageJsonPath, { encoding: 'utf-8' }),
+  // modify README file to have "starter template" title
+  const readmeFile = join(templateTargetDir, 'README.md')
+  await findAndReplaceInFile(
+    /\n# (.+)\n/,
+    '\n# Welcome to your ElectricSQL app!\n',
+    readmeFile,
   )
-  packageJson.name = 'my-electric-app'
-  packageJson.version = '0.1.0'
-  delete packageJson['license']
-  await writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2))
+
+  // change package.json name and version
+  const packageJsonPath = join(templateTargetDir, 'package.json')
+  await modifyJsonFile(packageJsonPath, (packageJson) => {
+    packageJson.name = 'my-electric-app'
+    packageJson.version = '0.1.0'
+    delete packageJson['license']
+    return packageJson
+  })
+
+  // change app.json name if present (Expo only)
+  const appJsonPath = join(templateTargetDir, 'app.json')
+  if (await fileExists(appJsonPath)) {
+    await modifyJsonFile(appJsonPath, (appJson) => {
+      appJson.expo.name = 'my-electric-app'
+      appJson.expo.slug = 'my-electric-app'
+      delete appJson.expo['owner']
+      return appJson
+    })
+  }
 }
 
 export { copyTemplateOverlayFiles }
