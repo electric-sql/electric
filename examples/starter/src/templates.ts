@@ -1,4 +1,4 @@
-const validTemplates = ['react', 'vue'] as const
+const validTemplates = ['react', 'vue', 'expo'] as const
 
 type TemplateType = (typeof validTemplates)[number]
 

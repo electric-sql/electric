@@ -20,7 +20,7 @@ You can optionally pass the following arguments to the `create-electric-app` com
 
 | Argument              | Value                   | Default   | Description
 |-----------------------|-------------------------|-----------|--------------
-| `--template`          | `'react' \| 'vue'`      | `'react'` | Starter template to use
+| `--template`          | `'react' \| 'vue' | 'expo'`      | `'react'` | Starter template to use
 | `--electricPort`      | `0 - 65535`             | `5133`    | Port on which to run Electric
 | `--electricProxyPort` | `0 - 65535`             | `65432`   | Port on which to run Electric's DB proxy
 
