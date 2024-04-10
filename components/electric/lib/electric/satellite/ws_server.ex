@@ -439,7 +439,7 @@ defmodule Electric.Satellite.WebsocketServer do
       end
     end
 
-    defp fetch_last_acked_client_lsn(_state), do: nil
+    defp fetch_last_acked_client_lsn(_state), do: {:ok, nil}
   else
     defp maybe_pause(_), do: :ok
 
