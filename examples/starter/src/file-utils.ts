@@ -8,7 +8,7 @@ import { getTemplateDirectory } from './templates'
  * Replaces the first occurence of `find` by `replace` in the file `file`.
  * If `find` is a regular expression that sets the `g` flag, then it replaces all occurences.
  */
-export async function findAndReplaceInFile(
+async function findAndReplaceInFile(
   find: string | RegExp,
   replace: string,
   file: string
@@ -16,31 +16,6 @@ export async function findAndReplaceInFile(
   const content = await fs.readFile(file, 'utf8')
   const replacedContent = content.replace(find, replace)
   await fs.writeFile(file, replacedContent)
-}
-
-/**
- * Generate a project from a template.
- *
- * @param currentDir - the current directory
- * @param templatesParentDir - the parent directory for templates
- * @param options - options object containing 'appName' and 'templateType'
- * @return the path to the generated project
- */
-export async function generateProjectFromTemplate(
-  currentDir: string,
-  templatesParentDir: string,
-  options: Pick<CLIOptions, 'appName' | 'templateType'>
-): Promise<string> {
-  const projectDir = path.resolve(currentDir, options.appName)
-  await fs.mkdir(projectDir, { recursive: true })
-
-  // Copy the app template to the project's directory
-  const templateDir = path.join(
-    templatesParentDir,
-    getTemplateDirectory(options.templateType)
-  )
-  await fs.cp(templateDir, projectDir, { recursive: true })
-  return projectDir
 }
 
 /**
@@ -63,12 +38,12 @@ async function modifyJsonFile(
 }
 
 /**
- * Replaces the package.json file with the given project name
+ * Modifies the package.json file to use the given project name
  * 
  * @param projectDir path to the project directory
  * @param options options object containing 'appName'
  */
-async function replacePackageJson(
+async function modifyPackageJson(
   projectDir: string,
   options: Pick<CLIOptions, 'appName'>
 ) {
@@ -81,12 +56,12 @@ async function replacePackageJson(
 }
 
 /**
- * Replaces the Expo app.json file with the given project name and slug
+ * Modifies the Expo app.json file to use the given project name and slug
  * 
  * @param projectDir path to the project directory
  * @param options options object containing 'appName'
  */
-async function replaceExpoAppJson(
+async function modifyExpoAppJson(
   projectDir: string,
   options: Pick<CLIOptions, 'appName'>
 ) {
@@ -145,6 +120,32 @@ async function generateEnvFile(
 
 
 /**
+ * Generate a project from a template.
+ *
+ * @param currentDir - the current directory
+ * @param templatesParentDir - the parent directory for templates
+ * @param options - options object containing 'appName' and 'templateType'
+ * @return the path to the generated project
+ */
+export async function generateProjectFromTemplate(
+  currentDir: string,
+  templatesParentDir: string,
+  options: Pick<CLIOptions, 'appName' | 'templateType'>
+): Promise<string> {
+  const projectDir = path.resolve(currentDir, options.appName)
+  await fs.mkdir(projectDir, { recursive: true })
+
+  // Copy the app template to the project's directory
+  const templateDir = path.join(
+    templatesParentDir,
+    getTemplateDirectory(options.templateType)
+  )
+  await fs.cp(templateDir, projectDir, { recursive: true })
+  return projectDir
+}
+
+
+/**
  * Modifies template files based on the provided project directory and CLI options.
  * Performs various operations like renaming configuration and README files.
  *
@@ -159,7 +160,7 @@ export async function modifyTemplateFiles(
   await generateEnvFile(projectDir, options)
 
   // currently all templates have a package.json, so modify here
-  await replacePackageJson(projectDir, options)
+  await modifyPackageJson(projectDir, options)
 
   switch (options.templateType) {
     case 'react':
@@ -174,7 +175,7 @@ export async function modifyTemplateFiles(
       break
 
     case 'expo':
-      await replaceExpoAppJson(projectDir, options)
+      await modifyExpoAppJson(projectDir, options)
       break
   }
 }
