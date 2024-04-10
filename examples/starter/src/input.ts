@@ -1,5 +1,12 @@
 import { CLIUserError } from './error'
-import { APP_NAME_REGEX, INVALID_APP_NAME_MESSAGE, parseAppName, parsePort, parseTemplateType, PORT_REGEX } from './parse'
+import {
+  APP_NAME_REGEX,
+  INVALID_APP_NAME_MESSAGE,
+  parseAppName,
+  parsePort,
+  parseTemplateType,
+  PORT_REGEX,
+} from './parse'
 import { TemplateType, validTemplates } from './templates'
 import prompt from 'prompt'
 import portUsed from 'tcp-port-used'
@@ -13,7 +20,6 @@ export interface CLIOptions {
 
 export type DefaultCLIOptions = Omit<CLIOptions, 'appName'>
 
-
 // The default options for the CLI
 export const defaultOptions: DefaultCLIOptions = {
   templateType: 'react',
@@ -23,7 +29,7 @@ export const defaultOptions: DefaultCLIOptions = {
 
 function parseCLIOptions(
   args: string[],
-  defaults: DefaultCLIOptions
+  defaults: DefaultCLIOptions,
 ): CLIOptions {
   // start by parsing the app name
   const appName = parseAppName(args[2])
@@ -104,8 +110,10 @@ async function promptForCLIOptions(defaults: DefaultCLIOptions) {
   return userInput
 }
 
-
-export async function getCLIOptions(args: string[], defaultOptions: DefaultCLIOptions): Promise<CLIOptions> {
+export async function getCLIOptions(
+  args: string[],
+  defaultOptions: DefaultCLIOptions,
+): Promise<CLIOptions> {
   if (args.length < 3) {
     return await promptForCLIOptions(defaultOptions)
   }
@@ -123,7 +131,7 @@ export async function checkPort(
   oldPort: number,
   process: string,
   defaultPort: number,
-  onPortOccupied?: (port: number) => void
+  onPortOccupied?: (port: number) => void,
 ): Promise<number> {
   const portOccupied = await portUsed.check(oldPort)
   if (!portOccupied) {

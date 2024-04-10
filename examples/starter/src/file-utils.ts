@@ -11,7 +11,7 @@ import { getTemplateDirectory } from './templates'
 async function findAndReplaceInFile(
   find: string | RegExp,
   replace: string,
-  file: string
+  file: string,
 ) {
   const content = await fs.readFile(file, 'utf8')
   const replacedContent = content.replace(find, replace)
@@ -30,7 +30,7 @@ async function findAndReplaceInFile(
  */
 async function modifyJsonFile(
   jsonFilePath: string,
-  modify: (json: any) => any
+  modify: (json: any) => any,
 ) {
   const parsedJson = JSON.parse(await fs.readFile(jsonFilePath, 'utf8'))
   const modifiedJson = modify(parsedJson)
@@ -45,7 +45,7 @@ async function modifyJsonFile(
  */
 async function modifyPackageJson(
   projectDir: string,
-  options: Pick<CLIOptions, 'appName'>
+  options: Pick<CLIOptions, 'appName'>,
 ) {
   const packageJsonFile = path.join(projectDir, 'package.json')
   await modifyJsonFile(packageJsonFile, (packageJson) => {
@@ -63,7 +63,7 @@ async function modifyPackageJson(
  */
 async function modifyExpoAppJson(
   projectDir: string,
-  options: Pick<CLIOptions, 'appName'>
+  options: Pick<CLIOptions, 'appName'>,
 ) {
   const expoAppJsonFile = path.join(projectDir, 'app.json')
   await modifyJsonFile(expoAppJsonFile, (expoAppJson) => {
@@ -93,7 +93,7 @@ async function modifyReadmeFile(projectDir: string) {
   await findAndReplaceInFile(
     /^#[\w\s]+$/,
     '# Welcome to your ElectricSQL app!',
-    readmeFile
+    readmeFile,
   )
 }
 
@@ -108,7 +108,7 @@ async function modifyReadmeFile(projectDir: string) {
 async function renameDotIgnoreFile(projectDir: string) {
   await fs.rename(
     path.join(projectDir, 'dot_gitignore'),
-    path.join(projectDir, '.gitignore')
+    path.join(projectDir, '.gitignore'),
   )
 }
 
@@ -120,7 +120,7 @@ async function renameDotIgnoreFile(projectDir: string) {
  */
 async function generateEnvFile(
   projectDir: string,
-  options: Pick<CLIOptions, 'electricPort' | 'electricProxyPort'>
+  options: Pick<CLIOptions, 'electricPort' | 'electricProxyPort'>,
 ) {
   // Create a .env.local file with specified or default options
   await fs.writeFile(
@@ -128,7 +128,7 @@ async function generateEnvFile(
     [
       `ELECTRIC_PORT=${options.electricPort}`,
       `ELECTRIC_PROXY_PORT=${options.electricProxyPort}`,
-    ].join('\n')
+    ].join('\n'),
   )
 }
 
@@ -143,7 +143,7 @@ async function generateEnvFile(
 export async function generateProjectFromTemplate(
   currentDir: string,
   templatesParentDir: string,
-  options: Pick<CLIOptions, 'appName' | 'templateType'>
+  options: Pick<CLIOptions, 'appName' | 'templateType'>,
 ): Promise<string> {
   const projectDir = path.resolve(currentDir, options.appName)
   await fs.mkdir(projectDir, { recursive: true })
@@ -151,7 +151,7 @@ export async function generateProjectFromTemplate(
   // Copy the app template to the project's directory
   const templateDir = path.join(
     templatesParentDir,
-    getTemplateDirectory(options.templateType)
+    getTemplateDirectory(options.templateType),
   )
   await fs.cp(templateDir, projectDir, { recursive: true })
   return projectDir
@@ -166,7 +166,7 @@ export async function generateProjectFromTemplate(
  */
 export async function modifyTemplateFiles(
   projectDir: string,
-  options: CLIOptions
+  options: CLIOptions,
 ) {
   await renameDotIgnoreFile(projectDir)
   await modifyReadmeFile(projectDir)
@@ -184,7 +184,7 @@ export async function modifyTemplateFiles(
       await findAndReplaceInFile(
         'Web Example - ElectricSQL',
         options.appName,
-        indexFile
+        indexFile,
       )
       break
 

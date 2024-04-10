@@ -26,7 +26,7 @@ export function parseAppName(appName: string): string {
 export function parsePort(port: string): number {
   if (!PORT_REGEX.test(port)) {
     throw new CLIUserError(
-      `Invalid port '${port}. Port should be between 0 and 65535.'`
+      `Invalid port '${port}. Port should be between 0 and 65535.'`,
     )
   }
   return Number.parseInt(port)
@@ -36,7 +36,7 @@ export function parseTemplateType(templateType: string): TemplateType {
   if (!(validTemplates as unknown as string[]).includes(templateType)) {
     throw new CLIUserError(
       `Invalid template type '${templateType}'. ` +
-        `Must be one of: ${validTemplates.join(', ')}`
+        `Must be one of: ${validTemplates.join(', ')}`,
     )
   }
   return templateType as TemplateType

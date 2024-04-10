@@ -54,7 +54,7 @@ async function copyFiles(sourceDir, destinationDir) {
 async function copyTemplateOverlayFiles(
   templateSourceDir,
   templateTargetDir,
-  templateOverlayDir
+  templateOverlayDir,
 ) {
   try {
     await rm(templateTargetDir, { recursive: true })
@@ -71,13 +71,13 @@ async function copyTemplateOverlayFiles(
   // Hance this renaming operation and a reverse operation in src/index.ts.
   await rename(
     join(templateTargetDir, '.gitignore'),
-    join(templateTargetDir, 'dot_gitignore')
+    join(templateTargetDir, 'dot_gitignore'),
   )
 
   // change package name and version
   const packageJsonPath = join(templateTargetDir, 'package.json')
   const packageJson = JSON.parse(
-    await readFile(packageJsonPath, { encoding: 'utf-8' })
+    await readFile(packageJsonPath, { encoding: 'utf-8' }),
   )
   packageJson.name = 'my-electric-app'
   packageJson.version = '0.1.0'
