@@ -45,12 +45,12 @@ const error = (err: string) => {
 try {
   let options: CLIOptions = { appName: '', ...defaultOptions }
 
-  spinner.text = 'Validating app name'
+
   spinner.stop()
   options = await getCLIOptions(process.argv, defaultOptions)
 
-  spinner.start()
   spinner.text = 'Ensuring the necessary ports are free'
+  spinner.start()
   options.electricPort = await checkPort(
     options.electricPort,
     'Electric',

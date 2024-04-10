@@ -72,7 +72,9 @@ function parseCLIOptions(
   return options
 }
 
-async function promptForCLIOptions(defaults: DefaultCLIOptions) {
+async function promptForCLIOptions(
+  defaults: DefaultCLIOptions,
+): Promise<CLIOptions> {
   prompt.start()
   const userInput = (await prompt.get({
     properties: {
@@ -105,9 +107,19 @@ async function promptForCLIOptions(defaults: DefaultCLIOptions) {
         default: defaults.electricProxyPort,
       },
     },
-  })) as CLIOptions
+  })) as {
+    appName: string
+    template: string
+    electricPort: string
+    electricProxyPort: string
+  }
 
-  return userInput
+  return {
+    appName: parseAppName(userInput.appName),
+    templateType: parseTemplateType(userInput.template),
+    electricPort: parsePort(userInput.electricPort),
+    electricProxyPort: parsePort(userInput.electricProxyPort),
+  }
 }
 
 export async function getCLIOptions(
