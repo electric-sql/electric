@@ -64,7 +64,9 @@ async function modifyJsonFile(
 
 /**
  * Replaces the package.json file with the given project name
+ * 
  * @param projectDir path to the project directory
+ * @param options options object containing 'appName'
  */
 async function replacePackageJson(
   projectDir: string,
@@ -78,6 +80,12 @@ async function replacePackageJson(
   })
 }
 
+/**
+ * Replaces the Expo app.json file with the given project name and slug
+ * 
+ * @param projectDir path to the project directory
+ * @param options options object containing 'appName'
+ */
 async function replaceExpoAppJson(
   projectDir: string,
   options: Pick<CLIOptions, 'appName'>
@@ -100,6 +108,14 @@ async function replaceExpoAppJson(
   })
 }
 
+/**
+ * Renames the "dot_gitignore" file to ".gitignore" in the
+ * specified project directory - this is required for npmjs.com
+ * as they seem to remove .gitignore files from published packages
+ * so we rename it to dot_gitignore and then rename it back
+ *
+ * @param projectDir the directory path where the files are located.
+ */
 async function renameDotIgnoreFile(projectDir: string) {
   await fs.rename(
     path.join(projectDir, 'dot_gitignore'),
@@ -107,6 +123,12 @@ async function renameDotIgnoreFile(projectDir: string) {
   )
 }
 
+/**
+ * Create a .env.local file with specified configuration
+ * 
+ * @param projectDir the directory where the file will be created
+ * @param options the options used to determine env vars to include
+ */
 async function generateEnvFile(
   projectDir: string,
   options: Pick<CLIOptions, 'electricPort' | 'electricProxyPort'>
@@ -121,6 +143,14 @@ async function generateEnvFile(
   )
 }
 
+
+/**
+ * Modifies template files based on the provided project directory and CLI options.
+ * Performs various operations like renaming configuration and README files.
+ *
+ * @param projectDir the directory of the project
+ * @param options the options for the command-line interface
+ */
 export async function modifyTemplateFiles(
   projectDir: string,
   options: CLIOptions
@@ -151,6 +181,7 @@ export async function modifyTemplateFiles(
 
 /**
  * Asynchronously installs dependencies for a project directory.
+ * 
  * @param projectDir the directory path of the project
  */
 export async function installDependencies(projectDir: string): Promise<void> {
