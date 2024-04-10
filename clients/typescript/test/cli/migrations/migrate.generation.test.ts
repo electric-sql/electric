@@ -178,7 +178,7 @@ test.after.always(() => {
   }
 })
 
-test('should generate valid TS client for simple schema', async (t) => {
+test.serial('should generate valid TS client for simple schema', async (t) => {
   const clientPath = await generateClientFromPrismaSchema(
     simpleSchema,
     'simple'
@@ -186,18 +186,24 @@ test('should generate valid TS client for simple schema', async (t) => {
   t.true(checkGeneratedClientCompiles(clientPath))
 })
 
-test('should generate valid TS client for relational schema', async (t) => {
-  const clientPath = await generateClientFromPrismaSchema(
-    relationalSchema,
-    'relational'
-  )
-  t.true(checkGeneratedClientCompiles(clientPath))
-})
+test.serial(
+  'should generate valid TS client for relational schema',
+  async (t) => {
+    const clientPath = await generateClientFromPrismaSchema(
+      relationalSchema,
+      'relational'
+    )
+    t.true(checkGeneratedClientCompiles(clientPath))
+  }
+)
 
-test('should generate valid TS client for schema with all data types', async (t) => {
-  const clientPath = await generateClientFromPrismaSchema(
-    dataTypesSchema,
-    'datatypes'
-  )
-  t.true(checkGeneratedClientCompiles(clientPath))
-})
+test.serial(
+  'should generate valid TS client for schema with all data types',
+  async (t) => {
+    const clientPath = await generateClientFromPrismaSchema(
+      dataTypesSchema,
+      'datatypes'
+    )
+    t.true(checkGeneratedClientCompiles(clientPath))
+  }
+)
