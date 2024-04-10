@@ -62,7 +62,11 @@ export const electrify_db = async (
     debug: true,
   }
   console.log(`(in electrify_db) config: ${JSON.stringify(config)}`)
-  schema.migrations = migrations
+  if (process.env.DIALECT === 'Postgres') {
+    schema.pgMigrations = migrations
+  } else {
+    schema.migrations = migrations
+  }
   const result = await electrify(db, schema, config)
   const token = await mockSecureAuthToken(exp)
 
@@ -295,7 +299,7 @@ export const write_float = (electric: Electric, id: string, f4: number, f8: numb
 
 export const get_json_raw = async (electric: Electric, id: string) => {
   const res = await electric.db.rawQuery({
-    sql: `SELECT js FROM jsons WHERE id = ?;`,
+    sql: `SELECT js FROM jsons WHERE id = ${builder.makePositionalParam(1)};`,
     args: [id]
   }) as unknown as Array<{ js: string }>
   return res[0]?.js
@@ -303,7 +307,7 @@ export const get_json_raw = async (electric: Electric, id: string) => {
 
 export const get_jsonb_raw = async (electric: Electric, id: string) => {
   const res = await electric.db.rawQuery({
-    sql: `SELECT jsb FROM jsons WHERE id = ${builder.paramSign};`,
+    sql: `SELECT jsb FROM jsons WHERE id = ${builder.makePositionalParam(1)};`,
     args: [id]
   }) as unknown as Array<{ jsb: string }>
   return res[0]?.jsb
@@ -406,7 +410,7 @@ export const insert_extended_into = async (electric: Electric, table: string, va
   }
   const columns = Object.keys(values)
   const columnNames = columns.join(", ")
-  const placeHolders = Array(columns.length).fill("?")
+  const placeHolders = columns.map((_, i) => builder.makePositionalParam(i+1))
   const args = Object.values(values)
 
   await electric.db.unsafeExec({
