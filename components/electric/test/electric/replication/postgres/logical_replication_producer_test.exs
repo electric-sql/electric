@@ -18,13 +18,10 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
   setup_with_mocks([
     {Client, [:passthrough],
      [
-       with_conn: fn _, fun -> fun.(:conn) end,
        connect: fn _ -> {:ok, :conn} end,
        start_replication: fn :conn, _, _, _, _ -> :ok end,
        create_main_slot: fn :conn, name -> {:ok, name} end,
        create_temporary_slot: fn :conn, _main_name, tmp_name -> {:ok, tmp_name, %Lsn{}} end,
-       current_lsn: fn :conn -> {:ok, %Lsn{}} end,
-       advance_replication_slot: fn _, _, _ -> :ok end,
        set_display_settings_for_replication: fn _ -> :ok end,
        get_server_versions: fn :conn -> {:ok, {"", "", ""}} end
      ]},
