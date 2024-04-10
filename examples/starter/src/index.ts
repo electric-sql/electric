@@ -9,12 +9,16 @@ import path from 'path'
 import ora from 'ora'
 import portUsed from 'tcp-port-used'
 import prompt from 'prompt'
-import { TemplateType, getTemplateDirectory, validTemplates } from './templates'
+import { getTemplateDirectory } from './templates'
 import { findAndReplaceInFile, replacePackageJson } from './file-utils'
+import { PORT_REGEX } from './parse'
+import { CLIOptions, DefaultCLIOptions, getCLIOptions } from './input'
 
-// Regex to check that a number is between 0 and 65535
-const portRegex =
-  /^([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$/
+const defaultOptions: DefaultCLIOptions = {
+  templateType: 'react',
+  electricPort: 5133,
+  electricProxyPort: 65432,
+} as const
 
 const spinner = ora('Validating arguments').start()
 
@@ -29,128 +33,34 @@ const error = (err: string) => {
   process.exit(1)
 }
 
-const defaultTemplateType = 'react'
-const defaultElectricPort = 5133
-const defaultElectricProxyPort = 65432
-
-let projectName = process.argv[2]
-let args = process.argv.slice(3)
-let templateType: TemplateType = defaultTemplateType
-let electricPort = defaultElectricPort
-let electricProxyPort = defaultElectricProxyPort
-
-// Validate the provided command line arguments
-while (args.length > 0) {
-  // There are arguments to parse
-  const flag = args[0]
-  const value = args[1]
-
-  args = args.slice(2)
-
-  const checkValue = () => {
-    if (typeof value === 'undefined') {
-      error(`Missing value for option '${flag}'.`)
-    }
-  }
-
-  switch (flag) {
-    case '--template':
-      checkValue()
-      templateType = parseTemplateType(value)
-      break
-    case '--electric-port':
-      checkValue()
-      electricPort = parsePort(value)
-      break
-    case '--electric-proxy-port':
-      checkValue()
-      electricProxyPort = parsePort(value)
-      break
-    default:
-      error(`Unrecognized option: '${flag}'.`)
-  }
-}
-
 spinner.text = 'Validating app name'
-const appNameRegex = /^[a-z0-9]+[a-z0-9-_]*$/
-const invalidAppNameMessage =
-  `Invalid app name. ` +
-  'App names must contain only lowercase letters, decimal digits, dashes, and underscores, ' +
-  'and must begin with a lowercase letter or decimal digit.'
-
-if (typeof projectName === 'undefined') {
-  // no project name is provided -> enter prompt mode
-  spinner.stop()
-  prompt.start()
-  const userInput = (await prompt.get({
-    properties: {
-      appName: {
-        description: 'App name',
-        type: 'string',
-        // Validate the project name to follow
-        // the restrictions for Docker compose project names.
-        // cf. https://docs.docker.com/compose/environment-variables/envvars/
-        // Because we will use the app name
-        // as the Docker compose project name.
-        pattern: appNameRegex,
-        message: invalidAppNameMessage,
-        required: true,
-      },
-      template: {
-        description: `Template to use (${validTemplates.join(', ')})`,
-        type: 'string',
-        pattern: new RegExp(`^(${validTemplates.join('|')})$`),
-        message: `Template should be one of: ${validTemplates.join(', ')}.`,
-        default: templateType,
-      },
-      electricPort: {
-        description: 'Port on which to run Electric',
-        type: 'number',
-        pattern: portRegex,
-        message: 'Port should be between 0 and 65535.',
-        default: electricPort,
-      },
-      electricProxyPort: {
-        description: "Port on which to run Electric's DB proxy",
-        type: 'number',
-        pattern: portRegex,
-        message: 'Port should be between 0 and 65535.',
-        default: electricProxyPort,
-      },
-    },
-  })) as {
-    appName: string
-    template: TemplateType
-    electricPort: number
-    electricProxyPort: number
-  }
+spinner.stop()
+let options: CLIOptions = { appName: '', ...defaultOptions }
+try {
+  options = await getCLIOptions(process.argv, defaultOptions)
 
   spinner.start()
-  projectName = userInput.appName
-  templateType = userInput.template
-  electricPort = userInput.electricPort
-  electricProxyPort = userInput.electricProxyPort
+  spinner.text = 'Ensuring the necessary ports are free'
+  options.electricPort = await checkPort(
+    options.electricPort,
+    'Electric',
+    defaultOptions.electricPort
+  )
+  options.electricProxyPort = await checkPort(
+    options.electricProxyPort,
+    "Electric's proxy",
+    defaultOptions.electricProxyPort
+  )
+
+  spinner.text = 'Creating project structure'
+  spinner.start()
+} catch (err: any) {
+  error(err.message)
 }
-
-spinner.text = 'Ensuring the necessary ports are free'
-
-if (!appNameRegex.test(projectName)) {
-  error(invalidAppNameMessage)
-}
-
-electricPort = await checkPort(electricPort, 'Electric', defaultElectricPort)
-electricProxyPort = await checkPort(
-  electricProxyPort,
-  "Electric's proxy",
-  defaultElectricProxyPort
-)
-
-spinner.text = 'Creating project structure'
-spinner.start()
 
 // Create a project directory with the project name
 const currentDir = process.cwd()
-const projectDir = path.resolve(currentDir, projectName)
+const projectDir = path.resolve(currentDir, options.appName)
 await fs.mkdir(projectDir, { recursive: true })
 
 // Copy the app template to the project's directory
@@ -158,7 +68,7 @@ const thisDir = path.dirname(fileURLToPath(import.meta.url))
 const templateDir = path.resolve(
   thisDir,
   '..',
-  getTemplateDirectory(templateType)
+  getTemplateDirectory(options.templateType)
 )
 await fs.cp(templateDir, projectDir, { recursive: true })
 await fs.rename(
@@ -167,11 +77,15 @@ await fs.rename(
 )
 
 const packageJsonFile = path.join(projectDir, 'package.json')
-await replacePackageJson(packageJsonFile, { projectName })
+await replacePackageJson(packageJsonFile, { projectName: options.appName })
 
 // Update the project's title in the index.html file
 const indexFile = path.join(projectDir, 'index.html')
-await findAndReplaceInFile('Web Example - ElectricSQL', projectName, indexFile)
+await findAndReplaceInFile(
+  'Web Example - ElectricSQL',
+  options.appName,
+  indexFile
+)
 
 // Create a .env.local file
 // Write the ELECTRIC_PORT and ELECTRIC_PROXY_PORT variables if they are different
@@ -179,11 +93,11 @@ await findAndReplaceInFile('Web Example - ElectricSQL', projectName, indexFile)
 await fs.writeFile(
   path.join(projectDir, '.env.local'),
   [
-    ...(electricPort !== defaultElectricPort
-      ? [`ELECTRIC_PORT=${electricPort}`]
+    ...(options.electricPort !== defaultOptions.electricPort
+      ? [`ELECTRIC_PORT=${options.electricPort}`]
       : []),
-    ...(electricProxyPort !== defaultElectricProxyPort
-      ? [`ELECTRIC_PROXY_PORT=${electricProxyPort}`]
+    ...(options.electricProxyPort !== defaultOptions.electricProxyPort
+      ? [`ELECTRIC_PROXY_PORT=${options.electricProxyPort}`]
       : []),
   ].join('\n')
 )
@@ -206,18 +120,17 @@ proc.stderr.on('data', (data) => {
 proc.on('close', async (code) => {
   spinner.stop()
   if (code === 0) {
-    console.log(`⚡️ Your ElectricSQL app is ready at \`./${projectName}\``)
+    console.log(`⚡️ Your ElectricSQL app is ready at \`./${options.appName}\``)
   } else {
     console.error(Buffer.concat(errors).toString())
     console.log(
-      `⚡️ Could not install project dependencies. Nevertheless the template for your app can be found at \`./${projectName}\``
+      `⚡️ Could not install project dependencies. Nevertheless the template for your app can be found at \`./${options.appName}\``
     )
   }
   console.log(
-    `Navigate to your app folder \`cd ${projectName}\` and follow the instructions in the README.md.`
+    `Navigate to your app folder \`cd ${options.appName}\` and follow the instructions in the README.md.`
   )
 })
-
 
 /**
  * Checks if the given port is open.
@@ -247,7 +160,7 @@ async function checkPort(
       port: {
         description: 'Hit Enter to keep it or enter a different port number',
         type: 'number',
-        pattern: portRegex,
+        pattern: PORT_REGEX,
         message: 'Please choose a port between 0 and 65535',
         default: port,
       },
@@ -261,21 +174,4 @@ async function checkPort(
     // user changed port, check that it is free
     return checkPort(newPort, process, defaultPort)
   }
-}
-
-function parsePort(port: string): number {
-  if (!portRegex.test(port)) {
-    error(`Invalid port '${port}. Port should be between 0 and 65535.'`)
-  }
-  return Number.parseInt(port)
-}
-
-function parseTemplateType(templateType: string): TemplateType {
-  if (!(validTemplates as unknown as string[]).includes(templateType)) {
-    error(
-      `Invalid template type '${templateType}'. ` +
-        `Must be one of: ${validTemplates.join(', ')}`
-    )
-  }
-  return templateType as TemplateType
 }
