@@ -169,7 +169,10 @@ test.before(() => {
 
 // This test runs the prisma generator under the hood, which can
 // cause issues when running concurrently, so we run them with serial
-const generatorTest = (testName: string, fn: (t: ExecutionContext<unknown>) => void) => {
+const generatorTest = (
+  testName: string,
+  fn: (t: ExecutionContext<unknown>) => void
+) => {
   return test.serial(testName, fn)
 }
 
@@ -184,13 +187,16 @@ test.after.always(() => {
   }
 })
 
-generatorTest('should generate valid TS client for simple schema', async (t) => {
-  const clientPath = await generateClientFromPrismaSchema(
-    simpleSchema,
-    'simple'
-  )
-  t.true(checkGeneratedClientCompiles(clientPath))
-})
+generatorTest(
+  'should generate valid TS client for simple schema',
+  async (t) => {
+    const clientPath = await generateClientFromPrismaSchema(
+      simpleSchema,
+      'simple'
+    )
+    t.true(checkGeneratedClientCompiles(clientPath))
+  }
+)
 
 generatorTest(
   'should generate valid TS client for relational schema',
