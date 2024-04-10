@@ -1,4 +1,4 @@
-import test from 'ava'
+import test, { ExecutionContext } from 'ava'
 import fs from 'fs'
 import ts from 'typescript'
 import { generateClient } from '../../../src/cli/migrations/migrate'
@@ -167,6 +167,12 @@ test.before(() => {
   }
 })
 
+// This test runs the prisma generator under the hood, which can
+// cause issues when running concurrently, so we run them with serial
+const generatorTest = (testName: string, fn: (t: ExecutionContext<unknown>) => void) => {
+  return test.serial(testName, fn)
+}
+
 test.after.always(() => {
   // avoid deleting whole temp directory as it might be used by
   // other tests as well
@@ -178,7 +184,7 @@ test.after.always(() => {
   }
 })
 
-test.serial('should generate valid TS client for simple schema', async (t) => {
+generatorTest('should generate valid TS client for simple schema', async (t) => {
   const clientPath = await generateClientFromPrismaSchema(
     simpleSchema,
     'simple'
@@ -186,7 +192,7 @@ test.serial('should generate valid TS client for simple schema', async (t) => {
   t.true(checkGeneratedClientCompiles(clientPath))
 })
 
-test.serial(
+generatorTest(
   'should generate valid TS client for relational schema',
   async (t) => {
     const clientPath = await generateClientFromPrismaSchema(
@@ -197,7 +203,7 @@ test.serial(
   }
 )
 
-test.serial(
+generatorTest(
   'should generate valid TS client for schema with all data types',
   async (t) => {
     const clientPath = await generateClientFromPrismaSchema(
