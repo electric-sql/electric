@@ -14,7 +14,7 @@ Key aspects of the system are not fully implemented yet:
 
 1. [Data modelling](#data-modelling) &mdash; remove constraints and ensure migrations are additive
 2. [DDLX rules](#ddlx-rules) &mdash; limited to electrification
-3. [Shapes](#shapes) &mdash; currently limited to whole table sync
+3. [Shapes](#shapes) &mdash; support following relations and partial sync, but with some limitations
 
 Plus you may encounter [failure modes](#failure-modes) that you need to work around in development
 
@@ -40,15 +40,17 @@ The DDLX rules for permissions, roles, validation or local SQLite commands docum
 ALTER TABLE items ENABLE ELECTRIC;
 ```
 
-### Shapes
-
-[Shape-based sync](../usage/data-access/shapes.md) using the [`sync()` function](../api/clients/typescript.md#sync) currently supports whole table sync. If the table contains outgoing foreign keys, then all tables that can be transitively reached by following these foreign keys must be part of the shape. There is no support for `where` clauses to filter the initial target rows or `select` clauses to filter the include tree. As a result, current calls to `db.tablename.sync({...})` will "over sync" additional data onto the device.
-
 :::note
-There is one temporary feature to filter data onto the local device: set an `electric_user_id` field on your table. If you do, then rows will only be synced if the value of that column matches the value of the authenticated user_id provided in your [auth token](../usage/auth/index.md).
+There is one temporary feature to limit data that goes on the local device: set an `electric_user_id` field on your table. If you do, then rows will only be synced if the value of that column matches the value of the authenticated user_id provided in your [auth token](../usage/auth/index.md).
+
+If you're OK with just filtering the available data, you should use [filter clauses on shapes](../usage/data-access/shapes.md#filter-clauses).
 
 This is a very temporary workaround and will be removed soon!
 :::
+
+### Shapes
+
+[Shape-based sync](../usage/data-access/shapes.md) using the [`sync()` function](../api/clients/typescript.md#sync) is currently supported with some [limitations](../usage/data-access/shapes.md#limitations-and-issues). You can ask for specific tables and rows, filter them, and follow relations. Biggest current limitation is that you cannot unsubscribe from a shape.
 
 ### Failure modes
 

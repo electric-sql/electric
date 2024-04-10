@@ -7,7 +7,11 @@ sidebar_position: 30
 
 Shapes are the core primitive for controlling sync in the ElectricSQL system.
 
-Local apps ask the server for a specific set of related data that gets synced to the local device. The central Postgres instance will often have too much data to fit on any one device, so shapes allow us to sync only a required subset of data onto the device. There is a balance between local data availability and storage usage on the device that is unique to every application, and shapes allow you to balance those properties while maintaining required guarantees.
+Local apps establish shape subscriptions. This syncs data from the cloud onto the local device using the [Satellite replication protocol](../../api/satellite.md), into the local embedded SQLite database. Once the initial data has synced, [queries](./queries.md) can run against it.
+
+The [Electric sync service](../installation/service.md) maintains shape subscriptions and streams any new data and data changes onto the local device. In this way, local devices can sync a sub-set of a larger database for interactive offline use.
+
+Local apps ask the server for a specific set of related data that gets synced to the device. The central Postgres instance will often have too much data to fit on any one device, so shapes allow us to sync only a required subset of data onto the device. There is a balance between local data availability and storage usage on the device that is unique to every application, and shapes allow you to balance those properties while maintaining required guarantees.
 
 :::caution Work in progress
 Shapes are being actively developed, there is a list of [limitations](#limitations-and-issues) at the bottom of the page.
@@ -26,27 +30,23 @@ For example, this `sync` call causes a project and all its issues, their comment
 ```js
 await db.projects.sync({
   where: {
-    id: "abcd",
+    id: 'abcd'
   },
   include: {
     issues: {
       include: {
         comments: {
           include: {
-            author: true,
-          },
-        },
-      },
-    },
-  },
-});
+            author: true
+          }
+        }
+      }
+    }
+  }
+})
 ```
 
 Once the data has synced onto the local device, it's kept in sync using a **shape subscription**. This monitors the replication stream and syncs any new data, updates and deletions onto the local device for as long as the shape's [subscription and retention semantics](#subscription-and-retention-semantics) define.
-
-### Foreign key and query consistency
-
-ElectricSQL maintains foreign key consistency both in the PostgreSQL central database, and in the SQLite database on the client. To achieve it, the server will automatically follow any many-to-one relation in the requested shape. For example, if there are projects each with an owner and related issues, requesting all projects will also ensure that users who are owners of those projects are available on the device too. However, related issues won't show up on the device unless explicitly requested.
 
 ## Syncing shapes
 
@@ -55,9 +55,9 @@ ElectricSQL syncs shapes using the [`sync`](../../api/clients/typescript.md#sync
 ```ts
 await db.projects.sync({
   where: {
-    id: "abcd",
-  },
-});
+    id: 'abcd'
+  }
+})
 ```
 
 You can sync filtered sets of rows:
@@ -65,38 +65,41 @@ You can sync filtered sets of rows:
 ```ts
 await db.projects.sync({
   where: {
-    status: "active",
-  },
-});
+    status: 'active'
+  }
+})
 ```
 
-You can sync deep nested shapes, such as an individual project with all its related content:
+You can sync deep nested shapes, such as an individual project with its related content and some filtering over that content
 
 ```ts
 await db.projects.sync({
   where: {
-    id: "abcd",
+    id: 'abcd'
   },
   include: {
     issues: {
+      where: { status: { not_in: ['backlog'] } },
       include: {
         comments: {
           include: {
-            author: true,
-          },
-        },
-      },
-    },
-  },
-});
+            author: true
+          }
+        }
+      }
+    }
+  }
+})
 ```
 
 ### Filter clauses
 
-You can filter data at the top of the shape, or when including data over a one-to-many relation using a `where` clause on the request object. Shape `where` clauses may be either an object, or a string. They may only reference the columns on the filtered table itself.
+You can filter requested data by specifying a `where` clause while requesting a shape. `where` clauses can filter top-level rows, as well as any rows that come from following a one-to-many relation (see last example above). Shape `where` clauses may be either an object, or a string. They may only reference the columns on the filtered table itself.
 
 It's important to note that many-to-one relations cannot be filtered that way (e.g. you cannot do `comments: { include: { author: { where { id: true }}}}`), because if a
 target row would be filtered out, that would break FK consistency on the client.
+
+This filter will apply to both initial data, and ongoing replication, with related data being pulled in or removed accordingly. For example, for `{projects: {where: {status: 'public'}, include: {issues: true}}}` shape, if there is an update that changes a project status to `public`, then that project will be synced to the device along with all the issues in that newly visible project. If a project changes status to, say, `private`, then the issues from that project will be gone from the device along with the project itself. There are some nuances to that part of the sync, which are described under the [move-in lag](#move-in-lag) section.
 
 #### Object `where` clause
 
@@ -130,10 +133,10 @@ For example:
 await db.projects.sync({
   where: {
     status: {
-      in: ["active", "pending"],
-    },
-  },
-});
+      in: ['active', 'pending']
+    }
+  }
+})
 ```
 
 See the <DocPageLink path="api/clients/typescript" /> docs for more details.
@@ -144,27 +147,28 @@ See the <DocPageLink path="api/clients/typescript" /> docs for more details.
 String `where` clause is currently only supported as top-level filtering. This will be fixed in a future release.
 :::
 
-As the where clause will be applied on Postgres and on the ElectricSQL server, you can drop down to a string representation that's close to that of a SQL `WHERE` clause on a regular query. You can use the usual PostgreSQL syntax, although not all functions are supported. The columns of the table you're filtering can be referenced using `this.` prefix:
+You can use string `where` clauses that are plain SQL comparisons. You can use the usual PostgreSQL syntax, although not all functions are supported. The filtering expression is expected to evaluate to a boolean value. The columns of the table you're filtering can be referenced using `this.` prefix:
 
 ```ts
 await db.projects.sync({
-  where: "this.status IN ('active', 'pending')",
-});
+  where: "this.status IN ('active', 'pending')"
+})
 ```
 
 This allows for more flexibility as the Prisma-like does not support the all possible expressions supported by the Electric sync engine. However, you need to be more careful with interpolating your own values in the string to ensure that PostgreSQL would accept for the expected type.
 
 ```ts
 await db.projects.sync({
-  where: "lower(this.status) ~~ 'pending%'",
-});
+  where: "lower(this.status) ~~ 'pending%'"
+})
 ```
 
-Full current list of supported Postgres functions is easiest found [in code](https://github.com/electric-sql/electric/blob/main/components/electric/lib/electric/replication/eval/env/known_functions.ex), but here's a gist:
+Full current list of supported Postgres functions and operators is easiest found [in code](https://github.com/electric-sql/electric/blob/main/components/electric/lib/electric/replication/eval/env/known_functions.ex), but here's a gist:
 
-- Types (input, comparison): all numerics, `bool`, `uuid`, `text`
+- Types (input, comparison): all numerics, `bool`, `uuid`, `text`, all date/times apart from `timetz`
 - Numeric functions: all basics + bitwise operations
 - String functions: concatenation, `LIKE`/`ILIKE`
+- Date functions: comparisons, intervals, `AT TIME ZONE` functions
 
 :::note Work in progress
 More basic type filtering support is being added, as well as more functions over those types.
@@ -184,11 +188,11 @@ The [`sync`](../../api/clients/typescript.md#sync) function resolves to an objec
 ```tsx
 // Resolves once the shape subscription
 // is confirmed by the server.
-const shape = await db.projects.sync();
+const shape = await db.projects.sync()
 
 // Resolves once the initial data load
 // for the shape is complete.
-await shape.synced;
+await shape.synced
 ```
 
 If the shape subscription is invalid, the first promise will be rejected. If the data load fails for some reason, the second promise will be rejected.
@@ -203,8 +207,8 @@ For example, this is OK:
 
 ```tsx
 const MyComponent = () => {
-  const { db } = useElectric()!;
-  const { results } = useLiveQuery(db.projects.liveMany());
+  const { db } = useElectric()!
+  const { results } = useLiveQuery(db.projects.liveMany())
 
   // console.log('MyComponent rendering')
   // console.log('results', results)
@@ -212,27 +216,27 @@ const MyComponent = () => {
   const syncProjects = async () => {
     // console.log('syncProjects')
 
-    const shape = await db.projects.sync();
+    const shape = await db.projects.sync()
     // console.log('shape subscription confirmed')
 
-    await shape.synced;
+    await shape.synced
     // console.log('shape data synced')
-  };
+  }
 
   useEffect(() => {
-    syncProjects();
-  }, []);
+    syncProjects()
+  }, [])
 
-  return <h1>{results.length}</h1>;
-};
+  return <h1>{results.length}</h1>
+}
 ```
 
 Or you can explicitly wait for the sync, for example, by conditionally rendering a child component once `shape.synced` has resolved:
 
 ```tsx
 const MyContainer = () => {
-  const { db } = useElectric()!;
-  const [ready, setReady] = useState(false);
+  const { db } = useElectric()!
+  const [ready, setReady] = useState(false)
 
   // console.log('MyContainer rendering')
   // console.log('ready', ready)
@@ -240,64 +244,38 @@ const MyContainer = () => {
   const syncProjects = async () => {
     // console.log('syncProjects')
 
-    const shape = await db.projects.sync();
+    const shape = await db.projects.sync()
     // console.log('shape subscription confirmed')
 
-    await shape.synced;
+    await shape.synced
     // console.log('shape data synced')
 
-    setReady(true);
-  };
-
-  useEffect(() => {
-    syncProjects();
-  }, []);
-
-  if (!ready) {
-    return null;
+    setReady(true)
   }
 
-  return <MyComponent />;
-};
+  useEffect(() => {
+    syncProjects()
+  }, [])
+
+  if (!ready) {
+    return null
+  }
+
+  return <MyComponent />
+}
 
 const MyComponent = () => {
-  const { db } = useElectric()!;
-  const { results } = useLiveQuery(db.projects.liveMany());
+  const { db } = useElectric()!
+  const { results } = useLiveQuery(db.projects.liveMany())
 
   // console.log('MyComponent rendering')
   // console.log('results', results)
 
-  return <h1>{results.length}</h1>;
-};
+  return <h1>{results.length}</h1>
+}
 ```
 
 For many applications you can simply define the data you want to sync up-front, for example, at app load time and then just code against the local database once the data has synced in. For others, you can craft more dynamic partial replication, for instance, syncing data in as the user navigates through different routes or parts of the app.
-
-#### Updating shapes
-
-:::danger Potential foot-gun in development
-We're working to fix this limitation
-:::
-
-Once a subscription is established, it remains statefully in the local SQLite database even when you change the code. For example, doing `db.projects.sync({ where: { id: 1 }})`, starting the application, then changing the code to `db.projects.sync({ where: { id: 2 }})` will result in **2 subscriptions** established, with both projects synced to the device. We're working on lifting this limitation.
-
-#### Move-in lag
-
-Due to consistency considerations, when additional rows move into a shape as a result of following a one-to-many relation these will show up on the device slightly later than the parent row itself. It's important to keep this in mind when designing the UI.
-
-For example, with this this shape:
-
-```ts
-await db.projects.sync({
-  where: { status: "active" },
-  include: { issues: true },
-});
-```
-
-If a project were to have its status changed to `active`, the client would now be eligible to see it, along with its issues. However, the project will be synced to the local database before the issues.
-:::note Work in progress
-We expect to add client-side hooks notifying of such move-in events so that UI has more information to act upon.
-:::
 
 ## Limitations and issues
 
@@ -307,6 +285,43 @@ Shape-based sync is under active development, and we're aware of some issues wit
 - `DELETE` of the top row on the client without having synced all the children may not result in a `DELETE` on the server and the row will be restored
 - Recursive and mutually recursive tables are not supported at all for now. A foreign key loop will prevent the shape subscription from being established.
 - Shape unsubscribe is not available, which means any `.sync` method (in development in particular) is going to be statefully persisted regardless of code changes.
+
+### Foreign key and query consistency
+
+ElectricSQL maintains foreign key consistency both in the PostgreSQL central database, and in the SQLite database on the client. To achieve it, the server will automatically follow any many-to-one relation in the requested shape. For example, if there are projects each with an owner and related issues, requesting all projects will also ensure that users who are owners of those projects are available on the device too. However, related issues won't show up on the device unless explicitly requested.
+
+#### Updating shapes
+
+:::danger Potential foot-gun in development
+We're working to fix this limitation
+:::
+
+Once a subscription is established, it remains statefully in the local SQLite database even when you change the code. For example, doing `db.projects.sync({ where: { id: 1 }})`, starting the application, then changing the code to `db.projects.sync({ where: { id: 2 }})` will result in **2 subscriptions** established, with both projects synced to the device. We're working on lifting this limitation.
+
+#### Unsubscribe not available
+
+Related to the previous heading, removing a subscription to an existing shape is not supported yet. This will be available, lifting the previous limitation as well.
+
+#### Move-in lag
+
+Due to consistency considerations, when additional rows move into a shape as a result of following a one-to-many relation these will show up on the device slightly later than the parent row itself. It's important to keep this in mind when designing the UI.
+
+For example, with this this shape:
+
+```ts
+await db.projects.sync({
+  where: { status: 'active' },
+  include: { issues: true }
+})
+```
+
+If a project were to have its status changed to `active`, the client would now be eligible to see it, along with its issues. However, the project will be synced to the local database before the issues.
+
+Please note that while we're going to improve developer experience around this aspect of syncing, this "lag" is part of the current consistency model.
+
+:::note Work in progress
+We expect to add client-side hooks notifying of such move-in events so that UI has more information to act upon.
+:::
 
 ## Future capabilities
 
