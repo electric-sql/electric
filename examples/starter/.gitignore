@@ -1,9 +1,8 @@
 node_modules
 dist
 
-# ignore template folders except the overlay
-template-*
-!template-overlay/
+# ignore template folder
+templates
 
 # ignore test-app folder used for testing the CLI
 test-app

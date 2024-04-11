@@ -8,7 +8,7 @@
   "platform": "node",
   "files": [
     "dist",
-    "template-!(overlay)*/**"
+    "templates/*/**"
   ],
   "bin": {
     "create-electric-app": "dist/index.js"

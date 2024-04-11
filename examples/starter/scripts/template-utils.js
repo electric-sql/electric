@@ -46,14 +46,14 @@ async function modifyJsonFile(jsonFilePath, modify) {
 }
 
 /**
- * Checks if a file exists
+ * Checks if a file or directory exists
  *
- * @param {string} filePath
+ * @param {string} path
  * @returns {Promise<boolean>}
  */
-async function fileExists(filePath) {
+async function pathExists(path) {
   try {
-    await access(filePath)
+    await access(path)
     return true
   } catch (err) {
     if (err.code === 'ENOENT') {
@@ -111,7 +111,7 @@ async function copyTemplateOverlayFiles(
   }
   await mkdir(templateTargetDir, { recursive: true })
   await copyFiles(templateSourceDir, templateTargetDir)
-  if (templateOverlayDir) {
+  if (templateOverlayDir && await pathExists(templateOverlayDir)) {
     await copyFiles(templateOverlayDir, templateTargetDir)
   }
 
@@ -141,7 +141,7 @@ async function copyTemplateOverlayFiles(
 
   // change app.json name if present (Expo and RN only)
   const appJsonPath = join(templateTargetDir, 'app.json')
-  if (await fileExists(appJsonPath)) {
+  if (await pathExists(appJsonPath)) {
     await modifyJsonFile(appJsonPath, (appJson) => {
       // for Expo app.json
       if ('expo' in appJson) {

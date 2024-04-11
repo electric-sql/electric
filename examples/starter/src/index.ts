@@ -28,6 +28,7 @@ const defaultOptions: DefaultCLIOptions = {
 const templatesParentDir = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '..',
+  'templates',
 )
 
 const spinner = ora('Validating arguments').start()
