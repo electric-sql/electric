@@ -1,5 +1,11 @@
 # create-electric-app
 
+## 0.3.0
+
+### Minor Changes
+
+- 4b535171: Added `expo` and `react-native` as starter templates.
+
 ## 0.2.8
 
 ### Patch Changes
