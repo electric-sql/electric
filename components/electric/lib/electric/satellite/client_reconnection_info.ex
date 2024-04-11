@@ -154,13 +154,15 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
       client_checkpoints_table: 0,
       client_shape_subscriptions_table: 0,
       client_additional_data_table: 0,
-      client_actions_table: 0
+      client_actions_table: 0,
+      client_unsub_points_table: 0
     ]
 
   alias Electric.Postgres.CachedWal
   alias Electric.Postgres.Repo.Client
   alias Electric.Replication.Connectors
   alias Electric.Replication.Changes.Transaction
+  alias Electric.Replication.Shapes.SentRowsGraph
   alias Electric.Replication.Shapes
   alias Electric.Replication.Shapes.ShapeRequest
   alias Electric.Utils
@@ -198,6 +200,10 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
            source_txns :: [non_neg_integer(), ...]}
   @type additional_data_row :: additional_data_sub_row() | additional_data_txn_row()
 
+  @unsubscribe_points_ets :unsubscribe_points
+  @type unsubscribe_points_row ::
+          {{client_id(), sub_id :: String.t(), wal_pos :: non_neg_integer()}}
+
   def start_link(connector_config) do
     origin = Connectors.origin(connector_config)
     GenServer.start_link(__MODULE__, connector_config, name: name(origin))
@@ -225,7 +231,8 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
           client_shape_subscriptions_table(),
           client_checkpoints_table(),
           client_actions_table(),
-          client_additional_data_table()
+          client_additional_data_table(),
+          client_unsub_points_table()
         ],
         &Client.query!("DELETE FROM #{&1} WHERE client_id = $1", [client_id])
       )
@@ -234,58 +241,39 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     :ok
   end
 
-  defp clear_all_ets_data(client_id) do
+  @doc false
+  def clear_all_ets_data(client_id) do
     :ets.match_delete(@actions_ets, {{client_id, :_}, :_})
     :ets.match_delete(@subscriptions_ets, {{client_id, :_}, :_, :_, :_})
     :ets.match_delete(@additional_data_ets, {{client_id, :_, :_, :_, :_}, :_, :_})
+    :ets.match_delete(@unsubscribe_points_ets, {{client_id, :_, :_}})
     :ets.delete(@checkpoint_ets, client_id)
   end
 
-  def fetch_subscriptions(client_id, subscription_ids)
-      when is_list(subscription_ids) and subscription_ids != [] do
-    :ets.select(@subscriptions_ets, [
-      {{{client_id, :"$1"}, :_, :"$2", :_}, [ids_ms_guard(subscription_ids)], [{{:"$1", :"$2"}}]}
-    ])
+  @doc """
+  List all subscriptions that can be continued by a client.
+  """
+  def fetch_subscriptions(client_id, ids) when is_list(ids) and ids != [] do
+    subscription_ets_ms = Enum.map(ids, &{{{client_id, &1}, :_, :"$1", :_}, [], [{{&1, :"$1"}}]})
+    :ets.select(@subscriptions_ets, subscription_ets_ms)
   end
 
-  def delete_subscriptions(origin, client_id, subscription_ids)
-      when is_list(subscription_ids) and subscription_ids != [] do
-    ms_guard = ids_ms_guard(subscription_ids)
+  defp delete_subscriptions(client_id, ids) when is_list(ids) and ids != [] do
+    subscription_ets_ms = Enum.map(ids, &{{{client_id, &1}, :_, :_, :_}, [], [true]})
+    :ets.select_delete(@subscriptions_ets, subscription_ets_ms)
 
-    :ets.select_delete(@subscriptions_ets, [
-      {{{client_id, :"$1"}, :_, :_, :_}, [ms_guard], [true]}
-    ])
+    additional_data_ms =
+      Enum.map(ids, &{{{client_id, :_, :_, :subscription, &1}, :_, :_}, [], [true]})
 
-    :ets.select_delete(@additional_data_ets, [
-      {{{client_id, :_, :_, :subscription, :"$1"}, :_, :_}, [ms_guard], [true]}
-    ])
+    :ets.select_delete(@additional_data_ets, additional_data_ms)
 
-    Client.pooled_transaction(origin, fn ->
-      subs_uuids = Enum.map(subscription_ids, &encode_uuid/1)
+    unsubscribe_points_ms = Enum.map(ids, &{{{client_id, &1, :_}}, [], [true]})
+    :ets.select_delete(@unsubscribe_points_ets, unsubscribe_points_ms)
 
-      Enum.each(
-        [client_shape_subscriptions_table(), client_additional_data_table()],
-        &Client.query!("DELETE FROM #{&1} WHERE client_id = $1 AND subscription_id = ANY($2)", [
-          client_id,
-          subs_uuids
-        ])
-      )
-    end)
-
-    :ok
-  rescue
-    exception ->
-      # Clear in-memory cache for the client to force its reloading from the database when the
-      # client reconnects.
-      clear_all_ets_data(client_id)
-      reraise exception, __STACKTRACE__
-  end
-
-  defp ids_ms_guard([id]), do: {:"=:=", :"$1", id}
-
-  defp ids_ms_guard([_id1, _id2 | _] = ids) do
-    id_matches = Enum.map(ids, &{:"=:=", :"$1", &1})
-    List.to_tuple([:or | id_matches])
+    %{}
+    |> merge_discarded({@subscriptions_ets, {client_id, {:sub_ids, ids}}})
+    |> merge_discarded({@additional_data_ets, {client_id, {:sub_ids, ids}}})
+    |> merge_discarded({@unsubscribe_points_ets, {client_id, {:sub_ids, ids}}})
   end
 
   @doc """
@@ -350,6 +338,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
         new_wal_pos = Keyword.fetch!(opts, :ack_point)
         txids = Keyword.fetch!(opts, :including_data)
         subscription_ids = Keyword.fetch!(opts, :including_subscriptions)
+        unsub_id_list = Keyword.fetch!(opts, :including_unsubscribes)
         cached_wal_impl = Keyword.get(opts, :cached_wal_impl, CachedWal.EtsBacked)
         origin = Keyword.fetch!(opts, :origin)
         advance_graph_fn = Keyword.fetch!(opts, :advance_graph_using)
@@ -368,7 +357,14 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
             )
 
           {new_graph, pending_actions, count, discarded_acc} =
-            advance_up_to_new_wal_pos(graph, advance_graph_fn, client_id, txn_stream)
+            advance_up_to_new_wal_pos(
+              graph,
+              advance_graph_fn,
+              client_id,
+              new_wal_pos,
+              unsub_id_list,
+              txn_stream
+            )
 
           Logger.debug(
             "Advancing graph for #{inspect(client_id)} from #{inspect(acked_wal_pos)} to #{inspect(new_wal_pos)} by #{count} txns"
@@ -425,7 +421,8 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   to process our readonly querying.
   """
   @spec advance_on_reconnection!(any(), any()) ::
-          {:ok, Graph.t(), Shapes.action_context()} | {:error, term()}
+          {:ok, Graph.t(), Shapes.action_context(), {[String.t()], [term()]} | nil}
+          | {:error, term()}
   def advance_on_reconnection!(client_id, opts) do
     # We need to remove all additional data "in the future", but
     # execute actions that were seen but not fulfilled that way.
@@ -444,23 +441,92 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
           Shapes.merge_actions_for_tx(acc, actions, txid)
         end)
 
-      {:ok, new_graph, actions}
+      # We're also clearing the unsubscription points that are in the future
+      # but the subscription continued on reconnection
+      opts
+      |> Keyword.fetch!(:including_subscriptions)
+      |> Enum.map(&{{{client_id, &1, :_}}, [], [true]})
+      |> then(&:ets.select_delete(@unsubscribe_points_ets, &1))
+
+      # FIXME: this needs to clear all that from the future, which is now done not in this function!!!!!!!
+
+      case :ets.select(@unsubscribe_points_ets, [{{{client_id, :"$1", :_}}, [], [:"$1"]}]) do
+        [] ->
+          {:ok, new_graph, actions, nil}
+
+        unsent_unsub_ids ->
+          request_ids = request_ids_for_subscriptions(client_id, unsent_unsub_ids)
+
+          {gone_nodes, new_graph} = SentRowsGraph.pop_by_request_ids(new_graph, request_ids)
+
+          {:ok, new_graph, actions, {unsent_unsub_ids, gone_nodes}}
+      end
+    end
+  end
+
+  defp pop_valid_unsub_points(client_id, new_wal_pos, observed_unsub_batches) do
+    # Take all points before acked LSN, and all right at acked lsn if they have been explicitly observed.
+    matches =
+      [
+        {{{client_id, :"$1", :"$2"}}, [{:<, :"$2", new_wal_pos}], [:"$1"]}
+        | Enum.map(observed_unsub_batches, &{{{client_id, &1, new_wal_pos}}, [], [&1]})
+      ]
+
+    results = :ets.select(@unsubscribe_points_ets, matches)
+
+    :ets.select_delete(
+      @unsubscribe_points_ets,
+      Enum.map(matches, fn {m, g, _} -> {m, g, [true]} end)
+    )
+
+    results
+  end
+
+  defp prune_active_subs(client_id, new_wal_pos, observed_unsub_batches) do
+    relevant_unsubs = pop_valid_unsub_points(client_id, new_wal_pos, observed_unsub_batches)
+
+    client_id
+    |> list_subscriptions()
+    |> Enum.split_with(fn {_, sub_id, _} -> sub_id in relevant_unsubs end)
+    |> case do
+      {[], subs} ->
+        {subs, [], %{}}
+
+      {unsubs, subs} ->
+        removed_request_ids =
+          Enum.flat_map(unsubs, fn {_, _, requests} -> Enum.map(requests, & &1.id) end)
+
+        discarded = delete_subscriptions(client_id, Enum.map(unsubs, &elem(&1, 1)))
+
+        {subs, removed_request_ids, discarded}
     end
   end
 
   # We're essentially advancing the graph until next fully acknowledged transaction +
   # subscription data
-  defp advance_up_to_new_wal_pos(graph, advance_graph_fn, client_id, txn_stream) do
-    subs = list_subscriptions(client_id)
+  defp advance_up_to_new_wal_pos(
+         graph,
+         advance_graph_fn,
+         client_id,
+         new_wal_pos,
+         unsub_batches,
+         txn_stream
+       ) do
+    {subs, removed_request_ids, discarded_acc} =
+      prune_active_subs(client_id, new_wal_pos, unsub_batches)
 
-    txn_stream
-    |> Enum.reduce({graph, %{}, 0, %{}}, fn %Transaction{} = txn,
-                                            {graph, pending_actions, count, discarded_acc} ->
+    {_, graph} = SentRowsGraph.pop_by_request_ids(graph, removed_request_ids)
+
+    state = {graph, %{}, 0, discarded_acc}
+
+    Enum.reduce(txn_stream, state, fn %Transaction{} = txn,
+                                      {graph, pending_actions, count, discarded_acc} ->
       {graph, pending_actions, discarded_acc} =
         client_id
         |> pop_additional_data_before(txn.xid)
         |> Enum.reduce({graph, pending_actions, discarded_acc}, fn
           {:transaction, diff, included_txns}, {graph, pending_actions, discarded_acc} ->
+            {_, diff} = SentRowsGraph.pop_by_request_ids(diff, removed_request_ids)
             graph = merge_in_graph_diff(graph, diff)
             popped_actions = clear_stored_actions(client_id, included_txns)
 
@@ -470,6 +536,9 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
             {graph, pending_actions, merge_discarded(discarded_acc, popped_actions)}
 
           {:subscription, diff, []}, {graph, pending_actions, discarded_acc} ->
+            # This cannot be a diff for an unsubbed subscription, because they were
+            # deleted in `prune_active_subs/3`. Each sub diff carries only data for
+            # subscription itself, so we don't need to pop rows when other subs are gone.
             graph = merge_in_graph_diff(graph, diff)
             {graph, pending_actions, discarded_acc}
         end)
@@ -524,8 +593,8 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
 
   defp get_active_shapes_for_txid(all_subs, txid) do
     all_subs
-    |> Enum.take_while(fn {xmin, _} -> xmin < txid end)
-    |> Enum.flat_map(&elem(&1, 1))
+    |> Enum.take_while(fn {xmin, _, _} -> xmin < txid end)
+    |> Enum.flat_map(&elem(&1, 2))
   end
 
   defp merge_in_graph_diff(graph, diff), do: Utils.merge_graph_edges(graph, diff)
@@ -640,8 +709,15 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
 
   defp list_subscriptions(client_id) do
     :ets.select(@subscriptions_ets, [
-      {{{client_id, :_}, :"$1", :"$2", :_}, [], [{{:"$1", :"$2"}}]}
+      {{{client_id, :"$3"}, :"$1", :"$2", :_}, [], [{{:"$1", :"$3", :"$2"}}]}
     ])
+  end
+
+  defp request_ids_for_subscriptions(client_id, subscription_ids) do
+    subscription_ids
+    |> Enum.map(&{{{client_id, &1}, :_, :"$1", :_}, [], [:"$1"]})
+    |> then(&:ets.select(@subscriptions_ets, &1))
+    |> Enum.flat_map(fn x -> Enum.map(x, & &1.id) end)
   end
 
   @insert_subscription_data_query """
@@ -729,6 +805,33 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
       reraise exception, __STACKTRACE__
   end
 
+  @insert_unsub_points_query """
+  INSERT INTO #{client_unsub_points_table()}
+    (client_id, wal_pos, subscription_id)
+  SELECT $1, $2, unnest($3::uuid[])
+  """
+
+  @doc """
+  Store client-requested unsubscribe until the client acknowledges it.
+  """
+  def unsubscribe(origin, client_id, ids, wal_pos) when is_list(ids) and ids != [] do
+    :ets.insert(@unsubscribe_points_ets, Enum.map(ids, &{{client_id, &1, wal_pos}}))
+
+    Client.pooled_query!(origin, @insert_unsub_points_query, [
+      client_id,
+      wal_pos,
+      Enum.map(ids, &encode_uuid/1)
+    ])
+
+    :ok
+  rescue
+    exception ->
+      # Clear in-memory cache for the client to force its reloading from the database when the
+      # client reconnects.
+      clear_all_ets_data(client_id)
+      reraise exception, __STACKTRACE__
+  end
+
   @doc """
   Restore client reconnection info cache from the database.
 
@@ -783,9 +886,9 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     Map.update(
       acc,
       @additional_data_ets,
-      {client_id, [xmin], [order], nil},
-      fn {^client_id, xmins, orders, txid} ->
-        {client_id, [xmin | xmins], [order | orders], txid}
+      {client_id, [xmin], [order], nil, []},
+      fn {^client_id, xmins, orders, txid, sub_ids} ->
+        {client_id, [xmin | xmins], [order | orders], txid, sub_ids}
       end
     )
   end
@@ -794,10 +897,42 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     Map.update(
       acc,
       @additional_data_ets,
-      {client_id, [], [], new_txid},
-      fn {^client_id, xmins, orders, txid} ->
-        {client_id, xmins, orders, max(new_txid, txid)}
+      {client_id, [], [], new_txid, []},
+      fn {^client_id, xmins, orders, txid, sub_ids} ->
+        {client_id, xmins, orders, max(new_txid, txid), sub_ids}
       end
+    )
+  end
+
+  defp merge_discarded(acc, {@additional_data_ets, {client_id, {:sub_ids, new_sub_ids}}})
+       when is_list(new_sub_ids) do
+    Map.update(
+      acc,
+      @additional_data_ets,
+      {client_id, [], [], nil, new_sub_ids},
+      fn {^client_id, xmins, orders, txid, sub_ids} ->
+        {client_id, xmins, orders, txid, sub_ids ++ new_sub_ids}
+      end
+    )
+  end
+
+  defp merge_discarded(acc, {@subscriptions_ets, {client_id, {:sub_ids, new_sub_ids}}})
+       when is_list(new_sub_ids) do
+    Map.update(
+      acc,
+      @subscriptions_ets,
+      {client_id, new_sub_ids},
+      fn {^client_id, sub_ids} -> {client_id, sub_ids ++ new_sub_ids} end
+    )
+  end
+
+  defp merge_discarded(acc, {@unsubscribe_points_ets, {client_id, {:sub_ids, new_sub_ids}}})
+       when is_list(new_sub_ids) do
+    Map.update(
+      acc,
+      @unsubscribe_points_ets,
+      {client_id, new_sub_ids},
+      fn {^client_id, sub_ids} -> {client_id, sub_ids ++ new_sub_ids} end
     )
   end
 
@@ -815,7 +950,18 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     client_id = $1 AND (
       (min_txid, ord) = ANY(SELECT * FROM unnest($2::xid8[], $3::bigint[]))
       OR coalesce(min_txid <= $4, false)
+      OR subscription_id = ANY($5::text[]::uuid[])
     )
+  """
+
+  @delete_subscriptions_query """
+  DELETE FROM #{client_shape_subscriptions_table()}
+  WHERE client_id = $1 AND subscription_id = ANY($2::text[]::uuid[])
+  """
+
+  @delete_unsubscribe_points_query """
+  DELETE FROM #{client_unsub_points_table()}
+  WHERE client_id = $1 AND subscription_id = ANY($2::text[]::uuid[])
   """
 
   # Given the accumulator of discarded ETS entries, issue one DELETE statement per table to
@@ -827,8 +973,14 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
       {@actions_ets, {client_id, txids}} ->
         Client.query!(@delete_actions_for_xids_query, [client_id, txids])
 
-      {@additional_data_ets, {client_id, xmins, orders, txid}} ->
-        Client.query!(@delete_additional_data_query, [client_id, xmins, orders, txid])
+      {@additional_data_ets, {client_id, xmins, orders, txid, sub_ids}} ->
+        Client.query!(@delete_additional_data_query, [client_id, xmins, orders, txid, sub_ids])
+
+      {@subscriptions_ets, {client_id, sub_ids}} ->
+        Client.query!(@delete_subscriptions_query, [client_id, sub_ids])
+
+      {@unsubscribe_points_ets, {client_id, sub_ids}} ->
+        Client.query!(@delete_unsubscribe_points_query, [client_id, sub_ids])
     end)
   end
 
@@ -840,13 +992,15 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     subscriptions_table = :ets.new(@subscriptions_ets, [:named_table, :public, :ordered_set])
     additional_data_table = :ets.new(@additional_data_ets, [:named_table, :public, :ordered_set])
     actions_table = :ets.new(@actions_ets, [:named_table, :public, :set])
+    unsub_points_table = :ets.new(@unsubscribe_points_ets, [:named_table, :public, :ordered_set])
 
     state = %{
       origin: Connectors.origin(connector_config),
       checkpoint_table: checkpoint_table,
       subscriptions_table: subscriptions_table,
       additional_data_table: additional_data_table,
-      actions_table: actions_table
+      actions_table: actions_table,
+      unsub_points_table: unsub_points_table
     }
 
     # Restore cached info for all clients at initialisation time.
@@ -870,16 +1024,19 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
       with {:ok, checkpoints} <- load_checkpoints(client_ids),
            {:ok, subscriptions} <- load_subscriptions(client_ids),
            {:ok, additional_data} <- load_additional_data(client_ids),
-           {:ok, actions} <- load_actions(client_ids) do
+           {:ok, actions} <- load_actions(client_ids),
+           {:ok, unsub_points} <- load_unsub_points(client_ids) do
         :ets.insert(state.checkpoint_table, checkpoints)
         :ets.insert(state.subscriptions_table, subscriptions)
         :ets.insert(state.additional_data_table, additional_data)
         :ets.insert(state.actions_table, actions)
+        :ets.insert(state.unsub_points_table, unsub_points)
 
         Logger.debug("Restored #{length(checkpoints)} cached client_checkpoints")
         Logger.debug("Restored #{length(subscriptions)} cached client_shape_subscriptions")
         Logger.debug("Restored #{length(additional_data)} cached client_additional_data records")
         Logger.debug("Restored #{length(actions)} cached client_actions")
+        Logger.debug("Restored #{length(unsub_points)} cached client_unsub_points")
 
         :ok
       end
@@ -931,6 +1088,18 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
       tuples =
         Enum.map(rows, fn [client_id, txid, actions_bin] ->
           {{client_id, txid}, :erlang.binary_to_term(actions_bin)}
+        end)
+
+      {:ok, tuples}
+    end
+  end
+
+  @load_actions_query "SELECT * FROM #{client_unsub_points_table()}"
+  defp load_unsub_points(client_ids) do
+    with {:ok, {_cols, rows}} <- scoped_query(@load_actions_query, client_ids) do
+      tuples =
+        Enum.map(rows, fn [client_id, subs_id, wal_pos] ->
+          {{client_id, decode_uuid(subs_id), wal_pos}}
         end)
 
       {:ok, tuples}

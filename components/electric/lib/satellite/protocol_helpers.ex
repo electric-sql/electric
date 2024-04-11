@@ -29,7 +29,7 @@ defmodule Satellite.ProtocolHelpers do
     )
   end
 
-  def simple_sub_request(tables) when is_list(tables) do
+  def simple_sub_request(tables) do
     subscription_id = Electric.Utils.uuid4()
     request_id = Electric.Utils.uuid4()
 
@@ -40,14 +40,15 @@ defmodule Satellite.ProtocolHelpers do
          %SatShapeReq{
            request_id: request_id,
            shape_definition: %SatShapeDef{
-             selects: Enum.map(tables, &unwrap_tables/1)
+             selects: Enum.map(List.wrap(tables), &unwrap_tables/1)
            }
          }
        ]
      }}
   end
 
-  defp unwrap_tables(table) when is_binary(table), do: unwrap_tables({table, []})
+  defp unwrap_tables(table) when is_binary(table) or is_atom(table),
+    do: unwrap_tables({table, []})
 
   defp unwrap_tables({table, kw_list}) do
     base_select =

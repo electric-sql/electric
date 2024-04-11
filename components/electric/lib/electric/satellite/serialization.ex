@@ -379,7 +379,7 @@ defmodule Electric.Satellite.Serialization do
   """
   @spec deserialize_trans(String.t(), %SatOpLog{}, %Transaction{} | nil, cached_relations()) ::
           {
-            incomplete :: %Transaction{} | nil,
+            incomplete :: %Transaction{} | additional_data() | nil,
             # Complete transactions are send in reverse order
             complete :: [%Transaction{} | additional_data()]
           }
@@ -392,13 +392,23 @@ defmodule Electric.Satellite.Serialization do
     deserialize_op_log(origin, op_log, {trans, []}, relations)
   end
 
+  def deserialize_trans(
+        origin,
+        %SatOpLog{} = op_log,
+        {:additional_data, _, _} = data,
+        relations
+      )
+      when origin !== "" do
+    deserialize_op_log(origin, op_log, {data, []}, relations)
+  end
+
   defp deserialize_op_log(origin, %SatOpLog{} = msg, incomplete, relations) do
     Enum.reduce(msg.ops, incomplete, fn
-      %SatTransOp{op: {:additional_begin, %SatOpAdditionalBegin{}}}, {nil, complete} ->
-        {{:additional_data, []}, complete}
+      %SatTransOp{op: {:additional_begin, %SatOpAdditionalBegin{ref: ref}}}, {nil, complete} ->
+        {{:additional_data, ref, []}, complete}
 
       %SatTransOp{op: {:additional_commit, %SatOpAdditionalCommit{ref: ref}}},
-      {{:additional_data, changes}, complete} ->
+      {{:additional_data, ref, changes}, complete} ->
         {nil, [{:additional_data, ref, Enum.reverse(changes)} | complete]}
 
       %SatTransOp{op: {:begin, %SatOpBegin{} = op}}, {nil, complete} ->
@@ -437,8 +447,8 @@ defmodule Electric.Satellite.Serialization do
           %Transaction{} = trans ->
             {%Transaction{trans | changes: [change | trans.changes]}, complete}
 
-          {:additional_data, changes} ->
-            {{:additional_data, [change | changes]}, complete}
+          {:additional_data, ref, changes} ->
+            {{:additional_data, ref, [change | changes]}, complete}
         end
     end)
   end

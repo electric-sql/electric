@@ -1,6 +1,7 @@
 defmodule Electric.Satellite.SubscriptionsTest do
   use ExUnit.Case, async: false
 
+  alias Electric.Satellite.ClientReconnectionInfo
   alias Electric.Replication.Changes.UpdatedRecord
   alias Satellite.ProtocolHelpers
   alias Electric.Replication.Postgres.Client
@@ -447,7 +448,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
     test "client can subscribe, then unsubscribe to stop streaming any further data",
          %{conn: pg_conn} = ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
-        start_replication_and_assert_response(conn, ctx.electrified_count)
+        rel_map = start_replication_and_assert_response(conn, ctx.electrified_count)
 
         request_id = uuid4()
         sub_id = uuid4()
@@ -469,9 +470,11 @@ defmodule Electric.Satellite.SubscriptionsTest do
 
         assert {[request_id], []} == receive_subscription_data(conn, sub_id)
 
+        uuid = uuid4()
+
         {:ok, 1} =
           :epgsql.equery(pg_conn, "INSERT INTO public.users (id, name) VALUES ($1, $2)", [
-            uuid4(),
+            uuid,
             "Garry"
           ])
 
@@ -490,6 +493,8 @@ defmodule Electric.Satellite.SubscriptionsTest do
                  MockClient.send_rpc(conn, "unsubscribe", %SatUnsubsReq{
                    subscription_ids: [sub_id]
                  })
+
+        assert {[^sub_id], _, [%Gone{pk: [^uuid]}]} = receive_unsub_gone_batch(conn, rel_map)
 
         {:ok, 1} =
           :epgsql.equery(pg_conn, "INSERT INTO public.users (id, name) VALUES ($1, $2)", [
@@ -1349,6 +1354,347 @@ defmodule Electric.Satellite.SubscriptionsTest do
         refute_received {^conn, %SatOpLog{ops: [%{op: {:additional_begin, _}} | _]}}
       end)
     end
+
+    @tag with_sql: """
+         INSERT INTO public.users (id, name) VALUES ('#{@john_doe_id}', 'John Doe');
+         INSERT INTO public.authored_entries (id, author_id, content) VALUES ('#{@entry_id}', '#{@john_doe_id}', 'Hello world');
+         INSERT INTO public.comments (id, entry_id, content, author_id) VALUES ('#{uuid4()}', '#{@entry_id}', 'Comment 1', '#{@john_doe_id}');
+         """
+    test "The client can unsubscribe and get a `GONE` message list",
+         %{conn: pg_conn} = ctx do
+      MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
+        rel_map = start_replication_and_assert_response(conn, ctx.electrified_count)
+
+        {sub_id, request_id, request} =
+          ProtocolHelpers.simple_sub_request(
+            users: [
+              include: [
+                authored_entries: [over: "author_id"]
+              ]
+            ]
+          )
+
+        assert {:ok, %SatSubsResp{err: nil}} =
+                 MockClient.make_rpc_call(conn, "subscribe", request)
+
+        assert {[^request_id], data} = receive_subscription_data(conn, sub_id)
+
+        assert [
+                 %SatOpInsert{row_data: %{values: [@john_doe_id, "John Doe"]}},
+                 %SatOpInsert{row_data: %{values: [@entry_id, "Hello world", @john_doe_id]}}
+               ] = data
+
+        {:ok, 1} =
+          :epgsql.equery(
+            pg_conn,
+            "INSERT INTO public.authored_entries (id, author_id, content) VALUES ($1, $2, $3)",
+            [
+              @other_entry_id,
+              @john_doe_id,
+              "Second item"
+            ]
+          )
+
+        assert [%NewRecord{record: %{"content" => "Second item"}}] =
+                 receive_txn_changes(conn, rel_map)
+
+        assert {:ok, %SatUnsubsResp{}} =
+                 MockClient.make_rpc_call(conn, "unsubscribe", %SatUnsubsReq{
+                   subscription_ids: [sub_id]
+                 })
+
+        assert {[^sub_id], _, data} = receive_unsub_gone_batch(conn, rel_map)
+
+        assert MapSet.new([
+                 %Gone{relation: {"public", "users"}, pk: [@john_doe_id]},
+                 %Gone{relation: {"public", "authored_entries"}, pk: [@entry_id]},
+                 %Gone{relation: {"public", "authored_entries"}, pk: [@other_entry_id]}
+               ]) == MapSet.new(data)
+      end)
+    end
+
+    @tag with_sql: """
+         INSERT INTO public.users (id, name) VALUES ('#{@john_doe_id}', 'John Doe');
+         INSERT INTO public.authored_entries (id, author_id, content) VALUES ('#{@entry_id}', '#{@john_doe_id}', 'Hello world');
+         INSERT INTO public.comments (id, entry_id, content, author_id) VALUES ('#{uuid4()}', '#{@entry_id}', 'Comment 1', '#{@john_doe_id}');
+         """
+    test "Unsubscribe from one shape keeps rows that are in others", %{conn: pg_conn} = ctx do
+      MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
+        rel_map = start_replication_and_assert_response(conn, ctx.electrified_count)
+
+        {sub_id, request_id, request} =
+          ProtocolHelpers.simple_sub_request(
+            users: [
+              include: [
+                authored_entries: [over: "author_id"]
+              ]
+            ]
+          )
+
+        assert {:ok, %SatSubsResp{err: nil}} =
+                 MockClient.make_rpc_call(conn, "subscribe", request)
+
+        assert {[^request_id], data} = receive_subscription_data(conn, sub_id)
+
+        assert [
+                 %SatOpInsert{row_data: %{values: [@john_doe_id, "John Doe"]}},
+                 %SatOpInsert{row_data: %{values: [@entry_id, "Hello world", @john_doe_id]}}
+               ] = data
+
+        {sub_id2, request_id2, request} = ProtocolHelpers.simple_sub_request("users")
+
+        assert {:ok, %SatSubsResp{err: nil}} =
+                 MockClient.make_rpc_call(conn, "subscribe", request)
+
+        assert {[^request_id2], []} = receive_subscription_data(conn, sub_id2)
+
+        assert {:ok, %SatUnsubsResp{}} =
+                 MockClient.make_rpc_call(conn, "unsubscribe", %SatUnsubsReq{
+                   subscription_ids: [sub_id]
+                 })
+
+        assert {[^sub_id], _, data} = receive_unsub_gone_batch(conn, rel_map)
+
+        # We should see only the authored entry gone, because subscription 2 keeps a reference to the user.
+        assert [%Gone{relation: {"public", "authored_entries"}, pk: [@entry_id]}] == data
+
+        # And check that the graph has been updated and updates come through correctly
+
+        Client.with_transaction(pg_conn, fn tx_conn ->
+          {:ok, 1} =
+            :epgsql.equery(
+              tx_conn,
+              "UPDATE public.users SET name = $2 WHERE id = $1",
+              [@john_doe_id, "Johnny Doe"]
+            )
+
+          {:ok, 1} =
+            :epgsql.equery(
+              tx_conn,
+              "UPDATE public.authored_entries SET content = $2 WHERE id = $1",
+              [@entry_id, "Updated"]
+            )
+        end)
+
+        assert [%UpdatedRecord{record: %{"name" => "Johnny Doe"}}] =
+                 receive_txn_changes(conn, rel_map)
+      end)
+    end
+
+    @tag with_sql: """
+         INSERT INTO public.users (id, name) VALUES ('#{@john_doe_id}', 'John Doe');
+         """
+    test "Unsub + reconnect: doesn't resend a GONE batch if acknowledged on reconnect", ctx do
+      {last_lsn, rel_map, sub_id} =
+        MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
+          rel_map = start_replication_and_assert_response(conn, ctx.electrified_count)
+
+          {sub_id, [%NewRecord{record: %{"id" => @john_doe_id}}]} =
+            simple_subscribe(conn, rel_map, :users)
+
+          {:ok, %SatUnsubsResp{}} =
+            MockClient.make_rpc_call(conn, "unsubscribe", %SatUnsubsReq{
+              subscription_ids: [sub_id]
+            })
+
+          {[^sub_id], lsn, [%Gone{pk: [@john_doe_id]}]} = receive_unsub_gone_batch(conn, rel_map)
+          {lsn, rel_map, sub_id}
+        end)
+
+      MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
+        # A reconnect at precisely the LSN of a GONE batch assumes + filled field assumes it was seen
+        assert {:ok, _} =
+                 MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{
+                   lsn: last_lsn,
+                   observed_gone_batch: [sub_id]
+                 })
+
+        assert {_, [%NewRecord{record: %{"id" => @john_doe_id}}]} =
+                 simple_subscribe(conn, rel_map, :users)
+
+        refute_received {^conn, %SatUnsubsDataBegin{}}
+      end)
+    end
+
+    @tag with_sql: "INSERT INTO public.users (id, name) VALUES ('#{@john_doe_id}', 'John Doe')"
+    test "Unsub + reconnect: reconnection before GONE batch with sub id acts as if unsub never happened",
+         ctx do
+      {last_lsn, rel_map, sub_id} =
+        MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
+          rel_map = start_replication_and_assert_response(conn, ctx.electrified_count)
+
+          {sub_id, [%NewRecord{record: %{"id" => @john_doe_id}}]} =
+            simple_subscribe(conn, rel_map, :users)
+
+          {:ok, %SatUnsubsResp{}} =
+            MockClient.make_rpc_call(conn, "unsubscribe", %SatUnsubsReq{
+              subscription_ids: [sub_id]
+            })
+
+          {[^sub_id], lsn, [%Gone{pk: [@john_doe_id]}]} = receive_unsub_gone_batch(conn, rel_map)
+          {lsn, rel_map, sub_id}
+        end)
+
+      MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
+        # A reconnect with same sub ID you unsubbed from is still allowed before the acknowledge point
+        assert {:ok, %{err: nil}} =
+                 MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{
+                   lsn: last_lsn,
+                   subscription_ids: [sub_id]
+                 })
+
+        {_sub_id, []} =
+          simple_subscribe(conn, rel_map, :users)
+
+        refute_received {^conn, %SatUnsubsDataBegin{}}
+      end)
+    end
+
+    @tag with_sql: "INSERT INTO public.users (id, name) VALUES ('#{@john_doe_id}', 'John Doe')"
+    test "Unsub + reconnect: send a GONE batch if reconnected before unsub but without this subscription",
+         ctx do
+      {last_lsn, rel_map, sub_id} =
+        MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
+          rel_map = start_replication_and_assert_response(conn, ctx.electrified_count)
+
+          {sub_id, [%NewRecord{record: %{"id" => @john_doe_id}}]} =
+            simple_subscribe(conn, rel_map, :users)
+
+          {lsn, [%Gone{pk: [@john_doe_id]}]} = simple_unsub(conn, rel_map, sub_id)
+          {lsn, rel_map, sub_id}
+        end)
+
+      MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
+        # A reconnect at precisely the LSN of a GONE batch and without filled field assumes GONE batch was not seen
+        assert {:ok, %{err: nil}} =
+                 MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{
+                   lsn: last_lsn
+                 })
+
+        {[^sub_id], _, [%Gone{pk: [@john_doe_id]}]} = receive_unsub_gone_batch(conn, rel_map)
+      end)
+    end
+
+    @tag with_sql: "INSERT INTO public.users (id, name) VALUES ('#{@john_doe_id}', 'John Doe')"
+    test "Unsub + reconnect: reconnection after a gone batch & without ID assumes it seen", ctx do
+      {last_lsn, rel_map} =
+        MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
+          rel_map = start_replication_and_assert_response(conn, ctx.electrified_count)
+
+          {sub_id, [%NewRecord{record: %{"id" => @john_doe_id}}]} =
+            simple_subscribe(conn, rel_map, :users)
+
+          {_lsn, [%Gone{pk: [@john_doe_id]}]} = simple_unsub(conn, rel_map, sub_id)
+
+          # Get a valid LSN after the unsub point
+          {_, []} = simple_subscribe(conn, rel_map, :my_entries)
+
+          {:ok, _} =
+            :epgsql.squery(
+              ctx.conn,
+              "INSERT INTO public.my_entries (id, content) VALUES (gen_random_uuid(), 'test')"
+            )
+
+          assert %{lsn: lsn, changes: [%{relation: {_, "my_entries"}}]} =
+                   receive_txn(conn, rel_map)
+
+          {lsn, rel_map}
+        end)
+
+      MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
+        # A reconnect at an LSN deserialize_op_log than the GONE batch assumes it was seen
+        assert {:ok, %{err: nil}} =
+                 MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{
+                   lsn: last_lsn
+                 })
+
+        {_, [%NewRecord{record: %{"id" => @john_doe_id}}]} =
+          simple_subscribe(conn, rel_map, :users)
+
+        refute_received {^conn, %SatUnsubsDataBegin{}}
+      end)
+    end
+
+    @tag with_sql: "INSERT INTO public.users (id, name) VALUES ('#{@john_doe_id}', 'John Doe')"
+    test "Unsub + reconnect: can't reconnect with a subscription id at a point after a GONE batch is acknowledged",
+         ctx do
+      {last_lsn, sub_id} =
+        MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
+          rel_map = start_replication_and_assert_response(conn, ctx.electrified_count)
+
+          {sub_id, [%NewRecord{record: %{"id" => @john_doe_id}}]} =
+            simple_subscribe(conn, rel_map, :users)
+
+          {lsn, [%Gone{pk: [@john_doe_id]}]} = simple_unsub(conn, rel_map, sub_id)
+
+          MockClient.send_data(conn, %SatOpLogAck{lsn: lsn, gone_subscription_ids: [sub_id]})
+
+          {lsn, sub_id}
+        end)
+
+      MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
+        # Should fail, because it's after the acknowledgement point of unsub, so sub id is not valid
+        assert {:ok, %{err: %{code: :SUBSCRIPTION_NOT_FOUND}}} =
+                 MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{
+                   lsn: last_lsn,
+                   subscription_ids: [sub_id]
+                 })
+      end)
+    end
+
+    @tag with_sql: "INSERT INTO public.users (id, name) VALUES ('#{@john_doe_id}', 'John Doe')"
+    test "Unsub + reconnect: unsubscribe points are cached",
+         ctx do
+      {last_lsn, rel_map, sub_id} =
+        MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
+          rel_map = start_replication_and_assert_response(conn, ctx.electrified_count)
+
+          {sub_id, [%NewRecord{record: %{"id" => @john_doe_id}}]} =
+            simple_subscribe(conn, rel_map, :users)
+
+          {lsn, [%Gone{pk: [@john_doe_id]}]} = simple_unsub(conn, rel_map, sub_id)
+          {lsn, rel_map, sub_id}
+        end)
+
+      # Clear ETS cache to force DB reload
+      ClientReconnectionInfo.clear_all_ets_data(ctx.client_id)
+
+      MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
+        # A reconnect at precisely the LSN of a GONE batch and without filled field assumes GONE batch was not seen
+        assert {:ok, %{err: nil}} =
+                 MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{
+                   lsn: last_lsn
+                 })
+
+        {[^sub_id], _, [%Gone{pk: [@john_doe_id]}]} = receive_unsub_gone_batch(conn, rel_map)
+      end)
+    end
+  end
+
+  defp simple_subscribe(conn, rel_map, shape) do
+    {sub_id, request_id, request} = ProtocolHelpers.simple_sub_request(shape)
+
+    assert {:ok, %SatSubsResp{err: nil}} =
+             MockClient.make_rpc_call(conn, "subscribe", request)
+
+    {[^request_id], data} =
+      receive_subscription_data(conn, sub_id, relations: rel_map)
+
+    {sub_id, data}
+  end
+
+  defp simple_unsub(conn, rel_map, id_or_ids) do
+    ids = List.wrap(id_or_ids)
+
+    assert {:ok, %SatUnsubsResp{}} =
+             MockClient.make_rpc_call(conn, "unsubscribe", %SatUnsubsReq{
+               subscription_ids: ids
+             })
+
+    {received_ids, lsn, msgs} = receive_unsub_gone_batch(conn, rel_map)
+    assert Enum.sort(ids) == Enum.sort(received_ids)
+
+    {lsn, msgs}
   end
 
   # Here we intentionally set display settings to unsupported values on the database, so that
@@ -1364,5 +1710,13 @@ defmodule Electric.Satellite.SubscriptionsTest do
       ALTER DATABASE #{dbname} SET extra_float_digits = -1;
       """
     )
+  end
+
+  def flush() do
+    receive do
+      _ -> flush()
+    after
+      0 -> :ok
+    end
   end
 end

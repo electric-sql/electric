@@ -170,6 +170,10 @@ defmodule Electric.Satellite.Protocol.OutRep do
   end
 
   @spec ack_transactions(t(), non_neg_integer()) :: :error | {:ok, t()}
+  # Special-case txid = 0 for clients that need to send an ACK message having not seen any transactions
+  # Use-case: a client has established a subscription, but no additional txns touch their shape.
+  def ack_transactions(%__MODULE__{} = out, 0), do: {:ok, out}
+
   def ack_transactions(
         %__MODULE__{unacked_transaction_count: count, unacked_transactions: txn_ids} = out,
         txn_id

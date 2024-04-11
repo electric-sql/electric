@@ -132,7 +132,11 @@ export interface SatInStartReplicationReq {
    * The SQL dialect used by the client
    * Defaults to SQLite if not specified
    */
-  sqlDialect?: SatInStartReplicationReq_Dialect | undefined;
+  sqlDialect?:
+    | SatInStartReplicationReq_Dialect
+    | undefined;
+  /** List of subscription IDs for which the client observed a GONE batch after unsubscribing */
+  observedGoneBatch: string[];
 }
 
 export enum SatInStartReplicationReq_Option {
@@ -261,6 +265,8 @@ export interface SatOpLogAck {
   subscriptionIds: string[];
   /** Transaction IDs for which additional data was received immediately after this transaction */
   additionalDataSourceIds: Long[];
+  /** Subscription IDs for GONE batches received at this LSN */
+  goneSubscriptionIds: string[];
 }
 
 /**
@@ -694,6 +700,20 @@ export interface SatSubsDataBegin {
 /** End delimiter for the incoming subscription data */
 export interface SatSubsDataEnd {
   $type: "Electric.Satellite.SatSubsDataEnd";
+}
+
+/** Begin delimiter for the incoming subscription data */
+export interface SatUnsubsDataBegin {
+  $type: "Electric.Satellite.SatUnsubsDataBegin";
+  /** Identifier of the subscriptions that were handled as unsubbed */
+  subscriptionIds: string[];
+  /** LSN at which this data is being sent. May be a duplicate of a transaction that was sent immediately before. */
+  lsn: Uint8Array;
+}
+
+/** End delimiter for the incoming subscription data */
+export interface SatUnsubsDataEnd {
+  $type: "Electric.Satellite.SatUnsubsDataEnd";
 }
 
 /** Begin delimiter for the initial shape data */
@@ -1136,6 +1156,7 @@ function createBaseSatInStartReplicationReq(): SatInStartReplicationReq {
     schemaVersion: undefined,
     observedTransactionData: [],
     sqlDialect: undefined,
+    observedGoneBatch: [],
   };
 }
 
@@ -1164,6 +1185,9 @@ export const SatInStartReplicationReq = {
     writer.ldelim();
     if (message.sqlDialect !== undefined) {
       writer.uint32(56).int32(message.sqlDialect);
+    }
+    for (const v of message.observedGoneBatch) {
+      writer.uint32(66).string(v!);
     }
     return writer;
   },
@@ -1237,6 +1261,13 @@ export const SatInStartReplicationReq = {
 
           message.sqlDialect = reader.int32() as any;
           continue;
+        case 8:
+          if (tag !== 66) {
+            break;
+          }
+
+          message.observedGoneBatch.push(reader.string());
+          continue;
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1257,6 +1288,7 @@ export const SatInStartReplicationReq = {
     message.schemaVersion = object.schemaVersion ?? undefined;
     message.observedTransactionData = object.observedTransactionData?.map((e) => Long.fromValue(e)) || [];
     message.sqlDialect = object.sqlDialect ?? undefined;
+    message.observedGoneBatch = object.observedGoneBatch?.map((e) => e) || [];
     return message;
   },
 };
@@ -1704,6 +1736,7 @@ function createBaseSatOpLogAck(): SatOpLogAck {
     transactionId: Long.UZERO,
     subscriptionIds: [],
     additionalDataSourceIds: [],
+    goneSubscriptionIds: [],
   };
 }
 
@@ -1728,6 +1761,9 @@ export const SatOpLogAck = {
       writer.uint64(v);
     }
     writer.ldelim();
+    for (const v of message.goneSubscriptionIds) {
+      writer.uint32(50).string(v!);
+    }
     return writer;
   },
 
@@ -1783,6 +1819,13 @@ export const SatOpLogAck = {
           }
 
           break;
+        case 6:
+          if (tag !== 50) {
+            break;
+          }
+
+          message.goneSubscriptionIds.push(reader.string());
+          continue;
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1806,6 +1849,7 @@ export const SatOpLogAck = {
       : Long.UZERO;
     message.subscriptionIds = object.subscriptionIds?.map((e) => e) || [];
     message.additionalDataSourceIds = object.additionalDataSourceIds?.map((e) => Long.fromValue(e)) || [];
+    message.goneSubscriptionIds = object.goneSubscriptionIds?.map((e) => e) || [];
     return message;
   },
 };
@@ -4119,6 +4163,106 @@ export const SatSubsDataEnd = {
 };
 
 messageTypeRegistry.set(SatSubsDataEnd.$type, SatSubsDataEnd);
+
+function createBaseSatUnsubsDataBegin(): SatUnsubsDataBegin {
+  return { $type: "Electric.Satellite.SatUnsubsDataBegin", subscriptionIds: [], lsn: new Uint8Array() };
+}
+
+export const SatUnsubsDataBegin = {
+  $type: "Electric.Satellite.SatUnsubsDataBegin" as const,
+
+  encode(message: SatUnsubsDataBegin, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    for (const v of message.subscriptionIds) {
+      writer.uint32(10).string(v!);
+    }
+    if (message.lsn.length !== 0) {
+      writer.uint32(18).bytes(message.lsn);
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatUnsubsDataBegin {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatUnsubsDataBegin();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 10) {
+            break;
+          }
+
+          message.subscriptionIds.push(reader.string());
+          continue;
+        case 2:
+          if (tag !== 18) {
+            break;
+          }
+
+          message.lsn = reader.bytes();
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatUnsubsDataBegin>, I>>(base?: I): SatUnsubsDataBegin {
+    return SatUnsubsDataBegin.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatUnsubsDataBegin>, I>>(object: I): SatUnsubsDataBegin {
+    const message = createBaseSatUnsubsDataBegin();
+    message.subscriptionIds = object.subscriptionIds?.map((e) => e) || [];
+    message.lsn = object.lsn ?? new Uint8Array();
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatUnsubsDataBegin.$type, SatUnsubsDataBegin);
+
+function createBaseSatUnsubsDataEnd(): SatUnsubsDataEnd {
+  return { $type: "Electric.Satellite.SatUnsubsDataEnd" };
+}
+
+export const SatUnsubsDataEnd = {
+  $type: "Electric.Satellite.SatUnsubsDataEnd" as const,
+
+  encode(_: SatUnsubsDataEnd, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatUnsubsDataEnd {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatUnsubsDataEnd();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatUnsubsDataEnd>, I>>(base?: I): SatUnsubsDataEnd {
+    return SatUnsubsDataEnd.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatUnsubsDataEnd>, I>>(_: I): SatUnsubsDataEnd {
+    const message = createBaseSatUnsubsDataEnd();
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatUnsubsDataEnd.$type, SatUnsubsDataEnd);
 
 function createBaseSatShapeDataBegin(): SatShapeDataBegin {
   return { $type: "Electric.Satellite.SatShapeDataBegin", requestId: "", uuid: "" };
