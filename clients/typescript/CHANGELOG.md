@@ -1,5 +1,24 @@
 # electric-sql
 
+## 0.10.0
+
+### Minor Changes
+
+- 64c8f87e: Introduce shapes with relation following on server and client
+
+### Patch Changes
+
+- 494aebd9: Don't receive notifications when no table has changed
+- 6adfe2e2: Fix queries trying to retrieve relations using `null` foreign keys.
+- da1b6f6d: Fixed incorrect field transformation for queries with included relations
+- a48bcdc3: Implement `setReplicationTransform` API on tables that allows transforming row fields at the replication boundary.
+- 179e9945: Fix `op-sqlite` driver integration using HostObjects and failing to return results
+- b7e99c88: Added support for BYTEA/BLOB column type across the sync service, TS client, and client generator
+- Updated dependencies [d8ee5f0e]
+- Updated dependencies [a48bcdc3]
+- Updated dependencies [b7e99c88]
+  - @electric-sql/prisma-generator@1.1.4
+
 ## 0.9.6
 
 ### Patch Changes
