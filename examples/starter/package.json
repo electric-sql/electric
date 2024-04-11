@@ -14,8 +14,8 @@
     "create-electric-app": "dist/index.js"
   },
   "scripts": {
-    "build": "pnpm run make-templates && shx rm -rf ./dist && tsc && tsmodule build",
-    "prepublishOnly": "pnpm run build",
+    "build": "pnpm make-templates && shx rm -rf ./dist && tsc && tsmodule build",
+    "prepublishOnly": "pnpm build",
     "make-templates": "node ./scripts/make-templates.js",
     "format": "prettier --write --loglevel warn .",
     "e2e": "ava e2e/**/*.test.js"
