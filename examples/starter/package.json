@@ -14,7 +14,7 @@
     "create-electric-app": "dist/index.js"
   },
   "scripts": {
-    "build": "npm run make-templates && shx rm -rf ./dist && tsc -p tsconfig.build.json && tsmodule build",
+    "build": "npm run make-templates && shx rm -rf ./dist && tsc && tsmodule build",
     "prepublishOnly": "npm run build",
     "make-templates": "node ./scripts/make-templates.js",
     "format": "prettier --write --loglevel warn .",
