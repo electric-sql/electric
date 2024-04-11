@@ -132,3 +132,16 @@ test('no more connectivity events after unsubscribe', async (t) => {
 
   t.is(notifications.length, 1)
 })
+
+test('empty changes should not emit', async (t) => {
+  const source = new EventNotifier('foo.db')
+
+  const notifications = []
+
+  source.subscribeToDataChanges((x) => {
+    notifications.push(x)
+  })
+
+  source.actuallyChanged('foo.db', [], 'local')
+  t.is(notifications.length, 0)
+})
