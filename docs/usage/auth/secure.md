@@ -108,7 +108,7 @@ await electric.connect(token)
 
 ## How the server validates auth tokens
 
-The sync service running in secure auth mode expects the standard `iat` and `exp` claims, as well as the custom `sub` claim (formerly `user_id`) to be included in the token.
+The sync service running in secure auth mode expects the standard `iat`, `exp` and `sub` (formerly a custom `user_id`) claims to be included in the token.
 
 If any of `iat`, `exp`, or `nbf` claims are included, they will be validated according to the JWT specification and so your token will get rejected if any of these standard claims' values are invalid. If you additionally configure the "issuer" and/or "audience" of the Secure auth mode, then the `iss` and/or `aud` claims are also required to be included in the auth token.
 
@@ -148,15 +148,17 @@ By default, if this setting is omitted or is set to an empty string, the `sub` /
 }
 ```
 
+Note that the validation of standard claims are not affected by this setting and are still done on the top level.
+
 ### `AUTH_JWT_ISS`
 
-This setting allows you to specificy the "issuer" that will be matched against the `iss` claim extracted from auth tokens. This can be used to ensure that only tokens created by the expected party are used to authenticate your client.
+This setting allows you to specify the "issuer" that will be matched against the `iss` claim extracted from auth tokens. This can be used to ensure that only tokens created by the expected party are used to authenticate your client.
 
 Leaving this variable empty makes the `iss` claim optional and doesn't verify its value even if it's included in token claims.
 
 ### `AUTH_JWT_AUD`
 
-This setting allows you to specificy the "audience" that will be matched against the `aud` claim extracted from auth tokens. This can be used to ensure that only tokens for a specific application are used to authenticate your client.
+This setting allows you to specify the "audience" that will be matched against the `aud` claim extracted from auth tokens. This can be used to ensure that only tokens for a specific application are used to authenticate your client.
 
 Leaving this variable empty makes the `aud` claim optional and doesn't verify its value even if it's included in token claims.
 
