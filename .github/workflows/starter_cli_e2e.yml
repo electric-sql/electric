@@ -7,6 +7,7 @@ on:
       - main
   pull_request:
     paths:
+      - 'pnpm-lock.yaml'
       - 'examples/starter/**'
       - '!examples/starter/**.md'
 
@@ -34,9 +35,9 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           cache: pnpm
-      - name: Install dependencies
-        run: npm ci
+      - name: Deps
+        run: pnpm install --frozen-lockfile
       - name: Build
-        run: npm run build
+        run: pnpm build
       - name: Run tests
-        run: npm run e2e
+        run: pnpm e2e
