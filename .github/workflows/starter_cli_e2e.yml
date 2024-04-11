@@ -38,4 +38,4 @@ jobs:
       - name: Build
         run: pnpm build
       - name: Run tests
-        run: npm e2e
+        run: pnpm e2e
