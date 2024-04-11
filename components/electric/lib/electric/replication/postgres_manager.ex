@@ -226,8 +226,8 @@ defmodule Electric.Replication.PostgresConnectorMng do
     subs_name = quote_ident(repl_opts.subscription)
 
     Client.with_pool(origin, fn ->
-      with {[], []} <- Client.query!("ALTER SUBSCRIPTION #{subs_name} ENABLE"),
-           {[], []} <-
+      with {nil, nil} <- Client.query!("ALTER SUBSCRIPTION #{subs_name} ENABLE"),
+           {nil, nil} <-
              Client.query!(
                "ALTER SUBSCRIPTION #{subs_name} REFRESH PUBLICATION WITH (copy_data = false)"
              ) do
@@ -251,7 +251,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
     Client.with_pool(origin, fn ->
       Client.query!("ALTER SUBSCRIPTION #{subs_name} DISABLE")
       |> case do
-        :ok ->
+        {nil, nil} ->
           Logger.notice("subscription stopped for #{origin}")
           :ok
 

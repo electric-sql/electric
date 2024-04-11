@@ -77,15 +77,7 @@ defmodule Electric.Postgres.Extension do
   # support for timestamp columns :(
   @txts_type "int8"
 
-  defp migration_history_query(after_version) do
-    where_clause =
-      if after_version do
-        "WHERE v.txid > (SELECT txid FROM #{@version_table} WHERE version = $1)"
-      else
-        # Dummy condition just to keep the $1 parameter in the query.
-        "WHERE $1::text IS NULL"
-      end
-
+  def migration_history_query do
     """
     SELECT
       v.txid::xid8,
@@ -98,7 +90,11 @@ defmodule Electric.Postgres.Extension do
       #{@version_table} v
     JOIN
       #{@schema_table} s USING (version)
-    #{where_clause}
+    WHERE
+      CASE $1
+        WHEN NULL THEN true
+        ELSE v.txid > (SELECT txid FROM #{@version_table} WHERE version = $1)
+      END
     ORDER BY
       v.txid ASC
     """
@@ -160,17 +156,23 @@ defmodule Electric.Postgres.Extension do
     end
   end
 
+  def current_schema_query, do: @current_schema_query
+
   def current_schema(conn) do
     with {:ok, [_, _], rows} <- :epgsql.equery(conn, @current_schema_query, []) do
-      case rows do
-        [] ->
-          {:ok, nil, Schema.new()}
+      load_schema_versions(rows)
+    end
+  end
 
-        [{schema, version}] ->
-          with {:ok, schema} <- Proto.Schema.json_decode(schema) do
-            {:ok, version, schema}
-          end
-      end
+  def load_schema_versions(rows) do
+    case rows do
+      [] ->
+        {:ok, nil, Schema.new()}
+
+      [{schema, version}] ->
+        with {:ok, schema} <- Proto.Schema.json_decode(schema) do
+          {:ok, version, schema}
+        end
     end
   end
 
@@ -216,17 +218,6 @@ defmodule Electric.Postgres.Extension do
       message: "invalid tx fk row #{inspect(row)}, expecting %{\"txid\" => _, \"txts\" => _}"
   end
 
-  @spec migration_history(conn(), binary() | nil) :: {:ok, [Migration.t()]} | {:error, term()}
-  def migration_history(conn, after_version \\ nil)
-
-  def migration_history(conn, after_version) do
-    query = migration_history_query(after_version)
-
-    with {:ok, [_, _, _, _, _, _], rows} <- :epgsql.equery(conn, query, [after_version]) do
-      {:ok, load_migrations(rows)}
-    end
-  end
-
   def known_migration_version?(conn, version) when is_binary(version) do
     case :epgsql.equery(conn, "SELECT 1 FROM #{@version_table} WHERE version = $1", [version]) do
       {:ok, [_], [{1}]} -> true
@@ -234,7 +225,9 @@ defmodule Electric.Postgres.Extension do
     end
   end
 
-  defp load_migrations(rows) do
+  def load_migrations(rows) do
+    IO.inspect(rows)
+
     Enum.map(rows, fn {txid_str, txts, version, timestamp, schema_json, stmts} ->
       %Migration{
         version: version,
