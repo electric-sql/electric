@@ -30,6 +30,10 @@ function toPostgres(v: any, pgType: PgType): any {
     return serialiseJSON(v)
   }
 
+  if (pgType === PgBasicType.PG_FLOAT4 || pgType === PgBasicType.PG_REAL) {
+    return Math.fround(v)
+  }
+
   return v
 }
 
@@ -50,6 +54,11 @@ function fromPostgres(v: any, pgType: PgType): any {
 
   if (pgType === PgBasicType.PG_INT8) {
     return BigInt(v) // needed because the node-pg driver returns bigints as strings
+  }
+
+  if (pgType === PgBasicType.PG_FLOAT4 || pgType === PgBasicType.PG_REAL) {
+    // fround the number to represent it as a 32-bit float
+    return Math.fround(v)
   }
 
   return v
