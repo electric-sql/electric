@@ -4,6 +4,28 @@ defmodule Electric.Replication.Eval.RunnerTest do
   alias Electric.Replication.Eval.Runner
   alias Electric.Replication.Eval.Parser
 
+  describe "record_to_ref_values/3" do
+    test "should build ref values from record with known types and nils" do
+      refs = %{
+        ["this", "string"] => :text,
+        ["this", "int"] => :int4,
+        ["this", "null_int"] => :int4
+      }
+
+      assert {:ok,
+              %{
+                ["this", "string"] => "test",
+                ["this", "int"] => 5,
+                ["this", "null_int"] => nil
+              }} ==
+               Runner.record_to_ref_values(refs, %{
+                 "string" => "test",
+                 "int" => "5",
+                 "null_int" => nil
+               })
+    end
+  end
+
   describe "execute/2" do
     test "should correctly execute constant expressions" do
       assert {:ok, true} =
