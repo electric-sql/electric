@@ -4,7 +4,7 @@
 
 ### Minor Changes
 
-- 284d987d: Introduce shapes with relation following on server and client
+- 64c8f87e: Introduce shapes with relation following on server and client
 
 ### Patch Changes
 

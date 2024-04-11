@@ -26,7 +26,7 @@ defmodule Electric.Plug.SatelliteWebsocketPlug do
         &InitialSync.query_after_move_in/4
       )
 
-  @currently_supported_versions ">= 0.6.0 and <= #{%{Electric.vsn() | pre: []}}"
+  @currently_supported_versions ">= 0.10.0 and <= #{%{Electric.vsn() | pre: []}}"
 
   def call(conn, handler_opts) do
     with :ok <- check_if_valid_upgrade(conn),
