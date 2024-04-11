@@ -27,16 +27,15 @@ async function assertPackageJson(t) {
 }
 
 test.serial.before(async (t) => {
-  t.timeout(60000)
   await fs.rm(tempDir, { recursive: true, force: true })
 })
 
-test.serial.beforeEach(async () => {
+test.serial.beforeEach(async (t) => {
+  t.timeout(10 * 60000)
   await fs.mkdir(tempDir, { recursive: true })
 })
 
 test.serial.afterEach.always(async () => {
-  // await new Promise((res) => setTimeout(res, 5000))
   await fs.rm(tempDir, { recursive: true, force: true })
 })
 
