@@ -36,9 +36,7 @@ const clearItems = () => db.items.deleteMany()
         <code>{{ item.value }}</code>
       </p>
     </div>
-    <div v-else>
-      No items available.
-    </div>
+    <div v-else />
   </div>
 </template>
 

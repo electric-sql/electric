@@ -1,0 +1,42 @@
+name: create-electric-app / E2E
+
+on:
+  workflow_call:
+  push:
+    branches:
+      - main
+  pull_request:
+    paths:
+      - 'examples/starter/**'
+      - '!examples/starter/**.md'
+
+defaults:
+  run:
+    working-directory: examples/starter
+
+concurrency:
+  group: starter-cli-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [20]
+    steps:
+      - uses: actions/checkout@v3
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 8
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: pnpm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Run tests
+        run: npm run e2e

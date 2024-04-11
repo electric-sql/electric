@@ -16,19 +16,9 @@
 
 This is an example web application using ElectricSQL in the browser with [wa-sqlite](https://github.com/rhashimoto/wa-sqlite).
 
-## Instructions
-
-Clone the [electric-sql/electric](https://github.com/electric-sql/electric) mono-repo and change directory into this example folder:
-
-```sh
-git clone https://github.com/electric-sql/electric
-cd electric/examples/web-wa-sqlite
-```
-
 ## Pre-reqs
 
 You need [NodeJS >= 16.11 and Docker Compose v2](https://electric-sql.com/docs/usage/installation/prereqs).
-```
 
 ## Install
 

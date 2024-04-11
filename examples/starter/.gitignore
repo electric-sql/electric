@@ -1,3 +1,9 @@
 node_modules
-template
 dist
+.tmp
+
+# ignore template folder
+templates
+
+# ignore test-app folder used for testing the CLI
+test-app

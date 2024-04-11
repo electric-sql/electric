@@ -1,6 +1,6 @@
 {
   "name": "electric-sql-react-native-example",
-  "version": "0.9.3",
+  "version": "0.10.0",
   "author": "ElectricSQL",
   "license": "Apache-2.0",
   "scripts": {
@@ -13,7 +13,7 @@
     "db:migrate": "npx electric-sql with-config \"npx pg-migrations apply --database {{ELECTRIC_PROXY}} --directory ./db/migrations\"",
     "db:psql": "npx electric-sql psql",
     "electric:start": "npx electric-sql start",
-    "pods:install": "cd ios && bundle exec pod install && cd ..",
+    "pods:install": "cd ios && bundle install && bundle exec pod install && cd ..",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
     "start": "react-native start",
     "start:android": "react-native run-android",
@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "@op-engineering/op-sqlite": "^2.0.22",
-    "electric-sql": "^0.9.6",
+    "electric-sql": "^0.10.0",
     "react": "18.2.0",
     "react-native": "0.73.6",
     "react-native-get-random-values": "^1.11.0",
@@ -44,8 +44,9 @@
     "eslint": "^8.57.0",
     "jest": "^29.7.0",
     "prettier": "2.8.8",
+    "react-native-eject": "^0.2.0",
     "react-test-renderer": "18.2.0",
-    "typescript": "5.0.4"
+    "typescript": "5.4.4"
   },
   "engines": {
     "node": ">=18"

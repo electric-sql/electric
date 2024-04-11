@@ -22,13 +22,6 @@ See the [Expo installation docs here](https://docs.expo.dev/get-started/installa
 
 ## Install
 
-Clone the [electric-sql/electric](https://github.com/electric-sql/electric) mono-repo and change directory into this example folder:
-
-```sh
-git clone https://github.com/electric-sql/electric
-cd electric/examples/expo
-```
-
 Install the dependencies:
 
 ```sh
@@ -65,10 +58,16 @@ npm run client:generate
 
 ## Run
 
-Run in the iOS simulator:
+Run on the iOS simulator:
 
 ```shell
 npm run start:ios
+```
+
+Run on the Android emulator:
+
+```shell
+npm run start:android
 ```
 
 ## More information

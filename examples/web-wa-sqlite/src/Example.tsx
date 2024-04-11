@@ -1,67 +1,14 @@
-import { useEffect, useState } from 'react'
-
-import { LIB_VERSION } from 'electric-sql/version'
-import { makeElectricContext, useLiveQuery } from 'electric-sql/react'
-import { genUUID, uniqueTabId } from 'electric-sql/util'
-import { ElectricDatabase, electrify } from 'electric-sql/wa-sqlite'
-
-import { authToken } from './auth'
-import { Electric, Items as Item, schema } from './generated/client'
+import { useEffect } from 'react'
+import { useLiveQuery } from 'electric-sql/react'
+import { genUUID } from 'electric-sql/util'
+import { Items as Item } from './generated/client'
+import { useElectric } from './ElectricProvider'
 
 import './Example.css'
 
-const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
-
 export const Example = () => {
-  const [ electric, setElectric ] = useState<Electric>()
-
-  useEffect(() => {
-    let isMounted = true
-
-    const init = async () => {
-      const config = {
-        debug: import.meta.env.DEV,
-        url: import.meta.env.ELECTRIC_SERVICE
-      }
-
-      const { tabId } = uniqueTabId()
-      const scopedDbName = `basic-${LIB_VERSION}-${tabId}.db`
-
-      const conn = await ElectricDatabase.init(scopedDbName) 
-      const electric = await electrify(conn, schema, config)
-      await electric.connect(authToken())
-
-
-      if (!isMounted) {
-        return
-      }
-
-      setElectric(electric)
-    }
-
-    init()
-
-    return () => {
-      isMounted = false
-    }
-  }, [])
-
-  if (electric === undefined) {
-    return null
-  }
-
-  return (
-    <ElectricProvider db={electric}>
-      <ExampleComponent />
-    </ElectricProvider>
-  )
-}
-
-const ExampleComponent = () => {
   const { db } = useElectric()!
-  const { results } = useLiveQuery(
-    db.items.liveMany()
-  )
+  const { results } = useLiveQuery(db.items.liveMany())
 
   useEffect(() => {
     const syncItems = async () => {
@@ -79,7 +26,7 @@ const ExampleComponent = () => {
     await db.items.create({
       data: {
         value: genUUID(),
-      }
+      },
     })
   }
 
@@ -92,16 +39,16 @@ const ExampleComponent = () => {
   return (
     <div>
       <div className="controls">
-        <button className="button" onClick={ addItem }>
+        <button className="button" onClick={addItem}>
           Add
         </button>
-        <button className="button" onClick={ clearItems }>
+        <button className="button" onClick={clearItems}>
           Clear
         </button>
       </div>
       {items.map((item: Item, index: number) => (
-        <p key={ index } className="item">
-          <code>{ item.value }</code>
+        <p key={index} className="item">
+          <code>{item.value}</code>
         </p>
       ))}
     </div>
