@@ -1,5 +1,19 @@
 # @core/electric
 
+## 0.10.0
+
+### Minor Changes
+
+- 284d987d: Introduce shapes with relation following on server and client
+
+### Patch Changes
+
+- f200734d: Fix the issue where the sync service would not sync any rows that had been present in a table before it was electrified.
+- 419e7b28: Fix unbounded disk usage growth caused by the WAL records retained by Electric's replication slot.
+- b7e99c88: Added support for BYTEA/BLOB column type across the sync service, TS client, and client generator
+- 378b1af1: fix: make sure the client is gracefully disconnected if PG is too slow on connection
+- 2394ec93: Include all publishable tables in the publication that Electric creates at startup.
+
 ## 0.9.4
 
 ### Patch Changes
