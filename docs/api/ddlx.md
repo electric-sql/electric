@@ -476,6 +476,10 @@ ELECTRIC UNASSIGN 'record.reader'
 
 ## Local migrations
 
+:::caution Not implemented
+The syntax and the overall design of local migrations described below is not yet implemented. This sections describes a planned feature that we intend to implement at some point in the future.
+:::
+
 The `SQLITE` statement provides a mechanism to run DDL statements directly on the local SQLite database. 
 
 ### `SQLITE`
