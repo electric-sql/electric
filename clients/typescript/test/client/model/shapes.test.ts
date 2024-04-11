@@ -368,13 +368,12 @@ test.serial('nested shape is constructed', async (t) => {
   const shape = Post.computeShape(input)
   t.deepEqual(shape, {
     tablename: 'Post',
-    where:
-      "(this.id IN (3, 'test') OR this.test LIKE '\\%hello%') AND ((NOT this.id = 1) AND (NOT this.id = 2)) AND (this.nbr = 6 AND this.nbr = 7) AND (this.title = 'foo') AND (this.contents = 'important''')",
+    where: `(this."id" IN (3, 'test') OR this."test" LIKE '\\%hello%') AND ((NOT this."id" = 1) AND (NOT this."id" = 2)) AND (this."nbr" = 6 AND this."nbr" = 7) AND (this."title" = 'foo') AND (this."contents" = 'important''')`,
     include: [
       {
         foreignKey: ['authorId'],
         select: {
-          where: "this.value < '2024-01-01T00:00:00.000Z'",
+          where: `this."value" < '2024-01-01T00:00:00.000Z'`,
           tablename: 'User',
           include: [
             {
