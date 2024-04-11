@@ -4,7 +4,7 @@ Make sure you have Docker and Node.js (>=16.11) and then:
 npx create-electric-app@latest my-app --template react
 ```
 
-You can specify the desired template, available options are `react` and `vue`. Change directory into `my-app` and start the backend services. This will use Docker Compose to run [Postgres](../usage/installation/postgres.md) and the [Electric sync service](../usage/installation/service.md):
+You can specify the desired template, available options are `react`, `vue`, `expo`, and `react-native`. Change directory into `my-app` and start the backend services. This will use Docker Compose to run [Postgres](../usage/installation/postgres.md) and the [Electric sync service](../usage/installation/service.md):
 
 ```shell
 cd my-app
