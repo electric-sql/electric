@@ -1,5 +1,11 @@
 # @core/electric
 
+## 0.10.1
+
+### Patch Changes
+
+- c8eec867: Fix handling NULL values when filtering replication stream
+
 ## 0.10.0
 
 ### Minor Changes
