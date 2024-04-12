@@ -1,5 +1,11 @@
 # electric-sql
 
+## 0.10.1
+
+### Patch Changes
+
+- b7faf724: Fixed GC on the client after a server-requested reset if nested shapes are used
+
 ## 0.10.0
 
 ### Minor Changes
