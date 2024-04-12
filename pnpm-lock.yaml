@@ -1,4 +1,4 @@
-lockfileVersion: '6.0'
+lockfileVersion: '6.1'
 
 settings:
   autoInstallPeers: true
@@ -83,6 +83,9 @@ importers:
       lodash.throttle:
         specifier: ^4.1.1
         version: 4.1.1
+      lodash.uniqwith:
+        specifier: ^4.5.0
+        version: 4.5.0
       loglevel:
         specifier: ^1.8.1
         version: 1.8.1
@@ -168,6 +171,9 @@ importers:
       '@types/lodash.throttle':
         specifier: ^4.1.7
         version: 4.1.7
+      '@types/lodash.uniqwith':
+        specifier: ^4.5.9
+        version: 4.5.9
       '@types/node':
         specifier: ^18.8.4
         version: 18.16.16
@@ -266,7 +272,7 @@ importers:
         version: 1.8.27(typescript@5.4.3)
       wa-sqlite:
         specifier: rhashimoto/wa-sqlite#semver:^0.9.8
-        version: github.com/rhashimoto/wa-sqlite/f1f8550ea9babe1867e5ec2c170aaaf0c649887e
+        version: github.com/rhashimoto/wa-sqlite/ca2084cdd188c56532ba3e272696d0b9e21a23bf
       web-worker:
         specifier: ^1.2.0
         version: 1.2.0
@@ -5026,6 +5032,12 @@ packages:
 
   /@types/lodash.throttle@4.1.7:
     resolution: {integrity: sha512-znwGDpjCHQ4FpLLx19w4OXDqq8+OvREa05H89obtSyXyOFKL3dDjCslsmfBz0T2FU8dmf5Wx1QvogbINiGIu9g==}
+    dependencies:
+      '@types/lodash': 4.14.195
+    dev: true
+
+  /@types/lodash.uniqwith@4.5.9:
+    resolution: {integrity: sha512-r/L/U1bAHuZF/bKVanxZtPTCr0J47L8Ftpg4BeV1Knv5ZOl9f6bwqVxP5fvvqniHatgcYpp7vwccxbvVGMV8Xw==}
     dependencies:
       '@types/lodash': 4.14.195
     dev: true
@@ -11146,6 +11158,10 @@ packages:
     resolution: {integrity: sha512-e/zcLx6CSbmaEgFHCA7BnoQKyCtKMxnuWrJygbwPs/AIn+IMKl66L8/s+wBUn5LRw2pZx3bUHibiV1b6aTWIww==}
     dev: true
 
+  /lodash.uniqwith@4.5.0:
+    resolution: {integrity: sha512-7lYL8bLopMoy4CTICbxygAUq6CdRJ36vFc80DucPueUee+d5NBRxz3FdT9Pes/HEx5mPoT9jwnsEJWz1N7uq7Q==}
+    dev: false
+
   /lodash@4.17.21:
     resolution: {integrity: sha512-v2kDEe57lecTulaDIuNTPy3Ry4gLGJ6Z1O3vE1krgXZNrsQ+LFTGHVxVjcXPs17LhbZVGedAJv8XZ1tvj5FvSg==}
 
@@ -16248,8 +16264,8 @@ packages:
     resolution: {integrity: sha512-m46AKbrzKVzOzs/DZgVnG5H55N1sv1M8qZU3A8RIKbs3mrACDNeIOeilDymVb2HdmP8uwshOCF4uJ8uM9rCqJw==}
     dev: false
 
-  github.com/rhashimoto/wa-sqlite/f1f8550ea9babe1867e5ec2c170aaaf0c649887e:
-    resolution: {tarball: https://codeload.github.com/rhashimoto/wa-sqlite/tar.gz/f1f8550ea9babe1867e5ec2c170aaaf0c649887e}
+  github.com/rhashimoto/wa-sqlite/ca2084cdd188c56532ba3e272696d0b9e21a23bf:
+    resolution: {tarball: https://codeload.github.com/rhashimoto/wa-sqlite/tar.gz/ca2084cdd188c56532ba3e272696d0b9e21a23bf}
     name: wa-sqlite
-    version: 0.9.12
+    version: 0.9.13
     dev: true

@@ -1,4 +1,5 @@
 import throttle from 'lodash.throttle'
+import uniqWith from 'lodash.uniqwith'
 
 import {
   SatOpMigrate_Type,
@@ -64,7 +65,7 @@ import Log from 'loglevel'
 import { generateTableTriggers } from '../migrators/triggers'
 import { prepareInsertBatchedStatements } from '../util/statements'
 import { mergeEntries } from './merge'
-import { SubscriptionsManager } from './shapes'
+import { SubscriptionsManager, getAllTablesForShape } from './shapes'
 import { InMemorySubscriptionsManager } from './shapes/manager'
 import {
   Shape,
@@ -293,27 +294,23 @@ export class SatelliteProcess implements Satellite {
   async _garbageCollectShapeHandler(
     shapeDefs: ShapeDefinition[]
   ): Promise<void> {
-    const stmts: Statement[] = []
-    const tablenames: string[] = []
-    // reverts to off on commit/abort
-    stmts.push({ sql: 'PRAGMA defer_foreign_keys = ON' })
-    shapeDefs
-      .flatMap((def: ShapeDefinition) => def.definition)
-      .map((select: Shape) => {
-        tablenames.push('main.' + select.tablename)
-        return 'main.' + select.tablename
-      }) // We need "fully qualified" table names in the next calls
-      .reduce((stmts: Statement[], tablename: string) => {
-        stmts.push({
-          sql: `DELETE FROM ${tablename}`,
-        })
-        return stmts
-        // does not delete shadow rows but we can do that
-      }, stmts)
+    const allTables = shapeDefs
+      .map((def: ShapeDefinition) => def.definition)
+      .flatMap((x) => getAllTablesForShape(x))
+    const tables = uniqWith(allTables, (a, b) => a.isEqual(b))
+
+    // TODO: table and schema warrant escaping here too, but they aren't in the triggers table.
+    const tablenames = tables.map((x) => x.toString())
+
+    const deleteStmts = tables.map((x) => ({
+      sql: `DELETE FROM ${x.toString()}`,
+    }))
 
     const stmtsWithTriggers = [
+      // reverts to off on commit/abort
+      { sql: 'PRAGMA defer_foreign_keys = ON' },
       ...this._disableTriggers(tablenames),
-      ...stmts,
+      ...deleteStmts,
       ...this._enableTriggers(tablenames),
     ]
 
