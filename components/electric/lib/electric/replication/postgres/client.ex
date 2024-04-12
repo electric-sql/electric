@@ -16,6 +16,8 @@ defmodule Electric.Replication.Postgres.Client do
   @type connection :: pid
   @type publication :: String.t()
 
+  @type row :: [term]
+
   @spec connect(Connectors.connection_opts()) ::
           {:ok, connection :: pid()} | {:error, reason :: :epgsql.connect_error()}
   def connect(conn_opts) do
@@ -58,7 +60,7 @@ defmodule Electric.Replication.Postgres.Client do
   queries/statements on a single DB connection by wrapping them in an anonymous function and
   passing it to `with_pool/2`.
   """
-  @spec query!(String.t(), [term]) :: {[String.t()], [tuple()]}
+  @spec query!(String.t(), [term]) :: {[String.t()], [row]}
   def query!(query_str, params \\ []) when is_binary(query_str) and is_list(params) do
     true = Repo.checked_out?()
 

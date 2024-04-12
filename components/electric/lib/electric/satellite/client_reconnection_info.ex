@@ -765,9 +765,9 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
       Client.query!("SELECT * FROM #{Extension.client_checkpoints_table()}")
 
     checkpoints =
-      for {client_id, wal_pos, sent_rows_graph} <- rows do
+      Enum.map(rows, fn [client_id, wal_pos, sent_rows_graph] ->
         {client_id, wal_pos, :erlang.binary_to_term(sent_rows_graph)}
-      end
+      end)
 
     :ets.insert(checkpoint_table, checkpoints)
   end
@@ -777,10 +777,10 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
       Client.query!("SELECT * FROM #{Extension.client_shape_subscriptions_table()}")
 
     subscriptions =
-      for {client_id, subscription_id, xmin, pos, shape_requests_bin} <- rows do
-        {{client_id, decode_uuid(subscription_id)}, String.to_integer(xmin),
+      Enum.map(rows, fn [client_id, subscription_id, xmin, pos, shape_requests_bin] ->
+        {{client_id, decode_uuid(subscription_id)}, xmin,
          :erlang.binary_to_term(shape_requests_bin), pos}
-      end
+      end)
 
     :ets.insert(subscriptions_table, subscriptions)
   end
@@ -797,10 +797,18 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
      ], rows} = Client.query!("SELECT * FROM #{Extension.client_additional_data_table()}")
 
     records =
-      for {client_id, xmin, pos, subject, subscription_id, graph_diff, included_txns} <- rows do
-        {{client_id, String.to_integer(xmin), pos, String.to_existing_atom(subject),
-          decode_uuid(subscription_id)}, :erlang.binary_to_term(graph_diff), included_txns}
-      end
+      Enum.map(rows, fn [
+                          client_id,
+                          xmin,
+                          pos,
+                          subject,
+                          subscription_id,
+                          graph_diff,
+                          included_txns
+                        ] ->
+        {{client_id, xmin, pos, String.to_existing_atom(subject), decode_uuid(subscription_id)},
+         :erlang.binary_to_term(graph_diff), included_txns}
+      end)
 
     :ets.insert(additional_data_table, records)
   end
@@ -810,9 +818,9 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
       Client.query!("SELECT * FROM #{Extension.client_actions_table()}")
 
     actions =
-      for {client_id, txid, actions_bin} <- rows do
-        {{client_id, String.to_integer(txid)}, :erlang.binary_to_term(actions_bin)}
-      end
+      Enum.map(rows, fn [client_id, txid, actions_bin] ->
+        {{client_id, txid}, :erlang.binary_to_term(actions_bin)}
+      end)
 
     :ets.insert(actions_table, actions)
   end
