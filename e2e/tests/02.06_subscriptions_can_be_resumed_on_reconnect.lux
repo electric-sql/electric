@@ -10,7 +10,6 @@
     -($fail_pattern|bad sentined value)
     [invoke start_elixir_test 1]
     [invoke client_session $user_id_1 1]
-    [invoke elixir_client_subscribe_with_id "00000000-0000-0000-0000-000000000000" "entries"]
 
 [shell pg_1]
     !BEGIN;
@@ -22,10 +21,13 @@
 
 [shell user_1_ws1]
     # We expect to receive the transaction on Satellite
+    !{:ok, %{err: nil}} = TestWsClient.make_rpc_call(conn,  "subscribe", ProtocolHelpers.subscription_request("00000000-0000-0000-0000-000000000000", request_1: ["entries"]))
     ?rec \[\d+\]: %Electric.Satellite.SatSubsDataBegin\{(?:.*)lsn: "(\d+)"
     [local lsn=$1]
     ??values: ["00000000-0000-0000-0000-000000000000", "sentinel value", ""]
     ?tags: \["postgres_1@\d{13,16}"\]
+    ?rec \[\d+\]: %Electric.Satellite.SatSubsDataEnd\{\}
+
     !TestWsClient.disconnect(conn)
     ?$eprompt
 
