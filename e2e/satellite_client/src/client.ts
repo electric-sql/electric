@@ -403,13 +403,6 @@ export const insert_other_item = async (electric: Electric, keys: [string]) => {
     }
   })
 
-  await electric.db.items.create({
-    data: {
-      id: "test_id_1",
-      content: ""
-    }
-  })
-
   await electric.db.other_items.createMany({
     data: items
   })
