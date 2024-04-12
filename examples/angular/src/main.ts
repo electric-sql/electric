@@ -1,6 +1,11 @@
 import { bootstrapApplication } from '@angular/platform-browser';
-import { appConfig } from './app/app.config';
 import { AppComponent } from './app/app.component';
+import { initElectric } from './app/electric';
+import { initConfig } from './app/app.config';
 
-bootstrapApplication(AppComponent, appConfig)
+initElectric().then((electricClient) => {
+  return bootstrapApplication(AppComponent, initConfig(electricClient))
+})
   .catch((err) => console.error(err));
+
+

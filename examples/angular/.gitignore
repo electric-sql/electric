@@ -40,3 +40,11 @@ testem.log
 # System files
 .DS_Store
 Thumbs.db
+
+src/generated/
+db/data/
+
+public/wa-sqlite-async.mjs
+public/wa-sqlite-async.wasm
+
+.electric_migrations*

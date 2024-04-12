@@ -1,0 +1,12 @@
+*.log
+.DS_Store
+dist/
+node_modules/
+test.db
+.tmp/
+build/
+.tool-versions
+.github/
+src/generated/
+db/data/
+wa-sqlite-async.mjs

@@ -1,19 +1,33 @@
-import { APP_INITIALIZER, makeEnvironmentProviders } from '@angular/core'
+import { ENVIRONMENT_INITIALIZER, makeEnvironmentProviders } from '@angular/core'
 import type { EnvironmentProviders } from '@angular/core'
-import { provideElectricClient } from './inject-electric'
-import { ElectricClient, DbSchema } from 'electric-sql/client/model'
+import { createNoopInjectionToken } from 'ngxtension/create-injection-token'
 
 
-export function provideElectric<S extends ElectricClient<DbSchema<any>>>(
+
+export function makeElectricContext<S>() {
+  const [injectElectric, provideElectricClient, ELECTRIC_CLIENT] =
+  createNoopInjectionToken<S>('ElectricClientToken')
+  console.log(provideElectricClient, 'provideElectricClient');
+  return {
+    injectElectric,
+    provideElectric: (electricClient: S) => {
+      return provideElectric(provideElectricClient, electricClient);
+    },
+    ELECTRIC_CLIENT,
+  }
+}
+
+export function provideElectric<S>(
+  provider,
   electricClient: S,
-  electricInitializer: () => Promise<S>
 ): EnvironmentProviders {
+  console.log(provider, 'provider');
   return makeEnvironmentProviders([
-    provideElectricClient(electricClient),
+    ...provider(electricClient),
     {
-      provide: APP_INITIALIZER,
+      provide: ENVIRONMENT_INITIALIZER,
       multi: true,
-      useFactory: electricInitializer,
+      useValue: () => electricClient,
     },
   ])
 }
