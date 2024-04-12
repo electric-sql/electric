@@ -1871,12 +1871,10 @@ test.serial('a shape delivery that triggers garbage collection', async (t) => {
     t.context
   await runMigrations()
 
-  const tablename = 'parent'
-  const qualified = new QualifiedTablename('main', tablename).toString()
-
   // relations must be present at subscription delivery
   client.setRelations(relations)
-  client.setRelationData(tablename, parentRecord)
+  client.setRelationData('parent', parentRecord)
+  client.setRelationData('child', childRecord)
   client.setRelationData('another', {})
 
   const conn = await startSatellite(satellite, authState, token)
@@ -1884,6 +1882,7 @@ test.serial('a shape delivery that triggers garbage collection', async (t) => {
 
   const shapeDef1: Shape = {
     tablename: 'parent',
+    include: [{ foreignKey: ['parent'], select: { tablename: 'child' } }],
   }
   const shapeDef2: Shape = {
     tablename: 'another',
@@ -1892,22 +1891,27 @@ test.serial('a shape delivery that triggers garbage collection', async (t) => {
   satellite!.relations = relations
   const { synced: synced1 } = await satellite.subscribe([shapeDef1])
   await synced1
+  const row = await adapter.query({ sql: `SELECT id FROM main.parent` })
+  t.is(row.length, 1)
+  const row1 = await adapter.query({ sql: `SELECT id FROM main.child` })
+  t.is(row1.length, 1)
   const { synced } = await satellite.subscribe([shapeDef2])
 
   try {
     await synced
     t.fail()
   } catch (expected: any) {
+    t.true(expected instanceof SatelliteError)
     try {
-      const row = await adapter.query({
-        sql: `SELECT id FROM ${qualified}`,
-      })
+      const row = await adapter.query({ sql: `SELECT id FROM main.parent` })
       t.is(row.length, 0)
+      const row1 = await adapter.query({ sql: `SELECT id FROM main.child` })
+      t.is(row1.length, 0)
 
       const shadowRows = await adapter.query({
         sql: `SELECT tags FROM _electric_shadow`,
       })
-      t.is(shadowRows.length, 1)
+      t.is(shadowRows.length, 2)
 
       const subsMeta = await satellite._getMeta('subscriptions')
       const subsObj = JSON.parse(subsMeta)
