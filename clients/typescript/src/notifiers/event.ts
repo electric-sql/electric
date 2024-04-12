@@ -135,7 +135,7 @@ export class EventNotifier implements Notifier {
       ),
     ]
 
-    Log.info(`actually changed notifier. Changed tables: [${tables}]`)
+    Log.info(`notifying client of database changes. Changed tables: [${tables}]. Origin: ${origin}`)
 
     this._emitActualChange(dbName, changes, origin)
   }
