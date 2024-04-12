@@ -641,14 +641,23 @@ export class SatelliteProcess implements Satellite {
     subscriptionId?: string
   ): Promise<void> {
     Log.error('encountered a subscription error: ' + satelliteError.message)
+    let resettingError: any
 
-    await this._resetClientState()
-
+    try {
+      await this._resetClientState()
+    } catch (error) {
+      // If we encounter an error here, we want to float it to the client so that the bug is visible
+      // instead of just a broken state.
+      resettingError = error
+      resettingError.stack +=
+        '\n  Encountered when handling a subscription error: \n    ' +
+        satelliteError.stack
+    }
     // Call the `onFailure` callback for this subscription
     if (subscriptionId) {
       const { reject: onFailure } = this.subscriptionNotifiers[subscriptionId]
       delete this.subscriptionNotifiers[subscriptionId] // GC the notifiers for this subscription ID
-      onFailure(satelliteError)
+      onFailure(resettingError ?? satelliteError)
     }
   }
 
