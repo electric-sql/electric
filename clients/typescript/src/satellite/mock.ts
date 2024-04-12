@@ -59,6 +59,7 @@ import {
 } from '../_generated/protocol/satellite'
 import { ShapeSubscription } from './process'
 import { DbSchema } from '../client/model/schema'
+import { getAllTablesForShape } from './shapes'
 
 export const MOCK_BEHIND_WINDOW_LSN = 42
 export const MOCK_INTERNAL_ERROR = 27
@@ -238,31 +239,33 @@ export class MockSatelliteClient
     const shapeReqToUuid: Record<string, string> = {}
 
     for (const shape of shapes) {
-      const { tablename } = shape.definition
-      if (tablename === 'failure' || tablename === 'Items') {
-        return Promise.resolve({
-          subscriptionId,
-          error: new SatelliteError(SatelliteErrorCode.TABLE_NOT_FOUND),
-        })
-      }
-      if (tablename === 'another' || tablename === 'User') {
-        return new Promise((resolve) => {
-          this.sendErrorAfterTimeout(subscriptionId, 1)
-          resolve({
+      const tables = getAllTablesForShape(shape.definition, 'main')
+      for (const { tablename } of tables) {
+        if (tablename === 'failure' || tablename === 'Items') {
+          return Promise.resolve({
             subscriptionId,
+            error: new SatelliteError(SatelliteErrorCode.TABLE_NOT_FOUND),
           })
-        })
-      } else {
-        shapeReqToUuid[shape.requestId] = genUUID()
-        const records: DataRecord[] = this.relationData[tablename] ?? []
+        }
+        if (tablename === 'another' || tablename === 'User') {
+          return new Promise((resolve) => {
+            this.sendErrorAfterTimeout(subscriptionId, 1)
+            resolve({
+              subscriptionId,
+            })
+          })
+        } else {
+          shapeReqToUuid[shape.requestId] = genUUID()
+          const records: DataRecord[] = this.relationData[tablename] ?? []
 
-        for (const record of records) {
-          const dataChange: InitialDataChange = {
-            relation: this.relations[tablename],
-            record,
-            tags: [generateTag('remote', new Date())],
+          for (const record of records) {
+            const dataChange: InitialDataChange = {
+              relation: this.relations[tablename],
+              record,
+              tags: [generateTag('remote', new Date())],
+            }
+            data.push(dataChange)
           }
-          data.push(dataChange)
         }
       }
     }

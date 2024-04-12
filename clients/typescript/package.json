@@ -186,6 +186,7 @@
     "lodash.partition": "^4.6.0",
     "lodash.pick": "^4.4.0",
     "lodash.throttle": "^4.1.1",
+    "lodash.uniqwith": "^4.5.0",
     "loglevel": "^1.8.1",
     "long": "^5.2.0",
     "object.hasown": "^1.1.2",
@@ -216,6 +217,7 @@
     "@types/lodash.partition": "^4.6.7",
     "@types/lodash.pick": "^4.4.7",
     "@types/lodash.throttle": "^4.1.7",
+    "@types/lodash.uniqwith": "^4.5.9",
     "@types/node": "^18.8.4",
     "@types/prompts": "^2.4.9",
     "@types/react": "^18.0.18",
@@ -252,8 +254,8 @@
     "web-worker": "^1.2.0"
   },
   "peerDependencies": {
-    "@op-engineering/op-sqlite": ">= 2.0.16",
     "@capacitor-community/sqlite": ">= 5.6.2",
+    "@op-engineering/op-sqlite": ">= 2.0.16",
     "@tauri-apps/plugin-sql": "2.0.0-alpha.5",
     "expo-sqlite": ">= 13.0.0",
     "react": ">= 16.8.0",

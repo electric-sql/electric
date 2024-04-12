@@ -1,3 +1,5 @@
+import uniqWith from 'lodash.uniqwith'
+
 import {
   Shape,
   ShapeDefinition,
@@ -5,6 +7,7 @@ import {
   SubscriptionData,
   SubscriptionId,
 } from './types'
+import { QualifiedTablename } from '../../util'
 
 /**
  * Manages the state of satellite shape subscriptions
@@ -78,4 +81,23 @@ export interface SubscriptionsManager {
    * loads the subscription manager state from a text representation
    */
   setState(serialized: string): void
+}
+
+/** List all tables covered by a given shape */
+export function getAllTablesForShape(
+  shape: Shape,
+  schema = 'main'
+): QualifiedTablename[] {
+  return uniqWith(doGetAllTablesForShape(shape, schema), (a, b) => a.isEqual(b))
+}
+
+function doGetAllTablesForShape(
+  shape: Shape,
+  schema: string
+): QualifiedTablename[] {
+  const includes =
+    shape.include?.flatMap((x) => doGetAllTablesForShape(x.select, schema)) ??
+    []
+  includes.push(new QualifiedTablename(schema, shape.tablename))
+  return includes
 }
