@@ -64,6 +64,8 @@ ElectricSQL supports `bytea` data but not all SQLite drivers are capable of read
 | [wa-sqlite](../../integrations/drivers/web/wa-sqlite.md) | [better-sqlite3](../../integrations/drivers/server/node.md) | [expo-sqlite](../../integrations/drivers/mobile/expo.md?usage=expo-sqlite) | [expo-sqlite/next](../../integrations/drivers/mobile/expo.md?usage=expo-sqlite-next)| [op-sqlite](../../integrations/drivers/mobile/react-native.md) |
 |:---------:|:--------------:|:-----------:|:----------------:|:---------:|
 | ✅︎       | ✅︎             | ❌          | ✅︎              | ✅︎        |
+
+Note that reading/writing empty byte arrays might produce [different results depending on the driver](https://github.com/electric-sql/electric/pull/1156).
 :::
 
 :::caution Enum type caveats
