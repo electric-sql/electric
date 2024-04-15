@@ -63,7 +63,7 @@ import {
 import { Mutex } from 'async-mutex'
 import Log from 'loglevel'
 import { generateTableTriggers } from '../migrators/triggers'
-import { prepareInsertBatchedStatements } from '../util/statements'
+import { prepareInsertJsonBatchedStatement } from '../util/statements'
 import { mergeEntries } from './merge'
 import { SubscriptionsManager, getAllTablesForShape } from './shapes'
 import { InMemorySubscriptionsManager } from './shapes/manager'
@@ -474,13 +474,6 @@ export class SatelliteProcess implements Satellite {
     const stmts: Statement[] = []
     stmts.push({ sql: 'PRAGMA defer_foreign_keys = ON' })
 
-    // It's much faster[1] to do less statements to insert the data instead of doing an insert statement for each row
-    // so we're going to do just that, but with a caveat: SQLite has a max number of parameters in prepared statements,
-    // so this is less of "insert all at once" and more of "insert in batches". This should be even more noticeable with
-    // WASM builds, since we'll be crossing the JS-WASM boundary less.
-    //
-    // [1]: https://medium.com/@JasonWyatt/squeezing-performance-from-sqlite-insertions-971aff98eef2
-
     const groupedChanges = new Map<
       string,
       {
@@ -532,16 +525,12 @@ export class SatelliteProcess implements Satellite {
     for (const [table, { relation, dataChanges }] of groupedChanges) {
       const records = dataChanges.map((change) => change.record)
       const columnNames = relation.columns.map((col) => col.name)
-      const sqlBase = `INSERT OR IGNORE INTO ${table} (${columnNames.join(
-        ', '
-      )}) VALUES `
-
       stmts.push(
-        ...prepareInsertBatchedStatements(
-          sqlBase,
+        prepareInsertJsonBatchedStatement(
+          table,
           columnNames,
           records as Record<string, SqlValue>[],
-          this.maxSqlParameters
+          'INSERT OR IGNORE'
         )
       )
     }
@@ -550,13 +539,12 @@ export class SatelliteProcess implements Satellite {
     stmts.push(...this._enableTriggers([...groupedChanges.keys()]))
 
     // Then do a batched insert for the shadow table
-    const upsertShadowStmt = `INSERT or REPLACE INTO ${this.opts.shadowTable.toString()} (namespace, tablename, primaryKey, tags) VALUES `
     stmts.push(
-      ...prepareInsertBatchedStatements(
-        upsertShadowStmt,
+      prepareInsertJsonBatchedStatement(
+        this.opts.shadowTable.toString(),
         ['namespace', 'tablename', 'primaryKey', 'tags'],
         allArgsForShadowInsert,
-        this.maxSqlParameters
+        'INSERT OR REPLACE'
       )
     )
 
