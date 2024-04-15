@@ -72,9 +72,6 @@
   },
   "typesVersions": {
     "*": {
-      "angular": [
-        "./dist/frameworks/angular/index.d.ts"
-      ],
       "browser": [
         "./dist/drivers/wa-sqlite/index.d.ts"
       ],
@@ -252,8 +249,7 @@
     "vue": "^3.4.19",
     "vue-tsc": "^1.8.27",
     "wa-sqlite": "rhashimoto/wa-sqlite#semver:^0.9.8",
-    "web-worker": "^1.2.0",
-    "zone.js": "^0.14.2"
+    "web-worker": "^1.2.0"
   },
   "peerDependencies": {
     "@op-engineering/op-sqlite": ">= 2.0.16",

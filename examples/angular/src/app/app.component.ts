@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { RouterOutlet } from '@angular/router';
 import { Electric } from '../generated/client';
 import { SecondaryComponent } from './secondary/secondary.component';
-import { injectElectric } from './electric';
+import { ELECTRIC_CLIENT, injectElectric } from './electric';
 
 @Component({
   selector: 'app-root',
@@ -16,7 +16,8 @@ export class AppComponent {
   title = 'document-editor';
 
 
-  public client2 = injectElectric()
+  // public client2 = injectElectric()
 
-  // constructor(@Inject(ELECTRIC_CLIENT) public client: Electric) {
+  constructor(@Inject(ELECTRIC_CLIENT) public client: Electric) {
   }
+}

@@ -1,27 +1,77 @@
-# DocumentEditor
+<a href="https://electric-sql.com">
+  <picture>
+    <source media="(prefers-color-scheme: dark)"
+        srcset="https://raw.githubusercontent.com/electric-sql/meta/main/identity/ElectricSQL-logo-light-trans.svg"
+    />
+    <source media="(prefers-color-scheme: light)"
+        srcset="https://raw.githubusercontent.com/electric-sql/meta/main/identity/ElectricSQL-logo-black.svg"
+    />
+    <img alt="ElectricSQL logo"
+        src="https://raw.githubusercontent.com/electric-sql/meta/main/identity/ElectricSQL-logo-black.svg"
+    />
+  </picture>
+</a>
 
-This project was generated with [Angular CLI](https://github.com/angular/angular-cli) version 17.0.6.
+# ElectricSQL Angular Example
 
-## Development server
 
-Run `ng serve` for a dev server. Navigate to `http://localhost:4200/`. The application will automatically reload if you change any of the source files.
 
-## Code scaffolding
+## Prereqs
 
-Run `ng generate component component-name` to generate a new component. You can also use `ng generate directive|pipe|service|class|guard|interface|enum|module`.
+You need Docker, Docker Compose v2 and Nodejs >= 16.14.
 
-## Build
+## Install
 
-Run `ng build` to build the project. The build artifacts will be stored in the `dist/` directory.
+Clone this repo and change directory into this folder:
 
-## Running unit tests
+```sh
+git clone https://github.com/electric-sql/electric
+cd electric/examples/linearlite
+```
 
-Run `ng test` to execute the unit tests via [Karma](https://karma-runner.github.io).
+Install the dependencies:
 
-## Running end-to-end tests
+```shell
+npm install
+```
 
-Run `ng e2e` to execute the end-to-end tests via a platform of your choice. To use this command, you need to first add a package that implements end-to-end testing capabilities.
+## Backend
 
-## Further help
+Start Postgres and Electric using Docker (see [running the examples](https://electric-sql.com/docs/examples/notes/running) for more options):
 
-To get more help on the Angular CLI use `ng help` or go check out the [Angular CLI Overview and Command Reference](https://angular.io/cli) page.
+```shell
+npm run backend:up
+# Or `npm run backend:start` to foreground
+```
+
+Note that, if useful, you can connect to Postgres using:
+
+```shell
+npm run db:psql
+```
+
+The [database schema](https://electric-sql.com/docs/usage/data-modelling) for this example is in `db/migrations/create_tables.sql`.
+You can apply it with:
+
+```shell
+npm run db:migrate
+```
+
+## Client
+
+Generate your [type-safe client](https://electric-sql.com/docs/usage/data-access/client):
+
+```shell
+npm run client:generate
+# or `npm run client:watch`` to re-generate whenever the DB schema changes
+```
+
+## Run
+
+The app is a React application to install and run it:
+
+```bash
+npm run dev
+```
+
+The app should be available on `localhost:4200`
