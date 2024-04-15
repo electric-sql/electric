@@ -82,9 +82,34 @@ export class ElectricDatabase {
     return this.sqlite3.changes(this.db)
   }
 
-  // Creates and opens a DB backed by an IndexedDB filesystem
+  /**
+   * Creates and opens a DB backed by an IndexedDB filesystem
+   */
   static async init(
     dbName: string,
+    locateSqliteDist?: string | ((path: string) => string)
+  ) {
+    return ElectricDatabase._init(
+      dbName,
+      new IDBBatchAtomicVFS(dbName),
+      locateSqliteDist
+    )
+  }
+
+  /**
+   * Creates and opens a DB backed by a custom VFS
+   */
+  static async initWithCustomVFS(
+    dbName: string,
+    vfs: SQLiteVFS,
+    locateSqliteDist?: string | ((path: string) => string)
+  ) {
+    return ElectricDatabase._init(dbName, vfs, locateSqliteDist)
+  }
+
+  private static async _init(
+    dbName: string,
+    vfs: SQLiteVFS,
     locateSqliteDist?: string | ((path: string) => string)
   ) {
     // Initialize SQLite
@@ -95,13 +120,15 @@ export class ElectricDatabase {
           }
         : locateSqliteDist
 
-    const SQLiteAsyncModule = await SQLiteAsyncESMFactory({ locateFile })
+    const SQLiteAsyncModule = await SQLiteAsyncESMFactory({
+      locateFile: locateFile,
+    })
 
     // Build API objects for the module
     const sqlite3 = SQLite.Factory(SQLiteAsyncModule)
 
     // Register a Virtual File System with the SQLite runtime
-    sqlite3.vfs_register(new IDBBatchAtomicVFS(dbName))
+    sqlite3.vfs_register(vfs)
 
     // Open the DB connection
     // see: https://rhashimoto.github.io/wa-sqlite/docs/interfaces/SQLiteAPI.html#open_v2
