@@ -1,3 +1,4 @@
+import { dedent } from 'ts-dedent'
 import { SqlValue, Statement } from './types'
 
 export function isInsertUpdateOrDeleteStatement(stmt: string) {
@@ -5,44 +6,28 @@ export function isInsertUpdateOrDeleteStatement(stmt: string) {
 }
 
 /**
- * Prepare multiple batched insert statements for an array of records.
+ * Generates a batched SQL statement for batch inserting records into a table
+ * using `json_each` and `json_extract`
  *
- * Since SQLite only supports a limited amount of positional `?` parameters,
- * we generate multiple insert statements with each one being filled as much
- * as possible from the given data. All statements are derived from same `baseSql` -
- * the positional parameters will be appended to this string.
- *
- * @param baseSql base SQL string to which inserts should be appended
+ * @param tablename name of the table to insert records into
  * @param columns columns that describe records
  * @param records records to be inserted
- * @param maxParameters max parameters this SQLite can accept - determines batching factor
- * @returns array of statements ready to be executed by the adapter
+ * @param insertCommand - The type of insert command to use (default is 'INSERT')
+ * @return {Statement} The generated SQL statement object
  */
-export function prepareInsertBatchedStatements(
-  baseSql: string,
+export function prepareInsertJsonBatchedStatement(
+  tablename: string,
   columns: string[],
   records: Record<string, SqlValue>[],
-  maxParameters: number
-): Statement[] {
-  const stmts: Statement[] = []
-  const columnCount = columns.length
-  const recordCount = records.length
-  let processed = 0
-  const insertPattern = ' (' + '?, '.repeat(columnCount).slice(0, -2) + '),'
-
-  // Largest number below maxSqlParamers that evenly divides by column count,
-  // divided by columnCount, giving the amount of rows we can insert at once
-  const batchMaxSize =
-    (maxParameters - (maxParameters % columnCount)) / columnCount
-  while (processed < recordCount) {
-    const currentInsertCount = Math.min(recordCount - processed, batchMaxSize)
-    const sql = baseSql + insertPattern.repeat(currentInsertCount).slice(0, -1)
-    const args = records
-      .slice(processed, processed + currentInsertCount)
-      .flatMap((record) => columns.map((col) => record[col] as SqlValue))
-
-    processed += currentInsertCount
-    stmts.push({ sql, args })
+  insertCommand: 'INSERT' | 'INSERT OR REPLACE' | 'INSERT OR IGNORE' = 'INSERT'
+): Statement {
+  return {
+    sql: dedent`
+    ${insertCommand} INTO ${tablename} (${columns.join(', ')})
+    SELECT ${columns.map(
+      (cn) => `json_extract(json_each.value, '$.${cn}')`
+    ).join(', ')}
+    FROM json_each(?);`,
+    args: [JSON.stringify(records)],
   }
-  return stmts
 }
