@@ -146,13 +146,6 @@ export class SatelliteProcess implements Satellite {
   subscriptionIdGenerator: (...args: any) => string
   shapeRequestIdGenerator: (...args: any) => string
 
-  /**
-   * To optimize inserting a lot of data when the subscription data comes, we need to do
-   * less `INSERT` queries, but SQLite supports only a limited amount of `?` positional
-   * arguments. Precisely, its either 999 for versions prior to 3.32.0 and 32766 for
-   * versions after.
-   */
-  private maxSqlParameters: 999 | 32766 = 999
   private snapshotMutex: Mutex = new Mutex()
   private performingSnapshot = false
 
@@ -264,7 +257,6 @@ export class SatelliteProcess implements Satellite {
 
     // Need to reload primary keys after schema migration
     this.relations = await this._getLocalRelations()
-    this.checkMaxSqlParameters()
 
     const lsnBase64 = await this._getMeta('lsn')
     if (lsnBase64 && lsnBase64.length > 0) {
@@ -1539,17 +1531,6 @@ export class SatelliteProcess implements Satellite {
   private updateLsnStmt(lsn: LSN): Statement {
     this._lsn = lsn
     return this._setMetaStatement('lsn', base64.fromBytes(lsn))
-  }
-
-  private async checkMaxSqlParameters() {
-    const [{ version }] = (await this.adapter.query({
-      sql: 'SELECT sqlite_version() AS version',
-    })) as [{ version: string }]
-
-    const [major, minor, _patch] = version.split('.').map((x) => parseInt(x))
-
-    if (major === 3 && minor >= 32) this.maxSqlParameters = 32766
-    else this.maxSqlParameters = 999
   }
 
   public setReplicationTransform(
