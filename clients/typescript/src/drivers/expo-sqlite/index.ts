@@ -11,14 +11,6 @@ import {
 import { DatabaseAdapter } from './adapter'
 import { ElectricConfig } from '../../config'
 import { Database } from './database'
-import { setUUIDImpl } from '../../util/common'
-
-// Provide implementation for TextEncoder/TextDecoder
-import 'fastestsmallesttextencoderdecoder'
-
-// Provide implementation for uuid()
-import uuid from 'react-native-uuid'
-setUUIDImpl(uuid.v4 as () => string)
 
 import { ElectricClient } from '../../client/model/client'
 import { DbSchema } from '../../client/model/schema'
@@ -30,7 +22,7 @@ export type { Database }
 export const electrify = async <T extends Database, DB extends DbSchema<any>>(
   db: T,
   dbDescription: DB,
-  config: ElectricConfig,
+  config: ElectricConfig = {},
   opts?: ElectrifyOptions
 ): Promise<ElectricClient<DB>> => {
   const dbName: DbName = db._name

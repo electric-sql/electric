@@ -1,10 +1,7 @@
 import { Satellite, ShapeSubscription } from '../../satellite'
+import { Shape } from '../../satellite/shapes/types'
 
 export type TableName = string
-
-export type Shape = {
-  tables: TableName[]
-}
 
 export interface IShapeManager {
   sync(shape: Shape): Promise<ShapeSubscription>
@@ -33,17 +30,12 @@ export class ShapeManager extends BaseShapeManager {
   }
 
   async sync(shape: Shape): Promise<ShapeSubscription> {
-    // Convert the shape to the format expected by the Satellite process
-    const shapeDef = {
-      selects: shape.tables.map((tbl) => ({ tablename: tbl })),
-    }
-
-    const sub = await this.satellite.subscribe([shapeDef])
-
+    const sub = await this.satellite.subscribe([shape])
+    const tables = getTableNames(shape)
     const dataReceivedProm = sub.synced.then(() => {
       // When all data is received
       // we store the fact that these tables are synced
-      shape.tables.forEach((tbl) => this.tablesPreviouslySubscribed.add(tbl))
+      tables.forEach((tbl) => this.tablesPreviouslySubscribed.add(tbl))
     })
 
     return {
@@ -63,10 +55,19 @@ export class ShapeManagerMock extends BaseShapeManager {
 
   override async sync(shape: Shape): Promise<ShapeSubscription> {
     // Do not contact the server but directly store the synced tables
-    shape.tables.forEach((tbl) => this.tablesPreviouslySubscribed.add(tbl))
+    getTableNames(shape).forEach((tbl) =>
+      this.tablesPreviouslySubscribed.add(tbl)
+    )
 
     return {
       synced: Promise.resolve(),
     }
   }
+}
+
+function getTableNames(shape: Shape): Array<TableName> {
+  return [
+    shape.tablename,
+    ...(shape.include ?? []).flatMap((rel) => getTableNames(rel.select)),
+  ]
 }

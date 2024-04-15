@@ -215,7 +215,7 @@ defmodule Electric.DDLX.Parser.Tokenizer do
     {token_out(
        :string,
        string,
-       IO.iodata_to_binary([?', :binary.replace(string, "'", "''"), ?']),
+       IO.iodata_to_binary([?', :binary.replace(string, "'", "''", [:global]), ?']),
        state
      ), {rest, token_start(%{state | p: state.p + 1, s: nil, acc: []})}}
   end

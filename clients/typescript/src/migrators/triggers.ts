@@ -55,14 +55,13 @@ export function generateOplogTriggers(
   const oldRows = joinColsForJSON(columns, columnTypes, 'old')
 
   return [
+    //`-- Toggles for turning the triggers on and off\n`,
     dedent`
-    -- Toggles for turning the triggers on and off
     INSERT OR IGNORE INTO _electric_trigger_settings(tablename,flag) VALUES ('${tableFullName}', 1);
     `,
+    //`\* Triggers for table ${tableName} *\\n
+    //`-- ensures primary key is immutable\n`
     dedent`
-    /* Triggers for table ${tableName} */
-  
-    -- ensures primary key is immutable
     DROP TRIGGER IF EXISTS update_ensure_${namespace}_${tableName}_primarykey;
     `,
     dedent`
@@ -80,8 +79,8 @@ export function generateOplogTriggers(
         END;
     END;
     `,
+    //`-- Triggers that add INSERT, UPDATE, DELETE operation to the _opslog table\n`
     dedent`
-    -- Triggers that add INSERT, UPDATE, DELETE operation to the _opslog table
     DROP TRIGGER IF EXISTS insert_${namespace}_${tableName}_into_oplog;
     `,
     dedent`
@@ -155,7 +154,8 @@ function generateCompensationTriggers(table: Table): Statement[] {
     })
 
     return [
-      dedent`-- Triggers for foreign key compensations
+      //`-- Triggers for foreign key compensations\n`,
+      dedent`
       DROP TRIGGER IF EXISTS compensation_insert_${namespace}_${tableName}_${childKey}_into_oplog;`,
       // The compensation trigger inserts a row in `_electric_oplog` if the row pointed at by the FK exists
       // The way how this works is that the values for the row are passed to the nested SELECT
@@ -234,6 +234,7 @@ export function generateTriggers(tables: Tables): Statement[] {
  * that can be used to build a JSON object in a SQLite `json_object` function call.
  * Values of type REAL are cast to text to avoid a bug in SQLite's `json_object` function (see below).
  * Similarly, values of type INT8 (i.e. BigInts) are cast to text because JSON does not support BigInts.
+ * All BLOB or BYTEA bytestrings are also encoded as hex strings to make them part of a JSON
  *
  * NOTE: There is a bug with SQLite's `json_object` function up to version 3.41.2
  *       that causes it to return an invalid JSON object if some value is +Infinity or -Infinity.
@@ -279,28 +280,34 @@ function joinColsForJSON(
   colTypes: ColumnTypes,
   target?: 'new' | 'old'
 ) {
-  // casts the value to TEXT if it is of type REAL
-  // to work around the bug in SQLite's `json_object` function
-  const castIfNeeded = (col: string, targettedCol: string) => {
+  // Perform transformations on some columns to ensure consistent
+  // serializability into JSON
+  const transformIfNeeded = (col: string, targetedCol: string) => {
     const tpes = colTypes[col]
     const sqliteType = tpes.sqliteType
     const pgType = tpes.pgType
+
+    // cast REALs, INT8s, BIGINTs to TEXT to work around SQLite's `json_object` bug
     if (sqliteType === 'REAL' || pgType === 'INT8' || pgType === 'BIGINT') {
-      return `cast(${targettedCol} as TEXT)`
-    } else {
-      return targettedCol
+      return `cast(${targetedCol} as TEXT)`
     }
+
+    // transform blobs/bytestrings into hexadecimal strings for JSON encoding
+    if (sqliteType === 'BLOB' || pgType === 'BYTEA') {
+      return `CASE WHEN ${targetedCol} IS NOT NULL THEN hex(${targetedCol}) ELSE NULL END`
+    }
+    return targetedCol
   }
 
   if (typeof target === 'undefined') {
     return cols
       .sort()
-      .map((col) => `'${col}', ${castIfNeeded(col, `"${col}"`)}`)
+      .map((col) => `'${col}', ${transformIfNeeded(col, `"${col}"`)}`)
       .join(', ')
   } else {
     return cols
       .sort()
-      .map((col) => `'${col}', ${castIfNeeded(col, `${target}."${col}"`)}`)
+      .map((col) => `'${col}', ${transformIfNeeded(col, `${target}."${col}"`)}`)
       .join(', ')
   }
 }

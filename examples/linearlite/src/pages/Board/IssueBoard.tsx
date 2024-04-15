@@ -30,21 +30,21 @@ export default function IssueBoard({ issues }: IssueBoardProps) {
   }, [issues])
 
   const { issuesByStatus } = useMemo(() => {
-    const issuesByStatus: Record<string, Issue[]> = {};
+    const issuesByStatus: Record<string, Issue[]> = {}
     issues.forEach((issue) => {
       // If the issue has been moved, patch with new status and kanbanorder for sorting
       if (movedIssues[issue.id]) {
         issue = {
           ...issue,
           ...movedIssues[issue.id],
-        };
+        }
       }
-      const status = issue.status.toLowerCase();
+      const status = issue.status.toLowerCase()
       if (!issuesByStatus[status]) {
-        issuesByStatus[status] = [];
+        issuesByStatus[status] = []
       }
-      issuesByStatus[status].push(issue);
-    });
+      issuesByStatus[status].push(issue)
+    })
 
     // Sort issues in each column by kanbanorder and issue id
     Object.keys(issuesByStatus).forEach((status) => {

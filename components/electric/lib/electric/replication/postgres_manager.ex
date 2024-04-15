@@ -44,6 +44,9 @@ defmodule Electric.Replication.PostgresConnectorMng do
           }
   end
 
+  @status_key :status
+  @connector_config_key :connector_config
+
   @spec start_link(Connectors.config()) :: {:ok, pid} | :ignore | {:error, term}
   def start_link(connector_config) do
     GenServer.start_link(__MODULE__, connector_config, [])
@@ -63,12 +66,15 @@ defmodule Electric.Replication.PostgresConnectorMng do
 
   @spec status(Connectors.origin()) :: State.status()
   def status(origin) do
-    GenServer.call(name(origin), :status)
+    case :ets.lookup(ets_table_name(origin), @status_key) do
+      [{@status_key, status}] -> status
+      [] -> :initialization
+    end
   end
 
   @spec connector_config(Connectors.origin()) :: Connectors.config()
   def connector_config(origin) do
-    GenServer.call(name(origin), :connector_config)
+    :ets.lookup_element(ets_table_name(origin), @connector_config_key, 2)
   end
 
   @impl GenServer
@@ -80,26 +86,46 @@ defmodule Electric.Replication.PostgresConnectorMng do
     Logger.metadata(origin: origin)
     Process.flag(:trap_exit, true)
 
-    connector_config = preflight_connector_config(connector_config)
+    # Use an ETS table to store data that are regularly looked up by other processes.
+    :ets.new(ets_table_name(origin), [:protected, :named_table, read_concurrency: true])
 
     state =
-      reset_state(%State{
-        origin: origin,
-        connector_config: connector_config,
-        conn_opts: Connectors.get_connection_opts(connector_config),
-        repl_opts: Connectors.get_replication_opts(connector_config),
-        write_to_pg_mode: Connectors.write_to_pg_mode(connector_config)
-      })
+      %State{origin: origin, connector_config: connector_config}
+      |> update_connector_config(&preflight_connector_config/1)
+      |> reset_state()
 
     {:ok, state, {:continue, :init}}
+  end
+
+  defp ets_table_name(origin) do
+    String.to_atom(inspect(__MODULE__) <> ":" <> origin)
   end
 
   defp reset_state(%State{} = state) do
     %State{
       state
       | backoff: {:backoff.init(1000, 10_000), nil},
-        status: :initialization,
         pg_connector_sup_monitor: nil
+    }
+    |> set_status(:initialization)
+  end
+
+  defp set_status(state, status) do
+    :ets.insert(ets_table_name(state.origin), {@status_key, status})
+    %{state | status: status}
+  end
+
+  defp update_connector_config(state, fun) do
+    connector_config = fun.(state.connector_config)
+
+    :ets.insert(ets_table_name(state.origin), {@connector_config_key, connector_config})
+
+    %{
+      state
+      | connector_config: connector_config,
+        conn_opts: Connectors.get_connection_opts(connector_config),
+        repl_opts: Connectors.get_replication_opts(connector_config),
+        write_to_pg_mode: Connectors.write_to_pg_mode(connector_config)
     }
   end
 
@@ -107,7 +133,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
   def handle_continue(:init, state) do
     case initialize_postgres(state) do
       :ok ->
-        state = %State{state | status: :establishing_repl_conn}
+        state = set_status(state, :establishing_repl_conn)
         {:noreply, state, {:continue, :establish_repl_conn}}
 
       {:error, {:ssl_negotiation_failed, _}} when state.conn_opts.ssl != :required ->
@@ -137,7 +163,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
         Logger.info("Successfully initialized Postgres connector #{inspect(state.origin)}.")
 
         ref = Process.monitor(sup_pid)
-        state = %State{state | status: :subscribing, pg_connector_sup_monitor: ref}
+        state = %State{state | pg_connector_sup_monitor: ref} |> set_status(:subscribing)
         {:noreply, state, {:continue, :subscribe}}
 
       :error ->
@@ -147,23 +173,14 @@ defmodule Electric.Replication.PostgresConnectorMng do
 
   def handle_continue(:subscribe, %State{write_to_pg_mode: :logical_replication} = state) do
     case start_subscription(state) do
-      :ok -> {:noreply, %State{state | status: :ready}}
+      :ok -> {:noreply, set_status(state, :ready)}
       {:error, _} -> {:noreply, schedule_retry(:subscribe, state)}
     end
   end
 
   def handle_continue(:subscribe, %State{write_to_pg_mode: :direct_writes} = state) do
     :ok = stop_subscription(state)
-    {:noreply, %State{state | status: :ready}}
-  end
-
-  @impl GenServer
-  def handle_call(:status, _from, state) do
-    {:reply, state.status, state}
-  end
-
-  def handle_call(:connector_config, _from, state) do
-    {:reply, state.connector_config, state}
+    {:noreply, set_status(state, :ready)}
   end
 
   @impl GenServer
@@ -240,6 +257,9 @@ defmodule Electric.Replication.PostgresConnectorMng do
 
     Client.with_conn(conn_opts, fn conn ->
       with {:ok, versions} <- Extension.migrate(conn),
+           {:ok, electrified_tables} <- Extension.electrified_tables(conn),
+           {:ok, _name} <-
+             Client.create_publication(conn, Extension.publication_name(), electrified_tables),
            :ok <- maybe_create_subscription(conn, state.write_to_pg_mode, state.repl_opts),
            :ok <- OidDatabase.update_oids(conn) do
         Logger.info(
@@ -272,27 +292,14 @@ defmodule Electric.Replication.PostgresConnectorMng do
       |> Connectors.get_connection_opts()
       |> resolve_host_to_addr()
 
-    update_in(connector_config, [:connection], fn conn_opts ->
+    Keyword.update!(connector_config, :connection, fn conn_opts ->
       conn_opts
       |> Keyword.put(:nulls, [nil, :null, :undefined])
       |> Keyword.put(:ip_addr, ip_addr)
-      |> maybe_put_sni()
       |> maybe_put_inet6(ip_addr)
+      |> maybe_put_sni()
+      |> maybe_verify_peer()
     end)
-  end
-
-  defp maybe_put_inet6(conn_opts, {_, _, _, _, _, _, _, _}),
-    do: Keyword.put(conn_opts, :tcp_opts, [:inet6])
-
-  defp maybe_put_inet6(conn_opts, _), do: conn_opts
-
-  defp maybe_put_sni(conn_opts) do
-    if conn_opts[:ssl] do
-      sni_opt = {:server_name_indication, String.to_charlist(conn_opts[:host])}
-      update_in(conn_opts, [:ssl_opts], &[sni_opt | List.wrap(&1)])
-    else
-      conn_opts
-    end
   end
 
   # Perform a DNS lookup for an IPv6 IP address, followed by a lookup for an IPv4 address in case the first one fails.
@@ -311,18 +318,61 @@ defmodule Electric.Replication.PostgresConnectorMng do
     :inet.getaddr(host, :inet)
   end
 
+  defp maybe_put_inet6(conn_opts, {_, _, _, _, _, _, _, _}),
+    do: Keyword.put(conn_opts, :tcp_opts, [:inet6])
+
+  defp maybe_put_inet6(conn_opts, _), do: conn_opts
+
+  defp maybe_put_sni(conn_opts) do
+    if conn_opts[:ssl] do
+      sni_opt = {:server_name_indication, String.to_charlist(conn_opts[:host])}
+      update_in(conn_opts, [:ssl_opts], &[sni_opt | List.wrap(&1)])
+    else
+      conn_opts
+    end
+  end
+
+  defp maybe_verify_peer(conn_opts) do
+    if conn_opts[:ssl] == :required do
+      ssl_opts = get_verify_peer_opts()
+      update_in(conn_opts, [:ssl_opts], &(ssl_opts ++ List.wrap(&1)))
+    else
+      conn_opts
+    end
+  end
+
+  defp get_verify_peer_opts do
+    case :public_key.cacerts_load() do
+      :ok ->
+        cacerts = :public_key.cacerts_get()
+        Logger.info("Successfully loaded #{length(cacerts)} cacerts from the OS")
+
+        [
+          verify: :verify_peer,
+          cacerts: cacerts,
+          customize_hostname_check: [
+            # Use a custom match function to support wildcard CN in server certificates.
+            # For example, CN = *.us-east-2.aws.neon.tech
+            match_fun: :public_key.pkix_verify_hostname_match_fun(:https)
+          ]
+        ]
+
+      {:error, reason} ->
+        Logger.warning("Failed to load cacerts from the OS: #{inspect(reason)}")
+        # We're not sure how reliable OS certificate stores are in general, so keep going even
+        # if the loading of cacerts has failed. A warning will be logged every time a new
+        # database connection is established without the `verify_peer` option, so the issue will be
+        # visible to the developer.
+        []
+    end
+  end
+
   defp fallback_to_nossl(state) do
     Logger.warning(
       "Falling back to trying an unencrypted connection to Postgres, since DATABASE_REQUIRE_SSL=false."
     )
 
-    connector_config = put_in(state.connector_config, [:connection, :ssl], false)
-
-    %State{
-      state
-      | connector_config: connector_config,
-        conn_opts: Connectors.get_connection_opts(connector_config)
-    }
+    update_connector_config(state, &put_in(&1, [:connection, :ssl], false))
   end
 
   defp extra_error_description(:invalid_authorization_specification) do

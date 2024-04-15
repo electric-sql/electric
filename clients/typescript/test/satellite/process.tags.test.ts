@@ -70,13 +70,166 @@ test('basic rules for setting tags', async (t) => {
 
   const entries = await satellite._getEntries()
   t.is(entries[0].clearTags, encodeTags([]))
-  t.is(entries[1].clearTags, genEncodedTags(clientId, [txDate1]))
-  t.is(entries[2].clearTags, genEncodedTags(clientId, [txDate2]))
-  t.is(entries[3].clearTags, genEncodedTags(clientId, [txDate3]))
+  t.is(entries[1].clearTags, genEncodedTags(clientId, [txDate2, txDate1]))
+  t.is(entries[2].clearTags, genEncodedTags(clientId, [txDate3, txDate2]))
+  t.is(entries[3].clearTags, genEncodedTags(clientId, [txDate4, txDate3]))
 
   t.not(txDate1, txDate2)
   t.not(txDate2, txDate3)
   t.not(txDate3, txDate4)
+})
+
+test('Tags are correctly set on multiple operations within snapshot/transaction', async (t) => {
+  const { adapter, runMigrations, satellite, authState } = t.context
+  await runMigrations()
+  const clientId = 'test_client'
+  satellite._setAuthState({ ...authState, clientId })
+
+  // Insert 4 items in separate snapshots
+  await adapter.run({
+    sql: `INSERT INTO parent (id, value) VALUES (1, 'val1')`,
+  })
+  const ts1 = await satellite._performSnapshot()
+  await adapter.run({
+    sql: `INSERT INTO parent (id, value) VALUES (2, 'val2')`,
+  })
+  const ts2 = await satellite._performSnapshot()
+  await adapter.run({
+    sql: `INSERT INTO parent (id, value) VALUES (3, 'val3')`,
+  })
+  const ts3 = await satellite._performSnapshot()
+  await adapter.run({
+    sql: `INSERT INTO parent (id, value) VALUES (4, 'val4')`,
+  })
+  const ts4 = await satellite._performSnapshot()
+
+  // Now delete them all in a single snapshot
+  await adapter.run({ sql: `DELETE FROM parent` })
+  const ts5 = await satellite._performSnapshot()
+
+  // Now check that each delete clears the correct tag
+  const entries = await satellite._getEntries(4)
+  t.deepEqual(
+    entries.map((x) => x.clearTags),
+    [
+      genEncodedTags(clientId, [ts5, ts1]),
+      genEncodedTags(clientId, [ts5, ts2]),
+      genEncodedTags(clientId, [ts5, ts3]),
+      genEncodedTags(clientId, [ts5, ts4]),
+    ]
+  )
+})
+
+test('Tags are correctly set on subsequent operations in a TX', async (t) => {
+  const { adapter, runMigrations, satellite, authState } = t.context
+
+  await runMigrations()
+
+  await adapter.run({
+    sql: `INSERT INTO parent(id, value) VALUES (1,'val1')`,
+  })
+
+  // Since no snapshot was made yet
+  // the timestamp in the oplog is not yet set
+  const insertEntry = await adapter.query({
+    sql: `SELECT timestamp, clearTags FROM _electric_oplog WHERE rowid = 1`,
+  })
+  t.is(insertEntry[0].timestamp, null)
+  t.deepEqual(JSON.parse(insertEntry[0].clearTags as string), [])
+
+  await satellite._setAuthState(authState)
+  await satellite._performSnapshot()
+
+  const parseDate = (date: string) => new Date(date).getTime()
+
+  // Now the timestamp is set
+  const insertEntryAfterSnapshot = await adapter.query({
+    sql: `SELECT timestamp, clearTags FROM _electric_oplog WHERE rowid = 1`,
+  })
+  t.assert(insertEntryAfterSnapshot[0].timestamp != null)
+  const insertTimestamp = parseDate(
+    insertEntryAfterSnapshot[0].timestamp as string
+  )
+  t.deepEqual(JSON.parse(insertEntryAfterSnapshot[0].clearTags as string), [])
+
+  // Now update the entry, then delete it, and then insert it again
+  await adapter.run({
+    sql: `UPDATE parent SET value = 'val2' WHERE id=1`,
+  })
+
+  await adapter.run({
+    sql: `DELETE FROM parent WHERE id=1`,
+  })
+
+  await adapter.run({
+    sql: `INSERT INTO parent(id, value) VALUES (1,'val3')`,
+  })
+
+  // Since no snapshot has been taken for these operations
+  // their timestamp and clearTags should not be set
+  const updateEntry = await adapter.query({
+    sql: `SELECT timestamp, clearTags FROM _electric_oplog WHERE rowid = 2`,
+  })
+
+  t.is(updateEntry[0].timestamp, null)
+  t.deepEqual(JSON.parse(updateEntry[0].clearTags as string), [])
+
+  const deleteEntry = await adapter.query({
+    sql: `SELECT timestamp, clearTags FROM _electric_oplog WHERE rowid = 3`,
+  })
+
+  t.is(deleteEntry[0].timestamp, null)
+  t.deepEqual(JSON.parse(deleteEntry[0].clearTags as string), [])
+
+  const reinsertEntry = await adapter.query({
+    sql: `SELECT timestamp, clearTags FROM _electric_oplog WHERE rowid = 4`,
+  })
+
+  t.is(reinsertEntry[0].timestamp, null)
+  t.deepEqual(JSON.parse(reinsertEntry[0].clearTags as string), [])
+
+  // Now take a snapshot for these operations
+  await satellite._performSnapshot()
+
+  // Now the timestamps should be set
+  // The first operation (update) should override
+  // the original insert (i.e. clearTags must contain the timestamp of the insert)
+  const updateEntryAfterSnapshot = await adapter.query({
+    sql: `SELECT timestamp, clearTags FROM _electric_oplog WHERE rowid = 2`,
+  })
+
+  const rawTimestampTx2 = updateEntryAfterSnapshot[0].timestamp
+  t.assert(rawTimestampTx2 != null)
+  const timestampTx2 = parseDate(rawTimestampTx2 as string)
+
+  t.is(
+    updateEntryAfterSnapshot[0].clearTags,
+    genEncodedTags(authState.clientId, [timestampTx2, insertTimestamp])
+  )
+
+  // The second operation (delete) should have the same timestamp
+  // and should contain the tag of the TX in its clearTags
+  const deleteEntryAfterSnapshot = await adapter.query({
+    sql: `SELECT timestamp, clearTags FROM _electric_oplog WHERE rowid = 3`,
+  })
+
+  t.assert(deleteEntryAfterSnapshot[0].timestamp === rawTimestampTx2)
+  t.is(
+    deleteEntryAfterSnapshot[0].clearTags,
+    genEncodedTags(authState.clientId, [timestampTx2, insertTimestamp])
+  )
+
+  // The third operation (reinsert) should have the same timestamp
+  // and should contain the tag of the TX in its clearTags
+  const reinsertEntryAfterSnapshot = await adapter.query({
+    sql: `SELECT timestamp, clearTags FROM _electric_oplog WHERE rowid = 4`,
+  })
+
+  t.assert(reinsertEntryAfterSnapshot[0].timestamp === rawTimestampTx2)
+  t.is(
+    reinsertEntryAfterSnapshot[0].clearTags,
+    genEncodedTags(authState.clientId, [timestampTx2, insertTimestamp])
+  )
 })
 
 test('TX1=INSERT, TX2=DELETE, TX3=INSERT, ack TX1', async (t) => {
@@ -121,7 +274,7 @@ test('TX1=INSERT, TX2=DELETE, TX3=INSERT, ack TX1', async (t) => {
   t.is(0, shadowEntry2.length)
   // clearTags contains previous shadowTag
   t.like(localEntries2[1], {
-    clearTags: tag1,
+    clearTags: genEncodedTags(clientId, [txDate2, txDate1]),
     timestamp: txDate2.toISOString(),
   })
 
@@ -569,7 +722,7 @@ test('origin tx (INSERT) concurrently with local txses (INSERT -> DELETE)', asyn
     entries[0].tablename,
     OPTYPES.insert,
     electricEntrySameTs,
-    genEncodedTags(clientId, [txDate1]),
+    '[]',
     JSON.parse(entries[0].newRow!),
     undefined
   )
@@ -583,10 +736,7 @@ test('origin tx (INSERT) concurrently with local txses (INSERT -> DELETE)', asyn
     entries[1].tablename,
     OPTYPES.insert,
     electricEntryConflictTs,
-    encodeTags([
-      generateTag(clientId, txDate1),
-      generateTag('remote', txDate1),
-    ]),
+    encodeTags([generateTag('remote', txDate1)]),
     JSON.parse(entries[1].newRow!),
     undefined
   )

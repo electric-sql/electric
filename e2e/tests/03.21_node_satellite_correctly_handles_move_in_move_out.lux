@@ -1,0 +1,106 @@
+[doc NodeJS Satellite correctly works with data move-ins and move-outs cause by shape updates]
+[include _shared.luxinc]
+[include _satellite_macros.luxinc]
+
+[invoke setup]
+
+[invoke setup_client 1 "electric_1" 5133]
+
+[shell proxy_1]
+    [local sql=
+        """
+        CREATE TABLE public.projects (
+            id UUID PRIMARY KEY,
+            content VARCHAR NOT NULL
+        );
+
+        CREATE TABLE public.issues (
+            id UUID PRIMARY KEY,
+            content VARCHAR NOT NULL,
+            project_id UUID REFERENCES public.projects (id)
+        );
+
+        CREATE TABLE public.comments (
+            id UUID PRIMARY KEY,
+            content VARCHAR NOT NULL,
+            issue_id UUID REFERENCES public.issues (id)
+        );
+
+        ALTER TABLE public.projects ENABLE ELECTRIC;
+        ALTER TABLE public.issues ENABLE ELECTRIC;
+        ALTER TABLE public.comments ENABLE ELECTRIC;
+        """]
+    [invoke migrate_pg 20240130000000 $sql]
+
+[shell satellite_1]
+    ??[rpc] recv: #SatInStartReplicationResp
+    [invoke node_await_table "comments"]
+
+[shell pg_1]
+    # Insert a row
+    !BEGIN;
+    !INSERT INTO public.projects (id, content) VALUES ('00000000-0000-0000-0000-000000000000', 'Project 1');
+    !INSERT INTO public.issues (id, content, project_id) VALUES ('00000000-0000-0000-0000-000000000001', 'Issue 1', '00000000-0000-0000-0000-000000000000');
+    !INSERT INTO public.comments (id, content, issue_id) VALUES ('00000000-0000-0000-0000-000000000002', 'Comment 1', '00000000-0000-0000-0000-000000000001');
+    !INSERT INTO public.projects (id, content) VALUES ('00000000-0000-0000-0000-000000000003', 'Project 2');
+    !INSERT INTO public.issues (id, content, project_id) VALUES ('00000000-0000-0000-0000-000000000004', 'Issue 2', '00000000-0000-0000-0000-000000000003');
+    !INSERT INTO public.comments (id, content, issue_id) VALUES ('00000000-0000-0000-0000-000000000005', 'Comment 2', '00000000-0000-0000-0000-000000000004');
+    !COMMIT;
+    ?$psql
+
+[shell satellite_1]
+    -$fail_pattern
+    """!await client.lowLevelSubscribe(db, {
+        tablename: "projects",
+        where: "this.content = 'Project 1'",
+        include: [
+            { foreignKey: ["project_id"],
+              select: {
+                tablename: "issues", 
+                include: [
+                  { foreignKey: ["issue_id"],
+                    select: { tablename: "comments" }
+                  }
+                ]
+              }
+            },
+        ]
+    })
+    """
+    
+    # As soon as sync is done, we expect to see the row in the database
+    -(Issue 2)|$fail_pattern
+    !await client.get_rows(db, "comments")
+    ?$node
+    -$fail_pattern
+
+
+###
+# Move-in part of the test
+###
+
+[shell pg_1]
+    # The issue changes the parent to the one we're observing, and we should see it's comment
+    !UPDATE public.issues SET project_id = '00000000-0000-0000-0000-000000000000' WHERE id = '00000000-0000-0000-0000-000000000004';
+    ?$psql
+
+[shell satellite_1]
+    # This one gets propagated "normally"
+    [invoke node_await_get_from_table "comments" "00000000-0000-0000-0000-000000000005"]
+
+###
+# Move-out part of the test
+###
+
+[shell pg_1]
+    # The issue changes the parent to the one we're observing, and we should see it's comment
+    !UPDATE public.issues SET project_id = '00000000-0000-0000-0000-000000000003' WHERE id = '00000000-0000-0000-0000-000000000004';
+    ?$psql
+
+[shell satellite_1]
+    # This one gets propagated "normally"
+    [invoke wait-for "`There is $${(await client.get_rows(db, 'comments')).length} comment`" "There is 1 comment" 10 $node]
+
+
+[cleanup]
+  [invoke teardown]

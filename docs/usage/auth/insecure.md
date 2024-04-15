@@ -53,13 +53,10 @@ Use the function to initialize the client and have your replication connection s
 import { electrify } from 'electric-sql/wa-sqlite'
 
 const userId = '...'
-const config = {
-  auth: {
-    token: unsignedJWT(userId)
-  }
-}
+const token = unsignedJWT(userId)
 
-const { db } = await electrify(conn, schema, config)
+const electric = await electrify(conn, schema)
+await electric.connect(token)
 ```
 
 :::note

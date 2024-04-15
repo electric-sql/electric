@@ -8,16 +8,12 @@ import { mockElectricClient } from '../satellite/common'
 import { EVENT_NAMES } from '../../src/notifiers/event'
 
 const conn = new Database(':memory:')
-const config = {
-  auth: {
-    token: 'test-token',
-  },
-}
+const config = {}
 
 const { notifier, adapter, db } = await electrify(conn, schema, config, {
   registry: new MockRegistry(),
 })
-await db.Items.sync() // sync the Items table
+await db.Items.sync({ where: 'this.id IN (1, 2, 3)' }) // sync the Items table
 
 async function runAndCheckNotifications(f: () => Promise<void>) {
   let notifications = 0

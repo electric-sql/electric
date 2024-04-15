@@ -7,7 +7,7 @@ defmodule Electric.Replication.ElectrificationTest do
   alias Electric.Replication.Changes.{NewRecord, Transaction}
 
   @origin "electrification-test"
-  @sleep_timeout 5000
+  @next_cached_tx_timeout 5000
 
   setup ctx, do: Map.put(ctx, :origin, @origin)
   setup :setup_replicated_db
@@ -83,13 +83,24 @@ defmodule Electric.Replication.ElectrificationTest do
     :ok
   end
 
-  defp wait_for_next_cached_wal_tx(lsn) do
-    with :ok <- wait_until_cached_wal_advances(lsn),
+  defp wait_for_next_cached_wal_tx(lsn, ts \\ System.monotonic_time()) do
+    with :ok <- check_remaining_time(ts, @next_cached_tx_timeout),
+         :ok <- wait_until_cached_wal_advances(lsn),
          {:ok, %Transaction{changes: [_ | _]} = tx, new_lsn} <- CachedWal.Api.next_segment(lsn) do
       {:ok, new_lsn, tx}
     else
-      {:ok, %Transaction{changes: []}, new_lsn} -> wait_for_next_cached_wal_tx(new_lsn)
+      {:ok, %Transaction{changes: []}, new_lsn} -> wait_for_next_cached_wal_tx(new_lsn, ts)
       :timeout -> :timeout
+    end
+  end
+
+  defp check_remaining_time(ts, timeout) do
+    elapsed_time = System.convert_time_unit(System.monotonic_time() - ts, :native, :millisecond)
+
+    if elapsed_time < timeout do
+      :ok
+    else
+      :timeout
     end
   end
 
@@ -99,8 +110,6 @@ defmodule Electric.Replication.ElectrificationTest do
     receive do
       {:cached_wal_notification, ^ref, :new_segments_available} ->
         :ok
-    after
-      @sleep_timeout -> :timeout
     end
   end
 end

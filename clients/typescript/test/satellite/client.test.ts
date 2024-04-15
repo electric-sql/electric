@@ -18,6 +18,7 @@ import { RpcResponse, SatelliteWSServerStub } from './server_ws_stub'
 import { DbSchema, TableSchema } from '../../src/client/model/schema'
 import { PgBasicType } from '../../src/client/conversions/types'
 import { HKT } from '../../src/client/util/hkt'
+import { AUTH_EXPIRED_CLOSE_EVENT } from '../../src/sockets'
 
 interface Context extends AuthState {
   server: SatelliteWSServerStub
@@ -204,6 +205,56 @@ test.serial('replication stop failure', async (t) => {
   } catch (error) {
     t.is((error as any).code, SatelliteErrorCode.REPLICATION_NOT_STARTED)
   }
+})
+
+test.serial('handle socket closure due to JWT expiration', async (t) => {
+  await connectAndAuth(t.context)
+  const { client, server } = t.context
+  await startReplication(client, server)
+
+  // We're expecting 1 assertion
+  t.plan(2)
+
+  // subscribe to errors on the client using subscribeToError
+  client.subscribeToError((error) => {
+    // check that the subscribed listener is called with the right reason
+    t.is(error.code, SatelliteErrorCode.AUTH_EXPIRED)
+  })
+
+  // close the socket with a JWT expired reason
+  server.closeSocket(AUTH_EXPIRED_CLOSE_EVENT)
+
+  // Give `closeSocket` some time
+  await sleepAsync(100)
+
+  t.false(client.isConnected())
+
+  server.close()
+})
+
+test.serial('handle socket closure for other reasons', async (t) => {
+  await connectAndAuth(t.context)
+  const { client, server } = t.context
+  await startReplication(client, server)
+
+  // We're expecting 2 assertions
+  t.plan(2)
+
+  // subscribe to errors on the client using subscribeToError
+  client.subscribeToError((error) => {
+    // check that the subscribed listener is called with the right reason
+    t.is(error.code, SatelliteErrorCode.SOCKET_ERROR)
+  })
+
+  // close the socket with a JWT expired reason
+  server.closeSocket()
+
+  // Give `closeSocket` some time
+  await sleepAsync(100)
+
+  t.false(client.isConnected())
+
+  server.close()
 })
 
 test.serial('receive transaction over multiple messages', async (t) => {
@@ -400,6 +451,8 @@ test.serial('migration transaction contains all information', async (t) => {
       t.deepEqual(transaction, {
         commit_timestamp: commit.commitTimestamp,
         lsn: begin.lsn,
+        id: undefined,
+        additionalDataRef: undefined,
         changes: [
           {
             migrationType: Proto.SatOpMigrate_Type.CREATE_TABLE,
@@ -730,13 +783,40 @@ test.serial('subscription succesful', async (t) => {
   const shapeReq: ShapeRequest = {
     requestId: 'fake',
     definition: {
-      selects: [{ tablename: 'fake' }],
+      tablename: 'fake',
+      include: [{ foreignKey: ['foreign_id'], select: { tablename: 'other' } }],
     },
   }
 
   const subscriptionId = 'THE_ID'
   const subsResp = Proto.SatSubsResp.fromPartial({ subscriptionId })
   server.nextRpcResponse('subscribe', [subsResp])
+
+  const res = await client.subscribe(subscriptionId, [shapeReq])
+  t.is(res.subscriptionId, subscriptionId)
+})
+
+test.serial('RPC subscribe flow is not interleaved', async (t) => {
+  // SatSubsDataEnd cannot be received before SatSubsResp, otherwise
+  // we would get an error: 'Received subscribe response for unknown subscription <id>'
+  // On Github https://github.com/electric-sql/electric/pull/985
+  await connectAndAuth(t.context)
+  const { client, server } = t.context
+  await startReplication(client, server)
+
+  const shapeReq: ShapeRequest = {
+    requestId: 'fake',
+    definition: {
+      tablename: 'fake',
+    },
+  }
+
+  const subscriptionId = 'THE_ID'
+  const subsResp = Proto.SatSubsResp.fromPartial({ subscriptionId })
+  const beginSub = Proto.SatSubsDataBegin.fromPartial({ subscriptionId })
+  const endSub = Proto.SatSubsDataEnd.create()
+  // By not adding a delay in between messages we trigger the interleaving
+  server.nextRpcResponse('subscribe', [subsResp, beginSub, endSub])
 
   const res = await client.subscribe(subscriptionId, [shapeReq])
   t.is(res.subscriptionId, subscriptionId)
@@ -752,14 +832,14 @@ test.serial(
     const shapeReq1: ShapeRequest = {
       requestId: 'fake1',
       definition: {
-        selects: [{ tablename: 'fake1' }],
+        tablename: 'fake1',
       },
     }
 
     const shapeReq2: ShapeRequest = {
       requestId: 'fake2',
       definition: {
-        selects: [{ tablename: 'fake2' }],
+        tablename: 'fake2',
       },
     }
 
@@ -801,7 +881,7 @@ test.serial('listen to subscription events: error', async (t) => {
   const shapeReq: ShapeRequest = {
     requestId: 'fake',
     definition: {
-      selects: [{ tablename: 'fake' }],
+      tablename: 'fake',
     },
   }
 
@@ -818,7 +898,7 @@ test.serial('listen to subscription events: error', async (t) => {
   })
   server.nextRpcResponse('subscribe', [subsResp, '50ms', subsData, subsError])
 
-  const success = () => t.fail()
+  const success = () => void t.fail()
   const error = () => t.pass()
 
   client.subscribeToSubscriptionEvents(success, error)
@@ -839,7 +919,7 @@ test.serial('subscription incorrect protocol sequence', async (t) => {
   const shapeReq: ShapeRequest = {
     requestId,
     definition: {
-      selects: [{ tablename }],
+      tablename,
     },
   }
 
@@ -985,14 +1065,14 @@ test.serial('subscription correct protocol sequence with data', async (t) => {
   const shapeReq1: ShapeRequest = {
     requestId: requestId1,
     definition: {
-      selects: [{ tablename }],
+      tablename,
     },
   }
 
   const shapeReq2: ShapeRequest = {
     requestId: requestId2,
     definition: {
-      selects: [{ tablename }],
+      tablename,
     },
   }
 
@@ -1047,6 +1127,136 @@ test.serial('subscription correct protocol sequence with data', async (t) => {
   await client.subscribe(subscriptionId, [shapeReq1, shapeReq2])
 
   await promise
+})
+
+test.serial('client correctly handles additional data messages', async (t) => {
+  await connectAndAuth(t.context)
+  const { client, server } = t.context
+
+  const dbDescription = new DbSchema(
+    {
+      table: {
+        fields: new Map([
+          ['name1', PgBasicType.PG_TEXT],
+          ['name2', PgBasicType.PG_TEXT],
+        ]),
+        relations: [],
+      } as unknown as TableSchema<
+        any,
+        any,
+        any,
+        any,
+        any,
+        any,
+        any,
+        any,
+        any,
+        HKT
+      >,
+    },
+    []
+  )
+
+  client['dbDescription'] = dbDescription
+
+  const start = Proto.SatInStartReplicationResp.create()
+  const begin = Proto.SatOpBegin.create({
+    commitTimestamp: Long.ZERO,
+    additionalDataRef: 10,
+  })
+  const commit = Proto.SatOpCommit.create({ additionalDataRef: 10 })
+
+  const rel: Relation = {
+    id: 1,
+    schema: 'schema',
+    table: 'table',
+    tableType: Proto.SatRelation_RelationType.TABLE,
+    columns: [
+      { name: 'name1', type: 'TEXT', isNullable: true },
+      { name: 'name2', type: 'TEXT', isNullable: true },
+    ],
+  }
+
+  const relation = Proto.SatRelation.fromPartial({
+    relationId: 1,
+    schemaName: 'schema',
+    tableName: 'table',
+    tableType: Proto.SatRelation_RelationType.TABLE,
+    columns: [
+      Proto.SatRelationColumn.fromPartial({
+        name: 'name1',
+        type: 'TEXT',
+        isNullable: true,
+      }),
+      Proto.SatRelationColumn.fromPartial({
+        name: 'name2',
+        type: 'TEXT',
+        isNullable: true,
+      }),
+    ],
+  })
+
+  const insertOp = Proto.SatOpInsert.fromPartial({
+    relationId: 1,
+    rowData: serializeRow({ name1: 'Foo', name2: 'Bar' }, rel, dbDescription),
+  })
+
+  const secondInsertOp = Proto.SatOpInsert.fromPartial({
+    relationId: 1,
+    rowData: serializeRow({ name1: 'More', name2: 'Data' }, rel, dbDescription),
+  })
+
+  const firstOpLogMessage = Proto.SatOpLog.fromPartial({
+    ops: [
+      Proto.SatTransOp.fromPartial({ begin }),
+      Proto.SatTransOp.fromPartial({ insert: insertOp }),
+      Proto.SatTransOp.fromPartial({ commit }),
+    ],
+  })
+
+  const secondOpLogMessage = Proto.SatOpLog.fromPartial({
+    ops: [
+      Proto.SatTransOp.fromPartial({
+        additionalBegin: Proto.SatOpAdditionalBegin.create({ ref: 10 }),
+      }),
+      Proto.SatTransOp.fromPartial({ insert: secondInsertOp }),
+      Proto.SatTransOp.fromPartial({
+        additionalCommit: Proto.SatOpAdditionalCommit.create({ ref: 10 }),
+      }),
+    ],
+  })
+
+  const stop = Proto.SatInStopReplicationResp.create()
+
+  server.nextRpcResponse('startReplication', [
+    start,
+    relation,
+    firstOpLogMessage,
+    '100ms',
+    secondOpLogMessage,
+  ])
+  server.nextRpcResponse('stopReplication', [stop])
+
+  await new Promise<void>((res) => {
+    let txnSeen = false
+
+    client.subscribeToTransactions(async (transaction) => {
+      t.is(transaction.changes.length, 1)
+      t.assert(transaction.additionalDataRef?.eq(10))
+
+      txnSeen = true
+    })
+
+    client.subscribeToAdditionalData(async (data) => {
+      t.assert(data.ref.eq(10))
+      t.is(data.changes.length, 1)
+      t.like(data.changes[0].record, { name1: 'More' })
+
+      if (txnSeen) res()
+    })
+
+    return client.startReplication()
+  })
 })
 
 test.serial('unsubscribe successfull', async (t) => {

@@ -1,13 +1,14 @@
 import Database from 'better-sqlite3'
 import { ElectricConfig } from 'electric-sql'
 import { mockSecureAuthToken } from 'electric-sql/auth/secure'
-
 import { setLogLevel } from 'electric-sql/debug'
 import { electrify } from 'electric-sql/node'
 import { v4 as uuidv4 } from 'uuid'
 import { schema, Electric, ColorType as Color } from './generated/client'
 export { JsonNull } from './generated/client'
 import { globalRegistry } from 'electric-sql/satellite'
+import { SatelliteErrorCode } from 'electric-sql/util'
+import { Shape } from 'electric-sql/satellite'
 
 setLogLevel('DEBUG')
 
@@ -22,34 +23,59 @@ export const electrify_db = async (
   db: any,
   host: string,
   port: number,
-  migrations: any
+  migrations: any,
+  connectToElectric: boolean,
+  exp?: string
 ): Promise<Electric> => {
   const config: ElectricConfig = {
     url: `electric://${host}:${port}`,
     debug: true,
-    auth: {
-      token: await mockSecureAuthToken()
-    }
   }
   console.log(`(in electrify_db) config: ${JSON.stringify(config)}`)
   schema.migrations = migrations
   const result = await electrify(db, schema, config)
-
-  result.notifier.subscribeToConnectivityStateChanges((x) => console.log("Connectivity state changed", x))
+  const token = await mockSecureAuthToken(exp)
+  
+  result.notifier.subscribeToConnectivityStateChanges((x: any) => console.log(`Connectivity state changed: ${x.connectivityState.status}`))
+  if (connectToElectric) {
+    await result.connect(token) // connect to Electric
+  }
 
   return result
 }
 
+// reconnects with Electric, e.g. after expiration of the JWT
+export const reconnect = async (electric: Electric, exp: string) => {
+  const token = await mockSecureAuthToken(exp)
+  await electric.connect(token)
+}
+
+export const check_token_expiration = (electric: Electric, minimalTime: number) => {
+  const start = Date.now()
+  const unsubscribe = electric.notifier.subscribeToConnectivityStateChanges((x: any) => {
+    if (x.connectivityState.status === 'disconnected' && x.connectivityState.reason?.code === SatelliteErrorCode.AUTH_EXPIRED) {
+      const delta = Date.now() - start
+      if (delta >= minimalTime) {
+        console.log(`JWT expired after ${delta} ms`)
+      }
+      else {
+        console.log(`JWT expired too early, after only ${delta} ms`)
+      }
+      unsubscribe()
+    }
+  })
+}
+
 export const set_subscribers = (db: Electric) => {
-  db.notifier.subscribeToAuthStateChanges((x) => {
+  db.notifier.subscribeToAuthStateChanges((x: any) => {
     console.log('auth state changes: ')
     console.log(x)
   })
-  db.notifier.subscribeToPotentialDataChanges((x) => {
+  db.notifier.subscribeToPotentialDataChanges((x: any) => {
     console.log('potential data change: ')
     console.log(x)
   })
-  db.notifier.subscribeToDataChanges((x) => {
+  db.notifier.subscribeToDataChanges((x: any) => {
     console.log('data changes: ')
     console.log(JSON.stringify(x))
   })
@@ -57,13 +83,18 @@ export const set_subscribers = (db: Electric) => {
 
 export const syncTable = async (electric: Electric, table: string) => {
   if (table === 'other_items') {
-    const { synced } = await electric.db.other_items.sync({ include: { items: true } })
+    const { synced } = await electric.db.other_items.sync()
     return await synced
   } else {
     const satellite = globalRegistry.satellites[dbName]
-    const { synced } = await satellite.subscribe([{selects: [{tablename: table}]}])
+    const { synced } = await satellite.subscribe([{tablename: table}])
     return await synced
   }
+}
+
+export const lowLevelSubscribe = async (electric: Electric, shape: Shape) => {
+    const { synced } = await electric.satellite.subscribe([shape])
+    return await synced
 }
 
 export const get_tables = (electric: Electric) => {
@@ -199,7 +230,7 @@ export const get_int = (electric: Electric, id: string) => {
   })
 }
 
-export const write_int = (electric: Electric, id: string, i2: number, i4: number, i8: number | BigInt) => {
+export const write_int = (electric: Electric, id: string, i2: number, i4: number, i8: number | bigint) => {
   return electric.db.ints.create({
     data: { id, i2, i4, i8 }
   })
@@ -292,6 +323,23 @@ export const write_enum = (electric: Electric, id: string, c: Color | null) => {
   })
 }
 
+export const get_blob = async (electric: Electric, id: string) => {
+  return electric.db.blobs.findUnique({
+    where: {
+      id: id
+    }
+  })
+}
+
+export const write_blob = (electric: Electric, id: string, blob: Uint8Array | null) => {
+  return electric.db.blobs.create({
+    data: {
+      id,
+      blob,
+    }
+  })
+}
+
 export const get_item_columns = (electric: Electric, table: string, column: string) => {
   return electric.db.rawQuery({ sql: `SELECT ${column} FROM ${table};` })
 }
@@ -309,11 +357,11 @@ export const insert_item = async (electric: Electric, keys: [string]) => {
   })
 }
 
-export const insert_extended_item = async (electric: Electric, values: { string: string }) => {
+export const insert_extended_item = async (electric: Electric, values: Record<string, string>) => {
   await insert_extended_into(electric, "items", values)
 }
 
-export const insert_extended_into = async (electric: Electric, table: string, values: { string: string }) => {
+export const insert_extended_into = async (electric: Electric, table: string, values: Record<string, string>) => {
   if (!values['id']) {
     values['id'] = uuidv4()
   }

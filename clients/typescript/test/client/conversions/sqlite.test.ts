@@ -14,11 +14,7 @@ const db = new Database(':memory:')
 const electric = await electrify(
   db,
   schema,
-  {
-    auth: {
-      token: 'test-token',
-    },
-  },
+  {},
   { registry: new MockRegistry() }
 )
 
@@ -30,7 +26,7 @@ await tbl.sync()
 function setupDB() {
   db.exec('DROP TABLE IF EXISTS DataTypes')
   db.exec(
-    "CREATE TABLE DataTypes('id' int PRIMARY KEY, 'date' varchar, 'time' varchar, 'timetz' varchar, 'timestamp' varchar, 'timestamptz' varchar, 'bool' int, 'uuid' varchar, 'int2' int2, 'int4' int4, 'int8' int8, 'float4' real, 'float8' real, 'json' varchar, 'relatedId' int);"
+    "CREATE TABLE DataTypes('id' int PRIMARY KEY, 'date' varchar, 'time' varchar, 'timetz' varchar, 'timestamp' varchar, 'timestamptz' varchar, 'bool' int, 'uuid' varchar, 'int2' int2, 'int4' int4, 'int8' int8, 'float4' real, 'float8' real, 'json' varchar, 'bytea' BLOB, 'relatedId' int);"
   )
 }
 
@@ -318,4 +314,56 @@ test.serial('json is converted correctly to SQLite', async (t) => {
   })
 
   t.is(rawRes5[0].json, JSON.stringify([1, 2, 3]))
+})
+
+test.serial('bytea is converted correctly to SQLite', async (t) => {
+  // inserting
+  const bytea1 = new Uint8Array([1, 2, 3, 4])
+  await tbl.create({
+    data: { id: 1, bytea: bytea1 },
+  })
+
+  const rawRes1 = await electric.db.rawQuery({
+    sql: 'SELECT bytea FROM DataTypes WHERE id = ?',
+    args: [1],
+  })
+  t.deepEqual((rawRes1[0].bytea as Uint8Array).buffer, bytea1.buffer)
+
+  // updating
+  const bytea2 = new Uint8Array([1, 2, 3, 5])
+  await tbl.update({
+    data: { bytea: bytea2 },
+    where: { id: 1 },
+  })
+
+  const rawRes2 = await electric.db.rawQuery({
+    sql: 'SELECT bytea FROM DataTypes WHERE id = ?',
+    args: [1],
+  })
+  t.deepEqual((rawRes2[0].bytea as Uint8Array).buffer, bytea2.buffer)
+
+  // inserting null
+  await tbl.create({
+    data: { id: 2, bytea: null },
+  })
+
+  const rawRes3 = await electric.db.rawQuery({
+    sql: 'SELECT bytea FROM DataTypes WHERE id = ?',
+    args: [2],
+  })
+  t.is(rawRes3[0].bytea, null)
+
+  // inserting large buffer
+  const sizeInBytes = 1000000
+  const bytea3 = new Uint8Array(sizeInBytes)
+  bytea3.forEach((_, i) => (bytea3[i] = Math.random() * 256))
+  await tbl.create({
+    data: { id: 3, bytea: bytea3 },
+  })
+
+  const rawRes4 = await electric.db.rawQuery({
+    sql: 'SELECT bytea FROM DataTypes WHERE id = ?',
+    args: [3],
+  })
+  t.deepEqual((rawRes4[0].bytea as Uint8Array).buffer, bytea3.buffer)
 })

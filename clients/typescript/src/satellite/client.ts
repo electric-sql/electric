@@ -56,13 +56,18 @@ import {
   Record,
   Relation,
   SchemaChange,
-  Transaction,
   StartReplicationResponse,
   StopReplicationResponse,
   ErrorCallback,
   RelationCallback,
   OutboundStartedCallback,
   TransactionCallback,
+  ServerTransaction,
+  InboundReplication,
+  SocketCloseReason,
+  AdditionalData,
+  DataInsert,
+  AdditionalDataCallback,
 } from '../util/types'
 import {
   base64,
@@ -74,7 +79,6 @@ import {
 import { Client } from '.'
 import { SatelliteClientOpts, satelliteClientDefaults } from './config'
 import Log from 'loglevel'
-import { AuthState } from '../auth'
 import isequal from 'lodash.isequal'
 import {
   SUBSCRIPTION_DELIVERED,
@@ -92,6 +96,10 @@ import { Mutex } from 'async-mutex'
 import { DbSchema } from '../client/model'
 import { PgBasicType, PgDateType, PgType } from '../client/conversions/types'
 import { AsyncEventEmitter } from '../util'
+import { AuthState } from '../auth'
+import Long from 'long'
+
+const DEFAULT_ACK_PERIOD = 60000
 
 type IncomingHandler = (msg: any) => void
 
@@ -107,8 +115,14 @@ const subscriptionError = [
 type Events = {
   error: (error: SatelliteError) => void
   relation: (relation: Relation) => void
-  transaction: (transaction: Transaction, ackCb: () => void) => Promise<void>
+  transaction: (
+    transaction: ServerTransaction,
+    ackCb: () => void
+  ) => Promise<void>
+  additionalData: (data: AdditionalData, ack: () => void) => Promise<void>
   outbound_started: () => void
+  [SUBSCRIPTION_DELIVERED]: SubscriptionDeliveredCallback
+  [SUBSCRIPTION_ERROR]: SubscriptionErrorCallback
 }
 type EventEmitter = AsyncEventEmitter<Events>
 
@@ -120,7 +134,7 @@ export class SatelliteClient implements Client {
   private socketFactory: SocketFactory
   private socket?: Socket
 
-  private inbound: Replication<Transaction>
+  private inbound: InboundReplication
   private outbound: Replication<DataTransaction>
 
   // can only handle a single subscription at a time
@@ -150,6 +164,7 @@ export class SatelliteClient implements Client {
         SatShapeDataEnd: (msg) => this.handleShapeDataEnd(msg),
         SatRpcResponse: (msg) => this.rpcClient.handleResponse(msg),
         SatRpcRequest: (msg) => this.handleRpcRequest(msg),
+        SatOpLogAck: (msg) => void msg, // Server doesn't send that
       } satisfies HandlerMapping).map((e) => [getFullTypeName(e[0]), e[1]])
     )
 
@@ -157,6 +172,13 @@ export class SatelliteClient implements Client {
     startReplication: this.handleStartReq.bind(this),
     stopReplication: this.handleStopReq.bind(this),
   }
+
+  /* eslint-disable-next-line @typescript-eslint/ban-types --
+   * This remapping actually is generic from a function to a function of the same type,
+   * but there's no way to express that. It's needed because we're wrapping the original
+   * callback in our own, which makes `.removeListener` not work.
+   */
+  private listenerRemapping: Map<Function, Function> = new Map()
 
   constructor(
     dbDescription: DbSchema<any>,
@@ -168,7 +190,7 @@ export class SatelliteClient implements Client {
     this.opts = { ...satelliteClientDefaults, ...opts }
     this.socketFactory = socketFactory
 
-    this.inbound = this.resetReplication()
+    this.inbound = this.resetInboundReplication()
     this.outbound = this.resetReplication()
     this.dbDescription = dbDescription
 
@@ -195,6 +217,30 @@ export class SatelliteClient implements Client {
       relations: new Map(),
       last_lsn: last_lsn,
       transactions: [],
+    }
+  }
+
+  private resetInboundReplication(
+    last_lsn?: LSN,
+    isReplicating?: ReplicationStatus
+  ): InboundReplication {
+    return {
+      ...this.resetReplication(last_lsn, isReplicating),
+      lastTxId: undefined,
+      lastAckedTxId: undefined,
+      unackedTxs: 0,
+      maxUnackedTxs: 30,
+      ackPeriod: DEFAULT_ACK_PERIOD,
+      ackTimer: setTimeout(
+        () => this.maybeSendAck('timeout'),
+        DEFAULT_ACK_PERIOD
+      ),
+      additionalData: [],
+      unseenAdditionalDataRefs: new Set(),
+      seenAdditionalDataSinceLastTx: {
+        dataRefs: [],
+        subscriptions: [],
+      },
     }
   }
 
@@ -237,14 +283,14 @@ export class SatelliteClient implements Client {
           }
           this.emitter.enqueueEmit('error', error)
         })
-        this.socket.onClose(() => {
+        this.socket.onClose((ev: SocketCloseReason) => {
           this.disconnect()
           if (this.emitter.listenerCount('error') === 0) {
             Log.error(`socket closed but no listener is attached`)
           }
           this.emitter.enqueueEmit(
             'error',
-            new SatelliteError(SatelliteErrorCode.SOCKET_ERROR, 'socket closed')
+            new SatelliteError(ev, 'socket closed')
           )
         })
 
@@ -262,7 +308,7 @@ export class SatelliteClient implements Client {
 
   disconnect() {
     this.outbound = this.resetReplication(this.outbound.last_lsn)
-    this.inbound = this.resetReplication(this.inbound.last_lsn)
+    this.inbound = this.resetInboundReplication(this.inbound.last_lsn)
 
     this.socketHandler = undefined
 
@@ -276,6 +322,10 @@ export class SatelliteClient implements Client {
     return !!this.socketHandler
   }
 
+  getOutboundReplicationStatus(): ReplicationStatus {
+    return this.outbound.isReplicating
+  }
+
   shutdown(): void {
     this.disconnect()
     this.emitter.removeAllListeners()
@@ -285,7 +335,8 @@ export class SatelliteClient implements Client {
   startReplication(
     lsn?: LSN,
     schemaVersion?: string,
-    subscriptionIds?: string[]
+    subscriptionIds?: string[],
+    observedTransactionData?: Long[]
   ): Promise<StartReplicationResponse> {
     if (this.inbound.isReplicating !== ReplicationStatus.STOPPED) {
       return Promise.reject(
@@ -315,11 +366,15 @@ export class SatelliteClient implements Client {
           lsn
         )} subscriptions: ${subscriptionIds}`
       )
-      request = SatInStartReplicationReq.fromPartial({ lsn, subscriptionIds })
+      request = SatInStartReplicationReq.fromPartial({
+        lsn,
+        subscriptionIds,
+        observedTransactionData,
+      })
     }
 
     // Then set the replication state
-    this.inbound = this.resetReplication(lsn, ReplicationStatus.STARTING)
+    this.inbound = this.resetInboundReplication(lsn, ReplicationStatus.STARTING)
 
     return this.delayIncomingMessages(
       async () => {
@@ -366,7 +421,19 @@ export class SatelliteClient implements Client {
   }
 
   unsubscribeToTransactions(callback: TransactionCallback) {
+    // TODO: This doesn't work because we're building a callback in the function above
     this.emitter.removeListener('transaction', callback)
+  }
+
+  subscribeToAdditionalData(callback: AdditionalDataCallback) {
+    this.emitter.on('additionalData', async (data, ackCb) => {
+      await callback(data)
+      ackCb()
+    })
+  }
+
+  unsubscribeToAdditionalData(_callback: AdditionalDataCallback) {
+    // TODO: real removeListener implementation, because the old one for txns doesn't work
   }
 
   subscribeToRelations(callback: RelationCallback) {
@@ -429,22 +496,40 @@ export class SatelliteClient implements Client {
     successCallback: SubscriptionDeliveredCallback,
     errorCallback: SubscriptionErrorCallback
   ): void {
-    this.subscriptionsDataCache.on(SUBSCRIPTION_DELIVERED, successCallback)
-    this.subscriptionsDataCache.on(SUBSCRIPTION_ERROR, errorCallback)
+    const newCb: SubscriptionDeliveredCallback = async (data) => {
+      await successCallback(data)
+      this.inbound.seenAdditionalDataSinceLastTx.subscriptions.push(
+        data.subscriptionId
+      )
+      this.maybeSendAck('additionalData')
+    }
+
+    this.listenerRemapping.set(successCallback, newCb)
+
+    // We're remapping this callback to internal emitter to keep event queue correct -
+    // a delivered subscription processing should not interleave with next transaction processing
+    this.emitter.on(SUBSCRIPTION_DELIVERED, newCb)
+    this.subscriptionsDataCache.on(SUBSCRIPTION_DELIVERED, (data) =>
+      this.emitter.enqueueEmit(SUBSCRIPTION_DELIVERED, data)
+    )
+    this.emitter.on(SUBSCRIPTION_ERROR, errorCallback)
+    this.subscriptionsDataCache.on(SUBSCRIPTION_ERROR, (error) =>
+      this.emitter.enqueueEmit(SUBSCRIPTION_ERROR, error)
+    )
   }
 
   unsubscribeToSubscriptionEvents(
     successCallback: SubscriptionDeliveredCallback,
     errorCallback: SubscriptionErrorCallback
   ): void {
-    this.subscriptionsDataCache.removeListener(
+    this.emitter.removeListener(
       SUBSCRIPTION_DELIVERED,
-      successCallback
+      (this.listenerRemapping.get(successCallback) as any) || successCallback
     )
-    this.subscriptionsDataCache.removeListener(
-      SUBSCRIPTION_ERROR,
-      errorCallback
-    )
+    this.emitter.removeListener(SUBSCRIPTION_ERROR, errorCallback)
+
+    this.subscriptionsDataCache.removeAllListeners(SUBSCRIPTION_DELIVERED)
+    this.subscriptionsDataCache.removeAllListeners(SUBSCRIPTION_ERROR)
   }
 
   async subscribe(
@@ -467,9 +552,13 @@ export class SatelliteClient implements Client {
 
     this.subscriptionsDataCache.subscriptionRequest(request)
 
-    return this.service
-      .subscribe(request)
-      .then(this.handleSubscription.bind(this))
+    return this.delayIncomingMessages(
+      async () => {
+        const resp = await this.service.subscribe(request)
+        return this.handleSubscription(resp)
+      },
+      { allowedRpcResponses: ['subscribe'] }
+    )
   }
 
   unsubscribe(subscriptionIds: string[]): Promise<UnsubscribeResponse> {
@@ -580,6 +669,11 @@ export class SatelliteClient implements Client {
             },
           })
           break
+        case DataChangeType.GONE:
+          throw new SatelliteError(
+            SatelliteErrorCode.PROTOCOL_VIOLATION,
+            'Client is not expected to send GONE messages'
+          )
       }
       ops.push(changeOp)
     })
@@ -611,6 +705,7 @@ export class SatelliteClient implements Client {
         return { error: startReplicationErrorToSatelliteError(resp.err) }
       } else {
         this.inbound.isReplicating = ReplicationStatus.ACTIVE
+        this.inbound.maxUnackedTxs = resp.unackedWindowSize ?? 30
       }
     } else {
       return {
@@ -747,6 +842,11 @@ export class SatelliteClient implements Client {
       return
     }
 
+    /* TODO: This makes a generally incorrect assumption that PK columns come in order in the relation
+             It works in most cases, but we need actual PK order information on the protocol
+             for multi-col PKs to work */
+    let pkPosition = 1
+
     const relation = {
       id: message.relationId,
       schema: message.schemaName,
@@ -756,9 +856,9 @@ export class SatelliteClient implements Client {
         name: c.name,
         type: c.type,
         isNullable: c.isNullable,
-        primaryKey: c.primaryKey,
+        primaryKey: c.primaryKey ? pkPosition++ : undefined,
       })),
-    }
+    } satisfies Relation
 
     this.inbound.relations.set(relation.id, relation)
     this.emitter.enqueueEmit('relation', relation)
@@ -865,67 +965,117 @@ export class SatelliteClient implements Client {
     }
   }
 
+  private getRelation({ relationId }: { relationId: number }): Relation {
+    const rel = this.inbound.relations.get(relationId)
+    if (!rel) {
+      throw new SatelliteError(
+        SatelliteErrorCode.PROTOCOL_VIOLATION,
+        `missing relation ${relationId} for incoming operation`
+      )
+    }
+    return rel
+  }
+
   private processOpLogMessage(opLogMessage: SatOpLog): void {
     const replication = this.inbound
     opLogMessage.ops.map((op) => {
       if (op.begin) {
-        const transaction = {
+        const transaction: ServerTransaction = {
           commit_timestamp: op.begin.commitTimestamp,
           lsn: op.begin.lsn,
           changes: [],
           origin: op.begin.origin!,
+          id: op.begin.transactionId!,
         }
+        replication.incomplete = 'transaction'
         replication.transactions.push(transaction)
       }
 
+      if (op.additionalBegin) {
+        replication.incomplete = 'additionalData'
+        replication.additionalData.push({
+          ref: op.additionalBegin.ref,
+          changes: [],
+        })
+      }
+
       const lastTxnIdx = replication.transactions.length - 1
+      const lastDataIdx = replication.additionalData.length - 1
       if (op.commit) {
-        const { commit_timestamp, lsn, changes, origin, migrationVersion } =
+        if (replication.incomplete !== 'transaction')
+          throw new Error('Unexpected commit message while not waiting for txn')
+
+        const { commit_timestamp, lsn, changes, origin, migrationVersion, id } =
           replication.transactions[lastTxnIdx]
-        const transaction: Transaction = {
+        const transaction: ServerTransaction = {
           commit_timestamp,
           lsn,
           changes,
           origin,
           migrationVersion,
+          id,
+          additionalDataRef: op.commit.additionalDataRef.isZero()
+            ? undefined
+            : op.commit.additionalDataRef,
         }
-        this.emitter.enqueueEmit(
-          'transaction',
-          transaction,
-          () => (this.inbound.last_lsn = transaction.lsn)
-        )
+        this.emitter.enqueueEmit('transaction', transaction, () => {
+          this.inbound.last_lsn = transaction.lsn
+          this.inbound.lastTxId = transaction.id
+          this.inbound.unackedTxs++
+          this.inbound.seenAdditionalDataSinceLastTx = {
+            dataRefs: [],
+            subscriptions: [],
+          }
+          this.maybeSendAck()
+        })
         replication.transactions.splice(lastTxnIdx)
+        replication.incomplete = undefined
+        if (!op.commit.additionalDataRef.isZero())
+          replication.unseenAdditionalDataRefs.add(
+            op.commit.additionalDataRef.toString()
+          )
+      }
+
+      if (op.additionalCommit) {
+        if (replication.incomplete !== 'additionalData')
+          throw new Error(
+            'Unexpected additionalCommit message while not waiting for additionalData'
+          )
+        const ref = op.additionalCommit!.ref
+
+        // TODO: We need to include these in the ACKs as well
+        this.emitter.enqueueEmit(
+          'additionalData',
+          replication.additionalData[lastDataIdx],
+          () => {
+            this.inbound.seenAdditionalDataSinceLastTx.dataRefs.push(ref)
+            this.maybeSendAck('additionalData')
+          }
+        )
+        replication.additionalData.splice(lastDataIdx)
+        replication.incomplete = undefined
+        replication.unseenAdditionalDataRefs.delete(ref.toString())
       }
 
       if (op.insert) {
-        const rid = op.insert.relationId
-        const rel = replication.relations.get(rid)
-        if (!rel) {
-          throw new SatelliteError(
-            SatelliteErrorCode.PROTOCOL_VIOLATION,
-            `missing relation ${op.insert.relationId} for incoming operation`
-          )
-        }
+        const rel = this.getRelation(op.insert)
 
-        const change = {
+        const change: DataInsert = {
           relation: rel,
           type: DataChangeType.INSERT,
           record: deserializeRow(op.insert.rowData!, rel, this.dbDescription),
           tags: op.insert.tags,
         }
 
-        replication.transactions[lastTxnIdx].changes.push(change)
+        if (replication.incomplete! === 'transaction') {
+          replication.transactions[lastTxnIdx].changes.push(change)
+        } else {
+          replication.additionalData[lastDataIdx].changes.push(change)
+        }
       }
 
       if (op.update) {
-        const rid = op.update.relationId
-        const rel = replication.relations.get(rid)
-        if (!rel) {
-          throw new SatelliteError(
-            SatelliteErrorCode.PROTOCOL_VIOLATION,
-            'missing relation for incoming operation'
-          )
-        }
+        const rel = this.getRelation(op.update)
 
         const change = {
           relation: rel,
@@ -943,14 +1093,7 @@ export class SatelliteClient implements Client {
       }
 
       if (op.delete) {
-        const rid = op.delete.relationId
-        const rel = replication.relations.get(rid)
-        if (!rel) {
-          throw new SatelliteError(
-            SatelliteErrorCode.PROTOCOL_VIOLATION,
-            'missing relation for incoming operation'
-          )
-        }
+        const rel = this.getRelation(op.delete)
 
         const change = {
           relation: rel,
@@ -961,6 +1104,19 @@ export class SatelliteClient implements Client {
             this.dbDescription
           ),
           tags: op.delete.tags,
+        }
+
+        replication.transactions[lastTxnIdx].changes.push(change)
+      }
+
+      if (op.gone) {
+        const rel = this.getRelation(op.gone)
+
+        const change = {
+          relation: rel,
+          type: DataChangeType.GONE,
+          oldRecord: deserializeRow(op.gone.pkData, rel, this.dbDescription),
+          tags: [],
         }
 
         replication.transactions[lastTxnIdx].changes.push(change)
@@ -1016,6 +1172,47 @@ export class SatelliteClient implements Client {
 
   getLastSentLsn(): LSN {
     return this.outbound.last_lsn ?? DEFAULT_LOG_POS
+  }
+
+  private maybeSendAck(reason?: 'timeout' | 'additionalData') {
+    // Restart the timer regardless
+    if (reason === 'timeout')
+      this.inbound.ackTimer = setTimeout(
+        () => this.maybeSendAck('timeout'),
+        this.inbound.ackPeriod
+      )
+
+    // Cannot ack while offline
+    if (!this.socket || !this.isConnected()) return
+    // or when there's nothing to be ack'd
+    if (this.inbound.lastTxId === undefined) return
+    // Shouldn't ack the same message
+    if (this.inbound.lastAckedTxId?.eq(this.inbound.lastTxId)) return
+
+    const msg: SatPbMsg = {
+      $type: 'Electric.Satellite.SatOpLogAck',
+      ackTimestamp: Long.UZERO.add(new Date().getTime()),
+      lsn: this.inbound.last_lsn!,
+      transactionId: this.inbound.lastTxId,
+      subscriptionIds: this.inbound.seenAdditionalDataSinceLastTx.subscriptions,
+      additionalDataSourceIds:
+        this.inbound.seenAdditionalDataSinceLastTx.dataRefs,
+    }
+
+    // Send acks earlier rather than later to keep the stream continuous -
+    // definitely send at 70% of allowed lag.
+    const boundary = Math.floor(this.inbound.maxUnackedTxs * 0.7)
+
+    // Send the ack if we're over the boundary, or wait to ack until the timer runs
+    // out to avoid making more traffic than required, but we always try to ack on additional data
+    if (
+      this.inbound.unackedTxs >= boundary ||
+      reason == 'timeout' ||
+      reason == 'additionalData'
+    ) {
+      this.sendMessage(msg)
+      this.inbound.lastAckedTxId = msg.transactionId
+    }
   }
 }
 
@@ -1081,6 +1278,16 @@ export function serializeRow(
 }
 
 export function deserializeRow(
+  row: SatOpRow,
+  relation: Relation,
+  dbDescription: DbSchema<any>
+): Record
+export function deserializeRow(
+  row: SatOpRow | undefined,
+  relation: Relation,
+  dbDescription: DbSchema<any>
+): Record | undefined
+export function deserializeRow(
   row: SatOpRow | undefined,
   relation: Relation,
   dbDescription: DbSchema<any>
@@ -1114,7 +1321,7 @@ function calculateNumBytes(column_num: number): number {
 function deserializeColumnData(
   column: Uint8Array,
   columnType: PgType
-): string | number {
+): string | number | Uint8Array {
   switch (columnType) {
     case PgBasicType.PG_BOOL:
       return typeDecoder.bool(column)
@@ -1129,6 +1336,8 @@ function deserializeColumnData(
       return typeDecoder.float(column)
     case PgDateType.PG_TIMETZ:
       return typeDecoder.timetz(column)
+    case PgBasicType.PG_BYTEA:
+      return column
     default:
       // also covers user-defined enumeration types
       return typeDecoder.text(column)
@@ -1145,6 +1354,8 @@ function serializeColumnData(
       return typeEncoder.bool(columnValue as number)
     case PgDateType.PG_TIMETZ:
       return typeEncoder.timetz(columnValue as string)
+    case PgBasicType.PG_BYTEA:
+      return columnValue as Uint8Array
     default:
       return typeEncoder.text(columnValue as string)
   }

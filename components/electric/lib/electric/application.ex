@@ -15,7 +15,7 @@ defmodule Electric.Application do
         Electric.Features,
         Electric.Postgres.OidDatabase,
         Electric.Postgres.Proxy.SASL.SCRAMLockedCache,
-        Electric.Satellite.SubscriptionManager,
+        Electric.Satellite.ClientReconnectionInfo,
         Electric.Satellite.ClientManager,
         Electric.Replication.Connectors
       ]

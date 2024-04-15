@@ -7,6 +7,7 @@ import {
   MetaData,
   makeMigration,
 } from '../../migrators'
+import { isObject } from '../../util'
 
 /*
  * This file defines functions to build migrations
@@ -94,11 +95,7 @@ async function readMetadataFile(path: string): Promise<MetaData> {
     const data = await fs.readFile(path, 'utf8')
     const jsonData = JSON.parse(data)
 
-    if (
-      typeof jsonData === 'object' &&
-      !Array.isArray(jsonData) &&
-      jsonData !== null
-    ) {
+    if (isObject(jsonData)) {
       return parseMetadata(jsonData)
     } else {
       throw new Error(

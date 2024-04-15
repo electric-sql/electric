@@ -16,10 +16,14 @@ import Log from 'loglevel'
 import { ExtendedTableSchema } from './schema'
 import { PgBasicType } from '../conversions/types'
 import { HKT } from '../util/hkt'
+import { isObject } from '../../util'
 
 const squelPostgres = squel.useFlavour('postgres')
 squelPostgres.registerValueHandler('bigint', function (bigint) {
   return bigint.toString()
+})
+squelPostgres.registerValueHandler(Uint8Array, function (uint8) {
+  return uint8
 })
 
 type AnyFindInput = FindInput<any, any, any, any, any>
@@ -112,7 +116,7 @@ export class Builder {
   ): QueryBuilder {
     const unsupportedEntry = Object.entries(i.data).find((entry) => {
       const [_key, value] = entry
-      return typeof value === 'object' && value !== null
+      return isObject(value)
     })
     if (unsupportedEntry)
       throw new InvalidArgumentError(
@@ -310,14 +314,22 @@ function addFilters<T, Q extends QueryBuilder & WhereMixin>(
   }, q)
 }
 
-function makeFilter(
+export function makeFilter(
   fieldValue: unknown,
-  fieldName: string
+  fieldName: string,
+  prefixFieldsWith = ''
 ): Array<{ sql: string; args?: unknown[] }> {
-  if (fieldValue === null) return [{ sql: `${fieldName} IS NULL` }]
+  if (fieldValue === null)
+    return [{ sql: `${prefixFieldsWith}${fieldName} IS NULL` }]
   else if (fieldName === 'AND' || fieldName === 'OR' || fieldName === 'NOT') {
-    return [makeBooleanFilter(fieldName as 'AND' | 'OR' | 'NOT', fieldValue)]
-  } else if (typeof fieldValue === 'object') {
+    return [
+      makeBooleanFilter(
+        fieldName as 'AND' | 'OR' | 'NOT',
+        fieldValue,
+        prefixFieldsWith
+      ),
+    ]
+  } else if (isObject(fieldValue)) {
     // an object containing filters is provided
     // e.g. users.findMany({ where: { id: { in: [1, 2, 3] } } })
     const fs = {
@@ -364,7 +376,10 @@ function makeFilter(
     Object.entries(fsHandlers).forEach((entry) => {
       const [filter, handler] = entry
       if (filter in obj) {
-        const sql = handler(fieldName, obj[filter as keyof typeof obj])
+        const sql = handler(
+          prefixFieldsWith + fieldName,
+          obj[filter as keyof typeof obj]
+        )
         filters.push(sql)
       }
     })
@@ -372,7 +387,8 @@ function makeFilter(
     return filters
   }
   // needed because `WHERE field = NULL` is not valid SQL
-  else return [{ sql: `${fieldName} = ?`, args: [fieldValue] }]
+  else
+    return [{ sql: `${prefixFieldsWith}${fieldName} = ?`, args: [fieldValue] }]
 }
 
 function joinStatements(
@@ -388,7 +404,8 @@ function joinStatements(
 
 function makeBooleanFilter(
   fieldName: 'AND' | 'OR' | 'NOT',
-  value: unknown
+  value: unknown,
+  prefixFieldsWith: string
 ): { sql: string; args?: unknown[] } {
   const objects = Array.isArray(value) ? value : [value] // the value may be a single object or an array of objects connected by the provided connective (AND, OR, NOT)
   const sqlStmts = objects.map((obj) => {
@@ -399,7 +416,7 @@ function makeBooleanFilter(
     const stmts = fields.reduce(
       (stmts: Array<{ sql: string; args?: unknown[] }>, fieldName) => {
         const fieldValue = obj[fieldName as keyof typeof obj]
-        const stmts2 = makeFilter(fieldValue, fieldName)
+        const stmts2 = makeFilter(fieldValue, fieldName, prefixFieldsWith)
         return stmts.concat(stmts2)
       },
       []
@@ -488,21 +505,31 @@ function makeStartsWithFilter(
   fieldName: string,
   value: unknown
 ): { sql: string; args?: unknown[] } {
-  return { sql: `${fieldName} LIKE ?`, args: [`${value}%`] }
+  if (typeof value !== 'string')
+    throw new Error('startsWith filter must be a string')
+  return { sql: `${fieldName} LIKE ?`, args: [`${escapeLike(value)}%`] }
 }
 
 function makeEndsWithFilter(
   fieldName: string,
   value: unknown
 ): { sql: string; args?: unknown[] } {
-  return { sql: `${fieldName} LIKE ?`, args: [`%${value}`] }
+  if (typeof value !== 'string')
+    throw new Error('endsWith filter must be a string')
+  return { sql: `${fieldName} LIKE ?`, args: [`%${escapeLike(value)}`] }
 }
 
 function makeContainsFilter(
   fieldName: string,
   value: unknown
 ): { sql: string; args?: unknown[] } {
-  return { sql: `${fieldName} LIKE ?`, args: [`%${value}%`] }
+  if (typeof value !== 'string')
+    throw new Error('contains filter must be a string')
+  return { sql: `${fieldName} LIKE ?`, args: [`%${escapeLike(value)}%`] }
+}
+
+function escapeLike(value: string): string {
+  return value.replaceAll(/(%|_)/g, '\\$1')
 }
 
 function addOffset(i: AnyFindInput, q: PostgresSelect): PostgresSelect {

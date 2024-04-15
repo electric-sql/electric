@@ -20,6 +20,9 @@ test('serialize/deserialize row data', async (t) => {
       { name: 'name1', type: 'TEXT', isNullable: true },
       { name: 'name2', type: 'TEXT', isNullable: true },
       { name: 'name3', type: 'TEXT', isNullable: true },
+      { name: 'blob1', type: 'BYTEA', isNullable: true },
+      { name: 'blob2', type: 'BYTEA', isNullable: true },
+      { name: 'blob3', type: 'BYTEA', isNullable: true },
       { name: 'int1', type: 'INTEGER', isNullable: true },
       { name: 'int2', type: 'INTEGER', isNullable: true },
       { name: 'float1', type: 'REAL', isNullable: true },
@@ -41,6 +44,9 @@ test('serialize/deserialize row data', async (t) => {
           ['name1', PgBasicType.PG_TEXT],
           ['name2', PgBasicType.PG_TEXT],
           ['name3', PgBasicType.PG_TEXT],
+          ['blob1', PgBasicType.PG_BYTEA],
+          ['blob2', PgBasicType.PG_BYTEA],
+          ['blob3', PgBasicType.PG_BYTEA],
           ['int1', PgBasicType.PG_INTEGER],
           ['int2', PgBasicType.PG_INTEGER],
           ['float1', PgBasicType.PG_REAL],
@@ -74,6 +80,9 @@ test('serialize/deserialize row data', async (t) => {
     name1: 'Hello',
     name2: 'World!',
     name3: null,
+    blob1: new Uint8Array([1, 15, 255, 145]),
+    blob2: new Uint8Array([]),
+    blob3: null,
     int1: 1,
     int2: -30,
     float1: 1.0,
@@ -86,13 +95,22 @@ test('serialize/deserialize row data', async (t) => {
     enum2: null,
   }
 
+  const recordKeys = Object.keys(record)
+
   const s_row = serializeRow(record, rel, dbDescription)
   t.deepEqual(
-    s_row.values.map((bytes) => new TextDecoder().decode(bytes)),
+    s_row.values.map((bytes, idx) =>
+      recordKeys[idx].startsWith('blob')
+        ? 'blob'
+        : new TextDecoder().decode(bytes)
+    ),
     [
       'Hello',
       'World!',
       '',
+      'blob',
+      'blob',
+      'blob',
       '1',
       '-30',
       '1',
@@ -114,6 +132,9 @@ test('serialize/deserialize row data', async (t) => {
     name1: 'Edge cases for Floats',
     name2: null,
     name3: null,
+    blob1: new Uint8Array([0, 1, 255, 245]),
+    blob2: new Uint8Array([]),
+    blob3: null,
     int1: null,
     int2: null,
     float1: NaN,
@@ -125,14 +146,22 @@ test('serialize/deserialize row data', async (t) => {
     enum1: 'red',
     enum2: null,
   }
+  const recordKeys2 = Object.keys(record2)
 
   const s_row2 = serializeRow(record2, rel, dbDescription)
   t.deepEqual(
-    s_row2.values.map((bytes) => new TextDecoder().decode(bytes)),
+    s_row2.values.map((bytes, idx) =>
+      recordKeys2[idx].startsWith('blob')
+        ? 'blob'
+        : new TextDecoder().decode(bytes)
+    ),
     [
       'Edge cases for Floats',
       '',
       '',
+      'blob',
+      'blob',
+      'blob',
       '',
       '',
       'NaN',

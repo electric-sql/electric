@@ -1,20 +1,35 @@
+import { Uuid } from './types'
+import Log from 'loglevel'
+
 export const randomValue = (): string => {
   return Math.random().toString(16).substring(2)
 }
 
-export const genUUID = (): string => {
+// only warn about unsafe RNG once to avoid flooding logs
+let unsafeRandomWarned = false
+
+export const genUUID = (): Uuid => {
   // best case, `crypto.randomUUID` is available
-  if (!!globalThis.crypto && !!globalThis.crypto.randomUUID) {
+  if (globalThis.crypto?.randomUUID) {
     return globalThis.crypto.randomUUID()
   }
 
   const bytes = new Uint8Array(16)
 
-  if (!!globalThis.crypto && !!globalThis.crypto.getRandomValues) {
+  if (globalThis.crypto?.getRandomValues) {
     // `crypto.getRandomValues` is available even in non-secure contexts
     globalThis.crypto.getRandomValues(bytes)
   } else {
     // fallback to Math.random, if the Crypto API is completely missing
+    if (!unsafeRandomWarned) {
+      Log.debug(
+        'Crypto API is not available. ' +
+          'Falling back to Math.random for UUID generation ' +
+          'with weak uniqueness guarantees. ' +
+          'Provide polyfill or alternative for crypto.getRandomValues.'
+      )
+      unsafeRandomWarned = true
+    }
     for (let i = 0; i < bytes.length; i++) {
       bytes[i] = Math.floor(Math.random() * 256)
     }
@@ -28,8 +43,7 @@ export const genUUID = (): string => {
     hexValues.push(byte.toString(16).padStart(2, '0'))
   })
 
-  return (
-    hexValues.slice(0, 4).join('') +
+  return (hexValues.slice(0, 4).join('') +
     '-' +
     hexValues.slice(4, 6).join('') +
     '-' +
@@ -37,6 +51,5 @@ export const genUUID = (): string => {
     '-' +
     hexValues.slice(8, 10).join('') +
     '-' +
-    hexValues.slice(10).join('')
-  )
+    hexValues.slice(10).join('')) as Uuid
 }

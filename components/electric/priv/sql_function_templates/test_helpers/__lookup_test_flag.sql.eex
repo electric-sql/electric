@@ -1,0 +1,12 @@
+CREATE OR REPLACE FUNCTION <%= schema() %>.__lookup_test_flag(flag_name text, default_val boolean)
+RETURNS boolean
+SECURITY DEFINER
+AS $$
+    SELECT
+      coalesce(
+        current_setting(
+          format('<%= schema() %>.%s', flag_name),
+          true  -- return NULL if the setting is not set
+        )::boolean,
+      default_val);
+$$ LANGUAGE SQL;

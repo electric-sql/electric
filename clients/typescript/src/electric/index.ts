@@ -1,5 +1,5 @@
 import { ElectricConfig, hydrateConfig } from '../config/index'
-import { DatabaseAdapter } from '../electric/adapter'
+import { DatabaseAdapter } from './adapter'
 import { BundleMigrator, Migrator } from '../migrators/index'
 import { EventNotifier, Notifier } from '../notifiers/index'
 import { globalRegistry, Registry } from '../satellite/index'
@@ -11,6 +11,7 @@ import { ElectricClient } from '../client/model/client'
 import { DbSchema } from '../client/model/schema'
 
 export { ElectricNamespace }
+export type * from './adapter'
 
 // These are the options that should be provided to the adapter's electrify
 // entrypoint. They are all optional to optionally allow different / mock
@@ -46,7 +47,7 @@ export const electrify = async <DB extends DbSchema<any>>(
   dbDescription: DB,
   adapter: DatabaseAdapter,
   socketFactory: SocketFactory,
-  config: ElectricConfig,
+  config: ElectricConfig = {},
   opts?: Omit<ElectrifyOptions, 'adapter' | 'socketFactory'>
 ): Promise<ElectricClient<DB>> => {
   setLogLevel(config.debug ? 'TRACE' : 'WARN')

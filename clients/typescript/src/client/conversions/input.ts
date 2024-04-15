@@ -4,6 +4,7 @@ import { fromSqlite, toSqlite, isDataObject } from './sqlite'
 import { InvalidArgumentError } from '../validation/errors/invalidArgumentError'
 import { mapObject } from '../util/functions'
 import { PgType } from './types'
+import { isObject } from '../../util'
 
 export enum Transformation {
   Js2Sqlite,
@@ -14,7 +15,6 @@ type UpdateInput = { data: object; where: object }
 type UpdateManyInput = { data: object; where?: object }
 type CreateInput = { data: object }
 type CreateManyInput = { data: Array<object> }
-type UpsertInput = { update: object; create: object; where: object }
 type WhereUniqueInput = { where: object }
 type WhereInput = { where?: object }
 
@@ -91,25 +91,6 @@ export function transformUpdateMany<T extends UpdateManyInput>(
   return {
     ...whereObj,
     data: transformFields(i.data, fields),
-  }
-}
-
-/**
- * Takes the data input of an `upsert` operation and
- * converts the JS values to their corresponding SQLite values.
- * @param i The validated input of the `upsert` operation.
- * @param fields The table's fields.
- * @returns The transformed input.
- */
-export function transformUpsert<T extends UpsertInput>(
-  i: T,
-  fields: Fields
-): Swap<T, UpsertInput, 'update' | 'create' | 'where'> {
-  return {
-    ...i,
-    update: transformFields(i.update, fields),
-    create: transformFields(i.create, fields),
-    where: transformWhere(i.where, fields),
   }
 }
 
@@ -324,10 +305,6 @@ function transformFieldsAllowingFilters(
   }
 
   return toSqlite(value, pgType)
-}
-
-function isObject(v: any): boolean {
-  return typeof v === 'object' && !Array.isArray(v) && v !== null
 }
 
 function isFilterObject(value: any): boolean {

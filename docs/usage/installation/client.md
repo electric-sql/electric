@@ -82,6 +82,10 @@ By default this will connect to the [sync service](./service.md) on `http://loca
 
 See <DocPageLink path="api/cli#generate" /> for the command-line options.
 
+:::caution TypeScript `strict` mode
+The generated type-safe client assumes that your TypeScript compiler will use [`strict` mode](https://www.typescriptlang.org/tsconfig#strict) for stronger correctness guarantees. Disabling it, or disabling similar checks like `strictNullChecks`, might lead to unexpected type errors - see the [Zod requirements](https://zod.dev/?id=requirements) for more info.
+:::
+
 ### Outputs
 
 The generator command outputs a database schema, type-safe database client and bundled SQL migrations. See <DocPageLink path="usage/data-access/client" /> for details on how to import and use these when instantiating a database client.

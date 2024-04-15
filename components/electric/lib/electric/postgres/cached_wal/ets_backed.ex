@@ -104,6 +104,11 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
     :exit, _ -> nil
   end
 
+  @impl Api
+  def compare_positions(p, p), do: :eq
+  def compare_positions(p1, p2) when p1 < p2, do: :lt
+  def compare_positions(p1, p2) when p1 > p2, do: :gt
+
   # Internal API
 
   @impl GenStage

@@ -5,6 +5,9 @@ import svgr from 'vite-plugin-svgr'
 // https://vitejs.dev/config/
 export default defineConfig({
   envPrefix: 'ELECTRIC_',
+  optimizeDeps: {
+    exclude: ['wa-sqlite'],
+  },
   plugins: [
     react(),
     svgr({

@@ -30,6 +30,7 @@ jobs:
         with:
           version: pnpm run bump
           publish: pnpm changeset publish
+          title: Publish new package versions
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

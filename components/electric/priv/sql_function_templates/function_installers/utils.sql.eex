@@ -1,0 +1,26 @@
+CREATE OR REPLACE FUNCTION <%= schema() %>.build_primary_key_list(target_oid regclass)
+RETURNS TEXT[]
+LANGUAGE SQL
+AS $$
+    SELECT
+        array_agg(attname ORDER BY array_position(indkey, attnum))
+    FROM
+        pg_index
+    JOIN
+        pg_attribute ON attrelid = indrelid AND attnum = ANY(indkey) AND indisprimary
+    WHERE
+        indrelid = target_oid;
+$$;
+
+
+CREATE OR REPLACE FUNCTION <%= schema() %>.build_non_pk_column_list(target_oid regclass)
+RETURNS TEXT[]
+LANGUAGE SQL
+AS $$
+    SELECT
+        coalesce(array_agg(col_name), ARRAY[]::TEXT[])
+    FROM
+        <%= schema() %>.lookup_columns(target_oid)
+    WHERE
+        NOT col_primary;
+$$;

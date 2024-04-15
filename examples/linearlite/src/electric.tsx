@@ -9,14 +9,14 @@ export type { Issue } from './generated/client'
 export const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
 
 const discriminator = 'linearlite'
-const distPath = '/'
 
 // import.meta.env is a special object that Vite provides for accessing
 // environment variables at build time and runtime.
 // They are replaced at build time with the actual values.
 // https://vitejs.dev/guide/env-and-mode.html
 const DEV_MODE = import.meta.env.DEV
-const ELECTRIC_URL = import.meta.env.ELECTRIC_URL
+const ELECTRIC_SERVICE =
+  import.meta.env.ELECTRIC_SERVICE || import.meta.env.ELECTRIC_URL
 const DEBUG_ENV = import.meta.env.DEBUG
 
 // We can override the debug mode with a query param: ?debug=true or ?debug=false
@@ -31,18 +31,22 @@ export let dbName: string
 
 export const initElectric = async () => {
   const { tabId } = uniqueTabId()
-  const electricUrl = ELECTRIC_URL ?? 'ws://localhost:5133'
+  const electricUrl = ELECTRIC_SERVICE ?? 'ws://localhost:5133'
   dbName = `${discriminator}-${LIB_VERSION}-${tabId}.db`
 
   const config = {
-    auth: {
-      token: insecureAuthToken({ user_id: genUUID() }),
-    },
     url: electricUrl,
     debug: DEBUG,
   }
 
-  const conn = await ElectricDatabase.init(dbName, distPath)
+  let userId = window.sessionStorage.getItem('userId')
+  if (!userId) {
+    userId = genUUID()
+    window.sessionStorage.setItem('userId', userId)
+  }
+  const authToken = insecureAuthToken({ sub: userId })
+
+  const conn = await ElectricDatabase.init(dbName)
   if (DEBUG) {
     console.log('initElectric')
     console.log('dbName', dbName)
@@ -50,5 +54,7 @@ export const initElectric = async () => {
     console.log(schema)
     console.log(config)
   }
-  return await electrify(conn, schema, config)
+  const electric = await electrify(conn, schema, config)
+  await electric.connect(authToken)
+  return electric
 }

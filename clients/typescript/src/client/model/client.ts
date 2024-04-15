@@ -103,6 +103,27 @@ export class ElectricClient<
     this.satellite = satellite
   }
 
+  /**
+   * Connects to the Electric sync service.
+   * This method is idempotent, it is safe to call it multiple times.
+   * @param token - The JWT token to use to connect to the Electric sync service.
+   *                This token is required on first connection but can be left out when reconnecting
+   *                in which case the last seen token is reused.
+   */
+  async connect(token?: string): Promise<void> {
+    if (token === undefined && !this.satellite.hasToken()) {
+      throw new Error('A token is required the first time you connect.')
+    }
+    if (token !== undefined) {
+      this.satellite.setToken(token)
+    }
+    await this.satellite.connectWithBackoff()
+  }
+
+  disconnect(): void {
+    this.satellite.clientDisconnect()
+  }
+
   // Builds the DAL namespace from a `dbDescription` object
   static create<DB extends DbSchema<any>>(
     dbName: string,
@@ -141,9 +162,9 @@ export class ElectricClient<
       ...dal,
       unsafeExec: unsafeExec.bind(null, adapter),
       rawQuery: rawQuery.bind(null, adapter),
-      liveRawQuery: liveRawQuery.bind(null, adapter),
+      liveRawQuery: liveRawQuery.bind(null, adapter, notifier),
       raw: unsafeExec.bind(null, adapter),
-      liveRaw: liveRawQuery.bind(null, adapter),
+      liveRaw: liveRawQuery.bind(null, adapter, notifier),
     }
 
     return new ElectricClient(

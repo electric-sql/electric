@@ -250,25 +250,15 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
     // Fetch the migrations from Electric endpoint and write them into `tmpFolder`
     await fetchMigrations(migrationEndpoint, migrationsFolder, tmpFolder)
 
-    const prismaSchema = await createPrismaSchema(tmpFolder, opts)
+    const prismaSchema = await createIntrospectionSchema(tmpFolder, opts)
 
     // Introspect the created DB to update the Prisma schema
     await introspectDB(prismaSchema)
 
-    // Add custom validators (such as uuid) to the Prisma schema
-    await addValidators(prismaSchema)
+    // Generate the Electric client from the given introspected schema
+    await generateClient(prismaSchema, config.CLIENT_PATH)
 
-    // Modify snake_case table names to PascalCase
-    await capitaliseTableNames(prismaSchema)
-
-    // Generate a client from the Prisma schema
-    await generateElectricClient(prismaSchema)
     const relativePath = path.relative(appRoot, config.CLIENT_PATH)
-    // Modify the type of JSON input values in the generated Prisma client
-    // because we deviate from Prisma's typing for JSON values
-    await extendJsonType(config.CLIENT_PATH)
-    // Delete all files generated for the Prisma client, except the typings
-    await keepOnlyPrismaTypings(config.CLIENT_PATH)
     console.log(`Successfully generated Electric client at: ./${relativePath}`)
 
     // Build the migrations
@@ -288,15 +278,64 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
     console.error('generate command failed: ' + e)
     throw e
   } finally {
-    // Delete our temporary directory unless
-    // generation failed in debug mode
-    if (!generationFailed || !opts.debug) {
-      await fs.rm(tmpFolder, { recursive: true })
-    }
+    // Delete our temporary directory unless in debug mode
+    if (!opts.debug) await fs.rm(tmpFolder, { recursive: true })
 
     // In case of process exit, make sure to run after folder removal
     if (generationFailed && opts.exitOnError) process.exit(1)
   }
+}
+
+/**
+ * Generates the Electric client and the Prisma clients based off of the provided
+ * introspected Prisma schema.
+ * NOTE: exported for testing purposes only, not intended for external uses
+ * @param prismaSchema path to the introspected Prisma schema
+ * @param clientPath path to the directory where the client should be generated
+ */
+export async function generateClient(prismaSchema: string, clientPath: string) {
+  // Add custom validators (such as uuid) to the Prisma schema
+  await addValidators(prismaSchema)
+
+  // Modify snake_case table names to PascalCase
+  await capitaliseTableNames(prismaSchema)
+
+  // Read the contents of the Prisma schema
+  const introspectedSchema = await fs.readFile(prismaSchema, 'utf8')
+
+  // Add a generator for the Electric client to the Prisma schema
+  await createElectricClientSchema(introspectedSchema, prismaSchema, clientPath)
+
+  // Generate the Electric client from the Prisma schema
+  await generateElectricClient(prismaSchema)
+
+  // Add a generator for the Prisma client to the Prisma schema
+  await createPrismaClientSchema(introspectedSchema, prismaSchema, clientPath)
+
+  // Generate the Prisma client from the Prisma schema
+  await generatePrismaClient(prismaSchema)
+
+  // Perform necessary modifications to the generated client, like
+  // augmenting types, removing unused files, etc
+  await augmentGeneratedClient(clientPath)
+}
+
+/**
+ * Performs any necessary modifications to the generated client such
+ * as augmenting types, removing unused files, etc.
+ * @param clientPath Path to the generated client directory
+ */
+async function augmentGeneratedClient(clientPath: string) {
+  // Modify the type of JSON input values in the generated Prisma client
+  // because we deviate from Prisma's typing for JSON values
+  await extendJsonType(clientPath)
+
+  // Replace the type of byte array input values in the generated Prisma client
+  // from `Buffer` to `Uint8Array` for better cross-environment support
+  await replaceByteArrayType(clientPath)
+
+  // Delete all files generated for the Prisma client, except the typings
+  await keepOnlyPrismaTypings(clientPath)
 }
 
 /**
@@ -326,29 +365,73 @@ function buildProxyUrlForIntrospection(config: Config) {
  * Creates a fresh Prisma schema in the provided folder.
  * The Prisma schema is initialised with a generator and a datasource.
  */
-async function createPrismaSchema(folder: string, opts: GeneratorOptions) {
+async function createIntrospectionSchema(
+  folder: string,
+  opts: GeneratorOptions
+) {
   const config = opts.config
   const prismaDir = path.join(folder, 'prisma')
   const prismaSchemaFile = path.join(prismaDir, 'schema.prisma')
   await fs.mkdir(prismaDir)
-  const output = path.resolve(config.CLIENT_PATH)
   const proxyUrl = buildProxyUrlForIntrospection(config)
+  const schema = dedent`
+    datasource db {
+      provider = "postgresql"
+      url      = "${proxyUrl}"
+    }`
+  await fs.writeFile(prismaSchemaFile, schema)
+  return prismaSchemaFile
+}
+
+/**
+ * Takes the Prisma schema that results from introspecting the DB
+ * and extends it with a generator for the Electric client.
+ * @param introspectedSchema The Prisma schema that results from introspecting the DB.
+ * @param prismaSchemaFile Path to the Prisma schema file.
+ * @returns The path to the Prisma schema file.
+ */
+async function createElectricClientSchema(
+  introspectedSchema: string,
+  prismaSchemaFile: string,
+  clientPath: string
+) {
+  const output = path.resolve(clientPath)
+
   const schema = dedent`
     generator electric {
       provider      = "node ${escapePathForString(generatorPath)}"
       output        = "${escapePathForString(output)}"
       relationModel = "false"
     }
+    
+    ${introspectedSchema}`
 
+  await fs.writeFile(prismaSchemaFile, schema)
+  return prismaSchemaFile
+}
+
+/**
+ * Takes the Prisma schema that results from introspecting the DB
+ * and extends it with a generator for the Prisma client.
+ * @param introspectedSchema The Prisma schema that results from introspecting the DB.
+ * @param prismaSchemaFile Path to the Prisma schema file.
+ * @returns The path to the Prisma schema file.
+ */
+async function createPrismaClientSchema(
+  introspectedSchema: string,
+  prismaSchemaFile: string,
+  clientPath: string
+) {
+  const output = path.resolve(clientPath)
+
+  const schema = dedent`
     generator client {
       provider = "prisma-client-js"
       output   = "${escapePathForString(output)}"
     }
+    
+    ${introspectedSchema}`
 
-    datasource db {
-      provider = "postgresql"
-      url      = "${proxyUrl}"
-    }`
   await fs.writeFile(prismaSchemaFile, schema)
   return prismaSchemaFile
 }
@@ -527,6 +610,13 @@ async function generateElectricClient(prismaSchema: string): Promise<void> {
   )
 }
 
+async function generatePrismaClient(prismaSchema: string): Promise<void> {
+  await executeShellCommand(
+    `node ${prismaPath} generate --schema="${prismaSchema}"`,
+    'Generator script exited with error code: '
+  )
+}
+
 async function executeShellCommand(
   command: string,
   errMsg: string
@@ -685,6 +775,18 @@ function extendJsonType(prismaDir: string): Promise<void> {
   const inputJsonValueRegex = /^\s*export\s*type\s*InputJsonValue\s*(=)\s*/gm
   const replacement = 'export type InputJsonValue = null | '
   return findAndReplaceInFile(inputJsonValueRegex, replacement, prismaTypings)
+}
+
+/*
+ * Replaces Prisma's `Buffer` type for byte arrays to the more generic `Uint8Array`
+ */
+function replaceByteArrayType(prismaDir: string): Promise<void> {
+  const prismaTypings = path.join(prismaDir, 'index.d.ts')
+  return fs.appendFile(
+    prismaTypings,
+    // omit 'set' property as it conflicts with the DAL setter prop name
+    "\n\ntype Buffer = Omit<Uint8Array, 'set'>\n"
+  )
 }
 
 async function keepOnlyPrismaTypings(prismaDir: string): Promise<void> {

@@ -3,6 +3,8 @@ defmodule Electric.Plug.SatelliteWebsocketPlug do
 
   import Plug.Conn
 
+  alias Electric.Replication.{InitialSync, PostgresConnector}
+
   require Logger
 
   @protocol_prefix "electric."
@@ -14,19 +16,23 @@ defmodule Electric.Plug.SatelliteWebsocketPlug do
       base_opts
       |> Keyword.put(:client_version, client_version)
       |> Keyword.put_new_lazy(:auth_provider, fn -> Electric.Satellite.Auth.provider() end)
-      |> Keyword.put_new_lazy(:connector_config, fn ->
-        Electric.Replication.PostgresConnector.connector_config()
-      end)
-      |> Keyword.put_new_lazy(:subscription_data_fun, fn ->
-        &Electric.Replication.InitialSync.query_subscription_data/2
-      end)
+      |> Keyword.put_new_lazy(:connector_config, fn -> PostgresConnector.connector_config() end)
+      |> Keyword.put_new(
+        :subscription_data_fun,
+        &InitialSync.query_subscription_data/2
+      )
+      |> Keyword.put_new(
+        :move_in_data_fun,
+        &InitialSync.query_after_move_in/4
+      )
 
   @currently_supported_versions ">= 0.6.0 and <= #{%{Electric.vsn() | pre: []}}"
 
   def call(conn, handler_opts) do
     with :ok <- check_if_valid_upgrade(conn),
          {:ok, conn} <- check_if_subprotocol_present(conn),
-         {:ok, conn} <- check_if_vsn_compatible(conn, with: @currently_supported_versions) do
+         {:ok, conn} <- check_if_vsn_compatible(conn, with: @currently_supported_versions),
+         :ok <- check_if_postgres_is_ready() do
       Logger.metadata(
         remote_ip: conn.remote_ip |> :inet.ntoa() |> to_string(),
         instance_id: Electric.instance_id()
@@ -62,7 +68,7 @@ defmodule Electric.Plug.SatelliteWebsocketPlug do
 
       :error ->
         reason = "Missing satellite websocket subprotocol"
-        Logger.debug("Client WebSocket connection failed with reason: #{reason}")
+        Logger.warning("Client WebSocket connection failed with reason: #{reason}")
         {:error, 400, reason}
     end
   end
@@ -74,8 +80,22 @@ defmodule Electric.Plug.SatelliteWebsocketPlug do
       reason =
         "Cannot connect satellite version #{assigns.satellite_vsn}: this server requires #{requirements}"
 
-      Logger.debug("Client WebSocket connection failed with reason: #{reason}")
+      Logger.warning("Client WebSocket connection failed with reason: #{reason}")
       {:error, 400, reason}
+    end
+  end
+
+  if Mix.env() == :test do
+    defp check_if_postgres_is_ready, do: :ok
+  else
+    defp check_if_postgres_is_ready do
+      PostgresConnector.connector_config()
+      |> Electric.Replication.Connectors.origin()
+      |> Electric.Replication.PostgresConnectorMng.status()
+      |> case do
+        :ready -> :ok
+        other -> {:error, 503, "Postgres connection is not ready: #{other}..."}
+      end
     end
   end
 

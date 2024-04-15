@@ -31,19 +31,24 @@ import { electrify, ElectricDatabase } from 'electric-sql/wa-sqlite'
 
 const config = {
   auth: {
-    token: await insecureAuthToken({user_id: 'dummy'})
+    clientId: 'dummy client id'
   }
 }
-const conn = await ElectricDatabase.init('electric.db', '')
+const conn = await ElectricDatabase.init('electric.db')
 const electric = await electrify(conn, schema, config)
+const token = insecureAuthToken({sub: 'dummy'})
+await electric.connect(token)
 ```
 
 The `electrify` call returns a promise that will resolve to an `ElectricClient` for our database.
-The client exposes the following interface:
+We call `connect` to connect the client to the Electric sync service.
+The Electric client exposes the following interface:
 
 ```ts
 interface ElectricClient<DB> {
   db: ClientTables<DB> & RawQueries
+  connect(token?: string): Promise<void>
+  disconnect(): void
 }
 
 export type ClientTables<DB> = {
@@ -73,28 +78,29 @@ In addition, one can execute raw read-only SQL queries using the `electric.db.ra
 It is also possible to execute raw queries that can modify the store using `electric.db.unsafeExec`, but it should be used with caution as the changes are unchecked and may cause the sync service to stop if they are ill-formed.
 Therefore, only use raw queries for features that are not supported by our regular API.
 
+## Connectivity methods
+
+The Electric client provides two connectivity methods:
+- `connect(token?: string)`: connects to Electric using the provided token. Can be used to reconnect to Electric in case the connection breaks; if the token is not provided the previous one is used.
+- `disconnect()`: disconnects from Electric. Can be used to go into offline mode.
+
 ## Configuration
 
 The Electric client has a few configuration options that are defined on the `ElectricConfig` type available in
 `electric-sql/config`. At a minimum, you have to include in the config object the URL to your instance of the
-[sync service](../../usage/installation/service) and an [auth token](../../usage/auth), for example:
+[sync service](../../usage/installation/service), for example:
 
 ```ts
 const config: ElectricConfig = {
   url: 'http://my-app-domain',
-  auth: {
-    token: 'eyJ0eXAiOiJKV1QiLCJhbGciOiJub25lIn0...'
-  }
 }
 ```
 
 ### Available options
 
-- `auth: AuthConfig`
+- `auth?: AuthConfig`
 
-   Authentication object that includes an auth `token` and an optional `clientId`.
-
-   `token` must be a JWT that the Electric sync service will be able to validate.
+   Authentication object that includes an optional client id `clientId`.
 
    `clientId` is a unique identifier for this particular client or device. If omitted, a random UUID will be generated
    the first time this client connects to the sync service.
@@ -158,7 +164,7 @@ Tables can be synced by requesting new shape subscriptions.
 
 ### `sync`
 
-To request a new shape subscription, we use the `sync` method on database tables.
+Once we are connected to the sync service we can request a new shape subscription using the `sync` method on database tables.
 We can sync a single table:
 ```ts
 const { synced } = await electric.db.comments.sync()
@@ -852,7 +858,19 @@ The live query above fetches all issues.
 The `results` variable will automatically be updated
 when new issues are created and when existing issues are updated or deleted.
 
-The `useLiveQuery` hook can be used in combination with any live query.
+If the existing bindings for live reactive queries don't cover your desired use case, you can subscribe to the results of a live query via its `subscribe` method, to which you can attach a handler that will get called anytime there are changes to data relevant to the query. Make sure to clean up any subscriptions after they are no longer needed.
+
+```ts
+const liveQuery = db.issues.liveMany()
+const unsubscribe = liveQuery.subscribe(
+  (resultUpdate) => * handle updated result *
+)
+
+// clean up live query subscription when done
+unsubscribe()
+```
+
+The `useLiveQuery` hook and `subscribe` method can be used in combination with any live query.
 The supported live queries are discussed below.
 
 ### `liveUnique`

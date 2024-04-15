@@ -4,6 +4,37 @@ defmodule Electric.Utils do
   """
 
   @doc """
+  Get a hash of an arbitrary Elixir term in a predictable form, encoded as base64 string
+  """
+  @spec term_hash(term()) :: binary()
+  def term_hash(term),
+    do: Base.encode64(:crypto.hash(:blake2b, :erlang.term_to_iovec(term, [:deterministic])))
+
+  @doc """
+  Merge two graphs by merging their edges together.
+
+  This does not copy over unconnected nodes, because for current use-cases we only care about edges or connected nodes.
+  Implementation of graph edge search is adapted from `Graph.edges/1`, but optimized to (1) be a direct reduction and (2) not create
+  `Graph.Edge` structs since it will be immediately torn down when merging.
+  """
+  def merge_graph_edges(%Graph{} = g1, %Graph{out_edges: edges, edges: meta, vertices: vs}) do
+    edges
+    |> Enum.reduce(g1, fn {source_id, out_neighbors}, acc ->
+      source = Map.get(vs, source_id)
+
+      out_neighbors
+      |> Enum.reduce(acc, fn out_neighbor, acc ->
+        target = Map.get(vs, out_neighbor)
+        meta = Map.get(meta, {source_id, out_neighbor})
+
+        Enum.reduce(meta, acc, fn {label, weight}, acc ->
+          Graph.add_edge(acc, source, target, label: label, weight: weight)
+        end)
+      end)
+    end)
+  end
+
+  @doc """
   Helper function to be used for GenStage alike processes to control
   demand and amount of produced events
   """
@@ -47,6 +78,58 @@ defmodule Electric.Utils do
 
   def list_last_and_length([_ | list], default, length),
     do: list_last_and_length(list, default, length + 1)
+
+  @doc """
+  Map each value of the enumerable using a mapper, unwrapping a result tuple returned by
+  the mapper and stopping on error.
+  """
+  @spec map_while_ok(Enumerable.t(elem), (elem -> {:ok, result} | {:error, term()})) ::
+          {:ok, list(result)} | {:error, term()}
+        when elem: var, result: var
+  def map_while_ok(enum, mapper) when is_function(mapper, 1) do
+    Enum.reduce_while(enum, {:ok, []}, fn elem, {:ok, acc} ->
+      case mapper.(elem) do
+        {:ok, value} -> {:cont, {:ok, [value | acc]}}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+    |> case do
+      {:ok, x} -> {:ok, Enum.reverse(x)}
+      error -> error
+    end
+  end
+
+  @doc """
+  Return a list of values from `enum` that are the maximal elements as calculated
+  by the given `fun`.
+
+  Base behaviour is similar to `Enum.max_by/4`, but this function returns a list
+  of all maximal values instead of just the first one.
+  """
+  def all_max_by(
+        enum,
+        fun,
+        sorter \\ &>=/2,
+        comparator \\ &==/2,
+        empty_fallback \\ fn -> raise(Enum.EmptyError) end
+      )
+
+  def all_max_by([], _, _, _, empty_fallback), do: empty_fallback.()
+
+  def all_max_by([head | tail], fun, sorter, comparator, _) when is_function(fun, 1) do
+    {_, max_values} =
+      Enum.reduce(tail, {fun.(head), [head]}, fn elem, {curr_max, agg} ->
+        new = fun.(elem)
+
+        cond do
+          comparator.(curr_max, new) -> {curr_max, [elem | agg]}
+          sorter.(curr_max, new) -> {curr_max, agg}
+          true -> {new, [elem]}
+        end
+      end)
+
+    Enum.reverse(max_values)
+  end
 
   @doc """
   Check if the list has any duplicates.
@@ -107,6 +190,34 @@ defmodule Electric.Utils do
     do: flatten_map(tail, fun, flatten_map(head, fun, acc))
 
   defp flatten_map([head | tail], fun, acc), do: flatten_map(tail, fun, [fun.(head) | acc])
+
+  @doc """
+  Drop elements from the head of the list while the predicate returns a truthy value.
+
+  Returns a tuple: count of dropped elements, and the remaining list.
+
+  ## Examples
+
+     iex> list_count_drop_while([1, 2, 3, 4], & &1 != 3)
+     {2, [3, 4]}
+
+     iex> list_count_drop_while([], & &1 < 3)
+     {0, []}
+
+     iex> list_count_drop_while([1, 2, -1], & &1 < 3)
+     {3, []}
+  """
+  def list_count_drop_while(list, fun), do: list_count_drop_while(list, fun, 0)
+
+  defp list_count_drop_while([], _, acc), do: {acc, []}
+
+  defp list_count_drop_while([head | tail] = list, fun, acc) do
+    if fun.(head) do
+      list_count_drop_while(tail, fun, acc + 1)
+    else
+      {acc, list}
+    end
+  end
 
   @doc """
   Generate a random UUID v4.

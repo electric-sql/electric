@@ -11,7 +11,7 @@ import {
   Relation,
 } from '../util/types'
 import { union } from '../util/sets'
-import { numberToBytes } from '../util/common'
+import { numberToBytes, blobToHexString, hexStringToBlob } from '../util/common'
 
 // format: UUID@timestamp_in_milliseconds
 export type Timestamp = string
@@ -76,20 +76,22 @@ export interface PendingChanges {
   }
 }
 
-export type OpType = 'DELETE' | 'INSERT' | 'UPDATE'
+export type OpType = 'DELETE' | 'INSERT' | 'UPDATE' | 'GONE'
 
-export type ChangesOpType = 'DELETE' | 'UPSERT'
+export type ChangesOpType = 'DELETE' | 'UPSERT' | 'GONE'
 
 export const OPTYPES: {
   insert: 'INSERT'
   update: 'UPDATE'
   delete: 'DELETE'
   upsert: 'UPSERT'
+  gone: 'GONE'
 } = {
   insert: 'INSERT',
   update: 'UPDATE',
   delete: 'DELETE',
   upsert: 'UPSERT',
+  gone: 'GONE',
 }
 
 export interface ShadowEntry {
@@ -109,6 +111,8 @@ export const stringToOpType = (opTypeStr: string): OpType => {
       return OPTYPES.update
     case 'DELETE':
       return OPTYPES.delete
+    case 'GONE':
+      return OPTYPES.gone
   }
   throw new Error(`unexpected opType string: ${opTypeStr}`)
 }
@@ -174,7 +178,7 @@ export const remoteEntryToChanges = (
       string,
       string | number
     >,
-    optype: entry.optype === OPTYPES.delete ? OPTYPES.delete : OPTYPES.upsert,
+    optype: optypeToShadow(entry.optype),
     changes: {},
     // if it is a delete, then `newRow` is empty so the full row is the old row
     fullRow: entry.optype === OPTYPES.delete ? oldRow : newRow,
@@ -190,6 +194,18 @@ export const remoteEntryToChanges = (
   }
 
   return result
+}
+
+function optypeToShadow(optype: OpType): ChangesOpType {
+  switch (optype) {
+    case 'DELETE':
+      return 'DELETE'
+    case 'GONE':
+      return 'GONE'
+    case 'INSERT':
+    case 'UPDATE':
+      return 'UPSERT'
+  }
 }
 
 /**
@@ -293,6 +309,7 @@ export const remoteOperationsToTableChanges = (
 /**
  * Serialises a row that is represented by a record.
  * `NaN`, `+Inf`, and `-Inf` are transformed to their string equivalent.
+ * Bytestrings are encoded as hex strings
  * @param record The row to serialise.
  */
 function serialiseRow(row?: Rec): string {
@@ -309,6 +326,10 @@ function serialiseRow(row?: Rec): string {
     if (typeof value === 'bigint') {
       return value.toString()
     }
+
+    if (value instanceof Uint8Array) {
+      return blobToHexString(value)
+    }
     return value
   })
 }
@@ -317,6 +338,7 @@ function serialiseRow(row?: Rec): string {
  * Deserialises a row back into a record.
  * `"NaN"`, `"+Inf"`, and `"-Inf"` are transformed back into their numeric equivalent
  * if the column type is a float.
+ * Hex encoded bytestrings are transformed back to `Uint8Array` instances
  * @param str The row to deserialise.
  * @param rel The relation for the table to which this row belongs.
  */
@@ -344,6 +366,13 @@ function deserialiseRow(str: string, rel: Pick<Relation, 'columns'>): Rec {
     if (columnType === 'INT8' || columnType === 'BIGINT') {
       return BigInt(value)
     }
+    if (
+      (columnType === 'BYTEA' || columnType === 'BLOB') &&
+      typeof value === 'string'
+    ) {
+      return hexStringToBlob(value)
+    }
+
     return value
   })
 }
@@ -474,11 +503,15 @@ export const opLogEntryToChange = (
  * @param primaryKeyObj object representing all columns of a primary key
  * @returns a stringified JSON with stable sorting on column names
  */
-export const primaryKeyToStr = <T extends Record<string, string | number>>(
+export const primaryKeyToStr = <
+  T extends Record<string, string | number | Uint8Array>
+>(
   primaryKeyObj: T
 ): string => {
   // Sort the keys then insert them in order in a fresh object
   // cf. https://stackoverflow.com/questions/5467129/sort-javascript-object-by-key
+
+  // TODO: it probably makes more sense to sort the PK object by actual PK order
   const keys: Array<keyof T> = Object.keys(primaryKeyObj).sort()
   const sortedObj = keys.reduce((obj, key) => {
     obj[key] = primaryKeyObj[key]

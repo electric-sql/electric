@@ -1,5 +1,5 @@
 {
-  "version": "0.9.1",
+  "version": "0.9.6",
   "name": "electric-sql",
   "description": "ElectricSQL TypeScript client for developing local-first SQL apps. Supports JavaScript based mobile, web and edge applications.",
   "repository": "https://github.com/electric-sql/electric/tree/main/clients/typescript",
@@ -12,7 +12,7 @@
     "android",
     "better-sqlite3",
     "capacitor",
-    "cordova",
+    "op-sqlite",
     "crdt",
     "crdts",
     "database",
@@ -49,18 +49,24 @@
   },
   "exports": {
     "./browser": "./dist/drivers/wa-sqlite/index.js",
-    "./cordova": "./dist/drivers/cordova-sqlite-storage/index.js",
     "./capacitor": "./dist/drivers/capacitor-sqlite/index.js",
     "./expo": "./dist/drivers/expo-sqlite/index.js",
+    "./expo-next": "./dist/drivers/expo-sqlite-next/index.js",
+    "./op-sqlite": "./dist/drivers/op-sqlite/index.js",
     "./generic": "./dist/drivers/generic/index.js",
     "./node": "./dist/drivers/better-sqlite3/index.js",
     "./react": "./dist/frameworks/react/index.js",
-    "./react-native": "./dist/drivers/react-native-sqlite-storage/index.js",
+    "./vuejs": "./dist/frameworks/vuejs/index.js",
     "./wa-sqlite": "./dist/drivers/wa-sqlite/index.js",
+    "./tauri": "./dist/drivers/tauri-sqlite/index.js",
     "./config": "./dist/config/index.js",
     "./debug": "./dist/util/debug/index.js",
     "./client/model": "./dist/client/model/index.js",
     "./migrators/builder": "./dist/migrators/builder.js",
+    "./sockets/generic": "./dist/sockets/genericSocket.js",
+    "./sockets/node": "./dist/sockets/node.js",
+    "./sockets/react-native": "./dist/sockets/react-native.js",
+    "./sockets/web": "./dist/sockets/web.js",
     ".": "./dist/index.js",
     "./*": "./dist/*/index.js"
   },
@@ -72,14 +78,14 @@
       "browser": [
         "./dist/drivers/wa-sqlite/index.d.ts"
       ],
-      "cordova": [
-        "./dist/drivers/cordova-sqlite-storage/index.d.ts"
-      ],
       "capacitor": [
         "./dist/drivers/capacitor-sqlite/index.d.ts"
       ],
       "expo": [
         "./dist/drivers/expo-sqlite/index.d.ts"
+      ],
+      "expo-next": [
+        "./dist/drivers/expo-sqlite-next/index.d.ts"
       ],
       "generic": [
         "./dist/drivers/generic/index.d.ts"
@@ -90,11 +96,17 @@
       "react": [
         "./dist/frameworks/react/index.d.ts"
       ],
-      "react-native": [
-        "./dist/drivers/react-native-sqlite-storage/index.d.ts"
+      "vuejs": [
+        "./dist/frameworks/vuejs/index.d.ts"
+      ],
+      "op-sqlite": [
+        "./dist/drivers/op-sqlite/index.d.ts"
       ],
       "wa-sqlite": [
         "./dist/drivers/wa-sqlite/index.d.ts"
+      ],
+      "tauri": [
+        "./dist/drivers/tauri-sqlite/index.d.ts"
       ],
       "config": [
         "./dist/config/index.d.ts"
@@ -108,8 +120,23 @@
       "migrators/builder": [
         "./dist/migrators/builder.d.ts"
       ],
+      "sockets/generic": [
+        "./dist/sockets/genericSocket.d.ts"
+      ],
+      "sockets/node": [
+        "./dist/sockets/node.d.ts"
+      ],
+      "sockets/react-native": [
+        "./dist/sockets/react-native.d.ts"
+      ],
+      "sockets/web": [
+        "./dist/sockets/web.d.ts"
+      ],
       "auth": [
         "./dist/auth/index.d.ts"
+      ],
+      "auth/secure": [
+        "./dist/auth/secure/index.d.ts"
       ],
       "satellite": [
         "./dist/satellite/index.d.ts"
@@ -128,6 +155,7 @@
     "build": "shx rm -rf dist && npm run build:copy-docker && concurrently \"tsup\" \"tsc -p tsconfig.build.json\" && node scripts/fix-imports.js",
     "build:copy-docker": "shx mkdir -p ./dist/cli/docker-commands/docker && shx cp -r ./src/cli/docker-commands/docker ./dist/cli/docker-commands",
     "test": "ava",
+    "generate-test-client": "npx tsx ./test/client/generateTestClient.ts",
     "typecheck": "tsc -p tsconfig.json",
     "posttest": "npm run typecheck",
     "prepublishOnly": "pnpm run build",
@@ -140,7 +168,7 @@
   },
   "dependencies": {
     "@electric-sql/prisma-generator": "workspace:*",
-    "@prisma/client": "5.2.0",
+    "@prisma/client": "4.8.1",
     "async-mutex": "^0.4.0",
     "base-64": "^1.0.0",
     "better-sqlite3": "^8.4.0",
@@ -150,7 +178,6 @@
     "dotenv-flow": "^4.1.0",
     "events": "^3.3.0",
     "exponential-backoff": "^3.1.0",
-    "fastestsmallesttextencoderdecoder": "^1.0.22",
     "frame-stream": "^3.0.1",
     "get-port": "^7.0.0",
     "jose": "^4.14.4",
@@ -166,24 +193,23 @@
     "long": "^5.2.0",
     "object.hasown": "^1.1.2",
     "ohash": "^1.1.2",
-    "prisma": "5.2.0",
+    "prisma": "4.8.1",
     "prompts": "^2.4.2",
     "protobufjs": "^7.1.1",
-    "react-native-uuid": "^2.0.1",
     "squel": "^5.13.0",
     "tcp-port-used": "^1.0.2",
+    "text-encoder-lite": "^2.0.0",
     "ts-dedent": "^2.2.0",
-    "uuid": "^9.0.0",
     "ws": "^8.8.1",
-    "zod": "^3.20.2"
+    "zod": "3.21.1"
   },
   "devDependencies": {
     "@electric-sql/prisma-generator": "workspace:*",
-    "@ikscodes/browser-env": "^1.0.0",
+    "@op-engineering/op-sqlite": ">= 2.0.16",
+    "@tauri-apps/plugin-sql": "2.0.0-alpha.5",
     "@testing-library/react": "^13.4.0",
     "@types/base-64": "^1.0.0",
     "@types/better-sqlite3": "7.6.3",
-    "@types/cordova-sqlite-storage": "^1.5.5",
     "@types/decompress": "^4.2.4",
     "@types/lodash.flow": "^3.5.7",
     "@types/lodash.groupby": "^4.6.7",
@@ -196,19 +222,20 @@
     "@types/node": "^18.8.4",
     "@types/prompts": "^2.4.9",
     "@types/react": "^18.0.18",
-    "@types/react-native-sqlite-storage": "^6.0.0",
-    "@types/react-native-uuid": "^2.0.0",
     "@types/tcp-port-used": "^1.0.2",
     "@types/uuid": "^9.0.1",
     "@types/ws": "^8.5.3",
     "@typescript-eslint/eslint-plugin": "^5.34.0",
     "@typescript-eslint/parser": "^5.34.0",
+    "@vue/test-utils": "^2.4.4",
     "ava": "^4.3.1",
     "concurrently": "^8.2.2",
     "eslint": "^8.22.0",
-    "expo-sqlite": "^11.7.0",
+    "expo-sqlite": "^13.0.0",
     "glob": "^10.3.10",
+    "global-jsdom": "24.0.0",
     "husky": "^8.0.3",
+    "jsdom": "24.0.0",
     "lint-staged": "^13.1.0",
     "memorystorage": "^0.12.0",
     "nodemon": "^3.0.2",
@@ -222,42 +249,41 @@
     "tsx": "^4.1.1",
     "typeorm": "^0.3.9",
     "typescript": "^5.3.3",
+    "vue": "^3.4.19",
+    "vue-tsc": "^1.8.27",
     "wa-sqlite": "rhashimoto/wa-sqlite#semver:^0.9.8",
     "web-worker": "^1.2.0",
     "zone.js": "^0.14.2"
   },
   "peerDependencies": {
-    "@capacitor-community/sqlite": ">= 5.4.1",
-    "cordova-sqlite-storage": ">= 5.0.0",
-    "expo-sqlite": ">= 11.7.0",
+    "@op-engineering/op-sqlite": ">= 2.0.16",
+    "@capacitor-community/sqlite": ">= 5.6.2",
+    "@tauri-apps/plugin-sql": "2.0.0-alpha.5",
+    "expo-sqlite": ">= 13.0.0",
     "react": ">= 16.8.0",
     "react-dom": ">= 16.8.0",
     "react-native": ">= 0.68.0",
-    "react-native-sqlite-storage": ">= 6.0.0",
     "typeorm": ">=0.3.0",
-    "wa-sqlite": "rhashimoto/wa-sqlite#semver:^0.9.8",
-    "@angular/core": "^17"
+    "vue": ">=3.0.0",
+    "wa-sqlite": "rhashimoto/wa-sqlite#semver:^0.9.8"
   },
   "peerDependenciesMeta": {
+    "@op-engineering/op-sqlite": {
+      "optional": true
+    },
     "@capacitor-community/sqlite": {
       "optional": true
     },
-    "@angular/core": {
-      "optional": true
-    },
-    "cordova-sqlite-storage": {
-      "optional": true
-    },
     "expo-sqlite": {
+      "optional": true
+    },
+    "vue": {
       "optional": true
     },
     "react": {
       "optional": true
     },
     "react-native": {
-      "optional": true
-    },
-    "react-native-sqlite-storage": {
       "optional": true
     },
     "wa-sqlite": {

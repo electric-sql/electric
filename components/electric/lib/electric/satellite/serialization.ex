@@ -1,4 +1,7 @@
 defmodule Electric.Satellite.Serialization do
+  alias Electric.Satellite.Protocol
+  alias Electric.Satellite.SatOpGone
+  alias Electric.Replication.Changes.Gone
   alias Electric.Postgres.Extension.SchemaCache
   alias Electric.Postgres.{Extension, Replication}
   alias Electric.Replication.Changes
@@ -44,31 +47,45 @@ defmodule Electric.Satellite.Serialization do
 
     state = Enum.reduce(trans.changes, state, &serialize_change/2)
 
-    case state.ops do
-      [] ->
-        {
-          [],
-          state.new_relations,
-          state.known_relations
-        }
+    tx_begin = %SatOpBegin{
+      commit_timestamp: tm,
+      lsn: lsn,
+      origin: trans.origin,
+      transaction_id: trans.xid,
+      is_migration: state.is_migration,
+      additional_data_ref: trans.additional_data_ref
+    }
 
-      [_ | _] = ops ->
-        tx_begin = %SatOpBegin{
-          commit_timestamp: tm,
-          lsn: lsn,
-          origin: trans.origin,
-          is_migration: state.is_migration
-        }
+    tx_commit = %SatOpCommit{
+      commit_timestamp: tm,
+      lsn: lsn,
+      additional_data_ref: trans.additional_data_ref
+    }
 
-        begin_op = %SatTransOp{op: {:begin, tx_begin}}
-        commit_op = %SatTransOp{op: {:commit, %SatOpCommit{commit_timestamp: tm, lsn: lsn}}}
+    begin_op = %SatTransOp{op: {:begin, tx_begin}}
+    commit_op = %SatTransOp{op: {:commit, tx_commit}}
 
-        {
-          [%SatOpLog{ops: [begin_op | Enum.reverse([commit_op | ops])]}],
-          state.new_relations,
-          state.known_relations
-        }
-    end
+    {
+      [%SatOpLog{ops: [begin_op | Enum.reverse([commit_op | state.ops])]}],
+      state.new_relations,
+      state.known_relations
+    }
+  end
+
+  def serialize_move_in_data_as_tx(ref, changes, known_relations) do
+    begin_op = %SatTransOp{op: {:additional_begin, %SatOpAdditionalBegin{ref: ref}}}
+    commit_op = %SatTransOp{op: {:additional_commit, %SatOpAdditionalCommit{ref: ref}}}
+
+    state = %{
+      ops: [commit_op],
+      new_relations: [],
+      known_relations: known_relations
+    }
+
+    # The changes cannot be migration relations, so our "state" is limited
+    state = Enum.reduce(changes, state, &serialize_change/2)
+
+    {[%SatOpLog{ops: [begin_op | state.ops]}], state.new_relations, state.known_relations}
   end
 
   def serialize_shape_data_as_tx(changes, known_relations) do
@@ -118,7 +135,7 @@ defmodule Electric.Satellite.Serialization do
 
           known_relations =
             Enum.reduce(add_relations, state.known_relations, fn relation, known ->
-              {_relation_id, _columns, known} = load_new_relation(relation, known)
+              {_relation_id, _columns, _, known} = load_new_relation(relation, known)
               known
             end)
 
@@ -152,16 +169,16 @@ defmodule Electric.Satellite.Serialization do
 
     relation = record.relation
 
-    {rel_id, rel_cols, new_relations, known_relations} =
+    {rel_id, rel_cols, rel_pks, new_relations, known_relations} =
       case fetch_relation_id(relation, known_relations) do
-        {:new, {relation_id, columns, known_relations}} ->
-          {relation_id, columns, [relation | new_relations], known_relations}
+        {:new, {relation_id, columns, pks, known_relations}} ->
+          {relation_id, columns, pks, [relation | new_relations], known_relations}
 
-        {:existing, {relation_id, columns}} ->
-          {relation_id, columns, new_relations, known_relations}
+        {:existing, {relation_id, columns, pks}} ->
+          {relation_id, columns, pks, new_relations, known_relations}
       end
 
-    op = mk_trans_op(record, rel_id, rel_cols)
+    op = mk_trans_op(record, rel_id, rel_cols, rel_pks)
 
     %{state | ops: [op | ops], new_relations: new_relations, known_relations: known_relations}
   end
@@ -180,7 +197,7 @@ defmodule Electric.Satellite.Serialization do
     {:ok, schema}
   end
 
-  defp mk_trans_op(%NewRecord{record: data, tags: tags}, rel_id, rel_cols) do
+  defp mk_trans_op(%NewRecord{record: data, tags: tags}, rel_id, rel_cols, _) do
     op_insert = %SatOpInsert{
       relation_id: rel_id,
       row_data: map_to_row(data, rel_cols),
@@ -193,7 +210,8 @@ defmodule Electric.Satellite.Serialization do
   defp mk_trans_op(
          %UpdatedRecord{record: data, old_record: old_data, tags: tags},
          rel_id,
-         rel_cols
+         rel_cols,
+         _
        ) do
     op_update = %SatOpUpdate{
       relation_id: rel_id,
@@ -205,7 +223,7 @@ defmodule Electric.Satellite.Serialization do
     %SatTransOp{op: {:update, op_update}}
   end
 
-  defp mk_trans_op(%DeletedRecord{old_record: data, tags: tags}, rel_id, rel_cols) do
+  defp mk_trans_op(%DeletedRecord{old_record: data, tags: tags}, rel_id, rel_cols, _) do
     op_delete = %SatOpDelete{
       relation_id: rel_id,
       old_row_data: map_to_row(data, rel_cols),
@@ -213,6 +231,14 @@ defmodule Electric.Satellite.Serialization do
     }
 
     %SatTransOp{op: {:delete, op_delete}}
+  end
+
+  defp mk_trans_op(%Gone{pk: pk}, rel_id, rel_cols, pk_cols) do
+    pk_map = Enum.zip(pk_cols, pk) |> Map.new()
+
+    %SatTransOp{
+      op: {:gone, %SatOpGone{relation_id: rel_id, pk_data: map_to_row(pk_map, rel_cols)}}
+    }
   end
 
   @spec map_to_row(%{String.t() => binary()} | nil, [map], Keyword.t()) :: %SatOpRow{}
@@ -262,6 +288,18 @@ defmodule Electric.Satellite.Serialization do
     DateTime.to_string(dt)
   end
 
+  # NOTE: Values of type `bytea` are coming over Postgres' logical replication stream encoded using either
+  # a regular hex encoding or Postgres' legacy escape format, but we're ensuring that they come in encoded
+  # in hex format by setting the `bytea_output` parameter before starting the replication stream, see:
+  # https://www.postgresql.org/docs/current/datatype-binary.html
+  #
+  # We "encode" bytea values by actually decoding them into raw byte arrays to send over the wire,
+  # which avoids any additional size from encoding and having to coordinate with receivers on
+  # the encoding format - what they see is what they get.
+  defp encode_column_value(val, :bytea) do
+    Electric.Postgres.Types.Bytea.from_postgres_hex(val)
+  end
+
   # No-op encoding for the rest of supported types
   defp encode_column_value(val, _type), do: val
 
@@ -282,14 +320,14 @@ defmodule Electric.Satellite.Serialization do
       nil ->
         {:new, load_new_relation(relation, known_relations)}
 
-      {relation_id, columns} ->
-        {:existing, {relation_id, columns}}
+      {relation_id, columns, pks} ->
+        {:existing, {relation_id, columns, pks}}
     end
   end
 
   defp load_new_relation(relation, known_relations) do
-    %{oid: relation_id, columns: columns} = fetch_relation(relation)
-    {relation_id, columns, Map.put(known_relations, relation, {relation_id, columns})}
+    %{oid: relation_id, columns: columns, primary_keys: pks} = fetch_relation(relation)
+    {relation_id, columns, pks, Map.put(known_relations, relation, {relation_id, columns, pks})}
   end
 
   defp fetch_relation(relation) do
@@ -321,13 +359,9 @@ defmodule Electric.Satellite.Serialization do
     end)
   end
 
-  @type cached_relations() :: %{
-          PB.relation_id() => %{
-            schema: String.t(),
-            table: String.t(),
-            columns: [String.t()]
-          }
-        }
+  @type cached_relations() :: Protocol.InRep.cached_relations()
+
+  @type additional_data :: {:additional_data, non_neg_integer(), [Changes.change()]}
 
   @doc """
   Deserialize from Satellite PB format to internal format
@@ -342,7 +376,7 @@ defmodule Electric.Satellite.Serialization do
           {
             incomplete :: %Transaction{} | nil,
             # Complete transactions are send in reverse order
-            complete :: [%Transaction{}]
+            complete :: [%Transaction{} | additional_data()]
           }
   def deserialize_trans(origin, %SatOpLog{} = op_log, nil, relations, ack_fun) do
     deserialize_op_log(origin, op_log, {nil, []}, relations, ack_fun)
@@ -355,6 +389,13 @@ defmodule Electric.Satellite.Serialization do
 
   defp deserialize_op_log(origin, %SatOpLog{} = msg, incomplete, relations, ack_fun) do
     Enum.reduce(msg.ops, incomplete, fn
+      %SatTransOp{op: {:additional_begin, %SatOpAdditionalBegin{}}}, {nil, complete} ->
+        {{:additional_data, []}, complete}
+
+      %SatTransOp{op: {:additional_commit, %SatOpAdditionalCommit{ref: ref}}},
+      {{:additional_data, changes}, complete} ->
+        {nil, [{:additional_data, ref, Enum.reverse(changes)} | complete]}
+
       %SatTransOp{op: {:begin, %SatOpBegin{} = op}}, {nil, complete} ->
         {:ok, dt} = DateTime.from_unix(op.commit_timestamp, :millisecond)
 
@@ -366,10 +407,12 @@ defmodule Electric.Satellite.Serialization do
           origin: origin,
           origin_type: :satellite,
           changes: [],
+          xid: op.transaction_id,
           publication: "",
           commit_timestamp: dt,
           lsn: op.lsn,
-          ack_fn: fn -> ack_fun.(op.lsn) end
+          ack_fn: fn -> ack_fun.(op.lsn) end,
+          additional_data_ref: op.additional_data_ref
         }
 
         {trans, complete}
@@ -386,7 +429,13 @@ defmodule Electric.Satellite.Serialization do
           |> op_to_change(relation.columns)
           |> Map.put(:relation, {relation.schema, relation.table})
 
-        {%Transaction{trans | changes: [change | trans.changes]}, complete}
+        case trans do
+          %Transaction{} = trans ->
+            {%Transaction{trans | changes: [change | trans.changes]}, complete}
+
+          {:additional_data, changes} ->
+            {{:additional_data, [change | changes]}, complete}
+        end
     end)
   end
 
@@ -398,6 +447,18 @@ defmodule Electric.Satellite.Serialization do
     %Compensation{
       record: decode_record!(pk_data, columns, :allow_nulls),
       tags: tags
+    }
+  end
+
+  defp op_to_change(%SatOpGone{pk_data: data}, columns) do
+    record = decode_record!(data, columns, :allow_nulls)
+
+    %Gone{
+      pk:
+        columns
+        |> Enum.reject(&is_nil(&1.pk_position))
+        |> Enum.sort_by(& &1.pk_position)
+        |> Enum.map(&record[&1.name])
     }
   end
 
@@ -480,8 +541,16 @@ defmodule Electric.Satellite.Serialization do
     raise "Unexpected value for bool column: #{inspect(val)}"
   end
 
-  def decode_column_value!(val, type) when type in [:bytea, :text, :varchar] do
+  def decode_column_value!(val, type) when type in [:text, :varchar] do
     val
+  end
+
+  # Assume bytea columns received from a Satellite client are raw byte arrays and not encoded in
+  # any way (e.g. hex or base64), so "decoding" them involves turning them into hex strings
+  # such that Postgres can ingest them, see:
+  # https://www.postgresql.org/docs/current/datatype-binary.html
+  def decode_column_value!(val, :bytea) do
+    Electric.Postgres.Types.Bytea.to_postgres_hex(val)
   end
 
   def decode_column_value!(val, :date) do

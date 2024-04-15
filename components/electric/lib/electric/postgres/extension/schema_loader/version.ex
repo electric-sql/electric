@@ -19,7 +19,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Version do
           primary_keys: %{relation() => [String.t()]}
         }
 
-  @spec new(version(), Schema.t()) :: t()
+  @spec new(nil | version(), Schema.t()) :: t()
   def new(version, %Schema.Proto.Schema{} = schema) do
     %__MODULE__{version: version, schema: schema}
     |> Map.update!(:tables, &cache_tables_by_name(&1, schema))
@@ -98,6 +98,14 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Version do
   @spec primary_keys(t(), table_ref()) :: {:ok, [name()]} | {:error, String.t()}
   def primary_keys(%__MODULE__{primary_keys: pks}, relation) do
     fetch_table_value(pks, relation)
+  end
+
+  @spec primary_keys!(t(), table_ref()) :: [name(), ...]
+  def primary_keys!(version, relation) do
+    case primary_keys(version, relation) do
+      {:ok, result} -> result
+      {:error, message} -> raise ArgumentError, message: message
+    end
   end
 
   @spec fk_graph(t()) :: Graph.t()

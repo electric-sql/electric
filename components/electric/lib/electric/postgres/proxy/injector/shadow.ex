@@ -23,7 +23,7 @@ defmodule Electric.Postgres.Proxy.Injector.Shadow do
   defmodule Simple do
     alias Electric.DDLX.Command
 
-    defstruct [:msgs, :resp]
+    defstruct [:msgs, :resp, completes: []]
 
     defimpl Operation do
       use Operation.Impl
@@ -41,12 +41,18 @@ defmodule Electric.Postgres.Proxy.Injector.Shadow do
       end
 
       def recv_server(%{resp: [{:sql, _} | resp]} = op, %M.CommandComplete{} = msg, state, send) do
-        {op, send} = send_electric_resps(%{op | resp: resp}, Send.client(send, msg))
+        {op, send} =
+          send_electric_resps(%{op | completes: [msg | op.completes], resp: resp}, send)
+
         {op, state, send}
       end
 
-      def recv_server(%{resp: []}, %M.ReadyForQuery{} = msg, state, send) do
-        {nil, state, Send.client(send, msg)}
+      def recv_server(%{resp: []} = op, %M.ReadyForQuery{} = msg, state, send) do
+        {nil, state, Send.client(send, Enum.reverse([msg | op.completes]))}
+      end
+
+      def recv_server(op, %M.ReadyForQuery{} = _msg, state, send) do
+        {op, state, send}
       end
 
       def recv_server(op, msg, state, send) do
@@ -56,13 +62,17 @@ defmodule Electric.Postgres.Proxy.Injector.Shadow do
       defp send_electric_resps(%{resp: resp} = op, send) do
         {cmds, resps} = Enum.split_while(resp, &(elem(&1, 0) == :electric))
 
-        msgs =
-          Enum.map(cmds, fn {:electric, cmd} -> %M.CommandComplete{tag: Command.tag(cmd)} end)
+        completes =
+          Enum.reduce(cmds, op.completes, fn {:electric, cmd}, completes ->
+            [%M.CommandComplete{tag: Command.tag(cmd)} | completes]
+          end)
 
-        {%{op | resp: resps}, Send.client(send, msgs)}
+        op = %{op | completes: completes}
+
+        {%{op | resp: resps}, send}
       end
 
-      defp send_ready(%{resp: []}, send, state) do
+      defp send_ready(%{resp: []} = op, send, state) do
         msg =
           if State.tx?(state) do
             %M.ReadyForQuery{status: :tx}
@@ -70,7 +80,7 @@ defmodule Electric.Postgres.Proxy.Injector.Shadow do
             %M.ReadyForQuery{status: :idle}
           end
 
-        {nil, Send.client(send, msg)}
+        {nil, Send.client(send, Enum.reverse([msg | op.completes]))}
       end
 
       defp send_ready(%{resp: [_ | _]} = op, send, _state) do
@@ -190,7 +200,7 @@ defmodule Electric.Postgres.Proxy.Injector.Shadow do
           handle_parse(msg, msgs, shadow, state)
 
         nil ->
-          {[Operation.Pass.server(msgs)], {shadow, state}}
+          {[Operation.Wait.new(msgs, state)], {shadow, state}}
       end
     end
 

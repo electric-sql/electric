@@ -35,6 +35,9 @@ defmodule Mint.WebSocketClient do
               {:ok, term(), [Mint.WebSocket.frame()]} | {:error, term()}
   @callback handle_frame({:text, String.t()} | {:binary, binary()}, term()) :: handler_return()
 
+  @callback handle_server_close(code :: non_neg_integer(), reason :: String.t(), state :: term()) ::
+              any()
+
   @callback do_handle_info(term(), term()) :: handler_return()
 
   defmacro __using__(_opts) do
@@ -119,8 +122,10 @@ defmodule Mint.WebSocketClient do
       defp do_handle_frame({:ping, text}, state), do: {:reply, {:pong, text}, state}
       defp do_handle_frame({:pong, _}, state), do: {:noreply, state}
 
-      defp do_handle_frame({:close, 1000, _}, state) do
+      defp do_handle_frame({:close, 1000, reason}, state) do
         Logger.info("Server closed the websocket connection")
+
+        handle_server_close(1000, reason, state)
 
         {:stop, :normal, :close, state}
       end
@@ -129,6 +134,8 @@ defmodule Mint.WebSocketClient do
         Logger.warning(
           "Server closed the websocket connection with code #{code} and reason #{reason}"
         )
+
+        handle_server_close(code, reason, state)
 
         {:stop, :normal, :close, state}
       end
@@ -166,6 +173,7 @@ defmodule Mint.WebSocketClient do
 
       def handle_connection(_, _, state), do: {:ok, state, []}
       def handle_frame(_, state), do: {:noreply, state}
+      def handle_server_close(_, _, _), do: :ok
 
       def do_handle_info(msg, state) do
         proc =

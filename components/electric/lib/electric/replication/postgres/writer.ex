@@ -1,6 +1,8 @@
 defmodule Electric.Replication.Postgres.Writer do
   use GenStage
 
+  import Electric.Postgres.Dialect.Postgresql, only: [quote_ident: 1, escape_quotes: 2]
+
   alias Electric.Postgres.Extension
   alias Electric.Postgres.ShadowTableTransformation
   alias Electric.Replication.Changes
@@ -136,7 +138,14 @@ defmodule Electric.Replication.Postgres.Writer do
   defp acked_client_lsn_statement(tx) do
     client_id = tx.origin
     lsn = tx.lsn
-    values_sql = encode_values([{client_id, :text}, {lsn, :bytea}])
+
+    values_sql =
+      encode_values([
+        {client_id, :text},
+        # Byte arrays are serialized to hex when ingested at the satellite replication layer,
+        # so we serialize the LSN here for consistency
+        {Electric.Postgres.Types.Bytea.to_postgres_hex(lsn), :bytea}
+      ])
 
     """
     INSERT INTO #{Extension.acked_client_lsn_table()} AS t
@@ -148,10 +157,9 @@ defmodule Electric.Replication.Postgres.Writer do
   end
 
   defp change_to_statement(%Changes.NewRecord{record: data, relation: table}, relations) do
-    {table_schema, table_name} = table
     columns = relations[table].columns
 
-    table_sql = quote_ident(table_schema, table_name)
+    table_sql = quote_ident(table)
     columns_sql = Enum.map_join(columns, ",", &quote_ident(&1.name))
     values_sql = column_values(data, columns) |> encode_values()
 
@@ -171,9 +179,6 @@ defmodule Electric.Replication.Postgres.Writer do
   defp encode_value("t", :bool), do: "true"
   defp encode_value("f", :bool), do: "false"
 
-  defp encode_value(bin, :bytea),
-    do: bin |> Electric.Postgres.Types.Bytea.to_postgres_hex() |> quote_string()
-
   defp encode_value(val, float_type) when float_type in [:float4, :float8] do
     case Float.parse(val) do
       :error ->
@@ -191,19 +196,7 @@ defmodule Electric.Replication.Postgres.Writer do
   # necessary type casts.
   defp encode_value(str, _type), do: quote_string(str)
 
-  defp quote_ident(name) do
-    ~s|"#{escape_quotes(name, ?")}"|
-  end
-
-  defp quote_ident(schema, name) do
-    ~s|"#{escape_quotes(schema, ?")}"."#{escape_quotes(name, ?")}"|
-  end
-
   defp quote_string(str) do
     ~s|'#{escape_quotes(str, ?')}'|
-  end
-
-  defp escape_quotes(str, q) do
-    :binary.replace(str, <<q>>, <<q, q>>, [:global])
   end
 end

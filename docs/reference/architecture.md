@@ -59,7 +59,7 @@ This is done with [transactional causal consistency](./consistency.md). The DDL 
 
 Data is synced onto local devices using [Shape subscriptions](../usage/data-access/shapes.md). Once data is synced into the local database, it can be queried using [static](../usage/data-access/queries.md#static-queries) and [live queries](../usage/data-access/queries.md#live-queries).
 
-Local writes to SQLite are copied by triggers into the "oplog", an system table that keeps a log of pending write operations. In the local client app, the satellite process is in charge of replicating these operations over the [Satellite protocol](../api/satellite.md).
+Local writes to SQLite are copied by triggers into the "oplog", a system table that keeps a log of pending write operations. In the local client app, the satellite process is in charge of replicating these operations over the [Satellite protocol](../api/satellite.md).
 
 [![Data flow diagramme](./_images/data-flow.png)](./_images/data-flow.jpg)
 
@@ -131,13 +131,10 @@ When notified that data has changed that *could potentially* affect the query re
 
 Satellite processes monitor the connectivity state of the network and their underlying web socket client connection. The potential states are:
 
-- `available`: the network is up and the connection is available to be made
 - `connected`: the web socket connection is active and replicating local writes
-- `disconnected`: the web socket connection is not active
-- `error`: there was an error when connecting
-- `syncing`: the connection is active but is currently catching up with the server prior to replicating local writes
+- `disconnected`: the web socket connection is not active. A reason for the disconnection may be provided through the connectivity state's `reason` field.
 
-If the connection is disconnected manually (for example, using the `toggle` functionn returned by the [`useConnectivityState`](../integrations/frontend/react.md#toggleConnectivityState) hook) then it won't automatically reconnect. Otherwise if disconnected due to a transient error or network connectivity then the web socket connection will try to reconnect automatically using a backoff algorithm.
+If the connection is disconnected manually (for example, using the `disconnect` method of the [`ElectricClient`](../api/clients/typescript.md#toggleConnectivityState) hook) then it won't automatically reconnect. Otherwise if disconnected due to a transient error or network connectivity then the web socket connection will try to reconnect automatically using a backoff algorithm.
 
 
 ## More information

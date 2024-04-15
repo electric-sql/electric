@@ -15,11 +15,7 @@ const db = new Database(':memory:')
 const electric = await electrify(
   db,
   schema,
-  {
-    auth: {
-      token: 'test-token',
-    },
-  },
+  {},
   { registry: new MockRegistry() }
 )
 //const postTable = electric.db.Post
@@ -35,7 +31,7 @@ test.beforeEach((_t) => {
   )
   db.exec('DROP TABLE IF EXISTS User')
   db.exec(
-    "CREATE TABLE IF NOT EXISTS User('id' int PRIMARY KEY, 'name' varchar);"
+    "CREATE TABLE IF NOT EXISTS User('id' int PRIMARY KEY, 'name' varchar, 'meta' varchar);"
   )
 })
 

@@ -27,7 +27,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
     {Connectors, [:passthrough],
      [
        get_replication_opts: fn _ -> %{publication: "mock_pub", slot: "mock_slot"} end,
-       get_connection_opts: fn _, _ -> %{ip_addr: {0, 0, 0, 1}} end
+       get_connection_opts: fn _ -> %{ip_addr: {0, 0, 0, 1}} end,
+       get_connection_opts: fn _, _ -> %{ip_addr: {0, 0, 0, 2}} end
      ]},
     {SchemaLoader, [:passthrough],
      [
@@ -103,6 +104,11 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
              %UpdatedRecord{record: %{"data" => "4"}, old_record: %{"data" => "3"}},
              %UpdatedRecord{record: %{"data" => "5"}, old_record: %{"data" => "4"}}
            ] = transaction.changes
+  end
+
+  test "Producer schedules the magic write timer" do
+    %LogicalReplicationProducer.State{magic_write_timer: tref} = initialize_producer()
+    assert_receive {:timeout, ^tref, :magic_write}, 2_000
   end
 
   def initialize_producer(demand \\ 100) do

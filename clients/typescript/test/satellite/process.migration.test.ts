@@ -10,6 +10,7 @@ import { generateTag } from '../../src/satellite/oplog'
 import {
   DataChange,
   DataChangeType,
+  Relation,
   Row,
   SchemaChange,
   Statement,
@@ -28,8 +29,10 @@ const test = testAny as TestFn<CurrentContext>
 
 test.beforeEach(async (t) => {
   await makeContext(t)
-  const { satellite, authState } = t.context
+  const { satellite, authState, token } = t.context
   await satellite.start(authState)
+  satellite.setToken(token)
+  await satellite.connectWithBackoff()
   t.context['clientId'] = satellite._authState!.clientId // store clientId in the context
   await populateDB(t)
   const txDate = await satellite._performSnapshot()
@@ -190,28 +193,28 @@ const addColumnRelation = {
       name: 'id',
       type: 'INTEGER',
       isNullable: false,
-      primaryKey: true,
+      primaryKey: 1,
     },
     {
       name: 'value',
       type: 'TEXT',
       isNullable: true,
-      primaryKey: false,
+      primaryKey: undefined,
     },
     {
       name: 'other',
       type: 'INTEGER',
       isNullable: true,
-      primaryKey: false,
+      primaryKey: undefined,
     },
     {
       name: 'baz',
       type: 'TEXT',
       isNullable: true,
-      primaryKey: false,
+      primaryKey: undefined,
     },
   ],
-}
+} satisfies Relation
 const newTableRelation = {
   id: 2001, // doesn't matter
   schema: 'public',
@@ -222,22 +225,22 @@ const newTableRelation = {
       name: 'id',
       type: 'TEXT',
       isNullable: false,
-      primaryKey: true,
+      primaryKey: 1,
     },
     {
       name: 'foo',
       type: 'INTEGER',
       isNullable: true,
-      primaryKey: false,
+      primaryKey: undefined,
     },
     {
       name: 'bar',
       type: 'TEXT',
       isNullable: true,
-      primaryKey: false,
+      primaryKey: undefined,
     },
   ],
-}
+} satisfies Relation
 
 async function checkMigrationIsApplied(t: ExecutionContext<CurrentContext>) {
   await assertDbHasTables(t, 'parent', 'child', 'NewTable')

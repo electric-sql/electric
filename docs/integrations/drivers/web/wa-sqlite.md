@@ -32,22 +32,23 @@ import { electrify, ElectricDatabase } from 'electric-sql/wa-sqlite'
 // Import your generated database schema.
 import { schema } from './generated/client'
 
-// Define your config with at least an auth token.
-// See Usage -> Authentication for more details.
+// Define custom configuration if needed
 const config = {
-  auth: {
-    token: '...'
-  }
+  url: 'https://example.com:5133'
 }
 
 // Create the wa-sqlite database connection. The first argument
 // is your database name. Changing this will create/use a new
 // local database file. The second argument is the public URL
 // path to use when loading the wa-sqlite WASM files.
-const conn = await ElectricDatabase.init('electric.db', '')
+const conn = await ElectricDatabase.init('electric.db')
 
 // Instantiate your electric client.
 const electric = await electrify(conn, schema, config)
+
+// Connect to Electric, passing along your authentication token
+// See Usage -> Authentication for more details.
+await electric.connect('your token')
 ```
 
 You can now use the client to read, write and sync data, e.g.:
@@ -55,7 +56,7 @@ You can now use the client to read, write and sync data, e.g.:
 ```tsx
 const { db } = electric
 
-const results = db.projects.findMany()
+const results = await db.projects.findMany()
 console.log(results)
 ```
 
