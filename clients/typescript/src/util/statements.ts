@@ -24,9 +24,9 @@ export function prepareInsertJsonBatchedStatement(
   return {
     sql: dedent`
     ${insertCommand} INTO ${tablename} (${columns.join(', ')})
-    SELECT ${columns.map(
-      (cn) => `json_extract(json_each.value, '$.${cn}')`
-    ).join(', ')}
+    SELECT ${columns
+      .map((cn) => `json_extract(json_each.value, '$.${cn}')`)
+      .join(', ')}
     FROM json_each(?);`,
     args: [JSON.stringify(records)],
   }
