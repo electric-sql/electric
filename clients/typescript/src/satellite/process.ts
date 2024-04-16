@@ -306,7 +306,7 @@ export class SatelliteProcess implements Satellite {
 
     // TODO: table and schema warrant escaping here too, but they aren't in the triggers table.
     const deleteStmts = tables.map((x) => ({
-      sql: `DELETE FROM "${x.namespace}".""${x.table}`,
+      sql: `DELETE FROM "${x.namespace}"."${x.tablename}"`,
     }))
 
     const stmtsWithTriggers = [
