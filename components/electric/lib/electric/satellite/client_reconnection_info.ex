@@ -605,12 +605,6 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     )
   VALUES
     ($1, $2, $3, $4, $5)
-  ON CONFLICT
-    (client_id, subscription_id)
-  DO UPDATE SET
-    min_txid = excluded.min_txid,
-    ord = excluded.ord,
-    shape_requests = excluded.shape_requests
   """
 
   @doc """
