@@ -36,7 +36,7 @@ const globalEmitter = new EventEmitter()
 
 // Increase the maximum number of listeners because multiple components
 // use this same emitter instance.
-globalEmitter.setMaxListeners(250)
+globalEmitter.setMaxListeners(Infinity)
 
 export class EventNotifier implements Notifier {
   dbName: DbName
