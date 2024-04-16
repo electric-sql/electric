@@ -3,6 +3,7 @@ import { RunResult } from '../../electric/adapter'
 import { Row, Statement } from '../../util'
 
 export class MockDatabaseAdapter extends SerialDatabaseAdapter {
+  readonly defaultNamespace = 'main'
   private expectRun: ((stmt: Statement) => Promise<RunResult>) | undefined
   private expectQuery: ((stmt: Statement) => Promise<Row[]>) | undefined
 

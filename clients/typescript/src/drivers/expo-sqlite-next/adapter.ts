@@ -6,6 +6,7 @@ import { SerialDatabaseAdapter } from '../generic'
 
 export class DatabaseAdapter extends SerialDatabaseAdapter {
   readonly db: Database
+  readonly defaultNamespace = 'main'
   constructor(db: Database) {
     super()
     this.db = db
