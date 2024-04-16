@@ -626,9 +626,6 @@ defmodule Electric.Satellite.Serialization do
 
   def decode_column_value!(val, :timestamptz) do
     # The offset of datetimes coming over the Satellite protocol MUST be 0.
-    len_minus_1 = byte_size(val) - 1
-    <<_::binary-size(len_minus_1), "Z">> = val
-
     {:ok, dt, 0} = DateTime.from_iso8601(val)
     assert_valid_year!(dt.year)
 
