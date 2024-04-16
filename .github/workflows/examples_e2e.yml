@@ -1,0 +1,45 @@
+name: Examples / E2E
+
+on:
+  workflow_call:
+  push:
+    branches:
+      - main
+  pull_request:
+    paths:
+      - 'examples/**'
+
+defaults:
+  run:
+    working-directory: examples/
+
+concurrency:
+  group: examples-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        example_dir: ['web-wa-sqlite']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: ${{ matrix.example_dir }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+      - name: Install dependencies
+        run: npm ci
+      - name: Start backend, run migrations, generate client
+        run: |
+          npm run backend:up &&
+          npm run db:migrate &&
+          npm run client:generate
+      - name: Start dev server in background
+        run: npm run dev < /dev/null &
+      - name: Run e2e tests
+        run: npm run e2e
