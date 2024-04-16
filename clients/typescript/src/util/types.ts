@@ -181,7 +181,7 @@ export function isDataChange(change: Change): change is DataChange {
 }
 
 export type Record = {
-  [key: string]: string | number | Uint8Array | undefined | null
+  [key: string]: boolean | string | number | Uint8Array | undefined | null
 }
 
 export type Replication<TransactionType> = {

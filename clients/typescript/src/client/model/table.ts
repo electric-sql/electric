@@ -1663,10 +1663,7 @@ export function rawQuery(
   // only allow safe queries from the client
   if (isPotentiallyDangerous(sql.sql)) {
     throw new InvalidArgumentError(
-      'Cannot use queries that might alter the store - ' +
-        'please use read-only queries' +
-        ' - DEBUG:\n' +
-        JSON.stringify(sql, null, 2)
+      'Cannot use queries that might alter the store - please use read-only queries'
     )
   }
 
