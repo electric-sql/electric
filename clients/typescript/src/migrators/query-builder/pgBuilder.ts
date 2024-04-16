@@ -426,18 +426,22 @@ class PgBuilder extends QueryBuilder {
     // since this is not reliant on re-executing a query
     // for every row in the shadow table, but uses a PK join instead.
     return dedent`
-      WITH _to_be_deleted (rowid) AS (
-        SELECT ${shadow}.rowid
-        FROM ${oplog}
-        INNER JOIN ${shadow}
-        ON ${shadow}.namespace = ${oplog}.namespace
-        AND ${shadow}.tablename = ${oplog}.tablename
-        AND
-        ${shadow}."primaryKey"::jsonb @> ${oplog}."primaryKey"::jsonb AND ${shadow}."primaryKey"::jsonb <@ ${oplog}."primaryKey"::jsonb
-        WHERE ${oplog}.timestamp = $1
-        AND ${oplog}.optype = 'DELETE'
-        GROUP BY ${shadow}.rowid
-      )
+      WITH 
+        _relevant_shadows AS (
+          SELECT DISTINCT ON (s.rowid)
+            s.rowid AS rowid,
+            op.optype AS last_optype
+          FROM ${oplog} AS op
+          INNER JOIN ${shadow} AS s
+          ON s.namespace = op.namespace
+            AND s.tablename = op.tablename
+            AND s."primaryKey"::jsonb = op."primaryKey"::jsonb
+          WHERE op.timestamp = $1
+          ORDER BY s.rowid, op.rowid DESC
+        ),
+        _to_be_deleted AS (
+          SELECT rowid FROM _relevant_shadows WHERE last_optype = 'DELETE'
+        )
       DELETE FROM ${shadow}
       WHERE rowid IN (SELECT rowid FROM _to_be_deleted);
     `
