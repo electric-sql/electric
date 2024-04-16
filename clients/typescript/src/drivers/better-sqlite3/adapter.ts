@@ -19,6 +19,7 @@ export class DatabaseAdapter
   implements DatabaseAdapterInterface
 {
   db: Database
+  readonly defaultNamespace = 'main'
 
   constructor(db: Database) {
     super()

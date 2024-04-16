@@ -1680,7 +1680,7 @@ export function liveRawQuery(
     // parse the table names from the query
     // because this is a raw query so
     // we cannot trust that it queries this table
-    const tablenames = parseTableNames(sql.sql)
+    const tablenames = parseTableNames(sql.sql, adapter.defaultNamespace)
     const res = await rawQuery(adapter, sql)
     return new LiveResult(res, tablenames)
   })
@@ -1688,7 +1688,7 @@ export function liveRawQuery(
   result.subscribe = createQueryResultSubscribeFunction(
     notifier,
     result,
-    parseTableNames(sql.sql)
+    parseTableNames(sql.sql, adapter.defaultNamespace)
   )
   result.sourceQuery = sql
   return result

@@ -7,6 +7,7 @@ import { SQLBatchTuple } from '@op-engineering/op-sqlite'
 
 export class DatabaseAdapter extends GenericDatabaseAdapter {
   readonly db: Database
+  readonly defaultNamespace = 'main'
 
   constructor(db: Database) {
     super()
