@@ -9,10 +9,6 @@ on:
     paths:
       - 'examples/**'
 
-defaults:
-  run:
-    working-directory: examples
-
 concurrency:
   group: examples-e2e-${{ github.ref }}
   cancel-in-progress: true
@@ -24,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        example_dir: ['./web-wa-sqlite']
+        example_dir: ['examples/web-wa-sqlite']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
