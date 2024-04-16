@@ -3,7 +3,7 @@
   "version": 1,
   "newProjectRoot": "projects",
   "projects": {
-    "document-editor": {
+    "wa-sqlite-example-angular": {
       "projectType": "application",
       "schematics": {
         "@schematics/angular:component": {
@@ -17,7 +17,7 @@
         "build": {
           "builder": "@angular-devkit/build-angular:application",
           "options": {
-            "outputPath": "dist/document-editor",
+            "outputPath": "dist/wa-sqlite-example-angular",
             "index": "src/index.html",
             "browser": "src/main.ts",
             "polyfills": [
@@ -73,10 +73,10 @@
           "builder": "@angular-devkit/build-angular:dev-server",
           "configurations": {
             "production": {
-              "buildTarget": "document-editor:build:production"
+              "buildTarget": "wa-sqlite-example-angular:build:production"
             },
             "development": {
-              "buildTarget": "document-editor:build:development"
+              "buildTarget": "wa-sqlite-example-angular:build:development"
             }
           },
           "defaultConfiguration": "development"
@@ -84,7 +84,7 @@
         "extract-i18n": {
           "builder": "@angular-devkit/build-angular:extract-i18n",
           "options": {
-            "buildTarget": "document-editor:build"
+            "buildTarget": "wa-sqlite-example-angular:build"
           }
         },
         "test": {
@@ -96,5 +96,8 @@
         }
       }
     }
+  },
+  "cli": {
+    "analytics": false
   }
 }
