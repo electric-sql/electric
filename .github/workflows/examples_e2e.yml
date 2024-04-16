@@ -11,7 +11,7 @@ on:
 
 defaults:
   run:
-    working-directory: examples/
+    working-directory: examples
 
 concurrency:
   group: examples-e2e-${{ github.ref }}
@@ -27,19 +27,21 @@ jobs:
         example_dir: ['web-wa-sqlite']
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: ${{ matrix.example_dir }}
       - uses: actions/setup-node@v4
         with:
           node-version: lts/*
       - name: Install dependencies
+        working-directory: ${{ matrix.example_dir }}
         run: npm ci
       - name: Start backend, run migrations, generate client
+        working-directory: ${{ matrix.example_dir }}
         run: |
           npm run backend:up &&
           npm run db:migrate &&
           npm run client:generate
       - name: Start dev server in background
+        working-directory: ${{ matrix.example_dir }}
         run: npm run dev < /dev/null &
       - name: Run e2e tests
+        working-directory: ${{ matrix.example_dir }}
         run: npm run e2e
