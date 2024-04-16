@@ -88,9 +88,7 @@ export async function generate(options: GeneratorOptions) {
       }
     }
     console.log('Service URL: ' + opts.config.SERVICE)
-    console.log(
-      'Proxy URL: ' + stripPasswordFromUrl(buildProxyUrl(opts.config))
-    )
+    console.log('Proxy URL: ' + stripPasswordFromUrl(opts.config['PROXY']))
     // Generate the client
     if (opts.watch) {
       watchMigrations(opts)
@@ -348,16 +346,6 @@ function escapePathForString(inputPath: string): string {
   return process.platform === 'win32'
     ? inputPath.replace(/\\/g, '\\\\')
     : inputPath
-}
-
-function buildProxyUrl(config: Config) {
-  return buildDatabaseURL({
-    user: config.DATABASE_USER,
-    password: config.PG_PROXY_PASSWORD,
-    host: config.PG_PROXY_HOST,
-    port: parsePgProxyPort(config.PG_PROXY_PORT).port,
-    dbName: config.DATABASE_NAME,
-  })
 }
 
 function buildProxyUrlForIntrospection(config: Config) {
