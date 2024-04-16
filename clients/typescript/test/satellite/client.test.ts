@@ -11,7 +11,13 @@ import { OplogEntry, toTransactions } from '../../src/satellite/oplog'
 import { ShapeRequest } from '../../src/satellite/shapes/types'
 import { WebSocketNode } from '../../src/sockets/node'
 import { QualifiedTablename, sleepAsync } from '../../src/util'
-import { base64, bytesToNumber, numberToBytes } from '../../src/util/common'
+import {
+  base64,
+  bytesToNumber,
+  numberToBytes,
+  sqliteTypeDecoder,
+  sqliteTypeEncoder,
+} from '../../src/util/common'
 import {
   DataChangeType,
   DataTransaction,
@@ -333,7 +339,12 @@ test.serial('receive transaction over multiple messages', async (t) => {
 
   const insertOp = Proto.SatOpInsert.fromPartial({
     relationId: 1,
-    rowData: serializeRow({ name1: 'Foo', name2: 'Bar' }, rel, dbDescription),
+    rowData: serializeRow(
+      { name1: 'Foo', name2: 'Bar' },
+      rel,
+      dbDescription,
+      sqliteTypeEncoder
+    ),
   })
 
   const updateOp = Proto.SatOpUpdate.fromPartial({
@@ -341,16 +352,23 @@ test.serial('receive transaction over multiple messages', async (t) => {
     rowData: serializeRow(
       { name1: 'Hello', name2: 'World!' },
       rel,
-      dbDescription
+      dbDescription,
+      sqliteTypeEncoder
     ),
-    oldRowData: serializeRow({ name1: '', name2: '' }, rel, dbDescription),
+    oldRowData: serializeRow(
+      { name1: '', name2: '' },
+      rel,
+      dbDescription,
+      sqliteTypeEncoder
+    ),
   })
   const deleteOp = Proto.SatOpDelete.fromPartial({
     relationId: 1,
     oldRowData: serializeRow(
       { name1: 'Hello', name2: 'World!' },
       rel,
-      dbDescription
+      dbDescription,
+      sqliteTypeEncoder
     ),
   })
 
@@ -722,7 +740,8 @@ test.serial('default and null test', async (t) => {
         intvalue_null_default: '10',
       },
       rel,
-      dbDescription
+      dbDescription,
+      sqliteTypeEncoder
     ),
   })
 
@@ -745,7 +764,12 @@ test.serial('default and null test', async (t) => {
     ],
   }
 
-  const record: any = deserializeRow(serializedRow, rel, dbDescription)!
+  const record: any = deserializeRow(
+    serializedRow,
+    rel,
+    dbDescription,
+    sqliteTypeDecoder
+  )!
 
   const firstOpLogMessage = Proto.SatOpLog.fromPartial({
     ops: [
@@ -1114,7 +1138,12 @@ test.serial('subscription correct protocol sequence with data', async (t) => {
 
   const insertOp = Proto.SatOpInsert.fromPartial({
     relationId: 0,
-    rowData: serializeRow({ name1: 'Foo', name2: 'Bar' }, rel, dbDescription),
+    rowData: serializeRow(
+      { name1: 'Foo', name2: 'Bar' },
+      rel,
+      dbDescription,
+      sqliteTypeEncoder
+    ),
   })
 
   const satTransOpInsert = Proto.SatTransOp.fromPartial({ insert: insertOp })
@@ -1210,12 +1239,22 @@ test.serial('client correctly handles additional data messages', async (t) => {
 
   const insertOp = Proto.SatOpInsert.fromPartial({
     relationId: 1,
-    rowData: serializeRow({ name1: 'Foo', name2: 'Bar' }, rel, dbDescription),
+    rowData: serializeRow(
+      { name1: 'Foo', name2: 'Bar' },
+      rel,
+      dbDescription,
+      sqliteTypeEncoder
+    ),
   })
 
   const secondInsertOp = Proto.SatOpInsert.fromPartial({
     relationId: 1,
-    rowData: serializeRow({ name1: 'More', name2: 'Data' }, rel, dbDescription),
+    rowData: serializeRow(
+      { name1: 'More', name2: 'Data' },
+      rel,
+      dbDescription,
+      sqliteTypeEncoder
+    ),
   })
 
   const firstOpLogMessage = Proto.SatOpLog.fromPartial({
