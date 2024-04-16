@@ -761,8 +761,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   end
 
   defp restore_checkpoint_cache(checkpoint_table) do
-    {["client_id", "pg_wal_pos", "sent_rows_graph"], rows} =
-      Client.query!("SELECT * FROM #{Extension.client_checkpoints_table()}")
+    {_cols, rows} = Client.query!("SELECT * FROM #{Extension.client_checkpoints_table()}")
 
     checkpoints =
       Enum.map(rows, fn [client_id, wal_pos, sent_rows_graph] ->
@@ -773,8 +772,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   end
 
   defp restore_subscriptions_cache(subscriptions_table) do
-    {["client_id", "subscription_id", "min_txid", "ord", "shape_requests"], rows} =
-      Client.query!("SELECT * FROM #{Extension.client_shape_subscriptions_table()}")
+    {_cols, rows} = Client.query!("SELECT * FROM #{Extension.client_shape_subscriptions_table()}")
 
     subscriptions =
       Enum.map(rows, fn [client_id, subscription_id, xmin, pos, shape_requests_bin] ->
@@ -786,15 +784,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   end
 
   defp restore_additional_data_cache(additional_data_table) do
-    {[
-       "client_id",
-       "min_txid",
-       "ord",
-       "subject",
-       "subscription_id",
-       "graph_diff",
-       "included_txns"
-     ], rows} = Client.query!("SELECT * FROM #{Extension.client_additional_data_table()}")
+    {_cols, rows} = Client.query!("SELECT * FROM #{Extension.client_additional_data_table()}")
 
     records =
       Enum.map(rows, fn [
@@ -814,8 +804,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   end
 
   defp restore_actions_cache(actions_table) do
-    {["client_id", "txid", "subquery_actions"], rows} =
-      Client.query!("SELECT * FROM #{Extension.client_actions_table()}")
+    {_cols, rows} = Client.query!("SELECT * FROM #{Extension.client_actions_table()}")
 
     actions =
       Enum.map(rows, fn [client_id, txid, actions_bin] ->
