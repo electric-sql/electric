@@ -237,18 +237,16 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   client. This is ensured by `Electric.Satellite.ClientManager` allowing
   at most one WebSocket process with the same client id.
   """
-  def clear_all_data(origin, client_id) do
+  def clear_all_data(client_id) do
     :ets.match_delete(@actions_ets, {{client_id, :_}, :_})
     :ets.match_delete(@subscriptions_ets, {{client_id, :_}, :_, :_, :_})
     :ets.match_delete(@additional_data_ets, {{client_id, :_, :_, :_, :_}, :_, :_})
     :ets.delete(@checkpoint_ets, client_id)
 
-    Client.with_pool(origin, fn ->
-      Client.query!(@delete_subscriptions_query, [client_id])
-      Client.query!(@delete_checkpoint_query, [client_id])
-      Client.query!(@delete_actions_query, [client_id])
-      Client.query!(@delete_additional_data_for_client_query, [client_id])
-    end)
+    Client.query!(@delete_subscriptions_query, [client_id])
+    Client.query!(@delete_checkpoint_query, [client_id])
+    Client.query!(@delete_actions_query, [client_id])
+    Client.query!(@delete_additional_data_for_client_query, [client_id])
 
     :ok
   end
@@ -296,8 +294,10 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   "shared" rows and/or migrations.
   """
   def store_initial_checkpoint(origin, client_id, wal_pos, sent_rows_graph) do
-    clear_all_data(origin, client_id)
-    store_client_checkpoint(origin, client_id, wal_pos, sent_rows_graph)
+    Client.with_pool(origin, fn ->
+      :ok = clear_all_data(client_id)
+      store_client_checkpoint(client_id, wal_pos, sent_rows_graph)
+    end)
   end
 
   @upsert_checkpoint_query """
@@ -312,15 +312,10 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     sent_rows_graph = excluded.sent_rows_graph
   """
 
-  defp store_client_checkpoint(origin, client_id, wal_pos, sent_rows_graph) do
+  defp store_client_checkpoint(client_id, wal_pos, sent_rows_graph) do
     :ets.insert(@checkpoint_ets, {client_id, wal_pos, sent_rows_graph})
     sent_rows_graph_bin = :erlang.term_to_binary(sent_rows_graph)
-
-    Client.pooled_query!(origin, @upsert_checkpoint_query, [
-      client_id,
-      wal_pos,
-      sent_rows_graph_bin
-    ])
+    Client.query!(@upsert_checkpoint_query, [client_id, wal_pos, sent_rows_graph_bin])
   end
 
   @doc """
@@ -359,22 +354,36 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
 
         if CachedWal.Api.compare_positions(cached_wal_impl, acked_wal_pos, new_wal_pos) != :gt do
           received_data =
-            MapSet.new(txids, &{:transaction, &1})
-            |> MapSet.union(MapSet.new(subscription_ids, &{:subscription, &1}))
-
-          new_graph =
-            graph
-            |> advance_up_to_new_wal_pos(
-              client_id,
-              cached_wal_impl,
-              origin,
-              advance_graph_fn,
-              acked_wal_pos,
-              new_wal_pos
+            MapSet.union(
+              MapSet.new(txids, &{:transaction, &1}),
+              MapSet.new(subscription_ids, &{:subscription, &1})
             )
-            |> advance_by_additional_data(client_id, received_data, origin)
 
-          store_client_checkpoint(origin, client_id, new_wal_pos, new_graph)
+          txn_stream =
+            CachedWal.Api.stream_transactions(cached_wal_impl, origin,
+              from: acked_wal_pos,
+              to: new_wal_pos
+            )
+
+          {new_graph, pending_actions, count, discarded_acc} =
+            advance_up_to_new_wal_pos(graph, advance_graph_fn, client_id, txn_stream)
+
+          Logger.debug(
+            "Advancing graph for #{inspect(client_id)} from #{inspect(acked_wal_pos)} to #{inspect(new_wal_pos)} by #{count} txns"
+          )
+
+          if map_size(pending_actions) > 0 do
+            :ets.insert(@actions_ets, Enum.to_list(pending_actions))
+          end
+
+          {new_graph, discarded_acc} =
+            advance_by_additional_data(new_graph, client_id, received_data, discarded_acc)
+
+          Client.with_pool(origin, fn ->
+            delete_discarded_cache_entries(discarded_acc)
+            store_client_checkpoint(client_id, new_wal_pos, new_graph)
+            store_client_actions(pending_actions)
+          end)
 
           {:ok, new_graph}
         else
@@ -382,6 +391,57 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
           {:error, {:wal_pos_before_checkpoint, acked_wal_pos, new_wal_pos}}
         end
     end
+  end
+
+  defp merge_discarded(acc, {@actions_ets, {client_id, new_txids}}) do
+    Map.update(
+      acc,
+      @actions_ets,
+      {client_id, new_txids},
+      fn {^client_id, txids} -> {client_id, new_txids ++ txids} end
+    )
+  end
+
+  defp merge_discarded(acc, {@additional_data_ets, {client_id, {:ord, order}}}) do
+    Map.update(
+      acc,
+      @additional_data_ets,
+      {client_id, [order], nil},
+      fn {^client_id, orders, txid} -> {client_id, [order | orders], txid} end
+    )
+  end
+
+  defp merge_discarded(acc, {@additional_data_ets, {client_id, {:before_txid, new_txid}}}) do
+    Map.update(
+      acc,
+      @additional_data_ets,
+      {client_id, [], new_txid},
+      fn {^client_id, orders, txid} -> {client_id, orders, max(new_txid, txid)} end
+    )
+  end
+
+  @delete_actions_for_xids_query """
+  DELETE FROM
+    #{Extension.client_actions_table()}
+  WHERE
+    client_id = $1 AND txid = ANY($2)
+  """
+
+  @delete_additional_data_query """
+  DELETE FROM
+    #{Extension.client_additional_data_table()}
+  WHERE
+    client_id = $1 AND (ord = ANY($2) OR coalesce(min_txid <= $3, false))
+  """
+
+  defp delete_discarded_cache_entries(entries) do
+    Enum.each(entries, fn
+      {@actions_ets, {client_id, txids}} ->
+        Client.query!(@delete_actions_for_xids_query, [client_id, txids])
+
+      {@additional_data_ets, {client_id, orders, txid}} ->
+        Client.query!(@delete_additional_data_query, [client_id, orders, txid])
+    end)
   end
 
   @doc """
@@ -429,76 +489,65 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     end
   end
 
-  # We're essentially advancing the graph until next fully acknowledged transaction + subscription data
-  defp advance_up_to_new_wal_pos(
-         graph,
-         client_id,
-         cached_wal_impl,
-         origin,
-         advance_graph_fn,
-         full_acked_wal_pos,
-         new_wal_pos
-       ) do
-    state = {graph, %{}, 0}
-
+  # We're essentially advancing the graph until next fully acknowledged transaction +
+  # subscription data
+  defp advance_up_to_new_wal_pos(graph, advance_graph_fn, client_id, txn_stream) do
     subs = list_subscriptions(client_id)
 
-    {graph, pending_actions, count} =
-      cached_wal_impl
-      |> CachedWal.Api.stream_transactions(origin, from: full_acked_wal_pos, to: new_wal_pos)
-      |> Enum.reduce(state, fn %Transaction{} = txn, {graph, pending_actions, count} ->
-        {graph, pending_actions} =
-          client_id
-          |> pop_additional_data_before(txn.xid)
-          |> Enum.reduce({graph, pending_actions}, fn
-            {:transaction, diff, included_txns}, {graph, pending_actions} ->
-              graph = merge_in_graph_diff(graph, diff)
-              clear_stored_actions(origin, client_id, included_txns)
+    txn_stream
+    |> Enum.reduce({graph, %{}, 0, %{}}, fn %Transaction{} = txn,
+                                            {graph, pending_actions, count, discarded_acc} ->
+      {graph, pending_actions, discarded_acc} =
+        client_id
+        |> pop_additional_data_before(txn.xid)
+        |> Enum.reduce({graph, pending_actions, discarded_acc}, fn
+          {:transaction, diff, included_txns}, {graph, pending_actions, discarded_acc} ->
+            graph = merge_in_graph_diff(graph, diff)
+            popped_actions = clear_stored_actions(client_id, included_txns)
 
-              pending_actions =
-                Map.drop(pending_actions, Enum.map(included_txns, &{client_id, &1}))
+            pending_actions =
+              Map.drop(pending_actions, Enum.map(included_txns, &{client_id, &1}))
 
-              {graph, pending_actions}
+            {graph, pending_actions, merge_discarded(discarded_acc, popped_actions)}
 
-            {:subscription, diff, []}, {graph, pending_actions} ->
-              graph = merge_in_graph_diff(graph, diff)
-              {graph, pending_actions}
-          end)
+          {:subscription, diff, []}, {graph, pending_actions, discarded_acc} ->
+            graph = merge_in_graph_diff(graph, diff)
+            {graph, pending_actions, discarded_acc}
+        end)
 
-        active_shapes = get_active_shapes_for_txid(subs, txn.xid)
+      active_shapes = get_active_shapes_for_txid(subs, txn.xid)
 
-        {fun, args} = advance_graph_fn
+      {fun, args} = advance_graph_fn
 
-        {_, graph, actions} = apply(fun, [txn, graph, active_shapes | args])
+      {_, graph, actions} = apply(fun, [txn, graph, active_shapes | args])
 
-        pending_actions =
-          case actions do
-            x when x == %{} -> pending_actions
-            actions -> Map.put(pending_actions, {client_id, txn.xid}, actions)
-          end
+      pending_actions =
+        case actions do
+          x when x == %{} -> pending_actions
+          actions -> Map.put(pending_actions, {client_id, txn.xid}, actions)
+        end
 
-        {graph, pending_actions, count + 1}
-      end)
+      discarded_acc =
+        merge_discarded(
+          discarded_acc,
+          {@additional_data_ets, {client_id, {:before_txid, txn.xid}}}
+        )
 
-    Logger.debug(
-      "Advancing graph for #{inspect(client_id)} from #{inspect(full_acked_wal_pos)} to #{inspect(new_wal_pos)} by #{count} txns"
-    )
-
-    if map_size(pending_actions) > 0 do
-      :ets.insert(@actions_ets, Enum.to_list(pending_actions))
-      :ok = persist_actions(origin, pending_actions)
-    end
-
-    graph
+      {graph, pending_actions, count + 1, discarded_acc}
+    end)
   end
 
-  defp persist_actions(origin, actions_map) do
-    values =
-      Enum.flat_map(actions_map, fn {{client_id, txid}, actions} ->
-        [client_id, txid, :erlang.term_to_binary(actions)]
-      end)
+  defp store_client_actions(actions_map) do
+    num_actions = map_size(actions_map)
 
-    Client.pooled_query!(origin, store_actions_query(map_size(actions_map)), values)
+    if num_actions > 0 do
+      values =
+        Enum.flat_map(actions_map, fn {{client_id, txid}, actions} ->
+          [client_id, txid, :erlang.term_to_binary(actions)]
+        end)
+
+      Client.query!(store_actions_query(num_actions), values)
+    end
 
     :ok
   end
@@ -525,14 +574,8 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
 
   defp merge_in_graph_diff(graph, diff), do: Utils.merge_graph_edges(graph, diff)
 
-  @spec advance_by_additional_data(Graph.t(), String.t(), MapSet.t(), Connectors.origin()) ::
-          Graph.t()
-  defp advance_by_additional_data(
-         graph,
-         client_id,
-         %MapSet{} = acknowledged,
-         origin
-       ) do
+  @spec advance_by_additional_data(Graph.t(), String.t(), MapSet.t(), map()) :: {Graph.t(), map()}
+  defp advance_by_additional_data(graph, client_id, %MapSet{} = acknowledged, discarded_acc) do
     # This gives us next unused additional data piece for this client, and we're
     # looking to know if it's been acknowledged. Since `xmin`s (second value in the
     # key) are monotonically growing, we can ask for the next one and see if it's in
@@ -542,19 +585,22 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     case :ets.next(@additional_data_ets, {client_id, 0, 0, 0, 0}) do
       :"$end_of_table" ->
         # No additional data left for the client, great!
-        graph
+        {graph, discarded_acc}
 
       {_client_id, _xmin, _order, :subscription, id} = key ->
         if MapSet.member?(acknowledged, {:subscription, id}) do
-          # Client has seen this subscription! Use it to advance the graph and delete it as confirmed.
+          # Client has seen this subscription! Use it to advance the graph and delete it as
+          # confirmed.
           diff = :ets.lookup_element(@additional_data_ets, key, 2)
           graph = merge_in_graph_diff(graph, diff)
-          :ok = delete_additional_data(origin, key)
+
+          discarded_acc = merge_discarded(discarded_acc, delete_additional_data(key))
+
           # See if we can do one more
-          advance_by_additional_data(graph, client_id, acknowledged, origin)
+          advance_by_additional_data(graph, client_id, acknowledged, discarded_acc)
         else
           # Client hasn't seen this, so we're done here
-          graph
+          {graph, discarded_acc}
         end
 
       {_client_id, _xmin, _order, :transaction, nil} = key ->
@@ -568,30 +614,25 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
           # Client has seen this additional data blob!
           diff = :ets.lookup_element(@additional_data_ets, key, 2)
           graph = merge_in_graph_diff(graph, diff)
-          :ok = delete_additional_data(origin, key)
-          clear_stored_actions(origin, client_id, covered_txns)
+
+          discarded_acc =
+            discarded_acc
+            |> merge_discarded(delete_additional_data(key))
+            |> merge_discarded(clear_stored_actions(client_id, covered_txns))
+
           # See if we can do one more
-          advance_by_additional_data(graph, client_id, acknowledged, origin)
+          advance_by_additional_data(graph, client_id, acknowledged, discarded_acc)
         else
           # Client hasn't seen this, so we're done here
-          graph
+          {graph, discarded_acc}
         end
     end
   end
 
-  @delete_additional_data_for_key_query """
-  DELETE FROM
-    #{Extension.client_additional_data_table()}
-  WHERE
-    client_id = $1 AND ord = $2
-  """
-
-  defp delete_additional_data(origin, {client_id, _xmin, order, _subject, _subscription_id} = key) do
+  defp delete_additional_data({client_id, _xmin, order, _subject, _subscription_id} = key) do
     :ets.delete(@additional_data_ets, key)
 
-    Client.pooled_query!(origin, @delete_additional_data_for_key_query, [client_id, order])
-
-    :ok
+    {@additional_data_ets, {client_id, {:ord, order}}}
   end
 
   @insert_subscription_query """
@@ -715,22 +756,11 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     results
   end
 
-  @delete_actions_for_xids_query """
-  DELETE FROM
-    #{Extension.client_actions_table()}
-  WHERE
-    client_id = $1 AND txid = ANY($2)
-  """
-
-  defp clear_stored_actions(origin, client_id, txids) do
-    matchspec =
-      for txid <- txids, do: {{{client_id, txid}, :_}, [], [true]}
-
+  defp clear_stored_actions(client_id, txids) do
+    matchspec = for txid <- txids, do: {{{client_id, txid}, :_}, [], [true]}
     :ets.select_delete(@actions_ets, matchspec)
 
-    Client.pooled_query!(origin, @delete_actions_for_xids_query, [client_id, txids])
-
-    :ok
+    {@actions_ets, {client_id, txids}}
   end
 
   @impl GenServer
