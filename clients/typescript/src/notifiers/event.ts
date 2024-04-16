@@ -29,15 +29,6 @@ export const EVENT_NAMES = {
   connectivityStateChange: 'network:connectivity:changed',
 }
 
-// Global singleton that all event notifiers use by default. Emitting an event
-// on this object will notify all subscribers in the same thread. Cross thread
-// notifications use the `./bridge` notifiers.
-const globalEmitter = new EventEmitter()
-
-// Increase the maximum number of listeners because multiple components
-// use this same emitter instance.
-globalEmitter.setMaxListeners(Infinity)
-
 export class EventNotifier implements Notifier {
   dbName: DbName
 
@@ -59,7 +50,12 @@ export class EventNotifier implements Notifier {
       byName: {},
     }
 
-    this.events = eventEmitter !== undefined ? eventEmitter : globalEmitter
+    this.events =
+      eventEmitter !== undefined
+        ? eventEmitter
+        : // initialise emitter with no limit to listeners as
+          // we don't want to limit the number of subscribers
+          new EventEmitter().setMaxListeners(Infinity)
   }
 
   attach(dbName: DbName, dbAlias: string): void {
