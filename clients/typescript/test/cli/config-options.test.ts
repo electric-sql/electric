@@ -70,3 +70,30 @@ test('assert SSL is disabled by default', (t) => {
 test('assert authentication mode is insecure by default', (t) => {
   t.is(configOptions['AUTH_MODE'].defaultVal, 'insecure')
 })
+
+test('assert database name is correctly inferred', (t) => {
+  // infer from db url
+  t.is(
+    configOptions['DATABASE_NAME'].inferVal({
+      databaseUrl: 'postgres://db_user:db_password@db_host:123/db_name',
+    }),
+    'db_name'
+  )
+
+  // infer from proxy url if db url missing
+  t.is(
+    configOptions['DATABASE_NAME'].inferVal({
+      proxy: 'postgres://db_user:db_password@db_host:123/db_name',
+    }),
+    'db_name'
+  )
+
+  // prefer db over proxy for name
+  t.is(
+    configOptions['DATABASE_NAME'].inferVal({
+      databaseUrl: 'postgres://db_user:db_password@db_host:123/db_name',
+      proxy: 'postgres://db_user:db_password@db_host:123/proxy_db_name',
+    }),
+    'db_name'
+  )
+})

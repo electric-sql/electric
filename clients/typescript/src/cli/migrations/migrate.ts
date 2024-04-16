@@ -88,10 +88,7 @@ export async function generate(options: GeneratorOptions) {
       }
     }
     console.log('Service URL: ' + opts.config.SERVICE)
-    console.log(
-      'Proxy URL: ' +
-        stripPasswordFromUrl(buildProxyUrlForIntrospection(opts.config))
-    )
+    console.log('Proxy URL: ' + stripPasswordFromUrl(opts.config.PROXY))
     // Generate the client
     if (opts.watch) {
       watchMigrations(opts)

@@ -143,7 +143,8 @@ export const configOptions: Record<string, any> = {
   DATABASE_NAME: {
     doc: 'Name of the database to connect to.',
     valueType: String,
-    inferVal: (options: ConfigMap) => inferDbUrlPart('dbName', options),
+    inferVal: (options: ConfigMap) =>
+      inferDbUrlPart('dbName', options, inferProxyUrlPart('dbName', options)),
     defaultVal: () => getAppName() ?? 'electric',
     groups: ['database', 'client', 'proxy'],
   },

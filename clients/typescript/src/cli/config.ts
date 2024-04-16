@@ -83,7 +83,10 @@ export function getConfigValue<K extends ConfigOptionName>(
 ): ConfigOptionValue<K> {
   // First check if the option was passed as a command line argument
   if (options) {
-    const optName = snakeToCamel(name.toLocaleLowerCase())
+    const strippedName = name.startsWith('ELECTRIC_')
+      ? name.slice('ELECTRIC_'.length)
+      : name
+    const optName = snakeToCamel(strippedName.toLocaleLowerCase())
     if (options[optName] !== undefined) {
       return options[optName] as ConfigOptionValue<K>
     } else if (options[name] !== undefined) {
