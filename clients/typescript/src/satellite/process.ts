@@ -584,6 +584,7 @@ export class SatelliteProcess implements Satellite {
     )
 
     try {
+      console.log('APPLYING SUBS DATA:\n' + JSON.stringify(stmts, null, 2))
       await this.adapter.runInTransaction(...stmts)
 
       // We're explicitly not specifying rowids in these changes for now,

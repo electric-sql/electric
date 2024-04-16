@@ -1,7 +1,7 @@
 import { InvalidArgumentError } from '../validation/errors/invalidArgumentError'
 import { Converter } from './converter'
 import { deserialiseDate, serialiseDate } from './datatypes/date'
-import { deserialiseJSON, serialiseJSON } from './datatypes/json'
+import { isJsonNull } from './datatypes/json'
 import { PgBasicType, PgDateType, PgType } from './types'
 
 /**
@@ -27,7 +27,20 @@ function toPostgres(v: any, pgType: PgType): any {
   }
 
   if (pgType === PgBasicType.PG_JSON || pgType === PgBasicType.PG_JSONB) {
-    return serialiseJSON(v)
+    // FIXME: the specialised conversions below are needed because of the pg package
+    //        we use to connect to the PG database
+    //        if we support other PG drivers then this may not be needed
+    //        Ideally, we would do this conversion in the driver itself
+    if (v === null) {
+      return null
+    }
+    if (isJsonNull(v)) {
+      // Also turn into a DB null
+      // because we currently don't support top-level JSON null value
+      // when using Postgres
+      return null // 'null'
+    }
+    return JSON.stringify(v)
   }
 
   if (pgType === PgBasicType.PG_FLOAT4 || pgType === PgBasicType.PG_REAL) {
@@ -49,7 +62,15 @@ function fromPostgres(v: any, pgType: PgType): any {
   }
 
   if (pgType === PgBasicType.PG_JSON || pgType === PgBasicType.PG_JSONB) {
-    return deserialiseJSON(v)
+    if (v === null) {
+      // DB null
+      return null
+    }
+    if (v === 'null') {
+      // JSON null value
+      return { __is_electric_json_null__: true }
+    }
+    return JSON.parse(v)
   }
 
   if (pgType === PgBasicType.PG_INT8) {

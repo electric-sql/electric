@@ -2,18 +2,65 @@ import { SatelliteError } from './types'
 import BASE64 from 'base-64'
 import { TextEncoderLite, TextDecoderLite } from 'text-encoder-lite'
 
-export const typeDecoder = {
+export type TypeEncoder = typeof sqliteTypeEncoder | typeof pgTypeEncoder
+export type TypeDecoder = typeof sqliteTypeDecoder | typeof pgTypeDecoder
+
+export const sqliteTypeEncoder = {
+  bool: boolToBytes,
+  text: (string: string) => textEncoder.encode(string),
+  json: (string: string) => {
+    const res = textEncoder.encode(string)
+    console.log('TEXTT ENCODED:\n' + res)
+    return res
+  },
+  timetz: (string: string) =>
+    sqliteTypeEncoder.text(stringToTimetzString(string)),
+}
+
+export const sqliteTypeDecoder = {
   bool: bytesToBool,
   text: bytesToString,
+  json: bytesToString,
   timetz: bytesToTimetzString,
   float: bytesToFloat,
 }
 
-export const typeEncoder = {
-  bool: boolToBytes,
-  text: (string: string) => textEncoder.encode(string),
-  timetz: (string: string) => typeEncoder.text(stringToTimetzString(string)),
+//// PG encoders/decoders
+export const pgTypeEncoder = {
+  ...sqliteTypeEncoder,
+  bool: pgBoolToBytes,
+  json: (x: JSON) => {
+    const str = JSON.stringify(x)
+    console.log('GONNA ENCODE:\n' + x)
+    console.log('SERIALISED:\n' + str)
+    const res = textEncoder.encode(str)
+    console.log('TEXT ENCODED:\n' + res)
+    //return textEncoder.encode(serialiseJSON(x))
+    return res
+  },
 }
+
+export const pgTypeDecoder = {
+  ...sqliteTypeDecoder,
+  bool: bytesToPgBool,
+  json: (bs: Uint8Array) => JSON.parse(textDecoder.decode(bs)),
+}
+
+function pgBoolToBytes(b: boolean) {
+  if (typeof b !== 'boolean') {
+    throw new Error(`Invalid boolean value: ${b}`)
+  }
+  return new Uint8Array([b ? trueByte : falseByte])
+}
+
+function bytesToPgBool(bs: Uint8Array) {
+  if (bs.length === 1 && (bs[0] === trueByte || bs[0] === falseByte)) {
+    return bs[0] === trueByte
+  }
+
+  throw new Error(`Invalid binary-encoded boolean value: ${bs}`)
+}
+////
 
 export const base64 = {
   fromBytes: (bytes: Uint8Array) =>
@@ -99,7 +146,7 @@ function bytesToTimetzString(bytes: Uint8Array) {
  * @returns The SQLite value.
  */
 function bytesToFloat(bytes: Uint8Array) {
-  const text = typeDecoder.text(bytes)
+  const text = sqliteTypeDecoder.text(bytes)
   if (text === 'NaN') {
     return 'NaN'
   } else {
