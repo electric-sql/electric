@@ -5,9 +5,11 @@ import {
 } from '../../../src/client/validation/errors/messages'
 import { JsonNull, Electric } from '../generated'
 import { ZodError } from 'zod'
+import { Dialect } from '../../../src/migrators/query-builder/builder'
 
 export type ContextType = {
   tbl: Electric['db']['DataTypes']
+  dialect: Dialect
 }
 
 /*
@@ -862,7 +864,7 @@ export const datatypeTests = (test: TestFn<ContextType>) => {
   })
 
   test('support JSONB type', async (t) => {
-    const { tbl } = t.context
+    const { tbl, dialect } = t.context
     const json = { a: 1, b: true, c: { d: 'nested' }, e: [1, 2, 3], f: null }
     const res = await tbl.create({
       data: {
@@ -889,7 +891,9 @@ export const datatypeTests = (test: TestFn<ContextType>) => {
       },
     })
 
-    t.deepEqual(res2.json, JsonNull)
+    // Currently can't store top-level JSON null values when using PG
+    // they are automatically transformed to DB NULL
+    t.deepEqual(res2.json, dialect === 'SQLite' ? JsonNull : null)
 
     const fetchRes2 = await tbl.findUnique({
       where: {
@@ -897,7 +901,7 @@ export const datatypeTests = (test: TestFn<ContextType>) => {
       },
     })
 
-    t.deepEqual(fetchRes2?.json, JsonNull)
+    t.deepEqual(fetchRes2?.json, dialect === 'SQLite' ? JsonNull : null)
   })
 
   test('support null values for JSONB type', async (t) => {
