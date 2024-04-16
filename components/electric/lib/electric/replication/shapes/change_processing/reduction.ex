@@ -47,13 +47,16 @@ defmodule Electric.Replication.Shapes.ChangeProcessing.Reduction do
   @spec unwrap(reduction :: t()) ::
           {Graph.t(), [Changes.change() | Changes.Gone.t()], subquery_actions()}
   def unwrap(reduction(graph: graph, operations: ops, gone_nodes: gone, actions: actions) = state) do
-    changes =
-      reduction(state, :passthrough_operations) ++
-        Enum.map(gone, fn {relation, pk} -> %Changes.Gone{relation: relation, pk: pk} end) ++
-        Enum.map(ops, &unwrap_operation/1)
+    operations = Enum.map(ops, &unwrap_operation/1)
+    ops_and_gone = Enum.reduce(gone, operations, &[build_gone_msg(&1) | &2])
+
+    # Side-effect here is that migration statements within a transaction are hoisted to be first changes.
+    changes = Enum.reverse(reduction(state, :passthrough_operations), ops_and_gone)
 
     {graph, changes, actions}
   end
+
+  defp build_gone_msg({relation, pk}), do: %Changes.Gone{relation: relation, pk: pk}
 
   defp unwrap_operation({%Changes.UpdatedRecord{} = change, {:deleted_record, pk}}),
     do: %Changes.Gone{relation: change.relation, pk: pk}

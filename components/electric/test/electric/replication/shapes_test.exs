@@ -154,6 +154,21 @@ defmodule Electric.Replication.ShapesTest do
       assert Graph.edge(graph, :root, {@rel, ["test"]}, "l1")
       refute Graph.edge(graph, :root, {@rel, ["test"]}, "l2")
     end
+
+    test "passes through migrations statements as-is and keeps the order", ctx do
+      insert1 =
+        insert({"electric", "ddl_commands"}, %{"id" => "1", "query" => "CREATE TABLE projects"})
+
+      insert2 =
+        insert({"electric", "ddl_commands"}, %{"id" => "2", "query" => "CREATE TABLE issues"})
+
+      tx = tx([insert1, insert2])
+
+      assert {%{changes: [^insert1, ^insert2]}, graph, _} =
+               Shapes.process_transaction(tx, Graph.new(), [ctx.shape, ctx.second_shape])
+
+      assert Graph.new() == graph
+    end
   end
 
   describe "validate_requests/2" do
