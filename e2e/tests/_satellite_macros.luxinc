@@ -122,6 +122,12 @@
     ??$node
 [endmacro]
 
+[macro node_get_jsonb_regex id expected_jsonb]
+    !await client.get_jsonb(db, '${id}')
+    ?\{ id: '${id}', jsb: ${expected_jsonb} \}
+    ??$node
+[endmacro]
+
 [macro node_get_enum id expected_enum]
     !await client.get_enum(db, '${id}')
     ??{ id: '${id}', c: ${expected_enum} }
