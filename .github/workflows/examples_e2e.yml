@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        example_dir: ['web-wa-sqlite']
+        example_dir: ['./web-wa-sqlite']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
