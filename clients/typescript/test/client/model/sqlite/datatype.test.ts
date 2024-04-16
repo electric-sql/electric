@@ -39,6 +39,7 @@ test.beforeEach(async (t) => {
   t.context = {
     db,
     tbl,
+    dialect: 'SQLite',
   }
 })
 

@@ -1409,7 +1409,8 @@ test.serial(
           deserializeRow(
             satOpLog[1].insert?.rowData,
             relations.parent,
-            dbDescription
+            dbDescription,
+            sqliteTypeDecoder
           ),
           {
             id: 1,
@@ -1422,7 +1423,8 @@ test.serial(
           deserializeRow(
             satOpLog[2].update?.rowData,
             relations.parent,
-            dbDescription
+            dbDescription,
+            sqliteTypeDecoder
           ),
           {
             id: 1,
@@ -1435,7 +1437,8 @@ test.serial(
           deserializeRow(
             satOpLog[2].update?.oldRowData,
             relations.parent,
-            dbDescription
+            dbDescription,
+            sqliteTypeDecoder
           ),
           {
             id: 1,
@@ -1448,7 +1451,8 @@ test.serial(
           deserializeRow(
             satOpLog[3].delete?.oldRowData,
             relations.parent,
-            dbDescription
+            dbDescription,
+            sqliteTypeDecoder
           ),
           {
             id: 1,
@@ -1522,7 +1526,8 @@ test.serial(
           other: null,
         },
         relations.parent,
-        dbDescription
+        dbDescription,
+        sqliteTypeEncoder
       ),
     })
 
@@ -1535,7 +1540,8 @@ test.serial(
           other: 2,
         },
         relations.parent,
-        dbDescription
+        dbDescription,
+        sqliteTypeEncoder
       ),
       oldRowData: serializeRow(
         {
@@ -1544,7 +1550,8 @@ test.serial(
           other: null,
         },
         relations.parent,
-        dbDescription
+        dbDescription,
+        sqliteTypeEncoder
       ),
     })
 
@@ -1557,7 +1564,8 @@ test.serial(
           other: 2,
         },
         relations.parent,
-        dbDescription
+        dbDescription,
+        sqliteTypeEncoder
       ),
     })
 
@@ -1658,7 +1666,8 @@ test.serial(
           deserializeRow(
             data.ops[1].insert?.rowData,
             relations.parent,
-            dbDescription
+            dbDescription,
+            sqliteTypeDecoder
           ),
           {
             ...change.record,
@@ -1673,7 +1682,8 @@ test.serial(
           deserializeRow(
             data.ops[1].insert?.rowData,
             relations.parent,
-            dbDescription
+            dbDescription,
+            sqliteTypeDecoder
           ),
           {
             ...change.record,
@@ -1688,7 +1698,8 @@ test.serial(
           deserializeRow(
             data.ops[1].insert?.rowData,
             relations.parent,
-            dbDescription
+            dbDescription,
+            sqliteTypeDecoder
           ),
           change.record
         )
@@ -1843,7 +1854,8 @@ test.serial(
           other: null,
         },
         relations.parent,
-        dbDescription
+        dbDescription,
+        sqliteTypeEncoder
       ),
     })
 
