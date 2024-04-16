@@ -45,6 +45,7 @@ test.beforeEach(async (t) => {
   t.context = {
     tbl,
     stop,
+    dialect: 'Postgres',
   }
 })
 
