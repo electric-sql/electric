@@ -125,7 +125,8 @@ export class Table<
       this._fields,
       this._transformer.converter
     )
-    this._qualifiedTableName = new QualifiedTablename('main', tableName)
+    const namespace = this.dialect === 'Postgres' ? 'public' : 'main'
+    this._qualifiedTableName = new QualifiedTablename(namespace, tableName)
     this._tables = new Map()
     this._schema = tableDescription.modelSchema
     this.createSchema = omitCountFromSelectAndIncludeSchema(
