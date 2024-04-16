@@ -18,6 +18,7 @@ abstract class DatabaseAdapter
   implements DatabaseAdapterInterface
 {
   protected txMutex: Mutex
+  abstract readonly defaultNamespace: 'main' | 'public'
 
   constructor() {
     super()
@@ -119,6 +120,8 @@ export abstract class BatchDatabaseAdapter
   extends DatabaseAdapter
   implements DatabaseAdapterInterface
 {
+  abstract readonly defaultNamespace: 'main' | 'public'
+
   /**
    * @param statements SQL statements to execute against the DB in a single batch.
    */
@@ -140,6 +143,7 @@ export abstract class SerialDatabaseAdapter
   extends DatabaseAdapter
   implements DatabaseAdapterInterface
 {
+  abstract readonly defaultNamespace: 'main' | 'public'
   async runInTransaction(...statements: Statement[]): Promise<RunResult> {
     // Uses a mutex to ensure that transactions are not interleaved.
     const release = await this.txMutex.acquire()
