@@ -2060,62 +2060,69 @@ export const processTests = (test: TestFn<ContextType>) => {
       } = t.context
       await runMigrations()
 
-  const tablename = 'parent'
-  const childTable = 'child'
+      const tablename = 'parent'
+      const childTable = 'child'
 
-  // relations must be present at subscription delivery
-  client.setRelations(relations)
-  client.setRelationData(tablename, parentRecord)
-  client.setRelationData(childTable, childRecord)
-  client.setRelationData('another', {})
+      // relations must be present at subscription delivery
+      client.setRelations(relations)
+      client.setRelationData(tablename, parentRecord)
+      client.setRelationData(childTable, childRecord)
+      client.setRelationData('another', {})
 
-  const conn = await startSatellite(satellite, authState, token)
-  await conn.connectionPromise
+      const conn = await startSatellite(satellite, authState, token)
+      await conn.connectionPromise
 
-  const shapeDef1: Shape = {
-    tablename: 'parent',
-    include: [{ foreignKey: ['parent'], select: { tablename: 'child' } }],
-  }
-  const shapeDef2: Shape = {
-    tablename: 'another',
-  }
+      const shapeDef1: Shape = {
+        tablename: 'parent',
+        include: [{ foreignKey: ['parent'], select: { tablename: 'child' } }],
+      }
+      const shapeDef2: Shape = {
+        tablename: 'another',
+      }
 
-  satellite!.relations = relations
-  const { synced: synced1 } = await satellite.subscribe([shapeDef1])
-  await synced1
-  const row = await adapter.query({ sql: `SELECT id FROM main.parent` })
-  t.is(row.length, 1)
-  const row1 = await adapter.query({ sql: `SELECT id FROM main.child` })
-  t.is(row1.length, 1)
-  const { synced } = await satellite.subscribe([shapeDef2])
-
-  try {
-    await synced
-    t.fail()
-  } catch (expected: any) {
-    t.true(expected instanceof SatelliteError)
-    try {
+      satellite!.relations = relations
+      const { synced: synced1 } = await satellite.subscribe([shapeDef1])
+      await synced1
       const row = await adapter.query({
-        sql: `SELECT id FROM "${namespace}"."${tablename}"`,
+        sql: `SELECT id FROM "${namespace}".parent`,
       })
-      t.is(row.length, 0)
-      const row1 = await adapter.query({ sql: `SELECT id FROM "${namespace}"."${childTable}"` })
-      t.is(row1.length, 0)
+      t.is(row.length, 1)
+      const row1 = await adapter.query({
+        sql: `SELECT id FROM "${namespace}".child`,
+      })
+      t.is(row1.length, 1)
+      const { synced } = await satellite.subscribe([shapeDef2])
 
-      const shadowRows = await adapter.query({
-        sql: `SELECT tags FROM "${namespace}"._electric_shadow`,
-      })
-      t.is(shadowRows.length, 2)
-  
-      const subsMeta = await satellite._getMeta('subscriptions')
-      const subsObj = JSON.parse(subsMeta)
-      t.deepEqual(subsObj, {})
-      t.true(expected.message.search("table 'another'") >= 0)
-    } catch (e) {
-      t.fail(JSON.stringify(e))
+      try {
+        await synced
+        t.fail()
+      } catch (expected: any) {
+        t.true(expected instanceof SatelliteError)
+        try {
+          const row = await adapter.query({
+            sql: `SELECT id FROM "${namespace}"."${tablename}"`,
+          })
+          t.is(row.length, 0)
+          const row1 = await adapter.query({
+            sql: `SELECT id FROM "${namespace}"."${childTable}"`,
+          })
+          t.is(row1.length, 0)
+
+          const shadowRows = await adapter.query({
+            sql: `SELECT tags FROM "${namespace}"._electric_shadow`,
+          })
+          t.is(shadowRows.length, 2)
+
+          const subsMeta = await satellite._getMeta('subscriptions')
+          const subsObj = JSON.parse(subsMeta)
+          t.deepEqual(subsObj, {})
+          t.true(expected.message.search("table 'another'") >= 0)
+        } catch (e) {
+          t.fail(JSON.stringify(e))
+        }
+      }
     }
-  }
-})
+  )
 
   test('a subscription request failure does not clear the manager state', async (t) => {
     const {
