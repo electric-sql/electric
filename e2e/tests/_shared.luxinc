@@ -41,6 +41,7 @@
 
 [macro stop_electric n]
     !make stop_electric_${n}
+    ??Stopped
     [invoke ok]
 [endmacro]
 
