@@ -12,9 +12,9 @@
   </picture>
 </a>
 
-# ElectricSQL - Web example
+# ElectricSQL - PGlite example
 
-This is an example web application using ElectricSQL in the browser with [wa-sqlite](https://github.com/rhashimoto/wa-sqlite).
+This is an example web application using ElectricSQL in the browser with [PGlite](https://github.com/electric-sql/pglite) a WASM build of Postgres.
 
 ## Instructions
 
@@ -22,7 +22,7 @@ Clone the [electric-sql/electric](https://github.com/electric-sql/electric) mono
 
 ```sh
 git clone https://github.com/electric-sql/electric
-cd electric/examples/web-wa-sqlite
+cd electric/examples/web-pglite
 ```
 
 ## Pre-reqs

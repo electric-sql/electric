@@ -13,25 +13,28 @@ import './Example.css'
 
 const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
 
+// We use a global database instance to avoid reinitializing the database
+// when the component re-renders under React strict mode.
+let db: PGlite
+
 export const Example = () => {
   const [ electric, setElectric ] = useState<Electric>()
 
   useEffect(() => {
     let isMounted = true
+    let electric: Electric | undefined
 
     const init = async () => {
       const config = {
-        debug: import.meta.env.DEV,
+        debug: false,//import.meta.env.DEV,
         url: import.meta.env.ELECTRIC_SERVICE
       }
 
       const { tabId } = uniqueTabId()
       const scopedDbName = `idb://basic-${LIB_VERSION}-${tabId}.db`
 
-      const db = new PGlite(scopedDbName) 
-      await db.waitReady;
-      await db.exec('SET search_path TO main, public;') // TODO: remove when schemas are fixed
-      const electric = await electrify(db, schema, config)
+      db ??= new PGlite(scopedDbName)
+      electric = await electrify(db, schema, config)
       await electric.connect(authToken())
 
       if (!isMounted) {
@@ -41,9 +44,16 @@ export const Example = () => {
       setElectric(electric)
     }
 
+    const cleanup = async () => {
+      if (electric) {
+        await electric.close()
+      }
+    }
+
     init()
 
     return () => {
+      cleanup()
       isMounted = false
     }
   }, [])
