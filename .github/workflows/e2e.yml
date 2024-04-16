@@ -80,7 +80,7 @@ jobs:
 
       - run: make lux
       - run: make deps pull
-      - run: make test_only
+      - run: make test_only && make -C tests test_pg
         id: tests
         env:
           ELECTRIC_IMAGE_NAME: electric-sql-ci/electric
