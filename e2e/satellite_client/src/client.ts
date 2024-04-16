@@ -367,11 +367,19 @@ export const write_enum = (electric: Electric, id: string, c: Color | null) => {
 }
 
 export const get_blob = async (electric: Electric, id: string) => {
-  return electric.db.blobs.findUnique({
+  const res = await electric.db.blobs.findUnique({
     where: {
       id: id
     }
   })
+
+  if (res) {
+    // The PG driver returns a NodeJS Buffer but the e2e test matches on a plain Uint8Array.
+    // So we convert the Buffer to a Uint8Array.
+    // Note that Buffer is a subclass of Uint8Array.
+    res.blob = new Uint8Array(res.blob)
+  }
+  return res
 }
 
 export const write_blob = (electric: Electric, id: string, blob: Uint8Array | null) => {
