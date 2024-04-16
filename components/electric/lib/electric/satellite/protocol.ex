@@ -15,6 +15,7 @@ defmodule Electric.Satellite.Protocol do
   alias Electric.Postgres.Schema
   alias Electric.Postgres.CachedWal
   alias Electric.Replication.Changes
+  alias Electric.Replication.Postgres.Client
   alias Electric.Replication.Shapes
   alias Electric.Replication.Shapes.ShapeRequest
   alias Electric.Satellite.Serialization
@@ -539,7 +540,9 @@ defmodule Electric.Satellite.Protocol do
       end
     else
       # Once the client is outside the WAL window, we are assuming the client will reset its local state, so we will too.
-      ClientReconnectionInfo.clear_all_data(state.origin, state.client_id)
+      Client.with_pool(state.origin, fn ->
+        ClientReconnectionInfo.clear_all_data(state.client_id)
+      end)
 
       {:error,
        start_replication_error(:BEHIND_WINDOW, "Cannot catch up to the server's current state")}
