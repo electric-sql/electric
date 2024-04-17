@@ -23,6 +23,12 @@ dist-ssr
 *.sln
 *.sw?
 
+# E2E testing files
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+
 # Wasm
 public/wa-sqlite-async.wasm
 
