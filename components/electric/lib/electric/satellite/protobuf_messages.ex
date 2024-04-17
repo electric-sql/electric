@@ -523,6 +523,15 @@
           end
         ),
         (
+          def encode(:CREATE_ENUM_TYPE) do
+            2
+          end
+
+          def encode("CREATE_ENUM_TYPE") do
+            2
+          end
+        ),
+        (
           def encode(:ALTER_ADD_COLUMN) do
             6
           end
@@ -545,6 +554,9 @@
         def decode(1) do
           :CREATE_INDEX
         end,
+        def decode(2) do
+          :CREATE_ENUM_TYPE
+        end,
         def decode(6) do
           :ALTER_ADD_COLUMN
         end
@@ -556,7 +568,7 @@
 
       @spec constants() :: [{integer(), atom()}]
       def constants() do
-        [{0, :CREATE_TABLE}, {1, :CREATE_INDEX}, {6, :ALTER_ADD_COLUMN}]
+        [{0, :CREATE_TABLE}, {1, :CREATE_INDEX}, {2, :CREATE_ENUM_TYPE}, {6, :ALTER_ADD_COLUMN}]
       end
 
       @spec has_constant?(any()) :: boolean()
@@ -566,6 +578,9 @@
             true
           end,
           def has_constant?(:CREATE_INDEX) do
+            true
+          end,
+          def has_constant?(:CREATE_ENUM_TYPE) do
             true
           end,
           def has_constant?(:ALTER_ADD_COLUMN) do
@@ -6810,7 +6825,7 @@
   end,
   defmodule Electric.Satellite.SatOpMigrate do
     @moduledoc false
-    defstruct version: "", stmts: [], table: nil
+    defstruct version: "", stmts: [], affected_entity: nil
 
     (
       (
@@ -6825,11 +6840,19 @@
 
         @spec encode!(struct) :: iodata | no_return
         def encode!(msg) do
-          [] |> encode_table(msg) |> encode_version(msg) |> encode_stmts(msg)
+          [] |> encode_affected_entity(msg) |> encode_version(msg) |> encode_stmts(msg)
         end
       )
 
-      []
+      [
+        defp encode_affected_entity(acc, msg) do
+          case msg.affected_entity do
+            nil -> acc
+            {:table, _field_value} -> encode_table(acc, msg)
+            {:enum_type, _field_value} -> encode_enum_type(acc, msg)
+          end
+        end
+      ]
 
       [
         defp encode_version(acc, msg) do
@@ -6865,13 +6888,20 @@
         end,
         defp encode_table(acc, msg) do
           try do
-            case msg.table do
-              nil -> [acc]
-              child_field_value -> [acc, "\x1A", Protox.Encode.encode_message(child_field_value)]
-            end
+            {_, child_field_value} = msg.affected_entity
+            [acc, "\x1A", Protox.Encode.encode_message(child_field_value)]
           rescue
             ArgumentError ->
               reraise Protox.EncodingError.new(:table, "invalid field value"), __STACKTRACE__
+          end
+        end,
+        defp encode_enum_type(acc, msg) do
+          try do
+            {_, child_field_value} = msg.affected_entity
+            [acc, "\"", Protox.Encode.encode_message(child_field_value)]
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:enum_type, "invalid field value"), __STACKTRACE__
           end
         end
       ]
@@ -6928,16 +6958,38 @@
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
 
                 {[
-                   case msg.table do
+                   case msg.affected_entity do
                      {:table, previous_value} ->
-                       {:table,
-                        Protox.MergeMessage.merge(
-                          previous_value,
-                          Electric.Satellite.SatOpMigrate.Table.decode!(delimited)
-                        )}
+                       {:affected_entity,
+                        {:table,
+                         Protox.MergeMessage.merge(
+                           previous_value,
+                           Electric.Satellite.SatOpMigrate.Table.decode!(delimited)
+                         )}}
 
                      _ ->
-                       {:table, Electric.Satellite.SatOpMigrate.Table.decode!(delimited)}
+                       {:affected_entity,
+                        {:table, Electric.Satellite.SatOpMigrate.Table.decode!(delimited)}}
+                   end
+                 ], rest}
+
+              {4, _, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+
+                {[
+                   case msg.affected_entity do
+                     {:enum_type, previous_value} ->
+                       {:affected_entity,
+                        {:enum_type,
+                         Protox.MergeMessage.merge(
+                           previous_value,
+                           Electric.Satellite.SatOpMigrate.EnumType.decode!(delimited)
+                         )}}
+
+                     _ ->
+                       {:affected_entity,
+                        {:enum_type, Electric.Satellite.SatOpMigrate.EnumType.decode!(delimited)}}
                    end
                  ], rest}
 
@@ -7000,7 +7052,12 @@
         %{
           1 => {:version, {:scalar, ""}, :string},
           2 => {:stmts, :unpacked, {:message, Electric.Satellite.SatOpMigrate.Stmt}},
-          3 => {:table, {:oneof, :_table}, {:message, Electric.Satellite.SatOpMigrate.Table}}
+          3 =>
+            {:table, {:oneof, :affected_entity},
+             {:message, Electric.Satellite.SatOpMigrate.Table}},
+          4 =>
+            {:enum_type, {:oneof, :affected_entity},
+             {:message, Electric.Satellite.SatOpMigrate.EnumType}}
         }
       end
 
@@ -7010,8 +7067,11 @@
             }
       def defs_by_name() do
         %{
+          enum_type:
+            {4, {:oneof, :affected_entity}, {:message, Electric.Satellite.SatOpMigrate.EnumType}},
           stmts: {2, :unpacked, {:message, Electric.Satellite.SatOpMigrate.Stmt}},
-          table: {3, {:oneof, :_table}, {:message, Electric.Satellite.SatOpMigrate.Table}},
+          table:
+            {3, {:oneof, :affected_entity}, {:message, Electric.Satellite.SatOpMigrate.Table}},
           version: {1, {:scalar, ""}, :string}
         }
       end
@@ -7042,11 +7102,20 @@
           %{
             __struct__: Protox.Field,
             json_name: "table",
-            kind: {:oneof, :_table},
-            label: :proto3_optional,
+            kind: {:oneof, :affected_entity},
+            label: :optional,
             name: :table,
             tag: 3,
             type: {:message, Electric.Satellite.SatOpMigrate.Table}
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "enumType",
+            kind: {:oneof, :affected_entity},
+            label: :optional,
+            name: :enum_type,
+            tag: 4,
+            type: {:message, Electric.Satellite.SatOpMigrate.EnumType}
           }
         ]
       end
@@ -7117,8 +7186,8 @@
              %{
                __struct__: Protox.Field,
                json_name: "table",
-               kind: {:oneof, :_table},
-               label: :proto3_optional,
+               kind: {:oneof, :affected_entity},
+               label: :optional,
                name: :table,
                tag: 3,
                type: {:message, Electric.Satellite.SatOpMigrate.Table}
@@ -7130,8 +7199,8 @@
              %{
                __struct__: Protox.Field,
                json_name: "table",
-               kind: {:oneof, :_table},
-               label: :proto3_optional,
+               kind: {:oneof, :affected_entity},
+               label: :optional,
                name: :table,
                tag: 3,
                type: {:message, Electric.Satellite.SatOpMigrate.Table}
@@ -7139,6 +7208,46 @@
           end
 
           []
+        ),
+        (
+          def field_def(:enum_type) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "enumType",
+               kind: {:oneof, :affected_entity},
+               label: :optional,
+               name: :enum_type,
+               tag: 4,
+               type: {:message, Electric.Satellite.SatOpMigrate.EnumType}
+             }}
+          end
+
+          def field_def("enumType") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "enumType",
+               kind: {:oneof, :affected_entity},
+               label: :optional,
+               name: :enum_type,
+               tag: 4,
+               type: {:message, Electric.Satellite.SatOpMigrate.EnumType}
+             }}
+          end
+
+          def field_def("enum_type") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "enumType",
+               kind: {:oneof, :affected_entity},
+               label: :optional,
+               name: :enum_type,
+               tag: 4,
+               type: {:message, Electric.Satellite.SatOpMigrate.EnumType}
+             }}
+          end
         ),
         def field_def(_) do
           {:error, :no_such_field}
@@ -7171,6 +7280,9 @@
         {:error, :no_default_value}
       end,
       def default(:table) do
+        {:error, :no_default_value}
+      end,
+      def default(:enum_type) do
         {:error, :no_default_value}
       end,
       def default(_) do
@@ -9249,6 +9361,303 @@
         {:error, :no_default_value}
       end,
       def default(:size) do
+        {:error, :no_default_value}
+      end,
+      def default(_) do
+        {:error, :no_such_field}
+      end
+    ]
+
+    (
+      @spec file_options() :: nil
+      def file_options() do
+        nil
+      end
+    )
+  end,
+  defmodule Electric.Satellite.SatOpMigrate.EnumType do
+    @moduledoc false
+    defstruct name: "", values: []
+
+    (
+      (
+        @spec encode(struct) :: {:ok, iodata} | {:error, any}
+        def encode(msg) do
+          try do
+            {:ok, encode!(msg)}
+          rescue
+            e in [Protox.EncodingError, Protox.RequiredFieldsError] -> {:error, e}
+          end
+        end
+
+        @spec encode!(struct) :: iodata | no_return
+        def encode!(msg) do
+          [] |> encode_name(msg) |> encode_values(msg)
+        end
+      )
+
+      []
+
+      [
+        defp encode_name(acc, msg) do
+          try do
+            if msg.name == "" do
+              acc
+            else
+              [acc, "\n", Protox.Encode.encode_string(msg.name)]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:name, "invalid field value"), __STACKTRACE__
+          end
+        end,
+        defp encode_values(acc, msg) do
+          try do
+            case msg.values do
+              [] ->
+                acc
+
+              values ->
+                [
+                  acc,
+                  Enum.reduce(values, [], fn value, acc ->
+                    [acc, "\x12", Protox.Encode.encode_string(value)]
+                  end)
+                ]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:values, "invalid field value"), __STACKTRACE__
+          end
+        end
+      ]
+
+      []
+    )
+
+    (
+      (
+        @spec decode(binary) :: {:ok, struct} | {:error, any}
+        def decode(bytes) do
+          try do
+            {:ok, decode!(bytes)}
+          rescue
+            e in [Protox.DecodingError, Protox.IllegalTagError, Protox.RequiredFieldsError] ->
+              {:error, e}
+          end
+        end
+
+        (
+          @spec decode!(binary) :: struct | no_return
+          def decode!(bytes) do
+            parse_key_value(bytes, struct(Electric.Satellite.SatOpMigrate.EnumType))
+          end
+        )
+      )
+
+      (
+        @spec parse_key_value(binary, struct) :: struct
+        defp parse_key_value(<<>>, msg) do
+          msg
+        end
+
+        defp parse_key_value(bytes, msg) do
+          {field, rest} =
+            case Protox.Decode.parse_key(bytes) do
+              {0, _, _} ->
+                raise %Protox.IllegalTagError{}
+
+              {1, _, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+                {[name: Protox.Decode.validate_string(delimited)], rest}
+
+              {2, _, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+                {[values: msg.values ++ [Protox.Decode.validate_string(delimited)]], rest}
+
+              {tag, wire_type, rest} ->
+                {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
+                {[], rest}
+            end
+
+          msg_updated = struct(msg, field)
+          parse_key_value(rest, msg_updated)
+        end
+      )
+
+      []
+    )
+
+    (
+      @spec json_decode(iodata(), keyword()) :: {:ok, struct()} | {:error, any()}
+      def json_decode(input, opts \\ []) do
+        try do
+          {:ok, json_decode!(input, opts)}
+        rescue
+          e in Protox.JsonDecodingError -> {:error, e}
+        end
+      end
+
+      @spec json_decode!(iodata(), keyword()) :: struct() | no_return()
+      def json_decode!(input, opts \\ []) do
+        {json_library_wrapper, json_library} = Protox.JsonLibrary.get_library(opts, :decode)
+
+        Protox.JsonDecode.decode!(
+          input,
+          Electric.Satellite.SatOpMigrate.EnumType,
+          &json_library_wrapper.decode!(json_library, &1)
+        )
+      end
+
+      @spec json_encode(struct(), keyword()) :: {:ok, iodata()} | {:error, any()}
+      def json_encode(msg, opts \\ []) do
+        try do
+          {:ok, json_encode!(msg, opts)}
+        rescue
+          e in Protox.JsonEncodingError -> {:error, e}
+        end
+      end
+
+      @spec json_encode!(struct(), keyword()) :: iodata() | no_return()
+      def json_encode!(msg, opts \\ []) do
+        {json_library_wrapper, json_library} = Protox.JsonLibrary.get_library(opts, :encode)
+        Protox.JsonEncode.encode!(msg, &json_library_wrapper.encode!(json_library, &1))
+      end
+    )
+
+    (
+      @deprecated "Use fields_defs()/0 instead"
+      @spec defs() :: %{
+              required(non_neg_integer) => {atom, Protox.Types.kind(), Protox.Types.type()}
+            }
+      def defs() do
+        %{1 => {:name, {:scalar, ""}, :string}, 2 => {:values, :unpacked, :string}}
+      end
+
+      @deprecated "Use fields_defs()/0 instead"
+      @spec defs_by_name() :: %{
+              required(atom) => {non_neg_integer, Protox.Types.kind(), Protox.Types.type()}
+            }
+      def defs_by_name() do
+        %{name: {1, {:scalar, ""}, :string}, values: {2, :unpacked, :string}}
+      end
+    )
+
+    (
+      @spec fields_defs() :: list(Protox.Field.t())
+      def fields_defs() do
+        [
+          %{
+            __struct__: Protox.Field,
+            json_name: "name",
+            kind: {:scalar, ""},
+            label: :optional,
+            name: :name,
+            tag: 1,
+            type: :string
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "values",
+            kind: :unpacked,
+            label: :repeated,
+            name: :values,
+            tag: 2,
+            type: :string
+          }
+        ]
+      end
+
+      [
+        @spec(field_def(atom) :: {:ok, Protox.Field.t()} | {:error, :no_such_field}),
+        (
+          def field_def(:name) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "name",
+               kind: {:scalar, ""},
+               label: :optional,
+               name: :name,
+               tag: 1,
+               type: :string
+             }}
+          end
+
+          def field_def("name") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "name",
+               kind: {:scalar, ""},
+               label: :optional,
+               name: :name,
+               tag: 1,
+               type: :string
+             }}
+          end
+
+          []
+        ),
+        (
+          def field_def(:values) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "values",
+               kind: :unpacked,
+               label: :repeated,
+               name: :values,
+               tag: 2,
+               type: :string
+             }}
+          end
+
+          def field_def("values") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "values",
+               kind: :unpacked,
+               label: :repeated,
+               name: :values,
+               tag: 2,
+               type: :string
+             }}
+          end
+
+          []
+        ),
+        def field_def(_) do
+          {:error, :no_such_field}
+        end
+      ]
+    )
+
+    []
+
+    (
+      @spec required_fields() :: []
+      def required_fields() do
+        []
+      end
+    )
+
+    (
+      @spec syntax() :: atom()
+      def syntax() do
+        :proto3
+      end
+    )
+
+    [
+      @spec(default(atom) :: {:ok, boolean | integer | String.t() | float} | {:error, atom}),
+      def default(:name) do
+        {:ok, ""}
+      end,
+      def default(:values) do
         {:error, :no_default_value}
       end,
       def default(_) do
