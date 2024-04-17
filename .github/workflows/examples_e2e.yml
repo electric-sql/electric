@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        example_dir: ['examples/web-wa-sqlite', 'examples/web-wa-sqlite-vue']
+        example_dir: ['examples/web-wa-sqlite', 'examples/web-wa-sqlite-vuejs']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
