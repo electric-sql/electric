@@ -1,4 +1,4 @@
-import React, { ReactNode } from 'react'
+import { ReactNode } from 'react'
 
 import DemoProvider from './DemoProvider'
 import ElectricProvider from './ElectricProvider'
