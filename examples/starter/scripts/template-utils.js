@@ -22,7 +22,7 @@ const ignoreDirs = [
   'android',
   'e2e',
 ]
-const ignoreFiles = ['package-lock.json']
+const ignoreFiles = ['package-lock.json', '.env', 'playwright.config.ts']
 
 /*
  * Replaces the first occurence of `find` by `replace` in the file `file`.
