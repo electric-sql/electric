@@ -14,7 +14,6 @@
     "db:migrate": "npx electric-sql with-config \"npx pg-migrations apply --database {{ELECTRIC_PROXY}} --directory ./db/migrations\"",
     "db:psql": "npx electric-sql psql",
     "electric:start": "npx electric-sql start",
-    "e2e": "npx playwright install --with-deps && npx playwright test",
     "dev": "vite",
     "build": "vue-tsc && vite build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
@@ -27,7 +26,6 @@
   },
   "devDependencies": {
     "@databases/pg-migrations": "^5.0.3",
-    "@playwright/test": "^1.43.1",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
     "@typescript-eslint/parser": "^6.21.0",
     "@vitejs/plugin-vue": "^5.0.4",
