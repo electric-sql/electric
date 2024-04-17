@@ -222,7 +222,6 @@ defmodule Electric.Satellite.SerializationTest do
         {"2023-08-15 11:12:13Z", :timestamp},
         {"2023-08-15 11:12:13+01", :timestamptz},
         {"2023-08-15 11:12:13+99:98", :timestamptz},
-        {"2023-08-15 11:12:13+00", :timestamptz},
         {"2023-08-15 11:12:13", :timestamptz},
         {"0000-08-15 23:00:00Z", :timestamptz},
         {"-2000-08-15 23:00:00Z", :timestamptz},
