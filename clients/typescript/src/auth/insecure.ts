@@ -1,5 +1,5 @@
 import { TokenClaims } from './index'
-import { base64 } from '../util/common'
+import { base64 } from '../util/encoders'
 
 export function insecureAuthToken(claims: TokenClaims): string {
   const header = {

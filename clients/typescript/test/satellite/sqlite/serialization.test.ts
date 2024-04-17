@@ -4,7 +4,10 @@ import { DatabaseAdapter as SQLiteDatabaseAdapter } from '../../../src/drivers/b
 import { sqliteBuilder } from '../../../src/migrators/query-builder'
 import { opts } from '../common'
 import { ContextType, SetupFn, serializationTests } from '../serialization'
-import { sqliteTypeDecoder, sqliteTypeEncoder } from '../../../src/util/common'
+import {
+  sqliteTypeDecoder,
+  sqliteTypeEncoder,
+} from '../../../src/util/encoders'
 
 const test = anyTest as TestFn<ContextType>
 

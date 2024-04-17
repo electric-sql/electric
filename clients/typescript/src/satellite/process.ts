@@ -15,13 +15,8 @@ import {
   Notifier,
   UnsubscribeFunction,
 } from '../notifiers/index'
-import {
-  Waiter,
-  base64,
-  bytesToNumber,
-  emptyPromise,
-  getWaiter,
-} from '../util/common'
+import { Waiter, emptyPromise, getWaiter } from '../util/common'
+import { base64, bytesToNumber } from '../util/encoders'
 import { QualifiedTablename } from '../util/tablename'
 import {
   AdditionalData,

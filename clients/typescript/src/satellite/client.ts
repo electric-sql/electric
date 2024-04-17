@@ -75,7 +75,6 @@ import {
 } from '../util/types'
 import {
   base64,
-  DEFAULT_LOG_POS,
   sqliteTypeEncoder,
   sqliteTypeDecoder,
   bytesToNumber,
@@ -83,7 +82,8 @@ import {
   TypeDecoder,
   pgTypeEncoder,
   pgTypeDecoder,
-} from '../util/common'
+} from '../util/encoders'
+import { DEFAULT_LOG_POS } from '../util/common'
 import { Client } from '.'
 import { SatelliteClientOpts, satelliteClientDefaults } from './config'
 import Log from 'loglevel'

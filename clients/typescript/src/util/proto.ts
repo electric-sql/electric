@@ -2,7 +2,7 @@ import * as Pb from '../_generated/protocol/satellite'
 import * as _m0 from 'protobufjs/minimal'
 import { SatelliteError, SatelliteErrorCode } from './types'
 import { ShapeRequest } from '../satellite/shapes/types'
-import { base64, sqliteTypeDecoder } from './common'
+import { base64, sqliteTypeDecoder } from './encoders'
 import { getMaskBit } from './bitmaskHelpers'
 
 export type GetName<T extends SatPbMsg> =

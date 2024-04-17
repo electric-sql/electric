@@ -32,12 +32,11 @@ import { SocketFactory } from '../sockets'
 import {
   DEFAULT_LOG_POS,
   subsDataErrorToSatelliteError,
-  base64,
   AsyncEventEmitter,
   genUUID,
   QualifiedTablename,
 } from '../util'
-import { bytesToNumber } from '../util/common'
+import { base64, bytesToNumber } from '../util/encoders'
 import { generateTag } from './oplog'
 import {
   Shape,

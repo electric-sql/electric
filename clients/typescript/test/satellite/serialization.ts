@@ -9,7 +9,7 @@ import { DatabaseAdapter as DatabaseAdapterInterface } from '../../src/electric/
 import { inferRelationsFromDb } from '../../src/util/relations'
 import { SatelliteOpts } from '../../src/satellite/config'
 import { QueryBuilder } from '../../src/migrators/query-builder'
-import { TypeDecoder, TypeEncoder } from '../../src/util'
+import { TypeDecoder, TypeEncoder } from '../../src/util/encoders'
 
 export type ContextType = {
   dialect: 'SQLite' | 'Postgres'

@@ -17,7 +17,7 @@ import {
   numberToBytes,
   sqliteTypeDecoder,
   sqliteTypeEncoder,
-} from '../../src/util/common'
+} from '../../src/util/encoders'
 import {
   DataChangeType,
   DataTransaction,
