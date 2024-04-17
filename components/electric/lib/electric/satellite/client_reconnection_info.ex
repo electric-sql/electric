@@ -200,34 +200,6 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     Electric.name(__MODULE__, origin)
   end
 
-  @delete_subscriptions_query """
-  DELETE FROM
-    #{Extension.client_shape_subscriptions_table()}
-  WHERE
-    client_id = $1
-  """
-
-  @delete_checkpoint_query """
-  DELETE FROM
-    #{Extension.client_checkpoints_table()}
-  WHERE
-    client_id = $1
-  """
-
-  @delete_actions_query """
-  DELETE FROM
-    #{Extension.client_actions_table()}
-  WHERE
-    client_id = $1
-  """
-
-  @delete_additional_data_for_client_query """
-  DELETE FROM
-    #{Extension.client_additional_data_table()}
-  WHERE
-    client_id = $1
-  """
-
   @doc """
   Remove all stored data about client reconnection.
 
@@ -243,10 +215,15 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     :ets.match_delete(@additional_data_ets, {{client_id, :_, :_, :_, :_}, :_, :_})
     :ets.delete(@checkpoint_ets, client_id)
 
-    Client.query!(@delete_subscriptions_query, [client_id])
-    Client.query!(@delete_checkpoint_query, [client_id])
-    Client.query!(@delete_actions_query, [client_id])
-    Client.query!(@delete_additional_data_for_client_query, [client_id])
+    Enum.each(
+      [
+        Extension.client_shape_subscriptions_table(),
+        Extension.client_checkpoints_table(),
+        Extension.client_actions_table(),
+        Extension.client_additional_data_table()
+      ],
+      &Client.query!("DELETE FROM #{&1} WHERE client_id = $1", [client_id])
+    )
 
     :ok
   end
@@ -258,20 +235,6 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     end
   end
 
-  @delete_subscription_query """
-  DELETE FROM
-    #{Extension.client_shape_subscriptions_table()}
-  WHERE
-    client_id = $1 AND subscription_id = $2
-  """
-
-  @delete_subscription_data_query """
-  DELETE FROM
-    #{Extension.client_additional_data_table()}
-  WHERE
-    client_id = $1 AND subscription_id = $2
-  """
-
   def delete_subscription(origin, client_id, subscription_id) do
     :ets.delete(@subscriptions_ets, {client_id, subscription_id})
 
@@ -282,8 +245,14 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
 
     Client.with_pool(origin, fn ->
       subs_uuid = encode_uuid(subscription_id)
-      Client.query!(@delete_subscription_query, [client_id, subs_uuid])
-      Client.query!(@delete_subscription_data_query, [client_id, subs_uuid])
+
+      Enum.each(
+        [Extension.client_shape_subscriptions_table(), Extension.client_additional_data_table()],
+        &Client.query!("DELETE FROM #{&1} WHERE client_id = $1 AND subscription_id = $2", [
+          client_id,
+          subs_uuid
+        ])
+      )
     end)
 
     :ok
@@ -393,56 +362,9 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     end
   end
 
-  defp merge_discarded(acc, {@actions_ets, {client_id, new_txids}}) do
-    Map.update(
-      acc,
-      @actions_ets,
-      {client_id, new_txids},
-      fn {^client_id, txids} -> {client_id, new_txids ++ txids} end
-    )
-  end
-
-  defp merge_discarded(acc, {@additional_data_ets, {client_id, {:ord, order}}}) do
-    Map.update(
-      acc,
-      @additional_data_ets,
-      {client_id, [order], nil},
-      fn {^client_id, orders, txid} -> {client_id, [order | orders], txid} end
-    )
-  end
-
-  defp merge_discarded(acc, {@additional_data_ets, {client_id, {:before_txid, new_txid}}}) do
-    Map.update(
-      acc,
-      @additional_data_ets,
-      {client_id, [], new_txid},
-      fn {^client_id, orders, txid} -> {client_id, orders, max(new_txid, txid)} end
-    )
-  end
-
-  @delete_actions_for_xids_query """
-  DELETE FROM
-    #{Extension.client_actions_table()}
-  WHERE
-    client_id = $1 AND txid = ANY($2)
+  @delete_additional_data_for_client_query """
+  DELETE FROM #{Extension.client_additional_data_table()} WHERE client_id = $1
   """
-
-  @delete_additional_data_query """
-  DELETE FROM
-    #{Extension.client_additional_data_table()}
-  WHERE
-    client_id = $1 AND (ord = ANY($2) OR coalesce(min_txid <= $3, false))
-  """
-
-  defp delete_discarded_cache_entries(entries) do
-    Enum.each(entries, fn
-      {@actions_ets, {client_id, txids}} ->
-        Client.query!(@delete_actions_for_xids_query, [client_id, txids])
-
-      {@additional_data_ets, {client_id, orders, txid}} ->
-        Client.query!(@delete_additional_data_query, [client_id, orders, txid])
-    end)
-  end
 
   @doc """
   Advance the graph up to the reconnection point, clearing all unsent data.
@@ -761,6 +683,69 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     :ets.select_delete(@actions_ets, matchspec)
 
     {@actions_ets, {client_id, txids}}
+  end
+
+  # Merge the discarded ETS entry given as the 2nd argument into the accumulator of discarded entries
+  # given as the 1st argument.
+  #
+  # The accumulator aggregates deleted ETS entries from different tables and is eventually
+  # passed to `delete_discarded_cache_entries/1` to build up and execute appropriate DELETE
+  # statements that remove all discarded entries in one go.
+  @spec merge_discarded(map, {:ets.table(), tuple}) :: map
+
+  defp merge_discarded(acc, {@actions_ets, {client_id, new_txids}}) do
+    Map.update(
+      acc,
+      @actions_ets,
+      {client_id, new_txids},
+      fn {^client_id, txids} -> {client_id, new_txids ++ txids} end
+    )
+  end
+
+  defp merge_discarded(acc, {@additional_data_ets, {client_id, {:ord, order}}}) do
+    Map.update(
+      acc,
+      @additional_data_ets,
+      {client_id, [order], nil},
+      fn {^client_id, orders, txid} -> {client_id, [order | orders], txid} end
+    )
+  end
+
+  defp merge_discarded(acc, {@additional_data_ets, {client_id, {:before_txid, new_txid}}}) do
+    Map.update(
+      acc,
+      @additional_data_ets,
+      {client_id, [], new_txid},
+      fn {^client_id, orders, txid} -> {client_id, orders, max(new_txid, txid)} end
+    )
+  end
+
+  @delete_actions_for_xids_query """
+  DELETE FROM
+    #{Extension.client_actions_table()}
+  WHERE
+    client_id = $1 AND txid = ANY($2)
+  """
+
+  @delete_additional_data_query """
+  DELETE FROM
+    #{Extension.client_additional_data_table()}
+  WHERE
+    client_id = $1 AND (ord = ANY($2) OR coalesce(min_txid <= $3, false))
+  """
+
+  # Given the accumulator of discarded ETS entries, issue one DELETE statement per table to
+  # remove all discarded entries from the database.
+  #
+  # This function must be called in the context of a checked out Repo connection.
+  def delete_discarded_cache_entries(entries) do
+    Enum.each(entries, fn
+      {@actions_ets, {client_id, txids}} ->
+        Client.query!(@delete_actions_for_xids_query, [client_id, txids])
+
+      {@additional_data_ets, {client_id, orders, txid}} ->
+        Client.query!(@delete_additional_data_query, [client_id, orders, txid])
+    end)
   end
 
   @impl GenServer
