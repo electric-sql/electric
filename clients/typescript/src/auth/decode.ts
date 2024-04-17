@@ -1,4 +1,4 @@
-import { base64 } from '../util/common'
+import { base64 } from '../util/encoders'
 
 export interface JwtPayload {
   iss?: string

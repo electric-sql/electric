@@ -3,7 +3,7 @@ import { makePgDatabase } from '../../support/node-postgres'
 import { randomValue } from '../../../src/util/random'
 import { opts } from '../common'
 import { ContextType, SetupFn, serializationTests } from '../serialization'
-import { pgTypeDecoder, pgTypeEncoder } from '../../../src/util/common'
+import { pgTypeDecoder, pgTypeEncoder } from '../../../src/util/encoders'
 import { DatabaseAdapter as PgDatabaseAdapter } from '../../../src/drivers/node-postgres/adapter'
 import { pgBuilder } from '../../../src/migrators/query-builder'
 

@@ -37,12 +37,9 @@ import {
 } from '../../src/util/types'
 import { relations, ContextType as CommonContextType } from './common'
 
-import {
-  DEFAULT_LOG_POS,
-  numberToBytes,
-  base64,
-  blobToHexString,
-} from '../../src/util/common'
+import { numberToBytes, base64, blobToHexString } from '../../src/util/encoders'
+
+import { DEFAULT_LOG_POS } from '../../src/util/common'
 
 import { Shape, SubscriptionData } from '../../src/satellite/shapes/types'
 import { mergeEntries } from '../../src/satellite/merge'

@@ -11,7 +11,11 @@ import {
   Relation,
 } from '../util/types'
 import { union } from '../util/sets'
-import { numberToBytes, blobToHexString, hexStringToBlob } from '../util/common'
+import {
+  numberToBytes,
+  blobToHexString,
+  hexStringToBlob,
+} from '../util/encoders'
 
 // format: UUID@timestamp_in_milliseconds
 export type Timestamp = string

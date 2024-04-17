@@ -1,6 +1,7 @@
 import * as z from 'zod'
 import { SatOpMigrate } from '../_generated/protocol/satellite'
-import { base64, getProtocolVersion } from '../util'
+import { base64 } from '../util/encoders'
+import { getProtocolVersion } from '../util'
 import { Migration } from './index'
 import { generateTriggersForTable } from '../satellite/process'
 import { sqliteBuilder, pgBuilder, QueryBuilder } from './query-builder'

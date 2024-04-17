@@ -1,5 +1,5 @@
 import { jwtDecode, JwtPayload } from '../decode'
-import { textEncoder } from '../../util/common'
+import { textEncoder } from '../../util/encoders'
 import { TokenClaims } from '../index'
 import { InvalidArgumentError } from '../../client/validation/errors/invalidArgumentError'
 
