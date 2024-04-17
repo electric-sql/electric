@@ -352,6 +352,10 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
             delete_discarded_cache_entries(discarded_acc)
             store_client_checkpoint(client_id, new_wal_pos, new_graph)
             store_client_actions(pending_actions)
+
+            if opts[:purge_additional_data] do
+              purge_additional_data_for_client(client_id)
+            end
           end)
 
           {:ok, new_graph}
@@ -361,10 +365,6 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
         end
     end
   end
-
-  @delete_additional_data_for_client_query """
-  DELETE FROM #{Extension.client_additional_data_table()} WHERE client_id = $1
-  """
 
   @doc """
   Advance the graph up to the reconnection point, clearing all unsent data.
@@ -388,18 +388,16 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   @spec advance_on_reconnection(any(), any()) ::
           {:ok, Graph.t(), Shapes.action_context()} | {:error, term()}
   def advance_on_reconnection(client_id, opts) do
+    # We need to remove all additional data "in the future", but
+    # execute actions that were seen but not fulfilled that way.
+    # This is easy, since "actions" are stored at checkpoint advance time,
+    # while additional data diffs are stored as soon as they were received, and
+    # acknowledged additional data is removed while advancing. So we can just
+    # indicate the all additional data must be removed in `advance_checkpoint()`
+    # and return all the actions.
+    opts = Keyword.put(opts, :purge_additional_data, true)
+
     with {:ok, new_graph} <- advance_checkpoint(client_id, opts) do
-      # Now we need to remove all additional data "in the future", but
-      # execute actions that were seen but not fulfilled that way.
-      # This is easy, since "actions" are stored at checkpoint advance time,
-      # while additional data diffs are stored as soon as they were received, and
-      # acknowledged additional data is removed while advancing. So we can just
-      # delete all additional data here and return all the actions.
-      :ets.match_delete(@additional_data_ets, {{client_id, :_, :_, :_, :_}, :_, :_})
-
-      origin = Keyword.fetch!(opts, :origin)
-      Client.pooled_query!(origin, @delete_additional_data_for_client_query, [client_id])
-
       actions =
         @actions_ets
         |> :ets.match({{client_id, :"$1"}, :"$2"})
@@ -552,6 +550,16 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     :ets.delete(@additional_data_ets, key)
 
     {@additional_data_ets, {client_id, {:pk, xmin, order}}}
+  end
+
+  @delete_additional_data_for_client_query """
+  DELETE FROM #{Extension.client_additional_data_table()} WHERE client_id = $1
+  """
+
+  defp purge_additional_data_for_client(client_id) do
+    :ets.match_delete(@additional_data_ets, {{client_id, :_, :_, :_, :_}, :_, :_})
+
+    Client.query!(@delete_additional_data_for_client_query, [client_id])
   end
 
   @insert_subscription_query """
