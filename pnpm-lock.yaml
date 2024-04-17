@@ -1,4 +1,4 @@
-lockfileVersion: '6.1'
+lockfileVersion: '6.0'
 
 settings:
   autoInstallPeers: true
@@ -136,8 +136,8 @@ importers:
         version: 3.21.1
     devDependencies:
       '@electric-sql/pglite':
-        specifier: ^0.1.1
-        version: 0.1.1
+        specifier: ^0.1.4
+        version: 0.1.4
       '@op-engineering/op-sqlite':
         specifier: '>= 2.0.16'
         version: 2.0.20(react-native@0.68.0)(react@18.2.0)
@@ -2762,8 +2762,8 @@ packages:
     engines: {node: '>=0.1.90'}
     dev: false
 
-  /@electric-sql/pglite@0.1.1:
-    resolution: {integrity: sha512-7tJNIJBXuiuVl6Y9ehwv9mTlQlPeQbQ7wIKn49eorToPlNnkYnBzVWpOOTkNqv6Xu4dz75vl3S/9BmlfqCqM1w==}
+  /@electric-sql/pglite@0.1.4:
+    resolution: {integrity: sha512-B1mWjMVHCjrqqdRXCk3a9v9XmtAg+i/GpH/fdlmkukFY2Ofm7lF+nJu5AjIk84NFdcG8IdvzS9fvQBXY5sXonQ==}
     dev: true
 
   /@embedded-postgres/darwin-arm64@16.1.1-beta.11:

@@ -216,7 +216,7 @@
     "zod": "3.21.1"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.1.1",
+    "@electric-sql/pglite": "^0.1.4",
     "@electric-sql/prisma-generator": "workspace:*",
     "@op-engineering/op-sqlite": ">= 2.0.16",
     "@tauri-apps/plugin-sql": "2.0.0-alpha.5",
@@ -273,7 +273,7 @@
   },
   "peerDependencies": {
     "@capacitor-community/sqlite": ">= 5.6.2",
-    "@electric-sql/pglite": ">= 0.1.1",
+    "@electric-sql/pglite": ">= 0.1.4",
     "@op-engineering/op-sqlite": ">= 2.0.16",
     "@tauri-apps/plugin-sql": "2.0.0-alpha.5",
     "embedded-postgres": "16.1.1-beta.9",

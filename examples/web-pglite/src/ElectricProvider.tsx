@@ -34,7 +34,9 @@ const ElectricProviderComponent = ({
       const { tabId } = uniqueTabId()
       const scopedDbName = `idb://basic-${LIB_VERSION}-${tabId}.db`
 
-      db ??= new PGlite(scopedDbName)
+      db ??= new PGlite(scopedDbName, {
+        relaxedDurability: true,
+      })
       const client = await electrify(db, schema, config)
       await client.connect(authToken())
 
