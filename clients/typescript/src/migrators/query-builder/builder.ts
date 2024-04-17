@@ -338,7 +338,7 @@ export abstract class QueryBuilder {
     columns: string[],
     records: Record<string, SqlValue>[],
     maxParameters: number,
-    suffixSql: string = ''
+    suffixSql = ''
   ): Statement[] {
     const stmts: Statement[] = []
     const columnCount = columns.length
