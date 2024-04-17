@@ -1,6 +1,6 @@
 import { InvalidArgumentError } from '../validation/errors/invalidArgumentError'
 import { Converter } from './converter'
-import { deserialiseDate, serialiseDate } from './datatypes/date'
+import { serialiseDate } from './datatypes/date'
 import { isJsonNull } from './datatypes/json'
 import { PgBasicType, PgDateType, PgType } from './types'
 
@@ -56,10 +56,9 @@ function fromPostgres(v: any, pgType: PgType): any {
     return v
   }
 
-  if (pgType === PgDateType.PG_TIME || pgType === PgDateType.PG_TIMETZ) {
-    // it's a serialised date
-    return deserialiseDate(v, pgType as PgDateType)
-  }
+  // no need to convert dates, times, or timestamps
+  // because we modified the parser in the node-pg driver
+  // to parse them how we want
 
   if (pgType === PgBasicType.PG_JSON || pgType === PgBasicType.PG_JSONB) {
     if (v === null) {

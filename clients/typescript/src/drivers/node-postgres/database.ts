@@ -1,6 +1,8 @@
 import pg from 'pg'
 import type { Client } from 'pg'
 import { Row, Statement } from '../../util'
+import { PgDateType } from '../../client/conversions/types'
+import { deserialiseDate } from '../../client/conversions/datatypes/date'
 
 const originalGetTypeParser = pg.types.getTypeParser
 
@@ -36,6 +38,26 @@ export class ElectricDatabase implements Database {
               oid === pg.types.builtins.JSONB
             ) {
               return (val) => val
+            }
+
+            if (
+              oid == pg.types.builtins.TIME ||
+              oid == pg.types.builtins.TIMETZ ||
+              oid == pg.types.builtins.TIMESTAMP ||
+              oid == pg.types.builtins.TIMESTAMPTZ ||
+              oid == pg.types.builtins.DATE
+            ) {
+              // Parse time, timestamp, and date values ourselves
+              // because the pg parser parses them differently from what we expect
+              const pgTypes = new Map([
+                [pg.types.builtins.TIME, PgDateType.PG_TIME],
+                [pg.types.builtins.TIMETZ, PgDateType.PG_TIMETZ],
+                [pg.types.builtins.TIMESTAMP, PgDateType.PG_TIMESTAMP],
+                [pg.types.builtins.TIMESTAMPTZ, PgDateType.PG_TIMESTAMPTZ],
+                [pg.types.builtins.DATE, PgDateType.PG_DATE],
+              ])
+              return (val: string) =>
+                deserialiseDate(val, pgTypes.get(oid) as PgDateType)
             }
             return originalGetTypeParser(oid)
           }) as typeof pg.types.getTypeParser,

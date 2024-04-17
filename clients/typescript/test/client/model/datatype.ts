@@ -31,7 +31,7 @@ export const datatypeTests = (test: TestFn<ContextType>) => {
       },
     })
 
-    const expectedDate = new Date(`${date} 00:00:00.000`)
+    const expectedDate = new Date(date)
     t.deepEqual(res.date, expectedDate)
 
     const fetchRes = await tbl.findUnique({
@@ -53,7 +53,7 @@ export const datatypeTests = (test: TestFn<ContextType>) => {
       },
     })
 
-    const expectedDate = new Date(`${date} 00:00:00.000`)
+    const expectedDate = new Date(date)
     t.deepEqual(res.date, expectedDate)
 
     const fetchRes = await tbl.findUnique({

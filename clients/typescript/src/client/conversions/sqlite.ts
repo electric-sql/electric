@@ -4,7 +4,7 @@ import { deserialiseBoolean, serialiseBoolean } from './datatypes/boolean'
 import { deserialiseBlob, serialiseBlob } from './datatypes/blob'
 import { deserialiseDate, serialiseDate } from './datatypes/date'
 import { deserialiseJSON, serialiseJSON } from './datatypes/json'
-import { PgBasicType, PgDateType, PgType } from './types'
+import { PgBasicType, PgDateType, PgType, isPgDateType } from './types'
 
 /**
  * This module takes care of converting TypeScript values for Postgres-specific types to a SQLite storeable value and back.
@@ -89,10 +89,6 @@ function fromSqlite(v: any, pgType: PgType): any {
   } else {
     return v
   }
-}
-
-function isPgDateType(pgType: PgType): boolean {
-  return (Object.values(PgDateType) as Array<string>).includes(pgType)
 }
 
 export const sqliteConverter: Converter = {
