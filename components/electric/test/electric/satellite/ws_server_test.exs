@@ -37,6 +37,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
   setup_with_mocks([
     {Electric.Postgres.Repo, [:passthrough],
      checkout: fn fun -> fun.() end,
+     transaction: fn fun -> fun.() end,
      checked_out?: fn -> true end,
      query!: fn _, _ ->
        %Postgrex.Result{columns: nil, rows: []}
