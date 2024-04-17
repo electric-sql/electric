@@ -1088,7 +1088,6 @@ export class SatelliteProcess implements Satellite {
     results: OplogEntry[],
     origin: ChangeOrigin
   ): Promise<void> {
-    Log.info('notify changes')
     const acc: ChangeAccumulator = {}
 
     // Would it be quicker to do this using a second SQL query that
