@@ -12988,7 +12988,7 @@
   end,
   defmodule Electric.Satellite.SatPerms do
     @moduledoc false
-    defstruct id: 0, user_id: "", rules: nil, roles: []
+    defstruct id: 0, user_id: "", rules: nil, roles: [], triggers: ""
 
     (
       (
@@ -13003,7 +13003,12 @@
 
         @spec encode!(struct) :: iodata | no_return
         def encode!(msg) do
-          [] |> encode_id(msg) |> encode_user_id(msg) |> encode_rules(msg) |> encode_roles(msg)
+          []
+          |> encode_id(msg)
+          |> encode_user_id(msg)
+          |> encode_rules(msg)
+          |> encode_roles(msg)
+          |> encode_triggers(msg)
         end
       )
 
@@ -13063,6 +13068,18 @@
           rescue
             ArgumentError ->
               reraise Protox.EncodingError.new(:roles, "invalid field value"), __STACKTRACE__
+          end
+        end,
+        defp encode_triggers(acc, msg) do
+          try do
+            if msg.triggers == "" do
+              acc
+            else
+              [acc, "*", Protox.Encode.encode_string(msg.triggers)]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:triggers, "invalid field value"), __STACKTRACE__
           end
         end
       ]
@@ -13130,6 +13147,11 @@
                 {[roles: msg.roles ++ [Electric.Satellite.SatPerms.Role.decode!(delimited)]],
                  rest}
 
+              {5, _, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+                {[triggers: Protox.Decode.validate_string(delimited)], rest}
+
               {tag, wire_type, rest} ->
                 {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
                 {[], rest}
@@ -13190,7 +13212,8 @@
           1 => {:id, {:scalar, 0}, :int64},
           2 => {:user_id, {:scalar, ""}, :string},
           3 => {:rules, {:scalar, nil}, {:message, Electric.Satellite.SatPerms.Rules}},
-          4 => {:roles, :unpacked, {:message, Electric.Satellite.SatPerms.Role}}
+          4 => {:roles, :unpacked, {:message, Electric.Satellite.SatPerms.Role}},
+          5 => {:triggers, {:scalar, ""}, :string}
         }
       end
 
@@ -13203,6 +13226,7 @@
           id: {1, {:scalar, 0}, :int64},
           roles: {4, :unpacked, {:message, Electric.Satellite.SatPerms.Role}},
           rules: {3, {:scalar, nil}, {:message, Electric.Satellite.SatPerms.Rules}},
+          triggers: {5, {:scalar, ""}, :string},
           user_id: {2, {:scalar, ""}, :string}
         }
       end
@@ -13247,6 +13271,15 @@
             name: :roles,
             tag: 4,
             type: {:message, Electric.Satellite.SatPerms.Role}
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "triggers",
+            kind: {:scalar, ""},
+            label: :optional,
+            name: :triggers,
+            tag: 5,
+            type: :string
           }
         ]
       end
@@ -13380,6 +13413,35 @@
 
           []
         ),
+        (
+          def field_def(:triggers) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "triggers",
+               kind: {:scalar, ""},
+               label: :optional,
+               name: :triggers,
+               tag: 5,
+               type: :string
+             }}
+          end
+
+          def field_def("triggers") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "triggers",
+               kind: {:scalar, ""},
+               label: :optional,
+               name: :triggers,
+               tag: 5,
+               type: :string
+             }}
+          end
+
+          []
+        ),
         def field_def(_) do
           {:error, :no_such_field}
         end
@@ -13415,6 +13477,9 @@
       end,
       def default(:roles) do
         {:error, :no_default_value}
+      end,
+      def default(:triggers) do
+        {:ok, ""}
       end,
       def default(_) do
         {:error, :no_such_field}

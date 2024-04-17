@@ -12,7 +12,7 @@ defmodule ElectricTest.PermissionsHelpers do
            "create table workspaces (id uuid primary key)",
            "create table projects (id uuid primary key, workspace_id uuid not null references workspaces (id))",
            "create table issues (id uuid primary key, project_id uuid not null references projects (id), description text)",
-           "create table comments (id uuid primary key, issue_id uuid not null references issues (id), comment text, owner text, author_id uuid references users (id))",
+           "create table comments (id uuid primary key, issue_id uuid not null references issues (id), comment text, owner text, author_id text references users (id))",
            "create table reactions (id uuid primary key, comment_id uuid not null references comments (id), is_public bool)",
            "create table users (id uuid primary key, role text not null default 'normie')",
            "create table teams (id uuid primary key)",
@@ -305,8 +305,11 @@ defmodule ElectricTest.PermissionsHelpers do
   defmodule Roles do
     alias Electric.Satellite.SatPerms, as: P
 
-    def role(role_name, assign_id) do
-      %P.Role{role: role_name, assign_id: assign_id}
+    def role(role_name, assign_id, attrs \\ []) do
+      struct(
+        %P.Role{role: role_name, assign_id: assign_id},
+        attrs
+      )
     end
 
     def role(role_name, table, id, assign_id, attrs \\ []) do
@@ -557,8 +560,8 @@ defmodule ElectricTest.PermissionsHelpers do
     end
   end
 
-  def table(relation) do
-    Electric.Utils.inspect_relation(relation)
+  def table({_schema, table}) do
+    table
   end
 
   def perms_build(cxt, grants, roles, attrs \\ []) do
@@ -618,6 +621,83 @@ defmodule ElectricTest.PermissionsHelpers do
     end
   end
 
+  defmodule Sqlite do
+    alias Electric.Postgres.Extension.SchemaLoader
+
+    def build_tree(conn, data, schema) do
+      {conn, _} = Enum.reduce(data, {conn, nil}, &build_data_tree(&1, &2, schema))
+      conn
+    end
+
+    defp build_data_tree({table, id, children}, {conn, parent}, schema) when is_list(children) do
+      build_data_tree({table, id, %{}, children}, {conn, parent}, schema)
+    end
+
+    defp build_data_tree({table, id}, {conn, parent}, schema) do
+      build_data_tree({table, id, %{}, []}, {conn, parent}, schema)
+    end
+
+    defp build_data_tree({table, id, attrs, children} = v, {conn, parent}, schema) do
+      {:ok, pks} = SchemaLoader.Version.primary_keys(schema, table)
+
+      ids =
+        id
+        |> List.wrap()
+        |> Enum.map(&"'#{&1}'")
+
+      init =
+        case parent do
+          nil ->
+            {
+              pks,
+              ids
+            }
+
+          {_table, _id, _attrs, _children} = parent ->
+            {
+              pks ++ fks(schema, table, parent),
+              ids ++ ids(parent)
+            }
+        end
+
+      {cols, vals} =
+        Enum.reduce(attrs, init, fn {k, v}, {ks, vs} ->
+          {[k | ks], ["'#{v}'" | vs]}
+        end)
+
+      query = "INSERT INTO #{t(v)} (#{Enum.join(cols, ",")}) VALUES (#{Enum.join(vals, ",")})"
+
+      :ok = Exqlite.Sqlite3.execute(conn, query)
+
+      {conn, _} = Enum.reduce(children, {conn, v}, &build_data_tree(&1, &2, schema))
+      {conn, parent}
+    end
+
+    defp t({{_, table}, _id, _attrs, _children}) do
+      table
+    end
+
+    defp fks(schema, table, {parent, _, _, _}) do
+      {:ok, fks} = SchemaLoader.Version.foreign_keys(schema, table, parent)
+      fks
+    end
+
+    defp ids({_table, id, _attrs, _}) do
+      id
+      |> List.wrap()
+      |> Enum.map(&"'#{&1}'")
+    end
+
+    def query(%{conn: nil}, _), do: nil
+
+    def query(%{conn: conn}, sql) do
+      {:ok, stmt} = Exqlite.Sqlite3.prepare(conn, sql)
+      Exqlite.Sqlite3.fetch_all(conn, stmt) |> dbg
+    end
+
+    def query(_, _), do: nil
+  end
+
   defmodule Server do
     use Electric.Postgres.MockSchemaLoader
 
@@ -660,5 +740,155 @@ defmodule ElectricTest.PermissionsHelpers do
     def validate_write(perms, tree, tx) do
       Permissions.validate_write(perms, tree, tx)
     end
+  end
+
+  defmodule Client do
+    use Electric.Postgres.MockSchemaLoader
+
+    alias Electric.Replication.Changes
+    alias Electric.Satellite.Permissions
+
+    def setup(cxt) do
+      %{migrations: migrations, data: data} = cxt
+      {:ok, conn} = Exqlite.Sqlite3.open(":memory:")
+
+      conn =
+        Enum.reduce(migrations, conn, fn {_version, stmts}, conn ->
+          for stmt <- stmts do
+            :ok = Exqlite.Sqlite3.execute(conn, stmt)
+          end
+
+          conn
+        end)
+
+      loader_spec = MockSchemaLoader.backend_spec(migrations: migrations)
+
+      {:ok, loader} = SchemaLoader.connect(loader_spec, [])
+      {:ok, schema_version} = SchemaLoader.load(loader)
+
+      conn = Sqlite.build_tree(conn, data, schema_version)
+
+      {:ok, tree: conn, conn: conn, schema_version: schema_version, loader: loader}
+    end
+
+    def reset(cxt) do
+      :ok = Exqlite.Sqlite3.close(cxt.conn)
+      {:ok, state} = cxt.module.setup(cxt)
+      Map.merge(cxt, Map.new(state))
+    end
+
+    def name, do: "Client"
+
+    def perms(cxt, grants, roles, attrs \\ []) do
+      perms = ElectricTest.PermissionsHelpers.perms_build(cxt, grants, roles, attrs)
+
+      query = Permissions.Client.permissions_triggers(perms, cxt.schema_version)
+
+      # IO.puts(query)
+
+      tx =
+        IO.iodata_to_binary([
+          "BEGIN EXCLUSIVE TRANSACTION;\n\n",
+          query,
+          "\nCOMMIT;\n"
+        ])
+
+      :ok = Exqlite.Sqlite3.execute(cxt.conn, tx)
+
+      perms
+    end
+
+    def table({_schema, table}), do: table
+
+    def validate_write(perms, conn, tx) do
+      query = build_query(tx)
+
+      case Exqlite.Sqlite3.execute(conn, query) do
+        :ok ->
+          {:ok, perms}
+
+        {:error, _} = error ->
+          Exqlite.Sqlite3.execute(conn, "ROLLBACK")
+          error
+      end
+    end
+
+    def apply_change(conn, _roots, change) do
+      query = build_query(%Changes.Transaction{changes: [change]})
+
+      with {:error, _} = error <- Exqlite.Sqlite3.execute(conn, query) do
+        Exqlite.Sqlite3.execute(conn, "ROLLBACK")
+        error
+      end
+    end
+
+    defp build_query(%Changes.Transaction{changes: changes}) do
+      IO.iodata_to_binary(
+        [
+          "BEGIN;",
+          Enum.map(changes, &change_to_stmt/1),
+          "COMMIT;"
+        ]
+        |> Enum.intersperse("\n")
+      )
+    end
+
+    defp change_to_stmt(%Changes.NewRecord{relation: relation, record: record}) do
+      {cols, vals} = columns_values(record)
+
+      [
+        "INSERT INTO ",
+        t(relation),
+        " (",
+        Enum.join(cols, ", "),
+        ") VALUES (",
+        Enum.join(vals, ", "),
+        ");"
+      ]
+    end
+
+    defp change_to_stmt(%Changes.UpdatedRecord{} = change) do
+      %{relation: relation, old_record: old, record: new, changed_columns: changed} = change
+
+      cols =
+        new
+        |> Enum.filter(fn {k, _} -> MapSet.member?(changed, k) end)
+        |> columns_values()
+        |> Tuple.to_list()
+        |> Enum.zip()
+
+      [
+        "UPDATE ",
+        t(relation),
+        " SET ",
+        Enum.map(cols, fn {k, v} -> [k, " = ", v] end) |> Enum.intersperse(", "),
+        " WHERE ",
+        "id = ",
+        v(Map.fetch!(old, "id")),
+        ";"
+      ]
+    end
+
+    defp change_to_stmt(%Changes.DeletedRecord{relation: relation, old_record: old}) do
+      [
+        "DELETE FROM ",
+        t(relation),
+        " WHERE ",
+        "id = ",
+        v(Map.fetch!(old, "id")),
+        ";"
+      ]
+    end
+
+    defp t({_, table}), do: table
+
+    defp columns_values(record) do
+      Enum.reduce(record, {[], []}, fn {k, v}, {cols, vals} ->
+        {[k | cols], [v(v) | vals]}
+      end)
+    end
+
+    defp v(s) when is_binary(s), do: "'#{s}'"
+    defp v(i), do: "#{i}"
   end
 end

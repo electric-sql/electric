@@ -739,4 +739,10 @@ message SatPerms {
     string user_id = 2;
     Rules rules = 3;
     repeated Role roles = 4;
+    // `triggers` is the sql code to install these permissions as triggers in
+    // the local db.
+    // The assumption is that the entire message is compressed before sending
+    // over the wire so just include the trigger sql directly rather than
+    // compress it separately.
+    string triggers = 5;
 }
