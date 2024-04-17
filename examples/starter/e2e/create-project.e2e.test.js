@@ -136,3 +136,17 @@ test.serial('should set environment variables for project', async (t) => {
   )
   await assertEnvFile(t, electricPort, electricProxyPort)
 })
+
+test.serial('should be able to use interactive prompt', async (t) => {
+  await t.notThrowsAsync(() =>
+    runCommand(`npx create-electric-app`, tempDir, [
+      testAppName,
+      'react',
+      '1234',
+      '12345',
+    ]),
+  )
+
+  await assertPackageJson(t)
+  await assertEnvFile(t, 1234, 12345)
+})
