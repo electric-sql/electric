@@ -11,9 +11,9 @@ import {
   Relation,
   SatelliteError,
   SatelliteErrorCode,
-  TypeDecoder,
   subsDataErrorToSatelliteError,
 } from '../../util'
+import type { TypeDecoder } from '../../util/encoders'
 import { deserializeRow } from '../client'
 import {
   InitialDataChange,

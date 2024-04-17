@@ -1,14 +1,13 @@
 import test from 'ava'
 
+import { getWaiter, isObject } from '../../src/util/common'
 import {
-  getWaiter,
   base64,
   textEncoder,
   textDecoder,
-  isObject,
   blobToHexString,
   hexStringToBlob,
-} from '../../src/util/common'
+} from '../../src/util/encoders'
 import { SatelliteError, SatelliteErrorCode } from '../../src/util/types'
 
 const OriginalEncoder = globalThis['TextEncoder']
