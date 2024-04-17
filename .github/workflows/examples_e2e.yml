@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
+  test_web:
     timeout-minutes: 30
     runs-on: ubuntu-latest
     strategy:
