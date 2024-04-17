@@ -450,10 +450,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
         end
 
       discarded_acc =
-        merge_discarded(
-          discarded_acc,
-          {@additional_data_ets, {client_id, {:before_txid, txn.xid}}}
-        )
+        merge_discarded(discarded_acc, {@additional_data_ets, {client_id, {:lte_txid, txn.xid}}})
 
       {graph, pending_actions, count + 1, discarded_acc}
     end)
@@ -551,10 +548,10 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     end
   end
 
-  defp delete_additional_data({client_id, _xmin, order, _subject, _subscription_id} = key) do
+  defp delete_additional_data({client_id, xmin, order, _subject, _subscription_id} = key) do
     :ets.delete(@additional_data_ets, key)
 
-    {@additional_data_ets, {client_id, {:ord, order}}}
+    {@additional_data_ets, {client_id, {:pk, xmin, order}}}
   end
 
   @insert_subscription_query """
@@ -702,21 +699,25 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     )
   end
 
-  defp merge_discarded(acc, {@additional_data_ets, {client_id, {:ord, order}}}) do
+  defp merge_discarded(acc, {@additional_data_ets, {client_id, {:pk, xmin, order}}}) do
     Map.update(
       acc,
       @additional_data_ets,
-      {client_id, [order], nil},
-      fn {^client_id, orders, txid} -> {client_id, [order | orders], txid} end
+      {client_id, [xmin], [order], nil},
+      fn {^client_id, xmins, orders, txid} ->
+        {client_id, [xmin | xmins], [order | orders], txid}
+      end
     )
   end
 
-  defp merge_discarded(acc, {@additional_data_ets, {client_id, {:before_txid, new_txid}}}) do
+  defp merge_discarded(acc, {@additional_data_ets, {client_id, {:lte_txid, new_txid}}}) do
     Map.update(
       acc,
       @additional_data_ets,
-      {client_id, [], new_txid},
-      fn {^client_id, orders, txid} -> {client_id, orders, max(new_txid, txid)} end
+      {client_id, [], [], new_txid},
+      fn {^client_id, xmins, orders, txid} ->
+        {client_id, xmins, orders, max(new_txid, txid)}
+      end
     )
   end
 
@@ -731,7 +732,10 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   DELETE FROM
     #{Extension.client_additional_data_table()}
   WHERE
-    client_id = $1 AND (ord = ANY($2) OR coalesce(min_txid <= $3, false))
+    client_id = $1 AND (
+      (min_txid, ord) = ANY(SELECT * FROM unnest($2::xid8[], $3::bigint[]))
+      OR coalesce(min_txid <= $4, false)
+    )
   """
 
   # Given the accumulator of discarded ETS entries, issue one DELETE statement per table to
@@ -743,8 +747,8 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
       {@actions_ets, {client_id, txids}} ->
         Client.query!(@delete_actions_for_xids_query, [client_id, txids])
 
-      {@additional_data_ets, {client_id, orders, txid}} ->
-        Client.query!(@delete_additional_data_query, [client_id, orders, txid])
+      {@additional_data_ets, {client_id, xmins, orders, txid}} ->
+        Client.query!(@delete_additional_data_query, [client_id, xmins, orders, txid])
     end)
   end
 
