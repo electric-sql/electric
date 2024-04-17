@@ -151,9 +151,9 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
 
   alias Electric.Postgres.CachedWal
   alias Electric.Postgres.Extension
+  alias Electric.Postgres.Repo.Client
   alias Electric.Replication.Connectors
   alias Electric.Replication.Changes.Transaction
-  alias Electric.Replication.Postgres.Client
   alias Electric.Replication.Shapes
   alias Electric.Replication.Shapes.ShapeRequest
   alias Electric.Utils

@@ -9,13 +9,12 @@ defmodule Electric.Satellite.Protocol do
 
   alias SatSubsResp.SatSubsError
 
-  alias Electric.Utils
-  alias Electric.Replication.Changes.Transaction
-  alias Electric.Postgres.Extension.SchemaCache
-  alias Electric.Postgres.Schema
   alias Electric.Postgres.CachedWal
+  alias Electric.Postgres.Extension.SchemaCache
+  alias Electric.Postgres.Repo.Client
+  alias Electric.Postgres.Schema
   alias Electric.Replication.Changes
-  alias Electric.Replication.Postgres.Client
+  alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.Shapes
   alias Electric.Replication.Shapes.ShapeRequest
   alias Electric.Satellite.Serialization
@@ -23,6 +22,7 @@ defmodule Electric.Satellite.Protocol do
   alias Electric.Satellite.WriteValidation
   alias Electric.Satellite.ClientReconnectionInfo
   alias Electric.Telemetry.Metrics
+  alias Electric.Utils
 
   alias Electric.Satellite.Protocol.{State, InRep, OutRep, Telemetry}
   import Electric.Satellite.Protocol.State, only: :macros
