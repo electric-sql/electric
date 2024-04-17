@@ -5,8 +5,7 @@
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
-    "deps": "npx playwright install --with-deps",
-    "e2e": "npx playwright test"
+    "web-e2e": "npx playwright install --with-deps && npx playwright test"
   },
   "devDependencies": {
     "@playwright/test": "^1.43.1",
