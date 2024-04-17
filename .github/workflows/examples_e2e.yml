@@ -21,23 +21,22 @@ jobs:
       fail-fast: false
       matrix:
         example_dir: ['examples/web-wa-sqlite', 'examples/web-wa-sqlite-vuejs']
+    defaults:
+      run:
+        working-directory: ${{ matrix.example_dir }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: lts/*
       - name: Install dependencies
-        working-directory: ${{ matrix.example_dir }}
         run: npm ci
       - name: Start backend, run migrations, generate client
-        working-directory: ${{ matrix.example_dir }}
         run: |
           npm run backend:up &&
           npm run db:migrate &&
           npm run client:generate
       - name: Start dev server in background
-        working-directory: ${{ matrix.example_dir }}
         run: npm run dev < /dev/null &
       - name: Run e2e tests
-        working-directory: ${{ matrix.example_dir }}
         run: npm run e2e
