@@ -28,7 +28,6 @@
   "devDependencies": {
     "@databases/pg-migrations": "^5.0.3",
     "@playwright/test": "^1.43.1",
-    "@types/node": "^20.12.7",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
     "@typescript-eslint/parser": "^6.21.0",
     "@vitejs/plugin-vue": "^5.0.4",
