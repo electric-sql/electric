@@ -373,7 +373,7 @@ export const get_blob = async (electric: Electric, id: string) => {
     }
   })
 
-  if (res) {
+  if (res.blob) {
     // The PG driver returns a NodeJS Buffer but the e2e test matches on a plain Uint8Array.
     // So we convert the Buffer to a Uint8Array.
     // Note that Buffer is a subclass of Uint8Array.
