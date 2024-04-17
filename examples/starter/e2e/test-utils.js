@@ -59,3 +59,22 @@ export function readJsonFile(filePath) {
     })
 }
 
+/**
+ * Asserts that a file contains a specific expression.
+ *
+ * @param {string} filePath - The path to the file.
+ * @param {RegExp} searchExpression - The regular expression to search for in the file.
+ * @throws {Error} If the file does not exist or does not contain the expression.
+ */
+export function assertFileContains(filePath, searchExpression) {
+  return fs
+    .readFile(filePath, 'utf-8')
+    .catch(() => {
+      throw new Error(`File ${filePath} does not exist`)
+    })
+    .then((f) => {
+      if (!searchExpression.test(f)) {
+        throw new Error(`File ${filePath} does not contain expression`)
+      }
+    })
+}

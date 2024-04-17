@@ -3,6 +3,7 @@ import * as path from 'path'
 import * as fs from 'fs/promises'
 import {
   assertDirectoryExists,
+  assertFileContains,
   assertFileExists,
   readJsonFile,
   runCommand,
@@ -16,6 +17,7 @@ const testAppSlug = 'test-app'
 const testAppAndroidProjectName = 'TestApp'
 const testAppDisplayName = 'Test App'
 const testAppDir = path.join(tempDir, testAppName)
+const envFilePath = path.join(testAppDir, '.env.local')
 
 async function assertPackageJson(t) {
   const packageJsonPath = path.join(testAppDir, 'package.json')
@@ -24,6 +26,26 @@ async function assertPackageJson(t) {
   const packageJson = await readJsonFile(packageJsonPath)
 
   t.is(packageJson.name, testAppName)
+}
+
+async function assertEnvFile(
+  t,
+  electricPort = 5133,
+  electricProxyPort = 65432,
+) {
+  await t.notThrowsAsync(() => assertFileExists(envFilePath))
+  await t.notThrowsAsync(() =>
+    assertFileContains(
+      envFilePath,
+      new RegExp(`ELECTRIC_SERVICE=http:\/\/localhost:${electricPort}`),
+    ),
+  )
+  await t.notThrowsAsync(() =>
+    assertFileContains(
+      envFilePath,
+      new RegExp(`ELECTRIC_PG_PROXY_PORT=${electricProxyPort}`),
+    ),
+  )
 }
 
 test.serial.before(async (t) => {
@@ -45,6 +67,7 @@ test.serial('should create React project', async (t) => {
   )
 
   await assertPackageJson(t)
+  await assertEnvFile(t)
 })
 
 test.serial('should create Vue.js project', async (t) => {
@@ -56,6 +79,7 @@ test.serial('should create Vue.js project', async (t) => {
   )
 
   await assertPackageJson(t)
+  await assertEnvFile(t)
 })
 
 test.serial('should create Expo project', async (t) => {
@@ -67,6 +91,7 @@ test.serial('should create Expo project', async (t) => {
   )
 
   await assertPackageJson(t)
+  await assertEnvFile(t)
 
   // assert project name has been modified appropriately
   const appJson = await readJsonFile(path.join(testAppDir, 'app.json'))
@@ -84,6 +109,7 @@ test.serial('should create React Native project', async (t) => {
   )
 
   await assertPackageJson(t)
+  await assertEnvFile(t)
 
   // assert project name has been modified appropriately
   const appJson = await readJsonFile(path.join(testAppDir, 'app.json'))
@@ -97,4 +123,16 @@ test.serial('should create React Native project', async (t) => {
   await t.notThrowsAsync(() =>
     assertDirectoryExists(path.join(testAppDir, 'android')),
   )
+})
+
+test.serial('should set environment variables for project', async (t) => {
+  const electricPort = 1234
+  const electricProxyPort = 12345
+  await t.notThrowsAsync(() =>
+    runCommand(
+      `npx create-electric-app ${testAppName} --electric-port ${electricPort} --electric-proxy-port ${electricProxyPort}`,
+      tempDir,
+    ),
+  )
+  await assertEnvFile(t, electricPort, electricProxyPort)
 })
