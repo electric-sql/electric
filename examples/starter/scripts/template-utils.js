@@ -20,9 +20,8 @@ const ignoreDirs = [
   '.git',
   'ios',
   'android',
-  'e2e',
 ]
-const ignoreFiles = ['package-lock.json', '.env', 'playwright.config.ts']
+const ignoreFiles = ['package-lock.json', '.env']
 
 /*
  * Replaces the first occurence of `find` by `replace` in the file `file`.
@@ -137,10 +136,6 @@ async function copyTemplateOverlayFiles(
     packageJson.name = 'my-electric-app'
     packageJson.version = '0.1.0'
     delete packageJson['license']
-
-    // Remove e2e related code (admittedly a bit hacky)
-    delete packageJson['devDependencies']['@playwright/test']
-    delete packageJson['scripts']['e2e']
     return packageJson
   })
 
