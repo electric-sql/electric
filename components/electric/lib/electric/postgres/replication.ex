@@ -83,6 +83,10 @@ defmodule Electric.Postgres.Replication do
     :CREATE_INDEX
   end
 
+  def stmt_type(%Pg.CreateEnumStmt{}) do
+    :CREATE_ENUM_TYPE
+  end
+
   def stmt_type(%Pg.AlterTableStmt{cmds: [cmd]}) do
     case cmd do
       %{node: {:alter_table_cmd, %Pg.AlterTableCmd{subtype: :AT_AddColumn}}} ->
@@ -137,9 +141,29 @@ defmodule Electric.Postgres.Replication do
         }
       )
 
+    enum_type =
+      ast
+      |> Enum.filter(&match?(%Pg.CreateEnumStmt{}, &1))
+      |> Enum.map(fn enum_ast ->
+        name = AST.map(enum_ast.type_name)
+        values = AST.map(enum_ast.vals)
+        %SatOpMigrate.EnumType{name: Dialect.table_name(name, dialect), values: values}
+      end)
+      |> case do
+        [] -> nil
+        [enum] -> enum
+      end
+
+    affected_entity =
+      case {table, enum_type} do
+        {%SatOpMigrate.Table{}, nil} -> {:table, table}
+        {nil, %SatOpMigrate.EnumType{}} -> {:enum_type, enum_type}
+        {nil, nil} -> nil
+      end
+
     {%SatOpMigrate{
        version: SchemaLoader.Version.version(schema_version),
-       table: table,
+       affected_entity: affected_entity,
        stmts: stmts
      }, relations}
   end
@@ -160,6 +184,9 @@ defmodule Electric.Postgres.Replication do
       } ->
         true
 
+      %Pg.CreateEnumStmt{} ->
+        true
+
       _else ->
         false
     end)
@@ -175,10 +202,18 @@ defmodule Electric.Postgres.Replication do
   end
 
   defp replication_msg_table_col(%Proto.Column{} = column, dialect) do
+    has_not_null_constraint? =
+      Enum.find_value(
+        column.constraints,
+        false,
+        &match?(%Proto.Constraint{constraint: {:not_null, _}}, &1)
+      )
+
     %SatOpMigrate.Column{
       name: column.name,
       pg_type: replication_msg_table_col_type(column.type),
-      sqlite_type: Dialect.type_name(column.type, dialect)
+      sqlite_type: Dialect.type_name(column.type, dialect),
+      is_nullable: not has_not_null_constraint?
     }
   end
 

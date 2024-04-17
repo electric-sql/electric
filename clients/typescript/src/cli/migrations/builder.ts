@@ -1,12 +1,7 @@
 import * as z from 'zod'
 import path from 'path'
 import * as fs from 'fs/promises'
-import {
-  Migration,
-  parseMetadata,
-  MetaData,
-  makeMigration,
-} from '../../migrators'
+import { parseMetadata, MetaData, makeMigration } from '../../migrators'
 import { isObject } from '../../util'
 
 /*
@@ -34,11 +29,11 @@ import { isObject } from '../../util'
  *                       Built migrations contain the DDL statements and the triggers.
  */
 export async function buildMigrations(
-  migrationsFolder: string,
+  migrationsMetadata: MetaData[],
   migrationsFile: string
 ) {
   try {
-    const migrations = await loadMigrations(migrationsFolder)
+    const migrations = migrationsMetadata.map(makeMigration)
     // Update the configuration file
     await fs.writeFile(
       migrationsFile,
@@ -68,21 +63,18 @@ export async function getMigrationNames(
 }
 
 /**
- * Loads all migrations that are present in the provided migrations folder.
+ * Loads metadata for all migrations that are present in the provided migrations folder.
  * @param migrationsFolder Folder where migrations are stored.
- * @returns An array of migrations.
+ * @returns An array of migrations metadata.
  */
 export async function loadMigrations(
   migrationsFolder: string
-): Promise<Migration[]> {
+): Promise<MetaData[]> {
   const dirNames = await getMigrationNames(migrationsFolder)
   const migrationPaths = dirNames.map((dirName) =>
     path.join(migrationsFolder, dirName, 'metadata.json')
   )
-  const migrationMetaDatas = await Promise.all(
-    migrationPaths.map(readMetadataFile)
-  )
-  return migrationMetaDatas.map(makeMigration)
+  return Promise.all(migrationPaths.map(readMetadataFile))
 }
 
 /**

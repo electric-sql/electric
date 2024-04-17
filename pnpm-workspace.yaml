@@ -1,6 +1,7 @@
 packages:
   - 'clients/typescript'
   - 'e2e/satellite_client'
+  - 'examples/electric-app'
   - 'examples/starter'
   - 'generator'
   - 'components/electric'

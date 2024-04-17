@@ -459,12 +459,14 @@ defmodule Electric.Satellite.SerializationTest do
                stmts: [
                  %SatOpMigrate.Stmt{type: :CREATE_TABLE, sql: sql1}
                ],
-               table: %SatOpMigrate.Table{
-                 name: "something_else",
-                 columns: [%SatOpMigrate.Column{name: "id", sqlite_type: "TEXT"}],
-                 fks: [],
-                 pks: ["id"]
-               }
+               affected_entity:
+                 {:table,
+                  %SatOpMigrate.Table{
+                    name: "something_else",
+                    columns: [%SatOpMigrate.Column{name: "id", sqlite_type: "TEXT"}],
+                    fks: [],
+                    pks: ["id"]
+                  }}
              } = migration1
 
       assert sql1 =~ ~r/^CREATE TABLE "something_else"/
@@ -473,12 +475,14 @@ defmodule Electric.Satellite.SerializationTest do
                stmts: [
                  %SatOpMigrate.Stmt{type: :CREATE_TABLE, sql: sql2}
                ],
-               table: %SatOpMigrate.Table{
-                 name: "other_thing",
-                 columns: [%SatOpMigrate.Column{name: "id", sqlite_type: "TEXT"}],
-                 fks: [],
-                 pks: ["id"]
-               }
+               affected_entity:
+                 {:table,
+                  %SatOpMigrate.Table{
+                    name: "other_thing",
+                    columns: [%SatOpMigrate.Column{name: "id", sqlite_type: "TEXT"}],
+                    fks: [],
+                    pks: ["id"]
+                  }}
              } = migration2
 
       assert sql2 =~ ~r/^CREATE TABLE "other_thing"/
@@ -487,12 +491,14 @@ defmodule Electric.Satellite.SerializationTest do
                stmts: [
                  %SatOpMigrate.Stmt{type: :CREATE_TABLE, sql: sql3}
                ],
-               table: %SatOpMigrate.Table{
-                 name: "yet_another_thing",
-                 columns: [%SatOpMigrate.Column{name: "id", sqlite_type: "TEXT"}],
-                 fks: [],
-                 pks: ["id"]
-               }
+               affected_entity:
+                 {:table,
+                  %SatOpMigrate.Table{
+                    name: "yet_another_thing",
+                    columns: [%SatOpMigrate.Column{name: "id", sqlite_type: "TEXT"}],
+                    fks: [],
+                    pks: ["id"]
+                  }}
              } = migration3
 
       assert sql3 =~ ~r/^CREATE TABLE "yet_another_thing"/

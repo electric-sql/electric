@@ -1,7 +1,10 @@
 import test from 'ava'
 import fs from 'fs/promises'
 import path from 'path'
-import { buildMigrations } from '../../../src/cli/migrations/builder'
+import {
+  loadMigrations,
+  buildMigrations,
+} from '../../../src/cli/migrations/builder'
 
 const migrationsFolder = path.join('./test/migrators/support/migrations')
 
@@ -31,7 +34,8 @@ test('write migration to configuration file', async (t) => {
   const ogMigrations = await importMigrations()
   t.deepEqual(ogMigrations, [])
 
-  await buildMigrations(migrationsFolder, testMigrationsFile)
+  const migrationsMetadata = await loadMigrations(migrationsFolder)
+  await buildMigrations(migrationsMetadata, testMigrationsFile)
   const newMigrations = await importMigrations()
   const versions = newMigrations.map((m: any) => m.version)
   t.deepEqual(versions, ['20230613112725_814', '20230613112735_992'])

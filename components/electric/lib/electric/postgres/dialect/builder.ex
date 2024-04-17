@@ -73,6 +73,14 @@ defmodule Electric.Postgres.Dialect.Builder do
     quote_name(name)
   end
 
+  def quote_name([schema, name]) do
+    quote_name(schema) <> "." <> quote_name(name)
+  end
+
+  def quote_name([name]) do
+    quote_name(name)
+  end
+
   def quote_name(name) when is_binary(name) do
     ~s("#{name}")
   end
@@ -84,6 +92,14 @@ defmodule Electric.Postgres.Dialect.Builder do
 
   def unquoted_name(%Pg.RangeVar{relname: name}) do
     unquoted_name(name)
+  end
+
+  def unquoted_name([_schema, name]) do
+    name
+  end
+
+  def unquoted_name([name]) do
+    name
   end
 
   def unquoted_name(name) when is_binary(name) do
