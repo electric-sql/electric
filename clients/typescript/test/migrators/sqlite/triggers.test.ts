@@ -10,8 +10,12 @@ import {
 } from '../../satellite/common'
 import { sqliteBuilder } from '../../../src/migrators/query-builder'
 import { DatabaseAdapter } from '../../../src/drivers/better-sqlite3'
+import { ContextType, triggerTests } from '../triggers'
 
-type Context = { db: Database; migrateDb: () => Promise<void> }
+type Context = ContextType & {
+  db: Database
+}
+
 const test = testAny as TestFn<Context>
 const defaults = satelliteDefaults('main')
 const oplogTable = `"${defaults.oplogTable.namespace}"."${defaults.oplogTable.tablename}"`
@@ -23,7 +27,12 @@ test.beforeEach(async (t) => {
 
   t.context = {
     db,
+    adapter,
+    defaults,
+    personTable,
+    dialect: 'SQLite',
     migrateDb: migrateDb.bind(null, adapter, personTable, sqliteBuilder),
+    stopDb: async () => {},
   }
 })
 
@@ -158,26 +167,7 @@ test('oplog trigger should handle Infinity values correctly', async (t) => {
   })
 })
 
-test('oplog trigger should separate null blobs from empty blobs', async (t) => {
-  const { db, migrateDb } = t.context
-  const tableName = personTable.tableName
-
-  // Migrate the DB with the necessary tables and triggers
-  await migrateDb()
-
-  // Insert null and empty rows in the table
-  const insertRowNullSQL = `INSERT INTO ${tableName} (id, name, age, bmi, int8, blob) VALUES (1, 'John Doe', 30, 25.5, 7, NULL)`
-  const insertRowEmptySQL = `INSERT INTO ${tableName} (id, name, age, bmi, int8, blob) VALUES (2, 'John Doe', 30, 25.5, 7, x'')`
-  db.exec(insertRowNullSQL)
-  db.exec(insertRowEmptySQL)
-
-  // Check that the oplog table contains an entry for the inserted row
-  const oplogRows = db
-    .prepare(
-      `SELECT * FROM "${defaults.oplogTable.namespace}"."${defaults.oplogTable.tablename}"`
-    )
-    .all()
-  t.is(oplogRows.length, 2)
-  t.regex(oplogRows[0].newRow, /,\s*"blob":\s*null\s*,/)
-  t.regex(oplogRows[1].newRow, /,\s*"blob":\s*""\s*,/)
-})
+// even though `Context` is a subtype of `ContextType`,
+// we have to cast `test` which is of type `TestFn<Context>` to `TestFn<ContexType>`
+// because `TestFn` does not declare its type parameter to be covariant
+triggerTests(test as unknown as TestFn<ContextType>)
