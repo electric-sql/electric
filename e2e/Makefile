@@ -5,16 +5,13 @@ deps: lux
 	make -C elixir_client build
 	make -C prisma_example build
 
+test_sqlite_and_pg: test_only
+	make -C tests test_pg
+
 test_only:
 	${LUX} --junit tests
 
 test: deps pull test_only
-
-test_pg:
-	DIALECT=Postgres make test
-
-test_only_pg:
-	DIALECT=Postgres make test_only
 
 pull:
 	docker compose -f services_templates.yaml pull \
