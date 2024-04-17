@@ -122,11 +122,22 @@ export interface SatInStartReplicationReq {
    * observed additional data before disconnect
    */
   observedTransactionData: Long[];
+  /**
+   * The SQL dialect used by the client
+   * Defaults to SQLite if not specified
+   */
+  sqlDialect?: SatInStartReplicationReq_Dialect | undefined;
 }
 
 export enum SatInStartReplicationReq_Option {
   /** NONE - Required by the Protobuf spec. */
   NONE = 0,
+  UNRECOGNIZED = -1,
+}
+
+export enum SatInStartReplicationReq_Dialect {
+  SQLITE = 0,
+  POSTGRES = 1,
   UNRECOGNIZED = -1,
 }
 
@@ -418,22 +429,32 @@ export interface SatOpMigrate {
    */
   version: string;
   /**
-   * a list of sql ddl statements to apply, converted from the pg originals
+   * A list of SQL DDL statements to apply, translated from Postgres to SQLite dialect.
+   *
    * The migration machinery converts an `ALTER TABLE action1, action2, action3;`
    * query into a set of 3: `ALTER TABLE action1; ALTER TABLE action2,` etc
    * so we need to support 1+ statements for every migration event.
+   *
+   * There is an exception for enum types. Since SQLite does not have a matching concept,
+   * the original Postgres DDL statement `CREATE TYPE ... AS ENUM (...)` is included as is,
+   * without translation.
    */
   stmts: SatOpMigrate_Stmt[];
   /**
    * The resulting table definition after applying these migrations
    * (a DDL statement can only affect one table at a time).
    */
-  table?: SatOpMigrate_Table | undefined;
+  table?:
+    | SatOpMigrate_Table
+    | undefined;
+  /** This field is set if stmts includes a single item which is an enum type definition. */
+  enumType?: SatOpMigrate_EnumType | undefined;
 }
 
 export enum SatOpMigrate_Type {
   CREATE_TABLE = 0,
   CREATE_INDEX = 1,
+  CREATE_ENUM_TYPE = 2,
   ALTER_ADD_COLUMN = 6,
   UNRECOGNIZED = -1,
 }
@@ -457,9 +478,15 @@ export interface SatOpMigrate_PgColumnType {
   size: number[];
 }
 
+/** reserved 2; */
 export interface SatOpMigrate_Column {
   $type: "Electric.Satellite.SatOpMigrate.Column";
   name: string;
+  /**
+   * deprecated
+   * leaving it here to avoid breaking TypeScript tests that have hard-coded,
+   * base64-encoded SatOpMigrate messages.
+   */
   sqliteType: string;
   pgType: SatOpMigrate_PgColumnType | undefined;
 }
@@ -480,6 +507,12 @@ export interface SatOpMigrate_Table {
   columns: SatOpMigrate_Column[];
   fks: SatOpMigrate_ForeignKey[];
   pks: string[];
+}
+
+export interface SatOpMigrate_EnumType {
+  $type: "Electric.Satellite.SatOpMigrate.EnumType";
+  name: string;
+  values: string[];
 }
 
 /** (Consumer) Request for new subscriptions */
@@ -1102,6 +1135,7 @@ function createBaseSatInStartReplicationReq(): SatInStartReplicationReq {
     subscriptionIds: [],
     schemaVersion: undefined,
     observedTransactionData: [],
+    sqlDialect: undefined,
   };
 }
 
@@ -1128,6 +1162,9 @@ export const SatInStartReplicationReq = {
       writer.uint64(v);
     }
     writer.ldelim();
+    if (message.sqlDialect !== undefined) {
+      writer.uint32(56).int32(message.sqlDialect);
+    }
     return writer;
   },
 
@@ -1193,6 +1230,13 @@ export const SatInStartReplicationReq = {
           }
 
           break;
+        case 7:
+          if (tag !== 56) {
+            break;
+          }
+
+          message.sqlDialect = reader.int32() as any;
+          continue;
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1213,6 +1257,7 @@ export const SatInStartReplicationReq = {
     message.subscriptionIds = object.subscriptionIds?.map((e) => e) || [];
     message.schemaVersion = object.schemaVersion ?? undefined;
     message.observedTransactionData = object.observedTransactionData?.map((e) => Long.fromValue(e)) || [];
+    message.sqlDialect = object.sqlDialect ?? undefined;
     return message;
   },
 };
@@ -2709,7 +2754,7 @@ export const SatOpRow = {
 messageTypeRegistry.set(SatOpRow.$type, SatOpRow);
 
 function createBaseSatOpMigrate(): SatOpMigrate {
-  return { $type: "Electric.Satellite.SatOpMigrate", version: "", stmts: [], table: undefined };
+  return { $type: "Electric.Satellite.SatOpMigrate", version: "", stmts: [], table: undefined, enumType: undefined };
 }
 
 export const SatOpMigrate = {
@@ -2724,6 +2769,9 @@ export const SatOpMigrate = {
     }
     if (message.table !== undefined) {
       SatOpMigrate_Table.encode(message.table, writer.uint32(26).fork()).ldelim();
+    }
+    if (message.enumType !== undefined) {
+      SatOpMigrate_EnumType.encode(message.enumType, writer.uint32(34).fork()).ldelim();
     }
     return writer;
   },
@@ -2756,6 +2804,13 @@ export const SatOpMigrate = {
 
           message.table = SatOpMigrate_Table.decode(reader, reader.uint32());
           continue;
+        case 4:
+          if (tag !== 34) {
+            break;
+          }
+
+          message.enumType = SatOpMigrate_EnumType.decode(reader, reader.uint32());
+          continue;
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2775,6 +2830,9 @@ export const SatOpMigrate = {
     message.stmts = object.stmts?.map((e) => SatOpMigrate_Stmt.fromPartial(e)) || [];
     message.table = (object.table !== undefined && object.table !== null)
       ? SatOpMigrate_Table.fromPartial(object.table)
+      : undefined;
+    message.enumType = (object.enumType !== undefined && object.enumType !== null)
+      ? SatOpMigrate_EnumType.fromPartial(object.enumType)
       : undefined;
     return message;
   },
@@ -3167,6 +3225,67 @@ export const SatOpMigrate_Table = {
 };
 
 messageTypeRegistry.set(SatOpMigrate_Table.$type, SatOpMigrate_Table);
+
+function createBaseSatOpMigrate_EnumType(): SatOpMigrate_EnumType {
+  return { $type: "Electric.Satellite.SatOpMigrate.EnumType", name: "", values: [] };
+}
+
+export const SatOpMigrate_EnumType = {
+  $type: "Electric.Satellite.SatOpMigrate.EnumType" as const,
+
+  encode(message: SatOpMigrate_EnumType, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (message.name !== "") {
+      writer.uint32(10).string(message.name);
+    }
+    for (const v of message.values) {
+      writer.uint32(18).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatOpMigrate_EnumType {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatOpMigrate_EnumType();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 10) {
+            break;
+          }
+
+          message.name = reader.string();
+          continue;
+        case 2:
+          if (tag !== 18) {
+            break;
+          }
+
+          message.values.push(reader.string());
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatOpMigrate_EnumType>, I>>(base?: I): SatOpMigrate_EnumType {
+    return SatOpMigrate_EnumType.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatOpMigrate_EnumType>, I>>(object: I): SatOpMigrate_EnumType {
+    const message = createBaseSatOpMigrate_EnumType();
+    message.name = object.name ?? "";
+    message.values = object.values?.map((e) => e) || [];
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatOpMigrate_EnumType.$type, SatOpMigrate_EnumType);
 
 function createBaseSatSubsReq(): SatSubsReq {
   return { $type: "Electric.Satellite.SatSubsReq", subscriptionId: "", shapeRequests: [] };
