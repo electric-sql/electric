@@ -66,6 +66,7 @@ export function isObject(value: any): value is object {
     typeof value === 'object' &&
     value !== null &&
     !Array.isArray(value) &&
-    !ArrayBuffer.isView(value)
+    !ArrayBuffer.isView(value) &&
+    !(value instanceof Date)
   )
 }
