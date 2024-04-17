@@ -36,10 +36,20 @@ defmodule Electric.Replication.Postgres.Client do
   repo module's API for querying and executing SQL statements instead of `epgsql`. See
   `pooled_query!/3` and `query!/2` below for a high-level API built on top of the Ecto repo.
   """
-  @spec with_pool(Connectors.origin(), (-> any)) :: any
-  def with_pool(origin, fun) when is_binary(origin) and is_function(fun, 0) do
+  @spec checkout_from_pool(Connectors.origin(), (-> any)) :: any
+  def checkout_from_pool(origin, fun) when is_binary(origin) and is_function(fun, 0) do
     Repo.put_dynamic_repo(Repo.name(origin))
     Repo.checkout(fun)
+  end
+
+  @doc """
+  Execute the given function in a single transaction using a pooled DB connection.
+
+  The pool is managed by `Electric.Postgres.Repo`, see `checkout/2` for more info.
+  """
+  def pooled_transaction(origin, fun) when is_binary(origin) and is_function(fun, 0) do
+    Repo.put_dynamic_repo(Repo.name(origin))
+    Repo.transaction(fun)
   end
 
   @doc """
@@ -49,7 +59,7 @@ defmodule Electric.Replication.Postgres.Client do
   """
   @spec pooled_query!(Connectors.origin(), String.t(), [term]) :: {[String.t()], [tuple()]}
   def pooled_query!(origin, query_str, params) when is_binary(origin) do
-    with_pool(origin, fn -> query!(query_str, params) end)
+    checkout_from_pool(origin, fn -> query!(query_str, params) end)
   end
 
   @doc """
@@ -58,7 +68,7 @@ defmodule Electric.Replication.Postgres.Client do
   This function assumes a connection has been checked out from a pool managed by
   `Electric.Postgres.Repo` and will fail if that's not the case. Use this to issue multiple
   queries/statements on a single DB connection by wrapping them in an anonymous function and
-  passing it to `with_pool/2`.
+  passing it to `checkout_from_pool/2` or `pooled_transaction/2`.
   """
   @spec query!(String.t(), [term]) :: {[String.t()], [row]}
   def query!(query_str, params \\ []) when is_binary(query_str) and is_list(params) do

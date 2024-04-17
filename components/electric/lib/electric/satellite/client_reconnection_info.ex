@@ -243,7 +243,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
       {{client_id, :_, :_, :subscription, subscription_id}, :_, :_}
     )
 
-    Client.with_pool(origin, fn ->
+    Client.pooled_transaction(origin, fn ->
       subs_uuid = encode_uuid(subscription_id)
 
       Enum.each(
@@ -263,7 +263,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   "shared" rows and/or migrations.
   """
   def store_initial_checkpoint(origin, client_id, wal_pos, sent_rows_graph) do
-    Client.with_pool(origin, fn ->
+    Client.pooled_transaction(origin, fn ->
       :ok = clear_all_data(client_id)
       store_client_checkpoint(client_id, wal_pos, sent_rows_graph)
     end)
@@ -348,7 +348,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
           {new_graph, discarded_acc} =
             advance_by_additional_data(new_graph, client_id, received_data, discarded_acc)
 
-          Client.with_pool(origin, fn ->
+          Client.pooled_transaction(origin, fn ->
             delete_discarded_cache_entries(discarded_acc)
             store_client_checkpoint(client_id, new_wal_pos, new_graph)
             store_client_actions(pending_actions)
@@ -771,7 +771,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
 
     origin = Connectors.origin(connector_config)
 
-    Client.with_pool(origin, fn ->
+    Client.checkout_from_pool(origin, fn ->
       restore_checkpoint_cache(checkpoint_table)
       restore_subscriptions_cache(subscriptions_table)
       restore_additional_data_cache(additional_data_table)
