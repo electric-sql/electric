@@ -51,7 +51,7 @@ const Header = function ({ children }: MenuItemProps) {
 export const Menu = (props: MenuProps) => {
   const {
     id,
-    size,
+    size = 'small',
     onKeywordChange,
     children,
     className,
@@ -101,6 +101,3 @@ export const Menu = (props: MenuProps) => {
 Menu.Item = Item
 Menu.Divider = Divider
 Menu.Header = Header
-Menu.defaultProps = {
-  size: 'small',
-}

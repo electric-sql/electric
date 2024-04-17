@@ -26,7 +26,7 @@ CREATE TABLE  IF NOT EXISTS "comment" (
     "created_at" TIMESTAMPTZ NOT NULL,
     CONSTRAINT "comment_pkey" PRIMARY KEY ("id"),
     -- FOREIGN KEY (username) REFERENCES "user"(username),
-    FOREIGN KEY (issue_id) REFERENCES issue(id)
+    FOREIGN KEY (issue_id) REFERENCES issue(id) DEFERRABLE
 );
 
 -- ⚡

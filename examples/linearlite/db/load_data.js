@@ -2,14 +2,16 @@ import createPool, { sql } from '@databases/pg'
 import fs from 'fs'
 import path from 'path'
 import * as url from 'url'
+import { getConfig } from 'electric-sql/cli'
 
 const dirname = url.fileURLToPath(new URL('.', import.meta.url))
-const DATABASE_URL =
-  process.env.ELECTRIC_DATABASE_URL || process.env.DATABASE_URL
+const { DATABASE_URL: ELECTRIC_DATABASE_URL } = getConfig()
+const DATABASE_URL = process.env.DATABASE_URL || ELECTRIC_DATABASE_URL
+console.log('DATABASE_URL', DATABASE_URL)
 const DATA_DIR = process.env.DATA_DIR || path.resolve(dirname, 'data')
 const ISSUES_TO_LOAD = process.env.ISSUES_TO_LOAD || 112
 
-console.info(`Connecting to Postgres..`)
+console.info(`Connecting to Postgres at ${DATABASE_URL}`)
 const db = createPool(DATABASE_URL)
 
 const issues = JSON.parse(
@@ -37,17 +39,22 @@ async function importComment(db, comment) {
 
 let commentCount = 0
 const issueToLoad = Math.min(ISSUES_TO_LOAD, issues.length)
-await db.tx(async (db) => {
-  for (let i = 0; i < issueToLoad; i++) {
-    process.stdout.write(`Loading issue ${i + 1} of ${issueToLoad}\r`)
-    const issue = issues[i]
-    await importIssue(db, issue)
-    for (const comment of issue.comments) {
-      commentCount++
-      await importComment(db, comment)
+const batchSize = 100
+for (let i = 0; i < issueToLoad; i += batchSize) {
+  await db.tx(async (db) => {
+    db.query(sql`SET CONSTRAINTS ALL DEFERRED;`) // disable FK checks
+    for (let j = i; j < i + batchSize && j < issueToLoad; j++) {
+      process.stdout.write(`Loading issue ${j + 1} of ${issueToLoad}\r`)
+      const issue = issues[j]
+      await importIssue(db, issue)
+      for (const comment of issue.comments) {
+        commentCount++
+        await importComment(db, comment)
+      }
     }
-  }
-})
+  })
+}
+
 process.stdout.write('\n')
 
 db.dispose()
