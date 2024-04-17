@@ -6,6 +6,7 @@ defmodule Electric.Postgres.Repo.Client do
   """
 
   alias Electric.Postgres.Repo
+  alias Electric.Replication.Connectors
 
   @type row :: [term]
 
