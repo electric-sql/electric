@@ -9,12 +9,12 @@ import {
 import { pgBuilder } from '../../../src/migrators/query-builder'
 import { makePgDatabase } from '../../support/node-postgres'
 import { Database, DatabaseAdapter } from '../../../src/drivers/node-postgres'
+import { ContextType, triggerTests } from '../triggers'
 
-type Context = {
+type Context = ContextType & {
   db: Database
-  migrateDb: () => Promise<void>
-  stopPG: () => Promise<void>
 }
+
 const test = testAny as TestFn<Context>
 const defaults = satelliteDefaults('public')
 const oplogTable = `"${defaults.oplogTable.namespace}"."${defaults.oplogTable.tablename}"`
@@ -33,14 +33,18 @@ test.beforeEach(async (t) => {
 
   t.context = {
     db,
+    adapter,
+    defaults,
+    personTable,
+    dialect: 'Postgres',
     migrateDb: migrateDb.bind(null, adapter, personTable, pgBuilder),
-    stopPG: stop,
+    stopDb: stop,
   }
 })
 
 test.afterEach.always(async (t) => {
-  const { stopPG } = t.context as any
-  await stopPG()
+  const { stopDb } = t.context as any
+  await stopDb()
 })
 
 test('generateTableTriggers should create correct triggers for a table', (t) => {
@@ -258,25 +262,7 @@ test('oplog trigger should handle Infinity values correctly', async (t) => {
   })
 })
 
-test('oplog trigger should separate null blobs from empty blobs', async (t) => {
-  const { db, migrateDb } = t.context
-  const namespace = personTable.namespace
-  const tableName = personTable.tableName
-
-  // Migrate the DB with the necessary tables and triggers
-  await migrateDb()
-
-  // Insert null and empty rows in the table
-  const insertRowNullSQL = `INSERT INTO "${namespace}"."${tableName}" (id, name, age, bmi, int8, blob) VALUES (1, 'John Doe', 30, 25.5, 7, NULL)`
-  const insertRowEmptySQL = `INSERT INTO "${namespace}"."${tableName}" (id, name, age, bmi, int8, blob) VALUES (2, 'John Doe', 30, 25.5, 7, '\\x')`
-  await db.exec({ sql: insertRowNullSQL })
-  await db.exec({ sql: insertRowEmptySQL })
-
-  // Check that the oplog table contains an entry for the inserted row
-  const { rows: oplogRows } = await db.exec({
-    sql: `SELECT * FROM "${defaults.oplogTable.namespace}"."${defaults.oplogTable.tablename}"`,
-  })
-  t.is(oplogRows.length, 2)
-  t.regex(oplogRows[0].newRow as string, /,\s*"blob":\s*null\s*,/)
-  t.regex(oplogRows[1].newRow as string, /,\s*"blob":\s*""\s*,/)
-})
+// even though `Context` is a subtype of `ContextType`,
+// we have to cast `test` which is of type `TestFn<Context>` to `TestFn<ContexType>`
+// because `TestFn` does not declare its type parameter to be covariant
+triggerTests(test as unknown as TestFn<ContextType>)
