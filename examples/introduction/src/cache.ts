@@ -2,15 +2,14 @@ import MemoryStorage from 'memorystorage'
 
 const memoryStorage = new MemoryStorage()
 
-const get = (key) => {
+const get = (key: string) => {
   let itemStr
   let storage
 
   try {
     itemStr = localStorage.getItem(key)
     storage = localStorage
-  }
-  catch {
+  } catch {
     itemStr = memoryStorage.getItem(key)
     storage = memoryStorage
   }
@@ -31,21 +30,20 @@ const get = (key) => {
   return item.value
 }
 
-const getRaw = (key) => {
+const getRaw = (key: string) => {
   let value
 
   try {
     value = localStorage.getItem(key)
-  }
-  catch {
+  } catch {
     value = memoryStorage.getItem(key)
   }
 
-  // Note that JSON.parse(null) => null
+  // @ts-expect-error note that JSON.parse(null) => null
   return JSON.parse(value)
 }
 
-const set = (key, value, ttl) => {
+const set = (key: string, value: unknown, ttl: number) => {
   const now = Date.now()
 
   const itemStr = JSON.stringify({
@@ -55,17 +53,15 @@ const set = (key, value, ttl) => {
 
   try {
     localStorage.setItem(key, itemStr)
-  }
-  catch {
+  } catch {
     memoryStorage.setItem(key, itemStr)
   }
 }
 
-const unset = (key) => {
+const unset = (key: string) => {
   try {
     localStorage.removeItem(key)
-  }
-  catch {
+  } catch {
     memoryStorage.removeItem(key)
   }
 }
@@ -74,5 +70,5 @@ export default {
   get: get,
   getRaw: getRaw,
   set: set,
-  unset: unset
+  unset: unset,
 }

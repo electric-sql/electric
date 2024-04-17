@@ -1,8 +1,7 @@
-import React, { createContext, useContext } from 'react'
+import { createContext, useContext } from 'react'
 
 import { genUUID, sleepAsync } from 'electric-sql/util'
 
-import api from './api'
 import cache from './cache'
 import { DB, Demo } from './electric'
 
@@ -10,14 +9,14 @@ const key = 'electric.intro.session:session_id'
 export const ttl = 1_000 * 60 * 60 // one hour
 
 export type DemoContextData = {
-  demo: Demo,
+  demo: Demo
   sessionId: string
 }
 
-export const DemoContext = createContext<DemoContextData>(null)
+export const DemoContext = createContext<DemoContextData | null>(null)
 
 export const useDemoContext = () => {
-  return useContext(DemoContext)
+  return useContext(DemoContext)!
 }
 
 export const getOrCreateSessionId = (defaultSessionId: string) => {
@@ -28,8 +27,7 @@ export const getOrCreateSessionId = (defaultSessionId: string) => {
     sessionId = urlParams.get('sessionId')
 
     cache.set(key, sessionId, ttl)
-  }
-  else {
+  } else {
     sessionId = cache.get(key)
 
     if (sessionId === null) {
@@ -69,40 +67,42 @@ export const timeTilSessionExpiry = () => {
   return value.expiry - now
 }
 
-export const getOrCreateDemo = async (db: DB, sessionId: string, name: string, bootstrapItems?: number) => {
-  let demo: Demo
-
+export const getOrCreateDemo = async (
+  db: DB,
+  sessionId: string,
+  name: string,
+  bootstrapItems?: number,
+): Promise<Demo> => {
   const ts = `${Date.now()}`
 
-  demo = await db.demos.findFirst({
+  let demo = await db.demos.findFirst({
     where: {
       name: name,
-      electric_user_id: sessionId
+      electric_user_id: sessionId,
     },
     orderBy: {
-      id: 'asc'
-    }
+      id: 'asc',
+    },
   })
 
   if (demo !== null) {
     demo = await db.demos.update({
       where: {
-        id: demo.id
+        id: demo.id,
       },
       data: {
-        updated_at: ts
-      }
+        updated_at: ts,
+      },
     })
-  }
-  else {
+  } else {
     demo = await db.demos.create({
       data: {
         id: genUUID(),
         name: name,
         inserted_at: ts,
         updated_at: ts,
-        electric_user_id: sessionId
-      }
+        electric_user_id: sessionId,
+      },
     })
 
     if (bootstrapItems) {
@@ -115,12 +115,12 @@ export const getOrCreateDemo = async (db: DB, sessionId: string, name: string, b
           inserted_at: `${t1 + i}`,
           demo_id: demo.id,
           demo_name: demo.name,
-          electric_user_id: sessionId
+          electric_user_id: sessionId,
         })
       }
 
       await db.items.createMany({
-        data: items
+        data: items,
       })
     }
   }
@@ -131,12 +131,17 @@ export const getOrCreateDemo = async (db: DB, sessionId: string, name: string, b
 // Used by the active-active intro page to fetch the same demo
 // as the embedded example is using. It's a bit of a hack but it
 // simplifies the psql insert items example ¯\_(ツ)_/¯
-export const getExistingDemo = async (db, sessionId, demoName) => {
-  let demo: Demo
+export const getExistingDemo = async (
+  db: DB,
+  sessionId: string,
+  demoName: string,
+): Promise<Demo | null> => {
+  let demo: Demo | null = null
 
   let retries = 0
   const maxRetries = 10
 
+  // eslint-disable-next-line no-constant-condition
   while (true) {
     retries += 1
 
@@ -149,11 +154,11 @@ export const getExistingDemo = async (db, sessionId, demoName) => {
     demo = await db.demos.findFirst({
       where: {
         name: demoName,
-        electric_user_id: sessionId
+        electric_user_id: sessionId,
       },
       orderBy: {
-        id: 'asc'
-      }
+        id: 'asc',
+      },
     })
 
     if (demo !== null) {
@@ -168,11 +173,11 @@ export const boostrapSlider = async (db: DB, demo: Demo) => {
   const existingSlider = await db.sliders.findFirst({
     where: {
       demo_name: demo.name,
-      electric_user_id: demo.electric_user_id
+      electric_user_id: demo.electric_user_id,
     },
     orderBy: {
-      id: 'asc'
-    }
+      id: 'asc',
+    },
   })
 
   if (existingSlider !== null) {
@@ -185,8 +190,8 @@ export const boostrapSlider = async (db: DB, demo: Demo) => {
       demo_id: demo.id,
       demo_name: demo.name,
       electric_user_id: demo.electric_user_id,
-      value: 50
-    }
+      value: 50,
+    },
   })
 
   return newSlider
@@ -196,11 +201,11 @@ export const boostrapPlayers = async (db: DB, demo: Demo, colors: string[]) => {
   const existingPlayers = await db.players.findMany({
     where: {
       demo_name: demo.name,
-      electric_user_id: demo.electric_user_id
+      electric_user_id: demo.electric_user_id,
     },
     orderBy: {
-      inserted_at: 'asc'
-    }
+      inserted_at: 'asc',
+    },
   })
 
   if (existingPlayers.length) {
@@ -215,11 +220,11 @@ export const boostrapPlayers = async (db: DB, demo: Demo, colors: string[]) => {
     updated_at: `${t1 + index}`,
     demo_id: demo.id,
     demo_name: demo.name,
-    electric_user_id: demo.electric_user_id
+    electric_user_id: demo.electric_user_id,
   }))
 
   const newPlayers = await db.players.createMany({
-    data: newItems
+    data: newItems,
   })
 
   return newPlayers
@@ -229,8 +234,8 @@ export const boostrapTournament = async (db: DB, demo: Demo, name: string) => {
   const existing = await db.tournaments.findMany({
     where: {
       demo_name: demo.name,
-      electric_user_id: demo.electric_user_id
-    }
+      electric_user_id: demo.electric_user_id,
+    },
   })
 
   if (existing.length) {
@@ -248,8 +253,8 @@ export const boostrapTournament = async (db: DB, demo: Demo, name: string) => {
       updated_at: ts,
       demo_id: demo.id,
       demo_name: demo.name,
-      electric_user_id: demo.electric_user_id
-    }
+      electric_user_id: demo.electric_user_id,
+    },
   })
 
   return 1

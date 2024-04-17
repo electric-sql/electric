@@ -1,15 +1,15 @@
-import React, { ReactNode, useEffect, useState } from 'react'
+import { ReactNode, useEffect, useState } from 'react'
 import api from '../api'
 import { DemoContext, DemoContextData, getCachedSessionId } from '../session'
 
 type Props = {
-  bootstrapItems: number,
-  children: ReactNode,
+  bootstrapItems: number
+  children: ReactNode
   demoName: string
 }
 
 const CloudDemoProvider = ({ bootstrapItems, children, demoName }: Props) => {
-  const [ demoContext, setDemoContext ] = useState<DemoContextData>()
+  const [demoContext, setDemoContext] = useState<DemoContextData>()
 
   useEffect(() => {
     let isMounted = true
@@ -22,7 +22,7 @@ const CloudDemoProvider = ({ bootstrapItems, children, demoName }: Props) => {
         return
       }
 
-      setDemoContext({demo: demo, sessionId: sessionId})
+      setDemoContext({ demo: demo, sessionId: sessionId })
     }
 
     init()
@@ -37,9 +37,7 @@ const CloudDemoProvider = ({ bootstrapItems, children, demoName }: Props) => {
   }
 
   return (
-    <DemoContext.Provider value={demoContext}>
-      { children }
-    </DemoContext.Provider>
+    <DemoContext.Provider value={demoContext}>{children}</DemoContext.Provider>
   )
 }
 

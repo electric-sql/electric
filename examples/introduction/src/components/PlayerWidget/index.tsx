@@ -1,29 +1,27 @@
 import clsx from 'clsx'
-import React from 'react'
 import { useDrag } from 'react-dnd'
 import { Player } from '../../electric'
 import styles from './styles.module.css'
 
 type Props = {
   player: Player
+  dndDiscriminator: string
 }
 
 const PlayerWidget = ({ dndDiscriminator, player }: Props) => {
-  const [{isDragging}, drag] = useDrag(
+  const [, drag] = useDrag(
     () => ({
       type: `PLAYER-${dndDiscriminator}`,
       item: player,
-      collect: monitor => ({
+      collect: (monitor) => ({
         isDragging: !!monitor.isDragging(),
       }),
     }),
-    [player]
+    [player],
   )
 
   return (
-    <div className={clsx(styles.player, styles[player.color])}
-        ref={drag}
-    />
+    <div className={clsx(styles.player, styles[player.color])} ref={drag} />
   )
 }
 

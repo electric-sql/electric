@@ -1,4 +1,3 @@
-import React from 'react'
 import { useCommandCreds } from './CommandCreds'
 import RenderCode from './RenderCode'
 
@@ -23,9 +22,7 @@ INSERT INTO items (
   );
   `.trim()
 
-  return (
-    <RenderCode>{code}</RenderCode>
-  )
+  return <RenderCode>{code}</RenderCode>
 }
 
 export default InsertItemsCommand

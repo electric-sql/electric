@@ -1,4 +1,10 @@
-import React, { ReactNode, createContext, useContext, useEffect, useState } from 'react'
+import React, {
+  ReactNode,
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+} from 'react'
 import { useElectric } from '../../electric'
 import { getCachedSessionId, getExistingDemo } from '../../session'
 
@@ -6,25 +12,25 @@ import ElectricProvider from '../ElectricProvider'
 import SessionProvider from '../SessionProvider'
 
 export type CommandCredsData = {
-  demoId: string,
-  demoName: string,
+  demoId: string
+  demoName: string
   sessionId: string
 }
 
-export const CommandCredsContext = createContext<CommandCredsData>(null)
+export const CommandCredsContext = createContext<CommandCredsData | null>(null)
 
 export const useCommandCreds = () => {
-  return useContext(CommandCredsContext)
+  return useContext(CommandCredsContext)!
 }
 
 type ProviderProps = {
-  children: ReactNode,
+  children: ReactNode
   demoName: string
 }
 
 const CommandCredsProvider = ({ children, demoName }: ProviderProps) => {
   const { db } = useElectric()!
-  const [ creds, setCreds ] = useState<CommandCredsData>()
+  const [creds, setCreds] = useState<CommandCredsData>()
 
   useEffect(() => {
     let isMounted = true
@@ -44,7 +50,7 @@ const CommandCredsProvider = ({ children, demoName }: ProviderProps) => {
       setCreds({
         demoId: demo.id,
         demoName: demo.name,
-        sessionId: sessionId
+        sessionId: sessionId,
       })
     }
 
@@ -61,7 +67,7 @@ const CommandCredsProvider = ({ children, demoName }: ProviderProps) => {
 
   return (
     <CommandCredsContext.Provider value={creds}>
-      { children }
+      {children}
     </CommandCredsContext.Provider>
   )
 }

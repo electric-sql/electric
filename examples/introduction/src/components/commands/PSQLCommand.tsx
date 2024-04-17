@@ -1,18 +1,18 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import api from '../../api'
 import { SANITISED_DATABASE_URL } from '../../config'
 import { useCommandCreds } from './CommandCreds'
 
 type UserCreds = {
-  userId: string,
+  userId: string
   password: string
 }
 
 const PSQLCommand = () => {
   const { demoName, sessionId } = useCommandCreds()!
-  const [ hasErrored, setHasErrored ] = useState<boolean>(false)
-  const [ retryCount, setRetryCount ] = useState<number>(0)
-  const [ userCreds, setUserCreds ] = useState<UserCreds>()
+  const [hasErrored, setHasErrored] = useState<boolean>(false)
+  const [retryCount, setRetryCount] = useState<number>(0)
+  const [userCreds, setUserCreds] = useState<UserCreds>()
 
   const retry = async () => {
     setHasErrored(false)
@@ -31,8 +31,7 @@ const PSQLCommand = () => {
 
       if (creds === undefined) {
         setHasErrored(true)
-      }
-      else {
+      } else {
         setUserCreds(creds)
       }
     }
@@ -59,25 +58,21 @@ const PSQLCommand = () => {
 
   if (userCreds === undefined) {
     return (
-      <pre><code>Fetching user credentials ...</code></pre>
+      <pre>
+        <code>Fetching user credentials ...</code>
+      </pre>
     )
   }
 
-  const [ protocol, remainder ] = SANITISED_DATABASE_URL.split('://')
+  const [protocol, remainder] = SANITISED_DATABASE_URL.split('://')
   const { userId, password } = userCreds
 
-  const parts = [
-    protocol,
-    '://',
-    userId,
-    ':',
-    password,
-    '@',
-    remainder
-  ]
+  const parts = [protocol, '://', userId, ':', password, '@', remainder]
 
   return (
-    <pre><code>{`psql "${parts.join('')}"`}</code></pre>
+    <pre>
+      <code>{`psql "${parts.join('')}"`}</code>
+    </pre>
   )
 }
 

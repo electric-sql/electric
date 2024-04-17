@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 
 import { useLiveQuery } from 'electric-sql/react'
 import { genUUID } from 'electric-sql/util'
@@ -14,42 +14,42 @@ const newItem = (demo) => {
     inserted_at: `${Date.now()}`,
     demo_id: demo.id,
     demo_name: demo.name,
-    electric_user_id: demo.electric_user_id
+    electric_user_id: demo.electric_user_id,
   }
 }
 
 const Replication = ({ itemColor, slider }) => {
   const { db } = useElectric()
   const { demo } = useDemoContext()
-  const [ sliderValue, setSliderValue ] = useState(slider.value)
+  const [sliderValue, setSliderValue] = useState(slider.value)
 
   const { results: liveItems } = useLiveQuery(
     db.items.liveMany({
       where: {
         demo_name: demo.name,
-        electric_user_id: demo.electric_user_id
+        electric_user_id: demo.electric_user_id,
       },
       orderBy: {
-        inserted_at: 'asc'
+        inserted_at: 'asc',
       },
-      take: 24
-    })
+      take: 24,
+    }),
   )
 
   const { results: liveSlider } = useLiveQuery(
     db.sliders.liveFirst({
       where: {
         demo_name: demo.name,
-        electric_user_id: demo.electric_user_id
+        electric_user_id: demo.electric_user_id,
       },
       select: {
         id: true,
-        value: true
+        value: true,
       },
       orderBy: {
-        id: 'asc'
-      }
-    })
+        id: 'asc',
+      },
+    }),
   )
 
   useEffect(() => {
@@ -62,7 +62,7 @@ const Replication = ({ itemColor, slider }) => {
 
   const add = async () => {
     await db.items.create({
-      data: newItem(demo)
+      data: newItem(demo),
     })
   }
 
@@ -70,8 +70,8 @@ const Replication = ({ itemColor, slider }) => {
     await db.items.deleteMany({
       where: {
         demo_name: demo.name,
-        electric_user_id: demo.electric_user_id
-      }
+        electric_user_id: demo.electric_user_id,
+      },
     })
   }
 
@@ -82,8 +82,8 @@ const Replication = ({ itemColor, slider }) => {
         electric_user_id: demo.electric_user_id,
       },
       data: {
-        value: value
-      }
+        value: value,
+      },
     })
   }
 
@@ -99,21 +99,21 @@ const Replication = ({ itemColor, slider }) => {
         </label>
         <div className={clsx('my-8', itemColor)}>
           <SliderInput
-              min={0}
-              max={100}
-              step={1}
-              value={sliderValue}
-              onChange={setSliderValue}
-              onChangeComplete={syncSlider}
+            min={0}
+            max={100}
+            step={1}
+            value={sliderValue}
+            onChange={setSliderValue}
+            onChangeComplete={syncSlider}
           />
         </div>
       </div>
       <ItemsWidget
-          add={add}
-          clear={clear}
-          items={liveItems}
-          itemColor={itemColor}
-          disableWhenInProgress={false}
+        add={add}
+        clear={clear}
+        items={liveItems}
+        itemColor={itemColor}
+        disableWhenInProgress={false}
       />
     </div>
   )
@@ -122,7 +122,7 @@ const Replication = ({ itemColor, slider }) => {
 const Wrapper = ({ itemColor }) => {
   const { db } = useElectric()
   const { demo } = useDemoContext()
-  const [ slider, setSlider ] = useState()
+  const [slider, setSlider] = useState()
 
   useEffect(() => {
     let isMounted = true
@@ -148,9 +148,7 @@ const Wrapper = ({ itemColor }) => {
     return null
   }
 
-  return (
-    <Replication itemColor={itemColor} slider={slider} />
-  )
+  return <Replication itemColor={itemColor} slider={slider} />
 }
 
 const Demo = () => (

@@ -1,12 +1,17 @@
-// @ts-nocheck
+// @ts-expect-error - injected by webpack
 export const BACKEND_URL: string = __BACKEND_URL__
+// @ts-expect-error - injected by webpack
 export const SANITISED_DATABASE_URL: string = __SANITISED_DATABASE_URL__
+// @ts-expect-error - injected by webpack
 export const DEBUG_MODE: boolean = __DEBUG_MODE__
+// @ts-expect-error - injected by webpack
 export const ELECTRIC_URL: string = __ELECTRIC_URL__
 
 // Verify that the database URL does not contain credentials.
 if (SANITISED_DATABASE_URL.includes('@')) {
-  throw new Error('DO NOT include user credentials in your `SANITISED_DATABASE_URL`!')
+  throw new Error(
+    'DO NOT include user credentials in your `SANITISED_DATABASE_URL`!'
+  )
 }
 
 /* Call this in the browser to get the debug mode, optionally overriding

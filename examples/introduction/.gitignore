@@ -1,3 +1,5 @@
+node_modules/
+
 # Generated
 src/generated/client
 public/wa-sqlite-async.*

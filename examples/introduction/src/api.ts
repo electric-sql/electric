@@ -6,7 +6,11 @@ const setEndpoint = (url: string) => {
   axios.defaults.baseURL = url
 }
 
-const bootstrapDemo = async (sessionId, demoName, numItems) => {
+const bootstrapDemo = async (
+  sessionId: string,
+  demoName: string,
+  numItems: number,
+) => {
   let resp
 
   const ts = `${Date.now()}`
@@ -17,11 +21,10 @@ const bootstrapDemo = async (sessionId, demoName, numItems) => {
         session_id: sessionId,
         name: demoName,
         timestamp: ts,
-        num_items: numItems
-      }
+        num_items: numItems,
+      },
     })
-  }
-  catch (err) {
+  } catch (err) {
     return
   }
 
@@ -36,9 +39,8 @@ const getItems = async (data: object) => {
   let resp
 
   try {
-    resp = await axios.get('/api/items', {params: data})
-  }
-  catch (_err) {
+    resp = await axios.get('/api/items', { params: data })
+  } catch (_err) {
     return
   }
 
@@ -54,8 +56,7 @@ const postItem = async (data: object) => {
 
   try {
     resp = await axios.post('/api/items', data)
-  }
-  catch (_err) {
+  } catch (_err) {
     return
   }
 
@@ -70,9 +71,8 @@ const deleteItem = async (data: object) => {
   let resp
 
   try {
-    resp = await axios.delete('/api/items', {data: data})
-  }
-  catch (_err) {
+    resp = await axios.delete('/api/items', { data: data })
+  } catch (_err) {
     return false
   }
 
@@ -88,8 +88,7 @@ const getUserCreds = async (userId: string) => {
 
   try {
     resp = await axios.post(`/api/users/get_or_create/${userId}`)
-  }
-  catch (err) {
+  } catch (err) {
     return
   }
 
@@ -101,7 +100,7 @@ const getUserCreds = async (userId: string) => {
 
   return {
     userId: user_id,
-    password: password
+    password: password,
   }
 }
 
@@ -111,5 +110,5 @@ export default {
   getItems,
   getUserCreds,
   postItem,
-  setEndpoint
+  setEndpoint,
 }

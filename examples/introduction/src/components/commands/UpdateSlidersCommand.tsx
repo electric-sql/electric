@@ -1,4 +1,3 @@
-import React from 'react'
 import { useCommandCreds } from './CommandCreds'
 import RenderCode from './RenderCode'
 
@@ -12,9 +11,7 @@ UPDATE sliders
     AND electric_user_id = '${sessionId}';
   `.trim()
 
-  return (
-    <RenderCode>{code}</RenderCode>
-  )
+  return <RenderCode>{code}</RenderCode>
 }
 
 export default UpdateSlidersCommand

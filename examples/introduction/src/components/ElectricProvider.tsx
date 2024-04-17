@@ -1,14 +1,18 @@
-import React, { ReactNode, useEffect, useState } from 'react'
+import { ReactNode, useEffect, useState } from 'react'
 
-import { Electric, ElectricProvider as BaseProvider, initElectric } from '../electric'
+import {
+  Electric,
+  ElectricProvider as BaseProvider,
+  initElectric,
+} from '../electric'
 
 type Props = {
-  children: ReactNode,
+  children: ReactNode
   dbName: string
 }
 
 const ElectricProvider = ({ children, dbName }: Props) => {
-  const [ electric, setElectric ] = useState<Electric>()
+  const [electric, setElectric] = useState<Electric>()
 
   useEffect(() => {
     let isMounted = true
@@ -34,11 +38,7 @@ const ElectricProvider = ({ children, dbName }: Props) => {
     return null
   }
 
-  return (
-    <BaseProvider db={electric}>
-      { children }
-    </BaseProvider>
-  )
+  return <BaseProvider db={electric}>{children}</BaseProvider>
 }
 
 export default ElectricProvider

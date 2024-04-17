@@ -1,9 +1,11 @@
-type RetVal = {
-  elapsed: number,
-  result: any
+type RetVal<T> = {
+  elapsed: number
+  result: T
 }
 
-export const timeResolution = async (promise: Promise<any>): Promise<RetVal> => {
+export const timeResolution = async <T,>(
+  promise: Promise<T>,
+): Promise<RetVal<T>> => {
   const t1 = Date.now()
 
   const result = await promise
@@ -13,6 +15,6 @@ export const timeResolution = async (promise: Promise<any>): Promise<RetVal> => 
 
   return {
     elapsed,
-    result
+    result,
   }
 }

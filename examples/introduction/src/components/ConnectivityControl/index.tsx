@@ -1,34 +1,35 @@
-import React from 'react'
 import { useConnectivityState } from 'electric-sql/react'
 
 import OnIcon from '@site/static/img/icons/wifi-on.svg'
 import OffIcon from '@site/static/img/icons/wifi-off.svg'
+import { useElectric } from '../../electric'
 
 const colors = {
   available: 'script-yellow',
   connected: 'electric-green',
-  disconnected: 'script-red'
+  disconnected: 'script-red',
 }
 
 const ConnectivityControl = () => {
-  const { connectivityState, toggleConnectivityState } = useConnectivityState()
+  const electric = useElectric()!
+  const { status } = useConnectivityState()
 
-  const Icon =
-    connectivityState === 'disconnected'
-    ? OffIcon
-    : OnIcon
+  const toggleConnectivityState = async (): Promise<void> =>
+    status === 'connected' ? electric.disconnect() : electric.connect()
+
+  const Icon = status === 'disconnected' ? OffIcon : OnIcon
 
   const labelStyle = {
-    color: `var(--${colors[connectivityState]})`
+    color: `var(--${colors[status]})`,
   }
 
   return (
     <label className="text-small" style={labelStyle}>
-      <a onMouseDown={ toggleConnectivityState }
-          className="flex flex-row items-center text-current hover:text-current cursor-pointer">
-        <span className="capitalize">
-          { connectivityState }
-        </span>
+      <a
+        onMouseDown={toggleConnectivityState}
+        className="flex flex-row items-center text-current hover:text-current cursor-pointer"
+      >
+        <span className="capitalize">{status}</span>
         <Icon className="ml-1 w-5" />
       </a>
     </label>
