@@ -52,7 +52,7 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20240417131000_Client
         subscription_id UUID,
         graph_diff BYTEA NOT NULL,
         included_txns BIGINT[] NOT NULL,
-        PRIMARY KEY (client_id, ord)
+        PRIMARY KEY (client_id, min_txid, ord)
       )
       """
     ]
