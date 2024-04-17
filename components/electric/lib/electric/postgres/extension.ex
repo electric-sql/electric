@@ -379,7 +379,7 @@ defmodule Electric.Postgres.Extension do
       Migrations.Migration_20240110110200_DropUnusedFunctions,
       Migrations.Migration_20240205141200_ReinstallTriggerFunctionWriteCorrectMaxTag,
       Migrations.Migration_20240213160300_DropGenerateElectrifiedSqlFunction,
-      Migrations.Migration_20240401134100_ClientReconnectionInfoTables
+      Migrations.Migration_20240417131000_ClientReconnectionInfoTables
     ]
   end
 
