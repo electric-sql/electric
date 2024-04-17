@@ -1,10 +1,10 @@
-defmodule Electric.Postgres.Extension.Migrations.Migration_20240401134100_ClientReconnectionInfoTables do
+defmodule Electric.Postgres.Extension.Migrations.Migration_20240417131000_ClientReconnectionInfoTables do
   alias Electric.Postgres.Extension
 
   @behaviour Extension.Migration
 
   @impl true
-  def version, do: 2024_04_01_13_41_00
+  def version, do: 2024_04_17_13_10_00
 
   @impl true
   def up(_schema) do
