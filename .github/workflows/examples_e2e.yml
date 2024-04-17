@@ -8,6 +8,7 @@ on:
   pull_request:
     paths:
       - 'examples/**'
+      - '!examples/**/**.md'
 
 concurrency:
   group: examples-e2e-${{ github.ref }}
@@ -46,4 +47,4 @@ jobs:
         working-directory: 'examples/_testing'
         run: |
           pnpm install --frozen-lockfile &&
-          npm run e2e
+          pnpm web-e2e

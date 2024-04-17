@@ -9,6 +9,7 @@ on:
     paths:
       - 'pnpm-lock.yaml'
       - 'examples/**'
+      - '!examples/**/**.md'
 
 defaults:
   run:
