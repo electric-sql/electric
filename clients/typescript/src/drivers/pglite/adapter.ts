@@ -21,7 +21,6 @@ export class DatabaseAdapter extends GenericDatabaseAdapter {
   }
 
   async _query(statement: Statement): Promise<Row[]> {
-    const ret = (await this.db.query<Row>(statement.sql, statement.args)).rows
-    return ret
+    return (await this.db.query<Row>(statement.sql, statement.args)).rows
   }
 }

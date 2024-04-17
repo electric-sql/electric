@@ -56,12 +56,12 @@
     "./generic": "./dist/drivers/generic/index.js",
     "./node": "./dist/drivers/better-sqlite3/index.js",
     "./node-postgres": "./dist/drivers/node-postgres/index.js",
+    "./pglite": "./dist/drivers/pglite/index.js",
     "./react": "./dist/frameworks/react/index.js",
     "./tauri-postgres": "./dist/drivers/tauri-postgres/index.js",
     "./vuejs": "./dist/frameworks/vuejs/index.js",
     "./wa-sqlite": "./dist/drivers/wa-sqlite/index.js",
     "./tauri": "./dist/drivers/tauri-sqlite/index.js",
-    "./pglite": "./dist/drivers/pglite/index.js",
     "./config": "./dist/config/index.js",
     "./debug": "./dist/util/debug/index.js",
     "./client/model": "./dist/client/model/index.js",
@@ -96,14 +96,14 @@
       "node-postgres": [
         "./dist/drivers/node-postgres/index.d.ts"
       ],
+      "pglite": [
+        "./dist/drivers/pglite/index.d.ts"
+      ],
       "react": [
         "./dist/frameworks/react/index.d.ts"
       ],
       "tauri-postgres": [
         "./dist/drivers/tauri-postgres/index.d.ts"
-      ],
-      "pglite": [
-        "./dist/drivers/pglite/index.d.ts"
       ],
       "vuejs": [
         "./dist/frameworks/vuejs/index.d.ts"
