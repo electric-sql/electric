@@ -77,7 +77,17 @@ const startSatellite = async (
 ) => {
   await satellite.start(authState)
   satellite.setToken(token)
-  const connectionPromise = satellite.connectWithBackoff()
+  const connectionPromise = satellite.connectWithBackoff().catch((e) => {
+    if (
+      e.message === 'terminating connection due to administrator command' ||
+      e.message ===
+        'Client has encountered a connection error and is not queryable'
+    ) {
+      // This is to be expected as we stop Satellite at the end of the test
+      return
+    }
+    throw e
+  })
   return { connectionPromise }
 }
 
