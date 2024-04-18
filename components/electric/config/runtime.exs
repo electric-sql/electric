@@ -104,6 +104,8 @@ auth_mode = env!("AUTH_MODE", :string, default_auth_mode)
 auth_opts = [
   alg: {"AUTH_JWT_ALG", env!("AUTH_JWT_ALG", :string, nil)},
   key: {"AUTH_JWT_KEY", env!("AUTH_JWT_KEY", :string, nil)},
+  key_is_base64_encoded:
+    {"AUTH_JWT_KEY_IS_BASE64_ENCODED", env!("AUTH_JWT_KEY_IS_BASE64_ENCODED", :boolean, nil)},
   namespace: {"AUTH_JWT_NAMESPACE", env!("AUTH_JWT_NAMESPACE", :string, nil)},
   iss: {"AUTH_JWT_ISS", env!("AUTH_JWT_ISS", :string, nil)},
   aud: {"AUTH_JWT_AUD", env!("AUTH_JWT_AUD", :string, nil)}

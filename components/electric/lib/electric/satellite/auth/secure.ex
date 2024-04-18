@@ -93,26 +93,19 @@ defmodule Electric.Satellite.Auth.Secure do
 
   defp validate_key(alg, opts) when is_binary(alg) and is_list(opts) do
     if key = opts[:key] do
-      validate_key(key, alg)
+      validate_key(key, alg, opts)
     else
       {:error, :key, "not set"}
     end
   end
 
-  defp validate_key(key, "HS" <> _ = alg) do
-    # Try decoding the user-provided key as base64. If that fails, assume the key is a raw
-    # binary and use it verbatim.
-    # The `padding: false` is required to accept keys that are base64-encoded without padding.
-    raw_key =
-      case Base.decode64(key, padding: false) do
-        {:ok, raw_key} -> raw_key
-        :error -> key
-      end
-
-    validate_key_length(raw_key, alg)
+  defp validate_key(maybe_encoded_key, "HS" <> _ = alg, opts) do
+    with {:ok, key} <- decode_key(maybe_encoded_key, opts) do
+      validate_key_length(key, alg)
+    end
   end
 
-  defp validate_key(key, pk_alg) do
+  defp validate_key(key, pk_alg, _opts) do
     algorithms_for_key =
       key
       |> JOSE.JWK.from_pem()
@@ -146,6 +139,18 @@ defmodule Electric.Satellite.Auth.Secure do
     do: {:error, :key, "has to be at least 64 bytes long for HS512"}
 
   defp validate_key_length(raw_key, "HS" <> _), do: {:ok, raw_key}
+
+  defp decode_key(maybe_encoded_key, opts) do
+    if opts[:key_is_base64_encoded] do
+      # The `padding: false` is required to accept keys that are base64-encoded without padding.
+      case Base.decode64(maybe_encoded_key, padding: false) do
+        {:ok, key} -> {:ok, key}
+        :error -> {:error, :key, "has invalid base64 encoding"}
+      end
+    else
+      {:ok, maybe_encoded_key}
+    end
+  end
 
   defp add_exp_claim(token_config, in: seconds) do
     Joken.Config.add_claim(
