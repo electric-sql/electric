@@ -20,6 +20,24 @@ To see the complete change log for each new release, see the [Releases page](htt
 - @electric-sql/prisma-generator: [/generator/CHANGELOG.md](https://github.com/electric-sql/electric/blob/main/generator/CHANGELOG.md)
 
 
+## 2024-10-14 - v0.10
+
+[Announcement post](/blog/2024/04/10/electricsql-v0.10-released).
+
+The first release to support where-clause and include-tree filtering with Shape-based sync. It also adds data type support for byte arrays / blobs.
+
+#### Updated components
+
+Component | Version
+--------- | -------
+[Sync service](https://hub.docker.com/r/electricsql/electric/tags) | [0.10.0](https://github.com/electric-sql/electric/blob/main/components/electric/CHANGELOG.md#0100)
+[TypeScript client](https://www.npmjs.com/package/electric-sql) | [0.10.0](https://github.com/electric-sql/electric/blob/main/clients/typescript/CHANGELOG.md#0100)
+[@electric-sql/prisma-generator](https://www.npmjs.com/package/@electric-sql/prisma-generator) | [1.1.4](https://github.com/electric-sql/electric/blob/main/generator/CHANGELOG.md#114)
+
+#### Compatibility notes
+
+This release does not introduce any noteable breaking changes.
+
 ## 2024-03-14 - patch release
 
 #### Updated components
