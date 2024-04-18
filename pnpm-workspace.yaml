@@ -1,6 +1,5 @@
 packages:
   - 'clients/typescript'
-  - 'clients/angular'
   - 'e2e/satellite_client'
   - 'examples/starter'
   - 'generator'

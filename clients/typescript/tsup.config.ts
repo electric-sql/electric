@@ -1,7 +1,7 @@
 import { globSync } from 'glob'
 import { defineConfig } from 'tsup'
 
-const entries = globSync('src/**/*.{ts,tsx,js,jsx}', { posix: true })
+const entries = globSync('src/**/*.{ts,tsx,js,jsx}', { posix: true, ignore: 'src/frameworks/angular/**'})
 
 export default defineConfig({
   entry: entries,

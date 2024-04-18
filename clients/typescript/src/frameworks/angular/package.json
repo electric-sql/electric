@@ -1,0 +1,16 @@
+{
+    "name": "@electric-sql/angular",
+    "version": "0.9.6",
+    "description": "Angular bindings for ElectricSQL. This file is kept for consistency with APF (Angular Package Format)",
+    "author": "Electric DB Limited",
+    "dependencies": {
+      "tslib": "^2.6.2",
+      "electric-sql": "workspace:*"
+    },
+    "peerDependencies": {
+        "@angular/common": "^17.3.0",
+        "@angular/core": "^17.3.0"
+    },
+    "sideEffects": false
+  }
+  

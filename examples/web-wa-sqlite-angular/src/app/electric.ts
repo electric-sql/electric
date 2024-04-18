@@ -2,7 +2,7 @@ import { Electric, schema } from '../generated/client'
 import { uniqueTabId } from 'electric-sql/util'
 import { electrify, ElectricDatabase } from 'electric-sql/wa-sqlite'
 import { environment } from '../environments/environment';
-import { makeElectricContext } from '@electric-sql/angular';
+import { makeElectricContext } from 'electric-sql/angular';
 import { ElectricConfig } from 'electric-sql';
 import { authToken } from './auth';
 import { LIB_VERSION } from 'electric-sql/version'
