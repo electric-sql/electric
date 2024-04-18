@@ -1,4 +1,4 @@
-import { ReactNode } from 'react'
+import React from 'react'
 
 import DemoProvider from './DemoProvider'
 import ElectricProvider from './ElectricProvider'
@@ -7,7 +7,7 @@ import SessionProvider from './SessionProvider'
 type Props = {
   bootstrapItems: number
   bootstrapServerItems: number
-  children: ReactNode
+  children: React.ReactNode
   dbName: string
   demoName: string
 }

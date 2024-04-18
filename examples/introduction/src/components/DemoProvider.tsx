@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useElectric } from '../electric'
 import {
   DemoContext,
@@ -10,7 +10,7 @@ import {
 type Props = {
   bootstrapItems: number
   bootstrapServerItems: number
-  children: ReactNode
+  children: React.ReactNode
   demoName: string
 }
 

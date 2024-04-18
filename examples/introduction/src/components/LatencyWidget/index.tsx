@@ -1,5 +1,6 @@
 import clsx from 'clsx'
-import { useState } from 'react'
+// @ts-expect-error ignore unused React
+import React, { useState } from 'react'
 
 import { Item } from '../../electric'
 import { timeResolution } from '../../util'

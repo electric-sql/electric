@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+// @ts-expect-error ignore unused React
+import React, { useEffect, useState } from 'react'
 import Slider from 'react-rangeslider'
 
 type Props = {

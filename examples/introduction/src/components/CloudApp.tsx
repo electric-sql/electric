@@ -1,11 +1,11 @@
-import { ReactNode } from 'react'
+import React from 'react'
 
 import CloudDemoProvider from './CloudDemoProvider'
 import SessionProvider from './SessionProvider'
 
 type Props = {
   bootstrapItems: number
-  children: ReactNode
+  children: React.ReactNode
   demoName: string
 }
 

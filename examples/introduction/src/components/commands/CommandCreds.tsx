@@ -1,10 +1,4 @@
-import {
-  ReactNode,
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-} from 'react'
+import React, { createContext, useContext, useEffect, useState } from 'react'
 import { useElectric } from '../../electric'
 import { getCachedSessionId, getExistingDemo } from '../../session'
 
@@ -24,7 +18,7 @@ export const useCommandCreds = () => {
 }
 
 type ProviderProps = {
-  children: ReactNode
+  children: React.ReactNode
   demoName: string
 }
 

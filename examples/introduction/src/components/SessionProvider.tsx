@@ -1,8 +1,8 @@
-import { ReactNode, useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { ensureSessionId, timeTilSessionExpiry } from '../session'
 
 type Props = {
-  children: ReactNode
+  children: React.ReactNode
 }
 
 const SessionProvider = ({ children }: Props) => {

@@ -1,3 +1,5 @@
+// @ts-expect-error ignore unused React
+import React from 'react'
 import clsx from 'clsx'
 import { Item } from '../../electric'
 import styles from './styles.module.css'

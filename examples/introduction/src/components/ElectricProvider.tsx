@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 
 import {
   Electric,
@@ -7,7 +7,7 @@ import {
 } from '../electric'
 
 type Props = {
-  children: ReactNode
+  children: React.ReactNode
   dbName: string
 }
 

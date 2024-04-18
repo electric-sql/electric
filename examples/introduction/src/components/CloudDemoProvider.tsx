@@ -1,10 +1,10 @@
-import { ReactNode, useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import api from '../api'
 import { DemoContext, DemoContextData, getCachedSessionId } from '../session'
 
 type Props = {
   bootstrapItems: number
-  children: ReactNode
+  children: React.ReactNode
   demoName: string
 }
 

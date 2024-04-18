@@ -1,3 +1,5 @@
+// @ts-expect-error ignore unused React
+import React from 'react'
 import { useCommandCreds } from './CommandCreds'
 import RenderCode from './RenderCode'
 

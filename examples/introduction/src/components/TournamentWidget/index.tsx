@@ -1,4 +1,6 @@
 import clsx from 'clsx'
+// @ts-expect-error ignore unused React
+import React from 'react'
 import { useDrop } from 'react-dnd'
 
 import { PlayerWidget } from '../../components'

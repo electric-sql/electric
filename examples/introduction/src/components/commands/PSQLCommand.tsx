@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+// @ts-expect-error ignore unused React
+import React, { useEffect, useState } from 'react'
 import api from '../../api'
 import { SANITISED_DATABASE_URL } from '../../config'
 import { useCommandCreds } from './CommandCreds'

@@ -1,3 +1,5 @@
+// @ts-expect-error ignore unused React
+import React from 'react'
 import { useConnectivityState } from 'electric-sql/react'
 import clsx from 'clsx'
 import { useElectric } from '../../electric'

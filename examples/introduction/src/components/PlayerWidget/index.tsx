@@ -1,4 +1,6 @@
 import clsx from 'clsx'
+// @ts-expect-error ignore unused React
+import React from 'react'
 import { useDrag } from 'react-dnd'
 import { Player } from '../../electric'
 import styles from './styles.module.css'

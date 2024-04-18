@@ -1,11 +1,11 @@
-import { ReactNode } from 'react'
+import React from 'react'
 
 const styles = {
   color: '#f5f5f5',
   padding: '0',
 }
 
-const RenderCode = ({ children }: { children: ReactNode }) => {
+const RenderCode = ({ children }: { children: React.ReactNode }) => {
   // XXX todo: dynamic highlighting with docusaurus.
 
   return (
