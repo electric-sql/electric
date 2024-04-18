@@ -52,8 +52,7 @@ defmodule Electric.Replication.InitialSync do
         commit_timestamp: migration.timestamp,
         origin: origin,
         publication: publication,
-        lsn: lsn,
-        ack_fn: fn -> :ok end
+        lsn: lsn
       }
     end
   end

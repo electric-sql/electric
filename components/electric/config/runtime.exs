@@ -90,6 +90,8 @@ default_database_require_ssl = true
 default_database_use_ipv6 = true
 default_write_to_pg_mode = "logical_replication"
 default_proxy_tracing_enable = false
+default_resumable_wal_window = 2 * 1024 * 1024 * 1024
+default_txn_cache_size = 256 * 1024 * 1024
 
 if config_env() in [:dev, :test] do
   source!([".env.#{config_env()}", ".env.#{config_env()}.local", System.get_env()])
@@ -152,6 +154,19 @@ end
 
 ###
 
+wal_window_config =
+  [
+    {"ELECTRIC_RESUMABLE_WAL_WINDOW", default_resumable_wal_window},
+    {"ELECTRIC_TXN_CACHE_SIZE", default_txn_cache_size}
+  ]
+  |> Enum.map(fn {var, default} ->
+    {var, env!(var, :string, nil) |> Electric.Config.parse_human_readable_size(default)}
+  end)
+
+if error = Electric.Config.format_invalid_config_error(wal_window_config) do
+  Electric.Errors.print_fatal_error(error)
+end
+
 {:ok, log_level} = log_level_config
 config :logger, level: log_level
 
@@ -185,13 +200,13 @@ config :electric, Electric.Features,
   proxy_ddlx_assign: false,
   proxy_ddlx_unassign: false
 
-{:ok, conn_params} = database_url_config
+{:ok, conn_config} = database_url_config
 
 connector_config =
-  if conn_params do
+  if conn_config do
     require_ssl_config = env!("DATABASE_REQUIRE_SSL", :boolean, nil)
 
-    # In Electric, we only support two ways of using SSL when connecting to the database:
+    # In Electric, we only support two ways of using SSL for database connections:
     #
     #   1. It is either required, in which case a failure to establish a secure connection to the
     #      database will be treated as a fatal error.
@@ -199,9 +214,9 @@ connector_config =
     #   2. Or it is not required, in which case Electric will still try connecting with SSL first
     #      and will only fallback to using unencrypted connection if that fails.
     #
-    # When DATABASE_REQUIRE_SSL is set by the user, the sslmode query option in DATABASE_URL is ignored.
+    # When DATABASE_REQUIRE_SSL is set by the user, the sslmode query parameter in DATABASE_URL is ignored.
     require_ssl? =
-      case {require_ssl_config, conn_params[:sslmode]} do
+      case {require_ssl_config, conn_config[:sslmode]} do
         {nil, :require} -> true
         {nil, _} -> false
         {nil, nil} -> default_database_require_ssl
@@ -209,10 +224,10 @@ connector_config =
         {false, _} -> false
       end
 
-    # When require_ssl?=true, :epgsql will try to connect using SSL and fail if the server does not accept encrypted
+    # When require_ssl?=true, epgsql will try to connect using SSL and fail if the server does not accept encrypted
     # connections.
     #
-    # When require_ssl?=false, :epgsql will try to connect using SSL first, then fallback to an unencrypted connection
+    # When require_ssl?=false, epgsql will try to connect using SSL first, then fallback to an unencrypted connection
     # if that fails.
     use_ssl? =
       if require_ssl? do
@@ -223,8 +238,8 @@ connector_config =
 
     use_ipv6? = env!("DATABASE_USE_IPV6", :boolean, default_database_use_ipv6)
 
-    conn_params =
-      conn_params
+    conn_config =
+      conn_config
       |> Keyword.put(:ssl, use_ssl?)
       |> Keyword.put(:ipv6, use_ipv6?)
       |> Keyword.put(:replication, "database")
@@ -233,6 +248,7 @@ connector_config =
     {:ok, pg_server_host} = logical_publisher_host_config
 
     {:ok, proxy_port} = pg_proxy_port_config
+    {:ok, proxy_password} = pg_proxy_password_config
 
     proxy_listener_opts =
       if listen_on_ipv6? do
@@ -241,18 +257,16 @@ connector_config =
         []
       end
 
-    {:ok, proxy_password} = pg_proxy_password_config
-
     [
       postgres_1: [
         producer: Electric.Replication.Postgres.LogicalReplicationProducer,
-        connection: conn_params,
+        connection: conn_config,
         replication: [
           electric_connection: [
             host: pg_server_host,
             port: pg_server_port,
             dbname: "electric",
-            connect_timeout: conn_params[:timeout]
+            connect_timeout: conn_config[:timeout]
           ]
         ],
         proxy: [
@@ -262,7 +276,12 @@ connector_config =
           use_http_tunnel?: use_http_tunnel?,
           password: proxy_password,
           log_level: log_level
-        ]
+        ],
+        wal_window:
+          Enum.map(wal_window_config, fn
+            {"ELECTRIC_RESUMABLE_WAL_WINDOW", {:ok, size}} -> {:resumable_size, size}
+            {"ELECTRIC_TXN_CACHE_SIZE", {:ok, size}} -> {:in_memory_size, size}
+          end)
       ]
     ]
   end

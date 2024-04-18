@@ -182,19 +182,30 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
   @spec handle_events([Transaction.t()], term(), state()) :: {:noreply, [], any}
   def handle_events(events, _, state) do
     events
-    |> Stream.each(& &1.ack_fn.())
     # TODO: We're currently storing & streaming empty transactions to Satellite, which is not ideal, but we need
     #       to be aware of all transaction IDs and LSNs that happen, otherwise flakiness begins. I don't like that,
     #       so we probably want to be able to store a shallower pair than a full transaction object and handle that
     #       appropriately in the consumers. Or something else.
+    #
+    #
+    # 9 Apr 2024. ALCO's UPDATE TO THE ABOVE NOTE FROM ILIA:
+    #
+    # Versions of Postgres before 15 include all transactions in the logical replication
+    # stream, even those that touched tables not included in electric_publication. That is the
+    # source of empty transactions Electric sees on the replication stream. I'm not aware of
+    # other sources of such transactions that have an empty list of changes.
+    #
+    # Since version 15.0, Postgres no longer sends such empty transactions. It stands to reason
+    # that this whole comment blob can be removed for good.
+    #
+    # Here's the relevant change in Postgres' source tree -
+    # https://www.postgresql.org/message-id/E1nZNz3-001zFN-UA%40gemulon.postgresql.org
     |> Stream.each(
       &Logger.debug(
         "Saving transaction #{&1.xid} at #{&1.lsn} with changes #{inspect(&1.changes)}"
       )
     )
-    |> Stream.map(fn %Transaction{lsn: lsn} = tx ->
-      {lsn_to_position(lsn), %{tx | ack_fn: nil}}
-    end)
+    |> Stream.map(fn %Transaction{} = tx -> {lsn_to_position(tx.lsn), tx} end)
     |> Enum.to_list()
     |> tap(&ETS.Set.put(state.table, &1))
     |> Electric.Utils.list_last_and_length()

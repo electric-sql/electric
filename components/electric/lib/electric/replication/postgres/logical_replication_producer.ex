@@ -9,8 +9,6 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
 
   alias Electric.Postgres.LogicalReplication
   alias Electric.Postgres.LogicalReplication.Messages
-  alias Electric.Replication.Postgres.Client
-  alias Electric.Replication.Connectors
 
   alias Electric.Postgres.LogicalReplication.Messages.{
     Begin,
@@ -25,6 +23,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     Message
   }
 
+  alias Electric.Postgres.Lsn
+
   alias Electric.Replication.Changes.{
     Transaction,
     NewRecord,
@@ -34,11 +34,15 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     ReferencedRecord
   }
 
+  alias Electric.Replication.Connectors
+  alias Electric.Replication.Postgres.Client
+
   defmodule State do
     defstruct repl_conn: nil,
               svc_conn: nil,
               demand: 0,
-              queue: nil,
+              queue: :queue.new(),
+              queue_len: 0,
               relations: %{},
               transaction: nil,
               publication: nil,
@@ -46,47 +50,55 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
               origin: nil,
               types: %{},
               span: nil,
-              magic_write_timer: nil
+              advance_timer: nil,
+              main_slot: "",
+              main_slot_lsn: %Lsn{},
+              resumable_wal_window: 1
 
     @type t() :: %__MODULE__{
             repl_conn: pid(),
             svc_conn: pid(),
             demand: non_neg_integer(),
             queue: :queue.queue(),
+            queue_len: non_neg_integer(),
             relations: %{Messages.relation_id() => %Relation{}},
-            transaction: {Electric.Postgres.Lsn.t(), %Transaction{}},
-            publication: String.t(),
+            transaction: {Lsn.t(), %Transaction{}},
+            publication: binary(),
             origin: Connectors.origin(),
             types: %{},
             span: Metrics.t() | nil,
-            magic_write_timer: reference() | nil
+            advance_timer: reference() | nil,
+            main_slot: binary(),
+            main_slot_lsn: Lsn.t(),
+            resumable_wal_window: pos_integer()
           }
   end
 
-  # Period of magic writes, in milliseconds.
+  # How often to check whether the the replication slot needs to be advanced, in milliseconds.
   #
   # 30 seconds is long enough to not put any noticeable load on the database and short enough
-  # for Postgres to discard obsolete WAL records before they register on a disk usage chart
-  # that can be displayed on a managed Postgres provider's dashboard.
-  @magic_write_timeout 30_000
-  @magic_write_msg :magic_write
+  # for Postgres to discard obsolete WAL records such that disk usage metrics remain constant
+  # once the configured limit of the resumable WAL window is reached.
+  @advance_timeout 30_000
+  @advance_msg :advance_main_slot
 
   if Mix.env() == :test do
-    @magic_write_timeout 1_000
+    @advance_timeout 1_000
   end
 
   @spec start_link(Connectors.config()) :: :ignore | {:error, any} | {:ok, pid}
   def start_link(connector_config) do
-    GenStage.start_link(__MODULE__, connector_config)
+    GenStage.start_link(__MODULE__, connector_config, name: name(connector_config))
   end
 
-  @spec get_name(Connectors.origin()) :: Electric.reg_name()
-  def get_name(name) do
-    {:via, :gproc, name(name)}
+  @spec name(Connectors.config()) :: Electric.reg_name()
+  def name(connector_config) when is_list(connector_config) do
+    name(Connectors.origin(connector_config))
   end
 
-  defp name(name) do
-    {:n, :l, {__MODULE__, name}}
+  @spec name(Connectors.origin()) :: Electric.reg_name()
+  def name(origin) when is_binary(origin) do
+    Electric.name(__MODULE__, origin)
   end
 
   @impl true
@@ -95,36 +107,42 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     conn_opts = Connectors.get_connection_opts(connector_config)
     repl_conn_opts = Connectors.get_connection_opts(connector_config, replication: true)
     repl_opts = Connectors.get_replication_opts(connector_config)
-
-    :gproc.reg(name(origin))
+    wal_window_opts = Connectors.get_wal_window_opts(connector_config)
 
     publication = repl_opts.publication
-    slot = repl_opts.slot
+    main_slot = repl_opts.slot
+    tmp_slot = main_slot <> "_rc"
 
-    Logger.debug("#{__MODULE__}.init: publication: '#{publication}', slot: '#{slot}'")
-
-    Logger.info("Starting replication from #{origin}")
+    Logger.metadata(pg_producer: origin)
 
     Logger.info(
-      "#{inspect(__MODULE__)}.init(#{inspect(Client.sanitize_conn_opts(repl_conn_opts))})"
+      "Starting replication with publication=#{publication} and slots=#{main_slot},#{tmp_slot}}"
     )
 
     # The replication connection is used to consumer the logical replication stream from
     # Postgres and to send acknowledgements about received transactions back to Postgres,
     # allowing it to advance the replication slot forward and discard obsolete WAL records.
     with {:ok, repl_conn} <- Client.connect(repl_conn_opts),
-         {:ok, _} <- Client.create_slot(repl_conn, slot),
+         # Refactoring note: make sure that both slots are created first thing after a
+         # connection is opened. In particular, trying to call `Client.get_server_versions()` before
+         # creating the main slot results in the replication stream not delivering transactions from
+         # Postgres when Electric is running in the direct_writes mode, which manifests as a
+         # failure of e2e/tests/02.02_migrations_get_streamed_to_satellite.lux.
+         {:ok, _slot_name} <- Client.create_main_slot(repl_conn, main_slot),
+         {:ok, _slot_name, main_slot_lsn} <-
+           Client.create_temporary_slot(repl_conn, main_slot, tmp_slot),
          :ok <- Client.set_display_settings_for_replication(repl_conn),
          {:ok, {short, long, cluster}} <- Client.get_server_versions(repl_conn),
          {:ok, table_count} <- SchemaLoader.count_electrified_tables({SchemaCache, origin}),
-         :ok <- Client.start_replication(repl_conn, publication, slot, self()),
+         {:ok, current_lsn} <- Client.current_lsn(repl_conn),
+         start_lsn = start_lsn(main_slot_lsn, current_lsn, wal_window_opts),
+         :ok <- Client.start_replication(repl_conn, publication, tmp_slot, start_lsn, self()),
          # The service connection is opened alongside the replication connection to execute
          # maintenance statements. It is needed because Postgres does not allow regular
          # statements and queries on a replication connection once the replication has started.
          {:ok, svc_conn} <- Client.connect(conn_opts) do
+      # Monitor the connection process to know when to stop the telemetry span created on the next line.
       Process.monitor(repl_conn)
-
-      Logger.metadata(pg_producer: origin)
 
       span =
         Metrics.start_span([:postgres, :replication_from], %{electrified_tables: table_count}, %{
@@ -137,22 +155,42 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
         %State{
           repl_conn: repl_conn,
           svc_conn: svc_conn,
-          queue: :queue.new(),
           publication: publication,
           origin: origin,
-          span: span
+          span: span,
+          main_slot: main_slot,
+          main_slot_lsn: main_slot_lsn,
+          resumable_wal_window: wal_window_opts.resumable_size
         }
         # The replication slot used by the replication connection prevents Postgres from
-        # discarding old WAL records until Electric sees a write to an electrified table.
-        # However, any writes in Postgres cause the WAL to grow, and, moreover, managed
-        # Postgres instances from any provider exhibit some background write rate even when the
-        # user application is idle. To keep WAL's disk usage in check, we issue a periodic no-op
-        # write that gets delivered to Electric over the replications stream, allowing it to
-        # ack the latest WAL position and let Postgres discard older records.
-        |> schedule_magic_write()
+        # discarding WAL records created after slot's start LSN.  Any writes in Postgres cause
+        # the WAL to grow, and, moreover, managed Postgres instances from any provider exhibit
+        # some background write rate even when the user application is idle. To keep WAL's disk
+        # usage in check, we perform a periodic check to see if the total WAL size kept around
+        # by our replication slot has exceeded the configured limit.
+        |> schedule_main_slot_advance()
 
       {:producer, state}
     end
+  end
+
+  # The current implementation is trivial for one reason: we don't know how many transactions
+  # that touch electrified tables ("etxns" from now on) there are between `main_slot_lsn` and
+  # `current_lsn`. As an extreme example, there could be one such transaction among thousands
+  # of transactions that Electric won't see. So there's no sensible way of choosing the start LSN
+  # such that we would stream in precisely as many etxns as can fit into the in-memory cache.
+  #
+  # Right now, the only way to preload all recent etxns into memory is to start streaming from
+  # the slot's starting point and rely on the in-memory cache's garbage collection to discard
+  # old transactions when it overflows.
+  #
+  # Going forward, we should look into writing etxns to a custom file format on disk as we
+  # are reading them from the logical replication stream. That will allow us to start
+  # replication from the last observed LSN, stream transactions until we reach the current LSN
+  # in Postgres and then fill the remaining cache space with older transactions from the file
+  # on disk.
+  defp start_lsn(main_slot_lsn, _current_lsn, _wal_window_opts) do
+    main_slot_lsn
   end
 
   @impl true
@@ -179,10 +217,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     {:stop, reason, state}
   end
 
-  def handle_info({:timeout, tref, @magic_write_msg}, %State{magic_write_timer: tref} = state) do
-    marker = "postgres_replication_producer:#{System.monotonic_time()}"
-    Electric.Replication.InitialSync.perform_magic_write(state.svc_conn, marker)
-    {:noreply, [], schedule_magic_write(%State{state | magic_write_timer: nil})}
+  def handle_info({:timeout, tref, @advance_msg}, %State{advance_timer: tref} = state) do
+    {:noreply, [], state |> advance_main_slot() |> schedule_main_slot_advance()}
   end
 
   def handle_info(msg, state) do
@@ -321,16 +357,15 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
        )
        when commit_lsn == current_txn_lsn do
     event =
-      txn
+      %{txn | lsn: end_lsn}
       |> ShadowTableTransformation.enrich_tx_from_shadow_ops()
-      |> build_message(end_lsn, state)
 
     Metrics.span_event(state.span, :transaction, Transaction.count_operations(event))
 
     queue = :queue.in(event, queue)
-    state = %{state | queue: queue, transaction: nil}
+    state = %{state | queue: queue, queue_len: state.queue_len + 1, transaction: nil}
 
-    dispatch_events(state, [])
+    dispatch_events(state)
   end
 
   # When we have new demand, add it to any pending demand and see if we can
@@ -339,37 +374,28 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   def handle_demand(incoming_demand, %{demand: pending_demand} = state) do
     state = %{state | demand: incoming_demand + pending_demand}
 
-    dispatch_events(state, [])
+    dispatch_events(state)
   end
 
-  # When we're done exhausting demand, emit events.
-  defp dispatch_events(%{demand: 0} = state, events) do
-    emit_events(state, events)
-  end
-
-  defp dispatch_events(%{demand: demand, queue: queue} = state, events) do
-    case :queue.out(queue) do
-      # If the queue has events, recurse to accumulate them
-      # as long as there is demand.
-      {{:value, event}, queue} ->
-        state = %{state | demand: demand - 1, queue: queue}
-
-        dispatch_events(state, [event | events])
-
-      # When the queue is empty, emit any accumulated events.
-      {:empty, queue} ->
-        state = %{state | queue: queue}
-
-        emit_events(state, events)
-    end
-  end
-
-  defp emit_events(state, []) do
+  defp dispatch_events(%{demand: demand, queue_len: queue_len} = state)
+       when demand == 0 or queue_len == 0 do
     {:noreply, [], state}
   end
 
-  defp emit_events(state, events) do
-    {:noreply, Enum.reverse(events), state}
+  defp dispatch_events(%{demand: demand, queue: queue, queue_len: queue_len} = state)
+       when demand >= queue_len do
+    queue |> :queue.last() |> ack(state)
+
+    state = %{state | queue: :queue.new(), queue_len: 0, demand: demand - queue_len}
+    {:noreply, :queue.to_list(queue), state}
+  end
+
+  defp dispatch_events(%{demand: demand, queue: queue, queue_len: queue_len} = state) do
+    {to_emit, queue_remaining} = :queue.split(demand, queue)
+    to_emit |> :queue.last() |> ack(state)
+
+    state = %{state | queue: queue_remaining, queue_len: queue_len - demand, demand: 0}
+    {:noreply, :queue.to_list(to_emit), state}
   end
 
   @spec data_tuple_to_map([Relation.Column.t()], list()) :: term()
@@ -381,27 +407,40 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     |> Map.new(fn {column, data} -> {column.name, data} end)
   end
 
-  defp build_message(%Transaction{} = transaction, end_lsn, %State{} = state) do
-    repl_conn = state.repl_conn
-    origin = state.origin
+  @spec ack(Transaction.t(), State.t()) :: :ok
 
-    %Transaction{
-      transaction
-      | lsn: end_lsn,
-        # Make sure not to pass state.field into ack function, as this
-        # will create a copy of the whole state in memory when sending a message
-        ack_fn: fn -> ack(repl_conn, origin, end_lsn) end
-    }
+  if Mix.env() == :test do
+    def ack(%Transaction{}, %State{repl_conn: :conn}) do
+      :ok
+    end
   end
 
-  @spec ack(pid(), Connectors.origin(), Electric.Postgres.Lsn.t()) :: :ok
-  def ack(repl_conn, origin, lsn) do
-    Logger.debug("Acknowledging #{lsn}", origin: origin)
-    Client.acknowledge_lsn(repl_conn, lsn)
+  def ack(%Transaction{lsn: lsn}, state) do
+    Logger.debug("Acknowledging #{lsn}", origin: state.origin)
+    Client.acknowledge_lsn(state.repl_conn, lsn)
   end
 
-  defp schedule_magic_write(state) do
-    tref = :erlang.start_timer(@magic_write_timeout, self(), @magic_write_msg)
-    %State{state | magic_write_timer: tref}
+  # Advance the replication slot to let Postgres discard old WAL records.
+  #
+  # TODO: make sure we're not removing transactions that are about to be requested by a newly
+  # connected client. See VAX-1552.
+  defp advance_main_slot(state) do
+    {:ok, current_lsn} = Client.current_lsn(state.svc_conn)
+    min_in_window_lsn = Lsn.increment(current_lsn, -state.resumable_wal_window)
+
+    if Lsn.compare(state.main_slot_lsn, min_in_window_lsn) == :lt do
+      # The sliding window that has the size `state.resumable_wal_window` and ends at
+      # `current_lsn` has moved forward. Advance the replication slot's starting point to let
+      # Postgres discard older WAL records.
+      :ok = Client.advance_replication_slot(state.svc_conn, state.main_slot, min_in_window_lsn)
+      %{state | main_slot_lsn: min_in_window_lsn}
+    else
+      state
+    end
+  end
+
+  defp schedule_main_slot_advance(state) do
+    tref = :erlang.start_timer(@advance_timeout, self(), @advance_msg)
+    %State{state | advance_timer: tref}
   end
 end

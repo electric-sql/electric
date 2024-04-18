@@ -92,7 +92,7 @@ defmodule ElectricTest.SatelliteHelpers do
     assert_receive {^conn, %SatOpLog{} = oplog}, timeout
 
     assert {nil, [%Transaction{} = txn]} =
-             Serialization.deserialize_trans("postgres_1", oplog, nil, cached_relations, & &1)
+             Serialization.deserialize_trans("postgres_1", oplog, nil, cached_relations)
 
     %{txn | changes: Enum.sort_by(txn.changes, &{&1.__struct__, &1.relation})}
   end
@@ -104,7 +104,7 @@ defmodule ElectricTest.SatelliteHelpers do
     assert_receive {^conn, %SatOpLog{} = oplog}, timeout
 
     assert {nil, [{:additional_data, ref, changes}]} =
-             Serialization.deserialize_trans("postgres_1", oplog, nil, cached_relations, & &1)
+             Serialization.deserialize_trans("postgres_1", oplog, nil, cached_relations)
 
     assert is_integer(ref)
 

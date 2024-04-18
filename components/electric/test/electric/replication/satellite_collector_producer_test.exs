@@ -86,7 +86,6 @@ defmodule Electric.Replication.SatelliteCollectorProducerTest do
 
   defp tx() do
     %Transaction{
-      ack_fn: fn -> nil end,
       changes: ["change 1"],
       origin: "client_id",
       lsn: <<0, 0, 0, 1>>

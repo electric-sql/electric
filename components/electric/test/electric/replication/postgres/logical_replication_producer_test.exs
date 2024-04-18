@@ -18,9 +18,13 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
   setup_with_mocks([
     {Client, [:passthrough],
      [
+       with_conn: fn _, fun -> fun.(:conn) end,
        connect: fn _ -> {:ok, :conn} end,
-       start_replication: fn :conn, _, _, _ -> :ok end,
-       create_slot: fn :conn, name -> {:ok, name} end,
+       start_replication: fn :conn, _, _, _, _ -> :ok end,
+       create_main_slot: fn :conn, name -> {:ok, name} end,
+       create_temporary_slot: fn :conn, _main_name, tmp_name -> {:ok, tmp_name, %Lsn{}} end,
+       current_lsn: fn :conn -> {:ok, %Lsn{}} end,
+       advance_replication_slot: fn _, _, _ -> :ok end,
        set_display_settings_for_replication: fn _ -> :ok end,
        get_server_versions: fn :conn -> {:ok, {"", "", ""}} end
      ]},
@@ -106,13 +110,19 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducerTest do
            ] = transaction.changes
   end
 
-  test "Producer schedules the magic write timer" do
-    %LogicalReplicationProducer.State{magic_write_timer: tref} = initialize_producer()
-    assert_receive {:timeout, ^tref, :magic_write}, 2_000
+  test "Producer schedules a timer for advancing the main slot" do
+    %LogicalReplicationProducer.State{advance_timer: tref} = initialize_producer()
+    assert_receive {:timeout, ^tref, :advance_main_slot}, 2_000
   end
 
   def initialize_producer(demand \\ 100) do
-    {:producer, state} = LogicalReplicationProducer.init(origin: "mock_postgres")
+    {:producer, state} =
+      LogicalReplicationProducer.init(
+        origin: "mock_postgres",
+        wal_window: [in_memory_size: 1, resumable_size: 1],
+        connection: %{}
+      )
+
     {_, _, state} = LogicalReplicationProducer.handle_demand(demand, state)
     state
   end

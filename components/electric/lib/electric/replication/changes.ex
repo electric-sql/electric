@@ -50,7 +50,6 @@ defmodule Electric.Replication.Changes do
             origin_type: :postgresql | :satellite,
             publication: String.t(),
             lsn: Electric.Postgres.Lsn.t(),
-            ack_fn: (-> :ok | {:error, term()}),
             additional_data_ref: non_neg_integer()
           }
 
@@ -61,7 +60,6 @@ defmodule Electric.Replication.Changes do
       :origin,
       :publication,
       :lsn,
-      :ack_fn,
       :origin_type,
       referenced_records: %{},
       additional_data_ref: 0

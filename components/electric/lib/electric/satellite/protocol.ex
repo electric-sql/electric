@@ -390,8 +390,7 @@ defmodule Electric.Satellite.Protocol do
              state.client_id,
              msg,
              in_rep.incomplete_trans,
-             in_rep.relations,
-             fn _lsn -> nil end
+             in_rep.relations
            ) do
         {incomplete, []} ->
           {nil, %State{state | in_rep: %InRep{in_rep | incomplete_trans: incomplete}}}
