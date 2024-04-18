@@ -6,7 +6,7 @@ import { genUUID } from 'electric-sql/util'
 
 import { App, ItemsWidget, SliderInput } from '../../components'
 import { useElectric } from '../../electric'
-import { boostrapSlider, useDemoContext } from '../../session'
+import { bootstrapSlider, useDemoContext } from '../../session'
 
 const newItem = (demo) => {
   return {
@@ -128,7 +128,7 @@ const Wrapper = ({ itemColor }) => {
     let isMounted = true
 
     const ensureSlider = async () => {
-      const slider = await boostrapSlider(db, demo)
+      const slider = await bootstrapSlider(db, demo)
 
       if (!isMounted) {
         return

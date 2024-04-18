@@ -169,7 +169,7 @@ export const getExistingDemo = async (
   return demo
 }
 
-export const boostrapSlider = async (db: DB, demo: Demo) => {
+export const bootstrapSlider = async (db: DB, demo: Demo) => {
   const existingSlider = await db.sliders.findFirst({
     where: {
       demo_name: demo.name,
@@ -197,7 +197,11 @@ export const boostrapSlider = async (db: DB, demo: Demo) => {
   return newSlider
 }
 
-export const boostrapPlayers = async (db: DB, demo: Demo, colors: string[]) => {
+export const bootstrapPlayers = async (
+  db: DB,
+  demo: Demo,
+  colors: string[],
+) => {
   const existingPlayers = await db.players.findMany({
     where: {
       demo_name: demo.name,
@@ -230,7 +234,7 @@ export const boostrapPlayers = async (db: DB, demo: Demo, colors: string[]) => {
   return newPlayers
 }
 
-export const boostrapTournament = async (db: DB, demo: Demo, name: string) => {
+export const bootstrapTournament = async (db: DB, demo: Demo, name: string) => {
   const existing = await db.tournaments.findMany({
     where: {
       demo_name: demo.name,

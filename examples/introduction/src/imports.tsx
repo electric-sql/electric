@@ -11,9 +11,9 @@ export { default as api } from './api'
 export * from './components'
 export { useElectric } from './electric'
 export {
-  boostrapPlayers,
-  boostrapSlider,
-  boostrapTournament,
+  bootstrapPlayers,
+  bootstrapSlider,
+  bootstrapTournament,
   useDemoContext,
 } from './session'
 export { timeResolution } from './util'

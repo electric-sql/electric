@@ -12,7 +12,7 @@ import { genUUID } from 'electric-sql/util'
 import { App, ConnectivityControl, PlayersWidget, TournamentWidget } from '../../components'
 import { useElectric } from '../../electric'
 /* prettier-ignore */
-import { bootstrapPlayers, boostrapTournament, useDemoContext } from '../../session'
+import { bootstrapPlayers, bootstrapTournament, useDemoContext } from '../../session'
 
 const newTournament = (name, demo) => {
   const ts = `${Date.now()}`
@@ -175,7 +175,7 @@ const Wrapper = ({ bootstrappedPlayerColors, userColor, userId }) => {
 
     const bootstrap = async () => {
       await bootstrapPlayers(db, demo, bootstrappedPlayerColors)
-      const numTournments = await boostrapTournament(db, demo, `${userId}:1`)
+      const numTournments = await bootstrapTournament(db, demo, `${userId}:1`)
 
       if (!isMounted) {
         return
