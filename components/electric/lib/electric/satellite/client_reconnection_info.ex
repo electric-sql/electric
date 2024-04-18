@@ -209,21 +209,23 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   client. This is ensured by `Electric.Satellite.ClientManager` allowing
   at most one WebSocket process with the same client id.
   """
-  def clear_all_data!(client_id) do
+  def clear_all_data!(origin, client_id) do
     :ets.match_delete(@actions_ets, {{client_id, :_}, :_})
     :ets.match_delete(@subscriptions_ets, {{client_id, :_}, :_, :_, :_})
     :ets.match_delete(@additional_data_ets, {{client_id, :_, :_, :_, :_}, :_, :_})
     :ets.delete(@checkpoint_ets, client_id)
 
-    Enum.each(
-      [
-        Extension.client_shape_subscriptions_table(),
-        Extension.client_checkpoints_table(),
-        Extension.client_actions_table(),
-        Extension.client_additional_data_table()
-      ],
-      &Client.query!("DELETE FROM #{&1} WHERE client_id = $1", [client_id])
-    )
+    Client.pooled_transaction(origin, fn ->
+      Enum.each(
+        [
+          Extension.client_shape_subscriptions_table(),
+          Extension.client_checkpoints_table(),
+          Extension.client_actions_table(),
+          Extension.client_additional_data_table()
+        ],
+        &Client.query!("DELETE FROM #{&1} WHERE client_id = $1", [client_id])
+      )
+    end)
 
     :ok
   end
@@ -264,7 +266,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   """
   def store_initial_checkpoint!(origin, client_id, wal_pos, sent_rows_graph) do
     Client.pooled_transaction(origin, fn ->
-      :ok = clear_all_data!(client_id)
+      :ok = clear_all_data!(origin, client_id)
       store_client_checkpoint(client_id, wal_pos, sent_rows_graph)
     end)
   end
