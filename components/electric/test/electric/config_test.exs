@@ -53,6 +53,13 @@ defmodule Electric.ConfigTest do
 
       assert {{Electric.Satellite.Auth.Insecure, %{joken_config: %{}, namespace: "ns"}}, []} =
                validate_auth_config("insecure", namespace: {"AUTH_JWT_NAMESPACE", "ns"})
+
+      # Settings without values are ignored
+      assert {{Electric.Satellite.Auth.Insecure, %{joken_config: %{}, namespace: "ns"}}, []} =
+               validate_auth_config("insecure",
+                 namespace: {"AUTH_JWT_NAMESPACE", "ns"},
+                 key: {"AUTH_JWT_KEY", nil}
+               )
     end
 
     test "validates secure mode" do
@@ -83,6 +90,15 @@ defmodule Electric.ConfigTest do
                  namespace: {"AUTH_JWT_NAMESPACE", "ns"},
                  iss: {"AUTH_JWT_ISS", "foo"},
                  aud: {"AUTH_JWT_AUD", "bar"}
+               )
+    end
+
+    test "complains about invalid key encoding" do
+      assert {nil, [{"AUTH_JWT_KEY", {:error, "has invalid base64 encoding"}}]} ==
+               validate_auth_config("secure",
+                 alg: {"AUTH_JWT_ALG", "HS256"},
+                 key: {"AUTH_JWT_KEY", String.duplicate(".", 32)},
+                 key_is_base64_encoded: {"AUTH_JWT_KEY_IS_BASE64_ENCODED", true}
                )
     end
 

@@ -46,11 +46,13 @@ defmodule Electric.Config do
     end
   end
 
+  # Remove unset options and those set to an empty string.
   defp filter_auth_opts(auth_opts) do
-    for {key, {_, val}} <- auth_opts,
-        not is_binary(val) or (is_binary(val) and String.trim(val) != "") do
-      {key, val}
-    end
+    auth_opts
+    |> Enum.map(fn {key, {_, val}} -> {key, val} end)
+    |> Enum.reject(fn {_key, val} ->
+      is_nil(val) or (is_binary(val) and String.trim(val) == "")
+    end)
   end
 
   @spec parse_database_url(maybe_string, :dev | :test | :prod) ::
