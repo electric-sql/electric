@@ -53,9 +53,11 @@ defmodule Electric.Satellite.Protocol do
     # succeed as well
     reg_name = Electric.Satellite.WebsocketServer.reg_name(client_id)
 
+    origin = Connectors.origin(state.connector_config)
+
     with {:ok, auth} <- Electric.Satellite.Auth.validate_token(token, state.auth_provider),
          true <- Electric.safe_reg(reg_name, 1000),
-         :ok <- ClientManager.register_client(client_id, reg_name) do
+         :ok <- ClientManager.register_client(client_id, reg_name, origin) do
       Logger.metadata(user_id: auth.user_id)
       Logger.info("Successfully authenticated the client")
       Metrics.satellite_connection_event(%{authorized_connection: 1})
@@ -456,6 +458,7 @@ defmodule Electric.Satellite.Protocol do
             including_data: msg.additional_data_source_ids,
             including_subscriptions: msg.subscription_ids,
             cached_wal_impl: CachedWal.EtsBacked,
+            origin: Connectors.origin(state.connector_config),
             advance_graph_using: {&advance_graph_by_tx/4, [state.auth.user_id]}
           )
 
@@ -525,7 +528,9 @@ defmodule Electric.Satellite.Protocol do
   end
 
   defp handle_start_replication_request(msg, lsn, state) do
-    if CachedWal.Api.lsn_in_cached_window?(lsn) do
+    origin = Connectors.origin(state.connector_config)
+
+    if CachedWal.Api.lsn_in_cached_window?(origin, lsn) do
       case restore_client_state(msg.subscription_ids, msg.observed_transaction_data, lsn, state) do
         {:ok, state} ->
           state =
@@ -1142,6 +1147,7 @@ defmodule Electric.Satellite.Protocol do
       including_data: observed_txn_data,
       including_subscriptions: Map.keys(state.subscriptions),
       cached_wal_impl: CachedWal.EtsBacked,
+      origin: Connectors.origin(state.connector_config),
       advance_graph_using: {&advance_graph_by_tx/4, [state.auth.user_id]}
     )
     |> case do

@@ -18,7 +18,10 @@ defmodule Electric.Satellite.ClientManager do
     @type t() :: %__MODULE__{
             clients: %{pid() => {String.t(), reference()}},
             resources: %{pid() => {String.t(), reference()}},
-            reverse: %{String.t() => {client_pid :: pid() | nil, resource_pid :: pid() | nil}}
+            reverse: %{
+              String.t() =>
+                {client_pid :: pid() | nil, resource_pid :: pid() | nil, Connectors.origin()}
+            }
           }
   end
 
@@ -27,10 +30,10 @@ defmodule Electric.Satellite.ClientManager do
     GenServer.start_link(__MODULE__, [], name: __MODULE__)
   end
 
-  @spec register_client(GenServer.server(), String.t(), Electric.reg_name()) ::
+  @spec register_client(GenServer.server(), String.t(), Electric.reg_name(), Connectors.origin()) ::
           :ok | {:error, term()}
-  def register_client(server \\ __MODULE__, client_name, reg_name) do
-    GenServer.call(server, {:register, client_name, reg_name})
+  def register_client(server \\ __MODULE__, client_name, reg_name, origin) do
+    GenServer.call(server, {:register, client_name, reg_name, origin})
   end
 
   @spec fetch_client(GenServer.server(), String.t()) :: {:ok, pid} | {:error, :not_found}
@@ -67,7 +70,7 @@ defmodule Electric.Satellite.ClientManager do
   def handle_call({:fetch_client, client_name}, _, %State{} = state) do
     res =
       state.reverse
-      |> Enum.find(fn {client_id, _} -> client_id == client_name end)
+      |> Enum.find(fn {client_id, _, _} -> client_id == client_name end)
       |> case do
         nil -> {:error, :not_found}
         {^client_name, {client_pid, _sup_pid}} -> {:ok, client_pid}
@@ -78,20 +81,20 @@ defmodule Electric.Satellite.ClientManager do
 
   def handle_call(:get_clients, _, %State{} = state) do
     res =
-      for {client, {client_pid, _sup_pid}} <- state.reverse do
+      for {client, {client_pid, _sup_pid, _origin}} <- state.reverse do
         {client, client_pid}
       end
 
     {:reply, res, state}
   end
 
-  def handle_call({:register, client_name, reg_name}, {client_pid, _}, %State{} = state) do
+  def handle_call({:register, client_name, reg_name, origin}, {client_pid, _}, %State{} = state) do
     case Map.get(state.reverse, client_name) do
       nil ->
         {:ok, sup_pid} =
           Connectors.start_connector(
             SatelliteConnector,
-            %{name: client_name, producer: reg_name}
+            %{name: client_name, producer: reg_name, origin: origin}
           )
 
         client_ref = Process.monitor(client_pid)
@@ -99,10 +102,10 @@ defmodule Electric.Satellite.ClientManager do
 
         clients = Map.put_new(state.clients, client_pid, {client_ref, client_name})
         resources = Map.put_new(state.resources, sup_pid, {resource_ref, client_name})
-        reverse = Map.put_new(state.reverse, client_name, {client_pid, sup_pid})
+        reverse = Map.put_new(state.reverse, client_name, {client_pid, sup_pid, origin})
         {:reply, :ok, %State{state | clients: clients, resources: resources, reverse: reverse}}
 
-      {old_pid, sup_pid} ->
+      {old_pid, sup_pid, origin} ->
         Logger.info("overtook supervisor")
 
         case Electric.lookup_pid(reg_name) do
@@ -114,7 +117,7 @@ defmodule Electric.Satellite.ClientManager do
               |> Map.delete(old_pid)
               |> Map.put_new(client_pid, {client_ref, client_name})
 
-            reverse = Map.put(state.reverse, client_name, {client_pid, sup_pid})
+            reverse = Map.put(state.reverse, client_name, {client_pid, sup_pid, origin})
 
             {:reply, :ok, %State{state | clients: clients, reverse: reverse}}
 
@@ -137,7 +140,7 @@ defmodule Electric.Satellite.ClientManager do
     # expect client to be reconnecting soon
 
     {{_client_ref, client_name}, clients} = Map.pop!(state.clients, client_pid)
-    {{^client_pid, sup_pid}, reverse} = Map.pop!(state.reverse, client_name)
+    {{^client_pid, sup_pid, _origin}, reverse} = Map.pop!(state.reverse, client_name)
 
     Logger.debug("cleaning resources for #{inspect(client_name)} #{inspect(client_pid)}")
 
@@ -162,19 +165,20 @@ defmodule Electric.Satellite.ClientManager do
     # - we should restart supervisor, or terminate the client if it's
     # missbehaving
     {{^sup_ref, client_name}, resources} = Map.pop!(state.resources, sup_pid)
-    {{client_pid, ^sup_pid}, reverse} = Map.pop(state.reverse, client_name)
+    {{client_pid, ^sup_pid, origin}, reverse} = Map.pop(state.reverse, client_name)
 
     case Connectors.start_connector(
            SatelliteConnector,
            %{
              name: client_name,
-             producer: Electric.Satellite.WebsocketServer.reg_name(client_name)
+             producer: Electric.Satellite.WebsocketServer.reg_name(client_name),
+             origin: origin
            }
          ) do
       {:ok, sup_pid1} ->
         resource_ref = Process.monitor(sup_pid)
         resources = Map.put(resources, sup_pid, {resource_ref, client_name})
-        reverse = Map.put(reverse, client_name, {client_pid, sup_pid1})
+        reverse = Map.put(reverse, client_name, {client_pid, sup_pid1, origin})
 
         {:noreply, %State{state | resources: resources, reverse: reverse}}
 

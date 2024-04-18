@@ -12,32 +12,39 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
     removing oldest entries (FIFO)
   """
 
-  require Logger
+  use GenStage
+
   alias Electric.Replication.Changes.Transaction
+  alias Electric.Replication.Connectors
   alias Electric.Postgres.Lsn
   alias Electric.Postgres.CachedWal.Api
 
-  use GenStage
+  require Logger
+
   @behaviour Electric.Postgres.CachedWal.Api
 
-  @ets_table_name :ets_backed_cached_wal
-
   @typep state :: %{
+           origin: Connectors.origin(),
            notification_requests: %{optional(reference()) => {Api.wal_pos(), pid()}},
-           table: ETS.Set.t(),
+           table: :ets.table(),
            last_seen_wal_pos: Api.wal_pos(),
-           current_cache_count: non_neg_integer(),
-           max_cache_count: non_neg_integer()
+           current_tx_count: non_neg_integer(),
+           wal_window_size: non_neg_integer()
          }
 
   # Public API
+
+  @spec name(Connectors.origin()) :: Electric.reg_name()
+  def name(origin) do
+    Electric.name(__MODULE__, origin)
+  end
 
   @doc """
   Start the cache. See module docs for options
   """
   def start_link(opts) do
-    # We're globally registering this process since ets table name is hardcoded anyway, so no two instances can be started.
-    GenStage.start_link(__MODULE__, opts, name: __MODULE__)
+    origin = Keyword.fetch!(opts, :origin)
+    GenStage.start_link(__MODULE__, opts, name: name(origin))
   end
 
   def clear_cache(stage) do
@@ -45,13 +52,15 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
   end
 
   @impl Api
-  def lsn_in_cached_window?(client_wal_pos) do
-    case :ets.first(@ets_table_name) do
+  def lsn_in_cached_window?(origin, client_wal_pos) do
+    table = ets_table_name(origin)
+
+    case :ets.first(table) do
       :"$end_of_table" ->
         false
 
       first_position ->
-        case :ets.last(@ets_table_name) do
+        case :ets.last(table) do
           :"$end_of_table" ->
             false
 
@@ -62,28 +71,28 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
   end
 
   @impl Api
-  def get_current_position do
-    with :"$end_of_table" <- :ets.last(@ets_table_name) do
+  def get_current_position(origin) do
+    with :"$end_of_table" <- :ets.last(ets_table_name(origin)) do
       nil
     end
   end
 
   @impl Api
-  def next_segment(wal_pos) do
-    case :ets.next(@ets_table_name, wal_pos) do
+  def next_segment(origin, wal_pos) do
+    case :ets.next(ets_table_name(origin), wal_pos) do
       :"$end_of_table" -> :latest
-      key -> {:ok, :ets.lookup_element(@ets_table_name, key, 2), key}
+      key -> {:ok, :ets.lookup_element(ets_table_name(origin), key, 2), key}
     end
   end
 
   @impl Api
-  def request_notification(wal_pos) do
-    GenStage.call(__MODULE__, {:request_notification, wal_pos})
+  def request_notification(origin, wal_pos) do
+    GenStage.call(name(origin), {:request_notification, wal_pos})
   end
 
   @impl Api
-  def cancel_notification_request(ref) do
-    GenStage.call(__MODULE__, {:cancel_notification, ref})
+  def cancel_notification_request(origin, ref) do
+    GenStage.call(name(origin), {:cancel_notification, ref})
   end
 
   @impl Api
@@ -98,8 +107,8 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
   end
 
   @impl Api
-  def telemetry_stats() do
-    GenStage.call(__MODULE__, :telemetry_stats)
+  def telemetry_stats(origin) do
+    GenStage.call(name(origin), :telemetry_stats)
   catch
     :exit, _ -> nil
   end
@@ -113,21 +122,28 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
 
   @impl GenStage
   def init(opts) do
-    set = ETS.Set.new!(name: @ets_table_name, ordered: true)
-    Logger.metadata(component: "CachedWal.EtsBacked")
+    origin = Keyword.fetch!(opts, :origin)
+
+    table = :ets.new(ets_table_name(origin), [:named_table, :ordered_set])
+    Logger.metadata(origin: origin, component: "CachedWal.EtsBacked")
 
     state = %{
+      origin: origin,
       notification_requests: %{},
-      table: set,
+      table: table,
       last_seen_wal_pos: 0,
-      current_cache_count: 0,
-      max_cache_count: Keyword.get(opts, :max_cache_count, 10000)
+      current_tx_count: 0,
+      wal_window_size: Keyword.fetch!(opts, :wal_window_size)
     }
 
     case Keyword.get(opts, :subscribe_to) do
       nil -> {:consumer, state}
       subscription -> {:consumer, state, subscribe_to: subscription}
     end
+  end
+
+  defp ets_table_name(origin) do
+    String.to_atom(inspect(__MODULE__) <> ":" <> origin)
   end
 
   @impl GenStage
@@ -142,29 +158,23 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
     {:reply, {:ok, ref}, [], state}
   end
 
-  @impl GenStage
   def handle_call({:cancel_notification, ref}, _, state) do
     state = Map.update!(state, :notification_requests, &Map.delete(&1, ref))
 
     {:reply, :ok, [], state}
   end
 
-  @impl GenStage
   def handle_call(:telemetry_stats, _from, state) do
     oldest_timestamp =
-      with {:ok, key} <- ETS.Set.first(state.table),
-           {:ok, %Transaction{} = tx} <- ETS.Set.get_element(state.table, key, 2) do
+      if tx = lookup_oldest_transaction(state.table) do
         tx.commit_timestamp
-      else
-        _ -> nil
       end
 
     stats = %{
-      transaction_count: state.current_cache_count,
-      max_transaction_count: state.max_cache_count,
+      transaction_count: state.current_tx_count,
       oldest_transaction_timestamp: oldest_timestamp,
-      cache_memory_total:
-        ETS.Set.info!(state.table, true)[:memory] * :erlang.system_info(:wordsize)
+      max_cache_size: state.wal_window_size,
+      cache_memory_total: :ets.info(state.table, :memory) * :erlang.system_info(:wordsize)
     }
 
     {:reply, stats, [], state}
@@ -172,15 +182,17 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
 
   @impl GenStage
   def handle_cast(:clear_cache, state) do
-    ETS.Set.delete_all!(state.table)
+    :ets.delete_all_objects(state.table)
 
     # This doesn't do anything with notification requests, but this function is not meant to be used in production
-    {:noreply, [], %{state | current_cache_count: 0, last_seen_wal_pos: 0}}
+    {:noreply, [], %{state | current_tx_count: 0, last_seen_wal_pos: 0}}
   end
 
   @impl GenStage
   @spec handle_events([Transaction.t()], term(), state()) :: {:noreply, [], any}
   def handle_events(events, _, state) do
+    # TODO: Make sure that when this process crashes, LogicalReplicationProducer is restarted as well
+    # in order to fill up the in-memory cache.
     events
     # TODO: We're currently storing & streaming empty transactions to Satellite, which is not ideal, but we need
     #       to be aware of all transaction IDs and LSNs that happen, otherwise flakiness begins. I don't like that,
@@ -207,19 +219,18 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
     )
     |> Stream.map(fn %Transaction{} = tx -> {lsn_to_position(tx.lsn), tx} end)
     |> Enum.to_list()
-    |> tap(&ETS.Set.put(state.table, &1))
-    |> Electric.Utils.list_last_and_length()
+    |> tap(&:ets.insert(state.table, &1))
+    |> List.last()
     |> case do
-      {_, 0} ->
+      nil ->
         # All transactions were empty
         {:noreply, [], state}
 
-      {{position, _}, total} ->
+      {position, _} ->
         state =
           state
           |> Map.put(:last_seen_wal_pos, position)
           |> fulfill_notification_requests()
-          |> Map.update!(:current_cache_count, &(&1 + total))
           |> trim_cache()
 
         {:noreply, [], state}
@@ -246,19 +257,28 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
 
   def lsn_to_position(lsn), do: Lsn.to_integer(lsn)
 
+  # Drop all transactions from the cache whose position is less than the last transaction's
+  # position minus in-memory WAL window size.
+  #
+  # TODO: make sure we're not removing transactions that are about to be requested by a newly
+  # connected client.
+  #
+  # NOTE(optimization): clean the cache up after every N new transactions.
   @spec trim_cache(state()) :: state()
-  defp trim_cache(%{current_cache_count: current, max_cache_count: max} = state)
-       when current <= max,
-       do: state
-
   defp trim_cache(state) do
-    to_trim = state.current_cache_count - state.max_cache_count
+    first_in_window_pos = state.last_seen_wal_pos - state.wal_window_size
 
-    state.table
-    # `match/3` works here because it's an ordered set, which guarantees traversal from the beginning
-    |> ETS.Set.match({:"$1", :_}, to_trim)
-    |> Enum.each(fn [key] -> ETS.Set.delete!(state.table, key) end)
+    :ets.select_delete(state.table, [
+      {{:"$1", :_}, [{:<, :"$1", first_in_window_pos}], [true]}
+    ])
 
-    Map.update!(state, :current_cache_count, &(&1 - to_trim))
+    %{state | current_tx_count: :ets.info(state.table, :size)}
+  end
+
+  defp lookup_oldest_transaction(ets_table) do
+    case :ets.match(ets_table, {:_, :"$1"}, 1) do
+      {[[%Transaction{} = tx]], _cont} -> tx
+      :"$end_of_table" -> nil
+    end
   end
 end

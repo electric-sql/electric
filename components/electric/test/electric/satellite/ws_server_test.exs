@@ -76,9 +76,11 @@ defmodule Electric.Satellite.WebsocketServerTest do
     {
       Electric.Postgres.CachedWal.Api,
       [:passthrough],
-      get_current_position: fn -> @current_wal_pos end,
-      lsn_in_cached_window?: fn num when is_integer(num) -> num > @current_wal_pos end,
-      stream_transactions: fn _, _ -> [] end
+      get_current_position: fn _ -> @current_wal_pos end,
+      lsn_in_cached_window?: fn _origin, pos when is_integer(pos) ->
+        pos > @current_wal_pos
+      end,
+      stream_transactions: fn _, _, _ -> [] end
     }
   ]) do
     {:ok, %{}}
