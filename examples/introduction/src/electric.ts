@@ -24,7 +24,7 @@ export const initElectric = async (name: string = 'intro') => {
   const { tabId } = uniqueTabId()
   const scopedDbName = `${name}-${LIB_VERSION}-${tabId}.db`
 
-  const conn = await ElectricDatabase.init(scopedDbName, '/')
+  const conn = await ElectricDatabase.init(scopedDbName)
   const config = {
     url: ELECTRIC_URL,
     debug: debugMode(),
