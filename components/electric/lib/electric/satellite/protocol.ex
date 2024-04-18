@@ -540,7 +540,7 @@ defmodule Electric.Satellite.Protocol do
       end
     else
       # Once the client is outside the WAL window, we are assuming the client will reset its local state, so we will too.
-      Client.checkout_from_pool(state.origin, fn ->
+      Client.pooled_transaction(state.origin, fn ->
         ClientReconnectionInfo.clear_all_data(state.client_id)
       end)
 
