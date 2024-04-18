@@ -448,7 +448,7 @@ defmodule Electric.Satellite.Protocol do
         )
 
         {:ok, _} =
-          ClientReconnectionInfo.advance_checkpoint(state.client_id,
+          ClientReconnectionInfo.advance_checkpoint!(state.client_id,
             ack_point: sent_pos,
             including_data: msg.additional_data_source_ids,
             including_subscriptions: msg.subscription_ids,
@@ -541,7 +541,7 @@ defmodule Electric.Satellite.Protocol do
     else
       # Once the client is outside the WAL window, we are assuming the client will reset its local state, so we will too.
       Client.pooled_transaction(state.origin, fn ->
-        ClientReconnectionInfo.clear_all_data(state.client_id)
+        ClientReconnectionInfo.clear_all_data!(state.client_id)
       end)
 
       {:error,
@@ -701,7 +701,7 @@ defmodule Electric.Satellite.Protocol do
     {graph_diff, _, _} = data
 
     # Store this data in case of disconnect until acknowledged
-    ClientReconnectionInfo.store_subscription_data(state.origin, state.client_id, id, graph_diff)
+    ClientReconnectionInfo.store_subscription_data!(state.origin, state.client_id, id, graph_diff)
 
     if is_paused_on_subscription(state, id) do
       # We're currently waiting for data from this subscription, we can send it immediately
@@ -755,7 +755,7 @@ defmodule Electric.Satellite.Protocol do
     # but more testing is required.
 
     # Store this data in case of disconnect until acknowledged
-    ClientReconnectionInfo.store_additional_txn_data(
+    ClientReconnectionInfo.store_additional_txn_data!(
       state.origin,
       state.client_id,
       xmin,
@@ -1043,7 +1043,7 @@ defmodule Electric.Satellite.Protocol do
           "Requested data for subscription #{id}, insertion point is at xmin = #{xmin}"
         )
 
-        ClientReconnectionInfo.store_subscription(
+        ClientReconnectionInfo.store_subscription!(
           state.origin,
           state.client_id,
           id,
@@ -1138,7 +1138,7 @@ defmodule Electric.Satellite.Protocol do
   end
 
   defp restore_graph(lsn, observed_txn_data, %State{} = state) do
-    ClientReconnectionInfo.advance_on_reconnection(state.client_id,
+    ClientReconnectionInfo.advance_on_reconnection!(state.client_id,
       ack_point: lsn,
       including_data: observed_txn_data,
       including_subscriptions: Map.keys(state.subscriptions),
