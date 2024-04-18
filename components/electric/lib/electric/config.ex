@@ -47,7 +47,8 @@ defmodule Electric.Config do
   end
 
   defp filter_auth_opts(auth_opts) do
-    for {key, {_, val}} <- auth_opts, is_binary(val) and String.trim(val) != "" do
+    for {key, {_, val}} <- auth_opts,
+        not is_binary(val) or (is_binary(val) and String.trim(val) != "") do
       {key, val}
     end
   end

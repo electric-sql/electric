@@ -62,6 +62,13 @@ defmodule Electric.ConfigTest do
                  key: {"AUTH_JWT_KEY", String.duplicate(".", 32)}
                )
 
+      assert {{Electric.Satellite.Auth.Secure, %{joken_config: %{}, namespace: nil}}, []} =
+               validate_auth_config("secure",
+                 alg: {"AUTH_JWT_ALG", "HS256"},
+                 key: {"AUTH_JWT_KEY", :crypto.strong_rand_bytes(32) |> Base.encode64()},
+                 key_is_base64_encoded: {"AUTH_JWT_KEY_IS_BASE64_ENCODED", true}
+               )
+
       assert {{Electric.Satellite.Auth.Secure,
                %{
                  joken_config: %{},
@@ -72,6 +79,7 @@ defmodule Electric.ConfigTest do
                validate_auth_config("secure",
                  alg: {"AUTH_JWT_ALG", "HS256"},
                  key: {"AUTH_JWT_KEY", String.duplicate(".", 32)},
+                 key_is_base64_encoded: {"AUTH_JWT_KEY_IS_BASE64_ENCODED", false},
                  namespace: {"AUTH_JWT_NAMESPACE", "ns"},
                  iss: {"AUTH_JWT_ISS", "foo"},
                  aud: {"AUTH_JWT_AUD", "bar"}
