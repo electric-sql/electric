@@ -131,8 +131,8 @@ async function generateEnvFile(
   await fs.writeFile(
     path.join(projectDir, '.env.local'),
     [
-      `ELECTRIC_PORT=${options.electricPort}`,
-      `ELECTRIC_PROXY_PORT=${options.electricProxyPort}`,
+      `ELECTRIC_SERVICE=http://localhost:${options.electricPort}`,
+      `ELECTRIC_PG_PROXY_PORT=${options.electricProxyPort}`,
     ].join('\n'),
   )
 }
@@ -238,11 +238,11 @@ export async function installDependencies(projectDir: string): Promise<void> {
  * Regenerates the React Native platform projects by "ejecting"
  * the native files from the root of the project using
  * react-native-eject: https://www.npmjs.com/package/react-native-eject
- * 
+ *
  * @param projectDir the directory of the project
  */
 export async function regenerateReactNativePlatformProjects(
-  projectDir: string
+  projectDir: string,
 ) {
   // recreate a react native project from scratch
   await new Promise<void>((res, rej) => {

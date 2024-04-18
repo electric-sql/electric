@@ -21,7 +21,7 @@ const ignoreDirs = [
   'ios',
   'android',
 ]
-const ignoreFiles = ['package-lock.json']
+const ignoreFiles = ['package-lock.json', '.env']
 
 /*
  * Replaces the first occurence of `find` by `replace` in the file `file`.
@@ -111,7 +111,7 @@ async function copyTemplateOverlayFiles(
   }
   await mkdir(templateTargetDir, { recursive: true })
   await copyFiles(templateSourceDir, templateTargetDir)
-  if (templateOverlayDir && await pathExists(templateOverlayDir)) {
+  if (templateOverlayDir && (await pathExists(templateOverlayDir))) {
     await copyFiles(templateOverlayDir, templateTargetDir)
   }
 

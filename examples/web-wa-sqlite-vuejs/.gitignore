@@ -23,9 +23,6 @@ dist-ssr
 *.sln
 *.sw?
 
-# Wasm
-public/wa-sqlite-async.wasm
-
 # Env files
 .env.local
 .env.*.local

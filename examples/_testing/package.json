@@ -1,0 +1,18 @@
+{
+  "name": "electric-sql-example-tests",
+  "version": "0.1.0",
+  "author": "ElectricSQL",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "web-e2e": "npx playwright install --with-deps && npx playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.43.1",
+    "@types/node": "^20.12.7",
+    "@typescript-eslint/eslint-plugin": "^7.7.0",
+    "@typescript-eslint/parser": "^7.7.0",
+    "eslint": "^9.0.0",
+    "typescript": "^5.4.5"
+  }
+}

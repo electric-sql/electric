@@ -1,0 +1,50 @@
+name: Examples / E2E
+
+on:
+  workflow_call:
+  push:
+    branches:
+      - main
+  pull_request:
+    paths:
+      - 'examples/**'
+      - '!examples/**/**.md'
+
+concurrency:
+  group: examples-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test_web:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        example_dir: ['examples/web-wa-sqlite', 'examples/web-wa-sqlite-vuejs']
+    defaults:
+      run:
+        working-directory: ${{ matrix.example_dir }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 8
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: pnpm
+      - name: Install dependencies
+        run: npm ci
+      - name: Start backend, run migrations, generate client
+        run: |
+          npm run backend:up &&
+          npm run db:migrate &&
+          npm run client:generate
+      - name: Start dev server in background
+        run: npm run dev < /dev/null &
+      - name: Run e2e tests
+        working-directory: 'examples/_testing'
+        run: |
+          pnpm install --frozen-lockfile &&
+          pnpm web-e2e

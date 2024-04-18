@@ -8,8 +8,8 @@ on:
   pull_request:
     paths:
       - 'pnpm-lock.yaml'
-      - 'examples/starter/**'
-      - '!examples/starter/**.md'
+      - 'examples/**'
+      - '!examples/**/**.md'
 
 defaults:
   run:
