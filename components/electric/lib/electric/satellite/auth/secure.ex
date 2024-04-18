@@ -41,6 +41,8 @@ defmodule Electric.Satellite.Auth.Secure do
 
          "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQY..."
 
+    * `key_is_base64_encoded: <boolean>` - optional flag that indicates whether the key should be base64-decoded.
+
     * `namespace: <string>` - optional namespace under which the "sub" or "user_id" claim will be looked up. If omitted,
       "sub" or "user_id" must be a top-level claim.
 
