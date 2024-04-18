@@ -8,8 +8,10 @@ import { TouchBackend } from 'react-dnd-touch-backend'
 import { useLiveQuery } from 'electric-sql/react'
 import { genUUID } from 'electric-sql/util'
 
+/* prettier-ignore */
 import { App, ConnectivityControl, PlayersWidget, TournamentWidget } from '../../components'
 import { useElectric } from '../../electric'
+/* prettier-ignore */
 import { bootstrapPlayers, boostrapTournament, useDemoContext } from '../../session'
 
 const newTournament = (name, demo) => {
@@ -172,7 +174,7 @@ const Wrapper = ({ bootstrappedPlayerColors, userColor, userId }) => {
     let isMounted = true
 
     const bootstrap = async () => {
-      await boostrapPlayers(db, demo, bootstrappedPlayerColors)
+      await bootstrapPlayers(db, demo, bootstrappedPlayerColors)
       const numTournments = await boostrapTournament(db, demo, `${userId}:1`)
 
       if (!isMounted) {

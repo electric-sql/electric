@@ -1,4 +1,3 @@
-
 # ElectricSQL Introduction
 
 This repo contains the source code for the demo apps / widgets on the [Introduction section](https://electric-sql.com/docs/intro/local-first) of the [ElectricSQL website](https://electric-sql.com).
@@ -6,11 +5,13 @@ This repo contains the source code for the demo apps / widgets on the [Introduct
 ## Usage
 
 Install deps:
+
 ```sh
 yarn
 ```
 
 Start the electric service, migrate, and generate the client:
+
 ```sh
 yarn backend:up
 yarn db:migrate
@@ -20,6 +21,7 @@ yarn client:generate
 If running outside of the context of the website repo, you will need to populate some environment variables in `src/config.ts`. These are normally injected by Webpack during the website build but this source repo uses Vite as its build process.
 
 Boot up the dev server
+
 ```sh
 yarn dev
 ```

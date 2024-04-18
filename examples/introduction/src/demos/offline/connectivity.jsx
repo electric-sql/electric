@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react'
 
 import { useLiveQuery } from 'electric-sql/react'
 import { genUUID } from 'electric-sql/util'
-
+/* prettier-ignore */
 import { App, ConnectivityControl, ItemsWidget, SliderInput } from '../../components'
 import { useElectric } from '../../electric'
 import { boostrapSlider, useDemoContext } from '../../session'

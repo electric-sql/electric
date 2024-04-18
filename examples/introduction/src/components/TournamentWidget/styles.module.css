@@ -5,7 +5,7 @@
   margin: 0.5rem 0 1rem;
 
   border-radius: 12px;
-  border: 1px dashed var(--cool-grey-800, #5A5C64);
+  border: 1px dashed var(--cool-grey-800, #5a5c64);
 }
 .tournamentActive {
   border-color: var(--electric-green);
@@ -56,4 +56,3 @@
   clear: both;
   padding: 0.5rem 1rem 0;
 }
-
