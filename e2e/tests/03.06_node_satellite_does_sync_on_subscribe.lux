@@ -22,7 +22,7 @@
 
 [shell satellite_1]
     -$fail_pattern
-    [invoke node_sync_table "items"]
+    [invoke node_sync_items ""]
     # As soon as sync is done, we expect to see the row in the database
     !await client.get_items(db)
     ??hello from pg

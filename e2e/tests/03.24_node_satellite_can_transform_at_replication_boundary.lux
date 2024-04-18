@@ -13,13 +13,11 @@
 [shell satellite_1]
     ??[rpc] recv: #SatInStartReplicationResp
     [invoke node_set_item_replication_transform]
-    [invoke node_await_table "items"]
     [invoke node_sync_table "items"]
     
 [shell satellite_2]
     ??[rpc] recv: #SatInStartReplicationResp
     [invoke node_set_item_replication_transform]
-    [invoke node_await_table "items"]
     [invoke node_sync_table "items"]
 
 [shell satellite_1]

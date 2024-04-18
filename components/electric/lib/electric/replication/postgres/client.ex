@@ -8,7 +8,8 @@ defmodule Electric.Replication.Postgres.Client do
 
   import Electric.Postgres.Dialect.Postgresql, only: [quote_ident: 1]
 
-  alias Electric.Postgres.{Extension, Lsn}
+  alias Electric.Postgres.Extension
+  alias Electric.Postgres.Lsn
   alias Electric.Replication.Connectors
 
   require Logger

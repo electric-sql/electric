@@ -35,13 +35,17 @@ export const electrify_db = async (
   schema.migrations = migrations
   const result = await electrify(db, schema, config)
   const token = await mockSecureAuthToken(exp)
-  
+
   result.notifier.subscribeToConnectivityStateChanges((x: any) => console.log(`Connectivity state changed: ${x.connectivityState.status}`))
   if (connectToElectric) {
     await result.connect(token) // connect to Electric
   }
 
   return result
+}
+
+export const disconnect = async (electric: Electric) => {
+  await electric.disconnect()
 }
 
 // reconnects with Electric, e.g. after expiration of the JWT
@@ -81,20 +85,25 @@ export const set_subscribers = (db: Electric) => {
   })
 }
 
-export const syncTable = async (electric: Electric, table: string) => {
-  if (table === 'other_items') {
-    const { synced } = await electric.db.other_items.sync()
-    return await synced
-  } else {
-    const satellite = globalRegistry.satellites[dbName]
-    const { synced } = await satellite.subscribe([{tablename: table}])
-    return await synced
-  }
+export const syncItemsTable = async (electric: Electric, shapeFilter: string) => {
+  const { synced } = await electric.db.items.sync({ where: shapeFilter })
+  return await synced
+}
+
+export const syncOtherItemsTable = async (electric: Electric, shapeFilter: string) => {
+  const { synced } = await electric.db.other_items.sync({ where: shapeFilter })
+  return await synced
+}
+
+export const syncTable = async (table: string) => {
+  const satellite = globalRegistry.satellites[dbName]
+  const { synced } = await satellite.subscribe([{ tablename: table }])
+  return await synced
 }
 
 export const lowLevelSubscribe = async (electric: Electric, shape: Shape) => {
-    const { synced } = await electric.satellite.subscribe([shape])
-    return await synced
+  const { synced } = await electric.satellite.subscribe([shape])
+  return await synced
 }
 
 export const get_tables = (electric: Electric) => {
@@ -106,7 +115,7 @@ export const get_columns = (electric: Electric, table: string) => {
 }
 
 export const get_rows = (electric: Electric, table: string) => {
-  return electric.db.rawQuery({sql: `SELECT * FROM ${table};`})
+  return electric.db.rawQuery({ sql: `SELECT * FROM ${table};` })
 }
 
 export const get_timestamps = (electric: Electric) => {
@@ -369,7 +378,7 @@ export const insert_extended_into = async (electric: Electric, table: string, va
   const columnNames = columns.join(", ")
   const placeHolders = Array(columns.length).fill("?")
   const args = Object.values(values)
-  
+
   await electric.db.unsafeExec({
     sql: `INSERT INTO ${table} (${columnNames}) VALUES (${placeHolders}) RETURNING *;`,
     args: args,
@@ -395,13 +404,6 @@ export const insert_other_item = async (electric: Electric, keys: [string]) => {
     return {
       id: uuidv4(),
       content: k
-    }
-  })
-
-  await electric.db.items.create({
-    data: {
-      id: "test_id_1",
-      content: ""
     }
   })
 

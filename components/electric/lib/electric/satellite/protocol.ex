@@ -9,12 +9,11 @@ defmodule Electric.Satellite.Protocol do
 
   alias SatSubsResp.SatSubsError
 
-  alias Electric.Utils
-  alias Electric.Replication.Changes.Transaction
+  alias Electric.Postgres.CachedWal
   alias Electric.Postgres.Extension.SchemaCache
   alias Electric.Postgres.Schema
-  alias Electric.Postgres.CachedWal
   alias Electric.Replication.Changes
+  alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.Shapes
   alias Electric.Replication.Shapes.ShapeRequest
   alias Electric.Satellite.Serialization
@@ -22,6 +21,7 @@ defmodule Electric.Satellite.Protocol do
   alias Electric.Satellite.WriteValidation
   alias Electric.Satellite.ClientReconnectionInfo
   alias Electric.Telemetry.Metrics
+  alias Electric.Utils
 
   alias Electric.Satellite.Protocol.{State, InRep, OutRep, Telemetry}
   import Electric.Satellite.Protocol.State, only: :macros
@@ -258,7 +258,7 @@ defmodule Electric.Satellite.Protocol do
       |> Map.put(:out_rep, out_rep)
       |> Map.update!(:subscriptions, &Map.drop(&1, ids))
 
-    for id <- ids, do: ClientReconnectionInfo.delete_subscription(state.client_id, id)
+    Enum.each(ids, &ClientReconnectionInfo.delete_subscription(state.origin, state.client_id, &1))
 
     if needs_unpausing? do
       {:force_unpause, %SatUnsubsResp{}, state}
@@ -447,7 +447,7 @@ defmodule Electric.Satellite.Protocol do
         )
 
         {:ok, _} =
-          ClientReconnectionInfo.advance_checkpoint(state.client_id,
+          ClientReconnectionInfo.advance_checkpoint!(state.client_id,
             ack_point: sent_pos,
             including_data: msg.additional_data_source_ids,
             including_subscriptions: msg.subscription_ids,
@@ -507,6 +507,7 @@ defmodule Electric.Satellite.Protocol do
     #
     # Sending a message to self() here ensures that the SatInStartReplicationResp message is delivered to the
     # client first, followed by the initial migrations.
+    Logger.debug("Performing initial sync for client #{state.client_id}")
     send(self(), {:perform_initial_sync_and_subscribe, msg})
 
     {:reply, %SatInStartReplicationResp{unacked_window_size: state.out_rep.allowed_unacked_txs},
@@ -539,7 +540,7 @@ defmodule Electric.Satellite.Protocol do
       end
     else
       # Once the client is outside the WAL window, we are assuming the client will reset its local state, so we will too.
-      ClientReconnectionInfo.clear_all_data(state.client_id)
+      ClientReconnectionInfo.clear_all_data!(state.origin, state.client_id)
 
       {:error,
        start_replication_error(:BEHIND_WINDOW, "Cannot catch up to the server's current state")}
@@ -698,7 +699,7 @@ defmodule Electric.Satellite.Protocol do
     {graph_diff, _, _} = data
 
     # Store this data in case of disconnect until acknowledged
-    ClientReconnectionInfo.store_subscription_data(state.client_id, id, graph_diff)
+    ClientReconnectionInfo.store_subscription_data!(state.origin, state.client_id, id, graph_diff)
 
     if is_paused_on_subscription(state, id) do
       # We're currently waiting for data from this subscription, we can send it immediately
@@ -752,9 +753,9 @@ defmodule Electric.Satellite.Protocol do
     # but more testing is required.
 
     # Store this data in case of disconnect until acknowledged
-    ClientReconnectionInfo.store_additional_tx_data(
+    ClientReconnectionInfo.store_additional_txn_data!(
+      state.origin,
       state.client_id,
-      ref,
       xmin,
       ref,
       included_txns,
@@ -1040,7 +1041,8 @@ defmodule Electric.Satellite.Protocol do
           "Requested data for subscription #{id}, insertion point is at xmin = #{xmin}"
         )
 
-        ClientReconnectionInfo.store_subscription(
+        ClientReconnectionInfo.store_subscription!(
+          state.origin,
           state.client_id,
           id,
           xmin,
@@ -1134,7 +1136,7 @@ defmodule Electric.Satellite.Protocol do
   end
 
   defp restore_graph(lsn, observed_txn_data, %State{} = state) do
-    ClientReconnectionInfo.advance_on_reconnection(state.client_id,
+    ClientReconnectionInfo.advance_on_reconnection!(state.client_id,
       ack_point: lsn,
       including_data: observed_txn_data,
       including_subscriptions: Map.keys(state.subscriptions),

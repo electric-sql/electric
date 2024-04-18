@@ -226,7 +226,8 @@ defmodule Electric.Satellite.WebsocketServer do
 
     max_txid = migrations |> Enum.map(& &1.xid) |> Enum.max(fn -> 0 end)
 
-    ClientReconnectionInfo.store_initial_checkpoint(
+    ClientReconnectionInfo.store_initial_checkpoint!(
+      state.origin,
       state.client_id,
       lsn,
       state.out_rep.sent_rows_graph

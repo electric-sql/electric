@@ -17,6 +17,7 @@
 
     [newshell electric]
         [invoke start_electric 1]
+        ??Successfully initialized Postgres connector "postgres_1"
         [progress setup finished]
 
     [shell postgres_logs]
@@ -36,11 +37,11 @@
 [macro start_electric n]
     !make start_electric_${n}
     -$fail_pattern
-    ??Successfully initialized Postgres connector "postgres_1"
 [endmacro]
 
 [macro stop_electric n]
     !make stop_electric_${n}
+    ??Stopped
     [invoke ok]
 [endmacro]
 
@@ -97,14 +98,14 @@
     """!
     {:ok, %{err: nil}} = TestWsClient.make_rpc_call(conn, "subscribe", ProtocolHelpers.subscription_request(request_1: ~w|$tables|))
     """
-    ?$eprompt
+    ?rec \[\d+\]: %Electric.Satellite.SatSubsDataEnd\{\}
 [endmacro]
 
 [macro elixir_client_subscribe_with_id id tables]
     """!
     {:ok, %{err: nil}} = TestWsClient.make_rpc_call(conn,  "subscribe", ProtocolHelpers.subscription_request("$id", request_1: ~w|$tables|))
     """
-    ?$eprompt
+    ?rec \[\d+\]: %Electric.Satellite.SatSubsDataEnd\{\}
 [endmacro]
 
 
@@ -140,6 +141,19 @@
             intvalue_null_default integer
         );
         ALTER TABLE public.items ENABLE ELECTRIC;
+        """]
+    [invoke migrate_pg $version $sql]
+[endmacro]
+
+[macro migrate_other_items_table version]
+    [local sql=
+        """
+        CREATE TABLE public.other_items (
+            id TEXT PRIMARY KEY,
+            content TEXT NOT NULL,
+            item_id UUID REFERENCES public.items(id)
+        );
+        ALTER TABLE public.other_items ENABLE ELECTRIC;
         """]
     [invoke migrate_pg $version $sql]
 [endmacro]
