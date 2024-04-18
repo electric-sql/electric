@@ -20,7 +20,7 @@ const ConnectivityControl = () => {
     status === 'disconnected' ? 'connectivity-off' : 'connectivity-on'
 
   const labelStyle = {
-    color: 'red', //`var(--${colors[status]})`,
+    color: `var(--${colors[status]})`,
   }
 
   return (

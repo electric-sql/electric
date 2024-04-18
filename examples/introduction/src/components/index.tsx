@@ -1,3 +1,4 @@
+import React from 'react'
 export { default as App } from './App'
 export { default as CloudApp } from './CloudApp'
 export { default as ConnectivityControl } from './ConnectivityControl'
@@ -8,3 +9,5 @@ export { default as PlayersWidget } from './PlayersWidget'
 export { default as SliderInput } from './SliderInput'
 export { default as TournamentWidget } from './TournamentWidget'
 export * from './commands'
+
+window.React = React
