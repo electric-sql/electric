@@ -1,8 +1,7 @@
 import { useConnectivityState } from 'electric-sql/react'
-
-import OnIcon from '@site/static/img/icons/wifi-on.svg'
-import OffIcon from '@site/static/img/icons/wifi-off.svg'
+import clsx from 'clsx'
 import { useElectric } from '../../electric'
+import styles from './styles.module.css'
 
 const colors = {
   available: 'script-yellow',
@@ -17,10 +16,11 @@ const ConnectivityControl = () => {
   const toggleConnectivityState = async (): Promise<void> =>
     status === 'connected' ? electric.disconnect() : electric.connect()
 
-  const Icon = status === 'disconnected' ? OffIcon : OnIcon
+  const connectivityStyle =
+    status === 'disconnected' ? 'connectivity-off' : 'connectivity-on'
 
   const labelStyle = {
-    color: `var(--${colors[status]})`,
+    color: 'red', //`var(--${colors[status]})`,
   }
 
   return (
@@ -30,7 +30,14 @@ const ConnectivityControl = () => {
         className="flex flex-row items-center text-current hover:text-current cursor-pointer"
       >
         <span className="capitalize">{status}</span>
-        <Icon className="ml-1 w-5" />
+        <div
+          className={clsx(
+            'ml-1 w-5',
+            styles['connectivity-icon'],
+            styles[connectivityStyle],
+          )}
+          style={{ backgroundColor: labelStyle.color }}
+        />
       </a>
     </label>
   )

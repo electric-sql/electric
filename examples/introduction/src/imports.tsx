@@ -10,16 +10,12 @@ export { QualifiedTablename, genUUID } from 'electric-sql/util'
 export { default as api } from './api'
 export * from './components'
 export { useElectric } from './electric'
-export { boostrapPlayers, boostrapSlider, boostrapTournament, useDemoContext } from './session'
+export {
+  boostrapPlayers,
+  boostrapSlider,
+  boostrapTournament,
+  useDemoContext,
+} from './session'
 export { timeResolution } from './util'
 
-export { default as ConnectivityOnIcon } from '@site/static/img/icons/wifi-on.svg'
-export { default as ConnectivityOffIcon } from '@site/static/img/icons/wifi-off.svg'
-
-export type {
-  Demo,
-  Item,
-  Player,
-  Slider,
-  Tournament,
-} from './electric'
+export type { Demo, Item, Player, Slider, Tournament } from './electric'

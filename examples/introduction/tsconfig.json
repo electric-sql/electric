@@ -5,11 +5,6 @@
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "skipLibCheck": true,
-    "paths": {
-      // alias the site dependencies for building independently
-      "@site/static/img/icons/*": ["assets/icons/*"]
-    },
-    "baseUrl": ".",
 
     /* Bundler mode */
     "moduleResolution": "bundler",
