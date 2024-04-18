@@ -209,7 +209,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   client. This is ensured by `Electric.Satellite.ClientManager` allowing
   at most one WebSocket process with the same client id.
   """
-  def clear_all_data(client_id) do
+  def clear_all_data!(client_id) do
     :ets.match_delete(@actions_ets, {{client_id, :_}, :_})
     :ets.match_delete(@subscriptions_ets, {{client_id, :_}, :_, :_, :_})
     :ets.match_delete(@additional_data_ets, {{client_id, :_, :_, :_, :_}, :_, :_})
@@ -262,9 +262,9 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   Store initial checkpoint for the client after first connection and sent
   "shared" rows and/or migrations.
   """
-  def store_initial_checkpoint(origin, client_id, wal_pos, sent_rows_graph) do
+  def store_initial_checkpoint!(origin, client_id, wal_pos, sent_rows_graph) do
     Client.pooled_transaction(origin, fn ->
-      :ok = clear_all_data(client_id)
+      :ok = clear_all_data!(client_id)
       store_client_checkpoint(client_id, wal_pos, sent_rows_graph)
     end)
   end
@@ -292,8 +292,8 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
 
   Once the client acknowledges a transaction, we can advance the graph, deleting the previous
   version. We may have sent additional data to the client (both as subscription data and as
-  additional data for transactions), and that was stored using `store_subscription_data/4`
-  and `store_additional_txn_data/6`. This is useful in case the client reconnects having seen
+  additional data for transactions), and that was stored using `store_subscription_data!/4`
+  and `store_additional_txn_data!/6`. This is useful in case the client reconnects having seen
   the data - we can correctly advance the graph using both transactions and additional data.
 
   To accommodate a case where the client reconnects **not** having seen data for some transaction,
@@ -307,8 +307,8 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   garbage collection based on client's state at reconnection. `advance_on_reconnection/2` should
   be used instead.
   """
-  @spec advance_checkpoint(binary(), Keyword.t()) :: {:ok, Graph.t()} | {:error, term()}
-  def advance_checkpoint(client_id, opts) do
+  @spec advance_checkpoint!(binary(), Keyword.t()) :: {:ok, Graph.t()} | {:error, term()}
+  def advance_checkpoint!(client_id, opts) do
     case :ets.lookup(@checkpoint_ets, client_id) do
       [] ->
         {:error, :client_not_initialized}
@@ -385,19 +385,19 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   has the same effect as if PG is overloaded and just took a lot of time
   to process our readonly querying.
   """
-  @spec advance_on_reconnection(any(), any()) ::
+  @spec advance_on_reconnection!(any(), any()) ::
           {:ok, Graph.t(), Shapes.action_context()} | {:error, term()}
-  def advance_on_reconnection(client_id, opts) do
+  def advance_on_reconnection!(client_id, opts) do
     # We need to remove all additional data "in the future", but
     # execute actions that were seen but not fulfilled that way.
     # This is easy, since "actions" are stored at checkpoint advance time,
     # while additional data diffs are stored as soon as they were received, and
     # acknowledged additional data is removed while advancing. So we can just
-    # indicate the all additional data must be removed in `advance_checkpoint()`
+    # indicate the all additional data must be removed in `advance_checkpoint!/2`
     # and return all the actions.
     opts = Keyword.put(opts, :purge_additional_data, true)
 
-    with {:ok, new_graph} <- advance_checkpoint(client_id, opts) do
+    with {:ok, new_graph} <- advance_checkpoint!(client_id, opts) do
       actions =
         @actions_ets
         |> :ets.match({{client_id, :"$1"}, :"$2"})
@@ -579,7 +579,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   Store a subscription with information as to where the data will fit in,
   and what were the requests issued as part of that subscription.
   """
-  def store_subscription(origin, client_id, subscription_id, xmin, pos, requests) do
+  def store_subscription!(origin, client_id, subscription_id, xmin, pos, requests) do
     :ets.insert(@subscriptions_ets, {{client_id, subscription_id}, xmin, requests, pos})
 
     Client.pooled_query!(origin, @insert_subscription_query, [
@@ -617,7 +617,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   @doc """
   Store subscription graph diff once it had arrived.
   """
-  def store_subscription_data(origin, client_id, subscription_id, graph_diff) do
+  def store_subscription_data!(origin, client_id, subscription_id, graph_diff) do
     xmin = :ets.lookup_element(@subscriptions_ets, {client_id, subscription_id}, 2)
     pos = :ets.lookup_element(@subscriptions_ets, {client_id, subscription_id}, 4)
 
@@ -655,7 +655,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   Store graph diff for additional data that was queried from PostgreSQL in
   response to a set of transactions.
   """
-  def store_additional_txn_data(origin, client_id, xmin, pos, included_txns, graph_diff) do
+  def store_additional_txn_data!(origin, client_id, xmin, pos, included_txns, graph_diff) do
     :ets.insert(
       @additional_data_ets,
       {{client_id, xmin, pos, :transaction, nil}, graph_diff, included_txns}
@@ -750,7 +750,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   # remove all discarded entries from the database.
   #
   # This function must be called in the context of a checked out Repo connection.
-  def delete_discarded_cache_entries(entries) do
+  defp delete_discarded_cache_entries(entries) do
     Enum.each(entries, fn
       {@actions_ets, {client_id, txids}} ->
         Client.query!(@delete_actions_for_xids_query, [client_id, txids])
