@@ -66,11 +66,11 @@ export function generateOplogTriggers(
       SELECT
         CASE
           ${primary
-        .map(
-          (col) =>
-            `WHEN old."${col}" != new."${col}" THEN\n\t\tRAISE (ABORT, 'cannot change the value of column ${col} as it belongs to the primary key')`
-        )
-        .join('\n')}
+            .map(
+              (col) =>
+                `WHEN old."${col}" != new."${col}" THEN\n\t\tRAISE (ABORT, 'cannot change the value of column ${col} as it belongs to the primary key')`
+            )
+            .join('\n')}
         END;
     END;
     `,
@@ -281,7 +281,12 @@ function joinColsForJSON(
     const pgType = colTypes[col]
 
     // cast REALs, INT8s, BIGINTs to TEXT to work around SQLite's `json_object` bug
-    if (pgType === 'FLOAT4' || pgType === 'REAL' || pgType === 'INT8' || pgType === 'BIGINT') {
+    if (
+      pgType === 'FLOAT4' ||
+      pgType === 'REAL' ||
+      pgType === 'INT8' ||
+      pgType === 'BIGINT'
+    ) {
       return `cast(${targetedCol} as TEXT)`
     }
 
