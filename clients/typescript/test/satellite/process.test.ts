@@ -1148,6 +1148,14 @@ export const processTests = (test: TestFn<ContextType>) => {
       builder,
       namespace,
     } = t.context
+    if (builder.dialect === 'Postgres') {
+      // Ignore this unit test for Postgres
+      // because we don't defer FK checks
+      // but completely disable them for incoming transactions
+      t.pass()
+      return
+    }
+
     await runMigrations()
 
     if (builder.dialect === 'SQLite') {
@@ -1269,6 +1277,18 @@ export const processTests = (test: TestFn<ContextType>) => {
       builder,
       namespace,
     } = t.context
+    // since this test disables compensations
+    // by putting the flag on 0
+    // it is expecting a FK violation
+    if (builder.dialect === 'Postgres') {
+      // if we're running Postgres
+      // we are not deferring FK checks
+      // but completely disabling them for incoming transactions
+      // so the FK violation will not occur
+      t.pass()
+      return
+    }
+
     await runMigrations()
 
     if (builder.dialect === 'SQLite') {
@@ -1912,7 +1932,16 @@ export const processTests = (test: TestFn<ContextType>) => {
       authState,
       token,
       namespace,
+      builder,
     } = t.context
+    if (builder.dialect === 'Postgres') {
+      // Ignore this unit test for Postgres
+      // because we don't defer FK checks
+      // but completely disable them for incoming transactions
+      t.pass()
+      return
+    }
+
     await runMigrations()
 
     const tablename = 'child'

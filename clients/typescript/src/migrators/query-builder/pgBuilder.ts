@@ -14,6 +14,9 @@ class PgBuilder extends QueryBuilder {
   readonly paramSign = '$'
   readonly defaultNamespace = 'public'
 
+  /** **Disables** FKs for the duration of the transaction */
+  readonly disableForeignKeys = 'SET LOCAL session_replication_role = replica;'
+
   pgOnly(query: string) {
     return query
   }

@@ -28,6 +28,11 @@ export abstract class QueryBuilder {
   abstract readonly getVersion: string
 
   /**
+   * Disables foreign key checks.
+   */
+  abstract readonly disableForeignKeys: string
+
+  /**
    * Returns the given query if the current SQL dialect is PostgreSQL.
    */
   abstract pgOnly(query: string): string

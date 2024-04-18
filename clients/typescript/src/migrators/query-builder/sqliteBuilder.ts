@@ -18,6 +18,8 @@ class SqliteBuilder extends QueryBuilder {
     'sqlite_temp_schema',
   ]
 
+  readonly disableForeignKeys = 'PRAGMA foreign_keys = OFF;'
+
   pgOnly(_query: string) {
     return ''
   }
