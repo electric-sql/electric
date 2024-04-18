@@ -287,10 +287,16 @@
     "wa-sqlite": "rhashimoto/wa-sqlite#semver:^0.9.8"
   },
   "peerDependenciesMeta": {
+    "@capacitor-community/sqlite": {
+      "optional": true
+    },
+    "@electric-sql/pglite": {
+      "optional": true
+    },
     "@op-engineering/op-sqlite": {
       "optional": true
     },
-    "@capacitor-community/sqlite": {
+    "@tauri-apps/plugin-sql": {
       "optional": true
     },
     "embedded-postgres": {
