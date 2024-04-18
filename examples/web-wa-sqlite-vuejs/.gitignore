@@ -29,3 +29,5 @@ public/wa-sqlite-async.wasm
 # Env files
 .env.local
 .env.*.local
+
+src/generated/
