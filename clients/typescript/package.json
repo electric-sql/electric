@@ -289,10 +289,16 @@
     "zod": "3.21.1"
   },
   "peerDependenciesMeta": {
+    "@capacitor-community/sqlite": {
+      "optional": true
+    },
+    "@electric-sql/pglite": {
+      "optional": true
+    },
     "@op-engineering/op-sqlite": {
       "optional": true
     },
-    "@capacitor-community/sqlite": {
+    "@tauri-apps/plugin-sql": {
       "optional": true
     },
     "@tauri-apps/plugin-sql": {
