@@ -268,30 +268,33 @@ defmodule Electric.Satellite.Serialization do
     %SatOpRow{nulls_bitmask: encode_nulls_bitmask(bitmask, num_cols), values: values}
   end
 
-  # Values of type `timestamp` are coming over Postgres' logical replication stream in the following form:
+  # Values of type `timestamp` are coming over Postgres' logical replication stream in the
+  # following form:
   #
   #     2023-08-14 14:01:28.848242
   #
-  # We don't need to do conversion on those values before passing them on to Satellite clients, so we let the catch-all
-  # function clause handle those. Values of type `timestamptz`, however, are encoded as follows:
+  # We don't need to do conversion on those values before passing them on to Satellite clients,
+  # so we let the catch-all function clause handle those. Values of type `timestamptz`,
+  # however, are encoded as follows:
   #
   #     2023-08-14 10:01:28.848242+00
   #
-  # This is not valid syntax for SQLite's builtin datetime functions and we would like to avoid letting the Satellite
-  # protocol propagate Postgres' data formatting quirks to clients. So a minor conversion step is done here to replace
-  # `+00` with `Z` so that the whole string becomes conformant with ISO-8601.
+  # This is not valid syntax for SQLite's builtin datetime functions and we would like to avoid
+  # letting the Satellite protocol propagate Postgres' data formatting quirks to clients. So a
+  # minor conversion step is done here to replace `+00` with `Z` so that the whole string
+  # becomes conformant with ISO-8601.
   #
-  # NOTE: We're ensuring the time zone offset is always `+00` by setting the `timezone` parameter to `'UTC'` before
-  # starting the replication stream.
+  # NOTE: We're ensuring the time zone offset is always `+00` by setting the `TimeZone`
+  # parameter to `'UTC'` for every DB connection that is used to fetch user data.
   defp encode_column_value(val, :timestamptz) do
     {:ok, dt, 0} = DateTime.from_iso8601(val)
     DateTime.to_string(dt)
   end
 
-  # NOTE: Values of type `bytea` are coming over Postgres' logical replication stream encoded using either
-  # a regular hex encoding or Postgres' legacy escape format, but we're ensuring that they come in encoded
-  # in hex format by setting the `bytea_output` parameter before starting the replication stream, see:
-  # https://www.postgresql.org/docs/current/datatype-binary.html
+  # NOTE: Values of type `bytea` can be encoded using either a regular hex encoding or
+  # Postgres' legacy escape format. We're ensuring that Electric reads them encoded in hex format by
+  # setting the `bytea_output` parameter before for every DB connection that is used to fetch
+  # user data.
   #
   # We "encode" bytea values by actually decoding them into raw byte arrays to send over the wire,
   # which avoids any additional size from encoding and having to coordinate with receivers on
