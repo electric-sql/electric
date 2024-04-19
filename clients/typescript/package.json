@@ -153,6 +153,7 @@
     "post-version-bump": "node -p \"'export const LIB_VERSION = \\'' + require('./package.json').version + '\\''\" > src/version/index.ts",
     "dev": "shx rm -rf dist && npm run build:copy-docker && mkdir dist && concurrently \"tsup --watch\" \"tsc -p tsconfig.build.json --watch\" \"nodemon --watch ./dist  --delay 250ms ./scripts/fix-imports.js\"",
     "build": "shx rm -rf dist && npm run build:copy-docker && concurrently \"tsup\" \"tsc -p tsconfig.build.json\" && node scripts/fix-imports.js && npm run build-angular",
+    "build-angular": "ng-packagr -p ./src/frameworks/angular/ng-package.json -c ./src/frameworks/angular/tsconfig.json",
     "build:copy-docker": "shx mkdir -p ./dist/cli/docker-commands/docker && shx cp -r ./src/cli/docker-commands/docker ./dist/cli/docker-commands",
     "test": "ava",
     "generate-test-client": "npx tsx ./test/client/generateTestClient.ts",
@@ -161,9 +162,7 @@
     "prepublishOnly": "pnpm run build",
     "lint": "eslint src --fix",
     "check-styleguide": "prettier --check --loglevel warn . && eslint src --quiet",
-    "format": "prettier --write --loglevel warn .",
-
-    "build-angular": "ng-packagr -p ./src/frameworks/angular/ng-package.json -c ./src/frameworks/angular/tsconfig.json"
+    "format": "prettier --write --loglevel warn ."
   },
   "lint-staged": {
     "**/*": "prettier --write --ignore-unknown"
@@ -202,13 +201,18 @@
     "tcp-port-used": "^1.0.2",
     "text-encoder-lite": "^2.0.0",
     "ts-dedent": "^2.2.0",
+    "tslib": "^2.6.2",
     "ws": "^8.8.1",
-    "zod": "3.21.1",
-
-    "tslib": "^2.6.2"
-
+    "zod": "3.21.1"
   },
   "devDependencies": {
+    "@angular/common": "^17.3.0",
+    "@angular/compiler": "^17.3.0",
+    "@angular/core": "^17.3.0",
+    "@angular/forms": "^17.3.0",
+    "@angular/platform-browser": "^17.3.0",
+    "@angular/platform-browser-dynamic": "^17.3.0",
+    "@angular/router": "^17.3.0",
     "@electric-sql/prisma-generator": "workspace:*",
     "@op-engineering/op-sqlite": ">= 2.0.16",
     "@tauri-apps/plugin-sql": "2.0.0-alpha.5",
@@ -248,6 +252,7 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "release-it": "^15.5.0",
+    "rxjs": "~7.8.0",
     "shx": "^0.3.4",
     "ts-proto": "^1.125.0",
     "tsup": "^8.0.1",
@@ -258,15 +263,6 @@
     "vue-tsc": "^1.8.27",
     "wa-sqlite": "rhashimoto/wa-sqlite#semver:^0.9.8",
     "web-worker": "^1.2.0",
-
-    "@analogjs/vite-plugin-angular": "^0.2.30",
-    "@angular/common": "^17.1.0",
-    "@angular/compiler": "^17.1.0",
-    "@angular/compiler-cli": "^17.1.0",
-    "@angular/core": "^17.1.0",
-    "@angular/platform-browser": "^17.1.0",
-    "@angular/platform-browser-dynamic": "^17.1.0",
-    "ng-packagr": "^17.1.0",
     "zone.js": "~0.14.3"
   },
   "peerDependencies": {

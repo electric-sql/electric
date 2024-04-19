@@ -14,8 +14,6 @@
 
 # ElectricSQL Angular Example
 
-
-
 ## Prereqs
 
 You need Docker, Docker Compose v2 and Nodejs >= 16.14.

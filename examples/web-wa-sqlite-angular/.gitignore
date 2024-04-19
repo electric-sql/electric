@@ -48,3 +48,5 @@ public/wa-sqlite-async.mjs
 public/wa-sqlite-async.wasm
 
 .electric_migrations*
+
+.nx/

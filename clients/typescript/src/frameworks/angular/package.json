@@ -1,6 +1,6 @@
 {
     "name": "@electric-sql/angular",
-    "version": "0.9.6",
+    "version": "0.0.1",
     "description": "Angular bindings for ElectricSQL. This file is kept for consistency with APF (Angular Package Format)",
     "author": "Electric DB Limited",
     "dependencies": {
@@ -11,6 +11,7 @@
         "@angular/common": "^17.3.0",
         "@angular/core": "^17.3.0"
     },
+    "private": true,
     "sideEffects": false
   }
   

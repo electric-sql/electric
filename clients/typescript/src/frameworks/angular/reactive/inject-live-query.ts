@@ -15,7 +15,6 @@
 
 //     const resultData = signal<ResultData<Res>>({});
 
-
 //     if (deps) {
 //       return useLiveQueryWithDependencies(
 //         runQueryOrFn as () => LiveResultContext<Res>,
