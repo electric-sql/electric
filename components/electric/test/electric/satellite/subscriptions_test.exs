@@ -150,6 +150,68 @@ defmodule Electric.Satellite.SubscriptionsTest do
       end)
     end
 
+    @tag with_sql: """
+         CREATE TABLE public.appointments (
+           id TEXT PRIMARY KEY,
+           name TEXT NOT NULL,
+           scheduled_at TIMESTAMPTZ NOT NULL,
+           extra_bits BYTEA NOT NULL
+         );
+         CALL electric.electrify('public.appointments');
+
+         INSERT INTO public.appointments VALUES
+           ('001', 'Important meeting', '2024-04-19 15:00:00+03', '\\x0100020300');
+         """
+    test "initial data and subsequent streamed changes use correct display settings",
+         %{conn: pg_conn} = ctx do
+      MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
+        start_replication_and_assert_response(conn, ctx.electrified_count, 1)
+
+        request_id = uuid4()
+        sub_id = uuid4()
+
+        request = %SatSubsReq{
+          subscription_id: sub_id,
+          shape_requests: [
+            %SatShapeReq{
+              request_id: request_id,
+              shape_definition: %SatShapeDef{
+                selects: [%SatShapeDef.Select{tablename: "appointments"}]
+              }
+            }
+          ]
+        }
+
+        assert {:ok, %SatSubsResp{err: nil}} =
+                 MockClient.make_rpc_call(conn, "subscribe", request)
+
+        assert {[^request_id], data} = receive_subscription_data(conn, sub_id)
+        assert [%SatOpInsert{row_data: %{values: row_data}}] = data
+        assert ["001", "Important meeting", "2024-04-19 12:00:00Z", <<1, 0, 2, 3, 0>>] == row_data
+
+        {:ok, 1} =
+          :epgsql.squery(
+            pg_conn,
+            """
+            INSERT INTO public.appointments VALUES
+              ('002', 'Thinking time', '2024-12-12 09:00:00-03:30', '\\001\\000\\002\\003\\000')
+            """
+          )
+
+        assert_receive {^conn,
+                        %SatOpLog{
+                          ops: [
+                            %{op: {:begin, _}},
+                            %{op: {:insert, %{row_data: %{values: row_data}}}},
+                            %{op: {:commit, _}}
+                          ]
+                        }},
+                       1000
+
+        assert ["002", "Thinking time", "2024-12-12 12:30:00Z", <<1, 0, 2, 3, 0>>] == row_data
+      end)
+    end
+
     test "client can subscribe to multiple shape requests at once", %{conn: pg_conn} = ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
         start_replication_and_assert_response(conn, ctx.electrified_count)
