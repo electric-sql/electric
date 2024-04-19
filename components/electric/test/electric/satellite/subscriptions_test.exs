@@ -150,6 +150,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
       end)
     end
 
+    @tag setup_fun: &__MODULE__.db_setup_for_display_settings_test/2
     @tag with_sql: """
          CREATE TABLE public.appointments (
            id TEXT PRIMARY KEY,
@@ -1348,5 +1349,20 @@ defmodule Electric.Satellite.SubscriptionsTest do
         refute_received {^conn, %SatOpLog{ops: [%{op: {:additional_begin, _}} | _]}}
       end)
     end
+  end
+
+  # Here we intentionally set display settings to unsupported values on the database, so that
+  # new connections inherit this settings by default. This will allow us to verify that the
+  # connections we open override any defaults with our own settings.
+  def db_setup_for_display_settings_test(conn, dbname) do
+    :epgsql.squery(
+      conn,
+      """
+      ALTER DATABASE #{dbname} SET bytea_output = 'escape';
+      ALTER DATABASE #{dbname} SET DateStyle = 'SQL, YMD';
+      ALTER DATABASE #{dbname} SET TimeZone = +3;
+      ALTER DATABASE #{dbname} SET extra_float_digits = -1;
+      """
+    )
   end
 end
