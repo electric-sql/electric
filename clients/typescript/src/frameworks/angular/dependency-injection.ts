@@ -2,6 +2,8 @@ import { ENVIRONMENT_INITIALIZER, makeEnvironmentProviders } from '@angular/core
 import type { EnvironmentProviders } from '@angular/core'
 import { createNoopInjectionToken } from './util';
 
+// Work in progress implementation
+
 export function makeElectricContext<S>() {
   const [injectElectric, provideElectricClient, ELECTRIC_CLIENT] =
   createNoopInjectionToken<S>('ElectricClientToken')
@@ -19,7 +21,6 @@ export function provideElectric<S>(
   provider: any,
   electricClient: S,
 ): EnvironmentProviders {
-  console.log(provider, 'provider');
   return makeEnvironmentProviders([
     ...provider(electricClient),
     {
