@@ -131,7 +131,6 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
          {:ok, _slot_name} <- Client.create_main_slot(repl_conn, main_slot),
          {:ok, _slot_name, main_slot_lsn} <-
            Client.create_temporary_slot(repl_conn, main_slot, tmp_slot),
-         :ok <- Client.set_display_settings_for_replication(repl_conn),
          {:ok, {short, long, cluster}} <- Client.get_server_versions(repl_conn),
          {:ok, table_count} <- SchemaLoader.count_electrified_tables({SchemaCache, origin}),
          {:ok, current_lsn} <- Client.current_lsn(repl_conn),

@@ -30,9 +30,21 @@ defmodule Electric.Postgres.Repo do
       database: conn_opts.database,
       ssl: conn_opts.ssl == :required,
       pool_size: Keyword.get(opts, :pool_size, @default_pool_size),
-      log: false
+      log: false,
+      after_connect: {__MODULE__, :set_display_settings, []}
     ]
   end
 
   def name(origin), do: :"#{inspect(__MODULE__)}:#{origin}"
+
+  # Explicitly set those configuration parameters that affect formatting of values of certain
+  # types.
+  #
+  # This function is automatically invoked for any new connection that gets added to the pool
+  # managed by this repo.
+  #
+  # See `Electric.Postgres.display_settings/0` for more info.
+  def set_display_settings(conn) do
+    :ok = Enum.each(Electric.Postgres.display_settings(), &Postgrex.query!(conn, &1, []))
+  end
 end
