@@ -1,0 +1,58 @@
+[doc NodeJS Satellite can disconnect and reconnect]
+[include ../_shared.luxinc]
+[include ../_satellite_macros.luxinc]
+
+[invoke setup]
+
+[invoke setup_client 1 "electric_1" 5133]
+[invoke setup_client 2 "electric_1" 5133]
+
+[shell proxy_1]
+    [invoke migrate_items_table 20230504114018]
+
+[shell satellite_1]
+    ??[rpc] recv: #SatInStartReplicationResp
+    [invoke node_sync_items ""]
+[shell satellite_2]
+    ??[rpc] recv: #SatInStartReplicationResp
+    [invoke node_sync_items ""]
+
+[invoke log "PG & Satellites migrated and ready"]
+
+[invoke test_sync "hello from satellite_1" "hello from satellite_2" "hello from PG"]
+
+[global sat1_msg_offline=hello from satellite_2 while offline]
+
+[shell satellite_1]
+    [invoke log "Disconnect client 1"]
+    !db.disconnect()
+    ?Connectivity state changed: disconnected
+    [invoke node_await_insert "['$sat1_msg_offline']"]
+
+[shell satellite_2]
+    [sleep 2]
+    # Satellite 2 should not receive $sat1_msg_offline
+    !(await client.get_items(db)).find(row => row.content === '$sat1_msg_offline') === undefined
+    ??true
+    ??$node
+
+[shell satellite_1]
+    [invoke log "Reconnect client 1"]
+    !db.connect()
+    ?Connectivity state changed: connected
+
+[shell satellite_2]
+    # satellite 2 should receive $sat1_msg_offline
+    [invoke node_await_get "$sat1_msg_offline"]
+
+[shell pg_1]
+    # PG should receive $sat1_msg_offline
+    [invoke wait-for "SELECT * FROM public.items;" "$sat1_msg_offline" 10 $psql]
+
+[invoke log "Row inserted offline propagated on reconnection"]
+
+# Syncing should still work
+[invoke test_sync "hello again from satellite_1" "hello again from satellite_2" "hello again from PG"]
+
+[cleanup]
+  [invoke teardown]

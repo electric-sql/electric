@@ -13,17 +13,15 @@ make docker-build
 
 ## How to add new test
 
-Add a new `.lux` file in the `tests/` directory. The files are number-prefixed, for two purposes:
-1. to ensure order of execution of the tests to be somewhat predictable, for ease of parsing the output, and
-2. to group them by purpose.
+Add a new `.lux` file in the appropriate subdirectory under `tests/`. Test files are split into multiple directories to keep related tests close to each other. File names are number-prefixed to ensure order of execution of the tests is somewhat predictable, for ease of parsing the output.
 
-Current groups are:
-- `01.*` - Sanity checks, startup, and electric-PG interaction
-- `02.*` - Replication verification between PG and Satellites, without actual clients
-- `03.*` - Replication using an actual typescript client in Node
-- `04.*` - Auxillary Electric functions not immediately related to replication
-- `05.*` - Conflict resolution semantics tests
-- `06.*` - Permissions and write validations
+Current test groups are:
+- `01_sanity_checks/*` - Sanity checks, startup, and electric-PG interaction
+- `02_elixir_client/*` - Replication verification between PG and Satellites, without actual clients
+- `03_node_client/*` - Replication using an actual typescript client in Node
+- `04_misc/*` - Auxillary Electric functions not immediately related to replication
+- `05_conflict_resolution/*` - Conflict resolution semantics tests
+- `06_permissions/*` - Permissions and write validations
 
 Feel free to add more.
 

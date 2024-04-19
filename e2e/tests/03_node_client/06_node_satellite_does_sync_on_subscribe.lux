@@ -1,0 +1,46 @@
+[doc NodeJS Satellite receives initial data when the table is synced, and continues to receive updates for that table]
+[include ../_shared.luxinc]
+[include ../_satellite_macros.luxinc]
+
+[invoke setup]
+
+[invoke setup_client 1 "electric_1" 5133]
+
+[shell proxy_1]
+    [invoke migrate_items_table 20230504114018]
+
+[shell satellite_1]
+    ??[rpc] recv: #SatInStartReplicationResp
+    [invoke node_await_table "items"]
+    # We shouldn't see this "hello from pg" until we actually do sync
+    -(hello from pg|$fail_pattern)
+
+[shell pg_1]
+    # Insert a row
+    !INSERT INTO public.items (id, content) VALUES ('00000000-0000-0000-0000-000000000000', 'hello from pg');
+    ?$psql
+
+[shell satellite_1]
+    -$fail_pattern
+    [invoke node_sync_items ""]
+    # As soon as sync is done, we expect to see the row in the database
+    !await client.get_items(db)
+    ??hello from pg
+
+[shell pg_1]
+    # Insert another row
+    !INSERT INTO public.items (id, content) VALUES ('00000000-0000-0000-0000-000000000001', 'hello from pg again');
+    ?$psql
+
+[shell satellite_1]
+    # This one gets propagated "normally"
+    [invoke node_await_get "00000000-0000-0000-0000-000000000001"]
+    !await client.delete_item(db, ['hello from pg again'])
+    ?$node
+
+[shell pg_1]
+    !\x
+    [invoke wait-for "SELECT COUNT(*) FROM public.items;" "count \| 1" 10 ${psql}]
+
+[cleanup]
+  [invoke teardown]

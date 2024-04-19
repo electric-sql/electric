@@ -1,0 +1,74 @@
+[doc In case a transaction comes while the transaction has been opened, PG picks a higher tag to win]
+[include ../_shared.luxinc]
+
+[invoke setup]
+[invoke electrify_table entries]
+
+[newshell user_1_ws1]
+    -$fail_pattern
+    [invoke start_elixir_test 1]
+    [invoke client_session 1 1]
+    [invoke elixir_client_subscribe "entries"]
+    !TestWsClient.send_data(conn, ProtocolHelpers.relation("public.entries"))
+    ?:ok
+    ?$eprompt
+
+[shell pg_1]
+    !\pset tuples_only
+    # Given an already-inserted row
+    !INSERT INTO entries (id, content) VALUES ('00000000-0000-0000-0000-000000000000', 'original value');
+    ?$psql
+    # We start a transaction
+    !BEGIN;
+    ?$psql
+
+[shell user_1_ws1]
+    ?%Electric.Satellite.SatOpInsert\{.*tags: \["(postgres_1@\d+)"\]
+    [my seen_tag=$1]
+    # We do an update while transaction on PG is open
+    """!
+    TestWsClient.send_data(conn, ProtocolHelpers.transaction("1", DateTime.add(DateTime.utc_now(), 86400, :second), [
+        ProtocolHelpers.update("public.entries",
+            %{"id" => "00000000-0000-0000-0000-000000000000"}, # pk
+            %{"content" => "original value", "content_b" => nil}, # old
+            %{"content" => "updated on client 1", "content_b" => nil}, # new
+            ["$seen_tag"]
+        )
+    ]))
+    """
+    ?:ok
+    ?$eprompt
+
+[shell electric]
+    # Check that the transaction made it to Postgres.SlotServer / Postgres.Writer
+    ??=postgres_1 [debug] Processed tx changes (# pre:
+    ??"content" => "updated on client 1"
+
+    # Wait for the roundtrip of the insert back to Electric
+    ?component=CachedWal.EtsBacked origin=postgres_1 \[debug\] Saving transaction \d+ at \d+/[\dA-F]+ with changes \
+      \[%Electric.Replication.Changes.UpdatedRecord\{\
+          relation: \{"public", "entries"\}, \
+          old_record: %\{"content" => "original value", "content_b" => nil, "id" => "00000000-0000-0000-0000-000000000000"\}, \
+          record: %\{"content" => "updated on client 1", "content_b" => nil, "id" => "00000000-0000-0000-0000-000000000000"\}
+
+[shell pg_1]
+    # And then we also do an update here
+    """!
+    UPDATE entries SET content = 'updated on pg' WHERE id = '00000000-0000-0000-0000-000000000000';
+    COMMIT;
+    """
+    ?$psql
+    # Expecting the update to win
+    !SELECT content FROM entries WHERE id = '00000000-0000-0000-0000-000000000000';
+    ??updated on pg
+    ?$psql
+    # By setting the column tag to the same timestamp, but source to `null`
+    !SELECT (shadow._tag_content).source_id, (shadow._tag_content).timestamp > (CURRENT_TIMESTAMP + interval '23 hours') FROM electric.shadow__public__entries as shadow WHERE id = '00000000-0000-0000-0000-000000000000';
+    ?<NULL>\s+\| t
+
+[shell user_1_ws1]
+    # And then expect to see the same row sent from Electric back to Satellite, keeping commit timestamp
+    ?rec \[\d+\]: %Electric.Satellite.SatOpLog\{(.*)origin: "postgres_1"(.*)values: \["00000000-0000-0000-0000-000000000000", "updated on pg", ""\]
+
+[cleanup]
+    [invoke teardown]

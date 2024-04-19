@@ -1,0 +1,57 @@
+[doc A write on the Satellite makes its way to PG and back]
+[include ../_shared.luxinc]
+
+[invoke setup]
+[invoke electrify_table entries]
+
+[global user_id_1=1]
+[newshell user_1_ws1]
+    -$fail_pattern
+    [invoke start_elixir_test 1]
+    [invoke client_session $user_id_1 1]
+    [invoke elixir_client_subscribe "entries"]
+
+    !TestWsClient.send_data(conn, ProtocolHelpers.relation("public.entries"))
+    ?:ok
+    ?$eprompt
+    """!
+    TestWsClient.send_data(conn, ProtocolHelpers.transaction("1", ~U[2023-06-06 00:00:00Z], [
+        ProtocolHelpers.insert("public.entries",
+            %{"id" => "00000000-0000-0000-0000-000000000000", "content" => "sentinel value"}
+        )
+    ]))
+    """
+    ?:ok
+    ?$eprompt
+
+
+[shell electric]
+    # We expect to recieve the transaction
+    ?user_id=1 \[debug\] ws data received: %Electric.Satellite.SatOpLog\{(.*)op: \{:insert, %Electric.Satellite.SatOpInsert\{(.*)values: \["00000000-0000-0000-0000-000000000000", "sentinel value", ""\]
+    # Check that the transaction made it to Postgres.SlotServer / Postgres.Writer
+    ??=postgres_1 [debug] Processed tx changes (# pre:
+    ??"content" => "sentinel value"
+    # Wait for the roundtrip of the insert back to Electric
+    ?component=CachedWal.EtsBacked origin=postgres_1 \[debug\] Saving transaction \d+ at \d+/[\dA-F]+ with changes \
+      \[%Electric.Replication.Changes.NewRecord\{\
+          relation: \{"public", "entries"\}, \
+          record: %\{"content" => "sentinel value", "content_b" => nil, "id" => "00000000-0000-0000-0000-000000000000"\}
+
+[shell pg_1]
+    # And then expect to see it there
+    [invoke wait-for "SELECT * FROM public.entries;" "sentinel value" 10 ${psql}]
+    # And expect an entry in the shadow table
+    !SELECT id, _tag FROM electric.shadow__public__entries;
+    """??
+                      id                  |                 _tag                  
+    --------------------------------------+---------------------------------------
+     00000000-0000-0000-0000-000000000000 | ("2023-06-06 00:00:00+00",client_1_1)
+    """
+    ?$psql
+
+[shell user_1_ws1]
+    # And then expect to see the same row sent from Electric back to Satellite, keeping commit timestamp
+    ?rec \[\d+\]: %Electric.Satellite.SatOpLog\{(.*)commit_timestamp: 1686009600000(.*)values: \["00000000-0000-0000-0000-000000000000", "sentinel value", ""\]
+
+[cleanup]
+    [invoke teardown]
