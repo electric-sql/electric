@@ -29,16 +29,18 @@ export class ElectricDatabase implements Database {
         text: statement.sql,
         values: statement.args,
         types: {
-          // Modify the parser to not parse JSON values
-          // Instead, return them as strings
-          // our conversions will correctly parse them
           getTypeParser: ((oid: number) => {
+            /*
+            // Modify the parser to not parse JSON values
+            // Instead, return them as strings
+            // our conversions will correctly parse them
             if (
               oid === pg.types.builtins.JSON ||
               oid === pg.types.builtins.JSONB
             ) {
               return (val) => val
             }
+            */
 
             if (
               oid == pg.types.builtins.TIMESTAMP ||

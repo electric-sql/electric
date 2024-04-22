@@ -5,14 +5,14 @@ export class MockDatabase implements Database {
   dataDir?: string
   fail: Error | undefined
 
-  constructor(dataDir?: string, options?: PGliteOptions) {
+  constructor(dataDir?: string, _options?: PGliteOptions) {
     this.dataDir = dataDir
   }
 
   async query<T>(
-    query: string,
-    params?: any[],
-    options?: QueryOptions
+    _query: string,
+    _params?: any[],
+    _options?: QueryOptions
   ): Promise<Results<T>> {
     if (typeof this.fail !== 'undefined') throw this.fail
 
