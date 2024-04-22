@@ -28,4 +28,4 @@ yarn dev
 
 You should be able to see the website demo widgets in an unstyled page at [http://localhost:5173](http://localhost:5173).
 
-These are meant to be integrated within the website.
+If you see API request failures in the browser console, that's expected when this example is running outside of the context of the (private) website repo. These are meant to be integrated within the codebase of the website repo that powers https://electric-sql.com.
