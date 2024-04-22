@@ -137,7 +137,7 @@ defmodule Electric.Postgres.Replication do
 
     stmts =
       ast
-      |> Enum.reject(&match?(%Pg.CreateEnumStmt{}, &1))
+      |> Enum.reject(&dialect == Dialect.SQLite and match?(%Pg.CreateEnumStmt{}, &1))
       |> Enum.map(
         &%SatOpMigrate.Stmt{
           type: stmt_type(&1),
