@@ -60,6 +60,11 @@ export abstract class QueryBuilder {
   abstract makePositionalParam(i: number): string
 
   /**
+   * Checks if the given table exists.
+   */
+  abstract tableExists(tableName: string, namespace?: string): Statement
+
+  /**
    * Counts tables whose name is included in `tables`.
    * The count is returned as `countName`.
    */

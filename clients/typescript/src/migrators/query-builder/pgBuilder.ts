@@ -33,6 +33,16 @@ class PgBuilder extends QueryBuilder {
     return []
   }
 
+  tableExists(
+    tableName: string,
+    namespace: string = this.defaultNamespace
+  ): Statement {
+    return {
+      sql: `SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = $2`,
+      args: [namespace, tableName],
+    }
+  }
+
   countTablesIn(countName: string, tables: string[]): Statement {
     const sql = dedent`
       SELECT COUNT(table_name)::integer AS "${countName}"

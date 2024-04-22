@@ -36,6 +36,13 @@ class SqliteBuilder extends QueryBuilder {
     return [query]
   }
 
+  tableExists(tableName: string, _namespace?: string): Statement {
+    return {
+      sql: `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`,
+      args: [tableName],
+    }
+  }
+
   countTablesIn(countName: string, tables: string[]): Statement {
     const sql = dedent`
       SELECT count(name) as ${countName} FROM sqlite_master
