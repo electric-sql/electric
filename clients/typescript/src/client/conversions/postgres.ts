@@ -56,10 +56,8 @@ function fromPostgres(v: any, pgType: PgType): any {
     return v
   }
 
-  // no need to convert dates, times, or timestamps
-  // because we modified the parser in the node-pg driver
-  // to parse them how we want
-
+  /*
+  // FIXME: the specialised conversions below are needed when adding support for top-level JSON null values
   if (pgType === PgBasicType.PG_JSON || pgType === PgBasicType.PG_JSONB) {
     if (v === null) {
       // DB null
@@ -69,8 +67,12 @@ function fromPostgres(v: any, pgType: PgType): any {
       // JSON null value
       return { __is_electric_json_null__: true }
     }
+    if (typeof v === 'object') {
+      return v
+    }
     return JSON.parse(v)
   }
+  */
 
   if (pgType === PgBasicType.PG_INT8) {
     return BigInt(v) // needed because the node-pg driver returns bigints as strings
