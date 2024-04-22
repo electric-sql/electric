@@ -2229,7 +2229,7 @@ test('(regression) performSnapshot handles exceptions gracefully', async (t) => 
   t.pass()
 })
 
-test('don\'t leave a snapshot running when stopping', async (t) => {
+test("don't leave a snapshot running when stopping", async (t) => {
   const { adapter, runMigrations, satellite, authState } = t.context
   await runMigrations()
   await satellite._setAuthState(authState)
@@ -2250,13 +2250,13 @@ test('don\'t leave a snapshot running when stopping', async (t) => {
   const snapshotPromise = satellite._mutexSnapshot()
   // Give some time to start the "slow" snapshot
   await sleepAsync(100)
-  
+
   // Stop the process while the snapshot is being performed
   await satellite.stop()
-  
+
   // Remove/close the database connection
   await clean(t)
-  
+
   // Wait for the snapshot to finish to consider the test successful
   await snapshotPromise
 
