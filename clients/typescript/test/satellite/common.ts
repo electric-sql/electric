@@ -25,6 +25,8 @@ import { QueryBuilder } from '../../src/migrators/query-builder'
 import { BundleMigratorBase } from '../../src/migrators/bundle'
 import { makePgDatabase } from '../support/node-postgres'
 import { DatabaseAdapter as PgDatabaseAdapter } from '../../src/drivers/node-postgres/adapter'
+import { PGlite } from '@electric-sql/pglite'
+import { DatabaseAdapter as PgliteDatabaseAdapter } from '../../src/drivers/pglite/adapter'
 import { DatabaseAdapter } from '../../src/electric/adapter'
 
 export const dbDescription = new DbSchema(
@@ -323,6 +325,20 @@ export const makePgContext = async (
   const dbName = `test-${randomValue()}`
   const { db, stop } = await makePgDatabase(dbName, port)
   const adapter = new PgDatabaseAdapter(db)
+  const migrator = new PgBundleMigrator(adapter, pgMigrations)
+  makeContextInternal(t, dbName, adapter, migrator, namespace, options)
+  t.context.stop = stop
+}
+
+export const makePgliteContext = async (
+  t: ExecutionContext<ContextType>,
+  namespace: string,
+  options: Opts = opts(namespace)
+) => {
+  const dbName = `test-${randomValue()}`
+  const db = new PGlite()
+  const stop = () => db.close()
+  const adapter = new PgliteDatabaseAdapter(db)
   const migrator = new PgBundleMigrator(adapter, pgMigrations)
   makeContextInternal(t, dbName, adapter, migrator, namespace, options)
   t.context.stop = stop
