@@ -35,7 +35,7 @@ import {
   SatelliteError,
   SatelliteErrorCode,
 } from '../../src/util/types'
-import { relations, ContextType as CommonContextType } from './common'
+import { relations, ContextType as CommonContextType, clean } from './common'
 
 import { numberToBytes, base64, blobToHexString } from '../../src/util/encoders'
 
@@ -2480,6 +2480,40 @@ export const processTests = (test: TestFn<ContextType>) => {
     }
 
     await satellite._performSnapshot()
+    t.pass()
+  })
+
+  test("don't leave a snapshot running when stopping", async (t) => {
+    const { adapter, runMigrations, satellite, authState } = t.context
+    await runMigrations()
+    await satellite._setAuthState(authState)
+
+    // Make the adapter slower, to interleave stopping the process and closing the db with a snapshot
+    const transaction = satellite.adapter.transaction.bind(satellite.adapter)
+    satellite.adapter.transaction = (f) =>
+      new Promise((res) => {
+        setTimeout(() => transaction(f).then(res), 500)
+      })
+
+    // Add something to the oplog
+    await adapter.run({
+      sql: `INSERT INTO parent(id, value) VALUES (1,'val1')`,
+    })
+
+    // // Perform snapshot with the mutex, to emulate a real scenario
+    const snapshotPromise = satellite._mutexSnapshot()
+    // Give some time to start the "slow" snapshot
+    await sleepAsync(100)
+
+    // Stop the process while the snapshot is being performed
+    await satellite.stop()
+
+    // Remove/close the database connection
+    await clean(t)
+
+    // Wait for the snapshot to finish to consider the test successful
+    await snapshotPromise
+
     t.pass()
   })
 }
