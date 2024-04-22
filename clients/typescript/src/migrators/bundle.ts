@@ -8,12 +8,7 @@ import {
 import { DatabaseAdapter } from '../electric/adapter'
 import { buildInitialMigration as makeBaseMigration } from './schema'
 import Log from 'loglevel'
-import {
-  SatelliteError,
-  SatelliteErrorCode,
-  SqlValue,
-  Statement,
-} from '../util'
+import { SatelliteError, SatelliteErrorCode, SqlValue } from '../util'
 import { ElectricSchema } from './schema'
 import {
   Kysely,
@@ -62,16 +57,6 @@ export abstract class BundleMigratorBase implements Migrator {
     this.eb = expressionBuilder<ElectricSchema, typeof _electric_migrations>()
   }
 
-  /**
-   * Returns a SQL statement that checks if the given table exists.
-   * @param namespace The namespace where to check.
-   * @param tableName The name of the table to check for existence.
-   */
-  abstract createTableExistsStatement(
-    namespace: string,
-    tableName: string
-  ): Statement
-
   async up(): Promise<number> {
     const existing = await this.queryApplied()
     const unapplied = await this.validateApplied(this.migrations, existing)
@@ -90,9 +75,9 @@ export abstract class BundleMigratorBase implements Migrator {
     // If this is the first time we're running migrations, then the
     // migrations table won't exist.
     const namespace = this.electricQueryBuilder.defaultNamespace
-    const tableExists = this.createTableExistsStatement(
-      namespace,
-      this.tableName
+    const tableExists = this.electricQueryBuilder.tableExists(
+      this.tableName,
+      namespace
     )
     const tables = await this.adapter.query(tableExists)
     return tables.length > 0
@@ -225,13 +210,6 @@ export class SqliteBundleMigrator extends BundleMigratorBase {
     }
     super(adapter, migrations, config, sqliteBuilder)
   }
-
-  createTableExistsStatement(_namespace: string, tableName: string): Statement {
-    return {
-      sql: `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`,
-      args: [tableName],
-    }
-  }
 }
 
 export class PgBundleMigrator extends BundleMigratorBase {
@@ -245,12 +223,5 @@ export class PgBundleMigrator extends BundleMigratorBase {
       },
     }
     super(adapter, migrations, config, pgBuilder)
-  }
-
-  createTableExistsStatement(namespace: string, tableName: string): Statement {
-    return {
-      sql: `SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = $2`,
-      args: [namespace, tableName],
-    }
   }
 }
