@@ -58,7 +58,11 @@ export class TransactionalDB implements DB {
               this._converter,
               Transformation.Decode
             )
-            return schema.parse(transformedRow)
+            try {
+              return schema.parse(transformedRow)
+            } catch (e) {
+              throw e
+            }
           })
           successCallback(
             new TransactionalDB(tx, this._fields, this._converter),

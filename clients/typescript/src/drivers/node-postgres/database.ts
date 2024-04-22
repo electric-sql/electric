@@ -41,13 +41,11 @@ export class ElectricDatabase implements Database {
             }
 
             if (
-              oid == pg.types.builtins.TIME ||
-              oid == pg.types.builtins.TIMETZ ||
               oid == pg.types.builtins.TIMESTAMP ||
               oid == pg.types.builtins.TIMESTAMPTZ ||
               oid == pg.types.builtins.DATE
             ) {
-              // Parse time, timestamp, and date values ourselves
+              // Parse timestamps and date values ourselves
               // because the pg parser parses them differently from what we expect
               const pgTypes = new Map([
                 [pg.types.builtins.TIME, PgDateType.PG_TIME],
