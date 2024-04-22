@@ -1,13 +1,15 @@
 import clsx from 'clsx'
+// @ts-expect-error ignore unused React
 import React from 'react'
 import { useDrop } from 'react-dnd'
-import { Player } from '../../electric'
+import { Item, Player } from '../../electric'
 import PlayerWidget from '../PlayerWidget'
 import styles from './styles.module.css'
 
 type Props = {
   players: Player[]
-  onDrop: (item: any) => void
+  onDrop: (item: Item) => void
+  dndDiscriminator: string
 }
 
 const PlayersWidget = ({ dndDiscriminator, onDrop, players }: Props) => {
@@ -20,20 +22,25 @@ const PlayersWidget = ({ dndDiscriminator, onDrop, players }: Props) => {
     collect: (monitor) => ({
       isOver: monitor.isOver(),
       canDrop: monitor.canDrop(),
-    })
+    }),
   })
 
   const isActive = isOver && canDrop
 
   return (
-    <div ref={drop} className={clsx(styles.players, isActive ? styles.playersActive : '')}
-        data-testid="players">
-      <div className={clsx('text-small', styles.playersLabel)}>
-        Players
-      </div>
+    <div
+      ref={drop}
+      className={clsx(styles.players, isActive ? styles.playersActive : '')}
+      data-testid="players"
+    >
+      <div className={clsx('text-small', styles.playersLabel)}>Players</div>
       <div className={styles.playerListings}>
         {players.map((player) => (
-          <PlayerWidget key={ player.id } player={player} dndDiscriminator={dndDiscriminator} />
+          <PlayerWidget
+            key={player.id}
+            player={player}
+            dndDiscriminator={dndDiscriminator}
+          />
         ))}
       </div>
     </div>

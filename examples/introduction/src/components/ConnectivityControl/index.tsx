@@ -1,35 +1,45 @@
+// @ts-expect-error ignore unused React
 import React from 'react'
 import { useConnectivityState } from 'electric-sql/react'
-
-import OnIcon from '@site/static/img/icons/wifi-on.svg'
-import OffIcon from '@site/static/img/icons/wifi-off.svg'
+import clsx from 'clsx'
+import { useElectric } from '../../electric'
+import styles from './styles.module.css'
 
 const colors = {
   available: 'script-yellow',
   connected: 'electric-green',
-  disconnected: 'script-red'
+  disconnected: 'script-red',
 }
 
 const ConnectivityControl = () => {
-  const { connectivityState, toggleConnectivityState } = useConnectivityState()
+  const electric = useElectric()!
+  const { status } = useConnectivityState()
 
-  const Icon =
-    connectivityState === 'disconnected'
-    ? OffIcon
-    : OnIcon
+  const toggleConnectivityState = async (): Promise<void> =>
+    status === 'connected' ? electric.disconnect() : electric.connect()
+
+  const connectivityStyle =
+    status === 'disconnected' ? 'connectivity-off' : 'connectivity-on'
 
   const labelStyle = {
-    color: `var(--${colors[connectivityState]})`
+    color: `var(--${colors[status]})`,
   }
 
   return (
     <label className="text-small" style={labelStyle}>
-      <a onMouseDown={ toggleConnectivityState }
-          className="flex flex-row items-center text-current hover:text-current cursor-pointer">
-        <span className="capitalize">
-          { connectivityState }
-        </span>
-        <Icon className="ml-1 w-5" />
+      <a
+        onMouseDown={toggleConnectivityState}
+        className="flex flex-row items-center text-current hover:text-current cursor-pointer"
+      >
+        <span className="capitalize">{status}</span>
+        <div
+          className={clsx(
+            'ml-1 w-5',
+            styles['connectivity-icon'],
+            styles[connectivityStyle],
+          )}
+          style={{ backgroundColor: labelStyle.color }}
+        />
       </a>
     </label>
   )

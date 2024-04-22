@@ -1,22 +1,22 @@
-import React, { ReactNode, useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useElectric } from '../electric'
 import {
   DemoContext,
   DemoContextData,
   getCachedSessionId,
-  getOrCreateDemo
+  getOrCreateDemo,
 } from '../session'
 
 type Props = {
-  bootstrapItems: number,
-  bootstrapServerItems: number,
-  children: ReactNode,
+  bootstrapItems: number
+  bootstrapServerItems: number
+  children: React.ReactNode
   demoName: string
 }
 
-const DemoProvider = ({ bootstrapItems, bootstrapServerItems, children, demoName }: Props) => {
+const DemoProvider = ({ bootstrapItems, children, demoName }: Props) => {
   const { db } = useElectric()!
-  const [ demoContext, setDemoContext ] = useState<DemoContextData>()
+  const [demoContext, setDemoContext] = useState<DemoContextData>()
 
   useEffect(() => {
     let isMounted = true
@@ -27,8 +27,8 @@ const DemoProvider = ({ bootstrapItems, bootstrapServerItems, children, demoName
           items: true,
           sliders: true,
           players: true,
-          tournaments: true
-        }
+          tournaments: true,
+        },
       })
       await shape.synced
 
@@ -37,13 +37,18 @@ const DemoProvider = ({ bootstrapItems, bootstrapServerItems, children, demoName
       }
 
       const sessionId = getCachedSessionId()
-      const demo = await getOrCreateDemo(db, sessionId, demoName, bootstrapItems)
+      const demo = await getOrCreateDemo(
+        db,
+        sessionId,
+        demoName,
+        bootstrapItems,
+      )
 
       if (!isMounted) {
         return
       }
 
-      setDemoContext({demo: demo, sessionId: sessionId})
+      setDemoContext({ demo: demo, sessionId: sessionId })
     }
 
     init()
@@ -58,9 +63,7 @@ const DemoProvider = ({ bootstrapItems, bootstrapServerItems, children, demoName
   }
 
   return (
-    <DemoContext.Provider value={demoContext}>
-      { children }
-    </DemoContext.Provider>
+    <DemoContext.Provider value={demoContext}>{children}</DemoContext.Provider>
   )
 }
 

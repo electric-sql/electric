@@ -1,0 +1,15 @@
+.connectivity-icon {
+  width: 1rem;
+  height: 1rem;
+  mask-repeat: no-repeat;
+  mask-size: cover;
+  mask-position: center;
+}
+.connectivity-on {
+  -webkit-mask-image: url('/img/icons/wifi-on.svg');
+  mask-image: url('/img/icons/wifi-on.svg');
+}
+.connectivity-off {
+  -webkit-mask-image: url('/img/icons/wifi-off.svg');
+  mask-image: url('/img/icons/wifi-off.svg');
+}

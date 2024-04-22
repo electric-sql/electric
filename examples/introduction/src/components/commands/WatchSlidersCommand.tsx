@@ -1,3 +1,4 @@
+// @ts-expect-error ignore unused React
 import React from 'react'
 import { useCommandCreds } from './CommandCreds'
 import RenderCode from './RenderCode'
@@ -11,9 +12,7 @@ SELECT value from sliders
     AND demo_name = '${demoName}'; \\watch 1.0
   `.trim()
 
-  return (
-    <RenderCode>{code}</RenderCode>
-  )
+  return <RenderCode>{code}</RenderCode>
 }
 
 export default WatchSlidersCommand

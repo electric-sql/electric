@@ -1,39 +1,49 @@
-import clsx from 'clsx'
+// @ts-expect-error ignore unused React
 import React from 'react'
+import clsx from 'clsx'
 import { Item } from '../../electric'
 import styles from './styles.module.css'
 
 type Props = {
-  add: () => Promise<void>,
-  clear: () => Promise<void>,
-  items: Item[] | undefined,
-  inProgress: boolean,
-  disableWhenInProgress: boolean,
+  add: () => Promise<void>
+  clear: () => Promise<void>
+  items: Item[] | undefined
+  inProgress: boolean
+  disableWhenInProgress: boolean
   itemColor: string
 }
 
-const ItemsWidget = ({ add, clear, items, inProgress, disableWhenInProgress, itemColor }: Props) => {
+const ItemsWidget = ({
+  add,
+  clear,
+  items,
+  inProgress,
+  disableWhenInProgress,
+  itemColor,
+}: Props) => {
   const itemsArray = items !== undefined ? [...items] : []
   const shouldDisable = inProgress && disableWhenInProgress
 
   return (
     <>
       <div className={styles.items}>
-        {items.map((item: Item) => (
-          <div key={ item.id }
-              className={clsx(styles.item, styles[itemColor])}
-          />
+        {itemsArray.map((item: Item) => (
+          <div key={item.id} className={clsx(styles.item, styles[itemColor])} />
         ))}
       </div>
       <div>
-        <button className="button button--secondary button--outline me-2"
-            disabled={shouldDisable}
-            onMouseDown={add}>
+        <button
+          className="button button--secondary button--outline me-2"
+          disabled={shouldDisable}
+          onMouseDown={add}
+        >
           Add
         </button>
-        <button className="button button--secondary button--outline"
-            disabled={shouldDisable}
-            onMouseDown={clear}>
+        <button
+          className="button button--secondary button--outline"
+          disabled={shouldDisable}
+          onMouseDown={clear}
+        >
           Clear
         </button>
       </div>

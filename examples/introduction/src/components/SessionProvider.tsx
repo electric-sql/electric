@@ -1,14 +1,13 @@
-import React, { ReactNode, useEffect, useState } from 'react'
-import { globalRegistry } from 'electric-sql/satellite'
+import React, { useEffect, useState } from 'react'
 import { ensureSessionId, timeTilSessionExpiry } from '../session'
 
 type Props = {
-  children: ReactNode
+  children: React.ReactNode
 }
 
 const SessionProvider = ({ children }: Props) => {
-  const [ ready, setReady ] = useState(false)
-  const [ hasExpired, setHasExpired ] = useState(false)
+  const [ready, setReady] = useState(false)
+  const [hasExpired, setHasExpired] = useState(false)
 
   useEffect(() => {
     ensureSessionId()
@@ -28,7 +27,7 @@ const SessionProvider = ({ children }: Props) => {
       // globalRegistry.stopAll()
     }
 
-    let timer = window.setTimeout(expire, ttl)
+    const timer = window.setTimeout(expire, ttl)
 
     return () => window.clearTimeout(timer)
   }, [])
@@ -40,12 +39,12 @@ const SessionProvider = ({ children }: Props) => {
   if (hasExpired) {
     return (
       <div className="p-6 h-48 flex text-center content-center">
-        <h4>
-          Demo session expired
-        </h4>
+        <h4>Demo session expired</h4>
         <p>
-          <a className="button button--secondary button--outline button--large"
-              onClick={() => window.location.reload()}>
+          <a
+            className="button button--secondary button--outline button--large"
+            onClick={() => window.location.reload()}
+          >
             Reload ↺
           </a>
         </p>
@@ -53,11 +52,7 @@ const SessionProvider = ({ children }: Props) => {
     )
   }
 
-  return (
-    <>
-      {children}
-    </>
-  )
+  return <>{children}</>
 }
 
 export default SessionProvider

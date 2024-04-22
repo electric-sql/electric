@@ -15,7 +15,7 @@ const newItem = (demo) => {
     inserted_at: `${Date.now()}`,
     demo_id: demo.id,
     demo_name: demo.name,
-    electric_user_id: demo.electric_user_id
+    electric_user_id: demo.electric_user_id,
   }
 }
 
@@ -29,18 +29,18 @@ const LocalFirst = () => {
     db.items.liveMany({
       where: {
         demo_name: demo.name,
-        electric_user_id: demo.electric_user_id
+        electric_user_id: demo.electric_user_id,
       },
       orderBy: {
-        inserted_at: 'asc'
+        inserted_at: 'asc',
       },
-      take: 24
-    })
+      take: 24,
+    }),
   )
 
   // This next block is just to time the initial fetch latency.
-  const [ t1, _ ] = useState(Date.now())
-  const [ fetchLatency, setFetchLatency ] = useState(-1)
+  const [t1] = useState(Date.now())
+  const [fetchLatency, setFetchLatency] = useState(-1)
   useEffect(() => {
     if (results === undefined || fetchLatency > 0) {
       return
@@ -51,7 +51,7 @@ const LocalFirst = () => {
 
   const add = async () => {
     await db.items.create({
-      data: newItem(demo)
+      data: newItem(demo),
     })
   }
 
@@ -59,8 +59,8 @@ const LocalFirst = () => {
     await db.items.deleteMany({
       where: {
         demo_name: demo.name,
-        electric_user_id: demo.electric_user_id
-      }
+        electric_user_id: demo.electric_user_id,
+      },
     })
   }
 
@@ -70,12 +70,12 @@ const LocalFirst = () => {
 
   return (
     <LatencyWidget
-        add={add}
-        clear={clear}
-        items={results}
-        initialLatency={fetchLatency}
-        itemColor="electric-green"
-        title="Local-first"
+      add={add}
+      clear={clear}
+      items={results}
+      initialLatency={fetchLatency}
+      itemColor="electric-green"
+      title="Local-first"
     />
   )
 }
@@ -84,8 +84,8 @@ const LocalFirst = () => {
 // manually updates the local state (if the request is successful).
 const CloudFirst = () => {
   const { demo } = useDemoContext()
-  const [ results, setResults ] = useState()
-  const [ fetchLatency, setFetchLatency ] = useState(-1)
+  const [results, setResults] = useState()
+  const [fetchLatency, setFetchLatency] = useState(-1)
   const mountedRef = useRef(false)
 
   useEffect(() => {
@@ -99,7 +99,7 @@ const CloudFirst = () => {
   useEffect(() => {
     const loadItems = async () => {
       const { elapsed, result } = await timeResolution(
-        api.getItems({demo_id: demo.id})
+        api.getItems({ demo_id: demo.id }),
       )
 
       if (!mountedRef.current) {
@@ -118,7 +118,7 @@ const CloudFirst = () => {
   const add = async () => {
     const item = newItem(demo)
     const savedItem = await api.postItem({
-      data: item
+      data: item,
     })
 
     if (!mountedRef.current) {
@@ -135,8 +135,8 @@ const CloudFirst = () => {
   const clear = async () => {
     const ok = await api.deleteItem({
       data: {
-        demo_id: demo.id
-      }
+        demo_id: demo.id,
+      },
     })
 
     if (!mountedRef.current || !ok) {
@@ -152,13 +152,13 @@ const CloudFirst = () => {
 
   return (
     <LatencyWidget
-        add={add}
-        clear={clear}
-        items={results.slice(0, 24)}
-        title="Cloud-first"
-        initialLatency={fetchLatency}
-        itemColor="script-red"
-        disableWhenInProgress={true}
+      add={add}
+      clear={clear}
+      items={results.slice(0, 24)}
+      title="Cloud-first"
+      initialLatency={fetchLatency}
+      itemColor="script-red"
+      disableWhenInProgress={true}
     />
   )
 }

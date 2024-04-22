@@ -3,10 +3,10 @@ import React, { useEffect, useState } from 'react'
 
 import { useLiveQuery } from 'electric-sql/react'
 import { genUUID } from 'electric-sql/util'
-
+/* prettier-ignore */
 import { App, ConnectivityControl, ItemsWidget, SliderInput } from '../../components'
 import { useElectric } from '../../electric'
-import { boostrapSlider, useDemoContext } from '../../session'
+import { bootstrapSlider, useDemoContext } from '../../session'
 
 const newItem = (demo) => {
   return {
@@ -14,42 +14,42 @@ const newItem = (demo) => {
     inserted_at: `${Date.now()}`,
     demo_id: demo.id,
     demo_name: demo.name,
-    electric_user_id: demo.electric_user_id
+    electric_user_id: demo.electric_user_id,
   }
 }
 
 const RealtimeWithConnectivity = ({ itemColor, slider, userId }) => {
   const { db } = useElectric()
   const { demo } = useDemoContext()
-  const [ sliderValue, setSliderValue ] = useState(slider.value)
+  const [sliderValue, setSliderValue] = useState(slider.value)
 
   const { results: liveItems } = useLiveQuery(
     db.items.liveMany({
       where: {
         demo_name: demo.name,
-        electric_user_id: demo.electric_user_id
+        electric_user_id: demo.electric_user_id,
       },
       orderBy: {
-        inserted_at: 'asc'
+        inserted_at: 'asc',
       },
-      take: 24
-    })
+      take: 24,
+    }),
   )
 
   const { results: liveSlider } = useLiveQuery(
     db.sliders.liveFirst({
       where: {
         demo_name: demo.name,
-        electric_user_id: demo.electric_user_id
+        electric_user_id: demo.electric_user_id,
       },
       select: {
         id: true,
-        value: true
+        value: true,
       },
       orderBy: {
-        id: 'asc'
-      }
-    })
+        id: 'asc',
+      },
+    }),
   )
 
   useEffect(() => {
@@ -62,7 +62,7 @@ const RealtimeWithConnectivity = ({ itemColor, slider, userId }) => {
 
   const add = async () => {
     await db.items.create({
-      data: newItem(demo)
+      data: newItem(demo),
     })
   }
 
@@ -70,8 +70,8 @@ const RealtimeWithConnectivity = ({ itemColor, slider, userId }) => {
     await db.items.deleteMany({
       where: {
         demo_name: demo.name,
-        electric_user_id: demo.electric_user_id
-      }
+        electric_user_id: demo.electric_user_id,
+      },
     })
   }
 
@@ -79,11 +79,11 @@ const RealtimeWithConnectivity = ({ itemColor, slider, userId }) => {
     await db.sliders.updateMany({
       where: {
         demo_name: demo.name,
-        electric_user_id: demo.electric_user_id
+        electric_user_id: demo.electric_user_id,
       },
       data: {
-        value: value
-      }
+        value: value,
+      },
     })
   }
 
@@ -93,8 +93,10 @@ const RealtimeWithConnectivity = ({ itemColor, slider, userId }) => {
 
   return (
     <div className="mb-4">
-      <div className="flex flex-row items-center justify-between pb-3 mb-5"
-          style={{borderBottom: '1px solid var(--card-border)'}}>
+      <div
+        className="flex flex-row items-center justify-between pb-3 mb-5"
+        style={{ borderBottom: '1px solid var(--card-border)' }}
+      >
         <label className={clsx('section-label text-small', itemColor)}>
           User: {userId}
         </label>
@@ -102,20 +104,20 @@ const RealtimeWithConnectivity = ({ itemColor, slider, userId }) => {
       </div>
       <div className={clsx('my-8', itemColor)}>
         <SliderInput
-            min={0}
-            max={100}
-            step={1}
-            value={sliderValue}
-            onChange={setSliderValue}
-            onChangeComplete={syncSlider}
+          min={0}
+          max={100}
+          step={1}
+          value={sliderValue}
+          onChange={setSliderValue}
+          onChangeComplete={syncSlider}
         />
       </div>
       <ItemsWidget
-          add={add}
-          clear={clear}
-          items={liveItems}
-          itemColor={itemColor}
-          disableWhenInProgress={false}
+        add={add}
+        clear={clear}
+        items={liveItems}
+        itemColor={itemColor}
+        disableWhenInProgress={false}
       />
     </div>
   )
@@ -124,16 +126,16 @@ const RealtimeWithConnectivity = ({ itemColor, slider, userId }) => {
 // Setup the slider in a Wrapper rather than directly
 // in the Demo below so we can use the db and
 // demoContext setup by the App component.
-const Wrapper = ({itemColor, userId}) => {
+const Wrapper = ({ itemColor, userId }) => {
   const { db } = useElectric()
   const { demo } = useDemoContext()
-  const [ slider, setSlider ] = useState()
+  const [slider, setSlider] = useState()
 
   useEffect(() => {
     let isMounted = true
 
     const ensureSlider = async () => {
-      const slider = await boostrapSlider(db, demo)
+      const slider = await bootstrapSlider(db, demo)
 
       if (!isMounted) {
         return
@@ -155,9 +157,9 @@ const Wrapper = ({itemColor, userId}) => {
 
   return (
     <RealtimeWithConnectivity
-        slider={slider}
-        userId={userId}
-        itemColor={itemColor}
+      slider={slider}
+      userId={userId}
+      itemColor={itemColor}
     />
   )
 }
