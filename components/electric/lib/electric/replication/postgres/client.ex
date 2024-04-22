@@ -121,28 +121,13 @@ defmodule Electric.Replication.Postgres.Client do
       t.oid
   """
 
+  def types_query(kinds),
+    do: {@types_query, Enum.map(kinds, &Electric.Postgres.OidDatabase.PgType.encode_kind/1)}
+
   def query_oids(conn, kinds \\ [:BASE, :DOMAIN, :ENUM]) do
     typtypes = Enum.map(kinds, &Electric.Postgres.OidDatabase.PgType.encode_kind/1)
     {:ok, _, type_data} = :epgsql.equery(conn, @types_query, [typtypes])
     {:ok, type_data}
-  end
-
-  def start_subscription(conn, name) do
-    with {:ok, _, _} <- squery(conn, ~s|ALTER SUBSCRIPTION "#{name}" ENABLE|),
-         {:ok, _, _} <-
-           squery(
-             conn,
-             ~s|ALTER SUBSCRIPTION "#{name}" REFRESH PUBLICATION WITH (copy_data = false)|
-           ) do
-      :ok
-    end
-  end
-
-  @spec stop_subscription(connection, String.t()) :: :ok
-  def stop_subscription(conn, name) do
-    with {:ok, _, _} <- squery(conn, ~s|ALTER SUBSCRIPTION "#{name}" DISABLE|) do
-      :ok
-    end
   end
 
   defp squery(conn, query) do

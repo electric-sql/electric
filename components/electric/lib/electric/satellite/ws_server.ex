@@ -35,8 +35,10 @@ defmodule Electric.Satellite.WebsocketServer do
 
   alias Electric.Utils
   alias Electric.Postgres.CachedWal
+  alias Electric.Postgres.Extension
   alias Electric.Replication.Connectors
   alias Electric.Replication.InitialSync
+  alias Electric.Replication.Postgres.Client
   alias Electric.Satellite.Protocol
   alias Electric.Satellite.Protocol.State
   alias Electric.Satellite.Protocol.OutRep
@@ -447,12 +449,35 @@ defmodule Electric.Satellite.WebsocketServer do
   else
     defp maybe_pause(_, _), do: :ok
 
+    # @last_acked_client_lsn_equery "SELECT lsn FROM #{@acked_client_lsn_table} WHERE client_id = $1"
+    # @spec fetch_last_acked_client_lsn(pid(), binary()) :: {:ok, binary() | nil} | {:error, term()}
+    # def fetch_last_acked_client_lsn(conn, client_id) do
+    #   case :epgsql.equery(conn, @last_acked_client_lsn_equery, [client_id]) do
+    #     {:ok, _, [{lsn}]} ->
+    #       # No need for a decoding step here because :epgsql.equery() uses Postgres' binary protocol, so a BYTEA value
+    #       # is returned as a raw binary.
+    #       {:ok, lsn}
+
+    #     {:ok, _, []} ->
+    #       {:ok, nil}
+
+    #     {:error, _} = error ->
+    #       error
+    #   end
+    # end
+
     def fetch_last_acked_client_lsn(state) do
-      state.connector_config
-      |> Electric.Replication.Connectors.get_connection_opts()
-      |> Electric.Replication.Postgres.Client.with_conn(fn conn ->
-        Electric.Postgres.Extension.fetch_last_acked_client_lsn(conn, state.client_id)
-      end)
+      {["lsn"], rows} =
+        Client.pooled_query!(
+          state.origin,
+          "SELECT lsn FROM #{Extension.acked_client_lsn_table()} WHERE client_id = $1",
+          [state.client_id]
+        )
+
+      case rows do
+        [] -> nil
+        [{lsn}] -> lsn
+      end
     end
   end
 end

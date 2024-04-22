@@ -77,15 +77,7 @@ defmodule Electric.Postgres.Extension do
   # support for timestamp columns :(
   @txts_type "int8"
 
-  defp migration_history_query(after_version) do
-    where_clause =
-      if after_version do
-        "WHERE v.txid > (SELECT txid FROM #{@version_table} WHERE version = $1)"
-      else
-        # Dummy condition just to keep the $1 parameter in the query.
-        "WHERE $1::text IS NULL"
-      end
-
+  def migration_history_query do
     """
     SELECT
       v.txid::xid8,
@@ -98,17 +90,13 @@ defmodule Electric.Postgres.Extension do
       #{@version_table} v
     JOIN
       #{@schema_table} s USING (version)
-    #{where_clause}
+    WHERE
+      CASE $1
+        WHEN NULL THEN true
+        ELSE v.txid > (SELECT txid FROM #{@version_table} WHERE version = $1)
+      END
     ORDER BY
       v.txid ASC
-    """
-  end
-
-  def transaction_marker_update_equery do
-    """
-    UPDATE #{transaction_marker_table()}
-    SET content = jsonb_build_object('xid', pg_current_xact_id(), 'caused_by', $1::text)
-    WHERE id = 'magic write'
     """
   end
 
@@ -168,17 +156,23 @@ defmodule Electric.Postgres.Extension do
     end
   end
 
+  def current_schema_query, do: @current_schema_query
+
   def current_schema(conn) do
     with {:ok, [_, _], rows} <- :epgsql.equery(conn, @current_schema_query, []) do
-      case rows do
-        [] ->
-          {:ok, nil, Schema.new()}
+      load_schema_versions(rows)
+    end
+  end
 
-        [{schema, version}] ->
-          with {:ok, schema} <- Proto.Schema.json_decode(schema) do
-            {:ok, version, schema}
-          end
-      end
+  def load_schema_versions(rows) do
+    case rows do
+      [] ->
+        {:ok, nil, Schema.new()}
+
+      [{schema, version}] ->
+        with {:ok, schema} <- Proto.Schema.json_decode(schema) do
+          {:ok, version, schema}
+        end
     end
   end
 
@@ -224,17 +218,6 @@ defmodule Electric.Postgres.Extension do
       message: "invalid tx fk row #{inspect(row)}, expecting %{\"txid\" => _, \"txts\" => _}"
   end
 
-  @spec migration_history(conn(), binary() | nil) :: {:ok, [Migration.t()]} | {:error, term()}
-  def migration_history(conn, after_version \\ nil)
-
-  def migration_history(conn, after_version) do
-    query = migration_history_query(after_version)
-
-    with {:ok, [_, _, _, _, _, _], rows} <- :epgsql.equery(conn, query, [after_version]) do
-      {:ok, load_migrations(rows)}
-    end
-  end
-
   def known_migration_version?(conn, version) when is_binary(version) do
     case :epgsql.equery(conn, "SELECT 1 FROM #{@version_table} WHERE version = $1", [version]) do
       {:ok, [_], [{1}]} -> true
@@ -242,7 +225,9 @@ defmodule Electric.Postgres.Extension do
     end
   end
 
-  defp load_migrations(rows) do
+  def load_migrations(rows) do
+    IO.inspect(rows)
+
     Enum.map(rows, fn {txid_str, txts, version, timestamp, schema_json, stmts} ->
       %Migration{
         version: version,
@@ -582,42 +567,6 @@ defmodule Electric.Postgres.Extension do
   end
 
   defp known_shadow_column?(_), do: false
-
-  @doc """
-  Perform a mostly no-op update to a transaction marker query to make sure
-  there is at least one write to Postgres after this point.
-
-  Second argument, `caused_by`, is any string which will be written in this
-  write, which may be useful for debugging.
-
-  This uses an extended query syntax, and thus cannot be used in a `replication: true`
-  connection.
-  """
-  def update_transaction_marker(conn, caused_by) when is_binary(caused_by) do
-    {:ok, 1} =
-      :epgsql.equery(
-        conn,
-        transaction_marker_update_equery(),
-        [caused_by]
-      )
-  end
-
-  @last_acked_client_lsn_equery "SELECT lsn FROM #{@acked_client_lsn_table} WHERE client_id = $1"
-  @spec fetch_last_acked_client_lsn(pid(), binary()) :: {:ok, binary() | nil} | {:error, term()}
-  def fetch_last_acked_client_lsn(conn, client_id) do
-    case :epgsql.equery(conn, @last_acked_client_lsn_equery, [client_id]) do
-      {:ok, _, [{lsn}]} ->
-        # No need for a decoding step here because :epgsql.equery() uses Postgres' binary protocol, so a BYTEA value
-        # is returned as a raw binary.
-        {:ok, lsn}
-
-      {:ok, _, []} ->
-        {:ok, nil}
-
-      {:error, _} = error ->
-        error
-    end
-  end
 
   @doc """
   Try inserting a new cluster id into PostgreSQL to persist, but return

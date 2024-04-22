@@ -84,21 +84,19 @@ defmodule Electric.Replication.InitialSync do
   """
   def query_subscription_data({subscription_id, requests, context},
         reply_to: {ref, parent},
-        connection: opts,
+        origin: origin,
         telemetry_span: span
       ) do
     marker = "subscription:" <> subscription_id
-    origin = Connectors.origin(opts)
     {:ok, schema_version} = Extension.SchemaCache.load(origin)
 
-    run_in_readonly_txn_with_checkpoint(opts, {ref, parent}, marker, fn conn, _ ->
+    run_in_readonly_txn_with_checkpoint(origin, {ref, parent}, marker, fn _xmin ->
       Enum.reduce_while(requests, {Graph.new(), %{}, []}, fn request,
                                                              {acc_graph, results, req_ids} ->
         start = System.monotonic_time()
 
         case Shapes.ShapeRequest.query_initial_data(
                request,
-               conn,
                schema_version,
                origin,
                context
@@ -132,17 +130,15 @@ defmodule Electric.Replication.InitialSync do
 
   def query_after_move_in(move_in_ref, {subquery_map, affected_txs}, context,
         reply_to: {ref, parent},
-        connection: opts
+        origin: origin
       ) do
     marker = "tx_subquery:#{System.monotonic_time()}"
-    origin = Connectors.origin(opts)
     {:ok, schema_version} = Extension.SchemaCache.load(origin)
 
-    run_in_readonly_txn_with_checkpoint(opts, {ref, parent}, marker, fn conn, xmin ->
+    run_in_readonly_txn_with_checkpoint(origin, {ref, parent}, marker, fn xmin ->
       Enum.reduce_while(subquery_map, {Graph.new(), %{}}, fn {layer, changes},
                                                              {acc_graph, results} ->
         case Shapes.ShapeRequest.query_moved_in_layer_data(
-               conn,
                layer,
                changes,
                schema_version,
@@ -168,31 +164,29 @@ defmodule Electric.Replication.InitialSync do
     end)
   end
 
-  defp run_in_readonly_txn_with_checkpoint(opts, {ref, parent}, marker, fun)
-       when is_function(fun, 2) do
-    conn_opts = Connectors.get_connection_opts(opts)
+  defp run_in_readonly_txn_with_checkpoint(origin, {ref, parent}, marker, fun)
+       when is_function(fun, 1) do
+    Client.pooled_transaction(origin, "ISOLATION LEVEL REPEATABLE READ READ ONLY", fn ->
+      # It's important that this magic write
+      # 1. is made after the current transaction has started
+      # 2. is in a separate transaction (thus on a different connection)
+      # 3. is before the potentially big read queries to ensure this arrives ASAP on any data size
+      Task.start(fn -> perform_magic_write(origin, marker) end)
 
-    Client.with_conn(conn_opts, fn conn ->
-      Client.with_transaction(
-        "ISOLATION LEVEL REPEATABLE READ READ ONLY",
-        conn,
-        fn conn ->
-          # It's important that this magic write
-          # 1. is made after the current transaction has started
-          # 2. is in a separate transaction (thus on a different connection)
-          # 3. is before the potentially big read queries to ensure this arrives ASAP on any data size
-          Task.start(fn -> perform_magic_write(conn_opts, marker) end)
-
-          {:ok, _, [{xmin_str}]} =
-            :epgsql.squery(conn, "SELECT pg_snapshot_xmin(pg_current_snapshot())")
-
-          xmin = String.to_integer(xmin_str)
-          send(parent, {:data_insertion_point, ref, xmin})
-          fun.(conn, xmin)
-        end
-      )
+      %{rows: [{xmin}]} = Client.query!("SELECT pg_snapshot_xmin(pg_current_snapshot())")
+      send(parent, {:data_insertion_point, ref, xmin})
+      fun.(xmin)
     end)
   end
+
+  @transaction_marker_update_query """
+  UPDATE
+    #{Extension.transaction_marker_table()}
+  SET
+    content = jsonb_build_object('xid', pg_current_xact_id(), 'caused_by', $1::text)
+  WHERE
+    id = 'magic write'
+  """
 
   # Commit a write transaction to ensure Electric sees one even in the absence of user writes
   # to Postgres.
@@ -207,11 +201,7 @@ defmodule Electric.Replication.InitialSync do
   # starting a REPEATABLE READ transaction. xid for this write transaction will definitely be
   # >= xmin, so even in the absence of user writes to electrified tables, Electric will at
   # least observe this magic write.
-  def perform_magic_write(conn_opts, marker) when is_map(conn_opts) do
-    Client.with_conn(conn_opts, &perform_magic_write(&1, marker))
-  end
-
-  def perform_magic_write(conn, marker) when is_pid(conn) do
-    Extension.update_transaction_marker(conn, marker)
+  def perform_magic_write(origin, marker) when is_binary(origin) do
+    Client.pooled_query!(origin, @transaction_marker_update_query, [marker])
   end
 end

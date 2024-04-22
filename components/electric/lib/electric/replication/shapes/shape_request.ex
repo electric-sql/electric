@@ -123,11 +123,10 @@ defmodule Electric.Replication.Shapes.ShapeRequest do
 
   def prepare_filtering_context(_previous_requests), do: %{}
 
-  @spec query_initial_data(t(), term(), SchemaLoader.Version.t(), String.t(), map()) ::
+  @spec query_initial_data(t(), SchemaLoader.Version.t(), String.t(), map()) ::
           {:error, any()} | {:ok, %{term() => {Changes.NewRecord.t(), [term()]}}, Graph.t()}
-  def query_initial_data(%__MODULE__{} = req, conn, schema_version, origin, context) do
+  def query_initial_data(%__MODULE__{} = req, schema_version, origin, context) do
     Querying.query_layer(
-      conn,
       req.tree,
       schema_version,
       origin,
@@ -136,7 +135,6 @@ defmodule Electric.Replication.Shapes.ShapeRequest do
   end
 
   def query_moved_in_layer_data(
-        conn,
         %Layer{} = layer,
         moved_in_records,
         schema_version,
@@ -154,7 +152,6 @@ defmodule Electric.Replication.Shapes.ShapeRequest do
     }
 
     Querying.query_next_layers(
-      conn,
       filtered_layer,
       schema_version,
       origin,

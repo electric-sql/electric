@@ -67,14 +67,15 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
 
   @impl true
   def connect(conn_config, _opts) do
-    {:ok, _pool} =
-      NimblePool.start_link(
-        worker: {ConnectionPool, conn_config},
-        # only connect when required, not immediately
-        lazy: true,
-        pool_size: 4,
-        worker_idle_timeout: 30_000
-      )
+    {:ok, Connectors.origin(conn_config)}
+    # {:ok, _pool} =
+    #   NimblePool.start_link(
+    #     worker: {ConnectionPool, conn_config},
+    #     # only connect when required, not immediately
+    #     lazy: true,
+    #     pool_size: 4,
+    #     worker_idle_timeout: 30_000
+    #   )
   end
 
   defp checkout!(pool, fun) do
@@ -89,12 +90,14 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
   end
 
   @impl true
-  def load(pool) do
-    checkout!(pool, fn conn ->
-      with {:ok, version, schema} <- Extension.current_schema(conn) do
-        {:ok, SchemaLoader.Version.new(version, schema)}
-      end
-    end)
+  def load(origin) do
+    {_cols, rows} =
+      Client.pooled_query!(origin, Extension.current_schema_query())
+      |> IO.inspect()
+
+    with {:ok, version, schema} <- Extension.load_schema_versions(rows) do
+      {:ok, SchemaLoader.Version.new(version, schema)}
+    end
   end
 
   @impl true
@@ -148,10 +151,11 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
   end
 
   @impl true
-  def migration_history(pool, version) do
-    checkout!(pool, fn conn ->
-      Extension.migration_history(conn, version)
-    end)
+  def migration_history(origin, version) do
+    {_cols, rows} =
+      Client.pooled_query!(origin, Extension.migration_history_query(), [version])
+
+    {:ok, Extension.load_migrations(rows)}
   end
 
   @impl true
