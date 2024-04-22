@@ -1,8 +1,8 @@
 import { InvalidArgumentError } from '../validation/errors/invalidArgumentError'
 import { Converter } from './converter'
-import { serialiseDate } from './datatypes/date'
+import { deserialiseDate, serialiseDate } from './datatypes/date'
 import { isJsonNull } from './datatypes/json'
-import { PgBasicType, PgDateType, PgType } from './types'
+import { PgBasicType, PgDateType, PgType, isPgDateType } from './types'
 
 /**
  * This module takes care of converting TypeScript values to a Postgres storeable value and back.
@@ -17,7 +17,7 @@ function toPostgres(v: any, pgType: PgType): any {
     return v
   }
 
-  if (pgType === PgDateType.PG_TIME || pgType === PgDateType.PG_TIMETZ) {
+  if (isPgDateType(pgType)) {
     if (!(v instanceof Date))
       throw new InvalidArgumentError(
         `Unexpected value ${v}. Expected a Date object.`
@@ -79,6 +79,14 @@ function fromPostgres(v: any, pgType: PgType): any {
   if (pgType === PgBasicType.PG_FLOAT4 || pgType === PgBasicType.PG_REAL) {
     // fround the number to represent it as a 32-bit float
     return Math.fround(v)
+  }
+
+  if (pgType === PgDateType.PG_TIME || pgType === PgDateType.PG_TIMETZ) {
+    // dates and timestamps are parsed into JS Date objects
+    // by the underlying PG driver we use
+    // But time and timetz values are returned as strings
+    // so we parse them into a JS Date object ourselves
+    return deserialiseDate(v, pgType as PgDateType)
   }
 
   return v
