@@ -73,7 +73,8 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
         # only connect when required, not immediately
         lazy: true,
         pool_size: 4,
-        worker_idle_timeout: 30_000
+        worker_idle_timeout: 30_000,
+        name: Electric.static_name(__MODULE__)
       )
   end
 

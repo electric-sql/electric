@@ -26,7 +26,7 @@ defmodule Electric.Replication.SatelliteConnector do
       {SatelliteCollectorConsumer,
        name: SatelliteCollectorConsumer.name(name),
        subscribe_to: [{producer, cancel: :temporary}],
-       push_to: SatelliteCollectorProducer.name(origin)},
+       push_to: SatelliteCollectorProducer.reg_name(origin)},
       {Electric.Postgres.CachedWal.Producer,
        name: Electric.Postgres.CachedWal.Producer.name(name), origin: origin}
     ]

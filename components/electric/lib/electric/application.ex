@@ -85,6 +85,10 @@ defmodule Electric.Application do
   defp pg_server_port, do: Application.fetch_env!(:electric, :pg_server_port)
 
   defp listener_opts do
+    [num_acceptors: 1] ++ ipv6_opts()
+  end
+
+  defp ipv6_opts do
     use_ipv6? = Application.get_env(:electric, :listen_on_ipv6?, false)
 
     if use_ipv6? do

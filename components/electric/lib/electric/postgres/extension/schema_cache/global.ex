@@ -11,15 +11,10 @@ defmodule Electric.Postgres.Extension.SchemaCache.Global do
 
   require Logger
 
-  {:via, :gproc, key} = name = Electric.name(SchemaCache, :__global__)
-
-  @name name
-  @key key
-
-  def name, do: @name
+  def name, do: Electric.name(SchemaCache, "__global__")
 
   def register(origin) do
-    case Electric.reg_or_locate(@name, origin) do
+    case Electric.reg_or_locate(name(), origin) do
       :ok ->
         # Kept as a warning to remind us that this is wrong... ;)
         Logger.warning("SchemaCache #{inspect(origin)} registered as the global instance")
@@ -32,7 +27,7 @@ defmodule Electric.Postgres.Extension.SchemaCache.Global do
   end
 
   defp with_instance(timeout \\ 5_000, fun) when is_function(fun, 1) do
-    {pid, _value} = :gproc.await(@key, timeout)
+    {pid, _value} = Electric.await_reg(name(), timeout)
     fun.(pid)
   end
 

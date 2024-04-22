@@ -25,28 +25,32 @@ defmodule Electric.Satellite.ClientManager do
           }
   end
 
+  def static_name do
+    Electric.static_name(__MODULE__)
+  end
+
   @spec start_link(any) :: :ignore | {:error, any} | {:ok, pid}
   def start_link(_) do
-    GenServer.start_link(__MODULE__, [], name: __MODULE__)
+    GenServer.start_link(__MODULE__, [], name: static_name())
   end
 
   @spec register_client(GenServer.server(), String.t(), Electric.reg_name(), Connectors.origin()) ::
           :ok | {:error, term()}
-  def register_client(server \\ __MODULE__, client_name, reg_name, origin) do
+  def register_client(server \\ static_name(), client_name, reg_name, origin) do
     GenServer.call(server, {:register, client_name, reg_name, origin})
   end
 
   @spec fetch_client(GenServer.server(), String.t()) :: {:ok, pid} | {:error, :not_found}
-  def fetch_client(server \\ __MODULE__, client_name) do
+  def fetch_client(server \\ static_name(), client_name) do
     GenServer.call(server, {:fetch_client, client_name})
   end
 
   @spec get_clients(GenServer.server()) :: [{String.t(), pid()}]
-  def get_clients(server \\ __MODULE__) do
+  def get_clients(server \\ static_name()) do
     GenServer.call(server, :get_clients)
   end
 
-  def emit_telemetry_stats(server \\ __MODULE__, event) do
+  def emit_telemetry_stats(server \\ static_name(), event) do
     GenServer.cast(server, {:emit_telemetry_stats, event})
   end
 

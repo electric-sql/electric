@@ -12,7 +12,7 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
     removing oldest entries (FIFO)
   """
 
-  use GenStage
+  use Electric, :gen_stage
 
   alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.Connectors
@@ -34,17 +34,12 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
 
   # Public API
 
-  @spec name(Connectors.origin()) :: Electric.reg_name()
-  def name(origin) do
-    Electric.name(__MODULE__, origin)
-  end
-
   @doc """
   Start the cache. See module docs for options
   """
   def start_link(opts) do
     origin = Keyword.fetch!(opts, :origin)
-    GenStage.start_link(__MODULE__, opts, name: name(origin))
+    GenStage.start_link(__MODULE__, opts, name: static_name(origin))
   end
 
   def clear_cache(stage) do
@@ -87,12 +82,12 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
 
   @impl Api
   def request_notification(origin, wal_pos) do
-    GenStage.call(name(origin), {:request_notification, wal_pos})
+    GenStage.call(reg_name(origin), {:request_notification, wal_pos})
   end
 
   @impl Api
   def cancel_notification_request(origin, ref) do
-    GenStage.call(name(origin), {:cancel_notification, ref})
+    GenStage.call(reg_name(origin), {:cancel_notification, ref})
   end
 
   @impl Api
@@ -108,7 +103,7 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
 
   @impl Api
   def telemetry_stats(origin) do
-    GenStage.call(name(origin), :telemetry_stats)
+    GenStage.call(reg_name(origin), :telemetry_stats)
   catch
     :exit, _ -> nil
   end
@@ -123,6 +118,8 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
   @impl GenStage
   def init(opts) do
     origin = Keyword.fetch!(opts, :origin)
+
+    reg(origin)
 
     table = :ets.new(ets_table_name(origin), [:named_table, :ordered_set])
     Logger.metadata(origin: origin, component: "CachedWal.EtsBacked")
@@ -140,10 +137,6 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
       nil -> {:consumer, state}
       subscription -> {:consumer, state, subscribe_to: subscription}
     end
-  end
-
-  defp ets_table_name(origin) do
-    String.to_atom(inspect(__MODULE__) <> ":" <> origin)
   end
 
   @impl GenStage

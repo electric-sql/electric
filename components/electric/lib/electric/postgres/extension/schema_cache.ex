@@ -14,7 +14,7 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   itself (via the functions in the `Extension` module).
   """
 
-  use GenServer
+  use Electric, :gen_server
 
   import Electric.Postgres.Extension, only: [is_extension_relation: 1]
 
@@ -44,27 +44,18 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     Supervisor.child_spec(default, [])
   end
 
-  def start_link({conn_config, opts}) do
-    start_link(conn_config, opts)
+  def start_link({connector_config, opts}) do
+    start_link(connector_config, opts)
   end
 
-  def start_link(conn_config, opts \\ []) do
-    GenServer.start_link(__MODULE__, {conn_config, opts}, name: name(conn_config))
-  end
-
-  @spec name(Connectors.config()) :: Electric.reg_name()
-  def name(conn_config) when is_list(conn_config) do
-    name(Connectors.origin(conn_config))
-  end
-
-  @spec name(Connectors.origin()) :: Electric.reg_name()
-  def name(origin) when is_binary(origin) do
-    Electric.name(__MODULE__, origin)
+  def start_link(connector_config, opts \\ []) do
+    name = static_name(connector_config)
+    GenServer.start_link(__MODULE__, {connector_config, opts}, name: name)
   end
 
   @spec ready?(Connectors.origin()) :: boolean()
   def ready?(origin) do
-    case Electric.lookup_pid(name(origin)) do
+    case Electric.lookup_pid(reg_name(origin)) do
       pid when is_pid(pid) -> true
       _ -> false
     end
@@ -200,7 +191,7 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   end
 
   defp call(name, msg) when is_binary(name) do
-    call(name(name), msg)
+    call(reg_name(name), msg)
   end
 
   defp call(pid, msg) when is_pid(pid) do
@@ -212,8 +203,9 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   end
 
   @impl GenServer
-  def init({conn_config, opts}) do
-    origin = Connectors.origin(conn_config)
+  def init({connector_config, opts}) do
+    reg(connector_config)
+    origin = Connectors.origin(connector_config)
 
     Logger.metadata(pg_producer: origin)
     Logger.info("Starting #{__MODULE__} for #{origin}")
@@ -226,12 +218,12 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     {:ok, backend} =
       opts
       |> SchemaLoader.get(:backend)
-      |> SchemaLoader.connect(conn_config)
+      |> SchemaLoader.connect(connector_config)
 
     state = %{
       origin: origin,
       backend: backend,
-      conn_config: conn_config,
+      conn_config: connector_config,
       opts: opts,
       current: nil,
       refresh_task: nil,
@@ -240,6 +232,10 @@ defmodule Electric.Postgres.Extension.SchemaCache do
     }
 
     {:ok, state}
+  end
+
+  def init(connector_config) when is_list(connector_config) do
+    init({connector_config, []})
   end
 
   @impl GenServer

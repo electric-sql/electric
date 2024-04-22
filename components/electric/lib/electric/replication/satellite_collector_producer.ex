@@ -8,22 +8,13 @@ defmodule Electric.Replication.SatelliteCollectorProducer do
   triggers on Postgres should take care of properly conflict-resolving inserts based
   on the metadata, regardless of observed operation order.
   """
-  use GenStage
+  use Electric, :gen_stage
 
   alias Electric.Postgres.Extension
   alias Electric.Replication.Changes.NewRecord
   alias Electric.Replication.Connectors
 
   require Logger
-
-  def start_link(connector_config) do
-    origin = Connectors.origin(connector_config)
-    GenStage.start_link(__MODULE__, connector_config, name: name(origin))
-  end
-
-  def name(origin) do
-    Electric.name(__MODULE__, origin)
-  end
 
   def store_incoming_transactions(_, []), do: :ok
 
@@ -35,6 +26,8 @@ defmodule Electric.Replication.SatelliteCollectorProducer do
 
   @impl GenStage
   def init(connector_config) do
+    reg(connector_config)
+
     table = :ets.new(nil, [:ordered_set, keypos: 2])
 
     {:producer,

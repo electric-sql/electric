@@ -75,8 +75,12 @@ defmodule Electric.Replication.Connectors do
 
   alias Electric.Postgres.Extension
 
+  def static_name do
+    Electric.static_name(__MODULE__)
+  end
+
   def start_link(extra_args) do
-    DynamicSupervisor.start_link(__MODULE__, extra_args, name: __MODULE__)
+    DynamicSupervisor.start_link(__MODULE__, extra_args, name: static_name())
   end
 
   @impl DynamicSupervisor
@@ -86,12 +90,12 @@ defmodule Electric.Replication.Connectors do
 
   @spec start_connector(module(), term()) :: Supervisor.on_start()
   def start_connector(module, args) do
-    DynamicSupervisor.start_child(__MODULE__, {module, args})
+    DynamicSupervisor.start_child(static_name(), {module, args})
   end
 
   @spec stop_connector(pid()) :: :ok | {:error, term()}
   def stop_connector(pid) do
-    DynamicSupervisor.terminate_child(__MODULE__, pid)
+    DynamicSupervisor.terminate_child(static_name(), pid)
   end
 
   def status(opt \\ :pretty) do
@@ -104,7 +108,7 @@ defmodule Electric.Replication.Connectors do
           fn {_, pid, _, [module]} -> {module, pid} end
       end
 
-    __MODULE__
+    static_name()
     |> DynamicSupervisor.which_children()
     |> Enum.map(map_fun)
   end

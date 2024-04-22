@@ -127,7 +127,12 @@ defmodule Electric.Postgres.Proxy do
     Logger.info("Starting Proxy server listening on port #{listen_opts[:port]}")
 
     ThousandIsland.child_spec(
-      Keyword.merge(listen_opts, handler_module: Handler, handler_options: handler_state)
+      Keyword.merge(listen_opts,
+        handler_module: Handler,
+        handler_options: handler_state,
+        num_acceptors: 1,
+        supervisor_options: [name: Electric.static_name(__MODULE__, connector_config)]
+      )
     )
   end
 

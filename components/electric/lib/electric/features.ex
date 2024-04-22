@@ -40,8 +40,12 @@ defmodule Electric.Features do
   @type flag() :: atom()
   @type name() :: atom()
 
+  def static_name do
+    Electric.static_name(__MODULE__)
+  end
+
   def start_link(args) do
-    GenServer.start_link(__MODULE__, args)
+    GenServer.start_link(__MODULE__, args, name: static_name())
   end
 
   def default_key, do: @default_key

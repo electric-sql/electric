@@ -9,8 +9,12 @@ defmodule Electric.Postgres.OidDatabase do
 
   @oid_table :oid_database
 
+  def static_name do
+    Electric.static_name(__MODULE__)
+  end
+
   def start_link(_) do
-    GenServer.start_link(__MODULE__, [], name: __MODULE__)
+    GenServer.start_link(__MODULE__, [], name: static_name())
   end
 
   def update_oids(conn, kinds \\ nil) do
@@ -22,11 +26,11 @@ defmodule Electric.Postgres.OidDatabase do
       end
 
     with {:ok, oids} <- res do
-      save_oids(__MODULE__, oids)
+      save_oids(static_name(), oids)
     end
   end
 
-  def save_oids(server \\ __MODULE__, values) do
+  def save_oids(server \\ static_name(), values) do
     GenServer.call(server, {:save_oids, Enum.map(values, &pg_type_from_tuple/1)})
   end
 
