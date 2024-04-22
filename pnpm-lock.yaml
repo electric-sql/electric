@@ -136,8 +136,8 @@ importers:
         version: 3.21.1
     devDependencies:
       '@electric-sql/pglite':
-        specifier: ^0.1.4
-        version: 0.1.4
+        specifier: ^0.1.5
+        version: 0.1.5
       '@op-engineering/op-sqlite':
         specifier: '>= 2.0.16'
         version: 2.0.20(react-native@0.68.0)(react@18.2.0)
@@ -2788,8 +2788,8 @@ packages:
     engines: {node: '>=0.1.90'}
     dev: false
 
-  /@electric-sql/pglite@0.1.4:
-    resolution: {integrity: sha512-B1mWjMVHCjrqqdRXCk3a9v9XmtAg+i/GpH/fdlmkukFY2Ofm7lF+nJu5AjIk84NFdcG8IdvzS9fvQBXY5sXonQ==}
+  /@electric-sql/pglite@0.1.5:
+    resolution: {integrity: sha512-eymv4ONNvoPZQTvOQIi5dbpR+J5HzEv0qQH9o/y3gvNheJV/P/NFcrbsfJZYTsDKoq7DKrTiFNexsRkJKy8x9Q==}
     dev: true
 
   /@embedded-postgres/darwin-arm64@16.1.1-beta.11:
