@@ -98,12 +98,6 @@ export const makeMigrationMetaData = (builder: QueryBuilder) => {
   }
 }
 
-/*
-  How to make adapter for PG:
-  //const { db, stop } = await makePgDatabase('load-migration-meta-data', 5500)
-  //const adapter = new DatabaseAdapter(db)
- */
-
 export type ContextType = {
   migrationMetaData: ReturnType<typeof makeMigrationMetaData>
   builder: QueryBuilder
