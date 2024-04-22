@@ -22,9 +22,11 @@ import {
 } from '../../src/migrators/query-builder'
 import { DatabaseAdapter as SQLiteDatabaseAdapter } from '../../src/drivers/better-sqlite3'
 import { DatabaseAdapter as PgDatabaseAdapter } from '../../src/drivers/node-postgres/adapter'
+import { DatabaseAdapter as PgliteDatabaseAdapter } from '../../src/drivers/pglite'
 import { DatabaseAdapter as DatabaseAdapterInterface } from '../../src/electric/adapter'
 import { makePgDatabase } from '../support/node-postgres'
 import { randomValue } from '../../src/util/random'
+import { PGlite } from '@electric-sql/pglite'
 
 const qualifiedMergeTable = new QualifiedTablename(
   'main',
@@ -200,11 +202,20 @@ const setupPG: SetupFn = async (t: ExecutionContext<unknown>) => {
   const defaults = satelliteDefaults(namespace)
   return [new PgDatabaseAdapter(db), pgBuilder, namespace, defaults]
 }
+  
+const setupPglite: SetupFn = async (t: ExecutionContext<unknown>) => {
+  const db = new PGlite()
+  t.teardown(async () => await db.close())
+  const namespace = 'public'
+  const defaults = satelliteDefaults(namespace)
+  return [new PgliteDatabaseAdapter(db), pgBuilder, namespace, defaults]
+}
 
 ;(
   [
     ['SQLite', setupSqlite],
     ['Postgres', setupPG],
+    ['PGlite', setupPglite]
   ] as const
 ).forEach(([dialect, setup]) => {
   test(`(${dialect}) merge works on oplog entries`, async (t) => {

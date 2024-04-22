@@ -1,6 +1,10 @@
 import anyTest, { TestFn } from 'ava'
 import { makeMigration, parseMetadata } from '../../../src/migrators/builder'
-import { ContextType, makeMigrationMetaData } from '../builder.test'
+import {
+  ContextType,
+  bundleTests,
+  makeMigrationMetaData,
+} from '../builder.test'
 import { PGlite } from '@electric-sql/pglite'
 import { DatabaseAdapter } from '../../../src/drivers/pglite'
 import { PgBundleMigrator } from '../../../src/migrators'
@@ -21,7 +25,7 @@ test.beforeEach(async (t) => {
 // No need to run the bundleTests because
 // they are already ran by `../postgres/builder.test.ts`
 // and the tests do not use an actual PG database
-//bundleTests(test)
+bundleTests(test)
 
 test('load migration from meta data', async (t) => {
   const { migrationMetaData, builder } = t.context
