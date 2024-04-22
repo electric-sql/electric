@@ -136,8 +136,9 @@ defmodule Electric.Postgres.Replication do
       end
 
     stmts =
-      Enum.map(
-        ast,
+      ast
+      |> Enum.reject(&match?(%Pg.CreateEnumStmt{}, &1))
+      |> Enum.map(
         &%SatOpMigrate.Stmt{
           type: stmt_type(&1),
           sql: to_sql(&1, stmt, dialect)
