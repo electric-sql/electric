@@ -181,7 +181,7 @@ export class SatelliteProcess implements Satellite {
       this._garbageCollectShapeHandler.bind(this)
     )
     this._throttledSnapshot = throttle(
-      this.mutexSnapshot.bind(this),
+      this._mutexSnapshot.bind(this),
       opts.minSnapshotWindow,
       {
         leading: true,
@@ -201,7 +201,7 @@ export class SatelliteProcess implements Satellite {
   /**
    * Perform a snapshot while taking out a mutex to avoid concurrent calls.
    */
-  private async mutexSnapshot() {
+  async _mutexSnapshot() {
     const release = await this.snapshotMutex.acquire()
     try {
       return await this._performSnapshot()
@@ -332,12 +332,17 @@ export class SatelliteProcess implements Satellite {
 
   // Unsubscribe from data changes and stop polling
   async stop(shutdown?: boolean): Promise<void> {
-    this._stop(shutdown)
+    return this._stop(shutdown)
   }
 
   private async _stop(shutdown?: boolean): Promise<void> {
     // Stop snapshotting and polling for changes.
     this._throttledSnapshot.cancel()
+
+    // Ensure that no snapshot is left running in the background
+    // by acquiring the mutex and releasing it immediately.
+    const releaseMutex = await this.snapshotMutex.acquire()
+    releaseMutex()
 
     if (this._pollingInterval !== undefined) {
       clearInterval(this._pollingInterval)
@@ -1315,7 +1320,7 @@ export class SatelliteProcess implements Satellite {
       if (firstDMLChunk) {
         Log.info(`apply incoming changes for LSN: ${base64.fromBytes(lsn)}`)
         // assign timestamp to pending operations before apply
-        await this.mutexSnapshot()
+        await this._mutexSnapshot()
         firstDMLChunk = false
       }
 
