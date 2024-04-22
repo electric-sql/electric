@@ -43,11 +43,35 @@ defmodule Electric.Satellite.Auth.SecureTest do
 
       Enum.each(options, fn opts ->
         raw_key = String.duplicate(<<1, 2, 3, 4, 5, 6, 7, 8>>, 4)
-        opts = [alg: "HS256", key: Base.encode64(raw_key, opts)]
+        opts = [alg: "HS256", key: Base.encode64(raw_key, opts), key_is_base64_encoded: true]
 
         assert {:ok, config} = build_config(opts)
-        assert is_map(config)
+        assert {:jose_jwk_kty_oct, raw_key} == config.joken_signer.jwk.kty
       end)
+    end
+
+    test "does not try to automatically decode a base64-encoded symmetric key" do
+      options = [
+        [],
+        [padding: true],
+        [padding: false]
+      ]
+
+      Enum.each(options, fn opts ->
+        raw_key = String.duplicate(<<1, 2, 3, 4, 5, 6, 7, 8>>, 4)
+        encoded_key = Base.encode64(raw_key, opts)
+        opts = [alg: "HS256", key: encoded_key]
+
+        assert {:ok, config} = build_config(opts)
+        assert {:jose_jwk_kty_oct, encoded_key} == config.joken_signer.jwk.kty
+      end)
+    end
+
+    test "validates proper base64 encoding for a symmetric key" do
+      key = String.duplicate(<<1, 2, 3, 4, 5, 6, 7, 8>>, 4)
+
+      assert {:error, :key, "has invalid base64 encoding"} ==
+               build_config(alg: "HS256", key: key, key_is_base64_encoded: true)
     end
 
     test "checks for missing 'alg'" do
@@ -79,7 +103,7 @@ defmodule Electric.Satellite.Auth.SecureTest do
       assert byte_size(key) >= 32
 
       assert {:error, :key, "has to be at least 32 bytes long for HS256"} ==
-               build_config(alg: "HS256", key: key)
+               build_config(alg: "HS256", key: key, key_is_base64_encoded: true)
 
       ###
 
@@ -88,7 +112,7 @@ defmodule Electric.Satellite.Auth.SecureTest do
       assert byte_size(key) >= 48
 
       assert {:error, :key, "has to be at least 48 bytes long for HS384"} ==
-               build_config(alg: "HS384", key: key)
+               build_config(alg: "HS384", key: key, key_is_base64_encoded: true)
 
       ###
 
@@ -97,7 +121,7 @@ defmodule Electric.Satellite.Auth.SecureTest do
       assert byte_size(key) >= 64
 
       assert {:error, :key, "has to be at least 64 bytes long for HS512"} ==
-               build_config(alg: "HS512", key: key)
+               build_config(alg: "HS512", key: key, key_is_base64_encoded: true)
     end
 
     test "validates the public key format" do
