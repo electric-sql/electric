@@ -47,6 +47,7 @@ const SliderInput = ({
       value={value}
       onChange={handleChange}
       onChangeComplete={handleChangeComplete}
+      data-testid="slider"
       {...props}
     />
   )

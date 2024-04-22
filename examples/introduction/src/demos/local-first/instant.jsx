@@ -165,13 +165,13 @@ const CloudFirst = () => {
 
 const Demo = () => {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-      <div className="px-3 md:px-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6" data-testid="local-first-instant-demo">
+      <div className="px-3 md:px-4" data-testid="local-first">
         <App dbName="user1" demoName="local-first" bootstrapItems={4}>
           <LocalFirst />
         </App>
       </div>
-      <div className="px-3 md:px-4">
+      <div className="px-3 md:px-4" data-testid="cloud-first">
         <CloudApp demoName="cloud-first" bootstrapItems={4}>
           <CloudFirst />
         </CloudApp>

@@ -23,7 +23,11 @@ const PlayerWidget = ({ dndDiscriminator, player }: Props) => {
   )
 
   return (
-    <div className={clsx(styles.player, styles[player.color])} ref={drag} />
+    <div
+      className={clsx(styles.player, styles[player.color])}
+      ref={drag}
+      data-testid="player"
+    />
   )
 }
 
