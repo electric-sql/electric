@@ -258,12 +258,14 @@
     "@op-engineering/op-sqlite": ">= 2.0.16",
     "@tauri-apps/plugin-sql": "2.0.0-alpha.5",
     "expo-sqlite": ">= 13.0.0",
+    "prisma": "^4.0.0",
     "react": ">= 16.8.0",
     "react-dom": ">= 16.8.0",
     "react-native": ">= 0.68.0",
     "typeorm": ">=0.3.0",
     "vue": ">=3.0.0",
-    "wa-sqlite": "rhashimoto/wa-sqlite#semver:^0.9.8"
+    "wa-sqlite": "rhashimoto/wa-sqlite#semver:^0.9.8",
+    "zod": "3.21.1"
   },
   "peerDependenciesMeta": {
     "@op-engineering/op-sqlite": {
@@ -276,6 +278,9 @@
       "optional": true
     },
     "expo-sqlite": {
+      "optional": true
+    },
+    "prisma": {
       "optional": true
     },
     "react": {
