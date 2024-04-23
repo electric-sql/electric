@@ -2262,3 +2262,27 @@ test("don't leave a snapshot running when stopping", async (t) => {
 
   t.pass()
 })
+
+test("don't snapshot after closing satellite process", async (t) => {
+  // open and then immediately close
+  // check that no snapshot is called after close
+  const { satellite, authState, token } = t.context
+  const { connectionPromise } = await startSatellite(
+    satellite,
+    authState,
+    token
+  )
+
+  await connectionPromise
+  await satellite.stop()
+
+  satellite._performSnapshot = () => {
+    t.fail('Snapshot was called')
+    return Promise.resolve(new Date())
+  }
+
+  // wait some time to see that mutexSnapshot is not called
+  await sleepAsync(50)
+
+  t.pass()
+})

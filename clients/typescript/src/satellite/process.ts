@@ -260,7 +260,7 @@ export class SatelliteProcess implements Satellite {
     )
 
     // Starting now!
-    setTimeout(this._throttledSnapshot, 0)
+    await this._throttledSnapshot()
 
     // Need to reload primary keys after schema migration
     this.relations = await this._getLocalRelations()
