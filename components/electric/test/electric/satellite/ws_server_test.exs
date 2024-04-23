@@ -41,17 +41,6 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
   import Mock
 
-  setup_with_mocks([
-    {Electric.Postgres.Repo, [:passthrough],
-     checkout: fn fun -> fun.() end,
-     transaction: fn fun -> fun.() end,
-     checked_out?: fn -> true end,
-     query: fn _, _ -> {:ok, %Postgrex.Result{columns: nil, rows: []}} end,
-     query!: fn _, _ -> %Postgrex.Result{columns: nil, rows: []} end}
-  ]) do
-    %{}
-  end
-
   setup ctx do
     ctx =
       ctx
@@ -82,6 +71,12 @@ defmodule Electric.Satellite.WebsocketServerTest do
   end
 
   setup_with_mocks([
+    {Electric.Postgres.Repo, [:passthrough],
+     checkout: fn fun -> fun.() end,
+     transaction: fn fun -> fun.() end,
+     checked_out?: fn -> true end,
+     query: fn _, _ -> {:ok, %Postgrex.Result{columns: nil, rows: []}} end,
+     query!: fn _, _ -> %Postgrex.Result{columns: nil, rows: []} end},
     {Electric.Satellite.ClientReconnectionInfo, [:passthrough],
      restore_cache_for_client: fn _, _ -> :ok end},
     {SatelliteConnector, [:passthrough],
