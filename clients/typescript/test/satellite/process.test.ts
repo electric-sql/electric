@@ -79,11 +79,9 @@ const startSatellite = async (
   satellite.setToken(token)
   const connectionPromise = satellite.connectWithBackoff().catch((e) => {
     if (
-      e.message === 'terminating connection due to administrator command' ||
-      e.message ===
-        'Client has encountered a connection error and is not queryable'
+      e.message === 'terminating connection due to administrator command'
     ) {
-      // This is to be expected as we stop Satellite at the end of the test
+      // This is to be expected as we stop Postgres at the end of the test
       return
     }
     throw e
