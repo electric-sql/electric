@@ -3,9 +3,10 @@ defmodule Electric.Satellite.Permissions.WriteBufferTest do
 
   alias Electric.Satellite.Permissions.WriteBuffer
   alias Electric.Satellite.Permissions.Graph
-  alias ElectricTest.PermissionsHelpers.Chgs
-  alias ElectricTest.PermissionsHelpers.Tree
   alias ElectricTest.PermissionsHelpers.Auth
+  alias ElectricTest.PermissionsHelpers.Chgs
+  alias ElectricTest.PermissionsHelpers.Schema
+  alias ElectricTest.PermissionsHelpers.Tree
 
   @workspaces {"public", "workspaces"}
   @projects {"public", "projects"}
@@ -14,7 +15,7 @@ defmodule Electric.Satellite.Permissions.WriteBufferTest do
   @tags {"public", "tags"}
   @issue_tags {"public", "issue_tags"}
 
-  def upstream(fks) do
+  def upstream(schema_version) do
     Tree.new(
       [
         {@workspaces, "w1",
@@ -34,17 +35,27 @@ defmodule Electric.Satellite.Permissions.WriteBufferTest do
          ]},
         {@workspaces, "w2", []}
       ],
-      fks
+      schema_version
     )
   end
 
   setup do
-    upstream =
-      upstream([
-        {@comments, @issues, ["issue_id"]},
-        {@issues, @projects, ["project_id"]},
-        {@projects, @workspaces, ["workspace_id"]}
-      ])
+    migrations = [
+      {"01",
+       [
+         "create table workspaces (id uuid primary key)",
+         "create table projects (id uuid primary key, workspace_id uuid not null references workspaces (id))",
+         "create table issues (id uuid primary key, project_id uuid not null references projects (id), description text)",
+         "create table comments (id uuid primary key, issue_id uuid not null references issues (id), comment text, owner text)",
+         "create table reactions (id uuid primary key, comment_id uuid not null references comments (id))",
+         "create table tags (id uuid primary key, tag text not null)",
+         "create table issue_tags (id uuid primary key, issue_id uuid not null references issues (id), tag_id uuid not null references tags (id))"
+       ]}
+    ]
+
+    {:ok, schema_version} = Schema.load(migrations)
+
+    upstream = upstream(schema_version)
 
     write_buffer = WriteBuffer.with_upstream(WriteBuffer.new(Auth.user()), upstream)
 
@@ -266,6 +277,21 @@ defmodule Electric.Satellite.Permissions.WriteBufferTest do
 
   describe "join table" do
     setup do
+      migrations = [
+        {"01",
+         [
+           "create table workspaces (id uuid primary key)",
+           "create table projects (id uuid primary key, workspace_id uuid not null references workspaces (id))",
+           "create table issues (id uuid primary key, project_id uuid not null references projects (id), description text)",
+           "create table comments (id uuid primary key, issue_id uuid not null references issues (id), comment text, owner text)",
+           "create table reactions (id uuid primary key, comment_id uuid not null references comments (id))",
+           "create table tags (id uuid primary key, tag text not null)",
+           "create table issue_tags (id uuid primary key, issue_id uuid not null references issues (id), tag_id uuid not null references tags (id))"
+         ]}
+      ]
+
+      {:ok, schema_version} = Schema.load(migrations)
+
       upstream =
         Tree.new(
           [
@@ -295,13 +321,7 @@ defmodule Electric.Satellite.Permissions.WriteBufferTest do
             {@tags, "t1", [{@issue_tags, "it1", []}, {@issue_tags, "it9", []}]},
             {@tags, "t2", []}
           ],
-          [
-            {@issue_tags, @tags, ["tag_id"]},
-            {@issue_tags, @issues, ["issue_id"]},
-            {@comments, @issues, ["issue_id"]},
-            {@issues, @projects, ["project_id"]},
-            {@projects, @workspaces, ["workspace_id"]}
-          ]
+          schema_version
         )
 
       write_buffer = WriteBuffer.with_upstream(WriteBuffer.new(Auth.user()), upstream)

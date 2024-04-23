@@ -16,9 +16,6 @@ defmodule Electric.Satellite.Permissions.TriggerTest do
 
   @workspaces {"public", "workspaces"}
   @projects {"public", "projects"}
-  @issues {"public", "issues"}
-  @comments {"public", "comments"}
-  @reactions {"public", "reactions"}
   @project_memberships {"public", "project_memberships"}
 
   setup do
@@ -38,7 +35,8 @@ defmodule Electric.Satellite.Permissions.TriggerTest do
                 id uuid primary key,
                 user_id uuid not null references users (id),
                 project_id uuid not null references projects (id),
-                role text not null
+                role text not null,
+                is_enabled bool
              )
              """
            ]}
@@ -58,13 +56,7 @@ defmodule Electric.Satellite.Permissions.TriggerTest do
              {@projects, "p3", []}
            ]}
         ],
-        [
-          {@comments, @issues, ["issue_id"]},
-          {@issues, @projects, ["project_id"]},
-          {@project_memberships, @projects, ["project_id"]},
-          {@projects, @workspaces, ["workspace_id"]},
-          {@reactions, @comments, ["comment_id"]}
-        ]
+        schema_version
       )
 
     {:ok, _} = start_supervised(Perms.Transient)
@@ -213,6 +205,150 @@ defmodule Electric.Satellite.Permissions.TriggerTest do
                user_id: ^user_id,
                scope: nil
              } = role
+    end
+
+    test "insert matching where clause", cxt do
+      assign =
+        assign("assign 'something' to #{table(@project_memberships)}.user_id if (row.is_enabled)")
+
+      assert {@project_memberships, fun} =
+               Trigger.for_assign(assign, cxt.schema_version, &callback/3)
+
+      change =
+        Chgs.insert(@project_memberships, %{
+          "id" => "pm1",
+          "project_id" => "p1",
+          "user_id" => Auth.user_id(),
+          "is_enabled" => true
+        })
+
+      assert {{:insert, _role}, ^change} = fun.(change, :loader)
+    end
+
+    test "insert not matching where clause", cxt do
+      assign =
+        assign("assign 'something' to #{table(@project_memberships)}.user_id if (row.is_enabled)")
+
+      assert {@project_memberships, fun} =
+               Trigger.for_assign(assign, cxt.schema_version, &callback/3)
+
+      change =
+        Chgs.insert(@project_memberships, %{
+          "id" => "pm1",
+          "project_id" => "p1",
+          "user_id" => Auth.user_id(),
+          "is_enabled" => false
+        })
+
+      assert {:passthrough, ^change} = fun.(change, :loader)
+    end
+
+    test "update that means row fails where clause", cxt do
+      assign =
+        assign("assign 'something' to #{table(@project_memberships)}.user_id if (row.is_enabled)")
+
+      assert {@project_memberships, fun} =
+               Trigger.for_assign(assign, cxt.schema_version, &callback/3)
+
+      change =
+        Chgs.update(
+          @project_memberships,
+          %{
+            "id" => "pm1",
+            "project_id" => "p1",
+            "user_id" => Auth.user_id(),
+            "is_enabled" => true
+          },
+          %{"is_enabled" => false}
+        )
+
+      assert {{:delete, _role}, ^change} = fun.(change, :loader)
+    end
+
+    test "update that means row now passes where clause", cxt do
+      assign =
+        assign("assign 'something' to #{table(@project_memberships)}.user_id if (row.is_enabled)")
+
+      assert {@project_memberships, fun} =
+               Trigger.for_assign(assign, cxt.schema_version, &callback/3)
+
+      change =
+        Chgs.update(
+          @project_memberships,
+          %{
+            "id" => "pm1",
+            "project_id" => "p1",
+            "user_id" => Auth.user_id(),
+            "is_enabled" => false
+          },
+          %{"is_enabled" => true}
+        )
+
+      assert {{:insert, _role}, ^change} = fun.(change, :loader)
+    end
+
+    test "update where means row still passes where clause", cxt do
+      assign =
+        assign("assign 'something' to #{table(@project_memberships)}.user_id if (row.is_enabled)")
+
+      assert {@project_memberships, fun} =
+               Trigger.for_assign(assign, cxt.schema_version, &callback/3)
+
+      change =
+        Chgs.update(
+          @project_memberships,
+          %{
+            "id" => "pm1",
+            "project_id" => "p1",
+            "user_id" => Auth.user_id(),
+            "is_enabled" => true,
+            "role" => "something"
+          },
+          %{"role" => "changed"}
+        )
+
+      assert {{:update, _old_role, _new_role}, ^change} = fun.(change, :loader)
+    end
+
+    test "update where means row still fails where clause", cxt do
+      assign =
+        assign("assign 'something' to #{table(@project_memberships)}.user_id if (row.is_enabled)")
+
+      assert {@project_memberships, fun} =
+               Trigger.for_assign(assign, cxt.schema_version, &callback/3)
+
+      change =
+        Chgs.update(
+          @project_memberships,
+          %{
+            "id" => "pm1",
+            "project_id" => "p1",
+            "user_id" => Auth.user_id(),
+            "is_enabled" => false,
+            "role" => "something"
+          },
+          %{"role" => "changed"}
+        )
+
+      assert {:passthrough, ^change} = fun.(change, :loader)
+    end
+
+    test "delete row failing where clause", cxt do
+      assign =
+        assign("assign 'something' to #{table(@project_memberships)}.user_id if (row.is_enabled)")
+
+      assert {@project_memberships, fun} =
+               Trigger.for_assign(assign, cxt.schema_version, &callback/3)
+
+      change =
+        Chgs.delete(@project_memberships, %{
+          "id" => "pm1",
+          "project_id" => "p1",
+          "user_id" => Auth.user_id(),
+          "is_enabled" => false
+        })
+
+      assert {{:delete, _role}, ^change} = fun.(change, :loader)
     end
   end
 end

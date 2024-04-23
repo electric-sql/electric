@@ -358,37 +358,40 @@ defmodule Electric.Satellite.Permissions.StateTest do
     end
   end
 
-  def loader_with_global_perms(cxt) do
+  def loader_with_global_perms(cxt, ddlx \\ default_ddlx()) do
     loader = loader(cxt)
 
-    ddlx =
-      Command.ddlx(
-        grants: [
-          Proto.grant(
-            privilege: :INSERT,
-            table: Proto.table("issues"),
-            role: Proto.role("editor"),
-            scope: Proto.scope("projects")
-          )
-        ],
-        assigns: [
-          Proto.assign(
-            table: Proto.table("project_memberships"),
-            scope: Proto.scope("projects"),
-            user_column: "user_id",
-            role_column: "project_role"
-          ),
-          Proto.assign(
-            table: Proto.table("site_admins"),
-            user_column: "user_id",
-            role_column: "site_role"
-          )
-        ]
-      )
+    ddlx = Command.ddlx(ddlx)
 
-    assert {:ok, 3, loader, rules} = State.update_global(ddlx, loader)
+    assert {:ok, _, loader, rules} = State.update_global(ddlx, loader)
 
     {loader, rules}
+  end
+
+  defp default_ddlx do
+    [
+      grants: [
+        Proto.grant(
+          privilege: :INSERT,
+          table: Proto.table("issues"),
+          role: Proto.role("editor"),
+          scope: Proto.scope("projects")
+        )
+      ],
+      assigns: [
+        Proto.assign(
+          table: Proto.table("project_memberships"),
+          scope: Proto.scope("projects"),
+          user_column: "user_id",
+          role_column: "project_role"
+        ),
+        Proto.assign(
+          table: Proto.table("site_admins"),
+          user_column: "user_id",
+          role_column: "site_role"
+        )
+      ]
+    ]
   end
 
   def loader(_cxt) do
@@ -411,7 +414,8 @@ defmodule Electric.Satellite.Permissions.StateTest do
                 id uuid primary key,
                 user_id uuid not null references users (id),
                 project_id uuid not null references projects (id),
-                project_role text not null
+                project_role text not null,
+                is_enabled bool
              )
              """,
              """
@@ -426,7 +430,8 @@ defmodule Electric.Satellite.Permissions.StateTest do
              create table site_admins (
                 id uuid primary key,
                 user_id uuid not null references users (id),
-                site_role text not null
+                site_role text not null,
+                is_superuser bool default false
              )
              """,
              """
@@ -1308,6 +1313,143 @@ defmodule Electric.Satellite.Permissions.StateTest do
                  role: "editor",
                  user_id: @user_id,
                  scope: %SatPerms.Scope{table: Proto.table("projects"), id: ["123"]}
+               }
+             ]
+    end
+
+    test "assign if clauses are honoured", cxt do
+      ddlx = [
+        grants: [
+          Proto.grant(
+            privilege: :INSERT,
+            table: Proto.table("issues"),
+            role: Proto.role("editor"),
+            scope: Proto.scope("projects")
+          )
+        ],
+        assigns: [
+          Proto.assign(
+            table: Proto.table("project_memberships"),
+            scope: Proto.scope("projects"),
+            user_column: "user_id",
+            role_column: "project_role",
+            if: "is_enabled"
+          ),
+          Proto.assign(
+            table: Proto.table("site_admins"),
+            user_column: "user_id",
+            role_column: "site_role",
+            if: "NOT is_superuser"
+          ),
+          Proto.assign(
+            table: Proto.table("site_admins"),
+            user_column: "user_id",
+            role_name: "superuser",
+            if: "is_superuser = true"
+          )
+        ]
+      ]
+
+      {loader, rules} = loader_with_global_perms(cxt, ddlx)
+      {:ok, consumer} = State.new(loader)
+
+      %{assigns: [%{id: assign_id2}, %{id: _assign_id1}, %{id: assign_id3}]} = rules
+
+      tx =
+        Chgs.tx([
+          Chgs.insert({"public", "kittens"}, %{"size" => "cute"}),
+          Chgs.insert(
+            @scoped_assign_relation,
+            %{
+              "id" => "db87f03f-89e1-48b4-a5c3-6cdbafb2837d",
+              "project_role" => "editor",
+              "user_id" => @user_id,
+              "project_id" => "123",
+              "is_enabled" => false
+            }
+          )
+        ])
+
+      assert {:ok, tx, consumer, loader} = State.update(tx, consumer, loader)
+
+      assert tx.changes == [
+               Chgs.insert({"public", "kittens"}, %{"size" => "cute"}),
+               Chgs.insert(
+                 @scoped_assign_relation,
+                 %{
+                   "id" => "db87f03f-89e1-48b4-a5c3-6cdbafb2837d",
+                   "project_role" => "editor",
+                   "user_id" => @user_id,
+                   "project_id" => "123",
+                   "is_enabled" => false
+                 }
+               )
+             ]
+
+      [insert1, insert2] =
+        changes = [
+          Chgs.insert(
+            @unscoped_assign_relation,
+            %{
+              "id" => "5c0fd272-3fc2-4ae8-8574-92823c814096",
+              "site_role" => "site_admin",
+              "user_id" => @user_id,
+              "is_superuser" => true
+            }
+          ),
+          Chgs.insert(
+            @unscoped_assign_relation,
+            %{
+              "id" => "5c0fd272-3fc2-4ae8-8574-92823c814096",
+              "site_role" => "site_admin",
+              "user_id" => @user_id,
+              "is_superuser" => false
+            }
+          )
+        ]
+
+      tx = Chgs.tx(changes)
+
+      assert {:ok, tx, _consumer, loader} = State.update(tx, consumer, loader)
+
+      assert {:ok, _loader, perms} =
+               SchemaLoader.user_permissions(loader, @user_id)
+
+      assert %{id: 3, user_id: @user_id, rules: %{id: 2}} = perms
+
+      assert [
+               ^insert1,
+               %Changes.UpdatedPermissions{
+                 type: :user,
+                 permissions: %Changes.UpdatedPermissions.UserPermissions{
+                   user_id: @user_id,
+                   permissions: _perms
+                 }
+               },
+               ^insert2,
+               %Changes.UpdatedPermissions{
+                 type: :user,
+                 permissions: %Changes.UpdatedPermissions.UserPermissions{
+                   user_id: @user_id,
+                   permissions: perms
+                 }
+               }
+             ] = tx.changes
+
+      assert perms.roles == [
+               %SatPerms.Role{
+                 row_id: ["5c0fd272-3fc2-4ae8-8574-92823c814096"],
+                 assign_id: assign_id2,
+                 role: "site_admin",
+                 user_id: @user_id,
+                 scope: nil
+               },
+               %SatPerms.Role{
+                 row_id: ["5c0fd272-3fc2-4ae8-8574-92823c814096"],
+                 assign_id: assign_id3,
+                 role: "superuser",
+                 user_id: @user_id,
+                 scope: nil
                }
              ]
     end

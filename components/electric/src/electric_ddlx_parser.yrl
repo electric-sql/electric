@@ -11,6 +11,7 @@ Nonterminals
    identifier
    record
    field_access
+   type_cast
    scoped_role
    grant_scoped_role
    scope
@@ -136,6 +137,7 @@ expr -> '(' expr ')' : ["(", '$2', ")"].
 expr -> expr op expr : ['$1', " ", '$2', " ", '$3']. %[{expr, [{op, '$2'}, {left, '$1'}, {right, '$3'}]}].
 expr -> field_access : ['$1'].
 expr -> identifier '(' func_args ')' : ['$1', "(", '$3', ")"]. % [{func_call, '$1', '$3'}].
+expr -> type_cast : ['$1'].
 expr -> identifier : ['$1']. % [{name, '$1'}].
 expr -> const : ['$1']. % [{const, '$1'}].
 
@@ -156,6 +158,9 @@ op -> 'NOT' : ["NOT"].
 op -> 'IS' : ["IS"].
 
 field_access -> record '.' identifier : ['$1', ".", '$3'].
+
+type_cast -> field_access ':' ':' identifier : ['$1', "::", '$4'].
+type_cast -> identifier ':' ':' identifier : ['$1', "::", '$4'].
 
 const -> string : ["'", unwrap('$1'), "'"]. 
 const -> integer : erlang:integer_to_list(unwrap('$1')).

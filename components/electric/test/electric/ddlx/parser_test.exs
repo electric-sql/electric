@@ -1017,6 +1017,31 @@ defmodule Electric.DDLX.ParserTest do
              }
     end
 
+    test "grant with type casting in check clause" do
+      sql =
+        "ELECTRIC GRANT READ ON issues TO (projects, 'editor') WHERE (row.user_id::text = AUTH.user_id)"
+
+      {:ok, result} = Parser.parse(sql)
+
+      assert result == %Command{
+               action: %SatPerms.DDLX{
+                 grants: [
+                   %SatPerms.Grant{
+                     id: "baa4uqpavntlksnbmmw7eqp24mela3ed",
+                     check: "ROW.user_id::text = AUTH.user_id",
+                     table: Proto.table("issues"),
+                     privilege: :SELECT,
+                     role: Proto.role("editor"),
+                     scope: Proto.scope("projects")
+                   }
+                 ]
+               },
+               stmt: sql,
+               tables: [{"public", "issues"}],
+               tag: "ELECTRIC GRANT"
+             }
+    end
+
     test "grant with multiple clauses in check clause" do
       sql =
         "ELECTRIC GRANT READ ON issues TO (projects, 'editor') WHERE ((row.user_id = AUTH.user_id) AND (thing.reason > 2))"

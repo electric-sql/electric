@@ -158,6 +158,7 @@ defmodule Electric.Satellite.Permissions do
   alias Electric.Replication.Changes
 
   alias Electric.Satellite.Permissions.{
+    Eval,
     Grant,
     Graph,
     Read,
@@ -214,6 +215,7 @@ defmodule Electric.Satellite.Permissions do
     :write_buffer,
     :triggers,
     :intermediate_roles,
+    :grants,
     source: %{rules: %{grants: [], assigns: []}, roles: [], schema: nil},
     transient_lut: Transient
   ]
@@ -246,6 +248,7 @@ defmodule Electric.Satellite.Permissions do
 
   @type t() :: %__MODULE__{
           roles: role_lookup(),
+          grants: [Grant.t()],
           source: %{
             rules: %{
               grants: [%SatPerms.Grant{}],
@@ -300,9 +303,9 @@ defmodule Electric.Satellite.Permissions do
 
   def update(%__MODULE__{} = perms, attrs) when is_list(attrs) do
     perms
+    |> update_schema(Keyword.get(attrs, :schema))
     |> update_rules(Keyword.get(attrs, :rules))
     |> update_roles(Keyword.get(attrs, :roles))
-    |> update_schema(Keyword.get(attrs, :schema))
     |> rebuild()
   end
 
@@ -331,17 +334,20 @@ defmodule Electric.Satellite.Permissions do
   end
 
   defp rebuild(perms) do
-    %{grants: grants, assigns: assigns} = perms.source.rules
+    %{roles: roles, rules: rules, schema: schema_version} = perms.source
 
-    assigned_roles = build_roles(perms.source.roles, perms.auth, assigns)
+    assigned_roles = build_roles(roles, perms.auth, rules.assigns)
     scoped_roles = compile_scopes(assigned_roles)
+    evaluator = Eval.new(schema_version, perms.auth)
+    grants = Enum.map(rules.grants, &Grant.new(&1, evaluator))
 
-    triggers = Trigger.assign_triggers(assigns, perms.source.schema, &trigger_callback/3)
+    triggers = Trigger.assign_triggers(rules.assigns, schema_version, &trigger_callback/3)
 
     %{
       perms
       | roles: build_role_grants(assigned_roles, grants),
         scoped_roles: scoped_roles,
+        grants: grants,
         scopes: Map.keys(scoped_roles),
         triggers: triggers
     }
@@ -360,7 +366,6 @@ defmodule Electric.Satellite.Permissions do
     roles
     |> Stream.map(&{&1, Role.matching_grants(&1, grants)})
     |> Stream.reject(fn {_role, grants} -> Enum.empty?(grants) end)
-    |> Stream.map(&build_grants/1)
     |> Stream.flat_map(&invert_role_lookup/1)
     |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
     |> Map.new(&classify_roles/1)
@@ -384,10 +389,6 @@ defmodule Electric.Satellite.Permissions do
     Stream.map(grants, fn grant ->
       {{grant.table, grant.privilege}, %RoleGrant{grant: grant, role: role}}
     end)
-  end
-
-  defp build_grants({role, grants}) do
-    {role, Enum.map(grants, &Grant.new/1)}
   end
 
   defp compile_scopes(roles) do
@@ -519,23 +520,19 @@ defmodule Electric.Satellite.Permissions do
   defp apply_triggers(write_buffer, change, perms) do
     %{auth: %{user_id: user_id}} = perms
 
-    {changes, _user_id} =
-      Trigger.apply(change, perms.triggers, user_id, &null_trigger/2)
+    {[^change | effects], _user_id} =
+      Trigger.apply(change, perms.triggers, user_id)
 
-    update_transient_roles(changes, perms, write_buffer)
-  end
-
-  defp null_trigger(_change, user_id) do
-    {[], user_id}
+    update_transient_roles(effects, perms, write_buffer)
   end
 
   defp trigger_callback(event, _change, user_id) do
     case event do
-      {c, %{user_id: ^user_id} = role} when c in [:insert, :delete] ->
-        {[{c, Role.new(role)}], user_id}
+      {e, %{user_id: ^user_id} = role} when e in [:insert, :delete] ->
+        {[{e, Role.new(role)}], user_id}
 
       # update nothing to do with us
-      {c, _role} when c in [:insert, :delete] ->
+      {e, _role} when e in [:insert, :delete] ->
         {[], user_id}
 
       # update keeps role belonging  to our user
@@ -552,6 +549,9 @@ defmodule Electric.Satellite.Permissions do
 
       # update nothing to do with us
       {:update, _old, _new} ->
+        {[], user_id}
+
+      :passthrough ->
         {[], user_id}
     end
   end
@@ -653,9 +653,8 @@ defmodule Electric.Satellite.Permissions do
     true
   end
 
-  defp change_passes_check?(_grant, _change) do
-    # TODO: test change against check function
-    true
+  defp change_passes_check?(grant, change) do
+    Eval.execute!(grant.check, change)
   end
 
   defp change_in_scope?(graph, scope_relation, scope_id, change) do
@@ -684,13 +683,11 @@ defmodule Electric.Satellite.Permissions do
       end
 
     {:error,
-     "user does not have permission to " <>
+     "permissions: user does not have permission to " <>
        action <> Electric.Utils.inspect_relation(relation)}
   end
 
   def update_transient_roles(role_changes, %__MODULE__{} = perms, write_buffer) do
-    %{source: %{rules: %{grants: grants}}} = perms
-
-    WriteBuffer.update_transient_roles(write_buffer, role_changes, grants)
+    WriteBuffer.update_transient_roles(write_buffer, role_changes, perms.grants)
   end
 end

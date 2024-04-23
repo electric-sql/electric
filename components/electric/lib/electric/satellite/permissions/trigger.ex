@@ -1,6 +1,7 @@
 defmodule Electric.Satellite.Permissions.Trigger do
   alias Electric.Postgres.Extension.SchemaLoader
   alias Electric.Replication.Changes
+  alias Electric.Satellite.Permissions.Eval
   alias Electric.Satellite.SatPerms
 
   @type role() :: %SatPerms.Role{}
@@ -9,7 +10,7 @@ defmodule Electric.Satellite.Permissions.Trigger do
           | {:update, old :: role(), new :: role()}
           | {:delete, old :: role()}
   @type callback_arg() :: term()
-  @type callback_result() :: {[term()], callback_arg()}
+  @type callback_result() :: {[Changes.change() | [term()]], callback_arg()}
   @type callback_fun() :: (role_event(), Changes.change(), callback_arg() -> callback_result())
   @type trigger_fun() :: (Changes.change(), callback_arg() -> callback_result())
   @type triggers() :: %{Electric.Postgres.relation() => trigger_fun()}
@@ -31,24 +32,36 @@ defmodule Electric.Satellite.Permissions.Trigger do
      change in role
   2. The original pg change event
   3. The second argument to the original callback
+
+  It should return a tuple `{effects :: [term()], callback_arg()}` which is list of effects, which
+  will be appended to the original change plus the modified callback argument it was given, or
+  `nil` which is the same as returning `{[], original_callback_arg}`.
   """
   @spec assign_triggers([%SatPerms.Assign{}], SchemaLoader.Version.t(), callback_fun()) ::
           triggers()
   def assign_triggers(assigns, schema_version, trigger_callback_fun)
       when is_function(trigger_callback_fun, 3) do
+    evaluator = Eval.new(schema_version)
+
     assigns
-    |> Enum.map(&for_assign(&1, schema_version, trigger_callback_fun))
+    |> Enum.map(&for_assign(&1, schema_version, evaluator, trigger_callback_fun))
     |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
   end
 
+  def for_assign(assign, schema_version, trigger_callback_fun) do
+    for_assign(assign, schema_version, Eval.new(schema_version), trigger_callback_fun)
+  end
+
   @doc false
-  @spec for_assign(%SatPerms.Assign{}, SchemaLoader.Version.t(), callback_fun()) ::
+  @spec for_assign(%SatPerms.Assign{}, SchemaLoader.Version.t(), Eval.t(), callback_fun()) ::
           {Electric.Postgres.relation(), trigger_fun()}
-  def for_assign(assign, schema_version, trigger_callback_fun)
+  def for_assign(assign, schema_version, evaluator, trigger_callback_fun)
       when is_function(trigger_callback_fun, 3) do
     %{table: %{schema: schema, name: name}} = assign
 
     relation = {schema, name}
+
+    {:ok, expression} = Eval.expression_context(evaluator, assign.if, relation)
 
     {:ok, fks} =
       case assign do
@@ -72,6 +85,7 @@ defmodule Electric.Satellite.Permissions.Trigger do
         :watch_columns,
         Enum.reject(fks ++ [assign.user_column, assign.role_column], &is_nil/1)
       )
+      |> Map.put(:where, expression)
 
     {
       relation,
@@ -83,63 +97,79 @@ defmodule Electric.Satellite.Permissions.Trigger do
   Apply the triggers to the given change.
 
   The `fallback` function is called when no trigger exists for the given relation.
+
   """
-  @spec apply(Changes.change(), triggers(), callback_arg(), trigger_fun()) :: callback_result()
-  def apply(change, triggers, callback_arg, fallback \\ &passthrough_trigger/2)
+  @spec apply(Changes.change(), triggers(), callback_arg()) :: callback_result()
+  def apply(%{relation: relation} = change, triggers, callback_arg) do
+    {effects, callback_arg} =
+      triggers
+      |> Map.get(relation, [&null_trigger/2])
+      |> Enum.flat_map_reduce(callback_arg, fn trigger_fun, arg ->
+        trigger_fun.(change, arg) || {[], arg}
+      end)
 
-  def apply(%{relation: relation} = change, triggers, callback_arg, fallback) do
-    # TODO: altough this claims to support multiple triggers per relation, in reality
-    # if we were to have that it would be difficult to manage which of the triggers
-    # passes on the change data itself
-    # Perhaps should be re-written as pass on change plus any supplemental stream
-    # elements...
-    triggers
-    |> Map.get(relation, [fallback])
-    |> Enum.flat_map_reduce(callback_arg, fn trigger_fun, arg ->
-      trigger_fun.(change, arg)
-    end)
+    {[change | effects], callback_arg}
   end
 
-  # just pass through changes with no relation
-  def apply(change, _triggers, callback_arg, _fallback) do
-    {[change], callback_arg}
+  # just ignore changes with no relation
+  def apply(_change, _triggers, callback_arg) do
+    {[], callback_arg}
   end
 
-  defp passthrough_trigger(change, arg) do
-    {[change], arg}
+  defp null_trigger(_change, arg) do
+    {[], arg}
   end
 
   defp change_trigger(%Changes.NewRecord{} = change, loader, assign, pks, fks, callback_fun) do
     %{record: record} = change
 
-    role = role(record, assign, pks, fks)
+    # only assign the role if the where expression passes
+    if validate_where(assign, change) do
+      role = role(record, assign, pks, fks)
 
-    callback_fun.({:insert, role}, change, loader)
+      callback_fun.({:insert, role}, change, loader)
+    else
+      callback_fun.(:passthrough, change, loader)
+    end
   end
 
   defp change_trigger(%Changes.UpdatedRecord{} = change, loader, assign, pks, fks, callback_fun) do
     %{old_record: old, record: new, changed_columns: changed_columns} = change
 
-    if MapSet.size(changed_columns) == 0 do
-      {[change], loader}
-    else
+    if MapSet.size(changed_columns) > 0 do
       # if role as been detatched, e.g. by a fk with delete action "SET NULL" or the role value has
       # been nulled, then delete the role
       role_nulled? =
         assign.watch_columns
-        |> Stream.filter(&MapSet.member?(changed_columns, &1))
-        |> Stream.map(&Map.fetch!(new, &1))
+        |> Enum.filter(&MapSet.member?(changed_columns, &1))
+        |> Enum.map(&Map.fetch!(new, &1))
         |> Enum.any?(&is_nil/1)
 
+      r = &role(&1, assign, pks, fks)
+
       if role_nulled? do
-        old_role = role(old, assign, pks, fks)
-
-        callback_fun.({:delete, old_role}, change, loader)
+        callback_fun.({:delete, r.(old)}, change, loader)
       else
-        old_role = role(old, assign, pks, fks)
-        new_role = role(new, assign, pks, fks)
+        event =
+          case validate_where(assign, change) do
+            {true, true} ->
+              # - old: t, new: t -> update: row still has a matching role, but that role may have changed
+              {:update, r.(old), r.(new)}
 
-        callback_fun.({:update, old_role, new_role}, change, loader)
+            {true, false} ->
+              # - old: t, new: f -> delete: old row did create role before but now shouldn't
+              {:delete, r.(old)}
+
+            {false, true} ->
+              # - old: f, new: t -> insert: old row didn't create a role, but should now
+              {:insert, r.(new)}
+
+            {false, false} ->
+              # - old: f, new: f -> passthrough: no role existed before, none should be created
+              :passthrough
+          end
+
+        callback_fun.(event, change, loader)
       end
     end
   end
@@ -149,7 +179,30 @@ defmodule Electric.Satellite.Permissions.Trigger do
 
     role = role(record, assign, pks, fks)
 
+    # send a delete even if say the row doesn't pass the where clause because
+    # we lose nothing by deleting something that isn't there.
+    # the callbacks should be able to handle a delete op on a non-existant role
     callback_fun.({:delete, role}, change, loader)
+  end
+
+  defp validate_where(%{where: nil}, %Changes.UpdatedRecord{} = _change) do
+    {true, true}
+  end
+
+  defp validate_where(
+         %{where: %Eval.ExpressionContext{} = expr},
+         %Changes.UpdatedRecord{} = change
+       ) do
+    %{old_record: old, record: new} = change
+    {Eval.evaluate!(expr, old), Eval.evaluate!(expr, new)}
+  end
+
+  defp validate_where(%{where: nil}, _change) do
+    true
+  end
+
+  defp validate_where(%{where: %Eval.ExpressionContext{} = expr}, change) do
+    Eval.execute!(expr, change)
   end
 
   defp role(record, assign, pks, fks) do
