@@ -21,19 +21,17 @@
     !SELECT schemaname, tablename FROM pg_publication_tables \
          WHERE pubname = 'electric_publication' ORDER BY tablename;
     ??electric   | acknowledged_client_lsns
-    ??electric   | assignments
     ??public     | baz
     ??electric   | ddl_commands
+    ??electric   | ddlx_commands
     ??electric   | electrified
     ??public     | foo
-    ??electric   | grants
     ??public     | items
-    ??electric   | roles
     ??electric   | shadow__public__baz
     ??electric   | shadow__public__foo
     ??electric   | shadow__public__items
     ??electric   | transaction_marker
-    ??(13 rows)
+    ??(11 rows)
 
 # Make sure Electric consumes all migrations from the replication stream before stopping it.
 [shell electric]
@@ -63,19 +61,17 @@
     !SELECT schemaname, tablename FROM pg_publication_tables \
          WHERE pubname = 'electric_publication' ORDER BY tablename;
     ??electric   | acknowledged_client_lsns
-    ??electric   | assignments
     ??public     | baz
     ??electric   | ddl_commands
+    ??electric   | ddlx_commands
     ??electric   | electrified
     ??public     | foo
-    ??electric   | grants
     ??public     | items
-    ??electric   | roles
     ??electric   | shadow__public__baz
     ??electric   | shadow__public__foo
     ??electric   | shadow__public__items
     ??electric   | transaction_marker
-    ??(13 rows)
+    ??(11 rows)
 
 [cleanup]
     [invoke teardown]

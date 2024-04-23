@@ -19,7 +19,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Version do
           primary_keys: %{relation() => [String.t()]}
         }
 
-  @spec new(nil | version(), Schema.t()) :: t()
+  @spec new(version() | nil, Schema.t()) :: t()
   def new(version, %Schema.Proto.Schema{} = schema) do
     %__MODULE__{version: version, schema: schema}
     |> Map.update!(:tables, &cache_tables_by_name(&1, schema))
@@ -105,6 +105,19 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Version do
     case primary_keys(version, relation) do
       {:ok, result} -> result
       {:error, message} -> raise ArgumentError, message: message
+    end
+  end
+
+  def foreign_keys(%__MODULE__{} = version, {_, _} = relation, {_, _} = target) do
+    graph = fk_graph(version)
+
+    case Graph.edges(graph, relation, target) do
+      [] ->
+        {:error,
+         "no foreign key found from #{Electric.Utils.inspect_relation(relation)} to #{Electric.Utils.inspect_relation(target)}"}
+
+      [fk] ->
+        {:ok, fk.label}
     end
   end
 

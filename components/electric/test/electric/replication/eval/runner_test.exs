@@ -61,5 +61,12 @@ defmodule Electric.Replication.Eval.RunnerTest do
                |> Parser.parse_and_validate_expression!(%{["test"] => :int4})
                |> Runner.execute(%{["test"] => "test"})
     end
+
+    test "should correctly cast uuids" do
+      assert {:ok, "b06d507c-4e08-4a7f-896a-5c3c6c5dc332"} =
+               ~S|test::text|
+               |> Parser.parse_and_validate_expression!(%{["test"] => :uuid})
+               |> Runner.execute(%{["test"] => "b06d507c-4e08-4a7f-896a-5c3c6c5dc332"})
+    end
   end
 end

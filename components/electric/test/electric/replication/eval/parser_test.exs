@@ -287,6 +287,36 @@ defmodule Electric.Replication.Eval.ParserTest do
       assert %Const{value: true, type: :bool} = result
     end
 
+    test "casting uuid to text" do
+      assert {:ok, _} =
+               Parser.parse_and_validate_expression(
+                 ~S|(new.is_valid) AND (new.user_id::text = auth.user_id)|,
+                 %{
+                   ["new", "user_id"] => :uuid,
+                   ["new", "is_valid"] => :bool,
+                   ["auth", "user_id"] => :text
+                 }
+               )
+    end
+
+    test "float[48] / float8" do
+      assert {:ok, _} =
+               Parser.parse_and_validate_expression(
+                 ~S|new.percent / 100.0 > 0.3|,
+                 %{
+                   ["new", "percent"] => :float8
+                 }
+               )
+
+      assert {:ok, _} =
+               Parser.parse_and_validate_expression(
+                 ~S|new.percent / 100.0 > 0.3|,
+                 %{
+                   ["new", "percent"] => :float4
+                 }
+               )
+    end
+
     test "should work with IN clauses" do
       env = Env.new()
 

@@ -23,7 +23,6 @@ defmodule Electric.Postgres.Extension do
 
   @version_relation "migration_versions"
   @ddl_relation "ddl_commands"
-  @schema_relation "schema"
   @electrified_tracking_relation "electrified"
   @transaction_marker_relation "transaction_marker"
   @acked_client_lsn_relation "acknowledged_client_lsns"
@@ -33,9 +32,10 @@ defmodule Electric.Postgres.Extension do
   @client_additional_data_relation "client_additional_data"
   @client_unsub_points_relation "client_unsub_points"
 
-  @grants_relation "grants"
-  @roles_relation "roles"
-  @assignments_relation "assignments"
+  # permissions storage and management
+  @ddlx_commands_relation "ddlx_commands"
+  @global_perms_relation "global_perms_state"
+  @user_perms_relation "user_perms_state"
 
   electric = &quote_ident(@schema, &1)
 
@@ -52,9 +52,9 @@ defmodule Electric.Postgres.Extension do
   @client_additional_data_table electric.(@client_additional_data_relation)
   @client_unsub_points_table electric.(@client_unsub_points_relation)
 
-  @grants_table electric.(@grants_relation)
-  @roles_table electric.(@roles_relation)
-  @assignments_table electric.(@assignments_relation)
+  @ddlx_table electric.(@ddlx_commands_relation)
+  @global_perms_table electric.(@global_perms_relation)
+  @user_perms_table electric.(@user_perms_relation)
 
   @client_additional_data_subject_type electric.("client_additional_data_subject")
 
@@ -127,14 +127,14 @@ defmodule Electric.Postgres.Extension do
   def client_additional_data_table, do: @client_additional_data_table
   def client_unsub_points_table, do: @client_unsub_points_table
 
-  def grants_table, do: @grants_table
-  def roles_table, do: @roles_table
-  def assignments_table, do: @assignments_table
+  def ddlx_table, do: @ddlx_table
+  def global_perms_table, do: @global_perms_table
+  def user_perms_table, do: @user_perms_table
 
   def ddl_relation, do: {@schema, @ddl_relation}
   def version_relation, do: {@schema, @version_relation}
-  def schema_relation, do: {@schema, @schema_relation}
   def electrified_tracking_relation, do: {@schema, @electrified_tracking_relation}
+  def ddlx_relation, do: {@schema, @ddlx_commands_relation}
   def acked_client_lsn_relation, do: {@schema, @acked_client_lsn_relation}
 
   def publication_name, do: @publication_name
@@ -152,6 +152,8 @@ defmodule Electric.Postgres.Extension do
 
   defguard is_acked_client_lsn_relation(relation)
            when relation == {@schema, @acked_client_lsn_relation}
+
+  defguard is_perms_relation(relation) when relation == {@schema, @ddlx_commands_relation}
 
   def extract_ddl_sql(%{"txid" => _, "txts" => _, "query" => query}) do
     {:ok, query}
@@ -301,10 +303,8 @@ defmodule Electric.Postgres.Extension do
     {@schema, @ddl_relation},
     {@schema, @electrified_tracking_relation},
     {@schema, @transaction_marker_relation},
-    {@schema, @grants_relation},
-    {@schema, @roles_relation},
-    {@schema, @assignments_relation},
-    {@schema, @acked_client_lsn_relation}
+    {@schema, @acked_client_lsn_relation},
+    {@schema, @ddlx_commands_relation}
   ]
 
   @doc """
@@ -370,7 +370,6 @@ defmodule Electric.Postgres.Extension do
       Migrations.Migration_20230605141256_ElectrifyFunction,
       Migrations.Migration_20230715000000_UtilitiesTable,
       Migrations.Migration_20230814170123_RenameDDLX,
-      Migrations.Migration_20230814170745_ElectricDDL,
       Migrations.Migration_20230829000000_AcknowledgedClientLsnsTable,
       Migrations.Migration_20230918115714_DDLCommandUniqueConstraint,
       Migrations.Migration_20230921161045_DropEventTriggers,
@@ -381,7 +380,9 @@ defmodule Electric.Postgres.Extension do
       Migrations.Migration_20231206130400_ConvertReplicaTriggersToAlways,
       Migrations.Migration_20240110110200_DropUnusedFunctions,
       Migrations.Migration_20240205141200_ReinstallTriggerFunctionWriteCorrectMaxTag,
+      Migrations.Migration_20240212161153_DDLXCommands,
       Migrations.Migration_20240213160300_DropGenerateElectrifiedSqlFunction,
+      Migrations.Migration_20240214131615_PermissionsState,
       Migrations.Migration_20240417131000_ClientReconnectionInfoTables,
       Migrations.Migration_20240501000000_UnsubPoints
     ]
