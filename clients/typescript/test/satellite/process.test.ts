@@ -78,9 +78,7 @@ const startSatellite = async (
   await satellite.start(authState)
   satellite.setToken(token)
   const connectionPromise = satellite.connectWithBackoff().catch((e) => {
-    if (
-      e.message === 'terminating connection due to administrator command'
-    ) {
+    if (e.message === 'terminating connection due to administrator command') {
       // This is to be expected as we stop Postgres at the end of the test
       return
     }
@@ -2511,6 +2509,30 @@ export const processTests = (test: TestFn<ContextType>) => {
 
     // Wait for the snapshot to finish to consider the test successful
     await snapshotPromise
+
+    t.pass()
+  })
+
+  test("don't snapshot after closing satellite process", async (t) => {
+    // open and then immediately close
+    // check that no snapshot is called after close
+    const { satellite, authState, token } = t.context
+    const { connectionPromise } = await startSatellite(
+      satellite,
+      authState,
+      token
+    )
+
+    await connectionPromise
+    await satellite.stop()
+
+    satellite._performSnapshot = () => {
+      t.fail('Snapshot was called')
+      return Promise.resolve(new Date())
+    }
+
+    // wait some time to see that mutexSnapshot is not called
+    await sleepAsync(50)
 
     t.pass()
   })
