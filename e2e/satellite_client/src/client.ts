@@ -310,7 +310,14 @@ export const get_jsonb_raw = async (electric: Electric, id: string) => {
     sql: `SELECT jsb FROM jsons WHERE id = ${builder.makePositionalParam(1)};`,
     args: [id]
   }) as unknown as Array<{ jsb: string }>
-  return res[0]?.jsb
+  
+  const js = res[0]?.jsb
+
+  if (builder.dialect === 'Postgres') {
+    return js
+  }
+
+  return JSON.parse(js) // SQLite stores JSON as string so parse it
 }
 
 export const get_json = async (electric: Electric, id: string) => {

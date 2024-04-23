@@ -37,7 +37,7 @@
     # when parsed as JSON, whitespace is trimmed but key order is kept
     #[invoke node_get_json "row1" "{ a: 1, c: true, b: \"foo\", d: null, e: [1,2,3] }"]
     # jsonb trims white space and sorts keys
-    [invoke node_get_jsonb_raw "row1" "[{\"a\": 1}, {\"b\": 5, \"d\": false}]"]
+    [invoke node_get_jsonb_raw "row1" "[ { a: 1 }, { b: 5, d: false } ]"]
     [invoke node_get_jsonb "row1" "[ { a: 1 }, { b: 5, d: false } ]"]
 
     # write JSON null value and DB NULL value
@@ -121,7 +121,7 @@
     # when parsed as JSON, whitespace is trimmed but key order is kept
     #[invoke node_get_json "row1" "{ a: 1, c: true, b: \"foo\", d: null, e: [1,2,3] }"]
     # jsonb trims white space and sorts keys
-    [invoke node_get_jsonb_raw "row1" "[{\"a\": 1}, {\"b\": 5, \"d\": false}]"]
+    [invoke node_get_jsonb_raw "row1" "[ { a: 1 }, { b: 5, d: false } ]"]
     [invoke node_get_jsonb "row1" "[ { a: 1 }, { b: 5, d: false } ]"]
 
     #[invoke node_get_json "row2" "{ __is_electric_json_null__: true }"]
