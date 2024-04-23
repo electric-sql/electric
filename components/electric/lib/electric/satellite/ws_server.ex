@@ -197,7 +197,7 @@ defmodule Electric.Satellite.WebsocketServer do
       "Received JWT expiration message #{inspect(ref)} for an already cancelled timer"
     )
 
-    {:noreply, state}
+    {:ok, state}
   end
 
   # While processing the SatInStartReplicationReq message, Protocol has determined that a new
