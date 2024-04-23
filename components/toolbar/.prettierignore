@@ -3,6 +3,6 @@
 .DS_Store
 dist/
 node_modules/
-generated/
+test/generated/
 .gitignore
 .github/
