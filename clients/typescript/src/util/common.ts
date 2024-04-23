@@ -62,11 +62,5 @@ export function getWaiter(): Waiter {
  * @returns {boolean} whether the `value` is an actual object
  */
 export function isObject(value: any): value is object {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    !Array.isArray(value) &&
-    !ArrayBuffer.isView(value) &&
-    !(value instanceof Date)
-  )
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
