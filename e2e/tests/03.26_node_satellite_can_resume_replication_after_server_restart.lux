@@ -148,11 +148,6 @@
 [shell electric]
     [invoke start_electric 1]
 
-    ??Cached 2 client_checkpoints from the DB
-    ??Cached 2 client_shape_subscriptions from the DB
-    ??Cached 0 client_additional_data records from the DB
-    ??Cached 0 client_actions from the DB
-
 [shell satellite_1]
     ??Connectivity state changed: connected
 
@@ -160,6 +155,13 @@
     [invoke node_await_get_from_table "other_items" "fifth"]
     [invoke node_await_get_from_table "other_items" "sixth"]
     [invoke node_await_get_from_table "other_items" "seventh"]
+
+[shell electric]
+    ??Restored 1 cached client_checkpoints
+    ??Restored 1 cached client_shape_subscriptions
+    ??Restored 0 cached client_additional_data records
+    ??Restored 0 cached client_actions
+    ?client_id=$client_1_id .+ Successfully loaded client reconnection info
 
 [shell satellite_2]
     [invoke client_reconnect]
@@ -171,6 +173,13 @@
     [invoke node_await_get "items-b-"]
     [invoke node_await_get_from_table "other_items" "first"]
     [invoke node_await_get_from_table "other_items" "third"]
+
+[shell electric]
+    ??Restored 1 cached client_checkpoints
+    ??Restored 1 cached client_shape_subscriptions
+    ??Restored 0 cached client_additional_data records
+    ??Restored 0 cached client_actions
+    ?client_id=$client_2_id .+ Successfully loaded client reconnection info
 
 # Stop the server and verify that it persists client_actions and client_additional_data.
 [shell log]
@@ -191,10 +200,10 @@
 
     [invoke start_electric 1]
 
-    ??Cached 2 client_checkpoints from the DB
-    ??Cached 2 client_shape_subscriptions from the DB
-    ??Cached 1 client_additional_data records from the DB
-    ??Cached 1 client_actions from the DB
+    ?+Restored 1 cached client_additional_data records
+    ?+Restored 1 cached client_actions
+    ?+client_id=$client_1_id .+ Successfully loaded client reconnection info
+    ?client_id=$client_2_id .+ Successfully loaded client reconnection info
 
 [shell satellite_1]
     ??Connectivity state changed: connected

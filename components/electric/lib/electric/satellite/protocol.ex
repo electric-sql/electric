@@ -55,6 +55,11 @@ defmodule Electric.Satellite.Protocol do
     with {:ok, auth} <- Electric.Satellite.Auth.validate_token(token, state.auth_provider),
          true <- Electric.safe_reg(reg_name, 1000),
          :ok <- ClientManager.register_client(client_id, reg_name, state.origin) do
+      # Client reconnection info must be loaded before this WebsocketServer process can proceed
+      # to ANY other actions but we don't want to delay the auth response. Hence the async
+      # loading.
+      send(self(), :load_client_reconnection_info)
+
       Logger.metadata(user_id: auth.user_id)
       Logger.info("Successfully authenticated the client")
       Metrics.satellite_connection_event(%{authorized_connection: 1})
