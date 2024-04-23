@@ -16,8 +16,8 @@ import Log from 'loglevel'
 import { ExtendedTableSchema } from './schema'
 import { PgBasicType } from '../conversions/types'
 import { HKT } from '../util/hkt'
-import { isObject } from '../../util'
 import { Dialect } from '../../migrators/query-builder/builder'
+import { isFilterObject } from '../conversions/input'
 
 const squelPostgres = squel.useFlavour('postgres')
 squelPostgres.registerValueHandler('bigint', function (bigint) {
@@ -141,7 +141,7 @@ export class Builder {
   ): QueryBuilder {
     const unsupportedEntry = Object.entries(i.data).find((entry) => {
       const [_key, value] = entry
-      return isObject(value)
+      return isFilterObject(value)
     })
     if (unsupportedEntry)
       throw new InvalidArgumentError(
@@ -365,7 +365,7 @@ export function makeFilter(
         prefixFieldsWith
       ),
     ]
-  } else if (isObject(fieldValue) && !(fieldValue instanceof Date)) {
+  } else if (isFilterObject(fieldValue)) {
     // an object containing filters is provided
     // e.g. users.findMany({ where: { id: { in: [1, 2, 3] } } })
     const fs = {

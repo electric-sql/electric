@@ -377,7 +377,7 @@ export function transformField(
   return [field, transformedValue]
 }
 
-function isFilterObject(value: any): boolean {
+export function isFilterObject(value: any): boolean {
   // if it is an object it can only be a data object or a filter object
   return isObject(value) && !isDataObject(value)
 }

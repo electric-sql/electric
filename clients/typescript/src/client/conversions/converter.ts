@@ -16,7 +16,7 @@ export interface Converter {
 }
 
 /**
- * Checks whether the provided value is a user-provided data object, e.g. a timestamp.
+ * Checks whether the provided value is a data object (e.g. a timestamp) and not a filter.
  * This is important because `input.ts` needs to distinguish between data objects and filter objects.
  * Data objects need to be converted to a SQLite storeable value, whereas filter objects need to be treated specially
  * as we have to transform the values of the filter's fields (cf. `transformFieldsAllowingFilters` in `input.ts`).
@@ -24,5 +24,5 @@ export interface Converter {
  * @returns True if it is a data object, false otherwise.
  */
 export function isDataObject(v: unknown): boolean {
-  return v instanceof Date || typeof v === 'bigint'
+  return v instanceof Date || typeof v === 'bigint' || ArrayBuffer.isView(v)
 }
