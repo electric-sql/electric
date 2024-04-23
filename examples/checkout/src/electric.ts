@@ -2,7 +2,7 @@ import { makeElectricContext } from 'electric-sql/react'
 import type { Electric } from './generated/client'
 import type {
   Items as Item,
-  BasketItems as BasketItem,
+  Basket_items as BasketItem,
   Orders as Order,
 } from './generated/client'
 
