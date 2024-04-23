@@ -45,7 +45,6 @@ const MainRoutes = ({onElectricLoaded}: MainRoutesProps) => {
       const token = await getSupabaseJWT(supabase)
 
       const config = {
-        auth: { token },
         debug: true,//import.meta.env.DEV,
         url: import.meta.env.ELECTRIC_URL,
       }
@@ -55,19 +54,20 @@ const MainRoutes = ({onElectricLoaded}: MainRoutesProps) => {
 
       console.log(config)
 
-      const conn = await ElectricDatabase.init(scopedDbName, '')
-      const electric = await electrify(conn, schema, config)
+      const conn = await ElectricDatabase.init(scopedDbName)
+      const client = await electrify(conn, schema, config)
+      await client.connect(token)
 
       // This is a simplification for now until we have "shapes"
-      const syncItems = await electric.db.items.sync() // All items in the shop
-      const syncBaskets = await electric.db.basket_items.sync({
+      const syncItems = await client.db.items.sync() // All items in the shop
+      const syncBaskets = await client.db.basket_items.sync({
         // All items in the user's basket
         include: {
           items: true,
           orders: true,
         },
       })
-      const syncOrders = await electric.db.orders.sync({
+      const syncOrders = await client.db.orders.sync({
         // All orders for the user
         include: {
           basket_items: {
@@ -86,7 +86,7 @@ const MainRoutes = ({onElectricLoaded}: MainRoutesProps) => {
       }
 
       onElectricLoaded()
-      setElectric(electric)
+      setElectric(client)
     }
 
     init()
