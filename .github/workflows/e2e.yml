@@ -92,7 +92,7 @@ jobs:
         if: ${{ failure() && steps.tests.outcome == 'failure'  }}
         with:
           name: lux_logs
-          path: e2e/lux_logs/run_*
+          path: e2e/lux_logs/**/run_*
       - name: Upload test results to Buildkite analytics
         if: ${{ !cancelled() && steps.tests.outcome != 'skipped' && env.BUILDKITE_ANALYTICS_TOKEN != '' }}
         working-directory: e2e/lux_logs/latest_run
