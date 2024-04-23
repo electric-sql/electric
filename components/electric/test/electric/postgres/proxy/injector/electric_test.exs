@@ -98,7 +98,8 @@ defmodule Electric.Postgres.Proxy.Injector.ElectricTest do
         proxy_ddlx_grant: false,
         proxy_ddlx_revoke: false,
         proxy_ddlx_assign: false,
-        proxy_ddlx_unassign: false
+        proxy_ddlx_unassign: false,
+        proxy_ddlx_sqlite: false
       )
 
       migrations = [
@@ -140,13 +141,14 @@ defmodule Electric.Postgres.Proxy.Injector.ElectricTest do
 
       test "#{scenario.description()} ELECTRIC GRANT", cxt do
         query =
-          "ELECTRIC GRANT UPDATE ON public.items TO 'projects:house.admin' USING project_id CHECK (name = Paul);"
+          "ELECTRIC GRANT UPDATE ON public.items TO (projects, 'house.admin') WHERE (name = Paul);"
 
         cxt.scenario.assert_injector_error(cxt.injector, query, code: "EX900")
       end
 
       test "#{scenario.description()} ELECTRIC REVOKE", cxt do
-        query = ~s[ELECTRIC REVOKE UPDATE (status, name) ON truths FROM 'projects:house.admin';]
+        query =
+          ~s[ELECTRIC REVOKE UPDATE (status, name) ON truths FROM (projects, 'house.admin');]
 
         cxt.scenario.assert_injector_error(cxt.injector, query, code: "EX900")
       end

@@ -17,8 +17,17 @@ defmodule Electric.DDLX.Parser do
     :electric_ddlx_parser.parse(tokens)
   end
 
-  defp build_cmd({:ok, {module, attrs}}, _ddlx, opts) do
-    module.build(attrs, opts)
+  defp build_cmd({:ok, {module, attrs}}, ddlx, opts) do
+    case module.build(attrs, opts, ddlx) do
+      {:ok, command} ->
+        {:ok, command}
+
+      {:error, message} when is_binary(message) ->
+        {:error, %Command.Error{message: message, sql: ddlx}}
+
+      {:error, %Command.Error{}} = error ->
+        error
+    end
   end
 
   defp build_cmd({:error, {{line, position, _}, :electric_ddlx_parser, messages}}, ddlx, _opts) do

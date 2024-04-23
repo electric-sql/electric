@@ -30,6 +30,7 @@ defmodule Electric.Replication.Changes do
           Changes.NewRecord.t()
           | Changes.UpdatedRecord.t()
           | Changes.DeletedRecord.t()
+          | Changes.UpdatedPermissions.t()
 
   defmodule Transaction do
     alias Electric.Replication.Changes
@@ -208,6 +209,36 @@ defmodule Electric.Replication.Changes do
 
   defmodule TruncatedRelation do
     defstruct [:relation]
+  end
+
+  defmodule UpdatedPermissions do
+    defmodule UserPermissions do
+      # When a user's permissions are changed, through some role change, only connections for that
+      # user need to do anything and since we know the entire permissions state for the user,
+      # including the important id, at this point just send them along
+      defstruct [:user_id, :permissions]
+
+      @type t() :: %__MODULE__{user_id: binary(), permissions: %Electric.Satellite.SatPerms{}}
+    end
+
+    defmodule GlobalPermissions do
+      # When the global permissions change, i.e. some ddlx command is received via the proxy, then
+      # every connected user will have to update their permissions. The actual permission id for a
+      # given user is not knowable without asking pg, so it has to mean every active connection
+      # bashing the db to load the new permissions for the user. So it's pointless including the
+      # actual global permissions state.
+      defstruct [:permissions_id]
+
+      @type t() :: %__MODULE__{
+              permissions_id: integer()
+            }
+    end
+
+    defstruct [:type, :permissions]
+
+    @type t() ::
+            %__MODULE__{type: :user, permissions: UserPermissions.t()}
+            | %__MODULE__{type: :global, permissions: GlobalPermissions.t()}
   end
 
   @spec filter_changes_belonging_to_user(Transaction.t(), binary()) :: Transaction.t()

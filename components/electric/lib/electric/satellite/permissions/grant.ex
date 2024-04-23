@@ -3,32 +3,35 @@ defmodule Electric.Satellite.Permissions.Grant do
   A "compiled" version of a grant statement
   """
 
+  alias Electric.Satellite.Permissions.Eval
   alias Electric.Satellite.SatPerms
 
-  defstruct [:table, :role, :privileges, :columns, :scope, :check, :source, path: []]
+  defstruct [:table, :role, :privilege, :columns, :scope, :check, :source, path: []]
 
   @type relation() :: Electric.Postgres.relation()
 
   @type t() :: %__MODULE__{
           table: relation(),
           role: String.t() | :AUTHENTICATED | :ANYONE,
-          privileges: [Electric.Satellite.Permissions.privilege()],
+          privilege: Electric.Satellite.Permissions.privilege(),
           columns: :all | MapSet.t(),
           scope: relation(),
-          check: String.t(),
+          check: nil | Eval.ExpressionContext.t(),
           path: [String.t()],
           source: %SatPerms.Grant{}
         }
 
-  @spec new(%SatPerms.Grant{}) :: t()
-  def new(%SatPerms.Grant{} = grant) do
+  @spec new(%SatPerms.Grant{}, Eval.t()) :: t()
+  def new(%SatPerms.Grant{} = grant, evaluator) do
+    table = make_relation(grant.table)
+
     %__MODULE__{
-      table: make_relation(grant.table),
+      table: table,
       role: make_role(grant.role),
-      privileges: grant.privileges,
+      privilege: grant.privilege,
       columns: make_columns(grant.columns),
       scope: make_relation(grant.scope),
-      check: make_check(grant.check),
+      check: make_check(grant, table, evaluator),
       path: make_path(grant.path),
       source: grant
     }
@@ -41,15 +44,18 @@ defmodule Electric.Satellite.Permissions.Grant do
 
   # no columns specified so defaults to all
   defp make_columns(nil), do: :all
-  defp make_columns(["*"]), do: :all
-  defp make_columns(columns), do: MapSet.new(columns)
+  defp make_columns(%SatPerms.ColumnList{names: columns}), do: MapSet.new(columns)
 
   defp make_path(empty) when empty in [nil, []], do: nil
   defp make_path(path), do: path
 
-  defp make_check(check) do
-    # TODO: compile to an actual function
-    check
+  defp make_check(%{check: nil}, _table, _evaluator) do
+    nil
+  end
+
+  defp make_check(%{check: query}, table, evaluator) when is_binary(query) do
+    {:ok, expr} = Eval.expression_context(evaluator, query, table)
+    expr
   end
 
   def columns_valid?(%__MODULE__{columns: :all}, _columns), do: true

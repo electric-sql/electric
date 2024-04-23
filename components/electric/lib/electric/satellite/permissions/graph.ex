@@ -78,15 +78,6 @@ defmodule Electric.Satellite.Permissions.Graph do
   """
   @callback parent(impl(), scope_root(), relation(), record()) :: {relation(), id()} | nil
 
-  @doc """
-  Return the path through the tables' foreign keys that gets from the given relation to the root.
-
-  If `relation` is the same as `root` then should return `[root]`.
-
-  If there is no path from `relation` to `root`, returns `nil`.
-  """
-  @callback relation_path(impl(), scope_root(), relation()) :: [relation(), ...] | nil
-
   @behaviour __MODULE__
 
   defguardp is_relation(r) when is_tuple(r) and tuple_size(r) == 2
@@ -249,14 +240,5 @@ defmodule Electric.Satellite.Permissions.Graph do
   @impl __MODULE__
   def primary_key({module, state}, relation, record) do
     module.primary_key(state, relation, record)
-  end
-
-  @impl __MODULE__
-  def relation_path(_impl, root, root) do
-    [root]
-  end
-
-  def relation_path({module, state}, root, relation) do
-    module.relation_path(state, root, relation)
   end
 end
