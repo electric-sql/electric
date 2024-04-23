@@ -17,6 +17,7 @@ import { start } from '../docker-commands/command-start'
 import { stop } from '../docker-commands/command-stop'
 import { withConfig } from '../configure/command-with-config'
 import { pgBuilder, sqliteBuilder } from '../../migrators/query-builder'
+import { Dialect } from '../../migrators/query-builder/builder'
 
 // Rather than run `npx prisma` we resolve the path to the prisma binary so that
 // we can be sure we are using the same version of Prisma that is a dependency of
@@ -177,7 +178,7 @@ async function watchMigrations(opts: GeneratorOptions) {
 async function getLatestMigration(
   opts: Omit<GeneratorOptions, 'watch'>
 ): Promise<string | undefined> {
-  const migrationsFile = migrationsFilePath(opts, sqliteMigrationsFileName)
+  const migrationsFile = migrationsFilePath(opts, 'SQLite')
 
   // Read the migrations file contents and parse it
   // need to strip the `export default` before parsing.
@@ -219,27 +220,25 @@ async function getLatestMigration(
 }
 
 async function bundleMigrationsFor(
-  dialect: 'sqlite' | 'postgresql',
+  dialect: Dialect,
   opts: Omit<GeneratorOptions, 'watch'>,
   tmpFolder: string
 ) {
   const config = opts.config
-  const folder = dialect === 'sqlite' ? 'migrations' : 'pg-migrations'
+  const folder = dialect === 'SQLite' ? 'migrations' : 'pg-migrations'
   const migrationsPath = path.join(tmpFolder, folder)
   await fs.mkdir(migrationsPath)
   const migrationEndpoint =
     config.SERVICE + `/api/migrations?dialect=${dialect}`
 
   const migrationsFolder = path.resolve(migrationsPath)
-  const migrationsFileName =
-    dialect === 'sqlite' ? sqliteMigrationsFileName : pgMigrationsFileName
-  const migrationsFile = migrationsFilePath(opts, migrationsFileName)
+  const migrationsFile = migrationsFilePath(opts, dialect)
 
   // Fetch the migrations from Electric endpoint and write them into `tmpFolder`
   await fetchMigrations(migrationEndpoint, migrationsFolder, tmpFolder)
 
   // Build the migrations
-  const builder = dialect === 'sqlite' ? sqliteBuilder : pgBuilder
+  const builder = dialect === 'SQLite' ? sqliteBuilder : pgBuilder
   return async () => {
     await buildMigrations(migrationsFolder, migrationsFile, builder)
   }
@@ -268,12 +267,12 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
 
   try {
     const buildSqliteMigrations = await bundleMigrationsFor(
-      'sqlite',
+      'SQLite',
       opts,
       tmpFolder
     )
     const buildPgMigrations = await bundleMigrationsFor(
-      'postgresql',
+      'Postgres',
       opts,
       tmpFolder
     )
@@ -715,10 +714,12 @@ async function fetchMigrations(
 
 function migrationsFilePath(
   opts: Omit<GeneratorOptions, 'watch'>,
-  filename: string
+  sqlDialect: Dialect
 ) {
   const outFolder = path.resolve(opts.config.CLIENT_PATH)
-  return path.join(outFolder, filename)
+  const migrationsFileName =
+    sqlDialect === 'SQLite' ? sqliteMigrationsFileName : pgMigrationsFileName
+  return path.join(outFolder, migrationsFileName)
 }
 
 function capitaliseFirstLetter(word: string): string {
