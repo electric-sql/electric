@@ -155,13 +155,13 @@ const Wrapper = ({ itemColor, userId }) => {
 }
 
 const Demo = () => (
-  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-    <div className="px-3 md:px-4">
+  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6" data-testid="multiuser-realtime-demo">
+    <div className="px-3 md:px-4" data-testid="user1">
       <App dbName="user1" demoName="multi-user" bootstrapItems={2}>
         <Wrapper userId={1} itemColor="electric-green" />
       </App>
     </div>
-    <div className="px-3 md:px-4">
+    <div className="px-3 md:px-4" data-testid="user2">
       <App dbName="user2" demoName="multi-user" bootstrapItems={2}>
         <Wrapper userId={2} itemColor="script-purple" />
       </App>

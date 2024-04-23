@@ -30,6 +30,7 @@ const ConnectivityControl = () => {
       <a
         onMouseDown={toggleConnectivityState}
         className="flex flex-row items-center text-current hover:text-current cursor-pointer"
+        data-testid="connectivity-toggle"
       >
         <span className="capitalize">{status}</span>
         <div

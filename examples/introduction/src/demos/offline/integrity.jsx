@@ -212,8 +212,8 @@ const Wrapper = ({ bootstrappedPlayerColors, userColor, userId }) => {
 }
 
 const Demo = () => (
-  <div className="grid grid-cols-1 sm:grid-cols-2 integrity-grid-cols gap-6">
-    <div className="px-3 md:px-4">
+  <div className="grid grid-cols-1 sm:grid-cols-2 integrity-grid-cols gap-6" data-testid="offline-integrity-demo">
+    <div className="px-3 md:px-4" data-testid="user1">
       <App dbName="user1" demoName="integrity">
         <Wrapper
           userId={1}
@@ -222,7 +222,7 @@ const Demo = () => (
         />
       </App>
     </div>
-    <div className="px-3 md:px-4">
+    <div className="px-3 md:px-4" data-testid="user2">
       <App dbName="user2" demoName="integrity">
         <Wrapper
           userId={2}

@@ -28,7 +28,11 @@ const ItemsWidget = ({
     <>
       <div className={styles.items}>
         {itemsArray.map((item: Item) => (
-          <div key={item.id} className={clsx(styles.item, styles[itemColor])} />
+          <div
+            key={item.id}
+            className={clsx(styles.item, styles[itemColor])}
+            data-testid="item"
+          />
         ))}
       </div>
       <div>
