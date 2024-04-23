@@ -23,7 +23,7 @@ export class NonTransactionalDB implements DB {
     successCallback?: (db: DB, res: RunResult) => void,
     errorCallback?: (error: any) => void
   ) {
-    const { text, values } = statement.toParam() //{ numberedParameters: false })
+    const { text, values } = statement.toParam()
     this._adapter
       .run({ sql: text, args: values })
       .then((res) => {
