@@ -1,4 +1,7 @@
 defmodule Electric.DDLX.Parser.Build do
+  alias Electric.Satellite.SatPerms
+  alias Electric.DDLX.Command
+
   def default_schema(opts) do
     Keyword.get(opts, :default_schema, "public")
   end
@@ -89,5 +92,49 @@ defmodule Electric.DDLX.Parser.Build do
     else
       _ -> {:ok, []}
     end
+  end
+
+  def protobuf_table({table_schema, table_name}) do
+    protobuf_table(table_schema, table_name)
+  end
+
+  def protobuf_table(table_schema, table_name) do
+    %SatPerms.Table{schema: table_schema, name: table_name}
+  end
+
+  def protobuf_scope({ss, sn}) do
+    %SatPerms.Table{schema: ss, name: sn}
+  end
+
+  def protobuf_scope(_), do: nil
+
+  def protobuf_columns(nil, _ddlx) do
+    {:ok, nil}
+  end
+
+  def protobuf_columns([], ddlx) do
+    {:error,
+     %Command.Error{sql: ddlx, line: 1, position: 1, message: "Invalid empty column list"}}
+  end
+
+  def protobuf_columns(names, _ddlx) do
+    {:ok, %SatPerms.ColumnList{names: names}}
+  end
+
+  # the parser already returns the correct :UPDATE, :INSERT, etc atoms
+  def protobuf_privs(privs) do
+    privs
+  end
+
+  def protobuf_role(:AUTHENTICATED) do
+    %SatPerms.RoleName{role: {:predefined, :AUTHENTICATED}}
+  end
+
+  def protobuf_role(:ANYONE) do
+    %SatPerms.RoleName{role: {:predefined, :ANYONE}}
+  end
+
+  def protobuf_role(role) when is_binary(role) do
+    %SatPerms.RoleName{role: {:application, role}}
   end
 end

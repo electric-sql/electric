@@ -200,7 +200,8 @@ config :electric, Electric.Features,
   proxy_ddlx_grant: false,
   proxy_ddlx_revoke: false,
   proxy_ddlx_assign: false,
-  proxy_ddlx_unassign: false
+  proxy_ddlx_unassign: false,
+  proxy_ddlx_sqlite: false
 
 {:ok, conn_config} = database_url_config
 

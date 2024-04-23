@@ -230,7 +230,7 @@ defmodule Electric.Postgres.Proxy.Handler do
 
     %{loader: {loader_module, loader_opts}, connector_config: connector_config} = state
 
-    {:ok, loader_conn} = loader_module.connect(connector_config, loader_opts)
+    {:ok, loader_conn} = loader_module.connect(loader_opts, connector_config)
 
     {:ok, {stack, _state} = injector} =
       state.injector_opts
