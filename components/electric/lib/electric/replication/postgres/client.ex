@@ -20,7 +20,7 @@ defmodule Electric.Replication.Postgres.Client do
   @spec connect(Connectors.connection_opts()) ::
           {:ok, connection :: pid()} | {:error, reason :: :epgsql.connect_error()}
   def connect(conn_opts) do
-    Logger.debug("#{inspect(__MODULE__)}.connect(#{inspect(sanitize_conn_opts(conn_opts))})")
+    Logger.debug("Postgres.Client.connect(#{inspect(sanitize_conn_opts(conn_opts))})")
 
     {%{ip_addr: ip_addr}, %{username: username, password: password} = epgsql_conn_opts} =
       Connectors.pop_extraneous_conn_opts(conn_opts)
@@ -42,7 +42,7 @@ defmodule Electric.Replication.Postgres.Client do
       end
     end
 
-    Logger.info("#{inspect(__MODULE__)}.with_conn(#{inspect(sanitize_conn_opts(conn_opts))})")
+    Logger.info("Postgres.Client.with_conn(#{inspect(sanitize_conn_opts(conn_opts))})")
 
     {:ok, conn} = :epgsql_sock.start_link()
 
@@ -149,7 +149,7 @@ defmodule Electric.Replication.Postgres.Client do
   end
 
   defp squery(conn, query) do
-    Logger.debug("#{__MODULE__}: #{query}")
+    Logger.debug("Postgres.Client: #{query}")
     :epgsql.squery(conn, query)
   end
 
