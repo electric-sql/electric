@@ -704,7 +704,6 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   """
   @spec restore_cache_for_client(Connectors.origin(), String.t()) :: :ok | {:error, Exception.t()}
   def restore_cache_for_client(origin, client_id) do
-    clear_all_ets_data(client_id)
     GenServer.call(name(origin), {:restore_cache_for_client, client_id})
   end
 
@@ -814,12 +813,15 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
        actions_table: actions_table,
        debounce_timer: nil,
        debounced_client_ids: [],
-       waiting_callers: []
+       waiting_callers: [],
+       client_monitors: %{}
      }}
   end
 
   @impl GenServer
-  def handle_call({:restore_cache_for_client, client_id}, from, state) do
+  def handle_call({:restore_cache_for_client, client_id}, {pid, _} = from, state) do
+    monitor = Process.monitor(pid)
+
     # We batch up multiple client requests that this gen server receives within a fixed time
     # period ("debounce duration") into a single SQL query. During the debounce duration,
     # clients that request restoration of their cache are blocked waiting for
@@ -831,6 +833,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
       state
       |> Map.update!(:debounced_client_ids, &[client_id | &1])
       |> Map.update!(:waiting_callers, &[from | &1])
+      |> Map.update!(:client_monitors, &Map.put(&1, monitor, client_id))
       |> debounce()
 
     {:noreply, state}
@@ -841,6 +844,20 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     result = restore_cached_info(state)
     :ok = unblock_waiting_callers(state.waiting_callers, result)
     {:noreply, %{state | debounce_timer: nil, debounced_client_ids: [], waiting_callers: []}}
+  end
+
+  def handle_info({:DOWN, monitor, :process, _pid, _reason}, state) do
+    %{client_monitors: client_monitors} = state
+
+    with {:ok, client_id} <- Map.fetch(client_monitors, monitor) do
+      Logger.debug(
+        "WebsocketProcess for client_id=#{client_id} is down. Cleaning up cached info."
+      )
+
+      clear_all_ets_data(client_id)
+    end
+
+    {:noreply, %{state | client_monitors: Map.delete(client_monitors, monitor)}}
   end
 
   defp debounce(%{debounce_timer: nil} = state) do
