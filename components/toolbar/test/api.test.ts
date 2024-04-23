@@ -14,13 +14,11 @@ const db = new Database(':memory:')
 const electric = await electrify(
   db,
   schema,
-  {
-    auth: {
-      token: 'test-token',
-    },
-  },
+  {},
   { registry: new MockRegistry() },
 )
+
+electric.connect('test-token')
 
 // test boilerplate copied from electric-sql/test/client/model/table.test.ts
 
@@ -126,7 +124,6 @@ test('get_status', async () => {
   const api = clientApi(electric.registry)
   const sat = electric.registry.satellites[':memory:']
   const result = await api.getSatelliteStatus(':memory:')
-  console.log(sat?.connectivityState)
   expect(result).toStrictEqual('disconnected')
 })
 
