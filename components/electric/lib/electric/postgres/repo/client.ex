@@ -9,6 +9,7 @@ defmodule Electric.Postgres.Repo.Client do
   alias Electric.Replication.Connectors
 
   @type row :: [term]
+  @type query_result :: {[String.t()], [row]}
 
   @doc """
   Execute the given function using a pooled DB connection.
@@ -51,11 +52,23 @@ defmodule Electric.Postgres.Repo.Client do
   queries/statements on a single DB connection by wrapping them in an anonymous function and
   passing it to `checkout_from_pool/2` or `pooled_transaction/2`.
   """
-  @spec query!(String.t(), [term]) :: {[String.t()], [row]}
-  def query!(query_str, params \\ []) when is_binary(query_str) and is_list(params) do
+  @spec query(String.t(), [term]) :: {:ok, query_result} | {:error, Exception.t()}
+  def query(query_str, params \\ []) when is_binary(query_str) and is_list(params) do
     true = Repo.checked_out?()
 
-    %Postgrex.Result{columns: columns, rows: rows} = Repo.query!(query_str, params)
-    {columns, rows}
+    with {:ok, %Postgrex.Result{columns: columns, rows: rows}} <- Repo.query(query_str, params) do
+      {:ok, {columns, rows}}
+    end
+  end
+
+  @doc """
+  Same as `query/2` but raises on invalid queries.
+  """
+  @spec query!(String.t(), [term]) :: query_result
+  def query!(query_str, params \\ []) when is_binary(query_str) and is_list(params) do
+    case query(query_str, params) do
+      {:ok, result} -> result
+      {:error, exception} -> raise exception
+    end
   end
 end
