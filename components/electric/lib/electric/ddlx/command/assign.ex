@@ -22,18 +22,19 @@ defmodule Electric.DDLX.Command.Assign do
 
       {:ok,
        %Command{
-         action: %SatPerms.DDLX{
-           assigns: [
-             %SatPerms.Assign{
-               table: protobuf_table(attrs[:table_name]),
-               user_column: attrs[:user_column],
-               role_column: attrs[:role_column],
-               role_name: attrs[:role_name],
-               scope: protobuf_scope(attrs[:scope]),
-               if: attrs[:if_statement]
-             }
-           ]
-         },
+         action:
+           Command.ddlx(
+             assigns: [
+               %SatPerms.Assign{
+                 table: protobuf_table(attrs[:table_name]),
+                 user_column: attrs[:user_column],
+                 role_column: attrs[:role_column],
+                 role_name: attrs[:role_name],
+                 scope: protobuf_scope(attrs[:scope]),
+                 if: attrs[:if_statement]
+               }
+             ]
+           ),
          stmt: ddlx,
          tables: [attrs[:table_name]],
          tag: "ELECTRIC ASSIGN"

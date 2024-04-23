@@ -20,17 +20,18 @@ defmodule Electric.DDLX.Command.Unassign do
 
       {:ok,
        %Command{
-         action: %SatPerms.DDLX{
-           unassigns: [
-             %SatPerms.Unassign{
-               table: protobuf_table(attrs[:table_name]),
-               user_column: attrs[:user_column],
-               role_column: attrs[:role_column],
-               role_name: attrs[:role_name],
-               scope: protobuf_scope(attrs[:scope])
-             }
-           ]
-         },
+         action:
+           Command.ddlx(
+             unassigns: [
+               %SatPerms.Unassign{
+                 table: protobuf_table(attrs[:table_name]),
+                 user_column: attrs[:user_column],
+                 role_column: attrs[:role_column],
+                 role_name: attrs[:role_name],
+                 scope: protobuf_scope(attrs[:scope])
+               }
+             ]
+           ),
          stmt: ddlx,
          tables: [attrs[:table_name]],
          tag: "ELECTRIC UNASSIGN"

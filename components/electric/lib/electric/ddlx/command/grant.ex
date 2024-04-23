@@ -28,9 +28,7 @@ defmodule Electric.DDLX.Command.Grant do
 
       {:ok,
        %Command{
-         action: %SatPerms.DDLX{
-           grants: grants
-         },
+         action: Command.ddlx(grants: grants),
          stmt: ddlx,
          tables: [{table_schema, table_name}],
          tag: "ELECTRIC GRANT"

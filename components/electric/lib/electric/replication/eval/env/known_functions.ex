@@ -63,7 +63,7 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
   defpostgres "*numeric_type* + *numeric_type* -> *numeric_type*", delegate: &Kernel.+/2
   defpostgres "*numeric_type* - *numeric_type* -> *numeric_type*", delegate: &Kernel.-/2
   defpostgres "*integral_type* / *integral_type* -> bool", delegate: &Kernel.div/2
-  defpostgres "float8 / float8 -> bool", delegate: &Kernel.//2
+  defpostgres "float8 / float8 -> float8", delegate: &Kernel.//2
   defpostgres "numeric ^ numeric -> numeric", delegate: &Float.pow/2
   defpostgres "float8 ^ float8 -> float8", delegate: &Float.pow/2
   defpostgres "|/ float8 -> float8", delegate: &:math.sqrt/1

@@ -4,7 +4,6 @@ defmodule Electric.DDLX.ParserTest do
 
   alias Electric.DDLX.Parser
   alias Electric.DDLX.Command
-  alias Electric.DDLX.Command
   alias Electric.Satellite.SatPerms
   alias ElectricTest.PermissionsHelpers.Proto
 
@@ -77,6 +76,7 @@ defmodule Electric.DDLX.ParserTest do
                action: %SatPerms.DDLX{
                  assigns: [
                    %SatPerms.Assign{
+                     id: "2uidsvryaa2k6xjbmq6zlu7nfy2ytg6b",
                      table: Proto.table("my_default", "admin_users"),
                      user_column: "user_id",
                      scope: nil,
@@ -97,6 +97,7 @@ defmodule Electric.DDLX.ParserTest do
                action: %SatPerms.DDLX{
                  assigns: [
                    %SatPerms.Assign{
+                     id: "2uidsvryaa2k6xjbmq6zlu7nfy2ytg6b",
                      table: Proto.table("my_default", "admin_users"),
                      user_column: "user_id",
                      scope: nil,
@@ -119,6 +120,7 @@ defmodule Electric.DDLX.ParserTest do
                action: %SatPerms.DDLX{
                  assigns: [
                    %SatPerms.Assign{
+                     id: "pxrga7klxw65mybjn6vrta3vs5t2rkhe",
                      table: Proto.table("my_default", "user_roles"),
                      user_column: "user_id",
                      scope: nil,
@@ -139,6 +141,7 @@ defmodule Electric.DDLX.ParserTest do
                action: %SatPerms.DDLX{
                  assigns: [
                    %SatPerms.Assign{
+                     id: "tcdchugjrxs6o52wlikvoaoqz5gef7du",
                      table: Proto.table("application", "user_roles"),
                      user_column: "user_id",
                      scope: nil,
@@ -160,6 +163,7 @@ defmodule Electric.DDLX.ParserTest do
                action: %SatPerms.DDLX{
                  assigns: [
                    %SatPerms.Assign{
+                     id: "tcdchugjrxs6o52wlikvoaoqz5gef7du",
                      table: Proto.table("application", "user_roles"),
                      user_column: "user_id",
                      scope: nil,
@@ -181,6 +185,7 @@ defmodule Electric.DDLX.ParserTest do
                action: %SatPerms.DDLX{
                  assigns: [
                    %SatPerms.Assign{
+                     id: "fq7ybdqfg6mee6cdnhx2ciyhzjxtwj3a",
                      table: Proto.table("Application", "user_roles"),
                      user_column: "user_id",
                      scope: nil,
@@ -202,6 +207,7 @@ defmodule Electric.DDLX.ParserTest do
                action: %SatPerms.DDLX{
                  assigns: [
                    %SatPerms.Assign{
+                     id: "tcdchugjrxs6o52wlikvoaoqz5gef7du",
                      table: Proto.table("application", "user_roles"),
                      user_column: "user_id",
                      scope: nil,
@@ -224,6 +230,7 @@ defmodule Electric.DDLX.ParserTest do
                action: %SatPerms.DDLX{
                  assigns: [
                    %SatPerms.Assign{
+                     id: "rzs4jo7bvzfmj2a5pjjblypdy2kw5vzc",
                      table: Proto.table("my_default", "project_members"),
                      user_column: "user_id",
                      scope: Proto.table("my_default", "projects"),
@@ -245,6 +252,7 @@ defmodule Electric.DDLX.ParserTest do
                action: %SatPerms.DDLX{
                  assigns: [
                    %SatPerms.Assign{
+                     id: "fcld4tiw2qsr4yxlwmytijlj5tl4mklp",
                      table: Proto.table("application", "project_members"),
                      user_column: "user_id",
                      scope: Proto.table("auth", "projects"),
@@ -332,6 +340,7 @@ defmodule Electric.DDLX.ParserTest do
                action: %SatPerms.DDLX{
                  assigns: [
                    %SatPerms.Assign{
+                     id: "2uidsvryaa2k6xjbmq6zlu7nfy2ytg6b",
                      table: Proto.table("my_default", "admin_users"),
                      user_column: "user_id",
                      scope: nil,
@@ -352,6 +361,7 @@ defmodule Electric.DDLX.ParserTest do
                action: %SatPerms.DDLX{
                  assigns: [
                    %SatPerms.Assign{
+                     id: "2uidsvryaa2k6xjbmq6zlu7nfy2ytg6b",
                      table: Proto.table("my_default", "admin_users"),
                      user_column: "user_id",
                      scope: nil,
@@ -378,6 +388,7 @@ defmodule Electric.DDLX.ParserTest do
                action: %SatPerms.DDLX{
                  assigns: [
                    %SatPerms.Assign{
+                     id: "pxrga7klxw65mybjn6vrta3vs5t2rkhe",
                      table: Proto.table("my_default", "user_roles"),
                      user_column: "user_id",
                      scope: nil,
@@ -398,6 +409,7 @@ defmodule Electric.DDLX.ParserTest do
                action: %SatPerms.DDLX{
                  assigns: [
                    %SatPerms.Assign{
+                     id: "pxrga7klxw65mybjn6vrta3vs5t2rkhe",
                      table: Proto.table("my_default", "user_roles"),
                      user_column: "user_id",
                      scope: nil,
@@ -420,6 +432,7 @@ defmodule Electric.DDLX.ParserTest do
                action: %SatPerms.DDLX{
                  assigns: [
                    %SatPerms.Assign{
+                     id: "rzs4jo7bvzfmj2a5pjjblypdy2kw5vzc",
                      table: Proto.table("my_default", "project_members"),
                      user_column: "user_id",
                      scope: Proto.table("my_default", "projects"),
@@ -442,6 +455,7 @@ defmodule Electric.DDLX.ParserTest do
                action: %SatPerms.DDLX{
                  assigns: [
                    %SatPerms.Assign{
+                     id: "uk3vbzo7am3uxtlnjprioxwgv52aeojz",
                      table: Proto.table("my_default", "deliveries"),
                      user_column: "driver_id",
                      scope: Proto.table("my_default", "deliveries"),
@@ -462,6 +476,7 @@ defmodule Electric.DDLX.ParserTest do
                action: %SatPerms.DDLX{
                  assigns: [
                    %SatPerms.Assign{
+                     id: "z5wssirjrctqy3zfbs25yfuuvou77gip",
                      table: Proto.table("other", "deliveries"),
                      user_column: "driver_id",
                      scope: Proto.table("other", "deliveries"),
@@ -489,6 +504,7 @@ defmodule Electric.DDLX.ParserTest do
                action: %SatPerms.DDLX{
                  assigns: [
                    %SatPerms.Assign{
+                     id: "o7iyzse5guwyxjwr367hpfbmcg2irbyi",
                      table: Proto.table("my_default", "user_permissions"),
                      user_column: "user_id",
                      scope: nil,
@@ -568,6 +584,7 @@ defmodule Electric.DDLX.ParserTest do
                action: %SatPerms.DDLX{
                  grants: [
                    %SatPerms.Grant{
+                     id: "6qwbckegxcxt2zesymulmwqotberhp4m",
                      privilege: :UPDATE,
                      table: Proto.table("thing", "Köln_en$ts"),
                      role: Proto.role("house.admin"),
@@ -594,6 +611,7 @@ defmodule Electric.DDLX.ParserTest do
                action: %SatPerms.DDLX{
                  grants: [
                    %SatPerms.Grant{
+                     id: "6qwbckegxcxt2zesymulmwqotberhp4m",
                      privilege: :UPDATE,
                      table: Proto.table("thing", "Köln_en$ts"),
                      role: Proto.role("house.admin"),
@@ -618,6 +636,7 @@ defmodule Electric.DDLX.ParserTest do
                action: %SatPerms.DDLX{
                  grants: [
                    %SatPerms.Grant{
+                     id: "6qwbckegxcxt2zesymulmwqotberhp4m",
                      privilege: :UPDATE,
                      table: Proto.table("thing", "Köln_en$ts"),
                      role: Proto.role("house.admin"),
@@ -644,6 +663,7 @@ defmodule Electric.DDLX.ParserTest do
                action: %SatPerms.DDLX{
                  grants: [
                    %SatPerms.Grant{
+                     id: "unz3ra6f4w3luf2wdfhjsiryuyp4bdse",
                      check: "name = 'Paul'",
                      columns: nil,
                      table: Proto.table("thing", "köln_en$ts"),
@@ -669,6 +689,7 @@ defmodule Electric.DDLX.ParserTest do
                action: %SatPerms.DDLX{
                  grants: [
                    %SatPerms.Grant{
+                     id: "l5clz3xxefjb7pn2erskct2qvh3jjxzv",
                      check: "name = 'Paul'",
                      columns: nil,
                      table: Proto.table("thing", "köln_en$ts"),
@@ -694,6 +715,7 @@ defmodule Electric.DDLX.ParserTest do
                action: %SatPerms.DDLX{
                  grants: [
                    %SatPerms.Grant{
+                     id: "2ag4ijgsjmrexpfbqzpyljuqnj4x4qry",
                      check: "name = 'Paul'",
                      columns: nil,
                      table: Proto.table("thing", "köln_en$ts"),
@@ -702,6 +724,7 @@ defmodule Electric.DDLX.ParserTest do
                      scope: Proto.table("public", "projects")
                    },
                    %SatPerms.Grant{
+                     id: "unz3ra6f4w3luf2wdfhjsiryuyp4bdse",
                      check: "name = 'Paul'",
                      columns: nil,
                      table: Proto.table("thing", "köln_en$ts"),
@@ -710,6 +733,7 @@ defmodule Electric.DDLX.ParserTest do
                      scope: Proto.table("public", "projects")
                    },
                    %SatPerms.Grant{
+                     id: "tr7tdsl5c7uv6pkcth5ybgtz6tddewnd",
                      check: "name = 'Paul'",
                      columns: nil,
                      table: Proto.table("thing", "köln_en$ts"),
@@ -733,6 +757,7 @@ defmodule Electric.DDLX.ParserTest do
                action: %SatPerms.DDLX{
                  grants: [
                    %SatPerms.Grant{
+                     id: "q5m3kn7dzjptvnf7a4y456l6n4j3bmy3",
                      check: nil,
                      columns: nil,
                      table: Proto.table("thing", "köln_en$ts"),
@@ -742,6 +767,7 @@ defmodule Electric.DDLX.ParserTest do
                      path: nil
                    },
                    %SatPerms.Grant{
+                     id: "qcw7p6e4aj7nfev7vqwrgtuqx3kai3xd",
                      check: nil,
                      columns: nil,
                      table: Proto.table("thing", "köln_en$ts"),
@@ -751,6 +777,7 @@ defmodule Electric.DDLX.ParserTest do
                      path: nil
                    },
                    %SatPerms.Grant{
+                     id: "qw366w63mnmifcedq3aqr7wt4gfxhc2v",
                      check: nil,
                      columns: nil,
                      table: Proto.table("thing", "köln_en$ts"),
@@ -760,6 +787,7 @@ defmodule Electric.DDLX.ParserTest do
                      path: nil
                    },
                    %SatPerms.Grant{
+                     id: "qrvaeunuhz3tzvkvxfyidadr6w6a4zis",
                      check: nil,
                      columns: nil,
                      table: Proto.table("thing", "köln_en$ts"),
@@ -782,6 +810,7 @@ defmodule Electric.DDLX.ParserTest do
                action: %SatPerms.DDLX{
                  grants: [
                    %SatPerms.Grant{
+                     id: "q5m3kn7dzjptvnf7a4y456l6n4j3bmy3",
                      check: nil,
                      columns: nil,
                      table: Proto.table("thing", "köln_en$ts"),
@@ -791,6 +820,7 @@ defmodule Electric.DDLX.ParserTest do
                      path: nil
                    },
                    %SatPerms.Grant{
+                     id: "qcw7p6e4aj7nfev7vqwrgtuqx3kai3xd",
                      check: nil,
                      columns: nil,
                      table: Proto.table("thing", "köln_en$ts"),
@@ -800,6 +830,7 @@ defmodule Electric.DDLX.ParserTest do
                      path: nil
                    },
                    %SatPerms.Grant{
+                     id: "qw366w63mnmifcedq3aqr7wt4gfxhc2v",
                      check: nil,
                      columns: nil,
                      table: Proto.table("thing", "köln_en$ts"),
@@ -809,6 +840,7 @@ defmodule Electric.DDLX.ParserTest do
                      path: nil
                    },
                    %SatPerms.Grant{
+                     id: "qrvaeunuhz3tzvkvxfyidadr6w6a4zis",
                      check: nil,
                      columns: nil,
                      table: Proto.table("thing", "köln_en$ts"),
@@ -833,6 +865,7 @@ defmodule Electric.DDLX.ParserTest do
                action: %SatPerms.DDLX{
                  grants: [
                    %SatPerms.Grant{
+                     id: "q5m3kn7dzjptvnf7a4y456l6n4j3bmy3",
                      check: nil,
                      columns: %SatPerms.ColumnList{names: ["col1", "col2"]},
                      table: Proto.table("thing", "köln_en$ts"),
@@ -842,6 +875,7 @@ defmodule Electric.DDLX.ParserTest do
                      path: nil
                    },
                    %SatPerms.Grant{
+                     id: "qcw7p6e4aj7nfev7vqwrgtuqx3kai3xd",
                      check: nil,
                      columns: %SatPerms.ColumnList{names: ["col1", "col2"]},
                      table: Proto.table("thing", "köln_en$ts"),
@@ -851,6 +885,7 @@ defmodule Electric.DDLX.ParserTest do
                      path: nil
                    },
                    %SatPerms.Grant{
+                     id: "qw366w63mnmifcedq3aqr7wt4gfxhc2v",
                      check: nil,
                      columns: %SatPerms.ColumnList{names: ["col1", "col2"]},
                      table: Proto.table("thing", "köln_en$ts"),
@@ -860,6 +895,7 @@ defmodule Electric.DDLX.ParserTest do
                      path: nil
                    },
                    %SatPerms.Grant{
+                     id: "qrvaeunuhz3tzvkvxfyidadr6w6a4zis",
                      check: nil,
                      columns: %SatPerms.ColumnList{names: ["col1", "col2"]},
                      table: Proto.table("thing", "köln_en$ts"),
@@ -884,6 +920,7 @@ defmodule Electric.DDLX.ParserTest do
                action: %SatPerms.DDLX{
                  grants: [
                    %SatPerms.Grant{
+                     id: "2akoxmzkfwchadl6qcf22f6syd2btygl",
                      check: nil,
                      columns: nil,
                      table: Proto.table("thing", "köln_en$ts"),
@@ -893,6 +930,7 @@ defmodule Electric.DDLX.ParserTest do
                      path: nil
                    },
                    %SatPerms.Grant{
+                     id: "jk7n6coz7jejdybyayxtwfni7jet43pv",
                      check: nil,
                      columns: nil,
                      table: Proto.table("thing", "köln_en$ts"),
@@ -902,6 +940,7 @@ defmodule Electric.DDLX.ParserTest do
                      path: nil
                    },
                    %SatPerms.Grant{
+                     id: "nv2253mnh3xo6ozaefj4kpfmbb5ervsz",
                      check: nil,
                      columns: nil,
                      table: Proto.table("thing", "köln_en$ts"),
@@ -911,6 +950,7 @@ defmodule Electric.DDLX.ParserTest do
                      path: nil
                    },
                    %SatPerms.Grant{
+                     id: "t3rp5vrt5r3tzzye33pcgwmxyovzgxb7",
                      check: nil,
                      columns: nil,
                      table: Proto.table("thing", "köln_en$ts"),
@@ -935,6 +975,7 @@ defmodule Electric.DDLX.ParserTest do
                action: %SatPerms.DDLX{
                  grants: [
                    %SatPerms.Grant{
+                     id: "dfhpttndlmoswwso2idggsadq4vwuikg",
                      check: nil,
                      columns: nil,
                      table: Proto.table("thing", "köln_en$ts"),
@@ -950,6 +991,81 @@ defmodule Electric.DDLX.ParserTest do
                tag: "ELECTRIC GRANT"
              }
     end
+
+    test "grant with field accesses in check clause" do
+      sql =
+        "ELECTRIC GRANT READ ON issues TO (projects, 'editor') WHERE (row.user_id = AUTH.user_id)"
+
+      {:ok, result} = Parser.parse(sql)
+
+      assert result == %Command{
+               action: %SatPerms.DDLX{
+                 grants: [
+                   %SatPerms.Grant{
+                     id: "baa4uqpavntlksnbmmw7eqp24mela3ed",
+                     check: "ROW.user_id = AUTH.user_id",
+                     table: Proto.table("issues"),
+                     privilege: :SELECT,
+                     role: Proto.role("editor"),
+                     scope: Proto.scope("projects")
+                   }
+                 ]
+               },
+               stmt: sql,
+               tables: [{"public", "issues"}],
+               tag: "ELECTRIC GRANT"
+             }
+    end
+
+    test "grant with type casting in check clause" do
+      sql =
+        "ELECTRIC GRANT READ ON issues TO (projects, 'editor') WHERE (row.user_id::text = AUTH.user_id)"
+
+      {:ok, result} = Parser.parse(sql)
+
+      assert result == %Command{
+               action: %SatPerms.DDLX{
+                 grants: [
+                   %SatPerms.Grant{
+                     id: "baa4uqpavntlksnbmmw7eqp24mela3ed",
+                     check: "ROW.user_id::text = AUTH.user_id",
+                     table: Proto.table("issues"),
+                     privilege: :SELECT,
+                     role: Proto.role("editor"),
+                     scope: Proto.scope("projects")
+                   }
+                 ]
+               },
+               stmt: sql,
+               tables: [{"public", "issues"}],
+               tag: "ELECTRIC GRANT"
+             }
+    end
+
+    test "grant with multiple clauses in check clause" do
+      sql =
+        "ELECTRIC GRANT READ ON issues TO (projects, 'editor') WHERE ((row.user_id = AUTH.user_id) AND (thing.reason > 2))"
+
+      {:ok, result} = Parser.parse(sql)
+
+      assert result == %Command{
+               action: %SatPerms.DDLX{
+                 grants: [
+                   %SatPerms.Grant{
+                     id: "baa4uqpavntlksnbmmw7eqp24mela3ed",
+                     check: "(ROW.user_id = AUTH.user_id) AND (THING.reason > 2)",
+                     table: Proto.table("issues"),
+                     privilege: :SELECT,
+                     role: Proto.role("editor"),
+                     scope: Proto.scope("projects")
+                   }
+                 ]
+               },
+               stmt: sql,
+               tables: [{"public", "issues"}],
+               tag: "ELECTRIC GRANT"
+             }
+    end
   end
 
   describe "ELECTRIC REVOKE" do
@@ -961,6 +1077,7 @@ defmodule Electric.DDLX.ParserTest do
                action: %SatPerms.DDLX{
                  revokes: [
                    %SatPerms.Revoke{
+                     id: "dajpwzccceliaxpwwru4rxc4f4qisw6j",
                      privilege: :UPDATE,
                      table: Proto.table("Thing", "Köln_en$ts"),
                      role: Proto.role("house.admin"),
@@ -981,24 +1098,28 @@ defmodule Electric.DDLX.ParserTest do
                action: %SatPerms.DDLX{
                  revokes: [
                    %SatPerms.Revoke{
+                     id: "7nwvujrdfzxc6i2733x2bl3z72ea7htc",
                      privilege: :SELECT,
                      table: Proto.table("thing", "köln_en$ts"),
                      role: Proto.role("house.admin"),
                      scope: Proto.table("my_default", "projects")
                    },
                    %SatPerms.Revoke{
+                     id: "tuanwoqchn5fvfkffu6bvjdhqkogo6nd",
                      privilege: :INSERT,
                      table: Proto.table("thing", "köln_en$ts"),
                      role: Proto.role("house.admin"),
                      scope: Proto.table("my_default", "projects")
                    },
                    %SatPerms.Revoke{
+                     id: "5re2yqzv7oogtv7p7pyt7cmfxtnl3bpo",
                      privilege: :UPDATE,
                      table: Proto.table("thing", "köln_en$ts"),
                      role: Proto.role("house.admin"),
                      scope: Proto.table("my_default", "projects")
                    },
                    %SatPerms.Revoke{
+                     id: "cpqo4as7pkf4coouxze6xfec2bd65hio",
                      privilege: :DELETE,
                      table: Proto.table("thing", "köln_en$ts"),
                      role: Proto.role("house.admin"),
@@ -1025,6 +1146,7 @@ defmodule Electric.DDLX.ParserTest do
                action: %SatPerms.DDLX{
                  revokes: [
                    %SatPerms.Revoke{
+                     id: "5re2yqzv7oogtv7p7pyt7cmfxtnl3bpo",
                      privilege: :UPDATE,
                      table: Proto.table("thing", "köln_en$ts"),
                      role: Proto.role("house.admin"),
@@ -1046,6 +1168,7 @@ defmodule Electric.DDLX.ParserTest do
                action: %SatPerms.DDLX{
                  revokes: [
                    %SatPerms.Revoke{
+                     id: "lwxqdr32qyfd6g7e3jfiioid4pxv7j2i",
                      privilege: :UPDATE,
                      table: Proto.table("thing", "köln_en$ts"),
                      role: Proto.role("house.admin"),
@@ -1067,18 +1190,21 @@ defmodule Electric.DDLX.ParserTest do
                action: %SatPerms.DDLX{
                  revokes: [
                    %SatPerms.Revoke{
+                     id: "ew7qw5tu7zaqwuwv72cdppnqbbynzpoj",
                      privilege: :INSERT,
                      table: Proto.table("thing", "köln_en$ts"),
                      role: Proto.role("house.admin"),
                      scope: Proto.table("thing", "projects")
                    },
                    %SatPerms.Revoke{
+                     id: "lwxqdr32qyfd6g7e3jfiioid4pxv7j2i",
                      privilege: :UPDATE,
                      table: Proto.table("thing", "köln_en$ts"),
                      role: Proto.role("house.admin"),
                      scope: Proto.table("thing", "projects")
                    },
                    %SatPerms.Revoke{
+                     id: "7ocohdpexauh56fkfgsakqeldvposuvw",
                      privilege: :DELETE,
                      table: Proto.table("thing", "köln_en$ts"),
                      role: Proto.role("house.admin"),
@@ -1170,6 +1296,7 @@ defmodule Electric.DDLX.ParserTest do
                action: %SatPerms.DDLX{
                  unassigns: [
                    %SatPerms.Unassign{
+                     id: "o7iyzse5guwyxjwr367hpfbmcg2irbyi",
                      table: Proto.table("my_default", "user_permissions"),
                      user_column: "user_id",
                      scope: nil,
@@ -1192,6 +1319,7 @@ defmodule Electric.DDLX.ParserTest do
                action: %SatPerms.DDLX{
                  unassigns: [
                    %SatPerms.Unassign{
+                     id: "nugp4djlkslpzpevh245r2kzurlf3k4p",
                      table: Proto.table("other", "user_permissions"),
                      user_column: "user_id",
                      scope: Proto.table("other", "projects"),
