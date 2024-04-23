@@ -35,7 +35,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
     setup :setup_electrified_tables
     setup :setup_with_sql_execute
 
-    test "The client can connect and immediately gets migrations", ctx do
+    test "client immediately gets migrations", ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
         assert {:ok, _} =
                  MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{})
@@ -57,7 +57,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
     @tag with_sql: """
          INSERT INTO public.users (id, name) VALUES ('#{uuid4()}', 'Garry');
          """
-    test "The client can connect and immediately gets migrations but gets neither already inserted data, nor new inserts",
+    test "client immediately gets migrations but gets neither already inserted data, nor new inserts",
          %{conn: pg_conn, origin: origin} = ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
         start_replication_and_assert_response(conn, ctx.electrified_count)
@@ -84,7 +84,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
          INSERT INTO public.clients (id, name) VALUES ('#{uuid4()}', 'John');
          CALL electric.electrify('public.clients');
          """
-    test "The client can connect and subscribe, and he gets data upon subscription and thereafter",
+    test "client receives initial data upon subscription and streams changes thereafter",
          %{conn: pg_conn} = ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
         start_replication_and_assert_response(conn, ctx.electrified_count, 1)
@@ -150,8 +150,70 @@ defmodule Electric.Satellite.SubscriptionsTest do
       end)
     end
 
-    test "The client can connect and subscribe, and that works with multiple shape requests",
+    @tag setup_fun: &__MODULE__.db_setup_for_display_settings_test/2
+    @tag with_sql: """
+         CREATE TABLE public.appointments (
+           id TEXT PRIMARY KEY,
+           name TEXT NOT NULL,
+           scheduled_at TIMESTAMPTZ NOT NULL,
+           extra_bits BYTEA NOT NULL
+         );
+         CALL electric.electrify('public.appointments');
+
+         INSERT INTO public.appointments VALUES
+           ('001', 'Important meeting', '2024-04-19 15:00:00+03', '\\x0100020300');
+         """
+    test "initial data and subsequent streamed changes use correct display settings",
          %{conn: pg_conn} = ctx do
+      MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
+        start_replication_and_assert_response(conn, ctx.electrified_count, 1)
+
+        request_id = uuid4()
+        sub_id = uuid4()
+
+        request = %SatSubsReq{
+          subscription_id: sub_id,
+          shape_requests: [
+            %SatShapeReq{
+              request_id: request_id,
+              shape_definition: %SatShapeDef{
+                selects: [%SatShapeDef.Select{tablename: "appointments"}]
+              }
+            }
+          ]
+        }
+
+        assert {:ok, %SatSubsResp{err: nil}} =
+                 MockClient.make_rpc_call(conn, "subscribe", request)
+
+        assert {[^request_id], data} = receive_subscription_data(conn, sub_id)
+        assert [%SatOpInsert{row_data: %{values: row_data}}] = data
+        assert ["001", "Important meeting", "2024-04-19 12:00:00Z", <<1, 0, 2, 3, 0>>] == row_data
+
+        {:ok, 1} =
+          :epgsql.squery(
+            pg_conn,
+            """
+            INSERT INTO public.appointments VALUES
+              ('002', 'Thinking time', '2024-12-12 09:00:00-03:30', '\\001\\000\\002\\003\\000')
+            """
+          )
+
+        assert_receive {^conn,
+                        %SatOpLog{
+                          ops: [
+                            %{op: {:begin, _}},
+                            %{op: {:insert, %{row_data: %{values: row_data}}}},
+                            %{op: {:commit, _}}
+                          ]
+                        }},
+                       1000
+
+        assert ["002", "Thinking time", "2024-12-12 12:30:00Z", <<1, 0, 2, 3, 0>>] == row_data
+      end)
+    end
+
+    test "client can subscribe to multiple shape requests at once", %{conn: pg_conn} = ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
         start_replication_and_assert_response(conn, ctx.electrified_count)
 
@@ -227,8 +289,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
          INSERT INTO public.users (id, name) VALUES (gen_random_uuid(), 'John');
          INSERT INTO public.my_entries (id, content) VALUES (gen_random_uuid(), 'Old');
          """
-    test "The client can connect and subscribe, and that works with multiple subscriptions",
-         %{conn: pg_conn} = ctx do
+    test "client can subscribe multiple times", %{conn: pg_conn} = ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
         start_replication_and_assert_response(conn, ctx.electrified_count)
 
@@ -311,8 +372,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
     @tag with_sql: """
          INSERT INTO public.users (id, name) VALUES ('#{uuid4()}', 'John');
          """
-    test "Second subscription for the same table yields no data",
-         %{conn: pg_conn} = ctx do
+    test "Second subscription for the same table yields no data", %{conn: pg_conn} = ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
         start_replication_and_assert_response(conn, ctx.electrified_count)
 
@@ -384,7 +444,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
       end)
     end
 
-    test "The client can connect and subscribe, and then unsubscribe, and gets no data after unsubscribing",
+    test "client can subscribe, then unsubscribe to stop streaming any further data",
          %{conn: pg_conn} = ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
         start_replication_and_assert_response(conn, ctx.electrified_count)
@@ -442,7 +502,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
       end)
     end
 
-    test "The client can connect and subscribe, and reconnect with the same subscription ID",
+    test "client can connect and subscribe, then reconnect using the same subscription ID",
          %{conn: pg_conn} = ctx do
       sub_id = uuid4()
 
@@ -521,8 +581,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
          INSERT INTO public.users (id, name) VALUES ('#{uuid4()}', 'John Doe');
          INSERT INTO public.users (id, name) VALUES ('#{uuid4()}', 'John Nobody');
          """
-    test "The client can connect and subscribe with where clauses on shapes",
-         %{conn: pg_conn} = ctx do
+    test "client can use where clauses in shape subscriptions", %{conn: pg_conn} = ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
         start_replication_and_assert_response(conn, ctx.electrified_count)
 
@@ -617,8 +676,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
     @tag with_sql: """
          INSERT INTO public.users (id, name) VALUES ('#{uuid4()}', 'John Doe');
          """
-    test "Second subscription with where clause doesn't duplicate data",
-         %{conn: pg_conn} = ctx do
+    test "Second subscription with where clause doesn't duplicate data", %{conn: pg_conn} = ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
         start_replication_and_assert_response(conn, ctx.electrified_count)
 
@@ -674,8 +732,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
          INSERT INTO public.authored_entries (id, author_id, content) VALUES ('#{@entry_id}', '#{@john_doe_id}', 'Hello world');
          INSERT INTO public.comments (id, entry_id, content, author_id) VALUES ('#{uuid4()}', '#{@entry_id}', 'Comment 1', '#{@john_doe_id}');
          """
-    test "The client can connect and subscribe with INCLUDE TREE on shapes",
-         %{conn: pg_conn} = ctx do
+    test "client can use INCLUDE TREE in shape subscriptions", %{conn: pg_conn} = ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
         start_replication_and_assert_response(conn, ctx.electrified_count)
 
@@ -735,8 +792,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
          INSERT INTO public.comments (id, entry_id, content, author_id) VALUES ('#{uuid4()}', '#{@entry_id}', 'Comment 1', '#{@john_doe_id}');
          INSERT INTO public.comments (id, entry_id, content, author_id) VALUES ('#{uuid4()}', '#{@entry_id}', 'Comment 2', '#{@jane_doe_id}');
          """
-    test "Include trees work with move-outs & gone-s",
-         %{conn: pg_conn} = ctx do
+    test "Include trees work with move-outs & gone-s", %{conn: pg_conn} = ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
         rel_map = start_replication_and_assert_response(conn, ctx.electrified_count)
 
@@ -984,8 +1040,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
          INSERT INTO public.authored_entries (id, author_id, content) VALUES ('#{@entry_id}', '#{@john_doe_id}', 'Hello world');
          INSERT INTO public.comments (id, entry_id, content, author_id) VALUES ('#{uuid4()}', '#{@entry_id}', 'Comment 1', '#{@john_doe_id}');
          """
-    test "move-in causes a fetch of additional",
-         %{conn: pg_conn} = ctx do
+    test "move-in causes a fetch of additional data", %{conn: pg_conn} = ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
         rel_map = start_replication_and_assert_response(conn, ctx.electrified_count)
 
@@ -1042,8 +1097,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
       end)
     end
 
-    test "Client reconnection restores the sent rows graph",
-         %{conn: pg_conn} = ctx do
+    test "client reconnection restores the sent rows graph", %{conn: pg_conn} = ctx do
       sub_id = uuid4()
 
       last_lsn =
@@ -1142,7 +1196,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
          INSERT INTO public.authored_entries (id, author_id, content) VALUES ('#{@other_entry_id}', '#{@jane_doe_id}', 'Goodbye world');
          INSERT INTO public.comments (id, entry_id, content, author_id) VALUES ('#{uuid4()}', '#{@other_entry_id}', 'Comment 3', '#{@john_doe_id}');
          """
-    test "Client reconnection works with partial acknowledgment of additional data",
+    test "client reconnection works with partial acknowledgment of additional data",
          %{conn: pg_conn} = ctx do
       sub_id = uuid4()
 
@@ -1295,5 +1349,20 @@ defmodule Electric.Satellite.SubscriptionsTest do
         refute_received {^conn, %SatOpLog{ops: [%{op: {:additional_begin, _}} | _]}}
       end)
     end
+  end
+
+  # Here we intentionally set display settings to unsupported values on the database, so that
+  # new connections inherit this settings by default. This will allow us to verify that the
+  # connections we open override any defaults with our own settings.
+  def db_setup_for_display_settings_test(conn, dbname) do
+    :epgsql.squery(
+      conn,
+      """
+      ALTER DATABASE #{dbname} SET bytea_output = 'escape';
+      ALTER DATABASE #{dbname} SET DateStyle = 'SQL, YMD';
+      ALTER DATABASE #{dbname} SET TimeZone = +3;
+      ALTER DATABASE #{dbname} SET extra_float_digits = -1;
+      """
+    )
   end
 end
