@@ -121,13 +121,13 @@ export default function SQLTab({ dbName, api }: ToolbarTabsProps): JSX.Element {
         <div className="mirror-in">
           <CodeMirror
             value={response}
-            // onChange={(_editor, _data, _value) => {}}
-            // options={{
-            //   readOnly: true,
-            //   tabSize: 4,
-            //   mode: 'json',
-            //   theme: 'material',
-            // }}
+            onChange={(_editor, _data, _value) => {}}
+            options={{
+              readOnly: true,
+              tabSize: 4,
+              mode: 'json',
+              theme: 'material',
+            }}
           />
         </div>
         <div className="mirror-ctls">
