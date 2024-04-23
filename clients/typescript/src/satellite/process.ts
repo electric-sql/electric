@@ -589,7 +589,6 @@ export class SatelliteProcess implements Satellite {
     )
 
     try {
-      console.log('APPLYING SUBS DATA:\n' + JSON.stringify(stmts, null, 2))
       await this.adapter.runInTransaction(...stmts)
 
       // We're explicitly not specifying rowids in these changes for now,
@@ -1278,7 +1277,6 @@ export class SatelliteProcess implements Satellite {
   }
 
   async _applyTransaction(transaction: Transaction) {
-    console.log('APPLY TX: ' + JSON.stringify(transaction))
     const namespace = this.builder.defaultNamespace
     const origin = transaction.origin!
     const commitTimestamp = new Date(transaction.commit_timestamp.toNumber())
@@ -1338,10 +1336,7 @@ export class SatelliteProcess implements Satellite {
 
       const { statements, tablenames } = await this._apply(entries, origin)
       entries.forEach((e) => opLogEntries.push(e))
-      statements.forEach((s) => {
-        console.log('DML stmt: ' + JSON.stringify(s))
-        stmts.push(s)
-      })
+      statements.forEach((s) => stmts.push(s))
       tablenames.forEach((n) => tablenamesSet.add(n))
     }
     const processDDL = async (changes: SchemaChange[]) => {
@@ -1349,7 +1344,6 @@ export class SatelliteProcess implements Satellite {
       const affectedTables: Map<string, MigrationTable> = new Map()
       changes.forEach((change) => {
         const changeStmt = { sql: change.sql }
-        console.log('DDL stmt: ' + JSON.stringify(changeStmt))
         stmts.push(changeStmt)
 
         if (
@@ -1417,13 +1411,11 @@ export class SatelliteProcess implements Satellite {
     if (transaction.migrationVersion) {
       // If a migration version is specified
       // then the transaction is a migration
-      console.log('APPLYING MIGRATION')
       await this.migrator.applyIfNotAlready({
         statements: allStatements,
         version: transaction.migrationVersion,
       })
     } else {
-      console.log('APPLYING TRANSACTION')
       await this.adapter.runInTransaction(...allStatements)
     }
 

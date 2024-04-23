@@ -10,11 +10,7 @@ import {
 export const sqliteTypeEncoder = {
   bool: boolToBytes,
   text: (string: string) => textEncoder.encode(string),
-  json: (string: string) => {
-    const res = textEncoder.encode(string)
-    console.log('TEXTT ENCODED:\n' + res)
-    return res
-  },
+  json: (string: string) => textEncoder.encode(string),
   timetz: (string: string) =>
     sqliteTypeEncoder.text(stringToTimetzString(string)),
 }

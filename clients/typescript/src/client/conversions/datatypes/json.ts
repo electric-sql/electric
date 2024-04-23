@@ -15,8 +15,6 @@ export function serialiseJSON(v: JSON): string {
 }
 
 export function deserialiseJSON(v: string): JSON {
-  console.log('DESERIALISING:\n' + v)
-  console.log('PARSED:\n' + JSON.parse(v))
   if (v === JSON.stringify(null)) return { __is_electric_json_null__: true }
   return JSON.parse(v)
 }
