@@ -16,7 +16,6 @@ defmodule Electric.Satellite.Protocol.State do
             origin: "",
             subscriptions: %{},
             subscription_data_fun: nil,
-            sql_dialect: Electric.Postgres.Dialect.SQLite,
             move_in_data_fun: nil,
             sql_dialect: Electric.Postgres.Dialect.SQLite,
             telemetry: nil
