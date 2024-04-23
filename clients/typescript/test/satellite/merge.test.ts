@@ -202,7 +202,7 @@ const setupPG: SetupFn = async (t: ExecutionContext<unknown>) => {
   const defaults = satelliteDefaults(namespace)
   return [new PgDatabaseAdapter(db), pgBuilder, namespace, defaults]
 }
-  
+
 const setupPglite: SetupFn = async (t: ExecutionContext<unknown>) => {
   const db = new PGlite()
   t.teardown(async () => await db.close())
@@ -215,7 +215,7 @@ const setupPglite: SetupFn = async (t: ExecutionContext<unknown>) => {
   [
     ['SQLite', setupSqlite],
     ['Postgres', setupPG],
-    ['PGlite', setupPglite]
+    ['PGlite', setupPglite],
   ] as const
 ).forEach(([dialect, setup]) => {
   test(`(${dialect}) merge works on oplog entries`, async (t) => {
