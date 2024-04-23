@@ -6,13 +6,7 @@ export const pgTypeEncoder = {
   ...sqliteTypeEncoder,
   bool: boolToBytes,
   json: (x: JSON) => {
-    const str = JSON.stringify(x)
-    console.log('GONNA ENCODE:\n' + x)
-    console.log('SERIALISED:\n' + str)
-    const res = textEncoder.encode(str)
-    console.log('TEXT ENCODED:\n' + res)
-    //return textEncoder.encode(serialiseJSON(x))
-    return res
+    return textEncoder.encode(JSON.stringify(x))
   },
 }
 

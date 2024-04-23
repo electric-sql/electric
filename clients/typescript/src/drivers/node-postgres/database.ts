@@ -17,20 +17,15 @@ export interface Database {
 }
 
 export class ElectricDatabase implements Database {
-  constructor(
-    public name: string,
-    //private postgres: EmbeddedPostgres,
-    private db: Client
-  ) {}
+  constructor(public name: string, private db: Client) {}
 
   async exec(statement: Statement): Promise<QueryResult> {
-    try {
-      const { rows, rowCount } = await this.db.query<Row>({
-        text: statement.sql,
-        values: statement.args,
-        types: {
-          getTypeParser: ((oid: number) => {
-            /*
+    const { rows, rowCount } = await this.db.query<Row>({
+      text: statement.sql,
+      values: statement.args,
+      types: {
+        getTypeParser: ((oid: number) => {
+          /*
             // Modify the parser to not parse JSON values
             // Instead, return them as strings
             // our conversions will correctly parse them
@@ -42,40 +37,28 @@ export class ElectricDatabase implements Database {
             }
             */
 
-            if (
-              oid == pg.types.builtins.TIMESTAMP ||
-              oid == pg.types.builtins.TIMESTAMPTZ ||
-              oid == pg.types.builtins.DATE
-            ) {
-              // Parse timestamps and date values ourselves
-              // because the pg parser parses them differently from what we expect
-              const pgTypes = new Map([
-                [pg.types.builtins.TIME, PgDateType.PG_TIME],
-                [pg.types.builtins.TIMETZ, PgDateType.PG_TIMETZ],
-                [pg.types.builtins.TIMESTAMP, PgDateType.PG_TIMESTAMP],
-                [pg.types.builtins.TIMESTAMPTZ, PgDateType.PG_TIMESTAMPTZ],
-                [pg.types.builtins.DATE, PgDateType.PG_DATE],
-              ])
-              return (val: string) =>
-                deserialiseDate(val, pgTypes.get(oid) as PgDateType)
-            }
-            return originalGetTypeParser(oid)
-          }) as typeof pg.types.getTypeParser,
-        },
-      })
-      return {
-        rows,
-        rowsModified: rowCount ?? 0,
-      }
-    } catch (e) {
-      console.log(
-        'EXEC failed: ' +
-          JSON.stringify(e) +
-          '\n' +
-          'Statement was: ' +
-          JSON.stringify(statement)
-      )
-      throw e
+          if (
+            oid == pg.types.builtins.TIMESTAMP ||
+            oid == pg.types.builtins.TIMESTAMPTZ ||
+            oid == pg.types.builtins.DATE
+          ) {
+            // Parse timestamps and date values ourselves
+            // because the pg parser parses them differently from what we expect
+            const pgTypes = new Map([
+              [pg.types.builtins.TIMESTAMP, PgDateType.PG_TIMESTAMP],
+              [pg.types.builtins.TIMESTAMPTZ, PgDateType.PG_TIMESTAMPTZ],
+              [pg.types.builtins.DATE, PgDateType.PG_DATE],
+            ])
+            return (val: string) =>
+              deserialiseDate(val, pgTypes.get(oid) as PgDateType)
+          }
+          return originalGetTypeParser(oid)
+        }) as typeof pg.types.getTypeParser,
+      },
+    })
+    return {
+      rows,
+      rowsModified: rowCount ?? 0,
     }
   }
 }
