@@ -41,7 +41,7 @@ jobs:
           node-version: 18
           cache: pnpm
       - run: make deps
-      - run: pnpm run build
+      - run: pnpm run typecheck
   test:
     runs-on: ubuntu-latest
     strategy:
