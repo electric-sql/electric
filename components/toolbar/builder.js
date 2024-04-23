@@ -1,7 +1,10 @@
-const { build } = require('esbuild')
-const { dependencies } = require('./package.json')
+// const { build } = require('esbuild')
+import { build } from 'esbuild'
+import inlineImage from 'esbuild-plugin-inline-image'
+import packageJson from './package.json' assert { type: 'json' }
+const { dependencies } = packageJson
 
-const inlineImage = require('esbuild-plugin-inline-image')
+// const inlineImage = require('esbuild-plugin-inline-image')
 
 const entryFile = 'src/index.tsx'
 const shared = {

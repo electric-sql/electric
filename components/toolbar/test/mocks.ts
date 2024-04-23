@@ -7,7 +7,7 @@ export class MockIndexDB {
 
   deleteDatabase(name: string): IDBOpenDBRequest {
     this.deleted.push(name)
-    return new MockDeleteRequest() as IDBOpenDBRequest
+    return new MockDeleteRequest() as unknown as IDBOpenDBRequest
   }
 
   deletedDatabases(): string[] {
@@ -16,7 +16,7 @@ export class MockIndexDB {
 }
 
 export class MockDeleteRequest {
-  public onsuccess: () => void
+  constructor(public onsuccess: () => void = () => {}) {}
 }
 
 export class MockLocation {

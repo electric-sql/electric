@@ -1,12 +1,8 @@
-import { expect, test } from 'vitest'
-
-import browserEnv from '@ikscodes/browser-env'
-browserEnv()
-
-import Database, { SqliteError } from 'better-sqlite3'
+import { vi, expect, test } from 'vitest'
+import Database from 'better-sqlite3'
 import { MockRegistry } from 'electric-sql/satellite'
 import { electrify } from 'electric-sql/drivers/better-sqlite3'
-import { schema, Post } from './generated'
+import { schema } from './generated'
 import { clientApi } from '../src'
 import { MockIndexDB, MockLocation } from './mocks'
 
@@ -18,11 +14,10 @@ const electric = await electrify(
   { registry: new MockRegistry() },
 )
 
-electric.connect('test-token')
+await electric.connect('test-token')
 
 // test boilerplate copied from electric-sql/test/client/model/table.test.ts
 
-const electricDb = electric.db
 const tbl = electric.db.Post
 const postTable = tbl
 const userTable = electric.db.User
@@ -32,57 +27,6 @@ const profileTable = electric.db.Profile
 await postTable.sync()
 await userTable.sync()
 await profileTable.sync()
-
-const post1 = {
-  id: 1,
-  title: 't1',
-  contents: 'c1',
-  nbr: 18,
-  authorId: 1,
-}
-
-const commonNbr = 21
-
-const post2 = {
-  id: 2,
-  title: 't2',
-  contents: 'c2',
-  nbr: commonNbr,
-  authorId: 1,
-}
-
-const post3 = {
-  id: 3,
-  title: 't2',
-  contents: 'c3',
-  nbr: commonNbr,
-  authorId: 2,
-}
-
-const author1 = {
-  id: 1,
-  name: 'alice',
-}
-
-const profile1 = {
-  id: 1,
-  bio: 'bio 1',
-  userId: 1,
-}
-
-const author2 = {
-  id: 2,
-  name: 'bob',
-}
-
-const profile2 = {
-  id: 2,
-  bio: 'bio 2',
-  userId: 2,
-}
-
-const sortById = <T extends { id: number }>(arr: Array<T>) =>
-  arr.sort((a, b) => b.id - a.id)
 
 // Create a Post table in the DB first
 function clear() {
@@ -122,7 +66,6 @@ test('query_db', async () => {
 test('get_status', async () => {
   clear()
   const api = clientApi(electric.registry)
-  const sat = electric.registry.satellites[':memory:']
   const result = await api.getSatelliteStatus(':memory:')
   expect(result).toStrictEqual('disconnected')
 })
@@ -131,11 +74,17 @@ test('reset_db', async () => {
   clear()
   const mock = new MockIndexDB()
   const mockLocation = new MockLocation()
-  browserEnv.stub('window.indexedDB', mock)
-  browserEnv.stub('window.location', mockLocation)
+  vi.stubGlobal('window', {
+    ...window,
+    indexedDB: mock,
+    location: mockLocation,
+  })
+
+  // browserEnv.stub('window.indexedDB', mock)
+  // browserEnv.stub('window.location', mockLocation)
   const api = clientApi(electric.registry)
-  const result = await api.resetDB(':memory:')
+  await api.resetDB(':memory:')
   const deleted = mock.deletedDatabases()
   expect(deleted).toStrictEqual([':memory:'])
-  browserEnv.restore()
+  vi.unstubAllGlobals()
 })
