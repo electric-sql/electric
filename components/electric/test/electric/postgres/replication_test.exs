@@ -323,12 +323,7 @@ defmodule Electric.Postgres.ReplicationTest do
       assert %SatOpMigrate{version: ^version, stmts: stmts, affected_entity: {:enum_type, enum}} =
                msg
 
-      assert stmts == [
-               %SatOpMigrate.Stmt{
-                 type: :CREATE_ENUM_TYPE,
-                 sql: "-- CREATE TYPE \"public\".\"colour\" AS ENUM ('red','green','blue');\n"
-               }
-             ]
+      assert stmts == []
 
       assert enum == %SatOpMigrate.EnumType{name: "colour", values: ["red", "green", "blue"]}
 
