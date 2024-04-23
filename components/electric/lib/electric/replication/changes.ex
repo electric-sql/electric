@@ -26,11 +26,15 @@ defmodule Electric.Replication.Changes do
   @type tag() :: String.t()
   @type pk() :: [String.t(), ...]
 
-  @type change() ::
+  @type data_change() ::
           Changes.NewRecord.t()
           | Changes.UpdatedRecord.t()
           | Changes.DeletedRecord.t()
+
+  @type change() ::
+          data_change()
           | Changes.UpdatedPermissions.t()
+          | Changes.Migration.t()
 
   defmodule Transaction do
     alias Electric.Replication.Changes
@@ -83,7 +87,8 @@ defmodule Electric.Replication.Changes do
         deletes: 0,
         compensations: 0,
         truncates: 0,
-        gone: 0
+        gone: 0,
+        migration: 0
       }
 
       Enum.reduce(changes, base, fn %module{}, acc ->
@@ -95,6 +100,7 @@ defmodule Electric.Replication.Changes do
             Changes.Compensation -> :compensations
             Changes.TruncatedRelation -> :truncates
             Changes.Gone -> :gone
+            Changes.Migration -> :migration
           end
 
         Map.update!(%{acc | operations: acc.operations + 1}, key, &(&1 + 1))
@@ -239,6 +245,48 @@ defmodule Electric.Replication.Changes do
     @type t() ::
             %__MODULE__{type: :user, permissions: UserPermissions.t()}
             | %__MODULE__{type: :global, permissions: GlobalPermissions.t()}
+  end
+
+  defmodule Migration do
+    alias Electric.Postgres.Extension.SchemaLoader
+    alias Electric.Postgres
+
+    @relation Electric.Postgres.Extension.ddl_relation()
+
+    defmodule Ops do
+      defstruct sqlite: [], postgres: []
+
+      @type t() :: %__MODULE__{
+              sqlite: [%Electric.Satellite.SatOpMigrate{}],
+              postgres: [%Electric.Satellite.SatOpMigrate{}]
+            }
+    end
+
+    defstruct [
+      :version,
+      :schema,
+      :ddl,
+      :ops,
+      :relations,
+      # give this message a relation just to make it more compatible with other messages
+      relation: @relation
+    ]
+
+    @type t() :: %__MODULE__{
+            version: SchemaLoader.version(),
+            schema: SchemaLoader.Version.t(),
+            ddl: [String.t(), ...],
+            ops: Ops.t(),
+            relations: [Postgres.relation()],
+            relation: Postgres.relation()
+          }
+
+    @spec dialects() :: [{atom(), Electric.Postgres.Dialect.t()}]
+    def dialects do
+      [
+        sqlite: Electric.Postgres.Dialect.SQLite
+      ]
+    end
   end
 
   @spec filter_changes_belonging_to_user(Transaction.t(), binary()) :: Transaction.t()

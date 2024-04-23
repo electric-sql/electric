@@ -5,6 +5,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
   alias Electric.Replication.Changes
   alias Electric.Replication.Changes.NewRecord
   alias Electric.Replication.Changes.Transaction
+  alias Electric.Replication.Changes.Migration
   alias Electric.Replication.Postgres.MigrationConsumer
 
   @receive_timeout 500
@@ -211,7 +212,33 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
 
       GenStage.call(producer, {:emit, cxt.loader, events, version})
 
-      assert_receive {FakeConsumer, :events, ^events}, @receive_timeout
+      assert_receive {FakeConsumer, :events, events}, @receive_timeout
+
+      assert [
+               %Transaction{
+                 changes: [
+                   %Migration{
+                     version: "20220421",
+                     schema: %{version: "20220421"},
+                     ddl: [
+                       "create table something_else (id uuid primary key);",
+                       "create table other_thing (id uuid primary key);",
+                       "create table yet_another_thing (id uuid primary key);"
+                     ],
+                     relations: [
+                       {"public", "other_thing"},
+                       {"public", "something_else"},
+                       {"public", "yet_another_thing"}
+                     ]
+                   }
+                 ],
+                 commit_timestamp: ~U[2023-05-02 10:08:00.948788Z],
+                 origin: ^origin,
+                 publication: "mock_pub",
+                 origin_type: :postgresql
+               }
+             ] = events
+
       assert_receive {MockSchemaLoader, :load}, @receive_timeout
       # only 1 save instruction is observed
       assert_receive {MockSchemaLoader, {:save, ^version, schema, [_, _, _]}}, @receive_timeout
@@ -346,30 +373,29 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
         }
       ]
 
-      filtered_events = [
-        %Transaction{
-          changes: [
-            %NewRecord{
-              relation: {"electric", "ddl_commands"},
-              record: %{
-                "id" => "6",
-                "query" => "create table something_else (id uuid primary key);",
-                "txid" => "101",
-                "txts" => "201"
-              },
-              tags: []
-            }
-          ],
-          commit_timestamp: ~U[2023-05-02 10:08:00.948788Z],
-          origin: origin,
-          publication: "mock_pub",
-          origin_type: :postgresql
-        }
-      ]
-
       GenStage.call(producer, {:emit, cxt.loader, raw_events, version})
 
-      assert_receive {FakeConsumer, :events, ^filtered_events}, 1000
+      assert_receive {FakeConsumer, :events, filtered_events}, 1000
+
+      assert [
+               %Transaction{
+                 changes: [
+                   %Migration{
+                     version: "20220421",
+                     ddl: [
+                       "create table something_else (id uuid primary key);"
+                     ],
+                     relations: [{"public", "something_else"}],
+                     relation: {"electric", "ddl_commands"}
+                   }
+                 ],
+                 commit_timestamp: ~U[2023-05-02 10:08:00.948788Z],
+                 origin: ^origin,
+                 publication: "mock_pub",
+                 origin_type: :postgresql
+               }
+             ] = filtered_events
+
       assert_receive {MockSchemaLoader, :load}, 500
 
       assert_receive {MockSchemaLoader,
@@ -573,30 +599,20 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
       assert [
                %Transaction{
                  changes: [
-                   %NewRecord{
-                     relation: {"electric", "ddl_commands"},
-                     record: %{
-                       "id" => "6",
-                       "query" => "create table teams (id uuid primary key);",
-                       "txid" => "101",
-                       "txts" => "201"
-                     }
-                   },
-                   %NewRecord{
-                     relation: {"electric", "ddl_commands"},
-                     record: %{
-                       "id" => "7",
-                       "query" => """
+                   %Migration{
+                     version: "20220421",
+                     ddl: [
+                       "create table teams (id uuid primary key);",
+                       """
                        create table team_memberships (
                          id uuid primary key,
                          team_id uuid references teams (id),
                          user_id uuid references users (id),
                          team_role text not null
                        );
-                       """,
-                       "txid" => "101",
-                       "txts" => "201"
-                     }
+                       """
+                     ],
+                     schema: %{version: "20220421"}
                    },
                    %Changes.UpdatedPermissions{
                      type: :global,

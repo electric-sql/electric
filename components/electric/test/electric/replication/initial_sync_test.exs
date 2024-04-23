@@ -3,8 +3,8 @@ defmodule Electric.Replication.InitialSyncTest do
 
   import Electric.Postgres.TestConnection
 
-  alias Electric.Postgres.{CachedWal, Extension, Lsn}
-  alias Electric.Replication.Changes.{NewRecord, Transaction}
+  alias Electric.Postgres.{CachedWal, Lsn}
+  alias Electric.Replication.Changes.{Migration, Transaction}
   alias Electric.Replication.InitialSync
   alias Electric.Replication.Postgres.Client
 
@@ -48,15 +48,9 @@ defmodule Electric.Replication.InitialSyncTest do
       assert is_integer(xid)
       assert %DateTime{} = timestamp
 
-      migration_relation = Extension.ddl_relation()
-
-      assert %NewRecord{
-               relation: ^migration_relation,
-               record: %{
-                 "query" => "CREATE TABLE users" <> _,
-                 "version" => ^version_1
-               },
-               tags: []
+      assert %Migration{
+               version: ^version_1,
+               ddl: ["CREATE TABLE users" <> _]
              } = migration
 
       :ok = electrify_table(conn, "public.documents", version_2)
@@ -89,28 +83,18 @@ defmodule Electric.Replication.InitialSyncTest do
       assert %DateTime{} = timestamp1
       assert %DateTime{} = timestamp2
 
-      migration1_version = Map.fetch!(migration1.record, "version")
-      migration2_version = Map.fetch!(migration2.record, "version")
+      migration1_version = migration1.version
+      migration2_version = migration2.version
       assert migration1_version < migration2_version
 
-      migration_relation = Extension.ddl_relation()
-
       assert [
-               %NewRecord{
-                 relation: ^migration_relation,
-                 record: %{
-                   "query" => "CREATE TABLE users" <> _,
-                   "version" => ^migration1_version
-                 },
-                 tags: []
+               %Migration{
+                 ddl: ["CREATE TABLE users" <> _],
+                 version: ^migration1_version
                },
-               %NewRecord{
-                 relation: ^migration_relation,
-                 record: %{
-                   "query" => "CREATE TABLE documents" <> _,
-                   "version" => ^migration2_version
-                 },
-                 tags: []
+               %Migration{
+                 ddl: ["CREATE TABLE documents" <> _],
+                 version: ^migration2_version
                }
              ] = [migration1, migration2]
     end

@@ -9,8 +9,8 @@ defmodule Electric.Replication.InitialSync do
   alias Electric.Utils
   alias Electric.Telemetry.Metrics
   alias Electric.Replication.Shapes
-  alias Electric.Postgres.{CachedWal, Extension}
-  alias Electric.Replication.Changes.{NewRecord, Transaction}
+  alias Electric.Postgres.{CachedWal, Extension, Migration}
+  alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.Connectors
   alias Electric.Replication.Postgres.Client
 
@@ -29,32 +29,9 @@ defmodule Electric.Replication.InitialSync do
           Transaction.t()
         ]
   def migrations_since(version, origin, lsn \\ 0) do
-    publication = Extension.publication_name()
     {:ok, migrations} = Extension.SchemaCache.migration_history(origin, version)
 
-    for migration <- migrations do
-      records =
-        for sql <- migration.stmts do
-          %NewRecord{
-            relation: Extension.ddl_relation(),
-            record: %{
-              "version" => migration.version,
-              "query" => sql,
-              "txid" => migration.txid,
-              "txts" => migration.txts
-            }
-          }
-        end
-
-      %Transaction{
-        xid: migration.txid,
-        changes: records,
-        commit_timestamp: migration.timestamp,
-        origin: origin,
-        publication: publication,
-        lsn: lsn
-      }
-    end
+    Migration.to_transactions(migrations, origin, lsn)
   end
 
   @doc """

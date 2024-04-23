@@ -143,7 +143,7 @@ defmodule Electric.Postgres.Extension do
   defguard is_extension_relation(relation) when elem(relation, 0) == @schema
 
   defguard is_migration_relation(relation)
-           when relation in [{@schema, @version_relation}, {@schema, @ddl_relation}]
+           when relation in [{@schema, @electrified_tracking_relation}, {@schema, @ddl_relation}]
 
   defguard is_ddl_relation(relation) when relation == {@schema, @ddl_relation}
 
@@ -154,6 +154,10 @@ defmodule Electric.Postgres.Extension do
 
   def extract_ddl_sql(%{"txid" => _, "txts" => _, "query" => query}) do
     {:ok, query}
+  end
+
+  def extract_ddl_txid(%{"txid" => txid, "txts" => txts}) do
+    {:ok, {txid, txts}}
   end
 
   def schema_version(conn, version) do

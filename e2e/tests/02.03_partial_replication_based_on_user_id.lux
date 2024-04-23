@@ -26,12 +26,14 @@
     ?$psql
 
 [shell electric]
-    # We expect to send the transaction to both satellites
+    # migration is sent for both clients
+    ?+client_id=client_1_1 .+ user_id=1 \[debug\] trans:(.*)%Electric.Replication.Changes.Migration
+    ?client_id=client_2_1 .+ user_id=2 \[debug\] trans:(.*)%Electric.Replication.Changes.Migration
+    # the insert is only sent to user_id=1
     ?client_id=client_1_1 .+ user_id=1 \[debug\] trans:(.*)%Electric.Replication.Changes.NewRecord
-    ?client_id=client_2_1 .+ user_id=2 \[debug\] trans:(.*)%Electric.Replication.Changes.NewRecord
 
 [shell user_1_ws1]
-    # And recieve it on Satellite 1. Assertion for the row missing on Satellite 2 is above
+    # And receive it on Satellite 1. Assertion for the row missing on Satellite 2 is above
     ?rec \[\d+\]: %Electric.Satellite.SatOpLog\{(.*)row_data: %Electric\.Satellite\.SatOpRow\{
     ?values: \["00000000-0000-0000-0000-000000000000", "1", "sentinel value"\]
     ?\}
