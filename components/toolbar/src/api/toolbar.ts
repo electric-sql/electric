@@ -53,8 +53,10 @@ export class Toolbar implements ToolbarInterface {
     //@ts-expect-error accessing private field
     const manager = sat['subscriptions'] as SubscriptionsManager
     const shapes = JSON.parse(manager.serialize()) as Record<string, any>
-    return Object.values(shapes).flatMap((shapeDef) =>
-      shapeDef.map((x: any) => JSON.stringify(x.definition)),
+    return Object.entries(shapes).flatMap((shapeKeyDef) =>
+      shapeKeyDef[1].map((x: any) =>
+        JSON.stringify({ id: shapeKeyDef[0], ...x.definition }, null, 2),
+      ),
     )
   }
 

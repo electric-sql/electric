@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { Controlled as CodeMirrorControlled } from 'react-codemirror2'
 import { ToolbarTabsProps } from '../tabs'
 
 export default function ShapesTab({
@@ -20,12 +21,17 @@ export default function ShapesTab({
 
   return (
     <div>
-      <h4>Fulfilled shapes</h4>
-      <ul>
-        {shapes.map((shape) => (
-          <li>{shape}</li>
-        ))}
-      </ul>
+      <CodeMirrorControlled
+        value={shapes.join('\n')}
+        onBeforeChange={(_editor, _data, _value) => {}}
+        options={{
+          readOnly: true,
+          tabSize: 4,
+          mode: 'text',
+          theme: 'material',
+          lineNumbers: false,
+        }}
+      />
     </div>
   )
 }

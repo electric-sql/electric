@@ -1,8 +1,5 @@
 import React, { useState } from 'react'
 import { Controlled as CodeMirrorControlled } from 'react-codemirror2'
-import 'codemirror/lib/codemirror.css'
-import 'codemirror/theme/material.css'
-import 'codemirror/mode/sql/sql'
 import { ToolbarTabsProps } from '../tabs'
 
 export default function SQLTab({ dbName, api }: ToolbarTabsProps): JSX.Element {
