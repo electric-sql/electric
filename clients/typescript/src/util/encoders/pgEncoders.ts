@@ -1,5 +1,5 @@
 import { sqliteTypeEncoder, sqliteTypeDecoder } from './sqliteEncoders'
-import { textEncoder, textDecoder } from './common'
+import { textEncoder } from './common'
 import { trueByte, falseByte } from './common'
 
 export const pgTypeEncoder = {
@@ -13,7 +13,6 @@ export const pgTypeEncoder = {
 export const pgTypeDecoder = {
   ...sqliteTypeDecoder,
   bool: bytesToBool,
-  json: (bs: Uint8Array) => JSON.parse(textDecoder.decode(bs)),
 }
 
 function boolToBytes(b: boolean) {
