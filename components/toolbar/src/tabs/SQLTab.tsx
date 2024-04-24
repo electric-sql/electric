@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { UnControlled as CodeMirror } from 'react-codemirror2'
+import { Controlled as CodeMirrorControlled } from 'react-codemirror2'
 import 'codemirror/lib/codemirror.css'
 import 'codemirror/theme/material.css'
 import 'codemirror/mode/sql/sql'
@@ -11,7 +11,7 @@ export default function SQLTab({ dbName, api }: ToolbarTabsProps): JSX.Element {
   const [code, setCode] = useState(
     'SELECT name FROM sqlite_schema\n' +
       "WHERE type='table'\n" +
-      'ORDER BY name; ',
+      'ORDER BY name;',
   )
   const [response, setResponse] = useState('')
   const [history, setHistory] = useState('')
@@ -46,9 +46,9 @@ export default function SQLTab({ dbName, api }: ToolbarTabsProps): JSX.Element {
           </span>
         </div>
         <div className="mirror-in">
-          <CodeMirror
+          <CodeMirrorControlled
             value={code}
-            onChange={(_editor, _data, value) => {
+            onBeforeChange={(_editor, _data, value) => {
               setCode(value)
             }}
             options={{
@@ -81,9 +81,9 @@ export default function SQLTab({ dbName, api }: ToolbarTabsProps): JSX.Element {
           <span className="header-span">history</span>
         </div>
         <div className="mirror-in">
-          <CodeMirror
+          <CodeMirrorControlled
             value={history}
-            onChange={(_editor, _data, _value) => {}}
+            onBeforeChange={(_editor, _data, _value) => {}}
             options={{
               readOnly: true,
               tabSize: 4,
@@ -119,9 +119,9 @@ export default function SQLTab({ dbName, api }: ToolbarTabsProps): JSX.Element {
       <div className="mirror-column">
         <div className="mirror-header">results</div>
         <div className="mirror-in">
-          <CodeMirror
+          <CodeMirrorControlled
             value={response}
-            onChange={(_editor, _data, _value) => {}}
+            onBeforeChange={(_editor, _data, _value) => {}}
             options={{
               readOnly: true,
               tabSize: 4,
