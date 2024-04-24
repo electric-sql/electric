@@ -4,8 +4,9 @@ import LocalDBTab from './tabs/LocalDBTab'
 import SQLTab from './tabs/SQLTab'
 import StatusTab from './tabs/StatusTab'
 import { ToolbarInterface } from './api/interface'
+import ShapesTab from './tabs/ShapesTab'
 
-type TabName = 'status' | 'db' | 'sql'
+type TabName = 'status' | 'db' | 'sql' | 'shapes'
 
 function TabItem(
   label: string,
@@ -41,6 +42,8 @@ export default function ToolbarTabs({
         return <LocalDBTab dbName={dbName} api={api} />
       case 'sql':
         return <SQLTab dbName={dbName} api={api} />
+      case 'shapes':
+        return <ShapesTab dbName={dbName} api={api} />
       default:
         return <StatusTab dbName={dbName} api={api} />
     }
@@ -51,6 +54,7 @@ export default function ToolbarTabs({
       <ul className="Toolbar-tab-items">
         {TabItem('Connection', 'status', setActive, active)}
         {TabItem('Local DB', 'db', setActive, active)}
+        {TabItem('Shapes', 'shapes', setActive, active)}
         {TabItem('Shell', 'sql', setActive, active)}
       </ul>
       <div className="Toolbar-tab-content">{renderComp()}</div>
