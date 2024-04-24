@@ -11,12 +11,9 @@ export default function StatusTab({
   )
 
   useEffect(() => {
-    const interval = setInterval(
-      () => setStatus(api.getSatelliteStatus(dbName)),
-      300,
-    )
-    return () => clearInterval(interval)
-  }, [])
+    const unsubscribe = api.subscribeToSatelliteStatus(dbName, setStatus)
+    return unsubscribe
+  }, [dbName, api])
 
   if (!status) {
     return <div>Waiting for satellite process...</div>
