@@ -1,0 +1,110 @@
+[doc Electrifying a table with dropped columns ignores said columns]
+[include _shared.luxinc]
+[include _satellite_macros.luxinc]
+
+[invoke setup]
+
+# When a table column is dropped, Postgres keeps some information about it in the
+# "pg_attribute" system catalog. Because Electric relies on information in that catalog, this
+# test verifies that dropped columns do not have adverse effects on normal functioning of the sync
+# service.
+#
+# You can see what it looks like for yourself by creating the "entries" table, dropping its
+# "content_b" column and then running the following query via psql:
+#
+#     SELECT
+#       attname, atttypid, format_type(atttypid, atttypmod)
+#     FROM
+#       pg_attribute
+#     WHERE
+#       attrelid = 'entries'::regclass AND attnum > 0;
+#
+# That should produce the following output:
+#
+#                attname            │ atttypid │    format_type
+#     ──────────────────────────────┼──────────┼───────────────────
+#      id                           │     2950 │ uuid
+#      content                      │     1043 │ character varying
+#      ........pg.dropped.3........ │        0 │ -
+#     (3 rows)
+
+[shell pg_1]
+    !ALTER TABLE entries DROP COLUMN content_b;
+    ??ALTER TABLE
+    ??electric=#
+
+    -$fail_pattern|content_b|dropped
+
+[shell electric]
+    -$fail_pattern|content_b|dropped
+
+[shell proxy_1]
+    -$fail_pattern|content_b|dropped
+
+    !ALTER TABLE entries ENABLE ELECTRIC;
+    ??ELECTRIC ENABLE
+    ??electric=#
+
+[shell pg_1]
+    !\dt electric.*
+    ??electric | shadow__public__entries
+
+    # Verify column structure of the shadow table:
+    !SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = 'electric' AND table_name = 'shadow__public__entries';
+    ??        column_name         |     data_type
+    ??----------------------------+-------------------
+    ?? __reordered_content        | character varying
+    ?? id                         | uuid
+    ?? _tag_content               | USER-DEFINED
+
+# Start two clients and make conflicting writes on both to verify correct conflict resolution
+# that's not affected by the dropped column content_b.
+[invoke setup_client 1 "electric_1" 5133]
+[shell satellite_1]
+    ?send: #SatAuthReq\{id: ([a-f0-9-]{36})
+    [global client_1_id=$1]
+
+    [invoke node_sync_table "entries"]
+    [invoke client_disconnect]
+
+[invoke setup_client 2 "electric_1" 5133]
+[shell satellite_2]
+    ?send: #SatAuthReq\{id: ([a-f0-9-]{36})
+    [global client_2_id=$1]
+
+    [invoke node_sync_table "entries"]
+    [invoke client_disconnect]
+
+[shell satellite_1]
+    [invoke node_await_insert_extended_into "entries" "{id: '00000000-0000-0000-0000-000000000001', content: 'sat1'}"]
+
+[shell satellite_2]
+    [invoke node_await_insert_extended_into "entries" "{id: '00000000-0000-0000-0000-000000000001', content: 'sat2'}"]
+
+# Now reconnect both clients and verify the convergence between all three nodes.
+[shell satellite_1]
+    [invoke client_reconnect]
+    ?recv: #SatOpLog\{.*#Insert\{.*new: \["00000000-0000-0000-0000-000000000001", "sat
+
+[shell satellite_2]
+    [invoke client_reconnect]
+    ?recv: #SatOpLog\{.*#Insert\{.*new: \["00000000-0000-0000-0000-000000000001", "sat
+
+[shell pg_1]
+    !SELECT *, (CASE WHEN content = 'sat1' THEN '$client_1_id' ELSE '$client_2_id' END) FROM entries;
+    ?00000000-0000-0000-0000-000000000001 \| (sat(1|2))    \| ([a-f0-9-]{36})
+    [global lww_val=$1]
+    [global lww_client=$3]
+
+    !SELECT id, _tag_content FROM electric.shadow__public__entries;
+    ?00000000-0000-0000-0000-000000000001 \| \("[0-9-:.+ ]+",$lww_client\)
+
+[shell satellite_1]
+    [invoke node_await_get_from_table "entries" "$lww_val"]
+
+[shell satellite_2]
+    [invoke node_await_get_from_table "entries" "$lww_val"]
+
+[cleanup]
+    [invoke teardown]
+

@@ -8,5 +8,16 @@
     !\dt electric.*
     ??electric | shadow__public__entries
 
+[shell pg_1]
+    # Verify column structure of the shadow table:
+    !SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = 'electric' AND table_name = 'shadow__public__entries';
+    ??        column_name         |     data_type
+    ??----------------------------+-------------------
+    ?? __reordered_content        | character varying
+    ?? __reordered_content_b      | text
+    ?? id                         | uuid
+    ?? _tag_content               | USER-DEFINED
+    ?? _tag_content_b             | USER-DEFINED
+
 [cleanup]
     [invoke teardown]
