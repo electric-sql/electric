@@ -261,25 +261,25 @@ function joinColsForJSON(
   const transformIfNeeded = (col: string, targetedCol: string) => {
     const colType = colTypes[col]
 
-    // cast REALs, INT8s, BIGINTs to TEXT to work around SQLite's `json_object` bug
-    if (
-      colType === 'FLOAT4' ||
-      colType === 'REAL' ||
-      colType === 'DOUBLE PRECISION' ||
-      colType === 'FLOAT8' ||
-      colType === 'INT8' ||
-      colType === 'BIGINT'
-    ) {
-      return `cast(${targetedCol} as TEXT)`
-    }
+    switch (colType) {
+      case 'FLOAT4':
+      case 'REAL':
+      case 'DOUBLE PRECISION':
+      case 'FLOAT8':
+      case 'INT8':
+      case 'BIGINT':
+        // cast REALs, INT8s, BIGINTs to TEXT to work around SQLite's `json_object` bug
+        return `cast(${targetedCol} as TEXT)`
 
-    // transform blobs/bytestrings into hexadecimal strings for JSON encoding
-    if (colType === 'BYTEA') {
-      return `CASE WHEN ${targetedCol} IS NOT NULL THEN ${builder.toHex(
-        targetedCol
-      )} ELSE NULL END`
+      case 'BYTEA':
+        // transform blobs/bytestrings into hexadecimal strings for JSON encoding
+        return `CASE WHEN ${targetedCol} IS NOT NULL THEN ${builder.toHex(
+          targetedCol
+        )} ELSE NULL END`
+
+      default:
+        return targetedCol
     }
-    return targetedCol
   }
 
   if (typeof target === 'undefined') {
