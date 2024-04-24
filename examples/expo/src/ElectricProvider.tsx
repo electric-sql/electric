@@ -18,8 +18,7 @@ const ElectricProviderComponent = ({
   const [electric, setElectric] = useState<Electric>()
 
   useEffect(() => {
-    let isMounted = true
-
+    let client: Electric
     const init = async () => {
       const config = {
         debug: DEBUG_MODE,
@@ -27,12 +26,8 @@ const ElectricProviderComponent = ({
       }
 
       const conn = SQLite.openDatabaseSync('electric.db')
-      const client = await electrify(conn, schema, config)
+      client = await electrify(conn, schema, config)
       await client.connect(authToken())
-
-      if (!isMounted) {
-        return
-      }
 
       setElectric(client)
     }
@@ -40,7 +35,7 @@ const ElectricProviderComponent = ({
     init()
 
     return () => {
-      isMounted = false
+      client?.close()
     }
   }, [])
 
