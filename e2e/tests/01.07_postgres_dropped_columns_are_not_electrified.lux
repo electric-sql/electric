@@ -4,6 +4,30 @@
 
 [invoke setup]
 
+# When a table column is dropped, Postgres keeps some information about it in the
+# "pg_attribute" system catalog. Because Electric relies on information in that catalog, this
+# test verifies that dropped columns do not have adverse effects on normal functioning of the sync
+# service.
+#
+# You can see what it looks like for yourself by creating the "entries" table, dropping its
+# "content_b" column and then running the following query via psql:
+#
+#     SELECT
+#       attname, atttypid, format_type(atttypid, atttypmod)
+#     FROM
+#       pg_attribute
+#     WHERE
+#       attrelid = 'entries'::regclass AND attnum > 0;
+#
+# That should produce the following output:
+#
+#                attname            │ atttypid │    format_type
+#     ──────────────────────────────┼──────────┼───────────────────
+#      id                           │     2950 │ uuid
+#      content                      │     1043 │ character varying
+#      ........pg.dropped.3........ │        0 │ -
+#     (3 rows)
+
 [shell pg_1]
     !ALTER TABLE entries DROP COLUMN content_b;
     ??ALTER TABLE
