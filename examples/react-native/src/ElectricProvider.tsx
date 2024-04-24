@@ -14,7 +14,7 @@ const ElectricProviderComponent = ({children}: {children: React.ReactNode}) => {
   const [electric, setElectric] = useState<Electric>();
 
   useEffect(() => {
-    let isMounted = true;
+    let client: Electric;
 
     const init = async () => {
       const config = {
@@ -24,12 +24,8 @@ const ElectricProviderComponent = ({children}: {children: React.ReactNode}) => {
 
       const dbName = 'electric.db';
       const conn = openSQLiteConnection({name: dbName});
-      const client = await electrify(conn, dbName, schema, config);
+      client = await electrify(conn, dbName, schema, config);
       await client.connect(authToken());
-
-      if (!isMounted) {
-        return;
-      }
 
       setElectric(client);
     };
@@ -37,7 +33,7 @@ const ElectricProviderComponent = ({children}: {children: React.ReactNode}) => {
     init();
 
     return () => {
-      isMounted = false;
+      client?.close();
     };
   }, []);
 
