@@ -318,6 +318,9 @@ importers:
       esbuild-plugin-inline-image:
         specifier: ^0.0.9
         version: 0.0.9
+      esbuild-plugin-inline-import:
+        specifier: ^1.0.4
+        version: 1.0.4
       jsdom:
         specifier: 24.0.0
         version: 24.0.0
@@ -9935,6 +9938,10 @@ packages:
 
   /esbuild-plugin-inline-image@0.0.9:
     resolution: {integrity: sha512-pw3ZgN2phh32Z7BpKrhRDtmI+iVCl+Gc0BLOT9croXg1MnMjRuN7aXhIQirhLeK39erkIwfFlhy6xieroBGc1Q==}
+    dev: true
+
+  /esbuild-plugin-inline-import@1.0.4:
+    resolution: {integrity: sha512-ULt6a6Tsk8eIGaB6FjiJuqvQtql2WKYK3arMCDXatqKsifNDNgKrLq8WwavxEUPpZiNortaOvejzVikLQsM5iw==}
     dev: true
 
   /esbuild-sunos-64@0.15.18:
