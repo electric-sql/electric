@@ -39,8 +39,9 @@ defmodule Electric.Replication.PostgresInterop.Casting do
     end
   end
 
-  def parse_bool("t"), do: true
-  def parse_bool("f"), do: false
+  # Yes, Postgres really allows all of these in `SELECT 'tru'::boolean`
+  def parse_bool(x) when x in ~w|t tr tru true|, do: true
+  def parse_bool(x) when x in ~w|f fa fal fals false|, do: false
 
   def parse_uuid(maybe_uuid) do
     {:ok, value} = Utils.validate_uuid(maybe_uuid)

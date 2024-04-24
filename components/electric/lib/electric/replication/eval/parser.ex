@@ -228,6 +228,63 @@ defmodule Electric.Replication.Eval.Parser do
     end
   end
 
+  defp do_parse_and_validate_tree(
+         %PgQuery.NullTest{argisrow: false, location: loc} = test,
+         refs,
+         env
+       ) do
+    with {:ok, arg} <- do_parse_and_validate_tree(test.arg, refs, env) do
+      arg =
+        case arg do
+          %UnknownConst{} = unknown -> infer_unknown(unknown)
+          arg -> arg
+        end
+
+      func =
+        if test.nulltesttype == :IS_NULL, do: &Kernel.is_nil/1, else: &(not Kernel.is_nil(&1))
+
+      maybe_reduce(%Func{
+        strict?: false,
+        location: loc,
+        args: [arg],
+        implementation: func,
+        type: :bool,
+        name: Atom.to_string(test.nulltesttype)
+      })
+    end
+  end
+
+  defp do_parse_and_validate_tree(
+         %PgQuery.BooleanTest{location: loc} = test,
+         refs,
+         env
+       ) do
+    with {:ok, arg} <- do_parse_and_validate_tree(test.arg, refs, env),
+         {:ok, [arg]} <- cast_unknowns([arg], [:bool], env) do
+      if arg.type == :bool do
+        func =
+          case test.booltesttype do
+            :IS_TRUE -> &(&1 == true)
+            :IS_NOT_TRUE -> &(&1 != true)
+            :IS_FALSE -> &(&1 == false)
+            :IS_NOT_FALSE -> &(&1 != false)
+          end
+
+        maybe_reduce(%Func{
+          strict?: false,
+          location: loc,
+          args: [arg],
+          implementation: func,
+          type: :bool,
+          name: Atom.to_string(test.booltesttype)
+        })
+      else
+        operator = unsnake(Atom.to_string(test.booltesttype))
+        {:error, {loc, "argument of #{operator} must be bool, not #{arg.type}"}}
+      end
+    end
+  end
+
   # Explicitly fail on "sublinks" - subqueries are not allowed in any context here
   defp do_parse_and_validate_tree(%PgQuery.SubLink{location: loc}, _, _),
     do: {:error, {loc, "subqueries are not supported"}}
@@ -613,4 +670,6 @@ defmodule Electric.Replication.Eval.Parser do
   defp find_refs(%Const{}, acc), do: acc
   defp find_refs(%Ref{path: path, type: type}, acc), do: Map.put_new(acc, path, type)
   defp find_refs(%Func{args: args}, acc), do: Enum.reduce(args, acc, &find_refs/2)
+
+  defp unsnake(string) when is_binary(string), do: :binary.replace(string, "_", " ", [:global])
 end
