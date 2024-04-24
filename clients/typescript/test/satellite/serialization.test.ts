@@ -89,7 +89,7 @@ test('serialize/deserialize row data', async (t) => {
     blob3: null,
     int1: 1,
     int2: -30,
-    bigint1: 31447483647n,
+    bigint1: '31447483647',
     bigint2: null,
     float1: 1.0,
     float2: -30.3,
@@ -133,11 +133,7 @@ test('serialize/deserialize row data', async (t) => {
   )
 
   const d_row = deserializeRow(s_row, rel, dbDescription)
-  t.deepEqual(d_row, {
-    ...record,
-    // BigInts are deserialised as strings
-    bigint1: '31447483647',
-  })
+  t.deepEqual(d_row, record)
 
   // Test edge cases for floats such as NaN, Infinity, -Infinity
   const record2: Record = {

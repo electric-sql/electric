@@ -512,7 +512,7 @@ export const opLogEntryToChange = (
  * @returns a stringified JSON with stable sorting on column names
  */
 export const primaryKeyToStr = <
-  T extends Record<string, string | number | bigint | Uint8Array>
+  T extends Record<string, string | number | Uint8Array>
 >(
   primaryKeyObj: T
 ): string => {

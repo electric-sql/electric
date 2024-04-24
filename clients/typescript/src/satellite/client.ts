@@ -1399,7 +1399,7 @@ function deserializeColumnData(
 
 // All values serialized as textual representation
 function serializeColumnData(
-  columnValue: string | number | bigint | object,
+  columnValue: string | number | object,
   columnType: PgType
 ): Uint8Array {
   switch (columnType) {
