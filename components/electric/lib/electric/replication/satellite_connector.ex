@@ -20,17 +20,16 @@ defmodule Electric.Replication.SatelliteConnector do
 
   @impl Supervisor
   def init(%{name: name, producer: producer, origin: origin}) do
-    # `cancel: :temporary` is used here since the death of the Satellite WS process will eventually kill the supervisor,
-    # but it'll kill SatelliteCollectorConsumer first and cause it to restart with nowhere to resubscribe.
-    children = [
-      {SatelliteCollectorConsumer,
-       name: SatelliteCollectorConsumer.name(name),
-       subscribe_to: [{producer, cancel: :temporary}],
-       push_to: SatelliteCollectorProducer.name(origin)},
-      {Electric.Postgres.CachedWal.Producer,
-       name: Electric.Postgres.CachedWal.Producer.name(name), origin: origin}
+    # `cancel: :temporary` is used here since the death of the Satellite WS process will
+    # eventually kill the supervisor, but it'll kill SatelliteCollectorConsumer first and cause
+    # it to restart with nowhere to resubscribe.
+    consumer_opts = [
+      name: SatelliteCollectorConsumer.name(name),
+      subscribe_to: [{producer, cancel: :temporary}],
+      push_to: SatelliteCollectorProducer.name(origin)
     ]
 
+    children = [{SatelliteCollectorConsumer, consumer_opts}]
     Supervisor.init(children, strategy: :one_for_one)
   end
 end

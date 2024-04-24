@@ -139,10 +139,10 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
       wal_window_size: Keyword.fetch!(opts, :wal_window_size)
     }
 
-    case Keyword.get(opts, :subscribe_to) do
-      nil -> {:consumer, state}
-      subscription -> {:consumer, state, subscribe_to: subscription}
-    end
+    producer_opts =
+      [dispatcher: GenStage.BroadcastDispatcher] ++ Keyword.take(opts, [:subscribe_to])
+
+    {:producer_consumer, state, producer_opts}
   end
 
   defp ets_table_name(origin) do
@@ -218,8 +218,8 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
   @impl GenStage
   @spec handle_events([Transaction.t()], term(), state()) :: {:noreply, [], any}
 
-  def handle_events([tx | _] = events, from, %{first_wal_pos: nil} = state) do
-    wal_pos = lsn_to_position(tx.lsn)
+  def handle_events([txn | _] = events, from, %{first_wal_pos: nil} = state) do
+    wal_pos = lsn_to_position(txn.lsn)
     Logger.debug("Initializing first_wal_pos=#{wal_pos}")
     handle_events(events, from, %{state | first_wal_pos: wal_pos})
   end
@@ -227,47 +227,49 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
   def handle_events(events, _from, state) do
     # TODO: Make sure that when this process crashes, LogicalReplicationProducer is restarted as well
     # in order to fill up the in-memory cache.
-    events
-    # TODO: We're currently storing & streaming empty transactions to Satellite, which is not ideal, but we need
-    #       to be aware of all transaction IDs and LSNs that happen, otherwise flakiness begins. I don't like that,
-    #       so we probably want to be able to store a shallower pair than a full transaction object and handle that
-    #       appropriately in the consumers. Or something else.
-    #
-    #
-    # 9 Apr 2024. ALCO's UPDATE TO THE ABOVE NOTE FROM ILIA:
-    #
-    # Versions of Postgres before 15 include all transactions in the logical replication
-    # stream, even those that touched tables not included in electric_publication. That is the
-    # source of empty transactions Electric sees on the replication stream. I'm not aware of
-    # other sources of such transactions that have an empty list of changes.
-    #
-    # Since version 15.0, Postgres no longer sends such empty transactions. It stands to reason
-    # that this whole comment blob can be removed for good.
-    #
-    # Here's the relevant change in Postgres' source tree -
-    # https://www.postgresql.org/message-id/E1nZNz3-001zFN-UA%40gemulon.postgresql.org
-    |> Stream.each(
-      &Logger.debug(
-        "Saving transaction #{&1.xid} at #{&1.lsn} with changes #{inspect(&1.changes)}"
+
+    {txns, last_wal_pos} =
+      events
+      # TODO: We're currently storing & streaming empty transactions to Satellite, which is not ideal, but we need
+      #       to be aware of all transaction IDs and LSNs that happen, otherwise flakiness begins. I don't like that,
+      #       so we probably want to be able to store a shallower pair than a full transaction object and handle that
+      #       appropriately in the consumers. Or something else.
+      #
+      #
+      # 9 Apr 2024. ALCO's UPDATE TO THE ABOVE NOTE FROM ILIA:
+      #
+      # Versions of Postgres before 15 include all transactions in the logical replication
+      # stream, even those that touched tables not included in electric_publication. That is the
+      # source of empty transactions Electric sees on the replication stream. I'm not aware of
+      # other sources of such transactions that have an empty list of changes.
+      #
+      # Since version 15.0, Postgres no longer sends such empty transactions. It stands to reason
+      # that this whole comment blob can be removed for good.
+      #
+      # Here's the relevant change in Postgres' source tree -
+      # https://www.postgresql.org/message-id/E1nZNz3-001zFN-UA%40gemulon.postgresql.org
+      |> Stream.each(
+        &Logger.debug(
+          "Saving transaction #{&1.xid} at #{&1.lsn} with changes #{inspect(&1.changes)}"
+        )
       )
-    )
-    |> Stream.map(fn %Transaction{} = tx -> {lsn_to_position(tx.lsn), tx} end)
-    |> Enum.to_list()
-    |> tap(&:ets.insert(state.table, &1))
-    |> List.last()
-    |> case do
-      nil ->
-        # All transactions were empty
-        {:noreply, [], state}
+      |> Enum.map_reduce(nil, fn %Transaction{} = txn, _ ->
+        wal_pos = lsn_to_position(txn.lsn)
+        {{wal_pos, txn}, wal_pos}
+      end)
 
-      {position, _} ->
-        state =
-          %{state | last_seen_wal_pos: position}
-          |> fulfill_notification_requests()
-          |> trim_cache()
+    if txns != [], do: :ets.insert(state.table, txns)
 
-        {:noreply, [], state}
-    end
+    state =
+      if last_wal_pos do
+        %{state | last_seen_wal_pos: last_wal_pos}
+        |> fulfill_notification_requests()
+        |> trim_cache()
+      else
+        state
+      end
+
+    {:noreply, txns, state}
   end
 
   @impl GenStage

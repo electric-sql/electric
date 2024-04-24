@@ -210,7 +210,7 @@ defmodule Electric.Satellite.WebsocketServer do
     # migrations_since() but before the client subscribes to the replication stream. If the migration was immediately
     # followed by another write in PG, we could have fetched the LSN of this last write with get_current_position() and
     # thus miss the migration committed just before it.
-    client_pos = CachedWal.Api.get_current_position(origin)
+    client_pos = CachedWal.Api.get_current_position(origin) || 0
 
     _ = maybe_pause(origin, client_pos)
 
@@ -221,7 +221,7 @@ defmodule Electric.Satellite.WebsocketServer do
     # which by definition aren't shape-dependent, so actions are always empty
     {msgs, {%{}, _}, state} =
       migrations
-      |> Enum.map(&{&1, &1.lsn})
+      |> Enum.map(&{&1.lsn, &1})
       |> Protocol.handle_outgoing_txs(state)
 
     max_txid = migrations |> Enum.map(& &1.xid) |> Enum.max(fn -> 0 end)

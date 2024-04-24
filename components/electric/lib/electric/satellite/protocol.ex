@@ -33,7 +33,7 @@ defmodule Electric.Satellite.Protocol do
   @type outgoing() :: {deep_msg_list(), State.t()} | {:error, deep_msg_list(), State.t()}
   @type txn_processing() :: {deep_msg_list(), actions(), State.t()}
 
-  @producer_demand 5
+  @max_demand 10
 
   @spec handle_rpc_request(PB.rpc_req(), State.t()) ::
           {:error, %SatErrorResp{} | PB.rpc_resp()}
@@ -574,10 +574,11 @@ defmodule Electric.Satellite.Protocol do
     end
   end
 
-  @spec handle_outgoing_txs([{Transaction.t(), term()}], State.t()) :: txn_processing()
+  @spec handle_outgoing_txs([{CachedWal.Api.wal_pos(), Transaction.t()}], State.t()) ::
+          txn_processing()
   def handle_outgoing_txs(events, state, acc \\ {[], {%{}, []}})
 
-  def handle_outgoing_txs([{tx, offset} | events], %State{} = state, {msgs_acc, actions_acc})
+  def handle_outgoing_txs([{wal_pos, tx} | events], %State{} = state, {msgs_acc, actions_acc})
       when can_send_more_txs(state) do
     {%Transaction{} = filtered_tx, new_graph, actions} =
       process_transaction(tx, state.out_rep.sent_rows_graph, state)
@@ -601,7 +602,7 @@ defmodule Electric.Satellite.Protocol do
             {filtered_tx, actions_acc}
           end
 
-        {relations, transaction, out_rep} = handle_outgoing_tx({filtered_tx, offset}, state)
+        {relations, transaction, out_rep} = handle_outgoing_tx({wal_pos, filtered_tx}, state)
 
         out_rep =
           %OutRep{out_rep | sent_rows_graph: new_graph}
@@ -613,7 +614,7 @@ defmodule Electric.Satellite.Protocol do
         {state.out_rep, {msgs_acc, actions_acc}}
       end
 
-    out_rep = %OutRep{out_rep | last_seen_wal_pos: offset}
+    out_rep = %OutRep{out_rep | last_seen_wal_pos: wal_pos}
     state = %State{state | out_rep: out_rep}
     handle_outgoing_txs(events, state, acc)
   end
@@ -656,14 +657,13 @@ defmodule Electric.Satellite.Protocol do
 
   defp maybe_strip_migration_ddl(tx, _), do: tx
 
-  # The offset here comes from the producer
   @spec handle_outgoing_tx({Transaction.t(), any}, State.t()) ::
           {[%SatRelation{}], [%SatOpLog{}], OutRep.t()}
-  defp handle_outgoing_tx({tx, offset}, %State{out_rep: out_rep}) do
-    Logger.debug("trans: #{inspect(tx)} with offset #{inspect(offset)}")
+  defp handle_outgoing_tx({wal_pos, tx}, %State{out_rep: out_rep}) do
+    Logger.debug("trans: #{inspect(tx)} with wal_pos=#{inspect(wal_pos)}")
 
     {serialized_log, unknown_relations, known_relations} =
-      Serialization.serialize_trans(tx, offset, out_rep.relations)
+      Serialization.serialize_trans(tx, wal_pos, out_rep.relations)
 
     if unknown_relations != [],
       do: Logger.debug("Sending previously unseen relations: #{inspect(unknown_relations)}")
@@ -679,13 +679,13 @@ defmodule Electric.Satellite.Protocol do
 
     {pid, ref} =
       Utils.GenStageHelpers.gproc_subscribe_self!(
-        to: CachedWal.Producer.name(state.client_id),
+        to: CachedWal.Api.default_module().name(state.origin),
         start_subscription: client_pos,
         min_demand: 5,
-        max_demand: 10
+        max_demand: @max_demand
       )
 
-    Utils.GenStageHelpers.ask({pid, ref}, @producer_demand)
+    Utils.GenStageHelpers.ask({pid, ref}, @max_demand)
 
     CachedWal.Api.cancel_reservation(state.origin, state.client_id)
 
@@ -801,7 +801,7 @@ defmodule Electric.Satellite.Protocol do
   def send_events_and_maybe_pause(events, %State{out_rep: out_rep} = state) do
     {{xmin, kind, ref}, _} = out_rep.pause_queue
 
-    {events, pending} = Enum.split_while(events, fn {tx, _} -> tx.xid < xmin end)
+    {events, pending} = Enum.split_while(events, fn {_, tx} -> tx.xid < xmin end)
     {msgs, actions, state} = handle_outgoing_txs(events, state)
 
     if is_out_rep_suspended(state) or pending == [] do
