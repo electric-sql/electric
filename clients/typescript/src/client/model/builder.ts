@@ -30,7 +30,7 @@ squelPostgres.registerValueHandler(Uint8Array, function (uint8) {
 type AnyFindInput = FindInput<any, any, any, any, any>
 
 export class Builder {
-  private _fullyQualifiedTableName: string
+  private _quotedTableName: string
 
   constructor(
     private _tableName: string,
@@ -50,20 +50,17 @@ export class Builder {
     >,
     public dialect: Dialect
   ) {
-    this._fullyQualifiedTableName = `"${this._tableName}"`
+    this._quotedTableName = `"${this._tableName}"`
     squelPostgres.cls.DefaultQueryBuilderOptions.nameQuoteCharacter = '"'
     squelPostgres.cls.DefaultQueryBuilderOptions.autoQuoteFieldNames = true
     if (dialect === 'Postgres') {
-      //squelPostgres.cls.DefaultQueryBuilderOptions.autoQuoteTableNames = true
-
-      // need to register it, otherwise squel complains that the Date type is not registered
-      // as Squel does not support it out-of-the-box but our Postgres drivers do support it.
+      // need to register the Date type
+      // as Squel does not support it out-of-the-box
+      // but our Postgres drivers do support it.
       squelPostgres.registerValueHandler(Date, (date) => date)
-      //this._fullyQualifiedTableName = `public."${this._tableName}"`
     } else {
       // Don't use numbered parameters if dialect is SQLite
       squelPostgres.cls.DefaultQueryBuilderOptions.numberedParameters = false
-      //this._fullyQualifiedTableName = `main."${this._tableName}"`
     }
   }
 
@@ -71,7 +68,7 @@ export class Builder {
     // Make a SQL query out of the data
     const query = squelPostgres
       .insert()
-      .into(this._fullyQualifiedTableName)
+      .into(this._quotedTableName)
       .setFields(i.data)
 
     // Adds a `RETURNING` statement that returns all known fields
@@ -82,7 +79,7 @@ export class Builder {
   createMany(i: CreateManyInput<any>): QueryBuilder {
     const insert = squelPostgres
       .insert()
-      .into(this._fullyQualifiedTableName)
+      .into(this._quotedTableName)
       .setFieldsRows(i.data)
     return i.skipDuplicates
       ? insert.onConflict() // adds "ON CONFLICT DO NOTHING" to the query
@@ -127,9 +124,7 @@ export class Builder {
     i: DeleteManyInput<any>,
     idRequired = false
   ): QueryBuilder {
-    const deleteQuery = squelPostgres
-      .delete()
-      .from(this._fullyQualifiedTableName)
+    const deleteQuery = squelPostgres.delete().from(this._quotedTableName)
     const whereObject = i.where // safe because the schema for `where` adds an empty object as default which is provided if the `where` field is absent
     const fields = this.getFields(whereObject, idRequired)
     return addFilters(fields, whereObject, deleteQuery)
@@ -152,7 +147,7 @@ export class Builder {
 
     const query = squelPostgres
       .update()
-      .table(this._fullyQualifiedTableName)
+      .table(this._quotedTableName)
       .setFields(i.data)
 
     // Adds a `RETURNING` statement that returns all known fields
@@ -189,7 +184,7 @@ export class Builder {
     // and squel would add quotes around the entire cast
     const query = squelPostgres
       .select({ autoQuoteFieldNames: false })
-      .from(this._fullyQualifiedTableName) // specify from which table to select
+      .from(this._quotedTableName) // specify from which table to select
     // only select the fields provided in `i.select` and the ones in `i.where`
     const addFieldSelectionP = this.addFieldSelection.bind(
       this,
