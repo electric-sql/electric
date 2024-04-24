@@ -5,8 +5,6 @@ import 'codemirror/theme/material.css'
 import 'codemirror/mode/sql/sql'
 import { ToolbarTabsProps } from '../tabs'
 
-import './mirror.css'
-
 export default function SQLTab({ dbName, api }: ToolbarTabsProps): JSX.Element {
   const [code, setCode] = useState(
     'SELECT name FROM sqlite_schema\n' +

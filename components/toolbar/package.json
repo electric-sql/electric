@@ -31,6 +31,7 @@
     "electric-sql": "workspace:*",
     "esbuild": "^0.20.2",
     "esbuild-plugin-inline-image": "^0.0.9",
+    "esbuild-plugin-inline-import": "^1.0.4",
     "jsdom": "24.0.0",
     "prettier": "3.2.5",
     "typescript": "^5.4.5",

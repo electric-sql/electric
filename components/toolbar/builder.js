@@ -1,10 +1,8 @@
-// const { build } = require('esbuild')
 import { build } from 'esbuild'
 import inlineImage from 'esbuild-plugin-inline-image'
+import inlineImport from 'esbuild-plugin-inline-import'
 import packageJson from './package.json' assert { type: 'json' }
 const { dependencies } = packageJson
-
-// const inlineImage = require('esbuild-plugin-inline-image')
 
 const entryFile = 'src/index.tsx'
 const shared = {
@@ -15,20 +13,29 @@ const shared = {
   logLevel: 'info',
   minify: true,
   sourcemap: true,
+  target: ['esnext', 'node12.22.0'],
+  plugins: [
+    inlineImage(),
+    inlineImport({
+      transform: (content) => {
+        // Remove comments
+        content = content.replace(/\/\*[\s\S]*?\*\//g, '')
+        // Remove whitespace and newlines
+        content = content.replace(/\n/g, '').replace(/\s\s+/g, ' ')
+        return content
+      },
+    }),
+  ],
 }
 
 build({
   ...shared,
   format: 'esm',
   outfile: './dist/index.esm.js',
-  target: ['esnext', 'node12.22.0'],
-  plugins: [inlineImage()],
 })
 
 build({
   ...shared,
   format: 'cjs',
   outfile: './dist/index.cjs.js',
-  target: ['esnext', 'node12.22.0'],
-  plugins: [inlineImage()],
 })
