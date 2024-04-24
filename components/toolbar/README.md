@@ -28,18 +28,15 @@ Add the toolbar to your project's `devDependencies` in `package.json`
     }
 ```
 
-First some imports 
-
-```typescript
-import { addToolbar } from '@electric-sql/debug-toolbar'
-import '@electric-sql/debug-toolbar/dist/index.cjs.css'
-```
-
-Then in your code after calling `electrify` pass the electric client into `addToolbar`:
+In your code after calling `electrify`, if in debug mode, import and pass the electric client into `addToolbar`:
 
 ```typescript
 const electric = await electrify(conn, schema, config)
-addToolbar(electric)
+
+if (config.debug) {
+  import('@electric-sql/debug-toolbar')
+    .then(({ addToolbar }) => addToolbar(electric))
+}
 ```
 
 This will add the toolbar to the bottom of your window
