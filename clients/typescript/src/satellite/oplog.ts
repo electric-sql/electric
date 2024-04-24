@@ -350,6 +350,8 @@ function serialiseRow(row?: Rec): string {
  */
 function deserialiseRow(str: string, rel: Pick<Relation, 'columns'>): Rec {
   return JSON.parse(str, (key, value) => {
+    if (value === null) return null
+
     const columnType = rel.columns
       .find((c) => c.name === key)
       ?.type?.toUpperCase()
