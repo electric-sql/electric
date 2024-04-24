@@ -1,10 +1,12 @@
 defmodule Electric.Satellite.WebsocketServerTest do
   use ExUnit.Case, async: false
 
+  alias Electric.Replication.Changes.ReferencedRecord
   use Electric.Satellite.Protobuf
 
   import ElectricTest.SetupHelpers
   import ElectricTest.SatelliteHelpers
+  import Satellite.ProtocolHelpers
 
   alias Electric.Replication.SatelliteConnector
   alias Electric.Postgres.CachedWal.Producer
@@ -29,6 +31,11 @@ defmodule Electric.Satellite.WebsocketServerTest do
   @test_oid 100_004
   @test_migration {"20230101",
                    "CREATE TABLE #{@test_schema}.#{@test_table} (id uuid PRIMARY KEY, electric_user_id VARCHAR(64), content VARCHAR(64))"}
+  @test_fk_migration {"20230101",
+                      [
+                        "CREATE TABLE public.test1 (id TEXT PRIMARY KEY, electric_user_id VARCHAR(64), content VARCHAR(64))",
+                        "CREATE TABLE public.test_child (id TEXT PRIMARY KEY, electric_user_id VARCHAR(64), parent_id TEXT REFERENCES test1 (id))"
+                      ]}
 
   @current_wal_pos 1
 
@@ -413,6 +420,59 @@ defmodule Electric.Satellite.WebsocketServerTest do
       end)
     end
 
+    @tag with_migrations: [@test_fk_migration]
+    test "compensations are filtered based on electric_user_id", ctx do
+      with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->
+        rel_map = start_replication_and_assert_response(conn, 2)
+
+        [{client_name, _client_pid}] = active_clients()
+        mocked_producer = Producer.name(client_name)
+
+        {sub_id, req_id, req} =
+          simple_sub_request(test1: [include: [test_child: [over: "parent_id"]]])
+
+        assert {:ok, %SatSubsResp{subscription_id: ^sub_id, err: nil}} =
+                 MockClient.make_rpc_call(conn, "subscribe", req)
+
+        # The real data function would have made a magic write which we're emulating here
+        DownstreamProducerMock.produce(mocked_producer, build_events([], 1))
+        assert {[^req_id], []} = receive_subscription_data(conn, sub_id)
+
+        :ok =
+          DownstreamProducerMock.produce(
+            mocked_producer,
+            %Changes.Transaction{
+              lsn: 2,
+              xid: 2,
+              commit_timestamp: DateTime.utc_now(),
+              referenced_records: %{
+                {"public", "test1"} => %{
+                  ["1"] => %ReferencedRecord{
+                    pk: ["1"],
+                    record: %{"id" => "1", "electric_user_id" => "not you", "content" => "wow"},
+                    relation: {"public", "test1"}
+                  }
+                }
+              },
+              changes: [
+                %NewRecord{
+                  relation: {"public", "test_child"},
+                  record: %{
+                    "id" => "child_1",
+                    "electric_user_id" => "not you",
+                    "parent_id" => "1"
+                  }
+                }
+              ],
+              origin: ctx.client_id
+            }
+            |> then(&[{&1, 2}])
+          )
+
+        assert [] = receive_txn_changes(conn, rel_map)
+      end)
+    end
+
     @tag with_migrations: [@test_migration]
     test "Start/stop replication", ctx do
       limit = 10
@@ -715,7 +775,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
   describe "Incoming replication (Satellite -> PG)" do
     @tag with_migrations: [
            {"20230815",
-            ~s'CREATE TABLE #{@test_schema}.#{@test_table} (id uuid PRIMARY KEY, "satellite-column-1" TEXT, "satellite-column-2" VARCHAR)'}
+            ~s'CREATE TABLE #{@test_schema}.#{@test_table} (id TEXT PRIMARY KEY, "satellite-column-1" TEXT, "satellite-column-2" VARCHAR)'}
          ]
     test "common replication", ctx do
       self = self()
