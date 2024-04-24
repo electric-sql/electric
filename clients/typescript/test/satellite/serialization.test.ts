@@ -25,6 +25,8 @@ test('serialize/deserialize row data', async (t) => {
       { name: 'blob3', type: 'BYTEA', isNullable: true },
       { name: 'int1', type: 'INTEGER', isNullable: true },
       { name: 'int2', type: 'INTEGER', isNullable: true },
+      { name: 'bigint1', type: 'INT8', isNullable: true },
+      { name: 'bigint2', type: 'INT8', isNullable: true },
       { name: 'float1', type: 'REAL', isNullable: true },
       { name: 'float2', type: 'FLOAT4', isNullable: true },
       { name: 'float3', type: 'FLOAT8', isNullable: true },
@@ -49,6 +51,8 @@ test('serialize/deserialize row data', async (t) => {
           ['blob3', PgBasicType.PG_BYTEA],
           ['int1', PgBasicType.PG_INTEGER],
           ['int2', PgBasicType.PG_INTEGER],
+          ['bigint1', PgBasicType.PG_INT8],
+          ['bigint2', PgBasicType.PG_INT8],
           ['float1', PgBasicType.PG_REAL],
           ['float2', PgBasicType.PG_FLOAT4],
           ['float3', PgBasicType.PG_FLOAT8],
@@ -85,6 +89,8 @@ test('serialize/deserialize row data', async (t) => {
     blob3: null,
     int1: 1,
     int2: -30,
+    bigint1: 31447483647n,
+    bigint2: null,
     float1: 1.0,
     float2: -30.3,
     float3: 5e234,
@@ -113,6 +119,8 @@ test('serialize/deserialize row data', async (t) => {
       'blob',
       '1',
       '-30',
+      '31447483647',
+      '',
       '1',
       '-30.3',
       '5e+234',
@@ -125,7 +133,11 @@ test('serialize/deserialize row data', async (t) => {
   )
 
   const d_row = deserializeRow(s_row, rel, dbDescription)
-  t.deepEqual(d_row, record)
+  t.deepEqual(d_row, {
+    ...record,
+    // BigInts are deserialised as strings
+    bigint1: '31447483647',
+  })
 
   // Test edge cases for floats such as NaN, Infinity, -Infinity
   const record2: Record = {
@@ -137,6 +149,8 @@ test('serialize/deserialize row data', async (t) => {
     blob3: null,
     int1: null,
     int2: null,
+    bigint1: null,
+    bigint2: null,
     float1: NaN,
     float2: Infinity,
     float3: -Infinity,
@@ -162,6 +176,8 @@ test('serialize/deserialize row data', async (t) => {
       'blob',
       'blob',
       'blob',
+      '',
+      '',
       '',
       '',
       'NaN',

@@ -350,6 +350,8 @@ function serialiseRow(row?: Rec): string {
  */
 function deserialiseRow(str: string, rel: Pick<Relation, 'columns'>): Rec {
   return JSON.parse(str, (key, value) => {
+    if (value === null) return null
+
     const columnType = rel.columns
       .find((c) => c.name === key)
       ?.type?.toUpperCase()
@@ -510,7 +512,7 @@ export const opLogEntryToChange = (
  * @returns a stringified JSON with stable sorting on column names
  */
 export const primaryKeyToStr = <
-  T extends Record<string, string | number | Uint8Array>
+  T extends Record<string, string | number | BigInt | Uint8Array>
 >(
   primaryKeyObj: T
 ): string => {
