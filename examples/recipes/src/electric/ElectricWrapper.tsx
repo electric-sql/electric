@@ -11,11 +11,14 @@ const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
 // eslint-disable-next-line react-refresh/only-export-components
 export { useElectric }
 
+const { tabId } = uniqueTabId()
+const scopedDbName = `recipes-${LIB_VERSION}-${tabId}.db`
+
 export function ElectricWrapper(props: { children: ReactElement[] | ReactElement }) {
   const [electric, setElectric] = useState<Electric>()
 
   useEffect(() => {
-    let isMounted = true
+    let client: Electric
 
     const init = async () => {
       const config = {
@@ -23,24 +26,17 @@ export function ElectricWrapper(props: { children: ReactElement[] | ReactElement
         url: import.meta.env.ELECTRIC_SERVICE,
       }
 
-      const { tabId } = uniqueTabId()
-      const scopedDbName = `recipes-${LIB_VERSION}-${tabId}.db`
-
       const conn = await ElectricDatabase.init(scopedDbName)
-      const electric = await electrify(conn, schema, config)
-      await electric.connect(authToken())
+      client = await electrify(conn, schema, config)
+      await client.connect(authToken())
 
-      if (!isMounted) {
-        return
-      }
-
-      setElectric(electric)
+      setElectric(client)
     }
 
     init()
 
     return () => {
-      isMounted = false
+      client?.close()
     }
   }, [])
 
