@@ -81,7 +81,8 @@ BEGIN
         $function$
         DECLARE
             built_row %4$s%%ROWTYPE;
-            current_row %4$s%%ROWTYPE;
+            -- Must be a `RECORD`, because `%%ROWTYPE` respects column order instead of column names when doing `SELECT INTO`.
+            current_row RECORD;
             tombstone_row <%= schema() %>.%3$I%%ROWTYPE;
             old_row_found boolean;
         BEGIN
