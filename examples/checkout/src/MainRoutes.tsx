@@ -34,28 +34,28 @@ interface MainRoutesProps {
   onElectricLoaded: () => void
 }
 
-const MainRoutes = ({onElectricLoaded}: MainRoutesProps) => {
+const { tabId } = uniqueTabId()
+const scopedDbName = `basic-${LIB_VERSION}-${tabId}.db`
+
+const MainRoutes = ({ onElectricLoaded }: MainRoutesProps) => {
   const [electric, setElectric] = useState<Electric>()
   const { supabase } = useContext(SupabaseContext)!
 
   useEffect(() => {
-    let isMounted = true
+    let client: Electric
 
     const init = async () => {
       const token = await getSupabaseJWT(supabase)
 
       const config = {
-        debug: true,//import.meta.env.DEV,
+        debug: true, //import.meta.env.DEV,
         url: import.meta.env.ELECTRIC_URL,
       }
-
-      const { tabId } = uniqueTabId()
-      const scopedDbName = `basic-${LIB_VERSION}-${tabId}.db`
 
       console.log(config)
 
       const conn = await ElectricDatabase.init(scopedDbName)
-      const client = await electrify(conn, schema, config)
+      client = await electrify(conn, schema, config)
       await client.connect(token)
 
       // This is a simplification for now until we have "shapes"
@@ -81,10 +81,6 @@ const MainRoutes = ({onElectricLoaded}: MainRoutesProps) => {
       await syncBaskets.synced
       await syncOrders.synced
 
-      if (!isMounted) {
-        return
-      }
-
       onElectricLoaded()
       setElectric(client)
     }
@@ -92,7 +88,7 @@ const MainRoutes = ({onElectricLoaded}: MainRoutesProps) => {
     init()
 
     return () => {
-      isMounted = false
+      client?.close()
     }
   }, [supabase])
 
