@@ -17,7 +17,7 @@ When starting the Electric server, specify which signature verification algorith
 $ docker run \
     -e AUTH_JWT_ALG=ES256 \
     -e AUTH_JWT_KEY="$(cat public_key.pem)" \
-    electric-sql/electric
+    electricsql/electric
 ```
 
 Now, all you need to authenticate your client is a JWT that includes a `sub` claim (formerly `user_id`) and is signed using the same `ES256` algorithm and the matching private key.

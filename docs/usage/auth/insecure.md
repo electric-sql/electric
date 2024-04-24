@@ -16,7 +16,7 @@ Insecure mode is convenient to use in development and testing. However, you must
 When starting the Electric server, make the `AUTH_MODE` environment variable with the value `insecure` available to it. For example,
 
 ```shell
-$ docker run -e AUTH_MODE=insecure electric-sql/electric
+$ docker run -e AUTH_MODE=insecure electricsql/electric
 ```
 
 Now, all you need to authenticate your client is a JWT with a `sub` claim (formerly `user_id`). You can use https://token.dev/ to craft a token with static claims and then copy-paste it into your client app. Alternatively, you can use something like the following function to generate JWTs at run time:
