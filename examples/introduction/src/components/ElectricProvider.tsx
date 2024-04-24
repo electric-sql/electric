@@ -15,22 +15,18 @@ const ElectricProvider = ({ children, dbName }: Props) => {
   const [electric, setElectric] = useState<Electric>()
 
   useEffect(() => {
-    let isMounted = true
+    let client: Electric
 
     const init = async () => {
-      const electric = await initElectric(dbName)
+      client = await initElectric(dbName)
 
-      if (!isMounted) {
-        return
-      }
-
-      setElectric(electric)
+      setElectric(client)
     }
 
     init()
 
     return () => {
-      isMounted = false
+      client?.close()
     }
   }, [])
 
