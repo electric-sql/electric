@@ -1,5 +1,5 @@
 import { ToolbarInterface } from './interface'
-import { Row, Statement, ConnectivityStatus } from 'electric-sql/util'
+import { Row, Statement, ConnectivityState } from 'electric-sql/util'
 import { Registry, GlobalRegistry } from 'electric-sql/satellite'
 
 export class Toolbar implements ToolbarInterface {
@@ -13,9 +13,9 @@ export class Toolbar implements ToolbarInterface {
     return Object.keys(this.registry.satellites)
   }
 
-  getSatelliteStatus(name: string): ConnectivityStatus | 'Not found' {
+  getSatelliteStatus(name: string): ConnectivityState | null {
     const sat = this.registry.satellites[name]
-    return sat?.connectivityState?.status ?? 'Not found'
+    return sat?.connectivityState ?? null
   }
 
   resetDB(dbName: string): Promise<void> {

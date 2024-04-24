@@ -67,7 +67,7 @@ test('get_status', async () => {
   clear()
   const api = clientApi(electric.registry)
   const result = await api.getSatelliteStatus(':memory:')
-  expect(result).toStrictEqual('disconnected')
+  expect(result?.status).toStrictEqual('disconnected')
 })
 
 test('reset_db', async () => {
