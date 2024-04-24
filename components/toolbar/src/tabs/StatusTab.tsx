@@ -21,6 +21,10 @@ export default function StatusTab({
 
   return (
     <div>
+      <button onClick={() => api.toggleSatelliteStatus(dbName)}>
+        TOGGLE CONNECTION
+      </button>
+
       <ul>
         <li>status: {status.status}</li>
         {status.reason && <li>reason: {status.reason.message}</li>}

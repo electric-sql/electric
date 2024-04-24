@@ -9,6 +9,9 @@ export interface ToolbarInterface {
     name: string,
     callback: (connectivityState: ConnectivityState) => void,
   ): UnsubscribeFunction
+
+  toggleSatelliteStatus(name: string): Promise<void>
+
   resetDB(dbName: string): Promise<void>
   queryDB(dbName: string, statement: Statement): Promise<Row[]>
 }

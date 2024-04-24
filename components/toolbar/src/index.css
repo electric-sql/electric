@@ -155,7 +155,6 @@
 .Toolbar-tab-content button {
   all: revert;
   margin-right: 10px;
-  float: left;
   color: #61dafb;
   border-style: solid;
   border-width: 1px;
