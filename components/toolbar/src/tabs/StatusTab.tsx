@@ -6,7 +6,9 @@ export default function StatusTab({
   dbName,
   api,
 }: ToolbarTabsProps): JSX.Element {
-  const [status, setStatus] = useState<ConnectivityState | null>(null)
+  const [status, setStatus] = useState<ConnectivityState | null>(
+    api.getSatelliteStatus(dbName),
+  )
 
   useEffect(() => {
     const interval = setInterval(
