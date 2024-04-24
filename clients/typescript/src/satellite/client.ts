@@ -1444,11 +1444,9 @@ function deserializeColumnData(
       return decoder.timetz(column)
     case PgBasicType.PG_BYTEA:
       return decoder.bytea(column)
-    /*
     case PgBasicType.PG_JSON:
     case PgBasicType.PG_JSONB:
-      return (decoder.json as any)(column)
-    */
+      return decoder.json(column)
     default:
       // also covers user-defined enumeration types
       return decoder.text(column)
