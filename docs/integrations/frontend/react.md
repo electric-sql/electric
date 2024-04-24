@@ -46,25 +46,21 @@ export const ElectricWrapper = ({ children }) => {
   const [ electric, setElectric ] = useState<Electric>()
 
   useEffect(() => {
-    let isMounted = true
+    let client: Electric
 
     const init = async () => {
       const conn = await ElectricDatabase.init('electric.db')
-      const electric = await electrify(conn, schema)
+      client = await electrify(conn, schema)
       const token = insecureAuthToken({sub: 'dummy'})
-      await electric.connect(token)
+      await client.connect(token)
 
-      if (!isMounted) {
-        return
-      }
-
-      setElectric(electric)
+      setElectric(client)
     }
 
     init()
 
     return () => {
-      isMounted = false
+      client?.close()
     }
   }, [])
 
