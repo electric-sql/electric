@@ -3,7 +3,7 @@ import React, { useEffect } from 'react'
 import 'codemirror/lib/codemirror.css'
 import 'codemirror/theme/material.css'
 import 'codemirror/mode/sql/sql'
-import style from 'inline:./index.css'
+import style from './index.css'
 
 import logo from './logo.svg'
 import { useState } from 'react'

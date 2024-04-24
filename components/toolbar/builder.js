@@ -17,6 +17,7 @@ const shared = {
   plugins: [
     inlineImage(),
     inlineImport({
+      filter: /index\.css$/,
       transform: (content) => {
         // Remove comments
         content = content.replace(/\/\*[\s\S]*?\*\//g, '')

@@ -60,7 +60,7 @@ export class Toolbar implements ToolbarInterface {
     )
   }
 
-  resetDB(dbName: string): Promise<void> {
+  resetDb(dbName: string): Promise<void> {
     const DBDeleteRequest = window.indexedDB.deleteDatabase(dbName)
     DBDeleteRequest.onsuccess = () =>
       console.log('Database deleted successfully')
@@ -72,7 +72,7 @@ export class Toolbar implements ToolbarInterface {
     return Promise.resolve()
   }
 
-  queryDB(dbName: string, statement: Statement): Promise<Row[]> {
+  queryDb(dbName: string, statement: Statement): Promise<Row[]> {
     const sat = this.getSatellite(dbName)
     return sat.adapter.query(statement)
   }

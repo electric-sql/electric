@@ -14,6 +14,6 @@ export interface ToolbarInterface {
 
   getSatelliteShapeSubscriptions(name: string): string[]
 
-  resetDB(dbName: string): Promise<void>
-  queryDB(dbName: string, statement: Statement): Promise<Row[]>
+  resetDb(dbName: string): Promise<void>
+  queryDb(dbName: string, statement: Statement): Promise<Row[]>
 }

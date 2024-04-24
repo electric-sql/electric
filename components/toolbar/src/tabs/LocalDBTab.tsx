@@ -8,7 +8,7 @@ export default function LocalDBTab({
   return (
     <div>
       <h3>{dbName}</h3>
-      <button onClick={() => api.resetDB(dbName)}>RESET </button>
+      <button onClick={() => api.resetDb(dbName)}>RESET </button>
     </div>
   )
 }
