@@ -1443,7 +1443,7 @@ function deserializeColumnData(
     case PgDateType.PG_TIMETZ:
       return decoder.timetz(column)
     case PgBasicType.PG_BYTEA:
-      return column
+      return decoder.bytea(column)
     /*
     case PgBasicType.PG_JSON:
     case PgBasicType.PG_JSONB:
@@ -1467,7 +1467,7 @@ function serializeColumnData(
     case PgDateType.PG_TIMETZ:
       return encoder.timetz(columnValue as string)
     case PgBasicType.PG_BYTEA:
-      return columnValue as Uint8Array
+      return encoder.bytea(columnValue as Uint8Array)
     case PgBasicType.PG_JSON:
     case PgBasicType.PG_JSONB:
       return (encoder.json as any)(columnValue)
