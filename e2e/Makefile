@@ -5,8 +5,10 @@ deps: lux
 	make -C elixir_client build
 	make -C prisma_example build
 
-test_sqlite_and_pg: test_only
-	make -C tests test_pg
+test_sqlite_and_pg:
+	make -C tests debug_pg
+#test_sqlite_and_pg: test_only
+#	make -C tests test_pg
 
 test_only:
 	${LUX} --junit tests

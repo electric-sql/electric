@@ -340,7 +340,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
             advance_up_to_new_wal_pos(graph, advance_graph_fn, client_id, txn_stream)
 
           Logger.debug(
-            "Advancing graph for #{inspect(client_id)} from #{inspect(acked_wal_pos)} to #{inspect(new_wal_pos)} by #{count} txns"
+            "Advancing graph for #{inspect(client_id)} from #{inspect(acked_wal_pos)} to #{inspect(new_wal_pos)} by #{count} txns - discarded acc is: #{inspect(discarded_acc)}"
           )
 
           if map_size(pending_actions) > 0 do
@@ -349,6 +349,10 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
 
           {new_graph, discarded_acc} =
             advance_by_additional_data(new_graph, client_id, received_data, discarded_acc)
+
+          Logger.debug(
+            "Discarded acc: #{inspect(discarded_acc)}"
+          )
 
           Client.pooled_transaction(origin, fn ->
             delete_discarded_cache_entries(discarded_acc)

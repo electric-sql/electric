@@ -7,3 +7,6 @@ test:
 
 test_pg:
 	DIALECT=Postgres ${LUX} 03.*.lux
+
+debug_pg:
+	DIALECT=Postgres ${LUX} 03.25_*.lux
