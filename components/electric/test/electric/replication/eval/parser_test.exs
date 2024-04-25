@@ -368,5 +368,51 @@ defmodule Electric.Replication.Eval.ParserTest do
 
       assert %Const{value: true, type: :bool} = result
     end
+
+    test "should support IS and IS NOT NULL" do
+      env = Env.new()
+
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(~S|null IS NULL|, %{}, env)
+
+      assert %Const{value: true, type: :bool} = result
+
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(~S|false IS NOT NULL|, %{}, env)
+
+      assert %Const{value: true, type: :bool} = result
+
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(~S|(1 = NULL) IS NULL|, %{}, env)
+
+      assert %Const{value: true, type: :bool} = result
+    end
+
+    test "should support IS and IS NOT TRUE/FALSE" do
+      env = Env.new()
+
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(~S|'true' IS TRUE|, %{}, env)
+
+      assert %Const{value: true, type: :bool} = result
+
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(~S|false IS NOT FALSE|, %{}, env)
+
+      assert %Const{value: false, type: :bool} = result
+
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(~S|null IS NOT FALSE|, %{}, env)
+
+      assert %Const{value: true, type: :bool} = result
+
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(~S|null IS TRUE|, %{}, env)
+
+      assert %Const{value: false, type: :bool} = result
+
+      assert {:error, "At location 2: argument of IS TRUE must be bool, not int4"} =
+               Parser.parse_and_validate_expression(~S|1 IS TRUE|, %{}, env)
+    end
   end
 end
