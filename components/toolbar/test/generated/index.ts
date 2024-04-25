@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from '../../node_modules/electric-sql/node_modules/zod'
 import type { Prisma } from './prismaClient'
 import {
   type TableSchema,
