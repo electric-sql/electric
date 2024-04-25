@@ -169,9 +169,12 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
   end
 
   defp produce_txs(producer, txs) when is_list(txs) do
-    MockProducer.produce(producer, txs)
+    # provide some unique marker that we can wait on
+    [txn | rest] = txs
+    xid = System.system_time(:millisecond)
+    MockProducer.produce(producer, [%{txn | xid: xid} | rest])
 
-    assert_receive {MockConsumer, :events, ^txs}, 1000
+    assert_receive {MockConsumer, :events, [%{xid: ^xid} | _rest]}, 1000
   end
 
   defp migration_transaction(conn, version, stmts) do

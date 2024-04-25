@@ -1,9 +1,9 @@
-defmodule Electric.Postgres.ReplicationTest do
+defmodule Electric.Postgres.MigrationTest do
   use ExUnit.Case, async: true
 
   use Electric.Satellite.Protobuf
 
-  alias Electric.Postgres.{Replication, Schema, Extension.SchemaLoader}
+  alias Electric.Postgres.{Migration, Schema, Extension.SchemaLoader}
 
   def parse(sql) do
     Electric.Postgres.parse!(sql)
@@ -18,7 +18,7 @@ defmodule Electric.Postgres.ReplicationTest do
 
     for {sql, expected_type} <- stmts do
       [ast] = parse(sql)
-      assert Replication.stmt_type(ast) == expected_type
+      assert Migration.stmt_type(ast) == expected_type
     end
   end
 
@@ -40,7 +40,7 @@ defmodule Electric.Postgres.ReplicationTest do
       create table teeth.front (id int8 primary key);
       """
       |> parse()
-      |> Replication.affected_tables()
+      |> Migration.affected_tables()
       |> assert_table_list([{"public", "fish"}, {"public", "frog"}, {"teeth", "front"}])
     end
 
@@ -51,7 +51,7 @@ defmodule Electric.Postgres.ReplicationTest do
       alter table teeth.front alter column id drop default;
       """
       |> parse()
-      |> Replication.affected_tables()
+      |> Migration.affected_tables()
       |> assert_table_list([{"public", "fish"}, {"public", "frog"}, {"teeth", "front"}])
     end
 
@@ -62,7 +62,7 @@ defmodule Electric.Postgres.ReplicationTest do
       alter table teeth.front alter column id drop default;
       """
       |> parse()
-      |> Replication.affected_tables()
+      |> Migration.affected_tables()
       |> assert_table_list([{"public", "fish"}, {"public", "frog"}, {"teeth", "front"}])
     end
 
@@ -72,7 +72,7 @@ defmodule Electric.Postgres.ReplicationTest do
       alter table fish alter column id drop default;
       """
       |> parse()
-      |> Replication.affected_tables()
+      |> Migration.affected_tables()
       |> assert_table_list([{"public", "fish"}])
     end
 
@@ -82,7 +82,7 @@ defmodule Electric.Postgres.ReplicationTest do
       create index on frog (id asc);
       """
       |> parse()
-      |> Replication.affected_tables()
+      |> Migration.affected_tables()
       |> assert_table_list([])
     end
 
@@ -102,7 +102,7 @@ defmodule Electric.Postgres.ReplicationTest do
       for stmt <- stmts do
         stmt
         |> parse()
-        |> Replication.affected_tables()
+        |> Migration.affected_tables()
         |> assert_table_list([])
       end
     end
@@ -124,7 +124,7 @@ defmodule Electric.Postgres.ReplicationTest do
       version = "20230405134615"
       schema_version = SchemaLoader.Version.new(version, schema)
 
-      assert {:ok, [msg], [{"public", "fish"}]} = Replication.migrate(schema_version, stmt)
+      assert {:ok, [msg], [{"public", "fish"}]} = Migration.to_op(stmt, schema_version)
 
       # there are lots of tests that validate the schema is being properly updated
       # assert Schema.table_names(schema) == [~s("public"."fish"), ~s("frog"), ~s("teeth"."front")]
@@ -165,7 +165,7 @@ defmodule Electric.Postgres.ReplicationTest do
       schema = schema_update(schema, stmt)
       schema_version = SchemaLoader.Version.new(version, schema)
 
-      assert {:ok, [msg], [{"teeth", "front"}]} = Replication.migrate(schema_version, stmt)
+      assert {:ok, [msg], [{"teeth", "front"}]} = Migration.to_op(stmt, schema_version)
       assert Schema.table_names(schema) == [~s("public"."fish"), ~s("teeth"."front")]
       assert %SatOpMigrate{version: ^version} = msg
       %{stmts: stmts, table: table} = msg
@@ -210,7 +210,7 @@ defmodule Electric.Postgres.ReplicationTest do
       version = "20230405134615"
       schema_version = SchemaLoader.Version.new(version, schema)
 
-      assert {:ok, [_msg], [{"public", "fish"}]} = Replication.migrate(schema_version, stmt)
+      assert {:ok, [_msg], [{"public", "fish"}]} = Migration.to_op(stmt, schema_version)
 
       # there are lots of tests that validate the schema is being properly updated
       assert Schema.table_names(schema) == [~s("public"."fish")]
@@ -221,7 +221,7 @@ defmodule Electric.Postgres.ReplicationTest do
       schema = schema_update(schema, stmt)
       schema_version = SchemaLoader.Version.new(version, schema)
 
-      assert {:ok, [msg], [{"public", "fish"}]} = Replication.migrate(schema_version, stmt)
+      assert {:ok, [msg], [{"public", "fish"}]} = Migration.to_op(stmt, schema_version)
 
       assert %SatOpMigrate{version: ^version} = msg
 
@@ -269,14 +269,14 @@ defmodule Electric.Postgres.ReplicationTest do
       version = "20230405134615"
       schema_version = SchemaLoader.Version.new(version, schema)
 
-      assert {:ok, [_msg], [{"public", "fish"}]} = Replication.migrate(schema_version, stmt)
+      assert {:ok, [_msg], [{"public", "fish"}]} = Migration.to_op(stmt, schema_version)
 
       stmt = "CREATE INDEX fish_available_index ON public.fish (avilable);"
       schema = schema_update(schema, stmt)
 
       version = "20230405134616"
       schema_version = SchemaLoader.Version.new(version, schema)
-      assert {:ok, [msg], []} = Replication.migrate(schema_version, stmt)
+      assert {:ok, [msg], []} = Migration.to_op(stmt, schema_version)
       assert %SatOpMigrate{version: ^version} = msg
 
       %{stmts: stmts, table: table} = msg
@@ -309,7 +309,7 @@ defmodule Electric.Postgres.ReplicationTest do
       schema_version = SchemaLoader.Version.new(version, schema)
 
       for stmt <- stmts do
-        assert {:ok, [], []} = Replication.migrate(schema_version, stmt)
+        assert {:ok, [], []} = Migration.to_op(stmt, schema_version)
       end
     end
 
@@ -331,7 +331,7 @@ defmodule Electric.Postgres.ReplicationTest do
     #   version = "20230405134615"
     #   schema_version = SchemaLoader.Version.new(version, schema)
 
-    #   assert {:error, schema} = Replication.migrate(schema_version, stmts)
+    #   assert {:error, schema} = Migration.to_op(stmts, schema_version)
     # end
   end
 end

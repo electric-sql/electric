@@ -3,7 +3,6 @@ defmodule Electric.Postgres.TestConnection do
   import ExUnit.Assertions
 
   alias Electric.Replication.{Postgres.Client, PostgresConnector, PostgresConnectorMng}
-  alias Electric.Postgres.Extension
 
   require Electric.Postgres.Extension
 
@@ -215,9 +214,24 @@ defmodule Electric.Postgres.TestConnection do
       & &1
     )
     |> Stream.reject(&(&1.changes == []))
-    |> Stream.take(10)
-    |> Enum.find(&Enum.all?(&1.changes, fn x -> Extension.is_ddl_relation(x.relation) end)) ||
-      flunk("Migration statements didn't show up in the cached WAL")
+    |> Enum.reduce_while(10, fn
+      _tx, 0 ->
+        {:halt, :error}
+
+      %{changes: changes}, n ->
+        if Enum.any?(changes, &is_struct(&1, Electric.Replication.Changes.Migration)) do
+          {:halt, :ok}
+        else
+          {:cont, n - 1}
+        end
+    end)
+    |> case do
+      :ok ->
+        :ok
+
+      :error ->
+        flunk("Migration statements didn't show up in the cached WAL")
+    end
 
     [electrified_count: electrified_count]
   end

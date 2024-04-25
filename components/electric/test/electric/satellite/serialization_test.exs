@@ -396,54 +396,69 @@ defmodule Electric.Satellite.SerializationTest do
     test "writes to electric ddl table are recognised as migration ops", cxt do
       version = "20220421"
 
-      tx = %Transaction{
-        changes: [
-          %Electric.Replication.Changes.UpdatedRecord{
-            relation: {"electric", "ddl_commands"},
-            old_record: nil,
-            record: %{
-              "id" => "6",
-              "query" => "create table something_else (id uuid primary key);",
-              "txid" => "100",
-              "txts" => "200"
-            },
-            tags: ["postgres_1@1682019749178"]
+      changes = [
+        %Electric.Replication.Changes.NewRecord{
+          relation: {"electric", "ddl_commands"},
+          record: %{
+            "id" => "6",
+            "query" => "create table something_else (id uuid primary key);",
+            "txid" => "100",
+            "txts" => "200"
           },
-          %Electric.Replication.Changes.UpdatedRecord{
-            relation: {"electric", "ddl_commands"},
-            old_record: nil,
-            record: %{
-              "id" => "7",
-              "query" => "create table other_thing (id uuid primary key);",
-              "txid" => "100",
-              "txts" => "200"
-            },
-            tags: ["postgres_1@1682019749178"]
+          tags: ["postgres_1@1682019749178"]
+        },
+        %Electric.Replication.Changes.NewRecord{
+          relation: {"electric", "ddl_commands"},
+          record: %{
+            "id" => "7",
+            "query" => "create table other_thing (id uuid primary key);",
+            "txid" => "100",
+            "txts" => "200"
           },
-          %Electric.Replication.Changes.UpdatedRecord{
-            relation: {"electric", "ddl_commands"},
-            old_record: nil,
-            record: %{
-              "id" => "8",
-              "query" => "create table yet_another_thing (id uuid primary key);",
-              "txid" => "100",
-              "txts" => "200"
-            },
-            tags: ["postgres_1@1682019749178"]
-          }
-        ],
-        commit_timestamp: ~U[2023-04-20 14:05:31.416063Z],
-        origin: cxt.origin,
-        publication: "all_tables",
-        lsn: %Lsn{segment: 0, offset: 0},
-        origin_type: :postgresql
-      }
+          tags: ["postgres_1@1682019749178"]
+        },
+        %Electric.Replication.Changes.NewRecord{
+          relation: {"electric", "ddl_commands"},
+          record: %{
+            "id" => "8",
+            "query" => "create table yet_another_thing (id uuid primary key);",
+            "txid" => "100",
+            "txts" => "200"
+          },
+          tags: ["postgres_1@1682019749178"]
+        }
+      ]
+
+      tx =
+        %Transaction{
+          changes: changes,
+          commit_timestamp: ~U[2023-04-20 14:05:31.416063Z],
+          origin: cxt.origin,
+          publication: "all_tables",
+          lsn: %Lsn{segment: 0, offset: 0},
+          origin_type: :postgresql
+        }
 
       migrate_schema(tx, version, cxt)
 
-      {oplog,
-       [{"public", "something_else"}, {"public", "other_thing"}, {"public", "yet_another_thing"}],
-       %{}} = Serialization.serialize_trans(tx, 1, %{})
+      # The migration consumer replaces the series of NewRecords against the ddl table
+      # into a single migration message
+      tx =
+        %Transaction{
+          changes: Electric.Postgres.Migration.State.convert(changes, cxt.loader),
+          commit_timestamp: ~U[2023-04-20 14:05:31.416063Z],
+          origin: cxt.origin,
+          publication: "all_tables",
+          lsn: %Lsn{segment: 0, offset: 0},
+          origin_type: :postgresql
+        }
+
+      assert {oplog,
+              [
+                {"public", "other_thing"},
+                {"public", "something_else"},
+                {"public", "yet_another_thing"}
+              ], %{}} = Serialization.serialize_trans(tx, 1, %{})
 
       assert [%SatOpLog{ops: ops}] = oplog
 
