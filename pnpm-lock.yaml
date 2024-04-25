@@ -333,9 +333,6 @@ importers:
       vitest:
         specifier: ^1.5.0
         version: 1.5.0(@types/node@20.12.7)(jsdom@24.0.0)
-      zod:
-        specifier: ^3.23.3
-        version: 3.23.3
 
   e2e/satellite_client:
     dependencies:
@@ -18981,10 +18978,6 @@ packages:
   /zod@3.21.4:
     resolution: {integrity: sha512-m46AKbrzKVzOzs/DZgVnG5H55N1sv1M8qZU3A8RIKbs3mrACDNeIOeilDymVb2HdmP8uwshOCF4uJ8uM9rCqJw==}
     dev: false
-
-  /zod@3.23.3:
-    resolution: {integrity: sha512-tPvq1B/2Yu/dh2uAIH2/BhUlUeLIUvAjr6dpL/75I0pCYefHgjhXk1o1Kob3kTU8C7yU1j396jFHlsVWFi9ogg==}
-    dev: true
 
   github.com/rhashimoto/wa-sqlite/ca2084cdd188c56532ba3e272696d0b9e21a23bf:
     resolution: {tarball: https://codeload.github.com/rhashimoto/wa-sqlite/tar.gz/ca2084cdd188c56532ba3e272696d0b9e21a23bf}

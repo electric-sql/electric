@@ -34,8 +34,8 @@ In your code after calling `electrify`, if in debug mode, import and pass the el
 const electric = await electrify(conn, schema, config)
 
 if (config.debug) {
-  import('@electric-sql/debug-toolbar')
-    .then(({ addToolbar }) => addToolbar(electric))
+  const { addToolbar } = await import('@electric-sql/debug-toolbar')
+  addToolbar(electric)
 }
 ```
 
