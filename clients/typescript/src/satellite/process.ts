@@ -144,9 +144,9 @@ export class SatelliteProcess implements Satellite {
 
   /**
    * To optimize inserting a lot of data when the subscription data comes, we need to do
-   * less `INSERT` queries, but SQLite supports only a limited amount of `?` positional
-   * arguments. Precisely, its either 999 for versions prior to 3.32.0 and 32766 for
-   * versions after.
+   * less `INSERT` queries, but SQLite/Postgres support only a limited amount of `?`/`$i` positional
+   * arguments. Precisely, its either 999 for SQLite versions prior to 3.32.0 and 32766 for
+   * versions after, and 65535 for Postgres.
    */
   private maxSqlParameters: 999 | 32766 | 65535 = 999
   private snapshotMutex: Mutex = new Mutex()

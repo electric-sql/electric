@@ -1475,7 +1475,7 @@ function serializeColumnData(
 }
 
 function serializeNullData(): Uint8Array {
-  return sqliteTypeEncoder.text('')
+  return new Uint8Array()
 }
 
 export function toMessage(data: Uint8Array): SatPbMsg {
