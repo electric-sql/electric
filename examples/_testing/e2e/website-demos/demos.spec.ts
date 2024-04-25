@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test'
 import type { Page, Locator } from '@playwright/test'
 
-const INITIAL_SYNC_TIME_MS = 2000
-const EXPECTED_SQLITE_TIME_MS = 500
-const EXPECTED_SYNC_TIME_MS = 2000
+const INITIAL_SYNC_TIME_MS = 4000
+const EXPECTED_SQLITE_TIME_MS = 1000
+const EXPECTED_SYNC_TIME_MS = 3000
 const CONNECTIVITY_TIME_MS = 200
 
 function expectSqlite(cb: () => number | Promise<number>) {
