@@ -405,11 +405,12 @@ defmodule Electric.Replication.Eval.ParserTest do
                Parser.parse_and_validate_expression(~S|null IS NOT FALSE|, %{}, env)
 
       assert %Const{value: true, type: :bool} = result
-      
+
       assert {:ok, %Expr{eval: result}} =
                Parser.parse_and_validate_expression(~S|null IS TRUE|, %{}, env)
 
       assert %Const{value: false, type: :bool} = result
+
       assert {:error, "At location 2: argument of IS TRUE must be bool, not int4"} =
                Parser.parse_and_validate_expression(~S|1 IS TRUE|, %{}, env)
     end
