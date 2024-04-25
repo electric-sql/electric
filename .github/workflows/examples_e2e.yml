@@ -79,4 +79,4 @@ jobs:
         working-directory: 'examples/_testing'
         run: |
           pnpm install --frozen-lockfile &&
-          pnpm web-e2e
+          pnpm website-demos-e2e
