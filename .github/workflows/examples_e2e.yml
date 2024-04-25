@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test_web:
+  test_web_examples:
     timeout-minutes: 30
     runs-on: ubuntu-latest
     strategy:
@@ -48,3 +48,35 @@ jobs:
         run: |
           pnpm install --frozen-lockfile &&
           pnpm web-e2e
+
+  test_website_demos:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    defaults:
+      run:
+        working-directory: 'examples/introduction'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 8
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: pnpm
+      - name: Install dependencies
+        run: yarn
+      - name: Start backend, run migrations, generate client
+        run: |
+          yarn backend:up &&
+          yarn db:migrate &&
+          yarn client:generate
+      - name: Start dev server in background
+        run: yarn dev < /dev/null &
+      - name: Run e2e tests
+        working-directory: 'examples/_testing'
+        run: |
+          pnpm install --frozen-lockfile &&
+          pnpm website-demos-e2e

@@ -18,7 +18,7 @@ yarn db:migrate
 yarn client:generate
 ```
 
-If running outside of the context of the website repo, you will need to populate some environment variables in `src/config.ts`. These are normally injected by Webpack during the website build but this source repo uses Vite as its build process.
+If running outside of the context of the website repo, you will need to ensure the configuration replacement variables in`vite.config.ts`'s `define` object are set correctly.
 
 Boot up the dev server
 
