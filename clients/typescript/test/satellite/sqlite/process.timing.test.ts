@@ -1,5 +1,5 @@
 import anyTest, { TestFn } from 'ava'
-import { processTimingTests } from '../process.timing.test'
+import { processTimingTests } from '../process.timing'
 import { makeContext, clean, ContextType } from '../common'
 
 const test = anyTest as TestFn<ContextType>

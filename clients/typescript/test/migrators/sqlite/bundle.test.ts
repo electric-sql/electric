@@ -7,7 +7,7 @@ import { DatabaseAdapter } from '../../../src/drivers/better-sqlite3/adapter'
 import { SqliteBundleMigrator as BundleMigrator } from '../../../src/migrators/bundle'
 
 import { randomValue } from '../../../src/util/random'
-import { ContextType, bundleTests } from '../bundle.test'
+import { ContextType, bundleTests } from '../bundle'
 
 import migrations from '../../support/migrations/migrations.js'
 

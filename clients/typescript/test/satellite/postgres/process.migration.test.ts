@@ -6,7 +6,7 @@ import {
   commonSetup,
   ContextType,
   processMigrationTests,
-} from '../process.migration.test'
+} from '../process.migration'
 
 const test = testAny as TestFn<ContextType>
 

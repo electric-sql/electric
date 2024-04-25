@@ -1,5 +1,5 @@
 import anyTest, { TestFn } from 'ava'
-import { processTimingTests } from '../process.timing.test'
+import { processTimingTests } from '../process.timing'
 import { makePgContext, cleanAndStopSatellite, ContextType } from '../common'
 
 let port = 4900

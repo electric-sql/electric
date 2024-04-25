@@ -3,7 +3,7 @@ import anyTest, { TestFn } from 'ava'
 import { makePgliteContext, cleanAndStopSatellite } from '../common'
 
 import { getPgMatchingShadowEntries } from '../../support/satellite-helpers'
-import { processTagsTests, ContextType } from '../process.tags.test'
+import { processTagsTests, ContextType } from '../process.tags'
 
 const test = anyTest as TestFn<ContextType>
 test.beforeEach(async (t) => {

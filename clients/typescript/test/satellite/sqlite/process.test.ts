@@ -5,7 +5,7 @@ import { getMatchingShadowEntries as getSQLiteMatchingShadowEntries } from '../.
 import { makeContext, cleanAndStopSatellite } from '../common'
 
 import { sqliteBuilder } from '../../../src/migrators/query-builder'
-import { processTests, ContextType } from '../process.test'
+import { processTests, ContextType } from '../process'
 import { QualifiedTablename } from '../../../src/util'
 
 const test = anyTest as TestFn<ContextType>
