@@ -200,6 +200,11 @@
 [shell satellite_2]
     ??Connectivity state changed: connected
 
+[shell electric]
+    # ?+ matches the two lines in any order
+    ?+Continuing sync for client $client_1_id from
+    ?Continuing sync for client $client_2_id from
+
 [shell pg_1]
     !SELECT * FROM electric.client_actions;
     ??(0 rows)

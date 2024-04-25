@@ -528,6 +528,8 @@ defmodule Electric.Satellite.Protocol do
     if CachedWal.Api.lsn_in_cached_window?(state.origin, lsn) do
       case restore_client_state(msg.subscription_ids, msg.observed_transaction_data, lsn, state) do
         {:ok, state} ->
+          Logger.debug("Continuing sync for client #{state.client_id} from lsn #{lsn}")
+
           state =
             state
             |> Telemetry.start_replication_span(subscriptions: length(msg.subscription_ids))
