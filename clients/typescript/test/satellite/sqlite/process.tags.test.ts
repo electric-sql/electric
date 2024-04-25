@@ -2,7 +2,7 @@ import anyTest, { TestFn } from 'ava'
 
 import { makeContext, cleanAndStopSatellite } from '../common'
 
-import { processTagsTests, ContextType } from '../process.tags.test'
+import { processTagsTests, ContextType } from '../process.tags'
 import { getMatchingShadowEntries } from '../../support/satellite-helpers'
 
 const test = anyTest as TestFn<ContextType>

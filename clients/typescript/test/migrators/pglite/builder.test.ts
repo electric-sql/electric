@@ -1,10 +1,6 @@
 import anyTest, { TestFn } from 'ava'
 import { makeMigration, parseMetadata } from '../../../src/migrators/builder'
-import {
-  ContextType,
-  bundleTests,
-  makeMigrationMetaData,
-} from '../builder.test'
+import { ContextType, bundleTests, makeMigrationMetaData } from '../builder'
 import { PGlite } from '@electric-sql/pglite'
 import { DatabaseAdapter } from '../../../src/drivers/pglite'
 import { PgBundleMigrator } from '../../../src/migrators'

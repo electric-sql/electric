@@ -6,7 +6,7 @@ import { PgBundleMigrator as BundleMigrator } from '../../../src/migrators/bundl
 import { randomValue } from '../../../src/util/random'
 
 import { PGlite } from '@electric-sql/pglite'
-import { ContextType, bundleTests } from '../bundle.test'
+import { ContextType, bundleTests } from '../bundle'
 
 import migrations from '../../support/migrations/pg-migrations.js'
 

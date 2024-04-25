@@ -1,5 +1,5 @@
 import anyTest, { TestFn } from 'ava'
-import { processTimingTests } from '../process.timing.test'
+import { processTimingTests } from '../process.timing'
 import {
   makePgliteContext,
   cleanAndStopSatellite,

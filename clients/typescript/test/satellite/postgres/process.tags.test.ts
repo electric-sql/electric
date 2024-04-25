@@ -3,7 +3,7 @@ import anyTest, { TestFn } from 'ava'
 import { makePgContext, cleanAndStopSatellite } from '../common'
 
 import { getPgMatchingShadowEntries } from '../../support/satellite-helpers'
-import { processTagsTests, ContextType } from '../process.tags.test'
+import { processTagsTests, ContextType } from '../process.tags'
 
 let port = 5100
 

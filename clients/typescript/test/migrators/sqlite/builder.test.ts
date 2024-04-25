@@ -3,11 +3,7 @@ import { makeMigration, parseMetadata } from '../../../src/migrators/builder'
 import Database from 'better-sqlite3'
 import { DatabaseAdapter } from '../../../src/drivers/better-sqlite3'
 import { sqliteBuilder } from '../../../src/migrators/query-builder'
-import {
-  ContextType,
-  bundleTests,
-  makeMigrationMetaData,
-} from '../builder.test'
+import { ContextType, bundleTests, makeMigrationMetaData } from '../builder'
 import { SqliteBundleMigrator } from '../../../src/migrators'
 
 const test = anyTest as TestFn<ContextType>

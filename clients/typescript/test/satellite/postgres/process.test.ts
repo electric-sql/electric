@@ -5,7 +5,7 @@ import { getPgMatchingShadowEntries } from '../../support/satellite-helpers'
 import { makePgContext, cleanAndStopSatellite } from '../common'
 
 import { pgBuilder } from '../../../src/migrators/query-builder'
-import { processTests, ContextType } from '../process.test'
+import { processTests, ContextType } from '../process'
 import { QualifiedTablename } from '../../../src/util'
 
 let port = 5200
