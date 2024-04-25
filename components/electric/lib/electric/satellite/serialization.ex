@@ -2,7 +2,6 @@ defmodule Electric.Satellite.Serialization do
   alias Electric.Satellite.Protocol
   alias Electric.Satellite.SatOpGone
   alias Electric.Replication.Changes.Gone
-  alias Electric.Postgres.Extension.SchemaCache
   alias Electric.Postgres.{Extension, Replication}
   alias Electric.Replication.Changes
 
@@ -11,13 +10,14 @@ defmodule Electric.Satellite.Serialization do
     NewRecord,
     UpdatedRecord,
     DeletedRecord,
-    Compensation
+    Compensation,
+    Migration
   }
 
   use Electric.Satellite.Protobuf
 
   import Electric.Postgres.Extension,
-    only: [is_migration_relation: 1, is_ddl_relation: 1, is_extension_relation: 1]
+    only: [is_extension_relation: 1]
 
   import Bitwise
 
@@ -109,9 +109,33 @@ defmodule Electric.Satellite.Serialization do
     {[%SatOpLog{ops: state.ops}], state.new_relations, state.known_relations}
   end
 
-  defp serialize_change(record, state) when is_migration_relation(record.relation) do
-    state = serialize_migration(record, state)
-    %{state | is_migration: true}
+  defp serialize_change(%Migration{} = migration, state) do
+    Logger.info("Serializing migration #{inspect(migration.version)}")
+
+    known_relations =
+      Enum.reduce(migration.relations, state.known_relations, fn relation, known ->
+        {_relation_id, _columns, _, known} =
+          load_new_relation(relation, known)
+
+        known
+      end)
+
+    ops =
+      migration.ops
+      |> Map.fetch!(:sqlite)
+      |> Enum.reduce(state.ops, fn op, ops ->
+        [%SatTransOp{op: {:migrate, op}} | ops]
+      end)
+
+    %{
+      state
+      | ops: ops,
+        migration_version: migration.version,
+        schema: migration.schema,
+        new_relations: state.new_relations ++ migration.relations,
+        known_relations: known_relations,
+        is_migration: true
+    }
   end
 
   # writes to any table under the electric.* schema shoudn't be passed as DML
@@ -140,69 +164,6 @@ defmodule Electric.Satellite.Serialization do
     op = mk_trans_op(record, rel_id, rel_cols, rel_pks)
 
     %{state | ops: [op | ops], new_relations: new_relations, known_relations: known_relations}
-  end
-
-  defp serialize_migration(%{relation: relation, record: record}, state)
-       when is_ddl_relation(relation) do
-    %{
-      origin: origin,
-      schema: schema,
-      ops: ops,
-      migration_version: version,
-      new_relations: new_relations,
-      sql_dialect: dialect
-    } = state
-
-    {:ok, v} = SchemaCache.tx_version(origin, record)
-    {:ok, sql} = Extension.extract_ddl_sql(record)
-
-    Logger.info("Serializing migration #{inspect(v)}: #{inspect(sql)}")
-
-    # unlikely since the extension tables have constraints that prevent this
-    if version && version != v,
-      do: raise("Got DDL transaction with differing migration versions")
-
-    {:ok, schema_version} = maybe_load_schema(origin, schema, v)
-
-    {ops, add_relations} =
-      case Replication.migrate(schema_version, sql, dialect) do
-        {:ok, [op], relations} ->
-          {[%SatTransOp{op: {:migrate, op}} | ops], relations}
-
-        {:ok, [], []} ->
-          {ops, []}
-      end
-
-    known_relations =
-      Enum.reduce(add_relations, state.known_relations, fn relation, known ->
-        {_relation_id, _columns, _, known} = load_new_relation(relation, known)
-        known
-      end)
-
-    %{
-      state
-      | ops: ops,
-        migration_version: v,
-        schema: schema_version,
-        new_relations: new_relations ++ add_relations,
-        known_relations: known_relations
-    }
-  end
-
-  defp serialize_migration(_record, state), do: state
-
-  defp maybe_load_schema(origin, nil, version) do
-    with {:ok, schema} <- Extension.SchemaCache.load(origin, version) do
-      {:ok, schema}
-    else
-      error ->
-        Logger.error("#{origin} Unable to load schema version #{version}: #{inspect(error)}")
-        error
-    end
-  end
-
-  defp maybe_load_schema(_origin, schema, _version) do
-    {:ok, schema}
   end
 
   defp mk_trans_op(%NewRecord{record: data, tags: tags}, rel_id, rel_cols, _) do

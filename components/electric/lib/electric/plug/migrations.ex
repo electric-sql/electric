@@ -108,7 +108,7 @@ defmodule Electric.Plug.Migrations do
       schema_version = SchemaLoader.Version.new(version, schema)
 
       {:ok, msgs, _relations} =
-        Electric.Postgres.Replication.migrate(schema_version, stmt, dialect)
+        Electric.Postgres.Migration.to_op(stmt, schema_version, dialect)
 
       msgs
     end)
