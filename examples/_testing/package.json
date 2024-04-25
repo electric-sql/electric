@@ -1,5 +1,5 @@
 {
-  "name": "electric-sql-example-tests",
+  "name": "@internal/electric-sql-example-tests",
   "version": "0.1.0",
   "author": "ElectricSQL",
   "license": "Apache-2.0",
