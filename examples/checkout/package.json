@@ -12,7 +12,7 @@
     "backend:down": "cd ./backend && docker compose -f docker-compose.yml -f ./dev/docker-compose.dev.yml down -v --remove-orphans",
     "client:generate": "electric-sql generate --service http://localhost:5133 --proxy postgresql://prisma:proxy_password@localhost:65432/postgres",
     "client:watch": "npm run client:generate --watch",
-    "db:migrate": "electric-sql with-config \"npx pg-migrations apply --database {{ELECTRIC_PROXY}} --directory ./db/migrations\"",
+    "db:migrate": "electric-sql with-config \"pg-migrations apply --database {{ELECTRIC_PROXY}} --directory ./db/migrations\"",
     "db:load-data": "node ./db/load-data.js",
     "dev": "vite",
     "build": "tsc && vite build",

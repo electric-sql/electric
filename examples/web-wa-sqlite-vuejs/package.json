@@ -5,15 +5,15 @@
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
-    "backend:start": "npx electric-sql start --with-postgres",
-    "backend:stop": "npx electric-sql stop",
-    "backend:up": "npx electric-sql start --with-postgres --detach",
-    "backend:down": "npx electric-sql stop --remove",
-    "client:generate": "npx electric-sql generate",
-    "client:watch": "npx electric-sql generate --watch",
-    "db:migrate": "npx electric-sql with-config \"npx pg-migrations apply --database {{ELECTRIC_PROXY}} --directory ./db/migrations\"",
-    "db:psql": "npx electric-sql psql",
-    "electric:start": "npx electric-sql start",
+    "backend:start": "electric-sql start --with-postgres",
+    "backend:stop": "electric-sql stop",
+    "backend:up": "electric-sql start --with-postgres --detach",
+    "backend:down": "electric-sql stop --remove",
+    "client:generate": "electric-sql generate",
+    "client:watch": "electric-sql generate --watch",
+    "db:migrate": "electric-sql with-config \"pg-migrations apply --database {{ELECTRIC_PROXY}} --directory ./db/migrations\"",
+    "db:psql": "electric-sql psql",
+    "electric:start": "electric-sql start",
     "dev": "vite",
     "build": "vue-tsc && vite build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
@@ -21,8 +21,8 @@
   },
   "dependencies": {
     "electric-sql": "^0.10.0",
-    "vue": "^3.4.21",
-    "wa-sqlite": "github:rhashimoto/wa-sqlite#semver:^0.9.8"
+    "vue": "^3.4.25",
+    "wa-sqlite": "github:rhashimoto/wa-sqlite#semver:^0.9.11"
   },
   "devDependencies": {
     "@databases/pg-migrations": "^5.0.3",
@@ -30,9 +30,9 @@
     "@typescript-eslint/parser": "^6.21.0",
     "@vitejs/plugin-vue": "^5.0.4",
     "eslint": "^8.57.0",
-    "eslint-plugin-vue": "^9.24.1",
-    "typescript": "^5.4.4",
-    "vite": "^5.2.8",
-    "vue-tsc": "^2.0.11"
+    "eslint-plugin-vue": "^9.25.0",
+    "typescript": "^5.4.5",
+    "vite": "^5.2.10",
+    "vue-tsc": "^2.0.14"
   }
 }
