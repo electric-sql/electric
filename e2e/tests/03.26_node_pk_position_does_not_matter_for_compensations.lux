@@ -75,8 +75,8 @@
 
 [shell pg_1]
     # and expect the previously deleted row to be present
+    [invoke wait-for "SELECT id, content FROM public.items;" "00000000-0000-0000-0000-000000000001 \| hello world" 10 $psql]
     !\x
-    [invoke wait-for "SELECT content FROM public.items;" "content \| hello world" 10 $psql]
     [invoke wait-for "SELECT COUNT(*) FROM public.other_items;" "count \| 1" 10 $psql]
 
 [shell satellite_1]
