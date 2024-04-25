@@ -5,14 +5,16 @@
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
-    "web-e2e": "npx playwright install --with-deps && npx playwright test"
+    "e2e-base": "playwright install --with-deps && playwright test",
+    "website-demos-e2e": "npm run e2e-base ./e2e/website-demos/*.spec.ts",
+    "web-e2e": "npm run e2e-base ./e2e/web/*.spec.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.43.1",
     "@types/node": "^20.12.7",
-    "@typescript-eslint/eslint-plugin": "^7.7.0",
-    "@typescript-eslint/parser": "^7.7.0",
-    "eslint": "^9.0.0",
+    "@typescript-eslint/eslint-plugin": "^7.7.1",
+    "@typescript-eslint/parser": "^7.7.1",
+    "eslint": "^8.56.0",
     "typescript": "^5.4.5"
   }
 }
