@@ -29,6 +29,12 @@ export const EVENT_NAMES = {
   connectivityStateChange: 'network:connectivity:changed',
 }
 
+// Initialise global emitter to be shared between all
+// electric instances (unless emitter is passed in)
+// Remove warning as we don't want to limit the number
+// of subscribers
+const globalEmitter = new EventEmitter().setMaxListeners(Infinity)
+
 export class EventNotifier implements Notifier {
   dbName: DbName
 
@@ -50,12 +56,7 @@ export class EventNotifier implements Notifier {
       byName: {},
     }
 
-    this.events =
-      eventEmitter !== undefined
-        ? eventEmitter
-        : // initialise emitter with no limit to listeners as
-          // we don't want to limit the number of subscribers
-          new EventEmitter().setMaxListeners(Infinity)
+    this.events = eventEmitter !== undefined ? eventEmitter : globalEmitter
   }
 
   attach(dbName: DbName, dbAlias: string): void {
