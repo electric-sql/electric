@@ -81,6 +81,7 @@ defmodule Electric.Satellite.Serialization do
   end
 
   def serialize_move_in_data_as_tx(ref, changes, known_relations) do
+    Logger.debug("serialize move-in data ref=#{ref} changes=#{inspect(changes)}")
     begin_op = %SatTransOp{op: {:additional_begin, %SatOpAdditionalBegin{ref: ref}}}
     commit_op = %SatTransOp{op: {:additional_commit, %SatOpAdditionalCommit{ref: ref}}}
 

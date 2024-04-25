@@ -206,13 +206,13 @@
     ?Continuing sync for client $client_2_id from
 
 [shell pg_1]
-    [invoke wait-for "SELECT * FROM electric.client_actions;" "(0 rows)" 10 $psql]
-    #!SELECT * FROM electric.client_actions;
-    #??(0 rows)
+    # [invoke wait-for "SELECT * FROM electric.client_actions;" "(0 rows)" 10 $psql]
+    !SELECT * FROM electric.client_actions;
+    # ??(0 rows)
 
-    [invoke wait-for "SELECT * FROM electric.client_additional_data;" "(0 rows)" 10 $psql]
-    #!SELECT * FROM electric.client_additional_data;
-    #??(0 rows)
+    # [invoke wait-for "SELECT * FROM electric.client_additional_data;" "(0 rows)" 10 $psql]
+    !SELECT * FROM electric.client_additional_data;
+    ??(0 rows)
 
 [cleanup]
   [invoke teardown]

@@ -445,7 +445,7 @@ defmodule Electric.Satellite.Protocol do
         {:ok, sent_pos} = CachedWal.Api.parse_wal_position(msg.lsn)
 
         Logger.debug(
-          "Client acknowledged transactions up to #{msg.transaction_id} (lsn #{sent_pos})"
+          "proto:recon:Client acknowledged transactions up to #{msg.transaction_id} (lsn #{sent_pos}): #{inspect(msg)}"
         )
 
         {:ok, _} =
@@ -528,7 +528,9 @@ defmodule Electric.Satellite.Protocol do
     if CachedWal.Api.lsn_in_cached_window?(state.origin, lsn) do
       case restore_client_state(msg.subscription_ids, msg.observed_transaction_data, lsn, state) do
         {:ok, state} ->
-          Logger.debug("Continuing sync for client #{state.client_id} from lsn #{lsn}")
+          Logger.debug(
+            "proto:recon:Continuing sync for client #{state.client_id} from lsn #{lsn} msg=#{inspect(msg)}"
+          )
 
           state =
             state
@@ -755,6 +757,10 @@ defmodule Electric.Satellite.Protocol do
     # prefers copying more data into itself and filtering here. Maybe sending a MapSet
     # of already-sent IDs to the Task process that does the querying is more optimal,
     # but more testing is required.
+
+    Logger.debug(
+      "proto:recon:move-in data received #{inspect(ref)}, changes=#{inspect(changes)}, xmin=#{inspect(xmin)}, included_txns=#{inspect(included_txns)}"
+    )
 
     # Store this data in case of disconnect until acknowledged
     ClientReconnectionInfo.store_additional_txn_data!(

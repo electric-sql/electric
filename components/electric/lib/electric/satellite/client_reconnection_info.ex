@@ -210,6 +210,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   at most one WebSocket process with the same client id.
   """
   def clear_all_data!(origin, client_id) do
+    Logger.debug("actions:clear_all_data")
     :ets.match_delete(@actions_ets, {{client_id, :_}, :_})
     :ets.match_delete(@subscriptions_ets, {{client_id, :_}, :_, :_, :_})
     :ets.match_delete(@additional_data_ets, {{client_id, :_, :_, :_, :_}, :_, :_})
@@ -265,6 +266,8 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   "shared" rows and/or migrations.
   """
   def store_initial_checkpoint!(origin, client_id, wal_pos, sent_rows_graph) do
+    Logger.debug("store_initial_checkpoint(#{inspect(wal_pos)}, #{inspect(sent_rows_graph)})")
+
     Client.pooled_transaction(origin, fn ->
       :ok = clear_all_data!(origin, client_id)
       store_client_checkpoint(client_id, wal_pos, sent_rows_graph)
@@ -285,6 +288,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
 
   defp store_client_checkpoint(client_id, wal_pos, sent_rows_graph) do
     :ets.insert(@checkpoint_ets, {client_id, wal_pos, sent_rows_graph})
+    Logger.debug("store_client_checkpoint(#{inspect(wal_pos)})")
     sent_rows_graph_bin = :erlang.term_to_binary(sent_rows_graph)
     Client.query!(@upsert_checkpoint_query, [client_id, wal_pos, sent_rows_graph_bin])
   end
@@ -335,6 +339,13 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
               from: acked_wal_pos,
               to: new_wal_pos
             )
+            |> Stream.each(
+              &Logger.debug(
+                "Transaction at pos=#{Electric.Postgres.Lsn.to_integer(&1.lsn)} xid=#{&1.xid} changes=#{inspect(&1.changes)}"
+              )
+            )
+
+          Logger.debug("txn stream from=#{acked_wal_pos} to=#{new_wal_pos}")
 
           {new_graph, pending_actions, count, discarded_acc} =
             advance_up_to_new_wal_pos(graph, advance_graph_fn, client_id, txn_stream)
@@ -344,15 +355,14 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
           )
 
           if map_size(pending_actions) > 0 do
+            Logger.debug("actions:insert #{inspect(pending_actions)}")
             :ets.insert(@actions_ets, Enum.to_list(pending_actions))
           end
 
           {new_graph, discarded_acc} =
             advance_by_additional_data(new_graph, client_id, received_data, discarded_acc)
 
-          Logger.debug(
-            "Discarded acc: #{inspect(discarded_acc)}"
-          )
+          Logger.debug("Discarded acc: #{inspect(discarded_acc)}")
 
           Client.pooled_transaction(origin, fn ->
             delete_discarded_cache_entries(discarded_acc)
@@ -431,6 +441,10 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
             graph = merge_in_graph_diff(graph, diff)
             popped_actions = clear_stored_actions(client_id, included_txns)
 
+            Logger.debug(
+              "actions:popped xid=#{txn.xid} included_txns=#{inspect(included_txns)} changes=#{inspect(txn.changes)} #{inspect(popped_actions)}"
+            )
+
             pending_actions =
               Map.drop(pending_actions, Enum.map(included_txns, &{client_id, &1}))
 
@@ -449,8 +463,12 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
 
       pending_actions =
         case actions do
-          x when x == %{} -> pending_actions
-          actions -> Map.put(pending_actions, {client_id, txn.xid}, actions)
+          x when x == %{} ->
+            pending_actions
+
+          actions ->
+            Logger.debug("actions:new txid=#{txn.xid} changes=#{inspect(txn.changes)}")
+            Map.put(pending_actions, {client_id, txn.xid}, actions)
         end
 
       discarded_acc =
@@ -508,6 +526,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     case :ets.next(@additional_data_ets, {client_id, 0, 0, 0, 0}) do
       :"$end_of_table" ->
         # No additional data left for the client, great!
+        Logger.debug("additional_data:end_of_table")
         {graph, discarded_acc}
 
       {_client_id, _xmin, _order, :subscription, id} = key ->
@@ -516,6 +535,10 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
           # confirmed.
           diff = :ets.lookup_element(@additional_data_ets, key, 2)
           graph = merge_in_graph_diff(graph, diff)
+
+          Logger.debug(
+            "additional_data:discarding subscription=#{id}, acknowledged=#{inspect(acknowledged)}"
+          )
 
           discarded_acc = merge_discarded(discarded_acc, delete_additional_data(key))
 
@@ -537,6 +560,10 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
           # Client has seen this additional data blob!
           diff = :ets.lookup_element(@additional_data_ets, key, 2)
           graph = merge_in_graph_diff(graph, diff)
+
+          Logger.debug(
+            "actions:discarding covered_txns=#{inspect(covered_txns)}, acknowledged=#{inspect(acknowledged)}"
+          )
 
           discarded_acc =
             discarded_acc
@@ -563,6 +590,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   """
 
   defp purge_additional_data_for_client(client_id) do
+    Logger.debug("additional_data:purge")
     :ets.match_delete(@additional_data_ets, {{client_id, :_, :_, :_, :_}, :_, :_})
 
     Client.query!(@delete_additional_data_for_client_query, [client_id])
@@ -662,6 +690,10 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   response to a set of transactions.
   """
   def store_additional_txn_data!(origin, client_id, xmin, pos, included_txns, graph_diff) do
+    Logger.debug(
+      "additional_data:store_txn_data xmin=#{xmin} pos=#{pos} included_txns=#{inspect(included_txns)}"
+    )
+
     :ets.insert(
       @additional_data_ets,
       {{client_id, xmin, pos, :transaction, nil}, graph_diff, included_txns}
@@ -681,17 +713,21 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   defp pop_additional_data_before(client_id, txid) do
     pattern = {{client_id, :"$1", :_, :"$2", :_}, :"$3", :"$4"}
     guard = [{:"=<", :"$1", txid}]
-    body = [{{:"$2", :"$3", :"$4"}}]
+    body = [{{:"$1", :"$2", :"$3", :"$4"}}]
 
     results = :ets.select(@additional_data_ets, [{pattern, guard, body}])
     :ets.select_delete(@additional_data_ets, [{pattern, guard, [true]}])
 
-    results
+    Logger.debug("additional_data:pop before txid=#{txid} : #{inspect(results)}")
+
+    Enum.map(results, fn {_, one, two, three} -> {one, two, three} end)
   end
 
   defp clear_stored_actions(client_id, txids) do
     matchspec = for txid <- txids, do: {{{client_id, txid}, :_}, [], [true]}
     :ets.select_delete(@actions_ets, matchspec)
+
+    Logger.debug("actions:remove txids=#{inspect(txids)}")
 
     {@actions_ets, {client_id, txids}}
   end
