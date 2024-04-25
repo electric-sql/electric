@@ -4,15 +4,15 @@
   "version": "0.9.4",
   "type": "module",
   "scripts": {
-    "backend:start": "npx electric-sql start --with-postgres",
-    "backend:stop": "npx electric-sql stop",
-    "backend:up": "npx electric-sql start --with-postgres --detach",
-    "backend:down": "npx electric-sql stop --remove",
-    "client:generate": "npx electric-sql generate",
-    "client:watch": "npx electric-sql generate --watch",
-    "db:migrate": "npx electric-sql with-config \"npx pg-migrations apply --database {{ELECTRIC_PROXY}} --directory ./db/migrations\"",
-    "db:psql": "npx electric-sql psql",
-    "electric:start": "npx electric-sql start",
+    "backend:start": "electric-sql start --with-postgres",
+    "backend:stop": "electric-sql stop",
+    "backend:up": "electric-sql start --with-postgres --detach",
+    "backend:down": "electric-sql stop --remove",
+    "client:generate": "electric-sql generate",
+    "client:watch": "electric-sql generate --watch",
+    "db:migrate": "electric-sql with-config \"pg-migrations apply --database {{ELECTRIC_PROXY}} --directory ./db/migrations\"",
+    "db:psql": "electric-sql psql",
+    "electric:start": "electric-sql start",
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
@@ -21,7 +21,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit --skipLibCheck",
     "format": "prettier --write --loglevel warn .",
-    "make-icons": "npx @capacitor/assets generate"
+    "make-icons": "@capacitor/assets generate"
   },
   "dependencies": {
     "@capacitor-community/sqlite": "^5.6.2",
