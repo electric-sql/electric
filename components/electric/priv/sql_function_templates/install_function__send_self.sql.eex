@@ -87,7 +87,7 @@ CREATE OR REPLACE FUNCTION <%= schema() %>.install_function__send_self_trigger(s
     DECLARE
         function_name TEXT := 'send_self_trigger___' || schema_name || '__' || table_name;
         referenced_calls TEXT := '';
-        pk_serialization TEXT := 'ARRAY[' || <%= schema() %>.format_every_and_join(primary_key_list, '__this_row.%I') || ']::text';
+        pk_serialization TEXT := 'ARRAY[' || <%= schema() %>.format_every_and_join(primary_key_list, '__this_row.%I::text') || ']';
         fk_info RECORD;
     BEGIN
         FOR fk_info IN SELECT * FROM <%= schema() %>.list_foreign_keys(schema_name, table_name)
@@ -113,7 +113,7 @@ CREATE OR REPLACE FUNCTION <%= schema() %>.install_function__send_self_trigger(s
 
                 FOR __this_row IN SELECT * FROM new_table
                 LOOP
-                    __serialized_pk := %5$s;
+                    __serialized_pk := %5$s::text;
                     CONTINUE WHEN <%= schema() %>.__tx_is_row_already_touched('%2$s', '%3$s', __serialized_pk);
 
                     PERFORM <%= schema() %>.__tx_store_touched_row('%2$s', '%3$s', __serialized_pk);
