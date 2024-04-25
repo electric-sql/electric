@@ -4,7 +4,7 @@ defmodule Electric.Replication.ElectrificationTest do
   import Electric.Postgres.TestConnection
 
   alias Electric.Postgres.CachedWal
-  alias Electric.Replication.Changes.{NewRecord, Transaction}
+  alias Electric.Replication.Changes.{Migration, Transaction}
 
   @origin "electrification-test"
   @sleep_timeout 5000
@@ -23,12 +23,11 @@ defmodule Electric.Replication.ElectrificationTest do
     assert {:ok, lsn,
             %Transaction{
               changes: [
-                %NewRecord{
+                %Migration{
                   relation: {"electric", "ddl_commands"},
-                  record: %{
-                    "query" =>
-                      "CREATE TABLE foo (\n    id text NOT NULL,\n    CONSTRAINT foo_pkey PRIMARY KEY (id)\n);\n\n\n"
-                  }
+                  ddl: [
+                    "CREATE TABLE foo (\n    id text NOT NULL,\n    CONSTRAINT foo_pkey PRIMARY KEY (id)\n);\n\n\n"
+                  ]
                 }
               ],
               origin: @origin
@@ -58,12 +57,11 @@ defmodule Electric.Replication.ElectrificationTest do
     assert {:ok, lsn,
             %Transaction{
               changes: [
-                %NewRecord{
+                %Migration{
                   relation: {"electric", "ddl_commands"},
-                  record: %{
-                    "query" =>
-                      "CREATE TABLE foo (\n    id text NOT NULL,\n    CONSTRAINT foo_pkey PRIMARY KEY (id)\n);\n\n\n"
-                  }
+                  ddl: [
+                    "CREATE TABLE foo (\n    id text NOT NULL,\n    CONSTRAINT foo_pkey PRIMARY KEY (id)\n);\n\n\n"
+                  ]
                 }
               ],
               origin: @origin

@@ -29,6 +29,10 @@ defmodule Electric.Replication.Changes.Ownership do
     validate_record(record, user_id, owner_column)
   end
 
+  def change_belongs_to_user?(%Changes.Migration{}, _user_id, _owner_column) do
+    true
+  end
+
   @empty [nil, ""]
 
   @spec validate_record(Changes.record(), Auth.user_id(), Changes.db_identifier()) :: boolean()
