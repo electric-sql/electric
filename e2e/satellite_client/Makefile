@@ -12,7 +12,7 @@ endif
 # By default we would like to build in docker, as we intend
 # to run tests with Satellite in it
 build:
-	docker buildx build --load ${CACHING_SETTINGS} -f ./Dockerfile -t satellite_client:local ${PROJECT_ROOT}
+	docker build --network host -f ./Dockerfile -t satellite_client:local ${PROJECT_ROOT}
 
 local-build:
 	pnpm i --frozen-lockfile
