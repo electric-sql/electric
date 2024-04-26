@@ -246,6 +246,8 @@ class SqliteBuilder extends QueryBuilder {
     const oldRecord =
       opType === 'INSERT' ? 'NULL' : this.createJsonObject(oldRows)
 
+    console.log(`oplog:: namespace: ${namespace}, tableName: ${tableName}`)
+
     return [
       dedent`
         CREATE TRIGGER ${opTypeLower}_${namespace}_${tableName}_into_oplog
@@ -270,6 +272,9 @@ class SqliteBuilder extends QueryBuilder {
     fkTableNamespace: string = this.defaultNamespace
   ): string[] {
     const opTypeLower = opType.toLowerCase()
+
+    console.log(`compensation:: namespace: ${namespace}, fkTableNamespace: ${fkTableNamespace}, tableName: ${tableName}, fkTableName: ${fkTableName}`)
+
     return [
       dedent`
         CREATE TRIGGER compensation_${opTypeLower}_${namespace}_${tableName}_${childKey}_into_oplog

@@ -417,6 +417,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
       actions =
         @actions_ets
         |> :ets.match({{client_id, :"$1"}, :"$2"})
+        |> tap(&Logger.debug("Client actions on reconnection: #{inspect(&1)}"))
         |> Enum.reduce({%{}, []}, fn [txid, actions], acc ->
           Shapes.merge_actions_for_tx(acc, actions, txid)
         end)

@@ -317,6 +317,8 @@ class PgBuilder extends QueryBuilder {
     const oldRecord =
       opType === 'INSERT' ? 'NULL' : this.createJsonbObject(oldRows)
 
+    console.log(`oplog:: namespace: ${namespace}, tableName: ${tableName}`)
+
     return [
       dedent`
         CREATE OR REPLACE FUNCTION ${opTypeLower}_${namespace}_${tableName}_into_oplog_function()
@@ -368,6 +370,8 @@ class PgBuilder extends QueryBuilder {
   ): string[] {
     const opTypeLower = opType.toLowerCase()
 
+    console.log(`compensation:: namespace: ${namespace}, fkTableNamespace: ${fkTableNamespace}, tableName: ${tableName}, fkTableName: ${fkTableName}`)
+
     return [
       dedent`
         CREATE OR REPLACE FUNCTION compensation_${opTypeLower}_${namespace}_${tableName}_${childKey}_into_oplog_function()
@@ -381,7 +385,6 @@ class PgBuilder extends QueryBuilder {
     
             SELECT value INTO meta_value FROM "${namespace}"._electric_meta WHERE key = 'compensations';
     
-            IF flag_value = 1 AND meta_value = 1 THEN
               INSERT INTO "${namespace}"._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
               SELECT
                 '${fkTableNamespace}',
@@ -395,7 +398,6 @@ class PgBuilder extends QueryBuilder {
                 NULL
               FROM "${fkTableNamespace}"."${fkTableName}"
               WHERE "${foreignKey.parentKey}" = NEW."${foreignKey.childKey}";
-            END IF;
     
             RETURN NEW;
           END;
