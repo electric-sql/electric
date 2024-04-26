@@ -386,7 +386,7 @@ class PgBuilder extends QueryBuilder {
               SELECT
                 '${fkTableNamespace}',
                 '${fkTableName}',
-                'UPDATE',
+                'COMPENSATION',
                 ${this.removeSpaceAndNullValuesFromJson(
                   this.createPKJsonObject(joinedFkPKs)
                 )},
