@@ -272,22 +272,28 @@
     "@capacitor-community/sqlite": {
       "optional": true
     },
-    "expo-sqlite": {
+    "@tauri-apps/plugin-sql": {
       "optional": true
     },
-    "vue": {
+    "expo-sqlite": {
       "optional": true
     },
     "react": {
       "optional": true
     },
+    "react-dom": {
+      "optional": true
+    },
     "react-native": {
       "optional": true
     },
-    "wa-sqlite": {
+    "typeorm": {
       "optional": true
     },
-    "typeorm": {
+    "vue": {
+      "optional": true
+    },
+    "wa-sqlite": {
       "optional": true
     }
   }
