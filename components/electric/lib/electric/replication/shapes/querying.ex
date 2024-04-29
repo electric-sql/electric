@@ -305,15 +305,19 @@ defmodule Electric.Replication.Shapes.Querying do
   defp apply_permissions(changes, graph, filtering_context) do
     case filtering_context do
       %{perms: perms, xid: xid} ->
-        {accepted_changes, rejected_changes} =
-          Permissions.Read.filter_shape_data(perms, graph, changes, xid)
+        if Permissions.filter_reads_enabled?() do
+          {accepted_changes, rejected_changes} =
+            Permissions.Read.filter_shape_data(perms, graph, changes, xid)
 
-        filtered_graph =
-          Enum.reduce(rejected_changes, graph, fn {vertex, _change}, graph ->
-            Graph.delete_vertex(graph, vertex)
-          end)
+          filtered_graph =
+            Enum.reduce(rejected_changes, graph, fn {vertex, _change}, graph ->
+              Graph.delete_vertex(graph, vertex)
+            end)
 
-        {Map.new(accepted_changes), filtered_graph}
+          {Map.new(accepted_changes), filtered_graph}
+        else
+          {changes, graph}
+        end
 
       _ ->
         Logger.warning(

@@ -572,7 +572,10 @@ defmodule Electric.Satellite.Protocol do
     {%Transaction{} = filtered_tx, new_graph, actions} =
       process_transaction(tx, state.out_rep.sent_rows_graph, state)
 
-    state = Map.update!(state, :permissions, &Permissions.receive_transaction(&1, tx))
+    state =
+      if Permissions.filter_reads_enabled?(),
+        do: Map.update!(state, :permissions, &Permissions.receive_transaction(&1, tx)),
+        else: state
 
     {out_rep, acc} =
       if filtered_tx.changes != [] or filtered_tx.origin == state.client_id do
@@ -1104,7 +1107,11 @@ defmodule Electric.Satellite.Protocol do
 
   defp apply_permissions_and_shapes(tx, graph, shapes, permissions) do
     {filtered_tx, _rejected_changes, moves_out} =
-      Permissions.filter_read(permissions, Electric.Replication.ScopeGraph.impl(graph), tx)
+      if Permissions.filter_reads_enabled?() do
+        Permissions.filter_read(permissions, Electric.Replication.ScopeGraph.impl(graph), tx)
+      else
+        {tx, [], []}
+      end
 
     Shapes.process_transaction(filtered_tx, moves_out, graph, shapes)
   end

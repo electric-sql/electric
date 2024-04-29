@@ -39,6 +39,9 @@ defmodule Electric.Replication.PostgresInterop.Casting do
     end
   end
 
+  def cast_bool(b) when is_binary(b), do: parse_bool(b)
+  def cast_bool(b) when is_boolean(b), do: b
+
   # Yes, Postgres really allows all of these in `SELECT 'tru'::boolean`
   def parse_bool(x) when x in ~w|t tr tru true|, do: true
   def parse_bool(x) when x in ~w|f fa fal fals false|, do: false

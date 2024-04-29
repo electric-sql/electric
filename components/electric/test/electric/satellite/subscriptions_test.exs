@@ -173,7 +173,10 @@ defmodule Electric.Satellite.SubscriptionsTest do
 
          INSERT INTO public.appointments VALUES
            ('001', 'Important meeting', '2024-04-19 15:00:00+03', '\\x0100020300');
-         """
+         """,
+         ddlx: [
+           "GRANT ALL ON public.appointments TO AUTHENTICATED"
+         ]
     test "initial data and subsequent streamed changes use correct display settings",
          %{conn: pg_conn} = ctx do
       MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->

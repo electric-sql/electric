@@ -9,3 +9,5 @@ import Config
 config :electric, disable_listeners: true
 
 config :electric, Electric.Postgres.Proxy.Handler.Tracing, colour: false
+
+config :electric, Electric.Features, read_permissions: true

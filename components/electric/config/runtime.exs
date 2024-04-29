@@ -197,10 +197,11 @@ config :electric,
 #     export ELECTRIC_FEATURES="proxy_ddlx_grant=true:proxy_ddlx_assign=true"
 #
 config :electric, Electric.Features,
-  proxy_ddlx_grant: false,
-  proxy_ddlx_revoke: false,
-  proxy_ddlx_assign: false,
-  proxy_ddlx_unassign: false,
+  read_permissions: false,
+  proxy_ddlx_grant: true,
+  proxy_ddlx_revoke: true,
+  proxy_ddlx_assign: true,
+  proxy_ddlx_unassign: true,
   proxy_ddlx_sqlite: false
 
 {:ok, conn_config} = database_url_config
