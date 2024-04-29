@@ -302,9 +302,6 @@
     "@tauri-apps/plugin-sql": {
       "optional": true
     },
-    "@tauri-apps/plugin-sql": {
-      "optional": true
-    },
     "embedded-postgres": {
       "optional": true
     },
