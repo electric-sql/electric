@@ -9,7 +9,6 @@ defmodule Electric.Satellite.WebsocketServerTest do
   import Satellite.ProtocolHelpers
 
   alias Electric.Replication.SatelliteConnector
-  alias Electric.Postgres.CachedWal.Producer
 
   alias Satellite.TestWsClient, as: MockClient
 
@@ -41,6 +40,8 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
   import Mock
 
+  @origin "test-origin"
+
   setup_with_mocks([
     {Electric.Postgres.Repo, [:passthrough],
      checkout: fn fun -> fun.() end,
@@ -63,7 +64,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
       )
       |> Map.put_new(:allowed_unacked_txs, 30)
 
-    connector_config = [origin: "test-origin", connection: []]
+    connector_config = [origin: @origin, connection: []]
     port = 55133
 
     plug =
@@ -85,11 +86,12 @@ defmodule Electric.Satellite.WebsocketServerTest do
   setup_with_mocks([
     {SatelliteConnector, [:passthrough],
      [
-       start_link: fn %{name: name, producer: producer} ->
+       start_link: fn %{producer: producer} ->
          Supervisor.start_link(
            [
              {Electric.DummyConsumer, subscribe_to: [{producer, []}], name: :dummy_consumer},
-             {DownstreamProducerMock, Producer.name(name)}
+             {DownstreamProducerMock,
+              Electric.Postgres.CachedWal.Api.default_module().name(@origin)}
            ],
            strategy: :one_for_one
          )
@@ -99,9 +101,14 @@ defmodule Electric.Satellite.WebsocketServerTest do
       Electric.Postgres.CachedWal.Api,
       [:passthrough],
       get_current_position: fn _ -> @current_wal_pos end,
-      lsn_in_cached_window?: fn _origin, pos when is_integer(pos) ->
-        pos > @current_wal_pos
+      reserve_wal_position: fn "test-origin", _client_id, wal_pos ->
+        if wal_pos > @current_wal_pos + 10 do
+          :error
+        else
+          :ok
+        end
       end,
+      cancel_reservation: fn "test-origin", _client_id -> :ok end,
       stream_transactions: fn _, _, _ -> [] end
     }
   ]) do
@@ -383,8 +390,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
       with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->
         start_replication_and_assert_response(conn, 1)
 
-        [{client_name, _client_pid}] = active_clients()
-        mocked_producer = Producer.name(client_name)
+        mocked_producer = Electric.Postgres.CachedWal.Api.default_module().name(ctx.origin)
 
         subscription = %SatSubsReq{
           subscription_id: "00000000-0000-0000-0000-000000000000",
@@ -479,8 +485,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
       with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
         start_replication_and_assert_response(conn, 1)
-        [{client_name, _client_pid}] = active_clients()
-        mocked_producer = Producer.name(client_name)
+        mocked_producer = Electric.Postgres.CachedWal.Api.default_module().name(ctx.origin)
 
         subscription = %SatSubsReq{
           subscription_id: "00000000-0000-0000-0000-000000000000",
@@ -586,8 +591,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
       with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->
         start_replication_and_assert_response(conn, 1)
 
-        [{client_name, _client_pid}] = active_clients()
-        mocked_producer = Producer.name(client_name)
+        mocked_producer = Electric.Postgres.CachedWal.Api.default_module().name(ctx.origin)
 
         request = %SatSubsReq{
           subscription_id: "00000000-0000-0000-0000-000000000000",
@@ -619,8 +623,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
       with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->
         start_replication_and_assert_response(conn, 1)
 
-        [{client_name, _client_pid}] = active_clients()
-        mocked_producer = Producer.name(client_name)
+        mocked_producer = Electric.Postgres.CachedWal.Api.default_module().name(ctx.origin)
 
         request = %SatSubsReq{
           subscription_id: "00000000-0000-0000-0000-000000000000",
@@ -638,7 +641,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
                  MockClient.make_rpc_call(conn, "subscribe", request)
 
         # No changes in the txn, but still should be sent
-        DownstreamProducerMock.produce(mocked_producer, build_events([], 1, ctx.client_id))
+        DownstreamProducerMock.produce(mocked_producer, build_events([], 1, ctx.origin))
         refute_receive {^conn, %SatOpLog{}}
         assert {["fake_id"], []} = receive_subscription_data(conn, sub_id, expecting_lsn: "1")
         assert_receive {^conn, %SatOpLog{ops: [_, _]}}
@@ -652,8 +655,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
       with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->
         start_replication_and_assert_response(conn, 1)
 
-        [{client_name, _client_pid}] = active_clients()
-        mocked_producer = Producer.name(client_name)
+        mocked_producer = Electric.Postgres.CachedWal.Api.default_module().name(ctx.origin)
 
         request = %SatSubsReq{
           subscription_id: "00000000-0000-0000-0000-000000000000",
@@ -686,8 +688,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
          ctx do
       with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->
         start_replication_and_assert_response(conn, 1)
-        [{client_name, _client_pid}] = active_clients()
-        mocked_producer = Producer.name(client_name)
+        mocked_producer = Electric.Postgres.CachedWal.Api.default_module().name(ctx.origin)
         subscription_id = "00000000-0000-0000-0000-000000000000"
 
         request = %SatSubsReq{
@@ -722,8 +723,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
       with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->
         start_replication_and_assert_response(conn, 1)
 
-        [{client_name, _client_pid}] = active_clients()
-        mocked_producer = Producer.name(client_name)
+        mocked_producer = Electric.Postgres.CachedWal.Api.default_module().name(ctx.origin)
 
         request = %SatSubsReq{
           subscription_id: "00000000-0000-0000-0000-000000000000",
@@ -863,12 +863,12 @@ defmodule Electric.Satellite.WebsocketServerTest do
       end)
     end
 
-    test "results in an error response when the client is outside of the cached WAL window",
+    test "results in an error response when the client is outside of the resumable WAL window",
          ctx do
       with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
         assert {:ok, %SatInStartReplicationResp{err: error}} =
                  MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{
-                   lsn: "1"
+                   lsn: "13"
                  })
 
         assert %SatInStartReplicationResp.ReplicationError{code: :BEHIND_WINDOW} = error
@@ -969,15 +969,17 @@ defmodule Electric.Satellite.WebsocketServerTest do
     end)
   end
 
-  defp build_events(changes, lsn, origin \\ nil) do
+  defp build_events(changes, wal_pos, origin \\ nil) do
     [
-      {%Changes.Transaction{
+      {wal_pos,
+       %Changes.Transaction{
          changes: List.wrap(changes),
          commit_timestamp: DateTime.utc_now(),
          origin: origin,
-         # The LSN here is faked and a number, so we're using the same monotonically growing value as xid to emulate PG
-         xid: lsn
-       }, lsn}
+         # wal_pos is faked and a number, so we're using the same monotonically growing
+         # value as xid to emulate PG
+         xid: wal_pos
+       }}
     ]
   end
 

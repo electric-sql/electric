@@ -17,7 +17,7 @@
 
     [newshell electric]
         [invoke start_electric 1]
-        ??Successfully initialized Postgres connector "postgres_1"
+        ??Successfully initialized origin postgres_1 at extension version
         [progress setup finished]
 
     [shell postgres_logs]

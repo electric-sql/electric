@@ -1,14 +1,16 @@
 defmodule Electric.Satellite.ClientManager do
-  alias Electric.Telemetry.Metrics
-  alias Electric.Replication.Connectors
-  alias Electric.Replication.SatelliteConnector
-
   @moduledoc """
   Process manages resources for satellite connections
   """
 
-  require Logger
   use GenServer
+
+  alias Electric.Postgres.CachedWal
+  alias Electric.Replication.Connectors
+  alias Electric.Replication.SatelliteConnector
+  alias Electric.Telemetry.Metrics
+
+  require Logger
 
   defmodule State do
     defstruct clients: %{},
@@ -140,7 +142,7 @@ defmodule Electric.Satellite.ClientManager do
     # expect client to be reconnecting soon
 
     {{_client_ref, client_name}, clients} = Map.pop!(state.clients, client_pid)
-    {{^client_pid, sup_pid, _origin}, reverse} = Map.pop!(state.reverse, client_name)
+    {{^client_pid, sup_pid, origin}, reverse} = Map.pop!(state.reverse, client_name)
 
     Logger.debug("cleaning resources for #{inspect(client_name)} #{inspect(client_pid)}")
 
@@ -155,6 +157,8 @@ defmodule Electric.Satellite.ClientManager do
           Process.demonitor(sup_ref, [:flush])
           map
       end
+
+    CachedWal.Api.cancel_reservation(origin, client_name)
 
     {:noreply, %State{state | clients: clients, reverse: reverse, resources: resources}}
   end
