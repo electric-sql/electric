@@ -45,6 +45,7 @@ export function runCommand(command, cwd, inputArgs = [], outputListener) {
         res()
       } else {
         const errStr = Buffer.concat(errors).toString()
+        console.error(errStr)
         rej(errStr)
       }
     })

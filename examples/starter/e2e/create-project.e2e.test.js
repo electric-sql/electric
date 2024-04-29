@@ -129,17 +129,15 @@ test.serial('should set environment variables for project', async (t) => {
 })
 
 test.serial('should be able to use interactive prompt', async (t) => {
-  await t.notThrowsAsync(
-    () =>
-      runCommand(`npx create-electric-app`, tempDir, [
-        testAppName,
-        'react',
-        '1234',
-        '12345',
-      ]),
-    (output) => {
-      t.notRegex(output, /Could not install project dependencies./)
-    },
+  await t.notThrowsAsync(() =>
+    runCommand(
+      `npx create-electric-app`,
+      tempDir,
+      [testAppName, 'react', '1234', '12345'],
+      (output) => {
+        t.notRegex(output, /Could not install project dependencies./)
+      },
+    ),
   )
 
   await assertPackageJson(t)
