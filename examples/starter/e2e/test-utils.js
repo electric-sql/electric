@@ -1,7 +1,7 @@
 import { spawn } from 'child_process'
 import * as fs from 'fs/promises'
 
-export function runCommand(command, cwd, inputArgs = []) {
+export function runCommand(command, cwd, inputArgs = [], outputListener) {
   const inputs = [...inputArgs]
   return new Promise((res, rej) => {
     const proc = spawn(command, [], {
@@ -18,6 +18,9 @@ export function runCommand(command, cwd, inputArgs = []) {
     let timer = null
     proc.stdin.setEncoding('utf-8')
     proc.stdout.on('data', (data) => {
+      if (outputListener) {
+        outputListener(Buffer.from(data).toString())
+      }
       if (inputs.length > 0) {
         if (timer === null) {
           console.log('Received:', Buffer.from(data).toString())
@@ -42,6 +45,7 @@ export function runCommand(command, cwd, inputArgs = []) {
         res()
       } else {
         const errStr = Buffer.concat(errors).toString()
+        console.error(errStr)
         rej(errStr)
       }
     })
