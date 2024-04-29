@@ -1410,6 +1410,9 @@ function serializeColumnData(
     case PgBasicType.PG_BYTEA:
       return columnValue as Uint8Array
     default:
+      if (typeof columnValue === 'number') {
+        return typeEncoder.text('' + columnValue)
+      }
       return typeEncoder.text(columnValue as string)
   }
 }
