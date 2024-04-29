@@ -19,6 +19,19 @@ const testAppDisplayName = 'Test App'
 const testAppDir = path.join(tempDir, testAppName)
 const envFilePath = path.join(testAppDir, '.env.local')
 
+async function runCli(t, cliArgs) {
+  return await t.notThrowsAsync(() =>
+    runCommand(
+      `npx create-electric-app ${testAppName} ${cliArgs}`,
+      tempDir,
+      [],
+      (output) => {
+        t.notRegex(output, /Could not install project dependencies./)
+      },
+    ),
+  )
+}
+
 async function assertPackageJson(t) {
   const packageJsonPath = path.join(testAppDir, 'package.json')
 
@@ -62,34 +75,19 @@ test.serial.afterEach.always(async () => {
 })
 
 test.serial('should create React project', async (t) => {
-  await t.notThrowsAsync(() =>
-    runCommand(`npx create-electric-app ${testAppName}`, tempDir),
-  )
-
+  await runCli(t, '')
   await assertPackageJson(t)
   await assertEnvFile(t)
 })
 
 test.serial('should create Vue.js project', async (t) => {
-  await t.notThrowsAsync(() =>
-    runCommand(
-      `npx create-electric-app ${testAppName} --template vue`,
-      tempDir,
-    ),
-  )
-
+  await runCli(t, '--template vue')
   await assertPackageJson(t)
   await assertEnvFile(t)
 })
 
 test.serial('should create Expo project', async (t) => {
-  await t.notThrowsAsync(() =>
-    runCommand(
-      `npx create-electric-app ${testAppName} --template expo`,
-      tempDir,
-    ),
-  )
-
+  await runCli(t, '--template expo')
   await assertPackageJson(t)
   await assertEnvFile(t)
 
@@ -101,12 +99,7 @@ test.serial('should create Expo project', async (t) => {
 })
 
 test.serial('should create React Native project', async (t) => {
-  await t.notThrowsAsync(() =>
-    runCommand(
-      `npx create-electric-app ${testAppName} --template react-native`,
-      tempDir,
-    ),
-  )
+  await runCli(t, '--template react-native')
 
   await assertPackageJson(t)
   await assertEnvFile(t)
@@ -128,23 +121,25 @@ test.serial('should create React Native project', async (t) => {
 test.serial('should set environment variables for project', async (t) => {
   const electricPort = 1234
   const electricProxyPort = 12345
-  await t.notThrowsAsync(() =>
-    runCommand(
-      `npx create-electric-app ${testAppName} --electric-port ${electricPort} --electric-proxy-port ${electricProxyPort}`,
-      tempDir,
-    ),
+  await runCli(
+    t,
+    `--electric-port ${electricPort} --electric-proxy-port ${electricProxyPort}`,
   )
   await assertEnvFile(t, electricPort, electricProxyPort)
 })
 
 test.serial('should be able to use interactive prompt', async (t) => {
-  await t.notThrowsAsync(() =>
-    runCommand(`npx create-electric-app`, tempDir, [
-      testAppName,
-      'react',
-      '1234',
-      '12345',
-    ]),
+  await t.notThrowsAsync(
+    () =>
+      runCommand(`npx create-electric-app`, tempDir, [
+        testAppName,
+        'react',
+        '1234',
+        '12345',
+      ]),
+    (output) => {
+      t.notRegex(output, /Could not install project dependencies./)
+    },
   )
 
   await assertPackageJson(t)
