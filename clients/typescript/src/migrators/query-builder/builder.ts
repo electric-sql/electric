@@ -281,22 +281,24 @@ export abstract class QueryBuilder {
     namespace: string = this.defaultNamespace,
     fkTableNamespace: string = this.defaultNamespace
   ): string[] {
+    const trig = this.createFkCompensationTrigger(
+      opType,
+      tableName,
+      childKey,
+      fkTableName,
+      joinedFkPKs,
+      foreignKey,
+      namespace,
+      fkTableNamespace
+    )
+    console.log(`FkCompensationTrigger: ${trig}`)
     return [
       this.dropTriggerIfExists(
         `compensation_${opType.toLowerCase()}_${namespace}_${tableName}_${childKey}_into_oplog`,
         tableName,
         namespace
       ),
-      ...this.createFkCompensationTrigger(
-        opType,
-        tableName,
-        childKey,
-        fkTableName,
-        joinedFkPKs,
-        foreignKey,
-        namespace,
-        fkTableNamespace
-      ),
+      ...trig,
     ]
   }
 

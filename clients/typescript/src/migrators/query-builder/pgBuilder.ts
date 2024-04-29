@@ -281,12 +281,6 @@ class PgBuilder extends QueryBuilder {
     return `jsonb_build_object(${rows})`
   }
 
-  // removes null values from the json object
-  // but most importantly also removes whitespaces introduced by `jsonb_build_object`
-  removeSpaceAndNullValuesFromJson(json: string): string {
-    return `json_strip_nulls(${json})`
-  }
-
   setTriggerSetting(
     tableName: string,
     value: 0 | 1,
@@ -390,9 +384,7 @@ class PgBuilder extends QueryBuilder {
                 '${fkTableNamespace}',
                 '${fkTableName}',
                 'COMPENSATION',
-                ${this.removeSpaceAndNullValuesFromJson(
-                  this.createPKJsonObject(joinedFkPKs)
-                )},
+                ${this.createPKJsonObject(joinedFkPKs)},
                 jsonb_build_object(${joinedFkPKs}),
                 NULL,
                 NULL

@@ -126,6 +126,7 @@ function generateCompensationTriggers(
       },
       builder
     )
+    console.log(`joinedFkPKs: ${joinedFkPKs}`)
 
     const [dropInsertTrigger, ...createInsertTrigger] =
       builder.createOrReplaceInsertCompensationTrigger(
@@ -157,6 +158,7 @@ function generateCompensationTriggers(
     ].map(mkStatement)
   }
   const fkTriggers = foreignKeys.map((fk) => makeTriggers(fk))
+  console.log(`fkTriggers: ${JSON.stringify(fkTriggers)}`)
 
   return fkTriggers.flat()
 }
@@ -200,6 +202,8 @@ export function generateTriggers(
     },
     ...tableTriggers,
   ]
+
+  console.log(`triggerStmts: ${JSON.stringify(stmts)}`)
 
   return stmts
 }

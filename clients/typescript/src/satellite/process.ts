@@ -1214,6 +1214,16 @@ export class SatelliteProcess implements Satellite {
         ORDER BY rowid ASC
     `
     const rows = await this.adapter.query({ sql: selectEntries, args: [since] })
+    console.log(`SatelliteProcess._getEntries(${since}): ${JSON.stringify(rows)}`)
+
+    const selectAllEntries = `
+      SELECT * FROM ${oplog}
+        WHERE rowid > ${this.builder.makePositionalParam(1)}
+        ORDER BY rowid ASC
+    `
+    const allEntries = await this.adapter.query({ sql: selectAllEntries, args: [-1] })
+    console.log(`SatelliteProcess::allEntries: ${JSON.stringify(allEntries)}`)
+
     return rows as unknown as OplogEntry[]
   }
 
