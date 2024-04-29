@@ -280,6 +280,13 @@ defmodule Electric.Satellite.Permissions do
           triggers: Trigger.triggers()
         }
 
+  @read_feature_flag :read_permissions
+
+  @spec filter_reads_enabled?() :: boolean()
+  def filter_reads_enabled?() do
+    Electric.Features.enabled?(@read_feature_flag)
+  end
+
   @doc """
   Configure a new empty permissions configuration with the given auth token, scope resolver and
   (optionally) a transient permissions lookup table name.

@@ -642,7 +642,10 @@ defmodule Electric.Satellite.Protocol do
     {%Transaction{} = filtered_tx, new_graph, actions} =
       process_transaction(tx, state.out_rep.sent_rows_graph, state)
 
-    state = Map.update!(state, :permissions, &Permissions.receive_transaction(&1, tx))
+    state =
+      if Permissions.filter_reads_enabled?(),
+        do: Map.update!(state, :permissions, &Permissions.receive_transaction(&1, tx)),
+        else: state
 
     {out_rep, acc} =
       if filtered_tx.changes != [] or filtered_tx.origin == state.client_id do
@@ -855,12 +858,18 @@ defmodule Electric.Satellite.Protocol do
 
     state = Telemetry.subscription_data_ready(state, id)
 
-    {accepted_data, filtered_graph} =
-      state.permissions
-      |> Permissions.Read.filter_shape_data(graph, data, xmin)
-      |> permissions_filter_graph(graph)
+    {filtered_graph, _, _} =
+      filtered_results =
+      if Permissions.filter_reads_enabled?() do
+        {accepted_data, filtered_graph} =
+          state.permissions
+          |> Permissions.Read.filter_shape_data(graph, data, xmin)
+          |> permissions_filter_graph(graph)
 
-    filtered_results = {filtered_graph, accepted_data, request_ids}
+        {filtered_graph, accepted_data, request_ids}
+      else
+        {graph, data, request_ids}
+      end
 
     # Store this data in case of disconnect until acknowledged
     ClientReconnectionInfo.store_subscription_data!(
@@ -940,13 +949,17 @@ defmodule Electric.Satellite.Protocol do
       SentRowsGraph.pop_by_request_ids(graph_diff, gone_request_ids, root_vertex: :fake_root)
 
     {accepted_changes, filtered_graph_diff} =
-      state.permissions
-      |> Permissions.Read.filter_move_in_data(
-        state.out_rep.sent_rows_graph,
-        changes,
-        xmin
-      )
-      |> permissions_filter_graph(graph_diff)
+      if Permissions.filter_reads_enabled?() do
+        state.permissions
+        |> Permissions.Read.filter_move_in_data(
+          state.out_rep.sent_rows_graph,
+          changes,
+          xmin
+        )
+        |> permissions_filter_graph(graph_diff)
+      else
+        {changes, graph_diff}
+      end
 
     # Store this data in case of disconnect until acknowledged
     ClientReconnectionInfo.store_additional_txn_data!(
@@ -1225,7 +1238,11 @@ defmodule Electric.Satellite.Protocol do
 
   defp apply_permissions_and_shapes(tx, graph, shapes, permissions) do
     {filtered_tx, _rejected_changes, moves_out} =
-      Permissions.Read.filter_transaction(permissions, graph, tx)
+      if Permissions.filter_reads_enabled?() do
+        Permissions.Read.filter_transaction(permissions, graph, tx)
+      else
+        {tx, [], []}
+      end
 
     Shapes.process_transaction(filtered_tx, moves_out, graph, shapes)
   end
