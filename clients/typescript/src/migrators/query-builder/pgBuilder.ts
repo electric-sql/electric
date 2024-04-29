@@ -256,6 +256,7 @@ class PgBuilder extends QueryBuilder {
           FOR EACH ROW
             EXECUTE FUNCTION update_ensure_${namespace}_${tablename}_primarykey_function();
       `,
+      `ALTER TABLE "${namespace}"."${tablename}" ENABLE ALWAYS TRIGGER update_ensure_${namespace}_${tablename}_primarykey;`,
     ]
   }
 
@@ -353,6 +354,7 @@ class PgBuilder extends QueryBuilder {
             FOR EACH ROW
               EXECUTE FUNCTION ${opTypeLower}_${namespace}_${tableName}_into_oplog_function();
       `,
+      `ALTER TABLE "${namespace}"."${tableName}" ENABLE ALWAYS TRIGGER ${opTypeLower}_${namespace}_${tableName}_into_oplog;`,
     ]
   }
 
@@ -386,7 +388,7 @@ class PgBuilder extends QueryBuilder {
               SELECT
                 '${fkTableNamespace}',
                 '${fkTableName}',
-                'UPDATE',
+                'COMPENSATION',
                 ${this.removeSpaceAndNullValuesFromJson(
                   this.createPKJsonObject(joinedFkPKs)
                 )},
@@ -408,6 +410,7 @@ class PgBuilder extends QueryBuilder {
               FOR EACH ROW
                 EXECUTE FUNCTION compensation_${opTypeLower}_${namespace}_${tableName}_${childKey}_into_oplog_function();
         `,
+      `ALTER TABLE "${namespace}"."${tableName}" ENABLE ALWAYS TRIGGER compensation_${opTypeLower}_${namespace}_${tableName}_${childKey}_into_oplog;`,
     ]
   }
 
