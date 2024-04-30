@@ -242,30 +242,30 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   end
 
   def fetch_subscriptions(client_id, subscription_ids) do
-    id_matches = for subs_id <- subscription_ids, do: {:"=:=", :"$1", subs_id}
-    guard = List.to_tuple([:or | id_matches])
-
     :ets.select(@subscriptions_ets, [
-      {{{client_id, :"$1"}, :_, :"$2", :_}, [guard], [{{:"$1", :"$2"}}]}
+      {{{client_id, :"$1"}, :_, :"$2", :_}, [ids_ms_guard(subscription_ids)], [{{:"$1", :"$2"}}]}
     ])
   end
 
-  def delete_subscription(origin, client_id, subscription_id) do
-    :ets.delete(@subscriptions_ets, {client_id, subscription_id})
+  def delete_subscriptions(origin, client_id, subscription_ids) do
+    ms_guard = ids_ms_guard(subscription_ids)
 
-    :ets.match_delete(
-      @additional_data_ets,
-      {{client_id, :_, :_, :subscription, subscription_id}, :_, :_}
-    )
+    :ets.select_delete(@subscriptions_ets, [
+      {{{client_id, :"$1"}, :_, :_, :_}, [ms_guard], [true]}
+    ])
+
+    :ets.select_delete(@additional_data_ets, [
+      {{{client_id, :_, :_, :subscription, :"$1"}, :_, :_}, [ms_guard], [true]}
+    ])
 
     Client.pooled_transaction(origin, fn ->
-      subs_uuid = encode_uuid(subscription_id)
+      subs_uuids = Enum.map(subscription_ids, &encode_uuid/1)
 
       Enum.each(
         [client_shape_subscriptions_table(), client_additional_data_table()],
-        &Client.query!("DELETE FROM #{&1} WHERE client_id = $1 AND subscription_id = $2", [
+        &Client.query!("DELETE FROM #{&1} WHERE client_id = $1 AND subscription_id = ANY($2)", [
           client_id,
-          subs_uuid
+          subs_uuids
         ])
       )
     end)
@@ -277,6 +277,11 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
       # client reconnects.
       clear_all_ets_data(client_id)
       reraise exception, __STACKTRACE__
+  end
+
+  defp ids_ms_guard(ids) do
+    id_matches = Enum.map(ids, &{:"=:=", :"$1", &1})
+    List.to_tuple([:or | id_matches])
   end
 
   @doc """

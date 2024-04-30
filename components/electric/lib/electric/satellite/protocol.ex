@@ -260,7 +260,7 @@ defmodule Electric.Satellite.Protocol do
       |> Map.put(:out_rep, out_rep)
       |> Map.update!(:subscriptions, &Map.drop(&1, ids))
 
-    Enum.each(ids, &ClientReconnectionInfo.delete_subscription(state.origin, state.client_id, &1))
+    ClientReconnectionInfo.delete_subscriptions(state.origin, state.client_id, ids)
 
     if needs_unpausing? do
       {:force_unpause, %SatUnsubsResp{}, state}
