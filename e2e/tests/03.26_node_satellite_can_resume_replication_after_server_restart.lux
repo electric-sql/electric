@@ -157,8 +157,8 @@
     [invoke node_await_get_from_table "other_items" "seventh"]
 
 [shell electric]
-    ??Restored 1 cached client_checkpoints
-    ??Restored 1 cached client_shape_subscriptions
+    ??Restored 2 cached client_checkpoints
+    ??Restored 2 cached client_shape_subscriptions
     ??Restored 0 cached client_additional_data records
     ??Restored 0 cached client_actions
     ?client_id=$client_1_id .+ Successfully loaded client reconnection info
@@ -175,10 +175,6 @@
     [invoke node_await_get_from_table "other_items" "third"]
 
 [shell electric]
-    ??Restored 1 cached client_checkpoints
-    ??Restored 1 cached client_shape_subscriptions
-    ??Restored 0 cached client_additional_data records
-    ??Restored 0 cached client_actions
     ?client_id=$client_2_id .+ Successfully loaded client reconnection info
 
 # Stop the server and verify that it persists client_actions and client_additional_data.
@@ -200,6 +196,8 @@
 
     [invoke start_electric 1]
 
+    ??Restored 2 cached client_checkpoints
+    ??Restored 2 cached client_shape_subscriptions
     ?+Restored 1 cached client_additional_data records
     ?+Restored 1 cached client_actions
     ?+client_id=$client_1_id .+ Successfully loaded client reconnection info
