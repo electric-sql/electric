@@ -13,7 +13,8 @@ defmodule Electric.Satellite.Protobuf do
     SatRpcRequest,
     SatRpcResponse,
     SatOpLogAck,
-    SatPerms
+    SatPerms,
+    SatClientCommand
   }
 
   require Logger
@@ -34,7 +35,8 @@ defmodule Electric.Satellite.Protobuf do
     SatRpcRequest => 21,
     SatRpcResponse => 22,
     SatOpLogAck => 23,
-    SatPerms => 24
+    SatPerms => 24,
+    SatClientCommand => 25
   }
 
   if Enum.any?(Map.values(@mapping), &(&1 in @reserved)) do
@@ -74,6 +76,7 @@ defmodule Electric.Satellite.Protobuf do
           | %SatRpcRequest{}
           | %SatRpcResponse{}
           | %SatPerms{}
+          | %SatClientCommand{}
 
   @type rpc_req() ::
           %Satellite.SatAuthReq{}
@@ -132,7 +135,8 @@ defmodule Electric.Satellite.Protobuf do
         SatOpAdditionalBegin,
         SatOpAdditionalCommit,
         SatOpLogAck,
-        SatPerms
+        SatPerms,
+        SatClientCommand
       }
     end
   end

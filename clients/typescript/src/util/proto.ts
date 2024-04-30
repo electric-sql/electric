@@ -128,6 +128,7 @@ const msgtypetuples: MappingTuples = {
   SatRpcResponse: [22, Pb.SatRpcResponse],
   SatOpLogAck: [23, Pb.SatOpLogAck],
   SatPerms: [24, Pb.SatPerms],
+  SatClientCommand: [25, Pb.SatClientCommand],
 }
 
 const msgtypemapping = Object.fromEntries(
@@ -180,6 +181,7 @@ export type SatPbMsg =
   | Pb.SatShapeDataEnd
   | Pb.SatOpLogAck
   | Pb.SatPerms
+  | Pb.SatClientCommand
 
 export type SatPbMsgObj<
   Msg extends { $type: string },
@@ -418,6 +420,12 @@ export function msgToString(message: MessageOfInterest): string {
       }}`
     case 'Electric.Satellite.SatPerms':
       return `#SatPerms{}`
+    case 'Electric.Satellite.SatClientCommand':
+      if (message.resetDatabase) {
+        return `#SatClientCommand{command: #ResetDatabase{reason: ${message.resetDatabase.reason}}}`
+      }
+
+      return `#SatClientCommand{command: <unknown>}`
   }
 }
 

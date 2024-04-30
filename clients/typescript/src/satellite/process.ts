@@ -4,6 +4,7 @@ import uniqWith from 'lodash.uniqwith'
 import {
   SatOpMigrate_Type,
   SatRelation_RelationType,
+  SatClientCommand,
 } from '../_generated/protocol/satellite'
 import { AuthConfig, AuthState } from '../auth/index'
 import { DatabaseAdapter } from '../electric/adapter'
@@ -323,6 +324,7 @@ export class SatelliteProcess implements Satellite {
     this.client.subscribeToTransactions(this._applyTransaction.bind(this))
     this.client.subscribeToAdditionalData(this._applyAdditionalData.bind(this))
     this.client.subscribeToOutboundStarted(this._throttledSnapshot.bind(this))
+    this.client.subscribeToCommands(this._handleCommand.bind(this))
 
     this.client.subscribeToSubscriptionEvents(
       this._handleSubscriptionData.bind(this),
@@ -1413,6 +1415,15 @@ export class SatelliteProcess implements Satellite {
     return this._applySubscriptionData(data.changes, this._lsn!, [
       this._addSeenAdditionalDataStmt(data.ref.toString()),
     ])
+  }
+
+  async _handleCommand(cmd: SatClientCommand) {
+    if (cmd.resetDatabase) {
+      await this._resetClientState({
+        keepSubscribedShapes: true,
+      })
+      this._subscribePreviousShapeRequests()
+    }
   }
 
   private async maybeGarbageCollect(

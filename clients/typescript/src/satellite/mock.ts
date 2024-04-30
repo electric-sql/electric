@@ -22,6 +22,7 @@ import {
   AdditionalDataCallback,
   ConnectivityState,
   ReplicatedRowTransformer,
+  CommandCallback,
 } from '../util/types'
 import { ElectricConfig } from '../config/index'
 
@@ -207,6 +208,7 @@ export class MockSatelliteClient
   relationsCb?: (relation: Relation) => void
   transactionsCb?: TransactionCallback
   additionalDataCb?: AdditionalDataCallback
+  commandCb?: CommandCallback
 
   relationData: Record<string, DataRecord[]> = {}
 
@@ -328,6 +330,14 @@ export class MockSatelliteClient
 
   subscribeToError(cb: (error: SatelliteError) => void): void {
     this.on('error', cb)
+  }
+
+  subscribeToCommands(callback: CommandCallback): void {
+    this.commandCb = callback
+  }
+
+  unsubscribeToCommands(_callback: CommandCallback): void {
+    this.commandCb = undefined
   }
 
   emitSocketClosedError(ev: SocketCloseReason): void {

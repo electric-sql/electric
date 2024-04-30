@@ -22,6 +22,7 @@ import {
   AdditionalDataCallback,
   Record,
   ReplicatedRowTransformer,
+  CommandCallback,
 } from '../util/types'
 import {
   Shape,
@@ -116,6 +117,8 @@ export interface Client {
   unsubscribeToOutboundStarted(callback: OutboundStartedCallback): void
   subscribeToError(callback: ErrorCallback): void
   unsubscribeToError(callback: ErrorCallback): void
+  subscribeToCommands(callback: CommandCallback): void
+  unsubscribeToCommands(callback: CommandCallback): void
 
   subscribe(subId: string, shapes: ShapeRequest[]): Promise<SubscribeResponse>
   unsubscribe(subIds: string[]): Promise<UnsubscribeResponse>
