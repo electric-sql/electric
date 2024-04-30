@@ -102,7 +102,7 @@ test('interactive transactions work', async (t) => {
   t.false(adapter.isLocked)
 })
 
-test('interactive transactions roll back if an error is thrown', async (t) => {
+test('interactive transactions roll back if an error in between statements is thrown', async (t) => {
   const adapter = new MockDatabaseAdapter()
 
   const sql = 'INSERT INTO items VALUES (1);'
@@ -131,6 +131,94 @@ test('interactive transactions roll back if an error is thrown', async (t) => {
       tx.run(insert)
       throw new Error('mocked failure')
     }),
+    {
+      message: 'mocked failure',
+    }
+  )
+
+  t.false(adapter.isLocked)
+})
+
+test('interactive transactions roll back once if an error in transaction is thrown', async (t) => {
+  const adapter = new MockDatabaseAdapter()
+
+  const sql = 'INSERT INTO items VALUES (1);'
+  const insert = { sql }
+
+  t.plan(5)
+
+  adapter.mockRun(async (stmt) => {
+    // First statement is `BEGIN`
+    t.deepEqual(stmt, { sql: 'BEGIN' })
+    // Next statement should be our insert
+    adapter.mockRun(async (stmt) => {
+      t.deepEqual(stmt, insert)
+
+      // Next statement should be `ROLLBACK`, only once
+      adapter.mockRun(async (stmt) => {
+        t.deepEqual(stmt, { sql: 'ROLLBACK' })
+        return { rowsAffected: 0 }
+      })
+
+      throw new Error('mocked failure')
+    })
+    return { rowsAffected: 1 }
+  })
+
+  await t.throwsAsync(
+    adapter.transaction((tx, res) => {
+      tx.run(insert, (_, r) => res(r))
+    }),
+    {
+      message: 'mocked failure',
+    }
+  )
+
+  t.false(adapter.isLocked)
+})
+
+test('interactive transactions hold lock until end of rollback', async (t) => {
+  const adapter = new MockDatabaseAdapter()
+
+  const sql = 'INSERT INTO items VALUES (1);'
+  const insert = { sql }
+  const nextStatement = { sql: 'NEXT STATEMENT' }
+
+  t.plan(6)
+
+  adapter.mockRun(async (stmt) => {
+    // First statement is `BEGIN`
+    t.deepEqual(stmt, { sql: 'BEGIN' })
+    // Next statement should be our insert
+    adapter.mockRun(async (stmt) => {
+      t.deepEqual(stmt, insert)
+
+      // Next statement should be `ROLLBACK`, only once
+      adapter.mockRun(async (stmt) => {
+        t.deepEqual(stmt, { sql: 'ROLLBACK' })
+
+        // _After_ rollback is done, then next statemnet is run
+        adapter.mockRun(async (stmt) => {
+          t.deepEqual(stmt, nextStatement)
+          return { rowsAffected: 0 }
+        })
+
+        return { rowsAffected: 0 }
+      })
+
+      throw new Error('mocked failure')
+    })
+    return { rowsAffected: 1 }
+  })
+
+  await t.throwsAsync(
+    async () => {
+      const prom1 = adapter.transaction((tx, res) => {
+        tx.run(insert, (_, r) => res(r))
+      })
+      const prom2 = adapter.run(nextStatement)
+      return Promise.all([prom1, prom2])
+    },
     {
       message: 'mocked failure',
     }
