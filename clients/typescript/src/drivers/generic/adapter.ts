@@ -56,38 +56,25 @@ abstract class DatabaseAdapter
     }
 
     return new Promise<T>((resolve, reject) => {
-      const releaseAndReject = (err?: any) => {
-        // if the tx is rolled back, release the lock and reject the promise
-        release()
-        reject(err)
-      }
-
-      const tx = new Transaction(this, releaseAndReject)
+      const tx = new Transaction(this, reject)
 
       f(tx, (res) => {
         // Commit the transaction when the user sets the result.
         // This assumes that the user does not execute any more queries after setting the result.
         this._run({ sql: 'COMMIT' })
-          .then(() => {
-            release()
-            resolve(res)
-          })
-          .catch((err) => {
-            // Failed to commit
-            reject(err)
-          })
+          .then(() => resolve(res))
+          // Failed to commit
+          .catch(reject)
       })
-    }).catch((err) => {
-      // something went wrong
-      // let's roll back
-      return this._run({ sql: 'ROLLBACK' })
-        .then(() => {
-          throw err
-        }) // rethrow the error
-        .finally(() => {
-          release()
-        })
     })
+      .catch((err) => {
+        // something went wrong
+        // let's roll back and rethrow
+        return this._run({ sql: 'ROLLBACK' }).then(() => {
+          throw err
+        })
+      })
+      .finally(release)
   }
 
   run(stmt: Statement): Promise<RunResult> {
@@ -173,20 +160,6 @@ class Transaction implements Tx {
     private signalFailure: (reason?: any) => void
   ) {}
 
-  private rollback(err: any, errorCallback?: (error: any) => void) {
-    const invokeErrorCallbackAndSignalFailure = () => {
-      if (typeof errorCallback !== 'undefined') errorCallback(err)
-      this.signalFailure(err)
-    }
-
-    this.adapter
-      ._run({ sql: 'ROLLBACK' })
-      .then(() => {
-        invokeErrorCallbackAndSignalFailure()
-      })
-      .catch(() => invokeErrorCallbackAndSignalFailure())
-  }
-
   private invokeCallback<T>(
     prom: Promise<T>,
     successCallback?: (tx: Transaction, result: T) => void,
@@ -197,7 +170,8 @@ class Transaction implements Tx {
         if (typeof successCallback !== 'undefined') successCallback(this, res)
       })
       .catch((err) => {
-        this.rollback(err, errorCallback)
+        if (typeof errorCallback !== 'undefined') errorCallback(err)
+        this.signalFailure(err)
       })
   }
 
