@@ -274,7 +274,7 @@ class SqliteBuilder extends QueryBuilder {
       dedent`
         CREATE TRIGGER compensation_${opTypeLower}_${namespace}_${tableName}_${childKey}_into_oplog
           AFTER ${opType} ON "${namespace}"."${tableName}"
-          WHEN 1 = (SELECT flag from _electric_trigger_settings WHERE namespace = '${fkTableNamespace}' AND tablename = '${fkTableName}') AND
+          WHEN 1 = (SELECT flag from _electric_trigger_settings WHERE namespace = '${namespace}' AND tablename = '${tableName}') AND
                1 = (SELECT value from _electric_meta WHERE key = 'compensations')
         BEGIN
           INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)

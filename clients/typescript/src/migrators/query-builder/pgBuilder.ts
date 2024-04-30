@@ -377,7 +377,7 @@ class PgBuilder extends QueryBuilder {
             flag_value INTEGER;
             meta_value INTEGER;
           BEGIN
-            SELECT flag INTO flag_value FROM "${namespace}"._electric_trigger_settings WHERE namespace = '${fkTableNamespace}' AND tablename = '${fkTableName}';
+            SELECT flag INTO flag_value FROM "${namespace}"._electric_trigger_settings WHERE namespace = '${namespace}' AND tablename = '${tableName}';
     
             SELECT value INTO meta_value FROM "${namespace}"._electric_meta WHERE key = 'compensations';
     
