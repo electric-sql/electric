@@ -187,12 +187,6 @@ defmodule Electric.Satellite.WebsocketServer do
     end
   end
 
-  def handle_info(:load_client_reconnection_info, state) do
-    :ok = ClientReconnectionInfo.restore_cache_for_client(state.origin, state.client_id)
-    Logger.debug("Successfully loaded client reconnection info")
-    {:ok, state}
-  end
-
   def handle_info({:jwt_expired, ref}, %{expiration_timer: {_timer, ref}} = state) do
     Logger.warning("JWT token expired, disconnecting")
     {:stop, :normal, {4000, "JWT-expired"}, state}

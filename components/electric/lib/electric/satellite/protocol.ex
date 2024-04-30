@@ -55,11 +55,6 @@ defmodule Electric.Satellite.Protocol do
     with {:ok, auth} <- Electric.Satellite.Auth.validate_token(token, state.auth_provider),
          true <- Electric.safe_reg(reg_name, 1000),
          :ok <- ClientManager.register_client(client_id, reg_name, state.origin) do
-      # Client reconnection info must be loaded before this WebsocketServer process can proceed
-      # to ANY other actions but we don't want to delay the auth response. Hence the async
-      # loading.
-      send(self(), :load_client_reconnection_info)
-
       Logger.metadata(user_id: auth.user_id)
       Logger.info("Successfully authenticated the client")
       Metrics.satellite_connection_event(%{authorized_connection: 1})
@@ -511,7 +506,11 @@ defmodule Electric.Satellite.Protocol do
        ) do
     # This particular client is connecting for the first time, so it needs to perform
     # the initial sync before we start streaming any changes to it.
-    #
+
+    # Make sure we don't have any leftover cached info for this client in case its local data
+    # was cleared without the server knowing about it.
+    ClientReconnectionInfo.clear_all_data!(state.origin, state.client_id)
+
     # Sending a message to self() here ensures that the SatInStartReplicationResp message is delivered to the
     # client first, followed by the initial migrations.
     Logger.debug("Performing initial sync for client #{state.client_id}")
@@ -548,7 +547,8 @@ defmodule Electric.Satellite.Protocol do
           error
       end
     else
-      # Once the client is outside the WAL window, we are assuming the client will reset its local state, so we will too.
+      # Once the client is outside the WAL window, we are assuming the client will reset its
+      # local state, so we will too.
       ClientReconnectionInfo.clear_all_data!(state.origin, state.client_id)
 
       {:error,
@@ -1139,9 +1139,29 @@ defmodule Electric.Satellite.Protocol do
   end
 
   defp restore_client_state(subscription_ids, observed_txn_data, lsn, %State{} = state) do
+    :ok = ClientReconnectionInfo.restore_cache_for_client(state.origin, state.client_id)
+    Logger.debug("Successfully loaded client reconnection info")
+
     with {:ok, state} <- restore_subscriptions(subscription_ids, state) do
       restore_graph(lsn, observed_txn_data, state)
     end
+  end
+
+  defp restore_subscriptions(subscription_ids, %State{} = state) do
+    Enum.reduce_while(subscription_ids, {:ok, state}, fn id, {:ok, state} ->
+      case ClientReconnectionInfo.fetch_subscription(state.client_id, id) do
+        {:ok, results} ->
+          state = Map.update!(state, :subscriptions, &Map.put(&1, id, results))
+          {:cont, {:ok, state}}
+
+        :error ->
+          id = if String.length(id) > 128, do: String.slice(id, 0..125) <> "...", else: id
+
+          {:halt,
+           {:error,
+            start_replication_error(:SUBSCRIPTION_NOT_FOUND, "Unknown subscription: #{id}")}}
+      end
+    end)
   end
 
   defp restore_graph(lsn, observed_txn_data, %State{} = state) do
@@ -1171,23 +1191,6 @@ defmodule Electric.Satellite.Protocol do
         {:error,
          start_replication_error(:INVALID_POSITION, "LSN is before the already acknowledged one")}
     end
-  end
-
-  defp restore_subscriptions(subscription_ids, %State{} = state) do
-    Enum.reduce_while(subscription_ids, {:ok, state}, fn id, {:ok, state} ->
-      case ClientReconnectionInfo.fetch_subscription(state.client_id, id) do
-        {:ok, results} ->
-          state = Map.update!(state, :subscriptions, &Map.put(&1, id, results))
-          {:cont, {:ok, state}}
-
-        :error ->
-          id = if String.length(id) > 128, do: String.slice(id, 0..125) <> "...", else: id
-
-          {:halt,
-           {:error,
-            start_replication_error(:SUBSCRIPTION_NOT_FOUND, "Unknown subscription: #{id}")}}
-      end
-    end)
   end
 
   defp start_replication_error(code, message) do

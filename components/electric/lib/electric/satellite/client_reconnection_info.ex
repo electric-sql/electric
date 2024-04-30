@@ -198,18 +198,6 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
            source_txns :: [non_neg_integer(), ...]}
   @type additional_data_row :: additional_data_sub_row() | additional_data_txn_row()
 
-  # How long to wait before loading client reconnection info from the database.
-  #
-  # A new debounce timer starts when a client asks to load its reconnection info and there's no
-  # timer currently running. Any other clients that ask to load their info within
-  # the debounce duration will be added to the batch query which is executed when the timer
-  # fires.
-  @debounce_duration 1_000
-
-  if Mix.env() == :test do
-    @debounce_duration 1
-  end
-
   def start_link(connector_config) do
     origin = Connectors.origin(connector_config)
     GenServer.start_link(__MODULE__, connector_config, name: name(origin))
@@ -281,6 +269,12 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     end)
 
     :ok
+  rescue
+    exception ->
+      # Clear in-memory cache for the client to force its reloading from the database when the
+      # client reconnects.
+      clear_all_ets_data(client_id)
+      reraise exception, __STACKTRACE__
   end
 
   @doc """
@@ -290,7 +284,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   def store_initial_checkpoint!(origin, client_id, wal_pos, sent_rows_graph) do
     Client.pooled_transaction(origin, fn ->
       :ok = clear_all_data!(origin, client_id)
-      store_client_checkpoint(client_id, wal_pos, sent_rows_graph)
+      :ok = store_client_checkpoint(client_id, wal_pos, sent_rows_graph)
     end)
   end
 
@@ -307,9 +301,12 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   """
 
   defp store_client_checkpoint(client_id, wal_pos, sent_rows_graph) do
-    :ets.insert(@checkpoint_ets, {client_id, wal_pos, sent_rows_graph})
     sent_rows_graph_bin = :erlang.term_to_binary(sent_rows_graph)
     Client.query!(@upsert_checkpoint_query, [client_id, wal_pos, sent_rows_graph_bin])
+
+    :ets.insert(@checkpoint_ets, {client_id, wal_pos, sent_rows_graph})
+
+    :ok
   end
 
   @doc """
@@ -389,6 +386,12 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
           {:error, {:wal_pos_before_checkpoint, acked_wal_pos, new_wal_pos}}
         end
     end
+  rescue
+    exception ->
+      # Clear in-memory cache for the client to force its reloading from the database when the
+      # client reconnects.
+      clear_all_ets_data(client_id)
+      reraise exception, __STACKTRACE__
   end
 
   @doc """
@@ -616,6 +619,12 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     ])
 
     :ok
+  rescue
+    exception ->
+      # Clear in-memory cache for the client to force its reloading from the database when the
+      # client reconnects.
+      clear_all_ets_data(client_id)
+      reraise exception, __STACKTRACE__
   end
 
   defp list_subscriptions(client_id) do
@@ -660,6 +669,12 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     ])
 
     :ok
+  rescue
+    exception ->
+      # Clear in-memory cache for the client to force its reloading from the database when the
+      # client reconnects.
+      clear_all_ets_data(client_id)
+      reraise exception, __STACKTRACE__
   end
 
   @insert_transaction_data_query """
@@ -695,6 +710,12 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     ])
 
     :ok
+  rescue
+    exception ->
+      # Clear in-memory cache for the client to force its reloading from the database when the
+      # client reconnects.
+      clear_all_ets_data(client_id)
+      reraise exception, __STACKTRACE__
   end
 
   @doc """
@@ -704,7 +725,12 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   """
   @spec restore_cache_for_client(Connectors.origin(), String.t()) :: :ok | {:error, Exception.t()}
   def restore_cache_for_client(origin, client_id) do
-    GenServer.call(name(origin), {:restore_cache_for_client, client_id})
+    if :ets.member(@checkpoint_ets, client_id) do
+      # Client's info is already in the cache.
+      :ok
+    else
+      GenServer.call(name(origin), {:restore_cache_for_client, client_id})
+    end
   end
 
   defp pop_additional_data_before(client_id, txid) do
@@ -804,70 +830,31 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     additional_data_table = :ets.new(@additional_data_ets, [:named_table, :public, :ordered_set])
     actions_table = :ets.new(@actions_ets, [:named_table, :public, :set])
 
-    {:ok,
-     %{
-       origin: Connectors.origin(connector_config),
-       checkpoint_table: checkpoint_table,
-       subscriptions_table: subscriptions_table,
-       additional_data_table: additional_data_table,
-       actions_table: actions_table,
-       debounce_timer: nil,
-       debounced_client_ids: [],
-       waiting_callers: [],
-       client_monitors: %{}
-     }}
+    state = %{
+      origin: Connectors.origin(connector_config),
+      checkpoint_table: checkpoint_table,
+      subscriptions_table: subscriptions_table,
+      additional_data_table: additional_data_table,
+      actions_table: actions_table
+    }
+
+    # Restore cached info for all clients at initialisation time.
+    # Later on, when any one client's write fails to be persisted in the database, its
+    # in-memory cached data will be cleared and later restored on-demand.
+    :ok = restore_cached_info(nil, state)
+
+    {:ok, state}
   end
 
   @impl GenServer
-  def handle_call({:restore_cache_for_client, client_id}, {pid, _} = from, state) do
-    monitor = Process.monitor(pid)
-
-    # We batch up multiple client requests that this gen server receives within a fixed time
-    # period ("debounce duration") into a single SQL query. During the debounce duration,
-    # clients that request restoration of their cache are blocked waiting for
-    # `GenServer.call()` to return.
-    #
-    # The purpose of this is to avoid issuing a separate SQL query per client. We'll need to
-    # benchmark this to tweak the duration for optimal batching.
-    state =
-      state
-      |> Map.update!(:debounced_client_ids, &[client_id | &1])
-      |> Map.update!(:waiting_callers, &[from | &1])
-      |> Map.update!(:client_monitors, &Map.put(&1, monitor, client_id))
-      |> debounce()
-
-    {:noreply, state}
+  def handle_call({:restore_cache_for_client, client_id}, _from, state) do
+    result = restore_cached_info([client_id], state)
+    {:reply, result, state}
   end
 
-  @impl GenServer
-  def handle_info(:restore_cache_for_clients, state) do
-    result = restore_cached_info(state)
-    :ok = unblock_waiting_callers(state.waiting_callers, result)
-    {:noreply, %{state | debounce_timer: nil, debounced_client_ids: [], waiting_callers: []}}
-  end
-
-  def handle_info({:DOWN, monitor, :process, _pid, _reason}, state) do
-    %{client_monitors: client_monitors} = state
-
-    with {:ok, client_id} <- Map.fetch(client_monitors, monitor) do
-      Logger.debug(
-        "WebsocketProcess for client_id=#{client_id} is down. Cleaning up cached info."
-      )
-
-      clear_all_ets_data(client_id)
-    end
-
-    {:noreply, %{state | client_monitors: Map.delete(client_monitors, monitor)}}
-  end
-
-  defp debounce(%{debounce_timer: nil} = state) do
-    timer = Process.send_after(self(), :restore_cache_for_clients, @debounce_duration)
-    %{state | debounce_timer: timer}
-  end
-
-  defp debounce(state), do: state
-
-  defp restore_cached_info(%{debounced_client_ids: client_ids} = state) do
+  # This function is not expected to raise. It returns an error tuple of any of the DB queries
+  # it executes fail.
+  defp restore_cached_info(client_ids, state) do
     Client.checkout_from_pool(state.origin, fn ->
       with {:ok, checkpoints} <- load_checkpoints(client_ids),
            {:ok, subscriptions} <- load_subscriptions(client_ids),
@@ -888,9 +875,9 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     end)
   end
 
-  @load_checkpoints_query "SELECT * FROM #{client_checkpoints_table()} WHERE client_id = ANY($1)"
+  @load_checkpoints_query "SELECT * FROM #{client_checkpoints_table()}"
   defp load_checkpoints(client_ids) do
-    with {:ok, {_cols, rows}} <- Client.query(@load_checkpoints_query, [client_ids]) do
+    with {:ok, {_cols, rows}} <- scoped_query(@load_checkpoints_query, client_ids) do
       tuples =
         Enum.map(rows, fn [client_id, wal_pos, sent_rows_graph] ->
           {client_id, wal_pos, :erlang.binary_to_term(sent_rows_graph)}
@@ -900,9 +887,9 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     end
   end
 
-  @load_subscriptions_query "SELECT * FROM #{client_shape_subscriptions_table()} WHERE client_id = ANY($1)"
+  @load_subscriptions_query "SELECT * FROM #{client_shape_subscriptions_table()}"
   defp load_subscriptions(client_ids) do
-    with {:ok, {_cols, rows}} <- Client.query(@load_subscriptions_query, [client_ids]) do
+    with {:ok, {_cols, rows}} <- scoped_query(@load_subscriptions_query, client_ids) do
       tuples =
         Enum.map(rows, fn [client_id, subs_id, xmin, pos, shape_requests_bin] ->
           {{client_id, decode_uuid(subs_id)}, xmin, :erlang.binary_to_term(shape_requests_bin),
@@ -913,9 +900,9 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     end
   end
 
-  @load_additional_data_query "SELECT * FROM #{client_additional_data_table()} WHERE client_id = ANY($1)"
+  @load_additional_data_query "SELECT * FROM #{client_additional_data_table()}"
   defp load_additional_data(client_ids) do
-    with {:ok, {_cols, rows}} <- Client.query(@load_additional_data_query, [client_ids]) do
+    with {:ok, {_cols, rows}} <- scoped_query(@load_additional_data_query, client_ids) do
       tuples =
         Enum.map(rows, fn
           [client_id, xmin, pos, subject, subscription_id, graph_diff, included_txns] ->
@@ -927,9 +914,9 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     end
   end
 
-  @load_actions_query "SELECT * FROM #{client_actions_table()} WHERE client_id = ANY($1)"
+  @load_actions_query "SELECT * FROM #{client_actions_table()}"
   defp load_actions(client_ids) do
-    with {:ok, {_cols, rows}} <- Client.query(@load_actions_query, [client_ids]) do
+    with {:ok, {_cols, rows}} <- scoped_query(@load_actions_query, client_ids) do
       tuples =
         Enum.map(rows, fn [client_id, txid, actions_bin] ->
           {{client_id, txid}, :erlang.binary_to_term(actions_bin)}
@@ -939,8 +926,13 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     end
   end
 
-  defp unblock_waiting_callers(callers, result) do
-    Enum.each(callers, &GenServer.reply(&1, result))
+  # Perform a query that can be scoped by `client_ids`.
+  defp scoped_query(query, nil) do
+    Client.query(query, [])
+  end
+
+  defp scoped_query(base_query, client_ids) when is_list(client_ids) do
+    Client.query(base_query <> " WHERE client_id = ANY($1)", [client_ids])
   end
 
   # The encode_uuid() and decode_uuid() functions are needed here due to incomplete adoption
