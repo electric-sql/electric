@@ -62,7 +62,11 @@ abstract class DatabaseAdapter
         // Commit the transaction when the user sets the result.
         // This assumes that the user does not execute any more queries after setting the result.
         this._run({ sql: 'COMMIT' })
-          .then(() => resolve(res))
+          .then(() => {
+            // Release early if commit succeeded
+            release()
+            resolve(res)
+          })
           // Failed to commit
           .catch(reject)
       })
