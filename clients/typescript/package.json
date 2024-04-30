@@ -258,7 +258,7 @@
     "@op-engineering/op-sqlite": ">= 2.0.16",
     "@tauri-apps/plugin-sql": "2.0.0-alpha.5",
     "expo-sqlite": ">= 13.0.0",
-    "prisma": "^4.0.0",
+    "prisma": "4.8.1",
     "react": ">= 16.8.0",
     "react-dom": ">= 16.8.0",
     "react-native": ">= 0.68.0",
