@@ -1,0 +1,46 @@
+{
+  "name": "@electric-sql/debug-toolbar",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.cjs.js",
+  "module": "dist/index.esm.js",
+  "types": "dist/index.d.ts",
+  "author": "ElectricSQL",
+  "license": "Apache-2.0",
+  "scripts": {
+    "build": "rm -rf ./dist && node builder.js && tsc  -p tsconfig.build.json",
+    "check-styleguide": "prettier --check --loglevel warn .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "engines": {
+    "node": ">=16.11.0"
+  },
+  "dependencies": {
+    "codemirror": "^5.65.16",
+    "react": "^18.2.0",
+    "react-codemirror2": "^8.0.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "7.6.3",
+    "@types/node": "^20.12.7",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "better-sqlite3": "^8.4.0",
+    "electric-sql": "workspace:*",
+    "esbuild": "^0.20.2",
+    "esbuild-plugin-inline-image": "^0.0.9",
+    "esbuild-plugin-inline-import": "^1.0.4",
+    "jsdom": "24.0.0",
+    "prettier": "3.2.5",
+    "typescript": "^5.4.5",
+    "vitest": "^1.5.0"
+  },
+  "peerDependencies": {
+    "electric-sql": "workspace:*"
+  },
+  "files": [
+    "dist"
+  ]
+}

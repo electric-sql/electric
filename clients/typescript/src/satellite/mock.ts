@@ -72,6 +72,7 @@ export class MockSatelliteProcess implements Satellite {
   socketFactory: SocketFactory
   opts: SatelliteOpts
   token: string | undefined
+  connectivityState?: ConnectivityState
 
   constructor(
     dbName: DbName,
@@ -87,8 +88,9 @@ export class MockSatelliteProcess implements Satellite {
     this.notifier = notifier
     this.socketFactory = socketFactory
     this.opts = opts
+    this.connectivityState = { status: 'disconnected' }
   }
-  connectivityState?: ConnectivityState | undefined
+
   subscribe(_shapeDefinitions: Shape[]): Promise<ShapeSubscription> {
     return Promise.resolve({
       synced: Promise.resolve(),
@@ -161,6 +163,11 @@ export class MockRegistry extends BaseRegistry {
 
     const opts = { ...satelliteDefaults, ...overrides }
 
+    const satellites = this.satellites
+    if (satellites[dbName] !== undefined) {
+      return satellites[dbName]
+    }
+
     const satellite = new MockSatelliteProcess(
       dbName,
       adapter,
@@ -169,8 +176,8 @@ export class MockRegistry extends BaseRegistry {
       socketFactory,
       opts
     )
+    this.satellites[dbName] = satellite
     await satellite.start()
-
     return satellite
   }
 }
