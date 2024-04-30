@@ -82,8 +82,6 @@ defmodule Electric.Satellite.WebsocketServerTest do
   end
 
   setup_with_mocks([
-    {Electric.Satellite.ClientReconnectionInfo, [:passthrough],
-     restore_cache_for_client: fn _, _ -> :ok end},
     {SatelliteConnector, [:passthrough],
      [
        start_link: fn %{name: name, producer: producer} ->

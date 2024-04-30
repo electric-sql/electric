@@ -1147,6 +1147,8 @@ defmodule Electric.Satellite.Protocol do
     end
   end
 
+  defp restore_subscriptions([], %State{} = state), do: {:ok, state}
+
   defp restore_subscriptions(subscription_ids, %State{} = state) do
     subscription_data =
       ClientReconnectionInfo.fetch_subscriptions(state.client_id, subscription_ids)

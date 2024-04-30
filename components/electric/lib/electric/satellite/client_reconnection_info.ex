@@ -241,13 +241,15 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     :ets.delete(@checkpoint_ets, client_id)
   end
 
-  def fetch_subscriptions(client_id, subscription_ids) do
+  def fetch_subscriptions(client_id, subscription_ids)
+      when is_list(subscription_ids) and subscription_ids != [] do
     :ets.select(@subscriptions_ets, [
       {{{client_id, :"$1"}, :_, :"$2", :_}, [ids_ms_guard(subscription_ids)], [{{:"$1", :"$2"}}]}
     ])
   end
 
-  def delete_subscriptions(origin, client_id, subscription_ids) do
+  def delete_subscriptions(origin, client_id, subscription_ids)
+      when is_list(subscription_ids) and subscription_ids != [] do
     ms_guard = ids_ms_guard(subscription_ids)
 
     :ets.select_delete(@subscriptions_ets, [
@@ -279,7 +281,9 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
       reraise exception, __STACKTRACE__
   end
 
-  defp ids_ms_guard(ids) do
+  defp ids_ms_guard([id]), do: {:"=:=", :"$1", id}
+
+  defp ids_ms_guard([_id1, _id2 | _] = ids) do
     id_matches = Enum.map(ids, &{:"=:=", :"$1", &1})
     List.to_tuple([:or | id_matches])
   end
