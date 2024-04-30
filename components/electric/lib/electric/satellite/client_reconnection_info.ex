@@ -241,11 +241,13 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     :ets.delete(@checkpoint_ets, client_id)
   end
 
-  def fetch_subscription(client_id, subscription_id) do
-    case :ets.lookup(@subscriptions_ets, {client_id, subscription_id}) do
-      [] -> :error
-      [{_key, _xmin, data, _pos}] -> {:ok, data}
-    end
+  def fetch_subscriptions(client_id, subscription_ids) do
+    id_matches = for subs_id <- subscription_ids, do: {:"=:=", :"$1", subs_id}
+    guard = List.to_tuple([:or | id_matches])
+
+    :ets.select(@subscriptions_ets, [
+      {{{client_id, :"$1"}, :_, :"$2", :_}, [guard], [{{:"$1", :"$2"}}]}
+    ])
   end
 
   def delete_subscription(origin, client_id, subscription_id) do
