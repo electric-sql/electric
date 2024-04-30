@@ -139,7 +139,7 @@ test('interactive transactions roll back if an error in between statements is th
   t.false(adapter.isLocked)
 })
 
-test.only('interactive transactions roll back once if an error in transaction is thrown', async (t) => {
+test('interactive transactions roll back once if an error in transaction is thrown', async (t) => {
   const adapter = new MockDatabaseAdapter()
 
   const sql = 'INSERT INTO items VALUES (1);'
