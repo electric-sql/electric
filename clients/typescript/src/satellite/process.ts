@@ -1463,22 +1463,22 @@ export class SatelliteProcess implements Satellite {
     tables: QualifiedTablename[],
     flag: 0 | 1
   ): Statement[] {
+    if (tables.length === 0) return []
     const triggers = `"${this.opts.triggersTable.namespace}"."${this.opts.triggersTable.tablename}"`
-    const namespacesAndTableNames = tables
-      .map((tbl) => [tbl.namespace, tbl.tablename])
-      .flat()
-    if (tables.length > 0) {
-      const pos = (i: number) => this.builder.makePositionalParam(i)
-      let i = 1
-      return [
-        {
-          sql: `UPDATE ${triggers} SET flag = ${pos(i++)} WHERE ${tables
-            .map((_) => `(namespace = ${pos(i++)} AND tablename = ${pos(i++)})`)
-            .join(' OR ')}`,
-          args: [flag, ...namespacesAndTableNames],
-        },
-      ]
-    } else return []
+    const namespacesAndTableNames = tables.flatMap((tbl) => [
+      tbl.namespace,
+      tbl.tablename,
+    ])
+    const pos = (i: number) => this.builder.makePositionalParam(i)
+    let i = 1
+    return [
+      {
+        sql: `UPDATE ${triggers} SET flag = ${pos(i++)} WHERE ${tables
+          .map((_) => `(namespace = ${pos(i++)} AND tablename = ${pos(i++)})`)
+          .join(' OR ')}`,
+        args: [flag, ...namespacesAndTableNames],
+      },
+    ]
   }
 
   _addSeenAdditionalDataStmt(ref: string): Statement {
