@@ -22,7 +22,9 @@ To see the complete change log for each new release, see the [Releases page](htt
 
 ## 2024-05-02 - v0.10.2
 
+```
 [Announcement post](/blog/2024/05/02/electricsql-v0.11-released).
+```
 
 This release introduces a new database driver for PGLite. Plus reliability improvements.
 
