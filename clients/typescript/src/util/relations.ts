@@ -15,11 +15,12 @@ export async function inferRelationsFromDb(
   const relations: RelationsCache = {}
 
   let id = 0
-  const schema = builder.defaultNamespace
   for (const table of tableNames) {
     const tableName = table.name
     const columnsForTable = (await adapter.query(
-      builder.getTableInfo(new QualifiedTablename(schema, tableName))
+      builder.getTableInfo(
+        new QualifiedTablename(builder.defaultNamespace, tableName)
+      )
     )) as {
       name: string
       type: string
@@ -31,7 +32,10 @@ export async function inferRelationsFromDb(
     }
     const relation: Relation = {
       id: id++,
-      schema: schema,
+      // schema needs to be 'public' because these relations are used
+      // by the Satellite process and client to replicate changes to Electric
+      // and merge incoming changes from Electric, and those use the 'public' namespace.
+      schema: 'public',
       table: tableName,
       tableType: SatRelation_RelationType.TABLE,
       columns: [],
