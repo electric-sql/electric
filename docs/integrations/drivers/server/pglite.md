@@ -2,7 +2,7 @@
 title: PGlite
 ---
 
-ElectricSQL supports [Node.js](https://nodejs.org) server application using using [PGlite](https://github.com/electric-sql/pglite/), our lightweight WebAssembly build of Postgres.
+ElectricSQL supports [Node.js](https://nodejs.org) server application using [PGlite](https://github.com/electric-sql/pglite/), our lightweight WebAssembly build of Postgres.
 
 ## Dependencies
 
@@ -29,14 +29,14 @@ const config = {
 }
 
 // Create the PGlite database connection. The first argument
-// is your database name. Changing this will create/use a new
-// local database file.
+// is your Postgres `pgdata` directory. Changing this will 
+// create/use a new local database.
 const conn = new PGlite('/path/to/postgres/datadir')
 
 // Instantiate your electric client.
 const electric = await electrify(conn, schema, config)
 
-// Connect to Electric, passing along your authentication token
+// Connect to the sync service, passing along your authentication token
 // See Usage -> Authentication for more details.
 await electric.connect('your token')
 ```

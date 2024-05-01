@@ -37,7 +37,7 @@ await client.connect()
 const conn = ElectricDatabase(client, 'name-of-database')
 const electric = await electrify(conn, schema, config)
 
-// Connect to Electric, passing along your authentication token
+// Connect to the sync service, passing along your authentication token
 // See Usage -> Authentication for more details.
 await electric.connect('your token')
 ```

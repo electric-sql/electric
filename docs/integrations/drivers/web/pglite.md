@@ -44,7 +44,7 @@ const conn = new PGlite('idb://electric.db', {
 // Instantiate your electric client.
 const electric = await electrify(conn, schema, config)
 
-// Connect to Electric, passing along your authentication token
+// Connect to the sync service, passing along your authentication token
 // See Usage -> Authentication for more details.
 await electric.connect('your token')
 ```
