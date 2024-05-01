@@ -92,7 +92,7 @@ class PgBuilder extends QueryBuilder {
     }
   }
 
-  getTableInfo(tablename: string): Statement {
+  getTableInfo(table: QualifiedTablename): Statement {
     return {
       sql: dedent`
         SELECT
@@ -120,9 +120,10 @@ class PgBuilder extends QueryBuilder {
             )
         FROM information_schema.columns AS c
         WHERE
-          c.table_name = $1;
+          c.table_name = $1 AND
+          c.table_schema = $2;
       `,
-      args: [tablename],
+      args: [table.tablename, table.namespace],
     }
   }
 

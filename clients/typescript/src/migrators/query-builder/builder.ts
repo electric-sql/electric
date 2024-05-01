@@ -99,7 +99,7 @@ export abstract class QueryBuilder {
    * The information includes all column names, their type,
    * whether or not they are nullable, and whether they are part of the PK.
    */
-  abstract getTableInfo(tablename: string): Statement
+  abstract getTableInfo(table: QualifiedTablename): Statement
 
   /**
    * Insert a row into a table, ignoring it if it already exists.

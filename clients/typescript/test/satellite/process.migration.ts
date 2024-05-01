@@ -10,6 +10,7 @@ import { generateTag } from '../../src/satellite/oplog'
 import {
   DataChange,
   DataChangeType,
+  QualifiedTablename,
   Relation,
   Row,
   SchemaChange,
@@ -94,7 +95,7 @@ async function assertDbHasTables(
 }
 
 async function getTableInfo(
-  table: string,
+  table: QualifiedTablename,
   t: ExecutionContext<ContextType>
 ): Promise<ColumnInfo[]> {
   const { adapter, builder } = t.context
@@ -247,7 +248,11 @@ export const processMigrationTests = (test: TestFn<ContextType>) => {
   async function checkMigrationIsApplied(t: ExecutionContext<ContextType>) {
     await assertDbHasTables(t, 'parent', 'child', 'NewTable')
 
-    const newTableInfo = await getTableInfo('NewTable', t)
+    const { namespace } = t.context
+    const newTableInfo = await getTableInfo(
+      new QualifiedTablename(namespace, 'NewTable'),
+      t
+    )
 
     const expectedTables = [
       {
@@ -265,7 +270,10 @@ export const processMigrationTests = (test: TestFn<ContextType>) => {
       t.true(newTableInfo.some((t) => isEqual(t, tbl)))
     })
 
-    const parentTableInfo = await getTableInfo('parent', t)
+    const parentTableInfo = await getTableInfo(
+      new QualifiedTablename(namespace, 'parent'),
+      t
+    )
     const parentTableHasColumn = parentTableInfo.some((col: ColumnInfo) => {
       return (
         col.name === 'baz' &&

@@ -63,10 +63,10 @@ class SqliteBuilder extends QueryBuilder {
     return `x'${hexString}'`
   }
 
-  getTableInfo(tablename: string): Statement {
+  getTableInfo(table: QualifiedTablename): Statement {
     return {
       sql: `SELECT name, type, "notnull", dflt_value, pk FROM pragma_table_info(?)`,
-      args: [tablename],
+      args: [table.tablename],
     }
   }
 

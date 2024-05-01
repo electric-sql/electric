@@ -2,6 +2,7 @@ import { SatRelation_RelationType } from '../_generated/protocol/satellite'
 import { DatabaseAdapter } from '../electric/adapter'
 import { QueryBuilder } from '../migrators/query-builder'
 import { SatelliteOpts } from '../satellite/config'
+import { QualifiedTablename } from './tablename'
 import { Relation, RelationsCache } from './types'
 
 // TODO: Improve this code once with Migrator and consider simplifying oplog.
@@ -14,11 +15,11 @@ export async function inferRelationsFromDb(
   const relations: RelationsCache = {}
 
   let id = 0
-  const schema = 'public' // TODO
+  const schema = builder.defaultNamespace
   for (const table of tableNames) {
     const tableName = table.name
     const columnsForTable = (await adapter.query(
-      builder.getTableInfo(tableName)
+      builder.getTableInfo(new QualifiedTablename(schema, tableName))
     )) as {
       name: string
       type: string
