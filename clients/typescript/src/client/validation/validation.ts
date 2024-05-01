@@ -1,6 +1,6 @@
 import * as z from 'zod'
 import { InvalidArgumentError } from './errors/invalidArgumentError'
-import { Record as DataRecord, isObject } from '../../util'
+import { DbRecord as DataRecord, isObject } from '../../util'
 import { InvalidRecordTransformationError } from './errors/invalidRecordTransformationError'
 
 function deepOmit(obj: Record<string, any>) {

@@ -54,7 +54,7 @@ import {
   SatelliteError,
   SatelliteErrorCode,
   DataTransaction,
-  Record,
+  DbRecord,
   Relation,
   SchemaChange,
   StartReplicationResponse,
@@ -151,8 +151,10 @@ export class SatelliteClient implements Client {
   // can only handle a single subscription at a time
   private subscriptionsDataCache: SubscriptionsDataCache
 
-  private replicationTransforms: Map<string, ReplicatedRowTransformer<Record>> =
-    new Map()
+  private replicationTransforms: Map<
+    string,
+    ReplicatedRowTransformer<DbRecord>
+  > = new Map()
 
   private socketHandler?: (any: any) => void
   private throttledPushTransaction?: () => void
@@ -1283,7 +1285,7 @@ export class SatelliteClient implements Client {
 
   public setReplicationTransform(
     tableName: QualifiedTablename,
-    transform: ReplicatedRowTransformer<Record>
+    transform: ReplicatedRowTransformer<DbRecord>
   ): void {
     this.replicationTransforms.set(tableName.tablename, transform)
   }
@@ -1350,7 +1352,7 @@ function getColumnType(
 }
 
 export function serializeRow(
-  rec: Record,
+  rec: DbRecord,
   relation: Relation,
   dbDescription: DbSchema<any>,
   encoder: TypeEncoder
@@ -1384,19 +1386,19 @@ export function deserializeRow(
   relation: Relation,
   dbDescription: DbSchema<any>,
   decoder: TypeDecoder
-): Record
+): DbRecord
 export function deserializeRow(
   row: SatOpRow | undefined,
   relation: Relation,
   dbDescription: DbSchema<any>,
   decoder: TypeDecoder
-): Record | undefined
+): DbRecord | undefined
 export function deserializeRow(
   row: SatOpRow | undefined,
   relation: Relation,
   dbDescription: DbSchema<any>,
   decoder: TypeDecoder
-): Record | undefined {
+): DbRecord | undefined {
   if (row == undefined) {
     return undefined
   }

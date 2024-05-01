@@ -14,9 +14,9 @@ export class QualifiedTablename {
   }
 
   toString(): string {
-    // Don't collapse it to "<namespace>.<tablename>" because that can lead to clashes
-    // since both `QualifiedTablename("foo", "bar.baz")` and `QualifiedTablename("foo.bar", "baz")`
-    // would be collapsed to "foo.bar.baz".
+    // Don't collapse it to '<namespace>.<tablename>' because that can lead to clashes
+    // since both `QualifiedTablename('foo', 'bar.baz')` and `QualifiedTablename('foo.bar', 'baz')`
+    // would be collapsed to 'foo.bar.baz'.
     return JSON.stringify({
       namespace: this.namespace,
       tablename: this.tablename,

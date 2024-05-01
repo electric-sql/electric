@@ -2,7 +2,7 @@ import { Satellite } from '../../satellite'
 import {
   QualifiedTablename,
   ReplicatedRowTransformer,
-  Record as DataRecord,
+  DbRecord as DataRecord,
 } from '../../util'
 import { Converter } from '../conversions/converter'
 import { Transformation, transformFields } from '../conversions/input'

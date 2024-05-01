@@ -1,7 +1,7 @@
 import { SatRelation_RelationType } from '../../src/_generated/protocol/satellite'
 import { serializeRow, deserializeRow } from '../../src/satellite/client'
 import { TestFn, ExecutionContext } from 'ava'
-import { Relation, Record } from '../../src/util/types'
+import { Relation, DbRecord } from '../../src/util/types'
 import { DbSchema, TableSchema } from '../../src/client/model/schema'
 import { PgBasicType } from '../../src/client/conversions/types'
 import { HKT } from '../../src/client/util/hkt'
@@ -96,7 +96,7 @@ export const serializationTests = (test: TestFn<ContextType>) => {
       []
     )
 
-    const record: Record = {
+    const record: DbRecord = {
       name1: 'Hello',
       name2: 'World!',
       name3: null,
@@ -152,7 +152,7 @@ export const serializationTests = (test: TestFn<ContextType>) => {
     t.deepEqual(d_row, record)
 
     // Test edge cases for floats such as NaN, Infinity, -Infinity
-    const record2: Record = {
+    const record2: DbRecord = {
       name1: 'Edge cases for Floats',
       name2: null,
       name3: null,
@@ -262,7 +262,7 @@ export const serializationTests = (test: TestFn<ContextType>) => {
       []
     )
 
-    const record: Record = {
+    const record: DbRecord = {
       bit0: null,
       bit1: null,
       bit2: 'Filled',

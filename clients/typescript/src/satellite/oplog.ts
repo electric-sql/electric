@@ -7,7 +7,7 @@ import {
   SqlValue,
   DataTransaction,
   DataChange,
-  Record as Rec,
+  DbRecord as Rec,
   Relation,
 } from '../util/types'
 import { union } from '../util/sets'

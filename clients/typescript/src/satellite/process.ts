@@ -37,7 +37,7 @@ import {
   Transaction,
   isDataChange,
   Uuid,
-  Record as DataRecord,
+  DbRecord as DataRecord,
   ReplicatedRowTransformer,
 } from '../util/types'
 import { SatelliteOpts } from './config'

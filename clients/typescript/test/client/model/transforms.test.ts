@@ -7,7 +7,7 @@ import {
 import { schema, Post } from '../generated'
 import { transformTableRecord } from '../../../src/client/model/transforms'
 import { InvalidRecordTransformationError } from '../../../src/client/validation/errors/invalidRecordTransformationError'
-import { Record } from '../../../src/util'
+import { DbRecord } from '../../../src/util'
 import { sqliteConverter } from '../../../src/client/conversions/sqlite'
 
 const tableName = 'Post'
@@ -24,7 +24,7 @@ const post1 = {
 }
 
 test('transformTableRecord should validate the input', (t) => {
-  const liftedTransform = (r: Record) =>
+  const liftedTransform = (r: DbRecord) =>
     transformTableRecord(
       r,
       (row: Post) => row,
@@ -50,7 +50,7 @@ test('transformTableRecord should validate the input', (t) => {
 })
 
 test('transformTableRecord should validate the output', (t) => {
-  const liftedTransform = (r: Record) =>
+  const liftedTransform = (r: DbRecord) =>
     transformTableRecord<Post>(
       r,
       // @ts-expect-error: incorrectly typed output
@@ -68,7 +68,7 @@ test('transformTableRecord should validate the output', (t) => {
 })
 
 test('transformTableRecord should validate output does not modify immutable fields', (t) => {
-  const liftedTransform = (r: Record) =>
+  const liftedTransform = (r: DbRecord) =>
     transformTableRecord(
       r,
       (row: Post) => ({

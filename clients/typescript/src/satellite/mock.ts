@@ -12,7 +12,7 @@ import {
   Relation,
   SatelliteErrorCode,
   RelationsCache,
-  Record as DataRecord,
+  DbRecord as DataRecord,
   StartReplicationResponse,
   StopReplicationResponse,
   OutboundStartedCallback,

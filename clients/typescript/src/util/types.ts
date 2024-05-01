@@ -149,15 +149,15 @@ export type Change = DataChange | SchemaChange
 export type DataChange = {
   relation: Relation
   type: DataChangeType
-  record?: Record
-  oldRecord?: Record
+  record?: DbRecord
+  oldRecord?: DbRecord
   tags: Tag[]
 }
 
 export type DataInsert = {
   relation: Relation
   type: DataChangeType.INSERT
-  record: Record
+  record: DbRecord
   tags: Tag[]
 }
 
@@ -180,7 +180,7 @@ export function isDataChange(change: Change): change is DataChange {
   return 'relation' in change
 }
 
-export type Record = {
+export type DbRecord = {
   [key: string]: boolean | string | number | Uint8Array | undefined | null
 }
 
