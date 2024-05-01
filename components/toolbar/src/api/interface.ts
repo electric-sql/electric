@@ -5,6 +5,11 @@ export type UnsubscribeFunction = () => void
 
 export type DebugShape = Shape & { id: string }
 
+export interface DbTableInfo {
+  name: string
+  sql: string
+}
+
 export interface ToolbarInterface {
   getSatelliteNames(): string[]
   getSatelliteStatus(name: string): ConnectivityState | null
@@ -19,4 +24,7 @@ export interface ToolbarInterface {
 
   resetDb(dbName: string): Promise<void>
   queryDb(dbName: string, statement: Statement): Promise<Row[]>
+
+  getDbTables(dbName: string): Promise<DbTableInfo[]>
+  getElectricTables(dbName: string): Promise<DbTableInfo[]>
 }

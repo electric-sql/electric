@@ -1,4 +1,9 @@
-import { DebugShape, ToolbarInterface, UnsubscribeFunction } from './interface'
+import {
+  DbTableInfo,
+  DebugShape,
+  ToolbarInterface,
+  UnsubscribeFunction,
+} from './interface'
 import { Row, Statement, ConnectivityState } from 'electric-sql/util'
 import {
   Registry,
@@ -81,5 +86,24 @@ export class Toolbar implements ToolbarInterface {
   queryDb(dbName: string, statement: Statement): Promise<Row[]> {
     const sat = this.getSatellite(dbName)
     return sat.adapter.query(statement)
+  }
+
+  getDbTables(dbName: string): Promise<DbTableInfo[]> {
+    const adapter = this.getSatellite(dbName).adapter
+    return adapter.query({
+      sql: `
+      SELECT name, sql FROM sqlite_master WHERE type='table'
+        AND name NOT LIKE 'sqlite_%'
+        AND name NOT LIKE '_electric_%'`,
+    }) as unknown as Promise<DbTableInfo[]>
+  }
+
+  getElectricTables(dbName: string): Promise<DbTableInfo[]> {
+    const adapter = this.getSatellite(dbName).adapter
+    return adapter.query({
+      sql: `
+      SELECT name, sql FROM sqlite_master WHERE type='table'
+        AND name LIKE '_electric_%'`,
+    }) as unknown as Promise<DbTableInfo[]>
   }
 }
