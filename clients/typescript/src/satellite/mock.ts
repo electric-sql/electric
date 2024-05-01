@@ -160,7 +160,7 @@ export class MockRegistry extends BaseRegistry {
       throw new Error('Failed to start satellite process')
     }
 
-    const namespace = migrator.electricQueryBuilder.defaultNamespace
+    const namespace = migrator.queryBuilder.defaultNamespace
     const opts = { ...satelliteDefaults(namespace), ...overrides }
 
     const satellites = this.satellites

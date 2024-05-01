@@ -32,5 +32,5 @@ export interface Migrator {
   apply(migration: StmtMigration): Promise<void>
   applyIfNotAlready(migration: StmtMigration): Promise<boolean>
   querySchemaVersion(): Promise<string | undefined>
-  electricQueryBuilder: QueryBuilder
+  queryBuilder: QueryBuilder
 }

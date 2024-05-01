@@ -168,7 +168,7 @@ export class SatelliteProcess implements Satellite {
     this.migrator = migrator
     this.notifier = notifier
     this.client = client
-    this.builder = this.migrator.electricQueryBuilder
+    this.builder = this.migrator.queryBuilder
 
     this.opts = opts
     this.relations = {}

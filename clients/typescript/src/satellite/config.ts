@@ -1,6 +1,5 @@
 import { IBackOffOptions } from 'exponential-backoff'
 import { QualifiedTablename } from '../util/tablename'
-import { Insertable, Selectable, Updateable, Generated } from 'kysely'
 
 export type ConnectionBackoffOptions = Omit<IBackOffOptions, 'retry'>
 export interface SatelliteOpts {
@@ -35,78 +34,11 @@ export interface SatelliteOverrides {
   minSnapshotWindow?: number
 }
 
-// Describe the schema of the database for use with Kysely
-// The names of the properties in this interface
-// must be kept consistent with the names of the tables
-
 export const _electric_oplog = '_electric_oplog'
 export const _electric_meta = '_electric_meta'
 export const _electric_migrations = '_electric_migrations'
 export const _electric_trigger_settings = '_electric_trigger_settings'
 export const _electric_shadow = '_electric_shadow'
-
-export interface ElectricSchema {
-  [_electric_oplog]: OplogTable
-  [_electric_meta]: MetaTable
-  [_electric_migrations]: MigrationsTable
-  [_electric_trigger_settings]: TriggersTable
-  [_electric_shadow]: ShadowTable
-}
-
-interface OplogTable {
-  rowid: number
-  namespace: string
-  tablename: string
-  optype: string
-  primaryKey: string
-  newRow: string | null
-  oldRow: string | null
-  timestamp: string
-  clearTags: string
-}
-
-export type Oplog = Selectable<OplogTable>
-export type NewOplog = Insertable<OplogTable>
-export type OplogUpdate = Updateable<OplogTable>
-
-interface MetaTable {
-  key: string
-  value: Buffer
-}
-
-export type Meta = Selectable<MetaTable>
-export type NewMeta = Insertable<MetaTable>
-export type MetaUpdate = Updateable<MetaTable>
-
-export interface MigrationsTable {
-  id: Generated<number>
-  version: string
-  applied_at: string
-}
-
-export type Migration = Selectable<MigrationsTable>
-export type NewMigration = Insertable<MigrationsTable>
-export type MigrationUpdate = Updateable<MigrationsTable>
-
-interface TriggersTable {
-  tablename: string
-  flag: number
-}
-
-export type Trigger = Selectable<TriggersTable>
-export type NewTrigger = Insertable<TriggersTable>
-export type TriggerUpdate = Updateable<TriggersTable>
-
-interface ShadowTable {
-  namespace: string
-  tablename: string
-  primaryKey: string
-  tags: string
-}
-
-export type Shadow = Selectable<ShadowTable>
-export type NewShadow = Insertable<ShadowTable>
-export type ShadowUpdate = Updateable<ShadowTable>
 
 export const satelliteDefaults: (namespace: string) => SatelliteOpts = (
   namespace: string

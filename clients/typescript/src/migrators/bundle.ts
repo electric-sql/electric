@@ -8,24 +8,10 @@ import {
 import { DatabaseAdapter } from '../electric/adapter'
 import { buildInitialMigration as makeBaseMigration } from './schema'
 import Log from 'loglevel'
-import { SatelliteError, SatelliteErrorCode, SqlValue } from '../util'
-import { ElectricSchema } from './schema'
-import {
-  Kysely,
-  KyselyConfig,
-  sql as raw,
-  DummyDriver,
-  PostgresAdapter,
-  PostgresIntrospector,
-  PostgresQueryCompiler,
-  SqliteAdapter,
-  SqliteIntrospector,
-  SqliteQueryCompiler,
-  expressionBuilder,
-  ExpressionBuilder,
-} from 'kysely'
+import { SatelliteError, SatelliteErrorCode } from '../util'
 import { _electric_migrations } from '../satellite/config'
 import { pgBuilder, QueryBuilder, sqliteBuilder } from './query-builder'
+import { dedent } from 'ts-dedent'
 
 export const SCHEMA_VSN_ERROR_MSG = `Local schema doesn't match server's. Clear local state through developer tools and retry connection manually. If error persists, re-generate the client. Check documentation (https://electric-sql.com/docs/reference/roadmap) to learn more.`
 
@@ -36,25 +22,18 @@ export abstract class BundleMigratorBase implements Migrator {
   migrations: StmtMigration[]
 
   readonly tableName = _electric_migrations
-  queryBuilder: Kysely<ElectricSchema>
-  eb: ExpressionBuilder<ElectricSchema, typeof _electric_migrations>
 
   constructor(
     adapter: DatabaseAdapter,
     migrations: Migration[] = [],
-    queryBuilderConfig: KyselyConfig,
-    public electricQueryBuilder: QueryBuilder,
-    private namespace: string = electricQueryBuilder.defaultNamespace
+    public queryBuilder: QueryBuilder,
+    private namespace: string = queryBuilder.defaultNamespace
   ) {
     this.adapter = adapter
-    const baseMigration = makeBaseMigration(electricQueryBuilder)
+    const baseMigration = makeBaseMigration(queryBuilder)
     this.migrations = [...baseMigration.migrations, ...migrations].map(
       makeStmtMigration
     )
-    this.queryBuilder = new Kysely<ElectricSchema>(
-      queryBuilderConfig
-    ).withSchema(namespace)
-    this.eb = expressionBuilder<ElectricSchema, typeof _electric_migrations>()
   }
 
   async up(): Promise<number> {
@@ -74,11 +53,8 @@ export abstract class BundleMigratorBase implements Migrator {
   async migrationsTableExists(): Promise<boolean> {
     // If this is the first time we're running migrations, then the
     // migrations table won't exist.
-    const namespace = this.electricQueryBuilder.defaultNamespace
-    const tableExists = this.electricQueryBuilder.tableExists(
-      this.tableName,
-      namespace
-    )
+    const namespace = this.queryBuilder.defaultNamespace
+    const tableExists = this.queryBuilder.tableExists(this.tableName, namespace)
     const tables = await this.adapter.query(tableExists)
     return tables.length > 0
   }
@@ -157,15 +133,16 @@ export abstract class BundleMigratorBase implements Migrator {
       )
     }
 
-    const { sql, parameters } = raw`
-      INSERT INTO ${this.eb.table(
-        this.tableName
-      )} (version, applied_at) VALUES (${version}, ${Date.now().toString()})
-    `.compile(this.queryBuilder)
-
     await this.adapter.runInTransaction(...statements, {
-      sql,
-      args: parameters as SqlValue[],
+      sql: dedent`
+        INSERT INTO "${this.namespace}"."${
+        this.tableName
+      }" (version, applied_at)
+        VALUES (${this.queryBuilder.makePositionalParam(
+          1
+        )}, ${this.queryBuilder.makePositionalParam(2)});
+      `,
+      args: [version, Date.now().toString()],
     })
   }
 
@@ -176,14 +153,12 @@ export abstract class BundleMigratorBase implements Migrator {
    *          that indicates if the migration was applied.
    */
   async applyIfNotAlready(migration: StmtMigration): Promise<boolean> {
-    const { sql, parameters } = raw`
-      SELECT 1 FROM ${this.eb.table(this.tableName)}
-        WHERE version = ${migration.version}
-    `.compile(this.queryBuilder)
-
     const rows = await this.adapter.query({
-      sql,
-      args: parameters as SqlValue[],
+      sql: dedent`
+        SELECT 1 FROM "${this.namespace}"."${this.tableName}"
+          WHERE version = ${this.queryBuilder.makePositionalParam(1)}
+      `,
+      args: [migration.version],
     })
 
     const shouldApply = rows.length === 0
@@ -200,28 +175,12 @@ export abstract class BundleMigratorBase implements Migrator {
 
 export class SqliteBundleMigrator extends BundleMigratorBase {
   constructor(adapter: DatabaseAdapter, migrations: Migration[] = []) {
-    const config: KyselyConfig = {
-      dialect: {
-        createAdapter: () => new SqliteAdapter(),
-        createDriver: () => new DummyDriver(),
-        createIntrospector: (db) => new SqliteIntrospector(db),
-        createQueryCompiler: () => new SqliteQueryCompiler(),
-      },
-    }
-    super(adapter, migrations, config, sqliteBuilder)
+    super(adapter, migrations, sqliteBuilder)
   }
 }
 
 export class PgBundleMigrator extends BundleMigratorBase {
   constructor(adapter: DatabaseAdapter, migrations: Migration[] = []) {
-    const config: KyselyConfig = {
-      dialect: {
-        createAdapter: () => new PostgresAdapter(),
-        createDriver: () => new DummyDriver(),
-        createIntrospector: (db) => new PostgresIntrospector(db),
-        createQueryCompiler: () => new PostgresQueryCompiler(),
-      },
-    }
-    super(adapter, migrations, config, pgBuilder)
+    super(adapter, migrations, pgBuilder)
   }
 }

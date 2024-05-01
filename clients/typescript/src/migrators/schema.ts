@@ -1,6 +1,5 @@
 import { satelliteDefaults } from '../satellite/config'
 import { QueryBuilder } from './query-builder'
-export type { ElectricSchema } from '../satellite/config'
 
 export const buildInitialMigration = (builder: QueryBuilder) => {
   const { metaTable, migrationsTable, oplogTable, triggersTable, shadowTable } =

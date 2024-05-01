@@ -13,7 +13,7 @@ const dbName = 'test.db'
 
 const dbDescription = {} as DbSchema<any>
 const adapter = {} as DatabaseAdapter
-const migrator = { electricQueryBuilder: sqliteBuilder } as unknown as Migrator
+const migrator = { queryBuilder: sqliteBuilder } as unknown as Migrator
 const notifier = {} as Notifier
 const socketFactory = {} as SocketFactory
 const config: InternalElectricConfig = {

@@ -2,7 +2,7 @@ import { Migrator, StmtMigration } from './index'
 import { QueryBuilder } from './query-builder'
 
 export class MockMigrator implements Migrator {
-  electricQueryBuilder: QueryBuilder = null as any
+  queryBuilder: QueryBuilder = null as any
 
   async up(): Promise<number> {
     return 1
