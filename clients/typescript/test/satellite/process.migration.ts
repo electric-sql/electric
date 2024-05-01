@@ -50,7 +50,14 @@ export const commonSetup = async (t: ExecutionContext<ContextType>) => {
   const { satellite, authState, token } = t.context
   await satellite.start(authState)
   satellite.setToken(token)
-  await satellite.connectWithBackoff()
+  await satellite.connectWithBackoff().catch((e) => {
+    if (e.message === 'terminating connection due to administrator command') {
+      // This can happen when we stop Postgres at the end of the test
+      return
+    }
+    throw e
+  })
+
   t.context['clientId'] = satellite._authState!.clientId // store clientId in the context
   await populateDB(t)
   const txDate = await satellite._performSnapshot()
