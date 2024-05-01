@@ -20,6 +20,26 @@ To see the complete change log for each new release, see the [Releases page](htt
 - @electric-sql/prisma-generator: [/generator/CHANGELOG.md](https://github.com/electric-sql/electric/blob/main/generator/CHANGELOG.md)
 
 
+## 2024-05-02 - v0.10.2
+
+[Announcement post](/blog/2024/05/02/electricsql-v0.11-released).
+
+This release introduces a new database driver for PGLite. Plus reliability improvements.
+
+#### Updated components
+
+Component | Version
+--------- | -------
+[Sync service][1] | [0.10.2](https://github.com/electric-sql/electric/blob/main/components/electric/CHANGELOG.md#0102)
+[TypeScript client][2] | [0.10.2](https://github.com/electric-sql/electric/blob/main/clients/typescript/CHANGELOG.md#0102)
+[create-electric-app][3] | [0.3.1](https://github.com/electric-sql/electric/blob/main/examples/starter/CHANGELOG.md#031)
+
+#### Compatibility notes
+
+**Sync service**
+
+- The default value for `DATABASE_USE_IPV6` is now `false` due to immaturity of IPv6 support at multiple levels of the Internet infrastucture.
+
 ## 2024-04-10 - v0.10
 
 [Announcement post](/blog/2024/04/10/electricsql-v0.10-released).
