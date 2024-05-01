@@ -1,4 +1,4 @@
-import { type JSX } from 'preact'
+import React from 'react'
 import { ToolbarTabsProps } from '../tabs'
 
 export default function LocalDBTab({

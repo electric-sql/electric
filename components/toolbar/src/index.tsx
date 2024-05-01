@@ -1,13 +1,16 @@
-import { render, type JSX } from 'preact'
-import { useEffect, useState } from 'preact/hooks'
+import React, { useEffect, useState } from 'react'
+import ReactDOM from 'react-dom/client'
+
+import '@radix-ui/themes/styles.css'
 
 import 'codemirror/lib/codemirror.css'
 import 'codemirror/theme/material.css'
 import 'codemirror/mode/sql/sql'
 import style from './index.module.css'
-import clsx from 'clsx'
+import './index.module.css'
 
 import logo from './logo.svg'
+import { Theme, Button, Box, Flex, Select, Text } from '@radix-ui/themes'
 
 import ToolbarTabs from './tabs'
 import { ToolbarInterface } from './api/interface'
@@ -33,37 +36,41 @@ function ElectricToolbar({ api }: ToolbarProps) {
     }
   }, [])
 
-  function handleClick() {
-    setHidden(!hidden)
-  }
-
-  function handleSelect(e: JSX.TargetedEvent<HTMLSelectElement, Event>) {
-    setDbName((e.target as HTMLSelectElement).value)
-  }
-
   return (
-    <div className={clsx(style.toolbar, hidden && style.toolbarHidden)}>
-      <header
-        className={clsx(
-          style.toolbarHeader,
-          hidden && style.toolbarHeaderHidden,
-        )}
+    <Theme asChild appearance="dark">
+      <Box
+        width={hidden ? '400px' : '100%'}
+        height="fit-content"
+        minHeight="auto"
+        style={{ float: 'right' }}
       >
-        <img src={logo} className={style.toolbarLogo} alt="logo" />
-        <span className={style.navText}>ElectricSQL Debug Tools</span>
-        <button onClick={handleClick}>{hidden ? 'SHOW' : 'HIDE'}</button>
-        {!hidden && (
-          <select onInput={handleSelect}>
-            {dbNames.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-        )}
-      </header>
-      {!hidden && <ToolbarTabs dbName={dbName} api={api} />}
-    </div>
+        <Flex justify="between" flexGrow="1">
+          <Flex align="center" gap="1">
+            <img src={logo} className={style.toolbarLogo} alt="logo" />
+            <Text>ElectricSQL Debug Tools</Text>
+          </Flex>
+          <Flex gap="1">
+            <Button onClick={() => setHidden(!hidden)}>
+              {hidden ? 'SHOW' : 'HIDE'}
+            </Button>
+
+            {!hidden && (
+              <Select.Root defaultValue={dbNames[0]} onValueChange={setDbName}>
+                <Select.Trigger />
+                <Select.Content>
+                  {dbNames.map((name) => (
+                    <Select.Item key={name} value={name}>
+                      {name}
+                    </Select.Item>
+                  ))}
+                </Select.Content>
+              </Select.Root>
+            )}
+          </Flex>
+        </Flex>
+        {!hidden && <ToolbarTabs dbName={dbName} api={api} />}
+      </Box>
+    </Theme>
   )
 }
 
@@ -76,5 +83,5 @@ export function addToolbar(electric: ElectricClient<any>) {
   const toolbarDiv = document.createElement('div')
   toolbarDiv.setAttribute('class', style.electricToolbar)
   document.body.appendChild(toolbarDiv)
-  render(<ElectricToolbar api={toolbarApi} />, toolbarDiv)
+  ReactDOM.createRoot(toolbarDiv).render(<ElectricToolbar api={toolbarApi} />)
 }

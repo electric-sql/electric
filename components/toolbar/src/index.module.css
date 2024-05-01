@@ -2,59 +2,10 @@
 
 .electricToolbar {
   all: revert;
-  position: absolute;
+  position: fixed;
   bottom: 0;
   right: 0;
   width: 100%;
-  padding: 10px;
-  z-index: 800;
-  box-sizing: border-box;
-}
-
-.toolbar {
-  all: revert;
-  border-color: lightgrey;
-  border-width: 1px;
-  border-style: solid;
-  border-radius: 5px;
-  height: fit-content;
-  font-family: 'open sauce one', 'Segoe UI', Inter, Helvetica, Arial, sans-serif;
-  font-size: 16px;
-  text-align: left;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  background-color: #201c1c;
-  color: white;
-  box-sizing: border-box;
-  width: 100%;
-}
-
-.toolbarHidden {
-  width: 400px;
-  float: right;
-}
-
-.toolbar h3 {
-  all: revert;
-  margin-top: 20px;
-  margin-bottom: 20px;
-}
-
-.toolbarHeader {
-  all: revert;
-  border-color: lightgrey;
-  border-width: 0 0 1px 0;
-  border-style: solid;
-  width: 100%;
-  font-family: OpenSauceOne, 'Segoe UI', Inter, Helvetica, Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  height: 30px;
-  box-sizing: border-box;
-}
-
-.toolbarHeaderHidden {
-  border-width: 0;
 }
 
 .toolbarLogo {
@@ -63,45 +14,7 @@
   height: 30px;
   margin: 0;
   display: inline-block;
-  /*float: left;*/
   vertical-align: middle;
-}
-
-.navText {
-  all: revert;
-  display: inline-block;
-  vertical-align: middle;
-}
-
-.toolbarHeader button {
-  all: revert;
-  height: 20px;
-  margin-top: 5px;
-  margin-right: 10px;
-  float: right;
-  color: #61dafb;
-  border-style: solid;
-  border-width: 0;
-  background-color: #1c1e20;
-  border-color: #61dafb;
-  font-size: 0.8rem;
-  border-radius: 8px;
-}
-
-.toolbarHeader select {
-  all: revert;
-  height: 20px;
-  margin-top: 5px;
-  margin-right: 10px;
-  float: right;
-  color: #61dafb;
-  border-style: solid;
-  border-width: 0;
-  background-color: #1c1e20;
-  border-color: #61dafb;
-  font-size: 0.8rem;
-  border-radius: 8px;
-  text-align: right;
 }
 
 .toolbarTabs {

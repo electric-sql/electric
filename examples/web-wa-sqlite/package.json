@@ -23,7 +23,8 @@
     "electric-sql": "^0.11.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "wa-sqlite": "github:rhashimoto/wa-sqlite#semver:^0.9.11"
+    "wa-sqlite": "github:rhashimoto/wa-sqlite#semver:^0.9.11",
+    "@electric-sql/debug-toolbar": "workspace:*"
   },
   "devDependencies": {
     "@databases/pg-migrations": "^5.0.3",

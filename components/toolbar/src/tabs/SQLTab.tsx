@@ -1,5 +1,4 @@
-import { type JSX } from 'preact'
-import { useState } from 'preact/hooks'
+import React, { useState } from 'react'
 import { Controlled as CodeMirrorControlled } from 'react-codemirror2'
 import { ToolbarTabsProps } from '../tabs'
 import clsx from 'clsx'
