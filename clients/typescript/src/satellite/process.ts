@@ -946,10 +946,10 @@ export class SatelliteProcess implements Satellite {
     const oplog = this.opts.oplogTable.tablename
     const shadow = this.opts.shadowTable.tablename
 
-    const [{ numTables }] = await this.adapter.query(
-      this.builder.countTablesIn('numTables', [meta, oplog, shadow])
+    const [{ count }] = await this.adapter.query(
+      this.builder.countTablesIn([meta, oplog, shadow])
     )
-    return numTables === 3
+    return count === 3
   }
 
   // Handle auth state changes.

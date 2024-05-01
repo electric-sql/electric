@@ -65,10 +65,9 @@ export abstract class QueryBuilder {
   abstract tableExists(table: QualifiedTablename): Statement
 
   /**
-   * Counts tables whose name is included in `tables`.
-   * The count is returned as `countName`.
+   * Counts tables whose name is included in `tableNames`.
    */
-  abstract countTablesIn(countName: string, tables: string[]): Statement
+  abstract countTablesIn(tableNames: string[]): Statement
 
   /**
    * Converts a column value to a hexidecimal string.

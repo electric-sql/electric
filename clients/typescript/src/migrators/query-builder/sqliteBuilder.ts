@@ -43,15 +43,15 @@ class SqliteBuilder extends QueryBuilder {
     }
   }
 
-  countTablesIn(countName: string, tables: string[]): Statement {
+  countTablesIn(tableNames: string[]): Statement {
     const sql = dedent`
-      SELECT count(name) as ${countName} FROM sqlite_master
+      SELECT count(name) as "count" FROM sqlite_master
         WHERE type='table'
-        AND name IN (${tables.map(() => '?').join(', ')})
+        AND name IN (${tableNames.map(() => '?').join(', ')})
     `
     return {
       sql,
-      args: tables,
+      args: tableNames,
     }
   }
 

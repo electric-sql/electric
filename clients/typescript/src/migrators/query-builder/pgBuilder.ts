@@ -40,17 +40,17 @@ class PgBuilder extends QueryBuilder {
     }
   }
 
-  countTablesIn(countName: string, tables: string[]): Statement {
+  countTablesIn(tableNames: string[]): Statement {
     const sql = dedent`
-      SELECT COUNT(table_name)::integer AS "${countName}"
+      SELECT COUNT(table_name)::integer AS "count"
         FROM information_schema.tables
           WHERE
             table_type = 'BASE TABLE' AND
-            table_name IN (${tables.map((_, i) => `$${i + 1}`).join(', ')});
+            table_name IN (${tableNames.map((_, i) => `$${i + 1}`).join(', ')});
     `
     return {
       sql,
-      args: tables,
+      args: tableNames,
     }
   }
 
