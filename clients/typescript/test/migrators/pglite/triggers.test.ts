@@ -17,12 +17,11 @@ type Context = ContextType & {
 
 const test = testAny as TestFn<Context>
 const defaults = satelliteDefaults('public')
-const oplogTable = `"${defaults.oplogTable.namespace}"."${defaults.oplogTable.tablename}"`
+const oplogTable = `${defaults.oplogTable}`
 
 const personTable = getPersonTable('public')
-const personNamespace = personTable.namespace
-const personTableName = personTable.tableName
-const qualifiedPersonTable = `"${personNamespace}"."${personTableName}"`
+const personTableName = personTable.qualifiedTableName.tablename
+const qualifiedPersonTable = personTable.qualifiedTableName
 
 test.beforeEach(async (t) => {
   const db = new PGlite()
@@ -223,7 +222,6 @@ test('oplog insertion trigger should insert row into oplog table', async (t) => 
 
 test('oplog trigger should handle Infinity values correctly', async (t) => {
   const { db, migrateDb } = t.context
-  const tableName = personTable.tableName
 
   // Migrate the DB with the necessary tables and triggers
   await migrateDb()
@@ -237,7 +235,7 @@ test('oplog trigger should handle Infinity values correctly', async (t) => {
   t.is(oplogRows.length, 1)
   t.deepEqual(oplogRows[0], {
     namespace: 'public',
-    tablename: tableName,
+    tablename: personTableName,
     optype: 'INSERT',
     // `id` and `bmi` values are stored as strings
     // because we cast REAL values to text in the trigger

@@ -1,5 +1,5 @@
 import { mkdir, rm as removeFile } from 'node:fs/promises'
-import { RelationsCache, randomValue } from '../../src/util'
+import { QualifiedTablename, RelationsCache, randomValue } from '../../src/util'
 import type { Database as SqliteDB } from 'better-sqlite3'
 import SqliteDatabase from 'better-sqlite3'
 import { DatabaseAdapter as SqliteDatabaseAdapter } from '../../src/drivers/better-sqlite3'
@@ -411,11 +411,9 @@ export async function migrateDb(
   const [createMainSchema, ...restMigration] = migration
   await db.run({ sql: createMainSchema })
 
-  const namespace = table.namespace
-  const tableName = table.tableName
   // Create the table in the database on the given namespace
   const blobType = builder.dialect === 'SQLite' ? 'BLOB' : 'BYTEA'
-  const createTableSQL = `CREATE TABLE "${namespace}"."${tableName}" (id REAL PRIMARY KEY, name TEXT, age INTEGER, bmi REAL, int8 INTEGER, blob ${blobType})`
+  const createTableSQL = `CREATE TABLE ${table.qualifiedTableName} (id REAL PRIMARY KEY, name TEXT, age INTEGER, bmi REAL, int8 INTEGER, blob ${blobType})`
   await db.run({ sql: createTableSQL })
 
   // Apply the initial migration on the database
@@ -435,8 +433,7 @@ export async function migrateDb(
 export const personTable: (namespace: string) => Table = (
   namespace: string
 ) => ({
-  namespace,
-  tableName: 'personTable',
+  qualifiedTableName: new QualifiedTablename(namespace, 'personTable'),
   columns: ['id', 'name', 'age', 'bmi', 'int8', 'blob'],
   primary: ['id'],
   foreignKeys: [],

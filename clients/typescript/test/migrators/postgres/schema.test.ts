@@ -40,7 +40,7 @@ test('check schema keys are unique', async (t) => {
   const migrator = new BundleMigrator(adapter, migrations)
   await migrator.up()
   const defaults = satelliteDefaults(migrator.queryBuilder.defaultNamespace)
-  const metaTable = `"${defaults.metaTable.namespace}"."${defaults.metaTable.tablename}"`
+  const metaTable = `${defaults.metaTable}`
 
   await adapter.run({
     sql: `INSERT INTO ${metaTable} (key, value) values ('key', 'value')`,

@@ -14,22 +14,24 @@ export class QualifiedTablename {
   }
 
   toString(): string {
-    // Don't collapse it to '<namespace>.<tablename>' because that can lead to clashes
-    // since both `QualifiedTablename('foo', 'bar.baz')` and `QualifiedTablename('foo.bar', 'baz')`
-    // would be collapsed to 'foo.bar.baz'.
-    return JSON.stringify({
-      namespace: this.namespace,
-      tablename: this.tablename,
-    })
+    // Escapes double quotes because names can contain double quotes
+    // e.g. CREATE TABLE "f""oo" (...) creates a table named f"oo
+    return `"${escDoubleQ(this.namespace)}"."${escDoubleQ(this.tablename)}"`
   }
 
-  static parse(json: string): QualifiedTablename {
+  static parse(fullyQualifiedName: string): QualifiedTablename {
     try {
-      const { namespace, tablename } = JSON.parse(json)
-      return new QualifiedTablename(namespace, tablename)
+      const [_, namespace, tablename] = /"(.*)"\."(.*)"/.exec(
+        fullyQualifiedName
+      )!
+      return new QualifiedTablename(
+        unescDoubleQ(namespace),
+        unescDoubleQ(tablename)
+      )
     } catch (_e) {
       throw new Error(
-        'Could not parse string into a qualified table name: ' + json
+        'Could not parse string into a qualified table name: ' +
+          fullyQualifiedName
       )
     }
   }
@@ -55,4 +57,12 @@ export const hasIntersection = (
   }
 
   return false
+}
+
+function escDoubleQ(str: string): string {
+  return str.replaceAll('"', '""')
+}
+
+function unescDoubleQ(str: string): string {
+  return str.replaceAll('""', '"')
 }

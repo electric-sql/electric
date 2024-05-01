@@ -18,8 +18,10 @@ type Context = ContextType & {
 
 const test = testAny as TestFn<Context>
 const defaults = satelliteDefaults('main')
-const oplogTable = `"${defaults.oplogTable.namespace}"."${defaults.oplogTable.tablename}"`
+const oplogTable = `${defaults.oplogTable}`
 const personTable = getPersonTable('main')
+const qualifiedPersonTable = personTable.qualifiedTableName
+const personTableName = qualifiedPersonTable.tablename
 
 test.beforeEach(async (t) => {
   const db = new OriginalDatabase(':memory:')
@@ -87,13 +89,12 @@ test('generateTableTriggers should create correct triggers for a table', (t) => 
 
 test('oplog insertion trigger should insert row into oplog table', async (t) => {
   const { db, migrateDb } = t.context
-  const tableName = personTable.tableName
 
   // Migrate the DB with the necessary tables and triggers
   await migrateDb()
 
   // Insert a row in the table
-  const insertRowSQL = `INSERT INTO ${tableName} (id, name, age, bmi, int8, blob) VALUES (1, 'John Doe', 30, 25.5, 7, x'0001ff')`
+  const insertRowSQL = `INSERT INTO ${qualifiedPersonTable} (id, name, age, bmi, int8, blob) VALUES (1, 'John Doe', 30, 25.5, 7, x'0001ff')`
   db.exec(insertRowSQL)
 
   // Check that the oplog table contains an entry for the inserted row
@@ -101,7 +102,7 @@ test('oplog insertion trigger should insert row into oplog table', async (t) => 
   t.is(oplogRows.length, 1)
   t.deepEqual(oplogRows[0], {
     namespace: 'main',
-    tablename: tableName,
+    tablename: personTableName,
     optype: 'INSERT',
     // `id` and `bmi` values are stored as strings
     // because we cast REAL values to text in the trigger
@@ -128,13 +129,12 @@ test('oplog insertion trigger should insert row into oplog table', async (t) => 
 
 test('oplog trigger should handle Infinity values correctly', async (t) => {
   const { db, migrateDb } = t.context
-  const tableName = personTable.tableName
 
   // Migrate the DB with the necessary tables and triggers
   await migrateDb()
 
   // Insert a row in the table
-  const insertRowSQL = `INSERT INTO ${tableName} (id, name, age, bmi, int8, blob) VALUES (-9e999, 'John Doe', 30, 9e999, 7, x'0001ff')`
+  const insertRowSQL = `INSERT INTO ${qualifiedPersonTable} (id, name, age, bmi, int8, blob) VALUES (-9e999, 'John Doe', 30, 9e999, 7, x'0001ff')`
   db.exec(insertRowSQL)
 
   // Check that the oplog table contains an entry for the inserted row
@@ -142,7 +142,7 @@ test('oplog trigger should handle Infinity values correctly', async (t) => {
   t.is(oplogRows.length, 1)
   t.deepEqual(oplogRows[0], {
     namespace: 'main',
-    tablename: tableName,
+    tablename: personTableName,
     optype: 'INSERT',
     // `id` and `bmi` values are stored as strings
     // because we cast REAL values to text in the trigger

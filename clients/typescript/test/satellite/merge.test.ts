@@ -223,18 +223,17 @@ const setupPglite: SetupFn = async (t: ExecutionContext<unknown>) => {
 
     // Migrate the DB with the necessary tables and triggers
     const personTable = getPersonTable(namespace)
+    const qualifiedPersonTable = personTable.qualifiedTableName
     await migrateDb(adapter, personTable, builder)
 
     // Insert a row in the table
-    const insertRowSQL = `INSERT INTO "${personTable.namespace}"."${
-      personTable.tableName
-    }" (id, name, age, bmi, int8, blob) VALUES (54321, 'John Doe', 30, 25.5, 7, ${builder.hexValue(
+    const insertRowSQL = `INSERT INTO ${qualifiedPersonTable} (id, name, age, bmi, int8, blob) VALUES (54321, 'John Doe', 30, 25.5, 7, ${builder.hexValue(
       '0001ff'
     )})`
     await adapter.run({ sql: insertRowSQL })
 
     // Fetch the oplog entry for the inserted row
-    const oplogTable = `"${defaults.oplogTable.namespace}"."${defaults.oplogTable.tablename}"`
+    const oplogTable = `${defaults.oplogTable}`
     const oplogRows = await adapter.query({
       sql: `SELECT * FROM ${oplogTable}`,
     })
@@ -250,7 +249,8 @@ const setupPglite: SetupFn = async (t: ExecutionContext<unknown>) => {
       commit_timestamp: to_commit_timestamp('1970-01-02T03:46:42.000Z'),
       changes: [
         {
-          relation: relations[personTable.tableName as keyof typeof relations],
+          relation:
+            relations[qualifiedPersonTable.tablename as keyof typeof relations],
           type: DataChangeType.INSERT,
           record: {
             // fields must be ordered alphabetically to match the behavior of the triggers
@@ -278,10 +278,7 @@ const setupPglite: SetupFn = async (t: ExecutionContext<unknown>) => {
     const pk = primaryKeyToStr({ id: 54321 })
 
     // the incoming transaction wins
-    const qualifiedTableName = new QualifiedTablename(
-      personTable.namespace,
-      personTable.tableName
-    ).toString()
+    const qualifiedTableName = qualifiedPersonTable.toString()
     t.like(merged, {
       [qualifiedTableName]: { [pk]: { optype: 'UPSERT' } },
     })

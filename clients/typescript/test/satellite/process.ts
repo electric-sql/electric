@@ -1654,7 +1654,7 @@ export const processTests = (test: TestFn<ContextType>) => {
     await runMigrations()
 
     const tablename = 'parent'
-    const qualified = new QualifiedTablename(namespace, tablename)
+    const qualifiedTableName = new QualifiedTablename(namespace, tablename)
 
     // relations must be present at subscription delivery
     client.setRelations(relations)
@@ -1675,7 +1675,7 @@ export const processTests = (test: TestFn<ContextType>) => {
     t.is(notifier.notifications.length, 2)
     t.is(notifier.notifications[1].changes.length, 1)
     t.deepEqual(notifier.notifications[1].changes[0], {
-      qualifiedTablename: qualified,
+      qualifiedTablename: qualifiedTableName,
       recordChanges: [
         {
           primaryKey: { id: 1 },
@@ -1686,7 +1686,6 @@ export const processTests = (test: TestFn<ContextType>) => {
     })
 
     // wait for process to apply shape data
-    const qualifiedTableName = `"${namespace}"."${tablename}"`
     try {
       const row = await adapter.query({
         sql: `SELECT id FROM ${qualifiedTableName}`,
@@ -1792,7 +1791,7 @@ export const processTests = (test: TestFn<ContextType>) => {
     await runMigrations()
 
     const tablename = 'parent'
-    const qualified = `"${namespace}"."${tablename}"`
+    const qualified = new QualifiedTablename(namespace, tablename)
 
     // relations must be present at subscription delivery
     client.setRelations(relations)
@@ -2306,7 +2305,7 @@ export const processTests = (test: TestFn<ContextType>) => {
     await runMigrations()
 
     const tablename = 'parent'
-    const qualified = `"${namespace}"."${tablename}"`
+    const qualified = new QualifiedTablename(namespace, tablename)
 
     // relations must be present at subscription delivery
     client.setRelations(relations)

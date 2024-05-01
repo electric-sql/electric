@@ -1,4 +1,4 @@
-import { Statement } from '../util'
+import { QualifiedTablename, Statement } from '../util'
 import { QueryBuilder } from './query-builder'
 
 export type ForeignKey = {
@@ -12,8 +12,7 @@ type ColumnType = string
 type ColumnTypes = Record<ColumnName, ColumnType>
 
 export type Table = {
-  tableName: string
-  namespace: string
+  qualifiedTableName: QualifiedTablename
   columns: ColumnName[]
   primary: ColumnName[]
   foreignKeys: ForeignKey[]
@@ -41,7 +40,7 @@ export function generateOplogTriggers(
   table: Omit<Table, 'foreignKeys'>,
   builder: QueryBuilder
 ): Statement[] {
-  const { tableName, namespace, columns, primary, columnTypes } = table
+  const { qualifiedTableName, columns, primary, columnTypes } = table
 
   const newPKs = joinColsForJSON(primary, columnTypes, builder, 'new')
   const oldPKs = joinColsForJSON(primary, columnTypes, builder, 'old')
@@ -49,19 +48,18 @@ export function generateOplogTriggers(
   const oldRows = joinColsForJSON(columns, columnTypes, builder, 'old')
 
   const [dropFkTrigger, ...createFkTrigger] =
-    builder.createOrReplaceNoFkUpdateTrigger(tableName, primary, namespace)
+    builder.createOrReplaceNoFkUpdateTrigger(qualifiedTableName, primary)
   const [dropInsertTrigger, ...createInsertTrigger] =
     builder.createOrReplaceInsertTrigger(
-      tableName,
+      qualifiedTableName,
       newPKs,
       newRows,
-      oldRows,
-      namespace
+      oldRows
     )
 
   return [
     // Toggles for turning the triggers on and off
-    builder.setTriggerSetting(tableName, 1, namespace),
+    builder.setTriggerSetting(qualifiedTableName, 1),
     // Triggers for table ${tableName}
     // ensures primary key is immutable
     dropFkTrigger,
@@ -70,18 +68,16 @@ export function generateOplogTriggers(
     dropInsertTrigger,
     ...createInsertTrigger,
     ...builder.createOrReplaceUpdateTrigger(
-      tableName,
+      qualifiedTableName,
       newPKs,
       newRows,
-      oldRows,
-      namespace
+      oldRows
     ),
     ...builder.createOrReplaceDeleteTrigger(
-      tableName,
+      qualifiedTableName,
       oldPKs,
       newRows,
-      oldRows,
-      namespace
+      oldRows
     ),
   ].map(mkStatement)
 }
@@ -104,7 +100,7 @@ function generateCompensationTriggers(
   table: Table,
   builder: QueryBuilder
 ): Statement[] {
-  const { tableName, namespace, foreignKeys, columnTypes } = table
+  const { qualifiedTableName, foreignKeys, columnTypes } = table
 
   const makeTriggers = (foreignKey: ForeignKey) => {
     const { childKey } = foreignKey
@@ -112,6 +108,10 @@ function generateCompensationTriggers(
     const fkTableNamespace = builder.defaultNamespace // currently, Electric always uses the DB's default namespace
     const fkTableName = foreignKey.table
     const fkTablePK = foreignKey.parentKey // primary key of the table pointed at by the FK.
+    const qualifiedFkTable = new QualifiedTablename(
+      fkTableNamespace,
+      fkTableName
+    )
 
     // This table's `childKey` points to the parent's table `parentKey`.
     // `joinColsForJSON` looks up the type of the `parentKey` column in the provided `colTypes` object.
@@ -129,13 +129,11 @@ function generateCompensationTriggers(
 
     const [dropInsertTrigger, ...createInsertTrigger] =
       builder.createOrReplaceInsertCompensationTrigger(
-        tableName,
+        qualifiedTableName,
         childKey,
-        fkTableName,
+        qualifiedFkTable,
         joinedFkPKs,
-        foreignKey,
-        namespace,
-        fkTableNamespace
+        foreignKey
       )
 
     return [
@@ -146,13 +144,11 @@ function generateCompensationTriggers(
       dropInsertTrigger,
       ...createInsertTrigger,
       ...builder.createOrReplaceUpdateCompensationTrigger(
-        tableName,
+        qualifiedTableName,
         foreignKey.childKey,
-        fkTableName,
+        qualifiedFkTable,
         joinedFkPKs,
-        foreignKey,
-        namespace,
-        fkTableNamespace
+        foreignKey
       ),
     ].map(mkStatement)
   }

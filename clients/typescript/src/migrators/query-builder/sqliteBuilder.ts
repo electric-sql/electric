@@ -36,10 +36,10 @@ class SqliteBuilder extends QueryBuilder {
     return [query]
   }
 
-  tableExists(tableName: string, _namespace?: string): Statement {
+  tableExists(table: QualifiedTablename): Statement {
     return {
       sql: `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`,
-      args: [tableName],
+      args: [table.tablename],
     }
   }
 
@@ -96,14 +96,13 @@ class SqliteBuilder extends QueryBuilder {
   }
 
   insertOrIgnore(
-    table: string,
+    table: QualifiedTablename,
     columns: string[],
-    values: SqlValue[],
-    schema: string = this.defaultNamespace
+    values: SqlValue[]
   ): Statement {
     return {
       sql: dedent`
-        INSERT OR IGNORE INTO ${schema}.${table} (${columns.join(', ')})
+        INSERT OR IGNORE INTO ${table} (${columns.join(', ')})
           VALUES (${columns.map(() => '?').join(', ')});
       `,
       args: values,
@@ -111,16 +110,15 @@ class SqliteBuilder extends QueryBuilder {
   }
 
   insertOrReplace(
-    table: string,
+    table: QualifiedTablename,
     columns: string[],
     values: Array<SqlValue>,
     _conflictCols: string[],
-    _updateCols: string[],
-    schema: string = this.defaultNamespace
+    _updateCols: string[]
   ): Statement {
     return {
       sql: dedent`
-        INSERT OR REPLACE INTO ${schema}.${table} (${columns.join(', ')})
+        INSERT OR REPLACE INTO ${table} (${columns.join(', ')})
         VALUES (${columns.map(() => '?').join(', ')})
       `,
       args: values,
@@ -128,21 +126,19 @@ class SqliteBuilder extends QueryBuilder {
   }
 
   insertOrReplaceWith(
-    table: string,
+    table: QualifiedTablename,
     columns: string[],
     values: Array<SqlValue>,
     conflictCols: string[],
     updateCols: string[],
-    updateVals: SqlValue[],
-    schema: string = this.defaultNamespace
+    updateVals: SqlValue[]
   ): Statement {
     const { sql: baseSql, args } = this.insertOrReplace(
       table,
       columns,
       values,
       conflictCols,
-      updateCols,
-      schema
+      updateCols
     )
     return {
       sql:
@@ -155,15 +151,14 @@ class SqliteBuilder extends QueryBuilder {
   }
 
   batchedInsertOrReplace(
-    table: string,
+    table: QualifiedTablename,
     columns: string[],
     records: Array<Record<string, SqlValue>>,
     _conflictCols: string[],
     _updateCols: string[],
-    maxSqlParameters: number,
-    schema: string = this.defaultNamespace
+    maxSqlParameters: number
   ): Statement[] {
-    const baseSql = `INSERT OR REPLACE INTO ${schema}.${table} (${columns.join(
+    const baseSql = `INSERT OR REPLACE INTO ${table} (${columns.join(
       ', '
     )}) VALUES `
     return this.prepareInsertBatchedStatements(
@@ -174,23 +169,16 @@ class SqliteBuilder extends QueryBuilder {
     )
   }
 
-  dropTriggerIfExists(
-    triggerName: string,
-    _tablename: string,
-    _namespace?: string
-  ) {
+  dropTriggerIfExists(triggerName: string, _tablename: QualifiedTablename) {
     return `DROP TRIGGER IF EXISTS ${triggerName};`
   }
 
-  createNoFkUpdateTrigger(
-    tablename: string,
-    pk: string[],
-    namespace: string = this.defaultNamespace
-  ): string[] {
+  createNoFkUpdateTrigger(table: QualifiedTablename, pk: string[]): string[] {
+    const { namespace, tablename } = table
     return [
       dedent`
         CREATE TRIGGER update_ensure_${namespace}_${tablename}_primarykey
-          BEFORE UPDATE ON "${namespace}"."${tablename}"
+          BEFORE UPDATE ON ${table}
         BEGIN
           SELECT
             CASE
@@ -220,22 +208,19 @@ class SqliteBuilder extends QueryBuilder {
     return this.removeSpaceAndNullValuesFromJson(this.createJsonObject(rows))
   }
 
-  setTriggerSetting(
-    tableName: string,
-    value: 0 | 1,
-    namespace: string = this.defaultNamespace
-  ): string {
-    return `INSERT OR IGNORE INTO _electric_trigger_settings (namespace, tablename, flag) VALUES ('${namespace}', '${tableName}', ${value});`
+  setTriggerSetting(table: QualifiedTablename, value: 0 | 1): string {
+    const { namespace, tablename } = table
+    return `INSERT OR IGNORE INTO _electric_trigger_settings (namespace, tablename, flag) VALUES ('${namespace}', '${tablename}', ${value});`
   }
 
   createOplogTrigger(
     opType: 'INSERT' | 'UPDATE' | 'DELETE',
-    tableName: string,
+    table: QualifiedTablename,
     newPKs: string,
     newRows: string,
-    oldRows: string,
-    namespace: string = this.defaultNamespace
+    oldRows: string
   ): string[] {
+    const { namespace, tablename } = table
     const opTypeLower = opType.toLowerCase()
     const pk = this.createPKJsonObject(newPKs)
     // Update has both the old and the new row
@@ -248,12 +233,12 @@ class SqliteBuilder extends QueryBuilder {
 
     return [
       dedent`
-        CREATE TRIGGER ${opTypeLower}_${namespace}_${tableName}_into_oplog
-           AFTER ${opType} ON "${namespace}"."${tableName}"
-           WHEN 1 = (SELECT flag from _electric_trigger_settings WHERE namespace = '${namespace}' AND tablename = '${tableName}')
+        CREATE TRIGGER ${opTypeLower}_${namespace}_${tablename}_into_oplog
+           AFTER ${opType} ON ${table}
+           WHEN 1 = (SELECT flag from _electric_trigger_settings WHERE namespace = '${namespace}' AND tablename = '${tablename}')
         BEGIN
           INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
-          VALUES ('${namespace}', '${tableName}', '${opType}', ${pk}, ${newRecord}, ${oldRecord}, NULL);
+          VALUES ('${namespace}', '${tablename}', '${opType}', ${pk}, ${newRecord}, ${oldRecord}, NULL);
         END;
       `,
     ]
@@ -261,40 +246,38 @@ class SqliteBuilder extends QueryBuilder {
 
   createFkCompensationTrigger(
     opType: 'INSERT' | 'UPDATE',
-    tableName: string,
+    table: QualifiedTablename,
     childKey: string,
-    fkTableName: string,
+    fkTable: QualifiedTablename,
     joinedFkPKs: string,
-    foreignKey: ForeignKey,
-    namespace: string = this.defaultNamespace,
-    fkTableNamespace: string = this.defaultNamespace
+    foreignKey: ForeignKey
   ): string[] {
+    const { namespace, tablename } = table
+    const { namespace: fkTableNamespace, tablename: fkTableName } = fkTable
     const opTypeLower = opType.toLowerCase()
     return [
       dedent`
-        CREATE TRIGGER compensation_${opTypeLower}_${namespace}_${tableName}_${childKey}_into_oplog
-          AFTER ${opType} ON "${namespace}"."${tableName}"
-          WHEN 1 = (SELECT flag from _electric_trigger_settings WHERE namespace = '${namespace}' AND tablename = '${tableName}') AND
+        CREATE TRIGGER compensation_${opTypeLower}_${namespace}_${tablename}_${childKey}_into_oplog
+          AFTER ${opType} ON ${table}
+          WHEN 1 = (SELECT flag from _electric_trigger_settings WHERE namespace = '${namespace}' AND tablename = '${tablename}') AND
                1 = (SELECT value from _electric_meta WHERE key = 'compensations')
         BEGIN
           INSERT INTO _electric_oplog (namespace, tablename, optype, primaryKey, newRow, oldRow, timestamp)
           SELECT '${fkTableNamespace}', '${fkTableName}', 'COMPENSATION', ${this.createPKJsonObject(
         joinedFkPKs
       )}, json_object(${joinedFkPKs}), NULL, NULL
-          FROM "${fkTableNamespace}"."${fkTableName}" WHERE "${
-        foreignKey.parentKey
-      }" = new."${foreignKey.childKey}";
+          FROM ${fkTable} WHERE "${foreignKey.parentKey}" = new."${
+        foreignKey.childKey
+      }";
         END;
       `,
     ]
   }
 
   setTagsForShadowRows(
-    oplogTable: QualifiedTablename,
-    shadowTable: QualifiedTablename
+    oplog: QualifiedTablename,
+    shadow: QualifiedTablename
   ): string {
-    const oplog = `"${oplogTable.namespace}"."${oplogTable.tablename}"`
-    const shadow = `"${shadowTable.namespace}"."${shadowTable.tablename}"`
     return dedent`
       INSERT OR REPLACE INTO ${shadow} (namespace, tablename, primaryKey, tags)
       SELECT namespace, tablename, primaryKey, ?
@@ -306,11 +289,9 @@ class SqliteBuilder extends QueryBuilder {
   }
 
   removeDeletedShadowRows(
-    oplogTable: QualifiedTablename,
-    shadowTable: QualifiedTablename
+    oplog: QualifiedTablename,
+    shadow: QualifiedTablename
   ): string {
-    const oplog = `"${oplogTable.namespace}"."${oplogTable.tablename}"`
-    const shadow = `"${shadowTable.namespace}"."${shadowTable.tablename}"`
     // We do an inner join in a CTE instead of a `WHERE EXISTS (...)`
     // since this is not reliant on re-executing a query
     // for every row in the shadow table, but uses a PK join instead.

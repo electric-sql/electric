@@ -8,7 +8,7 @@ import {
 import { DatabaseAdapter } from '../electric/adapter'
 import { buildInitialMigration as makeBaseMigration } from './schema'
 import Log from 'loglevel'
-import { SatelliteError, SatelliteErrorCode } from '../util'
+import { QualifiedTablename, SatelliteError, SatelliteErrorCode } from '../util'
 import { _electric_migrations } from '../satellite/config'
 import { pgBuilder, QueryBuilder, sqliteBuilder } from './query-builder'
 import { dedent } from 'ts-dedent'
@@ -22,6 +22,7 @@ export abstract class BundleMigratorBase implements Migrator {
   migrations: StmtMigration[]
 
   readonly tableName = _electric_migrations
+  readonly migrationsTable: QualifiedTablename
 
   constructor(
     adapter: DatabaseAdapter,
@@ -33,6 +34,10 @@ export abstract class BundleMigratorBase implements Migrator {
     const baseMigration = makeBaseMigration(queryBuilder)
     this.migrations = [...baseMigration.migrations, ...migrations].map(
       makeStmtMigration
+    )
+    this.migrationsTable = new QualifiedTablename(
+      this.namespace,
+      this.tableName
     )
   }
 
@@ -53,8 +58,7 @@ export abstract class BundleMigratorBase implements Migrator {
   async migrationsTableExists(): Promise<boolean> {
     // If this is the first time we're running migrations, then the
     // migrations table won't exist.
-    const namespace = this.queryBuilder.defaultNamespace
-    const tableExists = this.queryBuilder.tableExists(this.tableName, namespace)
+    const tableExists = this.queryBuilder.tableExists(this.migrationsTable)
     const tables = await this.adapter.query(tableExists)
     return tables.length > 0
   }
@@ -65,7 +69,7 @@ export abstract class BundleMigratorBase implements Migrator {
     }
 
     const existingRecords = `
-      SELECT version FROM "${this.namespace}"."${this.tableName}"
+      SELECT version FROM ${this.migrationsTable}
         ORDER BY id ASC
     `
 
@@ -82,7 +86,7 @@ export abstract class BundleMigratorBase implements Migrator {
     // The hard-coded version '0' below corresponds to the version of the internal migration defined in `schema.ts`.
     // We're ignoring it because this function is supposed to return the application schema version.
     const schemaVersion = `
-      SELECT version FROM "${this.namespace}"."${this.tableName}"
+      SELECT version FROM ${this.migrationsTable}
         WHERE version != '0'
         ORDER BY version DESC
         LIMIT 1
@@ -135,9 +139,7 @@ export abstract class BundleMigratorBase implements Migrator {
 
     await this.adapter.runInTransaction(...statements, {
       sql: dedent`
-        INSERT INTO "${this.namespace}"."${
-        this.tableName
-      }" (version, applied_at)
+        INSERT INTO ${this.migrationsTable} (version, applied_at)
         VALUES (${this.queryBuilder.makePositionalParam(
           1
         )}, ${this.queryBuilder.makePositionalParam(2)});
@@ -155,7 +157,7 @@ export abstract class BundleMigratorBase implements Migrator {
   async applyIfNotAlready(migration: StmtMigration): Promise<boolean> {
     const rows = await this.adapter.query({
       sql: dedent`
-        SELECT 1 FROM "${this.namespace}"."${this.tableName}"
+        SELECT 1 FROM ${this.migrationsTable}
           WHERE version = ${this.queryBuilder.makePositionalParam(1)}
       `,
       args: [migration.version],

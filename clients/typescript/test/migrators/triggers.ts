@@ -16,22 +16,20 @@ export type ContextType = {
 export const triggerTests = (test: TestFn<ContextType>) => {
   test('oplog trigger should separate null blobs from empty blobs', async (t) => {
     const { adapter, migrateDb, dialect, personTable, defaults } = t.context
-    const namespace = personTable.namespace
-    const tableName = personTable.tableName
 
     // Migrate the DB with the necessary tables and triggers
     await migrateDb()
 
     // Insert null and empty rows in the table
-    const insertRowNullSQL = `INSERT INTO "${namespace}"."${tableName}" (id, name, age, bmi, int8, blob) VALUES (1, 'John Doe', 30, 25.5, 7, NULL)`
+    const insertRowNullSQL = `INSERT INTO ${personTable.qualifiedTableName} (id, name, age, bmi, int8, blob) VALUES (1, 'John Doe', 30, 25.5, 7, NULL)`
     const blobValue = dialect === 'Postgres' ? `'\\x'` : `x''`
-    const insertRowEmptySQL = `INSERT INTO "${namespace}"."${tableName}" (id, name, age, bmi, int8, blob) VALUES (2, 'John Doe', 30, 25.5, 7, ${blobValue})`
+    const insertRowEmptySQL = `INSERT INTO ${personTable.qualifiedTableName} (id, name, age, bmi, int8, blob) VALUES (2, 'John Doe', 30, 25.5, 7, ${blobValue})`
     await adapter.run({ sql: insertRowNullSQL })
     await adapter.run({ sql: insertRowEmptySQL })
 
     // Check that the oplog table contains an entry for the inserted row
     const oplogRows = await adapter.query({
-      sql: `SELECT * FROM "${defaults.oplogTable.namespace}"."${defaults.oplogTable.tablename}"`,
+      sql: `SELECT * FROM ${defaults.oplogTable}`,
     })
     t.is(oplogRows.length, 2)
     t.regex(oplogRows[0].newRow as string, /,\s*"blob":\s*null\s*,/)

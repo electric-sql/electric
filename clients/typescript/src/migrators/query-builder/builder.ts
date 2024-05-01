@@ -62,7 +62,7 @@ export abstract class QueryBuilder {
   /**
    * Checks if the given table exists.
    */
-  abstract tableExists(tableName: string, namespace?: string): Statement
+  abstract tableExists(table: QualifiedTablename): Statement
 
   /**
    * Counts tables whose name is included in `tables`.
@@ -105,22 +105,20 @@ export abstract class QueryBuilder {
    * Insert a row into a table, ignoring it if it already exists.
    */
   abstract insertOrIgnore(
-    table: string,
+    table: QualifiedTablename,
     columns: string[],
-    values: SqlValue[],
-    schema?: string
+    values: SqlValue[]
   ): Statement
 
   /**
    * Insert a row into a table, replacing it if it already exists.
    */
   abstract insertOrReplace(
-    table: string,
+    table: QualifiedTablename,
     columns: string[],
     values: Array<SqlValue>,
     conflictCols: string[],
-    updateCols: string[],
-    schema?: string
+    updateCols: string[]
   ): Statement
 
   /**
@@ -129,26 +127,24 @@ export abstract class QueryBuilder {
    * with the provided values `updateVals`
    */
   abstract insertOrReplaceWith(
-    table: string,
+    table: QualifiedTablename,
     columns: string[],
     values: Array<SqlValue>,
     conflictCols: string[],
     updateCols: string[],
-    updateVals: SqlValue[],
-    schema?: string
+    updateVals: SqlValue[]
   ): Statement
 
   /**
    * Inserts a batch of rows into a table, replacing them if they already exist.
    */
   abstract batchedInsertOrReplace(
-    table: string,
+    table: QualifiedTablename,
     columns: string[],
     records: Array<Record<string, SqlValue>>,
     conflictCols: string[],
     updateCols: string[],
-    maxSqlParameters: number,
-    schema?: string
+    maxSqlParameters: number
   ): Statement[]
 
   /**
@@ -156,80 +152,64 @@ export abstract class QueryBuilder {
    */
   abstract dropTriggerIfExists(
     triggerName: string,
-    tablename: string,
-    namespace?: string
+    table: QualifiedTablename
   ): string
 
   /**
    * Create a trigger that prevents updates to the primary key.
    */
   abstract createNoFkUpdateTrigger(
-    tablename: string,
-    pk: string[],
-    namespace?: string
+    table: QualifiedTablename,
+    pk: string[]
   ): string[]
 
   /**
    * Creates or replaces a trigger that prevents updates to the primary key.
    */
   createOrReplaceNoFkUpdateTrigger(
-    tablename: string,
-    pk: string[],
-    namespace?: string
+    table: QualifiedTablename,
+    pk: string[]
   ): string[] {
     return [
       this.dropTriggerIfExists(
-        `update_ensure_${namespace}_${tablename}_primarykey`,
-        tablename,
-        namespace
+        `update_ensure_${table.namespace}_${table.tablename}_primarykey`,
+        table
       ),
-      ...this.createNoFkUpdateTrigger(tablename, pk, namespace),
+      ...this.createNoFkUpdateTrigger(table, pk),
     ]
   }
 
   /**
    * Modifies the trigger setting for the table identified by its tablename and namespace.
    */
-  abstract setTriggerSetting(
-    tableName: string,
-    value: 0 | 1,
-    namespace?: string
-  ): string
+  abstract setTriggerSetting(table: QualifiedTablename, value: 0 | 1): string
 
   /**
    * Create a trigger that logs operations into the oplog.
    */
   abstract createOplogTrigger(
     opType: 'INSERT' | 'UPDATE' | 'DELETE',
-    tableName: string,
+    table: QualifiedTablename,
     newPKs: string,
     newRows: string,
-    oldRows: string,
-    namespace?: string
+    oldRows: string
   ): string[]
 
   createOrReplaceOplogTrigger(
     opType: 'INSERT' | 'UPDATE' | 'DELETE',
-    tableName: string,
+    table: QualifiedTablename,
     newPKs: string,
     newRows: string,
-    oldRows: string,
-    namespace: string = this.defaultNamespace
+    oldRows: string
   ): string[] {
     return [
       this.dropTriggerIfExists(
-        `${opType.toLowerCase()}_${namespace}_${tableName}_into_oplog`,
-        tableName,
-        namespace
+        `${opType.toLowerCase()}_${table.namespace}_${
+          table.tablename
+        }_into_oplog`,
+        table
       ),
-      ...this.createOplogTrigger(
-        opType,
-        tableName,
-        newPKs,
-        newRows,
-        oldRows,
-        namespace
-      ),
+      ...this.createOplogTrigger(opType, table, newPKs, newRows, oldRows),
     ]
   }
 
@@ -262,40 +242,35 @@ export abstract class QueryBuilder {
    */
   abstract createFkCompensationTrigger(
     opType: 'INSERT' | 'UPDATE',
-    tableName: string,
+    table: QualifiedTablename,
     childKey: string,
-    fkTableName: string,
+    fkTable: QualifiedTablename,
     joinedFkPKs: string,
-    foreignKey: ForeignKey,
-    namespace?: string,
-    fkTableNamespace?: string
+    foreignKey: ForeignKey
   ): string[]
 
   createOrReplaceFkCompensationTrigger(
     opType: 'INSERT' | 'UPDATE',
-    tableName: string,
+    table: QualifiedTablename,
     childKey: string,
-    fkTableName: string,
+    fkTable: QualifiedTablename,
     joinedFkPKs: string,
-    foreignKey: ForeignKey,
-    namespace: string = this.defaultNamespace,
-    fkTableNamespace: string = this.defaultNamespace
+    foreignKey: ForeignKey
   ): string[] {
     return [
       this.dropTriggerIfExists(
-        `compensation_${opType.toLowerCase()}_${namespace}_${tableName}_${childKey}_into_oplog`,
-        tableName,
-        namespace
+        `compensation_${opType.toLowerCase()}_${table.namespace}_${
+          table.tablename
+        }_${childKey}_into_oplog`,
+        table
       ),
       ...this.createFkCompensationTrigger(
         opType,
-        tableName,
+        table,
         childKey,
-        fkTableName,
+        fkTable,
         joinedFkPKs,
-        foreignKey,
-        namespace,
-        fkTableNamespace
+        foreignKey
       ),
     ]
   }

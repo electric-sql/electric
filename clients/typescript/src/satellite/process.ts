@@ -301,7 +301,7 @@ export class SatelliteProcess implements Satellite {
 
     // TODO: table and schema warrant escaping here too, but they aren't in the triggers table.
     const deleteStmts = tables.map((x) => ({
-      sql: `DELETE FROM "${x.namespace}"."${x.tablename}"`,
+      sql: `DELETE FROM ${x}`,
     }))
 
     const stmtsWithTriggers = [
@@ -547,7 +547,7 @@ export class SatelliteProcess implements Satellite {
     // For each table, do a batched insert
     for (const [_table, { relation, records, table }] of groupedChanges) {
       const columnNames = relation.columns.map((col) => col.name)
-      const qualifiedTableName = `"${table.namespace}"."${table.tablename}"`
+      const qualifiedTableName = `${table}`
       const orIgnore = this.builder.sqliteOnly('OR IGNORE')
       const onConflictDoNothing = this.builder.pgOnly('ON CONFLICT DO NOTHING')
       const sqlBase = `INSERT ${orIgnore} INTO ${qualifiedTableName} (${columnNames.join(
@@ -571,13 +571,12 @@ export class SatelliteProcess implements Satellite {
 
     // Then do a batched insert for the shadow table
     const batchedShadowInserts = this.builder.batchedInsertOrReplace(
-      this.opts.shadowTable.tablename,
+      this.opts.shadowTable,
       ['namespace', 'tablename', 'primaryKey', 'tags'],
       allArgsForShadowInsert,
       ['namespace', 'tablename', 'primaryKey'],
       ['namespace', 'tablename', 'tags'],
-      this.maxSqlParameters,
-      this.opts.shadowTable.namespace
+      this.maxSqlParameters
     )
     stmts.push(...batchedShadowInserts)
 
@@ -978,8 +977,8 @@ export class SatelliteProcess implements Satellite {
     }
 
     try {
-      const oplog = `"${this.opts.oplogTable.namespace}"."${this.opts.oplogTable.tablename}"`
-      const shadow = `"${this.opts.shadowTable.namespace}"."${this.opts.shadowTable.tablename}"`
+      const oplog = `${this.opts.oplogTable}`
+      const shadow = `${this.opts.shadowTable}`
       const timestamp = new Date()
       const newTag = this._generateTag(timestamp)
 
@@ -1205,7 +1204,7 @@ export class SatelliteProcess implements Satellite {
   async _getEntries(since?: number): Promise<OplogEntry[]> {
     // `rowid` is never below 0, so -1 means "everything"
     since ??= -1
-    const oplog = `"${this.opts.oplogTable.namespace}"."${this.opts.oplogTable.tablename}"`
+    const oplog = `${this.opts.oplogTable}`
 
     const selectEntries = `
       SELECT * FROM ${oplog}
@@ -1218,7 +1217,7 @@ export class SatelliteProcess implements Satellite {
   }
 
   _deleteShadowTagsStatement(shadow: ShadowEntry): Statement {
-    const shadowTable = `"${this.opts.shadowTable.namespace}"."${this.opts.shadowTable.tablename}"`
+    const shadowTable = `${this.opts.shadowTable}`
     const pos = (i: number) => this.builder.makePositionalParam(i)
     const deleteRow = `
       DELETE FROM ${shadowTable}
@@ -1234,12 +1233,11 @@ export class SatelliteProcess implements Satellite {
 
   _updateShadowTagsStatement(shadow: ShadowEntry): Statement {
     return this.builder.insertOrReplace(
-      this.opts.shadowTable.tablename,
+      this.opts.shadowTable,
       ['namespace', 'tablename', 'primaryKey', 'tags'],
       [shadow.namespace, shadow.tablename, shadow.primaryKey, shadow.tags],
       ['namespace', 'tablename', 'primaryKey'],
-      ['tags'],
-      this.opts.shadowTable.namespace
+      ['tags']
     )
   }
 
@@ -1464,7 +1462,7 @@ export class SatelliteProcess implements Satellite {
     flag: 0 | 1
   ): Statement[] {
     if (tables.length === 0) return []
-    const triggers = `"${this.opts.triggersTable.namespace}"."${this.opts.triggersTable.tablename}"`
+    const triggers = `${this.opts.triggersTable}`
     const namespacesAndTableNames = tables.flatMap((tbl) => [
       tbl.namespace,
       tbl.tablename,
@@ -1482,8 +1480,7 @@ export class SatelliteProcess implements Satellite {
   }
 
   _addSeenAdditionalDataStmt(ref: string): Statement {
-    const meta = `"${this.opts.metaTable.namespace}"."${this.opts.metaTable.tablename}"`
-
+    const meta = `${this.opts.metaTable}`
     const sql = `
       INSERT INTO ${meta} (key, value) VALUES ('seenAdditionalData', ${this.builder.makePositionalParam(
       1
@@ -1505,7 +1502,7 @@ export class SatelliteProcess implements Satellite {
   ): Statement
   _setMetaStatement(key: Uuid, value: string | null): Statement
   _setMetaStatement(key: string, value: SqlValue) {
-    const meta = `"${this.opts.metaTable.namespace}"."${this.opts.metaTable.tablename}"`
+    const meta = `${this.opts.metaTable}`
     const pos = (i: number) => this.builder.makePositionalParam(i)
     const sql = `UPDATE ${meta} SET value = ${pos(1)} WHERE key = ${pos(2)}`
     const args = [value, key]
@@ -1528,7 +1525,7 @@ export class SatelliteProcess implements Satellite {
   async _getMeta(key: Uuid): Promise<string | null>
   async _getMeta<K extends keyof MetaEntries>(key: K): Promise<MetaEntries[K]>
   async _getMeta(key: string) {
-    const meta = `"${this.opts.metaTable.namespace}"."${this.opts.metaTable.tablename}"`
+    const meta = `${this.opts.metaTable}`
     const pos = (i: number) => this.builder.makePositionalParam(i)
     const sql = `SELECT value from ${meta} WHERE key = ${pos(1)}`
     const args = [key]
@@ -1564,7 +1561,7 @@ export class SatelliteProcess implements Satellite {
 
   async _garbageCollectOplog(commitTimestamp: Date): Promise<void> {
     const isoString = commitTimestamp.toISOString()
-    const oplog = `"${this.opts.oplogTable.namespace}"."${this.opts.oplogTable.tablename}"`
+    const oplog = `${this.opts.oplogTable}`
     const pos = (i: number) => this.builder.makePositionalParam(i)
     await this.adapter.run({
       sql: `DELETE FROM ${oplog} WHERE timestamp = ${pos(1)}`,
@@ -1632,22 +1629,20 @@ export class SatelliteProcess implements Satellite {
 
     if (updateColumnStmts.length > 0) {
       return this.builder.insertOrReplaceWith(
-        qualifiedTableName.tablename,
+        qualifiedTableName,
         columnNames,
         columnValues,
         ['id'],
         updateColumnStmts,
-        updateColumnStmts.map((col) => fullRow[col]),
-        qualifiedTableName.namespace
+        updateColumnStmts.map((col) => fullRow[col])
       )
     }
 
     // no changes, can ignore statement if exists
     return this.builder.insertOrIgnore(
-      qualifiedTableName.tablename,
+      qualifiedTableName,
       columnNames,
-      columnValues,
-      qualifiedTableName.namespace
+      columnValues
     )
   }
 
@@ -1673,8 +1668,10 @@ export function generateTriggersForTable(
   builder: QueryBuilder
 ): Statement[] {
   const table = {
-    tableName: tbl.name,
-    namespace: builder.defaultNamespace,
+    qualifiedTableName: new QualifiedTablename(
+      builder.defaultNamespace,
+      tbl.name
+    ),
     columns: tbl.columns.map((col) => col.name),
     primary: tbl.pks,
     foreignKeys: tbl.fks.map((fk) => {

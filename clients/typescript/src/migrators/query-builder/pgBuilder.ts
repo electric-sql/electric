@@ -33,13 +33,10 @@ class PgBuilder extends QueryBuilder {
     return []
   }
 
-  tableExists(
-    tableName: string,
-    namespace: string = this.defaultNamespace
-  ): Statement {
+  tableExists(table: QualifiedTablename): Statement {
     return {
       sql: `SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = $2`,
-      args: [namespace, tableName],
+      args: [table.namespace, table.tablename],
     }
   }
 
@@ -70,9 +67,7 @@ class PgBuilder extends QueryBuilder {
     onTable: QualifiedTablename,
     columns: string[]
   ) {
-    const namespace = onTable.namespace
-    const tablename = onTable.tablename
-    return `CREATE INDEX IF NOT EXISTS ${indexName} ON "${namespace}"."${tablename}" (${columns
+    return `CREATE INDEX IF NOT EXISTS ${indexName} ON ${onTable} (${columns
       .map(quote)
       .join(', ')})`
   }
@@ -132,14 +127,13 @@ class PgBuilder extends QueryBuilder {
   }
 
   insertOrIgnore(
-    table: string,
+    table: QualifiedTablename,
     columns: string[],
-    values: SqlValue[],
-    schema: string = this.defaultNamespace
+    values: SqlValue[]
   ): Statement {
     return {
       sql: dedent`
-        INSERT INTO "${schema}"."${table}" (${columns.map(quote).join(', ')})
+        INSERT INTO ${table} (${columns.map(quote).join(', ')})
           VALUES (${columns.map((_, i) => `$${i + 1}`).join(', ')})
           ON CONFLICT DO NOTHING;
       `,
@@ -148,16 +142,15 @@ class PgBuilder extends QueryBuilder {
   }
 
   insertOrReplace(
-    table: string,
+    table: QualifiedTablename,
     columns: string[],
     values: Array<SqlValue>,
     conflictCols: string[],
-    updateCols: string[],
-    schema: string = this.defaultNamespace
+    updateCols: string[]
   ): Statement {
     return {
       sql: dedent`
-        INSERT INTO "${schema}"."${table}" (${columns.map(quote).join(', ')})
+        INSERT INTO ${table} (${columns.map(quote).join(', ')})
           VALUES (${columns.map((_, i) => `$${i + 1}`).join(', ')})
         ON CONFLICT (${conflictCols.map(quote).join(', ')}) DO UPDATE
           SET ${updateCols
@@ -169,17 +162,16 @@ class PgBuilder extends QueryBuilder {
   }
 
   insertOrReplaceWith(
-    table: string,
+    table: QualifiedTablename,
     columns: string[],
     values: Array<SqlValue>,
     conflictCols: string[],
     updateCols: string[],
-    updateVals: SqlValue[],
-    schema: string = this.defaultNamespace
+    updateVals: SqlValue[]
   ): Statement {
     return {
       sql: dedent`
-        INSERT INTO "${schema}"."${table}" (${columns.map(quote).join(', ')})
+        INSERT INTO ${table} (${columns.map(quote).join(', ')})
           VALUES (${columns.map((_, i) => `$${i + 1}`).join(', ')})
         ON CONFLICT (${conflictCols.map(quote).join(', ')}) DO UPDATE
           SET ${updateCols
@@ -191,15 +183,14 @@ class PgBuilder extends QueryBuilder {
   }
 
   batchedInsertOrReplace(
-    table: string,
+    table: QualifiedTablename,
     columns: string[],
     records: Array<Record<string, SqlValue>>,
     conflictCols: string[],
     updateCols: string[],
-    maxSqlParameters: number,
-    schema: string = this.defaultNamespace
+    maxSqlParameters: number
   ): Statement[] {
-    const baseSql = `INSERT INTO "${schema}"."${table}" (${columns
+    const baseSql = `INSERT INTO ${table} (${columns
       .map(quote)
       .join(', ')}) VALUES `
     const statements = this.prepareInsertBatchedStatements(
@@ -220,19 +211,12 @@ class PgBuilder extends QueryBuilder {
     }))
   }
 
-  dropTriggerIfExists(
-    triggerName: string,
-    tablename: string,
-    namespace: string = this.defaultNamespace
-  ) {
-    return `DROP TRIGGER IF EXISTS ${triggerName} ON "${namespace}"."${tablename}";`
+  dropTriggerIfExists(triggerName: string, table: QualifiedTablename) {
+    return `DROP TRIGGER IF EXISTS ${triggerName} ON ${table};`
   }
 
-  createNoFkUpdateTrigger(
-    tablename: string,
-    pk: string[],
-    namespace: string = this.defaultNamespace
-  ): string[] {
+  createNoFkUpdateTrigger(table: QualifiedTablename, pk: string[]): string[] {
+    const { namespace, tablename } = table
     return [
       dedent`
         CREATE OR REPLACE FUNCTION update_ensure_${namespace}_${tablename}_primarykey_function()
@@ -252,7 +236,7 @@ class PgBuilder extends QueryBuilder {
       `,
       dedent`
       CREATE TRIGGER update_ensure_${namespace}_${tablename}_primarykey
-        BEFORE UPDATE ON "${namespace}"."${tablename}"
+        BEFORE UPDATE ON ${table}
           FOR EACH ROW
             EXECUTE FUNCTION update_ensure_${namespace}_${tablename}_primarykey_function();
       `,
@@ -287,26 +271,23 @@ class PgBuilder extends QueryBuilder {
     return `json_strip_nulls(${json})`
   }
 
-  setTriggerSetting(
-    tableName: string,
-    value: 0 | 1,
-    namespace: string = this.defaultNamespace
-  ): string {
+  setTriggerSetting(table: QualifiedTablename, value: 0 | 1): string {
+    const { namespace, tablename } = table
     return dedent`
       INSERT INTO "${namespace}"."_electric_trigger_settings" ("namespace", "tablename", "flag")
-        VALUES ('${namespace}', '${tableName}', ${value})
+        VALUES ('${namespace}', '${tablename}', ${value})
         ON CONFLICT DO NOTHING;
     `
   }
 
   createOplogTrigger(
     opType: 'INSERT' | 'UPDATE' | 'DELETE',
-    tableName: string,
+    table: QualifiedTablename,
     newPKs: string,
     newRows: string,
-    oldRows: string,
-    namespace: string = this.defaultNamespace
+    oldRows: string
   ): string[] {
+    const { namespace, tablename } = table
     const opTypeLower = opType.toLowerCase()
     const pk = this.createPKJsonObject(newPKs)
     // Update has both the old and the new row
@@ -319,21 +300,21 @@ class PgBuilder extends QueryBuilder {
 
     return [
       dedent`
-        CREATE OR REPLACE FUNCTION ${opTypeLower}_${namespace}_${tableName}_into_oplog_function()
+        CREATE OR REPLACE FUNCTION ${opTypeLower}_${namespace}_${tablename}_into_oplog_function()
         RETURNS TRIGGER AS $$
         BEGIN
           DECLARE
             flag_value INTEGER;
           BEGIN
             -- Get the flag value from _electric_trigger_settings
-            SELECT flag INTO flag_value FROM "${namespace}"._electric_trigger_settings WHERE namespace = '${namespace}' AND tablename = '${tableName}';
+            SELECT flag INTO flag_value FROM "${namespace}"._electric_trigger_settings WHERE namespace = '${namespace}' AND tablename = '${tablename}';
     
             IF flag_value = 1 THEN
               -- Insert into _electric_oplog
               INSERT INTO "${namespace}"._electric_oplog (namespace, tablename, optype, "primaryKey", "newRow", "oldRow", timestamp)
               VALUES (
                 '${namespace}',
-                '${tableName}',
+                '${tablename}',
                 '${opType}',
                 ${pk},
                 ${newRecord},
@@ -348,36 +329,36 @@ class PgBuilder extends QueryBuilder {
         $$ LANGUAGE plpgsql;
       `,
       dedent`
-        CREATE TRIGGER ${opTypeLower}_${namespace}_${tableName}_into_oplog
-          AFTER ${opType} ON "${namespace}"."${tableName}"
+        CREATE TRIGGER ${opTypeLower}_${namespace}_${tablename}_into_oplog
+          AFTER ${opType} ON ${table}
             FOR EACH ROW
-              EXECUTE FUNCTION ${opTypeLower}_${namespace}_${tableName}_into_oplog_function();
+              EXECUTE FUNCTION ${opTypeLower}_${namespace}_${tablename}_into_oplog_function();
       `,
     ]
   }
 
   createFkCompensationTrigger(
     opType: 'INSERT' | 'UPDATE',
-    tableName: string,
+    table: QualifiedTablename,
     childKey: string,
-    fkTableName: string,
+    fkTable: QualifiedTablename,
     joinedFkPKs: string,
-    foreignKey: ForeignKey,
-    namespace: string = this.defaultNamespace,
-    fkTableNamespace: string = this.defaultNamespace
+    foreignKey: ForeignKey
   ): string[] {
+    const { namespace, tablename } = table
+    const { namespace: fkTableNamespace, tablename: fkTableName } = fkTable
     const opTypeLower = opType.toLowerCase()
 
     return [
       dedent`
-        CREATE OR REPLACE FUNCTION compensation_${opTypeLower}_${namespace}_${tableName}_${childKey}_into_oplog_function()
+        CREATE OR REPLACE FUNCTION compensation_${opTypeLower}_${namespace}_${tablename}_${childKey}_into_oplog_function()
         RETURNS TRIGGER AS $$
         BEGIN
           DECLARE
             flag_value INTEGER;
             meta_value INTEGER;
           BEGIN
-            SELECT flag INTO flag_value FROM "${namespace}"._electric_trigger_settings WHERE namespace = '${namespace}' AND tablename = '${tableName}';
+            SELECT flag INTO flag_value FROM "${namespace}"._electric_trigger_settings WHERE namespace = '${namespace}' AND tablename = '${tablename}';
     
             SELECT value INTO meta_value FROM "${namespace}"._electric_meta WHERE key = 'compensations';
     
@@ -393,7 +374,7 @@ class PgBuilder extends QueryBuilder {
                 jsonb_build_object(${joinedFkPKs}),
                 NULL,
                 NULL
-              FROM "${fkTableNamespace}"."${fkTableName}"
+              FROM ${fkTable}
               WHERE "${foreignKey.parentKey}" = NEW."${foreignKey.childKey}";
             END IF;
     
@@ -403,20 +384,18 @@ class PgBuilder extends QueryBuilder {
         $$ LANGUAGE plpgsql;
         `,
       dedent`
-          CREATE TRIGGER compensation_${opTypeLower}_${namespace}_${tableName}_${childKey}_into_oplog
-            AFTER ${opType} ON "${namespace}"."${tableName}"
+          CREATE TRIGGER compensation_${opTypeLower}_${namespace}_${tablename}_${childKey}_into_oplog
+            AFTER ${opType} ON ${table}
               FOR EACH ROW
-                EXECUTE FUNCTION compensation_${opTypeLower}_${namespace}_${tableName}_${childKey}_into_oplog_function();
+                EXECUTE FUNCTION compensation_${opTypeLower}_${namespace}_${tablename}_${childKey}_into_oplog_function();
         `,
     ]
   }
 
   setTagsForShadowRows(
-    oplogTable: QualifiedTablename,
-    shadowTable: QualifiedTablename
+    oplog: QualifiedTablename,
+    shadow: QualifiedTablename
   ): string {
-    const oplog = `"${oplogTable.namespace}"."${oplogTable.tablename}"`
-    const shadow = `"${shadowTable.namespace}"."${shadowTable.tablename}"`
     return dedent`
       INSERT INTO ${shadow} (namespace, tablename, "primaryKey", tags)
         SELECT DISTINCT namespace, tablename, "primaryKey", $1
@@ -430,11 +409,9 @@ class PgBuilder extends QueryBuilder {
   }
 
   removeDeletedShadowRows(
-    oplogTable: QualifiedTablename,
-    shadowTable: QualifiedTablename
+    oplog: QualifiedTablename,
+    shadow: QualifiedTablename
   ): string {
-    const oplog = `"${oplogTable.namespace}"."${oplogTable.tablename}"`
-    const shadow = `"${shadowTable.namespace}"."${shadowTable.tablename}"`
     // We do an inner join in a CTE instead of a `WHERE EXISTS (...)`
     // since this is not reliant on re-executing a query
     // for every row in the shadow table, but uses a PK join instead.
