@@ -12,6 +12,7 @@ import {
   HoverCard,
   Skeleton,
   Strong,
+  Tooltip,
 } from '@radix-ui/themes'
 import { DbTableInfo } from 'src/api/interface'
 
@@ -43,18 +44,20 @@ export default function LocalDBTab({
           <DataList.Value>
             <Flex gap="3" align="center">
               <Strong>{dbName}</Strong>
-              <Button
-                size="1"
-                variant="soft"
-                color="orange"
-                loading={resettingDb}
-                onClick={() => {
-                  setResettingDb(true)
-                  api.resetDb(dbName)
-                }}
-              >
-                RESET
-              </Button>
+              <Tooltip content="Deletes local IndexedDB and refreshes page">
+                <Button
+                  size="1"
+                  variant="soft"
+                  color="orange"
+                  loading={resettingDb}
+                  onClick={() => {
+                    setResettingDb(true)
+                    api.resetDb(dbName)
+                  }}
+                >
+                  RESET
+                </Button>
+              </Tooltip>
             </Flex>
           </DataList.Value>
         </DataList.Item>
