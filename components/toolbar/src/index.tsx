@@ -1,4 +1,5 @@
-import React, { useEffect } from 'react'
+import { render, type JSX } from 'preact'
+import { useEffect, useState } from 'preact/hooks'
 
 import 'codemirror/lib/codemirror.css'
 import 'codemirror/theme/material.css'
@@ -6,8 +7,6 @@ import 'codemirror/mode/sql/sql'
 import './index.css'
 
 import logo from './logo.svg'
-import { useState } from 'react'
-import ReactDOM from 'react-dom/client'
 
 import ToolbarTabs from './tabs'
 import { ToolbarInterface } from './api/interface'
@@ -37,8 +36,8 @@ function ElectricToolbar({ api }: ToolbarProps) {
     setHidden(!hidden)
   }
 
-  function handleSelect(e: React.ChangeEvent<HTMLSelectElement>) {
-    setDbName(e.target.value)
+  function handleSelect(e: JSX.TargetedEvent<HTMLSelectElement, Event>) {
+    setDbName((e.target as HTMLSelectElement).value)
   }
 
   if (hidden) {
@@ -81,10 +80,6 @@ export function addToolbar(electric: ElectricClient<any>) {
   const toolbarDiv = document.createElement('div')
   toolbarDiv.setAttribute('id', 'electric-toolbar')
   toolbarDiv.setAttribute('class', 'electric-toolbar')
-
   document.body.appendChild(toolbarDiv)
-  const toolbarRoot = ReactDOM.createRoot(
-    document.getElementById('electric-toolbar') as HTMLElement,
-  )
-  toolbarRoot.render(<ElectricToolbar api={toolbarApi} />)
+  render(<ElectricToolbar api={toolbarApi} />, toolbarDiv)
 }

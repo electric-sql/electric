@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react'
+import { type JSX } from 'preact'
+import { useEffect, useState } from 'preact/hooks'
 import { ToolbarTabsProps } from '../tabs'
 import { ConnectivityState } from 'electric-sql/util'
 

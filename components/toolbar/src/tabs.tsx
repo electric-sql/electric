@@ -1,4 +1,5 @@
-import React, { useState } from 'react'
+import { type JSX } from 'preact'
+import { useState } from 'preact/hooks'
 
 import LocalDBTab from './tabs/LocalDBTab'
 import SQLTab from './tabs/SQLTab'

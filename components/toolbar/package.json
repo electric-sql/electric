@@ -18,15 +18,13 @@
   },
   "dependencies": {
     "codemirror": "^5.65.16",
-    "react": "^18.2.0",
-    "react-codemirror2": "^8.0.0",
-    "react-dom": "^18.2.0"
+    "preact": "^10.21.0",
+    "react-codemirror2": "^8.0.0"
   },
   "devDependencies": {
+    "@preact/preset-vite": "^2.8.2",
     "@types/better-sqlite3": "7.6.3",
     "@types/node": "^20.12.7",
-    "@types/react": "^18.2.0",
-    "@types/react-dom": "^18.2.0",
     "@vitejs/plugin-react": "^4.2.1",
     "better-sqlite3": "^8.4.0",
     "electric-sql": "workspace:*",
