@@ -3,12 +3,12 @@
   "version": "1.0.2",
   "type": "module",
   "main": "dist/index.cjs.js",
-  "module": "dist/index.esm.js",
+  "module": "dist/index.js",
   "types": "dist/index.d.ts",
   "author": "ElectricSQL",
   "license": "Apache-2.0",
   "scripts": {
-    "build": "rm -rf ./dist && node builder.js && tsc  -p tsconfig.build.json",
+    "build": "rm -rf ./dist && vite build && tsc  -p tsconfig.build.json",
     "check-styleguide": "prettier --check --loglevel warn .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
@@ -27,14 +27,14 @@
     "@types/node": "^20.12.7",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
+    "@vitejs/plugin-react": "^4.2.1",
     "better-sqlite3": "^8.4.0",
     "electric-sql": "workspace:*",
-    "esbuild": "^0.20.2",
-    "esbuild-plugin-inline-image": "^0.0.9",
-    "esbuild-plugin-inline-import": "^1.0.4",
     "jsdom": "24.0.0",
     "prettier": "3.2.5",
     "typescript": "^5.4.5",
+    "vite": "^5.2.10",
+    "vite-plugin-css-injected-by-js": "^3.5.1",
     "vitest": "^1.5.0"
   },
   "peerDependencies": {

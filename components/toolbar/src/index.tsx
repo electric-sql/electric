@@ -3,7 +3,7 @@ import React, { useEffect } from 'react'
 import 'codemirror/lib/codemirror.css'
 import 'codemirror/theme/material.css'
 import 'codemirror/mode/sql/sql'
-import style from './index.css'
+import './index.css'
 
 import logo from './logo.svg'
 import { useState } from 'react'
@@ -81,10 +81,6 @@ export function addToolbar(electric: ElectricClient<any>) {
   const toolbarDiv = document.createElement('div')
   toolbarDiv.setAttribute('id', 'electric-toolbar')
   toolbarDiv.setAttribute('class', 'electric-toolbar')
-
-  const styleTag = document.createElement('style')
-  styleTag.innerHTML = style
-  document.head.appendChild(styleTag)
 
   document.body.appendChild(toolbarDiv)
   const toolbarRoot = ReactDOM.createRoot(
