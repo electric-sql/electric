@@ -42,7 +42,13 @@ function ElectricToolbar({ api }: ToolbarProps) {
         width={hidden ? '400px' : '100%'}
         height="fit-content"
         minHeight="auto"
-        style={{ float: 'right', pointerEvents: 'auto' }}
+        p="2"
+        m={hidden ? '2' : '0'}
+        style={{
+          float: 'right',
+          pointerEvents: 'auto',
+          boxSizing: 'border-box',
+        }}
       >
         <Flex justify="between" flexGrow="1">
           <Flex align="center" gap="1">

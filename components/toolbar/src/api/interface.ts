@@ -1,6 +1,9 @@
+import { Shape } from 'electric-sql/satellite'
 import { Row, Statement, ConnectivityState } from 'electric-sql/util'
 
 export type UnsubscribeFunction = () => void
+
+export type DebugShape = Shape & { id: string }
 
 export interface ToolbarInterface {
   getSatelliteNames(): string[]
@@ -12,7 +15,7 @@ export interface ToolbarInterface {
 
   toggleSatelliteStatus(name: string): Promise<void>
 
-  getSatelliteShapeSubscriptions(name: string): string[]
+  getSatelliteShapeSubscriptions(name: string): DebugShape[]
 
   resetDb(dbName: string): Promise<void>
   queryDb(dbName: string, statement: Statement): Promise<Row[]>
