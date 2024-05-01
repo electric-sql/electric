@@ -38,19 +38,9 @@ export abstract class QueryBuilder {
   abstract pgOnly(query: string): string
 
   /**
-   * Returns an array containing the given query if the current SQL dialect is PostgreSQL.
-   */
-  abstract pgOnlyQuery(query: string): string[]
-
-  /**
    * Returns the given query if the current SQL dialect is SQLite.
    */
   abstract sqliteOnly(query: string): string
-
-  /**
-   * Returns an array containing the given query if the current SQL dialect is SQLite.
-   */
-  abstract sqliteOnlyQuery(query: string): string[]
 
   /**
    * Makes the i-th positional parameter,

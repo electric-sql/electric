@@ -45,7 +45,8 @@ export interface ElectricConfig {
 }
 
 export type ElectricConfigWithDialect = ElectricConfig & {
-  dialect?: 'SQLite' | 'Postgres' // defaults to SQLite
+  /** defaults to SQLite */
+  dialect?: 'SQLite' | 'Postgres'
 }
 
 export type HydratedConfig = {

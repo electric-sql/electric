@@ -1166,6 +1166,7 @@ export class SatelliteProcess implements Satellite {
 
     const stmts: Statement[] = []
     for (const [tablenameStr, mapping] of Object.entries(merged)) {
+      const qualifiedTableName = QualifiedTablename.parse(tablenameStr)
       for (const entryChanges of Object.values(mapping)) {
         const shadowEntry: ShadowEntry = {
           namespace: entryChanges.namespace,
@@ -1173,8 +1174,6 @@ export class SatelliteProcess implements Satellite {
           primaryKey: getShadowPrimaryKey(entryChanges),
           tags: encodeTags(entryChanges.tags),
         }
-
-        const qualifiedTableName = QualifiedTablename.parse(tablenameStr)
 
         switch (entryChanges.optype) {
           case OPTYPES.gone:

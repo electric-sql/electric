@@ -21,16 +21,8 @@ class PgBuilder extends QueryBuilder {
     return query
   }
 
-  pgOnlyQuery(query: string) {
-    return [query]
-  }
-
   sqliteOnly(_query: string) {
     return ''
-  }
-
-  sqliteOnlyQuery(_query: string) {
-    return []
   }
 
   tableExists(table: QualifiedTablename): Statement {
