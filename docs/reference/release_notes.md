@@ -14,10 +14,10 @@ To learn more about the major feature releases of Electric, see release announce
 
 To see the complete change log for each new release, see the [Releases page](https://github.com/electric-sql/electric/releases) on GitHub or the `CHANGELOG.md` file of each individual component:
 
-- Sync service: [/components/electric/CHANGELOG.md](https://github.com/electric-sql/electric/blob/main/components/electric/CHANGELOG.md)
-- TypeScript client: [/clients/typescript/CHANGELOG.md](https://github.com/electric-sql/electric/blob/main/clients/typescript/CHANGELOG.md)
-- create-electric-app: [/examples/starter/CHANGELOG.md](https://github.com/electric-sql/electric/blob/main/examples/starter/CHANGELOG.md)
-- @electric-sql/prisma-generator: [/generator/CHANGELOG.md](https://github.com/electric-sql/electric/blob/main/generator/CHANGELOG.md)
+- [Sync service](https://github.com/electric-sql/electric/blob/main/components/electric/CHANGELOG.md)
+- [TypeScript client](https://github.com/electric-sql/electric/blob/main/clients/typescript/CHANGELOG.md)
+- [create-electric-app](https://github.com/electric-sql/electric/blob/main/examples/starter/CHANGELOG.md)
+- [@electric-sql/prisma-generator](https://github.com/electric-sql/electric/blob/main/generator/CHANGELOG.md)
 
 
 ## 2024-05-02 - v0.10.2
