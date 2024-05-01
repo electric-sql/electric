@@ -1257,16 +1257,6 @@ export class SatelliteClient implements Client {
     // Shouldn't ack the same message
     if (this.inbound.lastAckedTxId?.eq(this.inbound.lastTxId)) return
 
-    const msg: SatPbMsg = {
-      $type: 'Electric.Satellite.SatOpLogAck',
-      ackTimestamp: Long.UZERO.add(new Date().getTime()),
-      lsn: this.inbound.last_lsn!,
-      transactionId: this.inbound.lastTxId,
-      subscriptionIds: this.inbound.seenAdditionalDataSinceLastTx.subscriptions,
-      additionalDataSourceIds:
-        this.inbound.seenAdditionalDataSinceLastTx.dataRefs,
-    }
-
     // Send acks earlier rather than later to keep the stream continuous -
     // definitely send at 70% of allowed lag.
     const boundary = Math.floor(this.inbound.maxUnackedTxs * 0.7)
@@ -1278,6 +1268,16 @@ export class SatelliteClient implements Client {
       reason == 'timeout' ||
       reason == 'additionalData'
     ) {
+      const msg: SatPbMsg = {
+        $type: 'Electric.Satellite.SatOpLogAck',
+        ackTimestamp: Long.UZERO.add(new Date().getTime()),
+        lsn: this.inbound.last_lsn!,
+        transactionId: this.inbound.lastTxId,
+        subscriptionIds: this.inbound.seenAdditionalDataSinceLastTx.subscriptions,
+        additionalDataSourceIds:
+          this.inbound.seenAdditionalDataSinceLastTx.dataRefs,
+      }
+
       this.sendMessage(msg)
       this.inbound.lastAckedTxId = msg.transactionId
     }
