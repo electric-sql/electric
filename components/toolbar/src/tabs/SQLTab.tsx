@@ -2,6 +2,7 @@ import { type JSX } from 'preact'
 import { useState } from 'preact/hooks'
 import { Controlled as CodeMirrorControlled } from 'react-codemirror2'
 import { ToolbarTabsProps } from '../tabs'
+import './SQLTab.module.css'
 
 export default function SQLTab({ dbName, api }: ToolbarTabsProps): JSX.Element {
   const [code, setCode] = useState(

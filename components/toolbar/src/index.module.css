@@ -1,6 +1,6 @@
 @import url('https://fonts.cdnfonts.com/css/open-sauce-one');
 
-#electric-toolbar {
+.electricToolbar {
   all: revert;
   position: absolute;
   bottom: 0;
@@ -11,7 +11,7 @@
   box-sizing: border-box;
 }
 
-.Toolbar {
+.toolbar {
   all: revert;
   border-color: lightgrey;
   border-width: 1px;
@@ -29,18 +29,18 @@
   width: 100%;
 }
 
-.Toolbar-hidden {
+.toolbarHidden {
   width: 400px;
   float: right;
 }
 
-.Toolbar h3 {
+.toolbar h3 {
   all: revert;
   margin-top: 20px;
   margin-bottom: 20px;
 }
 
-.Toolbar-header {
+.toolbarHeader {
   all: revert;
   border-color: lightgrey;
   border-width: 0 0 1px 0;
@@ -53,11 +53,11 @@
   box-sizing: border-box;
 }
 
-.Toolbar-header-hidden {
+.toolbarHeaderHidden {
   border-width: 0;
 }
 
-.Toolbar-logo {
+.toolbarLogo {
   all: revert;
   width: 30px;
   height: 30px;
@@ -67,13 +67,13 @@
   vertical-align: middle;
 }
 
-.nav-text {
+.navText {
   all: revert;
   display: inline-block;
   vertical-align: middle;
 }
 
-.Toolbar-header button {
+.toolbarHeader button {
   all: revert;
   height: 20px;
   margin-top: 5px;
@@ -88,7 +88,7 @@
   border-radius: 8px;
 }
 
-.Toolbar-header select {
+.toolbarHeader select {
   all: revert;
   height: 20px;
   margin-top: 5px;
@@ -104,7 +104,7 @@
   text-align: right;
 }
 
-.Toolbar-tabs {
+.toolbarTabs {
   all: revert;
   display: flex;
   flex-direction: row;
@@ -112,14 +112,14 @@
   padding: 20px;
 }
 
-.Toolbar-tab-items {
+.toolbarTabItems {
   all: revert;
   flex-basis: 180px;
   padding: 0;
   margin: 0;
 }
 
-.Toolbar-tab-item {
+.toolbarTabItem {
   all: revert;
   list-style: none;
   padding: 5px;
@@ -131,16 +131,16 @@
   user-select: none;
 }
 
-.Toolbar-tab-item:hover {
+.toolbarTabItem:hover {
   background-color: #777;
 }
 
-.Toolbar-tab-item-active {
+.toolbarTabItemActive {
   background-color: #555;
   color: white;
 }
 
-.Toolbar-tab-content {
+.toolbarTabContent {
   all: revert;
   flex-basis: 180px;
   flex-grow: 4;
@@ -152,7 +152,7 @@
   margin-left: 20px;
 }
 
-.Toolbar-tab-content button {
+.toolbarTabContent button {
   all: revert;
   margin-right: 10px;
   color: #61dafb;
@@ -166,77 +166,11 @@
   border-radius: 4px;
 }
 
-.Toolbar-tab-content button:hover {
+.toolbarTabContent button:hover {
   background-color: rgba(97, 218, 251, 0.1);
 }
 
-.Toolbar-tab-content button:active {
+.toolbarTabContent button:active {
   background-color: #61dafb;
   color: #1c1e20;
-}
-
-.CodeMirror {
-  height: 100%;
-  max-height: 100%;
-}
-
-.mirror-wrapper {
-  height: 100%;
-}
-
-.mirror-column {
-  float: left;
-  height: 100%;
-  width: calc(50% - 10px);
-  margin-left: 5px;
-  margin-right: 5px;
-}
-
-.mirror-ctls {
-  background-color: #263238;
-  height: 35px;
-}
-
-.mirror-in {
-  height: calc(100% - 55px);
-}
-
-.mirror-history {
-  height: calc(100% - 55px);
-}
-
-.mirror-out {
-  height: calc(100% - 55px);
-}
-
-.react-codemirror2 {
-  height: 100%;
-}
-
-.mirror-ctls button {
-  position: relative;
-  top: 4px;
-  float: right;
-  width: 110px;
-  height: 25px;
-  margin-right: 5px;
-  font-size: 0.7rem;
-}
-
-.mirror-header {
-  height: 20px;
-  font-size: 0.9rem;
-}
-
-.header-span {
-  margin-right: 10px;
-  -webkit-touch-callout: none;
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
-  user-select: none;
-}
-
-.header-span-button {
-  color: #61dafb;
 }

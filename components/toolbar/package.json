@@ -17,6 +17,7 @@
     "node": ">=16.11.0"
   },
   "dependencies": {
+    "clsx": "^2.1.1",
     "codemirror": "^5.65.16",
     "preact": "^10.21.0",
     "react-codemirror2": "^8.0.0"

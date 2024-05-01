@@ -6,6 +6,8 @@ import SQLTab from './tabs/SQLTab'
 import StatusTab from './tabs/StatusTab'
 import { ToolbarInterface } from './api/interface'
 import ShapesTab from './tabs/ShapesTab'
+import clsx from 'clsx'
+import style from './index.module.css'
 
 type TabName = 'status' | 'db' | 'sql' | 'shapes'
 
@@ -17,8 +19,8 @@ function TabItem(
 ): JSX.Element {
   const className =
     active == name
-      ? 'Toolbar-tab-item Toolbar-tab-item-active'
-      : 'Toolbar-tab-item'
+      ? clsx(style.toolbarTabItem, style.toolbarTabItemActive)
+      : style.toolbarTabItem
   return (
     <li className={className} onClick={handleClick.bind(null, name)}>
       {label}
@@ -51,14 +53,14 @@ export default function ToolbarTabs({
   }
 
   return (
-    <div className="Toolbar-tabs">
-      <ul className="Toolbar-tab-items">
+    <div className={style.toolbarTabs}>
+      <ul className={style.toolbarTabItems}>
         {TabItem('Connection', 'status', setActive, active)}
         {TabItem('Local DB', 'db', setActive, active)}
         {TabItem('Shapes', 'shapes', setActive, active)}
         {TabItem('Shell', 'sql', setActive, active)}
       </ul>
-      <div className="Toolbar-tab-content">{renderComp()}</div>
+      <div className={style.toolbarTabContent}>{renderComp()}</div>
     </div>
   )
 }

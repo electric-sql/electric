@@ -4,7 +4,8 @@ import { useEffect, useState } from 'preact/hooks'
 import 'codemirror/lib/codemirror.css'
 import 'codemirror/theme/material.css'
 import 'codemirror/mode/sql/sql'
-import './index.css'
+import style from './index.module.css'
+import clsx from 'clsx'
 
 import logo from './logo.svg'
 
@@ -42,20 +43,22 @@ function ElectricToolbar({ api }: ToolbarProps) {
 
   if (hidden) {
     return (
-      <div className="Toolbar Toolbar-hidden">
-        <header className="Toolbar-header Toolbar-header-hidden">
-          <img src={logo} className="Toolbar-logo" alt="logo" />
-          <span className="nav-text">ElectricSQL Debug Tools</span>
+      <div className={clsx(style.toolbar, style.toolbarHidden)}>
+        <header
+          className={clsx(style.toolbarHeader, style.toolbarHeaderHidden)}
+        >
+          <img src={logo} className={style.toolbarLogo} alt="logo" />
+          <span className={style.navText}>ElectricSQL Debug Tools</span>
           <button onClick={handleClick}>SHOW</button>
         </header>
       </div>
     )
   } else {
     return (
-      <div className="Toolbar">
-        <header className="Toolbar-header">
-          <img src={logo} className="Toolbar-logo" alt="logo" />
-          <span className="nav-text">ElectricSQL Debug Tools</span>
+      <div className={style.toolbar}>
+        <header className={style.toolbarHeader}>
+          <img src={logo} className={style.toolbarLogo} alt="logo" />
+          <span className={style.navText}>ElectricSQL Debug Tools</span>
           <button onClick={handleClick}>HIDE</button>
           <select onInput={handleSelect}>
             {dbNames.map((name) => (
@@ -78,8 +81,7 @@ export function clientApi(registry: GlobalRegistry | Registry) {
 export function addToolbar(electric: ElectricClient<any>) {
   const toolbarApi = clientApi(electric.registry)
   const toolbarDiv = document.createElement('div')
-  toolbarDiv.setAttribute('id', 'electric-toolbar')
-  toolbarDiv.setAttribute('class', 'electric-toolbar')
+  toolbarDiv.setAttribute('class', style.electricToolbar)
   document.body.appendChild(toolbarDiv)
   render(<ElectricToolbar api={toolbarApi} />, toolbarDiv)
 }
