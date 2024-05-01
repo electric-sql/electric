@@ -1,6 +1,6 @@
 customProps:
   description: >-
-    Adapt the SQLite database driver for your target environment.
+    Adapt the SQLite or Postgres database driver for your target environment.
   hide_overview: true
   icon: /img/icons/nodejs.png
 link:

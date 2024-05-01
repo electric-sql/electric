@@ -5,9 +5,9 @@ description: >-
 sidebar_position: 40
 ---
 
-ElectricSQL syncs data between Postgres and SQLite.
+ElectricSQL syncs data between Postgres on the server and either a SQLite or Postgres on the client.
 
-To do this, we map between [Postgres data types](https://www.postgresql.org/docs/current/datatype.html) and [SQLite data types](https://www.sqlite.org/datatype3.html). In addition, we validate [local writes](../../reference/architecture.md#local-writes) to ensure that the values written into the local database will successfully replicate into Postgres.
+In order to support SQLite on the client, we map between [Postgres data types](https://www.postgresql.org/docs/current/datatype.html) and [SQLite data types](https://www.sqlite.org/datatype3.html). In addition, we validate [local writes](../../reference/architecture.md#local-writes) to ensure that the values written into the local database will successfully replicate into Postgres.
 
 As a result, we support a limited set of validated Postgres data types. If you try to [electrify a table](./electrification.md) which contains unsupported types or [constraints](./constraints.md), this will fail. The same applies to altering an electrified table.
 
@@ -61,7 +61,7 @@ In future we plan to support more fine grained merge strategies for JSON data.
 :::info BYTEA support <a name="bytea-driver-support"></a>
 ElectricSQL supports `bytea` data but not all SQLite drivers are capable of reading/writing blobs - see table below:
 
-| [wa-sqlite](../../integrations/drivers/web/wa-sqlite.md) | [better-sqlite3](../../integrations/drivers/server/node.md) | [expo-sqlite](../../integrations/drivers/mobile/expo.md?usage=expo-sqlite) | [expo-sqlite/next](../../integrations/drivers/mobile/expo.md?usage=expo-sqlite-next)| [op-sqlite](../../integrations/drivers/mobile/react-native.md) |
+| [wa-sqlite](../../integrations/drivers/web/wa-sqlite.md) | [better-sqlite3](../../integrations/drivers/server/better-sqlite3.md) | [expo-sqlite](../../integrations/drivers/mobile/expo.md?usage=expo-sqlite) | [expo-sqlite/next](../../integrations/drivers/mobile/expo.md?usage=expo-sqlite-next)| [op-sqlite](../../integrations/drivers/mobile/react-native.md) |
 |:---------:|:--------------:|:-----------:|:----------------:|:---------:|
 | ✅︎       | ✅︎             | ❌          | ✅︎              | ✅︎        |
 

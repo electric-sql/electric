@@ -36,7 +36,7 @@ See <DocPageLink path="usage/installation/service" /> for more info.
 
 ### Typescript client
 
-Add the `electric-sql` library to your web or mobile app, along with an [SQLite driver](../integrations/drivers/index.md):
+Add the `electric-sql` library to your web or mobile app, along with an [SQLite or Postgres driver](../integrations/drivers/index.md):
 
 ```shell
 npm install electric-sql

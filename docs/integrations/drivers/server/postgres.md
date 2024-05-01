@@ -1,22 +1,22 @@
 ---
-title: NodeJS
+title: node-postgres
 ---
 
-ElectricSQL supports [Node.js](https://nodejs.org) server application using the [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) driver.
+ElectricSQL supports [Node.js](https://nodejs.org) server application using the [node-postgres](https://node-postgres.com) driver.
 
 ## Dependencies
 
-Add `better-sqlite3` as a dependency to your app, e.g.:
+Add `pg` as a dependency to your app, e.g.:
 
 ```shell
-npm install better-sqlite3
+npm install pg
 ```
 
 ## Usage
 
 ```tsx
-import Database from 'better-sqlite3'
-import { electrify } from 'electric-sql/node'
+import pg from 'pg'
+import { electrify, ElectricDatabase } from 'electric-sql/node-postgres'
 
 // Import your generated database schema.
 import { schema } from './generated/client'
@@ -26,17 +26,15 @@ const config = {
   url: 'https://example.com:5133'
 }
 
-// Create the better-sqlite3 database connection. The first
-// argument is your database name. Changing this will
-// create/use a new local database file.
-const conn = new Database('example.db')
-
-// Follow the library recommendation to enable WAL mode to
-// increase performance. As per:
-// https://github.com/WiseLibs/better-sqlite3/blob/master/docs/performance.md
-conn.pragma('journal_mode = WAL')
+// Create the node-postgres database connection.
+const client = new pg.Client({
+  // Connection configuration, see:
+  // https://node-postgres.com/apis/client
+})
+await client.connect()
 
 // Instantiate your electric client.
+const conn = ElectricDatabase(client, 'name-of-database')
 const electric = await electrify(conn, schema, config)
 
 // Connect to Electric, passing along your authentication token
