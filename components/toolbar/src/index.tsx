@@ -41,25 +41,18 @@ function ElectricToolbar({ api }: ToolbarProps) {
     setDbName((e.target as HTMLSelectElement).value)
   }
 
-  if (hidden) {
-    return (
-      <div className={clsx(style.toolbar, style.toolbarHidden)}>
-        <header
-          className={clsx(style.toolbarHeader, style.toolbarHeaderHidden)}
-        >
-          <img src={logo} className={style.toolbarLogo} alt="logo" />
-          <span className={style.navText}>ElectricSQL Debug Tools</span>
-          <button onClick={handleClick}>SHOW</button>
-        </header>
-      </div>
-    )
-  } else {
-    return (
-      <div className={style.toolbar}>
-        <header className={style.toolbarHeader}>
-          <img src={logo} className={style.toolbarLogo} alt="logo" />
-          <span className={style.navText}>ElectricSQL Debug Tools</span>
-          <button onClick={handleClick}>HIDE</button>
+  return (
+    <div className={clsx(style.toolbar, hidden && style.toolbarHidden)}>
+      <header
+        className={clsx(
+          style.toolbarHeader,
+          hidden && style.toolbarHeaderHidden,
+        )}
+      >
+        <img src={logo} className={style.toolbarLogo} alt="logo" />
+        <span className={style.navText}>ElectricSQL Debug Tools</span>
+        <button onClick={handleClick}>{hidden ? 'SHOW' : 'HIDE'}</button>
+        {!hidden && (
           <select onInput={handleSelect}>
             {dbNames.map((name) => (
               <option key={name} value={name}>
@@ -67,11 +60,11 @@ function ElectricToolbar({ api }: ToolbarProps) {
               </option>
             ))}
           </select>
-        </header>
-        <ToolbarTabs dbName={dbName} api={api} />
-      </div>
-    )
-  }
+        )}
+      </header>
+      {!hidden && <ToolbarTabs dbName={dbName} api={api} />}
+    </div>
+  )
 }
 
 export function clientApi(registry: GlobalRegistry | Registry) {
