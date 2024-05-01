@@ -20,7 +20,7 @@ To see the complete change log for each new release, see the [Releases page](htt
 - @electric-sql/prisma-generator: [/generator/CHANGELOG.md](https://github.com/electric-sql/electric/blob/main/generator/CHANGELOG.md)
 
 
-## 2024-10-14 - v0.10
+## 2024-04-10 - v0.10
 
 [Announcement post](/blog/2024/04/10/electricsql-v0.10-released).
 
