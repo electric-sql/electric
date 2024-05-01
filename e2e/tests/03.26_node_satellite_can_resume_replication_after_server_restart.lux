@@ -183,7 +183,9 @@
     !SELECT * FROM electric.client_additional_data;
     ?$client_2_id \|      \d+ \|   1 \| transaction \| <NULL>          \| \\x
 
-# Restart the server and verify that it cleans up client_actions and client_additional_data.
+# Restart the server and verify that it doesn't clean up client_actions and
+# client_additional_data for client 2 just yet because the client hasn't sent a SatOpLogAck
+# message.
 [shell electric]
     -initial sync|initial data
 
@@ -203,6 +205,33 @@
 [shell electric]
     # ?+ matches the two lines in any order
     ?+Continuing sync for client $client_1_id from
+    ?Continuing sync for client $client_2_id from
+
+[shell pg_1]
+    !SELECT * FROM electric.client_actions;
+    ??$client_2_id
+    ??(1 row)
+
+    !SELECT * FROM electric.client_additional_data;
+    ??$client_2_id
+    ??(1 row)
+
+# Make sure client 2 advances its stored LSN by sending a transaction to it.
+[shell pg_1]
+    !INSERT INTO items (id, content) VALUES \
+       ('00000000-0000-0000-0000-000000000007', 'items-7-');
+    ??INSERT 0 1
+
+[shell satellite_2]
+    [invoke node_await_get "items-7-"]
+
+# Restart the client to trigger `ClientReconnectionInfo.advance_on_reconnection()` for
+# it that will discard the now implicitly acknowledged actions and additional data.
+[shell satellite_2]
+    [invoke client_disconnect]
+    [invoke client_reconnect]
+
+[shell electric]
     ?Continuing sync for client $client_2_id from
 
 [shell pg_1]
