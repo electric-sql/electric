@@ -2,7 +2,8 @@ import { type JSX } from 'preact'
 import { useState } from 'preact/hooks'
 import { Controlled as CodeMirrorControlled } from 'react-codemirror2'
 import { ToolbarTabsProps } from '../tabs'
-import './SQLTab.module.css'
+import clsx from 'clsx'
+import style from './SQLTab.module.css'
 
 export default function SQLTab({ dbName, api }: ToolbarTabsProps): JSX.Element {
   const [code, setCode] = useState(
@@ -32,18 +33,19 @@ export default function SQLTab({ dbName, api }: ToolbarTabsProps): JSX.Element {
 
   function renderQuery() {
     return (
-      <div className="mirror-column">
-        <div className="mirror-header">
-          <span className="header-span">query</span>
+      <div className={style.mirrorColumn}>
+        <div className={style.mirrorHeader}>
+          <span className={style.headerSpan}>query</span>
           <span
-            className="header-span header-span-button"
+            className={clsx(style.headerSpan, style.headerSpanButton)}
             onClick={setActive.bind(null, 'history')}
           >
             history
           </span>
         </div>
-        <div className="mirror-in">
+        <div className={style.mirrorIn}>
           <CodeMirrorControlled
+            className={style.codeMirror}
             value={code}
             onBeforeChange={(_editor, _data, value) => {
               setCode(value)
@@ -56,7 +58,7 @@ export default function SQLTab({ dbName, api }: ToolbarTabsProps): JSX.Element {
             }}
           />
         </div>
-        <div className="mirror-ctls">
+        <div className={style.mirrorCtls}>
           <button id="submit-sql-button" onClick={submitSQL}>
             SUBMIT
           </button>
@@ -67,18 +69,19 @@ export default function SQLTab({ dbName, api }: ToolbarTabsProps): JSX.Element {
 
   function renderHistory() {
     return (
-      <div className="mirror-column">
-        <div className="mirror-header">
+      <div className={style.mirrorColumn}>
+        <div className={style.mirrorHeader}>
           <span
-            className="header-span header-span-button"
+            className={clsx(style.headerSpan, style.headerSpanButton)}
             onClick={setActive.bind(null, 'query')}
           >
             query
           </span>
-          <span className="header-span">history</span>
+          <span className={style.headerSpan}>history</span>
         </div>
-        <div className="mirror-in">
+        <div className={style.mirrorIn}>
           <CodeMirrorControlled
+            className={style.codeMirror}
             value={history}
             onBeforeChange={(_editor, _data, _value) => {}}
             options={{
@@ -90,7 +93,7 @@ export default function SQLTab({ dbName, api }: ToolbarTabsProps): JSX.Element {
             }}
           />
         </div>
-        <div className="mirror-ctls">
+        <div className={style.mirrorCtls}>
           <button id="submit-sql-button" onClick={clearHistory}>
             CLEAR
           </button>
@@ -111,12 +114,13 @@ export default function SQLTab({ dbName, api }: ToolbarTabsProps): JSX.Element {
   }
 
   return (
-    <div className="mirror-wrapper">
+    <div className={style.mirrorWrapper}>
       {switchInput()}
-      <div className="mirror-column">
-        <div className="mirror-header">results</div>
-        <div className="mirror-in">
+      <div className={style.mirrorColumn}>
+        <div className={style.mirrorHeader}>results</div>
+        <div className={style.mirrorIn}>
           <CodeMirrorControlled
+            className={style.codeMirror}
             value={response}
             onBeforeChange={(_editor, _data, _value) => {}}
             options={{
@@ -127,7 +131,7 @@ export default function SQLTab({ dbName, api }: ToolbarTabsProps): JSX.Element {
             }}
           />
         </div>
-        <div className="mirror-ctls">
+        <div className={style.mirrorCtls}>
           <button onClick={setResponse.bind(null, '')}>CLEAR</button>
         </div>
       </div>
