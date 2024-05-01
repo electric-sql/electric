@@ -40,7 +40,7 @@ function ElectricToolbar({ api }: ToolbarProps) {
     <Theme asChild appearance="dark">
       <Box
         width={hidden ? '400px' : '100%'}
-        height="fit-content"
+        height={hidden ? 'fit-content' : '40vh'}
         minHeight="auto"
         style={{ float: 'right' }}
       >
@@ -50,10 +50,6 @@ function ElectricToolbar({ api }: ToolbarProps) {
             <Text>ElectricSQL Debug Tools</Text>
           </Flex>
           <Flex gap="1">
-            <Button onClick={() => setHidden(!hidden)}>
-              {hidden ? 'SHOW' : 'HIDE'}
-            </Button>
-
             {!hidden && (
               <Select.Root defaultValue={dbNames[0]} onValueChange={setDbName}>
                 <Select.Trigger />
@@ -66,6 +62,9 @@ function ElectricToolbar({ api }: ToolbarProps) {
                 </Select.Content>
               </Select.Root>
             )}
+            <Button onClick={() => setHidden(!hidden)}>
+              {hidden ? 'SHOW' : 'HIDE'}
+            </Button>
           </Flex>
         </Flex>
         {!hidden && <ToolbarTabs dbName={dbName} api={api} />}
