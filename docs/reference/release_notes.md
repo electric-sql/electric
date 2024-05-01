@@ -30,9 +30,9 @@ The first release to support where-clause and include-tree filtering with Shape-
 
 Component | Version
 --------- | -------
-[Sync service](https://hub.docker.com/r/electricsql/electric/tags) | [0.10.0](https://github.com/electric-sql/electric/blob/main/components/electric/CHANGELOG.md#0100)
-[TypeScript client](https://www.npmjs.com/package/electric-sql) | [0.10.0](https://github.com/electric-sql/electric/blob/main/clients/typescript/CHANGELOG.md#0100)
-[@electric-sql/prisma-generator](https://www.npmjs.com/package/@electric-sql/prisma-generator) | [1.1.4](https://github.com/electric-sql/electric/blob/main/generator/CHANGELOG.md#114)
+[Sync service][1] | [0.10.0](https://github.com/electric-sql/electric/blob/main/components/electric/CHANGELOG.md#0100)
+[TypeScript client][2] | [0.10.0](https://github.com/electric-sql/electric/blob/main/clients/typescript/CHANGELOG.md#0100)
+[@electric-sql/prisma-generator][4] | [1.1.4](https://github.com/electric-sql/electric/blob/main/generator/CHANGELOG.md#114)
 
 #### Compatibility notes
 
@@ -44,8 +44,8 @@ This release does not introduce any noteable breaking changes.
 
 Component | Version
 --------- | -------
-[Sync service](https://hub.docker.com/r/electricsql/electric/tags) | [0.9.4](https://github.com/electric-sql/electric/blob/main/components/electric/CHANGELOG.md#094)
-[TypeScript client](https://www.npmjs.com/package/electric-sql) | [0.9.5](https://github.com/electric-sql/electric/blob/main/clients/typescript/CHANGELOG.md#095)
+[Sync service][1] | [0.9.4](https://github.com/electric-sql/electric/blob/main/components/electric/CHANGELOG.md#094)
+[TypeScript client][2] | [0.9.5](https://github.com/electric-sql/electric/blob/main/clients/typescript/CHANGELOG.md#095)
 
 #### Compatibility notes
 
@@ -62,9 +62,9 @@ Component | Version
 
 Component | Version
 --------- | -------
-[Sync service](https://hub.docker.com/r/electricsql/electric/tags) | [0.9.3](https://github.com/electric-sql/electric/blob/main/components/electric/CHANGELOG.md#093)
-[TypeScript client](https://www.npmjs.com/package/electric-sql) | [0.9.4](https://github.com/electric-sql/electric/blob/main/clients/typescript/CHANGELOG.md#094)
-[create-electric-app](https://www.npmjs.com/package/create-electric-app) | [0.2.8](https://github.com/electric-sql/electric/blob/main/examples/starter/CHANGELOG.md#028)
+[Sync service][1] | [0.9.3](https://github.com/electric-sql/electric/blob/main/components/electric/CHANGELOG.md#093)
+[TypeScript client][2] | [0.9.4](https://github.com/electric-sql/electric/blob/main/clients/typescript/CHANGELOG.md#094)
+[create-electric-app][3] | [0.2.8](https://github.com/electric-sql/electric/blob/main/examples/starter/CHANGELOG.md#028)
 
 #### Compatibility notes
 
@@ -91,10 +91,10 @@ This release introduces a whole new client CLI, experimental support for enum ty
 
 Component | Version
 --------- | -------
-[Sync service](https://hub.docker.com/r/electricsql/electric/tags) | [0.9.1](https://github.com/electric-sql/electric/blob/main/components/electric/CHANGELOG.md#091)
-[TypeScript client](https://www.npmjs.com/package/electric-sql) | [0.9.1](https://github.com/electric-sql/electric/blob/main/clients/typescript/CHANGELOG.md#091)
-[create-electric-app](https://www.npmjs.com/package/create-electric-app) | [0.2.5](https://github.com/electric-sql/electric/blob/main/examples/starter/CHANGELOG.md#025)
-[@electric-sql/prisma-generator](https://www.npmjs.com/package/@electric-sql/prisma-generator) | [1.1.3](https://github.com/electric-sql/electric/blob/main/generator/CHANGELOG.md#113)
+[Sync service][1] | [0.9.1](https://github.com/electric-sql/electric/blob/main/components/electric/CHANGELOG.md#091)
+[TypeScript client][2] | [0.9.1](https://github.com/electric-sql/electric/blob/main/clients/typescript/CHANGELOG.md#091)
+[create-electric-app][3] | [0.2.5](https://github.com/electric-sql/electric/blob/main/examples/starter/CHANGELOG.md#025)
+[@electric-sql/prisma-generator][4] | [1.1.3](https://github.com/electric-sql/electric/blob/main/generator/CHANGELOG.md#113)
 
 #### Compatibility notes
 
@@ -126,10 +126,10 @@ This release improves data model and deployment compatibility, including support
 
 Component | Version
 --------- | -------
-[Sync service](https://hub.docker.com/r/electricsql/electric/tags) | [0.8.1](https://github.com/electric-sql/electric/blob/main/components/electric/CHANGELOG.md#081)
-[TypeScript client](https://www.npmjs.com/package/electric-sql) | [0.8.2](https://github.com/electric-sql/electric/blob/main/clients/typescript/CHANGELOG.md#082)
-[create-electric-app](https://www.npmjs.com/package/create-electric-app) | [0.2.2](https://github.com/electric-sql/electric/blob/main/examples/starter/CHANGELOG.md#022)
-[@electric-sql/prisma-generator](https://www.npmjs.com/package/@electric-sql/prisma-generator) | [1.1.2](https://github.com/electric-sql/electric/blob/main/generator/CHANGELOG.md#112)
+[Sync service][1] | [0.8.1](https://github.com/electric-sql/electric/blob/main/components/electric/CHANGELOG.md#081)
+[TypeScript client][2] | [0.8.2](https://github.com/electric-sql/electric/blob/main/clients/typescript/CHANGELOG.md#082)
+[create-electric-app][3] | [0.2.2](https://github.com/electric-sql/electric/blob/main/examples/starter/CHANGELOG.md#022)
+[@electric-sql/prisma-generator][4] | [1.1.2](https://github.com/electric-sql/electric/blob/main/generator/CHANGELOG.md#112)
 
 #### Compatibility notes
 
@@ -152,10 +152,10 @@ Major highlights of this release are the introduction of the Migrations proxy an
 
 Component | Version
 --------- | -------
-[Sync service](https://hub.docker.com/r/electricsql/electric/tags) | [0.7.0](https://github.com/electric-sql/electric/blob/main/components/electric/CHANGELOG.md#070)
-[TypeScript client](https://www.npmjs.com/package/electric-sql) | [0.7.0](https://github.com/electric-sql/electric/blob/main/clients/typescript/CHANGELOG.md#070)
-[create-electric-app](https://www.npmjs.com/package/create-electric-app) | [0.2.0](https://github.com/electric-sql/electric/blob/main/examples/starter/CHANGELOG.md#020)
-[@electric-sql/prisma-generator](https://www.npmjs.com/package/@electric-sql/prisma-generator) | [1.1.0](https://github.com/electric-sql/electric/blob/main/generator/CHANGELOG.md#110)
+[Sync service][1] | [0.7.0](https://github.com/electric-sql/electric/blob/main/components/electric/CHANGELOG.md#070)
+[TypeScript client][2] | [0.7.0](https://github.com/electric-sql/electric/blob/main/clients/typescript/CHANGELOG.md#070)
+[create-electric-app][3] | [0.2.0](https://github.com/electric-sql/electric/blob/main/examples/starter/CHANGELOG.md#020)
+[@electric-sql/prisma-generator][4] | [1.1.0](https://github.com/electric-sql/electric/blob/main/generator/CHANGELOG.md#110)
 
 #### Compatibility notes
 
@@ -176,3 +176,8 @@ Component | Version
 [Announcement post](/blog/2023/09/20/introducing-electricsql-v0.6).
 
 The first public release of ElectricSQL as a self-hosted sync layer on top of PostgreSQL.
+
+[1]: https://hub.docker.com/r/electricsql/electric/tags
+[2]: https://www.npmjs.com/package/electric-sql
+[3]: https://www.npmjs.com/package/create-electric-app
+[4]: https://www.npmjs.com/package/@electric-sql/prisma-generator
