@@ -40,9 +40,9 @@ function ElectricToolbar({ api }: ToolbarProps) {
     <Theme asChild appearance="dark">
       <Box
         width={hidden ? '400px' : '100%'}
-        height={hidden ? 'fit-content' : '40vh'}
+        height="fit-content"
         minHeight="auto"
-        style={{ float: 'right' }}
+        style={{ float: 'right', pointerEvents: 'auto' }}
       >
         <Flex justify="between" flexGrow="1">
           <Flex align="center" gap="1">
@@ -80,7 +80,10 @@ export function clientApi(registry: GlobalRegistry | Registry) {
 export function addToolbar(electric: ElectricClient<any>) {
   const toolbarApi = clientApi(electric.registry)
   const toolbarDiv = document.createElement('div')
-  toolbarDiv.setAttribute('class', style.electricToolbar)
+  toolbarDiv.setAttribute(
+    'style',
+    'position: fixed; bottom: 0; right: 0; width: 100%; pointer-events: none;',
+  )
   document.body.appendChild(toolbarDiv)
   ReactDOM.createRoot(toolbarDiv).render(<ElectricToolbar api={toolbarApi} />)
 }

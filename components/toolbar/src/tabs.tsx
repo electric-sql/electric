@@ -1,7 +1,7 @@
 import React from 'react'
 import { ToolbarInterface } from './api/interface'
 
-import { Tabs } from '@radix-ui/themes'
+import { Box, ScrollArea, Tabs } from '@radix-ui/themes'
 
 import LocalDBTab from './tabs/LocalDBTab'
 import SQLTab from './tabs/SQLTab'
@@ -25,18 +25,22 @@ export default function ToolbarTabs({
         <Tabs.Trigger value="shapes">Shapes</Tabs.Trigger>
         <Tabs.Trigger value="sql">Shell</Tabs.Trigger>
       </Tabs.List>
-      <Tabs.Content value="status">
-        <StatusTab dbName={dbName} api={api} />
-      </Tabs.Content>
-      <Tabs.Content value="db">
-        <LocalDBTab dbName={dbName} api={api} />
-      </Tabs.Content>
-      <Tabs.Content value="shapes">
-        <ShapesTab dbName={dbName} api={api} />
-      </Tabs.Content>
-      <Tabs.Content value="sql">
-        <SQLTab dbName={dbName} api={api} />
-      </Tabs.Content>
+      <Box p="2">
+        <ScrollArea style={{ height: '40vh' }}>
+          <Tabs.Content value="status">
+            <StatusTab dbName={dbName} api={api} />
+          </Tabs.Content>
+          <Tabs.Content value="db">
+            <LocalDBTab dbName={dbName} api={api} />
+          </Tabs.Content>
+          <Tabs.Content value="shapes">
+            <ShapesTab dbName={dbName} api={api} />
+          </Tabs.Content>
+          <Tabs.Content value="sql">
+            <SQLTab dbName={dbName} api={api} />
+          </Tabs.Content>
+        </ScrollArea>
+      </Box>
     </Tabs.Root>
   )
 }
