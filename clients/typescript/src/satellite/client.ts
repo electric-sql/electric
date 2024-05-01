@@ -1273,7 +1273,8 @@ export class SatelliteClient implements Client {
         ackTimestamp: Long.UZERO.add(new Date().getTime()),
         lsn: this.inbound.last_lsn!,
         transactionId: this.inbound.lastTxId,
-        subscriptionIds: this.inbound.seenAdditionalDataSinceLastTx.subscriptions,
+        subscriptionIds:
+          this.inbound.seenAdditionalDataSinceLastTx.subscriptions,
         additionalDataSourceIds:
           this.inbound.seenAdditionalDataSinceLastTx.dataRefs,
       }
