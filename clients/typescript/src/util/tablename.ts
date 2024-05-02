@@ -21,9 +21,10 @@ export class QualifiedTablename {
 
   static parse(fullyQualifiedName: string): QualifiedTablename {
     try {
-      const [_, namespace, tablename] = /"(.*)"\."(.*)"/.exec(
-        fullyQualifiedName
-      )!
+      // allow only paired double quotes within the quotes
+      // identifiers can't be empty
+      const [_, namespace, tablename] =
+        /^"((?:[^"]|"")+)"\."((?:[^"]|"")+)"$/.exec(fullyQualifiedName)!
       return new QualifiedTablename(
         unescDoubleQ(namespace),
         unescDoubleQ(tablename)
