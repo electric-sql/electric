@@ -1,6 +1,7 @@
 import {
   DbTableInfo,
   DebugShape,
+  TableColumn,
   ToolbarInterface,
   UnsubscribeFunction,
 } from './interface'
@@ -83,22 +84,49 @@ export class Toolbar implements ToolbarInterface {
     return sat.adapter.query(statement)
   }
 
-  getDbTables(dbName: string): Promise<DbTableInfo[]> {
+  async getDbTables(dbName: string): Promise<DbTableInfo[]> {
     const adapter = this.getSatellite(dbName).adapter
-    return adapter.query({
+    const tables = (await adapter.query({
       sql: `
       SELECT name, sql FROM sqlite_master WHERE type='table'
         AND name NOT LIKE 'sqlite_%'
         AND name NOT LIKE '_electric_%'`,
-    }) as unknown as Promise<DbTableInfo[]>
+    })) as unknown as Omit<DbTableInfo, 'columns'>[]
+
+    return Promise.all(
+      tables.map(async (tbl) => ({
+        ...tbl,
+        columns: await this.getTableColumns(dbName, tbl.name),
+      })),
+    )
   }
 
-  getElectricTables(dbName: string): Promise<DbTableInfo[]> {
+  async getElectricTables(dbName: string): Promise<DbTableInfo[]> {
     const adapter = this.getSatellite(dbName).adapter
-    return adapter.query({
+    const tables = (await adapter.query({
       sql: `
       SELECT name, sql FROM sqlite_master WHERE type='table'
         AND name LIKE '_electric_%'`,
-    }) as unknown as Promise<DbTableInfo[]>
+    })) as unknown as Omit<DbTableInfo, 'columns'>[]
+
+    return Promise.all(
+      tables.map(async (tbl) => ({
+        ...tbl,
+        columns: await this.getTableColumns(dbName, tbl.name),
+      })),
+    )
+  }
+  private async getTableColumns(
+    dbName: string,
+    tableName: string,
+  ): Promise<TableColumn[]> {
+    const adapter = this.getSatellite(dbName).adapter
+    const columns = await adapter.query({
+      sql: `PRAGMA table_info(${tableName})`,
+    })
+    return columns.map((c) => ({
+      name: c.name,
+      type: c.type,
+    })) as TableColumn[]
   }
 }

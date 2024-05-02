@@ -5,9 +5,15 @@ export type UnsubscribeFunction = () => void
 
 export type DebugShape = Shape & { id: string }
 
+export interface TableColumn {
+  name: string
+  type: 'NULL' | 'INTEGER' | 'REAL' | 'TEXT' | 'BLOB'
+}
+
 export interface DbTableInfo {
   name: string
   sql: string
+  columns: TableColumn[]
 }
 
 export interface ToolbarInterface {
