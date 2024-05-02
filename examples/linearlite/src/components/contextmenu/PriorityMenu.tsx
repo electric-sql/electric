@@ -15,7 +15,7 @@ interface Props {
 function PriorityMenu({
   id,
   button,
-  filterKeyword,
+  filterKeyword = false,
   className,
   onSelect,
 }: Props) {
@@ -65,10 +65,6 @@ function PriorityMenu({
       </Portal>
     </>
   )
-}
-
-PriorityMenu.defaultProps = {
-  filterKeyword: false,
 }
 
 export default PriorityMenu

@@ -1,7 +1,6 @@
 import { ReactComponent as MenuIcon } from '../assets/icons/menu.svg'
 import { useState, useContext } from 'react'
 import { BsSortUp, BsPlus, BsX, BsSearch as SearchIcon } from 'react-icons/bs'
-import debounce from 'lodash.debounce'
 import { useLiveQuery } from 'electric-sql/react'
 import ViewOptionMenu from './ViewOptionMenu'
 import { Issue, useElectric } from '../electric'
@@ -31,17 +30,17 @@ export default function ({
 
   // We don't yet have a DAL for counts, so we use raw SQL
   const totalIssuesCount: number =
-    useLiveQuery(db.liveRaw({ sql: 'SELECT COUNT(*) FROM issue' }))
+    useLiveQuery(db.liveRawQuery({ sql: 'SELECT COUNT(*) FROM issue' }))
       .results?.[0]?.['COUNT(*)'] ?? 0
 
   const filteredIssuesCount = issues.length
 
-  const handleSearchInner = debounce((query: string) => {
+  const handleSearchInner = (query: string) => {
     setFilterState({
       ...filterState,
       query: query,
     })
-  }, 500)
+  }
 
   const handleSearch = (query: string) => {
     setSearchQuery(query)
