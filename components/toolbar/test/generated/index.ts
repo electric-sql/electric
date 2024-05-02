@@ -8284,6 +8284,6 @@ export const tableSchemas = {
   >,
 }
 
-export const schema = new DbSchema(tableSchemas, migrations)
+export const schema = new DbSchema(tableSchemas, migrations, migrations)
 export type Electric = ElectricClient<typeof schema>
 export const JsonNull = { __is_electric_json_null__: true }
