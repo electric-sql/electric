@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 
 import '@radix-ui/themes/styles.css'
+import '@glideapps/glide-data-grid/dist/index.css'
 
 import 'codemirror/lib/codemirror.css'
 import 'codemirror/theme/material.css'

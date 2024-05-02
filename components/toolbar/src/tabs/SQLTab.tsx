@@ -1,8 +1,14 @@
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { Controlled as CodeMirrorControlled } from 'react-codemirror2'
 import { ToolbarTabsProps } from '../tabs'
 import clsx from 'clsx'
 import style from './SQLTab.module.css'
+import {
+  DataEditor,
+  GridCell,
+  GridCellKind,
+  Item,
+} from '@glideapps/glide-data-grid'
 
 export default function SQLTab({ dbName, api }: ToolbarTabsProps): JSX.Element {
   const [code, setCode] = useState(
@@ -10,7 +16,11 @@ export default function SQLTab({ dbName, api }: ToolbarTabsProps): JSX.Element {
       "WHERE type='table'\n" +
       'ORDER BY name;',
   )
-  const [response, setResponse] = useState('')
+  const [response, setResponse] = useState<Record<string, any>[]>([])
+  const columnNames = useMemo(
+    () => (response.length > 0 ? Object.keys(response[0]) : []),
+    [response],
+  )
   const [history, setHistory] = useState('')
   const [active, setActive] = useState('query')
 
@@ -18,10 +28,10 @@ export default function SQLTab({ dbName, api }: ToolbarTabsProps): JSX.Element {
     setHistory(history + code + '\n\n')
     api.queryDb(dbName, { sql: code }).then(
       (rows) => {
-        setResponse(JSON.stringify(rows, null, 4))
+        setResponse(rows)
       },
       (err) => {
-        setResponse('Error: ' + err)
+        // setResponse('Error: ' + err)
       },
     )
   }
@@ -112,13 +122,36 @@ export default function SQLTab({ dbName, api }: ToolbarTabsProps): JSX.Element {
     }
   }
 
+  const getCellContent = (cell: Item): GridCell => {
+    const [col, row] = cell
+    const dataRow = response[row]
+    const d = dataRow[columnNames[col]]
+    return {
+      kind: GridCellKind.Text,
+      allowOverlay: false,
+      displayData: d,
+      data: d,
+    }
+  }
+
   return (
     <div className={style.mirrorWrapper}>
       {switchInput()}
       <div className={style.mirrorColumn}>
         <div className={style.mirrorHeader}>results</div>
         <div className={style.mirrorIn}>
-          <CodeMirrorControlled
+          <DataEditor
+            getCellContent={getCellContent}
+            rows={response.length}
+            columns={columnNames.map((cn) => ({
+              title: cn,
+              id: cn,
+              width: 100,
+              hasMenu: false,
+            }))}
+          />
+
+          {/* <CodeMirrorControlled
             className={style.codeMirror}
             value={response}
             onBeforeChange={(_editor, _data, _value) => {}}
@@ -128,7 +161,7 @@ export default function SQLTab({ dbName, api }: ToolbarTabsProps): JSX.Element {
               mode: 'json',
               theme: 'material',
             }}
-          />
+          /> */}
         </div>
         <div className={style.mirrorCtls}>
           <button onClick={setResponse.bind(null, '')}>CLEAR</button>
