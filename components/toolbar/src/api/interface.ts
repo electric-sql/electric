@@ -33,4 +33,10 @@ export interface ToolbarInterface {
 
   getDbTables(dbName: string): Promise<DbTableInfo[]>
   getElectricTables(dbName: string): Promise<DbTableInfo[]>
+
+  subscribeToDbTable(
+    dbName: string,
+    tableName: string,
+    callback: () => void,
+  ): UnsubscribeFunction
 }

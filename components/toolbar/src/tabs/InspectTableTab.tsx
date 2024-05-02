@@ -28,6 +28,7 @@ export default function InspectTableTab({ dbName, api }: ToolbarTabsProps) {
 
   useEffect(() => {
     let cancelled = false
+
     Promise.all([api.getDbTables(dbName), api.getElectricTables(dbName)]).then(
       ([dbTables, electricTables]) => {
         if (cancelled) return
@@ -43,14 +44,24 @@ export default function InspectTableTab({ dbName, api }: ToolbarTabsProps) {
 
   useEffect(() => {
     let cancelled = false
+    let unsubscribe: () => void
     if (tableInfo) {
-      api
-        .queryDb(dbName, { sql: `SELECT * FROM ${tableInfo.name}` })
-        .then((rows) => !cancelled && setRows(rows))
+      const updateTableData = () => {
+        api
+          .queryDb(dbName, { sql: `SELECT * FROM ${tableInfo.name}` })
+          .then((rows) => !cancelled && setRows(rows))
+      }
+      updateTableData()
+      unsubscribe = api.subscribeToDbTable(
+        dbName,
+        tableInfo?.name,
+        updateTableData,
+      )
     } else {
       setRows([])
     }
     return () => {
+      unsubscribe?.()
       cancelled = true
     }
   }, [dbName, api, tableInfo])

@@ -124,6 +124,30 @@ export class Toolbar implements ToolbarInterface {
       })),
     )
   }
+
+  subscribeToDbTable(
+    dbName: string,
+    tableName: string,
+    callback: () => void,
+  ): UnsubscribeFunction {
+    const sat = this.getSatellite(dbName)
+    const unsubscribe = sat.notifier.subscribeToDataChanges((notification) => {
+      if (notification.dbName !== dbName) return
+      for (const change of notification.changes) {
+        if (
+          change.qualifiedTablename.tablename === tableName ||
+          // always trigger an update if subscribing to internal tables
+          tableName.startsWith('_electric')
+        ) {
+          callback()
+          return
+        }
+      }
+    })
+
+    return unsubscribe
+  }
+
   private async getTableColumns(
     dbName: string,
     tableName: string,
