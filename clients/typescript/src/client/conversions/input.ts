@@ -333,15 +333,21 @@ export function transformFields(
 ): object {
   // only transform fields that are part of this table and not related fields
   // as those will be transformed later when the query on the related field is processed.
-  const fieldsAndValues = Object.entries(keepTableFieldsOnly(o, fields))
-  const fieldsAndTransformedValues = fieldsAndValues.map((entry) => {
-    const [field, value] = entry
-    return transformField(field, value, o, fields, converter, transformation)
+  const copied: Record<string, any> = { ...o }
+  Object.entries(o).forEach(([field, value]) => {
+    const pgType = fields.get(field)
+    // Skip anything that's not an actual column on the table
+    if (pgType === undefined) return
+
+    const transformedValue =
+      transformation === Transformation.Encode
+        ? converter.encode(value, pgType)
+        : converter.decode(value, pgType)
+
+    copied[field] = transformedValue
   })
-  return {
-    ...o,
-    ...Object.fromEntries(fieldsAndTransformedValues),
-  }
+
+  return copied
 }
 
 /**
@@ -390,16 +396,16 @@ export function isFilterObject(value: any): boolean {
  * @returns A filtered object.
  */
 function keepTableFieldsOnly(o: object, fields: Fields) {
-  return filterKeys(o, new Set(fields.keys()))
+  return filterKeys(o, fields)
 }
 
 /**
  * Filters the object to retain only keys that are in `keys`.
  * @param o The object to filter.
- * @param keys The keys to keep.
+ * @param keys Object that allows checking if a key is present.
  * @returns A filtered object.
  */
-function filterKeys(o: object, keys: Set<string>) {
+function filterKeys(o: object, keys: { has: (x: string) => boolean }) {
   return Object.fromEntries(
     Object.entries(o).filter((entry) => keys.has(entry[0]))
   )
