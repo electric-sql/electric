@@ -1,7 +1,7 @@
 label: Other
 customProps:
   description: >-
-    Create your own SQLite or Postgres driver adapter.
+    Create your own database driver adapter.
   hide_overview: true
   icon: /img/icons/other.svg
 position: 40

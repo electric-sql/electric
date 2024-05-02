@@ -1,7 +1,7 @@
 label: Web
 customProps:
   description: >-
-    SQLite and Postgres driver adapters for the web.
+    Database driver adapters for the web.
   hide_overview: true
   icon: /img/icons/firefox.svg
 position: 10

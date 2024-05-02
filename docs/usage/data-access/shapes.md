@@ -288,7 +288,7 @@ Shape-based sync is under active development, and we're aware of some issues wit
 
 ### Foreign key and query consistency
 
-ElectricSQL maintains foreign key consistency both in the PostgreSQL central database, and in the SQLite or Postgres database on the client. To achieve it, the server will automatically follow any many-to-one relation in the requested shape. For example, if there are projects each with an owner and related issues, requesting all projects will also ensure that users who are owners of those projects are available on the device too. However, related issues won't show up on the device unless explicitly requested.
+ElectricSQL maintains foreign key consistency both in the PostgreSQL central database, and in the local database on the client. To achieve it, the server will automatically follow any many-to-one relation in the requested shape. For example, if there are projects each with an owner and related issues, requesting all projects will also ensure that users who are owners of those projects are available on the device too. However, related issues won't show up on the device unless explicitly requested.
 
 #### Updating shapes
 

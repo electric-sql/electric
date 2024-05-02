@@ -20,7 +20,7 @@ ElectricSQL has three primary components. [Postgres](../usage/installation/postg
 
 [![High level component diagramme](./_images/high-level-components.png)](./_images/high-level-components.jpg)
 
-Inside the Client there is a [generated](../api/cli.md#generate) type-safe [data access library](../usage/data-access/client.md). A [satellite replication process](https://github.com/electric-sql/electric/blob/main/clients/typescript/src/satellite/process.ts) (per named local database), SQLite or Postgres [driver adapters](../integrations/drivers/index.md) and a [reactivity system](#reactivity) with [front-end framework integrations](../integrations/frontend/index.md).
+Inside the Client there is a [generated](../api/cli.md#generate) type-safe [data access library](../usage/data-access/client.md). A [satellite replication process](https://github.com/electric-sql/electric/blob/main/clients/typescript/src/satellite/process.ts) (per named local database), local database [driver adapters](../integrations/drivers/index.md) and a [reactivity system](#reactivity) with [front-end framework integrations](../integrations/frontend/index.md).
 
 ### Topology
 
@@ -31,7 +31,7 @@ Usually there is one central Postgres, which can have many Electrics in front of
 
 ## Schema evolution
 
-ElectricSQL is a relational system based on Postgres that syncs between Postgres and SQLite. Postgres and SQLite share a database schema. This schema is based on an exposed (["electrified"](../usage/data-modelling/electrification.md)) subset of the Postgres DDL schema. Electric streams changes to the schema into connected client applications over the satellite protocol.
+ElectricSQL is a relational system based on Postgres that syncs between Postgres and a local database. Postgres and the local database share a database schema. This schema is based on an exposed (["electrified"](../usage/data-modelling/electrification.md)) subset of the Postgres DDL schema. Electric streams changes to the schema into connected client applications over the satellite protocol.
 
 [![Schema evolution diagramme](./_images/schema-evolution.png)](./_images/schema-evolution.jpg)
 
@@ -44,7 +44,7 @@ The Postgres schema is managed using any [standard migration tooling](../usage/d
 Electric provides an HTTP "status API" to access the electrified DDL schema. In development, the [generator command](../api/cli.md#generate) calls this API to pull down the schema and uses it to:
 
 1. generate a type-safe data access library
-2. write an array of SQLite-compatible migrations into an importable Javascript file
+2. write an array of local database compatible migrations into an importable Javascript file
 
 This library and the migrations are imported into the local app. When the app [instantiates the electric database client](../usage/data-access/client.md) the system ensures that the local database is up-to-date with the bundled migrations.
 
@@ -82,7 +82,7 @@ The satellite process then fires data change notifications, which triggers the [
 
 ### Local writes
 
-Application code in the local app writes directly to the local SQLite or Postgres database using the [create, update and delete APIs](../usage/data-access/writes.md) from the type-safe database client. Before applying the writes, the client runs client-side validation to verify that the data is valid and will not be rejected once replicated.
+Application code in the local app writes directly to the local database using the [create, update and delete APIs](../usage/data-access/writes.md) from the type-safe database client. Before applying the writes, the client runs client-side validation to verify that the data is valid and will not be rejected once replicated.
 
 :::caution
 Direct writes to the local database that don't use the client library will also be replicated by the satellite process. However, this skips validation, so is dangerous and best avoided.

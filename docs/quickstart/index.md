@@ -76,7 +76,7 @@ ELECTRIC GRANT ALL
 
 ### Instantiate
 
-Wrap your local [SQLite or Postgres driver](../integrations/drivers/index.md) with a type-safe, schema-aware [database Client](../usage/data-access/client.md):
+Wrap your local [database driver](../integrations/drivers/index.md) with a type-safe, schema-aware [database Client](../usage/data-access/client.md):
 
 ```tsx
 import { electrify, ElectricDatabase } from 'electric-sql/wa-sqlite'

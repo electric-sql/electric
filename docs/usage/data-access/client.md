@@ -21,7 +21,7 @@ By default this outputs a `./src/generated/client` folder with an `index.ts` fil
 
 ## Instantiating the client
 
-The exact code for instantiating your database client depends on the SQLite, PGlite or Postgres driver that you're using for your target environment. However, the steps are the same across drivers:
+The exact code for instantiating your database client depends on the local database driver that you're using for your target environment. However, the steps are the same across drivers:
 
 1. initialise a database connection (`conn`) using your underlying driver
 2. import your database schema (`schema`) from the `./generated/client` folder

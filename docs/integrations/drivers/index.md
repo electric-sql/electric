@@ -5,7 +5,7 @@ sidebar_position: 10
 
 import DocCardList from '@theme/DocCardList';
 
-Adapt the local SQLite, PGlite or Postgres database driver for your target environment.
+Adapt the local database driver for your target environment.
 
 ## How drivers work
 

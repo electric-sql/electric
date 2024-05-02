@@ -18,7 +18,7 @@ The Typescript client provides a number of functions for developing front-end ap
 
 A Typescript client comprises of:
 
-1. A SQLite, PGlite or Postgres database connection from a [supported driver](../../integrations/drivers/)
+1. A local database connection from a [supported driver](../../integrations/drivers/)
 2. A client schema [generated using the generator command](../cli.md#generate)
 3. A [configuration object](#configuration)
 
