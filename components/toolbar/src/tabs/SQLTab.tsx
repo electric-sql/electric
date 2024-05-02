@@ -18,7 +18,9 @@ export default function SQLTab({ dbName, api }: ToolbarTabsProps): JSX.Element {
       "WHERE type='table'\n" +
       'ORDER BY name;',
   )
-  const [response, setResponse] = useState<Record<string, any>[] | string>([])
+  const [response, setResponse] = useState<Record<string, unknown>[] | string>(
+    [],
+  )
   const isError = useMemo(() => typeof response === 'string', [response])
   const columnNames = useMemo(
     () => (response.length > 0 ? Object.keys(response[0]) : []),
@@ -39,7 +41,7 @@ export default function SQLTab({ dbName, api }: ToolbarTabsProps): JSX.Element {
   const getCellContent = useCallback(
     (cell: Item): GridCell => {
       const [col, row] = cell
-      const dataRow = response[row] as Record<string, any>
+      const dataRow = response[row] as Record<string, unknown>
       const d = dataRow[columnNames[col]]
       return {
         kind: GridCellKind.Text,

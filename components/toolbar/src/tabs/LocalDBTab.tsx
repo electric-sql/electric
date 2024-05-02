@@ -85,7 +85,7 @@ const TableDataItem = ({
             <Skeleton loading>table1, table2, table3</Skeleton>
           ) : (
             tables.map((tblInfo) => (
-              <HoverCard.Root>
+              <HoverCard.Root key={tblInfo.name}>
                 <HoverCard.Trigger>
                   <Badge size="2" color="gray" highContrast>
                     {tblInfo.name}

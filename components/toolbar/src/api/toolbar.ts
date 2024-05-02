@@ -6,7 +6,12 @@ import {
   UnsubscribeFunction,
 } from './interface'
 import { Row, Statement, ConnectivityState } from 'electric-sql/util'
-import { Registry, GlobalRegistry, Satellite } from 'electric-sql/satellite'
+import {
+  Registry,
+  GlobalRegistry,
+  Satellite,
+  Shape,
+} from 'electric-sql/satellite'
 import { SubscriptionsManager } from 'electric-sql/satellite/shapes'
 
 export class Toolbar implements ToolbarInterface {
@@ -58,9 +63,12 @@ export class Toolbar implements ToolbarInterface {
     const sat = this.getSatellite(name)
     //@ts-expect-error accessing private field
     const manager = sat['subscriptions'] as SubscriptionsManager
-    const shapes = JSON.parse(manager.serialize()) as Record<string, any>
+    const shapes = JSON.parse(manager.serialize()) as Record<
+      string,
+      { definition: Shape }[]
+    >
     return Object.entries(shapes).flatMap((shapeKeyDef) =>
-      shapeKeyDef[1].map((x: any) => ({
+      shapeKeyDef[1].map((x) => ({
         id: shapeKeyDef[0],
         ...x.definition,
       })),

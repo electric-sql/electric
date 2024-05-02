@@ -17,13 +17,10 @@ import {
 } from '@glideapps/glide-data-grid'
 import { DbTableInfo } from 'src/api/interface'
 
-export default function InspectTableTab({
-  dbName,
-  api,
-}: ToolbarTabsProps): JSX.Element {
+export default function InspectTableTab({ dbName, api }: ToolbarTabsProps) {
   const [tables, setTables] = useState<DbTableInfo[] | null>(null)
   const [tableInfo, setTableInfo] = useState<DbTableInfo | null>(null)
-  const [rows, setRows] = useState<Record<string, any>[] | string>([])
+  const [rows, setRows] = useState<Record<string, unknown>[] | string>([])
   const columnNames = useMemo(
     () => (rows.length > 0 ? Object.keys(rows[0]) : []),
     [rows],
@@ -61,7 +58,7 @@ export default function InspectTableTab({
   const getCellContent = useCallback(
     (cell: Item): GridCell => {
       const [col, row] = cell
-      const dataRow = rows[row] as Record<string, any>
+      const dataRow = rows[row] as Record<string, unknown>
       const d = dataRow[columnNames[col]]
       return {
         kind: GridCellKind.Text,
@@ -96,7 +93,7 @@ export default function InspectTableTab({
             {tables
               .filter((dbInfo) => !dbInfo.name.startsWith('_electric'))
               .map((dbInfo) => (
-                <RadioCards.Item value={dbInfo.name}>
+                <RadioCards.Item key={dbInfo.name} value={dbInfo.name}>
                   {dbInfo.name}
                 </RadioCards.Item>
               ))}
@@ -104,7 +101,7 @@ export default function InspectTableTab({
             {tables
               .filter((dbInfo) => dbInfo.name.startsWith('_electric'))
               .map((dbInfo) => (
-                <RadioCards.Item value={dbInfo.name}>
+                <RadioCards.Item key={dbInfo.name} value={dbInfo.name}>
                   {dbInfo.name}
                 </RadioCards.Item>
               ))}

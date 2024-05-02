@@ -83,6 +83,7 @@ export function clientApi(registry: GlobalRegistry | Registry) {
   return new Toolbar(registry)
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function addToolbar(electric: ElectricClient<any>) {
   const toolbarApi = clientApi(electric.registry)
   const toolbarDiv = document.createElement('div')
