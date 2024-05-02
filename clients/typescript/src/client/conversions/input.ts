@@ -350,39 +350,6 @@ export function transformFields(
   return copied
 }
 
-/**
- * Transforms the provided value into a SQLite/PG compatible value
- * based on the type of this field.
- * @param field The name of the field.
- * @param value The value of the field.
- * @param o The object to which the field belongs.
- * @param fields Type information about the object's fields.
- * @param transformation Which transformation to execute.
- * @returns The transformed field.
- */
-export function transformField(
-  field: FieldName,
-  value: any,
-  o: object,
-  fields: Fields,
-  converter: Converter,
-  transformation: Transformation = Transformation.Encode
-): any {
-  const pgType = fields.get(field)
-
-  if (!pgType)
-    throw new InvalidArgumentError(
-      `Unknown field ${field} in object ${JSON.stringify(o)}`
-    )
-
-  const transformedValue =
-    transformation === Transformation.Encode
-      ? converter.encode(value, pgType)
-      : converter.decode(value, pgType)
-
-  return [field, transformedValue]
-}
-
 export function isFilterObject(value: any): boolean {
   // if it is an object it can only be a data object or a filter object
   return isObject(value) && !isDataObject(value)
