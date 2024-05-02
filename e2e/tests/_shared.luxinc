@@ -144,6 +144,10 @@
         ELECTRIC GRANT ALL ON public.items TO AUTHENTICATED;
         """]
     [invoke migrate_pg $version $sql]
+    [my old=$LUX_SHELLNAME]
+    [shell electric]
+        ??Updated global permissions
+    [shell $old]
 [endmacro]
 
 [macro migrate_other_items_table version]
@@ -158,4 +162,8 @@
         ELECTRIC GRANT ALL ON public.other_items TO AUTHENTICATED;
         """]
     [invoke migrate_pg $version $sql]
+    [my old=$LUX_SHELLNAME]
+    [shell electric]
+        ??Updated global permissions
+    [shell $old]
 [endmacro]

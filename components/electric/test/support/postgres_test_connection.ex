@@ -177,7 +177,11 @@ defmodule Electric.Postgres.TestConnection do
     [electrified_count: electrified_table_count]
   end
 
-  defp wait_for_message(origin, msg_type) do
+  defp wait_for_message(_origin, []) do
+    :ok
+  end
+
+  defp wait_for_message(origin, msg_type_list) when is_list(msg_type_list) do
     Stream.resource(
       fn -> 0 end,
       fn pos ->
@@ -193,24 +197,40 @@ defmodule Electric.Postgres.TestConnection do
       & &1
     )
     |> Stream.reject(&(&1.changes == []))
-    |> Enum.reduce_while(10, fn
-      _tx, 0 ->
-        {:halt, :error}
+    |> Enum.reduce_while(msg_type_list, fn
+      %{changes: changes}, wait ->
+        changes
+        |> Enum.reduce(wait, fn
+          %type{}, [type | rest] ->
+            rest
 
-      %{changes: changes}, n ->
-        if Enum.any?(changes, &is_struct(&1, msg_type)) do
-          {:halt, :ok}
-        else
-          {:cont, n - 1}
+          _, wait ->
+            wait
+        end)
+        |> case do
+          [] ->
+            {:halt, :ok}
+
+          rest ->
+            {:cont, rest}
         end
     end)
     |> case do
       :ok ->
         :ok
 
-      :error ->
-        flunk("#{msg_type} didn't show up in the cached WAL")
+      _ ->
+        flunk("#{inspect(msg_type_list)} didn't show up in the cached WAL")
     end
+  end
+
+  defp wait_for_message(origin, type, count \\ 1) when is_atom(type) do
+    wait_list =
+      type
+      |> Stream.duplicate(count)
+      |> Enum.to_list()
+
+    wait_for_message(origin, wait_list)
   end
 
   def run_scenario_migrations(conn, scenario) do
@@ -362,25 +382,39 @@ defmodule Electric.Postgres.TestConnection do
 
   def setup_with_sql_execute(_), do: :ok
 
-  def setup_with_ddlx(%{conn: conn, ddlx: ddlx}) do
-    ddlx
-    |> List.wrap()
-    |> Enum.map(&String.trim/1)
-    |> Enum.map(fn
-      "ELECTRIC " <> _ = ddlx -> ddlx
-      ddl -> "ELECTRIC " <> ddl
-    end)
-    |> Enum.map(&Electric.DDLX.parse!/1)
-    |> Electric.DDLX.Command.pg_sql()
-    |> Enum.each(fn sql ->
-      {:ok, 1} = :epgsql.squery(conn, sql)
-    end)
+  def setup_with_ddlx(%{conn: conn, ddlx: ddlx, origin: origin}) do
+    sql =
+      ddlx
+      |> List.wrap()
+      |> Enum.map(&String.trim/1)
+      |> Enum.map(fn
+        "ELECTRIC " <> _ = ddlx -> ddlx
+        ddl -> "ELECTRIC " <> ddl
+      end)
+      |> Enum.map(&Electric.DDLX.parse!/1)
+      |> Electric.DDLX.Command.pg_sql()
+      |> Enum.join("\n")
+
+    conn
+    |> :epgsql.squery(["BEGIN;\n", sql, "\nCOMMIT;"])
+    |> Enum.each(&(:ok = elem(&1, 0)))
+
+    :ok = wait_for_message(origin, Electric.Replication.Changes.UpdatedPermissions)
 
     :ok
   end
 
   def setup_with_ddlx(_) do
     :ok
+  end
+
+  def wait_for_permission_state(%{origin: origin} = cxt) do
+    msg_count =
+      cxt
+      |> Map.get(:wait_for, [])
+      |> Keyword.get(:perms, 0)
+
+    :ok = wait_for_message(origin, Electric.Replication.Changes.UpdatedPermissions, msg_count)
   end
 
   def load_schema(%{conn: _, origin: origin}) do

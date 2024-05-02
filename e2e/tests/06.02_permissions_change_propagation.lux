@@ -10,7 +10,6 @@
 [global session_id=001]
 [global project_id=99adf0a5-b3c6-45d7-9986-582e76db4556]
 
-
 [shell proxy_1]
     [invoke log "run migration $migration_version_1 on postgres"]
     """!
@@ -76,6 +75,18 @@
 
 [shell electric]
     ?user_id=$user_id1 .+ Global permissions updated for connection
+
+# TODO: permissions-change: perms change should not drop connection
+#       currently a perms change drops the connection to force
+#       a re-subscribe with updated perms
+
+[shell user_1_ws1]
+    ?SatClientCommand\{command: .+ResetDatabase\{reason: :PERMISSIONS_CHANGE
+    ?Server closed the websocket connection
+
+    -$fail_pattern
+
+    [invoke client_session $user_id1 $session_id]
 
 [shell pg_1]
     !INSERT INTO project_memberships (id, project_id, user_id, role) VALUES ('c197a4ef-0f22-4af1-acb1-bf7200e64900', '$project_id', '$user_id1', 'member');
