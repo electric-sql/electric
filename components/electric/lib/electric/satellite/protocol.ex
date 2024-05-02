@@ -34,7 +34,10 @@ defmodule Electric.Satellite.Protocol do
   @type lsn() :: non_neg_integer
   @type deep_msg_list() :: PB.sq_pb_msg() | [deep_msg_list()]
   @type actions() :: {Shapes.subquery_actions(), [non_neg_integer()]}
-  @type outgoing() :: {deep_msg_list(), State.t()} | {:error, deep_msg_list(), State.t()}
+  @type outgoing() ::
+          {deep_msg_list(), State.t()}
+          | {:error, deep_msg_list(), State.t()}
+          | {:close, deep_msg_list(), State.t()}
   @type txn_processing() :: {deep_msg_list(), actions(), State.t()}
 
   @type handle_rpc_result ::
@@ -715,10 +718,11 @@ defmodule Electric.Satellite.Protocol do
   defp apply_migrations({changes, state}) do
     Enum.flat_map_reduce(changes, state, fn
       %Changes.Migration{} = migration, state ->
+        # we're updating the permissions with the new schema, but our permissions haven't actually
+        # changed, so don't trigger shape reprocessing, which is expensive
         state =
           %{state | schema_version: migration.version}
           |> update_permissions(schema: migration.schema)
-          |> after_permissions_change()
 
         {[migration], state}
 
@@ -774,8 +778,16 @@ defmodule Electric.Satellite.Protocol do
   end
 
   defp after_permissions_change(state) do
-    # TODO(magnetised): updated permissions must be applied to the shapes
-    state
+    if Permissions.filter_reads_enabled?() do
+      command =
+        %SatClientCommand{
+          command: {:reset_database, %SatClientCommand.ResetDatabase{reason: :PERMISSIONS_CHANGE}}
+        }
+
+      throw({:close, [command], state})
+    else
+      state
+    end
   end
 
   # If the client received at least one migration during the initial sync, the value of
@@ -1512,6 +1524,8 @@ defmodule Electric.Satellite.Protocol do
     # TODO(magnetised): load specific permissions version
     {:ok, schema_loader, sat_perms} =
       SchemaLoader.user_permissions(state.schema_loader, State.user_id(state))
+
+    Logger.debug(fn -> "Loaded user permissions id: #{sat_perms.id}" end)
 
     perms =
       state.auth

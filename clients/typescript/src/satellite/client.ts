@@ -29,6 +29,7 @@ import {
   RootClientImpl,
   SatRpcRequest,
   SatInStartReplicationReq_Dialect,
+  SatClientCommand,
 } from '../_generated/protocol/satellite'
 import {
   getObjFromString,
@@ -76,6 +77,7 @@ import {
   ReplicatedRowTransformer,
   DataGone,
   GoneBatchCallback,
+  CommandCallback,
 } from '../util/types'
 import {
   base64,
@@ -142,7 +144,9 @@ type Events = {
     changes: DataGone[],
     ack: () => void
   ) => Promise<void>
+  command: (cmd: SatClientCommand) => Promise<void>
 }
+
 type EventEmitter = AsyncEventEmitter<Events>
 
 export class SatelliteClient implements Client {
@@ -195,6 +199,7 @@ export class SatelliteClient implements Client {
         SatUnsubsDataBegin: (msg) => this.handleUnsubsDataBegin(msg),
         SatUnsubsDataEnd: (msg) => this.handleUnsubsDataEnd(msg),
         SatPerms: (msg) => void msg,
+        SatClientCommand: (msg) => this.handleCommand(msg),
       } satisfies HandlerMapping).map((e) => [getFullTypeName(e[0]), e[1]])
     )
 
@@ -498,6 +503,14 @@ export class SatelliteClient implements Client {
   }
   unsubscribeToGoneBatch(_callback: GoneBatchCallback) {
     // TODO: real removeListener implementation, because the old one for txns doesn't work
+  }
+
+  subscribeToCommands(callback: CommandCallback): void {
+    this.emitter.on('command', callback)
+  }
+
+  unsubscribeToCommands(callback: CommandCallback): void {
+    this.emitter.removeListener('command', callback)
   }
 
   enqueueTransaction(transaction: DataTransaction): void {
@@ -984,6 +997,10 @@ export class SatelliteClient implements Client {
 
   private handleShapeDataEnd(_msg: SatShapeDataEnd): void {
     this.subscriptionsDataCache.shapeDataEnd()
+  }
+
+  private handleCommand(msg: SatClientCommand): void {
+    this.emitter.enqueueEmit('command', msg)
   }
 
   // For now, unsubscribe responses doesn't send any information back

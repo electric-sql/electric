@@ -731,6 +731,21 @@ export interface SatShapeDataEnd {
   $type: "Electric.Satellite.SatShapeDataEnd";
 }
 
+export interface SatClientCommand {
+  $type: "Electric.Satellite.SatClientCommand";
+  resetDatabase?: SatClientCommand_ResetDatabase | undefined;
+}
+
+export interface SatClientCommand_ResetDatabase {
+  $type: "Electric.Satellite.SatClientCommand.ResetDatabase";
+  reason: SatClientCommand_ResetDatabase_Reason;
+}
+
+export enum SatClientCommand_ResetDatabase_Reason {
+  PERMISSIONS_CHANGE = 0,
+  UNRECOGNIZED = -1,
+}
+
 /**
  * represents the client permissions
  * - `Rules`: the global permission rules, defined by the DDLX
@@ -4528,6 +4543,110 @@ export const SatShapeDataEnd = {
 };
 
 messageTypeRegistry.set(SatShapeDataEnd.$type, SatShapeDataEnd);
+
+function createBaseSatClientCommand(): SatClientCommand {
+  return { $type: "Electric.Satellite.SatClientCommand", resetDatabase: undefined };
+}
+
+export const SatClientCommand = {
+  $type: "Electric.Satellite.SatClientCommand" as const,
+
+  encode(message: SatClientCommand, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (message.resetDatabase !== undefined) {
+      SatClientCommand_ResetDatabase.encode(message.resetDatabase, writer.uint32(10).fork()).ldelim();
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatClientCommand {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatClientCommand();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 10) {
+            break;
+          }
+
+          message.resetDatabase = SatClientCommand_ResetDatabase.decode(reader, reader.uint32());
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatClientCommand>, I>>(base?: I): SatClientCommand {
+    return SatClientCommand.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatClientCommand>, I>>(object: I): SatClientCommand {
+    const message = createBaseSatClientCommand();
+    message.resetDatabase = (object.resetDatabase !== undefined && object.resetDatabase !== null)
+      ? SatClientCommand_ResetDatabase.fromPartial(object.resetDatabase)
+      : undefined;
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatClientCommand.$type, SatClientCommand);
+
+function createBaseSatClientCommand_ResetDatabase(): SatClientCommand_ResetDatabase {
+  return { $type: "Electric.Satellite.SatClientCommand.ResetDatabase", reason: 0 };
+}
+
+export const SatClientCommand_ResetDatabase = {
+  $type: "Electric.Satellite.SatClientCommand.ResetDatabase" as const,
+
+  encode(message: SatClientCommand_ResetDatabase, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (message.reason !== 0) {
+      writer.uint32(8).int32(message.reason);
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): SatClientCommand_ResetDatabase {
+    const reader = input instanceof _m0.Reader ? input : _m0.Reader.create(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSatClientCommand_ResetDatabase();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          if (tag !== 8) {
+            break;
+          }
+
+          message.reason = reader.int32() as any;
+          continue;
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skipType(tag & 7);
+    }
+    return message;
+  },
+
+  create<I extends Exact<DeepPartial<SatClientCommand_ResetDatabase>, I>>(base?: I): SatClientCommand_ResetDatabase {
+    return SatClientCommand_ResetDatabase.fromPartial(base ?? {});
+  },
+
+  fromPartial<I extends Exact<DeepPartial<SatClientCommand_ResetDatabase>, I>>(
+    object: I,
+  ): SatClientCommand_ResetDatabase {
+    const message = createBaseSatClientCommand_ResetDatabase();
+    message.reason = object.reason ?? 0;
+    return message;
+  },
+};
+
+messageTypeRegistry.set(SatClientCommand_ResetDatabase.$type, SatClientCommand_ResetDatabase);
 
 function createBaseSatPerms(): SatPerms {
   return { $type: "Electric.Satellite.SatPerms", id: Long.ZERO, userId: "", rules: undefined, roles: [] };
