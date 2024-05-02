@@ -5,12 +5,7 @@ import {
   UnsubscribeFunction,
 } from './interface'
 import { Row, Statement, ConnectivityState } from 'electric-sql/util'
-import {
-  Registry,
-  GlobalRegistry,
-  Satellite,
-  Shape,
-} from 'electric-sql/satellite'
+import { Registry, GlobalRegistry, Satellite } from 'electric-sql/satellite'
 import { SubscriptionsManager } from 'electric-sql/satellite/shapes'
 
 export class Toolbar implements ToolbarInterface {
