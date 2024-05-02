@@ -1,6 +1,6 @@
 import anyTest, { TestFn } from 'ava'
 import { makeMigration, parseMetadata } from '../../../src/migrators/builder'
-import { ContextType, bundleTests, makeMigrationMetaData } from '../builder'
+import { ContextType, builderTests, makeMigrationMetaData } from '../builder'
 import { makePgDatabase } from '../../support/node-postgres'
 import { DatabaseAdapter } from '../../../src/drivers/node-postgres'
 import { PgBundleMigrator } from '../../../src/migrators'
@@ -18,7 +18,7 @@ test.beforeEach(async (t) => {
   }
 })
 
-bundleTests(test)
+builderTests(test)
 
 test('load migration from meta data', async (t) => {
   const { migrationMetaData, builder } = t.context

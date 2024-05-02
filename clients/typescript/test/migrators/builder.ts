@@ -103,7 +103,7 @@ export type ContextType = {
   builder: QueryBuilder
 }
 
-export const bundleTests = (test: TestFn<ContextType>) => {
+export const builderTests = (test: TestFn<ContextType>) => {
   test('parse migration meta data', (t) => {
     const { migrationMetaData } = t.context
     const metaData = parseMetadata(migrationMetaData)
