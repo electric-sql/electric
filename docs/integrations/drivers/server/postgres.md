@@ -16,7 +16,7 @@ npm install pg
 
 ```tsx
 import pg from 'pg'
-import { electrify, ElectricDatabase } from 'electric-sql/node-postgres'
+import { electrify } from 'electric-sql/node-postgres'
 
 // Import your generated database schema.
 import { schema } from './generated/client'
@@ -27,14 +27,13 @@ const config = {
 }
 
 // Create the node-postgres database connection.
-const client = new pg.Client({
+const conn = new pg.Client({
   // Connection configuration, see:
   // https://node-postgres.com/apis/client
 })
-await client.connect()
+await conn.connect()
 
 // Instantiate your electric client.
-const conn = ElectricDatabase(client, 'name-of-database')
 const electric = await electrify(conn, schema, config)
 
 // Connect to the sync service, passing along your authentication token
