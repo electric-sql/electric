@@ -42,6 +42,8 @@ Component | Version
 
 - The default value for `DATABASE_USE_IPV6` is now `false` due to immaturity of IPv6 support at multiple levels of the Internet infrastucture.
 
+- Electric will no longer try to decode the JWT signing key by default. A new configuration option `AUTH_JWT_KEY_IS_BASE64_ENCODED` has been added to let the developer choose whether Electric should use the configured signing key as is or base64-decode it first.
+
 ## 2024-04-10 - v0.10
 
 [Announcement post](/blog/2024/04/10/electricsql-v0.10-released).
