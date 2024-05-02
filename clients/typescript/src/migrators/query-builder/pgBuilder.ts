@@ -66,15 +66,16 @@ class PgBuilder extends QueryBuilder {
 
   getLocalTableNames(notIn: string[] = []): Statement {
     let tables = dedent`
-      SELECT table_name AS name
-        FROM information_schema.tables
-        WHERE
-          table_type = 'BASE TABLE' AND
-          table_schema <> 'pg_catalog' AND
-          table_schema <> 'information_schema'
+      SELECT relname AS name
+      FROM pg_class
+      JOIN pg_namespace ON relnamespace = pg_namespace.oid
+      WHERE
+        relkind = 'r'
+        AND nspname <> 'pg_catalog'
+        AND nspname <> 'information_schema'
     `
     if (notIn.length > 0) {
-      tables += ` AND table_name NOT IN (${notIn
+      tables += `\n  AND relname NOT IN (${notIn
         .map((_, i) => `$${i + 1}`)
         .join(', ')})`
     }
