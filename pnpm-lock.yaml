@@ -23,9 +23,6 @@ importers:
       '@prisma/client':
         specifier: 4.8.1
         version: 4.8.1(prisma@4.8.1)
-      '@tauri-apps/api':
-        specifier: ^1.5.3
-        version: 1.5.3
       async-mutex:
         specifier: ^0.4.0
         version: 0.4.0
@@ -6299,11 +6296,6 @@ packages:
     dependencies:
       defer-to-connect: 2.0.1
     dev: true
-
-  /@tauri-apps/api@1.5.3:
-    resolution: {integrity: sha512-zxnDjHHKjOsrIzZm6nO5Xapb/BxqUq1tc7cGkFXsFkGTsSWgCPH1D8mm0XS9weJY2OaR73I3k3S+b7eSzJDfqA==}
-    engines: {node: '>= 14.6.0', npm: '>= 6.6.0', yarn: '>= 1.19.1'}
-    dev: false
 
   /@tauri-apps/api@2.0.0-alpha.13:
     resolution: {integrity: sha512-sGgCkFahF3OZAHoGN5Ozt9WK7wJlbVZSgWpPQKNag4nSOX1+Py6VDRTEWriiJHDiV+gg31CWHnNXRy6TFoZmdA==}

@@ -179,7 +179,6 @@
   "dependencies": {
     "@electric-sql/prisma-generator": "workspace:*",
     "@prisma/client": "4.8.1",
-    "@tauri-apps/api": "^1.5.3",
     "async-mutex": "^0.4.0",
     "base-64": "^1.0.0",
     "better-sqlite3": "^8.4.0",
