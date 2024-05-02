@@ -5,7 +5,7 @@ import { DatabaseAdapter } from '../../src/drivers/node-postgres'
 import { makePgDatabase } from '../support/node-postgres'
 
 test('database adapter run works', async (t) => {
-  const db = new MockDatabase('test.db')
+  const db = new MockDatabase('localhost', 5432, 'test')
   const adapter = new DatabaseAdapter(db)
 
   const sql = 'drop table badgers'
@@ -15,7 +15,7 @@ test('database adapter run works', async (t) => {
 })
 
 test('database adapter query works', async (t) => {
-  const db = new MockDatabase('test.db')
+  const db = new MockDatabase('localhost', 5432, 'test')
   const adapter = new DatabaseAdapter(db)
 
   const sql = 'select * from bars'

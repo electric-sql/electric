@@ -196,11 +196,11 @@ test('oplog insertion trigger should insert row into oplog table', async (t) => 
 
   // Insert a row in the table
   const insertRowSQL = `INSERT INTO ${qualifiedPersonTable} (id, name, age, bmi, int8, blob) VALUES (1, 'John Doe', 30, 25.5, 7, '\\x0001ff')`
-  await db.exec({ sql: insertRowSQL })
+  await db.query({ text: insertRowSQL })
 
   // Check that the oplog table contains an entry for the inserted row
-  const { rows: oplogRows } = await db.exec({
-    sql: `SELECT * FROM ${oplogTable}`,
+  const { rows: oplogRows } = await db.query({
+    text: `SELECT * FROM ${oplogTable}`,
   })
   t.is(oplogRows.length, 1)
   t.deepEqual(oplogRows[0], {
@@ -232,11 +232,11 @@ test('oplog trigger should handle Infinity values correctly', async (t) => {
 
   // Insert a row in the table
   const insertRowSQL = `INSERT INTO ${qualifiedPersonTable} (id, name, age, bmi, int8) VALUES ('-Infinity', 'John Doe', 30, 'Infinity', 7)`
-  await db.exec({ sql: insertRowSQL })
+  await db.query({ text: insertRowSQL })
 
   // Check that the oplog table contains an entry for the inserted row
-  const { rows: oplogRows } = await db.exec({
-    sql: `SELECT * FROM ${oplogTable}`,
+  const { rows: oplogRows } = await db.query({
+    text: `SELECT * FROM ${oplogTable}`,
   })
   t.is(oplogRows.length, 1)
   t.deepEqual(oplogRows[0], {

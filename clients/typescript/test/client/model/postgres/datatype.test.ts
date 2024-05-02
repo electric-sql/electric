@@ -38,8 +38,8 @@ test.beforeEach(async (t) => {
   // Sync all shapes such that we don't get warnings on every query
   await tbl.sync()
 
-  await db.exec({
-    sql: `CREATE TABLE "DataTypes"("id" INT4 PRIMARY KEY, "date" DATE, "time" TIME, "timetz" TIMETZ, "timestamp" TIMESTAMP, "timestamptz" TIMESTAMPTZ, "bool" BOOL, "uuid" UUID, "int2" INT2, "int4" INT4, "int8" INT8, "float4" FLOAT4, "float8" FLOAT8, "json" JSONB, "bytea" BYTEA, "relatedId" INT4);`,
+  await db.query({
+    text: `CREATE TABLE "DataTypes"("id" INT4 PRIMARY KEY, "date" DATE, "time" TIME, "timetz" TIMETZ, "timestamp" TIMESTAMP, "timestamptz" TIMESTAMPTZ, "bool" BOOL, "uuid" UUID, "int2" INT2, "int4" INT4, "int8" INT8, "float4" FLOAT4, "float8" FLOAT8, "json" JSONB, "bytea" BYTEA, "relatedId" INT4);`,
   })
 
   t.context = {

@@ -1,21 +1,29 @@
-import { Database, QueryResult } from './database'
-import { DbName, Statement } from '../../util'
+import { Database } from './database'
+import { QueryConfig, QueryResult, QueryResultRow } from 'pg'
+import { DbName } from '../../util'
 
 export class MockDatabase implements Database {
   name: DbName
   fail: Error | undefined
 
-  constructor(dbName: DbName, fail?: Error) {
-    this.name = dbName
+  constructor(
+    public host: string,
+    public port: number,
+    public database?: string,
+    fail?: Error
+  ) {
+    this.name = `${host}:${port}/${database ?? ''}`
     this.fail = fail
   }
 
-  async exec(_statement: Statement): Promise<QueryResult> {
+  async query<R extends QueryResultRow = any, I extends any[] = any[]>(
+    _queryConfig: QueryConfig<I>
+  ): Promise<Pick<QueryResult<R>, 'rows' | 'rowCount'>> {
     if (typeof this.fail !== 'undefined') throw this.fail
 
     return {
-      rows: [{ val: 1 }, { val: 2 }],
-      rowsModified: 0,
+      rows: [{ val: 1 } as unknown as R, { val: 2 } as unknown as R],
+      rowCount: 0,
     }
   }
 

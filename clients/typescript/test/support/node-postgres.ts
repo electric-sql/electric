@@ -1,11 +1,11 @@
 import fs from 'fs/promises'
-import { ElectricDatabase } from '../../src/drivers/node-postgres'
+import type { Database } from '../../src/drivers/node-postgres'
 import { createEmbeddedPostgres } from '../../src/drivers/node-postgres/database'
 
 export async function makePgDatabase(
   name: string,
   port: number
-): Promise<{ db: ElectricDatabase; stop: () => Promise<void> }> {
+): Promise<{ db: Database; stop: () => Promise<void> }> {
   const { db, stop: stopPg } = await createEmbeddedPostgres({
     name,
     databaseDir: `./tmp-${name}`,

@@ -3,7 +3,7 @@ import pg from 'pg'
 import SQLiteDatabase from 'better-sqlite3'
 import { ElectricConfig } from 'electric-sql'
 import { mockSecureAuthToken } from 'electric-sql/auth/secure'
-import { ElectricDatabase } from 'electric-sql/node-postgres'
+import type { Database } from 'electric-sql/node-postgres'
 import { setLogLevel } from 'electric-sql/debug'
 import { electrify as electrifySqlite } from 'electric-sql/node'
 import { electrify as electrifyPg } from 'electric-sql/node-postgres'
@@ -21,7 +21,7 @@ let dbName: string
 let electrify = electrifySqlite
 let builder: QueryBuilder = sqliteBuilder
 
-async function makePgDatabase(): Promise<ElectricDatabase> {
+async function makePgDatabase(): Promise<Database> {
   const client = new pg.Client({
     host: 'pg_1',
     port: 5432,
@@ -29,12 +29,10 @@ async function makePgDatabase(): Promise<ElectricDatabase> {
     user: 'postgres',
     password: 'password',
   })
-
+  dbName = `${client.host}:${client.port}/${client.database}`
   await client.connect()
 
-  //const stop = () => client.end()
-  const db = new ElectricDatabase(dbName, client)
-  return db //{ db, stop }
+  return client
 }
 
 export const make_db = async (name: string): Promise<any> => {

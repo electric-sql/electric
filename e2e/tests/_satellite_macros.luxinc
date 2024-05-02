@@ -7,14 +7,12 @@
     # ?$node
     !migrations = $migrations
     ??$node
-    # Temporarily disable the failure pattern
-    # because the printed value contains "_connectionError"
-    # which matches the failure pattern...
-    -
-    !originalDb = await client.make_db('e2e_client_${satellite_number}_db')
+    # Adds a 2nd expression that just returns 0
+    # otherwise Node will print the result of the assignment
+    # but that Database object contains the word "error"
+    # which would match the fail pattern!
+    !originalDb = await client.make_db('e2e_client_${satellite_number}_db'); 0
     ??$node
-    # Restore the failure pattern
-    -$fail_pattern
     [invoke electrify_db "originalDb" $host $port $migrations $connectToElectric]
     ??(in electrify_db) config:
 [endmacro]
@@ -24,13 +22,16 @@
      # when trying to read `exp` when calling `electrify_db`
      !if (typeof exp === 'undefined') { var exp = undefined }
      ??$node
-
+     # Adds a 2nd expression that just returns 0
+     # otherwise Node will print the result of the assignment
+     # but that Database object contains the word "error"
+     # which would match the fail pattern!
      !db = await client.electrify_db(originalDb, \
                                      "$host", \
                                      $port, \
                                      $migrations, \
                                      $connectToElectric, \
-                                     exp)
+                                     exp); 0
 [endmacro]
 
 [macro setup_client_with_migrations satellite_number electric port migrations connectToElectric]

@@ -1,13 +1,13 @@
 import { DatabaseAdapter as DatabaseAdapterI } from '../../electric/adapter'
 import { DatabaseAdapter } from './adapter'
-import { Database, ElectricDatabase, createEmbeddedPostgres } from './database'
+import { Database, createEmbeddedPostgres } from './database'
 import { ElectricConfig } from '../../config'
 import { electrify as baseElectrify, ElectrifyOptions } from '../../electric'
 import { WebSocketNode } from '../../sockets/node'
 import { ElectricClient, DbSchema } from '../../client/model'
 import { PgBundleMigrator } from '../../migrators/bundle'
 
-export { DatabaseAdapter, ElectricDatabase, createEmbeddedPostgres }
+export { DatabaseAdapter, createEmbeddedPostgres }
 export type { Database }
 
 /**
@@ -21,7 +21,7 @@ export const electrify = async <T extends Database, DB extends DbSchema<any>>(
   config: ElectricConfig,
   opts?: ElectrifyOptions
 ): Promise<ElectricClient<DB>> => {
-  const dbName = db.name
+  const dbName = `${db.host}:${db.port}/${db.database ?? ''}`
   const adapter = opts?.adapter || new DatabaseAdapter(db)
   const migrator =
     opts?.migrator || new PgBundleMigrator(adapter, dbDescription.pgMigrations)
