@@ -60,7 +60,7 @@ export const hasIntersection = (
   return false
 }
 
-function escDoubleQ(str: string): string {
+export function escDoubleQ(str: string): string {
   return str.replaceAll('"', '""')
 }
 

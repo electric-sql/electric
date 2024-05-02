@@ -18,6 +18,7 @@ import { PgBasicType } from '../conversions/types'
 import { HKT } from '../util/hkt'
 import { Dialect } from '../../migrators/query-builder/builder'
 import { isFilterObject } from '../conversions/input'
+import { escDoubleQ } from '../../util'
 
 const squelPostgres = squel.useFlavour('postgres')
 squelPostgres.registerValueHandler('bigint', function (bigint) {
@@ -50,7 +51,7 @@ export class Builder {
     >,
     public dialect: Dialect
   ) {
-    this._quotedTableName = `"${this._tableName}"`
+    this._quotedTableName = quoteIdentifier(this._tableName)
     squelPostgres.cls.DefaultQueryBuilderOptions.nameQuoteCharacter = '"'
     squelPostgres.cls.DefaultQueryBuilderOptions.autoQuoteFieldNames = true
     if (dialect === 'Postgres') {
@@ -258,9 +259,10 @@ export class Builder {
   private castBigIntToText(field: string) {
     const pgType = this._tableDescription.fields.get(field)
     if (pgType === PgBasicType.PG_INT8 && this.dialect === 'SQLite') {
-      return `cast("${field}" as TEXT) AS "${field}"`
+      const quotedField = quoteIdentifier(field)
+      return `cast(${quotedField} as TEXT) AS ${quotedField}`
     }
-    return `"${field}"`
+    return quoteIdentifier(field)
   }
 
   private addOrderBy(i: AnyFindInput, q: PostgresSelect): PostgresSelect {
@@ -289,7 +291,7 @@ export class Builder {
       // have to quote the field name ourselves
       // because Squel does not seem to auto quote
       // field names in order by statements
-      return query.order(`"${field}"`, squelOrder)
+      return query.order(quoteIdentifier(field), squelOrder)
     }, q)
   }
 
@@ -316,7 +318,10 @@ export class Builder {
       if (pgType === PgBasicType.PG_INT8 && this.dialect === 'SQLite') {
         // make a raw string and quote the field name ourselves
         // because otherwise Squel would add quotes around the entire cast
-        const f = squelPostgres.rstr(`cast("${field}" as TEXT) AS "${field}"`)
+        const quotedField = quoteIdentifier(field)
+        const f = squelPostgres.rstr(
+          `cast(${quotedField} as TEXT) AS ${quotedField}`
+        )
         return query.returning(f)
       }
       return query.returning(field)
@@ -351,7 +356,7 @@ export function makeFilter(
   prefixFieldsWith = ''
 ): Array<{ sql: string; args?: unknown[] }> {
   if (fieldValue === null)
-    return [{ sql: `${prefixFieldsWith}"${fieldName}" IS NULL` }]
+    return [{ sql: `${prefixFieldsWith}${quoteIdentifier(fieldName)} IS NULL` }]
   else if (fieldName === 'AND' || fieldName === 'OR' || fieldName === 'NOT') {
     return [
       makeBooleanFilter(
@@ -408,9 +413,8 @@ export function makeFilter(
       const [filter, handler] = entry
       if (filter in obj) {
         const sql = handler(
-          fieldName,
-          obj[filter as keyof typeof obj],
-          prefixFieldsWith
+          prefixFieldsWith + quoteIdentifier(fieldName),
+          obj[filter as keyof typeof obj]
         )
         filters.push(sql)
       }
@@ -421,7 +425,10 @@ export function makeFilter(
   // needed because `WHERE field = NULL` is not valid SQL
   else
     return [
-      { sql: `${prefixFieldsWith}"${fieldName}" = ?`, args: [fieldValue] },
+      {
+        sql: `${prefixFieldsWith}${quoteIdentifier(fieldName)} = ?`,
+        args: [fieldValue],
+      },
     ]
 }
 
@@ -476,108 +483,97 @@ function makeBooleanFilter(
 
 function makeEqualsFilter(
   fieldName: string,
-  value: unknown | undefined,
-  prefixFieldsWith: string
+  value: unknown | undefined
 ): { sql: string; args?: unknown[] } {
-  return { sql: `${prefixFieldsWith}"${fieldName}" = ?`, args: [value] }
+  return { sql: `${fieldName} = ?`, args: [value] }
 }
 
 function makeInFilter(
   fieldName: string,
-  values: unknown[] | undefined,
-  prefixFieldsWith: string
+  values: unknown[] | undefined
 ): { sql: string; args?: unknown[] } {
-  return { sql: `${prefixFieldsWith}"${fieldName}" IN ?`, args: [values] }
+  return { sql: `${fieldName} IN ?`, args: [values] }
 }
 
 function makeNotInFilter(
   fieldName: string,
-  values: unknown[] | undefined,
-  prefixFieldsWith: string
+  values: unknown[] | undefined
 ): { sql: string; args?: unknown[] } {
-  return { sql: `${prefixFieldsWith}"${fieldName}" NOT IN ?`, args: [values] }
+  return { sql: `${fieldName} NOT IN ?`, args: [values] }
 }
 
 function makeNotFilter(
   fieldName: string,
-  value: unknown,
-  prefixFieldsWith: string
+  value: unknown
 ): { sql: string; args?: unknown[] } {
   if (value === null) {
     // needed because `WHERE field != NULL` is not valid SQL
-    return { sql: `${prefixFieldsWith}"${fieldName}" IS NOT NULL` }
+    return { sql: `${fieldName} IS NOT NULL` }
   } else {
-    return { sql: `${prefixFieldsWith}"${fieldName}" != ?`, args: [value] }
+    return { sql: `${fieldName} != ?`, args: [value] }
   }
 }
 
 function makeLtFilter(
   fieldName: string,
-  value: unknown,
-  prefixFieldsWith: string
+  value: unknown
 ): { sql: string; args?: unknown[] } {
-  return { sql: `${prefixFieldsWith}"${fieldName}" < ?`, args: [value] }
+  return { sql: `${fieldName} < ?`, args: [value] }
 }
 
 function makeLteFilter(
   fieldName: string,
-  value: unknown,
-  prefixFieldsWith: string
+  value: unknown
 ): { sql: string; args?: unknown[] } {
-  return { sql: `${prefixFieldsWith}"${fieldName}" <= ?`, args: [value] }
+  return { sql: `${fieldName} <= ?`, args: [value] }
 }
 
 function makeGtFilter(
   fieldName: string,
-  value: unknown,
-  prefixFieldsWith: string
+  value: unknown
 ): { sql: string; args?: unknown[] } {
-  return { sql: `${prefixFieldsWith}"${fieldName}" > ?`, args: [value] }
+  return { sql: `${fieldName} > ?`, args: [value] }
 }
 
 function makeGteFilter(
   fieldName: string,
-  value: unknown,
-  prefixFieldsWith: string
+  value: unknown
 ): { sql: string; args?: unknown[] } {
-  return { sql: `${prefixFieldsWith}"${fieldName}" >= ?`, args: [value] }
+  return { sql: `${fieldName} >= ?`, args: [value] }
 }
 
 function makeStartsWithFilter(
   fieldName: string,
-  value: unknown,
-  prefixFieldsWith: string
+  value: unknown
 ): { sql: string; args?: unknown[] } {
   if (typeof value !== 'string')
     throw new Error('startsWith filter must be a string')
   return {
-    sql: `${prefixFieldsWith}"${fieldName}" LIKE ?`,
+    sql: `${fieldName} LIKE ?`,
     args: [`${escapeLike(value)}%`],
   }
 }
 
 function makeEndsWithFilter(
   fieldName: string,
-  value: unknown,
-  prefixFieldsWith: string
+  value: unknown
 ): { sql: string; args?: unknown[] } {
   if (typeof value !== 'string')
     throw new Error('endsWith filter must be a string')
   return {
-    sql: `${prefixFieldsWith}"${fieldName}" LIKE ?`,
+    sql: `${fieldName} LIKE ?`,
     args: [`%${escapeLike(value)}`],
   }
 }
 
 function makeContainsFilter(
   fieldName: string,
-  value: unknown,
-  prefixFieldsWith: string
+  value: unknown
 ): { sql: string; args?: unknown[] } {
   if (typeof value !== 'string')
     throw new Error('contains filter must be a string')
   return {
-    sql: `${prefixFieldsWith}"${fieldName}" LIKE ?`,
+    sql: `${fieldName} LIKE ?`,
     args: [`%${escapeLike(value)}%`],
   }
 }
@@ -601,7 +597,7 @@ function addDistinct(i: AnyFindInput, q: PostgresSelect): PostgresSelect {
   // have to quote the fields ourselves
   // because Squel does not seem to auto quote
   // field names in order by statements
-  return q.distinct(...i.distinct.map((f) => `"${f}"`))
+  return q.distinct(...i.distinct.map(quoteIdentifier))
 }
 
 /**
@@ -612,4 +608,11 @@ function addDistinct(i: AnyFindInput, q: PostgresSelect): PostgresSelect {
  */
 function getSelectedFields(obj: object): string[] {
   return Object.keys(obj).filter((key) => obj[key as keyof object])
+}
+
+/**
+ * Quotes the identifier, thereby, escaping any quotes in the identifier.
+ */
+function quoteIdentifier(identifier: string): string {
+  return `"${escDoubleQ(identifier)}"`
 }
