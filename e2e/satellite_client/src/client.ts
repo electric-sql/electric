@@ -1,22 +1,50 @@
-import Database from 'better-sqlite3'
+import fs from 'fs/promises'
+import pg from 'pg'
+import SQLiteDatabase from 'better-sqlite3'
 import { ElectricConfig } from 'electric-sql'
 import { mockSecureAuthToken } from 'electric-sql/auth/secure'
+import type { Database } from 'electric-sql/node-postgres'
 import { setLogLevel } from 'electric-sql/debug'
-import { electrify } from 'electric-sql/node'
+import { electrify as electrifySqlite } from 'electric-sql/node'
+import { electrify as electrifyPg } from 'electric-sql/node-postgres'
 import { v4 as uuidv4 } from 'uuid'
 import { schema, Electric, ColorType as Color } from './generated/client'
 export { JsonNull } from './generated/client'
 import { globalRegistry } from 'electric-sql/satellite'
 import { SatelliteErrorCode } from 'electric-sql/util'
 import { Shape } from 'electric-sql/satellite'
+import { pgBuilder, sqliteBuilder, QueryBuilder } from 'electric-sql/migrators/builder'
 
 setLogLevel('DEBUG')
 
 let dbName: string
+let electrify = electrifySqlite
+let builder: QueryBuilder = sqliteBuilder
 
-export const make_db = (name: string): any => {
+async function makePgDatabase(): Promise<Database> {
+  const client = new pg.Client({
+    host: 'pg_1',
+    port: 5432,
+    database: dbName,
+    user: 'postgres',
+    password: 'password',
+  })
+  dbName = `${client.host}:${client.port}/${client.database}`
+  await client.connect()
+
+  return client
+}
+
+export const make_db = async (name: string): Promise<any> => {
   dbName = name
-  return new Database(name)
+  console.log("DIALECT: " + process.env.DIALECT)
+  if (process.env.DIALECT === 'Postgres') {
+    electrify = electrifyPg
+    builder = pgBuilder
+    return makePgDatabase()
+  }
+
+  return new SQLiteDatabase(name)
 }
 
 export const electrify_db = async (
@@ -32,7 +60,11 @@ export const electrify_db = async (
     debug: true,
   }
   console.log(`(in electrify_db) config: ${JSON.stringify(config)}`)
-  schema.migrations = migrations
+  if (process.env.DIALECT === 'Postgres') {
+    schema.pgMigrations = migrations
+  } else {
+    schema.migrations = migrations
+  }
   const result = await electrify(db, schema, config)
   const token = await mockSecureAuthToken(exp)
 
@@ -107,11 +139,11 @@ export const lowLevelSubscribe = async (electric: Electric, shape: Shape) => {
 }
 
 export const get_tables = (electric: Electric) => {
-  return electric.db.rawQuery({ sql: `SELECT name FROM sqlite_master WHERE type='table';` })
+  return electric.db.rawQuery(builder.getLocalTableNames())
 }
 
 export const get_columns = (electric: Electric, table: string) => {
-  return electric.db.rawQuery({ sql: `SELECT * FROM pragma_table_info(?);`, args: [table] })
+  return electric.db.rawQuery(builder.getTableInfo(table))
 }
 
 export const get_rows = (electric: Electric, table: string) => {
@@ -265,7 +297,7 @@ export const write_float = (electric: Electric, id: string, f4: number, f8: numb
 
 export const get_json_raw = async (electric: Electric, id: string) => {
   const res = await electric.db.rawQuery({
-    sql: `SELECT js FROM jsons WHERE id = ?;`,
+    sql: `SELECT js FROM jsons WHERE id = ${builder.makePositionalParam(1)};`,
     args: [id]
   }) as unknown as Array<{ js: string }>
   return res[0]?.js
@@ -273,10 +305,17 @@ export const get_json_raw = async (electric: Electric, id: string) => {
 
 export const get_jsonb_raw = async (electric: Electric, id: string) => {
   const res = await electric.db.rawQuery({
-    sql: `SELECT jsb FROM jsons WHERE id = ?;`,
+    sql: `SELECT jsb FROM jsons WHERE id = ${builder.makePositionalParam(1)};`,
     args: [id]
   }) as unknown as Array<{ jsb: string }>
-  return res[0]?.jsb
+  
+  const js = res[0]?.jsb
+
+  if (builder.dialect === 'Postgres') {
+    return js
+  }
+
+  return JSON.parse(js) // SQLite stores JSON as string so parse it
 }
 
 export const get_json = async (electric: Electric, id: string) => {
@@ -333,11 +372,19 @@ export const write_enum = (electric: Electric, id: string, c: Color | null) => {
 }
 
 export const get_blob = async (electric: Electric, id: string) => {
-  return electric.db.blobs.findUnique({
+  const res = await electric.db.blobs.findUnique({
     where: {
       id: id
     }
   })
+
+  if (res.blob) {
+    // The PG driver returns a NodeJS Buffer but the e2e test matches on a plain Uint8Array.
+    // So we convert the Buffer to a Uint8Array.
+    // Note that Buffer is a subclass of Uint8Array.
+    res.blob = new Uint8Array(res.blob)
+  }
+  return res
 }
 
 export const write_blob = (electric: Electric, id: string, blob: Uint8Array | null) => {
@@ -376,7 +423,7 @@ export const insert_extended_into = async (electric: Electric, table: string, va
   }
   const columns = Object.keys(values)
   const columnNames = columns.join(", ")
-  const placeHolders = Array(columns.length).fill("?")
+  const placeHolders = columns.map((_, i) => builder.makePositionalParam(i+1))
   const args = Object.values(values)
 
   await electric.db.unsafeExec({

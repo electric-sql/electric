@@ -1,6 +1,7 @@
 import { Statement } from '../util'
+import { QueryBuilder } from './query-builder'
 
-export { BundleMigrator } from './bundle'
+export { SqliteBundleMigrator, PgBundleMigrator } from './bundle'
 export { MockMigrator } from './mock'
 export { parseMetadata, makeMigration } from './builder'
 export type { MetaData } from './builder'
@@ -31,8 +32,5 @@ export interface Migrator {
   apply(migration: StmtMigration): Promise<void>
   applyIfNotAlready(migration: StmtMigration): Promise<boolean>
   querySchemaVersion(): Promise<string | undefined>
-}
-
-export interface MigratorOptions {
-  tableName: string
+  queryBuilder: QueryBuilder
 }

@@ -17,6 +17,9 @@ build-dev: node_modules
 tests:
 	pnpm run test
 
+tests-CI:
+	pnpm run test-CI
+
 style:
 	prettier --check --loglevel warn . && eslint src --quiet
 

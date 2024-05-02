@@ -69,7 +69,7 @@ defmodule Electric.Postgres.Replication do
         {:ok, [], []}
 
       propagate_ast ->
-        {msg, relations} = build_replication_msg(propagate_ast, schema_version, dialect)
+        {msg, relations} = build_replication_msg(propagate_ast, stmt, schema_version, dialect)
 
         {:ok, [msg], relations}
     end
@@ -83,12 +83,19 @@ defmodule Electric.Postgres.Replication do
     :CREATE_INDEX
   end
 
+  def stmt_type(%Pg.CreateEnumStmt{}) do
+    :CREATE_ENUM_TYPE
+  end
+
   def stmt_type(%Pg.AlterTableStmt{cmds: [cmd]}) do
     case cmd do
       %{node: {:alter_table_cmd, %Pg.AlterTableCmd{subtype: :AT_AddColumn}}} ->
         :ALTER_ADD_COLUMN
     end
   end
+
+  defp to_sql(_ast, stmt, Dialect.Postgresql), do: stmt
+  defp to_sql(ast, _stmt, dialect), do: Dialect.to_sql(ast, dialect)
 
   def affected_tables(stmts, dialect \\ @default_dialect) when is_list(stmts) do
     stmts
@@ -112,7 +119,7 @@ defmodule Electric.Postgres.Replication do
     []
   end
 
-  defp build_replication_msg(ast, schema_version, dialect) do
+  defp build_replication_msg(ast, stmt, schema_version, dialect) do
     affected_tables = affected_tables(ast, dialect)
 
     relations = Enum.map(affected_tables, &{&1.schema, &1.name})
@@ -129,17 +136,38 @@ defmodule Electric.Postgres.Replication do
       end
 
     stmts =
-      Enum.map(
-        ast,
+      ast
+      |> Enum.reject(&(dialect == Dialect.SQLite and match?(%Pg.CreateEnumStmt{}, &1)))
+      |> Enum.map(
         &%SatOpMigrate.Stmt{
           type: stmt_type(&1),
-          sql: Dialect.to_sql(&1, dialect)
+          sql: to_sql(&1, stmt, dialect)
         }
       )
 
+    enum_type =
+      ast
+      |> Enum.filter(&match?(%Pg.CreateEnumStmt{}, &1))
+      |> Enum.map(fn enum_ast ->
+        name = AST.map(enum_ast.type_name)
+        values = AST.map(enum_ast.vals)
+        %SatOpMigrate.EnumType{name: Dialect.table_name(name, dialect), values: values}
+      end)
+      |> case do
+        [] -> nil
+        [enum] -> enum
+      end
+
+    affected_entity =
+      case {table, enum_type} do
+        {%SatOpMigrate.Table{}, nil} -> {:table, table}
+        {nil, %SatOpMigrate.EnumType{}} -> {:enum_type, enum_type}
+        {nil, nil} -> nil
+      end
+
     {%SatOpMigrate{
        version: SchemaLoader.Version.version(schema_version),
-       table: table,
+       affected_entity: affected_entity,
        stmts: stmts
      }, relations}
   end
@@ -160,6 +188,9 @@ defmodule Electric.Postgres.Replication do
       } ->
         true
 
+      %Pg.CreateEnumStmt{} ->
+        true
+
       _else ->
         false
     end)
@@ -168,17 +199,17 @@ defmodule Electric.Postgres.Replication do
   defp replication_msg_table(%Proto.Table{} = table, dialect) do
     %SatOpMigrate.Table{
       name: Dialect.table_name(table.name, dialect),
-      columns: Enum.map(table.columns, &replication_msg_table_col(&1, dialect)),
+      columns: Enum.map(table.columns, &replication_msg_table_col(&1)),
       fks: Enum.flat_map(table.constraints, &replication_msg_table_fk(&1, dialect)),
-      pks: Enum.flat_map(table.constraints, &replication_msg_table_pk(&1, dialect))
+      pks: Enum.flat_map(table.constraints, &replication_msg_table_pk(&1))
     }
   end
 
-  defp replication_msg_table_col(%Proto.Column{} = column, dialect) do
+  defp replication_msg_table_col(%Proto.Column{} = column) do
     %SatOpMigrate.Column{
       name: column.name,
       pg_type: replication_msg_table_col_type(column.type),
-      sqlite_type: Dialect.type_name(column.type, dialect)
+      sqlite_type: Dialect.type_name(column.type, Dialect.SQLite)
     }
   end
 
@@ -190,13 +221,8 @@ defmodule Electric.Postgres.Replication do
     }
   end
 
-  defp replication_msg_table_pk(%Proto.Constraint{constraint: {:primary, pk}}, _dialect) do
-    pk.keys
-  end
-
-  defp replication_msg_table_pk(_constraint, _dialect) do
-    []
-  end
+  defp replication_msg_table_pk(%Proto.Constraint{constraint: {:primary, pk}}), do: pk.keys
+  defp replication_msg_table_pk(_constraint), do: []
 
   defp replication_msg_table_fk(%Proto.Constraint{constraint: {:foreign, fk}}, dialect) do
     [

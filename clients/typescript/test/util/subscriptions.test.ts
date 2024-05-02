@@ -6,7 +6,7 @@ import {
   InitialDataChange,
   SubscriptionData,
 } from '../../src/satellite/shapes/types'
-import { base64 } from '../../src/util'
+import { base64 } from '../../src/util/encoders'
 
 type ContextType = {
   manager: InMemorySubscriptionsManager

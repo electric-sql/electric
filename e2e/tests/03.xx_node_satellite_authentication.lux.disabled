@@ -17,7 +17,7 @@
     -JWT expired too early
     # Set expiration time for the JWT to 10 seconds from now
     !exp="10s"
-    [invoke connect_to_electric electric_1 5133 "[]"]
+    [invoke connect_to_electric electric_1 5133 "[]" 1]
     # Wait for the items table migration and sync the table
     ??[rpc] recv: #SatInStartReplicationResp
     ??Connectivity state changed: connected

@@ -5,7 +5,7 @@ import {
   DbName,
   RowId,
   DataChangeType,
-  Record,
+  DbRecord,
 } from '../util/types'
 
 export { EventNotifier } from './event'
@@ -16,7 +16,7 @@ export interface AuthStateNotification {
 }
 
 export type RecordChange = {
-  primaryKey: Record
+  primaryKey: DbRecord
   type: `${DataChangeType}` | 'INITIAL'
 }
 export interface Change {

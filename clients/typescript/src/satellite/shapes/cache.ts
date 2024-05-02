@@ -13,6 +13,7 @@ import {
   SatelliteErrorCode,
   subsDataErrorToSatelliteError,
 } from '../../util'
+import type { TypeDecoder } from '../../util/encoders'
 import { deserializeRow } from '../client'
 import {
   InitialDataChange,
@@ -39,7 +40,7 @@ export class SubscriptionsDataCache extends EventEmitter {
   inDelivery?: SubscriptionDataInternal
   dbDescription: DbSchema<any>
 
-  constructor(dbDescription: DbSchema<any>) {
+  constructor(dbDescription: DbSchema<any>, private decoder: TypeDecoder) {
     super()
 
     this.requestedSubscriptions = {}
@@ -279,7 +280,12 @@ export class SubscriptionsDataCache extends EventEmitter {
       )
     }
 
-    const record = deserializeRow(rowData, relation, this.dbDescription)
+    const record = deserializeRow(
+      rowData,
+      relation,
+      this.dbDescription,
+      this.decoder
+    )
 
     if (!record) {
       this.internalError(

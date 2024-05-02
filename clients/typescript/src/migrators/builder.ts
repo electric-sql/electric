@@ -1,8 +1,12 @@
 import * as z from 'zod'
 import { SatOpMigrate } from '../_generated/protocol/satellite'
-import { base64, getProtocolVersion } from '../util'
+import { base64 } from '../util/encoders'
+import { getProtocolVersion } from '../util'
 import { Migration } from './index'
 import { generateTriggersForTable } from '../satellite/process'
+import { sqliteBuilder, pgBuilder, QueryBuilder } from './query-builder'
+
+export { sqliteBuilder, pgBuilder, QueryBuilder }
 
 const metaDataSchema = z
   .object({
@@ -69,7 +73,10 @@ export function parseMetadata(data: object): MetaData {
  * @param migration The migration's meta data.
  * @returns The corresponding migration.
  */
-export function makeMigration(migration: MetaData): Migration {
+export function makeMigration(
+  migration: MetaData,
+  builder: QueryBuilder
+): Migration {
   const statements = migration.ops
     .map((op) => op.stmts.map((stmt) => stmt.sql))
     .flat()
@@ -84,7 +91,7 @@ export function makeMigration(migration: MetaData): Migration {
     })
 
   const triggers = tables
-    .map(generateTriggersForTable)
+    .map((tbl) => generateTriggersForTable(tbl, builder))
     .flat()
     .map((stmt) => stmt.sql)
 

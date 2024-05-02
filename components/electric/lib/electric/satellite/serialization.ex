@@ -26,12 +26,19 @@ defmodule Electric.Satellite.Serialization do
   @type relation_mapping() ::
           %{Changes.relation() => {PB.relation_id(), [Replication.Column.name()]}}
 
+  @default_dialect Electric.Postgres.Dialect.SQLite
+
   @doc """
   Serialize from internal format to Satellite PB format
   """
-  @spec serialize_trans(Transaction.t(), term(), relation_mapping()) ::
+  @spec serialize_trans(Transaction.t(), term(), relation_mapping(), module()) ::
           {[%SatOpLog{}], [Changes.relation()], relation_mapping()}
-  def serialize_trans(%Transaction{} = trans, offset, known_relations) do
+  def serialize_trans(
+        %Transaction{} = trans,
+        offset,
+        known_relations,
+        dialect \\ @default_dialect
+      ) do
     tm = DateTime.to_unix(trans.commit_timestamp, :millisecond)
     lsn = Electric.Postgres.CachedWal.Api.serialize_wal_position(offset)
 
@@ -42,7 +49,8 @@ defmodule Electric.Satellite.Serialization do
       migration_version: nil,
       schema: nil,
       new_relations: [],
-      known_relations: known_relations
+      known_relations: known_relations,
+      sql_dialect: dialect
     }
 
     state = Enum.reduce(trans.changes, state, &serialize_change/2)
@@ -102,56 +110,7 @@ defmodule Electric.Satellite.Serialization do
   end
 
   defp serialize_change(record, state) when is_migration_relation(record.relation) do
-    %{
-      origin: origin,
-      schema: schema,
-      ops: ops,
-      migration_version: version,
-      new_relations: new_relations
-    } = state
-
-    state =
-      case(record) do
-        ddl when is_ddl_relation(ddl.relation) ->
-          {:ok, v} = SchemaCache.tx_version(origin, ddl.record)
-          {:ok, sql} = Extension.extract_ddl_sql(ddl.record)
-
-          Logger.info("Serializing migration #{inspect(v)}: #{inspect(sql)}")
-
-          # unlikely since the extension tables have constraints that prevent this
-          if version && version != v,
-            do: raise("Got DDL transaction with differing migration versions")
-
-          {:ok, schema_version} = maybe_load_schema(origin, schema, v)
-
-          {ops, add_relations} =
-            case Replication.migrate(schema_version, sql) do
-              {:ok, [op], relations} ->
-                {[%SatTransOp{op: {:migrate, op}} | ops], relations}
-
-              {:ok, [], []} ->
-                {ops, []}
-            end
-
-          known_relations =
-            Enum.reduce(add_relations, state.known_relations, fn relation, known ->
-              {_relation_id, _columns, _, known} = load_new_relation(relation, known)
-              known
-            end)
-
-          %{
-            state
-            | ops: ops,
-              migration_version: v,
-              schema: schema_version,
-              new_relations: new_relations ++ add_relations,
-              known_relations: known_relations
-          }
-
-        _ ->
-          state
-      end
-
+    state = serialize_migration(record, state)
     %{state | is_migration: true}
   end
 
@@ -182,6 +141,55 @@ defmodule Electric.Satellite.Serialization do
 
     %{state | ops: [op | ops], new_relations: new_relations, known_relations: known_relations}
   end
+
+  defp serialize_migration(%{relation: relation, record: record}, state)
+       when is_ddl_relation(relation) do
+    %{
+      origin: origin,
+      schema: schema,
+      ops: ops,
+      migration_version: version,
+      new_relations: new_relations,
+      sql_dialect: dialect
+    } = state
+
+    {:ok, v} = SchemaCache.tx_version(origin, record)
+    {:ok, sql} = Extension.extract_ddl_sql(record)
+
+    Logger.info("Serializing migration #{inspect(v)}: #{inspect(sql)}")
+
+    # unlikely since the extension tables have constraints that prevent this
+    if version && version != v,
+      do: raise("Got DDL transaction with differing migration versions")
+
+    {:ok, schema_version} = maybe_load_schema(origin, schema, v)
+
+    {ops, add_relations} =
+      case Replication.migrate(schema_version, sql, dialect) do
+        {:ok, [op], relations} ->
+          {[%SatTransOp{op: {:migrate, op}} | ops], relations}
+
+        {:ok, [], []} ->
+          {ops, []}
+      end
+
+    known_relations =
+      Enum.reduce(add_relations, state.known_relations, fn relation, known ->
+        {_relation_id, _columns, _, known} = load_new_relation(relation, known)
+        known
+      end)
+
+    %{
+      state
+      | ops: ops,
+        migration_version: v,
+        schema: schema_version,
+        new_relations: new_relations ++ add_relations,
+        known_relations: known_relations
+    }
+  end
+
+  defp serialize_migration(_record, state), do: state
 
   defp maybe_load_schema(origin, nil, version) do
     with {:ok, schema} <- Extension.SchemaCache.load(origin, version) do
@@ -618,9 +626,6 @@ defmodule Electric.Satellite.Serialization do
 
   def decode_column_value!(val, :timestamptz) do
     # The offset of datetimes coming over the Satellite protocol MUST be 0.
-    len_minus_1 = byte_size(val) - 1
-    <<_::binary-size(len_minus_1), "Z">> = val
-
     {:ok, dt, 0} = DateTime.from_iso8601(val)
     assert_valid_year!(dt.year)
 

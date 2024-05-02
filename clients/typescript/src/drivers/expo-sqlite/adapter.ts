@@ -6,6 +6,7 @@ import { RunResult } from '../../electric/adapter'
 
 export class DatabaseAdapter extends GenericDatabaseAdapter {
   readonly db: Database
+  readonly defaultNamespace = 'main'
   #rowsModified = 0
 
   constructor(db: Database) {

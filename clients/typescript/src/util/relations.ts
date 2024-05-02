@@ -1,23 +1,27 @@
 import { SatRelation_RelationType } from '../_generated/protocol/satellite'
 import { DatabaseAdapter } from '../electric/adapter'
+import { QueryBuilder } from '../migrators/query-builder'
 import { SatelliteOpts } from '../satellite/config'
+import { QualifiedTablename } from './tablename'
 import { Relation, RelationsCache } from './types'
 
 // TODO: Improve this code once with Migrator and consider simplifying oplog.
-export async function inferRelationsFromSQLite(
+export async function inferRelationsFromDb(
   adapter: DatabaseAdapter,
-  opts: SatelliteOpts
+  opts: SatelliteOpts,
+  builder: QueryBuilder
 ): Promise<{ [k: string]: Relation }> {
-  const tableNames = await _getLocalTableNames(adapter, opts)
+  const tableNames = await _getLocalTableNames(adapter, opts, builder)
   const relations: RelationsCache = {}
 
   let id = 0
-  const schema = 'public' // TODO
   for (const table of tableNames) {
     const tableName = table.name
-    const sql = 'SELECT * FROM pragma_table_info(?)'
-    const args = [tableName]
-    const columnsForTable = (await adapter.query({ sql, args })) as {
+    const columnsForTable = (await adapter.query(
+      builder.getTableInfo(
+        new QualifiedTablename(builder.defaultNamespace, tableName)
+      )
+    )) as {
       name: string
       type: string
       notnull: number
@@ -28,7 +32,10 @@ export async function inferRelationsFromSQLite(
     }
     const relation: Relation = {
       id: id++,
-      schema: schema,
+      // schema needs to be 'public' because these relations are used
+      // by the Satellite process and client to replicate changes to Electric
+      // and merge incoming changes from Electric, and those use the 'public' namespace.
+      schema: 'public',
       table: tableName,
       tableType: SatRelation_RelationType.TABLE,
       columns: [],
@@ -41,7 +48,7 @@ export async function inferRelationsFromSQLite(
         primaryKey: c.pk > 0 ? c.pk : undefined,
       })
     }
-    relations[`${tableName}`] = relation
+    relations[tableName] = relation
   }
 
   return relations
@@ -49,7 +56,8 @@ export async function inferRelationsFromSQLite(
 
 async function _getLocalTableNames(
   adapter: DatabaseAdapter,
-  opts: SatelliteOpts
+  opts: SatelliteOpts,
+  builder: QueryBuilder
 ): Promise<{ name: string }[]> {
   const notIn = [
     opts.metaTable.tablename.toString(),
@@ -57,16 +65,8 @@ async function _getLocalTableNames(
     opts.oplogTable.tablename.toString(),
     opts.triggersTable.tablename.toString(),
     opts.shadowTable.tablename.toString(),
-    'sqlite_schema',
-    'sqlite_sequence',
-    'sqlite_temp_schema',
   ]
 
-  const tables = `
-      SELECT name FROM sqlite_master
-        WHERE type = 'table'
-          AND name NOT IN (${notIn.map(() => '?').join(',')})
-    `
-  const rows = await adapter.query({ sql: tables, args: notIn })
+  const rows = await adapter.query(builder.getLocalTableNames(notIn))
   return rows as Array<{ name: string }>
 }

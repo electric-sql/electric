@@ -9,11 +9,29 @@ import {
   DEFAULT_LOG_POS,
   DataChangeType,
   DataTransaction,
+  QualifiedTablename,
 } from '../../src/util'
 import Long from 'long'
-import { relations, migrateDb, personTable } from './common'
+import { relations, migrateDb, personTable as getPersonTable } from './common'
 import Database from 'better-sqlite3'
-import { satelliteDefaults } from '../../src/satellite/config'
+import { SatelliteOpts, satelliteDefaults } from '../../src/satellite/config'
+import {
+  QueryBuilder,
+  pgBuilder,
+  sqliteBuilder,
+} from '../../src/migrators/query-builder'
+import { DatabaseAdapter as SQLiteDatabaseAdapter } from '../../src/drivers/better-sqlite3'
+import { DatabaseAdapter as PgDatabaseAdapter } from '../../src/drivers/node-postgres/adapter'
+import { DatabaseAdapter as PgliteDatabaseAdapter } from '../../src/drivers/pglite'
+import { DatabaseAdapter as DatabaseAdapterInterface } from '../../src/electric/adapter'
+import { makePgDatabase } from '../support/node-postgres'
+import { randomValue } from '../../src/util/random'
+import { PGlite } from '@electric-sql/pglite'
+
+const qualifiedMergeTable = new QualifiedTablename(
+  'main',
+  'mergeTable'
+).toString()
 
 test('merging entries: local no-op updates should cancel incoming delete', (t) => {
   const pk = primaryKeyToStr({ id: 1 })
@@ -48,9 +66,10 @@ test('merging entries: local no-op updates should cancel incoming delete', (t) =
   const merged = mergeEntries('local', local, 'remote', remote, relations)
 
   // Merge should resolve into the UPSERT for this row, since the remote DELETE didn't observe this local update
-  t.like(merged, { 'main.parent': { [pk]: { optype: 'UPSERT' } } })
-  t.deepEqual(merged['main.parent'][pk].tags, ['local@100001000'])
-  t.deepEqual(merged['main.parent'][pk].fullRow, { id: 1, value: 'TEST' })
+  const qualifiedTableName = new QualifiedTablename('main', 'parent').toString()
+  t.like(merged, { [qualifiedTableName]: { [pk]: { optype: 'UPSERT' } } })
+  t.deepEqual(merged[qualifiedTableName][pk].tags, ['local@100001000'])
+  t.deepEqual(merged[qualifiedTableName][pk].fullRow, { id: 1, value: 'TEST' })
 })
 
 test('merge can handle infinity values', (t) => {
@@ -145,84 +164,131 @@ function _mergeTableTest(
 
   // we go through `fromTransaction` on purpose
   // in order to also test serialisation/deserialisation of the rows
-  const entry1: OplogEntry[] = fromTransaction(tx1, relations)
-  const entry2: OplogEntry[] = fromTransaction(tx2, relations)
+  const entry1: OplogEntry[] = fromTransaction(tx1, relations, 'main')
+  const entry2: OplogEntry[] = fromTransaction(tx2, relations, 'main')
 
   const merged = mergeEntries('local', entry1, 'remote', entry2, relations)
 
   // tx2 should win because tx1 and tx2 happened concurrently
   // but the timestamp of tx2 > tx1
-  t.like(merged, { 'main.mergeTable': { [pk]: { optype: 'UPSERT' } } })
+  t.like(merged, { [qualifiedMergeTable]: { [pk]: { optype: 'UPSERT' } } })
 
-  t.deepEqual(merged['main.mergeTable'][pk].fullRow, {
+  t.deepEqual(merged[qualifiedMergeTable][pk].fullRow, {
     ...opts.expected,
     id: pkId,
   })
 }
 
-test('merge works on oplog entries', (t) => {
+type MaybePromise<T> = T | Promise<T>
+type SetupFn = (
+  t: ExecutionContext<unknown>
+) => MaybePromise<
+  [DatabaseAdapterInterface, QueryBuilder, string, SatelliteOpts]
+>
+const setupSqlite: SetupFn = (t: ExecutionContext<unknown>) => {
   const db = new Database(':memory:')
+  t.teardown(() => db.close())
+  const namespace = 'main'
+  const defaults = satelliteDefaults(namespace)
+  return [new SQLiteDatabaseAdapter(db), sqliteBuilder, namespace, defaults]
+}
 
-  // Migrate the DB with the necessary tables and triggers
-  migrateDb(db, personTable)
+let port = 4800
+const setupPG: SetupFn = async (t: ExecutionContext<unknown>) => {
+  const dbName = `merge-test-${randomValue()}`
+  const { db, stop } = await makePgDatabase(dbName, port++)
+  t.teardown(async () => await stop())
+  const namespace = 'public'
+  const defaults = satelliteDefaults(namespace)
+  return [new PgDatabaseAdapter(db), pgBuilder, namespace, defaults]
+}
 
-  // Insert a row in the table
-  const insertRowSQL = `INSERT INTO ${personTable.tableName} (id, name, age, bmi, int8, blob) VALUES (9e999, 'John Doe', 30, 25.5, 7, x'0001ff')`
-  db.exec(insertRowSQL)
+const setupPglite: SetupFn = async (t: ExecutionContext<unknown>) => {
+  const db = new PGlite()
+  t.teardown(async () => await db.close())
+  const namespace = 'public'
+  const defaults = satelliteDefaults(namespace)
+  return [new PgliteDatabaseAdapter(db), pgBuilder, namespace, defaults]
+}
 
-  // Fetch the oplog entry for the inserted row
-  const oplogRows = db
-    .prepare(`SELECT * FROM ${satelliteDefaults.oplogTable}`)
-    .all()
+;(
+  [
+    ['SQLite', setupSqlite],
+    ['Postgres', setupPG],
+    ['PGlite', setupPglite],
+  ] as const
+).forEach(([dialect, setup]) => {
+  test(`(${dialect}) merge works on oplog entries`, async (t) => {
+    const [adapter, builder, namespace, defaults] = await setup(t)
 
-  t.is(oplogRows.length, 1)
+    // Migrate the DB with the necessary tables and triggers
+    const personTable = getPersonTable(namespace)
+    const qualifiedPersonTable = personTable.qualifiedTableName
+    await migrateDb(adapter, personTable, builder)
 
-  const oplogEntry = oplogRows[0] as OplogEntry
+    // Insert a row in the table
+    const insertRowSQL = `INSERT INTO ${qualifiedPersonTable} (id, name, age, bmi, int8, blob) VALUES (54321, 'John Doe', 30, 25.5, 7, ${builder.hexValue(
+      '0001ff'
+    )})`
+    await adapter.run({ sql: insertRowSQL })
 
-  // Define a transaction that happened concurrently
-  // and inserts a row with the same id but different values
-  const tx: DataTransaction = {
-    lsn: DEFAULT_LOG_POS,
-    commit_timestamp: to_commit_timestamp('1970-01-02T03:46:42.000Z'),
-    changes: [
-      {
-        relation: relations[personTable.tableName as keyof typeof relations],
-        type: DataChangeType.INSERT,
-        record: {
-          // fields must be ordered alphabetically to match the behavior of the triggers
-          age: 30,
-          blob: new Uint8Array([0, 1, 255]),
-          bmi: 8e888,
-          id: 9e999,
-          int8: '224', // Big ints are serialized as strings in the oplog
-          name: 'John Doe',
+    // Fetch the oplog entry for the inserted row
+    const oplogTable = `${defaults.oplogTable}`
+    const oplogRows = await adapter.query({
+      sql: `SELECT * FROM ${oplogTable}`,
+    })
+
+    t.is(oplogRows.length, 1)
+
+    const oplogEntry = oplogRows[0] as unknown as OplogEntry
+
+    // Define a transaction that happened concurrently
+    // and inserts a row with the same id but different values
+    const tx: DataTransaction = {
+      lsn: DEFAULT_LOG_POS,
+      commit_timestamp: to_commit_timestamp('1970-01-02T03:46:42.000Z'),
+      changes: [
+        {
+          relation:
+            relations[qualifiedPersonTable.tablename as keyof typeof relations],
+          type: DataChangeType.INSERT,
+          record: {
+            // fields must be ordered alphabetically to match the behavior of the triggers
+            age: 30,
+            blob: new Uint8Array([0, 1, 255]),
+            bmi: 21.3,
+            id: 54321,
+            int8: '224', // Big ints are serialized as strings in the oplog
+            name: 'John Doe',
+          },
+          tags: [],
         },
-        tags: [],
-      },
-    ],
-  }
+      ],
+    }
 
-  // Merge the oplog entry with the transaction
-  const merged = mergeEntries(
-    'local',
-    [oplogEntry],
-    'remote',
-    fromTransaction(tx, relations),
-    relations
-  )
+    // Merge the oplog entry with the transaction
+    const merged = mergeEntries(
+      'local',
+      [oplogEntry],
+      'remote',
+      fromTransaction(tx, relations, namespace),
+      relations
+    )
 
-  const pk = primaryKeyToStr({ id: 9e999 })
+    const pk = primaryKeyToStr({ id: 54321 })
 
-  // the incoming transaction wins
-  t.like(merged, {
-    [`main.${personTable.tableName}`]: { [pk]: { optype: 'UPSERT' } },
-  })
-  t.deepEqual(merged[`main.${personTable.tableName}`][pk].fullRow, {
-    id: 9e999,
-    name: 'John Doe',
-    age: 30,
-    blob: new Uint8Array([0, 1, 255]),
-    bmi: Infinity,
-    int8: 224n,
+    // the incoming transaction wins
+    const qualifiedTableName = qualifiedPersonTable.toString()
+    t.like(merged, {
+      [qualifiedTableName]: { [pk]: { optype: 'UPSERT' } },
+    })
+    t.deepEqual(merged[qualifiedTableName][pk].fullRow, {
+      id: 54321,
+      name: 'John Doe',
+      age: 30,
+      blob: new Uint8Array([0, 1, 255]),
+      bmi: 21.3,
+      int8: 224n,
+    })
   })
 })

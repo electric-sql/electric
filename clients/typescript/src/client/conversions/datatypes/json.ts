@@ -19,7 +19,7 @@ export function deserialiseJSON(v: string): JSON {
   return JSON.parse(v)
 }
 
-function isJsonNull(v: JSON): boolean {
+export function isJsonNull(v: JSON): boolean {
   return (
     isObject(v) &&
     Object.hasOwn(v, '__is_electric_json_null__') &&

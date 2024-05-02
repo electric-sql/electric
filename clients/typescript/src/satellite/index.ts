@@ -20,7 +20,7 @@ import {
   SatelliteError,
   ReplicationStatus,
   AdditionalDataCallback,
-  Record,
+  DbRecord,
   ReplicatedRowTransformer,
 } from '../util/types'
 import {
@@ -85,7 +85,7 @@ export interface Satellite {
 
   setReplicationTransform(
     tableName: QualifiedTablename,
-    transform: ReplicatedRowTransformer<Record>
+    transform: ReplicatedRowTransformer<DbRecord>
   ): void
   clearReplicationTransform(tableName: QualifiedTablename): void
 }
@@ -131,7 +131,7 @@ export interface Client {
 
   setReplicationTransform(
     tableName: QualifiedTablename,
-    transformer: ReplicatedRowTransformer<Record>
+    transformer: ReplicatedRowTransformer<DbRecord>
   ): void
   clearReplicationTransform(tableName: QualifiedTablename): void
 }

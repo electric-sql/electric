@@ -70,7 +70,7 @@ jobs:
       - name: Build
         run: make build
       - name: Run tests
-        run: make tests
+        run: make tests-CI
   maybe_publish:
     runs-on: ubuntu-latest
     needs: [test, check_types, verify_formatting]

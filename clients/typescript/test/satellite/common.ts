@@ -1,16 +1,33 @@
 import { mkdir, rm as removeFile } from 'node:fs/promises'
-import { RelationsCache, randomValue } from '../../src/util'
-import Database from 'better-sqlite3'
+import { QualifiedTablename, RelationsCache, randomValue } from '../../src/util'
 import type { Database as SqliteDB } from 'better-sqlite3'
-import { DatabaseAdapter } from '../../src/drivers/better-sqlite3'
-import { BundleMigrator } from '../../src/migrators'
+import SqliteDatabase from 'better-sqlite3'
+import { DatabaseAdapter as SqliteDatabaseAdapter } from '../../src/drivers/better-sqlite3'
+import { SqliteBundleMigrator, PgBundleMigrator } from '../../src/migrators'
 import { EventNotifier, MockNotifier } from '../../src/notifiers'
 import { MockSatelliteClient } from '../../src/satellite/mock'
 import { GlobalRegistry, Registry, SatelliteProcess } from '../../src/satellite'
 import { TableInfo, initTableInfo } from '../support/satellite-helpers'
 import { satelliteDefaults, SatelliteOpts } from '../../src/satellite/config'
 import { Table, generateTableTriggers } from '../../src/migrators/triggers'
-import { data as initialMigration } from '../../src/migrators/schema'
+import { buildInitialMigration as makeInitialMigration } from '../../src/migrators/schema'
+
+import sqliteMigrations from '../support/migrations/migrations.js'
+import pgMigrations from '../support/migrations/pg-migrations.js'
+import { ExecutionContext } from 'ava'
+import { AuthState, insecureAuthToken } from '../../src/auth'
+import { DbSchema, TableSchema } from '../../src/client/model/schema'
+import { PgBasicType } from '../../src/client/conversions/types'
+import { HKT } from '../../src/client/util/hkt'
+import { ElectricClient } from '../../src/client/model'
+import EventEmitter from 'events'
+import { QueryBuilder } from '../../src/migrators/query-builder'
+import { BundleMigratorBase } from '../../src/migrators/bundle'
+import { makePgDatabase } from '../support/node-postgres'
+import { DatabaseAdapter as PgDatabaseAdapter } from '../../src/drivers/node-postgres/adapter'
+import { PGlite } from '@electric-sql/pglite'
+import { DatabaseAdapter as PgliteDatabaseAdapter } from '../../src/drivers/pglite/adapter'
+import { DatabaseAdapter } from '../../src/electric/adapter'
 
 export const dbDescription = new DbSchema(
   {
@@ -37,6 +54,7 @@ export const dbDescription = new DbSchema(
     string,
     TableSchema<any, any, any, any, any, any, any, any, any, HKT>
   >,
+  [],
   []
 )
 
@@ -207,20 +225,12 @@ export const relations = {
   },
 } satisfies RelationsCache
 
-import migrations from '../support/migrations/migrations.js'
-import { ExecutionContext } from 'ava'
-import { AuthState, insecureAuthToken } from '../../src/auth'
-import { DbSchema, TableSchema } from '../../src/client/model/schema'
-import { PgBasicType } from '../../src/client/conversions/types'
-import { HKT } from '../../src/client/util/hkt'
-import { ElectricClient } from '../../src/client/model'
-import EventEmitter from 'events'
-
 // Speed up the intervals for testing.
-export const opts = Object.assign({}, satelliteDefaults, {
-  minSnapshotWindow: 40,
-  pollingInterval: 200,
-})
+export const opts = (namespace: string) =>
+  Object.assign({}, satelliteDefaults(namespace), {
+    minSnapshotWindow: 40,
+    pollingInterval: 200,
+  })
 
 type Opts = SatelliteOpts & {
   minSnapshotWindow: number
@@ -242,17 +252,19 @@ export type ContextType<Extra = {}> = {
   timestamp: number
   authState: AuthState
   token: string
+  opts: Opts
+  namespace: string
+  stop?: () => Promise<void>
 } & Extra
 
-export const makeContext = async (
+const makeContextInternal = async (
   t: ExecutionContext<ContextType>,
-  options: Opts = opts
+  dbName: string,
+  adapter: DatabaseAdapter,
+  migrator: BundleMigratorBase,
+  namespace: string,
+  options: Opts = opts(namespace)
 ) => {
-  await mkdir('.tmp', { recursive: true })
-  const dbName = `.tmp/test-${randomValue()}.db`
-  const db = new Database(dbName)
-  const adapter = new DatabaseAdapter(db)
-  const migrator = new BundleMigrator(adapter, migrations)
   const notifier = new MockNotifier(dbName, new EventEmitter())
   const client = new MockSatelliteClient()
   const satellite = new SatelliteProcess(
@@ -264,7 +276,7 @@ export const makeContext = async (
     options
   )
 
-  const tableInfo = initTableInfo()
+  const tableInfo = initTableInfo(namespace)
   const timestamp = new Date().getTime()
 
   const runMigrations = async () => {
@@ -275,6 +287,7 @@ export const makeContext = async (
   const token = insecureAuthToken({ sub: 'test-user' })
 
   t.context = {
+    ...t.context,
     dbName,
     adapter,
     notifier,
@@ -285,17 +298,61 @@ export const makeContext = async (
     timestamp,
     authState,
     token,
+    namespace,
+    opts: options,
   }
+}
+
+export const makeContext = async (
+  t: ExecutionContext<ContextType>,
+  namespace: string,
+  options: Opts = opts(namespace)
+) => {
+  await mkdir('.tmp', { recursive: true })
+  const dbName = `.tmp/test-${randomValue()}.db`
+  const db = new SqliteDatabase(dbName)
+  const adapter = new SqliteDatabaseAdapter(db)
+  const migrator = new SqliteBundleMigrator(adapter, sqliteMigrations)
+  makeContextInternal(t, dbName, adapter, migrator, namespace, options)
+}
+
+export const makePgContext = async (
+  t: ExecutionContext<ContextType>,
+  port: number,
+  namespace: string,
+  options: Opts = opts(namespace)
+) => {
+  const dbName = `test-${randomValue()}`
+  const { db, stop } = await makePgDatabase(dbName, port)
+  const adapter = new PgDatabaseAdapter(db)
+  const migrator = new PgBundleMigrator(adapter, pgMigrations)
+  makeContextInternal(t, dbName, adapter, migrator, namespace, options)
+  t.context.stop = stop
+}
+
+export const makePgliteContext = async (
+  t: ExecutionContext<ContextType>,
+  namespace: string,
+  options: Opts = opts(namespace)
+) => {
+  const dbName = `test-${randomValue()}`
+  const db = new PGlite()
+  const stop = () => db.close()
+  const adapter = new PgliteDatabaseAdapter(db)
+  const migrator = new PgBundleMigrator(adapter, pgMigrations)
+  makeContextInternal(t, dbName, adapter, migrator, namespace, options)
+  t.context.stop = stop
 }
 
 export const mockElectricClient = async (
   db: SqliteDB,
   registry: Registry | GlobalRegistry,
-  options: Opts = opts
+  namespace: string = 'main',
+  options: Opts = opts(namespace)
 ): Promise<ElectricClient<any>> => {
   const dbName = db.name
-  const adapter = new DatabaseAdapter(db)
-  const migrator = new BundleMigrator(adapter, migrations)
+  const adapter = new SqliteDatabaseAdapter(db)
+  const migrator = new SqliteBundleMigrator(adapter, sqliteMigrations)
   const notifier = new MockNotifier(dbName, new EventEmitter())
   const client = new MockSatelliteClient()
   const satellite = new SatelliteProcess(
@@ -331,46 +388,61 @@ export const clean = async (t: ExecutionContext<{ dbName: string }>) => {
 }
 
 export const cleanAndStopSatellite = async (
-  t: ExecutionContext<{ dbName: string; satellite: SatelliteProcess }>
+  t: ExecutionContext<{
+    dbName: string
+    satellite: SatelliteProcess
+    stop?: () => Promise<void>
+  }>
 ) => {
   const { satellite } = t.context
   await satellite.stop()
   await clean(t)
+  await t.context.stop?.()
 }
 
-export function migrateDb(db: SqliteDB, table: Table) {
-  const tableName = table.tableName
-  // Create the table in the database
-  const createTableSQL = `CREATE TABLE ${tableName} (id REAL PRIMARY KEY, name TEXT, age INTEGER, bmi REAL, int8 INTEGER, blob BLOB)`
-  db.exec(createTableSQL)
+export async function migrateDb(
+  db: DatabaseAdapter,
+  table: Table,
+  builder: QueryBuilder
+) {
+  // First create the "main" schema (only when running on PG)
+  const initialMigration = makeInitialMigration(builder)
+  const migration = initialMigration.migrations[0].statements
+  const [createMainSchema, ...restMigration] = migration
+  await db.run({ sql: createMainSchema })
+
+  // Create the table in the database on the given namespace
+  const blobType = builder.dialect === 'SQLite' ? 'BLOB' : 'BYTEA'
+  const createTableSQL = `CREATE TABLE ${table.qualifiedTableName} (id REAL PRIMARY KEY, name TEXT, age INTEGER, bmi REAL, int8 INTEGER, blob ${blobType})`
+  await db.run({ sql: createTableSQL })
 
   // Apply the initial migration on the database
-  const migration = initialMigration.migrations[0].statements
-  migration.forEach((stmt) => {
-    db.exec(stmt)
-  })
+  for (const stmt of restMigration) {
+    await db.run({ sql: stmt })
+  }
 
   // Generate the table triggers
-  const triggers = generateTableTriggers(tableName, table)
+  const triggers = generateTableTriggers(table, builder)
 
   // Apply the triggers on the database
-  triggers.forEach((trigger) => {
-    db.exec(trigger.sql)
-  })
+  for (const trigger of triggers) {
+    await db.run({ sql: trigger.sql })
+  }
 }
 
-export const personTable: Table = {
-  namespace: 'main',
-  tableName: 'personTable',
+export const personTable: (namespace: string) => Table = (
+  namespace: string
+) => ({
+  qualifiedTableName: new QualifiedTablename(namespace, 'personTable'),
   columns: ['id', 'name', 'age', 'bmi', 'int8', 'blob'],
   primary: ['id'],
   foreignKeys: [],
   columnTypes: {
-    id: { sqliteType: 'REAL', pgType: PgBasicType.PG_REAL },
-    name: { sqliteType: 'TEXT', pgType: PgBasicType.PG_TEXT },
-    age: { sqliteType: 'INTEGER', pgType: PgBasicType.PG_INTEGER },
-    bmi: { sqliteType: 'REAL', pgType: PgBasicType.PG_REAL },
-    int8: { sqliteType: 'INTEGER', pgType: PgBasicType.PG_INT8 },
-    blob: { sqliteType: 'BLOB', pgType: PgBasicType.PG_BYTEA },
+    id: PgBasicType.PG_REAL,
+    name: PgBasicType.PG_TEXT,
+    age: PgBasicType.PG_INTEGER,
+    bmi: PgBasicType.PG_REAL,
+    int8: PgBasicType.PG_INT8,
+    blob: PgBasicType.PG_BYTEA,
   },
-}
+})

@@ -1,13 +1,17 @@
 [global node=>]
 
-[macro connect_to_electric host port migrations connectToElectric]
+[macro connect_to_electric host port migrations connectToElectric satellite_number]
     !client = await import('./dist/client.js')
     ??$node
     # !migrations = await client.read_migrations(process.env.MIGRATION_DIRS + "/index.js")
     # ?$node
     !migrations = $migrations
     ??$node
-    !originalDb = client.make_db(process.env.SATELLITE_DB_PATH + "/$LUX_SHELLNAME")
+    # Adds a 2nd expression that just returns 0
+    # otherwise Node will print the result of the assignment
+    # but that Database object contains the word "error"
+    # which would match the fail pattern!
+    !originalDb = await client.make_db('e2e_client_${satellite_number}_db'); 0
     ??$node
     [invoke electrify_db "originalDb" $host $port $migrations $connectToElectric]
     ??(in electrify_db) config:
@@ -18,20 +22,23 @@
      # when trying to read `exp` when calling `electrify_db`
      !if (typeof exp === 'undefined') { var exp = undefined }
      ??$node
-
+     # Adds a 2nd expression that just returns 0
+     # otherwise Node will print the result of the assignment
+     # but that Database object contains the word "error"
+     # which would match the fail pattern!
      !db = await client.electrify_db(originalDb, \
                                      "$host", \
                                      $port, \
                                      $migrations, \
                                      $connectToElectric, \
-                                     exp)
+                                     exp); 0
 [endmacro]
 
 [macro setup_client_with_migrations satellite_number electric port migrations connectToElectric]
     [invoke start_satellite $satellite_number]
     -$fail_pattern
     ??$node
-    [invoke connect_to_electric $electric $port $migrations $connectToElectric]
+    [invoke connect_to_electric $electric $port $migrations $connectToElectric $satellite_number]
 [endmacro]
 
 [macro client_disconnect]
@@ -125,6 +132,12 @@
     ??$node
 [endmacro]
 
+[macro node_get_jsonb_regex id expected_jsonb]
+    !await client.get_jsonb(db, '${id}')
+    ?\{ id: '${id}', jsb: ${expected_jsonb} \}
+    ??$node
+[endmacro]
+
 [macro node_get_enum id expected_enum]
     !await client.get_enum(db, '${id}')
     ??{ id: '${id}', c: ${expected_enum} }
@@ -179,7 +192,7 @@
 [endmacro]
 
 [macro node_await_table match]
-    [invoke wait-for "await client.get_tables(db)" "${match}" 10 $node]
+    [invoke wait-for "await client.get_tables(db)" "name: '${match}'" 10 $node]
 [endmacro]
 
 [macro node_await_column table column]

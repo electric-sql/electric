@@ -34,24 +34,37 @@ export interface SatelliteOverrides {
   minSnapshotWindow?: number
 }
 
-export const satelliteDefaults: SatelliteOpts = {
-  metaTable: new QualifiedTablename('main', '_electric_meta'),
-  migrationsTable: new QualifiedTablename('main', '_electric_migrations'),
-  oplogTable: new QualifiedTablename('main', '_electric_oplog'),
-  triggersTable: new QualifiedTablename('main', '_electric_trigger_settings'),
-  shadowTable: new QualifiedTablename('main', '_electric_shadow'),
-  pollingInterval: 2000,
-  minSnapshotWindow: 40,
-  clearOnBehindWindow: true,
-  connectionBackOffOptions: {
-    delayFirstAttempt: false,
-    startingDelay: 1000,
-    jitter: 'full',
-    maxDelay: 10000,
-    numOfAttempts: 50,
-    timeMultiple: 2,
-  },
-  debug: false,
+export const _electric_oplog = '_electric_oplog'
+export const _electric_meta = '_electric_meta'
+export const _electric_migrations = '_electric_migrations'
+export const _electric_trigger_settings = '_electric_trigger_settings'
+export const _electric_shadow = '_electric_shadow'
+
+export const satelliteDefaults: (namespace: string) => SatelliteOpts = (
+  namespace: string
+) => {
+  return {
+    metaTable: new QualifiedTablename(namespace, _electric_meta),
+    migrationsTable: new QualifiedTablename(namespace, _electric_migrations),
+    oplogTable: new QualifiedTablename(namespace, _electric_oplog),
+    triggersTable: new QualifiedTablename(
+      namespace,
+      _electric_trigger_settings
+    ),
+    shadowTable: new QualifiedTablename(namespace, _electric_shadow),
+    pollingInterval: 2000,
+    minSnapshotWindow: 40,
+    clearOnBehindWindow: true,
+    connectionBackOffOptions: {
+      delayFirstAttempt: false,
+      startingDelay: 1000,
+      jitter: 'full',
+      maxDelay: 10000,
+      numOfAttempts: 50,
+      timeMultiple: 2,
+    },
+    debug: false,
+  }
 }
 
 export const satelliteClientDefaults = {
@@ -64,6 +77,7 @@ export interface SatelliteClientOpts {
   ssl: boolean
   timeout: number
   pushPeriod?: number
+  dialect: 'SQLite' | 'Postgres'
 }
 
 export const validateConfig = (config: any) => {

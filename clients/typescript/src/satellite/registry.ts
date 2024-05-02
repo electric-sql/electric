@@ -208,6 +208,7 @@ export class GlobalRegistry extends BaseRegistry {
       port: config.replication.port,
       ssl: config.replication.ssl,
       timeout: config.replication.timeout,
+      dialect: config.replication.dialect,
     }
 
     const client = new SatelliteClient(
@@ -217,7 +218,7 @@ export class GlobalRegistry extends BaseRegistry {
     )
 
     const satelliteOpts: SatelliteOpts = {
-      ...satelliteDefaults,
+      ...satelliteDefaults(config.namespace),
       connectionBackOffOptions: config.connectionBackOffOptions,
       debug: config.debug,
     }

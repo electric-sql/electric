@@ -7,11 +7,15 @@ import {
   SqlValue,
   DataTransaction,
   DataChange,
-  Record as Rec,
+  DbRecord as Rec,
   Relation,
 } from '../util/types'
 import { union } from '../util/sets'
-import { numberToBytes, blobToHexString, hexStringToBlob } from '../util/common'
+import {
+  numberToBytes,
+  blobToHexString,
+  hexStringToBlob,
+} from '../util/encoders'
 
 // format: UUID@timestamp_in_milliseconds
 export type Timestamp = string
@@ -387,7 +391,8 @@ function deserialiseRow(str: string, rel: Pick<Relation, 'columns'>): Rec {
 
 export const fromTransaction = (
   transaction: DataTransaction,
-  relations: RelationsCache
+  relations: RelationsCache,
+  namespace: string
 ): OplogEntry[] => {
   return transaction.changes.map((t) => {
     const columnValues = t.record ? t.record : t.oldRecord!
@@ -400,7 +405,7 @@ export const fromTransaction = (
     )
 
     return {
-      namespace: 'main', // TODO: how?
+      namespace,
       tablename: t.relation.table,
       optype: stringToOpType(t.type),
       newRow: serialiseRow(t.record),
@@ -512,7 +517,7 @@ export const opLogEntryToChange = (
  * @returns a stringified JSON with stable sorting on column names
  */
 export const primaryKeyToStr = <
-  T extends Record<string, string | number | Uint8Array>
+  T extends Record<string, boolean | string | number | Uint8Array>
 >(
   primaryKeyObj: T
 ): string => {

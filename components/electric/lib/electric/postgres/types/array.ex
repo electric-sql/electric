@@ -85,11 +85,11 @@ defmodule Electric.Postgres.Types.Array do
       iex> str |> parse() |> serialize()
       str
   """
-  def serialize(array) when is_list(array) do
+  def serialize(array, quote_char \\ ?") when is_list(array) do
     array
     |> Enum.map_join(",", fn
       nil -> "null"
-      val when is_binary(val) -> val |> String.replace(~S|"|, ~S|\"|) |> enclose(~S|"|)
+      val when is_binary(val) -> val |> String.replace(~S|"|, ~S|\"|) |> enclose(<<quote_char>>)
     end)
     |> enclose("{", "}")
   end

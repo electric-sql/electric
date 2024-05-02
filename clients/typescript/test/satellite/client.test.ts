@@ -11,7 +11,13 @@ import { OplogEntry, toTransactions } from '../../src/satellite/oplog'
 import { ShapeRequest } from '../../src/satellite/shapes/types'
 import { WebSocketNode } from '../../src/sockets/node'
 import { QualifiedTablename, sleepAsync } from '../../src/util'
-import { base64, bytesToNumber, numberToBytes } from '../../src/util/common'
+import {
+  base64,
+  bytesToNumber,
+  numberToBytes,
+  sqliteTypeDecoder,
+  sqliteTypeEncoder,
+} from '../../src/util/encoders'
 import {
   DataChangeType,
   DataTransaction,
@@ -46,6 +52,7 @@ test.beforeEach((t) => {
     timeout: 10000,
     ssl: false,
     pushPeriod: 100,
+    dialect: 'SQLite',
   })
   const clientId = '91eba0c8-28ba-4a86-a6e8-42731c2c6694'
 
@@ -290,6 +297,7 @@ test.serial('receive transaction over multiple messages', async (t) => {
         HKT
       >,
     },
+    [],
     []
   )
 
@@ -331,7 +339,12 @@ test.serial('receive transaction over multiple messages', async (t) => {
 
   const insertOp = Proto.SatOpInsert.fromPartial({
     relationId: 1,
-    rowData: serializeRow({ name1: 'Foo', name2: 'Bar' }, rel, dbDescription),
+    rowData: serializeRow(
+      { name1: 'Foo', name2: 'Bar' },
+      rel,
+      dbDescription,
+      sqliteTypeEncoder
+    ),
   })
 
   const updateOp = Proto.SatOpUpdate.fromPartial({
@@ -339,16 +352,23 @@ test.serial('receive transaction over multiple messages', async (t) => {
     rowData: serializeRow(
       { name1: 'Hello', name2: 'World!' },
       rel,
-      dbDescription
+      dbDescription,
+      sqliteTypeEncoder
     ),
-    oldRowData: serializeRow({ name1: '', name2: '' }, rel, dbDescription),
+    oldRowData: serializeRow(
+      { name1: '', name2: '' },
+      rel,
+      dbDescription,
+      sqliteTypeEncoder
+    ),
   })
   const deleteOp = Proto.SatOpDelete.fromPartial({
     relationId: 1,
     oldRowData: serializeRow(
       { name1: 'Hello', name2: 'World!' },
       rel,
-      dbDescription
+      dbDescription,
+      sqliteTypeEncoder
     ),
   })
 
@@ -574,7 +594,6 @@ test.serial('send transaction', async (t) => {
   ]
 
   const transaction = toTransactions(opLogEntries, relations)
-  // console.log(transaction)
 
   t.plan(7) // We expect exactly 1 + 3 messages to be sent by the client, with 2 checks per non-relation message
 
@@ -703,6 +722,7 @@ test.serial('default and null test', async (t) => {
       table: tbl,
       Items: tbl,
     },
+    [],
     []
   )
 
@@ -720,7 +740,8 @@ test.serial('default and null test', async (t) => {
         intvalue_null_default: '10',
       },
       rel,
-      dbDescription
+      dbDescription,
+      sqliteTypeEncoder
     ),
   })
 
@@ -743,7 +764,12 @@ test.serial('default and null test', async (t) => {
     ],
   }
 
-  const record: any = deserializeRow(serializedRow, rel, dbDescription)!
+  const record: any = deserializeRow(
+    serializedRow,
+    rel,
+    dbDescription,
+    sqliteTypeDecoder
+  )!
 
   const firstOpLogMessage = Proto.SatOpLog.fromPartial({
     ops: [
@@ -1042,6 +1068,7 @@ test.serial('subscription correct protocol sequence with data', async (t) => {
       table: tbl,
       [tablename]: tbl,
     },
+    [],
     []
   )
 
@@ -1111,7 +1138,12 @@ test.serial('subscription correct protocol sequence with data', async (t) => {
 
   const insertOp = Proto.SatOpInsert.fromPartial({
     relationId: 0,
-    rowData: serializeRow({ name1: 'Foo', name2: 'Bar' }, rel, dbDescription),
+    rowData: serializeRow(
+      { name1: 'Foo', name2: 'Bar' },
+      rel,
+      dbDescription,
+      sqliteTypeEncoder
+    ),
   })
 
   const satTransOpInsert = Proto.SatTransOp.fromPartial({ insert: insertOp })
@@ -1162,6 +1194,7 @@ test.serial('client correctly handles additional data messages', async (t) => {
         HKT
       >,
     },
+    [],
     []
   )
 
@@ -1206,12 +1239,22 @@ test.serial('client correctly handles additional data messages', async (t) => {
 
   const insertOp = Proto.SatOpInsert.fromPartial({
     relationId: 1,
-    rowData: serializeRow({ name1: 'Foo', name2: 'Bar' }, rel, dbDescription),
+    rowData: serializeRow(
+      { name1: 'Foo', name2: 'Bar' },
+      rel,
+      dbDescription,
+      sqliteTypeEncoder
+    ),
   })
 
   const secondInsertOp = Proto.SatOpInsert.fromPartial({
     relationId: 1,
-    rowData: serializeRow({ name1: 'More', name2: 'Data' }, rel, dbDescription),
+    rowData: serializeRow(
+      { name1: 'More', name2: 'Data' },
+      rel,
+      dbDescription,
+      sqliteTypeEncoder
+    ),
   })
 
   const firstOpLogMessage = Proto.SatOpLog.fromPartial({
@@ -1366,7 +1409,8 @@ test.serial(
           deserializeRow(
             satOpLog[1].insert?.rowData,
             relations.parent,
-            dbDescription
+            dbDescription,
+            sqliteTypeDecoder
           ),
           {
             id: 1,
@@ -1379,7 +1423,8 @@ test.serial(
           deserializeRow(
             satOpLog[2].update?.rowData,
             relations.parent,
-            dbDescription
+            dbDescription,
+            sqliteTypeDecoder
           ),
           {
             id: 1,
@@ -1392,7 +1437,8 @@ test.serial(
           deserializeRow(
             satOpLog[2].update?.oldRowData,
             relations.parent,
-            dbDescription
+            dbDescription,
+            sqliteTypeDecoder
           ),
           {
             id: 1,
@@ -1405,7 +1451,8 @@ test.serial(
           deserializeRow(
             satOpLog[3].delete?.oldRowData,
             relations.parent,
-            dbDescription
+            dbDescription,
+            sqliteTypeDecoder
           ),
           {
             id: 1,
@@ -1479,7 +1526,8 @@ test.serial(
           other: null,
         },
         relations.parent,
-        dbDescription
+        dbDescription,
+        sqliteTypeEncoder
       ),
     })
 
@@ -1492,7 +1540,8 @@ test.serial(
           other: 2,
         },
         relations.parent,
-        dbDescription
+        dbDescription,
+        sqliteTypeEncoder
       ),
       oldRowData: serializeRow(
         {
@@ -1501,7 +1550,8 @@ test.serial(
           other: null,
         },
         relations.parent,
-        dbDescription
+        dbDescription,
+        sqliteTypeEncoder
       ),
     })
 
@@ -1514,7 +1564,8 @@ test.serial(
           other: 2,
         },
         relations.parent,
-        dbDescription
+        dbDescription,
+        sqliteTypeEncoder
       ),
     })
 
@@ -1615,7 +1666,8 @@ test.serial(
           deserializeRow(
             data.ops[1].insert?.rowData,
             relations.parent,
-            dbDescription
+            dbDescription,
+            sqliteTypeDecoder
           ),
           {
             ...change.record,
@@ -1630,7 +1682,8 @@ test.serial(
           deserializeRow(
             data.ops[1].insert?.rowData,
             relations.parent,
-            dbDescription
+            dbDescription,
+            sqliteTypeDecoder
           ),
           {
             ...change.record,
@@ -1645,7 +1698,8 @@ test.serial(
           deserializeRow(
             data.ops[1].insert?.rowData,
             relations.parent,
-            dbDescription
+            dbDescription,
+            sqliteTypeDecoder
           ),
           change.record
         )
@@ -1800,7 +1854,8 @@ test.serial(
           other: null,
         },
         relations.parent,
-        dbDescription
+        dbDescription,
+        sqliteTypeEncoder
       ),
     })
 

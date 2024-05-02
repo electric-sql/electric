@@ -121,7 +121,7 @@ defmodule Electric.Satellite.SerializationTest do
   describe "decode_record!" do
     test "decodes a SatOpRow struct into a map" do
       row = %SatOpRow{
-        nulls_bitmask: <<0b00100000, 0b10000000>>,
+        nulls_bitmask: <<0b00100000, 0b01000000>>,
         values: [
           "256",
           "hello",
@@ -131,6 +131,7 @@ defmodule Electric.Satellite.SerializationTest do
           "-1.0e124",
           "2023-08-15 17:20:31",
           "2023-08-15 17:20:31Z",
+          "2023-08-15 17:20:31+00",
           "",
           "0400-02-29",
           "03:59:59",
@@ -146,7 +147,8 @@ defmodule Electric.Satellite.SerializationTest do
         %{name: "real1", type: :float8},
         %{name: "real2", type: :float8},
         %{name: "t", type: :timestamp},
-        %{name: "tz", type: :timestamptz},
+        %{name: "tz1", type: :timestamptz},
+        %{name: "tz2", type: :timestamptz},
         %{name: "x", type: :float4, nullable?: true},
         %{name: "date", type: :date},
         %{name: "time", type: :time},
@@ -161,7 +163,8 @@ defmodule Electric.Satellite.SerializationTest do
                "real1" => "5.4",
                "real2" => "-1.0e124",
                "t" => "2023-08-15 17:20:31",
-               "tz" => "2023-08-15 17:20:31Z",
+               "tz1" => "2023-08-15 17:20:31Z",
+               "tz2" => "2023-08-15 17:20:31+00",
                "x" => nil,
                "date" => "0400-02-29",
                "time" => "03:59:59",
@@ -222,7 +225,6 @@ defmodule Electric.Satellite.SerializationTest do
         {"2023-08-15 11:12:13Z", :timestamp},
         {"2023-08-15 11:12:13+01", :timestamptz},
         {"2023-08-15 11:12:13+99:98", :timestamptz},
-        {"2023-08-15 11:12:13+00", :timestamptz},
         {"2023-08-15 11:12:13", :timestamptz},
         {"0000-08-15 23:00:00Z", :timestamptz},
         {"-2000-08-15 23:00:00Z", :timestamptz},
@@ -459,12 +461,14 @@ defmodule Electric.Satellite.SerializationTest do
                stmts: [
                  %SatOpMigrate.Stmt{type: :CREATE_TABLE, sql: sql1}
                ],
-               table: %SatOpMigrate.Table{
-                 name: "something_else",
-                 columns: [%SatOpMigrate.Column{name: "id", sqlite_type: "TEXT"}],
-                 fks: [],
-                 pks: ["id"]
-               }
+               affected_entity:
+                 {:table,
+                  %SatOpMigrate.Table{
+                    name: "something_else",
+                    columns: [%SatOpMigrate.Column{name: "id", sqlite_type: "TEXT"}],
+                    fks: [],
+                    pks: ["id"]
+                  }}
              } = migration1
 
       assert sql1 =~ ~r/^CREATE TABLE "something_else"/
@@ -473,12 +477,14 @@ defmodule Electric.Satellite.SerializationTest do
                stmts: [
                  %SatOpMigrate.Stmt{type: :CREATE_TABLE, sql: sql2}
                ],
-               table: %SatOpMigrate.Table{
-                 name: "other_thing",
-                 columns: [%SatOpMigrate.Column{name: "id", sqlite_type: "TEXT"}],
-                 fks: [],
-                 pks: ["id"]
-               }
+               affected_entity:
+                 {:table,
+                  %SatOpMigrate.Table{
+                    name: "other_thing",
+                    columns: [%SatOpMigrate.Column{name: "id", sqlite_type: "TEXT"}],
+                    fks: [],
+                    pks: ["id"]
+                  }}
              } = migration2
 
       assert sql2 =~ ~r/^CREATE TABLE "other_thing"/
@@ -487,12 +493,14 @@ defmodule Electric.Satellite.SerializationTest do
                stmts: [
                  %SatOpMigrate.Stmt{type: :CREATE_TABLE, sql: sql3}
                ],
-               table: %SatOpMigrate.Table{
-                 name: "yet_another_thing",
-                 columns: [%SatOpMigrate.Column{name: "id", sqlite_type: "TEXT"}],
-                 fks: [],
-                 pks: ["id"]
-               }
+               affected_entity:
+                 {:table,
+                  %SatOpMigrate.Table{
+                    name: "yet_another_thing",
+                    columns: [%SatOpMigrate.Column{name: "id", sqlite_type: "TEXT"}],
+                    fks: [],
+                    pks: ["id"]
+                  }}
              } = migration3
 
       assert sql3 =~ ~r/^CREATE TABLE "yet_another_thing"/

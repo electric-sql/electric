@@ -55,7 +55,10 @@
     "./op-sqlite": "./dist/drivers/op-sqlite/index.js",
     "./generic": "./dist/drivers/generic/index.js",
     "./node": "./dist/drivers/better-sqlite3/index.js",
+    "./node-postgres": "./dist/drivers/node-postgres/index.js",
+    "./pglite": "./dist/drivers/pglite/index.js",
     "./react": "./dist/frameworks/react/index.js",
+    "./tauri-postgres": "./dist/drivers/tauri-postgres/index.js",
     "./vuejs": "./dist/frameworks/vuejs/index.js",
     "./wa-sqlite": "./dist/drivers/wa-sqlite/index.js",
     "./tauri": "./dist/drivers/tauri-sqlite/index.js",
@@ -90,8 +93,17 @@
       "node": [
         "./dist/drivers/better-sqlite3/index.d.ts"
       ],
+      "node-postgres": [
+        "./dist/drivers/node-postgres/index.d.ts"
+      ],
+      "pglite": [
+        "./dist/drivers/pglite/index.d.ts"
+      ],
       "react": [
         "./dist/frameworks/react/index.d.ts"
+      ],
+      "tauri-postgres": [
+        "./dist/drivers/tauri-postgres/index.d.ts"
       ],
       "vuejs": [
         "./dist/frameworks/vuejs/index.d.ts"
@@ -152,6 +164,7 @@
     "build": "shx rm -rf dist && npm run build:copy-docker && concurrently \"tsup\" \"tsc -p tsconfig.build.json\" && node scripts/fix-imports.js",
     "build:copy-docker": "shx mkdir -p ./dist/cli/docker-commands/docker && shx cp -r ./src/cli/docker-commands/docker ./dist/cli/docker-commands",
     "test": "ava",
+    "test-CI": "DISABLE_DIALECT=postgres npm run test",
     "generate-test-client": "npx tsx ./test/client/generateTestClient.ts",
     "typecheck": "tsc -p tsconfig.json",
     "posttest": "npm run typecheck",
@@ -202,6 +215,7 @@
     "zod": "3.21.1"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.1.5",
     "@electric-sql/prisma-generator": "workspace:*",
     "@op-engineering/op-sqlite": ">= 2.0.16",
     "@tauri-apps/plugin-sql": "2.0.0-alpha.5",
@@ -219,6 +233,7 @@
     "@types/lodash.throttle": "^4.1.7",
     "@types/lodash.uniqwith": "^4.5.9",
     "@types/node": "^18.8.4",
+    "@types/pg": "^8.11.0",
     "@types/prompts": "^2.4.9",
     "@types/react": "^18.0.18",
     "@types/tcp-port-used": "^1.0.2",
@@ -229,8 +244,9 @@
     "@vue/test-utils": "^2.4.4",
     "ava": "^4.3.1",
     "concurrently": "^8.2.2",
+    "embedded-postgres": "16.1.1-beta.9",
     "eslint": "^8.22.0",
-    "expo-sqlite": "^13.0.0",
+    "expo-sqlite": "^13.1.0",
     "glob": "^10.3.10",
     "global-jsdom": "24.0.0",
     "husky": "^8.0.3",
@@ -238,6 +254,7 @@
     "lint-staged": "^13.1.0",
     "memorystorage": "^0.12.0",
     "nodemon": "^3.0.2",
+    "pg": "^8.11.3",
     "prettier": "2.8.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
@@ -255,9 +272,12 @@
   },
   "peerDependencies": {
     "@capacitor-community/sqlite": ">= 5.6.2",
+    "@electric-sql/pglite": ">= 0.1.5",
     "@op-engineering/op-sqlite": ">= 2.0.16",
     "@tauri-apps/plugin-sql": "2.0.0-alpha.5",
+    "embedded-postgres": "16.1.1-beta.9",
     "expo-sqlite": ">= 13.0.0",
+    "pg": "^8.11.3",
     "prisma": "4.8.1",
     "react": ">= 16.8.0",
     "react-dom": ">= 16.8.0",
@@ -268,16 +288,25 @@
     "zod": "3.21.1"
   },
   "peerDependenciesMeta": {
-    "@op-engineering/op-sqlite": {
+    "@capacitor-community/sqlite": {
       "optional": true
     },
-    "@capacitor-community/sqlite": {
+    "@electric-sql/pglite": {
+      "optional": true
+    },
+    "@op-engineering/op-sqlite": {
       "optional": true
     },
     "@tauri-apps/plugin-sql": {
       "optional": true
     },
+    "embedded-postgres": {
+      "optional": true
+    },
     "expo-sqlite": {
+      "optional": true
+    },
+    "pg": {
       "optional": true
     },
     "prisma": {

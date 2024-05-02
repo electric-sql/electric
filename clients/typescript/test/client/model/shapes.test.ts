@@ -5,7 +5,7 @@ import { schema } from '../generated'
 import { DatabaseAdapter } from '../../../src/drivers/better-sqlite3'
 import { SatelliteProcess } from '../../../src/satellite/process'
 import { MockRegistry, MockSatelliteClient } from '../../../src/satellite/mock'
-import { BundleMigrator } from '../../../src/migrators'
+import { SqliteBundleMigrator as BundleMigrator } from '../../../src/migrators'
 import { MockNotifier } from '../../../src/notifiers'
 import { RelationsCache, randomValue } from '../../../src/util'
 import { ElectricClient } from '../../../src/client/model/client'
@@ -55,7 +55,7 @@ async function makeContext(t: ExecutionContext<ContextType>) {
     migrator,
     notifier,
     client,
-    satelliteDefaults
+    satelliteDefaults(migrator.queryBuilder.defaultNamespace)
   )
 
   const electric = ElectricClient.create(
@@ -64,7 +64,8 @@ async function makeContext(t: ExecutionContext<ContextType>) {
     adapter,
     notifier,
     satellite,
-    registry
+    registry,
+    'SQLite'
   )
   const Post = electric.db.Post
   const Items = electric.db.Items
@@ -367,13 +368,12 @@ test.serial('nested shape is constructed', async (t) => {
   const shape = Post.computeShape(input)
   t.deepEqual(shape, {
     tablename: 'Post',
-    where:
-      "(this.id IN (3, 'test') OR this.test LIKE '\\%hello%') AND ((NOT this.id = 1) AND (NOT this.id = 2)) AND (this.nbr = 6 AND this.nbr = 7) AND (this.title = 'foo') AND (this.contents = 'important''')",
+    where: `(this."id" IN (3, 'test') OR this."test" LIKE '\\%hello%') AND ((NOT this."id" = 1) AND (NOT this."id" = 2)) AND (this."nbr" = 6 AND this."nbr" = 7) AND (this."title" = 'foo') AND (this."contents" = 'important''')`,
     include: [
       {
         foreignKey: ['authorId'],
         select: {
-          where: "this.value < '2024-01-01T00:00:00.000Z'",
+          where: `this."value" < '2024-01-01T00:00:00.000Z'`,
           tablename: 'User',
           include: [
             {

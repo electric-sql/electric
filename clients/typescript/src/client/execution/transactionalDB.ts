@@ -5,24 +5,33 @@ import * as z from 'zod'
 import { Row, Statement } from '../../util'
 import { Fields } from '../model/schema'
 import { Transformation, transformFields } from '../conversions/input'
+import { Converter } from '../conversions/converter'
 
 export class TransactionalDB implements DB {
-  constructor(private _tx: Transaction, private _fields: Fields) {}
+  constructor(
+    private _tx: Transaction,
+    private _fields: Fields,
+    private _converter: Converter
+  ) {}
 
   withTableSchema(fields: Fields) {
-    return new TransactionalDB(this._tx, fields)
+    return new TransactionalDB(this._tx, fields, this._converter)
   }
+
   run(
     statement: QueryBuilder,
     successCallback?: (db: DB, res: RunResult) => void,
     errorCallback?: (error: any) => void
   ): void {
-    const { text, values } = statement.toParam({ numberedParameters: false })
+    const { text, values } = statement.toParam()
     this._tx.run(
       { sql: text, args: values },
       (tx, res) => {
         if (typeof successCallback !== 'undefined')
-          successCallback(new TransactionalDB(tx, this._fields), res)
+          successCallback(
+            new TransactionalDB(tx, this._fields, this._converter),
+            res
+          )
       },
       errorCallback
     )
@@ -34,23 +43,27 @@ export class TransactionalDB implements DB {
     successCallback: (db: DB, res: Z[]) => void,
     errorCallback?: (error: any) => void
   ): void {
-    const { text, values } = statement.toParam({ numberedParameters: false })
+    const { text, values } = statement.toParam()
     this._tx.query(
       { sql: text, args: values },
       (tx, rows) => {
         if (typeof successCallback !== 'undefined') {
           const objects = rows.map((row) => {
-            // convert SQLite values back to JS values
+            // convert SQLite/PG values back to JS values
             // and then parse the transformed object
             // with the Zod schema to validate it
             const transformedRow = transformFields(
               row,
               this._fields,
-              Transformation.Sqlite2Js
+              this._converter,
+              Transformation.Decode
             )
             return schema.parse(transformedRow)
           })
-          successCallback(new TransactionalDB(tx, this._fields), objects)
+          successCallback(
+            new TransactionalDB(tx, this._fields, this._converter),
+            objects
+          )
         }
       },
       errorCallback
@@ -66,7 +79,10 @@ export class TransactionalDB implements DB {
       sql,
       (tx, rows) => {
         if (typeof successCallback !== 'undefined') {
-          successCallback(new TransactionalDB(tx, this._fields), rows)
+          successCallback(
+            new TransactionalDB(tx, this._fields, this._converter),
+            rows
+          )
         }
       },
       errorCallback

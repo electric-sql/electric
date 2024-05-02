@@ -7,12 +7,13 @@ import { Notifier } from '../../src/notifiers/index'
 import { MockSatelliteProcess, MockRegistry } from '../../src/satellite/mock'
 import { SocketFactory } from '../../src/sockets'
 import { DbSchema } from '../../src/client/model'
+import { sqliteBuilder } from '../../src/migrators/query-builder'
 
 const dbName = 'test.db'
 
 const dbDescription = {} as DbSchema<any>
 const adapter = {} as DatabaseAdapter
-const migrator = {} as Migrator
+const migrator = { queryBuilder: sqliteBuilder } as unknown as Migrator
 const notifier = {} as Notifier
 const socketFactory = {} as SocketFactory
 const config: InternalElectricConfig = {

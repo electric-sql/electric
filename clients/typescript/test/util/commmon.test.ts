@@ -1,15 +1,15 @@
 import test from 'ava'
 
+import { getWaiter, isObject } from '../../src/util/common'
 import {
-  getWaiter,
   base64,
   textEncoder,
   textDecoder,
-  isObject,
   blobToHexString,
   hexStringToBlob,
-} from '../../src/util/common'
+} from '../../src/util/encoders'
 import { SatelliteError, SatelliteErrorCode } from '../../src/util/types'
+import { isDataObject } from '../../src/client/conversions/converter'
 
 const OriginalEncoder = globalThis['TextEncoder']
 const OriginalDecoder = globalThis['TextDecoder']
@@ -128,6 +128,27 @@ test('test isObject detects only objects and not arrays', (t) => {
   t.true(isObject({}))
   t.true(isObject({ field: 'value' }))
   t.false(isObject([]))
-  t.false(isObject(new Uint8Array()))
-  t.false(isObject(new Int8Array()))
+  t.true(isObject(new Uint8Array()))
+  t.true(isObject(new Int8Array()))
+  t.true(isObject(new Date()))
+  t.false(isObject(5n))
+  // a filter object
+  t.true(
+    isObject({
+      lt: 5,
+    })
+  )
+})
+
+test('test isDataObject detects data objects and not filter objects', (t) => {
+  t.true(isDataObject(new Date()))
+  t.true(isDataObject(new Uint8Array()))
+  t.true(isDataObject(new Int8Array()))
+  t.true(isDataObject(5n))
+  // a filter object
+  t.false(
+    isDataObject({
+      lt: 5,
+    })
+  )
 })

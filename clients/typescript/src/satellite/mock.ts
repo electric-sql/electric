@@ -12,7 +12,7 @@ import {
   Relation,
   SatelliteErrorCode,
   RelationsCache,
-  Record as DataRecord,
+  DbRecord as DataRecord,
   StartReplicationResponse,
   StopReplicationResponse,
   OutboundStartedCallback,
@@ -32,12 +32,11 @@ import { SocketFactory } from '../sockets'
 import {
   DEFAULT_LOG_POS,
   subsDataErrorToSatelliteError,
-  base64,
   AsyncEventEmitter,
   genUUID,
   QualifiedTablename,
 } from '../util'
-import { bytesToNumber } from '../util/common'
+import { base64, bytesToNumber } from '../util/encoders'
 import { generateTag } from './oplog'
 import {
   Shape,
@@ -161,7 +160,8 @@ export class MockRegistry extends BaseRegistry {
       throw new Error('Failed to start satellite process')
     }
 
-    const opts = { ...satelliteDefaults, ...overrides }
+    const namespace = migrator.queryBuilder.defaultNamespace
+    const opts = { ...satelliteDefaults(namespace), ...overrides }
 
     const satellites = this.satellites
     if (satellites[dbName] !== undefined) {

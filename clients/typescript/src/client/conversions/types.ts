@@ -29,3 +29,7 @@ export enum PgDateType {
 }
 
 export type PgType = PgBasicType | PgDateType
+
+export function isPgDateType(pgType: PgType): boolean {
+  return (Object.values(PgDateType) as Array<string>).includes(pgType)
+}

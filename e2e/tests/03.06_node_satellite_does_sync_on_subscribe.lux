@@ -40,7 +40,7 @@
 
 [shell pg_1]
     !\x
-    [invoke wait-for "SELECT COUNT(*) FROM public.items;" "count \| 1" 10 ${psql}]
+    [invoke wait-for "SELECT COUNT(*) FROM public.items;" "count \| 2" 10 ${psql}]
 
 [cleanup]
   [invoke teardown]

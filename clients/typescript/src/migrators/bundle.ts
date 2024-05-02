@@ -3,42 +3,42 @@ import {
   Migration,
   MigrationRecord,
   Migrator,
-  MigratorOptions,
   StmtMigration,
 } from './index'
 import { DatabaseAdapter } from '../electric/adapter'
-import { overrideDefined } from '../util/options'
-import { data as baseMigration } from './schema'
+import { buildInitialMigration as makeBaseMigration } from './schema'
 import Log from 'loglevel'
-import { SatelliteError, SatelliteErrorCode } from '../util'
+import { QualifiedTablename, SatelliteError, SatelliteErrorCode } from '../util'
+import { _electric_migrations } from '../satellite/config'
+import { pgBuilder, QueryBuilder, sqliteBuilder } from './query-builder'
+import { dedent } from 'ts-dedent'
 
 export const SCHEMA_VSN_ERROR_MSG = `Local schema doesn't match server's. Clear local state through developer tools and retry connection manually. If error persists, re-generate the client. Check documentation (https://electric-sql.com/docs/reference/roadmap) to learn more.`
 
-const DEFAULTS: MigratorOptions = {
-  tableName: '_electric_migrations',
-}
-
 const VALID_VERSION_EXP = new RegExp('^[0-9_]+')
 
-export class BundleMigrator implements Migrator {
+export abstract class BundleMigratorBase implements Migrator {
   adapter: DatabaseAdapter
   migrations: StmtMigration[]
 
-  tableName: string
+  readonly tableName = _electric_migrations
+  readonly migrationsTable: QualifiedTablename
 
   constructor(
     adapter: DatabaseAdapter,
     migrations: Migration[] = [],
-    tableName?: string
+    public queryBuilder: QueryBuilder,
+    private namespace: string = queryBuilder.defaultNamespace
   ) {
-    const overrides = { tableName: tableName }
-    const opts = overrideDefined(DEFAULTS, overrides) as MigratorOptions
-
     this.adapter = adapter
+    const baseMigration = makeBaseMigration(queryBuilder)
     this.migrations = [...baseMigration.migrations, ...migrations].map(
       makeStmtMigration
     )
-    this.tableName = opts.tableName
+    this.migrationsTable = new QualifiedTablename(
+      this.namespace,
+      this.tableName
+    )
   }
 
   async up(): Promise<number> {
@@ -58,16 +58,8 @@ export class BundleMigrator implements Migrator {
   async migrationsTableExists(): Promise<boolean> {
     // If this is the first time we're running migrations, then the
     // migrations table won't exist.
-    const tableExists = `
-      SELECT 1 FROM sqlite_master
-        WHERE type = 'table'
-          AND name = ?
-    `
-    const tables = await this.adapter.query({
-      sql: tableExists,
-      args: [this.tableName],
-    })
-
+    const tableExists = this.queryBuilder.tableExists(this.migrationsTable)
+    const tables = await this.adapter.query(tableExists)
     return tables.length > 0
   }
 
@@ -77,9 +69,10 @@ export class BundleMigrator implements Migrator {
     }
 
     const existingRecords = `
-      SELECT version FROM ${this.tableName}
+      SELECT version FROM ${this.migrationsTable}
         ORDER BY id ASC
     `
+
     const rows = await this.adapter.query({ sql: existingRecords })
     return rows as unknown as MigrationRecord[]
   }
@@ -93,7 +86,7 @@ export class BundleMigrator implements Migrator {
     // The hard-coded version '0' below corresponds to the version of the internal migration defined in `schema.ts`.
     // We're ignoring it because this function is supposed to return the application schema version.
     const schemaVersion = `
-      SELECT version FROM ${this.tableName}
+      SELECT version FROM ${this.migrationsTable}
         WHERE version != '0'
         ORDER BY version DESC
         LIMIT 1
@@ -144,13 +137,14 @@ export class BundleMigrator implements Migrator {
       )
     }
 
-    const applied = `INSERT INTO ${this.tableName}
-        ('version', 'applied_at') VALUES (?, ?)
-        `
-
     await this.adapter.runInTransaction(...statements, {
-      sql: applied,
-      args: [version, Date.now()],
+      sql: dedent`
+        INSERT INTO ${this.migrationsTable} (version, applied_at)
+        VALUES (${this.queryBuilder.makePositionalParam(
+          1
+        )}, ${this.queryBuilder.makePositionalParam(2)});
+      `,
+      args: [version, Date.now().toString()],
     })
   }
 
@@ -161,12 +155,11 @@ export class BundleMigrator implements Migrator {
    *          that indicates if the migration was applied.
    */
   async applyIfNotAlready(migration: StmtMigration): Promise<boolean> {
-    const versionExists = `
-      SELECT 1 FROM ${this.tableName}
-        WHERE version = ?
-    `
     const rows = await this.adapter.query({
-      sql: versionExists,
+      sql: dedent`
+        SELECT 1 FROM ${this.migrationsTable}
+          WHERE version = ${this.queryBuilder.makePositionalParam(1)}
+      `,
       args: [migration.version],
     })
 
@@ -179,5 +172,17 @@ export class BundleMigrator implements Migrator {
     }
 
     return shouldApply
+  }
+}
+
+export class SqliteBundleMigrator extends BundleMigratorBase {
+  constructor(adapter: DatabaseAdapter, migrations: Migration[] = []) {
+    super(adapter, migrations, sqliteBuilder)
+  }
+}
+
+export class PgBundleMigrator extends BundleMigratorBase {
+  constructor(adapter: DatabaseAdapter, migrations: Migration[] = []) {
+    super(adapter, migrations, pgBuilder)
   }
 }

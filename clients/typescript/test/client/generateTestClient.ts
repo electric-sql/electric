@@ -80,6 +80,7 @@ const prismaSchemaPath = path.join(prismaSchemaDir, 'schema.prisma')
 const generatedClientDir = path.join(thisDir, 'generated')
 const generatedClientPath = path.join(generatedClientDir, 'index.ts')
 const migrationsPath = path.join(generatedClientDir, 'migrations.ts')
+const pgMigrationsPath = path.join(generatedClientDir, 'pg-migrations.ts')
 
 // remove the current generated client if present
 fs.rmSync(generatedClientDir, { recursive: true, force: true })
@@ -93,6 +94,7 @@ fs.writeFileSync(prismaSchemaPath, prismaSchema)
 // enhance schema and generate client along with mock migrations
 await generateClient(prismaSchemaPath, generatedClientDir)
 fs.writeFileSync(migrationsPath, 'export default []')
+fs.writeFileSync(pgMigrationsPath, 'export default []')
 
 // fix the generated client import path to point to local schema
 const clientStr = fs.readFileSync(generatedClientPath).toString()

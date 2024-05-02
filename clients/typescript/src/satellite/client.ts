@@ -26,6 +26,7 @@ import {
   Root,
   RootClientImpl,
   SatRpcRequest,
+  SatInStartReplicationReq_Dialect,
 } from '../_generated/protocol/satellite'
 import {
   getObjFromString,
@@ -53,7 +54,7 @@ import {
   SatelliteError,
   SatelliteErrorCode,
   DataTransaction,
-  Record,
+  DbRecord,
   Relation,
   SchemaChange,
   StartReplicationResponse,
@@ -74,11 +75,15 @@ import {
 } from '../util/types'
 import {
   base64,
-  DEFAULT_LOG_POS,
-  typeEncoder,
-  typeDecoder,
+  sqliteTypeEncoder,
+  sqliteTypeDecoder,
   bytesToNumber,
-} from '../util/common'
+  TypeEncoder,
+  TypeDecoder,
+  pgTypeEncoder,
+  pgTypeDecoder,
+} from '../util/encoders'
+import { DEFAULT_LOG_POS } from '../util/common'
 import { Client } from '.'
 import { SatelliteClientOpts, satelliteClientDefaults } from './config'
 import Log from 'loglevel'
@@ -131,6 +136,9 @@ type EventEmitter = AsyncEventEmitter<Events>
 
 export class SatelliteClient implements Client {
   private opts: Required<SatelliteClientOpts>
+  private dialect: SatInStartReplicationReq_Dialect
+  private encoder: TypeEncoder
+  private decoder: TypeDecoder
 
   private emitter: EventEmitter
 
@@ -143,8 +151,10 @@ export class SatelliteClient implements Client {
   // can only handle a single subscription at a time
   private subscriptionsDataCache: SubscriptionsDataCache
 
-  private replicationTransforms: Map<string, ReplicatedRowTransformer<Record>> =
-    new Map()
+  private replicationTransforms: Map<
+    string,
+    ReplicatedRowTransformer<DbRecord>
+  > = new Map()
 
   private socketHandler?: (any: any) => void
   private throttledPushTransaction?: () => void
@@ -194,13 +204,22 @@ export class SatelliteClient implements Client {
     this.emitter = new AsyncEventEmitter<Events>()
 
     this.opts = { ...satelliteClientDefaults, ...opts }
+    this.dialect =
+      opts.dialect === 'SQLite'
+        ? SatInStartReplicationReq_Dialect.SQLITE
+        : SatInStartReplicationReq_Dialect.POSTGRES
+    this.encoder = opts.dialect === 'SQLite' ? sqliteTypeEncoder : pgTypeEncoder
+    this.decoder = opts.dialect === 'SQLite' ? sqliteTypeDecoder : pgTypeDecoder
     this.socketFactory = socketFactory
 
     this.inbound = this.resetInboundReplication()
     this.outbound = this.resetReplication()
     this.dbDescription = dbDescription
 
-    this.subscriptionsDataCache = new SubscriptionsDataCache(dbDescription)
+    this.subscriptionsDataCache = new SubscriptionsDataCache(
+      dbDescription,
+      this.decoder
+    )
     this.rpcClient = new RPC(
       this.sendMessage.bind(this),
       this.opts.timeout,
@@ -365,7 +384,10 @@ export class SatelliteClient implements Client {
           )
         )
       }
-      request = SatInStartReplicationReq.fromPartial({ schemaVersion })
+      request = SatInStartReplicationReq.fromPartial({
+        schemaVersion,
+        sqlDialect: this.dialect,
+      })
     } else {
       Log.info(
         `starting replication with lsn: ${base64.fromBytes(
@@ -376,6 +398,7 @@ export class SatelliteClient implements Client {
         lsn,
         subscriptionIds,
         observedTransactionData,
+        sqlDialect: this.dialect,
       })
     }
 
@@ -637,10 +660,20 @@ export class SatelliteClient implements Client {
       const relation = this.outbound.relations.get(change.relation.id)!
       const tags = change.tags
       if (change.oldRecord) {
-        oldRecord = serializeRow(change.oldRecord, relation, this.dbDescription)
+        oldRecord = serializeRow(
+          change.oldRecord,
+          relation,
+          this.dbDescription,
+          this.encoder
+        )
       }
       if (change.record) {
-        record = serializeRow(change.record, relation, this.dbDescription)
+        record = serializeRow(
+          change.record,
+          relation,
+          this.dbDescription,
+          this.encoder
+        )
       }
       switch (change.type) {
         case DataChangeType.DELETE:
@@ -1081,7 +1114,12 @@ export class SatelliteClient implements Client {
         const change: DataInsert = {
           relation: rel,
           type: DataChangeType.INSERT,
-          record: deserializeRow(op.insert.rowData!, rel, this.dbDescription),
+          record: deserializeRow(
+            op.insert.rowData!,
+            rel,
+            this.dbDescription,
+            this.decoder
+          ),
           tags: op.insert.tags,
         }
 
@@ -1098,11 +1136,17 @@ export class SatelliteClient implements Client {
         const change = {
           relation: rel,
           type: DataChangeType.UPDATE,
-          record: deserializeRow(op.update.rowData!, rel, this.dbDescription),
+          record: deserializeRow(
+            op.update.rowData!,
+            rel,
+            this.dbDescription,
+            this.decoder
+          ),
           oldRecord: deserializeRow(
             op.update.oldRowData,
             rel,
-            this.dbDescription
+            this.dbDescription,
+            this.decoder
           ),
           tags: op.update.tags,
         }
@@ -1119,7 +1163,8 @@ export class SatelliteClient implements Client {
           oldRecord: deserializeRow(
             op.delete.oldRowData!,
             rel,
-            this.dbDescription
+            this.dbDescription,
+            this.decoder
           ),
           tags: op.delete.tags,
         }
@@ -1133,7 +1178,12 @@ export class SatelliteClient implements Client {
         const change = {
           relation: rel,
           type: DataChangeType.GONE,
-          oldRecord: deserializeRow(op.gone.pkData, rel, this.dbDescription),
+          oldRecord: deserializeRow(
+            op.gone.pkData,
+            rel,
+            this.dbDescription,
+            this.decoder
+          ),
           tags: [],
         }
 
@@ -1207,16 +1257,6 @@ export class SatelliteClient implements Client {
     // Shouldn't ack the same message
     if (this.inbound.lastAckedTxId?.eq(this.inbound.lastTxId)) return
 
-    const msg: SatPbMsg = {
-      $type: 'Electric.Satellite.SatOpLogAck',
-      ackTimestamp: Long.UZERO.add(new Date().getTime()),
-      lsn: this.inbound.last_lsn!,
-      transactionId: this.inbound.lastTxId,
-      subscriptionIds: this.inbound.seenAdditionalDataSinceLastTx.subscriptions,
-      additionalDataSourceIds:
-        this.inbound.seenAdditionalDataSinceLastTx.dataRefs,
-    }
-
     // Send acks earlier rather than later to keep the stream continuous -
     // definitely send at 70% of allowed lag.
     const boundary = Math.floor(this.inbound.maxUnackedTxs * 0.7)
@@ -1228,6 +1268,17 @@ export class SatelliteClient implements Client {
       reason == 'timeout' ||
       reason == 'additionalData'
     ) {
+      const msg: SatPbMsg = {
+        $type: 'Electric.Satellite.SatOpLogAck',
+        ackTimestamp: Long.UZERO.add(new Date().getTime()),
+        lsn: this.inbound.last_lsn!,
+        transactionId: this.inbound.lastTxId,
+        subscriptionIds:
+          this.inbound.seenAdditionalDataSinceLastTx.subscriptions,
+        additionalDataSourceIds:
+          this.inbound.seenAdditionalDataSinceLastTx.dataRefs,
+      }
+
       this.sendMessage(msg)
       this.inbound.lastAckedTxId = msg.transactionId
     }
@@ -1235,7 +1286,7 @@ export class SatelliteClient implements Client {
 
   public setReplicationTransform(
     tableName: QualifiedTablename,
-    transform: ReplicatedRowTransformer<Record>
+    transform: ReplicatedRowTransformer<DbRecord>
   ): void {
     this.replicationTransforms.set(tableName.tablename, transform)
   }
@@ -1302,9 +1353,10 @@ function getColumnType(
 }
 
 export function serializeRow(
-  rec: Record,
+  rec: DbRecord,
   relation: Relation,
-  dbDescription: DbSchema<any>
+  dbDescription: DbSchema<any>,
+  encoder: TypeEncoder
 ): SatOpRow {
   let recordNumColumn = 0
   const recordNullBitMask = new Uint8Array(
@@ -1314,7 +1366,7 @@ export function serializeRow(
     (acc: Uint8Array[], c: RelationColumn) => {
       if (rec[c.name] != null) {
         const pgColumnType = getColumnType(dbDescription, relation.table, c)
-        acc.push(serializeColumnData(rec[c.name]!, pgColumnType))
+        acc.push(serializeColumnData(rec[c.name]!, pgColumnType, encoder))
       } else {
         acc.push(serializeNullData())
         setMaskBit(recordNullBitMask, recordNumColumn)
@@ -1333,18 +1385,21 @@ export function serializeRow(
 export function deserializeRow(
   row: SatOpRow,
   relation: Relation,
-  dbDescription: DbSchema<any>
-): Record
+  dbDescription: DbSchema<any>,
+  decoder: TypeDecoder
+): DbRecord
 export function deserializeRow(
   row: SatOpRow | undefined,
   relation: Relation,
-  dbDescription: DbSchema<any>
-): Record | undefined
+  dbDescription: DbSchema<any>,
+  decoder: TypeDecoder
+): DbRecord | undefined
 export function deserializeRow(
   row: SatOpRow | undefined,
   relation: Relation,
-  dbDescription: DbSchema<any>
-): Record | undefined {
+  dbDescription: DbSchema<any>,
+  decoder: TypeDecoder
+): DbRecord | undefined {
   if (row == undefined) {
     return undefined
   }
@@ -1355,7 +1410,7 @@ export function deserializeRow(
         value = null
       } else {
         const pgColumnType = getColumnType(dbDescription, relation.table, c)
-        value = deserializeColumnData(row.values[i], pgColumnType)
+        value = deserializeColumnData(row.values[i], pgColumnType, decoder)
       }
       return [c.name, value]
     })
@@ -1373,49 +1428,57 @@ function calculateNumBytes(column_num: number): number {
 
 function deserializeColumnData(
   column: Uint8Array,
-  columnType: PgType
-): string | number | Uint8Array {
+  columnType: PgType,
+  decoder: TypeDecoder
+): boolean | string | number | Uint8Array {
   switch (columnType) {
     case PgBasicType.PG_BOOL:
-      return typeDecoder.bool(column)
+      return decoder.bool(column)
     case PgBasicType.PG_INT:
     case PgBasicType.PG_INT2:
     case PgBasicType.PG_INT4:
     case PgBasicType.PG_INTEGER:
-      return Number(typeDecoder.text(column))
+      return Number(decoder.text(column))
     case PgBasicType.PG_FLOAT4:
     case PgBasicType.PG_FLOAT8:
     case PgBasicType.PG_REAL:
-      return typeDecoder.float(column)
+      return decoder.float(column)
     case PgDateType.PG_TIMETZ:
-      return typeDecoder.timetz(column)
+      return decoder.timetz(column)
     case PgBasicType.PG_BYTEA:
-      return column
+      return decoder.bytea(column)
+    case PgBasicType.PG_JSON:
+    case PgBasicType.PG_JSONB:
+      return decoder.json(column)
     default:
       // also covers user-defined enumeration types
-      return typeDecoder.text(column)
+      return decoder.text(column)
   }
 }
 
 // All values serialized as textual representation
 function serializeColumnData(
-  columnValue: string | number | object,
-  columnType: PgType
+  columnValue: boolean | string | number | object,
+  columnType: PgType,
+  encoder: TypeEncoder
 ): Uint8Array {
   switch (columnType) {
     case PgBasicType.PG_BOOL:
-      return typeEncoder.bool(columnValue as number)
+      return (encoder.bool as any)(columnValue) // the encoder accepts the number or bool
     case PgDateType.PG_TIMETZ:
-      return typeEncoder.timetz(columnValue as string)
+      return encoder.timetz(columnValue as string)
     case PgBasicType.PG_BYTEA:
-      return columnValue as Uint8Array
+      return encoder.bytea(columnValue as Uint8Array)
+    case PgBasicType.PG_JSON:
+    case PgBasicType.PG_JSONB:
+      return (encoder.json as any)(columnValue)
     default:
-      return typeEncoder.text(String(columnValue))
+      return encoder.text(String(columnValue))
   }
 }
 
 function serializeNullData(): Uint8Array {
-  return typeEncoder.text('')
+  return new Uint8Array()
 }
 
 export function toMessage(data: Uint8Array): SatPbMsg {

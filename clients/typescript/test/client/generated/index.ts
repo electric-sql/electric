@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { Prisma } from './prismaClient';
 import { type TableSchema, DbSchema, Relation, ElectricClient, type HKT } from '../../../src/client/model';
 import migrations from './migrations';
+import pgMigrations from './pg-migrations';
 
 /////////////////////////////////////////
 // HELPER FUNCTIONS
@@ -3783,6 +3784,6 @@ export const tableSchemas = {
   >,
 }
 
-export const schema = new DbSchema(tableSchemas, migrations)
+export const schema = new DbSchema(tableSchemas, migrations, pgMigrations)
 export type Electric = ElectricClient<typeof schema>
 export const JsonNull = { __is_electric_json_null__: true }

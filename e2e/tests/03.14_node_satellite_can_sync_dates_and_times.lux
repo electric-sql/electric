@@ -19,7 +19,7 @@
 [invoke setup_client 1 electric_1 5133]
 
 [shell satellite_1]
-    [invoke node_await_table "name: 'datetimes'"]
+    [invoke node_await_table "datetimes"]
     [invoke node_sync_table "datetimes"]
 
 [shell pg_1]

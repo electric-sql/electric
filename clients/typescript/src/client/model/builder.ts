@@ -16,7 +16,9 @@ import Log from 'loglevel'
 import { ExtendedTableSchema } from './schema'
 import { PgBasicType } from '../conversions/types'
 import { HKT } from '../util/hkt'
-import { isObject } from '../../util'
+import { Dialect } from '../../migrators/query-builder/builder'
+import { isFilterObject } from '../conversions/input'
+import { escDoubleQ } from '../../util'
 
 const squelPostgres = squel.useFlavour('postgres')
 squelPostgres.registerValueHandler('bigint', function (bigint) {
@@ -29,6 +31,8 @@ squelPostgres.registerValueHandler(Uint8Array, function (uint8) {
 type AnyFindInput = FindInput<any, any, any, any, any>
 
 export class Builder {
+  private _quotedTableName: string
+
   constructor(
     private _tableName: string,
     private _fields: string[],
@@ -44,12 +48,29 @@ export class Builder {
       any,
       any,
       HKT
-    >
-  ) {}
+    >,
+    public dialect: Dialect
+  ) {
+    this._quotedTableName = quoteIdentifier(this._tableName)
+    squelPostgres.cls.DefaultQueryBuilderOptions.nameQuoteCharacter = '"'
+    squelPostgres.cls.DefaultQueryBuilderOptions.autoQuoteFieldNames = true
+    if (dialect === 'Postgres') {
+      // need to register the Date type
+      // as Squel does not support it out-of-the-box
+      // but our Postgres drivers do support it.
+      squelPostgres.registerValueHandler(Date, (date) => date)
+    } else {
+      // Don't use numbered parameters if dialect is SQLite
+      squelPostgres.cls.DefaultQueryBuilderOptions.numberedParameters = false
+    }
+  }
 
   create(i: CreateInput<any, any, any>): QueryBuilder {
     // Make a SQL query out of the data
-    const query = squelPostgres.insert().into(this._tableName).setFields(i.data)
+    const query = squelPostgres
+      .insert()
+      .into(this._quotedTableName)
+      .setFields(i.data)
 
     // Adds a `RETURNING` statement that returns all known fields
     const queryWithReturn = this.returnAllFields(query)
@@ -59,7 +80,7 @@ export class Builder {
   createMany(i: CreateManyInput<any>): QueryBuilder {
     const insert = squelPostgres
       .insert()
-      .into(this._tableName)
+      .into(this._quotedTableName)
       .setFieldsRows(i.data)
     return i.skipDuplicates
       ? insert.onConflict() // adds "ON CONFLICT DO NOTHING" to the query
@@ -104,7 +125,7 @@ export class Builder {
     i: DeleteManyInput<any>,
     idRequired = false
   ): QueryBuilder {
-    const deleteQuery = squel.delete().from(this._tableName)
+    const deleteQuery = squelPostgres.delete().from(this._quotedTableName)
     const whereObject = i.where // safe because the schema for `where` adds an empty object as default which is provided if the `where` field is absent
     const fields = this.getFields(whereObject, idRequired)
     return addFilters(fields, whereObject, deleteQuery)
@@ -116,7 +137,7 @@ export class Builder {
   ): QueryBuilder {
     const unsupportedEntry = Object.entries(i.data).find((entry) => {
       const [_key, value] = entry
-      return isObject(value)
+      return isFilterObject(value)
     })
     if (unsupportedEntry)
       throw new InvalidArgumentError(
@@ -127,7 +148,7 @@ export class Builder {
 
     const query = squelPostgres
       .update()
-      .table(this._tableName)
+      .table(this._quotedTableName)
       .setFields(i.data)
 
     // Adds a `RETURNING` statement that returns all known fields
@@ -159,7 +180,12 @@ export class Builder {
     if (!this.shapeManager.hasBeenSubscribed(this._tableName))
       Log.debug('Reading from unsynced table ' + this._tableName)
 
-    const query = squelPostgres.select().from(this._tableName) // specify from which table to select
+    // don't autoquote field names in the selection
+    // because if a field is a BigInt we cast it
+    // and squel would add quotes around the entire cast
+    const query = squelPostgres
+      .select({ autoQuoteFieldNames: false })
+      .from(this._quotedTableName) // specify from which table to select
     // only select the fields provided in `i.select` and the ones in `i.where`
     const addFieldSelectionP = this.addFieldSelection.bind(
       this,
@@ -232,10 +258,11 @@ export class Builder {
    */
   private castBigIntToText(field: string) {
     const pgType = this._tableDescription.fields.get(field)
-    if (pgType === PgBasicType.PG_INT8) {
-      return `cast(${field} as TEXT) AS ${field}`
+    if (pgType === PgBasicType.PG_INT8 && this.dialect === 'SQLite') {
+      const quotedField = quoteIdentifier(field)
+      return `cast(${quotedField} as TEXT) AS ${quotedField}`
     }
-    return field
+    return quoteIdentifier(field)
   }
 
   private addOrderBy(i: AnyFindInput, q: PostgresSelect): PostgresSelect {
@@ -261,7 +288,10 @@ export class Builder {
         )
 
       const squelOrder = order === 'asc' // squel expects 'true' for ascending order, 'false' for descending order
-      return query.order(field, squelOrder)
+      // have to quote the field name ourselves
+      // because Squel does not seem to auto quote
+      // field names in order by statements
+      return query.order(quoteIdentifier(field), squelOrder)
     }, q)
   }
 
@@ -285,8 +315,14 @@ export class Builder {
       // because not all adapters deal well with BigInts
       // the DAL will convert the string into a BigInt in the `fromSqlite` function from `../conversions/sqlite.ts`.
       const pgType = this._tableDescription.fields.get(field)
-      if (pgType === PgBasicType.PG_INT8) {
-        return query.returning(`cast(${field} as TEXT) AS ${field}`)
+      if (pgType === PgBasicType.PG_INT8 && this.dialect === 'SQLite') {
+        // make a raw string and quote the field name ourselves
+        // because otherwise Squel would add quotes around the entire cast
+        const quotedField = quoteIdentifier(field)
+        const f = squelPostgres.rstr(
+          `cast(${quotedField} as TEXT) AS ${quotedField}`
+        )
+        return query.returning(f)
       }
       return query.returning(field)
     }, query)
@@ -320,7 +356,7 @@ export function makeFilter(
   prefixFieldsWith = ''
 ): Array<{ sql: string; args?: unknown[] }> {
   if (fieldValue === null)
-    return [{ sql: `${prefixFieldsWith}${fieldName} IS NULL` }]
+    return [{ sql: `${prefixFieldsWith}${quoteIdentifier(fieldName)} IS NULL` }]
   else if (fieldName === 'AND' || fieldName === 'OR' || fieldName === 'NOT') {
     return [
       makeBooleanFilter(
@@ -329,7 +365,7 @@ export function makeFilter(
         prefixFieldsWith
       ),
     ]
-  } else if (isObject(fieldValue)) {
+  } else if (isFilterObject(fieldValue)) {
     // an object containing filters is provided
     // e.g. users.findMany({ where: { id: { in: [1, 2, 3] } } })
     const fs = {
@@ -377,7 +413,7 @@ export function makeFilter(
       const [filter, handler] = entry
       if (filter in obj) {
         const sql = handler(
-          prefixFieldsWith + fieldName,
+          prefixFieldsWith + quoteIdentifier(fieldName),
           obj[filter as keyof typeof obj]
         )
         filters.push(sql)
@@ -388,7 +424,12 @@ export function makeFilter(
   }
   // needed because `WHERE field = NULL` is not valid SQL
   else
-    return [{ sql: `${prefixFieldsWith}${fieldName} = ?`, args: [fieldValue] }]
+    return [
+      {
+        sql: `${prefixFieldsWith}${quoteIdentifier(fieldName)} = ?`,
+        args: [fieldValue],
+      },
+    ]
 }
 
 function joinStatements(
@@ -507,7 +548,10 @@ function makeStartsWithFilter(
 ): { sql: string; args?: unknown[] } {
   if (typeof value !== 'string')
     throw new Error('startsWith filter must be a string')
-  return { sql: `${fieldName} LIKE ?`, args: [`${escapeLike(value)}%`] }
+  return {
+    sql: `${fieldName} LIKE ?`,
+    args: [`${escapeLike(value)}%`],
+  }
 }
 
 function makeEndsWithFilter(
@@ -516,7 +560,10 @@ function makeEndsWithFilter(
 ): { sql: string; args?: unknown[] } {
   if (typeof value !== 'string')
     throw new Error('endsWith filter must be a string')
-  return { sql: `${fieldName} LIKE ?`, args: [`%${escapeLike(value)}`] }
+  return {
+    sql: `${fieldName} LIKE ?`,
+    args: [`%${escapeLike(value)}`],
+  }
 }
 
 function makeContainsFilter(
@@ -525,7 +572,10 @@ function makeContainsFilter(
 ): { sql: string; args?: unknown[] } {
   if (typeof value !== 'string')
     throw new Error('contains filter must be a string')
-  return { sql: `${fieldName} LIKE ?`, args: [`%${escapeLike(value)}%`] }
+  return {
+    sql: `${fieldName} LIKE ?`,
+    args: [`%${escapeLike(value)}%`],
+  }
 }
 
 function escapeLike(value: string): string {
@@ -544,7 +594,10 @@ function addLimit(i: AnyFindInput, q: PostgresSelect): PostgresSelect {
 
 function addDistinct(i: AnyFindInput, q: PostgresSelect): PostgresSelect {
   if (typeof i.distinct === 'undefined') return q
-  return q.distinct(...i.distinct)
+  // have to quote the fields ourselves
+  // because Squel does not seem to auto quote
+  // field names in order by statements
+  return q.distinct(...i.distinct.map(quoteIdentifier))
 }
 
 /**
@@ -555,4 +608,11 @@ function addDistinct(i: AnyFindInput, q: PostgresSelect): PostgresSelect {
  */
 function getSelectedFields(obj: object): string[] {
   return Object.keys(obj).filter((key) => obj[key as keyof object])
+}
+
+/**
+ * Quotes the identifier, thereby, escaping any quotes in the identifier.
+ */
+function quoteIdentifier(identifier: string): string {
+  return `"${escDoubleQ(identifier)}"`
 }

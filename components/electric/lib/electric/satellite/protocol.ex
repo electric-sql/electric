@@ -125,11 +125,13 @@ defmodule Electric.Satellite.Protocol do
         %State{} = state
       ) do
     Logger.debug(
-      "Received start replication request lsn: #{inspect(client_lsn)} with options: #{inspect(opts)}"
+      "Received start replication request lsn: #{inspect(client_lsn)} " <>
+        "with options: #{inspect(opts)} and dialect: #{inspect(msg.sql_dialect)}"
     )
 
     with :ok <- validate_schema_version(msg.schema_version),
          {:ok, lsn} <- validate_lsn(client_lsn) do
+      state = %{state | sql_dialect: decode_sql_dialect(msg.sql_dialect)}
       handle_start_replication_request(msg, lsn, state)
     else
       {:error, :bad_schema_version} ->
@@ -526,6 +528,8 @@ defmodule Electric.Satellite.Protocol do
     if CachedWal.Api.lsn_in_cached_window?(state.origin, lsn) do
       case restore_client_state(msg.subscription_ids, msg.observed_transaction_data, lsn, state) do
         {:ok, state} ->
+          Logger.debug("Continuing sync for client #{state.client_id} from lsn #{lsn}")
+
           state =
             state
             |> Telemetry.start_replication_span(subscriptions: length(msg.subscription_ids))
@@ -644,11 +648,11 @@ defmodule Electric.Satellite.Protocol do
   # The offset here comes from the producer
   @spec handle_outgoing_tx({Transaction.t(), any}, State.t()) ::
           {[%SatRelation{}], [%SatOpLog{}], OutRep.t()}
-  defp handle_outgoing_tx({tx, offset}, %State{out_rep: out_rep}) do
+  defp handle_outgoing_tx({tx, offset}, %State{out_rep: out_rep} = state) do
     Logger.debug("trans: #{inspect(tx)} with offset #{inspect(offset)}")
 
     {serialized_log, unknown_relations, known_relations} =
-      Serialization.serialize_trans(tx, offset, out_rep.relations)
+      Serialization.serialize_trans(tx, offset, out_rep.relations, state.sql_dialect)
 
     if unknown_relations != [],
       do: Logger.debug("Sending previously unseen relations: #{inspect(unknown_relations)}")
@@ -1222,4 +1226,9 @@ defmodule Electric.Satellite.Protocol do
     %State{state | expiration_timer: nil}
     |> schedule_auth_expiration(exp_time)
   end
+
+  defp decode_sql_dialect(default) when default in [nil, :SQLITE],
+    do: Electric.Postgres.Dialect.SQLite
+
+  defp decode_sql_dialect(:POSTGRES), do: Electric.Postgres.Dialect.Postgresql
 end

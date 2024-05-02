@@ -3,7 +3,7 @@ defmodule Electric.Postgres.ReplicationTest do
 
   use Electric.Satellite.Protobuf
 
-  alias Electric.Postgres.{Replication, Schema, Extension.SchemaLoader}
+  alias Electric.Postgres.{Dialect, Extension.SchemaLoader, Replication, Schema}
 
   def parse(sql) do
     Electric.Postgres.parse!(sql)
@@ -13,7 +13,8 @@ defmodule Electric.Postgres.ReplicationTest do
     stmts = [
       {"create table doorbel (id int8);", :CREATE_TABLE},
       {"create index on frog (id asc);", :CREATE_INDEX},
-      {"alter table public.fish add value text;", :ALTER_ADD_COLUMN}
+      {"alter table public.fish add value text;", :ALTER_ADD_COLUMN},
+      {"create type foo as enum ('bar', 'baz');", :CREATE_ENUM_TYPE}
     ]
 
     for {sql, expected_type} <- stmts do
@@ -117,7 +118,7 @@ defmodule Electric.Postgres.ReplicationTest do
   end
 
   describe "migrate/2" do
-    test "updates the schema and returns a valid protcol message" do
+    test "updates the schema and returns a valid protocol message" do
       stmt = "CREATE TABLE public.fish (id int8 PRIMARY KEY);"
       schema = schema_update(stmt)
 
@@ -126,11 +127,10 @@ defmodule Electric.Postgres.ReplicationTest do
 
       assert {:ok, [msg], [{"public", "fish"}]} = Replication.migrate(schema_version, stmt)
 
-      # there are lots of tests that validate the schema is being properly updated
-      # assert Schema.table_names(schema) == [~s("public"."fish"), ~s("frog"), ~s("teeth"."front")]
       assert Schema.table_names(schema) == [~s("public"."fish")]
-      assert %SatOpMigrate{version: ^version} = msg
-      %{stmts: stmts, table: table} = msg
+
+      assert %SatOpMigrate{version: ^version, stmts: stmts, affected_entity: {:table, table}} =
+               msg
 
       assert stmts == [
                %SatOpMigrate.Stmt{
@@ -167,8 +167,9 @@ defmodule Electric.Postgres.ReplicationTest do
 
       assert {:ok, [msg], [{"teeth", "front"}]} = Replication.migrate(schema_version, stmt)
       assert Schema.table_names(schema) == [~s("public"."fish"), ~s("teeth"."front")]
-      assert %SatOpMigrate{version: ^version} = msg
-      %{stmts: stmts, table: table} = msg
+
+      assert %SatOpMigrate{version: ^version, stmts: stmts, affected_entity: {:table, table}} =
+               msg
 
       assert stmts == [
                %SatOpMigrate.Stmt{
@@ -223,9 +224,8 @@ defmodule Electric.Postgres.ReplicationTest do
 
       assert {:ok, [msg], [{"public", "fish"}]} = Replication.migrate(schema_version, stmt)
 
-      assert %SatOpMigrate{version: ^version} = msg
-
-      %{stmts: stmts, table: table} = msg
+      assert %SatOpMigrate{version: ^version, stmts: stmts, affected_entity: {:table, table}} =
+               msg
 
       assert stmts == [
                %SatOpMigrate.Stmt{
@@ -277,9 +277,9 @@ defmodule Electric.Postgres.ReplicationTest do
       version = "20230405134616"
       schema_version = SchemaLoader.Version.new(version, schema)
       assert {:ok, [msg], []} = Replication.migrate(schema_version, stmt)
-      assert %SatOpMigrate{version: ^version} = msg
 
-      %{stmts: stmts, table: table} = msg
+      assert %SatOpMigrate{version: ^version, stmts: stmts, affected_entity: nil} =
+               msg
 
       assert stmts == [
                %SatOpMigrate.Stmt{
@@ -287,8 +287,6 @@ defmodule Electric.Postgres.ReplicationTest do
                  type: :CREATE_INDEX
                }
              ]
-
-      assert is_nil(table)
     end
 
     test "pg-only ddl statements don't generate a message" do
@@ -311,6 +309,124 @@ defmodule Electric.Postgres.ReplicationTest do
       for stmt <- stmts do
         assert {:ok, [], []} = Replication.migrate(schema_version, stmt)
       end
+    end
+
+    test "updates the schema and returns a valid protocol message for an enum using sqlite dialect" do
+      stmt = "CREATE TYPE public.colour AS ENUM ('red', 'green', 'blue');"
+      schema = schema_update(stmt)
+
+      version = "20240418002800"
+      schema_version = SchemaLoader.Version.new(version, schema)
+
+      assert {:ok, [msg], []} = Replication.migrate(schema_version, stmt, Dialect.SQLite)
+
+      assert %SatOpMigrate{version: ^version, stmts: stmts, affected_entity: {:enum_type, enum}} =
+               msg
+
+      assert stmts == []
+
+      assert enum == %SatOpMigrate.EnumType{name: "colour", values: ["red", "green", "blue"]}
+
+      stmt = "CREATE TABLE public.wall (id int8 PRIMARY KEY, finish public.colour);"
+      schema = schema_update(stmt)
+
+      version = "20240418002801"
+      schema_version = SchemaLoader.Version.new(version, schema)
+
+      assert {:ok, [msg], [{"public", "wall"}]} =
+               Replication.migrate(schema_version, stmt, Dialect.SQLite)
+
+      assert Schema.table_names(schema) == [~s("public"."wall")]
+
+      assert %SatOpMigrate{version: ^version, stmts: stmts, affected_entity: {:table, table}} =
+               msg
+
+      assert stmts == [
+               %SatOpMigrate.Stmt{
+                 type: :CREATE_TABLE,
+                 sql:
+                   "CREATE TABLE \"wall\" (\n  \"id\" INTEGER NOT NULL,\n  \"finish\" TEXT,\n  CONSTRAINT \"wall_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n"
+               }
+             ]
+
+      assert table == %SatOpMigrate.Table{
+               name: "wall",
+               columns: [
+                 %SatOpMigrate.Column{
+                   name: "id",
+                   sqlite_type: "INTEGER",
+                   pg_type: %SatOpMigrate.PgColumnType{name: "int8", array: [], size: []}
+                 },
+                 %SatOpMigrate.Column{
+                   name: "finish",
+                   sqlite_type: "TEXT",
+                   pg_type: %SatOpMigrate.PgColumnType{name: "public.colour", array: [], size: []}
+                 }
+               ],
+               fks: [],
+               pks: ["id"]
+             }
+    end
+
+    test "updates the schema and returns a valid protocol message for an enum using postgresql dialect" do
+      stmt = "CREATE TYPE public.colour AS ENUM ('red', 'green',  'blue');"
+      schema = schema_update(stmt)
+
+      version = "20240418002800"
+      schema_version = SchemaLoader.Version.new(version, schema)
+
+      assert {:ok, [msg], []} = Replication.migrate(schema_version, stmt, Dialect.Postgresql)
+
+      assert %SatOpMigrate{version: ^version, stmts: stmts, affected_entity: {:enum_type, enum}} =
+               msg
+
+      assert stmts == [
+               %SatOpMigrate.Stmt{
+                 type: :CREATE_ENUM_TYPE,
+                 sql: "CREATE TYPE public.colour AS ENUM ('red', 'green',  'blue');"
+               }
+             ]
+
+      assert enum == %SatOpMigrate.EnumType{name: "colour", values: ["red", "green", "blue"]}
+
+      stmt = "CREATE TABLE public.wall (id int8 PRIMARY KEY,finish  public.colour);"
+      schema = schema_update(stmt)
+
+      version = "20240418002801"
+      schema_version = SchemaLoader.Version.new(version, schema)
+
+      assert {:ok, [msg], [{"public", "wall"}]} =
+               Replication.migrate(schema_version, stmt, Dialect.Postgresql)
+
+      assert Schema.table_names(schema) == [~s("public"."wall")]
+
+      assert %SatOpMigrate{version: ^version, stmts: stmts, affected_entity: {:table, table}} =
+               msg
+
+      assert stmts == [
+               %SatOpMigrate.Stmt{
+                 type: :CREATE_TABLE,
+                 sql: "CREATE TABLE public.wall (id int8 PRIMARY KEY,finish  public.colour);"
+               }
+             ]
+
+      assert table == %SatOpMigrate.Table{
+               name: "wall",
+               columns: [
+                 %SatOpMigrate.Column{
+                   name: "id",
+                   sqlite_type: "INTEGER",
+                   pg_type: %SatOpMigrate.PgColumnType{name: "int8", array: [], size: []}
+                 },
+                 %SatOpMigrate.Column{
+                   name: "finish",
+                   sqlite_type: "TEXT",
+                   pg_type: %SatOpMigrate.PgColumnType{name: "public.colour", array: [], size: []}
+                 }
+               ],
+               fks: [],
+               pks: ["id"]
+             }
     end
 
     # TODO: actually I think this is a situation we *MUST* avoid by
