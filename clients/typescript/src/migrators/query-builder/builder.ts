@@ -18,19 +18,14 @@ export abstract class QueryBuilder {
   abstract readonly BLOB: string
 
   /**
-   * Defers foreign key checks for the current transaction.
-   */
-  abstract readonly deferForeignKeys: string
-
-  /**
    * Queries the version of SQLite/Postgres we are using.
    */
   abstract readonly getVersion: string
 
   /**
-   * Disables foreign key checks.
+   * Depending on the dialect, defers or disables foreign key checks for the duration of the transaction.
    */
-  abstract readonly disableForeignKeys: string
+  abstract readonly deferOrDisableFKsForTx: string
 
   /**
    * Returns the given query if the current SQL dialect is PostgreSQL.

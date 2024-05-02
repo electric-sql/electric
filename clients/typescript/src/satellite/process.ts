@@ -305,7 +305,7 @@ export class SatelliteProcess implements Satellite {
     }))
 
     const stmtsWithTriggers = [
-      { sql: this.builder.deferForeignKeys },
+      { sql: this.builder.deferOrDisableFKsForTx },
       ...this._disableTriggers(tables),
       ...deleteStmts,
       ...this._enableTriggers(tables),
@@ -476,16 +476,11 @@ export class SatelliteProcess implements Satellite {
     const namespace = this.builder.defaultNamespace
     const stmts: Statement[] = []
 
-    if (this.builder.dialect === 'Postgres') {
-      // disable FK checks because order of inserts
-      // may not respect referential integrity
-      // and Postgres doesn't let us defer FKs
-      // that were not originally defined as deferrable
-      stmts.push({ sql: this.builder.disableForeignKeys })
-    } else {
-      // Defer FKs on SQLite
-      stmts.push({ sql: this.builder.deferForeignKeys })
-    }
+    // Defer (SQLite) or temporarily disable FK checks (Postgres)
+    // because order of inserts may not respect referential integrity
+    // and Postgres doesn't let us defer FKs
+    // that were not originally defined as deferrable
+    stmts.push({ sql: this.builder.deferOrDisableFKsForTx })
 
     // It's much faster[1] to do less statements to insert the data instead of doing an insert statement for each row
     // so we're going to do just that, but with a caveat: SQLite has a max number of parameters in prepared statements,
@@ -1299,16 +1294,11 @@ export class SatelliteProcess implements Satellite {
     const lsn = transaction.lsn
     let firstDMLChunk = true
 
-    if (this.builder.dialect === 'Postgres') {
-      // Temporarily disable FK checks because order of inserts
-      // may not respect referential integrity
-      // and Postgres doesn't let us defer FKs
-      // that were not originally defined as deferrable
-      stmts.push({ sql: this.builder.disableForeignKeys })
-    } else {
-      // Defer FKs on SQLite
-      stmts.push({ sql: this.builder.deferForeignKeys })
-    }
+    // Defer (SQLite) or temporarily disable FK checks (Postgres)
+    // because order of inserts may not respect referential integrity
+    // and Postgres doesn't let us defer FKs
+    // that were not originally defined as deferrable
+    stmts.push({ sql: this.builder.deferOrDisableFKsForTx })
 
     // update lsn.
     stmts.push(this.updateLsnStmt(lsn))

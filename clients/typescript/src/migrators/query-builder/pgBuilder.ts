@@ -9,13 +9,13 @@ class PgBuilder extends QueryBuilder {
   readonly dialect = 'Postgres'
   readonly AUTOINCREMENT_PK = 'SERIAL PRIMARY KEY'
   readonly BLOB = 'TEXT'
-  readonly deferForeignKeys = 'SET CONSTRAINTS ALL DEFERRED;'
   readonly getVersion = 'SELECT version();'
   readonly paramSign = '$'
   readonly defaultNamespace = 'public'
 
   /** **Disables** FKs for the duration of the transaction */
-  readonly disableForeignKeys = 'SET LOCAL session_replication_role = replica;'
+  readonly deferOrDisableFKsForTx =
+    'SET LOCAL session_replication_role = replica;'
 
   pgOnly(query: string) {
     return query

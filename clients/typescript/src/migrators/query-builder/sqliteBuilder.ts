@@ -7,7 +7,7 @@ class SqliteBuilder extends QueryBuilder {
   readonly dialect = 'SQLite'
   readonly AUTOINCREMENT_PK = 'INTEGER PRIMARY KEY AUTOINCREMENT'
   readonly BLOB = 'BLOB'
-  readonly deferForeignKeys = 'PRAGMA defer_foreign_keys = ON;'
+  readonly deferOrDisableFKsForTx = 'PRAGMA defer_foreign_keys = ON;'
   readonly getVersion = 'SELECT sqlite_version() AS version'
   readonly maxSqlParameters = 65535
   readonly paramSign = '?'
@@ -17,8 +17,6 @@ class SqliteBuilder extends QueryBuilder {
     'sqlite_sequence',
     'sqlite_temp_schema',
   ]
-
-  readonly disableForeignKeys = 'PRAGMA foreign_keys = OFF;'
 
   pgOnly(_query: string) {
     return ''
