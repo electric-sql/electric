@@ -2,7 +2,7 @@
 title: node-postgres
 ---
 
-ElectricSQL supports [Node.js](https://nodejs.org) server application using the [node-postgres](https://node-postgres.com) driver.
+ElectricSQL supports [Node.js](https://nodejs.org) server applications using the [node-postgres](https://node-postgres.com) driver.
 
 ## Dependencies
 
@@ -15,8 +15,11 @@ npm install pg
 ## Usage
 
 ```tsx
+// Import the node-postgres database client.
 import pg from 'pg'
-import { electrify } from 'electric-sql/node-postgres'
+
+// Import the adapter to electrify node-postgres from the ElectricSQL library.
+import { PGlite } from '@electric-sql/node-postgres'
 
 // Import your generated database schema.
 import { schema } from './generated/client'

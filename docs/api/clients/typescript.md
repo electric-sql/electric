@@ -10,7 +10,7 @@ sidebar_position: 10
 The Typescript client provides a number of functions for developing front-end applications with Electric: 
 
 - [Authenticating](../../usage/auth/) with the sync service
-- [Synchronising database](#shapes) to a local SQLite, PGlite or Postgres database
+- [Synchronising database](#shapes) to a local embedded database
 - [Type-safe data access](#queries) to read and update the database
 - [Reactive live queries](#live-queries) that update in realtime as the database changes
 

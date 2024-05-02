@@ -27,7 +27,7 @@ In data-driven applications, providing users with intuitive tools to explore and
 
 With ElectricSQL, the [local-first development](/docs/intro/local-first) approach uses a local database for efficient querying, sorting, and filtering of data, enabling users to quickly and interactively explore datasets with ease, without worrying about network connectivity. By leveraging the power of SQL queries, developers can perform complex data manipulations and retrieve specific subsets of data based on user-defined criteria, ensuring a tailored and responsive viewing experience.
 
-This recipe demonstrates how to use ElectricSQL to create a table and chart data viewer for a simple e-commerce-like orders database, delegating pagination, sorting, filtering, aggregation, and arbitrary queries to the underlying database database.
+This recipe demonstrates how to use ElectricSQL to create a table and chart data viewer for a simple e-commerce-like orders database, delegating pagination, sorting, filtering, aggregation, and arbitrary queries to the underlying local database.
 
 <TOCInline toc={toc} />
 

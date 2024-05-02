@@ -5,7 +5,7 @@ description: >-
 sidebar_position: 40
 ---
 
-ElectricSQL syncs data between Postgres on the server and either a SQLite or Postgres on the client.
+ElectricSQL syncs data between Postgres on the server and either SQLite or Postgres on the client.
 
 In order to support SQLite on the client, we map between [Postgres data types](https://www.postgresql.org/docs/current/datatype.html) and [SQLite data types](https://www.sqlite.org/datatype3.html). In addition, we validate [local writes](../../reference/architecture.md#local-writes) to ensure that the values written into the local database will successfully replicate into Postgres.
 

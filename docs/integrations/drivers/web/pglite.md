@@ -17,7 +17,10 @@ See the [PGlite repo](https://github.com/electric-sql/pglite/) for more informat
 ## Usage
 
 ```tsx
+// Import the PGlite database client.
 import { electrify } from 'electric-sql/pglite'
+
+// Import the adapter to electrify PGlite from the ElectricSQL library.
 import { PGlite } from '@electric-sql/pglite'
 
 // Import your generated database schema.
