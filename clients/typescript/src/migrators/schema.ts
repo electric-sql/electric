@@ -27,9 +27,7 @@ export const buildInitialMigration = (builder: QueryBuilder) => {
           `DROP TABLE IF EXISTS ${triggersTable};`,
           `CREATE TABLE ${triggersTable} ("namespace" TEXT, "tablename" TEXT, "flag" INTEGER, PRIMARY KEY ("namespace", "tablename"));`,
           //`-- Somewhere to keep dependency tracking information\n`,
-          `CREATE TABLE "${shadowTable.namespace}"."${
-            shadowTable.tablename
-          }" (\n ${builder.pgOnly(
+          `CREATE TABLE ${shadowTable} (\n ${builder.pgOnly(
             '"rowid" SERIAL,'
           )} "namespace" TEXT NOT NULL,\n  "tablename" TEXT NOT NULL,\n  "primaryKey" TEXT NOT NULL,\n  "tags" TEXT NOT NULL,\n  PRIMARY KEY ("namespace", "tablename", "primaryKey"));`,
         ],
