@@ -1422,7 +1422,6 @@ export class SatelliteProcess implements Satellite {
       await this._resetClientState({
         keepSubscribedShapes: true,
       })
-      this._subscribePreviousShapeRequests()
     }
   }
 

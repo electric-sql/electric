@@ -120,7 +120,8 @@ defmodule Electric.Satellite.WebsocketServer do
         push({reply, state})
 
       {:force_unpause, reply, state} ->
-        Protocol.unpause_and_send_pending_events([reply], state)
+        [reply]
+        |> Protocol.unpause_and_send_pending_events(state)
         |> Protocol.perform_pending_actions()
         |> push()
     end
@@ -305,14 +306,18 @@ defmodule Electric.Satellite.WebsocketServer do
     {:ok, state}
   end
 
-  defp handle_producer_msg(from, events, %State{} = state)
-       when is_out_rep_active(state) do
+  defp handle_producer_msg(from, events, %State{} = state) when is_out_rep_active(state) do
     GenStage.ask(from, 1)
 
-    events
-    |> Protocol.send_events_and_maybe_pause(state)
-    |> Protocol.perform_pending_actions()
-    |> push()
+    try do
+      events
+      |> Protocol.send_events_and_maybe_pause(state)
+      |> Protocol.perform_pending_actions()
+      |> push()
+    catch
+      {:close, msgs, state} ->
+        push({:close, msgs, state})
+    end
   end
 
   defp handle_producer_msg(from, events, %State{} = state)
@@ -408,10 +413,24 @@ defmodule Electric.Satellite.WebsocketServer do
 
   @typep deep_msg_list() :: PB.sq_pb_msg() | [deep_msg_list()]
 
+  # https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.1
+  # 1007 indicates that an endpoint is terminating the connection
+  #      because it has received data within a message that was not
+  #      consistent with the type of the message (e.g., non-UTF-8 [RFC3629]
+  #      data within a text message).
+  @error_code 1007
+
+  # Status codes in the range 3000-3999 are reserved for use by
+  # libraries, frameworks, and applications.
+  @normal_termination 3000
+
   @spec push(Protocol.outgoing()) :: WebSock.handle_result()
   defp push({[], %State{} = state}), do: {:ok, state}
   defp push({pb_msg, %State{} = state}), do: {:push, binary_frames(pb_msg), state}
-  defp push({:error, msgs, state}), do: {:stop, :normal, 1007, binary_frames(msgs), state}
+  defp push({:error, msgs, state}), do: {:stop, :normal, @error_code, binary_frames(msgs), state}
+
+  defp push({:close, msgs, state}),
+    do: {:stop, :normal, @normal_termination, binary_frames(msgs), state}
 
   @spec binary_frames(deep_msg_list()) :: [{:binary, iolist()}]
   defp binary_frames(pb_msg) when not is_list(pb_msg), do: [binary_frame(pb_msg)]
