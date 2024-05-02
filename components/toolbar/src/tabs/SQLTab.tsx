@@ -116,6 +116,7 @@ export default function SQLTab({ dbName, api }: ToolbarTabsProps): JSX.Element {
           {typeof response !== 'string' && response.length > 0 ? (
             <DataEditor
               width="100%"
+              height="100%"
               getCellContent={getCellContent}
               rows={response.length}
               getCellsForSelection
