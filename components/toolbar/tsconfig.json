@@ -28,8 +28,7 @@
     "strictBindCallApply": true,
     "strictFunctionTypes": true,
     "strictNullChecks": true,
-    "target": "ESNext",
-    "plugins": [{ "name": "typescript-plugin-css-modules" }]
+    "target": "ESNext"
   },
   "include": ["src/**/*", "test/**/*", "vitest.config.ts"]
 }

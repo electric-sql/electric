@@ -1,0 +1,9 @@
+@import url('https://fonts.cdnfonts.com/css/open-sauce-one');
+
+.react-codemirror2 {
+  height: 100% !important;
+}
+
+.CodeMirror {
+  height: 100% !important;
+}

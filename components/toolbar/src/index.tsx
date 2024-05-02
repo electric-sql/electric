@@ -7,8 +7,7 @@ import '@glideapps/glide-data-grid/dist/index.css'
 import 'codemirror/lib/codemirror.css'
 import 'codemirror/theme/material.css'
 import 'codemirror/mode/sql/sql'
-import style from './index.module.css'
-import './index.module.css'
+import './index.css'
 
 import logo from './logo.svg'
 import { Theme, Button, Box, Flex, Select, Text } from '@radix-ui/themes'
@@ -53,7 +52,7 @@ function ElectricToolbar({ api }: ToolbarProps) {
       >
         <Flex justify="between" flexGrow="1">
           <Flex align="center" gap="1">
-            <img src={logo} className={style.toolbarLogo} alt="logo" />
+            <img src={logo} width="30px" height="30px" alt="logo" />
             <Text>ElectricSQL Debug Tools</Text>
           </Flex>
           <Flex gap="1">
