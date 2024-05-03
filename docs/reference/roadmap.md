@@ -58,17 +58,56 @@ Currently, you may experience bugs or behaviour that leads to an inconsistent da
 
 In development, you can usually recover from these bugs by resetting your database(s). In the browser, if you clear localStorage and IndexedDB (for example, in Chrome, "Inspect" to open the developer tools -> Application -> Storage -> Clear site data) that will reset the client and your local app will re-sync from the server.
 
-If you need to re-set your Postgres database, if you're using Docker Compose (such as with the starter template or examples) you can usually use something like `yarn backend:down` or `docker compose -f backend/compose.yaml down --volumes`. Alternatively, if you can't just nuke your whole database folder, you'll need to manually drop the objects created by Electric:
+If you need to reset your Postgres database, if you're using Docker Compose (such as with the starter template or examples) you can usually use something like `yarn backend:down` or `docker compose -f backend/compose.yaml down --volumes`. Alternatively, if you can't just nuke your whole database folder, you'll need to manually drop the objects created by Electric:
+
+- (optional) subscription `electric_1`
+- publication `electric_publication`
+- schema `electric`
+- replication slot `electric_replication_out_<dbname>`
+
+Double-check the replication slot name in your database by executing
 
 ```sql
-ALTER SUBSCRIPTION postgres_1 DISABLE;
-ALTER SUBSCRIPTION postgres_1 SET (slot_name = NONE);
-DROP SUBSCRIPTION postgres_1;
+SELECT slot_name, slot_type, database FROM pg_replication_slots;
+```
 
-DROP PUBLICATION electric_publication;
-DROP SCHEMA electric CASCADE;
+Example output:
 
-SELECT pg_drop_replication_slot('electric_replication_out_test');
+```
+             slot_name             │ slot_type │ database
+───────────────────────────────────┼───────────┼──────────
+ electric_replication_out_electric │ logical   │ electric
+(1 row)
+```
+
+Then edit in your slot name in the following code block and execute it in your database to remove everything cleanly:
+
+```sql
+DO $$
+  BEGIN
+    IF EXISTS (SELECT 1 FROM pg_subscription
+               WHERE subname = 'postgres_1') THEN
+      ALTER SUBSCRIPTION postgres_1 DISABLE;
+      ALTER SUBSCRIPTION postgres_1 SET (slot_name = NONE);
+      DROP SUBSCRIPTION postgres_1;
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM pg_publication
+               WHERE pubname = 'electric_publication') THEN
+      DROP PUBLICATION electric_publication;
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM pg_namespace
+               WHERE nspname = 'electric') THEN
+      DROP SCHEMA electric CASCADE;
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM pg_replication_slots
+               WHERE slot_name = 'electric_replication_out_electric') THEN
+      SELECT pg_drop_replication_slot('electric_replication_out_electric');
+    END IF;
+  END
+$$;
 ```
 
 You can then recreate your database, e.g.:
@@ -83,8 +122,6 @@ Then:
 - run Electric to bootstrap the database
 - re-apply your migrations
 - re-generate your client
-
-Keep an eye on [electric-sql/electric/pulls](https://github.com/electric-sql/electric) for the latest bugfixes.
 
 ## Fundamental limitations
 
