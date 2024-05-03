@@ -100,7 +100,31 @@ defmodule Electric.Replication.PostgresConnector do
       Failed to establish replication connection to Postgres:
         #{msg}
       """,
-      "Another instance of Electric appears to be connected to this database."
+      """
+      Another instance of Electric appears to be connected to this database.
+      Refer to https://github.com/electric-sql/electric/issues/971 for additional info.
+      """
+    )
+  end
+
+  defp log_child_error(
+         LogicalReplicationProducer,
+         {:bad_return_value,
+          {:error,
+           {:error, :error, "42710", :duplicate_object, "replication slot " <> _ = msg,
+            _c_stacktrace}}},
+         _connector_config
+       ) do
+    Electric.Errors.print_error(
+      :conn,
+      """
+      Failed to establish replication connection to Postgres:
+        #{msg}
+      """,
+      """
+      Another instance of Electric appears to be connected to this database.
+      Refer to https://github.com/electric-sql/electric/issues/971 for additional info.
+      """
     )
   end
 
