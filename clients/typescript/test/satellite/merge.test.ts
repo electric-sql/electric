@@ -193,7 +193,7 @@ const setupSqlite: SetupFn = (t: ExecutionContext<unknown>) => {
   return [new SQLiteDatabaseAdapter(db), sqliteBuilder, namespace, defaults]
 }
 
-let port = 4800
+let port = 4700
 const setupPG: SetupFn = async (t: ExecutionContext<unknown>) => {
   const dbName = `merge-test-${randomValue()}`
   const { db, stop } = await makePgDatabase(dbName, port++)
