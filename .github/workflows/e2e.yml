@@ -15,8 +15,8 @@ on:
       - "docs/**"
 
 env:
-  OTP_VERSION: "25.3.2.8"
-  ELIXIR_VERSION: "1.16.1-otp-25"
+  OTP_VERSION: "27.0"
+  ELIXIR_VERSION: "1.17.0-otp-27"
 
 concurrency:
   group: e2e-${{ github.ref }}
