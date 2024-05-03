@@ -11,7 +11,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { schema, Electric, ColorType as Color } from './generated/client'
 export { JsonNull } from './generated/client'
 import { globalRegistry } from 'electric-sql/satellite'
-import { SatelliteErrorCode } from 'electric-sql/util'
+import { QualifiedTablename, SatelliteErrorCode } from 'electric-sql/util'
 import { Shape } from 'electric-sql/satellite'
 import { pgBuilder, sqliteBuilder, QueryBuilder } from 'electric-sql/migrators/builder'
 
@@ -143,7 +143,9 @@ export const get_tables = (electric: Electric) => {
 }
 
 export const get_columns = (electric: Electric, table: string) => {
-  return electric.db.rawQuery(builder.getTableInfo(table))
+  const namespace = builder.defaultNamespace
+  const qualifiedTablename = new QualifiedTablename(namespace, table)
+  return electric.db.rawQuery(builder.getTableInfo(qualifiedTablename))
 }
 
 export const get_rows = (electric: Electric, table: string) => {
@@ -378,7 +380,7 @@ export const get_blob = async (electric: Electric, id: string) => {
     }
   })
 
-  if (res.blob) {
+  if (res?.blob) {
     // The PG driver returns a NodeJS Buffer but the e2e test matches on a plain Uint8Array.
     // So we convert the Buffer to a Uint8Array.
     // Note that Buffer is a subclass of Uint8Array.
