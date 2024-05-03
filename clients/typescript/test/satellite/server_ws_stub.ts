@@ -15,9 +15,7 @@ import {
 import { toMessage } from '../../src/satellite/client'
 import { ExecutionContext } from 'ava'
 import { sleepAsync } from '../../src/util'
-
-const PORT = 30002
-const IP = '127.0.0.1'
+import { AddressInfo } from 'net'
 
 type NonRpcMessage = Exclude<SatPbMsg, SatRpcRequest>
 
@@ -123,8 +121,13 @@ export class SatelliteWSServerStub {
       }
     }
   }
-  start() {
-    this.httpServer.listen(PORT, IP)
+  async start(): Promise<number> {
+    return new Promise((res) => {
+      this.httpServer.listen(() => {
+        const address = this.httpServer.address()
+        res((address as AddressInfo).port)
+      })
+    })
   }
 
   closeSocket(reason?: string) {

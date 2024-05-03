@@ -42,13 +42,13 @@ interface Context extends AuthState {
 
 const test = anyTest as TestFn<Context>
 
-test.beforeEach((t) => {
+test.beforeEach(async (t) => {
   const server = new SatelliteWSServerStub(t)
-  server.start()
+  const port = await server.start()
 
   const client = new SatelliteClient(dbDescription, WebSocketNode, {
     host: '127.0.0.1',
-    port: 30002,
+    port: port,
     timeout: 10000,
     ssl: false,
     pushPeriod: 100,
