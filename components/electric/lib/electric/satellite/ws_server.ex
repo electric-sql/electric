@@ -43,8 +43,10 @@ defmodule Electric.Satellite.WebsocketServer do
   alias Electric.Satellite.Protocol.InRep
   alias Electric.Satellite.Protocol.Telemetry
 
-  # in milliseconds
-  @ping_interval 5_000
+  # Time interval at which the server will ping the client, in milliseconds
+  # This will also be the time that the server will wait for a response to the ping
+  # before disconnecting the client
+  @ping_interval 20_000
 
   def reg_name(name) do
     Electric.name(__MODULE__, name)
@@ -179,7 +181,13 @@ defmodule Electric.Satellite.WebsocketServer do
         {:stop, :normal, {1005, "Client not responding to pings"}, state}
 
       last_msg_time ->
-        if :timer.now_diff(:erlang.timestamp(), last_msg_time) > @ping_interval * 1000 do
+        last_msg_diff_us = :timer.now_diff(:erlang.timestamp(), last_msg_time)
+
+        # Scheduling margin error in microseconds. The scheduling can undershoot
+        # the desired ping interval
+        timing_margin_error_us = 500
+
+        if last_msg_diff_us > @ping_interval * 1000 - timing_margin_error_us do
           {:push, {:ping, ""}, schedule_ping(%{state | last_msg_time: :ping_sent})}
         else
           {:ok, schedule_ping(state)}
