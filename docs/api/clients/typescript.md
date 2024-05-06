@@ -1011,7 +1011,7 @@ Greater than or equal operator:
 ```ts
 {
   where: {
-    name: {
+    age: {
       gte: 18
     }
   }
@@ -1155,12 +1155,12 @@ The same can be achieved by using `AND` explicitly:
   where: {
     AND: [
       {
-        name: {
+        age: {
           gte: 18,
         }
       },
       {
-        name: {
+        age: {
           lte: 65,
         }
       },
@@ -1181,7 +1181,7 @@ Operators can also be combined using `OR`:
         }
       },
       {
-        name: {
+        age: {
           gt: 65,
         }
       },
@@ -1202,7 +1202,7 @@ Operators can be negated using `NOT`:
         }
       },
       {
-        name: {
+        age: {
           gt: 65,
         }
       },
