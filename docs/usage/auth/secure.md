@@ -108,7 +108,7 @@ await electric.connect(token)
 
 ## How the server validates auth tokens
 
-The sync service running in secure auth mode expects the standard `iat`, `exp` and `sub` (formerly a custom `user_id`) claims to be included in the token.
+The sync service running in secure auth mode expects the standard `iat` and `exp` claims, as well as the custom `sub` claim (formerly `user_id`) to be included in the token.
 
 If any of `iat`, `exp`, or `nbf` claims are included, they will be validated according to the JWT specification and so your token will get rejected if any of these standard claims' values are invalid. If you additionally configure the "issuer" and/or "audience" of the Secure auth mode, then the `iss` and/or `aud` claims are also required to be included in the auth token.
 
