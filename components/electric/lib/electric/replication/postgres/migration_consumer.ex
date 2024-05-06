@@ -234,13 +234,13 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
       end)
       |> Schema.add_shadow_tables(oid_loader: oid_loader)
 
-    Logger.info("Saving schema version #{version} /#{inspect(loader)}/")
-
     {:ok, loader, schema_version} = SchemaLoader.save(loader, version, schema, stmts)
 
     if state.refresh_enum_types and schema.enums != old_enums do
       Client.with_conn(state.conn_opts, fn conn -> OidDatabase.update_oids(conn, [:ENUM]) end)
     end
+
+    Logger.info("Saved schema version #{version} /#{inspect(loader)}/")
 
     {:ok, loader, schema_version}
   end

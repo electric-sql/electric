@@ -11,8 +11,8 @@
     ?SH-PROMPT:
 
 [shell electric]
-    ?? [info] Applying migration 20230915175207
-    ?? [info] Applying migration 20230916212444
+    ?? [info] Saved schema version 20230915175207
+    ?? [info] Saved schema version 20230916212444
 
 [cleanup]
     [invoke teardown]

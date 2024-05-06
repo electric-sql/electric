@@ -23,7 +23,7 @@
 
 
 [shell electric]
-    ?? [info] Applying migration $migration_version_1
+    ?? [info] Saved schema version $migration_version_1
 
 [newshell user_1_ws1]
     -$fail_pattern
