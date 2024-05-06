@@ -281,7 +281,7 @@ export const configOptions: Record<string, any> = {
     valueType: String,
     valueTypeName: 'iss',
     doc: dedent`
-      This optional setting allows you to specificy the "issuer" that will be matched 
+      This optional setting allows you to specify the "issuer" that will be matched 
       against the iss claim extracted from auth tokens.
     `,
     groups: ['electric'],
@@ -290,7 +290,7 @@ export const configOptions: Record<string, any> = {
     valueType: String,
     valueTypeName: 'aud',
     doc: dedent`
-      This optional setting allows you to specificy the "audience" that will be matched
+      This optional setting allows you to specify the "audience" that will be matched
       against the aud claim extracted from auth tokens.
     `,
     groups: ['electric'],

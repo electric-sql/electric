@@ -148,15 +148,17 @@ By default, if this setting is omitted or is set to an empty string, the `sub` /
 }
 ```
 
+Note that standard claims are not affected by this setting and are always looked up at the top level.
+
 ### `AUTH_JWT_ISS`
 
-This setting allows you to specificy the "issuer" that will be matched against the `iss` claim extracted from auth tokens. This can be used to ensure that only tokens created by the expected party are used to authenticate your client.
+This setting allows you to specify the "issuer" that will be matched against the `iss` claim extracted from auth tokens. This can be used to ensure that only tokens created by the expected party are used to authenticate your client.
 
 Leaving this variable empty makes the `iss` claim optional and doesn't verify its value even if it's included in token claims.
 
 ### `AUTH_JWT_AUD`
 
-This setting allows you to specificy the "audience" that will be matched against the `aud` claim extracted from auth tokens. This can be used to ensure that only tokens for a specific application are used to authenticate your client.
+This setting allows you to specify the "audience" that will be matched against the `aud` claim extracted from auth tokens. This can be used to ensure that only tokens for a specific application are used to authenticate your client.
 
 Leaving this variable empty makes the `aud` claim optional and doesn't verify its value even if it's included in token claims.
 
