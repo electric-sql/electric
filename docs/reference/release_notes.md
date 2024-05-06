@@ -26,7 +26,7 @@ To see the complete change log for each new release, see the [Releases page](htt
 [Announcement post](/blog/2024/05/02/electricsql-v0.11-released).
 ```
 
-This release introduces a new database driver for PGLite. Plus reliability improvements.
+This release introduces a new database driver for PGLite, enabling client applications to use a local Postgres database. It also the first release to maintain replication stream continuity in the face of the sync service's restarts.
 
 #### Updated components
 
@@ -40,7 +40,7 @@ Component | Version
 
 **Sync service**
 
-- The default value for `DATABASE_USE_IPV6` is now `false` due to immaturity of IPv6 support at multiple levels of the Internet infrastucture.
+- The default value for `DATABASE_USE_IPV6` is now `false`. Using IPv6 by default turned out to cause problems that could have been avoided by sticking to IPv4. ISPs, Docker, hosting platforms do not all have seamless IPv6 support just yet.
 
 - Electric no longer tries decode the JWT signing key by default. A new configuration option `AUTH_JWT_KEY_IS_BASE64_ENCODED` has been added to let the developer choose whether Electric should use the configured signing key as is or base64-decode it first.
 
