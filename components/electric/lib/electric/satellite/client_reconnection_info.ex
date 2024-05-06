@@ -149,8 +149,15 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
 
   use GenServer
 
+  import Electric.Postgres.Extension,
+    only: [
+      client_checkpoints_table: 0,
+      client_shape_subscriptions_table: 0,
+      client_additional_data_table: 0,
+      client_actions_table: 0
+    ]
+
   alias Electric.Postgres.CachedWal
-  alias Electric.Postgres.Extension
   alias Electric.Postgres.Repo.Client
   alias Electric.Replication.Connectors
   alias Electric.Replication.Changes.Transaction
@@ -210,24 +217,28 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   at most one WebSocket process with the same client id.
   """
   def clear_all_data!(origin, client_id) do
-    :ets.match_delete(@actions_ets, {{client_id, :_}, :_})
-    :ets.match_delete(@subscriptions_ets, {{client_id, :_}, :_, :_, :_})
-    :ets.match_delete(@additional_data_ets, {{client_id, :_, :_, :_, :_}, :_, :_})
-    :ets.delete(@checkpoint_ets, client_id)
+    clear_all_ets_data(client_id)
 
     Client.pooled_transaction(origin, fn ->
       Enum.each(
         [
-          Extension.client_shape_subscriptions_table(),
-          Extension.client_checkpoints_table(),
-          Extension.client_actions_table(),
-          Extension.client_additional_data_table()
+          client_shape_subscriptions_table(),
+          client_checkpoints_table(),
+          client_actions_table(),
+          client_additional_data_table()
         ],
         &Client.query!("DELETE FROM #{&1} WHERE client_id = $1", [client_id])
       )
     end)
 
     :ok
+  end
+
+  defp clear_all_ets_data(client_id) do
+    :ets.match_delete(@actions_ets, {{client_id, :_}, :_})
+    :ets.match_delete(@subscriptions_ets, {{client_id, :_}, :_, :_, :_})
+    :ets.match_delete(@additional_data_ets, {{client_id, :_, :_, :_, :_}, :_, :_})
+    :ets.delete(@checkpoint_ets, client_id)
   end
 
   def fetch_subscription(client_id, subscription_id) do
@@ -249,7 +260,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
       subs_uuid = encode_uuid(subscription_id)
 
       Enum.each(
-        [Extension.client_shape_subscriptions_table(), Extension.client_additional_data_table()],
+        [client_shape_subscriptions_table(), client_additional_data_table()],
         &Client.query!("DELETE FROM #{&1} WHERE client_id = $1 AND subscription_id = $2", [
           client_id,
           subs_uuid
@@ -258,6 +269,12 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     end)
 
     :ok
+  rescue
+    exception ->
+      # Clear in-memory cache for the client to force its reloading from the database when the
+      # client reconnects.
+      clear_all_ets_data(client_id)
+      reraise exception, __STACKTRACE__
   end
 
   @doc """
@@ -267,13 +284,13 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   def store_initial_checkpoint!(origin, client_id, wal_pos, sent_rows_graph) do
     Client.pooled_transaction(origin, fn ->
       :ok = clear_all_data!(origin, client_id)
-      store_client_checkpoint(client_id, wal_pos, sent_rows_graph)
+      :ok = store_client_checkpoint(client_id, wal_pos, sent_rows_graph)
     end)
   end
 
   @upsert_checkpoint_query """
   INSERT INTO
-    #{Extension.client_checkpoints_table()}(client_id, pg_wal_pos, sent_rows_graph)
+    #{client_checkpoints_table()}(client_id, pg_wal_pos, sent_rows_graph)
   VALUES
     ($1, $2, $3)
   ON CONFLICT
@@ -284,9 +301,12 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   """
 
   defp store_client_checkpoint(client_id, wal_pos, sent_rows_graph) do
-    :ets.insert(@checkpoint_ets, {client_id, wal_pos, sent_rows_graph})
     sent_rows_graph_bin = :erlang.term_to_binary(sent_rows_graph)
     Client.query!(@upsert_checkpoint_query, [client_id, wal_pos, sent_rows_graph_bin])
+
+    :ets.insert(@checkpoint_ets, {client_id, wal_pos, sent_rows_graph})
+
+    :ok
   end
 
   @doc """
@@ -366,6 +386,12 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
           {:error, {:wal_pos_before_checkpoint, acked_wal_pos, new_wal_pos}}
         end
     end
+  rescue
+    exception ->
+      # Clear in-memory cache for the client to force its reloading from the database when the
+      # client reconnects.
+      clear_all_ets_data(client_id)
+      reraise exception, __STACKTRACE__
   end
 
   @doc """
@@ -481,7 +507,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
       |> Stream.take(num_txns)
       |> Enum.join(", ")
 
-    "INSERT INTO #{Extension.client_actions_table()}(client_id, txid, subquery_actions) VALUES " <>
+    "INSERT INTO #{client_actions_table()}(client_id, txid, subquery_actions) VALUES " <>
       param_placeholders
   end
 
@@ -555,7 +581,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   end
 
   @delete_additional_data_for_client_query """
-  DELETE FROM #{Extension.client_additional_data_table()} WHERE client_id = $1
+  DELETE FROM #{client_additional_data_table()} WHERE client_id = $1
   """
 
   defp purge_additional_data_for_client(client_id) do
@@ -566,7 +592,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
 
   @insert_subscription_query """
   INSERT INTO
-    #{Extension.client_shape_subscriptions_table()}(
+    #{client_shape_subscriptions_table()}(
       client_id,
       subscription_id,
       min_txid,
@@ -593,6 +619,12 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     ])
 
     :ok
+  rescue
+    exception ->
+      # Clear in-memory cache for the client to force its reloading from the database when the
+      # client reconnects.
+      clear_all_ets_data(client_id)
+      reraise exception, __STACKTRACE__
   end
 
   defp list_subscriptions(client_id) do
@@ -603,7 +635,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
 
   @insert_subscription_data_query """
   INSERT INTO
-    #{Extension.client_additional_data_table()}(
+    #{client_additional_data_table()}(
     client_id,
     min_txid,
     ord,
@@ -637,11 +669,17 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     ])
 
     :ok
+  rescue
+    exception ->
+      # Clear in-memory cache for the client to force its reloading from the database when the
+      # client reconnects.
+      clear_all_ets_data(client_id)
+      reraise exception, __STACKTRACE__
   end
 
   @insert_transaction_data_query """
   INSERT INTO
-    #{Extension.client_additional_data_table()}(
+    #{client_additional_data_table()}(
     client_id,
     min_txid,
     ord,
@@ -672,6 +710,27 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     ])
 
     :ok
+  rescue
+    exception ->
+      # Clear in-memory cache for the client to force its reloading from the database when the
+      # client reconnects.
+      clear_all_ets_data(client_id)
+      reraise exception, __STACKTRACE__
+  end
+
+  @doc """
+  Restore client reconnection info cache from the database.
+
+  Must be called for a new WebsocketServer process before it starts streaming transactions to the client.
+  """
+  @spec restore_cache_for_client(Connectors.origin(), String.t()) :: :ok | {:error, Exception.t()}
+  def restore_cache_for_client(origin, client_id) do
+    if :ets.member(@checkpoint_ets, client_id) do
+      # Client's info is already in the cache.
+      :ok
+    else
+      GenServer.call(name(origin), {:restore_cache_for_client, client_id})
+    end
   end
 
   defp pop_additional_data_before(client_id, txid) do
@@ -733,14 +792,14 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
 
   @delete_actions_for_xids_query """
   DELETE FROM
-    #{Extension.client_actions_table()}
+    #{client_actions_table()}
   WHERE
     client_id = $1 AND txid = ANY($2)
   """
 
   @delete_additional_data_query """
   DELETE FROM
-    #{Extension.client_additional_data_table()}
+    #{client_additional_data_table()}
   WHERE
     client_id = $1 AND (
       (min_txid, ord) = ANY(SELECT * FROM unnest($2::xid8[], $3::bigint[]))
@@ -771,74 +830,109 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     additional_data_table = :ets.new(@additional_data_ets, [:named_table, :public, :ordered_set])
     actions_table = :ets.new(@actions_ets, [:named_table, :public, :set])
 
-    origin = Connectors.origin(connector_config)
+    state = %{
+      origin: Connectors.origin(connector_config),
+      checkpoint_table: checkpoint_table,
+      subscriptions_table: subscriptions_table,
+      additional_data_table: additional_data_table,
+      actions_table: actions_table
+    }
 
-    Client.checkout_from_pool(origin, fn ->
-      restore_checkpoint_cache(checkpoint_table)
-      restore_subscriptions_cache(subscriptions_table)
-      restore_additional_data_cache(additional_data_table)
-      restore_actions_cache(actions_table)
+    # Restore cached info for all clients at initialisation time.
+    # Later on, when any one client's write fails to be persisted in the database, its
+    # in-memory cached data will be cleared and later restored on-demand.
+    :ok = restore_cached_info(nil, state)
+
+    {:ok, state}
+  end
+
+  @impl GenServer
+  def handle_call({:restore_cache_for_client, client_id}, _from, state) do
+    result = restore_cached_info([client_id], state)
+    {:reply, result, state}
+  end
+
+  # This function is not expected to raise. It returns an error tuple of any of the DB queries
+  # it executes fail.
+  defp restore_cached_info(client_ids, state) do
+    Client.checkout_from_pool(state.origin, fn ->
+      with {:ok, checkpoints} <- load_checkpoints(client_ids),
+           {:ok, subscriptions} <- load_subscriptions(client_ids),
+           {:ok, additional_data} <- load_additional_data(client_ids),
+           {:ok, actions} <- load_actions(client_ids) do
+        :ets.insert(state.checkpoint_table, checkpoints)
+        :ets.insert(state.subscriptions_table, subscriptions)
+        :ets.insert(state.additional_data_table, additional_data)
+        :ets.insert(state.actions_table, actions)
+
+        Logger.debug("Restored #{length(checkpoints)} cached client_checkpoints")
+        Logger.debug("Restored #{length(subscriptions)} cached client_shape_subscriptions")
+        Logger.debug("Restored #{length(additional_data)} cached client_additional_data records")
+        Logger.debug("Restored #{length(actions)} cached client_actions")
+
+        :ok
+      end
     end)
-
-    {:ok, nil}
   end
 
-  defp restore_checkpoint_cache(checkpoint_table) do
-    {_cols, rows} = Client.query!("SELECT * FROM #{Extension.client_checkpoints_table()}")
+  @load_checkpoints_query "SELECT * FROM #{client_checkpoints_table()}"
+  defp load_checkpoints(client_ids) do
+    with {:ok, {_cols, rows}} <- scoped_query(@load_checkpoints_query, client_ids) do
+      tuples =
+        Enum.map(rows, fn [client_id, wal_pos, sent_rows_graph] ->
+          {client_id, wal_pos, :erlang.binary_to_term(sent_rows_graph)}
+        end)
 
-    checkpoints =
-      Enum.map(rows, fn [client_id, wal_pos, sent_rows_graph] ->
-        {client_id, wal_pos, :erlang.binary_to_term(sent_rows_graph)}
-      end)
-
-    :ets.insert(checkpoint_table, checkpoints)
-    Logger.debug("Cached #{length(checkpoints)} client_checkpoints from the DB")
+      {:ok, tuples}
+    end
   end
 
-  defp restore_subscriptions_cache(subscriptions_table) do
-    {_cols, rows} = Client.query!("SELECT * FROM #{Extension.client_shape_subscriptions_table()}")
+  @load_subscriptions_query "SELECT * FROM #{client_shape_subscriptions_table()}"
+  defp load_subscriptions(client_ids) do
+    with {:ok, {_cols, rows}} <- scoped_query(@load_subscriptions_query, client_ids) do
+      tuples =
+        Enum.map(rows, fn [client_id, subs_id, xmin, pos, shape_requests_bin] ->
+          {{client_id, decode_uuid(subs_id)}, xmin, :erlang.binary_to_term(shape_requests_bin),
+           pos}
+        end)
 
-    subscriptions =
-      Enum.map(rows, fn [client_id, subscription_id, xmin, pos, shape_requests_bin] ->
-        {{client_id, decode_uuid(subscription_id)}, xmin,
-         :erlang.binary_to_term(shape_requests_bin), pos}
-      end)
-
-    :ets.insert(subscriptions_table, subscriptions)
-    Logger.debug("Cached #{length(subscriptions)} client_shape_subscriptions from the DB")
+      {:ok, tuples}
+    end
   end
 
-  defp restore_additional_data_cache(additional_data_table) do
-    {_cols, rows} = Client.query!("SELECT * FROM #{Extension.client_additional_data_table()}")
+  @load_additional_data_query "SELECT * FROM #{client_additional_data_table()}"
+  defp load_additional_data(client_ids) do
+    with {:ok, {_cols, rows}} <- scoped_query(@load_additional_data_query, client_ids) do
+      tuples =
+        Enum.map(rows, fn
+          [client_id, xmin, pos, subject, subscription_id, graph_diff, included_txns] ->
+            {{client_id, xmin, pos, String.to_existing_atom(subject),
+              decode_uuid(subscription_id)}, :erlang.binary_to_term(graph_diff), included_txns}
+        end)
 
-    records =
-      Enum.map(rows, fn [
-                          client_id,
-                          xmin,
-                          pos,
-                          subject,
-                          subscription_id,
-                          graph_diff,
-                          included_txns
-                        ] ->
-        {{client_id, xmin, pos, String.to_existing_atom(subject), decode_uuid(subscription_id)},
-         :erlang.binary_to_term(graph_diff), included_txns}
-      end)
-
-    :ets.insert(additional_data_table, records)
-    Logger.debug("Cached #{length(records)} client_additional_data records from the DB")
+      {:ok, tuples}
+    end
   end
 
-  defp restore_actions_cache(actions_table) do
-    {_cols, rows} = Client.query!("SELECT * FROM #{Extension.client_actions_table()}")
+  @load_actions_query "SELECT * FROM #{client_actions_table()}"
+  defp load_actions(client_ids) do
+    with {:ok, {_cols, rows}} <- scoped_query(@load_actions_query, client_ids) do
+      tuples =
+        Enum.map(rows, fn [client_id, txid, actions_bin] ->
+          {{client_id, txid}, :erlang.binary_to_term(actions_bin)}
+        end)
 
-    actions =
-      Enum.map(rows, fn [client_id, txid, actions_bin] ->
-        {{client_id, txid}, :erlang.binary_to_term(actions_bin)}
-      end)
+      {:ok, tuples}
+    end
+  end
 
-    :ets.insert(actions_table, actions)
-    Logger.debug("Cached #{length(actions)} client_actions from the DB")
+  # Perform a query that can be scoped by `client_ids`.
+  defp scoped_query(query, nil) do
+    Client.query(query, [])
+  end
+
+  defp scoped_query(base_query, client_ids) when is_list(client_ids) do
+    Client.query(base_query <> " WHERE client_id = ANY($1)", [client_ids])
   end
 
   # The encode_uuid() and decode_uuid() functions are needed here due to incomplete adoption
