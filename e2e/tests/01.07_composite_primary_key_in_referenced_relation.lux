@@ -1,0 +1,50 @@
+[doc Correct processing of composite PKs in referenced records]
+[include _shared.luxinc]
+
+# This is a regression test for https://github.com/electric-sql/electric/issues/1195.
+#
+# In the version of the code before it was fixed the following error had been occurring:
+#
+#     electric=# INSERT INTO project_memberships (id, sub_id, project_id) VALUES ('00000000-0000-0000-0000-000000000001', '.', 'p1');
+#     ERROR:  ARRAY types uuid and text cannot be matched
+#     LINE 1: __serialized_pk := ARRAY[__this_row.id, __this_row.sub_id]::...
+#                                                    ^
+#     QUERY:  __serialized_pk := ARRAY[__this_row.id, __this_row.sub_id]::text
+#     CONTEXT:  PL/pgSQL function electric.send_self_trigger___public__project_memberships() line 9 at assignment
+
+[invoke setup]
+
+[global project_id=p1]
+[global member_id=00000000-0000-0000-0000-000000000001]
+
+[shell proxy_1]
+    [local sql=
+        """
+        CREATE TABLE projects (
+            id TEXT PRIMARY KEY
+        );
+        CREATE TABLE project_memberships (
+            id UUID NOT NULL,
+            sub_id TEXT NOT NULL,
+            project_id TEXT NOT NULL REFERENCES projects (id),
+            PRIMARY KEY (id, sub_id)
+        );
+
+        ALTER TABLE projects ENABLE ELECTRIC;
+        ALTER TABLE project_memberships ENABLE ELECTRIC;
+
+        INSERT INTO projects VALUES ('$project_id');
+        """]
+    [invoke migrate_pg 001 $sql]
+
+[shell pg_1]
+    !INSERT INTO project_memberships (id, sub_id, project_id) VALUES ('$member_id', '.', '$project_id');
+    ??INSERT 0 1
+
+[shell electric]
+    ??%Electric.Replication.Changes.NewRecord{relation: {"public", "project_memberships"}, \
+       record: %{"id" => "$member_id", "project_id" => "$project_id", "sub_id" => "."}, \
+       tags: ["postgres_1@
+
+[cleanup]
+   [invoke teardown]
