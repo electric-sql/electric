@@ -198,10 +198,8 @@
 
     ??Restored 2 cached client_checkpoints
     ??Restored 2 cached client_shape_subscriptions
-    ?+Restored 1 cached client_additional_data records
-    ?+Restored 1 cached client_actions
-    ?+client_id=$client_1_id .+ Successfully loaded client reconnection info
-    ?client_id=$client_2_id .+ Successfully loaded client reconnection info
+    ??Restored 1 cached client_additional_data records
+    ??Restored 1 cached client_actions
 
 [shell satellite_1]
     ??Connectivity state changed: connected
@@ -210,9 +208,8 @@
     ??Connectivity state changed: connected
 
 [shell electric]
-    # ?+ matches the two lines in any order
-    ?+Continuing sync for client $client_1_id from
-    ?Continuing sync for client $client_2_id from
+    ?client_id=$client_2_id .+ Successfully loaded client reconnection info
+    ??Continuing sync for client $client_2_id from
 
 [shell pg_1]
     !SELECT * FROM electric.client_actions;
