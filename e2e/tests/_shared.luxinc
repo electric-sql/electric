@@ -39,6 +39,11 @@
     -$fail_pattern
 [endmacro]
 
+[macro start_electric_with_env env_str]
+    !${env_str} make start_electric_1
+    -$fail_pattern
+[endmacro]
+
 [macro stop_electric n]
     !make stop_electric_${n}
     ??Stopped

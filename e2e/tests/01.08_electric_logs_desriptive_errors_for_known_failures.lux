@@ -1,0 +1,15 @@
+[doc Validate Electric's error reporting when it encounters configuration problems]
+[include _shared.luxinc]
+
+[newshell electric]
+    [invoke start_electric_with_env "DATABASE_URL=http://"]
+    -
+    ??CONFIGURATION ERROR
+
+    ??DATABASE_URL has invalid URL scheme: "http"
+
+    ??Please review the official configuration reference at
+    ??https://electric-sql.com/docs/api/service
+
+[cleanup]
+   [invoke teardown]
