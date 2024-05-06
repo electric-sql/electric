@@ -148,7 +148,7 @@ By default, if this setting is omitted or is set to an empty string, the `sub` /
 }
 ```
 
-Note that the validation of standard claims are not affected by this setting and are still done on the top level.
+Note that standard claims are not affected by this setting and are always looked up at the top level.
 
 ### `AUTH_JWT_ISS`
 
