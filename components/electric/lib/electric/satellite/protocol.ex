@@ -260,7 +260,7 @@ defmodule Electric.Satellite.Protocol do
       |> Map.put(:out_rep, out_rep)
       |> Map.update!(:subscriptions, &Map.drop(&1, ids))
 
-    Enum.each(ids, &ClientReconnectionInfo.delete_subscription(state.origin, state.client_id, &1))
+    ClientReconnectionInfo.delete_subscriptions(state.origin, state.client_id, ids)
 
     if needs_unpausing? do
       {:force_unpause, %SatUnsubsResp{}, state}
@@ -1147,21 +1147,24 @@ defmodule Electric.Satellite.Protocol do
     end
   end
 
+  defp restore_subscriptions([], %State{} = state), do: {:ok, state}
+
   defp restore_subscriptions(subscription_ids, %State{} = state) do
-    Enum.reduce_while(subscription_ids, {:ok, state}, fn id, {:ok, state} ->
-      case ClientReconnectionInfo.fetch_subscription(state.client_id, id) do
-        {:ok, results} ->
-          state = Map.update!(state, :subscriptions, &Map.put(&1, id, results))
-          {:cont, {:ok, state}}
+    subscription_data =
+      ClientReconnectionInfo.fetch_subscriptions(state.client_id, subscription_ids)
+      |> Map.new()
 
-        :error ->
-          id = if String.length(id) > 128, do: String.slice(id, 0..125) <> "...", else: id
+    case Enum.find(subscription_ids, &(not Map.has_key?(subscription_data, &1))) do
+      nil ->
+        state = Map.update!(state, :subscriptions, &Map.merge(&1, subscription_data))
+        {:ok, state}
 
-          {:halt,
-           {:error,
-            start_replication_error(:SUBSCRIPTION_NOT_FOUND, "Unknown subscription: #{id}")}}
-      end
-    end)
+      id ->
+        id = if String.length(id) > 128, do: String.slice(id, 0..125) <> "...", else: id
+
+        {:halt,
+         {:error, start_replication_error(:SUBSCRIPTION_NOT_FOUND, "Unknown subscription: #{id}")}}
+    end
   end
 
   defp restore_graph(lsn, observed_txn_data, %State{} = state) do
