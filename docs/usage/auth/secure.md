@@ -132,6 +132,10 @@ The key to use for signature verification. A number of different key sizes and f
 
 See [Generating signing keys](#generating-signing-keys) below to learn more about generating keys for different algorithms.
 
+### `AUTH_JWT_KEY_IS_BASE64_ENCODED`
+
+A boolean value that tells the sync service whether the value of `AUTH_JWT_KEY` needs to be base64-decoded before using it for signature verification.
+
 ### `AUTH_JWT_NAMESPACE`
 
 This is an optional setting that specifies the location inside the token of custom claims that are specific to Electric. Currently, only the `sub` custom claim (formerly `user_id`) is required.
@@ -171,6 +175,8 @@ Different signature algorithms require different types of keys. Below we explain
 These use the same _secret key_ for both signing and signature verification. The key must be a randomly generated string of characters, long enough for the chosen algorithm.
 
 Minimum required key size is 256 bits for `HS256`, 384 bits for `HS384`, and 512 bits for `HS512`. The longer the key, the more secure the digital signature. We recommend using a 512-bit key regardless of which specific `HS*` algorithm you pick.
+
+If your deployment target makes it difficult to use a string containing random, non-printable characters for an environment variable, encode the secret key with base64 encoding and use the result for the `AUTH_JWT_KEY` setting, while also setting `AUTH_JWT_KEY_IS_BASE64_ENCODED` to `true`.
 
 ### `RS256, RS384, RS512`
 

@@ -333,6 +333,7 @@ See <DocPageLink path="usage/auth/secure" />
 
 import AuthJwtAlg from './_AUTH_JWT_ALG.md'
 import AuthJwtKey from './_AUTH_JWT_KEY.md'
+import AuthJwtKeyIsBase64Encoded from './_AUTH_JWT_KEY_IS_BASE64_ENCODED.md'
 import AuthJwtIss from './_AUTH_JWT_ISS.md'
 import AuthJwtAud from './_AUTH_JWT_AUD.md'
 
@@ -350,8 +351,17 @@ import AuthJwtAud from './_AUTH_JWT_AUD.md'
 <EnvVarConfig
     name="AUTH_JWT_KEY"
     required={true}
-    example="AAECAwQFBgc...">
+    example="x\a0CA7Q4_gc...">
   <AuthJwtKey />
+</EnvVarConfig>
+
+#### AUTH_JWT_KEY_IS_BASE64_ENCODED
+
+<EnvVarConfig
+    name="AUTH_JWT_KEY_IS_BASE64_ENCODED"
+    optional={true}
+    example="true">
+  <AuthJwtKeyIsBase64Encoded />
 </EnvVarConfig>
 
 #### AUTH_JWT_ISS
