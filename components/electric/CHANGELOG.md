@@ -1,5 +1,33 @@
 # @core/electric
 
+## 0.10.2
+
+### Patch Changes
+
+- 450a65b3: Support for a local Postgres database on the client. Also introduces drivers for node Postgres and PGlite.
+- bbe2f243: Persist client reconnection info to the database. This allows the sync service to restore its caches after a restart to be able to resume client replication streams and avoid resetting their local databases.
+- f3096b10: Switch the default value of `DATABASE_USE_IPV6` to "false".
+- d3759838: fix: filter the compensations along with main changes using the magic `electric_user_id`
+- 6573147a: fix: non-leading primary key columns should no longer break replication
+- cb175558: Introduce the concept of "WAL window" that Electric can keep around to enable it to recover already-seen transactions after a restart.
+
+  Where previously Electric was acknowledging transactions as soon as it was
+  receiving them from Postgres, now it will manually advance its replication's
+  slot starting position when needed to keep the overall disk usage within the
+  configurable limit. This allows Electric to replay some transactions it
+  previously consumed from the logical replication stream after a restart and
+  repopulate its in-memory cache of transactions that it uses to resume clients'
+  replication streams.
+
+- ed915ddd: Fix electrification of tables with previously dropped columns.
+- 2be5f171: Fix serialization of composite PKs in Electric's internal SQL code.
+- f12dd95c: Fix data encoding issues caused by unexpected cluster-wide or database-specific configuration in Postgres. Electric now overrides certain settings it is sensitive to when opening a new connection to the database.
+- 69eb03c2: fix: migration statements in a transaction should preserve original order when sent to the clients.
+- c00c293b: shapes: support `IS NULL`, `IS NOT NULL`, `IS TRUE/FALSE` and `IS NOT TRUE/FALSE` operators in where clauses
+- c8e69814: Revert the change introduced in 0deba4d79de61a31aa19515d055a2a977a8e1b4e (released in version 0.9.3) where the configured signing key would get automatically decoded if it looked like a valid base64-encoded string.
+
+  Electric will no longer try to interpet the signing key. A new configuration option named `AUTH_JWT_KEY_IS_BASE64_ENCODED` has been added.
+
 ## 0.10.1
 
 ### Patch Changes

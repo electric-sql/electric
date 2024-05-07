@@ -1,5 +1,13 @@
 # create-electric-app
 
+## 0.3.1
+
+### Patch Changes
+
+- 1b793442: Install with `--legacy-peer-deps` to circumvent temporary issue with `electric-sql` package.
+- ccd7e693: Fix port configuration not setting proper `.env` variables and update `README`
+- 784f7378: Remove usage of `npx` in template scripts to ensure correct package is used.
+
 ## 0.3.0
 
 ### Minor Changes
