@@ -1,5 +1,11 @@
 # electric-sql
 
+## 0.11.0
+
+### Minor Changes
+
+- 068b95fb: Added PGLite support
+
 ## 0.10.2
 
 ### Patch Changes
