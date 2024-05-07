@@ -1,5 +1,24 @@
 # electric-sql
 
+## 0.10.2
+
+### Patch Changes
+
+- 450a65b3: Support for a local Postgres database on the client. Also introduces drivers for node Postgres and PGlite.
+- c35956d6: Don't leave a snapshot running when stopping the Satellite process
+- 5dd3975e: Fix bug with null values in INT8 (BigInt) columns.
+- ca539551: Add `react-dom` and `@tauri-apps/plugin-sql` as optiomal peer dependencies.
+- 0115a0a3: Add Zod and Prisma to (optional) peer dependencies.
+- 22a7555a: Fix CLI `PROXY` option to correctly infer database name and not print introspection url.
+- ec27052c: Remove max listener warning on `EventNotifier`'s event emitter.
+- 22a7555a: Fix `ELECTRIC_` options not working as CLI arguments
+- abebbaa2: Adding debug toolbar
+- 244033ff: Ensure no snapshot is taken after closing the Satellite process.
+- 3794e2b1: Fix duplicate `ROLLBACK`s when using interactive transactions through the adapter's `transaction` API.
+- 244066af: Fix TextEncoder polyfill being fed numbers rather than strings and breaking replication of number types
+- Updated dependencies [450a65b3]
+  - @electric-sql/prisma-generator@1.1.5
+
 ## 0.10.1
 
 ### Patch Changes

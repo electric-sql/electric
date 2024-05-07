@@ -1,5 +1,11 @@
 # @electric-sql/prisma-generator
 
+## 1.1.5
+
+### Patch Changes
+
+- 450a65b3: Support for a local Postgres database on the client. Also introduces drivers for node Postgres and PGlite.
+
 ## 1.1.4
 
 ### Patch Changes
