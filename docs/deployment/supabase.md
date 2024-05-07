@@ -83,6 +83,7 @@ Run your [Electric sync service](../api/service), either locally or [via one of 
 - set `AUTH_JWT_ALG` to `HS256` to enable secure auth mode with the right signing algorithm
 - set `AUTH_JWT_KEY` to the "JWT Secret" value you retrieved in step 3 above
 - set `DATABASE_URL` to the connection string you retrieved in step 2 above
+- set `DATABASE_USE_IPV6` to `true` unless you've purchased the IPv4 add-on for Supabase
 - set `ELECTRIC_WRITE_TO_PG_MODE` to `direct_writes`
 - set `PG_PROXY_PASSWORD` to a secure password value and note it down
 
@@ -93,6 +94,7 @@ docker run \
     -e "AUTH_JWT_ALG=HS256" \
     -e "AUTH_JWT_KEY=..." \
     -e "DATABASE_URL=..." \
+    -e "DATABASE_USE_IPV6=true" \
     -e "ELECTRIC_WRITE_TO_PG_MODE=direct_writes" \
     -e "PG_PROXY_PASSWORD=..." \
     -e "PG_PROXY_PORT=65432" \

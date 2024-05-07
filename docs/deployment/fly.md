@@ -164,12 +164,13 @@ Restarting machine 148ed127a03de8
   Waiting for 148ed127a03de8 to become healthy (started, 1/3)
 ```
 
-Now go back to [Configure your Fly app](#configure-your-fly-app) above and modify the contents of the `fly.toml` file shown there by changing the `DATABASE_URL` value to use your Fly Postgres instance's connection string and adding the `DATABASE_REQUIRE_SSL` environment variable:
+Now go back to [Configure your Fly app](#configure-your-fly-app) above and modify the contents of the `fly.toml` file shown there by changing the `DATABASE_URL` value to use your Fly Postgres instance's connection string and adding `DATABASE_USE_IPV6` and `DATABASE_REQUIRE_SSL` environment variables:
 
 
 ```toml
 [env]
   DATABASE_URL = "postgres://postgres:...@<pg-app-name>.flycast:5432"
+  DATABASE_USE_IPV6 = "true"
   DATABASE_REQUIRE_SSL = "false"
   ...the rest of the env vars
 ```
