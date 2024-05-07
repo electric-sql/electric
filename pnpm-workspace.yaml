@@ -2,7 +2,6 @@ packages:
   - 'clients/typescript'
   - 'e2e/satellite_client'
   - 'examples/starter'
-  - 'examples/_testing'
   - 'generator'
   - 'components/electric'
   - 'components/toolbar'

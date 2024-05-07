@@ -27,13 +27,13 @@ jobs:
         working-directory: ${{ matrix.example_dir }}
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v3
-        with:
-          version: 8
       - uses: actions/setup-node@v4
         with:
           node-version: 18
-          cache: pnpm
+          cache: npm
+          cache-dependency-path: |
+            ${{ matrix.example_dir }}/package-lock.json
+            examples/_testing/package-lock.json 
       - name: Install dependencies
         run: npm ci
       - name: Start backend, run migrations, generate client
@@ -45,27 +45,21 @@ jobs:
         run: npm run dev < /dev/null &
       - name: Run e2e tests
         working-directory: 'examples/_testing'
-        run: |
-          pnpm install --frozen-lockfile &&
-          pnpm web-e2e
+        run: npm ci && npm run web-e2e
 
   test_website_demos:
     timeout-minutes: 30
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
     defaults:
       run:
         working-directory: 'examples/introduction'
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v3
-        with:
-          version: 8
       - uses: actions/setup-node@v4
         with:
           node-version: 18
-          cache: pnpm
+          cache: yarn
+          cache-dependency-path: examples/introduction/yarn.lock
       - name: Install dependencies
         run: yarn
       - name: Start backend, run migrations, generate client
@@ -77,6 +71,4 @@ jobs:
         run: yarn dev < /dev/null &
       - name: Run e2e tests
         working-directory: 'examples/_testing'
-        run: |
-          pnpm install --frozen-lockfile &&
-          pnpm website-demos-e2e
+        run: npm ci && npm run website-demos-e2e
