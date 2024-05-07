@@ -108,21 +108,21 @@ defmodule Electric.Satellite.Permissions.WhereClauseTest do
                execute(
                  cxt,
                  stmt,
-                 update(%{"user_id" => @user_id, "valid" => true})
+                 update(%{"user_id" => @user_id, "valid" => "t"})
                )
 
       assert {:ok, false} =
                execute(
                  cxt,
                  stmt,
-                 update(%{"user_id" => @user_id, "valid" => false}, %{"valid" => true})
+                 update(%{"user_id" => @user_id, "valid" => "f"}, %{"valid" => "t"})
                )
 
       assert {:ok, false} =
                execute(
                  cxt,
                  stmt,
-                 update(%{"user_id" => @not_user_id, "valid" => true}, %{"user_id" => @user_id})
+                 update(%{"user_id" => @not_user_id, "valid" => "t"}, %{"user_id" => @user_id})
                )
     end
 
@@ -133,23 +133,23 @@ defmodule Electric.Satellite.Permissions.WhereClauseTest do
                execute(
                  cxt,
                  stmt,
-                 update(%{"user_id" => @user_id, "valid" => true}, %{"valid" => false})
+                 update(%{"user_id" => @user_id, "valid" => "t"}, %{"valid" => "f"})
                )
 
       assert {:ok, false} =
                execute(
                  cxt,
                  stmt,
-                 update(%{"user_id" => @user_id, "valid" => true})
+                 update(%{"user_id" => @user_id, "valid" => "t"})
                )
 
       assert {:ok, false} =
                execute(
                  cxt,
                  stmt,
-                 update(%{"user_id" => @not_user_id, "valid" => true}, %{
+                 update(%{"user_id" => @not_user_id, "valid" => "t"}, %{
                    "user_id" => @user_id,
-                   "valid" => false
+                   "valid" => "f"
                  })
                )
     end
@@ -158,36 +158,36 @@ defmodule Electric.Satellite.Permissions.WhereClauseTest do
       stmt = "new.valid"
 
       assert {:ok, true} =
-               execute(cxt, stmt, update(%{"valid" => true}))
+               execute(cxt, stmt, update(%{"valid" => "t"}))
 
       assert {:ok, false} =
-               execute(cxt, stmt, update(%{"valid" => false}))
+               execute(cxt, stmt, update(%{"valid" => "f"}))
     end
 
     test "with NOT(ROW) reference to bool column", cxt do
       stmt = &"NOT #{&1}valid"
 
       assert {:ok, false} =
-               execute(cxt, stmt, update(%{"valid" => true}))
+               execute(cxt, stmt, update(%{"valid" => "t"}))
 
       assert {:ok, true} =
-               execute(cxt, stmt, update(%{"valid" => false}))
+               execute(cxt, stmt, update(%{"valid" => "f"}))
 
       assert {:ok, false} =
-               execute(cxt, stmt, update(%{"valid" => false}, %{"valid" => true}))
+               execute(cxt, stmt, update(%{"valid" => "f"}, %{"valid" => "t"}))
     end
 
     test "with THIS reference to bool column", cxt do
       stmt = &"#{&1}valid"
 
       assert {:ok, true} =
-               execute(cxt, stmt, update(%{"valid" => true}))
+               execute(cxt, stmt, update(%{"valid" => "t"}))
 
       assert {:ok, false} =
-               execute(cxt, stmt, update(%{"valid" => true}, %{"valid" => false}))
+               execute(cxt, stmt, update(%{"valid" => "t"}, %{"valid" => "f"}))
 
       assert {:ok, false} =
-               execute(cxt, stmt, update(%{"valid" => false}, %{"valid" => true}))
+               execute(cxt, stmt, update(%{"valid" => "f"}, %{"valid" => "t"}))
     end
   end
 
@@ -223,21 +223,21 @@ defmodule Electric.Satellite.Permissions.WhereClauseTest do
                  execute(
                    cxt,
                    stmt,
-                   change(unquote(change_fun), %{"user_id" => @user_id, "valid" => true})
+                   change(unquote(change_fun), %{"user_id" => @user_id, "valid" => "t"})
                  )
 
         assert {:ok, false} =
                  execute(
                    cxt,
                    stmt,
-                   change(unquote(change_fun), %{"user_id" => @user_id, "valid" => false})
+                   change(unquote(change_fun), %{"user_id" => @user_id, "valid" => "f"})
                  )
 
         assert {:ok, false} =
                  execute(
                    cxt,
                    stmt,
-                   change(unquote(change_fun), %{"user_id" => @not_user_id, "valid" => true})
+                   change(unquote(change_fun), %{"user_id" => @not_user_id, "valid" => "t"})
                  )
       end
 
@@ -245,30 +245,30 @@ defmodule Electric.Satellite.Permissions.WhereClauseTest do
         stmt = "#{unquote(ref)}.valid"
 
         assert {:ok, true} =
-                 execute(cxt, stmt, change(unquote(change_fun), %{"valid" => true}))
+                 execute(cxt, stmt, change(unquote(change_fun), %{"valid" => "t"}))
 
         assert {:ok, false} =
-                 execute(cxt, stmt, change(unquote(change_fun), %{"valid" => false}))
+                 execute(cxt, stmt, change(unquote(change_fun), %{"valid" => "f"}))
       end
 
       test "with NOT(ROW) reference to bool column", cxt do
         stmt = &"NOT #{&1}valid"
 
         assert {:ok, false} =
-                 execute(cxt, stmt, change(unquote(change_fun), %{"valid" => true}))
+                 execute(cxt, stmt, change(unquote(change_fun), %{"valid" => "t"}))
 
         assert {:ok, true} =
-                 execute(cxt, stmt, change(unquote(change_fun), %{"valid" => false}))
+                 execute(cxt, stmt, change(unquote(change_fun), %{"valid" => "f"}))
       end
 
       test "with THIS reference to bool column", cxt do
         stmt = &"#{&1}valid"
 
         assert {:ok, true} =
-                 execute(cxt, stmt, change(unquote(change_fun), %{"valid" => true}))
+                 execute(cxt, stmt, change(unquote(change_fun), %{"valid" => "t"}))
 
         assert {:ok, false} =
-                 execute(cxt, stmt, change(unquote(change_fun), %{"valid" => false}))
+                 execute(cxt, stmt, change(unquote(change_fun), %{"valid" => "f"}))
       end
     end
   end
