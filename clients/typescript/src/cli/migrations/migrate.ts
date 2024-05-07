@@ -228,8 +228,9 @@ async function bundleMigrationsFor(
   const folder = dialect === 'SQLite' ? 'migrations' : 'pg-migrations'
   const migrationsPath = path.join(tmpFolder, folder)
   await fs.mkdir(migrationsPath)
+  const dialectArg = dialect === 'SQLite' ? 'sqlite' : 'postgresql'
   const migrationEndpoint =
-    config.SERVICE + `/api/migrations?dialect=${dialect}`
+    config.SERVICE + `/api/migrations?dialect=${dialectArg}`
 
   const migrationsFolder = path.resolve(migrationsPath)
   const migrationsFile = migrationsFilePath(opts, dialect)
@@ -694,10 +695,15 @@ async function fetchMigrations(
       if (response.statusCode === 204) {
         // No new migrations
         resolve(false)
-      } else {
+      } else if (response.statusCode === 200) {
         const migrationsZipFile = createWriteStream(zipFile)
         response.pipe(migrationsZipFile)
         migrationsZipFile.on('finish', () => resolve(true))
+      } else {
+        // Other status code, indicating a problem
+        reject(
+          `Failed to fetch migrations from Electric. Got ${response.statusCode} status code.`
+        )
       }
     })
 
