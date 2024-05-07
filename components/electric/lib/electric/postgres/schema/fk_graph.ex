@@ -197,16 +197,16 @@ defmodule Electric.Postgres.Schema.FkGraph do
   - `{:many_to_one, {from_table, foreign_key_columns}, {to_table, primary_key_columns}}`, or
   - `{:one_to_many, {from_table, primary_key_columns}, {to_table, foreign_key_columns}}`
   """
-  @spec join(t(), relation(), relation()) :: {:ok, join()} | :error
-  def join(%__MODULE__{fks: fks, pks: pks}, {_, _} = source, {_, _} = target) do
-    cond do
-      fks = get_in(fks, [source, target]) ->
+  @spec fetch_join_type(t(), relation(), relation()) :: {:ok, join()} | :error
+  def fetch_join_type(%__MODULE__{fks: fks, pks: pks}, {_, _} = source, {_, _} = target) do
+    case fks do
+      %{^source => %{^target => fks}} ->
         {:ok, {:many_to_one, {source, fks}, {target, Map.fetch!(pks, target)}}}
 
-      fks = get_in(fks, [target, source]) ->
+      %{^target => %{^source => fks}} ->
         {:ok, {:one_to_many, {source, Map.fetch!(pks, source)}, {target, fks}}}
 
-      true ->
+      _ ->
         :error
     end
   end

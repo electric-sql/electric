@@ -112,7 +112,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Version do
   def foreign_keys(%__MODULE__{} = version, {_, _} = relation, {_, _} = target) do
     fk_graph = fk_graph(version)
 
-    case FkGraph.join(fk_graph, relation, target) do
+    case FkGraph.fetch_join_type(fk_graph, relation, target) do
       {:ok, {:many_to_one, {^relation, fks}, _}} ->
         {:ok, fks}
 

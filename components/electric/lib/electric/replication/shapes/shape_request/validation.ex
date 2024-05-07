@@ -153,7 +153,7 @@ defmodule Electric.Replication.Shapes.ShapeRequest.Validation do
         source_table: parent.target_table
     }
 
-    case FkGraph.join(fk_graph, layer.source_table, layer.target_table) do
+    case FkGraph.fetch_join_type(fk_graph, layer.source_table, layer.target_table) do
       {:ok, {direction, _, _}} ->
         {:ok, %Layer{layer | direction: direction}}
 

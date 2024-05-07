@@ -276,6 +276,7 @@ defmodule Electric.Satellite.Permissions do
           write_buffer: WriteBuffer.t(),
           scopes: [relation()],
           scoped_roles: %{relation => [Role.t()]},
+          structure: Structure.t(),
           triggers: Trigger.triggers()
         }
 
@@ -299,6 +300,10 @@ defmodule Electric.Satellite.Permissions do
       transient_lut: transient_lut_name
     }
   end
+
+  @spec fetch_id(t()) :: {:ok, pos_integer()} | :error
+  def fetch_id(%__MODULE__{id: id}), do: {:ok, id}
+  def fetch_id(_), do: :error
 
   def update!(%__MODULE__{} = perms, %SchemaLoader.Version{} = schema, rules, roles) do
     case update(perms, schema, rules, roles) do

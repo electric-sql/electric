@@ -1,5 +1,6 @@
 defmodule Electric.Satellite.Protocol.State do
   alias Electric.Replication.Connectors
+  alias Electric.Satellite.Permissions
   alias Electric.Satellite.Protocol.InRep
   alias Electric.Satellite.Protocol.OutRep
   alias Electric.Satellite.Protocol.Telemetry
@@ -115,5 +116,10 @@ defmodule Electric.Satellite.Protocol.State do
   def user_id(_state), do: nil
 
   @spec permissions_version(t()) :: pos_integer() | nil
-  def permissions_version(%__MODULE__{}), do: nil
+  def permissions_version(%__MODULE__{} = state) do
+    case Permissions.fetch_id(state.permissions) do
+      {:ok, id} -> id
+      :error -> nil
+    end
+  end
 end

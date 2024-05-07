@@ -26,7 +26,7 @@ defmodule Electric.Plug.SatelliteWebsocketPlug do
         &InitialSync.query_after_move_in/4
       )
 
-    {:ok, connector_config} = Keyword.fetch(opts, :connector_config)
+    connector_config = Keyword.fetch!(opts, :connector_config)
 
     Keyword.put_new(
       opts,

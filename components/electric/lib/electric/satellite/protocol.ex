@@ -713,11 +713,11 @@ defmodule Electric.Satellite.Protocol do
     Enum.flat_map_reduce(changes, state, fn
       %Changes.Migration{} = migration, state ->
         state =
-          update_permissions(%{state | schema_version: migration.version},
-            schema: migration.schema
-          )
+          %{state | schema_version: migration.version}
+          |> update_permissions(schema: migration.schema)
+          |> after_permissions_change()
 
-        {[migration], after_permissions_change(state)}
+        {[migration], state}
 
       change, state ->
         {[change], state}
@@ -1213,11 +1213,11 @@ defmodule Electric.Satellite.Protocol do
   # protocol.
   defp advance_graph_by_tx(tx, graph, shapes, permissions) do
     tx
-    |> filter_internal_messages()
+    |> reject_internal_messages()
     |> apply_permissions_and_shapes(graph, shapes, permissions)
   end
 
-  defp filter_internal_messages(%{changes: changes} = tx) do
+  defp reject_internal_messages(%{changes: changes} = tx) do
     %{tx | changes: Enum.reject(changes, &is_struct(&1, Changes.UpdatedPermissions))}
   end
 
