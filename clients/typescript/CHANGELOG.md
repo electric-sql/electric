@@ -4,16 +4,13 @@
 
 ### Minor Changes
 
-- 068b95fb: Added PGLite support
-
-## 0.10.2
+- 450a65b3: Support for a local Postgres database on the client. Also introduces drivers for node Postgres and PGlite.
 
 ### Patch Changes
 
-- 450a65b3: Support for a local Postgres database on the client. Also introduces drivers for node Postgres and PGlite.
 - c35956d6: Don't leave a snapshot running when stopping the Satellite process
 - 5dd3975e: Fix bug with null values in INT8 (BigInt) columns.
-- ca539551: Add `react-dom` and `@tauri-apps/plugin-sql` as optiomal peer dependencies.
+- ca539551: Add `react-dom` and `@tauri-apps/plugin-sql` as optional peer dependencies.
 - 0115a0a3: Add Zod and Prisma to (optional) peer dependencies.
 - 22a7555a: Fix CLI `PROXY` option to correctly infer database name and not print introspection url.
 - ec27052c: Remove max listener warning on `EventNotifier`'s event emitter.

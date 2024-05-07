@@ -4,13 +4,10 @@
 
 ### Minor Changes
 
-- 068b95fb: Added PGLite support
-
-## 0.10.2
+- 450a65b3: Support for a local Postgres database on the client by generating Postgres-compatible migrations.
 
 ### Patch Changes
 
-- 450a65b3: Support for a local Postgres database on the client. Also introduces drivers for node Postgres and PGlite.
 - bbe2f243: Persist client reconnection info to the database. This allows the sync service to restore its caches after a restart to be able to resume client replication streams and avoid resetting their local databases.
 - f3096b10: Switch the default value of `DATABASE_USE_IPV6` to "false".
 - d3759838: fix: filter the compensations along with main changes using the magic `electric_user_id`
