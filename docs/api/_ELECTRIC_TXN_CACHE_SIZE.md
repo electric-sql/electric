@@ -1,0 +1,3 @@
+Size of the in-memory cache for transactions the sync service consumes from Postgres over the logical replication stream. Measured in bytes unless one of the following suffixes is used: `k` for KB; `K` for KiB; `m` for MB; `M` for MiB; `g` for GB; `G` for GiB.
+
+This cache is used to quickly catch up newly connected clients to the current state in Postgres. When the sync service restarts, it will repopulate this in-memory cache by streaming already committed transactions from retained Postgres' WAL records, going as far back in time as the size of the WAL window configured with `ELECTRIC_RESUMABLE_WAL_WINDOW` allows.
