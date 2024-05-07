@@ -1,5 +1,11 @@
 # electric-sql
 
+## 0.11.1
+
+### Patch Changes
+
+- f03bde05: Fix CLI bug for fetching migrations
+
 ## 0.11.0
 
 ### Minor Changes
