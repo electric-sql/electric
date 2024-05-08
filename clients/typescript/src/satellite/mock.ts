@@ -22,6 +22,9 @@ import {
   AdditionalDataCallback,
   ConnectivityState,
   ReplicatedRowTransformer,
+  GoneBatchCallback,
+  DataGone,
+  DataChangeType,
 } from '../util/types'
 import { ElectricConfig } from '../config/index'
 
@@ -92,11 +95,12 @@ export class MockSatelliteProcess implements Satellite {
 
   subscribe(_shapeDefinitions: Shape[]): Promise<ShapeSubscription> {
     return Promise.resolve({
+      id: 'test',
       synced: Promise.resolve(),
     })
   }
 
-  unsubscribe(_shapeUuid: string): Promise<void> {
+  unsubscribe(_shapeUuid: string[]): Promise<void> {
     throw new Error('Method not implemented.')
   }
 
@@ -187,6 +191,7 @@ type Events = {
   [SUBSCRIPTION_ERROR]: (error: SatelliteError, subscriptionId: string) => void
   outbound_started: OutboundStartedCallback
   error: (error: SatelliteError) => void
+  goneBatch: GoneBatchCallback
 }
 export class MockSatelliteClient
   extends AsyncEventEmitter<Events>
@@ -211,6 +216,7 @@ export class MockSatelliteClient
   outboundStartedCallback?: OutboundStartedCallback
 
   relationData: Record<string, DataRecord[]> = {}
+  goneBatches: Record<string, DataGone[]> = {}
 
   deliverFirst = false
 
@@ -234,6 +240,18 @@ export class MockSatelliteClient
     const data = this.relationData[tablename]
 
     data.push(record)
+  }
+
+  setGoneBatch(
+    subscriptionId: string,
+    batch: { tablename: string; record: DataGone['oldRecord'] }[]
+  ): void {
+    this.goneBatches[subscriptionId] = batch.map((x) => ({
+      type: DataChangeType.GONE,
+      tags: [],
+      relation: this.relations[x.tablename],
+      oldRecord: x.record,
+    }))
   }
 
   enableDeliverFirst() {
@@ -308,7 +326,24 @@ export class MockSatelliteClient
     })
   }
 
-  unsubscribe(_subIds: string[]): Promise<UnsubscribeResponse> {
+  unsubscribe(subIds: string[]): Promise<UnsubscribeResponse> {
+    const gone: DataGone[] = []
+
+    for (const id of subIds) {
+      gone.push(...(this.goneBatches[id] ?? []))
+      delete this.goneBatches[id]
+    }
+
+    setTimeout(
+      () =>
+        this.enqueueEmit(
+          'goneBatch',
+          base64.toBytes(base64.encode('124')),
+          subIds,
+          gone
+        ),
+      1
+    )
     return Promise.resolve({})
   }
 
@@ -326,6 +361,14 @@ export class MockSatelliteClient
   ): void {
     this.removeListener(SUBSCRIPTION_DELIVERED, successCallback)
     this.removeListener(SUBSCRIPTION_ERROR, errorCallback)
+  }
+
+  subscribeToGoneBatch(callback: GoneBatchCallback): void {
+    this.on('goneBatch', callback)
+  }
+
+  unsubscribeToGoneBatch(callback: GoneBatchCallback): void {
+    this.off('goneBatch', callback)
   }
 
   subscribeToError(cb: (error: SatelliteError) => void): void {

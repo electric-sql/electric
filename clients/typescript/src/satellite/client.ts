@@ -23,6 +23,8 @@ import {
   SatShapeDataEnd,
   SatUnsubsReq,
   SatUnsubsResp,
+  SatUnsubsDataBegin,
+  SatUnsubsDataEnd,
   Root,
   RootClientImpl,
   SatRpcRequest,
@@ -72,6 +74,8 @@ import {
   DataChange,
   isDataChange,
   ReplicatedRowTransformer,
+  DataGone,
+  GoneBatchCallback,
 } from '../util/types'
 import {
   base64,
@@ -131,6 +135,12 @@ type Events = {
   outbound_started: () => void
   [SUBSCRIPTION_DELIVERED]: SubscriptionDeliveredCallback
   [SUBSCRIPTION_ERROR]: SubscriptionErrorCallback
+  goneBatch: (
+    lsn: LSN,
+    subscriptionIds: string[],
+    changes: DataGone[],
+    ack: () => void
+  ) => Promise<void>
 }
 type EventEmitter = AsyncEventEmitter<Events>
 
@@ -181,6 +191,8 @@ export class SatelliteClient implements Client {
         SatRpcResponse: (msg) => this.rpcClient.handleResponse(msg),
         SatRpcRequest: (msg) => this.handleRpcRequest(msg),
         SatOpLogAck: (msg) => void msg, // Server doesn't send that
+        SatUnsubsDataBegin: (msg) => this.handleUnsubsDataBegin(msg),
+        SatUnsubsDataEnd: (msg) => this.handleUnsubsDataEnd(msg),
       } satisfies HandlerMapping).map((e) => [getFullTypeName(e[0]), e[1]])
     )
 
@@ -261,10 +273,13 @@ export class SatelliteClient implements Client {
         DEFAULT_ACK_PERIOD
       ),
       additionalData: [],
+      goneBatch: [],
+      receivingUnsubsBatch: false,
       unseenAdditionalDataRefs: new Set(),
       seenAdditionalDataSinceLastTx: {
         dataRefs: [],
         subscriptions: [],
+        gone: [],
       },
     }
   }
@@ -471,6 +486,16 @@ export class SatelliteClient implements Client {
 
   unsubscribeToRelations(callback: RelationCallback) {
     this.emitter.removeListener('relation', callback)
+  }
+
+  subscribeToGoneBatch(callback: GoneBatchCallback) {
+    this.emitter.on('goneBatch', async (lsn, ids, changes, ack) => {
+      await callback(lsn, ids, changes)
+      ack()
+    })
+  }
+  unsubscribeToGoneBatch(_callback: GoneBatchCallback) {
+    // TODO: real removeListener implementation, because the old one for txns doesn't work
   }
 
   enqueueTransaction(transaction: DataTransaction): void {
@@ -911,6 +936,8 @@ export class SatelliteClient implements Client {
   private handleTransaction(message: SatOpLog) {
     if (!this.subscriptionsDataCache.isDelivering()) {
       this.processOpLogMessage(message)
+    } else if (this.inbound.receivingUnsubsBatch) {
+      this.processUnsubsDataMessage(message)
     } else {
       try {
         this.subscriptionsDataCache.transaction(message.ops)
@@ -961,6 +988,35 @@ export class SatelliteClient implements Client {
   // It might eventually confirm that the server processed it or was noop.
   private handleUnsubscribeResponse(_msg: SatUnsubsResp): UnsubscribeResponse {
     return {}
+  }
+
+  private handleUnsubsDataBegin(msg: SatUnsubsDataBegin): void {
+    this.inbound.receivingUnsubsBatch = msg.subscriptionIds
+    this.inbound.last_lsn = msg.lsn
+  }
+
+  private handleUnsubsDataEnd(_msg: SatUnsubsDataEnd): void {
+    if (!this.inbound.receivingUnsubsBatch)
+      throw new SatelliteError(
+        SatelliteErrorCode.PROTOCOL_VIOLATION,
+        'Received a `SatUnsubsDataEnd` message but not the begin message'
+      )
+
+    const subscriptionIds = [...this.inbound.receivingUnsubsBatch]
+
+    this.emitter.enqueueEmit(
+      'goneBatch',
+      this.inbound.last_lsn!,
+      subscriptionIds,
+      [...this.inbound.goneBatch],
+      () => {
+        this.inbound.seenAdditionalDataSinceLastTx.gone.push(...subscriptionIds)
+        this.maybeSendAck('additionalData')
+      }
+    )
+
+    this.inbound.receivingUnsubsBatch = []
+    this.inbound.goneBatch = []
   }
 
   private delayIncomingMessages<T>(
@@ -1020,6 +1076,29 @@ export class SatelliteClient implements Client {
     return rel
   }
 
+  private processUnsubsDataMessage(msg: SatOpLog): void {
+    msg.ops.forEach((op) => {
+      if (!op.gone)
+        throw new SatelliteError(
+          SatelliteErrorCode.PROTOCOL_VIOLATION,
+          'Expected to see only GONE messages in unsubscription data'
+        )
+
+      const rel = this.getRelation(op.gone)
+      this.inbound.goneBatch.push({
+        relation: rel,
+        type: DataChangeType.GONE,
+        oldRecord: deserializeRow(
+          op.gone.pkData!,
+          rel,
+          this.dbDescription,
+          this.decoder
+        ),
+        tags: [],
+      })
+    })
+  }
+
   private processOpLogMessage(opLogMessage: SatOpLog): void {
     const replication = this.inbound
     opLogMessage.ops.map((op) => {
@@ -1076,6 +1155,7 @@ export class SatelliteClient implements Client {
           this.inbound.seenAdditionalDataSinceLastTx = {
             dataRefs: [],
             subscriptions: [],
+            gone: [],
           }
           this.maybeSendAck()
         })
@@ -1277,6 +1357,7 @@ export class SatelliteClient implements Client {
           this.inbound.seenAdditionalDataSinceLastTx.subscriptions,
         additionalDataSourceIds:
           this.inbound.seenAdditionalDataSinceLastTx.dataRefs,
+        goneSubscriptionIds: this.inbound.seenAdditionalDataSinceLastTx.gone,
       }
 
       this.sendMessage(msg)

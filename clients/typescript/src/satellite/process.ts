@@ -39,6 +39,7 @@ import {
   Uuid,
   DbRecord as DataRecord,
   ReplicatedRowTransformer,
+  DataGone,
   ServerTransaction,
 } from '../util/types'
 import { SatelliteOpts } from './config'
@@ -49,6 +50,7 @@ import {
   ShadowEntry,
   ShadowEntryChanges,
   encodeTags,
+  extractPK,
   fromTransaction,
   generateTag,
   getShadowPrimaryKey,
@@ -78,12 +80,14 @@ import { decodeUserIdFromToken } from '../auth/secure'
 import { InvalidArgumentError } from '../client/validation/errors/invalidArgumentError'
 import Long from 'long'
 import { QueryBuilder } from '../migrators/query-builder'
+import groupBy from 'lodash.groupby'
 
 type ChangeAccumulator = {
   [key: string]: Change
 }
 
 export type ShapeSubscription = {
+  id: string
   synced: Promise<void>
 }
 
@@ -98,6 +102,7 @@ type MetaEntries = {
   lsn: string | null
   subscriptions: string
   seenAdditionalData: string
+  seenGoneBatch: string
 }
 
 type ConnectRetryHandler = (error: Error, attempt: number) => boolean
@@ -344,6 +349,9 @@ export class SatelliteProcess implements Satellite {
       this._handleClientOutboundStarted.bind(this)
     this.client.subscribeToOutboundStarted(clientOutboundStartedCallback)
 
+    const clientGoneBatchCallback = this._applyGoneBatch.bind(this)
+    this.client.subscribeToGoneBatch(clientGoneBatchCallback)
+
     const clientSubscriptionDataCallback =
       this._handleSubscriptionData.bind(this)
     const clientSubscriptionErrorCallback =
@@ -365,6 +373,7 @@ export class SatelliteProcess implements Satellite {
         clientSubscriptionDataCallback,
         clientSubscriptionErrorCallback
       )
+      this.client.unsubscribeToGoneBatch(clientGoneBatchCallback)
     }
   }
 
@@ -426,6 +435,7 @@ export class SatelliteProcess implements Satellite {
       this.subscriptions.getDuplicatingSubscription(shapeDefinitions)
     if (existingSubscription !== null && 'inFlight' in existingSubscription) {
       return {
+        id: existingSubscription['inFlight'],
         synced:
           this.subscriptionNotifiers[existingSubscription.inFlight].promise,
       }
@@ -433,7 +443,10 @@ export class SatelliteProcess implements Satellite {
       existingSubscription !== null &&
       'fulfilled' in existingSubscription
     ) {
-      return { synced: Promise.resolve() }
+      return {
+        id: existingSubscription['fulfilled'],
+        synced: Promise.resolve(),
+      }
     }
 
     // If no exact match found, we try to establish the subscription
@@ -483,6 +496,7 @@ export class SatelliteProcess implements Satellite {
       }
 
       return {
+        id: subId,
         synced: subProm,
       }
     } catch (error: any) {
@@ -490,12 +504,14 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  async unsubscribe(_subscriptionId: string): Promise<void> {
-    throw new SatelliteError(
-      SatelliteErrorCode.INTERNAL,
-      'unsubscribe shape not supported'
+  async unsubscribe(subscriptionIds: string[]): Promise<void> {
+    await this.client.unsubscribe(subscriptionIds)
+
+    // If the server didn't send an error, we persist the fact the subscription was deleted.
+    this.subscriptions.unsubscribe(subscriptionIds)
+    await this.adapter.run(
+      this._setMetaStatement('subscriptions', this.subscriptions.serialize())
     )
-    // return this.subscriptions.unsubscribe(subscriptionId)
   }
 
   async _handleSubscriptionData(subsData: SubscriptionData): Promise<void> {
@@ -689,7 +705,7 @@ export class SatelliteProcess implements Satellite {
     // TODO: this is obviously too conservative
     // we should also work on updating subscriptions
     // atomically on unsubscribe()
-    await this.subscriptions.unsubscribeAll()
+    await this.subscriptions.unsubscribeAllAndGC()
 
     await this.adapter.runInTransaction(
       this._setMetaStatement('lsn', null),
@@ -1366,7 +1382,7 @@ export class SatelliteProcess implements Satellite {
 
     // update lsn.
     stmts.push(this.updateLsnStmt(lsn))
-    stmts.push(this._resetSeenAdditionalDataStmt())
+    stmts.push(this._resetAllSeenStmt())
 
     const processDML = async (changes: DataChange[]) => {
       const tx = {
@@ -1482,6 +1498,67 @@ export class SatelliteProcess implements Satellite {
     ])
   }
 
+  async _applyGoneBatch(
+    lsn: LSN,
+    _subscriptionIds: string[],
+    allGone: DataGone[]
+  ) {
+    const fakeOplogEntries: OplogEntry[] = allGone.map(
+      (x): OplogEntry => ({
+        namespace: this.builder.defaultNamespace,
+        tablename: x.relation.table,
+        primaryKey: extractPK(x),
+        optype: 'GONE',
+        // Fields below don't matter here.
+        rowid: -1,
+        timestamp: '',
+        clearTags: '',
+      })
+    )
+
+    // Batch-delete shadow entries
+    const stmts = this.builder.prepareDeleteBatchedStatements(
+      `DELETE FROM ${this.opts.shadowTable} WHERE `,
+      ['namespace', 'tablename', 'primaryKey'],
+      fakeOplogEntries,
+      this.maxSqlParameters
+    )
+
+    const groupedChanges = groupBy(allGone, (x) => x.relation.table)
+    const affectedTables = Object.keys(groupedChanges).map((x) =>
+      this.builder.makeQT(x)
+    )
+
+    // Batch-delete affected rows per table
+    for (const [table, gone] of Object.entries(groupedChanges)) {
+      if (gone.length === 0) continue
+
+      const fqtn = this.builder.makeQT(table)
+      const pkCols = gone[0].relation.columns
+        .filter((x) => x.primaryKey)
+        .map((x) => x.name)
+
+      stmts.push(
+        ...this.builder.prepareDeleteBatchedStatements(
+          `DELETE FROM ${fqtn} WHERE`,
+          pkCols,
+          gone.map((x) => x.oldRecord) as Record<string, SqlValue>[],
+          this.maxSqlParameters
+        )
+      )
+    }
+
+    await this.adapter.runInTransaction(
+      this.updateLsnStmt(lsn),
+      { sql: this.builder.deferOrDisableFKsForTx },
+      ...this._disableTriggers(affectedTables),
+      ...stmts,
+      ...this._enableTriggers(affectedTables)
+    )
+
+    await this._notifyChanges(fakeOplogEntries, 'remote')
+  }
+
   private async maybeGarbageCollect(
     origin: string,
     commitTimestamp: Date
@@ -1532,6 +1609,17 @@ export class SatelliteProcess implements Satellite {
     ]
   }
 
+  _addSeenGoneBatchStmt(subscriptionIds: string[]): Statement {
+    const meta = `${this.opts.metaTable}`
+
+    return {
+      sql: `INSERT INTO ${meta} VALUES ('seenGoneBatch', ${this.builder.makePositionalParam(
+        1
+      )} ON CONFLICT (key) DO UPDATE SET value = ${meta}.value || ',' || excluded.value`,
+      args: [subscriptionIds.join(',')],
+    }
+  }
+
   _addSeenAdditionalDataStmt(ref: string): Statement {
     const meta = `${this.opts.metaTable}`
     const sql = `
@@ -1545,8 +1633,15 @@ export class SatelliteProcess implements Satellite {
     return { sql, args }
   }
 
-  _resetSeenAdditionalDataStmt(): Statement {
-    return this._setMetaStatement('seenAdditionalData', '')
+  _resetAllSeenStmt(
+    keys: (keyof MetaEntries)[] = ['seenAdditionalData', 'seenGoneBatch']
+  ): Statement {
+    const whereClause = keys
+      .map((_, i) => `key = ${this.builder.makePositionalParam(i + 1)}`)
+      .join(' OR ')
+    const sql = `UPDATE ${this.opts.metaTable} SET VALUE = '' WHERE ${whereClause}`
+
+    return { sql, args: keys }
   }
 
   _setMetaStatement<K extends keyof MetaEntries>(

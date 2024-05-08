@@ -117,15 +117,13 @@ export class InMemorySubscriptionsManager
     subs.forEach((sub: SubscriptionId) => this._gcSubscription(sub))
   }
 
-  /**
-   * Unsubscribes from one or more subscriptions.
-   * @param subId A subscription ID or an array of subscription IDs.
-   */
-  async unsubscribe(
-    subIds: SubscriptionId | SubscriptionId[]
-  ): Promise<SubscriptionId[]> {
-    const ids = Array.isArray(subIds) ? subIds : [subIds]
-    const shapes: ShapeDefinition[] = ids.flatMap(
+  unsubscribe(subIds: SubscriptionId[]): void {
+    // remove all subscriptions from memory
+    this._gcSubscriptions(subIds)
+  }
+
+  async unsubscribeAndGC(subIds: SubscriptionId[]): Promise<void> {
+    const shapes: ShapeDefinition[] = subIds.flatMap(
       (id) => this.shapesForActiveSubscription(id) ?? []
     )
 
@@ -134,13 +132,13 @@ export class InMemorySubscriptionsManager
       await this.gcHandler(shapes)
     }
     // also remove all subscriptions from memory
-    this._gcSubscriptions(ids)
-    return ids
+    this.unsubscribe(subIds)
   }
 
-  unsubscribeAll(): Promise<string[]> {
+  async unsubscribeAllAndGC(): Promise<SubscriptionId[]> {
     const ids = Object.keys(this.fulfilledSubscriptions)
-    return this.unsubscribe(ids)
+    await this.unsubscribeAndGC(ids)
+    return ids
   }
 
   serialize(): string {
