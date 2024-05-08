@@ -121,7 +121,8 @@ defmodule Electric.Replication.Shapes.SentRowsGraph do
     end
   end
 
-  defp dfs_traverse(
+  @doc false
+  def dfs_traverse(
          vertices,
          graph,
          acc,
@@ -130,7 +131,7 @@ defmodule Electric.Replication.Shapes.SentRowsGraph do
          visited \\ MapSet.new()
        )
 
-  defp dfs_traverse(
+  def dfs_traverse(
          [v_id | rest],
          %Graph{out_edges: oe, in_edges: ie, vertices: vs, edges: e} = g,
          acc,
@@ -168,7 +169,7 @@ defmodule Electric.Replication.Shapes.SentRowsGraph do
     end
   end
 
-  defp dfs_traverse([], _g, acc, _, _, _) do
+  def dfs_traverse([], _g, acc, _, _, _) do
     acc
   end
 end

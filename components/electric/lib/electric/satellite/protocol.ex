@@ -336,9 +336,6 @@ defmodule Electric.Satellite.Protocol do
           {:reply, result, state} ->
             {%{resp | result: {:message, rpc_encode(result)}}, state}
 
-          {:force_unpause, result, state} ->
-            {:force_unpause, %{resp | result: {:message, rpc_encode(result)}}, state}
-
           {:reply, result, followups, state} ->
             {[%{resp | result: {:message, rpc_encode(result)}}, followups], state}
 
