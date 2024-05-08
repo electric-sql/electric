@@ -10,6 +10,9 @@ import { Electric, schema } from './generated/client'
 
 const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
 
+const { tabId } = uniqueTabId()
+const scopedDbName = `basic-${LIB_VERSION}-${tabId}.db`
+
 const ElectricProviderComponent = ({
   children,
 }: {
@@ -25,9 +28,6 @@ const ElectricProviderComponent = ({
         debug: import.meta.env.DEV,
         url: import.meta.env.ELECTRIC_SERVICE,
       }
-
-      const { tabId } = uniqueTabId()
-      const scopedDbName = `basic-${LIB_VERSION}-${tabId}.db`
 
       const conn = await ElectricDatabase.init(scopedDbName)
       const client = await electrify(conn, schema, config)
