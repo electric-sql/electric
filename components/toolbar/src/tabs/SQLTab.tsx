@@ -4,15 +4,11 @@ import {
   UnControlled as CodeMirrorUnControlled,
 } from 'react-codemirror2'
 import { ToolbarTabsProps } from '../tabs'
-import {
-  DataEditor,
-  GridCell,
-  GridCellKind,
-  Item,
-} from '@glideapps/glide-data-grid'
 import { Button, Callout, Flex, Grid, ScrollArea, Tabs } from '@radix-ui/themes'
+import { DataTable } from '../components/DataTable'
 
 export default function SQLTab({ dbName, api }: ToolbarTabsProps): JSX.Element {
+  const [history, setHistory] = useState('')
   const [code, setCode] = useState(
     'SELECT name FROM sqlite_schema\n' +
       "WHERE type='table'\n" +
@@ -21,12 +17,12 @@ export default function SQLTab({ dbName, api }: ToolbarTabsProps): JSX.Element {
   const [response, setResponse] = useState<Record<string, unknown>[] | string>(
     [],
   )
+
   const isError = useMemo(() => typeof response === 'string', [response])
   const columnNames = useMemo(
     () => (response.length > 0 ? Object.keys(response[0]) : []),
     [response],
   )
-  const [history, setHistory] = useState('')
 
   const submitSQL = () => {
     setHistory(history + code + '\n\n')
@@ -37,21 +33,6 @@ export default function SQLTab({ dbName, api }: ToolbarTabsProps): JSX.Element {
   }
 
   const clearHistory = useCallback(() => setHistory(''), [])
-
-  const getCellContent = useCallback(
-    (cell: Item): GridCell => {
-      const [col, row] = cell
-      const dataRow = response[row] as Record<string, unknown>
-      const d = dataRow[columnNames[col]]
-      return {
-        kind: GridCellKind.Text,
-        allowOverlay: false,
-        displayData: String(d),
-        data: String(d),
-      }
-    },
-    [response, columnNames],
-  )
 
   return (
     <Grid
@@ -114,19 +95,7 @@ export default function SQLTab({ dbName, api }: ToolbarTabsProps): JSX.Element {
         </Tabs.List>
         <FixedSizeTabContent value="table">
           {typeof response !== 'string' && response.length > 0 ? (
-            <DataEditor
-              width="100%"
-              height="100%"
-              getCellContent={getCellContent}
-              rows={response.length}
-              getCellsForSelection
-              columns={columnNames.map((cn) => ({
-                title: cn,
-                id: cn,
-                grow: 1,
-                hasMenu: false,
-              }))}
-            />
+            <DataTable rows={response} columnNames={columnNames} />
           ) : (
             <Callout.Root color={isError ? 'red' : undefined}>
               <Callout.Text>

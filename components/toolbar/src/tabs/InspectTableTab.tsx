@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { ToolbarTabsProps } from '../tabs'
 import {
   Box,
@@ -9,21 +9,16 @@ import {
   Spinner,
   Text,
 } from '@radix-ui/themes'
-import {
-  DataEditor,
-  GridCell,
-  GridCellKind,
-  Item,
-} from '@glideapps/glide-data-grid'
 import { DbTableInfo } from 'src/api/interface'
+import { DataTable } from '../components/DataTable'
 
 export default function InspectTableTab({ dbName, api }: ToolbarTabsProps) {
   const [tables, setTables] = useState<DbTableInfo[] | null>(null)
   const [tableInfo, setTableInfo] = useState<DbTableInfo | null>(null)
-  const [rows, setRows] = useState<Record<string, unknown>[] | string>([])
+  const [rows, setRows] = useState<Record<string, unknown>[]>([])
   const columnNames = useMemo(
-    () => (rows.length > 0 ? Object.keys(rows[0]) : []),
-    [rows],
+    () => (tableInfo !== null ? tableInfo.columns.map((c) => c.name) : []),
+    [tableInfo],
   )
 
   useEffect(() => {
@@ -66,21 +61,6 @@ export default function InspectTableTab({ dbName, api }: ToolbarTabsProps) {
     }
   }, [dbName, api, tableInfo])
 
-  const getCellContent = useCallback(
-    (cell: Item): GridCell => {
-      const [col, row] = cell
-      const dataRow = rows[row] as Record<string, unknown>
-      const d = dataRow[columnNames[col]]
-      return {
-        kind: GridCellKind.Text,
-        allowOverlay: false,
-        displayData: String(d),
-        data: String(d),
-      }
-    },
-    [rows, columnNames],
-  )
-
   if (!tables) {
     return (
       <Flex gap="2">
@@ -122,19 +102,7 @@ export default function InspectTableTab({ dbName, api }: ToolbarTabsProps) {
       <Separator orientation="vertical" style={{ height: '100%' }} />
 
       <Flex height="100%" flexGrow="1">
-        <DataEditor
-          width="100%"
-          height="100%"
-          columns={tableInfo!.columns.map((c) => ({
-            title: c.name,
-            id: c.name,
-            grow: 1,
-            width: 100,
-          }))}
-          rows={rows.length}
-          getCellsForSelection
-          getCellContent={getCellContent}
-        />
+        <DataTable rows={rows} columnNames={columnNames} />
       </Flex>
     </Flex>
   )
