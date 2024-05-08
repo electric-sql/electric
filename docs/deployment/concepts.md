@@ -40,9 +40,9 @@ Whatever your target environment, your app code typically needs to be built, bun
 
 ### Generator
 
-The generator is built into the [`electric-sql` Typescript library](../usage/installation/client.md) and is invoked as the [`npx electric-sql generate` command](../api/cli.md#generate) that you call in development and during your build process to generate a [type safe client library](../usage/installation/client.md).
+The generator is built into the [`electric-sql` TypeScript library](../usage/installation/client.md) and is invoked as the [`npx electric-sql generate` command](../api/cli.md#generate) that you call in development and during your build process to generate a [type safe client library](../usage/installation/client.md).
 
-The generator needs to be able to connect to the Electric sync service and outputs a Typescript module that's imported and bundled into your app.
+The generator needs to be able to connect to the Electric sync service and outputs a TypeScript module that's imported and bundled into your app.
 
 ### Migrations proxy
 
@@ -135,7 +135,7 @@ pg-migrations apply \
 
 ### 3. Generator <-> Electric
 
-When you build a local-first app with ElectricSQL, you [use the CLI `generate` command](../api/cli.md#generate) provided by the [Typescript client](../usage/installation/client.md) to generate a type-safe, schema-aware data access library and bundle this into your app.
+When you build a local-first app with ElectricSQL, you [use the CLI `generate` command](../api/cli.md#generate) provided by the [TypeScript client](../usage/installation/client.md) to generate a type-safe, schema-aware data access library and bundle this into your app.
 
 When you *deploy* you app, you typically want to setup your CI or build environment to run the generate command as part of your production build process. This currently requires providing both `--service` and `--proxy` connection URLs, typically configured in your build environment using environment variables.
 

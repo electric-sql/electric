@@ -1,4 +1,4 @@
-You need to have a Postgres database, run the Electric sync service and develop using the Typescript client.
+You need to have a Postgres database, run the Electric sync service and develop using the TypeScript client.
 
 ### Postgres database
 
@@ -34,7 +34,7 @@ docker run \
 
 See <DocPageLink path="usage/installation/service" /> for more info.
 
-### Typescript client
+### TypeScript client
 
 Add the `electric-sql` library to your web or mobile app, along with an [SQLite driver](../integrations/drivers/index.md):
 

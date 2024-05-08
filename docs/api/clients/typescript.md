@@ -1,13 +1,13 @@
 ---
-title: Typescript
+title: TypeScript
 description: >-
   Function API and types provided by the generated data access library.
 sidebar_position: 10
 ---
 
-# Typescript client
+# TypeScript client
 
-The Typescript client provides a number of functions for developing front-end applications with Electric: 
+The TypeScript client provides a number of functions for developing front-end applications with Electric:
 
 - [Authenticating](../../usage/auth/) with the sync service
 - [Synchronising database](#shapes) to a local SQLite database
@@ -16,7 +16,7 @@ The Typescript client provides a number of functions for developing front-end ap
 
 ## Instantiation
 
-A Typescript client comprises of:
+A TypeScript client comprises of:
 
 1. SQLite database connection from a [supported driver](../../integrations/drivers/)
 2. A client schema [generated using the generator command](../cli.md#generate)
@@ -25,19 +25,19 @@ A Typescript client comprises of:
 To instantiate the client, these are passed to an `electrify` function that is specific to your SQLite database driver and platform.
 
 ```ts
-import { schema } from './generated/client'
-import { insecureAuthToken } from 'electric-sql/auth'
-import { electrify, ElectricDatabase } from 'electric-sql/wa-sqlite'
+import { schema } from "./generated/client";
+import { insecureAuthToken } from "electric-sql/auth";
+import { electrify, ElectricDatabase } from "electric-sql/wa-sqlite";
 
 const config = {
   auth: {
-    clientId: 'dummy client id'
-  }
-}
-const conn = await ElectricDatabase.init('electric.db')
-const electric = await electrify(conn, schema, config)
-const token = insecureAuthToken({sub: 'dummy'})
-await electric.connect(token)
+    clientId: "dummy client id",
+  },
+};
+const conn = await ElectricDatabase.init("electric.db");
+const electric = await electrify(conn, schema, config);
+const token = insecureAuthToken({ sub: "dummy" });
+await electric.connect(token);
 ```
 
 The `electrify` call returns a promise that will resolve to an `ElectricClient` for our database.
@@ -46,30 +46,29 @@ The Electric client exposes the following interface:
 
 ```ts
 interface ElectricClient<DB> {
-  db: ClientTables<DB> & RawQueries
-  connect(token?: string): Promise<void>
-  disconnect(): void
+  db: ClientTables<DB> & RawQueries;
+  connect(token?: string): Promise<void>;
+  disconnect(): void;
 }
 
 export type ClientTables<DB> = {
-  users: UsersTable
-  projects: ProjectsTable
-  memberships: MembershipsTable
-  issues: IssuesTable
-  comments: CommentsTable
-}
+  users: UsersTable;
+  projects: ProjectsTable;
+  memberships: MembershipsTable;
+  issues: IssuesTable;
+  comments: CommentsTable;
+};
 
 interface RawQueries {
-  rawQuery(sql: Statement): Promise<Row[]>
-  liveRawQuery(sql: Statement): LiveResultContext<any>
-  unsafeExec(sql: Statement): Promise<Row[]>
+  rawQuery(sql: Statement): Promise<Row[]>;
+  liveRawQuery(sql: Statement): LiveResultContext<any>;
+  unsafeExec(sql: Statement): Promise<Row[]>;
 }
 
 type Statement = {
-  sql: string
-  args?: BindParams
-}
-
+  sql: string;
+  args?: BindParams;
+};
 ```
 
 The Electric client above defines a property for every table in our data model: `electric.db.users`, `electric.db.projects`, etc.
@@ -81,6 +80,7 @@ Therefore, only use raw queries for features that are not supported by our regul
 ## Connectivity methods
 
 The Electric client provides two connectivity methods:
+
 - `connect(token?: string)`: connects to Electric using the provided token. Can be used to reconnect to Electric in case the connection breaks; if the token is not provided the previous one is used.
 - `disconnect()`: disconnects from Electric. Can be used to go into offline mode.
 
@@ -92,32 +92,32 @@ The Electric client has a few configuration options that are defined on the `Ele
 
 ```ts
 const config: ElectricConfig = {
-  url: 'http://my-app-domain',
-}
+  url: "http://my-app-domain",
+};
 ```
 
 ### Available options
 
 - `auth?: AuthConfig`
 
-   Authentication object that includes an optional client id `clientId`.
+  Authentication object that includes an optional client id `clientId`.
 
-   `clientId` is a unique identifier for this particular client or device. If omitted, a random UUID will be generated
-   the first time this client connects to the sync service.
+  `clientId` is a unique identifier for this particular client or device. If omitted, a random UUID will be generated
+  the first time this client connects to the sync service.
 
 - `url?: string` (default: `"http://localhost:5133"`)
 
-   URL of the Electric sync service to connect to.
+  URL of the Electric sync service to connect to.
 
-   Should have the following format:
+  Should have the following format:
 
-   ```
-   protocol://<host>:<port>[?ssl=true]
-   ```
+  ```
+  protocol://<host>:<port>[?ssl=true]
+  ```
 
-   If the protocol is `https` or `wss` then `ssl` defaults to true. Otherwise it defaults to false.
+  If the protocol is `https` or `wss` then `ssl` defaults to true. Otherwise it defaults to false.
 
-   If port is not provided, defaults to 443 when ssl is enabled or 80 when it isn't.
+  If port is not provided, defaults to 443 when ssl is enabled or 80 when it isn't.
 
 - `debug?: boolean` (default: `false`)
 
@@ -130,11 +130,10 @@ const config: ElectricConfig = {
   Needs to be large enough for the server to have time to deliver the full initial subscription data
   when the client subscribes to a shape for the first time.
 
-
 - `connectionBackOffOptions?: ConnectionBackOffOptions`
 
-   Configuration of the backoff strategy used when trying to reconnect to the Electric sync service after a failed
-   connection attempt.
+  Configuration of the backoff strategy used when trying to reconnect to the Electric sync service after a failed
+  connection attempt.
 
 ### Configuring example apps
 
@@ -166,22 +165,24 @@ Tables can be synced by requesting new shape subscriptions.
 
 Once we are connected to the sync service we can request a new shape subscription using the `sync` method on database tables.
 We can sync a single table:
+
 ```ts
-const { synced } = await electric.db.comments.sync()
+const { synced } = await electric.db.comments.sync();
 // shape request was acknowledged by the server
 // waiting for the data to be delivered...
-await synced
+await synced;
 // now the shape data has been delivered
 ```
 
 Or we can sync several tables using one shape:
+
 ```ts
 const { synced } = await electric.db.projects.sync({
   include: {
-    owner: true
-  }
-})
-await synced
+    owner: true,
+  },
+});
+await synced;
 // data for both tables got delivered
 ```
 
@@ -190,11 +191,11 @@ since we explicitly included the `owner`s of projects.
 We can achieve the same using two separate shape subscriptions:
 
 ```ts
-const { synced: sync1 } = await electric.db.projects.sync()
-const { synced: sync2 } = await electric.db.users.sync()
-await sync1
+const { synced: sync1 } = await electric.db.projects.sync();
+const { synced: sync2 } = await electric.db.users.sync();
+await sync1;
 // data for projects table has been delivered
-await sync2
+await sync2;
 // data for users table has been delivered
 ```
 
@@ -203,6 +204,7 @@ is delivered independently, whereas, in the previous example they are deliver to
 
 When a table is not yet synced, it exists on the device's local database but is empty.
 If you try to read from an unsynced table you will get empty results and a warning will be logged:
+
 > Reading from unsynced table memberships
 
 ## Queries
@@ -317,11 +319,11 @@ Accepts an object containing the following arguments:
 
 #### Options
 
-| Name | Example type | Required | Description |
-|------|--------------|----------|-------------|
-| `data` | `XOR<IssueCreateInput, IssueUncheckedCreateInput>` | Yes | An object representing the record to be inserted. This object must contain a value for all non-nullable fields and may contain relation fields in order to perform nested transactional insertions. |
-| `select` | `IssueSelect` | No | A selection of fields to include in the returned object. |
-| `include` | `IssueInclude` | No | Specifies relations to be included. |
+| Name      | Example type                                       | Required | Description                                                                                                                                                                                         |
+| --------- | -------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `data`    | `XOR<IssueCreateInput, IssueUncheckedCreateInput>` | Yes      | An object representing the record to be inserted. This object must contain a value for all non-nullable fields and may contain relation fields in order to perform nested transactional insertions. |
+| `select`  | `IssueSelect`                                      | No       | A selection of fields to include in the returned object.                                                                                                                                            |
+| `include` | `IssueInclude`                                     | No       | Specifies relations to be included.                                                                                                                                                                 |
 
 #### Examples
 
@@ -332,9 +334,9 @@ await electric.db.issues.create({
   data: {
     id: "0c67311d-196e-4504-b64d-27fa59679a65",
     title: "Create my first Electric app",
-    project_id: "9c0f2a8f-0d8b-405d-8278-b1b2f200e7d2"
-  }
-})
+    project_id: "9c0f2a8f-0d8b-405d-8278-b1b2f200e7d2",
+  },
+});
 ```
 
 Similarly, we can create an issue and limit the fields that are returned:
@@ -344,13 +346,13 @@ const { id, title } = await electric.db.issues.create({
   data: {
     id: "0c67311d-196e-4504-b64d-27fa59679a65",
     title: "Create my first Electric app",
-    project_id: "9c0f2a8f-0d8b-405d-8278-b1b2f200e7d2"
+    project_id: "9c0f2a8f-0d8b-405d-8278-b1b2f200e7d2",
   },
   select: {
     id: true,
-    title: true
-  }
-})
+    title: true,
+  },
+});
 ```
 
 Or, we can include related fields on the returned object:
@@ -362,9 +364,9 @@ await electric.db.issues.create({
     title: "Create my first Electric app",
   },
   include: {
-    project: true
-  }
-})
+    project: true,
+  },
+});
 ```
 
 We can also create an issue and the project it belongs to:
@@ -378,11 +380,11 @@ await electric.db.issues.create({
       create: {
         id: "9c0f2a8f-0d8b-405d-8278-b1b2f200e7d2",
         name: "My project",
-        owner_id: "Alice"
-      }
-    }
-  }
-})
+        owner_id: "Alice",
+      },
+    },
+  },
+});
 ```
 
 ### `createMany`
@@ -392,10 +394,10 @@ Returns a count of how many records were created.
 
 #### Options
 
-| Name | Example type | Required | Description |
-|------|--------------|----------|-------------|
-| `data` | <code>IssueCreateManyInput &#124; IssueCreateManyInput[]</code> | Yes | One or more records to create. Records must contain values for all non-nullable fields and may include related fields to perform nested inserts transactionally. |
-| `skipDuplicates` | `boolean` | No | Do not create records for which a unique field or ID field already exists. Thereby, ignoring records that are conflicting. |
+| Name             | Example type                                                    | Required | Description                                                                                                                                                      |
+| ---------------- | --------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `data`           | <code>IssueCreateManyInput &#124; IssueCreateManyInput[]</code> | Yes      | One or more records to create. Records must contain values for all non-nullable fields and may include related fields to perform nested inserts transactionally. |
+| `skipDuplicates` | `boolean`                                                       | No       | Do not create records for which a unique field or ID field already exists. Thereby, ignoring records that are conflicting.                                       |
 
 #### Examples
 
@@ -406,8 +408,8 @@ const { count } = await electric.db.issues.createMany({
   data: {
     id: "0c67311d-196e-4504-b64d-27fa59679a65",
     title: "Create my first Electric app",
-  }
-})
+  },
+});
 ```
 
 Create multiple issues:
@@ -423,14 +425,14 @@ const { count } = await electric.db.issues.createMany({
       id: "5252f22d-4223-4b18-be1c-b149f21e6f5c",
       title: "Improve the app",
     },
-  ]
-})
+  ],
+});
 ```
 
 Ignore conflicting records:
 
 ```ts
-const id = "0c67311d-196e-4504-b64d-27fa59679a65"
+const id = "0c67311d-196e-4504-b64d-27fa59679a65";
 const { count } = await electric.db.issues.createMany({
   data: [
     {
@@ -442,10 +444,10 @@ const { count } = await electric.db.issues.createMany({
       title: "Improve the app",
     },
   ],
-  skipDuplicates: true
-})
-console.log(count) // prints 1 because the 2nd record has the same ID
-                   // as the first one so it is ignored
+  skipDuplicates: true,
+});
+console.log(count); // prints 1 because the 2nd record has the same ID
+// as the first one so it is ignored
 ```
 
 ### `findUnique`
@@ -455,50 +457,53 @@ Returns the record if it is found and `null` otherwise.
 
 #### Options
 
-| Name | Example type | Required | Description |
-|------|--------------|----------|-------------|
-| `where` | `IssueWhereUniqueInput` | Yes | One or more fields that uniquely identify a record. |
-| `select` | `IssueSelect` | No | A selection of fields to include on the returned object. |
-| `include` | `IssueInclude` | No | Specifies relations to be included. |
+| Name      | Example type            | Required | Description                                              |
+| --------- | ----------------------- | -------- | -------------------------------------------------------- |
+| `where`   | `IssueWhereUniqueInput` | Yes      | One or more fields that uniquely identify a record.      |
+| `select`  | `IssueSelect`           | No       | A selection of fields to include on the returned object. |
+| `include` | `IssueInclude`          | No       | Specifies relations to be included.                      |
 
 #### Examples
 
 Using the `where` argument we can fetch a record by its unique identifier or by a combination of fields
 that uniquely identify the record:
+
 ```ts
 const result = await electric.db.issues.findUnique({
   where: {
-    id: 5
-  }
-})
+    id: 5,
+  },
+});
 ```
 
 If we are only interested in the author's name we can use `select`:
+
 ```ts
 const { author } = await electric.db.issues.findUnique({
   where: {
-    id: 5
+    id: 5,
   },
   select: {
-    author: true
-  }
-})
+    author: true,
+  },
+});
 ```
 
 And if we want to also get the issue's comments and their authors we can use `include`:
+
 ```ts
 const issueWithCommentsAndTheirAuthor = await electric.db.issues.findUnique({
   where: {
-    id: 5
+    id: 5,
   },
   include: {
     comments: {
       include: {
-        author: true
-      }
-    }
-  }
-})
+        author: true,
+      },
+    },
+  },
+});
 ```
 
 ### `findFirst`
@@ -509,14 +514,14 @@ Returns a record if one was found and `null` otherwise.
 
 #### Options
 
-| Name | Example type | Required | Description |
-|------|--------------|----------|-------------|
-| `where` | `IssueWhereInput` | No | Fields on which to filter the records. |
-| `select` | `IssueSelect` | No | A selection of fields to include on the returned object. |
-| `include` | `IssueInclude` | No | Specifies relations to be included. |
-| `orderBy` | <code>IssueOrderByInput &#124; IssueOrderByInput[]</code> | No | Order the list of matching records by the specified properties. |
-| `skip` | `number` | No | Number of records to skip from the list of matching records. |
-| `distinct` | <code>IssueDistinctFieldEnum[]</code> | No | Filter duplicates based on one or more fields. |
+| Name       | Example type                                              | Required | Description                                                     |
+| ---------- | --------------------------------------------------------- | -------- | --------------------------------------------------------------- |
+| `where`    | `IssueWhereInput`                                         | No       | Fields on which to filter the records.                          |
+| `select`   | `IssueSelect`                                             | No       | A selection of fields to include on the returned object.        |
+| `include`  | `IssueInclude`                                            | No       | Specifies relations to be included.                             |
+| `orderBy`  | <code>IssueOrderByInput &#124; IssueOrderByInput[]</code> | No       | Order the list of matching records by the specified properties. |
+| `skip`     | `number`                                                  | No       | Number of records to skip from the list of matching records.    |
+| `distinct` | <code>IssueDistinctFieldEnum[]</code>                     | No       | Filter duplicates based on one or more fields.                  |
 
 #### Examples
 
@@ -526,10 +531,10 @@ Get an issue of some project:
 await electric.db.issues.findFirst({
   where: {
     project: {
-      id: '17b1daef-07b3-4689-9e73-5af05474f17d'
-    }
-  }
-})
+      id: "17b1daef-07b3-4689-9e73-5af05474f17d",
+    },
+  },
+});
 ```
 
 To get the first issue of some project we can use `orderBy` to order on ascending time of insertion:
@@ -538,13 +543,13 @@ To get the first issue of some project we can use `orderBy` to order on ascendin
 await electric.db.issues.findFirst({
   where: {
     project: {
-      id: '17b1daef-07b3-4689-9e73-5af05474f17d'
-    }
+      id: "17b1daef-07b3-4689-9e73-5af05474f17d",
+    },
   },
   orderBy: {
-    inserted_at: 'asc'
-  }
-})
+    inserted_at: "asc",
+  },
+});
 ```
 
 Similarly, we can get the latest issue of some project using `orderBy` to order on descending time of insertion:
@@ -553,13 +558,13 @@ Similarly, we can get the latest issue of some project using `orderBy` to order 
 await electric.db.issues.findFirst({
   where: {
     project: {
-      id: '17b1daef-07b3-4689-9e73-5af05474f17d'
-    }
+      id: "17b1daef-07b3-4689-9e73-5af05474f17d",
+    },
   },
   orderBy: {
-    inserted_at: 'desc'
-  }
-})
+    inserted_at: "desc",
+  },
+});
 ```
 
 And if we want to get the 2nd latest issue of some project we can combine `orderBy` with `skip: 1`:
@@ -568,14 +573,14 @@ And if we want to get the 2nd latest issue of some project we can combine `order
 await electric.db.issues.findFirst({
   where: {
     project: {
-      id: '17b1daef-07b3-4689-9e73-5af05474f17d'
-    }
+      id: "17b1daef-07b3-4689-9e73-5af05474f17d",
+    },
   },
   orderBy: {
-    inserted_at: 'desc'
+    inserted_at: "desc",
   },
-  skip: 1
-})
+  skip: 1,
+});
 ```
 
 ### `findMany`
@@ -585,30 +590,30 @@ It supports the same arguments as `findFirst` with the addition of `take`.
 
 #### Options
 
-| Name | Example type | Required | Description |
-|------|--------------|----------|-------------|
-| `where` | `IssueWhereInput` | No | Fields on which to filter the records. |
-| `select` | `IssueSelect` | No | A selection of fields to include on the returned object. |
-| `include` | `IssueInclude` | No | Specifies relations to be included. |
-| `orderBy` | <code>IssueOrderByInput &#124; IssueOrderByInput[]</code> | No | Order the list of matching records by the specified properties. |
-| `skip` | `number` | No | Number of records to skip from the list of matching records. |
-| `distinct` | <code>IssueDistinctFieldEnum[]</code> | No | Filter duplicates based on one or more fields. |
-| `take` | `number` | No | Number of matching data records to return. |
+| Name       | Example type                                              | Required | Description                                                     |
+| ---------- | --------------------------------------------------------- | -------- | --------------------------------------------------------------- |
+| `where`    | `IssueWhereInput`                                         | No       | Fields on which to filter the records.                          |
+| `select`   | `IssueSelect`                                             | No       | A selection of fields to include on the returned object.        |
+| `include`  | `IssueInclude`                                            | No       | Specifies relations to be included.                             |
+| `orderBy`  | <code>IssueOrderByInput &#124; IssueOrderByInput[]</code> | No       | Order the list of matching records by the specified properties. |
+| `skip`     | `number`                                                  | No       | Number of records to skip from the list of matching records.    |
+| `distinct` | <code>IssueDistinctFieldEnum[]</code>                     | No       | Filter duplicates based on one or more fields.                  |
+| `take`     | `number`                                                  | No       | Number of matching data records to return.                      |
 
 #### Examples
 
 We can fetch all issues:
 
 ```ts
-await electric.db.issues.findMany() // equivalent to passing an empty object {}
+await electric.db.issues.findMany(); // equivalent to passing an empty object {}
 ```
 
 We can also use `take` to limit the results to the first 5 issues:
 
 ```ts
 await electric.db.issues.findMany({
-  take: 5
-})
+  take: 5,
+});
 ```
 
 ### `update`
@@ -617,12 +622,12 @@ await electric.db.issues.findMany({
 
 #### Options
 
-| Name | Example type | Required | Description |
-|------|--------------|----------|-------------|
-| `data` | `XOR<IssueUpdateInput, IssueUncheckedUpdateInput>` | Yes | Object containing the fields to be updated. |
-| `where` | `IssueWhereUniqueInput` | Yes | One or more fields that uniquely identify the record. |
-| `select` | `IssueSelect` | No | A selection of fields to include in the returned object. |
-| `include` | `IssueInclude` | No | Specifies relations to be included in the returned object. |
+| Name      | Example type                                       | Required | Description                                                |
+| --------- | -------------------------------------------------- | -------- | ---------------------------------------------------------- |
+| `data`    | `XOR<IssueUpdateInput, IssueUncheckedUpdateInput>` | Yes      | Object containing the fields to be updated.                |
+| `where`   | `IssueWhereUniqueInput`                            | Yes      | One or more fields that uniquely identify the record.      |
+| `select`  | `IssueSelect`                                      | No       | A selection of fields to include in the returned object.   |
+| `include` | `IssueInclude`                                     | No       | Specifies relations to be included in the returned object. |
 
 #### Examples
 
@@ -631,12 +636,12 @@ We can use `update` to update the title of a specific issue:
 ```ts
 await electric.db.issues.update({
   data: {
-    title: 'Updated issue title'
+    title: "Updated issue title",
   },
   where: {
-    id: '17b1daef-07b3-4689-9e73-5af05474f17'
-  }
-})
+    id: "17b1daef-07b3-4689-9e73-5af05474f17",
+  },
+});
 ```
 
 We can also update an issue and one of its comments by using a nested `update`:
@@ -644,42 +649,42 @@ We can also update an issue and one of its comments by using a nested `update`:
 ```ts
 await electric.db.issues.update({
   data: {
-    title: 'Updated issue title',
+    title: "Updated issue title",
     comments: {
       update: {
         data: {
-          text: 'Updated comment text'
+          text: "Updated comment text",
         },
         where: {
-          author_id: '422bfea3-2a1f-45ae-b6f9-3efeec4a5864'
-        }
-      }
-    }
+          author_id: "422bfea3-2a1f-45ae-b6f9-3efeec4a5864",
+        },
+      },
+    },
   },
   where: {
-    id: '6a87a816-4b8c-48e5-9ccf-eaf558032d82'
-  }
-})
+    id: "6a87a816-4b8c-48e5-9ccf-eaf558032d82",
+  },
+});
 ```
 
-We can also update an issue and *all* or *several* of its comments by using a nested `updateMany`:
+We can also update an issue and _all_ or _several_ of its comments by using a nested `updateMany`:
 
 ```ts
 await electric.db.issues.update({
   data: {
-    title: 'Updated issue title',
+    title: "Updated issue title",
     comments: {
       updateMany: {
         data: {
-          text: 'Updated comment text'
-        }
-      }
-    }
+          text: "Updated comment text",
+        },
+      },
+    },
   },
   where: {
-    id: '6a87a816-4b8c-48e5-9ccf-eaf558032d82'
-  }
-})
+    id: "6a87a816-4b8c-48e5-9ccf-eaf558032d82",
+  },
+});
 ```
 
 We can even nest several queries by providing an array of nested `update` and/or `updateMany` queries.
@@ -688,32 +693,32 @@ The following query updates an issue and two of its comments:
 ```ts
 await electric.db.issues.update({
   data: {
-    title: 'Updated issue title',
+    title: "Updated issue title",
     comments: {
       update: [
         {
           data: {
-            text: 'Updated comment text'
+            text: "Updated comment text",
           },
           where: {
-            id: 'f4ec1d54-664d-40e8-bc64-2736fb3c14b3'
-          }
+            id: "f4ec1d54-664d-40e8-bc64-2736fb3c14b3",
+          },
         },
         {
           data: {
-            text: "Updated another comment's text"
+            text: "Updated another comment's text",
           },
           where: {
-            id: '15d1cf30-80c3-4fb8-bcbf-a681171d134f'
-          }
-        }
-      ]
-    }
+            id: "15d1cf30-80c3-4fb8-bcbf-a681171d134f",
+          },
+        },
+      ],
+    },
   },
   where: {
-    id: '6a87a816-4b8c-48e5-9ccf-eaf558032d82'
-  }
-})
+    id: "6a87a816-4b8c-48e5-9ccf-eaf558032d82",
+  },
+});
 ```
 
 Note that updates can be arbitrarily nested, i.e., there is no limit to the number of nested updates.
@@ -724,10 +729,10 @@ Note that updates can be arbitrarily nested, i.e., there is no limit to the numb
 
 #### Options
 
-| Name | Example type | Required | Description |
-|------|--------------|----------|-------------|
-| `data` | `XOR<IssueUpdateManyMutationInput, IssueUncheckedUpdateManyInput>` | Yes | Object containing the fields to be updated. |
-| `where` | `IssueWhereInput` | No | Filters the database records based on the provided field values. |
+| Name    | Example type                                                       | Required | Description                                                      |
+| ------- | ------------------------------------------------------------------ | -------- | ---------------------------------------------------------------- |
+| `data`  | `XOR<IssueUpdateManyMutationInput, IssueUncheckedUpdateManyInput>` | Yes      | Object containing the fields to be updated.                      |
+| `where` | `IssueWhereInput`                                                  | No       | Filters the database records based on the provided field values. |
 
 #### Examples
 
@@ -736,9 +741,9 @@ Note that updates can be arbitrarily nested, i.e., there is no limit to the numb
 ```ts
 await electric.db.issues.updateMany({
   data: {
-    description: 'Default description for all issues'
-  }
-})
+    description: "Default description for all issues",
+  },
+});
 ```
 
 or it can be used to update certain database records, e.g, all issues of a project:
@@ -746,12 +751,12 @@ or it can be used to update certain database records, e.g, all issues of a proje
 ```ts
 await electric.db.issues.updateMany({
   data: {
-    description: 'Default description for all issues of this project'
+    description: "Default description for all issues of this project",
   },
   where: {
-    project_id: '6c0b6320-830e-42f8-937d-da389e9591e3'
-  }
-})
+    project_id: "6c0b6320-830e-42f8-937d-da389e9591e3",
+  },
+});
 ```
 
 ### `upsert`
@@ -761,13 +766,13 @@ await electric.db.issues.updateMany({
 
 #### Options
 
-| Name | Example type | Required | Description |
-|------|--------------|----------|-------------|
-| `create` | `XOR<IssueCreateInput, IssueUncheckedCreateInput>` | Yes | An object representing the record to be inserted. This object must contain a value for all non-nullable fields and may contain relation fields in order to perform nested transactional insertions. |
-| `update` | `XOR<IssueUpdateInput, IssueUncheckedUpdateInput>` | Yes | Object containing the fields to be updated. |
-| `where` | `IssueWhereUniqueInput` | Yes | One or more fields that uniquely identify the record. |
-| `select` | `IssueSelect` | No | A selection of fields to include in the returned object. |
-| `include` | `IssueInclude` | No | Specifies relations to be included in the returned object. |
+| Name      | Example type                                       | Required | Description                                                                                                                                                                                         |
+| --------- | -------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `create`  | `XOR<IssueCreateInput, IssueUncheckedCreateInput>` | Yes      | An object representing the record to be inserted. This object must contain a value for all non-nullable fields and may contain relation fields in order to perform nested transactional insertions. |
+| `update`  | `XOR<IssueUpdateInput, IssueUncheckedUpdateInput>` | Yes      | Object containing the fields to be updated.                                                                                                                                                         |
+| `where`   | `IssueWhereUniqueInput`                            | Yes      | One or more fields that uniquely identify the record.                                                                                                                                               |
+| `select`  | `IssueSelect`                                      | No       | A selection of fields to include in the returned object.                                                                                                                                            |
+| `include` | `IssueInclude`                                     | No       | Specifies relations to be included in the returned object.                                                                                                                                          |
 
 #### Examples
 
@@ -776,17 +781,17 @@ We can use `upsert` to update or create a new issue:
 ```ts
 const issue = await electric.db.issues.upsert({
   create: {
-    id: '0c67311d-196e-4504-b64d-27fa59679a65',
-    title: 'Create my first Electric app',
-    project_id: '9c0f2a8f-0d8b-405d-8278-b1b2f200e7d2'
+    id: "0c67311d-196e-4504-b64d-27fa59679a65",
+    title: "Create my first Electric app",
+    project_id: "9c0f2a8f-0d8b-405d-8278-b1b2f200e7d2",
   },
   update: {
-    title: 'Create my first Electric app'
+    title: "Create my first Electric app",
   },
   where: {
-    id: '0c67311d-196e-4504-b64d-27fa59679a65'
-  }
-})
+    id: "0c67311d-196e-4504-b64d-27fa59679a65",
+  },
+});
 ```
 
 ### `delete`
@@ -796,11 +801,11 @@ If the record to be deleted is not found, `delete` throws an `InvalidArgumentErr
 
 #### Options
 
-| Name | Example type | Required | Description |
-|------|--------------|----------|-------------|
-| `where` | `IssueWhereUniqueInput` | Yes | One or more fields that uniquely identify the record. |
-| `select` | `IssueSelect` | No | A selection of fields to include in the returned object. |
-| `include` | `IssueInclude` | No | Specifies relations to be included in the returned object. |
+| Name      | Example type            | Required | Description                                                |
+| --------- | ----------------------- | -------- | ---------------------------------------------------------- |
+| `where`   | `IssueWhereUniqueInput` | Yes      | One or more fields that uniquely identify the record.      |
+| `select`  | `IssueSelect`           | No       | A selection of fields to include in the returned object.   |
+| `include` | `IssueInclude`          | No       | Specifies relations to be included in the returned object. |
 
 #### Examples
 
@@ -809,9 +814,9 @@ We can delete a specific issue:
 ```ts
 const issue = await electric.db.issues.delete({
   where: {
-    id: '0c67311d-196e-4504-b64d-27fa59679a65'
-  }
-})
+    id: "0c67311d-196e-4504-b64d-27fa59679a65",
+  },
+});
 ```
 
 ### `deleteMany`
@@ -820,16 +825,16 @@ const issue = await electric.db.issues.delete({
 
 #### Options
 
-| Name | Example type | Required | Description |
-|------|--------------|----------|-------------|
-| `where` | `IssueWhereInput` | No | Filters the database records based on the provided field values. |
+| Name    | Example type      | Required | Description                                                      |
+| ------- | ----------------- | -------- | ---------------------------------------------------------------- |
+| `where` | `IssueWhereInput` | No       | Filters the database records based on the provided field values. |
 
 #### Examples
 
 We can use `deleteMany` to delete all issues:
 
 ```ts
-const { count } = await electric.db.issues.deleteMany()
+const { count } = await electric.db.issues.deleteMany();
 ```
 
 or only delete the issues belonging to a certain project:
@@ -837,9 +842,9 @@ or only delete the issues belonging to a certain project:
 ```ts
 const { count } = await electric.db.issues.deleteMany({
   where: {
-    project_id: '9c0f2a8f-0d8b-405d-8278-b1b2f200e7d2'
-  }
-})
+    project_id: "9c0f2a8f-0d8b-405d-8278-b1b2f200e7d2",
+  },
+});
 ```
 
 ## Live Queries
@@ -850,8 +855,8 @@ To this end, the Electric client supports live versions for all find queries.
 Live queries are integrated with React by means of the `useLiveQuery` hook:
 
 ```ts
-import { useLiveQuery } from 'electric-sql/react'
-const { results } = useLiveQuery(db.issues.liveMany())
+import { useLiveQuery } from "electric-sql/react";
+const { results } = useLiveQuery(db.issues.liveMany());
 ```
 
 The live query above fetches all issues.
@@ -879,11 +884,11 @@ Live version of the `findUnique` query.
 
 #### Options
 
-| Name | Example type | Required | Description |
-|------|--------------|----------|-------------|
-| `where` | `IssueWhereUniqueInput` | Yes | One or more fields that uniquely identify the record. |
-| `select` | `IssueSelect` | No | A selection of fields to include on the returned object. |
-| `include` | `IssueInclude` | No | Specifies relations to be included. |
+| Name      | Example type            | Required | Description                                              |
+| --------- | ----------------------- | -------- | -------------------------------------------------------- |
+| `where`   | `IssueWhereUniqueInput` | Yes      | One or more fields that uniquely identify the record.    |
+| `select`  | `IssueSelect`           | No       | A selection of fields to include on the returned object. |
+| `include` | `IssueInclude`          | No       | Specifies relations to be included.                      |
 
 ### `liveFirst`
 
@@ -891,14 +896,14 @@ Live version of the `findFirst` query.
 
 #### Options
 
-| Name | Example type | Required | Description |
-|------|--------------|----------|-------------|
-| `where` | `IssueWhereInput` | No | Fields on which to filter the records. |
-| `select` | `IssueSelect` | No | A selection of fields to include on the returned object. |
-| `include` | `IssueInclude` | No | Specifies relations to be included. |
-| `orderBy` | <code>IssueOrderByInput &#124; IssueOrderByInput[]</code> | No | Order the list of matching records by the specified properties. |
-| `skip` | `number` | No | Number of records to skip from the list of matching records. |
-| `distinct` | <code>IssueDistinctFieldEnum[]</code> | No | Filter duplicates based on one or more fields. |
+| Name       | Example type                                              | Required | Description                                                     |
+| ---------- | --------------------------------------------------------- | -------- | --------------------------------------------------------------- |
+| `where`    | `IssueWhereInput`                                         | No       | Fields on which to filter the records.                          |
+| `select`   | `IssueSelect`                                             | No       | A selection of fields to include on the returned object.        |
+| `include`  | `IssueInclude`                                            | No       | Specifies relations to be included.                             |
+| `orderBy`  | <code>IssueOrderByInput &#124; IssueOrderByInput[]</code> | No       | Order the list of matching records by the specified properties. |
+| `skip`     | `number`                                                  | No       | Number of records to skip from the list of matching records.    |
+| `distinct` | <code>IssueDistinctFieldEnum[]</code>                     | No       | Filter duplicates based on one or more fields.                  |
 
 ### `liveMany`
 
@@ -906,15 +911,15 @@ Live version of the `findMany` query.
 
 #### Options
 
-| Name | Example type | Required | Description |
-|------|--------------|----------|-------------|
-| `where` | `IssueWhereInput` | No | Fields on which to filter the records. |
-| `select` | `IssueSelect` | No | A selection of fields to include on the returned object. |
-| `include` | `IssueInclude` | No | Specifies relations to be included. |
-| `orderBy` | <code>IssueOrderByInput &#124; IssueOrderByInput[]</code> | No | Order the list of matching records by the specified properties. |
-| `skip` | `number` | No | Number of records to skip from the list of matching records. |
-| `distinct` | <code>IssueDistinctFieldEnum[]</code> | No | Filter duplicates based on one or more fields. |
-| `take` | `number` | No | Number of matching data records to return. |
+| Name       | Example type                                              | Required | Description                                                     |
+| ---------- | --------------------------------------------------------- | -------- | --------------------------------------------------------------- |
+| `where`    | `IssueWhereInput`                                         | No       | Fields on which to filter the records.                          |
+| `select`   | `IssueSelect`                                             | No       | A selection of fields to include on the returned object.        |
+| `include`  | `IssueInclude`                                            | No       | Specifies relations to be included.                             |
+| `orderBy`  | <code>IssueOrderByInput &#124; IssueOrderByInput[]</code> | No       | Order the list of matching records by the specified properties. |
+| `skip`     | `number`                                                  | No       | Number of records to skip from the list of matching records.    |
+| `distinct` | <code>IssueDistinctFieldEnum[]</code>                     | No       | Filter duplicates based on one or more fields.                  |
+| `take`     | `number`                                                  | No       | Number of matching data records to return.                      |
 
 <!---
 ### `discover`
@@ -937,9 +942,9 @@ To this end, we can chose to sort any field in ascending (`'asc'`) or descending
 ```ts
 await electric.db.issues.findMany({
   orderBy: {
-    title: 'asc'
-  }
-})
+    title: "asc",
+  },
+});
 ```
 
 The above query fetches all issues and sorts them in ascending lexicographical order of their title.
@@ -951,13 +956,13 @@ For instance, we can group issues by project and sort the issues of each project
 await electric.db.issues.findMany({
   orderBy: [
     {
-      project_id: 'asc'
+      project_id: "asc",
     },
     {
-      title: 'asc'
-    }
-  ]
-})
+      title: "asc",
+    },
+  ],
+});
 ```
 
 ### Selecting distinct records with `distinct`
@@ -967,11 +972,11 @@ For example, we can fetch distinct issue titles and include their comments:
 
 ```ts
 await electric.db.projects.findMany({
-  distinct: ['title'],
+  distinct: ["title"],
   include: {
-    comments: true
-  }
-})
+    comments: true,
+  },
+});
 ```
 
 The above query will return only 1 record per distinct issue title so if two issues have the same title, it will return only one of them.
@@ -979,11 +984,11 @@ We can also fetch distinct issues based on both their title and description:
 
 ```ts
 await electric.db.projects.findMany({
-  distinct: ['title', 'description'],
+  distinct: ["title", "description"],
   include: {
-    comments: true
-  }
-})
+    comments: true,
+  },
+});
 ```
 
 Now, if there are two issues with the same title but different descriptions, the query will return both issues.
@@ -1000,7 +1005,7 @@ Greater than operator:
 {
   where: {
     age: {
-      gt: 17
+      gt: 17;
     }
   }
 }
@@ -1012,7 +1017,7 @@ Greater than or equal operator:
 {
   where: {
     age: {
-      gte: 18
+      gte: 18;
     }
   }
 }
@@ -1026,7 +1031,7 @@ Lesser than operator:
 {
   where: {
     age: {
-      lt: 66
+      lt: 66;
     }
   }
 }
@@ -1038,7 +1043,7 @@ Lesser than or equal operator:
 {
   where: {
     age: {
-      lte: 65
+      lte: 65;
     }
   }
 }
@@ -1051,7 +1056,7 @@ Equality is expressed via direct assignment to the column name:
 ```ts
 {
   where: {
-    username: 'Alice'
+    username: "Alice";
   }
 }
 ```
@@ -1064,7 +1069,7 @@ Inequality can be expressed using `not`:
 {
   where: {
     username: {
-      not: 'Alice'
+      not: "Alice";
     }
   }
 }
@@ -1090,7 +1095,7 @@ We can use `notIn` to check that the value is not part of a list of values:
 {
   where: {
     username: {
-      notIn: ['Alice', 'Bob']
+      notIn: ["Alice", "Bob"];
     }
   }
 }
@@ -1103,7 +1108,7 @@ We can use `notIn` to check that the value is not part of a list of values:
 ```ts
 where: {
   title: {
-    startsWith: 'The'
+    startsWith: "The";
   }
 }
 ```
@@ -1115,7 +1120,7 @@ where: {
 ```ts
 where: {
   title: {
-    endsWith: 'documentation'
+    endsWith: "documentation";
   }
 }
 ```
@@ -1127,7 +1132,7 @@ where: {
 ```ts
 where: {
   title: {
-    contains: 'ElectricSQL'
+    contains: "ElectricSQL";
   }
 }
 ```
@@ -1157,14 +1162,14 @@ The same can be achieved by using `AND` explicitly:
       {
         age: {
           gte: 18,
-        }
+        },
       },
       {
         age: {
           lte: 65,
-        }
+        },
       },
-    ]
+    ];
   }
 }
 ```
@@ -1178,14 +1183,14 @@ Operators can also be combined using `OR`:
       {
         age: {
           lt: 18,
-        }
+        },
       },
       {
         age: {
           gt: 65,
-        }
+        },
       },
-    ]
+    ];
   }
 }
 ```
@@ -1199,14 +1204,14 @@ Operators can be negated using `NOT`:
       {
         age: {
           lt: 18,
-        }
+        },
       },
       {
         age: {
           gt: 65,
-        }
+        },
       },
-    ]
+    ];
   }
 }
 ```
