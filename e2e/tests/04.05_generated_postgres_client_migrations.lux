@@ -35,7 +35,9 @@
     ?CREATE TABLE mtable1 \(.*
     -CREATE TABLE mtable1 \(.*
     ?CREATE INDEX mtable1_value1_idx
+    -CREATE INDEX mtable1_value1_idx
     ?CREATE INDEX mtable1_value2_idx
+    -CREATE INDEX mtable1_value2_idx
     ?CREATE TABLE mtable2 \(.*
     ?SH-PROMPT:
 
