@@ -1,8 +1,9 @@
-import React, { useCallback } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import {
   DataEditor,
   GridCell,
   GridCellKind,
+  GridColumn,
   Item,
 } from '@glideapps/glide-data-grid'
 
@@ -12,6 +13,17 @@ export interface DataTableProps {
 }
 
 export const DataTable = ({ rows, columnNames }: DataTableProps) => {
+  const [columnDefs, setColumnDefs] = useState<GridColumn[]>(
+    columnNames.map((cn) => ({
+      title: cn,
+      id: cn,
+      grow: 1,
+      width: 100,
+      hasMenu: false,
+    })),
+  )
+
+  // show all values as text for simplicity
   const getCellContent = useCallback(
     (cell: Item): GridCell => {
       const [col, row] = cell
@@ -26,6 +38,20 @@ export const DataTable = ({ rows, columnNames }: DataTableProps) => {
     },
     [rows, columnNames],
   )
+
+  // reset column defs when different set provided
+  useEffect(() => {
+    setColumnDefs(
+      columnNames.map((cn) => ({
+        title: cn,
+        id: cn,
+        grow: 1,
+        width: 100,
+        hasMenu: false,
+      })),
+    )
+  }, [columnNames])
+
   return (
     <DataEditor
       width="100%"
@@ -33,13 +59,14 @@ export const DataTable = ({ rows, columnNames }: DataTableProps) => {
       getCellContent={getCellContent}
       rows={rows.length}
       getCellsForSelection
-      columns={columnNames.map((cn) => ({
-        title: cn,
-        id: cn,
-        grow: 1,
-        width: 100,
-        hasMenu: false,
-      }))}
+      onColumnResize={(_, newSize, colIndex) =>
+        setColumnDefs((columnDefs) =>
+          columnDefs.map((c, idx) =>
+            colIndex === idx ? { ...c, width: newSize, grow: 0 } : c,
+          ),
+        )
+      }
+      columns={columnDefs}
     />
   )
 }
