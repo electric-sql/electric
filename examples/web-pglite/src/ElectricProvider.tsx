@@ -15,6 +15,9 @@ const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
 // when the component re-renders under React strict mode.
 let db: PGlite
 
+const { tabId } = uniqueTabId()
+const scopedDbName = `idb://basic-${LIB_VERSION}-${tabId}.db`
+
 const ElectricProviderComponent = ({
   children,
 }: {
@@ -30,9 +33,6 @@ const ElectricProviderComponent = ({
         debug: import.meta.env.DEV,
         url: import.meta.env.ELECTRIC_SERVICE,
       }
-
-      const { tabId } = uniqueTabId()
-      const scopedDbName = `idb://basic-${LIB_VERSION}-${tabId}.db`
 
       db ??= new PGlite(scopedDbName, {
         relaxedDurability: true,
