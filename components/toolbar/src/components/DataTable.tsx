@@ -48,6 +48,8 @@ const getDataEditorTheme = (elem: Element | null): Partial<Theme> => {
     borderColor: borderColor,
     horizontalBorderColor: borderColor,
     drilldownBorder: borderColor,
+
+    fontFamily: styleVar('--default-font-family'),
   }
 }
 
@@ -78,6 +80,8 @@ export const DataTable = ({ rows, columnNames }: DataTableProps) => {
       return {
         kind: GridCellKind.Text,
         allowOverlay: false,
+        readonly: true,
+        allowWrapping: true,
         displayData: String(d),
         data: String(d),
       }
