@@ -37,7 +37,7 @@ function ElectricToolbar({ api }: ToolbarProps) {
   }, [])
 
   return (
-    <Theme asChild appearance="dark">
+    <Theme asChild appearance="dark" accentColor="teal" grayColor="sage">
       <Box
         width={hidden ? '400px' : '100%'}
         height="fit-content"
@@ -55,7 +55,7 @@ function ElectricToolbar({ api }: ToolbarProps) {
             <img src={logo} width="30px" height="30px" alt="logo" />
             <Text>ElectricSQL Debug Tools</Text>
           </Flex>
-          <Flex gap="1">
+          <Flex gap="2">
             {!hidden && (
               <Select.Root defaultValue={dbNames[0]} onValueChange={setDbName}>
                 <Select.Trigger />

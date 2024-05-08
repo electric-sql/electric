@@ -28,19 +28,19 @@ export default function ToolbarTabs({
         <Tabs.Trigger value="sql">Shell</Tabs.Trigger>
       </Tabs.List>
       <Box p="2" height="40vh">
-        <Tabs.Content value="status" asChild>
+        <Tabs.Content value="status" style={{ height: '100%' }}>
           <StatusTab dbName={dbName} api={api} />
         </Tabs.Content>
-        <Tabs.Content value="db" asChild>
+        <Tabs.Content value="db" style={{ height: '100%' }}>
           <LocalDBTab dbName={dbName} api={api} />
         </Tabs.Content>
-        <Tabs.Content value="shapes" asChild>
+        <Tabs.Content value="shapes" style={{ height: '100%' }}>
           <ShapesTab dbName={dbName} api={api} />
         </Tabs.Content>
-        <Tabs.Content value="inspect" asChild>
+        <Tabs.Content value="inspect" style={{ height: '100%' }}>
           <InspectTableTab dbName={dbName} api={api} />
         </Tabs.Content>
-        <Tabs.Content value="sql" asChild>
+        <Tabs.Content value="sql" style={{ height: '100%' }}>
           <SQLTab dbName={dbName} api={api} />
         </Tabs.Content>
       </Box>
