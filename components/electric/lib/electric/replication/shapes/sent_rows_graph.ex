@@ -123,23 +123,23 @@ defmodule Electric.Replication.Shapes.SentRowsGraph do
 
   @doc false
   def dfs_traverse(
-         vertices,
-         graph,
-         acc,
-         fun,
-         edge_predicate_fun,
-         visited \\ MapSet.new()
-       )
+        vertices,
+        graph,
+        acc,
+        fun,
+        edge_predicate_fun,
+        visited \\ MapSet.new()
+      )
 
   def dfs_traverse(
-         [v_id | rest],
-         %Graph{out_edges: oe, in_edges: ie, vertices: vs, edges: e} = g,
-         acc,
-         fun,
-         edge_predicate_fun,
-         visited
-       )
-       when is_function(fun, 3) and is_function(edge_predicate_fun, 1) do
+        [v_id | rest],
+        %Graph{out_edges: oe, in_edges: ie, vertices: vs, edges: e} = g,
+        acc,
+        fun,
+        edge_predicate_fun,
+        visited
+      )
+      when is_function(fun, 3) and is_function(edge_predicate_fun, 1) do
     if MapSet.member?(visited, v_id) do
       dfs_traverse(rest, g, visited, fun, acc)
     else
