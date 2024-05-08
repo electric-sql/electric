@@ -383,7 +383,7 @@ defmodule Electric.Postgres.ReplicationTest do
       assert stmts == [
                %SatOpMigrate.Stmt{
                  type: :CREATE_ENUM_TYPE,
-                 sql: "CREATE TYPE public.colour AS ENUM ('red', 'green',  'blue');"
+                 sql: "CREATE TYPE public.colour AS ENUM ('red', 'green',  'blue')"
                }
              ]
 
@@ -406,7 +406,7 @@ defmodule Electric.Postgres.ReplicationTest do
       assert stmts == [
                %SatOpMigrate.Stmt{
                  type: :CREATE_TABLE,
-                 sql: "CREATE TABLE public.wall (id int8 PRIMARY KEY,finish  public.colour);"
+                 sql: "CREATE TABLE public.wall (id int8 PRIMARY KEY,finish  public.colour)"
                }
              ]
 

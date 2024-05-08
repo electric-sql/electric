@@ -79,6 +79,7 @@ defmodule Electric.Plug.Migrations do
         sql =
           ops
           |> Enum.flat_map(fn op -> Enum.map(op.stmts, & &1.sql) end)
+          |> Enum.map(&ensure_semicolon/1)
           |> Enum.join("\n\n")
 
         metadata =
@@ -124,5 +125,10 @@ defmodule Electric.Plug.Migrations do
     version
     |> Path.join(filename)
     |> to_charlist()
+  end
+
+  defp ensure_semicolon(stmt) do
+    stmt = String.trim_trailing(stmt)
+    if String.ends_with?(stmt, ";"), do: stmt, else: stmt <> ";"
   end
 end

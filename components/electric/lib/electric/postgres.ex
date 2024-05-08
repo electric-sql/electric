@@ -16,9 +16,26 @@ defmodule Electric.Postgres do
     |> normalise_stmts()
   end
 
+  # FIXME: this is wrong. see [VAX-1828]
+  # because of the way we handle alter table statements, the locations generated here will fail
+  # when given an alter table statment with multiple clauses.
+  def parse_with_locations!(sql) when is_binary(sql) do
+    sql
+    |> PgQuery.parse!()
+    |> map_stmts_with_location()
+    |> normalise_stmts()
+  end
+
   defp map_stmts(%PgQuery.ParseResult{stmts: stmts}) do
     Enum.map(stmts, fn %PgQuery.RawStmt{stmt: %PgQuery.Node{node: {_type, struct}}} ->
       struct
+    end)
+  end
+
+  defp map_stmts_with_location(%PgQuery.ParseResult{stmts: stmts}) do
+    Enum.map(stmts, fn %PgQuery.RawStmt{} = raw ->
+      %{stmt: %PgQuery.Node{node: {_type, struct}}, stmt_location: location, stmt_len: len} = raw
+      {struct, location, len}
     end)
   end
 
@@ -30,6 +47,11 @@ defmodule Electric.Postgres do
   # single clause alter table statements
   defp normalise_stmt(%PgQuery.AlterTableStmt{} = stmt) do
     Enum.map(stmt.cmds, &%{stmt | cmds: [&1]})
+  end
+
+  # FIXME: this is wrong. see [VAX-1828]
+  defp normalise_stmt({%PgQuery.AlterTableStmt{} = stmt, location, len}) do
+    Enum.map(stmt.cmds, &{%{stmt | cmds: [&1]}, location, len})
   end
 
   defp normalise_stmt(stmt) do
