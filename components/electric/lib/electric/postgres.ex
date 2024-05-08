@@ -25,7 +25,6 @@ defmodule Electric.Postgres do
     |> PgQuery.parse!()
     |> map_stmts_with_location()
     |> normalise_stmts()
-    |> dbg
   end
 
   # without a semi-colon, location and length are both 0 for single statement sql
