@@ -98,7 +98,7 @@ defmodule Electric.Postgres.Replication do
     end
   end
 
-  # FIXME: this is wrong. see [VAX-1828]
+  # FIXME: this slicing of statments is wrong. see [VAX-1828]
   defp to_sql({_ast, loc, len}, stmt, Dialect.Postgresql) do
     stmt
     |> String.slice(loc, len)

@@ -21,9 +21,17 @@ defmodule Electric.Postgres do
   # when given an alter table statment with multiple clauses.
   def parse_with_locations!(sql) when is_binary(sql) do
     sql
+    |> ensure_semicolon()
     |> PgQuery.parse!()
     |> map_stmts_with_location()
     |> normalise_stmts()
+    |> dbg
+  end
+
+  # without a semi-colon, location and length are both 0 for single statement sql
+  defp ensure_semicolon(sql) when is_binary(sql) do
+    stmt = String.trim_trailing(sql)
+    if String.ends_with?(stmt, ";"), do: stmt, else: stmt <> ";"
   end
 
   defp map_stmts(%PgQuery.ParseResult{stmts: stmts}) do
