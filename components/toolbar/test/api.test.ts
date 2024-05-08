@@ -5,7 +5,7 @@ import { electrify } from 'electric-sql/drivers/better-sqlite3'
 import { schema } from './generated'
 import { clientApi } from '../src'
 import { MockIndexDB, MockLocation } from './mocks'
-import { ConnectivityState } from 'electric-sql/util'
+import { ConnectivityState, QualifiedTablename } from 'electric-sql/util'
 
 const db = new Database(':memory:')
 const electric = await electrify(
@@ -125,5 +125,108 @@ describe('api', () => {
     electric.satellite.connectivityState = { status: 'connected' }
     await api.toggleSatelliteStatus(':memory:')
     expect(disconnectSpy).toHaveBeenCalledOnce()
+  })
+
+  test('getDbTables', async () => {
+    const api = clientApi(electric.registry)
+
+    const tables = await api.getDbTables(':memory:')
+    expect(tables).toHaveLength(3)
+    expect(tables.map((tb) => tb.name).sort()).toEqual(
+      ['Post', 'User', 'Profile'].sort(),
+    )
+
+    // should have SQL schema and column definitions
+    expect(tables.find((t) => t.name === 'Profile')).toEqual({
+      name: 'Profile',
+      sql: "CREATE TABLE Profile('id' int PRIMARY KEY, 'bio' varchar, 'userId' int)",
+      columns: [
+        {
+          name: 'id',
+          type: 'INT',
+        },
+        {
+          name: 'bio',
+          type: 'varchar',
+        },
+        {
+          name: 'userId',
+          type: 'INT',
+        },
+      ],
+    })
+  })
+
+  test('subscribeToDbTable', async () => {
+    const api = clientApi(electric.registry)
+    let numProfileTableCbs = 0
+    let numUserTableCbs = 0
+    let numInternalTableCbs = 0
+    const unsubscribeProfile = api.subscribeToDbTable(
+      ':memory:',
+      'Profile',
+      () => {
+        numProfileTableCbs++
+      },
+    )
+    const unsubscribeUser = api.subscribeToDbTable(':memory:', 'User', () => {
+      numUserTableCbs++
+    })
+
+    const unsubscribeInternal = api.subscribeToDbTable(
+      ':memory:',
+      '_electric_oplog',
+      () => {
+        numInternalTableCbs++
+      },
+    )
+
+    expect(numProfileTableCbs).toBe(0)
+    expect(numUserTableCbs).toBe(0)
+    expect(numInternalTableCbs).toBe(0)
+
+    electric.satellite.notifier.actuallyChanged(
+      ':memory:',
+      [
+        {
+          qualifiedTablename: new QualifiedTablename('public', 'Profile'),
+        },
+      ],
+      'local',
+    )
+
+    expect(numProfileTableCbs).toBe(1)
+    expect(numUserTableCbs).toBe(0)
+    expect(numInternalTableCbs).toBe(1)
+
+    electric.satellite.notifier.actuallyChanged(
+      ':memory:',
+      [
+        {
+          qualifiedTablename: new QualifiedTablename('public', 'User'),
+        },
+      ],
+      'remote',
+    )
+
+    expect(numProfileTableCbs).toBe(1)
+    expect(numUserTableCbs).toBe(1)
+    expect(numInternalTableCbs).toBe(2)
+
+    unsubscribeProfile()
+    unsubscribeUser()
+    unsubscribeInternal()
+    electric.satellite.notifier.actuallyChanged(
+      ':memory:',
+      [
+        {
+          qualifiedTablename: new QualifiedTablename('public', 'User'),
+        },
+      ],
+      'remote',
+    )
+    expect(numProfileTableCbs).toBe(1)
+    expect(numUserTableCbs).toBe(1)
+    expect(numInternalTableCbs).toBe(2)
   })
 })
