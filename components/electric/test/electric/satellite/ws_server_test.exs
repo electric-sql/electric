@@ -1014,7 +1014,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
     Process.send_after(
       pid,
-      {:subscription_data, id, {Graph.new(), %{}, Enum.map(requests, & &1.id)}},
+      {:subscription_data, id, insertion_point, {Graph.new(), %{}, Enum.map(requests, & &1.id)}},
       data_delay_ms
     )
   end

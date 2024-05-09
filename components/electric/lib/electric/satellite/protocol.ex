@@ -848,24 +848,36 @@ defmodule Electric.Satellite.Protocol do
     %OutRep{out_rep | status: nil, pid: nil, stage_sub: nil}
   end
 
-  @spec subscription_data_received(String.t(), term(), State.t()) :: outgoing()
-  def subscription_data_received(id, data, state) when is_map_key(state.subscriptions, id) do
+  @spec subscription_data_received(String.t(), term(), non_neg_integer(), State.t()) :: outgoing()
+  def subscription_data_received(id, {graph, data, request_ids}, xmin, state)
+      when is_map_key(state.subscriptions, id) do
     Logger.debug("Received initial data for subscription #{id}")
 
     state = Telemetry.subscription_data_ready(state, id)
-    {graph_diff, _, _} = data
+
+    {accepted_data, filtered_graph} =
+      state.permissions
+      |> Permissions.Read.filter_shape_data(graph, data, xmin)
+      |> permissions_filter_graph(graph)
+
+    filtered_results = {filtered_graph, accepted_data, request_ids}
 
     # Store this data in case of disconnect until acknowledged
-    ClientReconnectionInfo.store_subscription_data!(state.origin, state.client_id, id, graph_diff)
+    ClientReconnectionInfo.store_subscription_data!(
+      state.origin,
+      state.client_id,
+      id,
+      filtered_graph
+    )
 
     if is_paused_on_subscription(state, id) do
       # We're currently waiting for data from this subscription, we can send it immediately
       {:subscription, id}
-      |> send_additional_data_and_unpause(data, state)
+      |> send_additional_data_and_unpause(filtered_results, state)
       |> perform_pending_actions()
     else
       # We're not blocked on waiting for this data yet, store & continue
-      {[], State.store_subscription_data(state, id, data)}
+      {[], State.store_subscription_data(state, id, filtered_results)}
     end
   end
 
@@ -927,18 +939,14 @@ defmodule Electric.Satellite.Protocol do
     {_, graph_diff} =
       SentRowsGraph.pop_by_request_ids(graph_diff, gone_request_ids, root_vertex: :fake_root)
 
-    {filtered_changes, rejected_changes} =
-      Permissions.Read.filter_move_in_data(
-        state.permissions,
+    {accepted_changes, filtered_graph_diff} =
+      state.permissions
+      |> Permissions.Read.filter_move_in_data(
         state.out_rep.sent_rows_graph,
         changes,
         xmin
       )
-
-    filtered_graph_diff =
-      Enum.reduce(rejected_changes, graph_diff, fn {vertex, _change}, graph ->
-        Graph.delete_vertex(graph, vertex)
-      end)
+      |> permissions_filter_graph(graph_diff)
 
     # Store this data in case of disconnect until acknowledged
     ClientReconnectionInfo.store_additional_txn_data!(
@@ -953,11 +961,11 @@ defmodule Electric.Satellite.Protocol do
     if is_paused_on_move_in(state, ref) do
       # We're paused waiting for this, send changes immediately
       {:move_in, ref}
-      |> send_additional_data_and_unpause(filtered_changes, state)
+      |> send_additional_data_and_unpause(accepted_changes, state)
       |> perform_pending_actions()
     else
       # Didn't reach the pause point for this move-in yet, just store
-      {[], State.store_move_in_data(state, ref, filtered_changes)}
+      {[], State.store_move_in_data(state, ref, accepted_changes)}
     end
   end
 
@@ -1347,10 +1355,7 @@ defmodule Electric.Satellite.Protocol do
     |> Map.values()
     |> List.flatten()
     |> ShapeRequest.prepare_filtering_context()
-    |> Map.merge(%{
-      user_id: Pathex.get(state, path(:auth / :user_id)),
-      perms: state.permissions
-    })
+    |> Map.put(:user_id, Pathex.get(state, path(:auth / :user_id)))
   end
 
   defp serialize_unknown_relations(unknown_relations, state) do
@@ -1497,5 +1502,14 @@ defmodule Electric.Satellite.Protocol do
       |> Permissions.update!(schema_version, sat_perms)
 
     %{state | schema_loader: schema_loader, permissions: perms}
+  end
+
+  defp permissions_filter_graph({accepted_changes, rejected_changes}, graph) do
+    filtered_graph =
+      Enum.reduce(rejected_changes, graph, fn {vertex, _change}, graph ->
+        Graph.delete_vertex(graph, vertex)
+      end)
+
+    {accepted_changes, filtered_graph}
   end
 end

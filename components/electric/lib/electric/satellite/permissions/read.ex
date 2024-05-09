@@ -73,7 +73,12 @@ defmodule Electric.Satellite.Permissions.Read do
     {accepted_changes, rejected_changes, []} =
       filter_changes_with_context(perms, graph, tx_graph, changes, xid, &shape_data_mapper/1)
 
-    preserve_fk_consistency(perms, accepted_changes, rejected_changes, &shape_data_mapper/1)
+    preserve_fk_consistency(
+      perms,
+      Map.new(accepted_changes),
+      rejected_changes,
+      &shape_data_mapper/1
+    )
   end
 
   @spec filter_shape_data(perms(), sent_rows_graph(), change_list(), xid()) ::
@@ -84,7 +89,12 @@ defmodule Electric.Satellite.Permissions.Read do
     {accepted_changes, rejected_changes, [] = _scope_moves} =
       filter_changes_with_context(perms, nil, graph_impl, changes, xid, &shape_data_mapper/1)
 
-    preserve_fk_consistency(perms, accepted_changes, rejected_changes, &shape_data_mapper/1)
+    preserve_fk_consistency(
+      perms,
+      Map.new(accepted_changes),
+      rejected_changes,
+      &shape_data_mapper/1
+    )
   end
 
   @spec filter_tx_with_context(

@@ -49,7 +49,7 @@ defmodule Electric.Replication.InitialSync do
   1. `{:data_insertion_point, ^ref, xmin}` is sent immediately to know where to insert
      results when they are ready. That message **has** to be sent ASAP since if we send the results
      at the end, we might have already skipped the point where the data is relevant.
-  2. `{:subscription_data, subscription_id, data}` is when we've collected all the data.
+  2. `{:subscription_data, subscription_id, xmin, data}` is when we've collected all the data.
 
   If an error occurs while collecting the data, this function is expected to send the following message:
 
@@ -69,8 +69,6 @@ defmodule Electric.Replication.InitialSync do
     origin = Connectors.origin(opts)
 
     run_in_readonly_txn_with_checkpoint(opts, {ref, parent}, marker, fn conn, xmin ->
-      context = Map.put(context, :xid, xmin)
-
       requests
       |> Enum.reduce_while({Graph.new(), %{}, []}, fn request, {acc_graph, results, req_ids} ->
         start = System.monotonic_time()
@@ -91,9 +89,11 @@ defmodule Electric.Replication.InitialSync do
             )
 
             {:cont,
-             {Utils.merge_graph_edges(acc_graph, graph),
-              Map.merge(results, data, fn _, {change, v1}, {_, v2} -> {change, v1 ++ v2} end),
-              [request.id | req_ids]}}
+             {
+               Utils.merge_graph_edges(acc_graph, graph),
+               Map.merge(results, data, fn _, {change, v1}, {_, v2} -> {change, v1 ++ v2} end),
+               [request.id | req_ids]
+             }}
 
           {:error, reason} ->
             {:halt, {:error, reason}}
@@ -104,7 +104,7 @@ defmodule Electric.Replication.InitialSync do
           send(parent, {:subscription_init_failed, subscription_id, reason})
 
         results ->
-          send(parent, {:subscription_data, subscription_id, results})
+          send(parent, {:subscription_data, subscription_id, xmin, results})
       end
     end)
   end
@@ -118,8 +118,6 @@ defmodule Electric.Replication.InitialSync do
     origin = Connectors.origin(opts)
 
     run_in_readonly_txn_with_checkpoint(opts, {ref, parent}, marker, fn conn, xmin ->
-      context = Map.put(context, :xid, xmin)
-
       Enum.reduce_while(subquery_map, {MapSet.new(), Graph.new(), %{}}, fn {layer, changes},
                                                                            {req_ids, acc_graph,
                                                                             results} ->
