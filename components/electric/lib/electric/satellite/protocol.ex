@@ -802,8 +802,8 @@ defmodule Electric.Satellite.Protocol do
 
   @spec move_in_data_received(
           non_neg_integer(),
+          MapSet.t(String.t()),
           Graph.t(),
-          [String.t()],
           Shapes.Querying.results(),
           non_neg_integer(),
           [non_neg_integer(), ...],
