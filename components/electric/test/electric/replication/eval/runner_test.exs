@@ -122,7 +122,7 @@ defmodule Electric.Replication.Eval.RunnerTest do
       assert {:ok, true} =
                ~S|new.valid = true|
                |> Parser.parse_and_validate_expression!(%{["new", "valid"] => :bool})
-               |> Runner.execute(%{["new", "valid"] => "t"})
+               |> Runner.execute(%{["new", "valid"] => true})
     end
   end
 end
