@@ -1,5 +1,5 @@
 ---
-title: Typescript client
+title: TypeScript client
 description: >-
   Generate a local database client as part of your build process.
 
@@ -38,7 +38,7 @@ Or in development you can also use [Yalc](https://github.com/wclr/yalc):
   </summary>
   <div>
 
-[Yalc](https://github.com/wclr/yalc) is sometimes useful to install from a local clone when you're working on the Typescript client package.
+[Yalc](https://github.com/wclr/yalc) is sometimes useful to install from a local clone when you're working on the TypeScript client package.
 
 For example:
 
@@ -55,7 +55,7 @@ Then in your app folder:
 yalc add electric-sql
 ```
 
-Then if you change the Typescript client source code (back in the `electric/clients/typescript` folder) run:
+Then if you change the TypeScript client source code (back in the `electric/clients/typescript` folder) run:
 
 ```shell
 yalc push

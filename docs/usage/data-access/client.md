@@ -7,11 +7,11 @@ sidebar_position: 20
 
 ElectricSQL provides a schema-aware, type-safe database client from the [electrified subset](../data-modelling/electrification.md) of your [Postgres&nbsp;DDL&nbsp;schema](../data-modelling/migrations.md).
 
-Generate this Typescript client as part of your build process, instantiate it within your local application and then use it to [sync shapes](./shapes.md), [query](./queries.md) and [write](./writes.md) data.
+Generate this TypeScript client as part of your build process, instantiate it within your local application and then use it to [sync shapes](./shapes.md), [query](./queries.md) and [write](./writes.md) data.
 
 ## Generating the client
 
-Use the [generator command](../../api/cli.md#generate) to generate the [Typescript client](../installation/client.md):
+Use the [generator command](../../api/cli.md#generate) to generate the [TypeScript client](../installation/client.md):
 
 ```shell
 npx electric-sql generate

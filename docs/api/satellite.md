@@ -19,4 +19,4 @@ The Electric server implementation is at [electric-sql/electric/components/elect
 
 ## Client
 
-The Typescript client implementation is at [electric-sql/electric/clients/typescript/src/satellite](https://github.com/electric-sql/electric/tree/main/clients/typescript/src/satellite).
+The TypeScript client implementation is at [electric-sql/electric/clients/typescript/src/satellite](https://github.com/electric-sql/electric/tree/main/clients/typescript/src/satellite).

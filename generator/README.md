@@ -1054,7 +1054,7 @@ export const MyModelCreateArgsSchema: z.ZodType<
   .strict()
 ```
 
-> When a `required` field is omitted the field needs to be added manually in the respective prisma function like `create`, `update`, `createMany` and so on. Otherwise Typescript would complain.
+> When a `required` field is omitted the field needs to be added manually in the respective prisma function like `create`, `update`, `createMany` and so on. Otherwise TypeScript would complain.
 
 ```ts
 const appRouter = t.router({

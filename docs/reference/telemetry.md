@@ -17,7 +17,7 @@ We collect telemetry to understand key usage metrics. Specifically, the key metr
 
 Telemetry is only collected from the [Electric sync service](../api/service.md).
 
-No telemetry data is collected from the Typescript client library, your local-first applications or your Postgres database. Telemetry is only collected server side in aggregated anonymised form from the Elixir sync service.
+No telemetry data is collected from the TypeScript client library, your local-first applications or your Postgres database. Telemetry is only collected server side in aggregated anonymised form from the Elixir sync service.
 
 ## When and how is telemetry data collected?
 

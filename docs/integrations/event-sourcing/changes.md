@@ -39,4 +39,4 @@ There are many ways to [consume Logical replication](https://www.postgresql.org/
 
 - Elixir: [Postgrex.ReplicationConnection](https://hexdocs.pm/postgrex/Postgrex.ReplicationConnection.html) / [cainophile/cainophile](https://github.com/cainophile/cainophile) / [supabase/realtime](https://github.com/supabase/realtime)
 - Python: [psycopg2.extras.LogicalReplicationConnection](https://www.psycopg.org/docs/extras.html#psycopg2.extras.LogicalReplicationConnection)
-- Typescript: [Prisma Pulse](https://www.prisma.io/data-platform/pulse)
+- TypeScript: [Prisma Pulse](https://www.prisma.io/data-platform/pulse)
