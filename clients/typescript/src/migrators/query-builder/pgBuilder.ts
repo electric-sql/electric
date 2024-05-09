@@ -96,21 +96,25 @@ class PgBuilder extends QueryBuilder {
             ELSE 1
           END AS notnull,
           c.column_default AS dflt_value,
-          (
-              SELECT CASE
-                       -- if the column is not part of the primary key
-                       -- then return 0
-                       WHEN NOT pg_attribute.attnum = ANY(pg_index.indkey) THEN 0
-                       -- else, return the position of the column in the primary key
-                       -- pg_index.indkey is indexed from 0 so we do + 1
-                       ELSE array_position(pg_index.indkey, pg_attribute.attnum) + 1
-                     END AS pk
-              FROM pg_class, pg_attribute, pg_index
-              WHERE pg_class.oid = pg_attribute.attrelid AND
-                  pg_class.oid = pg_index.indrelid AND
-                  pg_class.relname = $1 AND
-                  pg_attribute.attname = c.column_name
-            )
+          COALESCE(
+            (
+              -- Subquery to determine if the column is part of the primary key and 
+              -- its position. We +1 to the position as we return 0 if the column 
+              -- is not part of the primary key.
+              SELECT array_position(ind.indkey, att.attnum) + 1
+              FROM pg_class cl
+              JOIN pg_attribute att ON cl.oid = att.attrelid
+              JOIN pg_index ind ON cl.oid = ind.indrelid
+              JOIN pg_constraint con ON con.conindid = ind.indexrelid
+              WHERE cl.relname = c.table_name  -- Match the table name
+                AND att.attname = c.column_name  -- Match the column name
+                AND cl.relnamespace = (
+                  SELECT oid FROM pg_namespace WHERE nspname = c.table_schema
+                )  -- Match the schema
+                AND con.contype = 'p'  -- Only consider primary key constraints
+            ), 
+            0  -- If the column is not part of the primary key, return 0
+        ) AS pk
         FROM information_schema.columns AS c
         WHERE
           c.table_name = $1 AND
