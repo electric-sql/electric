@@ -24,7 +24,7 @@ function LeftMenu() {
   const [showAboutModal, setShowAboutModal] = useState(false)
   const [showIssueModal, setShowIssueModal] = useState(false)
   const { showMenu, setShowMenu } = useContext(MenuContext)!
-  const { connectivityState } = useConnectivityState()
+  const { status } = useConnectivityState()
 
   const classes = classnames(
     'absolute z-40 lg:static inset-0 transform duration-300 lg:relative lg:translate-x-0 bg-white flex flex-col flex-shrink-0 w-56 font-sans text-sm text-gray-700 border-r border-gray-100 lg:shadow-none justify-items-start',
@@ -70,7 +70,7 @@ function LeftMenu() {
               >
                 <Avatar
                   name="Electric"
-                  online={connectivityState == 'connected'}
+                  online={status == 'connected'}
                   showOffline={true}
                 />
                 <ExpandMore size={13} className="ml-2" />

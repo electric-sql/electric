@@ -15,12 +15,12 @@ import { Transition } from '@headlessui/react'
 interface Props {
   title?: string
   isOpen: boolean
-  center: boolean
+  center?: boolean
   className?: string
   /* function called when modal is closed */
   onDismiss?: () => void
   children?: React.ReactNode
-  size: keyof typeof sizeClasses
+  size?: keyof typeof sizeClasses
 }
 const sizeClasses = {
   large: 'w-175',
