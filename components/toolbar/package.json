@@ -11,6 +11,7 @@
     "build": "rm -rf ./dist && vite build && tsc  -p tsconfig.build.json",
     "check-styleguide": "prettier --check --loglevel warn . && eslint src --quiet",
     "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm build",
     "test": "vitest run"
   },
   "engines": {
