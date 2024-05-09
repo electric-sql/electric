@@ -99,6 +99,7 @@ import {
   SubscribeResponse,
   SubscriptionDeliveredCallback,
   SubscriptionErrorCallback,
+  SubscriptionId,
   UnsubscribeResponse,
 } from './shapes/types'
 import { SubscriptionsDataCache } from './shapes/cache'
@@ -137,7 +138,7 @@ type Events = {
   [SUBSCRIPTION_ERROR]: SubscriptionErrorCallback
   goneBatch: (
     lsn: LSN,
-    subscriptionIds: string[],
+    subscriptionIds: SubscriptionId[],
     changes: DataGone[],
     ack: () => void
   ) => Promise<void>
@@ -1002,13 +1003,17 @@ export class SatelliteClient implements Client {
         'Received a `SatUnsubsDataEnd` message but not the begin message'
       )
 
+    // We need to copy the value here so that the callback we're building 8 lines down
+    // will make a closure over array value instead of over `this` and will use current
+    // value instead of whatever is the value of `this.inbound.receivingUnsubsBatch` in
+    // the future.
     const subscriptionIds = [...this.inbound.receivingUnsubsBatch]
 
     this.emitter.enqueueEmit(
       'goneBatch',
       this.inbound.last_lsn!,
       subscriptionIds,
-      [...this.inbound.goneBatch],
+      this.inbound.goneBatch,
       () => {
         this.inbound.seenAdditionalDataSinceLastTx.gone.push(...subscriptionIds)
         this.maybeSendAck('additionalData')

@@ -17,7 +17,8 @@ defmodule Electric.Replication.Shapes.SentRowsGraph do
   if they are parts of multiple shapes.
 
   Graph edge key must be a 2-tuple where the first element is a "request id" - a unique ID
-  of a requested shape within a connection.
+  of a requested shape within a connection and the second element is a deterministic value
+  identifying the layer that caused this edge to exist.
   """
   alias Electric.Replication.Shapes.ShapeRequest
 

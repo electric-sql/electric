@@ -383,7 +383,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
             store_client_actions(pending_actions)
 
             if opts[:purge_additional_data] do
-              purge_additional_data_for_client(client_id)
+              purge_additional_data_for_client(client_id, subscription_ids)
             end
           end)
 
@@ -420,7 +420,7 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   has the same effect as if PG is overloaded and just took a lot of time
   to process our readonly querying.
   """
-  @spec advance_on_reconnection!(any(), any()) ::
+  @spec advance_on_reconnection!(binary(), Keyword.t()) ::
           {:ok, Graph.t(), Shapes.action_context(), {[String.t()], [term()]} | nil}
           | {:error, term()}
   def advance_on_reconnection!(client_id, opts) do
@@ -441,15 +441,8 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
           Shapes.merge_actions_for_tx(acc, actions, txid)
         end)
 
-      # We're also clearing the unsubscription points that are in the future
-      # but the subscription continued on reconnection
-      opts
-      |> Keyword.fetch!(:including_subscriptions)
-      |> Enum.map(&{{{client_id, &1, :_}}, [], [true]})
-      |> then(&:ets.select_delete(@unsubscribe_points_ets, &1))
-
-      # FIXME: this needs to clear all that from the future, which is now done not in this function!!!!!!!
-
+      # If there are any not-continued unacknowledged unsubscriptions left, remove rows from the graph
+      # and prepare a GONE batch.
       case :ets.select(@unsubscribe_points_ets, [{{{client_id, :"$1", :_}}, [], [:"$1"]}]) do
         [] ->
           {:ok, new_graph, actions, nil}
@@ -465,7 +458,8 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   end
 
   defp pop_valid_unsub_points(client_id, new_wal_pos, observed_unsub_batches) do
-    # Take all points before acked LSN, and all right at acked lsn if they have been explicitly observed.
+    # Take all points before acked LSN, and all at acked LSN that have been explicitly observed.
+
     matches =
       [
         {{{client_id, :"$1", :"$2"}}, [{:<, :"$2", new_wal_pos}], [:"$1"]}
@@ -664,10 +658,24 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   DELETE FROM #{client_additional_data_table()} WHERE client_id = $1
   """
 
-  defp purge_additional_data_for_client(client_id) do
-    :ets.match_delete(@additional_data_ets, {{client_id, :_, :_, :_, :_}, :_, :_})
+  @delete_unsubscribe_points_query """
+  DELETE FROM #{client_unsub_points_table()} WHERE client_id = $1 AND subscription_id = ANY($2)
+  """
 
+  defp purge_additional_data_for_client(client_id, continued_subscriptions) do
+    :ets.match_delete(@additional_data_ets, {{client_id, :_, :_, :_, :_}, :_, :_})
     Client.query!(@delete_additional_data_for_client_query, [client_id])
+
+    # If the client continued any subscriptions without acknowledging the GONE batch,
+    # remove the unsubscribe points for those.
+    continued_subscriptions
+    |> Enum.map(&{{{client_id, &1, :_}}, [], [true]})
+    |> then(&:ets.select_delete(@unsubscribe_points_ets, &1))
+
+    Client.query!(@delete_unsubscribe_points_query, [
+      client_id,
+      Enum.map(continued_subscriptions, &encode_uuid/1)
+    ])
   end
 
   @insert_subscription_query """
