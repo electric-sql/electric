@@ -2,6 +2,7 @@ defmodule Electric.Satellite.Protocol do
   @moduledoc """
   Protocol for communication with Satellite
   """
+  alias Electric.Replication.Shapes.SentRowsGraph
   use Electric.Satellite.Protobuf
   use Pathex
   import Electric.Satellite.Protobuf, only: [is_allowed_rpc_method: 1]
@@ -802,16 +803,32 @@ defmodule Electric.Satellite.Protocol do
   @spec move_in_data_received(
           non_neg_integer(),
           Graph.t(),
+          [String.t()],
           Shapes.Querying.results(),
           non_neg_integer(),
           [non_neg_integer(), ...],
           State.t()
         ) :: outgoing()
-  def move_in_data_received(ref, graph_diff, changes, xmin, included_txns, state) do
+  def move_in_data_received(
+        ref,
+        %MapSet{} = request_ids,
+        %Graph{} = graph_diff,
+        changes,
+        xmin,
+        included_txns,
+        %State{} = state
+      ) do
     # It's a trade-off where to filter out already-sent changes. Current implementation
     # prefers copying more data into itself and filtering here. Maybe sending a MapSet
     # of already-sent IDs to the Task process that does the querying is more optimal,
     # but more testing is required.
+    active_request_ids = MapSet.new(current_shapes(state), & &1.id)
+
+    # These request IDs were unsubbed while the data was moving in. We need to prune the graph & changes for that.
+    gone_request_ids = MapSet.difference(request_ids, active_request_ids)
+
+    {_, graph_diff} =
+      SentRowsGraph.pop_by_request_ids(graph_diff, gone_request_ids, root_vertex: :fake_root)
 
     # Store this data in case of disconnect until acknowledged
     ClientReconnectionInfo.store_additional_txn_data!(
@@ -820,7 +837,7 @@ defmodule Electric.Satellite.Protocol do
       xmin,
       ref,
       included_txns,
-      graph_diff
+      Graph.delete_vertex(graph_diff, :fake_root)
     )
 
     if is_paused_on_move_in(state, ref) do
@@ -996,10 +1013,16 @@ defmodule Electric.Satellite.Protocol do
   end
 
   defp handle_move_in_data(ref, changes, %State{} = state) do
+    active_req_ids = MapSet.new(current_shapes(state), & &1.id)
+
     # No actions are possible from changes formatted as NewRecords.
     {graph, changes, _actions} =
       changes
-      |> Stream.reject(fn {id, _} -> State.row_sent?(state, id) end)
+      |> Stream.reject(fn {id, {_, req_ids}} ->
+        # We don't want sent rows, or changes that were relevant for an unsubbed request.
+        State.row_sent?(state, id) or
+          not Enum.all?(req_ids, &MapSet.member?(active_req_ids, &1))
+      end)
       |> Stream.map(fn {_id, {change, _req_ids}} -> change end)
       |> Shapes.process_additional_changes(state.out_rep.sent_rows_graph, current_shapes(state))
 

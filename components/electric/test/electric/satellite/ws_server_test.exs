@@ -1,6 +1,7 @@
 defmodule Electric.Satellite.WebsocketServerTest do
   use ExUnit.Case, async: false
 
+  alias Satellite.ProtocolHelpers
   alias Electric.Replication.Changes.ReferencedRecord
   use Electric.Satellite.Protobuf
 
@@ -17,6 +18,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
   alias Electric.Replication.Changes.{
     NewRecord,
+    UpdatedRecord,
     Transaction
   }
 
@@ -36,6 +38,11 @@ defmodule Electric.Satellite.WebsocketServerTest do
                         "CREATE TABLE public.test1 (id TEXT PRIMARY KEY, electric_user_id VARCHAR(64), content VARCHAR(64))",
                         "CREATE TABLE public.test_child (id TEXT PRIMARY KEY, electric_user_id VARCHAR(64), parent_id TEXT REFERENCES test1 (id))"
                       ]}
+  @test_shape_migration {"20230101",
+                         [
+                           "CREATE TABLE public.test1 (id TEXT PRIMARY KEY, content VARCHAR(64))",
+                           "CREATE TABLE public.test_child (id TEXT PRIMARY KEY, parent_id TEXT NOT NULL REFERENCES test1 (id), some_flag BOOLEAN NOT NULL)"
+                         ]}
 
   @current_wal_pos 1
 
@@ -53,12 +60,21 @@ defmodule Electric.Satellite.WebsocketServerTest do
   end
 
   setup ctx do
+    test_pid = self()
+
     ctx =
       ctx
       |> Map.update(
         :subscription_data_fun,
         &mock_data_function/2,
         fn {name, opts} -> &apply(__MODULE__, name, [&1, &2, opts]) end
+      )
+      |> Map.put_new(:move_in_data_fun, {:mock_move_in_data_fn, []})
+      |> Map.update!(
+        :move_in_data_fun,
+        fn {name, opts} ->
+          &apply(__MODULE__, name, [&1, &2, &3, &4, [{:test_pid, test_pid} | opts]])
+        end
       )
       |> Map.put_new(:allowed_unacked_txs, 30)
 
@@ -70,6 +86,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
        auth_provider: Auth.provider(),
        connector_config: connector_config,
        subscription_data_fun: ctx.subscription_data_fun,
+       move_in_data_fun: ctx.move_in_data_fun,
        allowed_unacked_txs: ctx.allowed_unacked_txs}
 
     start_link_supervised!({Bandit, port: port, plug: plug})
@@ -769,6 +786,176 @@ defmodule Electric.Satellite.WebsocketServerTest do
         refute_receive {^conn, %SatOpLog{ops: [_, _, _]}}
       end)
     end
+
+    @tag with_migrations: [@test_shape_migration]
+    test "move-in after an unsubscribe should not contain rows for the subscription that's gone",
+         ctx do
+      with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->
+        rel_map = start_replication_and_assert_response(conn, 2)
+
+        [{client_name, _client_pid}] = active_clients()
+        mocked_producer = Producer.name(client_name)
+
+        ## Establish 2 subscriptions that intersect on the root, but differ in children
+
+        {sub_id1, req_id, req} =
+          ProtocolHelpers.simple_sub_request(
+            test1: [
+              where: "this.content ILIKE 's%'",
+              include: [test_child: [over: "parent_id", where: "this.some_flag"]]
+            ]
+          )
+
+        assert {:ok, %SatSubsResp{subscription_id: ^sub_id1, err: nil}} =
+                 MockClient.make_rpc_call(conn, "subscribe", req)
+
+        # The real data function would have made a magic write which we're emulating here
+        DownstreamProducerMock.produce(mocked_producer, build_events([], 1))
+        assert {[^req_id], []} = receive_subscription_data(conn, sub_id1)
+
+        {sub_id2, req_id, req} =
+          ProtocolHelpers.simple_sub_request(
+            test1: [
+              where: "this.content ILIKE 's%'",
+              include: [test_child: [over: "parent_id", where: "not this.some_flag"]]
+            ]
+          )
+
+        assert {:ok, %SatSubsResp{subscription_id: ^sub_id2, err: nil}} =
+                 MockClient.make_rpc_call(conn, "subscribe", req)
+
+        # The real data function would have made a magic write which we're emulating here
+        DownstreamProducerMock.produce(mocked_producer, build_events([], 2))
+        assert {[^req_id], []} = receive_subscription_data(conn, sub_id2)
+
+        ## A transaction that causes a move-in (client needs to see `test_child` rows)
+        DownstreamProducerMock.produce(
+          mocked_producer,
+          %Changes.Transaction{
+            lsn: 3,
+            xid: 3,
+            commit_timestamp: DateTime.utc_now(),
+            changes: [
+              %UpdatedRecord{
+                relation: {"public", "test1"},
+                record: %{
+                  "id" => "parent_1",
+                  "content" => "super",
+                  "parent_id" => "1"
+                }
+              }
+            ],
+            origin: ctx.client_id
+          }
+          |> then(&[{&1, &1.lsn}])
+        )
+
+        # Intercept the move-in function to supply data
+        assert_receive {:mock_move_in, {mock_pid, mock_ref}, 3, sq_map}
+
+        child_layers = sq_map |> Map.keys() |> Enum.flat_map(& &1.next_layers)
+        sub1_layer = Enum.find(child_layers, &(&1.where_target.query == "this.some_flag"))
+        sub2_layer = Enum.find(child_layers, &(&1.where_target.query == "not this.some_flag"))
+
+        xmin = 5
+
+        graph =
+          Graph.new()
+          |> Graph.add_edge(
+            {{"public", "test1"}, ["parent_1"]},
+            {{"public", "test_child"}, ["child_1"]},
+            label: sub1_layer.key
+          )
+          |> Graph.add_edge(
+            {{"public", "test1"}, ["parent_1"]},
+            {{"public", "test_child"}, ["child_2"]},
+            label: sub2_layer.key
+          )
+
+        data = %{
+          {{"public", "test_child"}, ["child_1"]} => {
+            %NewRecord{
+              relation: {"public", "test_child"},
+              record: %{"id" => "child_1", "parent_id" => "parent_1", "some_flag" => "t"},
+              tags: []
+            },
+            [sub1_layer.request_id]
+          },
+          {{"public", "test_child"}, ["child_2"]} => {
+            %NewRecord{
+              relation: {"public", "test_child"},
+              record: %{"id" => "child_2", "parent_id" => "parent_1", "some_flag" => "f"},
+              tags: []
+            },
+            [sub2_layer.request_id]
+          }
+        }
+
+        send(mock_pid, {:mock_move_in_data, mock_ref, {xmin, graph, data}})
+
+        assert %{additional_data_ref: ref, changes: [%NewRecord{record: %{"id" => "parent_1"}}]} =
+                 receive_txn(conn, rel_map)
+
+        ## Before the query is fulfilled, we unsubscribe from one of the shapes.
+        assert {:ok, _} =
+                 MockClient.make_rpc_call(conn, "unsubscribe", %SatUnsubsReq{
+                   subscription_ids: [sub_id2]
+                 })
+
+        {[^sub_id2], _, []} = receive_unsub_gone_batch(conn, rel_map)
+
+        ## And then the data arrives
+        DownstreamProducerMock.produce(mocked_producer, build_events([], 6))
+        send(mock_pid, {:mock_move_in_trigger, mock_ref})
+
+        ## And we see only a row that's in the subscription that's still live
+        {^ref, [%{record: %{"id" => "child_1", "some_flag" => "t"}}]} =
+          receive_additional_changes(conn, rel_map)
+
+        ## And further changes to the other child are not propagated
+        DownstreamProducerMock.produce(
+          mocked_producer,
+          %Changes.Transaction{
+            lsn: 7,
+            xid: 7,
+            commit_timestamp: DateTime.utc_now(),
+            changes: [
+              %UpdatedRecord{
+                relation: {"public", "test_child"},
+                old_record: %{
+                  "id" => "child_1",
+                  "parent_id" => "parent_1",
+                  "some_flag" => "t"
+                },
+                record: %{
+                  "id" => "child_1",
+                  "parent_id" => "parent_1",
+                  "some_flag" => "t"
+                }
+              },
+              %UpdatedRecord{
+                relation: {"public", "test_child"},
+                old_record: %{
+                  "id" => "child_2",
+                  "parent_id" => "parent_1",
+                  "some_flag" => "f"
+                },
+                record: %{
+                  "id" => "child_2",
+                  "parent_id" => "parent_1",
+                  "some_flag" => "f"
+                }
+              }
+            ],
+            origin: ctx.client_id
+          }
+          |> then(&[{&1, &1.lsn}])
+        )
+
+        assert %{changes: [%UpdatedRecord{record: %{"id" => "child_1"}}]} =
+                 receive_txn(conn, rel_map)
+      end)
+    end
   end
 
   describe "Incoming replication (Satellite -> PG)" do
@@ -890,6 +1077,38 @@ defmodule Electric.Satellite.WebsocketServerTest do
       {:subscription_data, id, {Graph.new(), %{}, Enum.map(requests, & &1.id)}},
       data_delay_ms
     )
+  end
+
+  def mock_move_in_data_fn(
+        move_in_ref,
+        {subquery_map, affected_txs},
+        _context,
+        [reply_to: {ref, pid}, connection: _],
+        opts \\ []
+      ) do
+    test_pid = Keyword.fetch!(opts, :test_pid)
+    test_ref = make_ref()
+
+    send(test_pid, {:mock_move_in, {self(), test_ref}, move_in_ref, subquery_map})
+
+    {insertion_point, graph_updates, changes} =
+      receive do
+        {:mock_move_in_data, ^test_ref, value} ->
+          value
+      end
+
+    send(pid, {:data_insertion_point, ref, insertion_point})
+
+    request_ids = MapSet.new(Map.keys(subquery_map), & &1.request_id)
+
+    receive do
+      {:mock_move_in_trigger, ^test_ref} ->
+        send(
+          pid,
+          {:move_in_query_data, move_in_ref, insertion_point,
+           {request_ids, graph_updates, changes}, affected_txs}
+        )
+    end
   end
 
   def clean_connections() do

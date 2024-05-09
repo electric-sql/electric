@@ -29,6 +29,8 @@ defmodule Satellite.ProtocolHelpers do
     )
   end
 
+  @spec simple_sub_request(atom() | binary() | keyword()) ::
+          {sub_id :: binary(), req_id :: binary(), %SatSubsReq{}}
   def simple_sub_request(tables) do
     subscription_id = Electric.Utils.uuid4()
     request_id = Electric.Utils.uuid4()

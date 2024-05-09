@@ -22,7 +22,7 @@ defmodule Electric.Replication.Shapes.SentRowsGraph do
   """
   alias Electric.Replication.Shapes.ShapeRequest
 
-  @type row_identifier :: {ShapeRequest.relation(), [String.t(), ...]}
+  @type row_id :: {ShapeRequest.relation(), [String.t(), ...]}
 
   @doc """
   Remove all edges from the sent rows graph that were added because of a given request id,
@@ -60,26 +60,33 @@ defmodule Electric.Replication.Shapes.SentRowsGraph do
       iex> new_graph
       #Graph<type: directed, vertices: [], edges: []>
   """
-  @spec pop_by_request_ids(Graph.t(), String.t() | [String.t()]) ::
-          {[row_identifier()], Graph.t()}
-  def pop_by_request_ids(graph, []), do: {[], graph}
+  @spec pop_by_request_ids(Graph.t(), String.t() | [String.t()] | MapSet.t(String.t()), keyword()) ::
+          {[row_id()], Graph.t()}
+  def pop_by_request_ids(graph, request_id_or_ids, opts \\ [])
 
-  def pop_by_request_ids(graph, request_id_or_ids) do
-    if Graph.has_vertex?(graph, :root),
-      do: do_pop_by_request_id(graph, List.wrap(request_id_or_ids)),
+  def pop_by_request_ids(graph, [], _), do: {[], graph}
+
+  def pop_by_request_ids(graph, id_or_ids, opts) when is_binary(id_or_ids) or is_list(id_or_ids),
+    do: pop_by_request_ids(graph, MapSet.new(List.wrap(id_or_ids)), opts)
+
+  def pop_by_request_ids(graph, %MapSet{} = request_ids, opts) do
+    root_vertex = Keyword.get(opts, :root_vertex, :root)
+
+    if Graph.has_vertex?(graph, root_vertex),
+      do: do_pop_by_request_id(graph, request_ids, root_vertex),
       else: {[], graph}
   end
 
-  defp do_pop_by_request_id(%Graph{} = graph, request_ids) when is_list(request_ids) do
-    predicate = fn {id, _} -> Enum.any?(request_ids, &(&1 == id)) end
+  defp do_pop_by_request_id(%Graph{} = graph, %MapSet{} = request_ids, root_vertex) do
+    predicate = fn {id, _} -> MapSet.member?(request_ids, id) end
 
     {edges, vertices} =
       dfs_traverse(
-        [Graph.Utils.vertex_id(:root)],
+        [Graph.Utils.vertex_id(root_vertex)],
         graph,
         {[], []},
         fn
-          :root, _, acc ->
+          ^root_vertex, _, acc ->
             {:next, acc}
 
           v, incoming_edges, {edges, vertices} ->

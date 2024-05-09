@@ -143,9 +143,14 @@ defmodule Electric.Replication.Shapes.ShapeRequest do
         origin,
         context
       ) do
-    # We're converting these records to a list of keys to query next layers on
-    curr_records =
-      Enum.map(moved_in_records, fn {id, record} -> {id, %Changes.NewRecord{record: record}} end)
+    # We're converting these records to a list of keys to query next layers on and building a fake-rooted graph.
+    # We're "rooting" the top layer of records so that `SentRowsGraph` functions know where to start traversal.
+    # It's important to get of that fake root later.
+    {curr_records, graph} =
+      Enum.map_reduce(moved_in_records, Graph.new(), fn {id, record}, acc ->
+        {{id, %Changes.NewRecord{record: record}},
+         Graph.add_edge(acc, :fake_root, id, label: layer.key)}
+      end)
 
     # We only need to follow one-to-many relations here from the already-fetched rows
     filtered_layer = %Layer{
@@ -159,7 +164,8 @@ defmodule Electric.Replication.Shapes.ShapeRequest do
       schema_version,
       origin,
       context,
-      curr_records
+      curr_records,
+      graph
     )
   end
 end

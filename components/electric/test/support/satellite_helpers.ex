@@ -252,7 +252,7 @@ defmodule ElectricTest.SatelliteHelpers do
           | {:expecting_lsn, String.t()}
           | {:returning_lsn, true}
           | {:relations, cached_rels()}
-        ]) :: {[String.t()], [%SatOpInsert{}]}
+        ]) :: {request_ids :: [String.t()], data :: [%SatOpInsert{}]}
   def receive_subscription_data(conn, subscription_id, opts \\ []) do
     # TODO: Addition of shapes complicated initial data sending for multiple requests due to records
     #       fulfilling multiple requests so we're "cheating" here while the client doesn't care by
