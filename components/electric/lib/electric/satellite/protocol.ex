@@ -1197,19 +1197,31 @@ defmodule Electric.Satellite.Protocol do
     :ok = ClientReconnectionInfo.restore_cache_for_client(state.origin, state.client_id)
     Logger.debug("Successfully loaded client reconnection info")
 
-    with {:ok, state} <- restore_subscriptions(msg.subscription_ids, state) do
+    with {:ok, state} <- restore_subscriptions(msg, lsn, state) do
       restore_graph(msg, lsn, state)
     end
   end
 
-  defp restore_subscriptions([], %State{} = state), do: {:ok, state}
+  @spec restore_subscriptions(%SatInStartReplicationReq{}, CachedWal.Api.wal_pos(), State.t()) ::
+          {:ok, State.t()} | {:error, term()}
+  defp restore_subscriptions(
+         %SatInStartReplicationReq{subscription_ids: []},
+         _,
+         %State{} = state
+       ),
+       do: {:ok, state}
 
-  defp restore_subscriptions(subscription_ids, %State{} = state) do
+  defp restore_subscriptions(%SatInStartReplicationReq{} = msg, lsn, %State{} = state) do
     subscription_data =
-      ClientReconnectionInfo.fetch_subscriptions(state.client_id, subscription_ids)
+      ClientReconnectionInfo.fetch_subscriptions(
+        state.client_id,
+        msg.subscription_ids,
+        lsn,
+        msg.observed_gone_batch
+      )
       |> Map.new()
 
-    case Enum.find(subscription_ids, &(not Map.has_key?(subscription_data, &1))) do
+    case Enum.find(msg.subscription_ids, &(not Map.has_key?(subscription_data, &1))) do
       nil ->
         state = Map.update!(state, :subscriptions, &Map.merge(&1, subscription_data))
         {:ok, state}

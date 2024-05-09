@@ -253,9 +253,14 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
   @doc """
   List all subscriptions that can be continued by a client.
   """
-  def fetch_subscriptions(client_id, ids) when is_list(ids) and ids != [] do
+  def fetch_subscriptions(client_id, ids, lsn, unsub_ids) when is_list(ids) and ids != [] do
     subscription_ets_ms = Enum.map(ids, &{{{client_id, &1}, :_, :"$1", :_}, [], [{{&1, :"$1"}}]})
-    :ets.select(@subscriptions_ets, subscription_ets_ms)
+    results = :ets.select(@subscriptions_ets, subscription_ets_ms)
+
+    seen_unsub_batches =
+      MapSet.new(observed_unsub_points(client_id, lsn, unsub_ids), &elem(&1, 0))
+
+    Enum.reject(results, fn {id, _} -> MapSet.member?(seen_unsub_batches, id) end)
   end
 
   defp delete_subscriptions(client_id, ids) when is_list(ids) and ids != [] do
@@ -457,23 +462,29 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
     end
   end
 
-  defp pop_valid_unsub_points(client_id, new_wal_pos, observed_unsub_batches) do
-    # Take all points before acked LSN, and all at acked LSN that have been explicitly observed.
-
+  @spec observed_unsub_points(client_id(), non_neg_integer(), [String.t()]) :: [
+          {String.t(), non_neg_integer()}
+        ]
+  defp observed_unsub_points(client_id, wal_pos, observed_unsub_batches) do
+    # Return all points before acked LSN, and all at acked LSN that have been explicitly observed.
     matches =
       [
-        {{{client_id, :"$1", :"$2"}}, [{:<, :"$2", new_wal_pos}], [:"$1"]}
-        | Enum.map(observed_unsub_batches, &{{{client_id, &1, new_wal_pos}}, [], [&1]})
+        {{{client_id, :"$1", :"$2"}}, [{:<, :"$2", wal_pos}], [{{:"$1", :"$2"}}]}
+        | Enum.map(observed_unsub_batches, &{{{client_id, &1, wal_pos}}, [], [{{&1, wal_pos}}]})
       ]
 
-    results = :ets.select(@unsubscribe_points_ets, matches)
+    :ets.select(@unsubscribe_points_ets, matches)
+  end
+
+  defp pop_valid_unsub_points(client_id, new_wal_pos, observed_unsub_batches) do
+    points = observed_unsub_points(client_id, new_wal_pos, observed_unsub_batches)
 
     :ets.select_delete(
       @unsubscribe_points_ets,
-      Enum.map(matches, fn {m, g, _} -> {m, g, [true]} end)
+      Enum.map(points, fn {id, wal_pos} -> {{{client_id, id, wal_pos}}, [], [true]} end)
     )
 
-    results
+    Enum.map(points, &elem(&1, 0))
   end
 
   defp prune_active_subs(client_id, new_wal_pos, observed_unsub_batches) do

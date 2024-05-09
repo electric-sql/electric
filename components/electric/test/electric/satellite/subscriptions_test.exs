@@ -1616,6 +1616,43 @@ defmodule Electric.Satellite.SubscriptionsTest do
     end
 
     @tag with_sql: "INSERT INTO public.users (id, name) VALUES ('#{@john_doe_id}', 'John Doe')"
+    test "Unsub + reconnect: can't reconnect with a subscription id at a point after a GONE batch",
+         ctx do
+      {last_lsn, _, sub_id} =
+        MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
+          rel_map = start_replication_and_assert_response(conn, ctx.electrified_count)
+
+          {first_sub_id, [%NewRecord{record: %{"id" => @john_doe_id}}]} =
+            simple_subscribe(conn, rel_map, :users)
+
+          {_lsn, [%Gone{pk: [@john_doe_id]}]} = simple_unsub(conn, rel_map, first_sub_id)
+
+          # Get a valid LSN after the unsub point
+          {_, []} = simple_subscribe(conn, rel_map, :my_entries)
+
+          {:ok, _} =
+            :epgsql.squery(
+              ctx.conn,
+              "INSERT INTO public.my_entries (id, content) VALUES (gen_random_uuid(), 'test')"
+            )
+
+          assert %{lsn: lsn, changes: [%{relation: {_, "my_entries"}}]} =
+                   receive_txn(conn, rel_map)
+
+          {lsn, rel_map, first_sub_id}
+        end)
+
+      MockClient.with_connect([auth: ctx, id: ctx.client_id, port: ctx.port], fn conn ->
+        # A reconnect at an LSN deserialize_op_log than the GONE batch assumes it was seen
+        assert {:ok, %{err: %{code: :SUBSCRIPTION_NOT_FOUND}}} =
+                 MockClient.make_rpc_call(conn, "startReplication", %SatInStartReplicationReq{
+                   lsn: last_lsn,
+                   subscription_ids: [sub_id]
+                 })
+      end)
+    end
+
+    @tag with_sql: "INSERT INTO public.users (id, name) VALUES ('#{@john_doe_id}', 'John Doe')"
     test "Unsub + reconnect: can't reconnect with a subscription id at a point after a GONE batch is acknowledged",
          ctx do
       {last_lsn, sub_id} =
