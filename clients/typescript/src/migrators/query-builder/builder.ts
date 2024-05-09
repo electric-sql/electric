@@ -316,16 +316,15 @@ export abstract class QueryBuilder {
     let positionalParam = 1
     const pos = (i: number) => `${this.makePositionalParam(i)}`
     const makeInsertPattern = () => {
-      return ` (${Array.from(
-        { length: columnCount },
-        () => `${pos(positionalParam++)}`
-      ).join(', ')})`
+      const insertRow = Array.from({ length: columnCount }, () =>
+        pos(positionalParam++)
+      )
+
+      return ` (${insertRow.join(', ')})`
     }
 
-    // Largest number below maxSqlParamers that evenly divides by column count,
-    // divided by columnCount, giving the amount of rows we can insert at once
-    const batchMaxSize =
-      (maxParameters - (maxParameters % columnCount)) / columnCount
+    // Amount of rows we can insert at once
+    const batchMaxSize = Math.floor(maxParameters / columnCount)
     while (processed < recordCount) {
       positionalParam = 1 // start counting parameters from 1 again
       const currentInsertCount = Math.min(recordCount - processed, batchMaxSize)
@@ -363,7 +362,7 @@ export abstract class QueryBuilder {
    */
   public prepareDeleteBatchedStatements<T extends object>(
     baseSql: string,
-    columns: (keyof T)[],
+    columns: Array<keyof T>,
     records: T[],
     maxParameters: number,
     suffixSql = ''
@@ -373,17 +372,18 @@ export abstract class QueryBuilder {
     const recordCount = records.length
     let processed = 0
     let positionalParam = 1
-    const pos = (i: number) => `${this.makePositionalParam(i)}`
-    const makeWherePattern = () =>
-      ` (${Array.from(
+    const pos = (i: number) => this.makePositionalParam(i)
+    const makeWherePattern = () => {
+      const columnComparisons = Array.from(
         { length: columnCount },
         (_, i) => `"${columns[i] as string}" = ${pos(positionalParam++)}`
-      ).join(' AND ')})`
+      )
 
-    // Largest number below maxSqlParamers that evenly divides by column count,
-    // divided by columnCount, giving the amount of rows we can insert at once
-    const batchMaxSize =
-      (maxParameters - (maxParameters % columnCount)) / columnCount
+      return ` (${columnComparisons.join(' AND ')})`
+    }
+
+    // Amount of rows we can delete at once
+    const batchMaxSize = Math.floor(maxParameters / columnCount)
     while (processed < recordCount) {
       positionalParam = 1 // start counting parameters from 1 again
       const currentDeleteCount = Math.min(recordCount - processed, batchMaxSize)

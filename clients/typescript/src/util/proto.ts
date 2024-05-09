@@ -128,7 +128,7 @@ const msgtypetuples: MappingTuples = {
   SatRpcResponse: [22, Pb.SatRpcResponse],
   SatOpLogAck: [23, Pb.SatOpLogAck],
   SatUnsubsDataBegin: [24, Pb.SatUnsubsDataBegin],
-  SatUnsubsDataEnd: [24, Pb.SatUnsubsDataEnd],
+  SatUnsubsDataEnd: [25, Pb.SatUnsubsDataEnd],
 }
 
 const msgtypemapping = Object.fromEntries(
