@@ -148,7 +148,18 @@ export class AsyncEventEmitter<Events extends EventMap> {
       // deep copy because once listeners mutate the `this.listeners` array as they remove themselves
       // which breaks the `map` which iterates over that same array while the contents may shift
       const ls = [...listeners]
-      const listenerProms = ls.map(async (listener) => await listener(...args))
+      const listenerProms = ls.map(async (listener) => {
+        try {
+          await listener(...args)
+        } catch (e) {
+          // If a listener throws an error, we re-throw it asynchronously so that the queue can continue
+          // to be processed, this ensures that the exception isn't swallowed by allSettled below.
+          // It will likely be caught by a global error handler, or be logged to the console.
+          queueMicrotask(() => {
+            throw e
+          })
+        }
+      })
 
       Promise
         // wait for all listeners to finish,
