@@ -7,7 +7,6 @@ defmodule Electric.Replication.ShapesTest do
   alias Electric.Replication.Changes
   alias Electric.Replication.Changes.Gone
   alias Electric.Replication.Changes.NewRecord
-  alias Electric.Replication.Changes.ReferencedRecord
   alias Electric.Replication.Eval
   alias Electric.Replication.Shapes
   alias Electric.Replication.Shapes.ShapeRequest
@@ -168,124 +167,6 @@ defmodule Electric.Replication.ShapesTest do
       assert {%{changes: [^insert1, ^insert2]}, graph, _} =
                Shapes.process_transaction(tx, Graph.new(), [ctx.shape, ctx.second_shape])
 
-      assert Graph.new() == graph
-    end
-
-    test "server compensations should not leak through" do
-      comment_author_l = %Layer{
-        source_table: {"public", "comments"},
-        source_pk: ["id"],
-        target_table: {"public", "users"},
-        target_pk: ["id"],
-        direction: :many_to_one,
-        fk: ["author_id"],
-        key: "comment_author_l",
-        parent_key: "issue_comments_l"
-      }
-
-      issue_comments_l = %Layer{
-        source_table: {"public", "issues"},
-        source_pk: ["id"],
-        target_table: {"public", "comments"},
-        target_pk: ["id"],
-        direction: :one_to_many,
-        fk: ["issue_id"],
-        key: "issue_comments_l",
-        parent_key: "issues_l",
-        next_layers: [comment_author_l]
-      }
-
-      project_account_l = %Layer{
-        source_table: {"public", "projects"},
-        source_pk: ["id"],
-        target_table: {"public", "accounts"},
-        target_pk: ["id"],
-        direction: :many_to_one,
-        fk: ["account_id"],
-        key: "project_account_l",
-        parent_key: "issue_project_l"
-      }
-
-      issue_project_l = %Layer{
-        source_table: {"public", "issues"},
-        source_pk: ["id"],
-        target_table: {"public", "projects"},
-        target_pk: ["id"],
-        direction: :many_to_one,
-        fk: ["project_id"],
-        key: "issue_project_l",
-        parent_key: "issues_l",
-        next_layers: [project_account_l]
-      }
-
-      issue_l = %Layer{
-        source_table: nil,
-        source_pk: nil,
-        target_table: {"public", "issues"},
-        target_pk: ["id"],
-        direction: :first_layer,
-        fk: nil,
-        key: "issues_l",
-        parent_key: nil,
-        next_layers: [issue_comments_l, issue_project_l]
-      }
-
-      shape = %ShapeRequest{
-        hash: "anything",
-        id: "r1",
-        tree: issue_l,
-        layer_map: %{
-          {"public", "issues"} => [issue_l],
-          {"public", "projects"} => [issue_project_l],
-          {"public", "accounts"} => [project_account_l],
-          {"public", "comments"} => [issue_comments_l],
-          {"public", "users"} => [comment_author_l]
-        }
-      }
-
-      incoming_txn = %Changes.Transaction{
-        changes: [
-          %NewRecord{
-            relation: {"public", "comments"},
-            record: %{"author_id" => "u1", "id" => "c1", "issue_id" => "i1"}
-          }
-        ],
-        referenced_records: %{
-          {"public", "accounts"} => %{
-            ["acc1"] => %ReferencedRecord{
-              relation: {"public", "accounts"},
-              record: %{"id" => "acc1", "name" => "Electric"},
-              pk: ["acc1"]
-            }
-          },
-          {"public", "issues"} => %{
-            ["i1"] => %ReferencedRecord{
-              relation: {"public", "issues"},
-              record: %{"id" => "i1", "name" => "Issue 2", "project_id" => "pr1"},
-              pk: ["i1"]
-            }
-          },
-          {"public", "projects"} => %{
-            ["pr1"] => %ReferencedRecord{
-              relation: {"public", "projects"},
-              record: %{"account_id" => "acc1", "id" => "pr1", "name" => "Project 2"},
-              pk: ["pr1"]
-            }
-          },
-          {"public", "users"} => %{
-            ["u1"] => %ReferencedRecord{
-              relation: {"public", "users"},
-              record: %{"id" => "u1", "name" => "Not Nobody"},
-              pk: ["u1"]
-            }
-          }
-        }
-      }
-
-      assert {%{changes: changes}, graph, _} =
-               Shapes.process_transaction(incoming_txn, Graph.new(), [shape])
-
-      assert [] = changes
       assert Graph.new() == graph
     end
   end

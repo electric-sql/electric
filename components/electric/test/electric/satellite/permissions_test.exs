@@ -1078,7 +1078,7 @@ defmodule Electric.Satellite.PermissionsTest do
                 "user_id" => Auth.user_id(),
                 "project_id" => "p1",
                 "role" => "manager",
-                "valid" => false
+                "valid" => "false"
               }),
               Chgs.insert(@issues, %{
                 "id" => "i100",
@@ -1098,7 +1098,7 @@ defmodule Electric.Satellite.PermissionsTest do
                        "user_id" => Auth.user_id(),
                        "project_id" => "p1",
                        "role" => "manager",
-                       "valid" => true
+                       "valid" => "true"
                      }),
                      Chgs.insert(@issues, %{
                        "id" => "i100",
@@ -1117,7 +1117,7 @@ defmodule Electric.Satellite.PermissionsTest do
                 "user_id" => Auth.user_id(),
                 "project_id" => "p1",
                 "role" => "manager",
-                "valid" => true
+                "valid" => "true"
               }),
               Chgs.insert(@issues, %{
                 "id" => "i101",
@@ -1150,7 +1150,7 @@ defmodule Electric.Satellite.PermissionsTest do
                        "user_id" => Auth.user_id(),
                        "project_id" => "p1",
                        "role" => "site.admin",
-                       "valid" => false
+                       "valid" => "false"
                      }),
                      Chgs.insert(@regions, %{
                        "id" => "rg200"

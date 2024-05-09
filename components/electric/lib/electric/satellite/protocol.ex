@@ -885,7 +885,8 @@ defmodule Electric.Satellite.Protocol do
     |> case do
       state when is_paused_on_subscription(state, id) ->
         # We're paused on this, we want to send the error and unpause
-        send_additional_data_error_and_unpause(error, state)
+        error
+        |> send_additional_data_error_and_unpause(state)
         |> perform_pending_actions()
 
       state ->
@@ -926,6 +927,19 @@ defmodule Electric.Satellite.Protocol do
     {_, graph_diff} =
       SentRowsGraph.pop_by_request_ids(graph_diff, gone_request_ids, root_vertex: :fake_root)
 
+    {filtered_changes, rejected_changes} =
+      Permissions.Read.filter_move_in_data(
+        state.permissions,
+        state.out_rep.sent_rows_graph,
+        changes,
+        xmin
+      )
+
+    filtered_graph_diff =
+      Enum.reduce(rejected_changes, graph_diff, fn {vertex, _change}, graph ->
+        Graph.delete_vertex(graph, vertex)
+      end)
+
     # Store this data in case of disconnect until acknowledged
     ClientReconnectionInfo.store_additional_txn_data!(
       state.origin,
@@ -933,16 +947,17 @@ defmodule Electric.Satellite.Protocol do
       xmin,
       ref,
       included_txns,
-      Graph.delete_vertex(graph_diff, :fake_root)
+      Graph.delete_vertex(filtered_graph_diff, :fake_root)
     )
 
     if is_paused_on_move_in(state, ref) do
       # We're paused waiting for this, send changes immediately
-      send_additional_data_and_unpause({:move_in, ref}, changes, state)
+      {:move_in, ref}
+      |> send_additional_data_and_unpause(filtered_changes, state)
       |> perform_pending_actions()
     else
       # Didn't reach the pause point for this move-in yet, just store
-      {[], State.store_move_in_data(state, ref, changes)}
+      {[], State.store_move_in_data(state, ref, filtered_changes)}
     end
   end
 

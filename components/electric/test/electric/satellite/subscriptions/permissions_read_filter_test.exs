@@ -194,6 +194,7 @@ defmodule Electric.Satellite.Subscriptions.PermissionsReadFilterTest do
          """,
          ddlx: [
            "GRANT READ ON public.authored_entries TO 'reader' WHERE (row.author_id = auth.user_id)",
+           "GRANT READ ON public.users TO 'reader'",
            "ASSIGN public.users.role TO public.users.id"
          ]
     test "filtered access returns valid rows", cxt do
@@ -220,7 +221,17 @@ defmodule Electric.Satellite.Subscriptions.PermissionsReadFilterTest do
         assert {[^req_id], data} = receive_subscription_data(conn, sub_id)
 
         assert [
-                 %SatOpInsert{row_data: %{values: [_, "Entry 1", _]}}
+                 %SatOpInsert{row_data: %{values: [_, "Entry 1", _]}},
+                 %SatOpInsert{
+                   row_data: %{
+                     values: [_, "John", "reader"]
+                   }
+                 },
+                 %SatOpInsert{
+                   row_data: %{
+                     values: [_, "Other 1", "reader"]
+                   }
+                 }
                ] = sorted_entry_inserts(data)
 
         insert_entry(cxt, "Entry 3", Auth.user_id())
@@ -338,10 +349,10 @@ defmodule Electric.Satellite.Subscriptions.PermissionsReadFilterTest do
         INSERT INTO public.issues (id, project_id, name, visible) VALUES ('#{@issue1_id}', '#{@project1_id}', 'Issue 1', true);
         INSERT INTO public.issues (id, project_id, name, visible) VALUES ('#{@issue2_id}', '#{@project2_id}', 'Issue 2', true);
 
-        INSERT INTO public.comments (id, issue_id, author_id, comment) VALUES ('#{@comment1_id}', '#{@issue1_id}', '#{Auth.user_id()}', 'Comment 1');
-        INSERT INTO public.comments (id, issue_id, author_id, comment) VALUES ('#{@comment2_id}', '#{@issue1_id}', '#{Auth.not_user_id()}', 'Comment 2');
-        INSERT INTO public.comments (id, issue_id, author_id, comment) VALUES ('#{@comment3_id}', '#{@issue2_id}', '#{Auth.user_id()}', 'Comment 3');
-        INSERT INTO public.comments (id, issue_id, author_id, comment) VALUES ('#{@comment4_id}', '#{@issue2_id}', '#{Auth.not_user_id()}', 'Comment 4');
+        INSERT INTO public.comments (id, issue_id, author_id, comment, visible) VALUES ('#{@comment1_id}', '#{@issue1_id}', '#{Auth.user_id()}', 'Comment 1', true);
+        INSERT INTO public.comments (id, issue_id, author_id, comment, visible) VALUES ('#{@comment2_id}', '#{@issue1_id}', '#{Auth.not_user_id()}', 'Comment 2', true);
+        INSERT INTO public.comments (id, issue_id, author_id, comment, visible) VALUES ('#{@comment3_id}', '#{@issue2_id}', '#{Auth.user_id()}', 'Comment 3', true);
+        INSERT INTO public.comments (id, issue_id, author_id, comment, visible) VALUES ('#{@comment4_id}', '#{@issue2_id}', '#{Auth.not_user_id()}', 'Comment 4', true);
 
         INSERT INTO public.project_memberships (id, team_membership_id, project_id, user_id, role) VALUES ('#{uuid4()}', '#{@tm1_id}', '#{@project1_id}', '#{Auth.user_id()}', 'member');
         INSERT INTO public.project_memberships (id, team_membership_id, project_id, user_id, role) VALUES ('#{uuid4()}', '#{@tm1_id}', '#{@project3_id}', '#{Auth.user_id()}', 'member');
@@ -351,8 +362,8 @@ defmodule Electric.Satellite.Subscriptions.PermissionsReadFilterTest do
         ddlx: [
           "GRANT READ ON public.accounts TO (public.accounts, 'member')",
           "GRANT READ ON public.projects TO (public.projects, 'member')",
-          "GRANT ALL ON public.issues TO (public.projects, 'member') WHERE (row.visible = true)",
-          "GRANT READ ON public.comments TO (public.projects, 'member')",
+          "GRANT ALL ON public.issues TO (public.projects, 'member') WHERE ((row.visible = true) OR (new.visible = true))",
+          "GRANT READ ON public.comments TO (public.projects, 'member') WHERE (visible = true)",
           "GRANT WRITE ON public.comments TO (public.projects, 'member') WHERE (row.author_id = auth.user_id)",
           "GRANT READ ON public.project_memberships TO (public.projects, 'member')",
           "GRANT ALL ON public.users TO (public.users, 'self')",
@@ -407,17 +418,19 @@ defmodule Electric.Satellite.Subscriptions.PermissionsReadFilterTest do
         {:ok, 2} =
           :epgsql.equery(
             cxt.conn,
-            "INSERT INTO public.comments (id, issue_id, author_id, comment) VALUES ($1, $2, $3, $4), ($5, $6, $7, $8)",
+            "INSERT INTO public.comments (id, issue_id, author_id, comment, visible) VALUES ($1, $2, $3, $4, $5), ($6, $7, $8, $9, $10)",
             [
               visible_comment_id,
               @issue1_id,
               user_id,
               "Visible",
+              true,
               ##
               uuid4(),
               @issue2_id,
               not_user_id,
-              "Invisible"
+              "Invisible",
+              true
             ]
           )
 
@@ -478,12 +491,13 @@ defmodule Electric.Satellite.Subscriptions.PermissionsReadFilterTest do
           {:ok, 1} =
             :epgsql.equery(
               tx_conn,
-              "INSERT INTO public.comments (id, issue_id, author_id, comment) VALUES ($1, $2, $3, $4);",
+              "INSERT INTO public.comments (id, issue_id, author_id, comment, visible) VALUES ($1, $2, $3, $4, $5);",
               [
                 new_comment_id,
                 new_issue_id,
                 not_user_id,
-                "Nothing to say"
+                "Nothing to say",
+                true
               ]
             )
 
@@ -652,7 +666,186 @@ defmodule Electric.Satellite.Subscriptions.PermissionsReadFilterTest do
       end)
     end
 
-    @tag :wip
+    test "move-ins are filtered by permissions", cxt do
+      new_issue_id = uuid4()
+
+      new_comment_id1 = uuid4()
+      new_comment_id2 = uuid4()
+      new_comment_id3 = uuid4()
+
+      Client.with_transaction(cxt.conn, fn tx_conn ->
+        {:ok, 1} =
+          :epgsql.equery(
+            tx_conn,
+            "INSERT INTO public.issues (id, project_id, name, visible) VALUES ($1, $2, $3, $4)",
+            [new_issue_id, @project1_id, "Appearing issue", false]
+          )
+
+        {:ok, 3} =
+          :epgsql.equery(
+            cxt.conn,
+            "INSERT INTO public.comments (id, issue_id, author_id, comment, visible) VALUES ($1, $2, $3, $4, $5), ($6, $7, $8, $9, $10), ($11, $12, $13, $14, $15)",
+            [
+              new_comment_id1,
+              new_issue_id,
+              Auth.user_id(),
+              "Invisible 1",
+              false,
+              ##
+              new_comment_id2,
+              new_issue_id,
+              Auth.user_id(),
+              "Invisible 2",
+              false,
+              ##
+              new_comment_id3,
+              new_issue_id,
+              Auth.user_id(),
+              "Visible 1",
+              true
+            ]
+          )
+      end)
+
+      MockClient.with_connect([auth: cxt, id: cxt.client_id, port: cxt.port], fn conn ->
+        rel_map = start_replication_and_assert_response(conn, cxt.electrified_count)
+
+        {sub_id, request_id, request} =
+          ProtocolHelpers.simple_sub_request(
+            issues: [
+              where: "this.visible = true",
+              include: [
+                projects: [over: "project_id", include: [issues: [over: "project_id"]]],
+                comments: [over: "issue_id"]
+              ]
+            ]
+          )
+
+        assert {:ok, %SatSubsResp{err: nil}} =
+                 MockClient.make_rpc_call(conn, "subscribe", request)
+
+        assert {[^request_id], data} = receive_subscription_data(conn, sub_id)
+
+        assert_sync_data(cxt, data, [
+          {{"public", "users"}, %{"id" => Auth.user_id()}},
+          {{"public", "users"}, %{"id" => Auth.not_user_id()}},
+          {{"public", "accounts"}, %{"id" => @account_id}},
+          {{"public", "projects"}, %{"id" => @project1_id}},
+          {{"public", "issues"}, %{"id" => @issue1_id}},
+          {{"public", "comments"}, %{"id" => @comment1_id}},
+          {{"public", "comments"}, %{"id" => @comment2_id}}
+        ])
+
+        Client.with_transaction(cxt.conn, fn tx_conn ->
+          {:ok, 1} =
+            :epgsql.equery(
+              tx_conn,
+              "UPDATE public.issues SET visible = $1 WHERE id = $2",
+              [true, new_issue_id]
+            )
+        end)
+
+        assert [
+                 %NewRecord{relation: {"public", "issues"}, record: %{"id" => ^new_issue_id}}
+               ] = receive_txn_changes(conn, rel_map)
+
+        # the other 2 comments on this issue have visible = false, which fails our perms test
+        assert {2,
+                [
+                  %NewRecord{
+                    relation: {"public", "comments"},
+                    record: %{"id" => ^new_comment_id3}
+                  }
+                ]} = receive_additional_changes(conn, rel_map)
+      end)
+    end
+
+    test "rows updated to be accepted by permissions are moved-in", cxt do
+      new_issue_id = uuid4()
+
+      new_comment_id1 = uuid4()
+      new_comment_id2 = uuid4()
+
+      Client.with_transaction(cxt.conn, fn tx_conn ->
+        {:ok, 1} =
+          :epgsql.equery(
+            tx_conn,
+            "INSERT INTO public.issues (id, project_id, name, visible) VALUES ($1, $2, $3, $4)",
+            [new_issue_id, @project1_id, "Appearing issue", false]
+          )
+
+        {:ok, 2} =
+          :epgsql.equery(
+            cxt.conn,
+            "INSERT INTO public.comments (id, issue_id, author_id, comment, visible) VALUES ($1, $2, $3, $4, $5), ($6, $7, $8, $9, $10)",
+            [
+              new_comment_id1,
+              new_issue_id,
+              Auth.user_id(),
+              "Visible 1",
+              true,
+              ##
+              new_comment_id2,
+              new_issue_id,
+              Auth.user_id(),
+              "Invisible 2",
+              false
+            ]
+          )
+      end)
+
+      MockClient.with_connect([auth: cxt, id: cxt.client_id, port: cxt.port], fn conn ->
+        rel_map = start_replication_and_assert_response(conn, cxt.electrified_count)
+
+        {sub_id, request_id, request} =
+          ProtocolHelpers.simple_sub_request(
+            issues: [
+              # no where clause -- so only perms changes affect visibility of row to shapes
+              include: [
+                projects: [over: "project_id", include: [issues: [over: "project_id"]]],
+                comments: [over: "issue_id"]
+              ]
+            ]
+          )
+
+        assert {:ok, %SatSubsResp{err: nil}} =
+                 MockClient.make_rpc_call(conn, "subscribe", request)
+
+        assert {[^request_id], data} = receive_subscription_data(conn, sub_id)
+
+        assert_sync_data(cxt, data, [
+          {{"public", "users"}, %{"id" => Auth.user_id()}},
+          {{"public", "users"}, %{"id" => Auth.not_user_id()}},
+          {{"public", "accounts"}, %{"id" => @account_id}},
+          {{"public", "projects"}, %{"id" => @project1_id}},
+          {{"public", "issues"}, %{"id" => @issue1_id}},
+          {{"public", "comments"}, %{"id" => @comment1_id}},
+          {{"public", "comments"}, %{"id" => @comment2_id}}
+        ])
+
+        Client.with_transaction(cxt.conn, fn tx_conn ->
+          {:ok, 1} =
+            :epgsql.equery(
+              tx_conn,
+              "UPDATE public.issues SET visible = $1 WHERE id = $2",
+              [true, new_issue_id]
+            )
+        end)
+
+        assert [
+                 %NewRecord{relation: {"public", "issues"}, record: %{"id" => ^new_issue_id}}
+               ] = receive_txn_changes(conn, rel_map)
+
+        assert {2,
+                [
+                  %NewRecord{
+                    relation: {"public", "comments"},
+                    record: %{"id" => ^new_comment_id1}
+                  }
+                ]} = receive_additional_changes(conn, rel_map)
+      end)
+    end
+
     test "new permissions applied after update", cxt do
       user_id = Auth.user_id()
       not_user_id = Auth.not_user_id()
@@ -687,17 +880,19 @@ defmodule Electric.Satellite.Subscriptions.PermissionsReadFilterTest do
         {:ok, 2} =
           :epgsql.equery(
             cxt.conn,
-            "INSERT INTO public.comments (id, issue_id, author_id, comment) VALUES ($1, $2, $3, $4), ($5, $6, $7, $8)",
+            "INSERT INTO public.comments (id, issue_id, author_id, comment, visible) VALUES ($1, $2, $3, $4, $5), ($6, $7, $8, $9, $10)",
             [
               visible_comment_id,
               @issue1_id,
               user_id,
               "Visible",
+              true,
               ##
               uuid4(),
               @issue2_id,
               not_user_id,
-              "Invisible"
+              "Invisible",
+              true
             ]
           )
 
@@ -722,12 +917,6 @@ defmodule Electric.Satellite.Subscriptions.PermissionsReadFilterTest do
             ]
           )
 
-        # under txid ordering + xmin insert
-        # tx 1 INSERT granting new permission & move-in data request (xmin = 4)
-        # tx 2 INSERT INTO comments 1 (new project)
-        # NEW DATA MOVE IN
-        # tx 4 INSERT INTO comments 2 (new project)
-
         new_comment_id = uuid4()
 
         # TODO(magnetised): adding a role should cause a subscription refresh, which would cause
@@ -738,36 +927,34 @@ defmodule Electric.Satellite.Subscriptions.PermissionsReadFilterTest do
         {:ok, 1} =
           :epgsql.equery(
             cxt.conn,
-            "INSERT INTO public.comments (id, issue_id, author_id, comment) VALUES ($1, $2, $3, $4)",
+            "INSERT INTO public.comments (id, issue_id, author_id, comment, visible) VALUES ($1, $2, $3, $4, $5)",
             [
               new_comment_id,
               # issue 2 belongs to project 2
               @issue2_id,
               not_user_id,
-              "Now Visible"
+              "Now Visible",
+              true
             ]
           )
 
         # FIXME(magnetised): when shapes and permissions are properly integrated, we should
         #                    receive the new comment plus all the associated elements of the new
         #                    project tree
-        # assert [
-        #          %NewRecord{
-        #            relation: {"public", "comments"},
-        #            record: %{"id" => ^new_comment_id}
-        #          },
-        #          %UpdatedRecord{
-        #            relation: {"public", "issues"},
-        #            record: %{"id" => @issue2_id}
-        #          },
-        #          %UpdatedRecord{
-        #            relation: {"public", "projects"},
-        #            record: %{"id" => @project2_id}
-        #          }
-        #        ] = receive_txn_changes(conn, rel_map)
-
-        # in the meantime the correct situation is to receive nothing
-        refute_receive {^conn, %SatOpLog{} = _oplog}
+        assert [
+                 %NewRecord{
+                   relation: {"public", "comments"},
+                   record: %{"id" => ^new_comment_id}
+                 },
+                 %NewRecord{
+                   relation: {"public", "issues"},
+                   record: %{"id" => @issue2_id}
+                 },
+                 %NewRecord{
+                   relation: {"public", "projects"},
+                   record: %{"id" => @project2_id}
+                 }
+               ] = receive_txn_changes(conn, rel_map)
       end)
     end
   end

@@ -220,7 +220,7 @@ defmodule Electric.Satellite.Permissions.TriggerTest do
           "id" => "pm1",
           "project_id" => "p1",
           "user_id" => Auth.user_id(),
-          "is_enabled" => true
+          "is_enabled" => "true"
         })
 
       assert {{:insert, _role}, ^change} = fun.(change, :loader)
@@ -238,7 +238,7 @@ defmodule Electric.Satellite.Permissions.TriggerTest do
           "id" => "pm1",
           "project_id" => "p1",
           "user_id" => Auth.user_id(),
-          "is_enabled" => false
+          "is_enabled" => "false"
         })
 
       assert {:passthrough, ^change} = fun.(change, :loader)
@@ -258,9 +258,9 @@ defmodule Electric.Satellite.Permissions.TriggerTest do
             "id" => "pm1",
             "project_id" => "p1",
             "user_id" => Auth.user_id(),
-            "is_enabled" => true
+            "is_enabled" => "true"
           },
-          %{"is_enabled" => false}
+          %{"is_enabled" => "false"}
         )
 
       assert {{:delete, _role}, ^change} = fun.(change, :loader)
@@ -280,9 +280,9 @@ defmodule Electric.Satellite.Permissions.TriggerTest do
             "id" => "pm1",
             "project_id" => "p1",
             "user_id" => Auth.user_id(),
-            "is_enabled" => false
+            "is_enabled" => "false"
           },
-          %{"is_enabled" => true}
+          %{"is_enabled" => "true"}
         )
 
       assert {{:insert, _role}, ^change} = fun.(change, :loader)
@@ -302,7 +302,7 @@ defmodule Electric.Satellite.Permissions.TriggerTest do
             "id" => "pm1",
             "project_id" => "p1",
             "user_id" => Auth.user_id(),
-            "is_enabled" => true,
+            "is_enabled" => "true",
             "role" => "something"
           },
           %{"role" => "changed"}
@@ -325,7 +325,7 @@ defmodule Electric.Satellite.Permissions.TriggerTest do
             "id" => "pm1",
             "project_id" => "p1",
             "user_id" => Auth.user_id(),
-            "is_enabled" => false,
+            "is_enabled" => "false",
             "role" => "something"
           },
           %{"role" => "changed"}
@@ -346,7 +346,7 @@ defmodule Electric.Satellite.Permissions.TriggerTest do
           "id" => "pm1",
           "project_id" => "p1",
           "user_id" => Auth.user_id(),
-          "is_enabled" => false
+          "is_enabled" => "false"
         })
 
       assert {{:delete, _role}, ^change} = fun.(change, :loader)

@@ -33,33 +33,61 @@ defmodule Electric.Satellite.Permissions.Read do
   @type mapper_fun() :: (term() -> Changes.change())
   @type change_list() :: Enumerable.t(term())
   @type changes() :: [Changes.change()]
-  @type referenced_records() :: Changes.Transaction.referenced_records()
+  @type referenced_records() :: Changes.Transaction.refere()
   @type moves() :: [Permissions.move_out()]
   @type xid() :: Electric.Postgres.xid()
   @type graph() :: Permissions.Graph.impl()
   @type perms() :: Permissions.t()
+  @type shape_data() :: Electric.Replication.Shapes.ShapeRequest.shape_data()
+  @type sent_rows_graph() :: Elixir.Graph.t()
+
+  def shape_data_mapper({_key, {change, _}}), do: change
 
   @spec filter_changes(perms(), graph(), change_list(), referenced_records(), xid(), mapper_fun()) ::
           {[term()], referenced_records(), [term()], moves()}
   def filter_changes(perms, graph, changes, referenced_records, xid, mapper_fun) do
-    tx_graph = Graph.transaction_context(graph, perms.structure, changes, referenced_records)
+    tx_graph =
+      Graph.transaction_context(
+        graph,
+        perms.structure,
+        Enum.map(changes, mapper_fun),
+        referenced_records
+      )
 
-    filter_with_context(perms, graph, tx_graph, changes, referenced_records, xid, mapper_fun)
+    filter_tx_with_context(perms, graph, tx_graph, changes, referenced_records, xid, mapper_fun)
   end
 
-  @spec filter_shape_data(perms(), graph(), change_list(), xid()) :: {[term()], [term()]}
+  @spec filter_move_in_data(perms(), sent_rows_graph(), shape_data(), xid()) ::
+          {accepted :: shape_data(), rejected :: shape_data()}
+  def filter_move_in_data(perms, graph, changes, xid) do
+    graph_impl = Electric.Replication.ScopeGraph.impl(graph)
+
+    tx_graph =
+      Graph.transaction_context(
+        graph_impl,
+        perms.structure,
+        Enum.map(changes, &shape_data_mapper/1),
+        %{}
+      )
+
+    {accepted_changes, rejected_changes, []} =
+      filter_changes_with_context(perms, graph, tx_graph, changes, xid, &shape_data_mapper/1)
+
+    preserve_fk_consistency(perms, accepted_changes, rejected_changes, &shape_data_mapper/1)
+  end
+
+  @spec filter_shape_data(perms(), sent_rows_graph(), change_list(), xid()) ::
+          {accepted :: shape_data(), rejected :: shape_data()}
   def filter_shape_data(perms, graph, changes, xid) do
     graph_impl = Electric.Replication.ScopeGraph.impl(graph)
 
-    {accepted_changes, rejected_changes, _scope_moves} =
-      filter_with_context(perms, nil, graph_impl, changes, xid, fn {_key, {change, _}} ->
-        change
-      end)
+    {accepted_changes, rejected_changes, [] = _scope_moves} =
+      filter_changes_with_context(perms, nil, graph_impl, changes, xid, &shape_data_mapper/1)
 
-    {accepted_changes, rejected_changes}
+    preserve_fk_consistency(perms, accepted_changes, rejected_changes, &shape_data_mapper/1)
   end
 
-  @spec filter_with_context(
+  @spec filter_tx_with_context(
           perms(),
           graph(),
           graph(),
@@ -68,18 +96,33 @@ defmodule Electric.Satellite.Permissions.Read do
           xid(),
           mapper_fun()
         ) :: {[term()], referenced_records(), [term()], moves()}
-  defp filter_with_context(perms, old_graph, graph, changes, referenced_records, xid, mapper_fun) do
+  defp filter_tx_with_context(
+         perms,
+         old_graph,
+         graph,
+         changes,
+         referenced_records,
+         xid,
+         mapper_fun
+       ) do
     {readable_changes, excluded_changes, moves} =
-      filter_with_context(perms, old_graph, graph, changes, xid, mapper_fun)
+      filter_changes_with_context(perms, old_graph, graph, changes, xid, mapper_fun)
 
     readable_referenced_records = filter_referenced_records(perms, graph, referenced_records, xid)
 
     {readable_changes, readable_referenced_records, excluded_changes, moves}
   end
 
-  @spec filter_with_context(perms(), graph() | nil, graph(), change_list(), xid(), mapper_fun()) ::
+  @spec filter_changes_with_context(
+          perms(),
+          graph() | nil,
+          graph(),
+          change_list(),
+          xid(),
+          mapper_fun()
+        ) ::
           {[term()], [term()], moves()}
-  defp filter_with_context(perms, old_graph, graph, changes, xid, mapper_fun) do
+  defp filter_changes_with_context(perms, old_graph, graph, changes, xid, mapper_fun) do
     results =
       Enum.map(changes, fn elem ->
         change = mapper_fun.(elem)
@@ -87,17 +130,17 @@ defmodule Electric.Satellite.Permissions.Read do
         {elem, change, results}
       end)
 
-    {readable_changes, excluded_changes} =
+    {accepted_changes, rejected_changes} =
       Enum.split_with(results, fn {_elem, _change, results} ->
         Enum.any?(results, fn {readable?, _} -> readable? end)
       end)
 
     moves =
-      excluded_changes
+      rejected_changes
       |> Enum.map(fn {_elem, change, results} -> {change, results} end)
       |> resolve_moves(old_graph, perms)
 
-    {Enum.map(readable_changes, &elem(&1, 0)), Enum.map(excluded_changes, &elem(&1, 0)), moves}
+    {Enum.map(accepted_changes, &elem(&1, 0)), Enum.map(rejected_changes, &elem(&1, 0)), moves}
   end
 
   defp filter_referenced_records(perms, graph, referenced_records, xid) do
@@ -242,5 +285,36 @@ defmodule Electric.Satellite.Permissions.Read do
       id: Structure.pk_val(structure, relation, record),
       scope_path: scope_path
     }
+  end
+
+  # the permissions may leave the graph in an inconsistent state, e.g.
+  # we may not have permissions to view an issue, due to some where clause,
+  # but the comments belonging to that where clause are allowed, so they will
+  # come in but missing the parent issue.
+  defp preserve_fk_consistency(perms, accepted_changes, rejected_changes, mapper_fun) do
+    dependents =
+      rejected_changes
+      |> Enum.map(mapper_fun)
+      |> Enum.reduce(%{}, fn %Changes.NewRecord{} = change, acc ->
+        inbound = Permissions.Structure.inbound_foreign_keys(perms.structure, change.relation)
+
+        Enum.reduce(inbound, acc, fn {source_table, cols}, inner_acc ->
+          values = Enum.map(cols, fn {pk, fk} -> {fk, Map.get(change.record, pk)} end)
+          Map.update(inner_acc, source_table, [values], &[values | &1])
+        end)
+      end)
+
+    {rejected_dependent_changes, accepted_changes} =
+      Enum.split_with(accepted_changes, fn data ->
+        %Changes.NewRecord{relation: relation, record: record} = mapper_fun.(data)
+        missing_refs = Map.get(dependents, relation, [])
+
+        Enum.any?(
+          missing_refs,
+          &Enum.all?(&1, fn {key, value} -> Map.get(record, key) == value end)
+        )
+      end)
+
+    {accepted_changes, rejected_changes ++ rejected_dependent_changes}
   end
 end

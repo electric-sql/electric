@@ -1365,7 +1365,7 @@ defmodule Electric.Satellite.Permissions.StateTest do
               "project_role" => "editor",
               "user_id" => @user_id,
               "project_id" => "123",
-              "is_enabled" => false
+              "is_enabled" => "false"
             }
           )
         ])
@@ -1381,7 +1381,7 @@ defmodule Electric.Satellite.Permissions.StateTest do
                    "project_role" => "editor",
                    "user_id" => @user_id,
                    "project_id" => "123",
-                   "is_enabled" => false
+                   "is_enabled" => "false"
                  }
                )
              ]
@@ -1394,7 +1394,7 @@ defmodule Electric.Satellite.Permissions.StateTest do
               "id" => "5c0fd272-3fc2-4ae8-8574-92823c814096",
               "site_role" => "site_admin",
               "user_id" => @user_id,
-              "is_superuser" => true
+              "is_superuser" => "true"
             }
           ),
           Chgs.insert(
@@ -1403,7 +1403,7 @@ defmodule Electric.Satellite.Permissions.StateTest do
               "id" => "5c0fd272-3fc2-4ae8-8574-92823c814096",
               "site_role" => "site_admin",
               "user_id" => @user_id,
-              "is_superuser" => false
+              "is_superuser" => "false"
             }
           )
         ]

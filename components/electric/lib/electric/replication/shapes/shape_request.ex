@@ -78,6 +78,7 @@ defmodule Electric.Replication.Shapes.ShapeRequest do
 
   @type relation :: {String.t(), String.t()}
   @type layer_map :: %{relation() => [Layer.t(), ...]}
+  @type shape_data() :: %{term() => {Changes.NewRecord.t(), [term()]}}
 
   defstruct [:id, :hash, tree: [], layer_map: %{}]
 
@@ -125,7 +126,7 @@ defmodule Electric.Replication.Shapes.ShapeRequest do
   def prepare_filtering_context(_previous_requests), do: %{}
 
   @spec query_initial_data(t(), term(), SchemaLoader.relation_loader(), String.t(), map()) ::
-          {:error, any()} | {:ok, %{term() => {Changes.NewRecord.t(), [term()]}}, Graph.t()}
+          {:error, any()} | {:ok, shape_data(), Graph.t()}
   def query_initial_data(%__MODULE__{} = req, conn, relation_loader, origin, context) do
     Querying.query_layer(
       conn,

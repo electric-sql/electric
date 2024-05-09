@@ -150,10 +150,10 @@ defmodule Electric.Replication.Shapes.ChangeProcessing do
       :first_layer ->
         case {was_in_where?, is_in_where?, is_in_graph?} do
           {true, true, false} ->
-            # This is the update for a row we have not seen, which means it's a server
-            # compensation for a row that's now available via permissions. We skip it
-            # here because we expect the row to show up as a move-in result later.
-            skip(state)
+            # update to a record has altered the row's permissions state, from rejected to
+            # accepted so we're seeing it for the first time. treat this as a move in so that
+            # permissions are applied immediately and the client receives the new data
+            move_in(state, r, layer, own_id)
 
           {true, true, true} ->
             state

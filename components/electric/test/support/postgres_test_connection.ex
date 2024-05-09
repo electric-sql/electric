@@ -306,7 +306,8 @@ defmodule Electric.Postgres.TestConnection do
          id UUID PRIMARY KEY,
          issue_id UUID NOT NULL REFERENCES public.issues (id),
          author_id UUID NOT NULL REFERENCES public.users (id),
-         comment TEXT NOT NULL
+         comment TEXT NOT NULL,
+         visible BOOL
          """},
         {"public.team_memberships",
          """

@@ -21,9 +21,11 @@ defmodule Electric.Satellite.Permissions.Structure do
   @type relation() :: Electric.Postgres.relation()
   @type name() :: Electric.Postgres.name()
   @type col() :: Electric.Postgres.name()
+  @type outbound_fks() :: %{relation() => %{relation() => [col()]}}
+  @type inbound_fks() :: %{relation() => %{relation() => [{col(), col()}]}}
   @type t() :: %__MODULE__{
           paths: %{relation() => %{relation() => [relation()]}},
-          fks: %{relation() => %{relation() => [col()]}},
+          fks: %{outbound: outbound_fks(), inbound: inbound_fks()},
           pks: %{relation() => [col()]},
           fk_graph: FkGraph.t(),
           scopes: [relation()]
@@ -123,10 +125,19 @@ defmodule Electric.Satellite.Permissions.Structure do
          end)}
       end)
 
+    inbound_fks =
+      for %{constraints: constraints, name: name} <- schema_version.schema.tables,
+          %{constraint: {:foreign, fk}} <- constraints do
+        {{fk.pk_table.schema, fk.pk_table.name},
+         {{name.schema, name.name}, Enum.zip(fk.pk_cols, fk.fk_cols)}}
+      end
+      |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+      |> Map.new(fn {dest, sources} -> {dest, Map.new(sources)} end)
+
     validate(
       %__MODULE__{
         paths: paths,
-        fks: schema_version.fk_graph.fks,
+        fks: %{outbound: schema_version.fk_graph.fks, inbound: inbound_fks},
         pks: schema_version.primary_keys,
         fk_graph: graph,
         scopes: Map.keys(paths)
@@ -170,7 +181,7 @@ defmodule Electric.Satellite.Permissions.Structure do
   @doc """
   Returns the primary key column(s) for the given table.
   """
-  @spec pk_col(t(), relation()) :: {:ok, [col()]} | :error
+  @spec pk_col(t(), relation()) :: {:ok, col()} | :error
   def pk_col(%__MODULE__{pks: pks}, relation) do
     Map.fetch(pks, relation)
   end
@@ -191,7 +202,11 @@ defmodule Electric.Satellite.Permissions.Structure do
     end
   end
 
-  def foreign_keys(%__MODULE__{fks: fks}, relation) do
+  def foreign_keys(%__MODULE__{fks: %{outbound: fks}}, relation) do
+    Map.get(fks, relation, %{})
+  end
+
+  def inbound_foreign_keys(%__MODULE__{fks: %{inbound: fks}}, relation) do
     Map.get(fks, relation, %{})
   end
 
@@ -305,7 +320,7 @@ defmodule Electric.Satellite.Permissions.Structure do
     end
   end
 
-  defp fk_cols(%__MODULE__{fks: fks}, parent, relation) do
+  defp fk_cols(%__MODULE__{fks: %{outbound: fks}}, parent, relation) do
     # raise extemely unlikely
     cond do
       cols = get_in(fks, [relation, parent]) -> cols

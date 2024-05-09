@@ -387,15 +387,15 @@ defmodule Electric.Satellite.Permissions.ReadTest do
           %{"text" => "updated"}
         ),
         # matches the is_public clause
-        Chgs.update(@reactions, %{"id" => "r1", "comment_id" => "c1", "is_public" => true}, %{
+        Chgs.update(@reactions, %{"id" => "r1", "comment_id" => "c1", "is_public" => "true"}, %{
           "text" => "updated"
         }),
         # change of is_public fails ROW.is_public test which tests old and new values
-        Chgs.update(@reactions, %{"id" => "r2", "comment_id" => "c1", "is_public" => true}, %{
+        Chgs.update(@reactions, %{"id" => "r2", "comment_id" => "c1", "is_public" => "true"}, %{
           "text" => "updated",
-          "is_public" => false
+          "is_public" => "false"
         }),
-        Chgs.insert(@reactions, %{"id" => "r200", "comment_id" => "c1", "is_public" => true})
+        Chgs.insert(@reactions, %{"id" => "r200", "comment_id" => "c1", "is_public" => "true"})
       ]
 
       {filtered_tx, _rejected, [_move]} =
@@ -414,7 +414,7 @@ defmodule Electric.Satellite.Permissions.ReadTest do
                # matches the is_public clause
                Chgs.update(
                  @reactions,
-                 %{"id" => "r1", "comment_id" => "c1", "is_public" => true},
+                 %{"id" => "r1", "comment_id" => "c1", "is_public" => "true"},
                  %{
                    "text" => "updated"
                  }
@@ -422,7 +422,7 @@ defmodule Electric.Satellite.Permissions.ReadTest do
                Chgs.insert(@reactions, %{
                  "id" => "r200",
                  "comment_id" => "c1",
-                 "is_public" => true
+                 "is_public" => "true"
                })
              ]
     end
@@ -444,8 +444,8 @@ defmodule Electric.Satellite.Permissions.ReadTest do
         )
 
       changes = [
-        Chgs.update(@reactions, %{"id" => "r1", "comment_id" => "c1", "is_public" => true}, %{
-          "is_public" => false
+        Chgs.update(@reactions, %{"id" => "r1", "comment_id" => "c1", "is_public" => "true"}, %{
+          "is_public" => "false"
         })
       ]
 

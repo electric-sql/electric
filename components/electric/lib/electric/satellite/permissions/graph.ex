@@ -167,7 +167,12 @@ defmodule Electric.Satellite.Permissions.Graph do
   end
 
   @spec transaction_context(impl(), Structure.t(), [Changes.change()]) :: impl()
-  def transaction_context({_module, _state} = impl, structure, changes, referenced_records \\ []) do
+  def transaction_context(
+        {_module, _state} = impl,
+        structure,
+        changes,
+        referenced_records \\ []
+      ) do
     for {_relation, records} <- referenced_records,
         {_pk, %{relation: relation, record: record}} <- records do
       %Changes.NewRecord{relation: relation, record: record}
