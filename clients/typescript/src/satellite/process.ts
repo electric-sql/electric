@@ -1621,7 +1621,7 @@ export class SatelliteProcess implements Satellite {
         qualifiedTableName,
         columnNames,
         columnValues,
-        ['id'],
+        Object.keys(primaryKeyCols),
         updateColumnStmts,
         updateColumnStmts.map((col) => fullRow[col])
       )
