@@ -220,22 +220,20 @@ connector_config =
     require_ssl? =
       case {require_ssl_config, conn_config[:sslmode]} do
         {nil, :require} -> true
-        {nil, _} -> false
         {nil, nil} -> default_database_require_ssl
+        {nil, _} -> false
         {true, _} -> true
         {false, _} -> false
       end
 
-    # When require_ssl?=true, epgsql will try to connect using SSL and fail if the server does not accept encrypted
-    # connections.
-    #
-    # When require_ssl?=false, epgsql will try to connect using SSL first, then fallback to an unencrypted connection
-    # if that fails.
+    # We're using `epgsql` and `Postgrex`. `Postgrex` does not allow trying a SSL connection an falling
+    # back to a plain one, so we're configuring our system to either always use SSL, or don't use SSL at all
+    # despite `epgsql` supporting fallback behaviour.
     use_ssl? =
       if require_ssl? do
         :required
       else
-        true
+        false
       end
 
     use_ipv6? = env!("DATABASE_USE_IPV6", :boolean, default_database_use_ipv6)
