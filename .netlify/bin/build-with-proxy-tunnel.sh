@@ -16,7 +16,7 @@ tunnel_pid=$!
 
 proxy_test="import socket; import sys; sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM); result = sock.connect_ex((\"127.0.0.1\",${tunnel_port})); sock.close(); sys.exit(result)"
 
-while ! python3 -c "$proxy_test"; do
+while ! python -c "$proxy_test"; do
     sleep 0.5
 done
 
