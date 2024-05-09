@@ -9,9 +9,8 @@ defmodule Electric.PlugTest do
   @migrations [
     {"0001",
      [
-       "CREATE TABLE a (id uuid PRIMARY KEY, value text NOT NULL);",
-       "CREATE TABLE b (id uuid PRIMARY KEY, value text NOT NULL);",
-       "CREATE INDEX a_idx ON a (value);"
+       "CREATE TABLE a (id uuid PRIMARY KEY, value text NOT NULL); CREATE INDEX a_idx ON a (value);",
+       "CREATE TABLE b (id uuid PRIMARY KEY, value text NOT NULL);"
      ]},
     {"0002", ["CREATE TABLE c (id uuid PRIMARY KEY, value text NOT NULL);"]},
     {"0003",
@@ -72,23 +71,23 @@ defmodule Electric.PlugTest do
 
       assert [
                {~c"0001/migration.sql",
-                "CREATE TABLE \"a\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"a_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n\n\nCREATE TABLE \"b\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"b_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n\n\nCREATE INDEX \"a_idx\" ON \"a\" (\"value\" ASC);\n"},
+                "CREATE TABLE \"a\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"a_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n\nCREATE INDEX \"a_idx\" ON \"a\" (\"value\" ASC);\n\nCREATE TABLE \"b\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"b_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;"},
                {~c"0001/metadata.json", metadata_json_0001},
                {~c"0002/migration.sql",
-                "CREATE TABLE \"c\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"c_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n"},
+                "CREATE TABLE \"c\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"c_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;"},
                {~c"0002/metadata.json", metadata_json_0002},
                {~c"0003/migration.sql",
-                "CREATE TABLE \"d\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"d_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n\n\nALTER TABLE \"d\" ADD COLUMN \"is_valid\" INTEGER;\n"},
+                "CREATE TABLE \"d\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"d_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n\nALTER TABLE \"d\" ADD COLUMN \"is_valid\" INTEGER;"},
                {~c"0003/metadata.json", metadata_json_0003},
                {~c"0004/migration.sql",
-                "CREATE TABLE \"e\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"e_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n"},
+                "CREATE TABLE \"e\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"e_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;"},
                {~c"0004/metadata.json", metadata_json_0004}
              ] = file_list
 
       assert {:ok,
               %{
                 "format" => "SatOpMigrate",
-                "ops" => [op1, _op2, _op3],
+                "ops" => [op1, _op2],
                 "protocol_version" => "Electric.Satellite",
                 "version" => "0001"
               }} = Jason.decode(metadata_json_0001)
@@ -100,6 +99,10 @@ defmodule Electric.PlugTest do
                     type: :CREATE_TABLE,
                     sql:
                       "CREATE TABLE \"a\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"a_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n"
+                  },
+                  %SatOpMigrate.Stmt{
+                    type: :CREATE_INDEX,
+                    sql: "CREATE INDEX \"a_idx\" ON \"a\" (\"value\" ASC);\n"
                   }
                 ],
                 affected_entity:
@@ -144,8 +147,10 @@ defmodule Electric.PlugTest do
       {:ok, file_list} = :zip.extract(body, [:memory])
 
       assert [
-               {~c"0001/migration.sql",
-                "CREATE TABLE a (id uuid PRIMARY KEY, value text NOT NULL);\n\nCREATE TABLE b (id uuid PRIMARY KEY, value text NOT NULL);\n\nCREATE INDEX a_idx ON a (value);"},
+               {
+                 ~c"0001/migration.sql",
+                 "CREATE TABLE a (id uuid PRIMARY KEY, value text NOT NULL);\n\nCREATE INDEX a_idx ON a (value);\n\nCREATE TABLE b (id uuid PRIMARY KEY, value text NOT NULL);"
+               },
                {~c"0001/metadata.json", metadata_json_0001},
                {~c"0002/migration.sql",
                 "CREATE TABLE c (id uuid PRIMARY KEY, value text NOT NULL);"},
@@ -161,7 +166,7 @@ defmodule Electric.PlugTest do
       assert {:ok,
               %{
                 "format" => "SatOpMigrate",
-                "ops" => [op1, _op2, _op3],
+                "ops" => [op1, _op2],
                 "protocol_version" => "Electric.Satellite",
                 "version" => "0001"
               }} = Jason.decode(metadata_json_0001)
@@ -171,7 +176,11 @@ defmodule Electric.PlugTest do
                 stmts: [
                   %SatOpMigrate.Stmt{
                     type: :CREATE_TABLE,
-                    sql: "CREATE TABLE a (id uuid PRIMARY KEY, value text NOT NULL);"
+                    sql: "CREATE TABLE a (id uuid PRIMARY KEY, value text NOT NULL)"
+                  },
+                  %SatOpMigrate.Stmt{
+                    type: :CREATE_INDEX,
+                    sql: "CREATE INDEX a_idx ON a (value)"
                   }
                 ],
                 affected_entity:
@@ -217,10 +226,10 @@ defmodule Electric.PlugTest do
 
       assert [
                {~c"0003/migration.sql",
-                "CREATE TABLE \"d\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"d_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n\n\nALTER TABLE \"d\" ADD COLUMN \"is_valid\" INTEGER;\n"},
+                "CREATE TABLE \"d\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"d_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n\nALTER TABLE \"d\" ADD COLUMN \"is_valid\" INTEGER;"},
                {~c"0003/metadata.json", metadata_json_0003},
                {~c"0004/migration.sql",
-                "CREATE TABLE \"e\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"e_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n"},
+                "CREATE TABLE \"e\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"e_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;"},
                {~c"0004/metadata.json", metadata_json_0004}
              ] = file_list
 

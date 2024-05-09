@@ -62,7 +62,7 @@ defmodule Electric.Postgres.Replication do
   @spec migrate(SchemaLoader.Version.t(), binary(), Electric.Postgres.Dialect.t()) ::
           {:ok, [%SatOpMigrate{}], [{binary, binary}]}
   def migrate(schema_version, stmt, dialect \\ @default_dialect) do
-    ast = Electric.Postgres.parse!(stmt)
+    ast = Electric.Postgres.parse_with_locations!(stmt)
 
     case propagatable_stmt?(ast) do
       [] ->
@@ -73,6 +73,10 @@ defmodule Electric.Postgres.Replication do
 
         {:ok, [msg], relations}
     end
+  end
+
+  def stmt_type({%{} = ast, _loc, _len}) do
+    stmt_type(ast)
   end
 
   def stmt_type(%Pg.CreateStmt{}) do
@@ -94,13 +98,23 @@ defmodule Electric.Postgres.Replication do
     end
   end
 
-  defp to_sql(_ast, stmt, Dialect.Postgresql), do: stmt
-  defp to_sql(ast, _stmt, dialect), do: Dialect.to_sql(ast, dialect)
+  # TODO: this slicing of statments is wrong. see [VAX-1828]
+  defp to_sql({_ast, loc, len}, stmt, Dialect.Postgresql) do
+    stmt
+    |> String.slice(loc, len)
+    |> String.trim()
+  end
+
+  defp to_sql({ast, _loc, _len}, _stmt, dialect), do: Dialect.to_sql(ast, dialect)
 
   def affected_tables(stmts, dialect \\ @default_dialect) when is_list(stmts) do
     stmts
     |> Enum.flat_map(&get_affected_table/1)
     |> Enum.uniq_by(&Dialect.table_name(&1, dialect))
+  end
+
+  defp get_affected_table({%{} = ast, _loc, _len}) do
+    get_affected_table(ast)
   end
 
   defp get_affected_table(%Pg.CreateStmt{relation: relation}) do
@@ -137,7 +151,7 @@ defmodule Electric.Postgres.Replication do
 
     stmts =
       ast
-      |> Enum.reject(&(dialect == Dialect.SQLite and match?(%Pg.CreateEnumStmt{}, &1)))
+      |> Enum.reject(&(dialect == Dialect.SQLite and match?({%Pg.CreateEnumStmt{}, _, _}, &1)))
       |> Enum.map(
         &%SatOpMigrate.Stmt{
           type: stmt_type(&1),
@@ -147,8 +161,8 @@ defmodule Electric.Postgres.Replication do
 
     enum_type =
       ast
-      |> Enum.filter(&match?(%Pg.CreateEnumStmt{}, &1))
-      |> Enum.map(fn enum_ast ->
+      |> Enum.filter(&match?({%Pg.CreateEnumStmt{}, _, _}, &1))
+      |> Enum.map(fn {enum_ast, _loc, _len} ->
         name = AST.map(enum_ast.type_name)
         values = AST.map(enum_ast.vals)
         %SatOpMigrate.EnumType{name: Dialect.table_name(name, dialect), values: values}
@@ -177,18 +191,18 @@ defmodule Electric.Postgres.Replication do
   # filter them here
   defp propagatable_stmt?(ast) do
     Enum.filter(ast, fn
-      %Pg.CreateStmt{} ->
+      {%Pg.CreateStmt{}, _loc, _len} ->
         true
 
-      %Pg.IndexStmt{} ->
+      {%Pg.IndexStmt{}, _loc, _len} ->
         true
 
-      %Pg.AlterTableStmt{
-        cmds: [%{node: {:alter_table_cmd, %Pg.AlterTableCmd{subtype: :AT_AddColumn}}}]
-      } ->
+      {%Pg.AlterTableStmt{
+         cmds: [%{node: {:alter_table_cmd, %Pg.AlterTableCmd{subtype: :AT_AddColumn}}}]
+       }, _loc, _len} ->
         true
 
-      %Pg.CreateEnumStmt{} ->
+      {%Pg.CreateEnumStmt{}, _loc, _len} ->
         true
 
       _else ->

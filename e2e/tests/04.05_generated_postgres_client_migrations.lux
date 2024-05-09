@@ -1,0 +1,45 @@
+[doc generated postgres client migrations are correct]
+[include _shared.luxinc]
+
+[invoke setup]
+
+[global migration_version_1=20230504114018]
+[shell proxy_1]
+    [invoke log "run migration $migration_version_1 on postgres"]
+    """!
+    BEGIN;
+    CALL electric.migration_version('$migration_version_1');
+    CREATE TABLE mtable1 (id uuid PRIMARY KEY, value1 TEXT, value2 TEXT);
+    CREATE TABLE mtable2 (id uuid PRIMARY KEY, value1 TEXT, value2 TEXT);
+    CREATE INDEX mtable1_value1_idx ON mtable1 (value1);
+    CREATE INDEX mtable1_value2_idx ON mtable1 (value2);
+    ALTER TABLE mtable1 ENABLE ELECTRIC;
+    ALTER TABLE mtable2 ENABLE ELECTRIC;
+    COMMIT;
+    """
+    ?$psql
+
+
+[shell electric]
+    ?? [info] Saved schema version $migration_version_1
+
+
+[newshell developer]
+    !cd $(mktemp -d)
+    ?SH-PROMPT:
+    !curl -v -o migrations.zip http://localhost:5133/api/migrations?dialect=postgresql
+    ?200 OK
+    !unzip migrations.zip
+    ?inflating: ${migration_version_1}/migration.sql
+    !cat "${migration_version_1}/migration.sql"
+    ?CREATE TABLE mtable1 \(.*
+    -CREATE TABLE mtable1 \(.*
+    ?CREATE INDEX mtable1_value1_idx
+    -CREATE INDEX mtable1_value1_idx
+    ?CREATE INDEX mtable1_value2_idx
+    -CREATE INDEX mtable1_value2_idx
+    ?CREATE TABLE mtable2 \(.*
+    ?SH-PROMPT:
+
+[cleanup]
+    [invoke teardown]
