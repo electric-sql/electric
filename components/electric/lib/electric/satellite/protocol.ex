@@ -255,22 +255,24 @@ defmodule Electric.Satellite.Protocol do
     needs_unpausing? =
       is_out_rep_paused(state) and Enum.any?(ids, &is_next_pending_subscription(state, &1))
 
+    removed_subs = Map.take(state.subscriptions, ids)
+    removed_ids = Map.keys(removed_subs)
+
     request_ids =
-      state.subscriptions
-      |> Map.take(ids)
+      removed_subs
       # We don't need to send GONEs for unsent data
       |> Enum.reject(fn {id, _} -> OutRep.subscription_pending?(id, state.out_rep) end)
       |> Enum.flat_map(fn {_, requests} -> Enum.map(requests, & &1.id) end)
 
     out_rep =
-      ids
+      removed_ids
       |> Enum.reduce(state.out_rep, &OutRep.remove_pause_point(&2, :subscription, &1))
-      |> Map.update!(:subscription_data_to_send, &Map.drop(&1, ids))
+      |> Map.update!(:subscription_data_to_send, &Map.drop(&1, removed_ids))
 
     ClientReconnectionInfo.unsubscribe(
       state.origin,
       state.client_id,
-      ids,
+      removed_ids,
       state.out_rep.last_seen_wal_pos
     )
 
@@ -279,7 +281,7 @@ defmodule Electric.Satellite.Protocol do
         {gone, graph} =
           Shapes.SentRowsGraph.pop_by_request_ids(state.out_rep.sent_rows_graph, request_ids)
 
-        {msgs, out_rep} = prepare_unsubs_data(ids, gone, out_rep)
+        {msgs, out_rep} = prepare_unsubs_data(removed_ids, gone, out_rep)
 
         {msgs, %OutRep{out_rep | sent_rows_graph: graph}}
       else
