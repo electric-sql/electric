@@ -7,7 +7,7 @@ import { PriorityOptions } from '../../types/issue'
 interface Props {
   id: string
   button: ReactNode
-  filterKeyword: boolean
+  filterKeyword?: boolean
   className?: string
   onSelect?: (item: string) => void
 }
