@@ -270,6 +270,9 @@ defmodule Electric.Replication.PostgresConnectorMng do
           "Successfully initialized origin #{origin} at extension version #{List.last(versions)}"
         )
 
+        # We're inspecting the state of `epgsql_sock` GenServer to figure out if the established
+        # connection is using SSL or not. This is needed to configure `Electric.Postgres.Repo`
+        # later on. There is no current public API on `:epgsql` that allows us to get this info otherwise.
         {:ok, elem(:sys.get_state(conn), 1) == :ssl}
       end
     end)
@@ -307,11 +310,9 @@ defmodule Electric.Replication.PostgresConnectorMng do
   end
 
   def force_ssl_mode(connector_config, ssl_mode?) do
-    if ssl_mode? do
-      Keyword.update!(connector_config, :connection, &Keyword.put(&1, :ssl, :required))
-    else
-      Keyword.update!(connector_config, :connection, &Keyword.put(&1, :ssl, false))
-    end
+    new_ssl_value = if ssl_mode?, do: :required, else: false
+
+    put_in(connector_config, [:connection, :ssl], new_ssl_value)
   end
 
   # Perform a DNS lookup for an IPv6 IP address, followed by a lookup for an IPv4 address in case the first one fails.
