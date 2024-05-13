@@ -33,7 +33,7 @@ defmodule Electric.Satellite.Permissions.Read do
   @type mapper_fun() :: (term() -> Changes.change())
   @type change_list() :: Enumerable.t(term())
   @type changes() :: [Changes.change()]
-  @type referenced_records() :: Changes.Transaction.refere()
+  @type referenced_records() :: Changes.Transaction.referenced_records()
   @type moves() :: [Permissions.move_out()]
   @type xid() :: Electric.Postgres.xid()
   @type graph() :: Permissions.Graph.impl()
