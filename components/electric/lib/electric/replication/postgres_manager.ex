@@ -132,8 +132,12 @@ defmodule Electric.Replication.PostgresConnectorMng do
   @impl GenServer
   def handle_continue(:init, state) do
     case initialize_postgres(state) do
-      :ok ->
-        state = set_status(state, :establishing_repl_conn)
+      {:ok, ssl_used?} ->
+        state =
+          state
+          |> set_status(:establishing_repl_conn)
+          |> update_connector_config(&force_ssl_mode(&1, ssl_used?))
+
         {:noreply, state, {:continue, :establish_repl_conn}}
 
       {:error, {:ssl_negotiation_failed, _}} when state.conn_opts.ssl != :required ->
@@ -266,7 +270,10 @@ defmodule Electric.Replication.PostgresConnectorMng do
           "Successfully initialized origin #{origin} at extension version #{List.last(versions)}"
         )
 
-        :ok
+        # We're inspecting the state of `epgsql_sock` GenServer to figure out if the established
+        # connection is using SSL or not. This is needed to configure `Electric.Postgres.Repo`
+        # later on. There is no current public API on `:epgsql` that allows us to get this info otherwise.
+        {:ok, elem(:sys.get_state(conn), 1) == :ssl}
       end
     end)
   end
@@ -300,6 +307,12 @@ defmodule Electric.Replication.PostgresConnectorMng do
       |> maybe_put_sni()
       |> maybe_verify_peer()
     end)
+  end
+
+  def force_ssl_mode(connector_config, ssl_mode?) do
+    new_ssl_value = if ssl_mode?, do: :required, else: false
+
+    put_in(connector_config, [:connection, :ssl], new_ssl_value)
   end
 
   # Perform a DNS lookup for an IPv6 IP address, followed by a lookup for an IPv4 address in case the first one fails.
