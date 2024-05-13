@@ -39,7 +39,6 @@ import {
   relations,
   ContextType as CommonContextType,
   cleanAndStopDb,
-  cleanAndStopSatellite,
 } from './common'
 
 import { numberToBytes, base64, blobToHexString } from '../../src/util/encoders'
