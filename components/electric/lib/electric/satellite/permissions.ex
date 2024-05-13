@@ -547,14 +547,7 @@ defmodule Electric.Satellite.Permissions do
   """
   @spec filter_read(t(), Graph.impl(), tx()) :: {tx(), [change()], [move_out()]}
   def filter_read(%__MODULE__{} = perms, graph, %Changes.Transaction{} = tx) do
-    {readable_changes, referenced_records, rejected_changes, moves} =
-      Read.filter_changes(perms, graph, tx.changes, tx.referenced_records, tx.xid, & &1)
-
-    {
-      %{tx | changes: readable_changes, referenced_records: referenced_records},
-      rejected_changes,
-      moves
-    }
+    Read.filter_transaction(perms, graph, tx)
   end
 
   @doc """

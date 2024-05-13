@@ -39,26 +39,37 @@ defmodule Electric.Satellite.Permissions.Read do
   @type graph() :: Permissions.Graph.impl()
   @type perms() :: Permissions.t()
   @type shape_data() :: Electric.Replication.Shapes.ShapeRequest.shape_data()
+  @type shape_data_row() :: {term(), {Changes.NewRecord.t(), [term()]}}
+  @type shape_data_rows() :: [shape_data_row()]
   @type sent_rows_graph() :: Elixir.Graph.t()
 
-  def shape_data_mapper({_key, {change, _}}), do: change
+  @spec filter_transaction(perms(), Elixir.Graph.t() | graph(), Changes.Transaction.t()) ::
+          {Changes.Transaction.t(), [Changes.change()], moves()}
+  def filter_transaction(perms, graph, txn) do
+    %{changes: changes, referenced_records: referenced_records, xid: xid} = txn
 
-  @spec filter_changes(perms(), graph(), change_list(), referenced_records(), xid(), mapper_fun()) ::
-          {[term()], referenced_records(), [term()], moves()}
-  def filter_changes(perms, graph, changes, referenced_records, xid, mapper_fun) do
+    graph_impl = ensure_graph_impl(graph)
+
     tx_graph =
       Graph.transaction_context(
-        graph,
+        graph_impl,
         perms.structure,
-        Enum.map(changes, mapper_fun),
+        changes,
         referenced_records
       )
 
-    filter_tx_with_context(perms, graph, tx_graph, changes, referenced_records, xid, mapper_fun)
+    {readable_changes, readable_referenced_records, rejected_changes, moves} =
+      filter_tx_with_context(perms, graph_impl, tx_graph, changes, referenced_records, xid, & &1)
+
+    {
+      %{txn | changes: readable_changes, referenced_records: readable_referenced_records},
+      rejected_changes,
+      moves
+    }
   end
 
   @spec filter_move_in_data(perms(), sent_rows_graph(), shape_data(), xid()) ::
-          {accepted :: shape_data(), rejected :: shape_data()}
+          {accepted :: shape_data(), rejected :: shape_data_rows()}
   def filter_move_in_data(perms, graph, changes, xid) do
     graph_impl = Electric.Replication.ScopeGraph.impl(graph)
 
@@ -75,14 +86,14 @@ defmodule Electric.Satellite.Permissions.Read do
 
     preserve_fk_consistency(
       perms,
-      Map.new(accepted_changes),
+      accepted_changes,
       rejected_changes,
       &shape_data_mapper/1
     )
   end
 
   @spec filter_shape_data(perms(), sent_rows_graph(), change_list(), xid()) ::
-          {accepted :: shape_data(), rejected :: shape_data()}
+          {accepted :: shape_data(), rejected :: shape_data_rows()}
   def filter_shape_data(perms, graph, changes, xid) do
     graph_impl = Electric.Replication.ScopeGraph.impl(graph)
 
@@ -91,7 +102,7 @@ defmodule Electric.Satellite.Permissions.Read do
 
     preserve_fk_consistency(
       perms,
-      Map.new(accepted_changes),
+      accepted_changes,
       rejected_changes,
       &shape_data_mapper/1
     )
@@ -105,7 +116,7 @@ defmodule Electric.Satellite.Permissions.Read do
           referenced_records(),
           xid(),
           mapper_fun()
-        ) :: {[term()], referenced_records(), [term()], moves()}
+        ) :: {Enumerable.t(term()), referenced_records(), Enumerable.t(term()), moves()}
   defp filter_tx_with_context(
          perms,
          old_graph,
@@ -123,15 +134,15 @@ defmodule Electric.Satellite.Permissions.Read do
     {readable_changes, readable_referenced_records, excluded_changes, moves}
   end
 
-  @spec filter_changes_with_context(
-          perms(),
-          graph() | nil,
-          graph(),
-          change_list(),
-          xid(),
-          mapper_fun()
-        ) ::
-          {[term()], [term()], moves()}
+  # @spec filter_changes_with_context(
+  #         perms(),
+  #         graph() | nil,
+  #         graph(),
+  #         change_list(),
+  #         xid(),
+  #         mapper_fun()
+  #       ) ::
+  #         {[term()], [term()], moves()}
   defp filter_changes_with_context(perms, old_graph, graph, changes, xid, mapper_fun) do
     results =
       Enum.map(changes, fn elem ->
@@ -301,6 +312,12 @@ defmodule Electric.Satellite.Permissions.Read do
   # we may not have permissions to view an issue, due to some where clause,
   # but the comments belonging to that where clause are allowed, so they will
   # come in but missing the parent issue.
+  @spec preserve_fk_consistency(
+          Permissions.t(),
+          shape_data_rows(),
+          shape_data_rows(),
+          mapper_fun()
+        ) :: {shape_data(), shape_data_rows()}
   defp preserve_fk_consistency(perms, accepted_changes, rejected_changes, mapper_fun) do
     dependents =
       rejected_changes
@@ -325,6 +342,18 @@ defmodule Electric.Satellite.Permissions.Read do
         )
       end)
 
-    {accepted_changes, rejected_changes ++ rejected_dependent_changes}
+    {Map.new(accepted_changes), rejected_changes ++ rejected_dependent_changes}
+  end
+
+  @spec shape_data_mapper(shape_data_row()) :: Changes.change()
+  defp shape_data_mapper({_key, {change, _}}), do: change
+
+  @spec ensure_graph_impl(Elixir.Graph.t() | Graph.impl()) :: Graph.impl()
+  defp ensure_graph_impl({_module, _state} = impl) do
+    impl
+  end
+
+  defp ensure_graph_impl(%{} = graph) do
+    Electric.Replication.ScopeGraph.impl(graph)
   end
 end

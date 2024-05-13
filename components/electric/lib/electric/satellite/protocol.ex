@@ -1225,7 +1225,7 @@ defmodule Electric.Satellite.Protocol do
 
   defp apply_permissions_and_shapes(tx, graph, shapes, permissions) do
     {filtered_tx, _rejected_changes, moves_out} =
-      Permissions.filter_read(permissions, Electric.Replication.ScopeGraph.impl(graph), tx)
+      Permissions.Read.filter_transaction(permissions, graph, tx)
 
     Shapes.process_transaction(filtered_tx, moves_out, graph, shapes)
   end
