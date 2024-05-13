@@ -50,7 +50,7 @@ defmodule Electric.Postgres.Migration do
 
   @doc false
   @spec to_ops([String.t()], SchemaLoader.Version.t()) ::
-          {Changes.Migration.Ops.t(), [Electric.Postgres.relation()]}
+          {Changes.Migration.ops(), [Electric.Postgres.relation()]}
   def to_ops(stmts, schema_version) do
     ops = {Changes.Migration.empty_ops(), MapSet.new()}
 
