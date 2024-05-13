@@ -9,4 +9,5 @@ if [ ! -f "${DOCKER_COMPOSE_FILE}" ]; then
     exit 1
 fi
 
-docker compose -f "${DOCKER_COMPOSE_FILE}" run "$@"
+docker compose version
+docker compose -f "${DOCKER_COMPOSE_FILE}" run --no-TTY "$@"
