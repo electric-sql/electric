@@ -52,13 +52,15 @@ defmodule Electric.Postgres.Migration do
   @spec to_ops([String.t()], SchemaLoader.Version.t()) ::
           {Changes.Migration.Ops.t(), [Electric.Postgres.relation()]}
   def to_ops(stmts, schema_version) do
+    ops = {Changes.Migration.empty_ops(), MapSet.new()}
+
     stmts
-    |> Enum.reduce({%Changes.Migration.Ops{}, MapSet.new()}, fn stmt, {ops, relations} ->
+    |> Enum.reduce(ops, fn stmt, {ops, relations} ->
       Changes.Migration.dialects()
-      |> Enum.reduce(ops, fn {key, dialect}, ops ->
+      |> Enum.reduce({ops, relations}, fn dialect, {ops, relations} ->
         {:ok, new_ops, new_relations} = to_op(stmt, schema_version, dialect)
 
-        {Map.update!(ops, key, &(&1 ++ new_ops)), Enum.into(new_relations, relations)}
+        {Map.update!(ops, dialect, &(&1 ++ new_ops)), Enum.into(new_relations, relations)}
       end)
     end)
     |> then(fn {ops, relations} -> {ops, MapSet.to_list(relations)} end)

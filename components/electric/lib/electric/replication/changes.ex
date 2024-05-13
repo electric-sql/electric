@@ -253,14 +253,10 @@ defmodule Electric.Replication.Changes do
 
     @relation Electric.Postgres.Extension.ddl_relation()
 
-    defmodule Ops do
-      defstruct sqlite: [], postgres: []
-
-      @type t() :: %__MODULE__{
-              sqlite: [%Electric.Satellite.SatOpMigrate{}],
-              postgres: [%Electric.Satellite.SatOpMigrate{}]
-            }
-    end
+    @dialects [
+      Postgres.Dialect.Postgresql,
+      Postgres.Dialect.SQLite
+    ]
 
     defstruct [
       :version,
@@ -272,20 +268,26 @@ defmodule Electric.Replication.Changes do
       relation: @relation
     ]
 
+    @type ops() :: %{
+            Electric.Postgres.Dialect.t() => [%Electric.Satellite.SatOpMigrate{}]
+          }
+
     @type t() :: %__MODULE__{
             version: SchemaLoader.version(),
             schema: SchemaLoader.Version.t(),
             ddl: [String.t(), ...],
-            ops: Ops.t(),
+            ops: ops(),
             relations: [Postgres.relation()],
             relation: Postgres.relation()
           }
 
-    @spec dialects() :: [{atom(), Electric.Postgres.Dialect.t()}]
+    @spec dialects() :: [Electric.Postgres.Dialect.t()]
     def dialects do
-      [
-        sqlite: Electric.Postgres.Dialect.SQLite
-      ]
+      @dialects
+    end
+
+    def empty_ops do
+      Map.new(@dialects, fn dialect -> {dialect, []} end)
     end
   end
 

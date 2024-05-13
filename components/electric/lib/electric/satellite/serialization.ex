@@ -111,9 +111,10 @@ defmodule Electric.Satellite.Serialization do
 
   defp serialize_change(%Migration{} = migration, state) do
     Logger.info("Serializing migration #{inspect(migration.version)}")
+    %{known_relations: known_relations, sql_dialect: sql_dialect} = state
 
     known_relations =
-      Enum.reduce(migration.relations, state.known_relations, fn relation, known ->
+      Enum.reduce(migration.relations, known_relations, fn relation, known ->
         {_relation_id, _columns, _, known} =
           load_new_relation(relation, known)
 
@@ -122,7 +123,7 @@ defmodule Electric.Satellite.Serialization do
 
     ops =
       migration.ops
-      |> Map.fetch!(:sqlite)
+      |> Map.fetch!(sql_dialect)
       |> Enum.reduce(state.ops, fn op, ops ->
         [%SatTransOp{op: {:migrate, op}} | ops]
       end)
