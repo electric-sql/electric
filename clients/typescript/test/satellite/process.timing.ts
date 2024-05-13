@@ -33,13 +33,13 @@ export const processTimingTests = (test: TestFn<ContextType>) => {
 
     await satellite._setAuthState(authState)
 
-    await satellite._throttledSnapshot!()
+    await satellite._throttledSnapshot()
 
     const numNotifications = notifier.notifications.length
 
     const sql = `INSERT INTO parent(id) VALUES ('1'),('2')`
     await adapter.run({ sql })
-    await satellite._throttledSnapshot!()
+    await satellite._throttledSnapshot()
 
     t.is(notifier.notifications.length, numNotifications)
 

@@ -130,7 +130,7 @@ export class SatelliteProcess implements Satellite {
 
   _pollingInterval?: any
   _unsubscribeFromPotentialDataChanges?: UnsubscribeFunction
-  _throttledSnapshot?: ThrottleFunction
+  _throttledSnapshot: ThrottleFunction
 
   _lsn?: LSN
 
@@ -177,8 +177,14 @@ export class SatelliteProcess implements Satellite {
     this.subscriptions = new InMemorySubscriptionsManager(
       this._garbageCollectShapeHandler.bind(this)
     )
-    this._throttledSnapshot = this._createThrottledSnapshotFun()
-
+    this._throttledSnapshot = throttle(
+      this._mutexSnapshot.bind(this),
+      opts.minSnapshotWindow,
+      {
+        leading: true,
+        trailing: true,
+      }
+    )
     this.subscriptionNotifiers = {}
 
     this.subscriptionIdGenerator = () => genUUID()
@@ -204,9 +210,6 @@ export class SatelliteProcess implements Satellite {
       await this.logDatabaseVersion()
     }
 
-    if (!this._throttledSnapshot) {
-      this._throttledSnapshot = this._createThrottledSnapshotFun()
-    }
     this.setClientListeners()
 
     await this.migrator.up()
@@ -245,18 +248,16 @@ export class SatelliteProcess implements Satellite {
 
     // Request a snapshot whenever the data in our database potentially changes.
     this._unsubscribeFromPotentialDataChanges =
-      this.notifier.subscribeToPotentialDataChanges(() =>
-        this._throttledSnapshot?.()
-      )
+      this.notifier.subscribeToPotentialDataChanges(this._throttledSnapshot)
 
     // Start polling to request a snapshot every `pollingInterval` ms.
     this._pollingInterval = setInterval(
-      () => this._throttledSnapshot?.(),
+      this._throttledSnapshot,
       this.opts.pollingInterval
     )
 
     // Starting now!
-    await this._throttledSnapshot?.()
+    await this._throttledSnapshot()
 
     // Need to reload primary keys after schema migration
     this.relations = await this._getLocalRelations()
@@ -274,17 +275,6 @@ export class SatelliteProcess implements Satellite {
     if (subscriptionsState) {
       this.subscriptions.setState(subscriptionsState)
     }
-  }
-
-  private _createThrottledSnapshotFun(): ThrottleFunction {
-    return throttle(
-      this._mutexSnapshot.bind(this),
-      this.opts.minSnapshotWindow,
-      {
-        leading: true,
-        trailing: true,
-      }
-    )
   }
 
   private async logDatabaseVersion(): Promise<void> {
@@ -329,7 +319,7 @@ export class SatelliteProcess implements Satellite {
     this.client.subscribeToRelations(this._updateRelations.bind(this))
     this.client.subscribeToTransactions(this._applyTransaction.bind(this))
     this.client.subscribeToAdditionalData(this._applyAdditionalData.bind(this))
-    this.client.subscribeToOutboundStarted(() => this._throttledSnapshot?.())
+    this.client.subscribeToOutboundStarted(this._throttledSnapshot.bind(this))
 
     this.client.subscribeToSubscriptionEvents(
       this._handleSubscriptionData.bind(this),
@@ -344,8 +334,7 @@ export class SatelliteProcess implements Satellite {
 
   private async _stop(shutdown?: boolean): Promise<void> {
     // Stop snapshotting and polling for changes.
-    this._throttledSnapshot?.cancel()
-    this._throttledSnapshot = undefined
+    this._throttledSnapshot.cancel()
 
     // Ensure that no snapshot is left running in the background
     // by acquiring the mutex and releasing it immediately.

@@ -282,10 +282,10 @@ export const processTests = (test: TestFn<ContextType>) => {
     satellite.adapter.run = (stmt) =>
       new Promise((res) => setTimeout(() => run(stmt).then(res), 100))
 
-    const p1 = satellite._throttledSnapshot!()
+    const p1 = satellite._throttledSnapshot()
     const p2 = new Promise<Date>((res) => {
       // call snapshot after throttle time has expired
-      setTimeout(() => satellite._throttledSnapshot!()?.then(res), 50)
+      setTimeout(() => satellite._throttledSnapshot()?.then(res), 50)
     })
 
     await t.notThrowsAsync(async () => {
