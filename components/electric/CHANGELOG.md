@@ -1,5 +1,12 @@
 # @core/electric
 
+## 0.11.1
+
+### Patch Changes
+
+- 3294240d: fix: set `Postgrex` SSL mode based on the connection by `:epgsql` to keep `sslmode=prefer` behaviour when `DATABASE_REQUIRE_SSL` is not `true`.
+- 6a746d97: Correct handling of multi-statement migration sql
+
 ## 0.11.0
 
 ### Minor Changes
