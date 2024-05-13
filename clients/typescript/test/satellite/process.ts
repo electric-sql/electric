@@ -2791,7 +2791,7 @@ export const processTests = (test: TestFn<ContextType>) => {
     )
 
     const results = await adapter.query({
-      sql: 'SELECT * FROM main.parent',
+      sql: 'SELECT * FROM parent',
     })
 
     t.deepEqual(results, [])
