@@ -39,6 +39,7 @@ import {
   Uuid,
   DbRecord as DataRecord,
   ReplicatedRowTransformer,
+  ServerTransaction,
 } from '../util/types'
 import { SatelliteOpts } from './config'
 import { Client, Satellite } from './index'
@@ -131,6 +132,7 @@ export class SatelliteProcess implements Satellite {
   _pollingInterval?: any
   _unsubscribeFromPotentialDataChanges?: UnsubscribeFunction
   _throttledSnapshot: ThrottleFunction
+  _startProcessPromise?: Promise<void>
 
   _lsn?: LSN
 
@@ -154,6 +156,8 @@ export class SatelliteProcess implements Satellite {
 
   private _connectRetryHandler: ConnectRetryHandler
   private initializing?: Waiter
+
+  private _removeClientListeners?: () => void
 
   constructor(
     dbName: DbName,
@@ -206,11 +210,17 @@ export class SatelliteProcess implements Satellite {
   }
 
   async start(authConfig?: AuthConfig): Promise<void> {
+    this._startProcessPromise = this._startProcess(authConfig)
+    await this._startProcessPromise
+    this._startProcessPromise = undefined
+  }
+
+  private async _startProcess(authConfig?: AuthConfig): Promise<void> {
     if (this.opts.debug) {
       await this.logDatabaseVersion()
     }
 
-    this.setClientListeners()
+    this._removeClientListeners = this.setClientListeners()
 
     await this.migrator.up()
 
@@ -314,17 +324,50 @@ export class SatelliteProcess implements Satellite {
     await this.adapter.runInTransaction(...stmtsWithTriggers)
   }
 
-  setClientListeners(): void {
-    this.client.subscribeToError(this._handleClientError.bind(this))
-    this.client.subscribeToRelations(this._updateRelations.bind(this))
-    this.client.subscribeToTransactions(this._applyTransaction.bind(this))
-    this.client.subscribeToAdditionalData(this._applyAdditionalData.bind(this))
-    this.client.subscribeToOutboundStarted(this._throttledSnapshot.bind(this))
+  // Returns a function that removes the listeners
+  setClientListeners(): () => void {
+    if (this._removeClientListeners) {
+      this._removeClientListeners?.()
+    }
 
-    this.client.subscribeToSubscriptionEvents(
-      this._handleSubscriptionData.bind(this),
+    const clientErrorCallback = this._handleClientError.bind(this)
+    this.client.subscribeToError(clientErrorCallback)
+
+    const clientRelationsCallback = this._handleClientRelations.bind(this)
+    this.client.subscribeToRelations(clientRelationsCallback)
+
+    const clientTransactionsCallback = this._handleClientTransactions.bind(this)
+    this.client.subscribeToTransactions(clientTransactionsCallback)
+
+    const clientAdditionalDataCallback =
+      this._handleClientAdditionalData.bind(this)
+    this.client.subscribeToAdditionalData(clientAdditionalDataCallback)
+
+    const clientOutboundStartedCallback =
+      this._handleClientOutboundStarted.bind(this)
+    this.client.subscribeToOutboundStarted(clientOutboundStartedCallback)
+
+    const clientSubscriptionDataCallback =
+      this._handleSubscriptionData.bind(this)
+    const clientSubscriptionErrorCallback =
       this._handleSubscriptionError.bind(this)
+    this.client.subscribeToSubscriptionEvents(
+      clientSubscriptionDataCallback,
+      clientSubscriptionErrorCallback
     )
+
+    return () => {
+      this.client.unsubscribeToError(clientErrorCallback)
+      this.client.unsubscribeToRelations(clientRelationsCallback)
+      this.client.unsubscribeToTransactions(clientTransactionsCallback)
+      this.client.unsubscribeToAdditionalData(clientAdditionalDataCallback)
+      this.client.unsubscribeToOutboundStarted(clientOutboundStartedCallback)
+
+      this.client.unsubscribeToSubscriptionEvents(
+        clientSubscriptionDataCallback,
+        clientSubscriptionErrorCallback
+      )
+    }
   }
 
   // Unsubscribe from data changes and stop polling
@@ -333,13 +376,12 @@ export class SatelliteProcess implements Satellite {
   }
 
   private async _stop(shutdown?: boolean): Promise<void> {
-    // Stop snapshotting and polling for changes.
-    this._throttledSnapshot.cancel()
-
-    // Ensure that no snapshot is left running in the background
-    // by acquiring the mutex and releasing it immediately.
-    const releaseMutex = await this.snapshotMutex.acquire()
-    releaseMutex()
+    // Wait for the start promise to finish first
+    // This would only happen if we stop the process too soon and the process
+    // hasn't finished starting yet
+    if (this._startProcessPromise) {
+      await Promise.allSettled([this._startProcessPromise])
+    }
 
     if (this._pollingInterval !== undefined) {
       clearInterval(this._pollingInterval)
@@ -362,11 +404,28 @@ export class SatelliteProcess implements Satellite {
       }
     })
 
+    this._removeClientListeners?.()
+    this._removeClientListeners = undefined
+
     this.disconnect()
+
+    // Stop snapshotting and polling for changes.
+    this._throttledSnapshot.cancel()
+
+    await this._ensureNoActiveSnapshot()
 
     if (shutdown) {
       this.client.shutdown()
     }
+  }
+
+  // Make sure no snapshot is running after we stop the process, otherwise we might be trying to
+  // interact with a closed database connection
+  async _ensureNoActiveSnapshot(): Promise<void> {
+    // Ensure that no snapshot is left running in the background
+    // by acquiring the mutex and releasing it immediately.
+    const releaseMutex = await this.snapshotMutex.acquire()
+    releaseMutex()
   }
 
   async subscribe(shapeDefinitions: Shape[]): Promise<ShapeSubscription> {
@@ -672,6 +731,22 @@ export class SatelliteProcess implements Satellite {
       delete this.subscriptionNotifiers[subscriptionId] // GC the notifiers for this subscription ID
       onFailure(resettingError ?? satelliteError)
     }
+  }
+
+  _handleClientRelations(relation: Relation): void {
+    this._updateRelations(relation)
+  }
+
+  async _handleClientTransactions(tx: ServerTransaction) {
+    await this._applyTransaction(tx)
+  }
+
+  async _handleClientAdditionalData(data: AdditionalData) {
+    await this._applyAdditionalData(data)
+  }
+
+  async _handleClientOutboundStarted() {
+    await this._throttledSnapshot()
   }
 
   // handles async client errors: can be a socket error or a server error message

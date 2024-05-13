@@ -208,6 +208,8 @@ export class MockSatelliteClient
   transactionsCb?: TransactionCallback
   additionalDataCb?: AdditionalDataCallback
 
+  outboundStartedCallback?: OutboundStartedCallback
+
   relationData: Record<string, DataRecord[]> = {}
 
   deliverFirst = false
@@ -423,7 +425,7 @@ export class MockSatelliteClient
   }
 
   unsubscribeToTransactions(): void {
-    throw new Error('Method not implemented.')
+    this.transactionsCb = undefined
   }
 
   subscribeToAdditionalData(callback: AdditionalDataCallback): void {
@@ -431,7 +433,7 @@ export class MockSatelliteClient
   }
 
   unsubscribeToAdditionalData(_cb: AdditionalDataCallback): void {
-    throw new Error('Method not implemented.')
+    this.additionalDataCb = undefined
   }
 
   enqueueTransaction(transaction: DataTransaction): void {
@@ -448,10 +450,13 @@ export class MockSatelliteClient
 
   subscribeToOutboundStarted(callback: OutboundStartedCallback): void {
     this.on('outbound_started', callback)
+    this.outboundStartedCallback = callback
   }
 
   unsubscribeToOutboundStarted(): void {
-    throw new Error('Method not implemented.')
+    if (!this.outboundStartedCallback) return
+    this.removeListener('outbound_started', this.outboundStartedCallback)
+    this.outboundStartedCallback = undefined
   }
 
   sendErrorAfterTimeout(subscriptionId: string, timeout: number): void {

@@ -35,7 +35,12 @@ import {
   SatelliteError,
   SatelliteErrorCode,
 } from '../../src/util/types'
-import { relations, ContextType as CommonContextType, clean } from './common'
+import {
+  relations,
+  ContextType as CommonContextType,
+  cleanAndStopDb,
+  cleanAndStopSatellite,
+} from './common'
 
 import { numberToBytes, base64, blobToHexString } from '../../src/util/encoders'
 
@@ -2504,7 +2509,7 @@ export const processTests = (test: TestFn<ContextType>) => {
     await satellite.stop()
 
     // Remove/close the database connection
-    await clean(t)
+    await cleanAndStopDb(t)
 
     // Wait for the snapshot to finish to consider the test successful
     await snapshotPromise
@@ -2532,6 +2537,79 @@ export const processTests = (test: TestFn<ContextType>) => {
 
     // wait some time to see that mutexSnapshot is not called
     await sleepAsync(50)
+
+    t.pass()
+  })
+
+  test("don't schedule snapshots from polling interval when closing satellite process", async (t) => {
+    const {
+      adapter,
+      runMigrations,
+      satellite,
+      authState,
+      token,
+      opts,
+      builder,
+    } = t.context
+
+    await runMigrations()
+
+    // Replace the snapshot function to simulate a slow snapshot
+    // that access the database after closing
+    satellite._performSnapshot = async () => {
+      try {
+        await sleepAsync(500)
+        await adapter.query(builder.getLocalTableNames())
+        return new Date()
+      } catch (e) {
+        t.fail()
+        throw e
+      }
+    }
+
+    const conn = await startSatellite(satellite, authState, token)
+    await conn.connectionPromise
+
+    // Let the process schedule a snapshot
+    await sleepAsync(opts.pollingInterval * 2)
+
+    await satellite.stop()
+
+    // Remove/close the database connection
+    await cleanAndStopDb(t)
+
+    // Wait for the snapshot to finish to consider the test successful
+    await sleepAsync(1000)
+
+    t.pass()
+  })
+
+  test('wait for initial snapshot to end if stopping too soon', async (t) => {
+    const { adapter, runMigrations, satellite, authState, builder } = t.context
+
+    await runMigrations()
+
+    // Replace the snapshot function to simulate a slow snapshot
+    // that access the database after closing
+    satellite._performSnapshot = async () => {
+      try {
+        await sleepAsync(500)
+        await adapter.query(builder.getLocalTableNames())
+        return new Date()
+      } catch (e) {
+        t.fail()
+        throw e
+      }
+    }
+
+    const startPromise = satellite.start(authState)
+    
+    await satellite.stop()
+
+    // Remove/close the database connection
+    await cleanAndStopDb(t)
+
+    await startPromise
 
     t.pass()
   })

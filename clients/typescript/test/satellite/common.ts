@@ -314,6 +314,9 @@ export const makeContext = async (
   const adapter = new SqliteDatabaseAdapter(db)
   const migrator = new SqliteBundleMigrator(adapter, sqliteMigrations)
   makeContextInternal(t, dbName, adapter, migrator, namespace, options)
+  t.context.stop = async () => {
+    db.close()
+  }
 }
 
 export const makePgContext = async (
@@ -380,8 +383,12 @@ export const mockElectricClient = async (
   return electric
 }
 
-export const clean = async (t: ExecutionContext<{ dbName: string }>) => {
-  const { dbName } = t.context
+export const cleanAndStopDb = async (
+  t: ExecutionContext<{ dbName: string; stop?: () => Promise<void> }>
+) => {
+  const { dbName, stop } = t.context
+
+  await stop?.()
 
   await removeFile(dbName, { force: true })
   await removeFile(`${dbName}-journal`, { force: true })
@@ -396,8 +403,7 @@ export const cleanAndStopSatellite = async (
 ) => {
   const { satellite } = t.context
   await satellite.stop()
-  await clean(t)
-  await t.context.stop?.()
+  await cleanAndStopDb(t)
 }
 
 export async function migrateDb(
