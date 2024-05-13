@@ -2603,7 +2603,7 @@ export const processTests = (test: TestFn<ContextType>) => {
     }
 
     const startPromise = satellite.start(authState)
-    
+
     await satellite.stop()
 
     // Remove/close the database connection
