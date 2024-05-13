@@ -9,7 +9,7 @@ import BrowserOnly from '@docusaurus/BrowserOnly'
 
 # LinearLite example
 
-This LinearLite example is a simplified clone of [Linear](https://linear.app) developed using ElectricSQL. You can open it online at [linear-lite.electric-sql.com](https://linear-lite.electric-sql.com):
+This LinearLite example is a simplified clone of [Linear](https://linear.app) developed using ElectricSQL. We have two versions available online, one using [wa-sqlite](../integrations/drivers/web/wa-sqlite.md) at [linear-lite.electric-sql.com](https://linear-lite.electric-sql.com) and another using [PGlite](../integrations/drivers/web/pglite.md) at [linear-lite-pg.electric-sql.com](https://linear-lite-pg.electric-sql.com/):
 
 <div className="my-6">
 

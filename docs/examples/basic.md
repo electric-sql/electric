@@ -9,7 +9,7 @@ import BrowserOnly from '@docusaurus/BrowserOnly'
 
 # Basic example
 
-See the basic web example running online at [basic-items.electric-sql.com](https://basic-items.electric-sql.com):
+See the basic web example running online using the SQLite driver at [basic-items.electric-sql.com](https://basic-items.electric-sql.com) and using PGlite at [basic-items-pg.electric-sql.com/](https://basic-items-pg.electric-sql.com/).
 
 <div className="my-6">
 
@@ -17,7 +17,7 @@ See the basic web example running online at [basic-items.electric-sql.com](https
 
 </div>
 
-It's a basic app running in the web browser [using wa-sqlite](../integrations/drivers/web/wa-sqlite.md). You can also open in your mobile browser by scanning this QR code:
+It's a basic app running in the web browser [using wa-sqlite](../integrations/drivers/web/wa-sqlite.md) or [PGlite](../integrations/drivers/web/pglite.md). You can also open in your mobile browser by scanning this QR code:
 
 <div className="grid grid-cols-1 gap-4 my-6 mb-8">
   <div className="tile">
@@ -57,10 +57,16 @@ Clone the monorepo:
 git clone https://github.com/electric-sql/electric
 ```
 
-Change into the `web-wa-sqlite` example directory:
+Change into the `web-wa-sqlite` example directory for the wa-sqlite version:
 
 ```shell
 cd electric/examples/web-wa-sqlite
 ```
 
 Follow the instructions in the [README.md](https://github.com/electric-sql/electric/blob/main/examples/web-wa-sqlite/README.md) and see the page here on [running the examples](./notes/running).
+
+Alternatively the `web-pglite` example directory contains the PGlite version:
+
+```shell
+cd electric/examples/web-pglite
+```
