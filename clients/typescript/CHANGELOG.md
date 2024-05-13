@@ -1,5 +1,12 @@
 # electric-sql
 
+## 0.11.2
+
+### Patch Changes
+
+- c4876dd7: Fix Postgres introspection subquery to only look at PK constraints
+- ebd2cb93: Fix a bug with Postgres client sync so that pk columns for creating the ON CONFLICT statement are correct when applying an incoming transaction.
+
 ## 0.11.1
 
 ### Patch Changes

@@ -1,5 +1,13 @@
 # @electric-sql/debug-toolbar
 
+## 1.0.2
+
+### Patch Changes
+
+- Updated dependencies [c4876dd7]
+- Updated dependencies [ebd2cb93]
+  - electric-sql@0.11.2
+
 ## 1.0.1
 
 ### Patch Changes
