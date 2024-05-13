@@ -115,7 +115,7 @@ docker-attach-%:
 	docker compose -f ${DOCKER_COMPOSE_FILE} exec $* bash
 
 docker-prisma:
-	DOCKER_COMPOSE_FILE=${DOCKER_COMPOSE_FILE} ../prisma_example/run.sh ${ARGS}
+	DOCKER_COMPOSE_FILE=${DOCKER_COMPOSE_FILE} ../prisma_example/run.sh $(ARGS)
 
 DOCKER_WORKDIR?=${E2E_ROOT}
 
