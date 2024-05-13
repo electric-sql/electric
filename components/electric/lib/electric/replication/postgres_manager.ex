@@ -132,8 +132,12 @@ defmodule Electric.Replication.PostgresConnectorMng do
   @impl GenServer
   def handle_continue(:init, state) do
     case initialize_postgres(state) do
-      :ok ->
-        state = set_status(state, :establishing_repl_conn)
+      {:ok, ssl_used?} ->
+        state =
+          state
+          |> set_status(:establishing_repl_conn)
+          |> update_connector_config(&force_ssl_mode(&1, ssl_used?))
+
         {:noreply, state, {:continue, :establish_repl_conn}}
 
       {:error, {:ssl_negotiation_failed, _}} when state.conn_opts.ssl != :required ->
@@ -266,7 +270,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
           "Successfully initialized origin #{origin} at extension version #{List.last(versions)}"
         )
 
-        :ok
+        {:ok, elem(:sys.get_state(conn), 1) == :ssl}
       end
     end)
   end
@@ -300,6 +304,14 @@ defmodule Electric.Replication.PostgresConnectorMng do
       |> maybe_put_sni()
       |> maybe_verify_peer()
     end)
+  end
+
+  def force_ssl_mode(connector_config, ssl_mode?) do
+    if ssl_mode? do
+      Keyword.update!(connector_config, :connection, &Keyword.put(&1, :ssl, :required))
+    else
+      Keyword.update!(connector_config, :connection, &Keyword.put(&1, :ssl, false))
+    end
   end
 
   # Perform a DNS lookup for an IPv6 IP address, followed by a lookup for an IPv4 address in case the first one fails.
