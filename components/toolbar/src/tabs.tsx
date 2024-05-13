@@ -18,6 +18,7 @@ export default function ToolbarTabs({
   dbName,
   api,
 }: ToolbarTabsProps): JSX.Element {
+  const tabContentHeight = '100%'
   return (
     <Tabs.Root orientation="vertical" defaultValue="status">
       <Tabs.List>
@@ -28,19 +29,19 @@ export default function ToolbarTabs({
         <Tabs.Trigger value="sql">Shell</Tabs.Trigger>
       </Tabs.List>
       <Box p="2" height="40vh">
-        <Tabs.Content value="status" style={{ height: '100%' }}>
+        <Tabs.Content value="status" style={{ height: tabContentHeight }}>
           <StatusTab dbName={dbName} api={api} />
         </Tabs.Content>
-        <Tabs.Content value="db" style={{ height: '100%' }}>
+        <Tabs.Content value="db" style={{ height: tabContentHeight }}>
           <LocalDBTab dbName={dbName} api={api} />
         </Tabs.Content>
-        <Tabs.Content value="shapes" style={{ height: '100%' }}>
+        <Tabs.Content value="shapes" style={{ height: tabContentHeight }}>
           <ShapesTab dbName={dbName} api={api} />
         </Tabs.Content>
-        <Tabs.Content value="inspect" style={{ height: '100%' }}>
+        <Tabs.Content value="inspect" style={{ height: tabContentHeight }}>
           <InspectTableTab dbName={dbName} api={api} />
         </Tabs.Content>
-        <Tabs.Content value="sql" style={{ height: '100%' }}>
+        <Tabs.Content value="sql" style={{ height: tabContentHeight }}>
           <SQLTab dbName={dbName} api={api} />
         </Tabs.Content>
       </Box>

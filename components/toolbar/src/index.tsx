@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import ReactDOM from 'react-dom/client'
 
 import '@radix-ui/themes/styles.css'
@@ -15,6 +15,12 @@ import { Theme, Button, Box, Flex, Select, Text } from '@radix-ui/themes'
 import ToolbarTabs from './tabs'
 import { ToolbarInterface } from './api/interface'
 import { Toolbar } from './api/toolbar'
+import {
+  getToolbarElem,
+  getToolbarTemplate,
+  TOOLBAR_ELEMENT_ID,
+  TOOLBAR_CONTAINER_ID,
+} from './utils/portal'
 import { ElectricClient } from 'electric-sql/client/model'
 
 import { Registry, GlobalRegistry } from 'electric-sql/satellite'
@@ -27,6 +33,8 @@ function ElectricToolbar({ api }: ToolbarProps) {
   const [hidden, setHidden] = useState(true)
   const [dbNames, setDbNames] = useState<Array<string>>([])
   const [dbName, setDbName] = useState('')
+
+  const onToggle = useCallback(() => setHidden((hidden) => !hidden), [])
 
   useEffect(() => {
     const names = api.getSatelliteNames()
@@ -59,7 +67,7 @@ function ElectricToolbar({ api }: ToolbarProps) {
             {!hidden && (
               <Select.Root defaultValue={dbNames[0]} onValueChange={setDbName}>
                 <Select.Trigger />
-                <Select.Content>
+                <Select.Content container={getToolbarElem()}>
                   {dbNames.map((name) => (
                     <Select.Item key={name} value={name}>
                       {name}
@@ -68,9 +76,7 @@ function ElectricToolbar({ api }: ToolbarProps) {
                 </Select.Content>
               </Select.Root>
             )}
-            <Button onClick={() => setHidden(!hidden)}>
-              {hidden ? 'SHOW' : 'HIDE'}
-            </Button>
+            <Button onClick={onToggle}>{hidden ? 'SHOW' : 'HIDE'}</Button>
           </Flex>
         </Flex>
         {!hidden && <ToolbarTabs dbName={dbName} api={api} />}
@@ -86,11 +92,28 @@ export function clientApi(registry: GlobalRegistry | Registry) {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function addToolbar(electric: ElectricClient<any>) {
   const toolbarApi = clientApi(electric.registry)
-  const toolbarDiv = document.createElement('div')
-  toolbarDiv.setAttribute(
+
+  const containerDiv = document.createElement('div')
+  containerDiv.id = TOOLBAR_CONTAINER_ID
+  containerDiv.setAttribute(
     'style',
-    'position: fixed; bottom: 0; right: 0; width: 100%; pointer-events: none;',
+    'position: fixed; bottom: 0; right: 0; width: 100%; pointer-events: none; z-index: 99999;',
   )
-  document.body.appendChild(toolbarDiv)
+
+  // create shadow dom from container element
+  const shadow = containerDiv.attachShadow({ mode: 'open' })
+
+  // add styles to shadow dom
+  const template = getToolbarTemplate()
+  shadow.appendChild(template.content)
+
+  // render toolbar to shadow dom
+  const toolbarDiv = document.createElement('div')
+  toolbarDiv.id = TOOLBAR_ELEMENT_ID
+  toolbarDiv.setAttribute('style', 'height: 100%; width: 100%;')
+  shadow.appendChild(toolbarDiv)
   ReactDOM.createRoot(toolbarDiv).render(<ElectricToolbar api={toolbarApi} />)
+
+  // attach to body
+  document.body.appendChild(containerDiv)
 }

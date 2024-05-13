@@ -14,7 +14,8 @@ import {
   Strong,
   Tooltip,
 } from '@radix-ui/themes'
-import { DbTableInfo } from 'src/api/interface'
+import { DbTableInfo } from '../api/interface'
+import { getToolbarElem } from '../utils/portal'
 
 export default function LocalDBTab({
   dbName,
@@ -91,7 +92,8 @@ const TableDataItem = ({
                     {tblInfo.name}
                   </Badge>
                 </HoverCard.Trigger>
-                <HoverCard.Content>
+
+                <HoverCard.Content container={getToolbarElem()}>
                   <Flex direction="column" minWidth="100px" gap="3">
                     <Heading>Schema</Heading>
                     <CodeMirrorUnControlled
