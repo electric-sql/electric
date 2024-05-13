@@ -311,12 +311,14 @@ export const makeContext = async (
   await mkdir('.tmp', { recursive: true })
   const dbName = `.tmp/test-${randomValue()}.db`
   const db = new SqliteDatabase(dbName)
+  const stop = async () => {
+    if (!db.open) return
+    db.close()
+  }
   const adapter = new SqliteDatabaseAdapter(db)
   const migrator = new SqliteBundleMigrator(adapter, sqliteMigrations)
   makeContextInternal(t, dbName, adapter, migrator, namespace, options)
-  t.context.stop = async () => {
-    db.close()
-  }
+  t.context.stop = stop
 }
 
 export const makePgContext = async (
@@ -340,7 +342,10 @@ export const makePgliteContext = async (
 ) => {
   const dbName = `test-${randomValue()}`
   const db = new PGlite()
-  const stop = () => db.close()
+  const stop = async () => {
+    if (db.closed) return
+    await db.close()
+  }
   const adapter = new PgliteDatabaseAdapter(db)
   const migrator = new PgBundleMigrator(adapter, pgMigrations)
   makeContextInternal(t, dbName, adapter, migrator, namespace, options)
