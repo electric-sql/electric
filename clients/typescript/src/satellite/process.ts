@@ -220,7 +220,7 @@ export class SatelliteProcess implements Satellite {
       await this.logDatabaseVersion()
     }
 
-    this._removeClientListeners = this.setClientListeners()
+    this.setClientListeners()
 
     await this.migrator.up()
 
@@ -325,9 +325,11 @@ export class SatelliteProcess implements Satellite {
   }
 
   // Returns a function that removes the listeners
-  setClientListeners(): () => void {
+  setClientListeners(): void {
+    // Remove any existing listeners
     if (this._removeClientListeners) {
       this._removeClientListeners?.()
+      this._removeClientListeners = undefined
     }
 
     const clientErrorCallback = this._handleClientError.bind(this)
@@ -356,7 +358,8 @@ export class SatelliteProcess implements Satellite {
       clientSubscriptionErrorCallback
     )
 
-    return () => {
+    // Keep a way to remove the client listeners
+    this._removeClientListeners = () => {
       this.client.unsubscribeToError(clientErrorCallback)
       this.client.unsubscribeToRelations(clientRelationsCallback)
       this.client.unsubscribeToTransactions(clientTransactionsCallback)
@@ -383,6 +386,7 @@ export class SatelliteProcess implements Satellite {
       await Promise.allSettled([this._startProcessPromise])
     }
 
+    // Stop snapshot polling
     if (this._pollingInterval !== undefined) {
       clearInterval(this._pollingInterval)
 
@@ -407,12 +411,11 @@ export class SatelliteProcess implements Satellite {
     this._removeClientListeners?.()
     this._removeClientListeners = undefined
 
-    this.disconnect()
-
-    // Stop snapshotting and polling for changes.
+    // Cancel the snapshot throttle and wait for any ongoing snapshot to finish
     this._throttledSnapshot.cancel()
-
-    await this._ensureNoActiveSnapshot()
+    await this._waitForActiveSnapshots()
+    
+    this.disconnect()
 
     if (shutdown) {
       this.client.shutdown()
@@ -421,7 +424,7 @@ export class SatelliteProcess implements Satellite {
 
   // Make sure no snapshot is running after we stop the process, otherwise we might be trying to
   // interact with a closed database connection
-  async _ensureNoActiveSnapshot(): Promise<void> {
+  async _waitForActiveSnapshots(): Promise<void> {
     // Ensure that no snapshot is left running in the background
     // by acquiring the mutex and releasing it immediately.
     const releaseMutex = await this.snapshotMutex.acquire()
