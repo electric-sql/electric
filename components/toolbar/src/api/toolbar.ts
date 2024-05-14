@@ -1,7 +1,6 @@
 import {
   DbTableInfo,
   DebugShape,
-  TableColumn,
   ToolbarInterface,
   UnsubscribeFunction,
 } from './interface'
@@ -13,8 +12,15 @@ import {
   Shape,
 } from 'electric-sql/satellite'
 import { SubscriptionsManager } from 'electric-sql/satellite/shapes'
+import {
+  getDbTables,
+  getElectricTables,
+  getSqlDialect,
+  SqlDialect,
+} from './statements'
 
 export class Toolbar implements ToolbarInterface {
+  private dialectMap: Record<string, SqlDialect> = {}
   constructor(private registry: Registry | GlobalRegistry) {}
 
   private getSatellite(name: string): Satellite {
@@ -92,37 +98,25 @@ export class Toolbar implements ToolbarInterface {
     return sat.adapter.query(statement)
   }
 
+  async getDbDialect(name: string): Promise<SqlDialect> {
+    if (!this.dialectMap[name]) {
+      this.dialectMap[name] = await getSqlDialect(
+        this.getSatellite(name).adapter,
+      )
+    }
+    return this.dialectMap[name]
+  }
+
   async getDbTables(dbName: string): Promise<DbTableInfo[]> {
     const adapter = this.getSatellite(dbName).adapter
-    const tables = (await adapter.query({
-      sql: `
-      SELECT name, sql FROM sqlite_master WHERE type='table'
-        AND name NOT LIKE 'sqlite_%'
-        AND name NOT LIKE '_electric_%'`,
-    })) as unknown as Omit<DbTableInfo, 'columns'>[]
-
-    return Promise.all(
-      tables.map(async (tbl) => ({
-        ...tbl,
-        columns: await this.getTableColumns(dbName, tbl.name),
-      })),
-    )
+    const dialect = await this.getDbDialect(dbName)
+    return getDbTables(adapter, dialect)
   }
 
   async getElectricTables(dbName: string): Promise<DbTableInfo[]> {
     const adapter = this.getSatellite(dbName).adapter
-    const tables = (await adapter.query({
-      sql: `
-      SELECT name, sql FROM sqlite_master WHERE type='table'
-        AND name LIKE '_electric_%'`,
-    })) as unknown as Omit<DbTableInfo, 'columns'>[]
-
-    return Promise.all(
-      tables.map(async (tbl) => ({
-        ...tbl,
-        columns: await this.getTableColumns(dbName, tbl.name),
-      })),
-    )
+    const dialect = await this.getDbDialect(dbName)
+    return getElectricTables(adapter, dialect)
   }
 
   subscribeToDbTable(
@@ -146,19 +140,5 @@ export class Toolbar implements ToolbarInterface {
     })
 
     return unsubscribe
-  }
-
-  private async getTableColumns(
-    dbName: string,
-    tableName: string,
-  ): Promise<TableColumn[]> {
-    const adapter = this.getSatellite(dbName).adapter
-    const columns = await adapter.query({
-      sql: `PRAGMA table_info(${tableName})`,
-    })
-    return columns.map((c) => ({
-      name: c.name,
-      type: c.type,
-    })) as TableColumn[]
   }
 }

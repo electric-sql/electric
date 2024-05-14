@@ -12,6 +12,7 @@ import {
   HoverCard,
   Skeleton,
   Strong,
+  Table,
   Tooltip,
 } from '@radix-ui/themes'
 import { DbTableInfo } from '../api/interface'
@@ -96,20 +97,49 @@ const TableDataItem = ({
                 <HoverCard.Content container={getToolbarElem()}>
                   <Flex direction="column" minWidth="100px" gap="3">
                     <Heading>Schema</Heading>
-                    <CodeMirrorUnControlled
-                      value={format(tblInfo.sql, {
-                        language: 'sqlite',
-                        tabWidth: 2,
-                        expressionWidth: 20,
-                      })}
-                      options={{
-                        readOnly: true,
-                        tabSize: 2,
-                        mode: 'sql',
-                        theme: 'material',
-                        lineNumbers: false,
-                      }}
-                    />
+                    {tblInfo.sql ? (
+                      <CodeMirrorUnControlled
+                        value={format(tblInfo.sql, {
+                          language: 'sqlite',
+                          tabWidth: 2,
+                          expressionWidth: 20,
+                        })}
+                        options={{
+                          readOnly: true,
+                          tabSize: 2,
+                          mode: 'sql',
+                          theme: 'material',
+                          lineNumbers: false,
+                        }}
+                      />
+                    ) : (
+                      <Table.Root>
+                        <Table.Header>
+                          <Table.Row>
+                            <Table.ColumnHeaderCell>
+                              Column Name
+                            </Table.ColumnHeaderCell>
+                            <Table.ColumnHeaderCell>
+                              Type
+                            </Table.ColumnHeaderCell>
+                            <Table.ColumnHeaderCell>
+                              Nullable
+                            </Table.ColumnHeaderCell>
+                          </Table.Row>
+                        </Table.Header>
+                        <Table.Body>
+                          {tblInfo.columns.map((col) => (
+                            <Table.Row key={col.name}>
+                              <Table.Cell>{col.name}</Table.Cell>
+                              <Table.Cell>{col.type?.toUpperCase()}</Table.Cell>
+                              <Table.Cell>
+                                {col.nullable ? 'YES' : 'NO'}
+                              </Table.Cell>
+                            </Table.Row>
+                          ))}
+                        </Table.Body>
+                      </Table.Root>
+                    )}
                   </Flex>
                 </HoverCard.Content>
               </HoverCard.Root>
