@@ -10,7 +10,9 @@
     ?SH-PROMPT:
     !cp ../prisma_example/schema.prisma ../prisma_example/prisma/
     ?SH-PROMPT:
-    [timeout 120]
+    # long timeout -- this step was causing constant failures in CI see
+    # https://linear.app/electric-sql/issue/VAX-1840/flaky-e2e-test-0402
+    [timeout 60]
     !make docker-prisma ARGS='prisma_example_1 prisma db pull'
     ?The introspected database was empty
     ?SH-PROMPT:
@@ -108,6 +110,8 @@
     ?SH-PROMPT:
     !cp ../prisma_example/schema.prisma ../prisma_example/prisma/
     ?SH-PROMPT:
+    # long timeout -- this step was causing constant failures in CI see
+    # https://linear.app/electric-sql/issue/VAX-1840/flaky-e2e-test-0402
     [timeout 60]
     !make docker-prisma ARGS='prisma_example_1 prisma db pull'
     ?SH-PROMPT:
