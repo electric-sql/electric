@@ -1,134 +1,139 @@
-import React, { useState } from 'react'
-import { Controlled as CodeMirrorControlled } from 'react-codemirror2'
+import React, { useCallback, useMemo, useState } from 'react'
+import {
+  Controlled as CodeMirrorControlled,
+  UnControlled as CodeMirrorUnControlled,
+} from 'react-codemirror2'
 import { ToolbarTabsProps } from '../tabs'
+import { Button, Callout, Flex, Grid, ScrollArea, Tabs } from '@radix-ui/themes'
+import { DataTable } from '../components/DataTable'
 
 export default function SQLTab({ dbName, api }: ToolbarTabsProps): JSX.Element {
+  const [history, setHistory] = useState('')
   const [code, setCode] = useState(
     'SELECT name FROM sqlite_schema\n' +
       "WHERE type='table'\n" +
       'ORDER BY name;',
   )
-  const [response, setResponse] = useState('')
-  const [history, setHistory] = useState('')
-  const [active, setActive] = useState('query')
+  const [response, setResponse] = useState<Record<string, unknown>[] | string>(
+    [],
+  )
 
-  function submitSQL() {
+  const isError = useMemo(() => typeof response === 'string', [response])
+  const columnNames = useMemo(
+    () => (response.length > 0 ? Object.keys(response[0]) : []),
+    [response],
+  )
+
+  const submitSQL = () => {
     setHistory(history + code + '\n\n')
     api.queryDb(dbName, { sql: code }).then(
-      (rows) => {
-        setResponse(JSON.stringify(rows, null, 4))
-      },
-      (err) => {
-        setResponse('Error: ' + err)
-      },
+      (rows) => setResponse(rows),
+      (err) => setResponse('Error: ' + err.message),
     )
   }
 
-  function clearHistory() {
-    setHistory('')
-  }
-
-  function renderQuery() {
-    return (
-      <div className="mirror-column">
-        <div className="mirror-header">
-          <span className="header-span">query</span>
-          <span
-            className="header-span header-span-button"
-            onClick={setActive.bind(null, 'history')}
-          >
-            history
-          </span>
-        </div>
-        <div className="mirror-in">
-          <CodeMirrorControlled
-            value={code}
-            onBeforeChange={(_editor, _data, value) => {
-              setCode(value)
-            }}
-            options={{
-              tabSize: 4,
-              mode: 'sql',
-              theme: 'material',
-              lineNumbers: true,
-            }}
-          />
-        </div>
-        <div className="mirror-ctls">
-          <button id="submit-sql-button" onClick={submitSQL}>
-            SUBMIT
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  function renderHistory() {
-    return (
-      <div className="mirror-column">
-        <div className="mirror-header">
-          <span
-            className="header-span header-span-button"
-            onClick={setActive.bind(null, 'query')}
-          >
-            query
-          </span>
-          <span className="header-span">history</span>
-        </div>
-        <div className="mirror-in">
-          <CodeMirrorControlled
-            value={history}
-            onBeforeChange={(_editor, _data, _value) => {}}
-            options={{
-              readOnly: true,
-              tabSize: 4,
-              mode: 'sql',
-              theme: 'material',
-              lineNumbers: false,
-            }}
-          />
-        </div>
-        <div className="mirror-ctls">
-          <button id="submit-sql-button" onClick={clearHistory}>
-            CLEAR
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  function switchInput() {
-    switch (active) {
-      case 'query':
-        return renderQuery()
-      case 'history':
-        return renderHistory()
-      default:
-        return <div></div>
-    }
-  }
+  const clearHistory = useCallback(() => setHistory(''), [])
 
   return (
-    <div className="mirror-wrapper">
-      {switchInput()}
-      <div className="mirror-column">
-        <div className="mirror-header">results</div>
-        <div className="mirror-in">
-          <CodeMirrorControlled
-            value={response}
-            onBeforeChange={(_editor, _data, _value) => {}}
-            options={{
-              readOnly: true,
-              tabSize: 4,
-              mode: 'json',
-              theme: 'material',
-            }}
-          />
-        </div>
-        <div className="mirror-ctls">
-          <button onClick={setResponse.bind(null, '')}>CLEAR</button>
-        </div>
-      </div>
-    </div>
+    <Grid
+      columns="minmax(300px, 33%) 1fr"
+      gap="3"
+      rows="1"
+      width="auto"
+      height="100%"
+    >
+      <Tabs.Root defaultValue="query">
+        <Tabs.List mb="1">
+          <Tabs.Trigger value="query">Query</Tabs.Trigger>
+          <Tabs.Trigger value="history">History</Tabs.Trigger>
+        </Tabs.List>
+        <FixedSizeTabContent value="query">
+          <ScrollArea style={{ height: '100%' }}>
+            <CodeMirrorControlled
+              value={code}
+              onBeforeChange={(_editor, _data, value) => {
+                setCode(value)
+              }}
+              options={{
+                tabSize: 4,
+                mode: 'sql',
+                theme: 'material',
+                lineNumbers: true,
+              }}
+            />
+          </ScrollArea>
+          <Flex justify="end" style={{ backgroundColor: '#263238' }}>
+            <Button m="2" onClick={submitSQL}>
+              SUBMIT
+            </Button>
+          </Flex>
+        </FixedSizeTabContent>
+        <FixedSizeTabContent value="history">
+          <ScrollArea style={{ height: '100%' }}>
+            <CodeMirrorUnControlled
+              value={history}
+              options={{
+                readOnly: true,
+                tabSize: 4,
+                mode: 'sql',
+                theme: 'material',
+                lineNumbers: false,
+              }}
+            />
+          </ScrollArea>
+          <Flex justify="end" style={{ backgroundColor: '#263238' }}>
+            <Button m="2" onClick={clearHistory}>
+              CLEAR
+            </Button>
+          </Flex>
+        </FixedSizeTabContent>
+      </Tabs.Root>
+      <Tabs.Root defaultValue="table">
+        <Tabs.List mb="1">
+          <Tabs.Trigger value="table">Table</Tabs.Trigger>
+          <Tabs.Trigger value="json">JSON</Tabs.Trigger>
+        </Tabs.List>
+        <FixedSizeTabContent value="table">
+          {typeof response !== 'string' && response.length > 0 ? (
+            <DataTable rows={response} columnNames={columnNames} />
+          ) : (
+            <Callout.Root color={isError ? 'red' : undefined}>
+              <Callout.Text>
+                {isError ? (response as string) : 'No data to show'}
+              </Callout.Text>
+            </Callout.Root>
+          )}
+        </FixedSizeTabContent>
+
+        <FixedSizeTabContent value="json">
+          <ScrollArea style={{ height: '100%' }}>
+            <CodeMirrorUnControlled
+              value={JSON.stringify(response, null, 2)}
+              options={{
+                readOnly: true,
+                tabSize: 4,
+                mode: 'json',
+                theme: 'material',
+              }}
+            />
+          </ScrollArea>
+        </FixedSizeTabContent>
+      </Tabs.Root>
+    </Grid>
   )
 }
+
+const FixedSizeTabContent = ({
+  children,
+  value,
+}: {
+  children: React.ReactNode
+  value: string
+}) => (
+  <Tabs.Content value={value} asChild>
+    {/* Hacky way to ensure tab content is scrollable */}
+    <Flex direction="column" height="calc(100% - 40px)">
+      {children}
+    </Flex>
+  </Tabs.Content>
+)

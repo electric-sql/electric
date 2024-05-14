@@ -1,5 +1,5 @@
 import { Row } from '../../util/types'
-import { Query, ResultSet, SQLiteCallback } from 'expo-sqlite/src/SQLite.types'
+import { type Query, type ResultSet, type SQLiteCallback } from 'expo-sqlite'
 import { Database } from './database'
 
 export class MockDatabase implements Database {

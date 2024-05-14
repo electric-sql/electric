@@ -27,7 +27,7 @@ jobs:
           node-version: 18
           cache: pnpm
       - run: make deps
-      - run: pnpm run check-styleguide
+      - run: make check_styleguide
   check_types:
     name: Check types
     runs-on: ubuntu-latest
@@ -41,7 +41,7 @@ jobs:
           node-version: 18
           cache: pnpm
       - run: make deps
-      - run: pnpm run typecheck
+      - run: make check_types
   test:
     runs-on: ubuntu-latest
     strategy:

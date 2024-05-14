@@ -1,6 +1,17 @@
-import { ToolbarInterface, UnsubscribeFunction } from './interface'
+import {
+  DbTableInfo,
+  DebugShape,
+  TableColumn,
+  ToolbarInterface,
+  UnsubscribeFunction,
+} from './interface'
 import { Row, Statement, ConnectivityState } from 'electric-sql/util'
-import { Registry, GlobalRegistry, Satellite } from 'electric-sql/satellite'
+import {
+  Registry,
+  GlobalRegistry,
+  Satellite,
+  Shape,
+} from 'electric-sql/satellite'
 import { SubscriptionsManager } from 'electric-sql/satellite/shapes'
 
 export class Toolbar implements ToolbarInterface {
@@ -48,15 +59,19 @@ export class Toolbar implements ToolbarInterface {
     return sat.connectWithBackoff()
   }
 
-  getSatelliteShapeSubscriptions(name: string): string[] {
+  getSatelliteShapeSubscriptions(name: string): DebugShape[] {
     const sat = this.getSatellite(name)
     //@ts-expect-error accessing private field
     const manager = sat['subscriptions'] as SubscriptionsManager
-    const shapes = JSON.parse(manager.serialize()) as Record<string, any>
+    const shapes = JSON.parse(manager.serialize()) as Record<
+      string,
+      { definition: Shape }[]
+    >
     return Object.entries(shapes).flatMap((shapeKeyDef) =>
-      shapeKeyDef[1].map((x: any) =>
-        JSON.stringify({ id: shapeKeyDef[0], ...x.definition }, null, 2),
-      ),
+      shapeKeyDef[1].map((x) => ({
+        id: shapeKeyDef[0],
+        ...x.definition,
+      })),
     )
   }
 
@@ -75,5 +90,75 @@ export class Toolbar implements ToolbarInterface {
   queryDb(dbName: string, statement: Statement): Promise<Row[]> {
     const sat = this.getSatellite(dbName)
     return sat.adapter.query(statement)
+  }
+
+  async getDbTables(dbName: string): Promise<DbTableInfo[]> {
+    const adapter = this.getSatellite(dbName).adapter
+    const tables = (await adapter.query({
+      sql: `
+      SELECT name, sql FROM sqlite_master WHERE type='table'
+        AND name NOT LIKE 'sqlite_%'
+        AND name NOT LIKE '_electric_%'`,
+    })) as unknown as Omit<DbTableInfo, 'columns'>[]
+
+    return Promise.all(
+      tables.map(async (tbl) => ({
+        ...tbl,
+        columns: await this.getTableColumns(dbName, tbl.name),
+      })),
+    )
+  }
+
+  async getElectricTables(dbName: string): Promise<DbTableInfo[]> {
+    const adapter = this.getSatellite(dbName).adapter
+    const tables = (await adapter.query({
+      sql: `
+      SELECT name, sql FROM sqlite_master WHERE type='table'
+        AND name LIKE '_electric_%'`,
+    })) as unknown as Omit<DbTableInfo, 'columns'>[]
+
+    return Promise.all(
+      tables.map(async (tbl) => ({
+        ...tbl,
+        columns: await this.getTableColumns(dbName, tbl.name),
+      })),
+    )
+  }
+
+  subscribeToDbTable(
+    dbName: string,
+    tableName: string,
+    callback: () => void,
+  ): UnsubscribeFunction {
+    const sat = this.getSatellite(dbName)
+    const unsubscribe = sat.notifier.subscribeToDataChanges((notification) => {
+      if (notification.dbName !== dbName) return
+      for (const change of notification.changes) {
+        if (
+          change.qualifiedTablename.tablename === tableName ||
+          // always trigger an update if subscribing to internal tables
+          tableName.startsWith('_electric')
+        ) {
+          callback()
+          return
+        }
+      }
+    })
+
+    return unsubscribe
+  }
+
+  private async getTableColumns(
+    dbName: string,
+    tableName: string,
+  ): Promise<TableColumn[]> {
+    const adapter = this.getSatellite(dbName).adapter
+    const columns = await adapter.query({
+      sql: `PRAGMA table_info(${tableName})`,
+    })
+    return columns.map((c) => ({
+      name: c.name,
+      type: c.type,
+    })) as TableColumn[]
   }
 }
