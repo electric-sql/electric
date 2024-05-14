@@ -127,6 +127,12 @@ describe('api', () => {
     expect(disconnectSpy).toHaveBeenCalledOnce()
   })
 
+  test('getDbDialect', async () => {
+    const api = clientApi(electric.registry)
+    const dialect = await api.getDbDialect(':memory:')
+    expect(dialect).toBe('sqlite')
+  })
+
   test('getDbTables', async () => {
     const api = clientApi(electric.registry)
 
@@ -144,14 +150,17 @@ describe('api', () => {
         {
           name: 'id',
           type: 'INT',
+          nullable: true,
         },
         {
           name: 'bio',
           type: 'varchar',
+          nullable: true,
         },
         {
           name: 'userId',
           type: 'INT',
+          nullable: true,
         },
       ],
     })

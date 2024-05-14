@@ -117,7 +117,6 @@ const getTableColumns = async (
     SELECT
       column_name as name,
       data_type as type,
-      column_default as dflt_value,
       (is_nullable = 'NO') as notnull
     FROM information_schema.columns
     WHERE table_name = '${tableName}';`,
@@ -126,6 +125,5 @@ const getTableColumns = async (
     name: c.name,
     type: c.type,
     nullable: !c.notnull,
-    defaultVal: new String(c.dflt_value),
   })) as TableColumn[]
 }
