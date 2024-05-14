@@ -423,7 +423,7 @@ importers:
         version: 1.2.3
       '@types/node':
         specifier: ^16.9.1
-        version: 16.18.34
+        version: 16.18.96
       '@types/pg':
         specifier: ^8.11.3
         version: 8.11.3
@@ -444,13 +444,13 @@ importers:
         version: 4.8.1
       tslint:
         specifier: ^6.1.3
-        version: 6.1.3(typescript@5.4.5)
+        version: 6.1.3(typescript@4.9.5)
       tslint-config-prettier:
         specifier: ^1.18.0
         version: 1.18.0
       typescript:
-        specifier: 5.4.5
-        version: 5.4.5
+        specifier: ^4.4.3
+        version: 4.9.5
 
   examples/starter:
     dependencies:
@@ -6041,7 +6041,7 @@ packages:
   /@types/jsonwebtoken@9.0.6:
     resolution: {integrity: sha512-/5hndP5dCjloafCXns6SZyESp3Ldq7YjH3zwzwczYnjxIT0Fqzk5ROSYVGfFyczIue7IUEj8hkvLbPoLQ18vQw==}
     dependencies:
-      '@types/node': 16.18.97
+      '@types/node': 20.12.8
     dev: true
 
   /@types/live-server@1.2.3:
@@ -6143,18 +6143,18 @@ packages:
   /@types/normalize-package-data@2.4.4:
     resolution: {integrity: sha512-37i+OaWTh9qeK4LSHPsyRC7NahnGotNuZvjLSgcPzblpHB3rrCJxAOgI5gCdKm7coonsaX1Of0ILiTcnZjbfxA==}
 
-  /@types/pg@8.11.6:
-    resolution: {integrity: sha512-/2WmmBXHLsfRqzfHW7BNZ8SbYzE8OSk7i3WjFYvfgRHj7S1xj+16Je5fUKv3lVdVzk/zn9TXOqf+avFCFIE0yQ==}
+  /@types/pg@8.11.3:
+    resolution: {integrity: sha512-xocw4LvpDcj/Ta7bN52tLZm34mso5SZ0Q8fVC0UtD8s85Itip3YHvBeYZhBmC0OThpdOujHsxXtRbEIRxqXPXg==}
     dependencies:
       '@types/node': 18.19.33
       pg-protocol: 1.6.1
       pg-types: 4.0.2
     dev: true
 
-  /@types/pg@8.11.3:
-    resolution: {integrity: sha512-xocw4LvpDcj/Ta7bN52tLZm34mso5SZ0Q8fVC0UtD8s85Itip3YHvBeYZhBmC0OThpdOujHsxXtRbEIRxqXPXg==}
+  /@types/pg@8.11.6:
+    resolution: {integrity: sha512-/2WmmBXHLsfRqzfHW7BNZ8SbYzE8OSk7i3WjFYvfgRHj7S1xj+16Je5fUKv3lVdVzk/zn9TXOqf+avFCFIE0yQ==}
     dependencies:
-      '@types/node': 20.12.7
+      '@types/node': 20.12.8
       pg-protocol: 1.6.1
       pg-types: 4.0.2
     dev: true
@@ -12440,9 +12440,15 @@ packages:
       dayjs: 1.11.11
       yargs: 15.4.1
 
+  /loglevel@1.8.1:
+    resolution: {integrity: sha512-tCRIJM51SHjAayKwC+QAg8hT8vg6z7GSgLJKGvzuPb1Wc+hLzqtuVLxp6/HzSPOozuK+8ErAhy7U/sVzw8Dgfg==}
+    engines: {node: '>= 0.6.0'}
+    dev: true
+
   /loglevel@1.9.1:
     resolution: {integrity: sha512-hP3I3kCrDIMuRwAwHltphhDM1r8i55H33GgqjXbrisuJhF4kRhW1dNuxsRklp4bXl8DSdLaNLuiL4A/LWRfxvg==}
     engines: {node: '>= 0.6.0'}
+    dev: false
 
   /long@5.2.3:
     resolution: {integrity: sha512-lcHwpNoggQTObv5apGNCTdJrO69eHOZMi4BNC+rTLER8iHAqGrUVeLh/irVIM7zTw2bOXA8T6uNPeujwOLg/2Q==}
@@ -16351,7 +16357,7 @@ packages:
     hasBin: true
     dev: true
 
-  /tslint@6.1.3(typescript@5.4.5):
+  /tslint@6.1.3(typescript@4.9.5):
     resolution: {integrity: sha512-IbR4nkT96EQOvKE2PW/djGz8iGNeJ4rF2mBfiYaR/nvUWYKJhLwimoJKgjIFEIDibBtOevj7BqCRL4oHeWWUCg==}
     engines: {node: '>=4.8.0'}
     deprecated: TSLint has been deprecated in favor of ESLint. Please see https://github.com/palantir/tslint/issues/4534 for more information.
@@ -16371,8 +16377,8 @@ packages:
       resolve: 1.22.8
       semver: 5.7.2
       tslib: 1.14.1
-      tsutils: 2.29.0(typescript@5.4.5)
-      typescript: 5.4.5
+      tsutils: 2.29.0(typescript@4.9.5)
+      typescript: 4.9.5
     dev: true
 
   /tsup@8.0.2(typescript@5.4.5):
@@ -16414,13 +16420,13 @@ packages:
       - ts-node
     dev: true
 
-  /tsutils@2.29.0(typescript@5.4.5):
+  /tsutils@2.29.0(typescript@4.9.5):
     resolution: {integrity: sha512-g5JVHCIJwzfISaXpXE1qvNalca5Jwob6FjI4AoPlqMusJ6ftFE7IkkFoMhVLRgK+4Kx3gkzb8UZK5t5yTTvEmA==}
     peerDependencies:
       typescript: '>=2.1.0 || >=2.1.0-dev || >=2.2.0-dev || >=2.3.0-dev || >=2.4.0-dev || >=2.5.0-dev || >=2.6.0-dev || >=2.7.0-dev || >=2.8.0-dev || >=2.9.0-dev || >= 3.0.0-dev || >= 3.1.0-dev'
     dependencies:
       tslib: 1.14.1
-      typescript: 5.4.5
+      typescript: 4.9.5
     dev: true
 
   /tsutils@3.21.0(typescript@4.9.5):
