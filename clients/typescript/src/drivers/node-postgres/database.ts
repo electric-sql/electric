@@ -58,10 +58,16 @@ export async function createEmbeddedPostgres(
   const db = pg.getPgClient()
   await db.connect()
 
+  let stopPromise: Promise<void>
+
   // We use the database directory as the name
   // because it uniquely identifies the DB
   return {
     db,
-    stop: () => pg.stop(),
+    stop: () => {
+      if (stopPromise) return stopPromise
+      stopPromise = pg.stop()
+      return stopPromise
+    },
   }
 }

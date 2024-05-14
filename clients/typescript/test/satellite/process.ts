@@ -147,7 +147,8 @@ export const processTests = (test: TestFn<ContextType>) => {
 
     await satellite.stop()
 
-    await startSatellite(satellite, authState, token)
+    const conn = await startSatellite(satellite, authState, token)
+    await conn.connectionPromise
 
     const clientId2 = satellite._authState!.clientId
     t.truthy(clientId2)
@@ -158,11 +159,12 @@ export const processTests = (test: TestFn<ContextType>) => {
     const { satellite, authState } = t.context
 
     await t.notThrowsAsync(async () => {
-      await startSatellite(
+      const conn = await startSatellite(
         satellite,
         authState,
         insecureAuthToken({ user_id: 'test-userA' })
       )
+      await conn.connectionPromise
     })
   })
 
@@ -170,11 +172,12 @@ export const processTests = (test: TestFn<ContextType>) => {
     const { satellite, authState } = t.context
 
     await t.notThrowsAsync(async () => {
-      await startSatellite(
+      const conn = await startSatellite(
         satellite,
         authState,
         insecureAuthToken({ sub: 'test-userB' })
       )
+      await conn.connectionPromise
     })
   })
 
@@ -194,7 +197,7 @@ export const processTests = (test: TestFn<ContextType>) => {
   test('cannot update user id', async (t) => {
     const { satellite, authState, token } = t.context
 
-    await startSatellite(satellite, authState, token)
+    const conn = await startSatellite(satellite, authState, token)
     const error = t.throws(() => {
       satellite.setToken(insecureAuthToken({ sub: 'test-user2' }))
     })
@@ -202,6 +205,7 @@ export const processTests = (test: TestFn<ContextType>) => {
       error?.message,
       "Can't change user ID when reconnecting. Previously connected with user ID 'test-user' but trying to reconnect with user ID 'test-user2'"
     )
+    await conn.connectionPromise
   })
 
   test('cannot UPDATE primary key', async (t) => {
@@ -1551,7 +1555,8 @@ export const processTests = (test: TestFn<ContextType>) => {
       token,
     } = t.context
     await runMigrations()
-    await startSatellite(satellite, authState, token)
+    const conn = await startSatellite(satellite, authState, token)
+    await conn.connectionPromise
 
     // give some time for Satellite to start
     // (needed because connecting and starting replication are async)
@@ -1560,8 +1565,8 @@ export const processTests = (test: TestFn<ContextType>) => {
     // we're expecting 2 assertions
     t.plan(4)
 
-    notifier.subscribeToConnectivityStateChanges(
-      (notification: ConnectivityStateChangeNotification) => {
+    const unsubConnectivityChanges = notifier.subscribeToConnectivityStateChanges(
+      (notification: ConnectivityStateChangeNotification) => {        
         t.is(notification.dbName, dbName)
         t.is(notification.connectivityState.status, 'disconnected')
         t.is(
@@ -1570,6 +1575,7 @@ export const processTests = (test: TestFn<ContextType>) => {
         )
       }
     )
+    t.teardown(unsubConnectivityChanges)
 
     // mock JWT expiration
     client.emitSocketClosedError(SatelliteErrorCode.AUTH_EXPIRED)
