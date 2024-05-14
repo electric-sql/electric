@@ -1565,16 +1565,17 @@ export const processTests = (test: TestFn<ContextType>) => {
     // we're expecting 2 assertions
     t.plan(4)
 
-    const unsubConnectivityChanges = notifier.subscribeToConnectivityStateChanges(
-      (notification: ConnectivityStateChangeNotification) => {        
-        t.is(notification.dbName, dbName)
-        t.is(notification.connectivityState.status, 'disconnected')
-        t.is(
-          notification.connectivityState.reason?.code,
-          SatelliteErrorCode.AUTH_EXPIRED
-        )
-      }
-    )
+    const unsubConnectivityChanges =
+      notifier.subscribeToConnectivityStateChanges(
+        (notification: ConnectivityStateChangeNotification) => {
+          t.is(notification.dbName, dbName)
+          t.is(notification.connectivityState.status, 'disconnected')
+          t.is(
+            notification.connectivityState.reason?.code,
+            SatelliteErrorCode.AUTH_EXPIRED
+          )
+        }
+      )
     t.teardown(unsubConnectivityChanges)
 
     // mock JWT expiration
@@ -2585,36 +2586,6 @@ export const processTests = (test: TestFn<ContextType>) => {
 
     // Wait for the snapshot to finish to consider the test successful
     await sleepAsync(1000)
-
-    t.pass()
-  })
-
-  test('wait for initial snapshot to end if stopping too soon', async (t) => {
-    const { adapter, runMigrations, satellite, authState, builder } = t.context
-
-    await runMigrations()
-
-    // Replace the snapshot function to simulate a slow snapshot
-    // that access the database after closing
-    satellite._performSnapshot = async () => {
-      try {
-        await sleepAsync(500)
-        await adapter.query(builder.getLocalTableNames())
-        return new Date()
-      } catch (e) {
-        t.fail()
-        throw e
-      }
-    }
-
-    const startPromise = satellite.start(authState)
-
-    await satellite.stop()
-
-    // Remove/close the database connection
-    await cleanAndStopDb(t)
-
-    await startPromise
 
     t.pass()
   })

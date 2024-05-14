@@ -132,7 +132,6 @@ export class SatelliteProcess implements Satellite {
   _pollingInterval?: any
   _unsubscribeFromPotentialDataChanges?: UnsubscribeFunction
   _throttledSnapshot: ThrottleFunction
-  _startProcessPromise?: Promise<void>
 
   _lsn?: LSN
 
@@ -210,12 +209,6 @@ export class SatelliteProcess implements Satellite {
   }
 
   async start(authConfig?: AuthConfig): Promise<void> {
-    this._startProcessPromise = this._startProcess(authConfig)
-    await this._startProcessPromise
-    this._startProcessPromise = undefined
-  }
-
-  private async _startProcess(authConfig?: AuthConfig): Promise<void> {
     if (this.opts.debug) {
       await this.logDatabaseVersion()
     }
@@ -380,13 +373,6 @@ export class SatelliteProcess implements Satellite {
   }
 
   private async _stop(shutdown?: boolean): Promise<void> {
-    // Wait for the start promise to finish first
-    // This would only happen if we stop the process too soon and the process
-    // hasn't finished starting yet
-    if (this._startProcessPromise) {
-      await Promise.allSettled([this._startProcessPromise])
-    }
-
     // Stop snapshot polling
     if (this._pollingInterval !== undefined) {
       clearInterval(this._pollingInterval)
