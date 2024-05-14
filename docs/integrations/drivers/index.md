@@ -5,11 +5,11 @@ sidebar_position: 10
 
 import DocCardList from '@theme/DocCardList';
 
-Adapt the SQLite database driver for your target environment.
+Adapt the local database driver for your target environment.
 
 ## How drivers work
 
-ElectricSQL works with existing SQLite database drivers. Connect to your local SQLite database using your existing driver library. Then pass the database `conn` to your driver adapter's `electrify` function when [instantiating your Client](../../usage/data-access/client.md#instantiating-the-client).
+The ElectricSQL client works with existing SQLite and Postgres database drivers as well as [PGlite](http://github.com/electric-sql/pglite/), our WASM build of Postgres. Connect to your local database using your existing driver library. Then pass the database `conn` to your driver adapter's `electrify` function when [instantiating your Client](../../usage/data-access/client.md#instantiating-the-client).
 
 ## Supported drivers
 

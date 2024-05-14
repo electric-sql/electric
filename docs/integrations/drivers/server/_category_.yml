@@ -1,7 +1,7 @@
 label: Server
 customProps:
   description: >-
-    SQLite driver adapters for the server.
+    Database driver adapters for NodeJS on the server.
   hide_overview: true
   icon: /img/icons/nodejs.png
 position: 30

@@ -5,7 +5,7 @@ description: >-
 sidebar_position: 10
 ---
 
-You can integrate any SQLite database driver by adapting it to the ElectricSQL [`DatabaseAdapter` interface](https://github.com/electric-sql/electric/blob/main/clients/typescript/src/electric/adapter.ts):
+You can integrate any SQLite or Postgres database driver by adapting it to the ElectricSQL [`DatabaseAdapter` interface](https://github.com/electric-sql/electric/blob/main/clients/typescript/src/electric/adapter.ts):
 
 ```tsx
 export interface DatabaseAdapter {

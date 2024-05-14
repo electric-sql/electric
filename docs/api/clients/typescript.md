@@ -10,7 +10,7 @@ sidebar_position: 10
 The TypeScript client provides a number of functions for developing front-end applications with Electric:
 
 - [Authenticating](../../usage/auth/) with the sync service
-- [Synchronising database](#shapes) to a local SQLite database
+- [Synchronising database](#shapes) to a local embedded database
 - [Type-safe data access](#queries) to read and update the database
 - [Reactive live queries](#live-queries) that update in realtime as the database changes
 
@@ -18,11 +18,11 @@ The TypeScript client provides a number of functions for developing front-end ap
 
 A TypeScript client comprises of:
 
-1. SQLite database connection from a [supported driver](../../integrations/drivers/)
+1. A local database connection from a [supported driver](../../integrations/drivers/)
 2. A client schema [generated using the generator command](../cli.md#generate)
 3. A [configuration object](#configuration)
 
-To instantiate the client, these are passed to an `electrify` function that is specific to your SQLite database driver and platform.
+To instantiate the client, these are passed to an `electrify` function that is specific to your database driver and platform.
 
 ```ts
 import { schema } from "./generated/client";

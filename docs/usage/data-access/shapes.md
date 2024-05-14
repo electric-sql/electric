@@ -7,7 +7,7 @@ sidebar_position: 30
 
 Shapes are the core primitive for controlling sync in the ElectricSQL system.
 
-Local apps establish shape subscriptions. This syncs data from the cloud onto the local device using the [Satellite replication protocol](../../api/satellite.md), into the local embedded SQLite database. Once the initial data has synced, [queries](./queries.md) can run against it.
+Local apps establish shape subscriptions. This syncs data from the cloud onto the local device using the [Satellite replication protocol](../../api/satellite.md), into the local embedded database. Once the initial data has synced, [queries](./queries.md) can run against it.
 
 The [Electric sync service](../installation/service.md) maintains shape subscriptions and streams any new data and data changes onto the local device. In this way, local devices can sync a sub-set of a larger database for interactive offline use.
 
@@ -288,7 +288,7 @@ Shape-based sync is under active development, and we're aware of some issues wit
 
 ### Foreign key and query consistency
 
-ElectricSQL maintains foreign key consistency both in the PostgreSQL central database, and in the SQLite database on the client. To achieve it, the server will automatically follow any many-to-one relation in the requested shape. For example, if there are projects each with an owner and related issues, requesting all projects will also ensure that users who are owners of those projects are available on the device too. However, related issues won't show up on the device unless explicitly requested.
+ElectricSQL maintains foreign key consistency both in the PostgreSQL central database, and in the local database on the client. To achieve it, the server will automatically follow any many-to-one relation in the requested shape. For example, if there are projects each with an owner and related issues, requesting all projects will also ensure that users who are owners of those projects are available on the device too. However, related issues won't show up on the device unless explicitly requested.
 
 #### Updating shapes
 
@@ -296,7 +296,7 @@ ElectricSQL maintains foreign key consistency both in the PostgreSQL central dat
 We're working to fix this limitation
 :::
 
-Once a subscription is established, it remains statefully in the local SQLite database even when you change the code. For example, doing `db.projects.sync({ where: { id: 1 }})`, starting the application, then changing the code to `db.projects.sync({ where: { id: 2 }})` will result in **2 subscriptions** established, with both projects synced to the device. We're working on lifting this limitation.
+Once a subscription is established, it remains statefully in the local database even when you change the code. For example, doing `db.projects.sync({ where: { id: 1 }})`, starting the application, then changing the code to `db.projects.sync({ where: { id: 2 }})` will result in **2 subscriptions** established, with both projects synced to the device. We're working on lifting this limitation.
 
 #### Unsubscribe not available
 

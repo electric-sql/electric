@@ -5,7 +5,7 @@ slug: /reference
 
 import DocCardList from '@theme/DocCardList';
 
-ElectricSQL is a conflict-free sync layer implementing active-active replication between Postgres in the cloud and SQLite on the local device. As such, it extends Postgres for [strong eventual consistency](../reference/consistency.md) and [optimal scale and resiliency](../reference/architecture.md).
+ElectricSQL is a conflict-free sync layer implementing active-active replication between Postgres in the cloud and either SQLite or Postgres on the local device. As such, it extends Postgres for [strong eventual consistency](../reference/consistency.md) and [optimal scale and resiliency](../reference/architecture.md).
 
 ElectricSQL is developed by a team of [experienced engineers and specialist distributed database experts](/about/team), under the guidance of:
 

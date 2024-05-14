@@ -20,7 +20,7 @@ ElectricSQL has three primary components. [Postgres](../usage/installation/postg
 
 [![High level component diagramme](./_images/high-level-components.png)](./_images/high-level-components.jpg)
 
-Inside the Client there is a [generated](../api/cli.md#generate) type-safe [data access library](../usage/data-access/client.md). A [satellite replication process](https://github.com/electric-sql/electric/blob/main/clients/typescript/src/satellite/process.ts) (per named local database), SQLite [driver adapters](../integrations/drivers/index.md) and a [reactivity system](#reactivity) with [front-end framework integrations](../integrations/frontend/index.md).
+Inside the Client there is a [generated](../api/cli.md#generate) type-safe [data access library](../usage/data-access/client.md). A [satellite replication process](https://github.com/electric-sql/electric/blob/main/clients/typescript/src/satellite/process.ts) (per named local database), local database [driver adapters](../integrations/drivers/index.md) and a [reactivity system](#reactivity) with [front-end framework integrations](../integrations/frontend/index.md).
 
 ### Topology
 
@@ -31,7 +31,7 @@ Usually there is one central Postgres, which can have many Electrics in front of
 
 ## Schema evolution
 
-ElectricSQL is a relational system based on Postgres that syncs between Postgres and SQLite. Postgres and SQLite share a database schema. This schema is based on an exposed (["electrified"](../usage/data-modelling/electrification.md)) subset of the Postgres DDL schema. Electric streams changes to the schema into connected client applications over the satellite protocol.
+ElectricSQL is a relational system based on Postgres that syncs between Postgres and a local database. Postgres and the local database share a database schema. This schema is based on an exposed (["electrified"](../usage/data-modelling/electrification.md)) subset of the Postgres DDL schema. Electric streams changes to the schema into connected client applications over the satellite protocol.
 
 [![Schema evolution diagramme](./_images/schema-evolution.png)](./_images/schema-evolution.jpg)
 
@@ -44,13 +44,13 @@ The Postgres schema is managed using any [standard migration tooling](../usage/d
 Electric provides an HTTP "status API" to access the electrified DDL schema. In development, the [generator command](../api/cli.md#generate) calls this API to pull down the schema and uses it to:
 
 1. generate a type-safe data access library
-2. write an array of SQLite-compatible migrations into an importable Javascript file
+2. write an array of local database compatible migrations into an importable Javascript file
 
 This library and the migrations are imported into the local app. When the app [instantiates the electric database client](../usage/data-access/client.md) the system ensures that the local database is up-to-date with the bundled migrations.
 
 ### Runtime changes
 
-When the client connects to the replication stream over the [Satellite protocol](../api/satellite.md), the system verifies that the local app and server have compatible migrations. New migrations streamed into Electric over logical replication are then streamed into the clients over the Satellite protocol and applied to the local SQLite database.
+When the client connects to the replication stream over the [Satellite protocol](../api/satellite.md), the system verifies that the local app and server have compatible migrations. New migrations streamed into Electric over logical replication are then streamed into the clients over the Satellite protocol and applied to the local database.
 
 This is done with [transactional causal consistency](./consistency.md). The DDL changes are marked as causal dependencies of any subsequent DML changes using that schema version, ensuring that the DDL changes are applied before any writes relying on them.
 
@@ -59,7 +59,7 @@ This is done with [transactional causal consistency](./consistency.md). The DDL 
 
 Data is synced onto local devices using [Shape subscriptions](../usage/data-access/shapes.md). Once data is synced into the local database, it can be queried using [static](../usage/data-access/queries.md#static-queries) and [live queries](../usage/data-access/queries.md#live-queries).
 
-Local writes to SQLite are copied by triggers into the "oplog", a system table that keeps a log of pending write operations. In the local client app, the satellite process is in charge of replicating these operations over the [Satellite protocol](../api/satellite.md).
+Local writes are copied by triggers into the "oplog", a system table that keeps a log of pending write operations. In the local client app, the satellite process is in charge of replicating these operations over the [Satellite protocol](../api/satellite.md).
 
 [![Data flow diagramme](./_images/data-flow.png)](./_images/data-flow.jpg)
 
@@ -82,10 +82,10 @@ The satellite process then fires data change notifications, which triggers the [
 
 ### Local writes
 
-Application code in the local app writes directly to the SQLite database using the [create, update and delete APIs](../usage/data-access/writes.md) from the type-safe database client. Before applying the writes, the client runs client-side validation to verify that the data is valid and will not be rejected once replicated.
+Application code in the local app writes directly to the local database using the [create, update and delete APIs](../usage/data-access/writes.md) from the type-safe database client. Before applying the writes, the client runs client-side validation to verify that the data is valid and will not be rejected once replicated.
 
 :::caution
-Direct writes to SQLite that don't use the client library will also be replicated by the satellite process. However, this skips validation, so is dangerous and best avoided.
+Direct writes to the local database that don't use the client library will also be replicated by the satellite process. However, this skips validation, so is dangerous and best avoided.
 :::
 
 ElectricSQL aims to provide **finality** of local writes. That is to say: valid writes accepted locally should always be accepted by Electric and Postgres and never rejected unless invalid or unauthorised. This avoids having to code rollback handlers for local writes. This is key to simplifying local-first development.
@@ -95,7 +95,7 @@ Whilst local writes are final, they are still subject to concurrent merge semant
 
 ### Streaming into Electric
 
-When the SQLite database migrations are generated from the Postgres DDL changes, triggers are added that automatically copy insert, update and delete operations on the tables to the "oplog" table. The satellite process then processes these operations by sending them to the Electric server over the Satellite protocol. Electric then applies server-side validation and authorisation before sending on to Postgres over the incoming logical-replication stream.
+When the local database migrations are generated from the Postgres DDL changes, triggers are added that automatically copy insert, update and delete operations on the tables to the "oplog" table. The satellite process then processes these operations by sending them to the Electric server over the Satellite protocol. Electric then applies server-side validation and authorisation before sending on to Postgres over the incoming logical-replication stream.
 
 :::note
 Electric acts as a [logical replication publisher](https://www.postgresql.org/docs/current/logical-replication.html). This is why you configure a `LOGICAL_PUBLISHER_HOST` when deploying the Electric sync service -- so that Postgres can connect to consume inbound logical replication.

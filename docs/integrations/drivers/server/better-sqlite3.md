@@ -1,5 +1,5 @@
 ---
-title: NodeJS
+title: better-sqlite3
 ---
 
 ElectricSQL supports [Node.js](https://nodejs.org) server application using the [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) driver.
