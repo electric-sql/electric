@@ -107,7 +107,6 @@ export type Items = {
  */
 export type Jsons = {
   id: string
-  js: Prisma.JsonValue | null
   jsb: Prisma.JsonValue | null
 }
 
@@ -7716,7 +7715,6 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
 
   export type JsonsCountAggregateOutputType = {
     id: number
-    js: number
     jsb: number
     _all: number
   }
@@ -7732,7 +7730,6 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
 
   export type JsonsCountAggregateInputType = {
     id?: true
-    js?: true
     jsb?: true
     _all?: true
   }
@@ -7817,7 +7814,6 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
 
   export type JsonsGroupByOutputType = {
     id: string
-    js: JsonValue | null
     jsb: JsonValue | null
     _count: JsonsCountAggregateOutputType | null
     _min: JsonsMinAggregateOutputType | null
@@ -7840,7 +7836,6 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
 
   export type JsonsSelect = {
     id?: boolean
-    js?: boolean
     jsb?: boolean
   }
 
@@ -11464,7 +11459,6 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
 
   export const JsonsScalarFieldEnum: {
     id: 'id',
-    js: 'js',
     jsb: 'jsb'
   };
 
@@ -11811,13 +11805,11 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
     OR?: Enumerable<JsonsWhereInput>
     NOT?: Enumerable<JsonsWhereInput>
     id?: StringFilter | string
-    js?: JsonNullableFilter
     jsb?: JsonNullableFilter
   }
 
   export type JsonsOrderByWithRelationInput = {
     id?: SortOrder
-    js?: SortOrder
     jsb?: SortOrder
   }
 
@@ -11827,7 +11819,6 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
 
   export type JsonsOrderByWithAggregationInput = {
     id?: SortOrder
-    js?: SortOrder
     jsb?: SortOrder
     _count?: JsonsCountOrderByAggregateInput
     _max?: JsonsMaxOrderByAggregateInput
@@ -11839,7 +11830,6 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
     OR?: Enumerable<JsonsScalarWhereWithAggregatesInput>
     NOT?: Enumerable<JsonsScalarWhereWithAggregatesInput>
     id?: StringWithAggregatesFilter | string
-    js?: JsonNullableWithAggregatesFilter
     jsb?: JsonNullableWithAggregatesFilter
   }
 
@@ -12255,43 +12245,36 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
 
   export type JsonsCreateInput = {
     id: string
-    js?: NullableJsonNullValueInput | InputJsonValue
     jsb?: NullableJsonNullValueInput | InputJsonValue
   }
 
   export type JsonsUncheckedCreateInput = {
     id: string
-    js?: NullableJsonNullValueInput | InputJsonValue
     jsb?: NullableJsonNullValueInput | InputJsonValue
   }
 
   export type JsonsUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
-    js?: NullableJsonNullValueInput | InputJsonValue
     jsb?: NullableJsonNullValueInput | InputJsonValue
   }
 
   export type JsonsUncheckedUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
-    js?: NullableJsonNullValueInput | InputJsonValue
     jsb?: NullableJsonNullValueInput | InputJsonValue
   }
 
   export type JsonsCreateManyInput = {
     id: string
-    js?: NullableJsonNullValueInput | InputJsonValue
     jsb?: NullableJsonNullValueInput | InputJsonValue
   }
 
   export type JsonsUpdateManyMutationInput = {
     id?: StringFieldUpdateOperationsInput | string
-    js?: NullableJsonNullValueInput | InputJsonValue
     jsb?: NullableJsonNullValueInput | InputJsonValue
   }
 
   export type JsonsUncheckedUpdateManyInput = {
     id?: StringFieldUpdateOperationsInput | string
-    js?: NullableJsonNullValueInput | InputJsonValue
     jsb?: NullableJsonNullValueInput | InputJsonValue
   }
 
@@ -12820,7 +12803,6 @@ export type InputJsonValue = null | string | number | boolean | InputJsonObject 
 
   export type JsonsCountOrderByAggregateInput = {
     id?: SortOrder
-    js?: SortOrder
     jsb?: SortOrder
   }
 

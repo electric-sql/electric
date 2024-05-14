@@ -330,7 +330,7 @@ export const get_json = async (electric: Electric, id: string) => {
     },
     select: {
       id: true,
-      js: true,
+      //js: true,
     }
   })
   return res

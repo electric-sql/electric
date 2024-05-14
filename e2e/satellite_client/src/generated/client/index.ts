@@ -62,7 +62,7 @@ export const ItemsScalarFieldEnumSchema = z.enum(['id','content','content_text_n
 
 export const JsonNullValueFilterSchema = z.enum(['DbNull','JsonNull','AnyNull',]);
 
-export const JsonsScalarFieldEnumSchema = z.enum(['id','js','jsb']);
+export const JsonsScalarFieldEnumSchema = z.enum(['id','jsb']);
 
 export const NullableJsonNullValueInputSchema = z.enum(['DbNull','JsonNull',])
 
@@ -177,7 +177,6 @@ export type Items = z.infer<typeof ItemsSchema>
 
 export const JsonsSchema = z.object({
   id: z.string(),
-  js: NullableJsonValue.optional(),
   jsb: NullableJsonValue.optional(),
 })
 
@@ -310,7 +309,6 @@ export const ItemsSelectSchema: z.ZodType<Prisma.ItemsSelect> = z.object({
 
 export const JsonsSelectSchema: z.ZodType<Prisma.JsonsSelect> = z.object({
   id: z.boolean().optional(),
-  js: z.boolean().optional(),
   jsb: z.boolean().optional(),
 }).strict()
 
@@ -630,13 +628,11 @@ export const JsonsWhereInputSchema: z.ZodType<Prisma.JsonsWhereInput> = z.object
   OR: z.lazy(() => JsonsWhereInputSchema).array().optional(),
   NOT: z.union([ z.lazy(() => JsonsWhereInputSchema),z.lazy(() => JsonsWhereInputSchema).array() ]).optional(),
   id: z.union([ z.lazy(() => StringFilterSchema),z.string() ]).optional(),
-  js: z.lazy(() => JsonNullableFilterSchema).optional(),
   jsb: z.lazy(() => JsonNullableFilterSchema).optional()
 }).strict();
 
 export const JsonsOrderByWithRelationInputSchema: z.ZodType<Prisma.JsonsOrderByWithRelationInput> = z.object({
   id: z.lazy(() => SortOrderSchema).optional(),
-  js: z.lazy(() => SortOrderSchema).optional(),
   jsb: z.lazy(() => SortOrderSchema).optional()
 }).strict();
 
@@ -646,7 +642,6 @@ export const JsonsWhereUniqueInputSchema: z.ZodType<Prisma.JsonsWhereUniqueInput
 
 export const JsonsOrderByWithAggregationInputSchema: z.ZodType<Prisma.JsonsOrderByWithAggregationInput> = z.object({
   id: z.lazy(() => SortOrderSchema).optional(),
-  js: z.lazy(() => SortOrderSchema).optional(),
   jsb: z.lazy(() => SortOrderSchema).optional(),
   _count: z.lazy(() => JsonsCountOrderByAggregateInputSchema).optional(),
   _max: z.lazy(() => JsonsMaxOrderByAggregateInputSchema).optional(),
@@ -658,7 +653,6 @@ export const JsonsScalarWhereWithAggregatesInputSchema: z.ZodType<Prisma.JsonsSc
   OR: z.lazy(() => JsonsScalarWhereWithAggregatesInputSchema).array().optional(),
   NOT: z.union([ z.lazy(() => JsonsScalarWhereWithAggregatesInputSchema),z.lazy(() => JsonsScalarWhereWithAggregatesInputSchema).array() ]).optional(),
   id: z.union([ z.lazy(() => StringWithAggregatesFilterSchema),z.string() ]).optional(),
-  js: z.lazy(() => JsonNullableWithAggregatesFilterSchema).optional(),
   jsb: z.lazy(() => JsonNullableWithAggregatesFilterSchema).optional()
 }).strict();
 
@@ -1074,43 +1068,36 @@ export const ItemsUncheckedUpdateManyInputSchema: z.ZodType<Prisma.ItemsUnchecke
 
 export const JsonsCreateInputSchema: z.ZodType<Prisma.JsonsCreateInput> = z.object({
   id: z.string(),
-  js: z.union([ z.lazy(() => NullableJsonNullValueInputSchema),InputJsonValue ]).optional(),
   jsb: z.union([ z.lazy(() => NullableJsonNullValueInputSchema),InputJsonValue ]).optional(),
 }).strict();
 
 export const JsonsUncheckedCreateInputSchema: z.ZodType<Prisma.JsonsUncheckedCreateInput> = z.object({
   id: z.string(),
-  js: z.union([ z.lazy(() => NullableJsonNullValueInputSchema),InputJsonValue ]).optional(),
   jsb: z.union([ z.lazy(() => NullableJsonNullValueInputSchema),InputJsonValue ]).optional(),
 }).strict();
 
 export const JsonsUpdateInputSchema: z.ZodType<Prisma.JsonsUpdateInput> = z.object({
   id: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  js: z.union([ z.lazy(() => NullableJsonNullValueInputSchema),InputJsonValue ]).optional(),
   jsb: z.union([ z.lazy(() => NullableJsonNullValueInputSchema),InputJsonValue ]).optional(),
 }).strict();
 
 export const JsonsUncheckedUpdateInputSchema: z.ZodType<Prisma.JsonsUncheckedUpdateInput> = z.object({
   id: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  js: z.union([ z.lazy(() => NullableJsonNullValueInputSchema),InputJsonValue ]).optional(),
   jsb: z.union([ z.lazy(() => NullableJsonNullValueInputSchema),InputJsonValue ]).optional(),
 }).strict();
 
 export const JsonsCreateManyInputSchema: z.ZodType<Prisma.JsonsCreateManyInput> = z.object({
   id: z.string(),
-  js: z.union([ z.lazy(() => NullableJsonNullValueInputSchema),InputJsonValue ]).optional(),
   jsb: z.union([ z.lazy(() => NullableJsonNullValueInputSchema),InputJsonValue ]).optional(),
 }).strict();
 
 export const JsonsUpdateManyMutationInputSchema: z.ZodType<Prisma.JsonsUpdateManyMutationInput> = z.object({
   id: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  js: z.union([ z.lazy(() => NullableJsonNullValueInputSchema),InputJsonValue ]).optional(),
   jsb: z.union([ z.lazy(() => NullableJsonNullValueInputSchema),InputJsonValue ]).optional(),
 }).strict();
 
 export const JsonsUncheckedUpdateManyInputSchema: z.ZodType<Prisma.JsonsUncheckedUpdateManyInput> = z.object({
   id: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
-  js: z.union([ z.lazy(() => NullableJsonNullValueInputSchema),InputJsonValue ]).optional(),
   jsb: z.union([ z.lazy(() => NullableJsonNullValueInputSchema),InputJsonValue ]).optional(),
 }).strict();
 
@@ -1633,7 +1620,6 @@ export const JsonNullableFilterSchema: z.ZodType<Prisma.JsonNullableFilter> = z.
 
 export const JsonsCountOrderByAggregateInputSchema: z.ZodType<Prisma.JsonsCountOrderByAggregateInput> = z.object({
   id: z.lazy(() => SortOrderSchema).optional(),
-  js: z.lazy(() => SortOrderSchema).optional(),
   jsb: z.lazy(() => SortOrderSchema).optional()
 }).strict();
 
@@ -3637,10 +3623,6 @@ export const tableSchemas = {
       [
         "id",
         "TEXT"
-      ],
-      [
-        "js",
-        "JSONB"
       ],
       [
         "jsb",

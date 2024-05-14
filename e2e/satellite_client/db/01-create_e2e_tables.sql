@@ -73,7 +73,6 @@ ALTER TABLE "floats" ENABLE ELECTRIC;
 
 CREATE TABLE "jsons" (
   id TEXT NOT NULL PRIMARY KEY,
-  js JSONB,
   jsb JSONB
 );
 
