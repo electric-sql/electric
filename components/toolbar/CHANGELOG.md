@@ -1,5 +1,11 @@
 # @electric-sql/debug-toolbar
 
+## 1.1.0
+
+### Minor Changes
+
+- 8369649: Complete restyling of toolbar and new features (table inspector, shape inspector)
+
 ## 1.0.2
 
 ### Patch Changes
