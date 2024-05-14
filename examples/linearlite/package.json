@@ -69,6 +69,7 @@
   "devDependencies": {
     "@databases/pg": "^5.4.1",
     "@databases/pg-migrations": "^5.0.2",
+    "@electric-sql/debug-toolbar": "^1.2.0",
     "@tailwindcss/typography": "^0.5.10",
     "@types/jest": "^29.5.4",
     "@types/lodash.debounce": "^4.0.7",
