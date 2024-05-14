@@ -1,5 +1,11 @@
 # electric-sql
 
+## 0.11.3
+
+### Patch Changes
+
+- 6080c9c: Fix port collisions in client tests
+
 ## 0.11.2
 
 ### Patch Changes
