@@ -4944,9 +4944,8 @@ export const SatPerms_ColumnList = {
   },
 
   create<I extends Exact<DeepPartial<SatPerms_ColumnList>, I>>(base?: I): SatPerms_ColumnList {
-    return SatPerms_ColumnList.fromPartial(base ?? {});
+    return SatPerms_ColumnList.fromPartial(base ?? ({} as any));
   },
-
   fromPartial<I extends Exact<DeepPartial<SatPerms_ColumnList>, I>>(object: I): SatPerms_ColumnList {
     const message = createBaseSatPerms_ColumnList();
     message.names = object.names?.map((e) => e) || [];
@@ -5198,9 +5197,8 @@ export const SatPerms_Revoke = {
   },
 
   create<I extends Exact<DeepPartial<SatPerms_Revoke>, I>>(base?: I): SatPerms_Revoke {
-    return SatPerms_Revoke.fromPartial(base ?? {});
+    return SatPerms_Revoke.fromPartial(base ?? ({} as any));
   },
-
   fromPartial<I extends Exact<DeepPartial<SatPerms_Revoke>, I>>(object: I): SatPerms_Revoke {
     const message = createBaseSatPerms_Revoke();
     message.id = object.id ?? "";
@@ -5447,9 +5445,8 @@ export const SatPerms_Unassign = {
   },
 
   create<I extends Exact<DeepPartial<SatPerms_Unassign>, I>>(base?: I): SatPerms_Unassign {
-    return SatPerms_Unassign.fromPartial(base ?? {});
+    return SatPerms_Unassign.fromPartial(base ?? ({} as any));
   },
-
   fromPartial<I extends Exact<DeepPartial<SatPerms_Unassign>, I>>(object: I): SatPerms_Unassign {
     const message = createBaseSatPerms_Unassign();
     message.id = object.id ?? "";
@@ -5506,9 +5503,8 @@ export const SatPerms_Sqlite = {
   },
 
   create<I extends Exact<DeepPartial<SatPerms_Sqlite>, I>>(base?: I): SatPerms_Sqlite {
-    return SatPerms_Sqlite.fromPartial(base ?? {});
+    return SatPerms_Sqlite.fromPartial(base ?? ({} as any));
   },
-
   fromPartial<I extends Exact<DeepPartial<SatPerms_Sqlite>, I>>(object: I): SatPerms_Sqlite {
     const message = createBaseSatPerms_Sqlite();
     message.stmt = object.stmt ?? "";
@@ -5691,9 +5687,8 @@ export const SatPerms_DDLX = {
   },
 
   create<I extends Exact<DeepPartial<SatPerms_DDLX>, I>>(base?: I): SatPerms_DDLX {
-    return SatPerms_DDLX.fromPartial(base ?? {});
+    return SatPerms_DDLX.fromPartial(base ?? ({} as any));
   },
-
   fromPartial<I extends Exact<DeepPartial<SatPerms_DDLX>, I>>(object: I): SatPerms_DDLX {
     const message = createBaseSatPerms_DDLX();
     message.grants = object.grants?.map((e) => SatPerms_Grant.fromPartial(e)) || [];
@@ -5715,7 +5710,7 @@ export const SatPerms_Rules = {
   $type: "Electric.Satellite.SatPerms.Rules" as const,
 
   encode(message: SatPerms_Rules, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
-    if (!message.id.isZero()) {
+    if (!message.id.equals(Long.UZERO)) {
       writer.uint32(8).uint64(message.id);
     }
     if (message.parentId !== undefined) {
@@ -5805,13 +5800,13 @@ export const SatPerms_Roles = {
   $type: "Electric.Satellite.SatPerms.Roles" as const,
 
   encode(message: SatPerms_Roles, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
-    if (!message.id.isZero()) {
+    if (!message.id.equals(Long.UZERO)) {
       writer.uint32(8).uint64(message.id);
     }
     if (message.parentId !== undefined) {
       writer.uint32(16).uint64(message.parentId);
     }
-    if (!message.rulesId.isZero()) {
+    if (!message.rulesId.equals(Long.UZERO)) {
       writer.uint32(24).uint64(message.rulesId);
     }
     for (const v of message.roles) {
