@@ -318,7 +318,8 @@ export class SatelliteProcess implements Satellite {
     await this.adapter.runInTransaction(...stmtsWithTriggers)
   }
 
-  // Returns a function that removes the listeners
+  // Adds all the necessary listeners to the satellite client
+  // They can be cleared up by calling the function `_removeClientListeners`
   setClientListeners(): void {
     // Remove any existing listeners
     if (this._removeClientListeners) {
