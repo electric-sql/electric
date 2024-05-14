@@ -20,7 +20,7 @@ concurrency:
 jobs:
   tests:
     name: elixir tests
-    runs-on: electric-e2e-8-32
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: components/electric
