@@ -85,4 +85,6 @@ const IssueItem = ({ issue, style, isDragging, provided }: IssueProps) => {
   )
 }
 
-export default memo(IssueItem)
+const IssueItemMemo = memo(IssueItem)
+
+export default IssueItemMemo

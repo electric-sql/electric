@@ -8,7 +8,7 @@ interface Props {
   isOpen: boolean
   onDismiss?: () => void
 }
-export default function ({ isOpen, onDismiss }: Props) {
+export default function ViewOptionMenu({ isOpen, onDismiss }: Props) {
   const ref = useRef(null)
   const [filterState, setFilterState] = useFilterState()
 
