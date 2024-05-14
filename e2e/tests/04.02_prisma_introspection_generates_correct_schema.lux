@@ -104,7 +104,7 @@
     ?SH-PROMPT:
     !cp ../prisma_example/schema.prisma ../prisma_example/prisma/
     ?SH-PROMPT:
-    [timeout 60]
+    [timeout 120]
     !make docker-prisma ARGS='prisma_example_1 prisma db pull'
     ?SH-PROMPT:
 
