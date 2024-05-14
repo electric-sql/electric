@@ -4,6 +4,7 @@ set -ex
 
 protoc --version
 git status --porcelain
+git diff -p
 
 for file in $(git status --porcelain | awk '{ print $2 }')
 do
