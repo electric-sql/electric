@@ -20,11 +20,9 @@ To see the complete change log for each new release, see the [Releases page](htt
 - [@electric-sql/prisma-generator](https://github.com/electric-sql/electric/blob/main/generator/CHANGELOG.md)
 
 
-## 2024-05-02 - v0.10.2
+## 2024-05-02 - v0.11
 
-```
-[Announcement post](/blog/2024/05/02/electricsql-v0.11-released).
-```
+[Announcement post](/blog/2024/05/14/electricsql-postgres-client-support).
 
 This release introduces a new database driver for PGLite, enabling client applications to use a local Postgres database. It also the first release to maintain replication stream continuity in the face of the sync service's restarts.
 
@@ -32,15 +30,13 @@ This release introduces a new database driver for PGLite, enabling client applic
 
 Component | Version
 --------- | -------
-[Sync service][1] | [0.10.2](https://github.com/electric-sql/electric/blob/main/components/electric/CHANGELOG.md#0102)
-[TypeScript client][2] | [0.10.2](https://github.com/electric-sql/electric/blob/main/clients/typescript/CHANGELOG.md#0102)
+[Sync service][1] | [0.11.1](https://github.com/electric-sql/electric/blob/main/components/electric/CHANGELOG.md#0111)
+[TypeScript client][2] | [0.11.2](https://github.com/electric-sql/electric/blob/main/clients/typescript/CHANGELOG.md#0112)
 [create-electric-app][3] | [0.3.1](https://github.com/electric-sql/electric/blob/main/examples/starter/CHANGELOG.md#031)
 
 #### Compatibility notes
 
 **Sync service**
-
-- The default value for `DATABASE_USE_IPV6` is now `false`. Using IPv6 by default turned out to cause problems that could have been avoided by sticking to IPv4. ISPs, Docker, hosting platforms do not all have seamless IPv6 support just yet.
 
 - Electric no longer tries decode the JWT signing key by default. A new configuration option `AUTH_JWT_KEY_IS_BASE64_ENCODED` has been added to let the developer choose whether Electric should use the configured signing key as is or base64-decode it first.
 
