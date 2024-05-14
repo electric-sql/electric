@@ -35,5 +35,18 @@ export default defineConfig({
       // the proper extensions will be added
       fileName: 'index',
     },
+    rollupOptions: {
+      onLog: (level, log, handler) => {
+        if (
+          log.code === 'INVALID_ANNOTATION' &&
+          log.message.includes('/*#__PURE__*/')
+        ) {
+          // ignore these, not critical but fails build
+          // https://github.com/vitejs/vite/issues/15100
+          return
+        }
+        handler(level, log)
+      },
+    },
   },
 })
