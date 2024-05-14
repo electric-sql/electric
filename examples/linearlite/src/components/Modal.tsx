@@ -8,7 +8,7 @@ import React, {
 import ReactDOM from 'react-dom'
 import classnames from 'classnames'
 
-import { ReactComponent as CloseIcon } from '../assets/icons/close.svg'
+import CloseIcon from '../assets/icons/close.svg?react'
 import useLockBodyScroll from '../hooks/useLockBodyScroll'
 import { Transition } from '@headlessui/react'
 
