@@ -18,7 +18,7 @@
     "node": ">=16.11.0"
   },
   "dependencies": {
-    "@glideapps/glide-data-grid": "^6.0.3",
+    "@glideapps/glide-data-grid": "^6.0.4-alpha8",
     "@radix-ui/themes": "^3.0.3",
     "clsx": "^2.1.1",
     "codemirror": "^5.65.16",
