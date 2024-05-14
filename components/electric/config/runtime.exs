@@ -214,22 +214,32 @@ connector_config =
     #      database will be treated as a fatal error.
     #
     #   2. Or it is not required, in which case Electric will still try connecting with SSL first
-    #      and will only fallback to using unencrypted connection if that fails.
+    #      and will only fall back to using unencrypted connection if that fails.
     #
     # When DATABASE_REQUIRE_SSL is set by the user, the sslmode query parameter in DATABASE_URL is ignored.
     require_ssl? =
       case {require_ssl_config, conn_config[:sslmode]} do
-        {nil, :require} -> true
-        {nil, _} -> false
-        {nil, nil} -> default_database_require_ssl
-        {true, _} -> true
-        {false, _} -> false
+        {nil, nil} ->
+          # neither DATABASE_REQUIRE_SSL nor ?sslmode=... are present, use the default setting
+          default_database_require_ssl
+
+        {true, _} ->
+          # DATABASE_REQUIRE_SSL=true: require database connections to use SSL
+          true
+
+        {nil, :require} ->
+          # ?sslmode=require and DATABASE_REQUIRE_SSL is not set: require database connections to use SSL
+          true
+
+        _ ->
+          # any other value of ?sslmode=... or DATABASE_REQUIRE_SSL means SSL is not required
+          false
       end
 
     # When require_ssl?=true, epgsql will try to connect using SSL and fail if the server does not accept encrypted
     # connections.
     #
-    # When require_ssl?=false, epgsql will try to connect using SSL first, then fallback to an unencrypted connection
+    # When require_ssl?=false, epgsql will try to connect using SSL first, then fall back to an unencrypted connection
     # if that fails.
     use_ssl? =
       if require_ssl? do
