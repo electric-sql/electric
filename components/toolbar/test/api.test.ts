@@ -1,55 +1,81 @@
-import { vi, expect, test, describe, beforeEach } from 'vitest'
+import { vi, expect, test, describe, beforeEach, afterAll } from 'vitest'
 import Database from 'better-sqlite3'
+import { electrify as electrifySqlite } from 'electric-sql/drivers/better-sqlite3'
+import { PGlite } from '@electric-sql/pglite'
+import { electrify as electrifyPg } from 'electric-sql/drivers/pglite'
 import { MockRegistry } from 'electric-sql/satellite'
-import { electrify } from 'electric-sql/drivers/better-sqlite3'
 import { schema } from './generated'
 import { clientApi } from '../src'
 import { MockIndexDB, MockLocation } from './mocks'
 import { ConnectivityState, QualifiedTablename } from 'electric-sql/util'
 
-const db = new Database(':memory:')
-const electric = await electrify(
-  db,
-  schema,
-  {},
-  { registry: new MockRegistry() },
-)
-
-await electric.connect('test-token')
-
-// test boilerplate copied from electric-sql/test/client/model/table.test.ts
-
-const tbl = electric.db.Post
-const postTable = tbl
-const userTable = electric.db.User
-const profileTable = electric.db.Profile
-
-// Sync all shapes such that we don't get warnings on every query
-await postTable.sync()
-await userTable.sync()
-await profileTable.sync()
-
-// Create a Post table in the DB first
-function clear() {
-  db.exec('DROP TABLE IF EXISTS Post')
-  db.exec(
-    "CREATE TABLE IF NOT EXISTS Post('id' int PRIMARY KEY, 'title' varchar, 'contents' varchar, 'nbr' int, 'authorId' int);",
-  )
-  db.exec('DROP TABLE IF EXISTS User')
-  db.exec(
-    "CREATE TABLE IF NOT EXISTS User('id' int PRIMARY KEY, 'name' varchar);",
-  )
-  db.exec('DROP TABLE IF EXISTS Profile')
-  db.exec(
-    "CREATE TABLE IF NOT EXISTS Profile('id' int PRIMARY KEY, 'bio' varchar, 'userId' int);",
-  )
+interface TestConfig {
+  dialect: 'sqlite' | 'postgres'
+  electrify: typeof electrifySqlite | typeof electrifyPg
+  db: unknown
 }
 
-describe('api', () => {
-  beforeEach(() => {
-    clear()
+const configurations: TestConfig[] = [
+  {
+    dialect: 'sqlite',
+    electrify: electrifySqlite,
+    db: new Database(':memory:'),
+  },
+  {
+    dialect: 'postgres',
+    electrify: electrifyPg,
+    db: new PGlite('memory://:memory:'),
+  },
+]
+
+describe.each(configurations)(`api - $dialect`, async (config) => {
+  // @ts-expect-error using different electrification for each db
+  const electric = await config.electrify(
+    config.db,
+    schema,
+    {},
+    { registry: new MockRegistry() },
+  )
+  const db = electric.adapter
+
+  await electric.connect('test-token')
+
+  // test boilerplate copied from electric-sql/test/client/model/table.test.ts
+  const tbl = electric.db.Post
+  const postTable = tbl
+  const userTable = electric.db.User
+  const profileTable = electric.db.Profile
+
+  // Sync all shapes such that we don't get warnings on every query
+  await postTable.sync()
+  await userTable.sync()
+  await profileTable.sync()
+
+  // Create a Post table in the DB first
+  async function clear() {
+    await db.run({ sql: 'DROP TABLE IF EXISTS Post' })
+    await db.run({
+      sql: 'CREATE TABLE IF NOT EXISTS Post(id int PRIMARY KEY, title varchar, contents varchar, nbr int, authorId int);',
+    })
+    await db.run({ sql: 'DROP TABLE IF EXISTS Users' })
+    await db.run({
+      sql: 'CREATE TABLE IF NOT EXISTS Users(id int PRIMARY KEY, name varchar);',
+    })
+    await db.run({ sql: 'DROP TABLE IF EXISTS Profile' })
+    await db.run({
+      sql: 'CREATE TABLE IF NOT EXISTS Profile(id int PRIMARY KEY, bio varchar, userId int);',
+    })
+  }
+
+  // describe(`api - ${config.dialect}`, () => {
+  beforeEach(async () => {
+    await clear()
     electric.satellite.connectivityState = { status: 'disconnected' }
     vi.unstubAllGlobals()
+  })
+
+  afterAll(async () => {
+    electric.close()
   })
 
   test('getSatelliteNames', async () => {
@@ -61,12 +87,19 @@ describe('api', () => {
   test('queryDb', async () => {
     const api = clientApi(electric.registry)
     const query =
-      'SELECT name FROM sqlite_schema\n' +
-      "WHERE type='table'\n" +
-      'ORDER BY name; '
-    const result = await api.queryDb(':memory:', { sql: query })
-    const expected = [{ name: 'Post' }, { name: 'Profile' }, { name: 'User' }]
-    expect(result).toStrictEqual(expected)
+      config.dialect === 'sqlite'
+        ? `SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name;`
+        : `SELECT table_name as name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name;`
+
+    const result = (await api.queryDb(':memory:', { sql: query })) as {
+      name: string
+    }[]
+    const expected = [{ name: 'post' }, { name: 'profile' }, { name: 'users' }]
+    expect(
+      result.map((o) => ({
+        name: o.name.toLowerCase(),
+      })),
+    ).toStrictEqual(expected)
   })
 
   test('resetDb', async () => {
@@ -130,7 +163,7 @@ describe('api', () => {
   test('getDbDialect', async () => {
     const api = clientApi(electric.registry)
     const dialect = await api.getDbDialect(':memory:')
-    expect(dialect).toBe('sqlite')
+    expect(dialect).toBe(config.dialect)
   })
 
   test('getDbTables', async () => {
@@ -138,32 +171,61 @@ describe('api', () => {
 
     const tables = await api.getDbTables(':memory:')
     expect(tables).toHaveLength(3)
-    expect(tables.map((tb) => tb.name).sort()).toEqual(
-      ['Post', 'User', 'Profile'].sort(),
-    )
+    expect(
+      tables
+        .map((tb) => tb.name)
+        .sort()
+        .map((s) => s.toLowerCase()),
+    ).toEqual(['Post', 'Users', 'Profile'].sort().map((s) => s.toLowerCase()))
 
     // should have SQL schema and column definitions
-    expect(tables.find((t) => t.name === 'Profile')).toEqual({
-      name: 'Profile',
-      sql: "CREATE TABLE Profile('id' int PRIMARY KEY, 'bio' varchar, 'userId' int)",
-      columns: [
-        {
-          name: 'id',
-          type: 'INT',
-          nullable: true,
-        },
-        {
-          name: 'bio',
-          type: 'varchar',
-          nullable: true,
-        },
-        {
-          name: 'userId',
-          type: 'INT',
-          nullable: true,
-        },
-      ],
-    })
+    const profileTblInfo = tables.find(
+      (t) => t.name.toLowerCase() === 'profile',
+    )!
+
+    expect(profileTblInfo.name.toLowerCase()).toBe('profile')
+    if (config.dialect === 'sqlite') {
+      expect(profileTblInfo.sql).toBe(
+        'CREATE TABLE Profile(id int PRIMARY KEY, bio varchar, userId int)',
+      )
+    }
+    expect(profileTblInfo.columns).toEqual(
+      config.dialect === 'sqlite'
+        ? [
+            {
+              name: 'id',
+              type: 'INT',
+              nullable: true,
+            },
+            {
+              name: 'bio',
+              type: 'varchar',
+              nullable: true,
+            },
+            {
+              name: 'userId',
+              type: 'INT',
+              nullable: true,
+            },
+          ]
+        : [
+            {
+              name: 'id',
+              type: 'integer',
+              nullable: false,
+            },
+            {
+              name: 'bio',
+              type: 'character varying',
+              nullable: true,
+            },
+            {
+              name: 'userid',
+              type: 'integer',
+              nullable: true,
+            },
+          ],
+    )
   })
 
   test('subscribeToDbTable', async () => {
@@ -178,7 +240,7 @@ describe('api', () => {
         numProfileTableCbs++
       },
     )
-    const unsubscribeUser = api.subscribeToDbTable(':memory:', 'User', () => {
+    const unsubscribeUser = api.subscribeToDbTable(':memory:', 'Users', () => {
       numUserTableCbs++
     })
 
@@ -212,7 +274,7 @@ describe('api', () => {
       ':memory:',
       [
         {
-          qualifiedTablename: new QualifiedTablename('public', 'User'),
+          qualifiedTablename: new QualifiedTablename('public', 'Users'),
         },
       ],
       'remote',
@@ -229,7 +291,7 @@ describe('api', () => {
       ':memory:',
       [
         {
-          qualifiedTablename: new QualifiedTablename('public', 'User'),
+          qualifiedTablename: new QualifiedTablename('public', 'Users'),
         },
       ],
       'remote',
