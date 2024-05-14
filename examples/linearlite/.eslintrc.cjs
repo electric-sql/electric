@@ -27,5 +27,11 @@ module.exports = {
       { allowConstantExport: true },
     ],
   },
-  ignorePatterns: ['**/*/mock.ts', 'dist', '.eslintrc.cjs', 'src/generated/*'],
+  ignorePatterns: [
+    '**/*/mock.ts',
+    'db/**/*',
+    'dist',
+    '.eslintrc.cjs',
+    'src/generated/*',
+  ],
 }
