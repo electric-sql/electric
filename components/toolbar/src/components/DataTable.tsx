@@ -34,8 +34,8 @@ const getDataEditorTheme = (elem: Element | null): Partial<Theme> => {
     textHeader: textColor,
     textGroupHeader: textColor,
     textHeaderSelected: textColorLight,
-    bgCell: styleVar('--gray-5'),
-    bgCellMedium: styleVar('--gray-6'),
+    bgCell: styleVar('--gray-3'),
+    bgCellMedium: styleVar('--gray-4'),
 
     bgHeader: styleVar('--accent-4'),
     bgHeaderHovered: styleVar('--accent-5'),
