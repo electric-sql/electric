@@ -1,5 +1,9 @@
 #!/usr/bin/bash
 
+set -ex
+
+git status --porcelain
+
 for file in $(git status --porcelain | awk '{ print $2 }')
 do
   echo "::error file=$file,title=This generated file doesn't match the protobuf file::Please run \`make update_protobuf\` to update \`$file\` and commit the changes."
