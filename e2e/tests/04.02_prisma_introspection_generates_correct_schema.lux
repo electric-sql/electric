@@ -4,13 +4,19 @@
 [invoke setup]
 
 [newshell developer]
+    !docker ps
+    ?SH-PROMPT:
     !mkdir -p ../prisma_example/prisma/
     ?SH-PROMPT:
     !cp ../prisma_example/schema.prisma ../prisma_example/prisma/
     ?SH-PROMPT:
+    # long timeout -- this step was causing constant failures in CI see
+    # https://linear.app/electric-sql/issue/VAX-1840/flaky-e2e-test-0402
+    [timeout 60]
     !make docker-prisma ARGS='prisma_example_1 prisma db pull'
     ?The introspected database was empty
     ?SH-PROMPT:
+    [timeout]
 
 [global migration_version_1=20230504114018]
 
@@ -104,8 +110,12 @@
     ?SH-PROMPT:
     !cp ../prisma_example/schema.prisma ../prisma_example/prisma/
     ?SH-PROMPT:
+    # long timeout -- this step was causing constant failures in CI see
+    # https://linear.app/electric-sql/issue/VAX-1840/flaky-e2e-test-0402
+    [timeout 60]
     !make docker-prisma ARGS='prisma_example_1 prisma db pull'
     ?SH-PROMPT:
+    [timeout]
 
     # this exact comparison is too fussy
     #!cmp ../prisma_example/prisma/schema.prisma ../prisma_example/expected-schema.prisma || echo "error: schema files differ"
