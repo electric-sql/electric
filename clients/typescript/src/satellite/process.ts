@@ -261,6 +261,7 @@ export class SatelliteProcess implements Satellite {
       this.notifier.subscribeToPotentialDataChanges(this._throttledSnapshot)
 
     // Start polling to request a snapshot every `pollingInterval` ms.
+    clearInterval(this._pollingInterval)
     this._pollingInterval = setInterval(
       this._throttledSnapshot,
       this.opts.pollingInterval
