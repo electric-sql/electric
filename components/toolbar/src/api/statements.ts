@@ -53,12 +53,12 @@ export const getSqlDialect = async (
   }
   try {
     await adapter.query({
-      sql: `SELECT 1 FROM information_schema.tables;`,
+      sql: `SELECT 1 FROM pg_catalog.pg_class;`,
     })
     return 'postgres'
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (err: any) {
-    if (!err.message.includes('no such table: information_schema.tables')) {
+    if (!err.message.includes('no such table: pg_catalog.pg_class')) {
       throw err
     }
   }
