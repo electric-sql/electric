@@ -1,5 +1,6 @@
 import { Shape } from 'electric-sql/satellite'
 import { Row, Statement, ConnectivityState } from 'electric-sql/util'
+import { SqlDialect } from './statements'
 
 export type UnsubscribeFunction = () => void
 
@@ -7,12 +8,14 @@ export type DebugShape = Shape & { id: string }
 
 export interface TableColumn {
   name: string
-  type: 'NULL' | 'INTEGER' | 'REAL' | 'TEXT' | 'BLOB'
+  type: string
+  nullable: boolean
+  defaultVal: string
 }
 
 export interface DbTableInfo {
   name: string
-  sql: string
+  sql?: string
   columns: TableColumn[]
 }
 
@@ -30,6 +33,8 @@ export interface ToolbarInterface {
 
   resetDb(dbName: string): Promise<void>
   queryDb(dbName: string, statement: Statement): Promise<Row[]>
+
+  getDbDialect(name: string): Promise<SqlDialect>
 
   getDbTables(dbName: string): Promise<DbTableInfo[]>
   getElectricTables(dbName: string): Promise<DbTableInfo[]>

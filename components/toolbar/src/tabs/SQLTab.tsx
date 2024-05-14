@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Controlled as CodeMirrorControlled,
   UnControlled as CodeMirrorUnControlled,
@@ -7,13 +7,15 @@ import { ToolbarTabsProps } from '../tabs'
 import { Button, Callout, Flex, Grid, ScrollArea, Tabs } from '@radix-ui/themes'
 import { DataTable } from '../components/DataTable'
 
+const DEFAULT_SQLITE_STMT =
+  'SELECT name FROM sqlite_schema\n' + "WHERE type='table'\n" + 'ORDER BY name;'
+const DEFAULT_PG_STMT =
+  'SELECT table_name FROM information_schema.tables\n' +
+  "WHERE table_schema = 'public';"
+
 export default function SQLTab({ dbName, api }: ToolbarTabsProps): JSX.Element {
   const [history, setHistory] = useState('')
-  const [code, setCode] = useState(
-    'SELECT name FROM sqlite_schema\n' +
-      "WHERE type='table'\n" +
-      'ORDER BY name;',
-  )
+  const [code, setCode] = useState('')
   const [response, setResponse] = useState<Record<string, unknown>[] | string>(
     [],
   )
@@ -23,6 +25,21 @@ export default function SQLTab({ dbName, api }: ToolbarTabsProps): JSX.Element {
     () => (response.length > 0 ? Object.keys(response[0]) : []),
     [response],
   )
+
+  // set default statement
+  useEffect(() => {
+    api
+      .getDbDialect(dbName)
+      .then((dialect) =>
+        setCode((prevCode) =>
+          prevCode == ''
+            ? dialect === 'sqlite'
+              ? DEFAULT_SQLITE_STMT
+              : DEFAULT_PG_STMT
+            : prevCode,
+        ),
+      )
+  }, [dbName, api])
 
   const submitSQL = () => {
     setHistory(history + code + '\n\n')
