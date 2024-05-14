@@ -1,5 +1,16 @@
 # @electric-sql/debug-toolbar
 
+## 1.2.0
+
+### Minor Changes
+
+- e9f9221: Add support for Electric with postgres dialect (e.g. with PGLite)
+
+### Patch Changes
+
+- Updated dependencies [6080c9c]
+  - electric-sql@0.11.3
+
 ## 1.1.0
 
 ### Minor Changes
