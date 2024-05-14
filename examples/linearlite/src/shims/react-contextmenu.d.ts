@@ -1,5 +1,6 @@
 // Copied here from the unreleased master branch of github.com/firefox-devtools/react-contextmenu
 /* eslint @typescript-eslint/ban-types: 0 */
+/* eslint @typescript-eslint/no-explicit-any: 0 */
 
 declare module '@firefox-devtools/react-contextmenu' {
   import * as React from 'react'

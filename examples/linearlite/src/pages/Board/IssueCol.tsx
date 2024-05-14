@@ -99,7 +99,7 @@ const Row = memo(
   }: {
     data: Issue[]
     index: number
-    style: any
+    style?: React.CSSProperties
   }) => {
     const issue = issues[index]
     if (!issue) return null
@@ -120,4 +120,5 @@ const Row = memo(
   areEqual
 )
 
-export default memo(IssueCol)
+const IssueColMemo = memo(IssueCol)
+export default IssueColMemo

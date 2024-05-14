@@ -47,7 +47,10 @@ function IssueModal({ isOpen, onDismiss }: Props) {
     }
 
     if (project_id === undefined) {
-      showWarning('Please select a project before submitting', 'Project required')
+      showWarning(
+        'Please select a project before submitting',
+        'Project required'
+      )
       return
     }
 
@@ -183,7 +186,6 @@ function IssueModal({ isOpen, onDismiss }: Props) {
             </option>
           ))}
         </select>
-
       </div>
       {/* Footer */}
       <div className="flex items-center flex-shrink-0 px-4 pt-3">
@@ -204,4 +206,5 @@ function IssueModal({ isOpen, onDismiss }: Props) {
   )
 }
 
-export default memo(IssueModal)
+const IssueModalMemo = memo(IssueModal)
+export default IssueModalMemo

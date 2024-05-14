@@ -232,4 +232,6 @@ function LeftMenu() {
   )
 }
 
-export default memo(LeftMenu)
+const LeftMenuMemo = memo(LeftMenu)
+
+export default LeftMenuMemo

@@ -8,7 +8,7 @@ interface Props {
   id: string
   button: ReactNode
   className?: string
-  onSelect?: (item: any) => void
+  onSelect?: (item: string) => void
 }
 export default function StatusMenu({ id, button, className, onSelect }: Props) {
   const [keyword, setKeyword] = useState('')

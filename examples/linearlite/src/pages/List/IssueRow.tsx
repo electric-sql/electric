@@ -77,4 +77,6 @@ function IssueRow({ issue, style }: Props) {
   )
 }
 
-export default memo(IssueRow)
+const IssueRowMemo = memo(IssueRow)
+
+export default IssueRowMemo
