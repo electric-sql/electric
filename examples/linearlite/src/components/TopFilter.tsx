@@ -1,4 +1,4 @@
-import { ReactComponent as MenuIcon } from '../assets/icons/menu.svg'
+import MenuIcon from '../assets/icons/menu.svg?react'
 import { useState, useContext } from 'react'
 import { BsSortUp, BsPlus, BsX, BsSearch as SearchIcon } from 'react-icons/bs'
 import { useLiveQuery } from 'electric-sql/react'

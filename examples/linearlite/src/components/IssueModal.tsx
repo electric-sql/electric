@@ -5,8 +5,8 @@ import { useLiveQuery } from 'electric-sql/react'
 import { useElectric } from '../electric'
 
 import { BsChevronRight as ChevronRight } from 'react-icons/bs'
-import { ReactComponent as CloseIcon } from '../assets/icons/close.svg'
-import { ReactComponent as ElectricIcon } from '../assets/images/icon.inverse.svg'
+import CloseIcon from '../assets/icons/close.svg?react'
+import ElectricIcon from '../assets/images/icon.inverse.svg?react'
 
 import Modal from '../components/Modal'
 import Editor from '../components/editor/Editor'
