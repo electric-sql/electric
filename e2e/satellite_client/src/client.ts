@@ -1,6 +1,6 @@
-import fs from 'fs/promises'
 import pg from 'pg'
 import SQLiteDatabase from 'better-sqlite3'
+import type { Database as BetterSqliteDatabase } from 'electric-sql/node'
 import { ElectricConfig } from 'electric-sql'
 import { mockSecureAuthToken } from 'electric-sql/auth/secure'
 import type { Database } from 'electric-sql/node-postgres'
@@ -14,11 +14,14 @@ import { globalRegistry } from 'electric-sql/satellite'
 import { SatelliteErrorCode } from 'electric-sql/util'
 import { Shape } from 'electric-sql/satellite'
 import { pgBuilder, sqliteBuilder, QueryBuilder } from 'electric-sql/migrators/builder'
+import { DbSchema, ElectricClient } from 'electric-sql/client/model'
 
 setLogLevel('DEBUG')
 
 let dbName: string
-let electrify = electrifySqlite
+type DB = Database | BetterSqliteDatabase
+let electrify: <Schema extends DbSchema<any>>(db: DB, dbDescription: Schema, config: ElectricConfig) => Promise<ElectricClient<Schema>> =
+  <Schema extends DbSchema<any>>(db: DB, dbDescription: Schema, config: ElectricConfig) => electrifySqlite(db as BetterSqliteDatabase, dbDescription, config)
 let builder: QueryBuilder = sqliteBuilder
 
 async function makePgDatabase(): Promise<Database> {
@@ -35,11 +38,11 @@ async function makePgDatabase(): Promise<Database> {
   return client
 }
 
-export const make_db = async (name: string): Promise<any> => {
+export const make_db = async (name: string): Promise<DB> => {
   dbName = name
   console.log("DIALECT: " + process.env.DIALECT)
   if (process.env.DIALECT === 'Postgres') {
-    electrify = electrifyPg
+    electrify = <Schema extends DbSchema<any>>(db: DB, dbDescription: Schema, config: ElectricConfig) => electrifyPg(db as Database, dbDescription, config)
     builder = pgBuilder
     return makePgDatabase()
   }
@@ -48,7 +51,7 @@ export const make_db = async (name: string): Promise<any> => {
 }
 
 export const electrify_db = async (
-  db: any,
+  db: DB,
   host: string,
   port: number,
   migrations: any,
@@ -344,11 +347,11 @@ export const get_jsonb = async (electric: Electric, id: string) => {
   return res
 }
 
-export const write_json = async (electric: Electric, id: string, js: any, jsb: any) => {
+export const write_json = async (electric: Electric, id: string, _js: any, jsb: any) => {
   return electric.db.jsons.create({
     data: {
       id,
-      //js,
+      //_js,
       jsb,
     }
   })
