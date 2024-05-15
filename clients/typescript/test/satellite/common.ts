@@ -311,9 +311,14 @@ export const makeContext = async (
   await mkdir('.tmp', { recursive: true })
   const dbName = `.tmp/test-${randomValue()}.db`
   const db = new SqliteDatabase(dbName)
+  const stop = async () => {
+    if (!db.open) return
+    db.close()
+  }
   const adapter = new SqliteDatabaseAdapter(db)
   const migrator = new SqliteBundleMigrator(adapter, sqliteMigrations)
   makeContextInternal(t, dbName, adapter, migrator, namespace, options)
+  t.context.stop = stop
 }
 
 export const makePgContext = async (
@@ -337,7 +342,10 @@ export const makePgliteContext = async (
 ) => {
   const dbName = `test-${randomValue()}`
   const db = new PGlite()
-  const stop = () => db.close()
+  const stop = async () => {
+    if (db.closed) return
+    await db.close()
+  }
   const adapter = new PgliteDatabaseAdapter(db)
   const migrator = new PgBundleMigrator(adapter, pgMigrations)
   makeContextInternal(t, dbName, adapter, migrator, namespace, options)
@@ -380,8 +388,12 @@ export const mockElectricClient = async (
   return electric
 }
 
-export const clean = async (t: ExecutionContext<{ dbName: string }>) => {
-  const { dbName } = t.context
+export const cleanAndStopDb = async (
+  t: ExecutionContext<{ dbName: string; stop?: () => Promise<void> }>
+) => {
+  const { dbName, stop } = t.context
+
+  await stop?.()
 
   await removeFile(dbName, { force: true })
   await removeFile(`${dbName}-journal`, { force: true })
@@ -396,8 +408,7 @@ export const cleanAndStopSatellite = async (
 ) => {
   const { satellite } = t.context
   await satellite.stop()
-  await clean(t)
-  await t.context.stop?.()
+  await cleanAndStopDb(t)
 }
 
 export async function migrateDb(

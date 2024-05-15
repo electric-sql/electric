@@ -39,6 +39,7 @@ import {
   Uuid,
   DbRecord as DataRecord,
   ReplicatedRowTransformer,
+  ServerTransaction,
 } from '../util/types'
 import { SatelliteOpts } from './config'
 import { Client, Satellite } from './index'
@@ -155,6 +156,8 @@ export class SatelliteProcess implements Satellite {
   private _connectRetryHandler: ConnectRetryHandler
   private initializing?: Waiter
 
+  private _removeClientListeners?: () => void
+
   constructor(
     dbName: DbName,
     adapter: DatabaseAdapter,
@@ -191,8 +194,6 @@ export class SatelliteProcess implements Satellite {
     this.shapeRequestIdGenerator = this.subscriptionIdGenerator
 
     this._connectRetryHandler = connectRetryHandler
-
-    this.setClientListeners()
   }
 
   /**
@@ -211,6 +212,8 @@ export class SatelliteProcess implements Satellite {
     if (this.opts.debug) {
       await this.logDatabaseVersion()
     }
+
+    this.setClientListeners()
 
     await this.migrator.up()
 
@@ -251,6 +254,7 @@ export class SatelliteProcess implements Satellite {
       this.notifier.subscribeToPotentialDataChanges(this._throttledSnapshot)
 
     // Start polling to request a snapshot every `pollingInterval` ms.
+    clearInterval(this._pollingInterval)
     this._pollingInterval = setInterval(
       this._throttledSnapshot,
       this.opts.pollingInterval
@@ -314,17 +318,54 @@ export class SatelliteProcess implements Satellite {
     await this.adapter.runInTransaction(...stmtsWithTriggers)
   }
 
+  // Adds all the necessary listeners to the satellite client
+  // They can be cleared up by calling the function `_removeClientListeners`
   setClientListeners(): void {
-    this.client.subscribeToError(this._handleClientError.bind(this))
-    this.client.subscribeToRelations(this._updateRelations.bind(this))
-    this.client.subscribeToTransactions(this._applyTransaction.bind(this))
-    this.client.subscribeToAdditionalData(this._applyAdditionalData.bind(this))
-    this.client.subscribeToOutboundStarted(this._throttledSnapshot.bind(this))
+    // Remove any existing listeners
+    if (this._removeClientListeners) {
+      this._removeClientListeners?.()
+      this._removeClientListeners = undefined
+    }
 
-    this.client.subscribeToSubscriptionEvents(
-      this._handleSubscriptionData.bind(this),
+    const clientErrorCallback = this._handleClientError.bind(this)
+    this.client.subscribeToError(clientErrorCallback)
+
+    const clientRelationsCallback = this._handleClientRelations.bind(this)
+    this.client.subscribeToRelations(clientRelationsCallback)
+
+    const clientTransactionsCallback = this._handleClientTransactions.bind(this)
+    this.client.subscribeToTransactions(clientTransactionsCallback)
+
+    const clientAdditionalDataCallback =
+      this._handleClientAdditionalData.bind(this)
+    this.client.subscribeToAdditionalData(clientAdditionalDataCallback)
+
+    const clientOutboundStartedCallback =
+      this._handleClientOutboundStarted.bind(this)
+    this.client.subscribeToOutboundStarted(clientOutboundStartedCallback)
+
+    const clientSubscriptionDataCallback =
+      this._handleSubscriptionData.bind(this)
+    const clientSubscriptionErrorCallback =
       this._handleSubscriptionError.bind(this)
+    this.client.subscribeToSubscriptionEvents(
+      clientSubscriptionDataCallback,
+      clientSubscriptionErrorCallback
     )
+
+    // Keep a way to remove the client listeners
+    this._removeClientListeners = () => {
+      this.client.unsubscribeToError(clientErrorCallback)
+      this.client.unsubscribeToRelations(clientRelationsCallback)
+      this.client.unsubscribeToTransactions(clientTransactionsCallback)
+      this.client.unsubscribeToAdditionalData(clientAdditionalDataCallback)
+      this.client.unsubscribeToOutboundStarted(clientOutboundStartedCallback)
+
+      this.client.unsubscribeToSubscriptionEvents(
+        clientSubscriptionDataCallback,
+        clientSubscriptionErrorCallback
+      )
+    }
   }
 
   // Unsubscribe from data changes and stop polling
@@ -333,19 +374,9 @@ export class SatelliteProcess implements Satellite {
   }
 
   private async _stop(shutdown?: boolean): Promise<void> {
-    // Stop snapshotting and polling for changes.
-    this._throttledSnapshot.cancel()
-
-    // Ensure that no snapshot is left running in the background
-    // by acquiring the mutex and releasing it immediately.
-    const releaseMutex = await this.snapshotMutex.acquire()
-    releaseMutex()
-
-    if (this._pollingInterval !== undefined) {
-      clearInterval(this._pollingInterval)
-
-      this._pollingInterval = undefined
-    }
+    // Stop snapshot polling
+    clearInterval(this._pollingInterval)
+    this._pollingInterval = undefined
 
     // Unsubscribe all listeners and remove them
     const unsubscribers = [
@@ -362,11 +393,28 @@ export class SatelliteProcess implements Satellite {
       }
     })
 
+    this._removeClientListeners?.()
+    this._removeClientListeners = undefined
+
+    // Cancel the snapshot throttle
+    this._throttledSnapshot.cancel()
+
+    // Make sure no snapshot is running after we stop the process, otherwise we might be trying to
+    // interact with a closed database connection
+    await this._waitForActiveSnapshots()
+
     this.disconnect()
 
     if (shutdown) {
       this.client.shutdown()
     }
+  }
+
+  // Ensure that no snapshot is left running in the background
+  // by acquiring the mutex and releasing it immediately.
+  async _waitForActiveSnapshots(): Promise<void> {
+    const releaseMutex = await this.snapshotMutex.acquire()
+    releaseMutex()
   }
 
   async subscribe(shapeDefinitions: Shape[]): Promise<ShapeSubscription> {
@@ -672,6 +720,22 @@ export class SatelliteProcess implements Satellite {
       delete this.subscriptionNotifiers[subscriptionId] // GC the notifiers for this subscription ID
       onFailure(resettingError ?? satelliteError)
     }
+  }
+
+  _handleClientRelations(relation: Relation): void {
+    this._updateRelations(relation)
+  }
+
+  async _handleClientTransactions(tx: ServerTransaction) {
+    await this._applyTransaction(tx)
+  }
+
+  async _handleClientAdditionalData(data: AdditionalData) {
+    await this._applyAdditionalData(data)
+  }
+
+  async _handleClientOutboundStarted() {
+    await this._throttledSnapshot()
   }
 
   // handles async client errors: can be a socket error or a server error message
