@@ -102,6 +102,7 @@ function ProjectModal({ isOpen, onDismiss }: Props) {
             placeholder="Project title"
             value={title}
             ref={ref}
+            maxLength={30}
             onChange={(e) => setTitle(e.target.value)}
           />
         </div>
