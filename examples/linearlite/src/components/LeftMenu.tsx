@@ -38,18 +38,6 @@ function LeftMenu() {
     })
   )
 
-  const syncProject = async (projectId: string) => {
-    await db.issue.sync({
-      where: {
-        project_id: projectId,
-      },
-      include: {
-        project: true,
-        comment: true,
-      },
-    })
-  }
-
   const classes = classnames(
     'absolute z-40 lg:static inset-0 transform duration-300 lg:relative lg:translate-x-0 bg-white flex flex-col flex-shrink-0 w-56 font-sans text-sm text-gray-700 border-r border-gray-100 lg:shadow-none justify-items-start',
     {
@@ -165,7 +153,7 @@ function LeftMenu() {
             <ItemGroup
               title={project.name}
               key={project.id}
-              onSync={() => syncProject(project.id)}
+              projectId={project.id}
             >
               <Link
                 to={`/${project.id}`}

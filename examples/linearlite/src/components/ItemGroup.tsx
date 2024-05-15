@@ -1,17 +1,14 @@
-import {
-  BsFillCaretDownFill,
-  BsFillCaretRightFill,
-  BsCloudArrowDownFill,
-} from 'react-icons/bs'
+import { BsFillCaretDownFill, BsFillCaretRightFill } from 'react-icons/bs'
 import * as React from 'react'
 import { useState } from 'react'
+import ProjectSyncToggle from './ProjectSyncToggle'
 
 interface Props {
   title: string
-  onSync?: () => void
+  projectId?: string
   children: React.ReactNode
 }
-function ItemGroup({ title, children, onSync }: Props) {
+function ItemGroup({ title, children, projectId }: Props) {
   const [showItems, setShowItems] = useState(true)
 
   const Icon = showItems ? BsFillCaretDownFill : BsFillCaretRightFill
@@ -25,13 +22,10 @@ function ItemGroup({ title, children, onSync }: Props) {
           <Icon className="w-3 min-w-3 h-3 mr-2 -ml-1" />
           <div className="truncate">{title}</div>
         </button>
-        {onSync && (
-          <button
-            className="px-2 relative min-w-10 w-10 mt-0.5 h-7 flex items-center rounded hover:bg-gray-100 cursor-pointer justify-center"
-            onClick={onSync}
-          >
-            <BsCloudArrowDownFill />
-          </button>
+        {projectId && (
+          <div className="px-2 relative min-w-10 w-10 mt-0.5 h-7">
+            <ProjectSyncToggle projectId={projectId} />
+          </div>
         )}
       </div>
       {showItems && children}
