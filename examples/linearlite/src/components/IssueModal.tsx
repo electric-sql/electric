@@ -175,13 +175,17 @@ function IssueModal({ isOpen, onDismiss }: Props) {
           }}
         />
         <select
-          className="inline-flex items-center text-xs h-6 ms-2 py-0 px-2 pe-8 text-gray-500 bg-gray-200 border-none rounded hover:bg-gray-100 hover:text-gray-700"
+          className="inline-flex items-center text-xs h-6 ms-2 py-0 px-2 pe-8 text-gray-500 bg-gray-200 border-none rounded hover:bg-gray-100 hover:text-gray-700 truncate max-w-36"
           value={project_id}
           onChange={(e) => setProjectId(e.target.value)}
         >
           <option value="">Select project</option>
           {projects?.map((project) => (
-            <option key={project.id} value={project.id}>
+            <option
+              key={project.id}
+              value={project.id}
+              className="truncate max-w-3"
+            >
               {project.name}
             </option>
           ))}

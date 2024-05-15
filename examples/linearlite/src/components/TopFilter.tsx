@@ -75,9 +75,11 @@ export default function TopFilter({
             <MenuIcon className="w-3.5 text-gray-500 hover:text-gray-800" />
           </button>
 
-          <div className="p-1 font-semibold me-1">{title}</div>
+          <div className="p-1 font-semibold me-1 truncate max-w-44">
+            {title}
+          </div>
           {/* <span>{filteredIssuesCount}</span> */}
-          <span>
+          <span className="whitespace-nowrap">
             {filteredIssuesCount}
             {filteredIssuesCount !== totalIssuesCount
               ? ` of ${totalIssuesCount}`
