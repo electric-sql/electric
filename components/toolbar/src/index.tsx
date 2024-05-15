@@ -10,7 +10,7 @@ import 'codemirror/mode/sql/sql'
 import './index.css'
 
 import logo from './logo.svg'
-import { Theme, Button, Box, Flex, Select, Text } from '@radix-ui/themes'
+import { Theme, Button, Box, Flex, Select, Text, Card } from '@radix-ui/themes'
 
 import ToolbarTabs from './tabs'
 import { ToolbarInterface } from './api/interface'
@@ -31,6 +31,7 @@ export type ToolbarProps = {
 
 function ElectricToolbar({ api }: ToolbarProps) {
   const [hidden, setHidden] = useState(true)
+  const [appearance] = useState<'light' | 'dark'>('dark')
   const [dbNames, setDbNames] = useState<Array<string>>([])
   const [dbName, setDbName] = useState('')
 
@@ -45,41 +46,52 @@ function ElectricToolbar({ api }: ToolbarProps) {
   }, [])
 
   return (
-    <Theme asChild appearance="dark" accentColor="teal" grayColor="sage">
+    <Theme
+      asChild
+      appearance={appearance}
+      accentColor="teal"
+      grayColor="sage"
+      panelBackground="solid"
+    >
       <Box
+        id="electric-core"
         width={hidden ? '400px' : '100%'}
         height="fit-content"
         minHeight="auto"
         p="2"
-        m={hidden ? '2' : '0'}
         style={{
+          backgroundColor: 'transparent',
           float: 'right',
-          pointerEvents: 'auto',
           boxSizing: 'border-box',
         }}
       >
-        <Flex justify="between" flexGrow="1">
-          <Flex align="center" gap="1">
-            <img src={logo} width="30px" height="30px" alt="logo" />
-            <Text>ElectricSQL Debug Tools</Text>
+        <Card style={{ pointerEvents: 'auto' }}>
+          <Flex justify="between" flexGrow="1">
+            <Flex align="center" gap="1">
+              <img src={logo} width="30px" height="30px" alt="logo" />
+              <Text>ElectricSQL Debug Tools</Text>
+            </Flex>
+            <Flex gap="2">
+              {!hidden && (
+                <Select.Root
+                  defaultValue={dbNames[0]}
+                  onValueChange={setDbName}
+                >
+                  <Select.Trigger />
+                  <Select.Content container={getToolbarElem()}>
+                    {dbNames.map((name) => (
+                      <Select.Item key={name} value={name}>
+                        {name}
+                      </Select.Item>
+                    ))}
+                  </Select.Content>
+                </Select.Root>
+              )}
+              <Button onClick={onToggle}>{hidden ? 'SHOW' : 'HIDE'}</Button>
+            </Flex>
           </Flex>
-          <Flex gap="2">
-            {!hidden && (
-              <Select.Root defaultValue={dbNames[0]} onValueChange={setDbName}>
-                <Select.Trigger />
-                <Select.Content container={getToolbarElem()}>
-                  {dbNames.map((name) => (
-                    <Select.Item key={name} value={name}>
-                      {name}
-                    </Select.Item>
-                  ))}
-                </Select.Content>
-              </Select.Root>
-            )}
-            <Button onClick={onToggle}>{hidden ? 'SHOW' : 'HIDE'}</Button>
-          </Flex>
-        </Flex>
-        {!hidden && <ToolbarTabs dbName={dbName} api={api} />}
+          {!hidden && <ToolbarTabs dbName={dbName} api={api} />}
+        </Card>
       </Box>
     </Theme>
   )
