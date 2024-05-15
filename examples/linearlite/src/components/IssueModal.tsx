@@ -140,7 +140,7 @@ function IssueModal({ isOpen, onDismiss }: Props) {
             }}
           />
           <input
-            className="w-full ml-1.5 text-lg font-semibold placeholder-gray-400 border-none h-7 focus:border-none focus:outline-none focus:ring-0"
+            className="w-full p-1 ml-1 text-lg font-semibold placeholder-gray-400 border-none h-7 focus:border-none focus:outline-none focus:ring-0"
             placeholder="Issue title"
             value={title}
             ref={ref}

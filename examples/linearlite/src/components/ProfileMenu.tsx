@@ -5,12 +5,12 @@ import { useConnectivityState } from 'electric-sql/react'
 import { useClickOutside } from '../hooks/useClickOutside'
 import { useElectric } from '../electric'
 import Toggle from './Toggle'
-import { v4 as uuidv4 } from 'uuid'
 
 interface Props {
   isOpen: boolean
   onDismiss?: () => void
   setShowAboutModal?: (show: boolean) => void
+  setShowProjectModal?: (show: boolean) => void
   className?: string
 }
 export default function ProfileMenu({
@@ -18,9 +18,9 @@ export default function ProfileMenu({
   className,
   onDismiss,
   setShowAboutModal,
+  setShowProjectModal,
 }: Props) {
   const electric = useElectric()!
-  const db = electric.db
   const connectivityState = useConnectivityState()
   const classes = classnames(
     'select-none w-53 shadow-modal z-50 flex flex-col py-1 bg-white font-normal rounded text-gray-800',
@@ -47,17 +47,6 @@ export default function ProfileMenu({
     }
   })
 
-  const newProject = () => {
-    const name = prompt('Enter project name')
-    if (!name) return
-    db.project.create({
-      data: {
-        id: uuidv4(),
-        name: name,
-      },
-    })
-  }
-
   return (
     <div ref={ref}>
       <Transition
@@ -72,7 +61,10 @@ export default function ProfileMenu({
         <div className={classes}>
           <button
             className="flex items-center h-8 px-3 hover:bg-gray-100"
-            onClick={newProject}
+            onClick={() => {
+              setShowProjectModal?.(true)
+              onDismiss?.()
+            }}
           >
             New Project
           </button>
