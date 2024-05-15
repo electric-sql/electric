@@ -28,7 +28,7 @@ jobs:
         uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-          version: "24.4"
+          version: "26.1"
       - uses: pnpm/action-setup@v2
         with:
           version: 8

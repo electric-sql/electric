@@ -1,3 +1,3 @@
 elixir 1.16.1-otp-25
 erlang 25.3.2.8
-protoc 24.4
+protoc 26.1
