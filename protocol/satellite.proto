@@ -659,5 +659,6 @@ message SatShapeDataBegin {
 message SatShapeDataEnd {
 }
 
-// update to run ci tasks
+// update `touch:` value to force run relevant ci tasks via a change without
+// substantive changes to the protocol
 // touch: 2024-05-15
