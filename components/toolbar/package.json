@@ -54,6 +54,7 @@
     "electric-sql": "workspace:*"
   },
   "files": [
-    "dist"
+    "dist",
+    "!*.map"
   ]
 }
