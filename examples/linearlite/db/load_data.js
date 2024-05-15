@@ -9,7 +9,7 @@ import { generateKeyBetween } from 'fractional-indexing'
 /*
 Call with:
 
-ISSUES_TO_LOAD=100 PROJECT_ID=1 PROJECT_NAME='Name' npm run reset
+ISSUES_TO_LOAD=100 npm run reset
 */
 
 const dirname = url.fileURLToPath(new URL('.', import.meta.url))
@@ -18,14 +18,16 @@ const DATABASE_URL = process.env.DATABASE_URL || ELECTRIC_DATABASE_URL
 console.log('DATABASE_URL', DATABASE_URL)
 const DATA_DIR = process.env.DATA_DIR || path.resolve(dirname, 'data')
 const ISSUES_TO_LOAD = process.env.ISSUES_TO_LOAD || 112
-const PROJECT_ID = process.env.PROJECT_ID ?? uuidv4()
-const PROJECT_NAME = process.env.PROJECT_NAME ?? 'React'
 
 console.info(`Connecting to Postgres at ${DATABASE_URL}`)
 const db = createPool(DATABASE_URL)
 
 const issues = JSON.parse(
   fs.readFileSync(path.join(DATA_DIR, 'issues.json'), 'utf8')
+)
+
+const projects = JSON.parse(
+  fs.readFileSync(path.join(DATA_DIR, 'projects.json'), 'utf8')
 )
 
 async function makeInsertQuery(db, table, data) {
@@ -58,15 +60,14 @@ async function importComment(db, comment) {
   return await makeInsertQuery(db, 'comment', comment)
 }
 
+function getRandomProjectId() {
+  return projects[Math.floor(Math.random() * projects.length)].id
+}
+
 // Create the project if it doesn't exist.
-upsertProject(db, {
-  id: PROJECT_ID,
-  name: PROJECT_NAME,
-  description: 'React-related work',
-  created: new Date(),
-  modified: new Date(),
-  kanbanorder: generateKeyBetween(),
-})
+for (const project of projects) {
+  upsertProject(db, project)
+}
 
 let commentCount = 0
 const issueToLoad = Math.min(ISSUES_TO_LOAD, issues.length)
@@ -81,7 +82,7 @@ for (let i = 0; i < issueToLoad; i += batchSize) {
       await importIssue(db, {
         ...issue,
         id: id,
-        project_id: PROJECT_ID,
+        project_id: getRandomProjectId(),
       })
       for (const comment of issue.comments) {
         commentCount++
