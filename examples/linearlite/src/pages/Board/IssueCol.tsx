@@ -7,7 +7,7 @@ import {
   Draggable,
   DraggableProvided,
   DraggableStateSnapshot,
-} from 'react-beautiful-dnd'
+} from '@hello-pangea/dnd'
 import { FixedSizeList as List, areEqual } from 'react-window'
 import AutoSizer from 'react-virtualized-auto-sizer'
 import { Issue } from '../../electric'
@@ -69,7 +69,9 @@ function IssueCol({ title, status, issues = [] }: Props) {
               <AutoSizer>
                 {({ height, width }) => (
                   <List
-                    height={height}
+                    // autosizer not dealing well with fractional sizes
+                    // https://github.com/bvaughn/react-virtualized/issues/1287
+                    height={height - 1}
                     itemCount={itemCount}
                     itemSize={itemHeight + itemSpacing}
                     width={width}
@@ -77,7 +79,7 @@ function IssueCol({ title, status, issues = [] }: Props) {
                     itemData={issues}
                     className="w-full border-gray-200 pt-0.5"
                     // ref={provided.innerRef}
-                    // {...provided.droppableProps}
+                    {...droppableProvided.droppableProps}
                   >
                     {Row}
                   </List>
