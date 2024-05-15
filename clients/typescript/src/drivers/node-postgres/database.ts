@@ -64,10 +64,6 @@ export async function createEmbeddedPostgres(
   // because it uniquely identifies the DB
   return {
     db,
-    stop: () => {
-      if (stopPromise) return stopPromise
-      stopPromise = pg.stop()
-      return stopPromise
-    },
+    stop: () => (stopPromise ??= pg.stop()),
   }
 }

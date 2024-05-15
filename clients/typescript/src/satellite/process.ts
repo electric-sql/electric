@@ -375,11 +375,8 @@ export class SatelliteProcess implements Satellite {
 
   private async _stop(shutdown?: boolean): Promise<void> {
     // Stop snapshot polling
-    if (this._pollingInterval !== undefined) {
-      clearInterval(this._pollingInterval)
-
-      this._pollingInterval = undefined
-    }
+    clearInterval(this._pollingInterval)
+    this._pollingInterval = undefined
 
     // Unsubscribe all listeners and remove them
     const unsubscribers = [
