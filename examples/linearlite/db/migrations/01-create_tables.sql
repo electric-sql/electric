@@ -2,6 +2,10 @@
 CREATE TABLE IF NOT EXISTS "project" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
+    "description" TEXT NOT NULL,
+    "modified" TIMESTAMPTZ NOT NULL,
+    "created" TIMESTAMPTZ NOT NULL,
+    "kanbanorder" TEXT NOT NULL,
     CONSTRAINT "project_pkey" PRIMARY KEY ("id")
 );
 

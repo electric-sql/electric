@@ -15,6 +15,7 @@ import { Link } from 'react-router-dom'
 import { useElectric } from '../electric'
 import Avatar from './Avatar'
 import AboutModal from './AboutModal'
+import ProjectModal from './ProjectModal'
 import IssueModal from './IssueModal'
 import ItemGroup from './ItemGroup'
 import ProfileMenu from './ProfileMenu'
@@ -23,6 +24,7 @@ function LeftMenu() {
   const ref = useRef<HTMLDivElement>() as RefObject<HTMLDivElement>
   const [showProfileMenu, setShowProfileMenu] = useState(false)
   const [showAboutModal, setShowAboutModal] = useState(false)
+  const [showProjectModal, setShowProjectModal] = useState(false)
   const [showIssueModal, setShowIssueModal] = useState(false)
   const { showMenu, setShowMenu } = useContext(MenuContext)!
   const { status } = useConnectivityState()
@@ -31,7 +33,7 @@ function LeftMenu() {
   const { results: projects } = useLiveQuery(
     db.project.liveMany({
       orderBy: {
-        name: 'asc',
+        kanbanorder: 'asc',
       },
     })
   )
@@ -101,6 +103,7 @@ function LeftMenu() {
                 isOpen={showProfileMenu}
                 onDismiss={() => setShowProfileMenu(false)}
                 setShowAboutModal={setShowAboutModal}
+                setShowProjectModal={setShowProjectModal}
                 className="absolute top-10"
               />
             </div>
@@ -220,6 +223,12 @@ function LeftMenu() {
         <AboutModal
           isOpen={showAboutModal}
           onDismiss={() => setShowAboutModal(false)}
+        />
+      }
+      {
+        <ProjectModal
+          isOpen={showProjectModal}
+          onDismiss={() => setShowProjectModal(false)}
         />
       }
       {

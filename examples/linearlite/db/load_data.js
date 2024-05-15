@@ -4,6 +4,7 @@ import path from 'path'
 import * as url from 'url'
 import { getConfig } from 'electric-sql/cli'
 import { v4 as uuidv4 } from 'uuid'
+import { generateKeyBetween } from 'fractional-indexing'
 
 /*
 Call with:
@@ -17,7 +18,7 @@ const DATABASE_URL = process.env.DATABASE_URL || ELECTRIC_DATABASE_URL
 console.log('DATABASE_URL', DATABASE_URL)
 const DATA_DIR = process.env.DATA_DIR || path.resolve(dirname, 'data')
 const ISSUES_TO_LOAD = process.env.ISSUES_TO_LOAD || 112
-const PROJECT_ID = process.env.PROJECT_ID ?? '1'
+const PROJECT_ID = process.env.PROJECT_ID ?? uuidv4()
 const PROJECT_NAME = process.env.PROJECT_NAME ?? 'React'
 
 console.info(`Connecting to Postgres at ${DATABASE_URL}`)
@@ -61,6 +62,10 @@ async function importComment(db, comment) {
 upsertProject(db, {
   id: PROJECT_ID,
   name: PROJECT_NAME,
+  description: 'React-related work',
+  created: new Date(),
+  modified: new Date(),
+  kanbanorder: generateKeyBetween(),
 })
 
 let commentCount = 0
