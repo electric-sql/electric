@@ -181,7 +181,7 @@ export class SatelliteProcess implements Satellite {
       this._garbageCollectShapeHandler.bind(this)
     )
     this._throttledSnapshot = throttle(
-      this._mutexSnapshot.bind(this),
+      this._onSnapshotThrottleTick.bind(this),
       opts.minSnapshotWindow,
       {
         leading: true,
@@ -194,6 +194,13 @@ export class SatelliteProcess implements Satellite {
     this.shapeRequestIdGenerator = this.subscriptionIdGenerator
 
     this._connectRetryHandler = connectRetryHandler
+  }
+
+  _onSnapshotThrottleTick() {
+    if (this.snapshotMutex.isLocked()) {
+      return
+    }
+    return this._mutexSnapshot()
   }
 
   /**

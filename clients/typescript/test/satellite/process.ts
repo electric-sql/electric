@@ -2589,4 +2589,36 @@ export const processTests = (test: TestFn<ContextType>) => {
 
     t.pass()
   })
+
+  test("don't take the snapshot mutex when polling if one is running already", async (t) => {
+    const { runMigrations, satellite, authState, token, opts } = t.context
+
+    await runMigrations()
+
+    // Replace the snapshot function to simulate a slow snapshot
+    satellite._performSnapshot = async () => {
+      await sleepAsync(2000)
+      return new Date()
+    }
+
+    const conn = await startSatellite(satellite, authState, token)
+    await conn.connectionPromise
+
+    const startMs = new Date().getTime()
+    // Let the process poll multiple times
+    await sleepAsync(opts.pollingInterval * 3)
+
+    await satellite.stop()
+    const endMs = new Date().getTime()
+    const ellapsedMs = endMs - startMs
+
+    // Shouldn't take more than 2 + 1 second. If snapshots were added to the queue,
+    // it would be much longer, because while a snapshot is running, the poll would
+    // be scheduling new ones
+    t.assert(ellapsedMs < 3000)
+
+    await cleanAndStopDb(t)
+
+    t.pass()
+  })
 }
