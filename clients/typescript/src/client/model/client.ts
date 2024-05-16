@@ -111,7 +111,7 @@ export class ElectricClient<
     // Expose the Shape Sync API without additional properties
     this.sync = {
       syncStatus: this.satellite.syncStatus.bind(this.satellite),
-      unsubscribe: this.satellite.unsubscribe.bind(this.satellite)
+      unsubscribe: this.satellite.unsubscribe.bind(this.satellite),
     }
   }
 

@@ -358,7 +358,7 @@ export class ShapeManager {
   }
 
   public getServerID(shapes: Shape[]): string[] {
-    const shapeHash = hash(shapes, {unorderedArrays: true})
+    const shapeHash = hash(shapes, { unorderedArrays: true })
     const fullKey = makeFullKey(shapeHash, shapeHash)
     const serverId = this.knownSubscriptions[fullKey]?.serverId
     return serverId ? [serverId] : []
