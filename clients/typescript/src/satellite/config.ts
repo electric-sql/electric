@@ -14,6 +14,8 @@ export interface SatelliteOpts {
   triggersTable: QualifiedTablename
   /** The database table that contains dependency tracking information */
   shadowTable: QualifiedTablename
+  /** The database table that holds information about established subscriptions */
+  subscriptionsTable: QualifiedTablename
   /** Polls the database for changes every `pollingInterval` milliseconds. */
   pollingInterval: number
   /** Throttle snapshotting to once per `minSnapshotWindow` milliseconds. */
@@ -39,6 +41,7 @@ export const _electric_meta = '_electric_meta'
 export const _electric_migrations = '_electric_migrations'
 export const _electric_trigger_settings = '_electric_trigger_settings'
 export const _electric_shadow = '_electric_shadow'
+export const _electric_subscriptions = '_electric_subscriptions'
 
 export const satelliteDefaults: (namespace: string) => SatelliteOpts = (
   namespace: string
@@ -52,6 +55,10 @@ export const satelliteDefaults: (namespace: string) => SatelliteOpts = (
       _electric_trigger_settings
     ),
     shadowTable: new QualifiedTablename(namespace, _electric_shadow),
+    subscriptionsTable: new QualifiedTablename(
+      namespace,
+      _electric_subscriptions
+    ),
     pollingInterval: 2000,
     minSnapshotWindow: 40,
     clearOnBehindWindow: true,

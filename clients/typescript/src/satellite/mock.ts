@@ -62,6 +62,7 @@ import {
 import { ShapeSubscription } from './process'
 import { DbSchema } from '../client/model/schema'
 import { getAllTablesForShape } from './shapes'
+import { SyncStatus } from '../client/model/shapes'
 
 export const MOCK_BEHIND_WINDOW_LSN = 42
 export const MOCK_INTERNAL_ERROR = 27
@@ -93,14 +94,18 @@ export class MockSatelliteProcess implements Satellite {
     this.connectivityState = { status: 'disconnected' }
   }
 
+  syncStatus(_key: string): SyncStatus {
+    return undefined
+  }
+
   subscribe(_shapeDefinitions: Shape[]): Promise<ShapeSubscription> {
     return Promise.resolve({
-      id: 'test',
+      key: 'test',
       synced: Promise.resolve(),
     })
   }
 
-  unsubscribe(_shapeUuid: string[]): Promise<void> {
+  unsubscribe(_shapeUuid: any): Promise<void> {
     throw new Error('Method not implemented.')
   }
 
@@ -219,6 +224,7 @@ export class MockSatelliteClient
   goneBatches: Record<string, DataGone[]> = {}
 
   deliverFirst = false
+  doSkipNextEmit = false
 
   private startReplicationDelayMs: number | null = null
 
@@ -258,6 +264,10 @@ export class MockSatelliteClient
     this.deliverFirst = true
   }
 
+  skipNextEmit() {
+    this.doSkipNextEmit = true
+  }
+
   subscribe(
     subscriptionId: string,
     shapes: ShapeRequest[]
@@ -273,8 +283,7 @@ export class MockSatelliteClient
             subscriptionId,
             error: new SatelliteError(SatelliteErrorCode.TABLE_NOT_FOUND),
           })
-        }
-        if (tablename === 'another' || tablename === 'User') {
+        } else if (tablename === 'another' || tablename === 'User') {
           return new Promise((resolve) => {
             this.sendErrorAfterTimeout(subscriptionId, 1)
             resolve({
@@ -320,7 +329,8 @@ export class MockSatelliteClient
         setTimeout(resolveProm, 1)
       } else {
         // Otherwise, we resolve the promise before delivering the subscription.
-        setTimeout(emit, 1)
+        if (!this.doSkipNextEmit) setTimeout(emit, 1)
+        else this.doSkipNextEmit = false
         resolveProm()
       }
     })

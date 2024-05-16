@@ -1,5 +1,4 @@
 import throttle from 'lodash.throttle'
-import uniqWith from 'lodash.uniqwith'
 
 import {
   SatOpMigrate_Type,
@@ -15,7 +14,7 @@ import {
   Notifier,
   UnsubscribeFunction,
 } from '../notifiers/index'
-import { Waiter, emptyPromise, getWaiter } from '../util/common'
+import { Waiter, getWaiter } from '../util/common'
 import { base64, bytesToNumber } from '../util/encoders'
 import { QualifiedTablename } from '../util/tablename'
 import {
@@ -62,13 +61,9 @@ import { Mutex } from 'async-mutex'
 import Log from 'loglevel'
 import { generateTableTriggers } from '../migrators/triggers'
 import { mergeEntries } from './merge'
-import { SubscriptionsManager, getAllTablesForShape } from './shapes'
-import { InMemorySubscriptionsManager } from './shapes/manager'
 import {
   Shape,
   InitialDataChange,
-  ShapeDefinition,
-  ShapeRequest,
   SubscribeResponse,
   SubscriptionData,
 } from './shapes/types'
@@ -81,13 +76,15 @@ import { InvalidArgumentError } from '../client/validation/errors/invalidArgumen
 import Long from 'long'
 import { QueryBuilder } from '../migrators/query-builder'
 import groupBy from 'lodash.groupby'
+import { ShapeManager } from './shapes/shapeManager'
+import { SyncStatus } from '../client/model/shapes'
 
 type ChangeAccumulator = {
   [key: string]: Change
 }
 
 export type ShapeSubscription = {
-  id: string
+  key: string
   synced: Promise<void>
 }
 
@@ -142,11 +139,8 @@ export class SatelliteProcess implements Satellite {
 
   relations: RelationsCache
 
-  previousShapeSubscriptions: Shape[]
-  subscriptions: SubscriptionsManager
-  subscriptionNotifiers: Record<string, ReturnType<typeof emptyPromise<void>>>
-  subscriptionIdGenerator: (...args: any) => string
-  shapeRequestIdGenerator: (...args: any) => string
+  previousShapeSubscriptions: { keY: string; shapes: Shape[] }[]
+  subscriptionManager: ShapeManager
 
   /**
    * To optimize inserting a lot of data when the subscription data comes, we need to do
@@ -182,9 +176,8 @@ export class SatelliteProcess implements Satellite {
     this.relations = {}
 
     this.previousShapeSubscriptions = []
-    this.subscriptions = new InMemorySubscriptionsManager(
-      this._garbageCollectShapeHandler.bind(this)
-    )
+    this.subscriptionManager = new ShapeManager()
+
     this._throttledSnapshot = throttle(
       this._mutexSnapshot.bind(this),
       opts.minSnapshotWindow,
@@ -193,10 +186,6 @@ export class SatelliteProcess implements Satellite {
         trailing: true,
       }
     )
-    this.subscriptionNotifiers = {}
-
-    this.subscriptionIdGenerator = () => genUUID()
-    this.shapeRequestIdGenerator = this.subscriptionIdGenerator
 
     this._connectRetryHandler = connectRetryHandler
   }
@@ -282,7 +271,8 @@ export class SatelliteProcess implements Satellite {
 
     const subscriptionsState = await this._getMeta('subscriptions')
     if (subscriptionsState) {
-      this.subscriptions.setState(subscriptionsState)
+      // this.subscriptions.setState(subscriptionsState)
+      this.subscriptionManager.initialize(subscriptionsState)
     }
   }
 
@@ -297,30 +287,6 @@ export class SatelliteProcess implements Satellite {
 
   _setAuthState(authState: AuthState): void {
     this._authState = authState
-  }
-
-  async _garbageCollectShapeHandler(
-    shapeDefs: ShapeDefinition[]
-  ): Promise<void> {
-    const namespace = this.builder.defaultNamespace
-    const allTables = shapeDefs
-      .map((def: ShapeDefinition) => def.definition)
-      .flatMap((x) => getAllTablesForShape(x, namespace))
-    const tables = uniqWith(allTables, (a, b) => a.isEqual(b))
-
-    // TODO: table and schema warrant escaping here too, but they aren't in the triggers table.
-    const deleteStmts = tables.map((x) => ({
-      sql: `DELETE FROM ${x}`,
-    }))
-
-    const stmtsWithTriggers = [
-      { sql: this.builder.deferOrDisableFKsForTx },
-      ...this._disableTriggers(tables),
-      ...deleteStmts,
-      ...this._enableTriggers(tables),
-    ]
-
-    await this.adapter.runInTransaction(...stmtsWithTriggers)
   }
 
   // Adds all the necessary listeners to the satellite client
@@ -426,116 +392,125 @@ export class SatelliteProcess implements Satellite {
     releaseMutex()
   }
 
-  async subscribe(shapeDefinitions: Shape[]): Promise<ShapeSubscription> {
+  /** Get information about a requested subscription by it's key */
+  public syncStatus(key: string): SyncStatus {
+    return this.subscriptionManager.status(key)
+  }
+
+  /**
+   * Subscribe to a set of shapes, so that server data can get onto the client.
+   *
+   * A set of shapes can be "named" using a key. Any subsequent calls to `subscribe`
+   * using this key will exchange the subscription: a new one will be subscribed, and
+   * then the old one will be unsubscribed.
+   *
+   * If the `key` is not provided, it will instead be generated. Un-keyed subscriptions
+   * are deduplicated: multiple `subscribe` calls with exactly same shapes will result in
+   * only one subscription, and will even return the same key.
+   */
+  async subscribe(
+    shapeDefinitions: Shape[],
+    key?: string
+  ): Promise<ShapeSubscription> {
     // Await for client to be ready before doing anything else
     await this.initializing?.waitOn()
 
-    // First, we want to check if we already have either fulfilled or fulfilling subscriptions with exactly the same definitions
-    const existingSubscription =
-      this.subscriptions.getDuplicatingSubscription(shapeDefinitions)
-    if (existingSubscription !== null && 'inFlight' in existingSubscription) {
-      return {
-        id: existingSubscription['inFlight'],
-        synced:
-          this.subscriptionNotifiers[existingSubscription.inFlight].promise,
-      }
-    } else if (
-      existingSubscription !== null &&
-      'fulfilled' in existingSubscription
-    ) {
-      return {
-        id: existingSubscription['fulfilled'],
-        synced: Promise.resolve(),
-      }
-    }
+    return this._doSubscribe(shapeDefinitions, key)
+  }
 
-    // If no exact match found, we try to establish the subscription
-    const shapeReqs: ShapeRequest[] = shapeDefinitions.map((definition) => ({
-      requestId: this.shapeRequestIdGenerator(),
-      definition,
-    }))
+  /** Make a subscription without waiting for init */
+  private async _doSubscribe(
+    shapes: Shape[],
+    key?: string
+  ): Promise<ShapeSubscription> {
+    const request = this.subscriptionManager.syncRequested(shapes, key)
 
-    const subId = this.subscriptionIdGenerator()
-    this.subscriptions.subscriptionRequested(subId, shapeReqs)
+    if ('existing' in request)
+      return { key: request.key, synced: request.existing }
 
-    // store the resolve and reject
-    // such that we can resolve/reject
-    // the promise later when the shape
-    // is fulfilled or when an error arrives
-    // we store it before making the actual request
-    // to avoid that the answer would arrive too fast
-    // and this resolver and rejecter would not yet be stored
-    // this could especially happen in unit tests
-    this.subscriptionNotifiers[subId] = emptyPromise()
-    // store the promise because by the time the
-    // `await this.client.subscribe(subId, shapeReqs)` call resolves
-    // the `subId` entry in the `subscriptionNotifiers` may have been deleted
-    // so we can no longer access it
-    const subProm = this.subscriptionNotifiers[subId].promise
-
-    // `clearSubAndThrow` deletes the listeners and cancels the subscription
     const clearSubAndThrow = (error: any): never => {
-      delete this.subscriptionNotifiers[subId]
-      this.subscriptions.subscriptionCancelled(subId)
+      request.syncFailed()
       throw error
     }
 
     try {
+      // We're not using generated subscription ID in code here because
+      // it should become server-generated at some point.
       const { subscriptionId, error }: SubscribeResponse =
-        await this.client.subscribe(subId, shapeReqs)
-      if (subId !== subscriptionId) {
-        clearSubAndThrow(
-          new Error(
-            `Expected SubscripeResponse for subscription id: ${subId} but got it for another id: ${subscriptionId}`
-          )
+        await this.client.subscribe(
+          genUUID(),
+          shapes.map((x) => ({ definition: x, requestId: genUUID() }))
         )
-      }
 
-      if (error) {
-        clearSubAndThrow(error)
-      }
+      request.setServerId(subscriptionId)
+
+      if (error) throw error
+
+      await this._setMeta('subscriptions', this.subscriptionManager.serialize())
 
       return {
-        id: subId,
-        synced: subProm,
+        key: request.key,
+        synced: request.promise,
       }
     } catch (error: any) {
       return clearSubAndThrow(error)
     }
   }
 
-  async unsubscribe(subscriptionIds: string[]): Promise<void> {
+  public unsubscribe(sync: { shapes: Shape[]; key?: string }): Promise<void>
+  public unsubscribe(keys: string[]): Promise<void>
+  public unsubscribe(
+    target: string[] | { shapes: Shape[]; key?: string }
+  ): Promise<void> {
+    if (Array.isArray(target)) {
+      return this.unsubscribeIds(this.subscriptionManager.getServerIDs(target))
+    } else if (target.key) {
+      return this.unsubscribeIds(
+        this.subscriptionManager.getServerIDs([target.key])
+      )
+    } else {
+      return this.unsubscribeIds(
+        this.subscriptionManager.getServerID(target.shapes)
+      )
+    }
+  }
+
+  private async unsubscribeIds(subscriptionIds: string[]): Promise<void> {
+    if (subscriptionIds.length === 0) return
+
     await this.client.unsubscribe(subscriptionIds)
 
     // If the server didn't send an error, we persist the fact the subscription was deleted.
-    this.subscriptions.unsubscribe(subscriptionIds)
+    this.subscriptionManager.unsubscribeMade(subscriptionIds)
     await this.adapter.run(
-      this._setMetaStatement('subscriptions', this.subscriptions.serialize())
+      this._setMetaStatement(
+        'subscriptions',
+        this.subscriptionManager.serialize()
+      )
     )
   }
 
   async _handleSubscriptionData(subsData: SubscriptionData): Promise<void> {
-    this.subscriptions.subscriptionDelivered(subsData)
+    const afterApply = this.subscriptionManager.dataDelivered(
+      subsData.subscriptionId
+    )
 
-    // When data is empty, we will simply store the subscription and lsn state
-    // Not storing this state means that a second open of the app will try to
-    // re-insert rows which will possible trigger a UNIQUE constraint violation
-    await this._applySubscriptionData(subsData.data, subsData.lsn)
-
-    // Call the `onSuccess` callback for this subscription
-    const { resolve: onSuccess } =
-      this.subscriptionNotifiers[subsData.subscriptionId]
-    delete this.subscriptionNotifiers[subsData.subscriptionId] // GC the notifiers for this subscription ID
-    onSuccess()
+    await this._applySubscriptionData(
+      subsData.data,
+      subsData.lsn,
+      [],
+      subsData.subscriptionId
+    )
+    const toBeUnsubbed = afterApply()
+    if (toBeUnsubbed.length > 0) await this.unsubscribeIds(toBeUnsubbed)
   }
 
-  // Applies initial data for a shape subscription. Current implementation
-  // assumes there are no conflicts INSERTing new rows and only expects
-  // subscriptions for entire tables.
-  async _applySubscriptionData(
+  /** Insert incoming subscription data into the database. */
+  private async _applySubscriptionData(
     changes: InitialDataChange[],
     lsn: LSN,
-    additionalStmts: Statement[] = []
+    additionalStmts: Statement[] = [],
+    subscriptionId?: string
   ) {
     const namespace = this.builder.defaultNamespace
     const stmts: Statement[] = []
@@ -569,15 +544,16 @@ export class SatelliteProcess implements Satellite {
 
     // Group all changes by table name to be able to insert them all together
     for (const op of changes) {
-      const tableName = new QualifiedTablename(namespace, op.relation.table)
-      const tableNameString = tableName.toString()
-      if (groupedChanges.has(tableNameString)) {
-        groupedChanges.get(tableName.toString())?.records.push(op.record)
+      const qt = new QualifiedTablename(namespace, op.relation.table)
+      const tableName = qt.toString()
+
+      if (groupedChanges.has(tableName)) {
+        groupedChanges.get(tableName)?.records.push(op.record)
       } else {
-        groupedChanges.set(tableName.toString(), {
+        groupedChanges.set(tableName, {
           relation: op.relation,
           records: [op.record],
-          table: tableName,
+          table: qt,
         })
       }
 
@@ -641,7 +617,10 @@ export class SatelliteProcess implements Satellite {
 
     // Then update subscription state and LSN
     stmts.push(
-      this._setMetaStatement('subscriptions', this.subscriptions.serialize()),
+      this._setMetaStatement(
+        'subscriptions',
+        this.subscriptionManager.serialize()
+      ),
       this.updateLsnStmt(lsn),
       ...additionalStmts
     )
@@ -679,37 +658,37 @@ export class SatelliteProcess implements Satellite {
         new SatelliteError(
           SatelliteErrorCode.INTERNAL,
           `Error applying subscription data: ${(e as any).message}`
-        )
+        ),
+        subscriptionId
       )
     }
   }
 
-  async _resetClientState(opts?: {
-    keepSubscribedShapes: boolean
-  }): Promise<void> {
+  _resetClientState(opts?: { keepSubscribedShapes: boolean }): Promise<void> {
     Log.warn(`resetting client state`)
     this.disconnect()
-    const subscriptionIds = this.subscriptions.getFulfilledSubscriptions()
-
-    if (opts?.keepSubscribedShapes) {
-      const shapeDefs: Shape[] = subscriptionIds
-        .map((subId) => this.subscriptions.shapesForActiveSubscription(subId))
-        .filter((s): s is ShapeDefinition[] => s !== undefined)
-        .flatMap((s: ShapeDefinition[]) => s.map((i) => i.definition))
-
-      this.previousShapeSubscriptions.push(...shapeDefs)
-    }
 
     this._lsn = undefined
 
-    // TODO: this is obviously too conservative
-    // we should also work on updating subscriptions
-    // atomically on unsubscribe()
-    await this.subscriptions.unsubscribeAllAndGC()
+    const tables = this.subscriptionManager.reset({
+      defaultNamespace: this.builder.defaultNamespace,
+      reestablishSubscribed: opts?.keepSubscribedShapes,
+    })
 
+    return this._clearTables(tables)
+  }
+
+  async _clearTables(tables: QualifiedTablename[]) {
     await this.adapter.runInTransaction(
       this._setMetaStatement('lsn', null),
-      this._setMetaStatement('subscriptions', this.subscriptions.serialize())
+      this._setMetaStatement(
+        'subscriptions',
+        this.subscriptionManager.serialize()
+      ),
+      { sql: this.builder.deferOrDisableFKsForTx },
+      ...this._disableTriggers(tables),
+      ...tables.map((x) => ({ sql: `DELETE FROM ${x}` })),
+      ...this._enableTriggers(tables)
     )
   }
 
@@ -718,11 +697,17 @@ export class SatelliteProcess implements Satellite {
     subscriptionId?: string
   ): Promise<void> {
     Log.error('encountered a subscription error: ' + satelliteError.message)
-    let resettingError: any
+    let resettingError: any = satelliteError
+    let onFailure: ((reason?: any) => void) | undefined
+
+    // We're pulling out the reject callback because we're about to reset the subscription manager
+    if (subscriptionId)
+      onFailure = this.subscriptionManager.getOnFailureCallback(subscriptionId)
 
     try {
       await this._resetClientState()
     } catch (error) {
+      console.log(error)
       // If we encounter an error here, we want to float it to the client so that the bug is visible
       // instead of just a broken state.
       resettingError = error
@@ -731,11 +716,7 @@ export class SatelliteProcess implements Satellite {
         satelliteError.stack
     }
     // Call the `onFailure` callback for this subscription
-    if (subscriptionId) {
-      const { reject: onFailure } = this.subscriptionNotifiers[subscriptionId]
-      delete this.subscriptionNotifiers[subscriptionId] // GC the notifiers for this subscription ID
-      onFailure(resettingError ?? satelliteError)
-    }
+    onFailure?.(resettingError)
   }
 
   _handleClientRelations(relation: Relation): void {
@@ -863,7 +844,8 @@ export class SatelliteProcess implements Satellite {
       }
       await this._connect()
       await this._startReplication()
-      this._subscribePreviousShapeRequests()
+      await this._makePendingSubscriptions()
+      // this._subscribePreviousShapeRequests()
 
       this._notifyConnectivityState('connected')
       this.initializing?.resolve()
@@ -884,22 +866,30 @@ export class SatelliteProcess implements Satellite {
     return prom
   }
 
-  _subscribePreviousShapeRequests(): void {
-    try {
-      if (this.previousShapeSubscriptions.length > 0) {
-        Log.warn(`Subscribing previous shape definitions`)
-        this.subscribe(
-          this.previousShapeSubscriptions.splice(
-            0,
-            this.previousShapeSubscriptions.length
-          )
-        )
-      }
-    } catch (error: any) {
-      const message = `Client was unable to subscribe previously subscribed shapes: ${error.message}`
-      throw new SatelliteError(SatelliteErrorCode.INTERNAL, message)
-    }
+  private async _makePendingSubscriptions(): Promise<void> {
+    const { subscribe, unsubscribe } =
+      this.subscriptionManager.listPendingActions()
+
+    await this.unsubscribeIds(unsubscribe)
+    await Promise.all(subscribe.map((x) => this._doSubscribe(x.shapes, x.key)))
   }
+
+  // _subscribePreviousShapeRequests(): void {
+  //   try {
+  //     if (this.previousShapeSubscriptions.length > 0) {
+  //       Log.warn(`Subscribing previous shape definitions`)
+  //       this.subscribe(
+  //         this.previousShapeSubscriptions.splice(
+  //           0,
+  //           this.previousShapeSubscriptions.length
+  //         )
+  //       )
+  //     }
+  //   } catch (error: any) {
+  //     const message = `Client was unable to subscribe previously subscribed shapes: ${error.message}`
+  //     throw new SatelliteError(SatelliteErrorCode.INTERNAL, message)
+  //   }
+  // }
 
   // NO DIRECT CALLS TO CONNECT
   private async _connect(): Promise<void> {
@@ -963,10 +953,17 @@ export class SatelliteProcess implements Satellite {
     try {
       const schemaVersion = await this.migrator.querySchemaVersion()
 
+      // Load subscription state that to reset the subscription manager correctly
+      const subscriptionsState = await this._getMeta('subscriptions')
+      if (subscriptionsState) {
+        this.subscriptionManager.initialize(subscriptionsState)
+      }
+
       // Fetch the subscription IDs that were fulfilled
       // such that we can resume and inform Electric
       // about fulfilled subscriptions
-      const subscriptionIds = this.subscriptions.getFulfilledSubscriptions()
+      const subscriptionIds =
+        this.subscriptionManager.listContinuedSubscriptions()
       const observedTransactionData = await this._getMeta('seenAdditionalData')
 
       const { error } = await this.client.startReplication(
@@ -1162,10 +1159,7 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  async _notifyChanges(
-    results: OplogEntry[],
-    origin: ChangeOrigin
-  ): Promise<void> {
+  _notifyChanges(results: OplogEntry[], origin: ChangeOrigin): void {
     const acc: ChangeAccumulator = {}
 
     // Would it be quicker to do this using a second SQL query that
@@ -1486,7 +1480,7 @@ export class SatelliteProcess implements Satellite {
       await this.adapter.runInTransaction(...allStatements)
     }
 
-    await this._notifyChanges(opLogEntries, 'remote')
+    this._notifyChanges(opLogEntries, 'remote')
   }
 
   async _applyAdditionalData(data: AdditionalData) {
@@ -1500,7 +1494,7 @@ export class SatelliteProcess implements Satellite {
 
   async _applyGoneBatch(
     lsn: LSN,
-    _subscriptionIds: string[],
+    subscriptionIds: string[],
     allGone: DataGone[]
   ) {
     const fakeOplogEntries: OplogEntry[] = allGone.map(
@@ -1555,8 +1549,9 @@ export class SatelliteProcess implements Satellite {
       ...stmts,
       ...this._enableTriggers(affectedTables)
     )
+    this.subscriptionManager.goneBatchDelivered(subscriptionIds)
 
-    await this._notifyChanges(fakeOplogEntries, 'remote')
+    this._notifyChanges(fakeOplogEntries, 'remote')
   }
 
   private async maybeGarbageCollect(

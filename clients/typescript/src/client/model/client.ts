@@ -6,12 +6,12 @@ import { LiveResult, LiveResultContext } from './model'
 import { Notifier } from '../../notifiers'
 import { DatabaseAdapter } from '../../electric/adapter'
 import { GlobalRegistry, Registry, Satellite } from '../../satellite'
-import { ShapeManager } from './shapes'
 import { ReplicationTransformManager } from './transforms'
 import { Dialect } from '../../migrators/query-builder/builder'
 import { InputTransformer } from '../conversions/input'
 import { sqliteConverter } from '../conversions/sqlite'
 import { postgresConverter } from '../conversions/postgres'
+import { IShapeManager } from './shapes'
 
 export type ClientTables<DB extends DbSchema<any>> = {
   [Tbl in keyof DB['tables']]: DB['tables'][Tbl] extends TableSchema<
@@ -96,6 +96,8 @@ interface RawQueries {
 export class ElectricClient<
   DB extends DbSchema<any>
 > extends ElectricNamespace {
+  public sync: Omit<IShapeManager, 'subscribe'>
+
   private constructor(
     public db: ClientTables<DB> & RawQueries,
     dbName: string,
@@ -106,6 +108,11 @@ export class ElectricClient<
   ) {
     super(dbName, adapter, notifier, registry)
     this.satellite = satellite
+    // Expose the Shape Sync API without additional properties
+    this.sync = {
+      syncStatus: this.satellite.syncStatus.bind(this.satellite),
+      unsubscribe: this.satellite.unsubscribe.bind(this.satellite),
+    }
   }
 
   /**
@@ -140,7 +147,6 @@ export class ElectricClient<
     dialect: Dialect
   ): ElectricClient<DB> {
     const tables = dbDescription.extendedTables
-    const shapeManager = new ShapeManager(satellite)
     const converter = dialect === 'SQLite' ? sqliteConverter : postgresConverter
     const replicationTransformManager = new ReplicationTransformManager(
       satellite,
@@ -153,7 +159,7 @@ export class ElectricClient<
         tableName,
         adapter,
         notifier,
-        shapeManager,
+        satellite,
         replicationTransformManager,
         dbDescription,
         inputTransformer,

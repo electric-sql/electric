@@ -25,16 +25,15 @@ import {
   GoneBatchCallback,
 } from '../util/types'
 import {
-  Shape,
   ShapeRequest,
   SubscribeResponse,
   SubscriptionDeliveredCallback,
   SubscriptionErrorCallback,
   UnsubscribeResponse,
 } from './shapes/types'
-import { ShapeSubscription } from './process'
 import { DbSchema } from '../client/model/schema'
 import { QualifiedTablename } from '../util'
+import { IShapeManager } from '../client/model/shapes'
 
 export { MockRegistry } from './mock'
 export { SatelliteProcess } from './process'
@@ -64,7 +63,7 @@ export interface Registry {
 
 // `Satellite` is the main process handling ElectricSQL replication,
 // processing the opslog and notifying when there are data changes.
-export interface Satellite {
+export interface Satellite extends IShapeManager {
   dbName: DbName
 
   adapter: DatabaseAdapter
@@ -81,8 +80,6 @@ export interface Satellite {
   disconnect(error?: SatelliteError): void
   clientDisconnect(): void
   authenticate(token: string): Promise<void>
-  subscribe(shapeDefinitions: Shape[]): Promise<ShapeSubscription>
-  unsubscribe(shapeUuids: string[]): Promise<void>
 
   setReplicationTransform(
     tableName: QualifiedTablename,

@@ -115,7 +115,6 @@ export class Table<
     this._builder = new Builder(
       tableName,
       fieldNames,
-      this._shapeManager,
       tableDescription,
       this.dialect
     )
@@ -154,6 +153,7 @@ export class Table<
 
     this.syncSchema = (this.syncSchema as any).extend({
       where: shape.or(z.string().optional()),
+      key: z.string().optional(),
     })
   }
 
@@ -251,7 +251,7 @@ export class Table<
   sync<T extends SyncInput<Include, Where>>(i?: T): Promise<ShapeSubscription> {
     const validatedInput = this.syncSchema.parse(i ?? {})
     const shape = this.computeShape(validatedInput)
-    return this._shapeManager.sync(shape)
+    return this._shapeManager.subscribe([shape], validatedInput.key)
   }
 
   /*

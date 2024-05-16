@@ -1,5 +1,4 @@
 import testAny, { TestFn, ExecutionContext } from 'ava'
-import Log from 'loglevel'
 import Database from 'better-sqlite3'
 import { schema } from '../generated'
 import { DatabaseAdapter } from '../../../src/drivers/better-sqlite3'
@@ -14,23 +13,6 @@ import { satelliteDefaults } from '../../../src/satellite/config'
 import { insecureAuthToken } from '../../../src/auth'
 
 const test = testAny as TestFn<ContextType>
-
-// Modify `loglevel` to store the logged messages
-// based on "Writing plugins" in https://github.com/pimterry/loglevel
-type LoggedMsg = string
-let log: Array<LoggedMsg> = []
-const originalFactory = Log.methodFactory
-Log.methodFactory = function (methodName, logLevel, loggerName) {
-  var rawMethod = originalFactory(methodName, logLevel, loggerName)
-
-  return function (message) {
-    log.push(message)
-    if (message !== 'Reading from unsynced table Post') {
-      rawMethod(message)
-    }
-  }
-}
-Log.setLevel(Log.levels.DEBUG) // Be sure to call setLevel method in order to apply plugin
 
 const config = {
   auth: {
@@ -118,52 +100,11 @@ function init({ db }: ContextType) {
   db.exec(
     "CREATE TABLE IF NOT EXISTS Profile('id' int PRIMARY KEY, 'bio' varchar, 'userId' int);"
   )
-
-  log = []
 }
 
 test.beforeEach(makeContext)
 test.afterEach.always((t: ExecutionContext<ContextType>) => {
   return cleanAndStopSatellite(t)
-})
-
-test.serial('Read queries issue warning if table is not synced', async (t) => {
-  const { Post } = t.context as ContextType
-  t.assert(log.length === 0)
-  await Post.findMany()
-  t.deepEqual(log, ['Reading from unsynced table Post'])
-})
-
-test.serial('Upsert query issues warning if table is not synced', async (t) => {
-  const { Post } = t.context as ContextType
-  t.assert(log.length === 0)
-
-  const newPost = {
-    id: 4,
-    title: 't4',
-    contents: 'c4',
-    nbr: 5,
-    authorId: 1,
-  }
-
-  const updatePost = { title: 'Modified title' }
-
-  await Post.upsert({
-    create: newPost,
-    update: updatePost,
-    where: {
-      id: newPost.id,
-    },
-  })
-
-  // The log contains the warning twice
-  // because upsert first tries to find the record
-  // and then reads the created/updated record
-  // and both of those reads will raise the warning
-  t.deepEqual(log, [
-    'Reading from unsynced table Post',
-    'Reading from unsynced table Post',
-  ])
 })
 
 const relations = {

@@ -84,6 +84,8 @@ export interface SubscriptionsManager {
    * loads the subscription manager state from a text representation
    */
   setState(serialized: string): void
+
+  hash(shapes: Shape[]): string
 }
 
 /** List all tables covered by a given shape */

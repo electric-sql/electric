@@ -935,11 +935,9 @@ export class SatelliteClient implements Client {
   }
 
   private handleTransaction(message: SatOpLog) {
-    if (!this.subscriptionsDataCache.isDelivering()) {
-      this.processOpLogMessage(message)
-    } else if (this.inbound.receivingUnsubsBatch) {
+    if (this.inbound.receivingUnsubsBatch) {
       this.processUnsubsDataMessage(message)
-    } else {
+    } else if (this.subscriptionsDataCache.isDelivering()) {
       try {
         this.subscriptionsDataCache.transaction(message.ops)
       } catch (e) {
@@ -947,6 +945,8 @@ export class SatelliteClient implements Client {
           `Error applying transaction message for subs ${JSON.stringify(e)}`
         )
       }
+    } else {
+      this.processOpLogMessage(message)
     }
   }
 
@@ -1020,7 +1020,7 @@ export class SatelliteClient implements Client {
       }
     )
 
-    this.inbound.receivingUnsubsBatch = []
+    this.inbound.receivingUnsubsBatch = false
     this.inbound.goneBatch = []
   }
 

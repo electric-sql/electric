@@ -3,7 +3,6 @@ import { TestFn, ExecutionContext } from 'ava'
 import {
   MOCK_BEHIND_WINDOW_LSN,
   MOCK_INTERNAL_ERROR,
-  MockSatelliteClient,
 } from '../../src/satellite/mock'
 import { QualifiedTablename } from '../../src/util/tablename'
 import { sleepAsync } from '../../src/util/timer'
@@ -47,7 +46,6 @@ import { DEFAULT_LOG_POS } from '../../src/util/common'
 
 import { Shape, SubscriptionData } from '../../src/satellite/shapes/types'
 import { mergeEntries } from '../../src/satellite/merge'
-import { MockSubscriptionsManager } from '../../src/satellite/shapes/manager'
 import { AuthState, insecureAuthToken } from '../../src/auth'
 import {
   ChangeCallback,
@@ -1713,44 +1711,13 @@ export const processTests = (test: TestFn<ContextType>) => {
 
       const subsMeta = await satellite._getMeta('subscriptions')
       const subsObj = JSON.parse(subsMeta)
-      t.is(Object.keys(subsObj).length, 1)
+      t.is(Object.keys(subsObj.active).length, 1)
 
       // Check that we save the LSN sent by the mock
       t.deepEqual(satellite._lsn, base64.toBytes('MTIz'))
     } catch (e) {
       t.fail(JSON.stringify(e))
     }
-  })
-
-  test('(regression) shape subscription succeeds even if subscription data is delivered before the SatSubsReq RPC call receives its SatSubsResp answer', async (t) => {
-    const { client, satellite, runMigrations, authState, token } = t.context
-    await runMigrations()
-
-    const tablename = 'parent'
-
-    // relations must be present at subscription delivery
-    client.setRelations(relations)
-    client.setRelationData(tablename, parentRecord)
-
-    const conn = await startSatellite(satellite, authState, token)
-    await conn.connectionPromise
-
-    const shapeDef: Shape = {
-      tablename,
-    }
-
-    satellite!.relations = relations
-
-    // Enable the deliver first flag in the mock client
-    // such that the subscription data is delivered before the
-    // subscription promise is resolved
-    const mockClient = satellite.client as MockSatelliteClient
-    mockClient.enableDeliverFirst()
-
-    const { synced } = await satellite.subscribe([shapeDef])
-    await synced
-
-    t.pass()
   })
 
   test('multiple subscriptions for the same shape are deduplicated', async (t) => {
@@ -1789,7 +1756,7 @@ export const processTests = (test: TestFn<ContextType>) => {
     })
 
     // And be "merged" into one subscription
-    t.is(satellite.subscriptions.getFulfilledSubscriptions().length, 1)
+    t.is(satellite.subscriptionManager.listContinuedSubscriptions().length, 1)
   })
 
   test('applied shape data will be acted upon correctly', async (t) => {
@@ -1946,19 +1913,23 @@ export const processTests = (test: TestFn<ContextType>) => {
     await startSatellite(satellite, authState, token)
 
     satellite!.relations = relations
-    const { synced, id } = await satellite.subscribe([{ tablename }])
+    const { synced, key } = await satellite.subscribe([{ tablename }])
     await synced
     await satellite._performSnapshot()
+
+    const status = satellite.syncStatus(key)
+    if (status?.status !== 'active') return void t.fail()
 
     const promise = new Promise((r: ChangeCallback) => {
       satellite.notifier.subscribeToDataChanges(r)
     })
-    client.setGoneBatch(id, [
+    client.setGoneBatch(status.serverId, [
       { tablename, record: { id: 1 } },
       { tablename, record: { id: 2 } },
     ])
     // Send additional data
-    await satellite.unsubscribe([id])
+    t.timeout(10, "Unsubscribe call to the server didn't resolve")
+    await t.notThrowsAsync(() => satellite.unsubscribe([key]))
 
     const change = await promise
     t.is(change.changes.length, 1)
@@ -2009,16 +1980,16 @@ export const processTests = (test: TestFn<ContextType>) => {
 
     satellite!.relations = relations
     const { synced } = await satellite.subscribe([shapeDef1])
-    await synced // wait for subscription to be fulfilled
+    t.timeout(1000, "Synced promise didn't resolve within 100ms as expected")
+    await t.throwsAsync(() => synced, {
+      instanceOf: SatelliteError,
+      message: /Error applying subscription data/,
+    })
 
-    try {
-      const row = await adapter.query({
-        sql: `SELECT id FROM "${namespace}"."${tablename}"`,
-      })
-      t.is(row.length, 0)
-    } catch (e) {
-      t.fail(JSON.stringify(e))
-    }
+    const row = await adapter.query({
+      sql: `SELECT id FROM "${namespace}"."${tablename}"`,
+    })
+    t.is(row.length, 0)
   })
 
   test('a second successful subscription', async (t) => {
@@ -2068,7 +2039,71 @@ export const processTests = (test: TestFn<ContextType>) => {
 
       const subsMeta = await satellite._getMeta('subscriptions')
       const subsObj = JSON.parse(subsMeta)
-      t.is(Object.keys(subsObj).length, 2)
+      t.is(Object.keys(subsObj.active).length, 2)
+    } catch (e) {
+      t.fail(JSON.stringify(e))
+    }
+  })
+
+  test('a subscription that did not receive data before we went offline is retried', async (t) => {
+    const {
+      client,
+      satellite,
+      adapter,
+      runMigrations,
+      authState,
+      token,
+      namespace,
+    } = t.context
+    await runMigrations()
+
+    // relations must be present at subscription delivery
+    client.setRelations(relations)
+    client.setRelationData('parent', parentRecord)
+
+    const conn = await startSatellite(satellite, authState, token)
+    await conn.connectionPromise
+
+    const shapeDef1: Shape = {
+      tablename: 'parent',
+    }
+
+    satellite!.relations = relations
+    // Make sure the data doesn't arrive but the ID does
+    client.skipNextEmit()
+    await satellite.subscribe([shapeDef1], 'testKey')
+
+    const state1 = satellite.subscriptionManager.status('testKey')!
+    if (state1.status !== 'establishing') return void t.fail()
+    t.is(state1.progress, 'receiving_data')
+
+    satellite.disconnect()
+
+    const promise = new Promise((r: ChangeCallback) => {
+      satellite.notifier.subscribeToDataChanges(r)
+    })
+
+    await satellite.connectWithBackoff()
+    await promise
+
+    const state2 = satellite.subscriptionManager.status('testKey')!
+    t.is(state2.status, 'active')
+    t.not((state1 as any).serverId, (state2 as any).serverId)
+
+    try {
+      const row = await adapter.query({
+        sql: `SELECT id FROM "${namespace}".parent`,
+      })
+      t.is(row.length, 1)
+
+      const shadowRows = await adapter.query({
+        sql: `SELECT tags FROM _electric_shadow`,
+      })
+      t.is(shadowRows.length, 1)
+
+      const subsMeta = await satellite._getMeta('subscriptions')
+      const subsObj = JSON.parse(subsMeta)
+      t.is(Object.keys(subsObj.active).length, 1)
     } catch (e) {
       t.fail(JSON.stringify(e))
     }
@@ -2179,34 +2214,33 @@ export const processTests = (test: TestFn<ContextType>) => {
       t.is(row1.length, 1)
       const { synced } = await satellite.subscribe([shapeDef2])
 
-      try {
-        await synced
-        t.fail()
-      } catch (expected: any) {
-        t.true(expected instanceof SatelliteError)
-        try {
-          const row = await adapter.query({
-            sql: `SELECT id FROM "${namespace}"."${tablename}"`,
-          })
-          t.is(row.length, 0)
-          const row1 = await adapter.query({
-            sql: `SELECT id FROM "${namespace}"."${childTable}"`,
-          })
-          t.is(row1.length, 0)
+      await t.throwsAsync(() => synced, {
+        instanceOf: SatelliteError,
+        message: /table 'another'/,
+      })
 
-          const shadowRows = await adapter.query({
-            sql: `SELECT tags FROM "${namespace}"._electric_shadow`,
-          })
-          t.is(shadowRows.length, 2)
+      const newRow = await adapter.query({
+        sql: `SELECT id FROM "${namespace}"."${tablename}"`,
+      })
+      t.is(newRow.length, 0)
+      const newRow1 = await adapter.query({
+        sql: `SELECT id FROM "${namespace}"."${childTable}"`,
+      })
+      t.is(newRow1.length, 0)
 
-          const subsMeta = await satellite._getMeta('subscriptions')
-          const subsObj = JSON.parse(subsMeta)
-          t.deepEqual(subsObj, {})
-          t.true(expected.message.search("table 'another'") >= 0)
-        } catch (e) {
-          t.fail(JSON.stringify(e))
-        }
-      }
+      const shadowRows = await adapter.query({
+        sql: `SELECT tags FROM "${namespace}"._electric_shadow`,
+      })
+      t.is(shadowRows.length, 2)
+
+      const subsMeta = await satellite._getMeta('subscriptions')
+      const subsObj = JSON.parse(subsMeta)
+      t.deepEqual(subsObj, {
+        active: {},
+        known: {},
+        unfulfilled: {},
+        unsubscribes: [],
+      })
     }
   )
 
@@ -2251,11 +2285,10 @@ export const processTests = (test: TestFn<ContextType>) => {
       t.fail(JSON.stringify(e))
     }
 
-    try {
-      await satellite.subscribe([shapeDef2])
-    } catch (error: any) {
-      t.is(error.code, SatelliteErrorCode.TABLE_NOT_FOUND)
-    }
+    await t.throwsAsync(() => satellite.subscribe([shapeDef2]), {
+      instanceOf: SatelliteError,
+      code: SatelliteErrorCode.TABLE_NOT_FOUND,
+    })
   })
 
   test("snapshot while not fully connected doesn't throw", async (t) => {
@@ -2286,14 +2319,6 @@ export const processTests = (test: TestFn<ContextType>) => {
 
     await runMigrations() // because the meta tables need to exist for shape GC
 
-    satellite._garbageCollectShapeHandler([
-      { uuid: '', definition: { tablename: 'parent' } },
-    ])
-
-    const subsManager = new MockSubscriptionsManager(
-      satellite._garbageCollectShapeHandler.bind(satellite)
-    )
-
     // Create the 'users' and 'posts' tables expected by sqlite
     // populate it with foreign keys and check that the subscription
     // manager does not violate the FKs when unsubscribing from all subscriptions
@@ -2314,7 +2339,10 @@ export const processTests = (test: TestFn<ContextType>) => {
       throw e
     }
 
-    await subsManager.unsubscribeAllAndGC()
+    await satellite._clearTables([
+      builder.makeQT('users'),
+      builder.makeQT('posts'),
+    ])
     // if we reach here, the FKs were not violated
 
     // Check that everything was deleted
@@ -2330,7 +2358,8 @@ export const processTests = (test: TestFn<ContextType>) => {
   })
 
   test("Garbage collecting the subscription doesn't generate oplog entries", async (t) => {
-    const { adapter, runMigrations, satellite, authState, token } = t.context
+    const { adapter, runMigrations, satellite, authState, token, builder } =
+      t.context
     await startSatellite(satellite, authState, token)
     await runMigrations()
     await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
@@ -2338,9 +2367,7 @@ export const processTests = (test: TestFn<ContextType>) => {
     await satellite._garbageCollectOplog(ts)
     t.is((await satellite._getEntries(0)).length, 0)
 
-    satellite._garbageCollectShapeHandler([
-      { uuid: '', definition: { tablename: 'parent' } },
-    ])
+    satellite._clearTables([builder.makeQT('parent')])
 
     await satellite._performSnapshot()
     t.deepEqual(await satellite._getEntries(0), [])
