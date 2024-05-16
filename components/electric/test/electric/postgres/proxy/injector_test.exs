@@ -130,9 +130,11 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
         if s.tx?() do
           @tag electrified_migration: true
           test "create, electrify and alter table is captured", cxt do
+            ddl = ~s[CREATE TABLE "socks" ("id" uuid PRIMARY KEY, colour TEXT)]
+
             queries = [
-              passthrough: ~s[CREATE TABLE "socks" ("id" uuid PRIMARY KEY, colour TEXT)],
-              electric: ~s[ALTER TABLE "socks" ENABLE ELECTRIC],
+              passthrough: ddl,
+              electric: {~s[ALTER TABLE "socks" ENABLE ELECTRIC], ddl: ddl},
               capture:
                 {~s[ALTER TABLE "socks" ADD COLUMN size int2],
                  shadow_add_column: [
@@ -145,11 +147,13 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
 
           @tag electrified_migration: true
           test "create, electrify via function and alter table is captured", cxt do
+            ddl = ~s[CREATE TABLE "socks" ("id" uuid PRIMARY KEY, colour TEXT)]
+
             queries = [
-              passthrough: ~s[CREATE TABLE "socks" ("id" uuid PRIMARY KEY, colour TEXT)],
+              passthrough: ddl,
               electric:
                 {~s[CALL electric.electrify('socks')],
-                 command: Electric.DDLX.Command.electric_enable({"public", "socks"})},
+                 command: Electric.DDLX.Command.electric_enable({"public", "socks"}), ddl: ddl},
               capture:
                 {~s[ALTER TABLE "socks" ADD COLUMN size int2],
                  shadow_add_column: [
@@ -298,9 +302,10 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
         end
 
         test "ALTER TABLE .. ENABLE ELECTRIC", cxt do
+          ddl = ~s[CREATE TABLE "underwear" (id uuid PRIMARY KEY, value text);]
           query = ~s[ALTER TABLE "underwear" ENABLE ELECTRIC]
 
-          cxt.scenario.assert_valid_electric_command(cxt.injector, cxt.framework, query)
+          cxt.scenario.assert_valid_electric_command(cxt.injector, cxt.framework, query, ddl: ddl)
         end
 
         @tag injector_error: true
@@ -316,7 +321,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
 
         test "ELECTRIC REVOKE UPDATE", cxt do
           query =
-            ~s[-- this is my comment\nELECTRIC REVOKE ALL (status, name) ON truths FROM 'projects:house.admin';]
+            ~s[-- this is my comment\nELECTRIC REVOKE ALL (status, name) ON truths FROM (projects, 'house.admin');]
 
           cxt.scenario.assert_valid_electric_command(cxt.injector, cxt.framework, query)
         end
@@ -335,9 +340,10 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
         @tag server_error: true
         test "errors from functions are correctly handled", cxt do
           # imagine that this function errors for some reason
+          ddl = ~s[CREATE TABLE truths (id uuid PRIMARY KEY, value text);]
           query = ~s[ALTER TABLE truths ENABLE ELECTRIC]
 
-          cxt.scenario.assert_electrify_server_error(cxt.injector, cxt.framework, query,
+          cxt.scenario.assert_electrify_server_error(cxt.injector, cxt.framework, query, ddl,
             message: "table truths already electrified"
           )
         end
@@ -437,16 +443,21 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
       version_query =
         "INSERT INTO \"_prisma_migrations\" (\"id\",\"checksum\",\"started_at\",\"migration_name\") VALUES ($1,$2,$3,$4)"
 
+      ddl = ~s[CREATE TABLE something (id uuid PRIMARY KEY, value text);]
+
       query = """
-      CREATE TABLE something (id uuid PRIMARY KEY, value text);
+      #{ddl}
       ALTER TABLE something ENABLE ELECTRIC;
       CREATE TABLE ignoreme (id uuid PRIMARY KEY);
       ALTER TABLE something ADD amount int4, ADD colour varchar;
       """
 
       {:ok, command} = DDLX.parse("ALTER TABLE something ENABLE ELECTRIC")
-      [electric] = DDLX.Command.pg_sql(command)
+      [electric] = proxy_sql(command, [ddl])
+
       version = "20230915175206"
+
+      introspect = introspect_tables_query([{"public", "something"}])
 
       cxt.injector
       |> client([M.Close, M.Sync, %M.Parse{name: "s4", query: version_query}, M.Describe, M.Sync])
@@ -459,6 +470,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
       ])
       |> client(
         bind_execute("s3",
+          source: "s4",
           bind: [
             parameter_format_codes: [1, 1, 1, 1],
             parameters: [
@@ -477,7 +489,8 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
       |> server(complete_ready("BEGIN", :tx),
         server: [query("CREATE TABLE something (id uuid PRIMARY KEY, value text)")]
       )
-      |> server(complete_ready("CREATE TABLE"), server: [query(electric)])
+      |> server(complete_ready("CREATE TABLE"), server: [query(introspect)])
+      |> server(introspect_result(ddl), server: electric)
       |> server(complete_ready("CALL"),
         server: [query("CREATE TABLE ignoreme (id uuid PRIMARY KEY)")]
       )
@@ -563,24 +576,29 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
 
     test "create function", cxt do
       query1 =
-        "create or replace function function1() returns bool as $$ return true; $$ language pgpsql"
+        "create table electric.nonsense (id uuid primary key)"
 
       query2 =
-        "create or replace function function2() returns bool as $$ return true; $$ language pgpsql"
+        "create or replace function function1() returns bool as $$ return true; $$ language pgpsql"
 
       query3 =
+        "create or replace function function2() returns bool as $$ return true; $$ language pgpsql"
+
+      query4 =
         "alter table electric.nonsense add column age int4"
 
-      query = Enum.join([query1 <> ";", query2 <> ";", query3 <> ";"], "\n")
+      query = Enum.join([query1 <> ";", query2 <> ";", query3 <> ";", query4 <> ";"], "\n")
 
       cxt.injector
       |> client(begin())
       |> server(complete_ready("BEGIN"))
       |> client(query(query), server: query(query1))
-      |> server(complete_ready("CREATE FUNCTION1"), server: query(query2))
-      |> server(complete_ready("CREATE FUNCTION2"), server: query(query3))
+      |> server(complete_ready("CREATE TABLE"), server: query(query2))
+      |> server(complete_ready("CREATE FUNCTION1"), server: query(query3))
+      |> server(complete_ready("CREATE FUNCTION2"), server: query(query4))
       |> server(complete_ready("ALTER TABLE"),
         client: [
+          complete("CREATE TABLE"),
           complete("CREATE FUNCTION1"),
           complete("CREATE FUNCTION2"),
           complete("ALTER TABLE"),
@@ -656,16 +674,21 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
     test "@databases version capture", cxt do
       alias Electric.DDLX
 
+      ddl = ~s[CREATE TABLE "socks" (id uuid PRIMARY KEY, value text);]
+
       {:ok, command} = DDLX.parse("ALTER TABLE public.socks ENABLE ELECTRIC;")
-      [electric] = DDLX.Command.pg_sql(command)
+      [electric] = proxy_sql(command, [ddl])
 
       version_query =
         "INSERT INTO \"atdatabases_migrations_applied\"\n  (\n    index, name, script,\n    applied_at, ignored_error, obsolete\n  )\nVALUES\n  (\n    $1, $2, $3,\n    $4,\n    $5,\n    $6\n  )"
 
+      introspect = introspect_tables_query([{"public", "socks"}])
+
       cxt.injector
       |> client(query("BEGIN"))
       |> server(complete_ready("BEGIN", :tx))
-      |> client(query("ALTER TABLE public.socks ENABLE ELECTRIC;"), server: query(electric))
+      |> client(query("ALTER TABLE public.socks ENABLE ELECTRIC;"), server: query(introspect))
+      |> server(introspect_result(ddl), server: electric)
       |> server(complete_ready("CALL", :tx), client: complete_ready("ELECTRIC ENABLE"))
       |> client(%M.Parse{query: version_query}, server: [])
       |> client(
@@ -732,16 +755,20 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
       # same as v1 above but the sync message has been split from the parse, bind etc
       alias Electric.DDLX
 
+      ddl = ~s[CREATE TABLE public.socks (id uuid PRIMARY KEY, value text);]
       {:ok, command} = DDLX.parse("ALTER TABLE public.socks ENABLE ELECTRIC;")
-      [electric] = DDLX.Command.pg_sql(command)
+      [electric] = proxy_sql(command, [ddl])
 
       version_query =
         "INSERT INTO \"atdatabases_migrations_applied\"\n  (\n    index, name, script,\n    applied_at, ignored_error, obsolete\n  )\nVALUES\n  (\n    $1, $2, $3,\n    $4,\n    $5,\n    $6\n  )"
 
+      introspect = introspect_tables_query([{"public", "socks"}])
+
       cxt.injector
       |> client(query("BEGIN"))
       |> server(complete_ready("BEGIN", :tx))
-      |> client(query("ALTER TABLE public.socks ENABLE ELECTRIC;"), server: query(electric))
+      |> client(query("ALTER TABLE public.socks ENABLE ELECTRIC;"), server: introspect)
+      |> server(introspect_result(ddl), server: electric)
       |> server(complete_ready("CALL", :tx), client: complete_ready("ELECTRIC ENABLE"))
       |> client(%M.Parse{query: version_query}, server: [])
       |> client(

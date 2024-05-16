@@ -1,0 +1,26 @@
+-- just a wrapper around `generate_electrified_sql` to return the generated
+-- ddl as a table, not an array
+CREATE OR REPLACE FUNCTION <%= schema() %>.introspect_tables(VARIADIC names text[])
+    RETURNS TABLE (ddl text)
+    SECURITY DEFINER
+    LANGUAGE PLPGSQL AS
+$function$
+    DECLARE
+        _name text;
+        _oid regclass;
+        _table_ddl text[];
+        _ddl text[];
+    BEGIN
+        FOREACH _name IN ARRAY names
+        LOOP
+            SELECT table_oid INTO _oid
+                FROM <%= schema() %>.__resolve_table_from_names(_name, NULL);
+
+            _table_ddl := (SELECT <%= schema() %>.generate_electrified_sql(_oid));
+
+            _ddl := array_cat(_ddl , _table_ddl);
+        END LOOP;
+
+        RETURN QUERY SELECT unnest(_ddl);
+    END;
+$function$;

@@ -1,10 +1,11 @@
 defmodule Electric.DDLX.Command.Enable do
   alias Electric.DDLX.Command
+  alias Electric.Postgres
 
   import Electric.DDLX.Parser.Build
 
   @type t() :: %__MODULE__{
-          table_name: String.t()
+          table_name: Postgres.relation()
         }
 
   @keys [
@@ -25,18 +26,6 @@ defmodule Electric.DDLX.Command.Enable do
          tables: [{table_schema, table_name}],
          tag: "ELECTRIC ENABLE"
        }}
-    end
-  end
-
-  defimpl Command.PgSQL do
-    import Electric.DDLX.Command.Common
-
-    def to_sql(enable) do
-      [
-        """
-        CALL electric.enable(#{sql_repr(enable.table_name)});
-        """
-      ]
     end
   end
 end

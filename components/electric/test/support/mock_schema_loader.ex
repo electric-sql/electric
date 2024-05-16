@@ -79,7 +79,7 @@ defmodule Electric.Postgres.MockSchemaLoader do
     {__MODULE__, {:agent, name}}
   end
 
-  def backend_spec(opts) do
+  def backend_spec(opts \\ []) do
     oid_loader = Keyword.get(opts, :oids, &oid_loader/3) |> make_oid_loader()
 
     versions = migrate_versions(Keyword.get(opts, :migrations, []), oid_loader)

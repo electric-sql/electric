@@ -9,6 +9,14 @@ defmodule Electric.Postgres.Schema do
 
   require Logger
 
+  defmodule UnknownTableError do
+    defexception [:schema, :name]
+
+    def message(%{schema: schema, name: name}) do
+      "Unknown table #{Electric.Utils.inspect_relation({schema, name})}"
+    end
+  end
+
   @public_schema "public"
   @search_paths [nil, @public_schema]
 
@@ -73,7 +81,7 @@ defmodule Electric.Postgres.Schema do
   def fetch_table!(schema, name) do
     case fetch_table(schema, name) do
       {:ok, table} -> table
-      {:error, reason} -> raise ArgumentError, message: reason
+      {:error, _reason} -> raise UnknownTableError, schema: schema, name: name
     end
   end
 
@@ -389,6 +397,10 @@ defmodule Electric.Postgres.Schema do
   end
 
   defp qualified_names(%Pg.RangeVar{relname: n, schemaname: s}, search_paths) do
+    qualified_names({blank(s), n}, search_paths)
+  end
+
+  defp qualified_names(%{schema: s, name: n}, search_paths) do
     qualified_names({blank(s), n}, search_paths)
   end
 

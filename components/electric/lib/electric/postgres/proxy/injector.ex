@@ -1,5 +1,6 @@
 defmodule Electric.Postgres.Proxy.Injector do
   alias PgProtocol.Message, as: M
+  alias Electric.Postgres
   alias Electric.Postgres.Proxy.Injector
   alias Electric.Postgres.Proxy.Injector.{Operation, Send, State}
 
@@ -17,6 +18,8 @@ defmodule Electric.Postgres.Proxy.Injector do
   @type quote_mark() :: String.t()
   @type t :: module()
 
+  @callback quote_query(String.t()) :: String.t()
+  @callback introspect_tables_query(Postgres.relation() | String.t() | [String.t()]) :: String.t()
   @callback capture_ddl_query(query :: binary()) :: binary()
   @callback capture_version_query(version :: binary(), priority :: integer()) :: binary()
   @callback alter_shadow_table_query(table_modification()) :: binary()
@@ -126,6 +129,13 @@ defmodule Electric.Postgres.Proxy.Injector do
 
     {stack, state, send} = Operation.activate(stack, state, Send.new())
 
+    state =
+      if Enum.any?(send.client, &is_struct(&1, M.ErrorResponse)) do
+        State.failed(state)
+      else
+        state
+      end
+
     %{client: client, server: server} = Send.flush(send)
 
     {:ok, {stack, state}, server, client}
@@ -146,13 +156,13 @@ defmodule Electric.Postgres.Proxy.Injector do
       case errors do
         [] ->
           if Enum.any?(send.client, &is_struct(&1, M.ErrorResponse)) do
-            Operation.send_error(stack, state, send)
+            Operation.send_error(stack, State.failed(state), send)
           else
             Operation.send_client(stack, state, send)
           end
 
         [_ | _] ->
-          Operation.recv_error(stack, errors, state, Send.client(send, errors))
+          Operation.recv_error(stack, errors, State.failed(state), Send.client(send, errors))
       end
 
     %{client: client, server: server} = Send.flush(send)
@@ -160,8 +170,37 @@ defmodule Electric.Postgres.Proxy.Injector do
     {:ok, {stack, state}, server, client}
   end
 
+  @spec introspect_tables_query(Postgres.relation() | String.t() | [String.t()], String.t() | nil) ::
+          String.t()
+  def introspect_tables_query(names, quote_delimiter \\ nil) do
+    stmts =
+      names
+      |> List.wrap()
+      |> Enum.map(&normalise_name/1)
+      |> Enum.map(&quote_query(&1, quote_delimiter))
+      |> Enum.join(", ")
+
+    "SELECT electric.introspect_tables(#{stmts});"
+  end
+
+  defp normalise_name({_, _} = relation) do
+    Electric.Utils.inspect_relation(relation)
+  end
+
+  defp normalise_name(name) when is_binary(name) do
+    name
+  end
+
+  def capture_ddl_query(stmts, quote_delimiter \\ nil)
+
+  @spec capture_ddl_query([String.t()], String.t() | nil) :: String.t()
+  def capture_ddl_query(ddlx, quote_delimiter) when is_list(ddlx) do
+    stmts = ddlx |> Enum.map(&quote_query(&1, quote_delimiter)) |> Enum.join(", ")
+    ~s|CALL electric.capture_ddl_array(#{stmts})|
+  end
+
   @spec capture_ddl_query(String.t(), String.t() | nil) :: String.t()
-  def capture_ddl_query(query, quote_delimiter \\ nil) do
+  def capture_ddl_query(query, quote_delimiter) do
     ~s|CALL electric.capture_ddl(#{quote_query(query, quote_delimiter)})|
   end
 
@@ -186,10 +225,18 @@ defmodule Electric.Postgres.Proxy.Injector do
     ~s|CALL electric.alter_shadow_table(#{args})|
   end
 
-  defp quote_query(query, delimiter) do
+  def quote_query(query) do
+    quote_query(query, random_delimiter())
+  end
+
+  def quote_query(query, delimiter) do
     delimiter = delimiter || random_delimiter()
 
     delimiter <> to_string(query) <> delimiter
+  end
+
+  def query_generator({_, %State{query_generator: query_generator}}) do
+    query_generator
   end
 
   defp random_delimiter do

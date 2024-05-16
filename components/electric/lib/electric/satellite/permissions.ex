@@ -282,6 +282,16 @@ defmodule Electric.Satellite.Permissions do
 
   @read_feature_flag :read_permissions
 
+  @read_privileges [:SELECT]
+  @write_privileges [:INSERT, :UPDATE, :DELETE]
+  @privileges @read_privileges ++ @write_privileges
+
+  def read_privileges, do: @read_privileges
+
+  def write_privileges, do: @write_privileges
+
+  def privileges, do: @privileges
+
   @spec filter_reads_enabled?() :: boolean()
   def filter_reads_enabled?() do
     Electric.Features.enabled?(@read_feature_flag)

@@ -31,9 +31,8 @@ defmodule Electric.Replication.Eval.Parser do
     ]
   end
 
-  @valid_types (Electric.Postgres.supported_types() ++
-                  Electric.Postgres.supported_types_only_in_functions())
-               |> Enum.map(&Atom.to_string/1)
+  @valid_types Electric.Postgres.supported_types() ++
+                 Electric.Postgres.supported_types_only_in_functions()
 
   @type tree_part :: %Const{} | %Ref{} | %Func{}
   @type refs_map :: %{optional([String.t(), ...]) => Env.pg_type()}

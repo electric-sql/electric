@@ -1,6 +1,4 @@
 defmodule Electric.DDLX.Command.Error do
-  alias Electric.DDLX.Command
-
   @type t() :: %__MODULE__{
           sql: String.t(),
           line: pos_integer(),
@@ -13,6 +11,7 @@ defmodule Electric.DDLX.Command.Error do
   defstruct [
     :sql,
     :message,
+    :code,
     line: 0,
     position: 0
   ]
@@ -32,11 +31,5 @@ defmodule Electric.DDLX.Command.Error do
   @impl Exception
   def message(%__MODULE__{message: message}) do
     message
-  end
-
-  defimpl Command.PgSQL do
-    def to_sql(_) do
-      []
-    end
   end
 end

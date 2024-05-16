@@ -23,6 +23,6 @@ defmodule Electric.DDLX do
   """
   @spec command_to_postgres(Command.t() | [Command.t()]) :: [String.t()]
   def command_to_postgres(command) do
-    Command.pg_sql(command)
+    Command.proxy_sql(command)
   end
 end

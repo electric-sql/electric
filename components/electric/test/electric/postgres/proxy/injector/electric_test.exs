@@ -102,10 +102,12 @@ defmodule Electric.Postgres.Proxy.Injector.ElectricTest do
         proxy_ddlx_sqlite: false
       )
 
+      ddl = "CREATE TABLE public.items (id uuid PRIMARY KEY, value text)"
+
       migrations = [
         {"0001",
          [
-           "CREATE TABLE public.items (id uuid PRIMARY KEY, value text)",
+           ddl,
            "CREATE INDEX items_idx ON public.items (value)"
          ]}
       ]
@@ -122,7 +124,7 @@ defmodule Electric.Postgres.Proxy.Injector.ElectricTest do
           database: "electric"
         )
 
-      {:ok, injector: injector}
+      {:ok, ddl: ddl, injector: injector}
     end
 
     for scenario <- TestScenario.scenarios() do
@@ -131,11 +133,10 @@ defmodule Electric.Postgres.Proxy.Injector.ElectricTest do
       end
 
       test "#{scenario.description()} ELECTRIC ENABLE", cxt do
-        query =
-          "ALTER TABLE public.items ENABLE ELECTRIC;"
+        query = "ALTER TABLE public.items ENABLE ELECTRIC;"
 
         for framework <- TestScenario.frameworks() do
-          cxt.scenario.assert_valid_electric_command(cxt.injector, framework, query)
+          cxt.scenario.assert_valid_electric_command(cxt.injector, framework, query, ddl: cxt.ddl)
         end
       end
 

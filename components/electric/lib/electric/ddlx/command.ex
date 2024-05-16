@@ -1,6 +1,12 @@
 defprotocol Electric.DDLX.Command.PgSQL do
-  @spec to_sql(t()) :: [String.t()]
-  def to_sql(cmd)
+  alias Electric.Postgres.Schema
+
+  @spec to_sql(t(), [String.t()], (String.t() -> String.t())) :: [String.t()]
+  def to_sql(cmd, ddl_capture, quote_fun)
+
+  @spec validate_schema(t(), Schema.t()) ::
+          {:ok, [String.t()]} | {:error, %{optional(:code) => String.t(), message: String.t()}}
+  def validate_schema(cmd, schema)
 end
 
 alias Electric.Satellite.SatPerms
@@ -8,6 +14,7 @@ alias Electric.Satellite.SatPerms
 defmodule Electric.DDLX.Command do
   alias Electric.DDLX
   alias Electric.DDLX.Command.PgSQL
+  alias Electric.Postgres.Proxy.Injector
 
   defstruct [:action, :stmt, :tag, tables: []]
 
@@ -17,6 +24,8 @@ defmodule Electric.DDLX.Command do
           tag: String.t(),
           tables: [Electric.Postgres.relation()]
         }
+
+  @privileges Electric.Satellite.Permissions.privileges()
 
   def tag(%__MODULE__{tag: tag}) do
     tag
@@ -46,8 +55,20 @@ defmodule Electric.DDLX.Command do
     cmd
   end
 
-  def pg_sql(cmd) do
-    PgSQL.to_sql(cmd)
+  def proxy_sql(cmd) do
+    proxy_sql(cmd, [], &Injector.quote_query/1)
+  end
+
+  def proxy_sql(cmd, ddl) do
+    proxy_sql(cmd, ddl, &Injector.quote_query/1)
+  end
+
+  def proxy_sql(cmd, ddl, quote_fun) do
+    PgSQL.to_sql(cmd, List.wrap(ddl), quote_fun)
+  end
+
+  def validate_schema(cmd, schema) do
+    PgSQL.validate_schema(cmd, schema)
   end
 
   def table_names(%__MODULE__{tables: tables}), do: tables
@@ -60,7 +81,7 @@ defmodule Electric.DDLX.Command do
     table_name = Electric.Utils.inspect_relation(table)
 
     %__MODULE__{
-      action: %DDLX.Command.Enable{table_name: table_name},
+      action: %DDLX.Command.Enable{table_name: table},
       stmt: "CALL electric.electrify('#{table_name}');",
       tag: "ELECTRIC ENABLE",
       tables: [table]
@@ -177,33 +198,63 @@ defmodule Electric.DDLX.Command do
     role
   end
 
-  defp fingerprint(priv) when priv in [:SELECT, :INSERT, :UPDATE, :DELETE] do
+  defp fingerprint(priv) when priv in @privileges do
     to_string(priv)
   end
 
   defimpl Electric.DDLX.Command.PgSQL do
-    def to_sql(%Electric.DDLX.Command{action: action}) do
-      PgSQL.to_sql(action)
+    alias Electric.DDLX.Command
+
+    def to_sql(%Electric.DDLX.Command{action: action}, ddl_capture, quote_fun) do
+      Command.PgSQL.to_sql(action, ddl_capture, quote_fun)
+    end
+
+    def validate_schema(%Electric.DDLX.Command{action: action}, schema) do
+      Command.PgSQL.validate_schema(action, schema)
     end
   end
 end
 
-defimpl Electric.DDLX.Command.PgSQL, for: List do
-  def to_sql(list) do
-    Enum.flat_map(list, &Electric.DDLX.Command.PgSQL.to_sql/1)
+alias Electric.DDLX.Command
+
+defimpl Command.PgSQL, for: List do
+  alias Command
+
+  def to_sql(list, ddl_capture, quote_fun) do
+    Enum.flat_map(list, &Command.PgSQL.to_sql(&1, ddl_capture, quote_fun))
+  end
+
+  def validate_schema(list, schema) do
+    Enum.reduce_while(list, {:ok, []}, fn cmd, {:ok, warnings} ->
+      case Command.PgSQL.validate_schema(cmd, schema) do
+        {:ok, w} ->
+          {:cont, {:ok, warnings ++ w}}
+
+        {:error, reason} ->
+          {:halt, {:error, reason}}
+      end
+    end)
   end
 end
 
-defimpl Electric.DDLX.Command.PgSQL, for: SatPerms.DDLX do
+defimpl Command.PgSQL, for: SatPerms.DDLX do
+  alias Command
   alias Electric.Postgres.Extension
 
-  def to_sql(%SatPerms.DDLX{} = ddlx) do
+  def to_sql(%SatPerms.DDLX{} = ddlx, ddl_capture, quote_fun) do
     Enum.concat([
       serialise_ddlx(ddlx),
       ddlx
-      |> Electric.DDLX.Command.command_list()
-      |> Enum.flat_map(&Electric.DDLX.Command.PgSQL.to_sql/1)
+      |> Command.command_list()
+      |> Enum.flat_map(&Command.PgSQL.to_sql(&1, ddl_capture, quote_fun))
     ])
+  end
+
+  def validate_schema(%SatPerms.DDLX{} = ddlx, schema) do
+    ddlx
+    |> Command.command_list()
+    |> Enum.to_list()
+    |> Command.PgSQL.validate_schema(schema)
   end
 
   defp serialise_ddlx(ddlx) do
@@ -215,32 +266,104 @@ defimpl Electric.DDLX.Command.PgSQL, for: SatPerms.DDLX do
   end
 end
 
-defimpl Electric.DDLX.Command.PgSQL, for: SatPerms.Grant do
-  def to_sql(%SatPerms.Grant{} = _grant) do
+defimpl Command.PgSQL, for: SatPerms.Grant do
+  alias Electric.Postgres.Schema.Validator
+
+  def to_sql(%SatPerms.Grant{} = _grant, _ddl_capture, _quote_fun) do
     []
+  end
+
+  def validate_schema(%SatPerms.Grant{} = grant, schema) do
+    Validator.validate_schema_for_grant(schema, grant)
   end
 end
 
-defimpl Electric.DDLX.Command.PgSQL, for: SatPerms.Revoke do
-  def to_sql(%SatPerms.Revoke{} = _revoke) do
+defimpl Command.PgSQL, for: SatPerms.Revoke do
+  def to_sql(%SatPerms.Revoke{} = _revoke, _ddl_capture, _quote_fun) do
     []
+  end
+
+  def validate_schema(%SatPerms.Revoke{}, _schema) do
+    {:ok, []}
   end
 end
 
-defimpl Electric.DDLX.Command.PgSQL, for: SatPerms.Assign do
-  def to_sql(%SatPerms.Assign{} = _assign) do
+defimpl Command.PgSQL, for: SatPerms.Assign do
+  def to_sql(%SatPerms.Assign{} = _assign, _ddl_capture, _quote_fun) do
     []
+  end
+
+  def validate_schema(%SatPerms.Assign{}, _schema) do
+    {:ok, []}
   end
 end
 
-defimpl Electric.DDLX.Command.PgSQL, for: SatPerms.Unassign do
-  def to_sql(%SatPerms.Unassign{} = _unassign) do
+defimpl Command.PgSQL, for: SatPerms.Unassign do
+  def to_sql(%SatPerms.Unassign{} = _unassign, _ddl_capture, _quote_fun) do
     []
+  end
+
+  def validate_schema(%SatPerms.Unassign{}, _schema) do
+    {:ok, []}
   end
 end
 
-defimpl Electric.DDLX.Command.PgSQL, for: SatPerms.Sqlite do
-  def to_sql(%SatPerms.Sqlite{} = _sqlite) do
+defimpl Command.PgSQL, for: SatPerms.Sqlite do
+  def to_sql(%SatPerms.Sqlite{} = _sqlite, _ddl_capture, _quote_fun) do
     []
+  end
+
+  def validate_schema(%SatPerms.Sqlite{}, _schema) do
+    {:ok, []}
+  end
+end
+
+defimpl Command.PgSQL, for: Command.Enable do
+  alias Command.Enable
+  alias Electric.Postgres.Schema.Validator
+
+  import Command.Common, only: [sql_repr: 1]
+
+  def to_sql(%Enable{table_name: {schema, name}}, [_ | _] = ddl, quote_fun) do
+    args =
+      ddl
+      |> Enum.map(quote_fun)
+      |> Enum.join(", ")
+
+    [
+      """
+      CALL electric.electrify_with_ddl(#{sql_repr(schema)}, #{sql_repr(name)}, #{args});
+      """
+    ]
+  end
+
+  def validate_schema(%Enable{} = enable, schema) do
+    Validator.validate_schema_for_electrification(schema, enable.table_name)
+  end
+end
+
+defimpl Command.PgSQL, for: Command.Disable do
+  import Command.Common, only: [sql_repr: 1]
+
+  def to_sql(%Command.Disable{} = disable, _ddl_capture, _quote_fun) do
+    [
+      """
+      CALL electric.disable(#{sql_repr(disable.table_name)});
+      """
+    ]
+  end
+
+  def validate_schema(%Command.Disable{}, _schema) do
+    {:ok, []}
+  end
+end
+
+defimpl Command.PgSQL, for: Command.Error do
+  def to_sql(_, _, _) do
+    []
+  end
+
+  def validate_schema(_, _) do
+    {:ok, []}
   end
 end
