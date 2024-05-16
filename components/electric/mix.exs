@@ -38,42 +38,62 @@ defmodule Electric.MixProject do
 
   # Run "mix help deps" to learn about dependencies.
   defp deps do
+    List.flatten([
+      [
+        {:backoff, "~> 1.1"},
+        {:bandit, "~> 1.1"},
+        {:dotenvy, "~> 0.8"},
+        {:gen_stage, "~> 1.2"},
+        {:gproc, "~> 1.0"},
+        {:jason, "~> 1.4"},
+        {:joken, "~> 2.6"},
+        {:libgraph, "~> 0.16.0"},
+        {:mint, "~> 1.5"},
+        {:mint_web_socket, "~> 1.0"},
+        {:nimble_parsec, "~> 1.4"},
+        {:nimble_pool, "~> 1.0"},
+        {:pathex, "~> 2.5.2"},
+        {:pg_protocol, github: "electric-sql/pg_protocol"},
+        {:pg_query_ex, github: "electric-sql/pg_query_ex"},
+        {:protox, "~> 1.7"},
+        {:req, "~> 0.4"},
+        {:ssl_verify_fun, "~> 1.1.7", override: true},
+        {:thousand_island, "~> 1.3"},
+        {:timex, "~> 3.7"},
+        {:tzdata, "~> 1.1"}
+      ],
+      database_deps(),
+      dev_and_test_deps(),
+      telemetry_deps()
+    ])
+  end
+
+  defp database_deps do
     [
-      {:backoff, "~> 1.1"},
-      {:bandit, "~> 1.1"},
-      {:dialyxir, "~> 1.4", only: [:dev], runtime: false},
-      {:dotenvy, "~> 0.8"},
       {:ecto, "~> 3.11"},
       {:ecto_sql, "~> 3.11"},
       {:epgsql, "~> 4.2"},
+      {:postgrex, "~> 0.17"}
+    ]
+  end
+
+  defp dev_and_test_deps do
+    [
+      {:dialyxir, "~> 1.4", only: [:dev], runtime: false},
       {:excoveralls, "~> 0.18", only: :test, runtime: false},
       {:exqlite, "~> 0.19", only: [:dev, :test]},
-      {:gen_stage, "~> 1.2"},
-      {:gproc, "~> 1.0"},
-      {:jason, "~> 1.4"},
-      {:joken, "~> 2.6"},
-      {:libgraph, "~> 0.16.0"},
-      {:mint, "~> 1.5"},
-      {:mint_web_socket, "~> 1.0"},
       {:mock, "~> 0.3.0", only: :test},
-      {:mox, "~> 1.1"},
-      {:nimble_parsec, "~> 1.4"},
-      {:nimble_pool, "~> 1.0"},
-      {:pathex, "~> 2.5.2"},
-      {:pg_protocol, github: "electric-sql/pg_protocol"},
-      {:pg_query_ex, github: "electric-sql/pg_query_ex"},
-      {:postgrex, "~> 0.17"},
-      {:protox, "~> 1.7"},
-      {:req, "~> 0.4"},
-      {:ssl_verify_fun, "~> 1.1.7", override: true},
-      {:stream_data, "~> 1.0", only: [:dev, :test]},
+      {:mox, "~> 1.1", only: :test},
+      {:stream_data, "~> 1.0", only: [:dev, :test]}
+    ]
+  end
+
+  defp telemetry_deps do
+    [
       {:telemetry, "~> 1.1", override: true},
       {:telemetry_metrics, "~> 1.0", override: true},
       {:telemetry_metrics_statsd, "~> 0.7"},
-      {:telemetry_poller, "~> 1.0"},
-      {:thousand_island, "~> 1.3"},
-      {:timex, "~> 3.7"},
-      {:tzdata, "~> 1.1"}
+      {:telemetry_poller, "~> 1.0"}
     ]
   end
 
