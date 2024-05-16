@@ -111,6 +111,27 @@ test('Shape manager promise does not get resolved when data arrives if there are
   await promiseResolved(t, secondResult.promise)
 })
 
+test('Shape manager correctly rehydrates the state', async (t) => {
+  // Setup
+  const mng = new ShapeManager()
+  const firstResult = mng.syncRequested([{ tablename: 't1' }], 'k1')
+  if ('existing' in firstResult) return void t.fail()
+  firstResult.setServerId('testID')
+  mng.dataDelivered('testID')()
+
+  const secondResult = mng.syncRequested([{ tablename: 't2' }], 'k2')
+  if ('existing' in secondResult) return void t.fail()
+  secondResult.setServerId('id2')
+  mng.dataDelivered('id2')()
+
+  mng.unsubscribeMade(['testID'])
+  mng.goneBatchDelivered(['testID'])
+
+  // Simulate reconnect
+  mng.initialize(mng.serialize())
+  t.deepEqual(mng.listContinuedSubscriptions(), ['id2'])
+})
+
 async function promiseResolved(
   t: ExecutionContext<any>,
   promise: Promise<any>,

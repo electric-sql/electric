@@ -327,6 +327,9 @@ export class ShapeManager {
       delete this.knownSubscriptions[fullKey]
       this.serverIds.delete(id)
       this.incompleteUnsubs.delete(id)
+      if (this.activeSubscriptions[key] === fullKey)
+        delete this.activeSubscriptions[key]
+
       for (const sub of this.getSubscriptionsWaitingForUnsub(fullKey)) {
         sub.overshadowsFullKeys.splice(
           sub.overshadowsFullKeys.indexOf(fullKey),
