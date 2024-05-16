@@ -16,7 +16,7 @@ export default function ShapesTab({
     // periodically refresh shape subscriptions
     const interval = setInterval(
       () => setShapes(api.getSatelliteShapeSubscriptions(dbName)),
-      1000,
+      500,
     )
     return () => clearInterval(interval)
   }, [dbName, api])
