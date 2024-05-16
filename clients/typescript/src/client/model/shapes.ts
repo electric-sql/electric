@@ -3,6 +3,32 @@ import { Shape } from '../../satellite/shapes/types'
 
 export type TableName = string
 
+export type SyncStatus =
+  | {
+      status: 'exchanging'
+      oldServerId: string | undefined
+      newServerId: string | undefined
+    }
+  | {
+      status: 'requested'
+      serverId: string
+    }
+  | {
+      status: 'finishing_exchange'
+      serverId: string
+    }
+  | {
+      status: 'active'
+      serverId: string
+    }
+  | undefined
+
+export interface IShapeManager2 {
+  subscribe(shapes: Shape[], key?: string): Promise<ShapeSubscription>
+  unsubscribe(keys: string[]): Promise<void>
+  syncStatus(key: string): SyncStatus
+}
+
 export interface IShapeManager {
   sync(shape: Shape): Promise<ShapeSubscription>
   hasBeenSubscribed(table: TableName): boolean
@@ -39,7 +65,7 @@ export class ShapeManager extends BaseShapeManager {
     })
 
     return {
-      id: sub.id,
+      key: sub.key,
       synced: dataReceivedProm,
     }
   }
@@ -61,7 +87,7 @@ export class ShapeManagerMock extends BaseShapeManager {
     )
 
     return {
-      id: 'unknown',
+      key: 'unknown',
       synced: Promise.resolve(),
     }
   }

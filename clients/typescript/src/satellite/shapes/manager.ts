@@ -1,6 +1,5 @@
 import { SatelliteError, SatelliteErrorCode } from '../../util/types'
 
-import EventEmitter from 'events'
 import {
   Shape,
   ShapeDefinition,
@@ -20,10 +19,7 @@ export type GarbageCollectShapeHandler = (
   shapeDefs: ShapeDefinition[]
 ) => Promise<void>
 
-export class InMemorySubscriptionsManager
-  extends EventEmitter
-  implements SubscriptionsManager
-{
+export class InMemorySubscriptionsManager implements SubscriptionsManager {
   private inFlight: SubcriptionShapeRequests = {}
   protected fulfilledSubscriptions: SubcriptionShapeDefinitions = {}
   private readonly shapeRequestHashmap: Map<string, SubscriptionId> = new Map()
@@ -31,7 +27,7 @@ export class InMemorySubscriptionsManager
   private readonly gcHandler?: GarbageCollectShapeHandler
 
   constructor(gcHandler?: GarbageCollectShapeHandler) {
-    super()
+    // super()
     this.gcHandler = gcHandler
   }
 
@@ -105,6 +101,10 @@ export class InMemorySubscriptionsManager
     } else {
       return null
     }
+  }
+
+  public hash(shapes: Shape[]) {
+    return computeClientDefsHash(shapes)
   }
 
   private _gcSubscription(subId: SubscriptionId): void {

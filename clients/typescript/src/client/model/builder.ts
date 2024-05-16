@@ -11,8 +11,6 @@ import { DeleteInput, DeleteManyInput } from '../input/deleteInput'
 import flow from 'lodash.flow'
 import { InvalidArgumentError } from '../validation/errors/invalidArgumentError'
 import * as z from 'zod'
-import { IShapeManager } from './shapes'
-import Log from 'loglevel'
 import { ExtendedTableSchema } from './schema'
 import { PgBasicType } from '../conversions/types'
 import { HKT } from '../util/hkt'
@@ -36,7 +34,6 @@ export class Builder {
   constructor(
     private _tableName: string,
     private _fields: string[],
-    private shapeManager: IShapeManager,
     private _tableDescription: ExtendedTableSchema<
       any,
       any,
@@ -176,9 +173,6 @@ export class Builder {
 
     const whereObject = i.where
     const identificationFields = this.getFields(whereObject, idRequired)
-
-    if (!this.shapeManager.hasBeenSubscribed(this._tableName))
-      Log.debug('Reading from unsynced table ' + this._tableName)
 
     // don't autoquote field names in the selection
     // because if a field is a BigInt we cast it

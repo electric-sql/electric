@@ -39,7 +39,7 @@ import {
   ReplicatedRowTransformer,
 } from '../../util'
 import { NarrowInclude } from '../input/inputNarrowing'
-import { IShapeManager } from './shapes'
+import { IShapeManager2 } from './shapes'
 import { ShapeSubscription } from '../../satellite'
 import { Rel, Shape } from '../../satellite/shapes/types'
 import { IReplicationTransformManager } from './transforms'
@@ -103,7 +103,7 @@ export class Table<
     public tableName: string,
     adapter: DatabaseAdapter,
     private _notifier: Notifier,
-    private _shapeManager: IShapeManager,
+    private _shapeManager: IShapeManager2,
     private _replicationTransformManager: IReplicationTransformManager,
     private _dbDescription: DbSchema<any>,
     private _transformer: InputTransformer,
@@ -115,7 +115,6 @@ export class Table<
     this._builder = new Builder(
       tableName,
       fieldNames,
-      this._shapeManager,
       tableDescription,
       this.dialect
     )
@@ -154,6 +153,7 @@ export class Table<
 
     this.syncSchema = (this.syncSchema as any).extend({
       where: shape.or(z.string().optional()),
+      key: z.string().optional(),
     })
   }
 
@@ -251,7 +251,7 @@ export class Table<
   sync<T extends SyncInput<Include, Where>>(i?: T): Promise<ShapeSubscription> {
     const validatedInput = this.syncSchema.parse(i ?? {})
     const shape = this.computeShape(validatedInput)
-    return this._shapeManager.sync(shape)
+    return this._shapeManager.subscribe([shape], validatedInput.key)
   }
 
   /*

@@ -2,7 +2,6 @@ import anyTest, { TestFn } from 'ava'
 import { Builder } from '../../../src/client/model/builder'
 import { ZodError } from 'zod'
 import { Dialect } from '../../../src/migrators/query-builder/builder'
-import { ShapeManagerMock } from '../../../src/client/model/shapes'
 import { schema } from '../generated'
 import { pgBuilder, sqliteBuilder } from '../../../src/migrators/query-builder'
 
@@ -26,17 +25,13 @@ const post2 = {
 
 const test = anyTest as TestFn<ContextType>
 
-const shapeManager = new ShapeManagerMock()
 const postTableDescription = schema.getTableDescription('Post')
-// Sync all shapes such that we don't get warnings on every query
-shapeManager.sync({ tablename: 'Post' })
 
 function makeContext(dialect: Dialect) {
   test.beforeEach(async (t) => {
     const tbl = new Builder(
       'Post',
       ['id', 'title', 'contents', 'nbr'],
-      shapeManager,
       postTableDescription,
       dialect
     )

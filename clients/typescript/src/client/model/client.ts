@@ -6,7 +6,6 @@ import { LiveResult, LiveResultContext } from './model'
 import { Notifier } from '../../notifiers'
 import { DatabaseAdapter } from '../../electric/adapter'
 import { GlobalRegistry, Registry, Satellite } from '../../satellite'
-import { ShapeManager } from './shapes'
 import { ReplicationTransformManager } from './transforms'
 import { Dialect } from '../../migrators/query-builder/builder'
 import { InputTransformer } from '../conversions/input'
@@ -140,7 +139,6 @@ export class ElectricClient<
     dialect: Dialect
   ): ElectricClient<DB> {
     const tables = dbDescription.extendedTables
-    const shapeManager = new ShapeManager(satellite)
     const converter = dialect === 'SQLite' ? sqliteConverter : postgresConverter
     const replicationTransformManager = new ReplicationTransformManager(
       satellite,
@@ -153,7 +151,7 @@ export class ElectricClient<
         tableName,
         adapter,
         notifier,
-        shapeManager,
+        satellite,
         replicationTransformManager,
         dbDescription,
         inputTransformer,
