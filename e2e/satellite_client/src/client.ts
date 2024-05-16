@@ -19,7 +19,20 @@ setLogLevel('DEBUG')
 
 let dbName: string
 type DB = PgDatabase | BetterSqliteDatabase
-const builder: QueryBuilder = process.env.DIALECT === 'Postgres' ? pgBuilder : sqliteBuilder
+const builder: QueryBuilder = dialect() === 'Postgres' ? pgBuilder : sqliteBuilder
+
+function dialect(): 'Postgres' | 'SQLite' {
+  switch (process.env.DIALECT) {
+    case 'Postgres':
+    case 'SQLite':
+      return process.env.DIALECT
+    case '':
+    case undefined:
+      return 'SQLite'
+    default:
+      throw new Error(`Unrecognised dialect: ${process.env.DIALECT}`)
+  }
+} 
 
 async function makePgDatabase(): Promise<PgDatabase> {
   const client = new pg.Client({
@@ -38,11 +51,13 @@ async function makePgDatabase(): Promise<PgDatabase> {
 export const make_db = async (name: string): Promise<DB> => {
   dbName = name
   console.log("DIALECT: " + process.env.DIALECT)
-  if (process.env.DIALECT === 'Postgres') {
-    return makePgDatabase()
+  
+  switch (dialect()) {
+    case 'Postgres':
+      return makePgDatabase()
+    case 'SQLite':
+      return new SQLiteDatabase(name)
   }
-
-  return new SQLiteDatabase(name)
 }
 
 function isPostgresDb(dialect: string | undefined, _db: DB): _db is PgDatabase {
@@ -63,10 +78,13 @@ export const electrify_db = async (
   }
   console.log(`(in electrify_db) config: ${JSON.stringify(config)}`)
 
-  if (process.env.DIALECT === 'Postgres') {
-    schema.pgMigrations = migrations
-  } else {
-    schema.migrations = migrations
+  switch (dialect()) {
+    case 'Postgres':
+      schema.pgMigrations = migrations
+      break
+    case 'SQLite':
+      schema.migrations = migrations
+      break
   }
   
   const electric = isPostgresDb(process.env.DIALECT, db)
@@ -75,7 +93,7 @@ export const electrify_db = async (
   
   const token = await mockSecureAuthToken(exp)
 
-  electric.notifier.subscribeToConnectivityStateChanges((x: any) => console.log(`Connectivity state changed: ${x.connectivityState.status}`))
+  electric.notifier.subscribeToConnectivityStateChanges(x => console.log(`Connectivity state changed: ${x.connectivityState.status}`))
   if (connectToElectric) {
     await electric.connect(token) // connect to Electric
   }
