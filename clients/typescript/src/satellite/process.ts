@@ -523,16 +523,20 @@ export class SatelliteProcess implements Satellite {
       subsData.subscriptionId
     )
 
-    // notify subscribers of change
+    // notify subscribers of change (if finished delivering data)
     const key = this.subscriptionManager.getKeyForServerID(
       subsData.subscriptionId
     )
-    if (key)
-      this.notifier.shapeSubscriptionSyncStatusChanged(
-        this.dbName,
-        key,
-        this.syncStatus(key)
-      )
+    if (key) {
+      const syncStatus = this.syncStatus(key)
+      if (syncStatus?.status === 'active') {
+        this.notifier.shapeSubscriptionSyncStatusChanged(
+          this.dbName,
+          key,
+          syncStatus
+        )
+      }
+    }
 
     const toBeUnsubbed = afterApply()
     if (toBeUnsubbed.length > 0) await this.unsubscribeIds(toBeUnsubbed)
@@ -1582,11 +1586,16 @@ export class SatelliteProcess implements Satellite {
       ...stmts,
       ...this._enableTriggers(affectedTables)
     )
+
+    // retrieve sub keys before they get removed
+    const subKeys = subscriptionIds.map((x) =>
+      this.subscriptionManager.getKeyForServerID(x)
+    )
+
     this.subscriptionManager.goneBatchDelivered(subscriptionIds)
 
     // notify subscribers of change
-    subscriptionIds.forEach((subId) => {
-      const key = this.subscriptionManager.getKeyForServerID(subId)
+    subKeys.forEach((key) => {
       if (!key) return
       this.notifier.shapeSubscriptionSyncStatusChanged(
         this.dbName,
