@@ -1,14 +1,15 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useElectric } from '../electric'
 
-import { BsCloudArrowDownFill, BsCloudSlashFill } from 'react-icons/bs'
+import { BsCheck } from 'react-icons/bs'
 import { AiOutlineLoading3Quarters } from 'react-icons/ai'
+import { Checkbox } from '@headlessui/react'
 
 interface Props {
+  title: string
   projectId: string
 }
-
-function ProjectSyncToggle({ projectId }: Props) {
+function ProjectItem({ title, projectId }: Props) {
   const { db, sync } = useElectric()!
   const [loading, setLoading] = useState(false)
   const [synced, setSynced] = useState(false)
@@ -49,6 +50,7 @@ function ProjectSyncToggle({ projectId }: Props) {
 
   useEffect(() => {
     const status = sync.syncStatus(projectId)
+    console.log(title, status)
 
     // if sub not present, do nothing
     if (!status) return
@@ -56,26 +58,31 @@ function ProjectSyncToggle({ projectId }: Props) {
     // if sub in progress, set loading state
     if (status.status !== 'active') setLoading(true)
 
-    // set sync status based on whether sub is being
-    // established or cancelled
-    setSynced(status.status === 'establishing')
+    // set sync status based on whether sub is active
+    // or being cancelled
+    setSynced(status.status !== 'cancelling')
   }, [sync, projectId])
-
-  const ActionIcon = synced ? BsCloudSlashFill : BsCloudArrowDownFill
 
   return (
     <button
-      className="min-w-10 w-10 h-7 flex items-center rounded hover:bg-gray-100 cursor-pointer disabled:opacity-75 justify-center"
       disabled={loading}
+      className="flex flex-row w-full text-sm items-center px-2 relative w-full mt-0.5 h-7 rounded hover:bg-gray-100 cursor-pointer disabled:cursor-default truncate"
       onClick={synced ? unsyncProject : syncProject}
     >
-      {loading ? (
-        <AiOutlineLoading3Quarters className="animate-spin" />
-      ) : (
-        <ActionIcon />
-      )}
+      <Checkbox
+        checked={synced}
+        disabled={loading}
+        className="group block size-4 rounded border bg-white flex items-center justify-center"
+      >
+        {loading ? (
+          <AiOutlineLoading3Quarters className="w-1/2 animate-spin" />
+        ) : (
+          <BsCheck className="stroke-white opacity-0 group-data-[checked]:opacity-100" />
+        )}
+      </Checkbox>
+      <div className="ml-2 truncate">{title}</div>
     </button>
   )
 }
 
-export default ProjectSyncToggle
+export default ProjectItem
