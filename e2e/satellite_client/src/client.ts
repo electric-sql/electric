@@ -19,7 +19,7 @@ setLogLevel('DEBUG')
 
 let dbName: string
 type DB = PgDatabase | BetterSqliteDatabase
-let builder: QueryBuilder = sqliteBuilder
+const builder: QueryBuilder = process.env.DIALECT === 'Postgres' ? pgBuilder : sqliteBuilder
 
 async function makePgDatabase(): Promise<PgDatabase> {
   const client = new pg.Client({
@@ -39,7 +39,6 @@ export const make_db = async (name: string): Promise<DB> => {
   dbName = name
   console.log("DIALECT: " + process.env.DIALECT)
   if (process.env.DIALECT === 'Postgres') {
-    builder = pgBuilder
     return makePgDatabase()
   }
 
