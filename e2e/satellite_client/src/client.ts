@@ -330,7 +330,6 @@ export const get_json = async (electric: Electric, id: string) => {
     },
     select: {
       id: true,
-      //js: true,
     }
   })
   return res
@@ -349,11 +348,10 @@ export const get_jsonb = async (electric: Electric, id: string) => {
   return res
 }
 
-export const write_json = async (electric: Electric, id: string, _js: any, jsb: any) => {
+export const write_json = async (electric: Electric, id: string, jsb: any) => {
   return electric.db.jsons.create({
     data: {
       id,
-      //_js,
       jsb,
     }
   })
