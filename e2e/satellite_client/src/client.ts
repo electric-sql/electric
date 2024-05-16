@@ -3,7 +3,7 @@ import SQLiteDatabase from 'better-sqlite3'
 import type { Database as BetterSqliteDatabase } from 'electric-sql/node'
 import { ElectricConfig } from 'electric-sql'
 import { mockSecureAuthToken } from 'electric-sql/auth/secure'
-import type { Database } from 'electric-sql/node-postgres'
+import type { Database as PgDatabase } from 'electric-sql/node-postgres'
 import { setLogLevel } from 'electric-sql/debug'
 import { electrify as electrifySqlite } from 'electric-sql/node'
 import { electrify as electrifyPg } from 'electric-sql/node-postgres'
@@ -19,12 +19,12 @@ import { DbSchema, ElectricClient } from 'electric-sql/client/model'
 setLogLevel('DEBUG')
 
 let dbName: string
-type DB = Database | BetterSqliteDatabase
+type DB = PgDatabase | BetterSqliteDatabase
 let electrify: <Schema extends DbSchema<any>>(db: DB, dbDescription: Schema, config: ElectricConfig) => Promise<ElectricClient<Schema>> =
   <Schema extends DbSchema<any>>(db: DB, dbDescription: Schema, config: ElectricConfig) => electrifySqlite(db as BetterSqliteDatabase, dbDescription, config)
 let builder: QueryBuilder = sqliteBuilder
 
-async function makePgDatabase(): Promise<Database> {
+async function makePgDatabase(): Promise<PgDatabase> {
   const client = new pg.Client({
     host: 'pg_1',
     port: 5432,
@@ -42,7 +42,7 @@ export const make_db = async (name: string): Promise<DB> => {
   dbName = name
   console.log("DIALECT: " + process.env.DIALECT)
   if (process.env.DIALECT === 'Postgres') {
-    electrify = <Schema extends DbSchema<any>>(db: DB, dbDescription: Schema, config: ElectricConfig) => electrifyPg(db as Database, dbDescription, config)
+    electrify = <Schema extends DbSchema<any>>(db: DB, dbDescription: Schema, config: ElectricConfig) => electrifyPg(db as PgDatabase, dbDescription, config)
     builder = pgBuilder
     return makePgDatabase()
   }
