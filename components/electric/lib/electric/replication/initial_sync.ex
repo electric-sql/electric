@@ -139,8 +139,9 @@ defmodule Electric.Replication.InitialSync do
     {:ok, schema_version} = Extension.SchemaCache.load(origin)
 
     run_in_readonly_txn_with_checkpoint(opts, {ref, parent}, marker, fn conn, xmin ->
-      Enum.reduce_while(subquery_map, {Graph.new(), %{}}, fn {layer, changes},
-                                                             {acc_graph, results} ->
+      Enum.reduce_while(subquery_map, {MapSet.new(), Graph.new(), %{}}, fn {layer, changes},
+                                                                           {req_ids, acc_graph,
+                                                                            results} ->
         case Shapes.ShapeRequest.query_moved_in_layer_data(
                conn,
                layer,
@@ -151,7 +152,7 @@ defmodule Electric.Replication.InitialSync do
              ) do
           {:ok, _, data, graph} ->
             {:cont,
-             {Utils.merge_graph_edges(acc_graph, graph),
+             {MapSet.put(req_ids, layer.request_id), Utils.merge_graph_edges(acc_graph, graph),
               Map.merge(results, data, fn _, {change, v1}, {_, v2} -> {change, v1 ++ v2} end)}}
 
           {:error, reason} ->

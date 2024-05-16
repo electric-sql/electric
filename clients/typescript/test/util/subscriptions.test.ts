@@ -78,7 +78,7 @@ test('some tests', (t) => {
   manager.subscriptionDelivered(subscriptionData)
 
   // not active after unsubscribe
-  manager.unsubscribe(subscriptionId)
+  manager.unsubscribe([subscriptionId])
   t.is(manager.shapesForActiveSubscription(subscriptionId), undefined)
 
   // able to subscribe again after unsubscribe

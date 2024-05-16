@@ -154,6 +154,13 @@ export type DataChange = {
   tags: Tag[]
 }
 
+export type DataGone = {
+  relation: Relation
+  type: DataChangeType.GONE
+  oldRecord: DbRecord
+  tags: []
+}
+
 export type DataInsert = {
   relation: Relation
   type: DataChangeType.INSERT
@@ -202,9 +209,12 @@ export interface InboundReplication extends Replication<ServerTransaction> {
   additionalData: AdditionalData[]
   unseenAdditionalDataRefs: Set<string>
   incomplete?: 'transaction' | 'additionalData'
+  goneBatch: DataGone[]
+  receivingUnsubsBatch: false | string[]
   seenAdditionalDataSinceLastTx: {
     subscriptions: string[]
     dataRefs: Long[]
+    gone: string[]
   }
 }
 
@@ -250,6 +260,11 @@ export type IncomingTransactionCallback = (
   AckCb: () => void
 ) => void
 export type OutboundStartedCallback = () => void
+export type GoneBatchCallback = (
+  lsn: LSN,
+  subscriptionIds: string[],
+  changes: DataGone[]
+) => void | Promise<void>
 
 export type ConnectivityStatus = 'connected' | 'disconnected'
 export type ConnectivityState = {

@@ -39,6 +39,7 @@ export class ShapeManager extends BaseShapeManager {
     })
 
     return {
+      id: sub.id,
       synced: dataReceivedProm,
     }
   }
@@ -60,6 +61,7 @@ export class ShapeManagerMock extends BaseShapeManager {
     )
 
     return {
+      id: 'unknown',
       synced: Promise.resolve(),
     }
   }

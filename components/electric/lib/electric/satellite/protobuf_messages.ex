@@ -3335,7 +3335,8 @@
               subscription_ids: [],
               schema_version: nil,
               observed_transaction_data: [],
-              sql_dialect: nil
+              sql_dialect: nil,
+              observed_gone_batch: []
 
     (
       (
@@ -3357,6 +3358,7 @@
           |> encode_options(msg)
           |> encode_subscription_ids(msg)
           |> encode_observed_transaction_data(msg)
+          |> encode_observed_gone_batch(msg)
         end
       )
 
@@ -3486,6 +3488,26 @@
               reraise Protox.EncodingError.new(:sql_dialect, "invalid field value"),
                       __STACKTRACE__
           end
+        end,
+        defp encode_observed_gone_batch(acc, msg) do
+          try do
+            case msg.observed_gone_batch do
+              [] ->
+                acc
+
+              values ->
+                [
+                  acc,
+                  Enum.reduce(values, [], fn value, acc ->
+                    [acc, "B", Protox.Encode.encode_string(value)]
+                  end)
+                ]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:observed_gone_batch, "invalid field value"),
+                      __STACKTRACE__
+          end
         end
       ]
 
@@ -3589,6 +3611,15 @@
 
                 {[sql_dialect: value], rest}
 
+              {8, _, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+
+                {[
+                   observed_gone_batch:
+                     msg.observed_gone_batch ++ [Protox.Decode.validate_string(delimited)]
+                 ], rest}
+
               {tag, wire_type, rest} ->
                 {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
                 {[], rest}
@@ -3653,7 +3684,8 @@
           6 => {:observed_transaction_data, :packed, :uint64},
           7 =>
             {:sql_dialect, {:oneof, :_sql_dialect},
-             {:enum, Electric.Satellite.SatInStartReplicationReq.Dialect}}
+             {:enum, Electric.Satellite.SatInStartReplicationReq.Dialect}},
+          8 => {:observed_gone_batch, :unpacked, :string}
         }
       end
 
@@ -3664,6 +3696,7 @@
       def defs_by_name() do
         %{
           lsn: {1, {:scalar, ""}, :bytes},
+          observed_gone_batch: {8, :unpacked, :string},
           observed_transaction_data: {6, :packed, :uint64},
           options: {2, :packed, {:enum, Electric.Satellite.SatInStartReplicationReq.Option}},
           schema_version: {5, {:oneof, :_schema_version}, :string},
@@ -3732,6 +3765,15 @@
             name: :sql_dialect,
             tag: 7,
             type: {:enum, Electric.Satellite.SatInStartReplicationReq.Dialect}
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "observedGoneBatch",
+            kind: :unpacked,
+            label: :repeated,
+            name: :observed_gone_batch,
+            tag: 8,
+            type: :string
           }
         ]
       end
@@ -3956,6 +3998,46 @@
              }}
           end
         ),
+        (
+          def field_def(:observed_gone_batch) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "observedGoneBatch",
+               kind: :unpacked,
+               label: :repeated,
+               name: :observed_gone_batch,
+               tag: 8,
+               type: :string
+             }}
+          end
+
+          def field_def("observedGoneBatch") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "observedGoneBatch",
+               kind: :unpacked,
+               label: :repeated,
+               name: :observed_gone_batch,
+               tag: 8,
+               type: :string
+             }}
+          end
+
+          def field_def("observed_gone_batch") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "observedGoneBatch",
+               kind: :unpacked,
+               label: :repeated,
+               name: :observed_gone_batch,
+               tag: 8,
+               type: :string
+             }}
+          end
+        ),
         def field_def(_) do
           {:error, :no_such_field}
         end
@@ -3996,6 +4078,9 @@
         {:error, :no_default_value}
       end,
       def default(:sql_dialect) do
+        {:error, :no_default_value}
+      end,
+      def default(:observed_gone_batch) do
         {:error, :no_default_value}
       end,
       def default(_) do
@@ -6336,6 +6421,172 @@
       def default(:pk_cols) do
         {:error, :no_default_value}
       end,
+      def default(_) do
+        {:error, :no_such_field}
+      end
+    ]
+
+    (
+      @spec file_options() :: nil
+      def file_options() do
+        nil
+      end
+    )
+  end,
+  defmodule Electric.Satellite.SatUnsubsDataEnd do
+    @moduledoc false
+    defstruct []
+
+    (
+      (
+        @spec encode(struct) :: {:ok, iodata}
+        def encode(msg) do
+          {:ok, encode!(msg)}
+        end
+
+        @spec encode!(struct) :: iodata
+        def encode!(_msg) do
+          []
+        end
+      )
+
+      []
+      []
+      []
+    )
+
+    (
+      (
+        @spec decode(binary) :: {:ok, struct} | {:error, any}
+        def decode(bytes) do
+          try do
+            {:ok, decode!(bytes)}
+          rescue
+            e in [Protox.DecodingError, Protox.IllegalTagError, Protox.RequiredFieldsError] ->
+              {:error, e}
+          end
+        end
+
+        (
+          @spec decode!(binary) :: struct | no_return
+          def decode!(bytes) do
+            parse_key_value(bytes, struct(Electric.Satellite.SatUnsubsDataEnd))
+          end
+        )
+      )
+
+      (
+        @spec parse_key_value(binary, struct) :: struct
+        defp parse_key_value(<<>>, msg) do
+          msg
+        end
+
+        defp parse_key_value(bytes, msg) do
+          {field, rest} =
+            case Protox.Decode.parse_key(bytes) do
+              {0, _, _} ->
+                raise %Protox.IllegalTagError{}
+
+              {tag, wire_type, rest} ->
+                {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
+                {[], rest}
+            end
+
+          msg_updated = struct(msg, field)
+          parse_key_value(rest, msg_updated)
+        end
+      )
+
+      []
+    )
+
+    (
+      @spec json_decode(iodata(), keyword()) :: {:ok, struct()} | {:error, any()}
+      def json_decode(input, opts \\ []) do
+        try do
+          {:ok, json_decode!(input, opts)}
+        rescue
+          e in Protox.JsonDecodingError -> {:error, e}
+        end
+      end
+
+      @spec json_decode!(iodata(), keyword()) :: struct() | no_return()
+      def json_decode!(input, opts \\ []) do
+        {json_library_wrapper, json_library} = Protox.JsonLibrary.get_library(opts, :decode)
+
+        Protox.JsonDecode.decode!(
+          input,
+          Electric.Satellite.SatUnsubsDataEnd,
+          &json_library_wrapper.decode!(json_library, &1)
+        )
+      end
+
+      @spec json_encode(struct(), keyword()) :: {:ok, iodata()} | {:error, any()}
+      def json_encode(msg, opts \\ []) do
+        try do
+          {:ok, json_encode!(msg, opts)}
+        rescue
+          e in Protox.JsonEncodingError -> {:error, e}
+        end
+      end
+
+      @spec json_encode!(struct(), keyword()) :: iodata() | no_return()
+      def json_encode!(msg, opts \\ []) do
+        {json_library_wrapper, json_library} = Protox.JsonLibrary.get_library(opts, :encode)
+        Protox.JsonEncode.encode!(msg, &json_library_wrapper.encode!(json_library, &1))
+      end
+    )
+
+    (
+      @deprecated "Use fields_defs()/0 instead"
+      @spec defs() :: %{
+              required(non_neg_integer) => {atom, Protox.Types.kind(), Protox.Types.type()}
+            }
+      def defs() do
+        %{}
+      end
+
+      @deprecated "Use fields_defs()/0 instead"
+      @spec defs_by_name() :: %{
+              required(atom) => {non_neg_integer, Protox.Types.kind(), Protox.Types.type()}
+            }
+      def defs_by_name() do
+        %{}
+      end
+    )
+
+    (
+      @spec fields_defs() :: list(Protox.Field.t())
+      def fields_defs() do
+        []
+      end
+
+      [
+        @spec(field_def(atom) :: {:ok, Protox.Field.t()} | {:error, :no_such_field}),
+        def field_def(_) do
+          {:error, :no_such_field}
+        end
+      ]
+    )
+
+    []
+
+    (
+      @spec required_fields() :: []
+      def required_fields() do
+        []
+      end
+    )
+
+    (
+      @spec syntax() :: atom()
+      def syntax() do
+        :proto3
+      end
+    )
+
+    [
+      @spec(default(atom) :: {:ok, boolean | integer | String.t() | float} | {:error, atom}),
       def default(_) do
         {:error, :no_such_field}
       end
@@ -12040,7 +12291,8 @@
               lsn: "",
               transaction_id: 0,
               subscription_ids: [],
-              additional_data_source_ids: []
+              additional_data_source_ids: [],
+              gone_subscription_ids: []
 
     (
       (
@@ -12061,6 +12313,7 @@
           |> encode_transaction_id(msg)
           |> encode_subscription_ids(msg)
           |> encode_additional_data_source_ids(msg)
+          |> encode_gone_subscription_ids(msg)
         end
       )
 
@@ -12154,6 +12407,26 @@
                       ),
                       __STACKTRACE__
           end
+        end,
+        defp encode_gone_subscription_ids(acc, msg) do
+          try do
+            case msg.gone_subscription_ids do
+              [] ->
+                acc
+
+              values ->
+                [
+                  acc,
+                  Enum.reduce(values, [], fn value, acc ->
+                    [acc, "2", Protox.Encode.encode_string(value)]
+                  end)
+                ]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:gone_subscription_ids, "invalid field value"),
+                      __STACKTRACE__
+          end
         end
       ]
 
@@ -12228,6 +12501,15 @@
                 {value, rest} = Protox.Decode.parse_uint64(bytes)
                 {[additional_data_source_ids: msg.additional_data_source_ids ++ [value]], rest}
 
+              {6, _, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+
+                {[
+                   gone_subscription_ids:
+                     msg.gone_subscription_ids ++ [Protox.Decode.validate_string(delimited)]
+                 ], rest}
+
               {tag, wire_type, rest} ->
                 {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
                 {[], rest}
@@ -12289,7 +12571,8 @@
           2 => {:lsn, {:scalar, ""}, :bytes},
           3 => {:transaction_id, {:scalar, 0}, :uint64},
           4 => {:subscription_ids, :unpacked, :string},
-          5 => {:additional_data_source_ids, :packed, :uint64}
+          5 => {:additional_data_source_ids, :packed, :uint64},
+          6 => {:gone_subscription_ids, :unpacked, :string}
         }
       end
 
@@ -12301,6 +12584,7 @@
         %{
           ack_timestamp: {1, {:scalar, 0}, :uint64},
           additional_data_source_ids: {5, :packed, :uint64},
+          gone_subscription_ids: {6, :unpacked, :string},
           lsn: {2, {:scalar, ""}, :bytes},
           subscription_ids: {4, :unpacked, :string},
           transaction_id: {3, {:scalar, 0}, :uint64}
@@ -12356,6 +12640,15 @@
             name: :additional_data_source_ids,
             tag: 5,
             type: :uint64
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "goneSubscriptionIds",
+            kind: :unpacked,
+            label: :repeated,
+            name: :gone_subscription_ids,
+            tag: 6,
+            type: :string
           }
         ]
       end
@@ -12551,6 +12844,46 @@
              }}
           end
         ),
+        (
+          def field_def(:gone_subscription_ids) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "goneSubscriptionIds",
+               kind: :unpacked,
+               label: :repeated,
+               name: :gone_subscription_ids,
+               tag: 6,
+               type: :string
+             }}
+          end
+
+          def field_def("goneSubscriptionIds") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "goneSubscriptionIds",
+               kind: :unpacked,
+               label: :repeated,
+               name: :gone_subscription_ids,
+               tag: 6,
+               type: :string
+             }}
+          end
+
+          def field_def("gone_subscription_ids") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "goneSubscriptionIds",
+               kind: :unpacked,
+               label: :repeated,
+               name: :gone_subscription_ids,
+               tag: 6,
+               type: :string
+             }}
+          end
+        ),
         def field_def(_) do
           {:error, :no_such_field}
         end
@@ -12588,6 +12921,9 @@
         {:error, :no_default_value}
       end,
       def default(:additional_data_source_ids) do
+        {:error, :no_default_value}
+      end,
+      def default(:gone_subscription_ids) do
         {:error, :no_default_value}
       end,
       def default(_) do
@@ -15819,6 +16155,319 @@
 
     [
       @spec(default(atom) :: {:ok, boolean | integer | String.t() | float} | {:error, atom}),
+      def default(_) do
+        {:error, :no_such_field}
+      end
+    ]
+
+    (
+      @spec file_options() :: nil
+      def file_options() do
+        nil
+      end
+    )
+  end,
+  defmodule Electric.Satellite.SatUnsubsDataBegin do
+    @moduledoc false
+    defstruct subscription_ids: [], lsn: ""
+
+    (
+      (
+        @spec encode(struct) :: {:ok, iodata} | {:error, any}
+        def encode(msg) do
+          try do
+            {:ok, encode!(msg)}
+          rescue
+            e in [Protox.EncodingError, Protox.RequiredFieldsError] -> {:error, e}
+          end
+        end
+
+        @spec encode!(struct) :: iodata | no_return
+        def encode!(msg) do
+          [] |> encode_subscription_ids(msg) |> encode_lsn(msg)
+        end
+      )
+
+      []
+
+      [
+        defp encode_subscription_ids(acc, msg) do
+          try do
+            case msg.subscription_ids do
+              [] ->
+                acc
+
+              values ->
+                [
+                  acc,
+                  Enum.reduce(values, [], fn value, acc ->
+                    [acc, "\n", Protox.Encode.encode_string(value)]
+                  end)
+                ]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:subscription_ids, "invalid field value"),
+                      __STACKTRACE__
+          end
+        end,
+        defp encode_lsn(acc, msg) do
+          try do
+            if msg.lsn == "" do
+              acc
+            else
+              [acc, "\x12", Protox.Encode.encode_bytes(msg.lsn)]
+            end
+          rescue
+            ArgumentError ->
+              reraise Protox.EncodingError.new(:lsn, "invalid field value"), __STACKTRACE__
+          end
+        end
+      ]
+
+      []
+    )
+
+    (
+      (
+        @spec decode(binary) :: {:ok, struct} | {:error, any}
+        def decode(bytes) do
+          try do
+            {:ok, decode!(bytes)}
+          rescue
+            e in [Protox.DecodingError, Protox.IllegalTagError, Protox.RequiredFieldsError] ->
+              {:error, e}
+          end
+        end
+
+        (
+          @spec decode!(binary) :: struct | no_return
+          def decode!(bytes) do
+            parse_key_value(bytes, struct(Electric.Satellite.SatUnsubsDataBegin))
+          end
+        )
+      )
+
+      (
+        @spec parse_key_value(binary, struct) :: struct
+        defp parse_key_value(<<>>, msg) do
+          msg
+        end
+
+        defp parse_key_value(bytes, msg) do
+          {field, rest} =
+            case Protox.Decode.parse_key(bytes) do
+              {0, _, _} ->
+                raise %Protox.IllegalTagError{}
+
+              {1, _, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+
+                {[
+                   subscription_ids:
+                     msg.subscription_ids ++ [Protox.Decode.validate_string(delimited)]
+                 ], rest}
+
+              {2, _, bytes} ->
+                {len, bytes} = Protox.Varint.decode(bytes)
+                {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
+                {[lsn: delimited], rest}
+
+              {tag, wire_type, rest} ->
+                {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
+                {[], rest}
+            end
+
+          msg_updated = struct(msg, field)
+          parse_key_value(rest, msg_updated)
+        end
+      )
+
+      []
+    )
+
+    (
+      @spec json_decode(iodata(), keyword()) :: {:ok, struct()} | {:error, any()}
+      def json_decode(input, opts \\ []) do
+        try do
+          {:ok, json_decode!(input, opts)}
+        rescue
+          e in Protox.JsonDecodingError -> {:error, e}
+        end
+      end
+
+      @spec json_decode!(iodata(), keyword()) :: struct() | no_return()
+      def json_decode!(input, opts \\ []) do
+        {json_library_wrapper, json_library} = Protox.JsonLibrary.get_library(opts, :decode)
+
+        Protox.JsonDecode.decode!(
+          input,
+          Electric.Satellite.SatUnsubsDataBegin,
+          &json_library_wrapper.decode!(json_library, &1)
+        )
+      end
+
+      @spec json_encode(struct(), keyword()) :: {:ok, iodata()} | {:error, any()}
+      def json_encode(msg, opts \\ []) do
+        try do
+          {:ok, json_encode!(msg, opts)}
+        rescue
+          e in Protox.JsonEncodingError -> {:error, e}
+        end
+      end
+
+      @spec json_encode!(struct(), keyword()) :: iodata() | no_return()
+      def json_encode!(msg, opts \\ []) do
+        {json_library_wrapper, json_library} = Protox.JsonLibrary.get_library(opts, :encode)
+        Protox.JsonEncode.encode!(msg, &json_library_wrapper.encode!(json_library, &1))
+      end
+    )
+
+    (
+      @deprecated "Use fields_defs()/0 instead"
+      @spec defs() :: %{
+              required(non_neg_integer) => {atom, Protox.Types.kind(), Protox.Types.type()}
+            }
+      def defs() do
+        %{1 => {:subscription_ids, :unpacked, :string}, 2 => {:lsn, {:scalar, ""}, :bytes}}
+      end
+
+      @deprecated "Use fields_defs()/0 instead"
+      @spec defs_by_name() :: %{
+              required(atom) => {non_neg_integer, Protox.Types.kind(), Protox.Types.type()}
+            }
+      def defs_by_name() do
+        %{lsn: {2, {:scalar, ""}, :bytes}, subscription_ids: {1, :unpacked, :string}}
+      end
+    )
+
+    (
+      @spec fields_defs() :: list(Protox.Field.t())
+      def fields_defs() do
+        [
+          %{
+            __struct__: Protox.Field,
+            json_name: "subscriptionIds",
+            kind: :unpacked,
+            label: :repeated,
+            name: :subscription_ids,
+            tag: 1,
+            type: :string
+          },
+          %{
+            __struct__: Protox.Field,
+            json_name: "lsn",
+            kind: {:scalar, ""},
+            label: :optional,
+            name: :lsn,
+            tag: 2,
+            type: :bytes
+          }
+        ]
+      end
+
+      [
+        @spec(field_def(atom) :: {:ok, Protox.Field.t()} | {:error, :no_such_field}),
+        (
+          def field_def(:subscription_ids) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "subscriptionIds",
+               kind: :unpacked,
+               label: :repeated,
+               name: :subscription_ids,
+               tag: 1,
+               type: :string
+             }}
+          end
+
+          def field_def("subscriptionIds") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "subscriptionIds",
+               kind: :unpacked,
+               label: :repeated,
+               name: :subscription_ids,
+               tag: 1,
+               type: :string
+             }}
+          end
+
+          def field_def("subscription_ids") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "subscriptionIds",
+               kind: :unpacked,
+               label: :repeated,
+               name: :subscription_ids,
+               tag: 1,
+               type: :string
+             }}
+          end
+        ),
+        (
+          def field_def(:lsn) do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "lsn",
+               kind: {:scalar, ""},
+               label: :optional,
+               name: :lsn,
+               tag: 2,
+               type: :bytes
+             }}
+          end
+
+          def field_def("lsn") do
+            {:ok,
+             %{
+               __struct__: Protox.Field,
+               json_name: "lsn",
+               kind: {:scalar, ""},
+               label: :optional,
+               name: :lsn,
+               tag: 2,
+               type: :bytes
+             }}
+          end
+
+          []
+        ),
+        def field_def(_) do
+          {:error, :no_such_field}
+        end
+      ]
+    )
+
+    []
+
+    (
+      @spec required_fields() :: []
+      def required_fields() do
+        []
+      end
+    )
+
+    (
+      @spec syntax() :: atom()
+      def syntax() do
+        :proto3
+      end
+    )
+
+    [
+      @spec(default(atom) :: {:ok, boolean | integer | String.t() | float} | {:error, atom}),
+      def default(:subscription_ids) do
+        {:error, :no_default_value}
+      end,
+      def default(:lsn) do
+        {:ok, ""}
+      end,
       def default(_) do
         {:error, :no_such_field}
       end

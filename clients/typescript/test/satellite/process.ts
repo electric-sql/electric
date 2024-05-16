@@ -49,7 +49,10 @@ import { Shape, SubscriptionData } from '../../src/satellite/shapes/types'
 import { mergeEntries } from '../../src/satellite/merge'
 import { MockSubscriptionsManager } from '../../src/satellite/shapes/manager'
 import { AuthState, insecureAuthToken } from '../../src/auth'
-import { ConnectivityStateChangeNotification } from '../../src/notifiers'
+import {
+  ChangeCallback,
+  ConnectivityStateChangeNotification,
+} from '../../src/notifiers'
 import { QueryBuilder } from '../../src/migrators/query-builder'
 import { SatelliteOpts } from '../../src/satellite/config'
 
@@ -1929,6 +1932,47 @@ export const processTests = (test: TestFn<ContextType>) => {
     t.deepEqual(results, [])
   })
 
+  test('GONE batch is applied as DELETEs', async (t) => {
+    const { client, satellite, adapter } = t.context
+    const { runMigrations, authState, token } = t.context
+    await runMigrations()
+    const tablename = 'parent'
+
+    // relations must be present at subscription delivery
+    client.setRelations(relations)
+    client.setRelationData(tablename, parentRecord)
+    client.setRelationData(tablename, { ...parentRecord, id: 2 })
+
+    await startSatellite(satellite, authState, token)
+
+    satellite!.relations = relations
+    const { synced, id } = await satellite.subscribe([{ tablename }])
+    await synced
+    await satellite._performSnapshot()
+
+    const promise = new Promise((r: ChangeCallback) => {
+      satellite.notifier.subscribeToDataChanges(r)
+    })
+    client.setGoneBatch(id, [
+      { tablename, record: { id: 1 } },
+      { tablename, record: { id: 2 } },
+    ])
+    // Send additional data
+    await satellite.unsubscribe([id])
+
+    const change = await promise
+    t.is(change.changes.length, 1)
+    t.deepEqual(change.changes[0].recordChanges, [
+      { primaryKey: { id: 1 }, type: 'GONE' },
+      { primaryKey: { id: 2 }, type: 'GONE' },
+    ])
+
+    const results = await adapter.query({
+      sql: 'SELECT * FROM parent',
+    })
+    t.deepEqual(results, [])
+  })
+
   test('a subscription that failed to apply because of FK constraint triggers GC', async (t) => {
     const {
       client,
@@ -2270,7 +2314,7 @@ export const processTests = (test: TestFn<ContextType>) => {
       throw e
     }
 
-    await subsManager.unsubscribeAll()
+    await subsManager.unsubscribeAllAndGC()
     // if we reach here, the FKs were not violated
 
     // Check that everything was deleted

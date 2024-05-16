@@ -1,4 +1,5 @@
 defmodule ElectricTest.SatelliteHelpers do
+  alias Electric.Replication.Changes.Gone
   alias Electric.Replication.Changes.Transaction
   alias Electric.Satellite.Serialization
   use Electric.Satellite.Protobuf
@@ -163,14 +164,95 @@ defmodule ElectricTest.SatelliteHelpers do
   end
 
   @doc """
+  Wait for and receive a batch of `GONE` messages after an unsubscribe
+
+  Waits for the `SatSubsDataBegin` message, then for each shape data, then for the end message,
+  and verifies their order. Returns a tuple, with first element being all the mentioned request IDs, and the second being all the data.
+  """
+  @spec receive_unsub_gone_batch(term(), String.t(), [
+          {:timeout, non_neg_integer()} | {:expecting_lsn, String.t()}
+        ]) :: {[String.t(), ...], String.t(), [Gone.t()]}
+  def receive_unsub_gone_batch(conn, relation_map, opts \\ []) do
+    # TODO: Addition of shapes complicated initial data sending for multiple requests due to records
+    #       fulfilling multiple requests so we're "cheating" here while the client doesn't care by
+    #       sending all but one "request data" messages empty, and stuffing entire response into the first one.
+    #       See paired comment in `Electric.Satellite.Protocol.handle_subscription_data/3`
+    first_message_timeout = Keyword.get(opts, :timeout, 1000)
+
+    receive do
+      {^conn, %SatUnsubsDataBegin{subscription_ids: subscription_ids, lsn: received_lsn}} ->
+        case Keyword.fetch(opts, :expecting_lsn) do
+          {:ok, expected_lsn} -> assert expected_lsn == received_lsn
+          _ -> nil
+        end
+
+        result =
+          receive_rest_of_unsub_data(conn, [])
+          |> assert_unsub_data_format(relation_map)
+
+        {subscription_ids, received_lsn, result}
+    after
+      first_message_timeout ->
+        {:messages, messages} = :erlang.process_info(self(), :messages)
+
+        flunk(
+          "Timed out waiting for #{inspect(%SatUnsubsDataBegin{})} after #{first_message_timeout} ms.\n\nCurrent messages: #{inspect(messages, pretty: true)}"
+        )
+    end
+  end
+
+  defp receive_rest_of_unsub_data(conn, acc) do
+    receive do
+      {^conn, %SatUnsubsDataEnd{}} ->
+        Enum.reverse(acc)
+
+      {_, %type{} = msg} when type in [SatOpLog] ->
+        receive_rest_of_unsub_data(conn, [msg | acc])
+    after
+      100 ->
+        flunk(
+          "Timeout while waiting for message sequence responding to an unsubscribe, received:\n#{inspect(acc, pretty: true)}"
+        )
+    end
+  end
+
+  defp assert_unsub_data_format(messages, relation_map) do
+    Enum.each(messages, fn op -> assert %SatOpLog{} = op end)
+
+    fake_begin = %SatOpLog{ops: [%SatTransOp{op: {:additional_begin, %SatOpAdditionalBegin{}}}]}
+
+    fake_commit = %SatOpLog{
+      ops: [%SatTransOp{op: {:additional_commit, %SatOpAdditionalCommit{}}}]
+    }
+
+    {incomplete, []} =
+      Serialization.deserialize_trans("postgres_1", fake_begin, nil, relation_map)
+
+    {incomplete, []} =
+      Enum.reduce(
+        messages,
+        {incomplete, []},
+        &Serialization.deserialize_trans("postgres_1", &1, elem(&2, 0), relation_map)
+      )
+
+    {nil, [{:additional_data, _, changes}]} =
+      Serialization.deserialize_trans("postgres_1", fake_commit, incomplete, relation_map)
+
+    changes |> Enum.sort_by(&{&1.relation, &1.pk})
+  end
+
+  @doc """
   Wait for and receives subscription data response as sent back to the test process by `Satellite.TestWsClient`.
 
   Waits for the `SatSubsDataBegin` message, then for each shape data, then for the end message,
   and verifies their order. Returns a tuple, with first element being all the mentioned request IDs, and the second being all the data.
   """
   @spec receive_subscription_data(term(), String.t(), [
-          {:timeout, non_neg_integer()} | {:expecting_lsn, String.t()} | {:returning_lsn, true}
-        ]) :: {[String.t()], [%SatOpInsert{}]}
+          {:timeout, non_neg_integer()}
+          | {:expecting_lsn, String.t()}
+          | {:returning_lsn, true}
+          | {:relations, cached_rels()}
+        ]) :: {request_ids :: [String.t()], data :: [%SatOpInsert{}]}
   def receive_subscription_data(conn, subscription_id, opts \\ []) do
     # TODO: Addition of shapes complicated initial data sending for multiple requests due to records
     #       fulfilling multiple requests so we're "cheating" here while the client doesn't care by
@@ -188,6 +270,7 @@ defmodule ElectricTest.SatelliteHelpers do
         result =
           receive_rest_of_subscription_data(conn, [])
           |> assert_subscription_data_format({[], []})
+          |> maybe_unwrap_subscription_data(Keyword.get(opts, :relations))
 
         if Keyword.has_key?(opts, :returning_lsn), do: {received_lsn, result}, else: result
     after
@@ -235,5 +318,22 @@ defmodule ElectricTest.SatelliteHelpers do
     assert [%SatShapeDataEnd{} | messages] = messages
 
     assert_subscription_data_format(messages, {[id | ids], data ++ oplogs})
+  end
+
+  defp maybe_unwrap_subscription_data(results, nil), do: results
+
+  defp maybe_unwrap_subscription_data({ids, inserts}, rel_map) do
+    oplog =
+      %SatOpLog{
+        ops:
+          [%SatTransOp{op: {:additional_begin, %SatOpAdditionalBegin{ref: nil}}}] ++
+            Enum.map(inserts, &%SatTransOp{op: {:insert, &1}}) ++
+            [%SatTransOp{op: {:additional_commit, %SatOpAdditionalCommit{ref: nil}}}]
+      }
+
+    {nil, [{_, _, changes}]} =
+      Serialization.deserialize_trans("postgres_1", oplog, nil, rel_map)
+
+    {ids, changes}
   end
 end

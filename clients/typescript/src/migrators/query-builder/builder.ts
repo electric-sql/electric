@@ -316,16 +316,15 @@ export abstract class QueryBuilder {
     let positionalParam = 1
     const pos = (i: number) => `${this.makePositionalParam(i)}`
     const makeInsertPattern = () => {
-      return ` (${Array.from(
-        { length: columnCount },
-        () => `${pos(positionalParam++)}`
-      ).join(', ')})`
+      const insertRow = Array.from({ length: columnCount }, () =>
+        pos(positionalParam++)
+      )
+
+      return ` (${insertRow.join(', ')})`
     }
 
-    // Largest number below maxSqlParamers that evenly divides by column count,
-    // divided by columnCount, giving the amount of rows we can insert at once
-    const batchMaxSize =
-      (maxParameters - (maxParameters % columnCount)) / columnCount
+    // Amount of rows we can insert at once
+    const batchMaxSize = Math.floor(maxParameters / columnCount)
     while (processed < recordCount) {
       positionalParam = 1 // start counting parameters from 1 again
       const currentInsertCount = Math.min(recordCount - processed, batchMaxSize)
@@ -345,5 +344,70 @@ export abstract class QueryBuilder {
       stmts.push({ sql, args })
     }
     return stmts
+  }
+
+  /**
+   * Prepare multiple batched DELETE statements for an array of records.
+   *
+   * Since SQLite only supports a limited amount of positional `?` parameters,
+   * we generate multiple delete statements with each one being filled as much
+   * as possible from the given data. This function only supports column equality checks
+   *
+   * @param baseSql base SQL string to which inserts should be appended
+   * @param columns columns that describe records
+   * @param records records to be inserted
+   * @param maxParameters max parameters this SQLite can accept - determines batching factor
+   * @param suffixSql optional SQL string to append to each insert statement
+   * @returns array of statements ready to be executed by the adapter
+   */
+  public prepareDeleteBatchedStatements<T extends object>(
+    baseSql: string,
+    columns: Array<keyof T>,
+    records: T[],
+    maxParameters: number,
+    suffixSql = ''
+  ): Statement[] {
+    const stmts: Statement[] = []
+    const columnCount = columns.length
+    const recordCount = records.length
+    let processed = 0
+    let positionalParam = 1
+    const pos = (i: number) => this.makePositionalParam(i)
+    const makeWherePattern = () => {
+      const columnComparisons = Array.from(
+        { length: columnCount },
+        (_, i) => `"${columns[i] as string}" = ${pos(positionalParam++)}`
+      )
+
+      return ` (${columnComparisons.join(' AND ')})`
+    }
+
+    // Amount of rows we can delete at once
+    const batchMaxSize = Math.floor(maxParameters / columnCount)
+    while (processed < recordCount) {
+      positionalParam = 1 // start counting parameters from 1 again
+      const currentDeleteCount = Math.min(recordCount - processed, batchMaxSize)
+      let sql =
+        baseSql +
+        Array.from({ length: currentDeleteCount }, makeWherePattern).join(
+          ' OR '
+        )
+
+      if (suffixSql !== '') {
+        sql += ' ' + suffixSql
+      }
+
+      const args = records
+        .slice(processed, processed + currentDeleteCount)
+        .flatMap((record) => columns.map((col) => record[col] as SqlValue))
+
+      processed += currentDeleteCount
+      stmts.push({ sql, args })
+    }
+    return stmts
+  }
+
+  public makeQT(tablename: string): QualifiedTablename {
+    return new QualifiedTablename(this.defaultNamespace, tablename)
   }
 }

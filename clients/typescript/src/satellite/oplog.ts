@@ -389,28 +389,31 @@ function deserialiseRow(str: string, rel: Pick<Relation, 'columns'>): Rec {
   })
 }
 
+export function extractPK(c: DataChange) {
+  const columnValues = c.record ? c.record : c.oldRecord!
+
+  return primaryKeyToStr(
+    Object.fromEntries(
+      c.relation.columns
+        .filter((c) => c.primaryKey)
+        .map((col) => [col.name, columnValues[col.name]!])
+    )
+  )
+}
+
 export const fromTransaction = (
   transaction: DataTransaction,
-  relations: RelationsCache,
+  _relations: RelationsCache,
   namespace: string
 ): OplogEntry[] => {
   return transaction.changes.map((t) => {
-    const columnValues = t.record ? t.record : t.oldRecord!
-    const pk = primaryKeyToStr(
-      Object.fromEntries(
-        relations[`${t.relation.table}`].columns
-          .filter((c) => c.primaryKey)
-          .map((col) => [col.name, columnValues[col.name]!])
-      )
-    )
-
     return {
       namespace,
       tablename: t.relation.table,
       optype: stringToOpType(t.type),
       newRow: serialiseRow(t.record),
       oldRow: serialiseRow(t.oldRecord),
-      primaryKey: pk,
+      primaryKey: extractPK(t),
       rowid: -1, // not required
       timestamp: new Date(
         transaction.commit_timestamp.toNumber()

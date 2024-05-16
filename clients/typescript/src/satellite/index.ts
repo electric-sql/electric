@@ -22,6 +22,7 @@ import {
   AdditionalDataCallback,
   DbRecord,
   ReplicatedRowTransformer,
+  GoneBatchCallback,
 } from '../util/types'
 import {
   Shape,
@@ -81,7 +82,7 @@ export interface Satellite {
   clientDisconnect(): void
   authenticate(token: string): Promise<void>
   subscribe(shapeDefinitions: Shape[]): Promise<ShapeSubscription>
-  unsubscribe(shapeUuid: string): Promise<void>
+  unsubscribe(shapeUuids: string[]): Promise<void>
 
   setReplicationTransform(
     tableName: QualifiedTablename,
@@ -110,6 +111,8 @@ export interface Client {
   unsubscribeToTransactions(callback: TransactionCallback): void
   subscribeToAdditionalData(callback: AdditionalDataCallback): void
   unsubscribeToAdditionalData(callback: AdditionalDataCallback): void
+  subscribeToGoneBatch(callback: GoneBatchCallback): void
+  unsubscribeToGoneBatch(callback: GoneBatchCallback): void
   enqueueTransaction(transaction: DataTransaction): void
   getLastSentLsn(): LSN
   subscribeToOutboundStarted(callback: OutboundStartedCallback): void

@@ -12,10 +12,13 @@ defmodule Electric.Replication.Shapes.Querying do
   alias Electric.Replication.Eval
   alias Electric.Replication.Shapes.ChangeProcessing
   alias Electric.Replication.Shapes.ShapeRequest.Layer
+  alias Electric.Replication.Shapes.SentRowsGraph
 
   alias Electric.Utils
 
-  @type results :: %{Layer.graph_key() => {Changes.change(), [String.t(), ...]}}
+  @type results :: %{
+          SentRowsGraph.row_id() => {Changes.change(), request_ids :: [String.t(), ...]}
+        }
 
   @doc """
   Query PostgreSQL for data which corresponds to this layer.
@@ -271,7 +274,7 @@ defmodule Electric.Replication.Shapes.Querying do
     do: Enum.any?(key, &is_nil(Map.fetch!(record, &1)))
 
   @spec rows_to_changes_with_tags([tuple()], [String.t(), ...], Layer.t(), String.t()) ::
-          [{Layer.graph_key(), Changes.NewRecord.t()}]
+          [{SentRowsGraph.row_id(), Changes.NewRecord.t()}]
   defp rows_to_changes_with_tags(
          rows,
          col_names,

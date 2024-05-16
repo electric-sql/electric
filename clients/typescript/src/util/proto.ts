@@ -127,6 +127,8 @@ const msgtypetuples: MappingTuples = {
   SatRpcRequest: [21, Pb.SatRpcRequest],
   SatRpcResponse: [22, Pb.SatRpcResponse],
   SatOpLogAck: [23, Pb.SatOpLogAck],
+  SatUnsubsDataBegin: [24, Pb.SatUnsubsDataBegin],
+  SatUnsubsDataEnd: [25, Pb.SatUnsubsDataEnd],
 }
 
 const msgtypemapping = Object.fromEntries(
@@ -178,6 +180,8 @@ export type SatPbMsg =
   | Pb.SatShapeDataBegin
   | Pb.SatShapeDataEnd
   | Pb.SatOpLogAck
+  | Pb.SatUnsubsDataBegin
+  | Pb.SatUnsubsDataEnd
 
 export type SatPbMsgObj<
   Msg extends { $type: string },
@@ -414,6 +418,12 @@ export function msgToString(message: MessageOfInterest): string {
       return `#SatOpLogAck{lsn: ${base64.fromBytes(message.lsn)}, txid: ${
         message.transactionId
       }}`
+    case 'Electric.Satellite.SatUnsubsDataBegin':
+      return `#SatSatUnsubsDataBegin{lsn: ${base64.fromBytes(message.lsn)}, ${
+        message.subscriptionIds
+      }}`
+    case 'Electric.Satellite.SatUnsubsDataEnd':
+      return `#SatSatUnsubsDataEnd{}`
   }
 }
 

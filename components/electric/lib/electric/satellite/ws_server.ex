@@ -261,10 +261,18 @@ defmodule Electric.Satellite.WebsocketServer do
   end
 
   def handle_info(
-        {:move_in_query_data, ref, xmin, {graph_updates, changes}, included_txns},
+        {:move_in_query_data, ref, xmin, {request_ids, graph_updates, changes}, included_txns},
         state
       ) do
-    Protocol.move_in_data_received(ref, graph_updates, changes, xmin, included_txns, state)
+    Protocol.move_in_data_received(
+      ref,
+      request_ids,
+      graph_updates,
+      changes,
+      xmin,
+      included_txns,
+      state
+    )
     |> push()
   end
 

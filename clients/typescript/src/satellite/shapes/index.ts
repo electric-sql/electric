@@ -59,17 +59,20 @@ export interface SubscriptionsManager {
    * Deletes the subscription(s) from the manager.
    * @param subId the identifier of the subscription or an array of subscription identifiers
    */
-  unsubscribe(
-    subId: SubscriptionId | SubscriptionId[]
-  ): Promise<SubscriptionId[]>
+  unsubscribe(subId: SubscriptionId[]): void
+
+  /**
+   * Delete the subscriptions from the manager and call a GC function
+   */
+  unsubscribeAndGC(subIds: SubscriptionId[]): Promise<void>
 
   /**
    * Deletes all subscriptions from the manager. Useful to
-   * reset the state of the manager.
+   * reset the state of the manager. Calls the configured GC.
    * Returns the subscription identifiers of all subscriptions
    * that were deleted.
    */
-  unsubscribeAll(): Promise<string[]>
+  unsubscribeAllAndGC(): Promise<SubscriptionId[]>
 
   /**
    * Converts the state of the manager to a string format that

@@ -128,14 +128,14 @@ message SatInStartReplicationReq {
 
     // the subscriptions identifiers the client wants to resume subscription    
     repeated string subscription_ids = 4;
-
+    
     // The version of the most recent migration seen by the client.
     optional string schema_version = 5;
-
+    
     /**
-     * List of transaction IDs for which the client
-     * observed additional data before disconnect
-     */
+    * List of transaction IDs for which the client
+    * observed additional data before disconnect
+    */
     repeated uint64 observed_transaction_data = 6;
 
     /**
@@ -150,6 +150,9 @@ message SatInStartReplicationReq {
     // server. The server is responsible to keep/gc the remaining subscriptions.
     // - the server must ensure that if the client skips a portion of the replication
     // stream, the client is not able to read data it no longer has access to.
+    
+    /** List of subscription IDs for which the client observed a GONE batch after unsubscribing */
+    repeated string observed_gone_batch = 8;
 }
 
 // (Producer) The result of the start replication requests
@@ -255,6 +258,8 @@ message SatOpLogAck {
     repeated string subscription_ids = 4;
     /** Transaction IDs for which additional data was received immediately after this transaction */
     repeated uint64 additional_data_source_ids = 5;
+    /** Subscription IDs for GONE batches received at this LSN */
+    repeated string gone_subscription_ids = 6;
 }
 
 // (Producer) Single operation, should be only send as part of the SatOplog
@@ -646,6 +651,19 @@ message SatSubsDataBegin {
 // End delimiter for the incoming subscription data
 message SatSubsDataEnd {
 }
+
+// Begin delimiter for the incoming subscription data
+message SatUnsubsDataBegin {
+    // Identifier of the subscriptions that were handled as unsubbed
+    repeated string subscription_ids = 1;
+    // LSN at which this data is being sent. May be a duplicate of a transaction that was sent immediately before.
+    bytes lsn = 2;
+}
+
+// End delimiter for the incoming subscription data
+message SatUnsubsDataEnd {
+}
+
 
 // Begin delimiter for the initial shape data
 message SatShapeDataBegin {
