@@ -2720,40 +2720,35 @@ export const processTests = (test: TestFn<ContextType>) => {
     const secondServerId = thirdNotifictiaon.status.serverId
     t.true(typeof secondServerId === 'string')
 
-    await sleepAsync(0)
+    await syncedSecond
 
     // fourth one is another "mutation" one, removing old data
-    t.true(shapeNotifications().length >= 4)
+    t.is(shapeNotifications().length, 5)
+
     const fourthNotifictiaon = shapeNotifications()[3]
     t.is(fourthNotifictiaon.key, shapeSubKey)
     t.is(fourthNotifictiaon.status.status, 'establishing')
     t.is(fourthNotifictiaon.status.progress, 'removing_data')
     t.is(fourthNotifictiaon.status.serverId, secondServerId)
 
-    await syncedSecond
-
     // fifth one should eventually get back to active
-    t.is(shapeNotifications().length, 5)
     const fifthNotification = shapeNotifications()[4]
-
     t.is(fifthNotification.key, shapeSubKey)
     t.is(fifthNotification.status.status, 'active')
     t.is(fifthNotification.status.serverId, secondServerId)
 
     // cancel subscription
     await satellite.unsubscribe([shapeSubKey])
+    await sleepAsync(100)
 
     // sixth one first notifies of cancellation
-    t.is(shapeNotifications().length, 6)
+    t.is(shapeNotifications().length, 7)
     const sixthNotification = shapeNotifications()[5]
     t.is(sixthNotification.key, shapeSubKey)
     t.is(sixthNotification.status.status, 'cancelling')
     t.is(sixthNotification.status.serverId, secondServerId)
 
-    await sleepAsync(0)
-
     // last one should indicate that it is gone
-    t.is(shapeNotifications().length, 7)
     const seventhNotification = shapeNotifications()[6]
     t.is(seventhNotification.key, shapeSubKey)
     t.is(seventhNotification.status, undefined)
