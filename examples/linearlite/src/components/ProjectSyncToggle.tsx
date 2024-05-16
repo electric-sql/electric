@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useElectric } from '../electric'
 
 import { BsCloudArrowDownFill, BsCloudSlashFill } from 'react-icons/bs'
@@ -9,27 +9,23 @@ interface Props {
 }
 
 function ProjectSyncToggle({ projectId }: Props) {
-  const { db, satellite } = useElectric()!
+  const { db, sync } = useElectric()!
   const [loading, setLoading] = useState(false)
   const [synced, setSynced] = useState(false)
-
-  const shapeRequest = useMemo(
-    () => ({
-      where: {
-        project_id: projectId,
-      },
-      include: {
-        comment: true,
-        project: true,
-      },
-    }),
-    [projectId]
-  )
 
   const syncProject = useCallback(async () => {
     setLoading(true)
     try {
-      const synced = await db.issue.sync(shapeRequest)
+      const synced = await db.issue.sync({
+        where: {
+          project_id: projectId,
+        },
+        include: {
+          comment: true,
+          project: true,
+        },
+        key: projectId,
+      })
       await synced.synced
       setSynced(true)
     } catch (err) {
@@ -37,30 +33,36 @@ function ProjectSyncToggle({ projectId }: Props) {
     } finally {
       setLoading(false)
     }
-  }, [shapeRequest, db.issue])
+  }, [projectId, db.issue])
 
-  const unsyncProject = useCallback(() => {
-    // TODO: add proper shape unsub
-  }, [])
+  const unsyncProject = useCallback(async () => {
+    setLoading(true)
+    try {
+      await sync.unsubscribe([projectId])
+      setSynced(false)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }, [projectId, sync])
 
   useEffect(() => {
-    // @ts-expect-error using private method until we have shapes API
-    const shape = db.issue.computeShape(shapeRequest)
-    // @ts-expect-error using private method until we have shapes API
-    const subManager = satellite.subscriptions
-    const result = subManager.getDuplicatingSubscription([shape])
+    const status = sync.syncStatus(projectId)
 
     // if sub not present, do nothing
-    if (!result) return
+    if (!status) return
 
     // if sub in progress, set loading state
-    if (result.inFlight) setLoading(true)
+    if (status.status !== 'active') setLoading(true)
 
-    // sub is present so assume synced status (even if loading)
-    setSynced(true)
-  }, [shapeRequest, db.issue, satellite])
+    // set sync status based on whether sub is being
+    // established or cancelled
+    setSynced(status.status === 'establishing')
+  }, [sync, projectId])
 
   const ActionIcon = synced ? BsCloudSlashFill : BsCloudArrowDownFill
+
   return (
     <button
       className="min-w-10 w-10 h-7 flex items-center rounded hover:bg-gray-100 cursor-pointer disabled:opacity-75 justify-center"
