@@ -1,5 +1,8 @@
 import test from 'ava'
-import { ConnectivityStateChangeNotification } from '../../src/notifiers'
+import {
+  ConnectivityStateChangeNotification,
+  ShapeSubscriptionSyncStatusChangeNotification,
+} from '../../src/notifiers'
 
 import { EventNotifier } from '../../src/notifiers/event'
 import { QualifiedTablename } from '../../src/util/tablename'
@@ -151,4 +154,52 @@ test('empty changes should not emit', async (t) => {
 
   source.actuallyChanged('foo.db', [], 'local')
   t.is(notifications.length, 0)
+})
+
+test('subscribe to shape subscription status changes', async (t) => {
+  const eventEmitter = new EventEmitter()
+  const source = new EventNotifier('test.db', eventEmitter)
+  const target = new EventNotifier('test.db', eventEmitter)
+
+  const notifications: ShapeSubscriptionSyncStatusChangeNotification[] = []
+
+  target.subscribeToShapeSubscriptionSyncStatusChanges((x) => {
+    notifications.push(x)
+  })
+
+  source.shapeSubscriptionSyncStatusChanged('test.db', 'foo', {
+    status: 'establishing',
+    serverId: 'foo',
+    progress: 'receiving_data',
+  })
+
+  t.is(notifications.length, 1)
+})
+
+test('subscribe to shape subscription status changes is scoped by db name', async (t) => {
+  const eventEmitter = new EventEmitter()
+  const source = new EventNotifier('test.db', eventEmitter)
+  const target = new EventNotifier('test.db', eventEmitter)
+
+  const notifications: ShapeSubscriptionSyncStatusChangeNotification[] = []
+
+  target.subscribeToShapeSubscriptionSyncStatusChanges((x) => {
+    notifications.push(x)
+  })
+
+  source.shapeSubscriptionSyncStatusChanged('test.db', 'foo', {
+    status: 'establishing',
+    serverId: 'foo',
+    progress: 'receiving_data',
+  })
+
+  t.is(notifications.length, 1)
+
+  source.shapeSubscriptionSyncStatusChanged('non-existing.db', 'foo', {
+    status: 'establishing',
+    serverId: 'foo',
+    progress: 'receiving_data',
+  })
+
+  t.is(notifications.length, 1)
 })
