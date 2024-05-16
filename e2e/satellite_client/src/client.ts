@@ -45,6 +45,10 @@ export const make_db = async (name: string): Promise<DB> => {
   return new SQLiteDatabase(name)
 }
 
+function isPostgresDb(dialect: string | undefined, _db: DB): _db is PgDatabase {
+  return dialect === 'Postgres'
+}
+
 export const electrify_db = async (
   db: DB,
   host: string,
@@ -65,9 +69,9 @@ export const electrify_db = async (
     schema.migrations = migrations
   }
   
-  const electric = process.env.DIALECT === 'Postgres'
-    ? await electrifyPg(db as PgDatabase, schema, config)
-    : await electrifySqlite(db as BetterSqliteDatabase, schema, config)
+  const electric = isPostgresDb(process.env.DIALECT, db)
+    ? await electrifyPg(db, schema, config)
+    : await electrifySqlite(db, schema, config)
   
   const token = await mockSecureAuthToken(exp)
 
