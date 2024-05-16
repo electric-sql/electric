@@ -14,14 +14,11 @@ import { globalRegistry } from 'electric-sql/satellite'
 import { QualifiedTablename, SatelliteErrorCode } from 'electric-sql/util'
 import { Shape } from 'electric-sql/satellite'
 import { pgBuilder, sqliteBuilder, QueryBuilder } from 'electric-sql/migrators/builder'
-import { DbSchema, ElectricClient } from 'electric-sql/client/model'
 
 setLogLevel('DEBUG')
 
 let dbName: string
 type DB = PgDatabase | BetterSqliteDatabase
-let electrify: <Schema extends DbSchema<any>>(db: DB, dbDescription: Schema, config: ElectricConfig) => Promise<ElectricClient<Schema>> =
-  <Schema extends DbSchema<any>>(db: DB, dbDescription: Schema, config: ElectricConfig) => electrifySqlite(db as BetterSqliteDatabase, dbDescription, config)
 let builder: QueryBuilder = sqliteBuilder
 
 async function makePgDatabase(): Promise<PgDatabase> {
@@ -42,7 +39,6 @@ export const make_db = async (name: string): Promise<DB> => {
   dbName = name
   console.log("DIALECT: " + process.env.DIALECT)
   if (process.env.DIALECT === 'Postgres') {
-    electrify = <Schema extends DbSchema<any>>(db: DB, dbDescription: Schema, config: ElectricConfig) => electrifyPg(db as PgDatabase, dbDescription, config)
     builder = pgBuilder
     return makePgDatabase()
   }
@@ -63,20 +59,25 @@ export const electrify_db = async (
     debug: true,
   }
   console.log(`(in electrify_db) config: ${JSON.stringify(config)}`)
+
   if (process.env.DIALECT === 'Postgres') {
     schema.pgMigrations = migrations
   } else {
     schema.migrations = migrations
   }
-  const result = await electrify(db, schema, config)
+  
+  const electric = process.env.DIALECT === 'Postgres'
+    ? await electrifyPg(db as PgDatabase, schema, config)
+    : await electrifySqlite(db as BetterSqliteDatabase, schema, config)
+  
   const token = await mockSecureAuthToken(exp)
 
-  result.notifier.subscribeToConnectivityStateChanges((x: any) => console.log(`Connectivity state changed: ${x.connectivityState.status}`))
+  electric.notifier.subscribeToConnectivityStateChanges((x: any) => console.log(`Connectivity state changed: ${x.connectivityState.status}`))
   if (connectToElectric) {
-    await result.connect(token) // connect to Electric
+    await electric.connect(token) // connect to Electric
   }
 
-  return result
+  return electric
 }
 
 export const disconnect = async (electric: Electric) => {
