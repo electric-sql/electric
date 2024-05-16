@@ -281,7 +281,8 @@ defmodule Electric.Satellite.Protocol do
         {gone, graph} =
           Shapes.SentRowsGraph.pop_by_request_ids(state.out_rep.sent_rows_graph, request_ids)
 
-        {msgs, out_rep} = prepare_unsubs_data(removed_ids, gone, out_rep)
+        # We're sending back all subscription IDs to not confuse the client
+        {msgs, out_rep} = prepare_unsubs_data(ids, gone, out_rep)
 
         {msgs, %OutRep{out_rep | sent_rows_graph: graph}}
       else
