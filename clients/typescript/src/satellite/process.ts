@@ -1,5 +1,4 @@
 import throttle from 'lodash.throttle'
-import uniqWith from 'lodash.uniqwith'
 
 import {
   SatOpMigrate_Type,
@@ -62,11 +61,9 @@ import { Mutex } from 'async-mutex'
 import Log from 'loglevel'
 import { generateTableTriggers } from '../migrators/triggers'
 import { mergeEntries } from './merge'
-import { getAllTablesForShape } from './shapes'
 import {
   Shape,
   InitialDataChange,
-  ShapeDefinition,
   SubscribeResponse,
   SubscriptionData,
 } from './shapes/types'
