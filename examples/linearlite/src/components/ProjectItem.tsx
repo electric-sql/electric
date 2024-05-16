@@ -50,18 +50,22 @@ function ProjectItem({ title, projectId }: Props) {
 
   useEffect(() => {
     const status = sync.syncStatus(projectId)
-    console.log(title, status)
 
     // if sub not present, do nothing
     if (!status) return
 
-    // if sub in progress, set loading state
-    if (status.status !== 'active') setLoading(true)
-
-    // set sync status based on whether sub is active
-    // or being cancelled
-    setSynced(status.status !== 'cancelling')
-  }, [sync, projectId])
+    switch (status.status) {
+      case 'cancelling':
+        unsyncProject()
+        break
+      case 'establishing':
+        syncProject()
+        break
+      case 'active':
+        setSynced(true)
+        break
+    }
+  }, [sync, syncProject, unsyncProject, projectId])
 
   return (
     <button
