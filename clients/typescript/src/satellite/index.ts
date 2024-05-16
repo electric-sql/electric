@@ -33,7 +33,7 @@ import {
 } from './shapes/types'
 import { DbSchema } from '../client/model/schema'
 import { QualifiedTablename } from '../util'
-import { IShapeManager2 } from '../client/model/shapes'
+import { IShapeManager } from '../client/model/shapes'
 
 export { MockRegistry } from './mock'
 export { SatelliteProcess } from './process'
@@ -63,7 +63,7 @@ export interface Registry {
 
 // `Satellite` is the main process handling ElectricSQL replication,
 // processing the opslog and notifying when there are data changes.
-export interface Satellite extends IShapeManager2 {
+export interface Satellite extends IShapeManager {
   dbName: DbName
 
   adapter: DatabaseAdapter

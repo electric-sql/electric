@@ -33,8 +33,6 @@ export class ShapeManager {
   private serverIds: Map<string, string> = new Map()
   private incompleteUnsubs: Set<string> = new Set()
 
-  constructor() {}
-
   /** Set internal state using a string returned from {@link ShapeManager#serialize}. */
   public initialize(serializedState: string): void {
     const { unfulfilled, active, known, unsubscribes } =
@@ -208,7 +206,7 @@ export class ShapeManager {
      */
     const fullKey = makeFullKey(shapeHash, keyOrHash)
 
-    let sub = this.getLatestSubscription(keyOrHash)
+    const sub = this.getLatestSubscription(keyOrHash)
 
     if (sub && sub.shapeHash === shapeHash) {
       // Known & latest subscription with same key and hash.
