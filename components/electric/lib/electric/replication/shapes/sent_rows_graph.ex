@@ -149,7 +149,7 @@ defmodule Electric.Replication.Shapes.SentRowsGraph do
       )
       when is_function(fun, 3) and is_function(edge_predicate_fun, 1) do
     if MapSet.member?(visited, v_id) do
-      dfs_traverse(rest, g, visited, fun, acc)
+      dfs_traverse(rest, g, visited, fun, edge_predicate_fun, acc)
     else
       v = Map.get(vs, v_id)
       in_edges = Enum.map(Map.get(ie, v_id, []), &{Map.fetch!(vs, &1), Map.fetch!(e, {&1, v_id})})
