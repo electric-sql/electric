@@ -168,6 +168,27 @@ export class ShapeManager {
   }
 
   /**
+   * List all subscriptions as defined along with their simple key and sync status
+   */
+  public listAllSubscriptions(): {
+    key: string
+    shapes: Shape[]
+    status: SyncStatus
+  }[] {
+    const allKeys = Object.keys(this.activeSubscriptions).concat(
+      Object.keys(this.requestedSubscriptions)
+    )
+    return allKeys.map((key) => ({
+      shapes:
+        this.knownSubscriptions[
+          (this.activeSubscriptions[key] ?? this.requestedSubscriptions[key])!
+        ]!.shapes,
+      status: this.status(key),
+      key,
+    }))
+  }
+
+  /**
    * Store a request to sync a list of shapes.
    *
    * This should be done before any actual API requests in order to correctly deduplicate concurrent calls
