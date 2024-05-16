@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { ToolbarTabsProps } from '../tabs'
 import { Badge, Box, Table, Text } from '@radix-ui/themes'
+import { SyncStatus } from 'electric-sql/client/model'
 
 export default function ShapesTab({
   dbName,
@@ -11,6 +12,7 @@ export default function ShapesTab({
   )
 
   useEffect(() => {
+    // TODO: need notifier API for shape status
     // periodically refresh shape subscriptions
     const interval = setInterval(
       () => setShapes(api.getSatelliteShapeSubscriptions(dbName)),
@@ -33,7 +35,7 @@ export default function ShapesTab({
         <Table.Header>
           <Table.Row>
             <Table.ColumnHeaderCell>
-              Shape Subscription ID
+              Shape Subscription Key
             </Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell>Tablename</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell>Include</Table.ColumnHeaderCell>
@@ -43,19 +45,18 @@ export default function ShapesTab({
         </Table.Header>
 
         <Table.Body>
-          {shapes.map(({ id, tablename, include = [], where }) => (
-            <Table.Row key={id}>
-              <Table.Cell>{id}</Table.Cell>
-              <Table.Cell>{tablename}</Table.Cell>
+          {shapes.map(({ key, shape, status }) => (
+            <Table.Row key={key}>
+              <Table.Cell>{key}</Table.Cell>
+              <Table.Cell>{shape.tablename}</Table.Cell>
               <Table.Cell>
-                {include.length === 0
-                  ? 'N/A'
-                  : include.map((v) => v.select.tablename).join(', ')}
+                {!shape.include || shape.include.length === 0
+                  ? ''
+                  : shape.include.map((v) => v.select.tablename).join(', ')}
               </Table.Cell>
-              <Table.Cell>{where ?? 'N/A'}</Table.Cell>
+              <Table.Cell>{shape.where ?? ''}</Table.Cell>
               <Table.Cell>
-                {/* TODO: add shape status once available */}
-                <Badge color="green">Active</Badge>
+                <ShapeStatusBadge status={status} />
               </Table.Cell>
             </Table.Row>
           ))}
@@ -63,4 +64,16 @@ export default function ShapesTab({
       </Table.Root>
     </Box>
   )
+}
+
+const ShapeStatusBadge = ({ status }: { status: SyncStatus }) => {
+  if (!status) return null
+  switch (status.status) {
+    case 'active':
+      return <Badge color="green">Active</Badge>
+    case 'establishing':
+      return <Badge color="orange">Establishing</Badge>
+    case 'cancelling':
+      return <Badge color="red">Cancelled</Badge>
+  }
 }

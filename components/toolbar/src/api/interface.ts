@@ -1,10 +1,11 @@
 import { Shape } from 'electric-sql/satellite'
 import { Row, Statement, ConnectivityState } from 'electric-sql/util'
 import { SqlDialect } from './statements'
+import { SyncStatus } from 'electric-sql/client/model'
 
 export type UnsubscribeFunction = () => void
 
-export type DebugShape = Shape & { id: string }
+export type DebugShape = { key: string; shape: Shape; status: SyncStatus }
 
 export interface TableColumn {
   name: string
