@@ -11,39 +11,23 @@ type UnwrapTuple<Tuple extends readonly unknown[]> = {
   [K in keyof Tuple]: K extends `${number}` ? Tuple[K] extends PrismaPromise<infer X> ? X : UnwrapPromise<Tuple[K]> : UnwrapPromise<Tuple[K]>
 };
 
-type Buffer = Omit<Uint8Array, 'set'>
 
 /**
- * Model Items
+ * Model Blobs
  * 
  */
-export type Items = {
+export type Blobs = {
   id: string
-  content: string
-  content_text_null: string | null
-  content_text_null_default: string | null
-  intvalue_null: number | null
-  intvalue_null_default: number | null
+  blob: Buffer | null
 }
 
 /**
- * Model OtherItems
+ * Model Bools
  * 
  */
-export type OtherItems = {
+export type Bools = {
   id: string
-  content: string
-  item_id: string | null
-}
-
-/**
- * Model Timestamps
- * 
- */
-export type Timestamps = {
-  id: string
-  created_at: Date
-  updated_at: Date
+  b: boolean | null
 }
 
 /**
@@ -57,23 +41,28 @@ export type Datetimes = {
 }
 
 /**
- * Model Bools
+ * Model Enums
  * 
  */
-export type Bools = {
+export type Enums = {
   id: string
-  b: boolean | null
+  c: Color | null
 }
 
 /**
- * Model Uuids
+ * Model Floats
  * 
  */
-export type Uuids = {
-  /**
-   * @zod.string.uuid()
-   */
+export type Floats = {
   id: string
+  /**
+   * @zod.custom.use(z.number().or(z.nan()))
+   */
+  f4: number | null
+  /**
+   * @zod.custom.use(z.number().or(z.nan()))
+   */
+  f8: number | null
 }
 
 /**
@@ -94,19 +83,22 @@ export type Ints = {
 }
 
 /**
- * Model Floats
+ * Model Items
  * 
  */
-export type Floats = {
+export type Items = {
   id: string
+  content: string
+  content_text_null: string | null
+  content_text_null_default: string | null
   /**
-   * @zod.custom.use(z.number().or(z.nan()))
+   * @zod.number.int().gte(-2147483648).lte(2147483647)
    */
-  f4: number | null
+  intvalue_null: number | null
   /**
-   * @zod.custom.use(z.number().or(z.nan()))
+   * @zod.number.int().gte(-2147483648).lte(2147483647)
    */
-  f8: number | null
+  intvalue_null_default: number | null
 }
 
 /**
@@ -115,26 +107,38 @@ export type Floats = {
  */
 export type Jsons = {
   id: string
-  js: Prisma.JsonValue | null
   jsb: Prisma.JsonValue | null
 }
 
 /**
- * Model Enums
+ * Model Other_items
  * 
  */
-export type Enums = {
+export type Other_items = {
   id: string
-  c: Color | null
+  content: string
+  item_id: string | null
 }
 
 /**
- * Model Blobs
+ * Model Timestamps
  * 
  */
-export type Blobs = {
+export type Timestamps = {
   id: string
-  blob: Uint8Array | null
+  created_at: Date
+  updated_at: Date
+}
+
+/**
+ * Model Uuids
+ * 
+ */
+export type Uuids = {
+  /**
+   * @zod.string.uuid()
+   */
+  id: string
 }
 
 
@@ -161,8 +165,8 @@ export type Color = (typeof Color)[keyof typeof Color]
  * @example
  * ```
  * const prisma = new PrismaClient()
- * // Fetch zero or more Items
- * const items = await prisma.items.findMany()
+ * // Fetch zero or more Blobs
+ * const blobs = await prisma.blobs.findMany()
  * ```
  *
  * 
@@ -182,8 +186,8 @@ export class PrismaClient<
    * @example
    * ```
    * const prisma = new PrismaClient()
-   * // Fetch zero or more Items
-   * const items = await prisma.items.findMany()
+   * // Fetch zero or more Blobs
+   * const blobs = await prisma.blobs.findMany()
    * ```
    *
    * 
@@ -272,44 +276,14 @@ export class PrismaClient<
   $transaction<R>(fn: (prisma: Prisma.TransactionClient) => Promise<R>, options?: {maxWait?: number, timeout?: number, isolationLevel?: Prisma.TransactionIsolationLevel}): Promise<R>;
 
       /**
-   * `prisma.items`: Exposes CRUD operations for the **Items** model.
+   * `prisma.blobs`: Exposes CRUD operations for the **Blobs** model.
     * Example usage:
     * ```ts
-    * // Fetch zero or more Items
-    * const items = await prisma.items.findMany()
+    * // Fetch zero or more Blobs
+    * const blobs = await prisma.blobs.findMany()
     * ```
     */
-  get items(): Prisma.ItemsDelegate<GlobalReject>;
-
-  /**
-   * `prisma.otherItems`: Exposes CRUD operations for the **OtherItems** model.
-    * Example usage:
-    * ```ts
-    * // Fetch zero or more OtherItems
-    * const otherItems = await prisma.otherItems.findMany()
-    * ```
-    */
-  get otherItems(): Prisma.OtherItemsDelegate<GlobalReject>;
-
-  /**
-   * `prisma.timestamps`: Exposes CRUD operations for the **Timestamps** model.
-    * Example usage:
-    * ```ts
-    * // Fetch zero or more Timestamps
-    * const timestamps = await prisma.timestamps.findMany()
-    * ```
-    */
-  get timestamps(): Prisma.TimestampsDelegate<GlobalReject>;
-
-  /**
-   * `prisma.datetimes`: Exposes CRUD operations for the **Datetimes** model.
-    * Example usage:
-    * ```ts
-    * // Fetch zero or more Datetimes
-    * const datetimes = await prisma.datetimes.findMany()
-    * ```
-    */
-  get datetimes(): Prisma.DatetimesDelegate<GlobalReject>;
+  get blobs(): Prisma.BlobsDelegate<GlobalReject>;
 
   /**
    * `prisma.bools`: Exposes CRUD operations for the **Bools** model.
@@ -322,44 +296,14 @@ export class PrismaClient<
   get bools(): Prisma.BoolsDelegate<GlobalReject>;
 
   /**
-   * `prisma.uuids`: Exposes CRUD operations for the **Uuids** model.
+   * `prisma.datetimes`: Exposes CRUD operations for the **Datetimes** model.
     * Example usage:
     * ```ts
-    * // Fetch zero or more Uuids
-    * const uuids = await prisma.uuids.findMany()
+    * // Fetch zero or more Datetimes
+    * const datetimes = await prisma.datetimes.findMany()
     * ```
     */
-  get uuids(): Prisma.UuidsDelegate<GlobalReject>;
-
-  /**
-   * `prisma.ints`: Exposes CRUD operations for the **Ints** model.
-    * Example usage:
-    * ```ts
-    * // Fetch zero or more Ints
-    * const ints = await prisma.ints.findMany()
-    * ```
-    */
-  get ints(): Prisma.IntsDelegate<GlobalReject>;
-
-  /**
-   * `prisma.floats`: Exposes CRUD operations for the **Floats** model.
-    * Example usage:
-    * ```ts
-    * // Fetch zero or more Floats
-    * const floats = await prisma.floats.findMany()
-    * ```
-    */
-  get floats(): Prisma.FloatsDelegate<GlobalReject>;
-
-  /**
-   * `prisma.jsons`: Exposes CRUD operations for the **Jsons** model.
-    * Example usage:
-    * ```ts
-    * // Fetch zero or more Jsons
-    * const jsons = await prisma.jsons.findMany()
-    * ```
-    */
-  get jsons(): Prisma.JsonsDelegate<GlobalReject>;
+  get datetimes(): Prisma.DatetimesDelegate<GlobalReject>;
 
   /**
    * `prisma.enums`: Exposes CRUD operations for the **Enums** model.
@@ -372,14 +316,74 @@ export class PrismaClient<
   get enums(): Prisma.EnumsDelegate<GlobalReject>;
 
   /**
-   * `prisma.blobs`: Exposes CRUD operations for the **Blobs** model.
+   * `prisma.floats`: Exposes CRUD operations for the **Floats** model.
     * Example usage:
     * ```ts
-    * // Fetch zero or more Blobs
-    * const blobs = await prisma.blobs.findMany()
+    * // Fetch zero or more Floats
+    * const floats = await prisma.floats.findMany()
     * ```
     */
-  get blobs(): Prisma.BlobsDelegate<GlobalReject>;
+  get floats(): Prisma.FloatsDelegate<GlobalReject>;
+
+  /**
+   * `prisma.ints`: Exposes CRUD operations for the **Ints** model.
+    * Example usage:
+    * ```ts
+    * // Fetch zero or more Ints
+    * const ints = await prisma.ints.findMany()
+    * ```
+    */
+  get ints(): Prisma.IntsDelegate<GlobalReject>;
+
+  /**
+   * `prisma.items`: Exposes CRUD operations for the **Items** model.
+    * Example usage:
+    * ```ts
+    * // Fetch zero or more Items
+    * const items = await prisma.items.findMany()
+    * ```
+    */
+  get items(): Prisma.ItemsDelegate<GlobalReject>;
+
+  /**
+   * `prisma.jsons`: Exposes CRUD operations for the **Jsons** model.
+    * Example usage:
+    * ```ts
+    * // Fetch zero or more Jsons
+    * const jsons = await prisma.jsons.findMany()
+    * ```
+    */
+  get jsons(): Prisma.JsonsDelegate<GlobalReject>;
+
+  /**
+   * `prisma.other_items`: Exposes CRUD operations for the **Other_items** model.
+    * Example usage:
+    * ```ts
+    * // Fetch zero or more Other_items
+    * const other_items = await prisma.other_items.findMany()
+    * ```
+    */
+  get other_items(): Prisma.Other_itemsDelegate<GlobalReject>;
+
+  /**
+   * `prisma.timestamps`: Exposes CRUD operations for the **Timestamps** model.
+    * Example usage:
+    * ```ts
+    * // Fetch zero or more Timestamps
+    * const timestamps = await prisma.timestamps.findMany()
+    * ```
+    */
+  get timestamps(): Prisma.TimestampsDelegate<GlobalReject>;
+
+  /**
+   * `prisma.uuids`: Exposes CRUD operations for the **Uuids** model.
+    * Example usage:
+    * ```ts
+    * // Fetch zero or more Uuids
+    * const uuids = await prisma.uuids.findMany()
+    * ```
+    */
+  get uuids(): Prisma.UuidsDelegate<GlobalReject>;
 }
 
 export namespace Prisma {
@@ -478,7 +482,7 @@ export namespace Prisma {
    *
    * @see https://www.prisma.io/docs/concepts/components/prisma-client/working-with-fields/working-with-json-fields#filtering-by-null-values
    */
-  export type InputJsonValue = null | string | number | boolean | InputJsonObject | InputJsonArray
+export type InputJsonValue = null | string | number | boolean | InputJsonObject | InputJsonArray
 
   /**
    * Types of the values used to represent different kinds of `null` values when working with JSON fields.
@@ -864,17 +868,17 @@ export namespace Prisma {
   }
 
   export const ModelName: {
-    Items: 'Items',
-    OtherItems: 'OtherItems',
-    Timestamps: 'Timestamps',
-    Datetimes: 'Datetimes',
+    Blobs: 'Blobs',
     Bools: 'Bools',
-    Uuids: 'Uuids',
-    Ints: 'Ints',
-    Floats: 'Floats',
-    Jsons: 'Jsons',
+    Datetimes: 'Datetimes',
     Enums: 'Enums',
-    Blobs: 'Blobs'
+    Floats: 'Floats',
+    Ints: 'Ints',
+    Items: 'Items',
+    Jsons: 'Jsons',
+    Other_items: 'Other_items',
+    Timestamps: 'Timestamps',
+    Uuids: 'Uuids'
   };
 
   export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -1039,400 +1043,365 @@ export namespace Prisma {
    */
 
 
+  /**
+   * Count Type ItemsCountOutputType
+   */
+
+
+  export type ItemsCountOutputType = {
+    other_items: number
+  }
+
+  export type ItemsCountOutputTypeSelect = {
+    other_items?: boolean
+  }
+
+  export type ItemsCountOutputTypeGetPayload<S extends boolean | null | undefined | ItemsCountOutputTypeArgs> =
+    S extends { select: any, include: any } ? 'Please either choose `select` or `include`' :
+    S extends true ? ItemsCountOutputType :
+    S extends undefined ? never :
+    S extends { include: any } & (ItemsCountOutputTypeArgs)
+    ? ItemsCountOutputType 
+    : S extends { select: any } & (ItemsCountOutputTypeArgs)
+      ? {
+    [P in TruthyKeys<S['select']>]:
+    P extends keyof ItemsCountOutputType ? ItemsCountOutputType[P] : never
+  } 
+      : ItemsCountOutputType
+
+
+
+
+  // Custom InputTypes
+
+  /**
+   * ItemsCountOutputType without action
+   */
+  export type ItemsCountOutputTypeArgs = {
+    /**
+     * Select specific fields to fetch from the ItemsCountOutputType
+     * 
+    **/
+    select?: ItemsCountOutputTypeSelect | null
+  }
+
+
 
   /**
    * Models
    */
 
   /**
-   * Model Items
+   * Model Blobs
    */
 
 
-  export type AggregateItems = {
-    _count: ItemsCountAggregateOutputType | null
-    _avg: ItemsAvgAggregateOutputType | null
-    _sum: ItemsSumAggregateOutputType | null
-    _min: ItemsMinAggregateOutputType | null
-    _max: ItemsMaxAggregateOutputType | null
+  export type AggregateBlobs = {
+    _count: BlobsCountAggregateOutputType | null
+    _min: BlobsMinAggregateOutputType | null
+    _max: BlobsMaxAggregateOutputType | null
   }
 
-  export type ItemsAvgAggregateOutputType = {
-    intvalue_null: number | null
-    intvalue_null_default: number | null
-  }
-
-  export type ItemsSumAggregateOutputType = {
-    intvalue_null: number | null
-    intvalue_null_default: number | null
-  }
-
-  export type ItemsMinAggregateOutputType = {
+  export type BlobsMinAggregateOutputType = {
     id: string | null
-    content: string | null
-    content_text_null: string | null
-    content_text_null_default: string | null
-    intvalue_null: number | null
-    intvalue_null_default: number | null
+    blob: Buffer | null
   }
 
-  export type ItemsMaxAggregateOutputType = {
+  export type BlobsMaxAggregateOutputType = {
     id: string | null
-    content: string | null
-    content_text_null: string | null
-    content_text_null_default: string | null
-    intvalue_null: number | null
-    intvalue_null_default: number | null
+    blob: Buffer | null
   }
 
-  export type ItemsCountAggregateOutputType = {
+  export type BlobsCountAggregateOutputType = {
     id: number
-    content: number
-    content_text_null: number
-    content_text_null_default: number
-    intvalue_null: number
-    intvalue_null_default: number
+    blob: number
     _all: number
   }
 
 
-  export type ItemsAvgAggregateInputType = {
-    intvalue_null?: true
-    intvalue_null_default?: true
-  }
-
-  export type ItemsSumAggregateInputType = {
-    intvalue_null?: true
-    intvalue_null_default?: true
-  }
-
-  export type ItemsMinAggregateInputType = {
+  export type BlobsMinAggregateInputType = {
     id?: true
-    content?: true
-    content_text_null?: true
-    content_text_null_default?: true
-    intvalue_null?: true
-    intvalue_null_default?: true
+    blob?: true
   }
 
-  export type ItemsMaxAggregateInputType = {
+  export type BlobsMaxAggregateInputType = {
     id?: true
-    content?: true
-    content_text_null?: true
-    content_text_null_default?: true
-    intvalue_null?: true
-    intvalue_null_default?: true
+    blob?: true
   }
 
-  export type ItemsCountAggregateInputType = {
+  export type BlobsCountAggregateInputType = {
     id?: true
-    content?: true
-    content_text_null?: true
-    content_text_null_default?: true
-    intvalue_null?: true
-    intvalue_null_default?: true
+    blob?: true
     _all?: true
   }
 
-  export type ItemsAggregateArgs = {
+  export type BlobsAggregateArgs = {
     /**
-     * Filter which Items to aggregate.
+     * Filter which Blobs to aggregate.
      * 
     **/
-    where?: ItemsWhereInput
+    where?: BlobsWhereInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
      * 
-     * Determine the order of Items to fetch.
+     * Determine the order of Blobs to fetch.
      * 
     **/
-    orderBy?: Enumerable<ItemsOrderByWithRelationInput>
+    orderBy?: Enumerable<BlobsOrderByWithRelationInput>
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
      * 
      * Sets the start position
      * 
     **/
-    cursor?: ItemsWhereUniqueInput
+    cursor?: BlobsWhereUniqueInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Take `±n` Items from the position of the cursor.
+     * Take `±n` Blobs from the position of the cursor.
      * 
     **/
     take?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Skip the first `n` Items.
+     * Skip the first `n` Blobs.
      * 
     **/
     skip?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
      * 
-     * Count returned Items
+     * Count returned Blobs
     **/
-    _count?: true | ItemsCountAggregateInputType
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
-     * 
-     * Select which fields to average
-    **/
-    _avg?: ItemsAvgAggregateInputType
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
-     * 
-     * Select which fields to sum
-    **/
-    _sum?: ItemsSumAggregateInputType
+    _count?: true | BlobsCountAggregateInputType
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
      * 
      * Select which fields to find the minimum value
     **/
-    _min?: ItemsMinAggregateInputType
+    _min?: BlobsMinAggregateInputType
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
      * 
      * Select which fields to find the maximum value
     **/
-    _max?: ItemsMaxAggregateInputType
+    _max?: BlobsMaxAggregateInputType
   }
 
-  export type GetItemsAggregateType<T extends ItemsAggregateArgs> = {
-        [P in keyof T & keyof AggregateItems]: P extends '_count' | 'count'
+  export type GetBlobsAggregateType<T extends BlobsAggregateArgs> = {
+        [P in keyof T & keyof AggregateBlobs]: P extends '_count' | 'count'
       ? T[P] extends true
         ? number
-        : GetScalarType<T[P], AggregateItems[P]>
-      : GetScalarType<T[P], AggregateItems[P]>
+        : GetScalarType<T[P], AggregateBlobs[P]>
+      : GetScalarType<T[P], AggregateBlobs[P]>
   }
 
 
 
 
-  export type ItemsGroupByArgs = {
-    where?: ItemsWhereInput
-    orderBy?: Enumerable<ItemsOrderByWithAggregationInput>
-    by: Array<ItemsScalarFieldEnum>
-    having?: ItemsScalarWhereWithAggregatesInput
+  export type BlobsGroupByArgs = {
+    where?: BlobsWhereInput
+    orderBy?: Enumerable<BlobsOrderByWithAggregationInput>
+    by: Array<BlobsScalarFieldEnum>
+    having?: BlobsScalarWhereWithAggregatesInput
     take?: number
     skip?: number
-    _count?: ItemsCountAggregateInputType | true
-    _avg?: ItemsAvgAggregateInputType
-    _sum?: ItemsSumAggregateInputType
-    _min?: ItemsMinAggregateInputType
-    _max?: ItemsMaxAggregateInputType
+    _count?: BlobsCountAggregateInputType | true
+    _min?: BlobsMinAggregateInputType
+    _max?: BlobsMaxAggregateInputType
   }
 
 
-  export type ItemsGroupByOutputType = {
+  export type BlobsGroupByOutputType = {
     id: string
-    content: string
-    content_text_null: string | null
-    content_text_null_default: string | null
-    intvalue_null: number | null
-    intvalue_null_default: number | null
-    _count: ItemsCountAggregateOutputType | null
-    _avg: ItemsAvgAggregateOutputType | null
-    _sum: ItemsSumAggregateOutputType | null
-    _min: ItemsMinAggregateOutputType | null
-    _max: ItemsMaxAggregateOutputType | null
+    blob: Buffer | null
+    _count: BlobsCountAggregateOutputType | null
+    _min: BlobsMinAggregateOutputType | null
+    _max: BlobsMaxAggregateOutputType | null
   }
 
-  type GetItemsGroupByPayload<T extends ItemsGroupByArgs> = PrismaPromise<
+  type GetBlobsGroupByPayload<T extends BlobsGroupByArgs> = PrismaPromise<
     Array<
-      PickArray<ItemsGroupByOutputType, T['by']> &
+      PickArray<BlobsGroupByOutputType, T['by']> &
         {
-          [P in ((keyof T) & (keyof ItemsGroupByOutputType))]: P extends '_count'
+          [P in ((keyof T) & (keyof BlobsGroupByOutputType))]: P extends '_count'
             ? T[P] extends boolean
               ? number
-              : GetScalarType<T[P], ItemsGroupByOutputType[P]>
-            : GetScalarType<T[P], ItemsGroupByOutputType[P]>
+              : GetScalarType<T[P], BlobsGroupByOutputType[P]>
+            : GetScalarType<T[P], BlobsGroupByOutputType[P]>
         }
       >
     >
 
 
-  export type ItemsSelect = {
+  export type BlobsSelect = {
     id?: boolean
-    content?: boolean
-    content_text_null?: boolean
-    content_text_null_default?: boolean
-    intvalue_null?: boolean
-    intvalue_null_default?: boolean
-    other_items?: boolean | OtherItemsArgs
+    blob?: boolean
   }
 
 
-  export type ItemsInclude = {
-    other_items?: boolean | OtherItemsArgs
-  } 
-
-  export type ItemsGetPayload<S extends boolean | null | undefined | ItemsArgs> =
+  export type BlobsGetPayload<S extends boolean | null | undefined | BlobsArgs> =
     S extends { select: any, include: any } ? 'Please either choose `select` or `include`' :
-    S extends true ? Items :
+    S extends true ? Blobs :
     S extends undefined ? never :
-    S extends { include: any } & (ItemsArgs | ItemsFindManyArgs)
-    ? Items  & {
-    [P in TruthyKeys<S['include']>]:
-        P extends 'other_items' ? OtherItemsGetPayload<S['include'][P]> | null :  never
-  } 
-    : S extends { select: any } & (ItemsArgs | ItemsFindManyArgs)
+    S extends { include: any } & (BlobsArgs | BlobsFindManyArgs)
+    ? Blobs 
+    : S extends { select: any } & (BlobsArgs | BlobsFindManyArgs)
       ? {
     [P in TruthyKeys<S['select']>]:
-        P extends 'other_items' ? OtherItemsGetPayload<S['select'][P]> | null :  P extends keyof Items ? Items[P] : never
+    P extends keyof Blobs ? Blobs[P] : never
   } 
-      : Items
+      : Blobs
 
 
-  type ItemsCountArgs = Merge<
-    Omit<ItemsFindManyArgs, 'select' | 'include'> & {
-      select?: ItemsCountAggregateInputType | true
+  type BlobsCountArgs = Merge<
+    Omit<BlobsFindManyArgs, 'select' | 'include'> & {
+      select?: BlobsCountAggregateInputType | true
     }
   >
 
-  export interface ItemsDelegate<GlobalRejectSettings extends Prisma.RejectOnNotFound | Prisma.RejectPerOperation | false | undefined> {
+  export interface BlobsDelegate<GlobalRejectSettings extends Prisma.RejectOnNotFound | Prisma.RejectPerOperation | false | undefined> {
     /**
-     * Find zero or one Items that matches the filter.
-     * @param {ItemsFindUniqueArgs} args - Arguments to find a Items
+     * Find zero or one Blobs that matches the filter.
+     * @param {BlobsFindUniqueArgs} args - Arguments to find a Blobs
      * @example
-     * // Get one Items
-     * const items = await prisma.items.findUnique({
+     * // Get one Blobs
+     * const blobs = await prisma.blobs.findUnique({
      *   where: {
      *     // ... provide filter here
      *   }
      * })
     **/
-    findUnique<T extends ItemsFindUniqueArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
-      args: SelectSubset<T, ItemsFindUniqueArgs>
-    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findUnique', 'Items'> extends True ? Prisma__ItemsClient<ItemsGetPayload<T>> : Prisma__ItemsClient<ItemsGetPayload<T> | null, null>
+    findUnique<T extends BlobsFindUniqueArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
+      args: SelectSubset<T, BlobsFindUniqueArgs>
+    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findUnique', 'Blobs'> extends True ? Prisma__BlobsClient<BlobsGetPayload<T>> : Prisma__BlobsClient<BlobsGetPayload<T> | null, null>
 
     /**
-     * Find one Items that matches the filter or throw an error  with `error.code='P2025'` 
+     * Find one Blobs that matches the filter or throw an error  with `error.code='P2025'` 
      *     if no matches were found.
-     * @param {ItemsFindUniqueOrThrowArgs} args - Arguments to find a Items
+     * @param {BlobsFindUniqueOrThrowArgs} args - Arguments to find a Blobs
      * @example
-     * // Get one Items
-     * const items = await prisma.items.findUniqueOrThrow({
+     * // Get one Blobs
+     * const blobs = await prisma.blobs.findUniqueOrThrow({
      *   where: {
      *     // ... provide filter here
      *   }
      * })
     **/
-    findUniqueOrThrow<T extends ItemsFindUniqueOrThrowArgs>(
-      args?: SelectSubset<T, ItemsFindUniqueOrThrowArgs>
-    ): Prisma__ItemsClient<ItemsGetPayload<T>>
+    findUniqueOrThrow<T extends BlobsFindUniqueOrThrowArgs>(
+      args?: SelectSubset<T, BlobsFindUniqueOrThrowArgs>
+    ): Prisma__BlobsClient<BlobsGetPayload<T>>
 
     /**
-     * Find the first Items that matches the filter.
+     * Find the first Blobs that matches the filter.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {ItemsFindFirstArgs} args - Arguments to find a Items
+     * @param {BlobsFindFirstArgs} args - Arguments to find a Blobs
      * @example
-     * // Get one Items
-     * const items = await prisma.items.findFirst({
+     * // Get one Blobs
+     * const blobs = await prisma.blobs.findFirst({
      *   where: {
      *     // ... provide filter here
      *   }
      * })
     **/
-    findFirst<T extends ItemsFindFirstArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
-      args?: SelectSubset<T, ItemsFindFirstArgs>
-    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findFirst', 'Items'> extends True ? Prisma__ItemsClient<ItemsGetPayload<T>> : Prisma__ItemsClient<ItemsGetPayload<T> | null, null>
+    findFirst<T extends BlobsFindFirstArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
+      args?: SelectSubset<T, BlobsFindFirstArgs>
+    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findFirst', 'Blobs'> extends True ? Prisma__BlobsClient<BlobsGetPayload<T>> : Prisma__BlobsClient<BlobsGetPayload<T> | null, null>
 
     /**
-     * Find the first Items that matches the filter or
+     * Find the first Blobs that matches the filter or
      * throw `NotFoundError` if no matches were found.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {ItemsFindFirstOrThrowArgs} args - Arguments to find a Items
+     * @param {BlobsFindFirstOrThrowArgs} args - Arguments to find a Blobs
      * @example
-     * // Get one Items
-     * const items = await prisma.items.findFirstOrThrow({
+     * // Get one Blobs
+     * const blobs = await prisma.blobs.findFirstOrThrow({
      *   where: {
      *     // ... provide filter here
      *   }
      * })
     **/
-    findFirstOrThrow<T extends ItemsFindFirstOrThrowArgs>(
-      args?: SelectSubset<T, ItemsFindFirstOrThrowArgs>
-    ): Prisma__ItemsClient<ItemsGetPayload<T>>
+    findFirstOrThrow<T extends BlobsFindFirstOrThrowArgs>(
+      args?: SelectSubset<T, BlobsFindFirstOrThrowArgs>
+    ): Prisma__BlobsClient<BlobsGetPayload<T>>
 
     /**
-     * Find zero or more Items that matches the filter.
+     * Find zero or more Blobs that matches the filter.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {ItemsFindManyArgs=} args - Arguments to filter and select certain fields only.
+     * @param {BlobsFindManyArgs=} args - Arguments to filter and select certain fields only.
      * @example
-     * // Get all Items
-     * const items = await prisma.items.findMany()
+     * // Get all Blobs
+     * const blobs = await prisma.blobs.findMany()
      * 
-     * // Get first 10 Items
-     * const items = await prisma.items.findMany({ take: 10 })
+     * // Get first 10 Blobs
+     * const blobs = await prisma.blobs.findMany({ take: 10 })
      * 
      * // Only select the `id`
-     * const itemsWithIdOnly = await prisma.items.findMany({ select: { id: true } })
+     * const blobsWithIdOnly = await prisma.blobs.findMany({ select: { id: true } })
      * 
     **/
-    findMany<T extends ItemsFindManyArgs>(
-      args?: SelectSubset<T, ItemsFindManyArgs>
-    ): PrismaPromise<Array<ItemsGetPayload<T>>>
+    findMany<T extends BlobsFindManyArgs>(
+      args?: SelectSubset<T, BlobsFindManyArgs>
+    ): PrismaPromise<Array<BlobsGetPayload<T>>>
 
     /**
-     * Create a Items.
-     * @param {ItemsCreateArgs} args - Arguments to create a Items.
+     * Create a Blobs.
+     * @param {BlobsCreateArgs} args - Arguments to create a Blobs.
      * @example
-     * // Create one Items
-     * const Items = await prisma.items.create({
+     * // Create one Blobs
+     * const Blobs = await prisma.blobs.create({
      *   data: {
-     *     // ... data to create a Items
+     *     // ... data to create a Blobs
      *   }
      * })
      * 
     **/
-    create<T extends ItemsCreateArgs>(
-      args: SelectSubset<T, ItemsCreateArgs>
-    ): Prisma__ItemsClient<ItemsGetPayload<T>>
+    create<T extends BlobsCreateArgs>(
+      args: SelectSubset<T, BlobsCreateArgs>
+    ): Prisma__BlobsClient<BlobsGetPayload<T>>
 
     /**
-     * Create many Items.
-     *     @param {ItemsCreateManyArgs} args - Arguments to create many Items.
+     * Create many Blobs.
+     *     @param {BlobsCreateManyArgs} args - Arguments to create many Blobs.
      *     @example
-     *     // Create many Items
-     *     const items = await prisma.items.createMany({
+     *     // Create many Blobs
+     *     const blobs = await prisma.blobs.createMany({
      *       data: {
      *         // ... provide data here
      *       }
      *     })
      *     
     **/
-    createMany<T extends ItemsCreateManyArgs>(
-      args?: SelectSubset<T, ItemsCreateManyArgs>
+    createMany<T extends BlobsCreateManyArgs>(
+      args?: SelectSubset<T, BlobsCreateManyArgs>
     ): PrismaPromise<BatchPayload>
 
     /**
-     * Delete a Items.
-     * @param {ItemsDeleteArgs} args - Arguments to delete one Items.
+     * Delete a Blobs.
+     * @param {BlobsDeleteArgs} args - Arguments to delete one Blobs.
      * @example
-     * // Delete one Items
-     * const Items = await prisma.items.delete({
+     * // Delete one Blobs
+     * const Blobs = await prisma.blobs.delete({
      *   where: {
-     *     // ... filter to delete one Items
+     *     // ... filter to delete one Blobs
      *   }
      * })
      * 
     **/
-    delete<T extends ItemsDeleteArgs>(
-      args: SelectSubset<T, ItemsDeleteArgs>
-    ): Prisma__ItemsClient<ItemsGetPayload<T>>
+    delete<T extends BlobsDeleteArgs>(
+      args: SelectSubset<T, BlobsDeleteArgs>
+    ): Prisma__BlobsClient<BlobsGetPayload<T>>
 
     /**
-     * Update one Items.
-     * @param {ItemsUpdateArgs} args - Arguments to update one Items.
+     * Update one Blobs.
+     * @param {BlobsUpdateArgs} args - Arguments to update one Blobs.
      * @example
-     * // Update one Items
-     * const items = await prisma.items.update({
+     * // Update one Blobs
+     * const blobs = await prisma.blobs.update({
      *   where: {
      *     // ... provide filter here
      *   },
@@ -1442,34 +1411,34 @@ export namespace Prisma {
      * })
      * 
     **/
-    update<T extends ItemsUpdateArgs>(
-      args: SelectSubset<T, ItemsUpdateArgs>
-    ): Prisma__ItemsClient<ItemsGetPayload<T>>
+    update<T extends BlobsUpdateArgs>(
+      args: SelectSubset<T, BlobsUpdateArgs>
+    ): Prisma__BlobsClient<BlobsGetPayload<T>>
 
     /**
-     * Delete zero or more Items.
-     * @param {ItemsDeleteManyArgs} args - Arguments to filter Items to delete.
+     * Delete zero or more Blobs.
+     * @param {BlobsDeleteManyArgs} args - Arguments to filter Blobs to delete.
      * @example
-     * // Delete a few Items
-     * const { count } = await prisma.items.deleteMany({
+     * // Delete a few Blobs
+     * const { count } = await prisma.blobs.deleteMany({
      *   where: {
      *     // ... provide filter here
      *   }
      * })
      * 
     **/
-    deleteMany<T extends ItemsDeleteManyArgs>(
-      args?: SelectSubset<T, ItemsDeleteManyArgs>
+    deleteMany<T extends BlobsDeleteManyArgs>(
+      args?: SelectSubset<T, BlobsDeleteManyArgs>
     ): PrismaPromise<BatchPayload>
 
     /**
-     * Update zero or more Items.
+     * Update zero or more Blobs.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {ItemsUpdateManyArgs} args - Arguments to update one or more rows.
+     * @param {BlobsUpdateManyArgs} args - Arguments to update one or more rows.
      * @example
-     * // Update many Items
-     * const items = await prisma.items.updateMany({
+     * // Update many Blobs
+     * const blobs = await prisma.blobs.updateMany({
      *   where: {
      *     // ... provide filter here
      *   },
@@ -1479,59 +1448,59 @@ export namespace Prisma {
      * })
      * 
     **/
-    updateMany<T extends ItemsUpdateManyArgs>(
-      args: SelectSubset<T, ItemsUpdateManyArgs>
+    updateMany<T extends BlobsUpdateManyArgs>(
+      args: SelectSubset<T, BlobsUpdateManyArgs>
     ): PrismaPromise<BatchPayload>
 
     /**
-     * Create or update one Items.
-     * @param {ItemsUpsertArgs} args - Arguments to update or create a Items.
+     * Create or update one Blobs.
+     * @param {BlobsUpsertArgs} args - Arguments to update or create a Blobs.
      * @example
-     * // Update or create a Items
-     * const items = await prisma.items.upsert({
+     * // Update or create a Blobs
+     * const blobs = await prisma.blobs.upsert({
      *   create: {
-     *     // ... data to create a Items
+     *     // ... data to create a Blobs
      *   },
      *   update: {
      *     // ... in case it already exists, update
      *   },
      *   where: {
-     *     // ... the filter for the Items we want to update
+     *     // ... the filter for the Blobs we want to update
      *   }
      * })
     **/
-    upsert<T extends ItemsUpsertArgs>(
-      args: SelectSubset<T, ItemsUpsertArgs>
-    ): Prisma__ItemsClient<ItemsGetPayload<T>>
+    upsert<T extends BlobsUpsertArgs>(
+      args: SelectSubset<T, BlobsUpsertArgs>
+    ): Prisma__BlobsClient<BlobsGetPayload<T>>
 
     /**
-     * Count the number of Items.
+     * Count the number of Blobs.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {ItemsCountArgs} args - Arguments to filter Items to count.
+     * @param {BlobsCountArgs} args - Arguments to filter Blobs to count.
      * @example
-     * // Count the number of Items
-     * const count = await prisma.items.count({
+     * // Count the number of Blobs
+     * const count = await prisma.blobs.count({
      *   where: {
-     *     // ... the filter for the Items we want to count
+     *     // ... the filter for the Blobs we want to count
      *   }
      * })
     **/
-    count<T extends ItemsCountArgs>(
-      args?: Subset<T, ItemsCountArgs>,
+    count<T extends BlobsCountArgs>(
+      args?: Subset<T, BlobsCountArgs>,
     ): PrismaPromise<
       T extends _Record<'select', any>
         ? T['select'] extends true
           ? number
-          : GetScalarType<T['select'], ItemsCountAggregateOutputType>
+          : GetScalarType<T['select'], BlobsCountAggregateOutputType>
         : number
     >
 
     /**
-     * Allows you to perform aggregations operations on a Items.
+     * Allows you to perform aggregations operations on a Blobs.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {ItemsAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @param {BlobsAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
      * @example
      * // Ordered by age ascending
      * // Where email contains prisma.io
@@ -1551,13 +1520,13 @@ export namespace Prisma {
      *   take: 10,
      * })
     **/
-    aggregate<T extends ItemsAggregateArgs>(args: Subset<T, ItemsAggregateArgs>): PrismaPromise<GetItemsAggregateType<T>>
+    aggregate<T extends BlobsAggregateArgs>(args: Subset<T, BlobsAggregateArgs>): PrismaPromise<GetBlobsAggregateType<T>>
 
     /**
-     * Group by Items.
+     * Group by Blobs.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {ItemsGroupByArgs} args - Group by arguments.
+     * @param {BlobsGroupByArgs} args - Group by arguments.
      * @example
      * // Group by city, order by createdAt, get count
      * const result = await prisma.user.groupBy({
@@ -1572,14 +1541,14 @@ export namespace Prisma {
      * 
     **/
     groupBy<
-      T extends ItemsGroupByArgs,
+      T extends BlobsGroupByArgs,
       HasSelectOrTake extends Or<
         Extends<'skip', Keys<T>>,
         Extends<'take', Keys<T>>
       >,
       OrderByArg extends True extends HasSelectOrTake
-        ? { orderBy: ItemsGroupByArgs['orderBy'] }
-        : { orderBy?: ItemsGroupByArgs['orderBy'] },
+        ? { orderBy: BlobsGroupByArgs['orderBy'] }
+        : { orderBy?: BlobsGroupByArgs['orderBy'] },
       OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
       ByFields extends TupleToUnion<T['by']>,
       ByValid extends Has<ByFields, OrderFields>,
@@ -1628,17 +1597,17 @@ export namespace Prisma {
             ? never
             : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
         }[OrderFields]
-    >(args: SubsetIntersection<T, ItemsGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetItemsGroupByPayload<T> : PrismaPromise<InputErrors>
+    >(args: SubsetIntersection<T, BlobsGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetBlobsGroupByPayload<T> : PrismaPromise<InputErrors>
 
   }
 
   /**
-   * The delegate class that acts as a "Promise-like" for Items.
+   * The delegate class that acts as a "Promise-like" for Blobs.
    * Why is this prefixed with `Prisma__`?
    * Because we want to prevent naming conflicts as mentioned in
    * https://github.com/prisma/prisma-client-js/issues/707
    */
-  export class Prisma__ItemsClient<T, Null = never> implements PrismaPromise<T> {
+  export class Prisma__BlobsClient<T, Null = never> implements PrismaPromise<T> {
     [prisma]: true;
     private readonly _dmmf;
     private readonly _fetcher;
@@ -1655,7 +1624,6 @@ export namespace Prisma {
     constructor(_dmmf: runtime.DMMFClass, _fetcher: PrismaClientFetcher, _queryType: 'query' | 'mutation', _rootField: string, _clientMethod: string, _args: any, _dataPath: string[], _errorFormat: ErrorFormat, _measurePerformance?: boolean | undefined, _isList?: boolean);
     readonly [Symbol.toStringTag]: 'PrismaClientPromise';
 
-    other_items<T extends OtherItemsArgs= {}>(args?: Subset<T, OtherItemsArgs>): Prisma__OtherItemsClient<OtherItemsGetPayload<T> | Null>;
 
     private get _document();
     /**
@@ -1685,30 +1653,25 @@ export namespace Prisma {
   // Custom InputTypes
 
   /**
-   * Items base type for findUnique actions
+   * Blobs base type for findUnique actions
    */
-  export type ItemsFindUniqueArgsBase = {
+  export type BlobsFindUniqueArgsBase = {
     /**
-     * Select specific fields to fetch from the Items
+     * Select specific fields to fetch from the Blobs
      * 
     **/
-    select?: ItemsSelect | null
+    select?: BlobsSelect | null
     /**
-     * Choose, which related nodes to fetch as well.
+     * Filter, which Blobs to fetch.
      * 
     **/
-    include?: ItemsInclude | null
-    /**
-     * Filter, which Items to fetch.
-     * 
-    **/
-    where: ItemsWhereUniqueInput
+    where: BlobsWhereUniqueInput
   }
 
   /**
-   * Items findUnique
+   * Blobs findUnique
    */
-  export interface ItemsFindUniqueArgs extends ItemsFindUniqueArgsBase {
+  export interface BlobsFindUniqueArgs extends BlobsFindUniqueArgsBase {
    /**
     * Throw an Error if query returns no results
     * @deprecated since 4.0.0: use `findUniqueOrThrow` method instead
@@ -1718,87 +1681,77 @@ export namespace Prisma {
       
 
   /**
-   * Items findUniqueOrThrow
+   * Blobs findUniqueOrThrow
    */
-  export type ItemsFindUniqueOrThrowArgs = {
+  export type BlobsFindUniqueOrThrowArgs = {
     /**
-     * Select specific fields to fetch from the Items
+     * Select specific fields to fetch from the Blobs
      * 
     **/
-    select?: ItemsSelect | null
+    select?: BlobsSelect | null
     /**
-     * Choose, which related nodes to fetch as well.
+     * Filter, which Blobs to fetch.
      * 
     **/
-    include?: ItemsInclude | null
-    /**
-     * Filter, which Items to fetch.
-     * 
-    **/
-    where: ItemsWhereUniqueInput
+    where: BlobsWhereUniqueInput
   }
 
 
   /**
-   * Items base type for findFirst actions
+   * Blobs base type for findFirst actions
    */
-  export type ItemsFindFirstArgsBase = {
+  export type BlobsFindFirstArgsBase = {
     /**
-     * Select specific fields to fetch from the Items
+     * Select specific fields to fetch from the Blobs
      * 
     **/
-    select?: ItemsSelect | null
+    select?: BlobsSelect | null
     /**
-     * Choose, which related nodes to fetch as well.
+     * Filter, which Blobs to fetch.
      * 
     **/
-    include?: ItemsInclude | null
-    /**
-     * Filter, which Items to fetch.
-     * 
-    **/
-    where?: ItemsWhereInput
+    where?: BlobsWhereInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
      * 
-     * Determine the order of Items to fetch.
+     * Determine the order of Blobs to fetch.
      * 
     **/
-    orderBy?: Enumerable<ItemsOrderByWithRelationInput>
+    orderBy?: Enumerable<BlobsOrderByWithRelationInput>
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
      * 
-     * Sets the position for searching for Items.
+     * Sets the position for searching for Blobs.
      * 
     **/
-    cursor?: ItemsWhereUniqueInput
+    cursor?: BlobsWhereUniqueInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Take `±n` Items from the position of the cursor.
+     * Take `±n` Blobs from the position of the cursor.
      * 
     **/
     take?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Skip the first `n` Items.
+     * Skip the first `n` Blobs.
      * 
     **/
     skip?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
      * 
-     * Filter by unique combinations of Items.
+     * Filter by unique combinations of Blobs.
      * 
     **/
-    distinct?: Enumerable<ItemsScalarFieldEnum>
+    distinct?: Enumerable<BlobsScalarFieldEnum>
   }
 
   /**
-   * Items findFirst
+   * Blobs findFirst
    */
-  export interface ItemsFindFirstArgs extends ItemsFindFirstArgsBase {
+  export interface BlobsFindFirstArgs extends BlobsFindFirstArgsBase {
    /**
     * Throw an Error if query returns no results
     * @deprecated since 4.0.0: use `findFirstOrThrow` method instead
@@ -1808,603 +1761,552 @@ export namespace Prisma {
       
 
   /**
-   * Items findFirstOrThrow
+   * Blobs findFirstOrThrow
    */
-  export type ItemsFindFirstOrThrowArgs = {
+  export type BlobsFindFirstOrThrowArgs = {
     /**
-     * Select specific fields to fetch from the Items
+     * Select specific fields to fetch from the Blobs
      * 
     **/
-    select?: ItemsSelect | null
+    select?: BlobsSelect | null
     /**
-     * Choose, which related nodes to fetch as well.
+     * Filter, which Blobs to fetch.
      * 
     **/
-    include?: ItemsInclude | null
-    /**
-     * Filter, which Items to fetch.
-     * 
-    **/
-    where?: ItemsWhereInput
+    where?: BlobsWhereInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
      * 
-     * Determine the order of Items to fetch.
+     * Determine the order of Blobs to fetch.
      * 
     **/
-    orderBy?: Enumerable<ItemsOrderByWithRelationInput>
+    orderBy?: Enumerable<BlobsOrderByWithRelationInput>
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
      * 
-     * Sets the position for searching for Items.
+     * Sets the position for searching for Blobs.
      * 
     **/
-    cursor?: ItemsWhereUniqueInput
+    cursor?: BlobsWhereUniqueInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Take `±n` Items from the position of the cursor.
+     * Take `±n` Blobs from the position of the cursor.
      * 
     **/
     take?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Skip the first `n` Items.
+     * Skip the first `n` Blobs.
      * 
     **/
     skip?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
      * 
-     * Filter by unique combinations of Items.
+     * Filter by unique combinations of Blobs.
      * 
     **/
-    distinct?: Enumerable<ItemsScalarFieldEnum>
+    distinct?: Enumerable<BlobsScalarFieldEnum>
   }
 
 
   /**
-   * Items findMany
+   * Blobs findMany
    */
-  export type ItemsFindManyArgs = {
+  export type BlobsFindManyArgs = {
     /**
-     * Select specific fields to fetch from the Items
+     * Select specific fields to fetch from the Blobs
      * 
     **/
-    select?: ItemsSelect | null
+    select?: BlobsSelect | null
     /**
-     * Choose, which related nodes to fetch as well.
+     * Filter, which Blobs to fetch.
      * 
     **/
-    include?: ItemsInclude | null
-    /**
-     * Filter, which Items to fetch.
-     * 
-    **/
-    where?: ItemsWhereInput
+    where?: BlobsWhereInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
      * 
-     * Determine the order of Items to fetch.
+     * Determine the order of Blobs to fetch.
      * 
     **/
-    orderBy?: Enumerable<ItemsOrderByWithRelationInput>
+    orderBy?: Enumerable<BlobsOrderByWithRelationInput>
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
      * 
-     * Sets the position for listing Items.
+     * Sets the position for listing Blobs.
      * 
     **/
-    cursor?: ItemsWhereUniqueInput
+    cursor?: BlobsWhereUniqueInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Take `±n` Items from the position of the cursor.
+     * Take `±n` Blobs from the position of the cursor.
      * 
     **/
     take?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Skip the first `n` Items.
+     * Skip the first `n` Blobs.
      * 
     **/
     skip?: number
-    distinct?: Enumerable<ItemsScalarFieldEnum>
+    distinct?: Enumerable<BlobsScalarFieldEnum>
   }
 
 
   /**
-   * Items create
+   * Blobs create
    */
-  export type ItemsCreateArgs = {
+  export type BlobsCreateArgs = {
     /**
-     * Select specific fields to fetch from the Items
+     * Select specific fields to fetch from the Blobs
      * 
     **/
-    select?: ItemsSelect | null
+    select?: BlobsSelect | null
     /**
-     * Choose, which related nodes to fetch as well.
+     * The data needed to create a Blobs.
      * 
     **/
-    include?: ItemsInclude | null
-    /**
-     * The data needed to create a Items.
-     * 
-    **/
-    data: XOR<ItemsCreateInput, ItemsUncheckedCreateInput>
+    data: XOR<BlobsCreateInput, BlobsUncheckedCreateInput>
   }
 
 
   /**
-   * Items createMany
+   * Blobs createMany
    */
-  export type ItemsCreateManyArgs = {
+  export type BlobsCreateManyArgs = {
     /**
-     * The data used to create many Items.
+     * The data used to create many Blobs.
      * 
     **/
-    data: Enumerable<ItemsCreateManyInput>
+    data: Enumerable<BlobsCreateManyInput>
     skipDuplicates?: boolean
   }
 
 
   /**
-   * Items update
+   * Blobs update
    */
-  export type ItemsUpdateArgs = {
+  export type BlobsUpdateArgs = {
     /**
-     * Select specific fields to fetch from the Items
+     * Select specific fields to fetch from the Blobs
      * 
     **/
-    select?: ItemsSelect | null
+    select?: BlobsSelect | null
     /**
-     * Choose, which related nodes to fetch as well.
+     * The data needed to update a Blobs.
      * 
     **/
-    include?: ItemsInclude | null
+    data: XOR<BlobsUpdateInput, BlobsUncheckedUpdateInput>
     /**
-     * The data needed to update a Items.
+     * Choose, which Blobs to update.
      * 
     **/
-    data: XOR<ItemsUpdateInput, ItemsUncheckedUpdateInput>
-    /**
-     * Choose, which Items to update.
-     * 
-    **/
-    where: ItemsWhereUniqueInput
+    where: BlobsWhereUniqueInput
   }
 
 
   /**
-   * Items updateMany
+   * Blobs updateMany
    */
-  export type ItemsUpdateManyArgs = {
+  export type BlobsUpdateManyArgs = {
     /**
-     * The data used to update Items.
+     * The data used to update Blobs.
      * 
     **/
-    data: XOR<ItemsUpdateManyMutationInput, ItemsUncheckedUpdateManyInput>
+    data: XOR<BlobsUpdateManyMutationInput, BlobsUncheckedUpdateManyInput>
     /**
-     * Filter which Items to update
+     * Filter which Blobs to update
      * 
     **/
-    where?: ItemsWhereInput
+    where?: BlobsWhereInput
   }
 
 
   /**
-   * Items upsert
+   * Blobs upsert
    */
-  export type ItemsUpsertArgs = {
+  export type BlobsUpsertArgs = {
     /**
-     * Select specific fields to fetch from the Items
+     * Select specific fields to fetch from the Blobs
      * 
     **/
-    select?: ItemsSelect | null
+    select?: BlobsSelect | null
     /**
-     * Choose, which related nodes to fetch as well.
+     * The filter to search for the Blobs to update in case it exists.
      * 
     **/
-    include?: ItemsInclude | null
+    where: BlobsWhereUniqueInput
     /**
-     * The filter to search for the Items to update in case it exists.
+     * In case the Blobs found by the `where` argument doesn't exist, create a new Blobs with this data.
      * 
     **/
-    where: ItemsWhereUniqueInput
+    create: XOR<BlobsCreateInput, BlobsUncheckedCreateInput>
     /**
-     * In case the Items found by the `where` argument doesn't exist, create a new Items with this data.
+     * In case the Blobs was found with the provided `where` argument, update it with this data.
      * 
     **/
-    create: XOR<ItemsCreateInput, ItemsUncheckedCreateInput>
-    /**
-     * In case the Items was found with the provided `where` argument, update it with this data.
-     * 
-    **/
-    update: XOR<ItemsUpdateInput, ItemsUncheckedUpdateInput>
+    update: XOR<BlobsUpdateInput, BlobsUncheckedUpdateInput>
   }
 
 
   /**
-   * Items delete
+   * Blobs delete
    */
-  export type ItemsDeleteArgs = {
+  export type BlobsDeleteArgs = {
     /**
-     * Select specific fields to fetch from the Items
+     * Select specific fields to fetch from the Blobs
      * 
     **/
-    select?: ItemsSelect | null
+    select?: BlobsSelect | null
     /**
-     * Choose, which related nodes to fetch as well.
+     * Filter which Blobs to delete.
      * 
     **/
-    include?: ItemsInclude | null
-    /**
-     * Filter which Items to delete.
-     * 
-    **/
-    where: ItemsWhereUniqueInput
+    where: BlobsWhereUniqueInput
   }
 
 
   /**
-   * Items deleteMany
+   * Blobs deleteMany
    */
-  export type ItemsDeleteManyArgs = {
+  export type BlobsDeleteManyArgs = {
     /**
-     * Filter which Items to delete
+     * Filter which Blobs to delete
      * 
     **/
-    where?: ItemsWhereInput
+    where?: BlobsWhereInput
   }
 
 
   /**
-   * Items without action
+   * Blobs without action
    */
-  export type ItemsArgs = {
+  export type BlobsArgs = {
     /**
-     * Select specific fields to fetch from the Items
+     * Select specific fields to fetch from the Blobs
      * 
     **/
-    select?: ItemsSelect | null
-    /**
-     * Choose, which related nodes to fetch as well.
-     * 
-    **/
-    include?: ItemsInclude | null
+    select?: BlobsSelect | null
   }
 
 
 
   /**
-   * Model OtherItems
+   * Model Bools
    */
 
 
-  export type AggregateOtherItems = {
-    _count: OtherItemsCountAggregateOutputType | null
-    _min: OtherItemsMinAggregateOutputType | null
-    _max: OtherItemsMaxAggregateOutputType | null
+  export type AggregateBools = {
+    _count: BoolsCountAggregateOutputType | null
+    _min: BoolsMinAggregateOutputType | null
+    _max: BoolsMaxAggregateOutputType | null
   }
 
-  export type OtherItemsMinAggregateOutputType = {
+  export type BoolsMinAggregateOutputType = {
     id: string | null
-    content: string | null
-    item_id: string | null
+    b: boolean | null
   }
 
-  export type OtherItemsMaxAggregateOutputType = {
+  export type BoolsMaxAggregateOutputType = {
     id: string | null
-    content: string | null
-    item_id: string | null
+    b: boolean | null
   }
 
-  export type OtherItemsCountAggregateOutputType = {
+  export type BoolsCountAggregateOutputType = {
     id: number
-    content: number
-    item_id: number
+    b: number
     _all: number
   }
 
 
-  export type OtherItemsMinAggregateInputType = {
+  export type BoolsMinAggregateInputType = {
     id?: true
-    content?: true
-    item_id?: true
+    b?: true
   }
 
-  export type OtherItemsMaxAggregateInputType = {
+  export type BoolsMaxAggregateInputType = {
     id?: true
-    content?: true
-    item_id?: true
+    b?: true
   }
 
-  export type OtherItemsCountAggregateInputType = {
+  export type BoolsCountAggregateInputType = {
     id?: true
-    content?: true
-    item_id?: true
+    b?: true
     _all?: true
   }
 
-  export type OtherItemsAggregateArgs = {
+  export type BoolsAggregateArgs = {
     /**
-     * Filter which OtherItems to aggregate.
+     * Filter which Bools to aggregate.
      * 
     **/
-    where?: OtherItemsWhereInput
+    where?: BoolsWhereInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
      * 
-     * Determine the order of OtherItems to fetch.
+     * Determine the order of Bools to fetch.
      * 
     **/
-    orderBy?: Enumerable<OtherItemsOrderByWithRelationInput>
+    orderBy?: Enumerable<BoolsOrderByWithRelationInput>
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
      * 
      * Sets the start position
      * 
     **/
-    cursor?: OtherItemsWhereUniqueInput
+    cursor?: BoolsWhereUniqueInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Take `±n` OtherItems from the position of the cursor.
+     * Take `±n` Bools from the position of the cursor.
      * 
     **/
     take?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Skip the first `n` OtherItems.
+     * Skip the first `n` Bools.
      * 
     **/
     skip?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
      * 
-     * Count returned OtherItems
+     * Count returned Bools
     **/
-    _count?: true | OtherItemsCountAggregateInputType
+    _count?: true | BoolsCountAggregateInputType
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
      * 
      * Select which fields to find the minimum value
     **/
-    _min?: OtherItemsMinAggregateInputType
+    _min?: BoolsMinAggregateInputType
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
      * 
      * Select which fields to find the maximum value
     **/
-    _max?: OtherItemsMaxAggregateInputType
+    _max?: BoolsMaxAggregateInputType
   }
 
-  export type GetOtherItemsAggregateType<T extends OtherItemsAggregateArgs> = {
-        [P in keyof T & keyof AggregateOtherItems]: P extends '_count' | 'count'
+  export type GetBoolsAggregateType<T extends BoolsAggregateArgs> = {
+        [P in keyof T & keyof AggregateBools]: P extends '_count' | 'count'
       ? T[P] extends true
         ? number
-        : GetScalarType<T[P], AggregateOtherItems[P]>
-      : GetScalarType<T[P], AggregateOtherItems[P]>
+        : GetScalarType<T[P], AggregateBools[P]>
+      : GetScalarType<T[P], AggregateBools[P]>
   }
 
 
 
 
-  export type OtherItemsGroupByArgs = {
-    where?: OtherItemsWhereInput
-    orderBy?: Enumerable<OtherItemsOrderByWithAggregationInput>
-    by: Array<OtherItemsScalarFieldEnum>
-    having?: OtherItemsScalarWhereWithAggregatesInput
+  export type BoolsGroupByArgs = {
+    where?: BoolsWhereInput
+    orderBy?: Enumerable<BoolsOrderByWithAggregationInput>
+    by: Array<BoolsScalarFieldEnum>
+    having?: BoolsScalarWhereWithAggregatesInput
     take?: number
     skip?: number
-    _count?: OtherItemsCountAggregateInputType | true
-    _min?: OtherItemsMinAggregateInputType
-    _max?: OtherItemsMaxAggregateInputType
+    _count?: BoolsCountAggregateInputType | true
+    _min?: BoolsMinAggregateInputType
+    _max?: BoolsMaxAggregateInputType
   }
 
 
-  export type OtherItemsGroupByOutputType = {
+  export type BoolsGroupByOutputType = {
     id: string
-    content: string
-    item_id: string | null
-    _count: OtherItemsCountAggregateOutputType | null
-    _min: OtherItemsMinAggregateOutputType | null
-    _max: OtherItemsMaxAggregateOutputType | null
+    b: boolean | null
+    _count: BoolsCountAggregateOutputType | null
+    _min: BoolsMinAggregateOutputType | null
+    _max: BoolsMaxAggregateOutputType | null
   }
 
-  type GetOtherItemsGroupByPayload<T extends OtherItemsGroupByArgs> = PrismaPromise<
+  type GetBoolsGroupByPayload<T extends BoolsGroupByArgs> = PrismaPromise<
     Array<
-      PickArray<OtherItemsGroupByOutputType, T['by']> &
+      PickArray<BoolsGroupByOutputType, T['by']> &
         {
-          [P in ((keyof T) & (keyof OtherItemsGroupByOutputType))]: P extends '_count'
+          [P in ((keyof T) & (keyof BoolsGroupByOutputType))]: P extends '_count'
             ? T[P] extends boolean
               ? number
-              : GetScalarType<T[P], OtherItemsGroupByOutputType[P]>
-            : GetScalarType<T[P], OtherItemsGroupByOutputType[P]>
+              : GetScalarType<T[P], BoolsGroupByOutputType[P]>
+            : GetScalarType<T[P], BoolsGroupByOutputType[P]>
         }
       >
     >
 
 
-  export type OtherItemsSelect = {
+  export type BoolsSelect = {
     id?: boolean
-    content?: boolean
-    item_id?: boolean
-    items?: boolean | ItemsArgs
+    b?: boolean
   }
 
 
-  export type OtherItemsInclude = {
-    items?: boolean | ItemsArgs
-  } 
-
-  export type OtherItemsGetPayload<S extends boolean | null | undefined | OtherItemsArgs> =
+  export type BoolsGetPayload<S extends boolean | null | undefined | BoolsArgs> =
     S extends { select: any, include: any } ? 'Please either choose `select` or `include`' :
-    S extends true ? OtherItems :
+    S extends true ? Bools :
     S extends undefined ? never :
-    S extends { include: any } & (OtherItemsArgs | OtherItemsFindManyArgs)
-    ? OtherItems  & {
-    [P in TruthyKeys<S['include']>]:
-        P extends 'items' ? ItemsGetPayload<S['include'][P]> | null :  never
-  } 
-    : S extends { select: any } & (OtherItemsArgs | OtherItemsFindManyArgs)
+    S extends { include: any } & (BoolsArgs | BoolsFindManyArgs)
+    ? Bools 
+    : S extends { select: any } & (BoolsArgs | BoolsFindManyArgs)
       ? {
     [P in TruthyKeys<S['select']>]:
-        P extends 'items' ? ItemsGetPayload<S['select'][P]> | null :  P extends keyof OtherItems ? OtherItems[P] : never
+    P extends keyof Bools ? Bools[P] : never
   } 
-      : OtherItems
+      : Bools
 
 
-  type OtherItemsCountArgs = Merge<
-    Omit<OtherItemsFindManyArgs, 'select' | 'include'> & {
-      select?: OtherItemsCountAggregateInputType | true
+  type BoolsCountArgs = Merge<
+    Omit<BoolsFindManyArgs, 'select' | 'include'> & {
+      select?: BoolsCountAggregateInputType | true
     }
   >
 
-  export interface OtherItemsDelegate<GlobalRejectSettings extends Prisma.RejectOnNotFound | Prisma.RejectPerOperation | false | undefined> {
+  export interface BoolsDelegate<GlobalRejectSettings extends Prisma.RejectOnNotFound | Prisma.RejectPerOperation | false | undefined> {
     /**
-     * Find zero or one OtherItems that matches the filter.
-     * @param {OtherItemsFindUniqueArgs} args - Arguments to find a OtherItems
+     * Find zero or one Bools that matches the filter.
+     * @param {BoolsFindUniqueArgs} args - Arguments to find a Bools
      * @example
-     * // Get one OtherItems
-     * const otherItems = await prisma.otherItems.findUnique({
+     * // Get one Bools
+     * const bools = await prisma.bools.findUnique({
      *   where: {
      *     // ... provide filter here
      *   }
      * })
     **/
-    findUnique<T extends OtherItemsFindUniqueArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
-      args: SelectSubset<T, OtherItemsFindUniqueArgs>
-    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findUnique', 'OtherItems'> extends True ? Prisma__OtherItemsClient<OtherItemsGetPayload<T>> : Prisma__OtherItemsClient<OtherItemsGetPayload<T> | null, null>
+    findUnique<T extends BoolsFindUniqueArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
+      args: SelectSubset<T, BoolsFindUniqueArgs>
+    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findUnique', 'Bools'> extends True ? Prisma__BoolsClient<BoolsGetPayload<T>> : Prisma__BoolsClient<BoolsGetPayload<T> | null, null>
 
     /**
-     * Find one OtherItems that matches the filter or throw an error  with `error.code='P2025'` 
+     * Find one Bools that matches the filter or throw an error  with `error.code='P2025'` 
      *     if no matches were found.
-     * @param {OtherItemsFindUniqueOrThrowArgs} args - Arguments to find a OtherItems
+     * @param {BoolsFindUniqueOrThrowArgs} args - Arguments to find a Bools
      * @example
-     * // Get one OtherItems
-     * const otherItems = await prisma.otherItems.findUniqueOrThrow({
+     * // Get one Bools
+     * const bools = await prisma.bools.findUniqueOrThrow({
      *   where: {
      *     // ... provide filter here
      *   }
      * })
     **/
-    findUniqueOrThrow<T extends OtherItemsFindUniqueOrThrowArgs>(
-      args?: SelectSubset<T, OtherItemsFindUniqueOrThrowArgs>
-    ): Prisma__OtherItemsClient<OtherItemsGetPayload<T>>
+    findUniqueOrThrow<T extends BoolsFindUniqueOrThrowArgs>(
+      args?: SelectSubset<T, BoolsFindUniqueOrThrowArgs>
+    ): Prisma__BoolsClient<BoolsGetPayload<T>>
 
     /**
-     * Find the first OtherItems that matches the filter.
+     * Find the first Bools that matches the filter.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {OtherItemsFindFirstArgs} args - Arguments to find a OtherItems
+     * @param {BoolsFindFirstArgs} args - Arguments to find a Bools
      * @example
-     * // Get one OtherItems
-     * const otherItems = await prisma.otherItems.findFirst({
+     * // Get one Bools
+     * const bools = await prisma.bools.findFirst({
      *   where: {
      *     // ... provide filter here
      *   }
      * })
     **/
-    findFirst<T extends OtherItemsFindFirstArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
-      args?: SelectSubset<T, OtherItemsFindFirstArgs>
-    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findFirst', 'OtherItems'> extends True ? Prisma__OtherItemsClient<OtherItemsGetPayload<T>> : Prisma__OtherItemsClient<OtherItemsGetPayload<T> | null, null>
+    findFirst<T extends BoolsFindFirstArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
+      args?: SelectSubset<T, BoolsFindFirstArgs>
+    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findFirst', 'Bools'> extends True ? Prisma__BoolsClient<BoolsGetPayload<T>> : Prisma__BoolsClient<BoolsGetPayload<T> | null, null>
 
     /**
-     * Find the first OtherItems that matches the filter or
+     * Find the first Bools that matches the filter or
      * throw `NotFoundError` if no matches were found.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {OtherItemsFindFirstOrThrowArgs} args - Arguments to find a OtherItems
+     * @param {BoolsFindFirstOrThrowArgs} args - Arguments to find a Bools
      * @example
-     * // Get one OtherItems
-     * const otherItems = await prisma.otherItems.findFirstOrThrow({
+     * // Get one Bools
+     * const bools = await prisma.bools.findFirstOrThrow({
      *   where: {
      *     // ... provide filter here
      *   }
      * })
     **/
-    findFirstOrThrow<T extends OtherItemsFindFirstOrThrowArgs>(
-      args?: SelectSubset<T, OtherItemsFindFirstOrThrowArgs>
-    ): Prisma__OtherItemsClient<OtherItemsGetPayload<T>>
+    findFirstOrThrow<T extends BoolsFindFirstOrThrowArgs>(
+      args?: SelectSubset<T, BoolsFindFirstOrThrowArgs>
+    ): Prisma__BoolsClient<BoolsGetPayload<T>>
 
     /**
-     * Find zero or more OtherItems that matches the filter.
+     * Find zero or more Bools that matches the filter.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {OtherItemsFindManyArgs=} args - Arguments to filter and select certain fields only.
+     * @param {BoolsFindManyArgs=} args - Arguments to filter and select certain fields only.
      * @example
-     * // Get all OtherItems
-     * const otherItems = await prisma.otherItems.findMany()
+     * // Get all Bools
+     * const bools = await prisma.bools.findMany()
      * 
-     * // Get first 10 OtherItems
-     * const otherItems = await prisma.otherItems.findMany({ take: 10 })
+     * // Get first 10 Bools
+     * const bools = await prisma.bools.findMany({ take: 10 })
      * 
      * // Only select the `id`
-     * const otherItemsWithIdOnly = await prisma.otherItems.findMany({ select: { id: true } })
+     * const boolsWithIdOnly = await prisma.bools.findMany({ select: { id: true } })
      * 
     **/
-    findMany<T extends OtherItemsFindManyArgs>(
-      args?: SelectSubset<T, OtherItemsFindManyArgs>
-    ): PrismaPromise<Array<OtherItemsGetPayload<T>>>
+    findMany<T extends BoolsFindManyArgs>(
+      args?: SelectSubset<T, BoolsFindManyArgs>
+    ): PrismaPromise<Array<BoolsGetPayload<T>>>
 
     /**
-     * Create a OtherItems.
-     * @param {OtherItemsCreateArgs} args - Arguments to create a OtherItems.
+     * Create a Bools.
+     * @param {BoolsCreateArgs} args - Arguments to create a Bools.
      * @example
-     * // Create one OtherItems
-     * const OtherItems = await prisma.otherItems.create({
+     * // Create one Bools
+     * const Bools = await prisma.bools.create({
      *   data: {
-     *     // ... data to create a OtherItems
+     *     // ... data to create a Bools
      *   }
      * })
      * 
     **/
-    create<T extends OtherItemsCreateArgs>(
-      args: SelectSubset<T, OtherItemsCreateArgs>
-    ): Prisma__OtherItemsClient<OtherItemsGetPayload<T>>
+    create<T extends BoolsCreateArgs>(
+      args: SelectSubset<T, BoolsCreateArgs>
+    ): Prisma__BoolsClient<BoolsGetPayload<T>>
 
     /**
-     * Create many OtherItems.
-     *     @param {OtherItemsCreateManyArgs} args - Arguments to create many OtherItems.
+     * Create many Bools.
+     *     @param {BoolsCreateManyArgs} args - Arguments to create many Bools.
      *     @example
-     *     // Create many OtherItems
-     *     const otherItems = await prisma.otherItems.createMany({
+     *     // Create many Bools
+     *     const bools = await prisma.bools.createMany({
      *       data: {
      *         // ... provide data here
      *       }
      *     })
      *     
     **/
-    createMany<T extends OtherItemsCreateManyArgs>(
-      args?: SelectSubset<T, OtherItemsCreateManyArgs>
+    createMany<T extends BoolsCreateManyArgs>(
+      args?: SelectSubset<T, BoolsCreateManyArgs>
     ): PrismaPromise<BatchPayload>
 
     /**
-     * Delete a OtherItems.
-     * @param {OtherItemsDeleteArgs} args - Arguments to delete one OtherItems.
+     * Delete a Bools.
+     * @param {BoolsDeleteArgs} args - Arguments to delete one Bools.
      * @example
-     * // Delete one OtherItems
-     * const OtherItems = await prisma.otherItems.delete({
+     * // Delete one Bools
+     * const Bools = await prisma.bools.delete({
      *   where: {
-     *     // ... filter to delete one OtherItems
+     *     // ... filter to delete one Bools
      *   }
      * })
      * 
     **/
-    delete<T extends OtherItemsDeleteArgs>(
-      args: SelectSubset<T, OtherItemsDeleteArgs>
-    ): Prisma__OtherItemsClient<OtherItemsGetPayload<T>>
+    delete<T extends BoolsDeleteArgs>(
+      args: SelectSubset<T, BoolsDeleteArgs>
+    ): Prisma__BoolsClient<BoolsGetPayload<T>>
 
     /**
-     * Update one OtherItems.
-     * @param {OtherItemsUpdateArgs} args - Arguments to update one OtherItems.
+     * Update one Bools.
+     * @param {BoolsUpdateArgs} args - Arguments to update one Bools.
      * @example
-     * // Update one OtherItems
-     * const otherItems = await prisma.otherItems.update({
+     * // Update one Bools
+     * const bools = await prisma.bools.update({
      *   where: {
      *     // ... provide filter here
      *   },
@@ -2414,34 +2316,34 @@ export namespace Prisma {
      * })
      * 
     **/
-    update<T extends OtherItemsUpdateArgs>(
-      args: SelectSubset<T, OtherItemsUpdateArgs>
-    ): Prisma__OtherItemsClient<OtherItemsGetPayload<T>>
+    update<T extends BoolsUpdateArgs>(
+      args: SelectSubset<T, BoolsUpdateArgs>
+    ): Prisma__BoolsClient<BoolsGetPayload<T>>
 
     /**
-     * Delete zero or more OtherItems.
-     * @param {OtherItemsDeleteManyArgs} args - Arguments to filter OtherItems to delete.
+     * Delete zero or more Bools.
+     * @param {BoolsDeleteManyArgs} args - Arguments to filter Bools to delete.
      * @example
-     * // Delete a few OtherItems
-     * const { count } = await prisma.otherItems.deleteMany({
+     * // Delete a few Bools
+     * const { count } = await prisma.bools.deleteMany({
      *   where: {
      *     // ... provide filter here
      *   }
      * })
      * 
     **/
-    deleteMany<T extends OtherItemsDeleteManyArgs>(
-      args?: SelectSubset<T, OtherItemsDeleteManyArgs>
+    deleteMany<T extends BoolsDeleteManyArgs>(
+      args?: SelectSubset<T, BoolsDeleteManyArgs>
     ): PrismaPromise<BatchPayload>
 
     /**
-     * Update zero or more OtherItems.
+     * Update zero or more Bools.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {OtherItemsUpdateManyArgs} args - Arguments to update one or more rows.
+     * @param {BoolsUpdateManyArgs} args - Arguments to update one or more rows.
      * @example
-     * // Update many OtherItems
-     * const otherItems = await prisma.otherItems.updateMany({
+     * // Update many Bools
+     * const bools = await prisma.bools.updateMany({
      *   where: {
      *     // ... provide filter here
      *   },
@@ -2451,59 +2353,59 @@ export namespace Prisma {
      * })
      * 
     **/
-    updateMany<T extends OtherItemsUpdateManyArgs>(
-      args: SelectSubset<T, OtherItemsUpdateManyArgs>
+    updateMany<T extends BoolsUpdateManyArgs>(
+      args: SelectSubset<T, BoolsUpdateManyArgs>
     ): PrismaPromise<BatchPayload>
 
     /**
-     * Create or update one OtherItems.
-     * @param {OtherItemsUpsertArgs} args - Arguments to update or create a OtherItems.
+     * Create or update one Bools.
+     * @param {BoolsUpsertArgs} args - Arguments to update or create a Bools.
      * @example
-     * // Update or create a OtherItems
-     * const otherItems = await prisma.otherItems.upsert({
+     * // Update or create a Bools
+     * const bools = await prisma.bools.upsert({
      *   create: {
-     *     // ... data to create a OtherItems
+     *     // ... data to create a Bools
      *   },
      *   update: {
      *     // ... in case it already exists, update
      *   },
      *   where: {
-     *     // ... the filter for the OtherItems we want to update
+     *     // ... the filter for the Bools we want to update
      *   }
      * })
     **/
-    upsert<T extends OtherItemsUpsertArgs>(
-      args: SelectSubset<T, OtherItemsUpsertArgs>
-    ): Prisma__OtherItemsClient<OtherItemsGetPayload<T>>
+    upsert<T extends BoolsUpsertArgs>(
+      args: SelectSubset<T, BoolsUpsertArgs>
+    ): Prisma__BoolsClient<BoolsGetPayload<T>>
 
     /**
-     * Count the number of OtherItems.
+     * Count the number of Bools.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {OtherItemsCountArgs} args - Arguments to filter OtherItems to count.
+     * @param {BoolsCountArgs} args - Arguments to filter Bools to count.
      * @example
-     * // Count the number of OtherItems
-     * const count = await prisma.otherItems.count({
+     * // Count the number of Bools
+     * const count = await prisma.bools.count({
      *   where: {
-     *     // ... the filter for the OtherItems we want to count
+     *     // ... the filter for the Bools we want to count
      *   }
      * })
     **/
-    count<T extends OtherItemsCountArgs>(
-      args?: Subset<T, OtherItemsCountArgs>,
+    count<T extends BoolsCountArgs>(
+      args?: Subset<T, BoolsCountArgs>,
     ): PrismaPromise<
       T extends _Record<'select', any>
         ? T['select'] extends true
           ? number
-          : GetScalarType<T['select'], OtherItemsCountAggregateOutputType>
+          : GetScalarType<T['select'], BoolsCountAggregateOutputType>
         : number
     >
 
     /**
-     * Allows you to perform aggregations operations on a OtherItems.
+     * Allows you to perform aggregations operations on a Bools.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {OtherItemsAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @param {BoolsAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
      * @example
      * // Ordered by age ascending
      * // Where email contains prisma.io
@@ -2523,13 +2425,13 @@ export namespace Prisma {
      *   take: 10,
      * })
     **/
-    aggregate<T extends OtherItemsAggregateArgs>(args: Subset<T, OtherItemsAggregateArgs>): PrismaPromise<GetOtherItemsAggregateType<T>>
+    aggregate<T extends BoolsAggregateArgs>(args: Subset<T, BoolsAggregateArgs>): PrismaPromise<GetBoolsAggregateType<T>>
 
     /**
-     * Group by OtherItems.
+     * Group by Bools.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {OtherItemsGroupByArgs} args - Group by arguments.
+     * @param {BoolsGroupByArgs} args - Group by arguments.
      * @example
      * // Group by city, order by createdAt, get count
      * const result = await prisma.user.groupBy({
@@ -2544,14 +2446,14 @@ export namespace Prisma {
      * 
     **/
     groupBy<
-      T extends OtherItemsGroupByArgs,
+      T extends BoolsGroupByArgs,
       HasSelectOrTake extends Or<
         Extends<'skip', Keys<T>>,
         Extends<'take', Keys<T>>
       >,
       OrderByArg extends True extends HasSelectOrTake
-        ? { orderBy: OtherItemsGroupByArgs['orderBy'] }
-        : { orderBy?: OtherItemsGroupByArgs['orderBy'] },
+        ? { orderBy: BoolsGroupByArgs['orderBy'] }
+        : { orderBy?: BoolsGroupByArgs['orderBy'] },
       OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
       ByFields extends TupleToUnion<T['by']>,
       ByValid extends Has<ByFields, OrderFields>,
@@ -2600,981 +2502,17 @@ export namespace Prisma {
             ? never
             : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
         }[OrderFields]
-    >(args: SubsetIntersection<T, OtherItemsGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetOtherItemsGroupByPayload<T> : PrismaPromise<InputErrors>
+    >(args: SubsetIntersection<T, BoolsGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetBoolsGroupByPayload<T> : PrismaPromise<InputErrors>
 
   }
 
   /**
-   * The delegate class that acts as a "Promise-like" for OtherItems.
+   * The delegate class that acts as a "Promise-like" for Bools.
    * Why is this prefixed with `Prisma__`?
    * Because we want to prevent naming conflicts as mentioned in
    * https://github.com/prisma/prisma-client-js/issues/707
    */
-  export class Prisma__OtherItemsClient<T, Null = never> implements PrismaPromise<T> {
-    [prisma]: true;
-    private readonly _dmmf;
-    private readonly _fetcher;
-    private readonly _queryType;
-    private readonly _rootField;
-    private readonly _clientMethod;
-    private readonly _args;
-    private readonly _dataPath;
-    private readonly _errorFormat;
-    private readonly _measurePerformance?;
-    private _isList;
-    private _callsite;
-    private _requestPromise?;
-    constructor(_dmmf: runtime.DMMFClass, _fetcher: PrismaClientFetcher, _queryType: 'query' | 'mutation', _rootField: string, _clientMethod: string, _args: any, _dataPath: string[], _errorFormat: ErrorFormat, _measurePerformance?: boolean | undefined, _isList?: boolean);
-    readonly [Symbol.toStringTag]: 'PrismaClientPromise';
-
-    items<T extends ItemsArgs= {}>(args?: Subset<T, ItemsArgs>): Prisma__ItemsClient<ItemsGetPayload<T> | Null>;
-
-    private get _document();
-    /**
-     * Attaches callbacks for the resolution and/or rejection of the Promise.
-     * @param onfulfilled The callback to execute when the Promise is resolved.
-     * @param onrejected The callback to execute when the Promise is rejected.
-     * @returns A Promise for the completion of which ever callback is executed.
-     */
-    then<TResult1 = T, TResult2 = never>(onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null, onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null): Promise<TResult1 | TResult2>;
-    /**
-     * Attaches a callback for only the rejection of the Promise.
-     * @param onrejected The callback to execute when the Promise is rejected.
-     * @returns A Promise for the completion of the callback.
-     */
-    catch<TResult = never>(onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null): Promise<T | TResult>;
-    /**
-     * Attaches a callback that is invoked when the Promise is settled (fulfilled or rejected). The
-     * resolved value cannot be modified from the callback.
-     * @param onfinally The callback to execute when the Promise is settled (fulfilled or rejected).
-     * @returns A Promise for the completion of the callback.
-     */
-    finally(onfinally?: (() => void) | undefined | null): Promise<T>;
-  }
-
-
-
-  // Custom InputTypes
-
-  /**
-   * OtherItems base type for findUnique actions
-   */
-  export type OtherItemsFindUniqueArgsBase = {
-    /**
-     * Select specific fields to fetch from the OtherItems
-     * 
-    **/
-    select?: OtherItemsSelect | null
-    /**
-     * Choose, which related nodes to fetch as well.
-     * 
-    **/
-    include?: OtherItemsInclude | null
-    /**
-     * Filter, which OtherItems to fetch.
-     * 
-    **/
-    where: OtherItemsWhereUniqueInput
-  }
-
-  /**
-   * OtherItems findUnique
-   */
-  export interface OtherItemsFindUniqueArgs extends OtherItemsFindUniqueArgsBase {
-   /**
-    * Throw an Error if query returns no results
-    * @deprecated since 4.0.0: use `findUniqueOrThrow` method instead
-    */
-    rejectOnNotFound?: RejectOnNotFound
-  }
-      
-
-  /**
-   * OtherItems findUniqueOrThrow
-   */
-  export type OtherItemsFindUniqueOrThrowArgs = {
-    /**
-     * Select specific fields to fetch from the OtherItems
-     * 
-    **/
-    select?: OtherItemsSelect | null
-    /**
-     * Choose, which related nodes to fetch as well.
-     * 
-    **/
-    include?: OtherItemsInclude | null
-    /**
-     * Filter, which OtherItems to fetch.
-     * 
-    **/
-    where: OtherItemsWhereUniqueInput
-  }
-
-
-  /**
-   * OtherItems base type for findFirst actions
-   */
-  export type OtherItemsFindFirstArgsBase = {
-    /**
-     * Select specific fields to fetch from the OtherItems
-     * 
-    **/
-    select?: OtherItemsSelect | null
-    /**
-     * Choose, which related nodes to fetch as well.
-     * 
-    **/
-    include?: OtherItemsInclude | null
-    /**
-     * Filter, which OtherItems to fetch.
-     * 
-    **/
-    where?: OtherItemsWhereInput
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
-     * 
-     * Determine the order of OtherItems to fetch.
-     * 
-    **/
-    orderBy?: Enumerable<OtherItemsOrderByWithRelationInput>
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
-     * 
-     * Sets the position for searching for OtherItems.
-     * 
-    **/
-    cursor?: OtherItemsWhereUniqueInput
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
-     * 
-     * Take `±n` OtherItems from the position of the cursor.
-     * 
-    **/
-    take?: number
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
-     * 
-     * Skip the first `n` OtherItems.
-     * 
-    **/
-    skip?: number
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
-     * 
-     * Filter by unique combinations of OtherItems.
-     * 
-    **/
-    distinct?: Enumerable<OtherItemsScalarFieldEnum>
-  }
-
-  /**
-   * OtherItems findFirst
-   */
-  export interface OtherItemsFindFirstArgs extends OtherItemsFindFirstArgsBase {
-   /**
-    * Throw an Error if query returns no results
-    * @deprecated since 4.0.0: use `findFirstOrThrow` method instead
-    */
-    rejectOnNotFound?: RejectOnNotFound
-  }
-      
-
-  /**
-   * OtherItems findFirstOrThrow
-   */
-  export type OtherItemsFindFirstOrThrowArgs = {
-    /**
-     * Select specific fields to fetch from the OtherItems
-     * 
-    **/
-    select?: OtherItemsSelect | null
-    /**
-     * Choose, which related nodes to fetch as well.
-     * 
-    **/
-    include?: OtherItemsInclude | null
-    /**
-     * Filter, which OtherItems to fetch.
-     * 
-    **/
-    where?: OtherItemsWhereInput
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
-     * 
-     * Determine the order of OtherItems to fetch.
-     * 
-    **/
-    orderBy?: Enumerable<OtherItemsOrderByWithRelationInput>
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
-     * 
-     * Sets the position for searching for OtherItems.
-     * 
-    **/
-    cursor?: OtherItemsWhereUniqueInput
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
-     * 
-     * Take `±n` OtherItems from the position of the cursor.
-     * 
-    **/
-    take?: number
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
-     * 
-     * Skip the first `n` OtherItems.
-     * 
-    **/
-    skip?: number
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
-     * 
-     * Filter by unique combinations of OtherItems.
-     * 
-    **/
-    distinct?: Enumerable<OtherItemsScalarFieldEnum>
-  }
-
-
-  /**
-   * OtherItems findMany
-   */
-  export type OtherItemsFindManyArgs = {
-    /**
-     * Select specific fields to fetch from the OtherItems
-     * 
-    **/
-    select?: OtherItemsSelect | null
-    /**
-     * Choose, which related nodes to fetch as well.
-     * 
-    **/
-    include?: OtherItemsInclude | null
-    /**
-     * Filter, which OtherItems to fetch.
-     * 
-    **/
-    where?: OtherItemsWhereInput
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
-     * 
-     * Determine the order of OtherItems to fetch.
-     * 
-    **/
-    orderBy?: Enumerable<OtherItemsOrderByWithRelationInput>
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
-     * 
-     * Sets the position for listing OtherItems.
-     * 
-    **/
-    cursor?: OtherItemsWhereUniqueInput
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
-     * 
-     * Take `±n` OtherItems from the position of the cursor.
-     * 
-    **/
-    take?: number
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
-     * 
-     * Skip the first `n` OtherItems.
-     * 
-    **/
-    skip?: number
-    distinct?: Enumerable<OtherItemsScalarFieldEnum>
-  }
-
-
-  /**
-   * OtherItems create
-   */
-  export type OtherItemsCreateArgs = {
-    /**
-     * Select specific fields to fetch from the OtherItems
-     * 
-    **/
-    select?: OtherItemsSelect | null
-    /**
-     * Choose, which related nodes to fetch as well.
-     * 
-    **/
-    include?: OtherItemsInclude | null
-    /**
-     * The data needed to create a OtherItems.
-     * 
-    **/
-    data: XOR<OtherItemsCreateInput, OtherItemsUncheckedCreateInput>
-  }
-
-
-  /**
-   * OtherItems createMany
-   */
-  export type OtherItemsCreateManyArgs = {
-    /**
-     * The data used to create many OtherItems.
-     * 
-    **/
-    data: Enumerable<OtherItemsCreateManyInput>
-    skipDuplicates?: boolean
-  }
-
-
-  /**
-   * OtherItems update
-   */
-  export type OtherItemsUpdateArgs = {
-    /**
-     * Select specific fields to fetch from the OtherItems
-     * 
-    **/
-    select?: OtherItemsSelect | null
-    /**
-     * Choose, which related nodes to fetch as well.
-     * 
-    **/
-    include?: OtherItemsInclude | null
-    /**
-     * The data needed to update a OtherItems.
-     * 
-    **/
-    data: XOR<OtherItemsUpdateInput, OtherItemsUncheckedUpdateInput>
-    /**
-     * Choose, which OtherItems to update.
-     * 
-    **/
-    where: OtherItemsWhereUniqueInput
-  }
-
-
-  /**
-   * OtherItems updateMany
-   */
-  export type OtherItemsUpdateManyArgs = {
-    /**
-     * The data used to update OtherItems.
-     * 
-    **/
-    data: XOR<OtherItemsUpdateManyMutationInput, OtherItemsUncheckedUpdateManyInput>
-    /**
-     * Filter which OtherItems to update
-     * 
-    **/
-    where?: OtherItemsWhereInput
-  }
-
-
-  /**
-   * OtherItems upsert
-   */
-  export type OtherItemsUpsertArgs = {
-    /**
-     * Select specific fields to fetch from the OtherItems
-     * 
-    **/
-    select?: OtherItemsSelect | null
-    /**
-     * Choose, which related nodes to fetch as well.
-     * 
-    **/
-    include?: OtherItemsInclude | null
-    /**
-     * The filter to search for the OtherItems to update in case it exists.
-     * 
-    **/
-    where: OtherItemsWhereUniqueInput
-    /**
-     * In case the OtherItems found by the `where` argument doesn't exist, create a new OtherItems with this data.
-     * 
-    **/
-    create: XOR<OtherItemsCreateInput, OtherItemsUncheckedCreateInput>
-    /**
-     * In case the OtherItems was found with the provided `where` argument, update it with this data.
-     * 
-    **/
-    update: XOR<OtherItemsUpdateInput, OtherItemsUncheckedUpdateInput>
-  }
-
-
-  /**
-   * OtherItems delete
-   */
-  export type OtherItemsDeleteArgs = {
-    /**
-     * Select specific fields to fetch from the OtherItems
-     * 
-    **/
-    select?: OtherItemsSelect | null
-    /**
-     * Choose, which related nodes to fetch as well.
-     * 
-    **/
-    include?: OtherItemsInclude | null
-    /**
-     * Filter which OtherItems to delete.
-     * 
-    **/
-    where: OtherItemsWhereUniqueInput
-  }
-
-
-  /**
-   * OtherItems deleteMany
-   */
-  export type OtherItemsDeleteManyArgs = {
-    /**
-     * Filter which OtherItems to delete
-     * 
-    **/
-    where?: OtherItemsWhereInput
-  }
-
-
-  /**
-   * OtherItems without action
-   */
-  export type OtherItemsArgs = {
-    /**
-     * Select specific fields to fetch from the OtherItems
-     * 
-    **/
-    select?: OtherItemsSelect | null
-    /**
-     * Choose, which related nodes to fetch as well.
-     * 
-    **/
-    include?: OtherItemsInclude | null
-  }
-
-
-
-  /**
-   * Model Timestamps
-   */
-
-
-  export type AggregateTimestamps = {
-    _count: TimestampsCountAggregateOutputType | null
-    _min: TimestampsMinAggregateOutputType | null
-    _max: TimestampsMaxAggregateOutputType | null
-  }
-
-  export type TimestampsMinAggregateOutputType = {
-    id: string | null
-    created_at: Date | null
-    updated_at: Date | null
-  }
-
-  export type TimestampsMaxAggregateOutputType = {
-    id: string | null
-    created_at: Date | null
-    updated_at: Date | null
-  }
-
-  export type TimestampsCountAggregateOutputType = {
-    id: number
-    created_at: number
-    updated_at: number
-    _all: number
-  }
-
-
-  export type TimestampsMinAggregateInputType = {
-    id?: true
-    created_at?: true
-    updated_at?: true
-  }
-
-  export type TimestampsMaxAggregateInputType = {
-    id?: true
-    created_at?: true
-    updated_at?: true
-  }
-
-  export type TimestampsCountAggregateInputType = {
-    id?: true
-    created_at?: true
-    updated_at?: true
-    _all?: true
-  }
-
-  export type TimestampsAggregateArgs = {
-    /**
-     * Filter which Timestamps to aggregate.
-     * 
-    **/
-    where?: TimestampsWhereInput
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
-     * 
-     * Determine the order of Timestamps to fetch.
-     * 
-    **/
-    orderBy?: Enumerable<TimestampsOrderByWithRelationInput>
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
-     * 
-     * Sets the start position
-     * 
-    **/
-    cursor?: TimestampsWhereUniqueInput
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
-     * 
-     * Take `±n` Timestamps from the position of the cursor.
-     * 
-    **/
-    take?: number
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
-     * 
-     * Skip the first `n` Timestamps.
-     * 
-    **/
-    skip?: number
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
-     * 
-     * Count returned Timestamps
-    **/
-    _count?: true | TimestampsCountAggregateInputType
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
-     * 
-     * Select which fields to find the minimum value
-    **/
-    _min?: TimestampsMinAggregateInputType
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
-     * 
-     * Select which fields to find the maximum value
-    **/
-    _max?: TimestampsMaxAggregateInputType
-  }
-
-  export type GetTimestampsAggregateType<T extends TimestampsAggregateArgs> = {
-        [P in keyof T & keyof AggregateTimestamps]: P extends '_count' | 'count'
-      ? T[P] extends true
-        ? number
-        : GetScalarType<T[P], AggregateTimestamps[P]>
-      : GetScalarType<T[P], AggregateTimestamps[P]>
-  }
-
-
-
-
-  export type TimestampsGroupByArgs = {
-    where?: TimestampsWhereInput
-    orderBy?: Enumerable<TimestampsOrderByWithAggregationInput>
-    by: Array<TimestampsScalarFieldEnum>
-    having?: TimestampsScalarWhereWithAggregatesInput
-    take?: number
-    skip?: number
-    _count?: TimestampsCountAggregateInputType | true
-    _min?: TimestampsMinAggregateInputType
-    _max?: TimestampsMaxAggregateInputType
-  }
-
-
-  export type TimestampsGroupByOutputType = {
-    id: string
-    created_at: Date
-    updated_at: Date
-    _count: TimestampsCountAggregateOutputType | null
-    _min: TimestampsMinAggregateOutputType | null
-    _max: TimestampsMaxAggregateOutputType | null
-  }
-
-  type GetTimestampsGroupByPayload<T extends TimestampsGroupByArgs> = PrismaPromise<
-    Array<
-      PickArray<TimestampsGroupByOutputType, T['by']> &
-        {
-          [P in ((keyof T) & (keyof TimestampsGroupByOutputType))]: P extends '_count'
-            ? T[P] extends boolean
-              ? number
-              : GetScalarType<T[P], TimestampsGroupByOutputType[P]>
-            : GetScalarType<T[P], TimestampsGroupByOutputType[P]>
-        }
-      >
-    >
-
-
-  export type TimestampsSelect = {
-    id?: boolean
-    created_at?: boolean
-    updated_at?: boolean
-  }
-
-
-  export type TimestampsGetPayload<S extends boolean | null | undefined | TimestampsArgs> =
-    S extends { select: any, include: any } ? 'Please either choose `select` or `include`' :
-    S extends true ? Timestamps :
-    S extends undefined ? never :
-    S extends { include: any } & (TimestampsArgs | TimestampsFindManyArgs)
-    ? Timestamps 
-    : S extends { select: any } & (TimestampsArgs | TimestampsFindManyArgs)
-      ? {
-    [P in TruthyKeys<S['select']>]:
-    P extends keyof Timestamps ? Timestamps[P] : never
-  } 
-      : Timestamps
-
-
-  type TimestampsCountArgs = Merge<
-    Omit<TimestampsFindManyArgs, 'select' | 'include'> & {
-      select?: TimestampsCountAggregateInputType | true
-    }
-  >
-
-  export interface TimestampsDelegate<GlobalRejectSettings extends Prisma.RejectOnNotFound | Prisma.RejectPerOperation | false | undefined> {
-    /**
-     * Find zero or one Timestamps that matches the filter.
-     * @param {TimestampsFindUniqueArgs} args - Arguments to find a Timestamps
-     * @example
-     * // Get one Timestamps
-     * const timestamps = await prisma.timestamps.findUnique({
-     *   where: {
-     *     // ... provide filter here
-     *   }
-     * })
-    **/
-    findUnique<T extends TimestampsFindUniqueArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
-      args: SelectSubset<T, TimestampsFindUniqueArgs>
-    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findUnique', 'Timestamps'> extends True ? Prisma__TimestampsClient<TimestampsGetPayload<T>> : Prisma__TimestampsClient<TimestampsGetPayload<T> | null, null>
-
-    /**
-     * Find one Timestamps that matches the filter or throw an error  with `error.code='P2025'` 
-     *     if no matches were found.
-     * @param {TimestampsFindUniqueOrThrowArgs} args - Arguments to find a Timestamps
-     * @example
-     * // Get one Timestamps
-     * const timestamps = await prisma.timestamps.findUniqueOrThrow({
-     *   where: {
-     *     // ... provide filter here
-     *   }
-     * })
-    **/
-    findUniqueOrThrow<T extends TimestampsFindUniqueOrThrowArgs>(
-      args?: SelectSubset<T, TimestampsFindUniqueOrThrowArgs>
-    ): Prisma__TimestampsClient<TimestampsGetPayload<T>>
-
-    /**
-     * Find the first Timestamps that matches the filter.
-     * Note, that providing `undefined` is treated as the value not being there.
-     * Read more here: https://pris.ly/d/null-undefined
-     * @param {TimestampsFindFirstArgs} args - Arguments to find a Timestamps
-     * @example
-     * // Get one Timestamps
-     * const timestamps = await prisma.timestamps.findFirst({
-     *   where: {
-     *     // ... provide filter here
-     *   }
-     * })
-    **/
-    findFirst<T extends TimestampsFindFirstArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
-      args?: SelectSubset<T, TimestampsFindFirstArgs>
-    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findFirst', 'Timestamps'> extends True ? Prisma__TimestampsClient<TimestampsGetPayload<T>> : Prisma__TimestampsClient<TimestampsGetPayload<T> | null, null>
-
-    /**
-     * Find the first Timestamps that matches the filter or
-     * throw `NotFoundError` if no matches were found.
-     * Note, that providing `undefined` is treated as the value not being there.
-     * Read more here: https://pris.ly/d/null-undefined
-     * @param {TimestampsFindFirstOrThrowArgs} args - Arguments to find a Timestamps
-     * @example
-     * // Get one Timestamps
-     * const timestamps = await prisma.timestamps.findFirstOrThrow({
-     *   where: {
-     *     // ... provide filter here
-     *   }
-     * })
-    **/
-    findFirstOrThrow<T extends TimestampsFindFirstOrThrowArgs>(
-      args?: SelectSubset<T, TimestampsFindFirstOrThrowArgs>
-    ): Prisma__TimestampsClient<TimestampsGetPayload<T>>
-
-    /**
-     * Find zero or more Timestamps that matches the filter.
-     * Note, that providing `undefined` is treated as the value not being there.
-     * Read more here: https://pris.ly/d/null-undefined
-     * @param {TimestampsFindManyArgs=} args - Arguments to filter and select certain fields only.
-     * @example
-     * // Get all Timestamps
-     * const timestamps = await prisma.timestamps.findMany()
-     * 
-     * // Get first 10 Timestamps
-     * const timestamps = await prisma.timestamps.findMany({ take: 10 })
-     * 
-     * // Only select the `id`
-     * const timestampsWithIdOnly = await prisma.timestamps.findMany({ select: { id: true } })
-     * 
-    **/
-    findMany<T extends TimestampsFindManyArgs>(
-      args?: SelectSubset<T, TimestampsFindManyArgs>
-    ): PrismaPromise<Array<TimestampsGetPayload<T>>>
-
-    /**
-     * Create a Timestamps.
-     * @param {TimestampsCreateArgs} args - Arguments to create a Timestamps.
-     * @example
-     * // Create one Timestamps
-     * const Timestamps = await prisma.timestamps.create({
-     *   data: {
-     *     // ... data to create a Timestamps
-     *   }
-     * })
-     * 
-    **/
-    create<T extends TimestampsCreateArgs>(
-      args: SelectSubset<T, TimestampsCreateArgs>
-    ): Prisma__TimestampsClient<TimestampsGetPayload<T>>
-
-    /**
-     * Create many Timestamps.
-     *     @param {TimestampsCreateManyArgs} args - Arguments to create many Timestamps.
-     *     @example
-     *     // Create many Timestamps
-     *     const timestamps = await prisma.timestamps.createMany({
-     *       data: {
-     *         // ... provide data here
-     *       }
-     *     })
-     *     
-    **/
-    createMany<T extends TimestampsCreateManyArgs>(
-      args?: SelectSubset<T, TimestampsCreateManyArgs>
-    ): PrismaPromise<BatchPayload>
-
-    /**
-     * Delete a Timestamps.
-     * @param {TimestampsDeleteArgs} args - Arguments to delete one Timestamps.
-     * @example
-     * // Delete one Timestamps
-     * const Timestamps = await prisma.timestamps.delete({
-     *   where: {
-     *     // ... filter to delete one Timestamps
-     *   }
-     * })
-     * 
-    **/
-    delete<T extends TimestampsDeleteArgs>(
-      args: SelectSubset<T, TimestampsDeleteArgs>
-    ): Prisma__TimestampsClient<TimestampsGetPayload<T>>
-
-    /**
-     * Update one Timestamps.
-     * @param {TimestampsUpdateArgs} args - Arguments to update one Timestamps.
-     * @example
-     * // Update one Timestamps
-     * const timestamps = await prisma.timestamps.update({
-     *   where: {
-     *     // ... provide filter here
-     *   },
-     *   data: {
-     *     // ... provide data here
-     *   }
-     * })
-     * 
-    **/
-    update<T extends TimestampsUpdateArgs>(
-      args: SelectSubset<T, TimestampsUpdateArgs>
-    ): Prisma__TimestampsClient<TimestampsGetPayload<T>>
-
-    /**
-     * Delete zero or more Timestamps.
-     * @param {TimestampsDeleteManyArgs} args - Arguments to filter Timestamps to delete.
-     * @example
-     * // Delete a few Timestamps
-     * const { count } = await prisma.timestamps.deleteMany({
-     *   where: {
-     *     // ... provide filter here
-     *   }
-     * })
-     * 
-    **/
-    deleteMany<T extends TimestampsDeleteManyArgs>(
-      args?: SelectSubset<T, TimestampsDeleteManyArgs>
-    ): PrismaPromise<BatchPayload>
-
-    /**
-     * Update zero or more Timestamps.
-     * Note, that providing `undefined` is treated as the value not being there.
-     * Read more here: https://pris.ly/d/null-undefined
-     * @param {TimestampsUpdateManyArgs} args - Arguments to update one or more rows.
-     * @example
-     * // Update many Timestamps
-     * const timestamps = await prisma.timestamps.updateMany({
-     *   where: {
-     *     // ... provide filter here
-     *   },
-     *   data: {
-     *     // ... provide data here
-     *   }
-     * })
-     * 
-    **/
-    updateMany<T extends TimestampsUpdateManyArgs>(
-      args: SelectSubset<T, TimestampsUpdateManyArgs>
-    ): PrismaPromise<BatchPayload>
-
-    /**
-     * Create or update one Timestamps.
-     * @param {TimestampsUpsertArgs} args - Arguments to update or create a Timestamps.
-     * @example
-     * // Update or create a Timestamps
-     * const timestamps = await prisma.timestamps.upsert({
-     *   create: {
-     *     // ... data to create a Timestamps
-     *   },
-     *   update: {
-     *     // ... in case it already exists, update
-     *   },
-     *   where: {
-     *     // ... the filter for the Timestamps we want to update
-     *   }
-     * })
-    **/
-    upsert<T extends TimestampsUpsertArgs>(
-      args: SelectSubset<T, TimestampsUpsertArgs>
-    ): Prisma__TimestampsClient<TimestampsGetPayload<T>>
-
-    /**
-     * Count the number of Timestamps.
-     * Note, that providing `undefined` is treated as the value not being there.
-     * Read more here: https://pris.ly/d/null-undefined
-     * @param {TimestampsCountArgs} args - Arguments to filter Timestamps to count.
-     * @example
-     * // Count the number of Timestamps
-     * const count = await prisma.timestamps.count({
-     *   where: {
-     *     // ... the filter for the Timestamps we want to count
-     *   }
-     * })
-    **/
-    count<T extends TimestampsCountArgs>(
-      args?: Subset<T, TimestampsCountArgs>,
-    ): PrismaPromise<
-      T extends _Record<'select', any>
-        ? T['select'] extends true
-          ? number
-          : GetScalarType<T['select'], TimestampsCountAggregateOutputType>
-        : number
-    >
-
-    /**
-     * Allows you to perform aggregations operations on a Timestamps.
-     * Note, that providing `undefined` is treated as the value not being there.
-     * Read more here: https://pris.ly/d/null-undefined
-     * @param {TimestampsAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
-     * @example
-     * // Ordered by age ascending
-     * // Where email contains prisma.io
-     * // Limited to the 10 users
-     * const aggregations = await prisma.user.aggregate({
-     *   _avg: {
-     *     age: true,
-     *   },
-     *   where: {
-     *     email: {
-     *       contains: "prisma.io",
-     *     },
-     *   },
-     *   orderBy: {
-     *     age: "asc",
-     *   },
-     *   take: 10,
-     * })
-    **/
-    aggregate<T extends TimestampsAggregateArgs>(args: Subset<T, TimestampsAggregateArgs>): PrismaPromise<GetTimestampsAggregateType<T>>
-
-    /**
-     * Group by Timestamps.
-     * Note, that providing `undefined` is treated as the value not being there.
-     * Read more here: https://pris.ly/d/null-undefined
-     * @param {TimestampsGroupByArgs} args - Group by arguments.
-     * @example
-     * // Group by city, order by createdAt, get count
-     * const result = await prisma.user.groupBy({
-     *   by: ['city', 'createdAt'],
-     *   orderBy: {
-     *     createdAt: true
-     *   },
-     *   _count: {
-     *     _all: true
-     *   },
-     * })
-     * 
-    **/
-    groupBy<
-      T extends TimestampsGroupByArgs,
-      HasSelectOrTake extends Or<
-        Extends<'skip', Keys<T>>,
-        Extends<'take', Keys<T>>
-      >,
-      OrderByArg extends True extends HasSelectOrTake
-        ? { orderBy: TimestampsGroupByArgs['orderBy'] }
-        : { orderBy?: TimestampsGroupByArgs['orderBy'] },
-      OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
-      ByFields extends TupleToUnion<T['by']>,
-      ByValid extends Has<ByFields, OrderFields>,
-      HavingFields extends GetHavingFields<T['having']>,
-      HavingValid extends Has<ByFields, HavingFields>,
-      ByEmpty extends T['by'] extends never[] ? True : False,
-      InputErrors extends ByEmpty extends True
-      ? `Error: "by" must not be empty.`
-      : HavingValid extends False
-      ? {
-          [P in HavingFields]: P extends ByFields
-            ? never
-            : P extends string
-            ? `Error: Field "${P}" used in "having" needs to be provided in "by".`
-            : [
-                Error,
-                'Field ',
-                P,
-                ` in "having" needs to be provided in "by"`,
-              ]
-        }[HavingFields]
-      : 'take' extends Keys<T>
-      ? 'orderBy' extends Keys<T>
-        ? ByValid extends True
-          ? {}
-          : {
-              [P in OrderFields]: P extends ByFields
-                ? never
-                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
-            }[OrderFields]
-        : 'Error: If you provide "take", you also need to provide "orderBy"'
-      : 'skip' extends Keys<T>
-      ? 'orderBy' extends Keys<T>
-        ? ByValid extends True
-          ? {}
-          : {
-              [P in OrderFields]: P extends ByFields
-                ? never
-                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
-            }[OrderFields]
-        : 'Error: If you provide "skip", you also need to provide "orderBy"'
-      : ByValid extends True
-      ? {}
-      : {
-          [P in OrderFields]: P extends ByFields
-            ? never
-            : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
-        }[OrderFields]
-    >(args: SubsetIntersection<T, TimestampsGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetTimestampsGroupByPayload<T> : PrismaPromise<InputErrors>
-
-  }
-
-  /**
-   * The delegate class that acts as a "Promise-like" for Timestamps.
-   * Why is this prefixed with `Prisma__`?
-   * Because we want to prevent naming conflicts as mentioned in
-   * https://github.com/prisma/prisma-client-js/issues/707
-   */
-  export class Prisma__TimestampsClient<T, Null = never> implements PrismaPromise<T> {
+  export class Prisma__BoolsClient<T, Null = never> implements PrismaPromise<T> {
     [prisma]: true;
     private readonly _dmmf;
     private readonly _fetcher;
@@ -3620,25 +2558,25 @@ export namespace Prisma {
   // Custom InputTypes
 
   /**
-   * Timestamps base type for findUnique actions
+   * Bools base type for findUnique actions
    */
-  export type TimestampsFindUniqueArgsBase = {
+  export type BoolsFindUniqueArgsBase = {
     /**
-     * Select specific fields to fetch from the Timestamps
+     * Select specific fields to fetch from the Bools
      * 
     **/
-    select?: TimestampsSelect | null
+    select?: BoolsSelect | null
     /**
-     * Filter, which Timestamps to fetch.
+     * Filter, which Bools to fetch.
      * 
     **/
-    where: TimestampsWhereUniqueInput
+    where: BoolsWhereUniqueInput
   }
 
   /**
-   * Timestamps findUnique
+   * Bools findUnique
    */
-  export interface TimestampsFindUniqueArgs extends TimestampsFindUniqueArgsBase {
+  export interface BoolsFindUniqueArgs extends BoolsFindUniqueArgsBase {
    /**
     * Throw an Error if query returns no results
     * @deprecated since 4.0.0: use `findUniqueOrThrow` method instead
@@ -3648,77 +2586,77 @@ export namespace Prisma {
       
 
   /**
-   * Timestamps findUniqueOrThrow
+   * Bools findUniqueOrThrow
    */
-  export type TimestampsFindUniqueOrThrowArgs = {
+  export type BoolsFindUniqueOrThrowArgs = {
     /**
-     * Select specific fields to fetch from the Timestamps
+     * Select specific fields to fetch from the Bools
      * 
     **/
-    select?: TimestampsSelect | null
+    select?: BoolsSelect | null
     /**
-     * Filter, which Timestamps to fetch.
+     * Filter, which Bools to fetch.
      * 
     **/
-    where: TimestampsWhereUniqueInput
+    where: BoolsWhereUniqueInput
   }
 
 
   /**
-   * Timestamps base type for findFirst actions
+   * Bools base type for findFirst actions
    */
-  export type TimestampsFindFirstArgsBase = {
+  export type BoolsFindFirstArgsBase = {
     /**
-     * Select specific fields to fetch from the Timestamps
+     * Select specific fields to fetch from the Bools
      * 
     **/
-    select?: TimestampsSelect | null
+    select?: BoolsSelect | null
     /**
-     * Filter, which Timestamps to fetch.
+     * Filter, which Bools to fetch.
      * 
     **/
-    where?: TimestampsWhereInput
+    where?: BoolsWhereInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
      * 
-     * Determine the order of Timestamps to fetch.
+     * Determine the order of Bools to fetch.
      * 
     **/
-    orderBy?: Enumerable<TimestampsOrderByWithRelationInput>
+    orderBy?: Enumerable<BoolsOrderByWithRelationInput>
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
      * 
-     * Sets the position for searching for Timestamps.
+     * Sets the position for searching for Bools.
      * 
     **/
-    cursor?: TimestampsWhereUniqueInput
+    cursor?: BoolsWhereUniqueInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Take `±n` Timestamps from the position of the cursor.
+     * Take `±n` Bools from the position of the cursor.
      * 
     **/
     take?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Skip the first `n` Timestamps.
+     * Skip the first `n` Bools.
      * 
     **/
     skip?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
      * 
-     * Filter by unique combinations of Timestamps.
+     * Filter by unique combinations of Bools.
      * 
     **/
-    distinct?: Enumerable<TimestampsScalarFieldEnum>
+    distinct?: Enumerable<BoolsScalarFieldEnum>
   }
 
   /**
-   * Timestamps findFirst
+   * Bools findFirst
    */
-  export interface TimestampsFindFirstArgs extends TimestampsFindFirstArgsBase {
+  export interface BoolsFindFirstArgs extends BoolsFindFirstArgsBase {
    /**
     * Throw an Error if query returns no results
     * @deprecated since 4.0.0: use `findFirstOrThrow` method instead
@@ -3728,237 +2666,237 @@ export namespace Prisma {
       
 
   /**
-   * Timestamps findFirstOrThrow
+   * Bools findFirstOrThrow
    */
-  export type TimestampsFindFirstOrThrowArgs = {
+  export type BoolsFindFirstOrThrowArgs = {
     /**
-     * Select specific fields to fetch from the Timestamps
+     * Select specific fields to fetch from the Bools
      * 
     **/
-    select?: TimestampsSelect | null
+    select?: BoolsSelect | null
     /**
-     * Filter, which Timestamps to fetch.
+     * Filter, which Bools to fetch.
      * 
     **/
-    where?: TimestampsWhereInput
+    where?: BoolsWhereInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
      * 
-     * Determine the order of Timestamps to fetch.
+     * Determine the order of Bools to fetch.
      * 
     **/
-    orderBy?: Enumerable<TimestampsOrderByWithRelationInput>
+    orderBy?: Enumerable<BoolsOrderByWithRelationInput>
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
      * 
-     * Sets the position for searching for Timestamps.
+     * Sets the position for searching for Bools.
      * 
     **/
-    cursor?: TimestampsWhereUniqueInput
+    cursor?: BoolsWhereUniqueInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Take `±n` Timestamps from the position of the cursor.
+     * Take `±n` Bools from the position of the cursor.
      * 
     **/
     take?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Skip the first `n` Timestamps.
+     * Skip the first `n` Bools.
      * 
     **/
     skip?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
      * 
-     * Filter by unique combinations of Timestamps.
+     * Filter by unique combinations of Bools.
      * 
     **/
-    distinct?: Enumerable<TimestampsScalarFieldEnum>
+    distinct?: Enumerable<BoolsScalarFieldEnum>
   }
 
 
   /**
-   * Timestamps findMany
+   * Bools findMany
    */
-  export type TimestampsFindManyArgs = {
+  export type BoolsFindManyArgs = {
     /**
-     * Select specific fields to fetch from the Timestamps
+     * Select specific fields to fetch from the Bools
      * 
     **/
-    select?: TimestampsSelect | null
+    select?: BoolsSelect | null
     /**
-     * Filter, which Timestamps to fetch.
+     * Filter, which Bools to fetch.
      * 
     **/
-    where?: TimestampsWhereInput
+    where?: BoolsWhereInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
      * 
-     * Determine the order of Timestamps to fetch.
+     * Determine the order of Bools to fetch.
      * 
     **/
-    orderBy?: Enumerable<TimestampsOrderByWithRelationInput>
+    orderBy?: Enumerable<BoolsOrderByWithRelationInput>
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
      * 
-     * Sets the position for listing Timestamps.
+     * Sets the position for listing Bools.
      * 
     **/
-    cursor?: TimestampsWhereUniqueInput
+    cursor?: BoolsWhereUniqueInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Take `±n` Timestamps from the position of the cursor.
+     * Take `±n` Bools from the position of the cursor.
      * 
     **/
     take?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Skip the first `n` Timestamps.
+     * Skip the first `n` Bools.
      * 
     **/
     skip?: number
-    distinct?: Enumerable<TimestampsScalarFieldEnum>
+    distinct?: Enumerable<BoolsScalarFieldEnum>
   }
 
 
   /**
-   * Timestamps create
+   * Bools create
    */
-  export type TimestampsCreateArgs = {
+  export type BoolsCreateArgs = {
     /**
-     * Select specific fields to fetch from the Timestamps
+     * Select specific fields to fetch from the Bools
      * 
     **/
-    select?: TimestampsSelect | null
+    select?: BoolsSelect | null
     /**
-     * The data needed to create a Timestamps.
+     * The data needed to create a Bools.
      * 
     **/
-    data: XOR<TimestampsCreateInput, TimestampsUncheckedCreateInput>
+    data: XOR<BoolsCreateInput, BoolsUncheckedCreateInput>
   }
 
 
   /**
-   * Timestamps createMany
+   * Bools createMany
    */
-  export type TimestampsCreateManyArgs = {
+  export type BoolsCreateManyArgs = {
     /**
-     * The data used to create many Timestamps.
+     * The data used to create many Bools.
      * 
     **/
-    data: Enumerable<TimestampsCreateManyInput>
+    data: Enumerable<BoolsCreateManyInput>
     skipDuplicates?: boolean
   }
 
 
   /**
-   * Timestamps update
+   * Bools update
    */
-  export type TimestampsUpdateArgs = {
+  export type BoolsUpdateArgs = {
     /**
-     * Select specific fields to fetch from the Timestamps
+     * Select specific fields to fetch from the Bools
      * 
     **/
-    select?: TimestampsSelect | null
+    select?: BoolsSelect | null
     /**
-     * The data needed to update a Timestamps.
+     * The data needed to update a Bools.
      * 
     **/
-    data: XOR<TimestampsUpdateInput, TimestampsUncheckedUpdateInput>
+    data: XOR<BoolsUpdateInput, BoolsUncheckedUpdateInput>
     /**
-     * Choose, which Timestamps to update.
+     * Choose, which Bools to update.
      * 
     **/
-    where: TimestampsWhereUniqueInput
+    where: BoolsWhereUniqueInput
   }
 
 
   /**
-   * Timestamps updateMany
+   * Bools updateMany
    */
-  export type TimestampsUpdateManyArgs = {
+  export type BoolsUpdateManyArgs = {
     /**
-     * The data used to update Timestamps.
+     * The data used to update Bools.
      * 
     **/
-    data: XOR<TimestampsUpdateManyMutationInput, TimestampsUncheckedUpdateManyInput>
+    data: XOR<BoolsUpdateManyMutationInput, BoolsUncheckedUpdateManyInput>
     /**
-     * Filter which Timestamps to update
+     * Filter which Bools to update
      * 
     **/
-    where?: TimestampsWhereInput
+    where?: BoolsWhereInput
   }
 
 
   /**
-   * Timestamps upsert
+   * Bools upsert
    */
-  export type TimestampsUpsertArgs = {
+  export type BoolsUpsertArgs = {
     /**
-     * Select specific fields to fetch from the Timestamps
+     * Select specific fields to fetch from the Bools
      * 
     **/
-    select?: TimestampsSelect | null
+    select?: BoolsSelect | null
     /**
-     * The filter to search for the Timestamps to update in case it exists.
+     * The filter to search for the Bools to update in case it exists.
      * 
     **/
-    where: TimestampsWhereUniqueInput
+    where: BoolsWhereUniqueInput
     /**
-     * In case the Timestamps found by the `where` argument doesn't exist, create a new Timestamps with this data.
+     * In case the Bools found by the `where` argument doesn't exist, create a new Bools with this data.
      * 
     **/
-    create: XOR<TimestampsCreateInput, TimestampsUncheckedCreateInput>
+    create: XOR<BoolsCreateInput, BoolsUncheckedCreateInput>
     /**
-     * In case the Timestamps was found with the provided `where` argument, update it with this data.
+     * In case the Bools was found with the provided `where` argument, update it with this data.
      * 
     **/
-    update: XOR<TimestampsUpdateInput, TimestampsUncheckedUpdateInput>
+    update: XOR<BoolsUpdateInput, BoolsUncheckedUpdateInput>
   }
 
 
   /**
-   * Timestamps delete
+   * Bools delete
    */
-  export type TimestampsDeleteArgs = {
+  export type BoolsDeleteArgs = {
     /**
-     * Select specific fields to fetch from the Timestamps
+     * Select specific fields to fetch from the Bools
      * 
     **/
-    select?: TimestampsSelect | null
+    select?: BoolsSelect | null
     /**
-     * Filter which Timestamps to delete.
+     * Filter which Bools to delete.
      * 
     **/
-    where: TimestampsWhereUniqueInput
+    where: BoolsWhereUniqueInput
   }
 
 
   /**
-   * Timestamps deleteMany
+   * Bools deleteMany
    */
-  export type TimestampsDeleteManyArgs = {
+  export type BoolsDeleteManyArgs = {
     /**
-     * Filter which Timestamps to delete
+     * Filter which Bools to delete
      * 
     **/
-    where?: TimestampsWhereInput
+    where?: BoolsWhereInput
   }
 
 
   /**
-   * Timestamps without action
+   * Bools without action
    */
-  export type TimestampsArgs = {
+  export type BoolsArgs = {
     /**
-     * Select specific fields to fetch from the Timestamps
+     * Select specific fields to fetch from the Bools
      * 
     **/
-    select?: TimestampsSelect | null
+    select?: BoolsSelect | null
   }
 
 
@@ -4877,316 +3815,316 @@ export namespace Prisma {
 
 
   /**
-   * Model Bools
+   * Model Enums
    */
 
 
-  export type AggregateBools = {
-    _count: BoolsCountAggregateOutputType | null
-    _min: BoolsMinAggregateOutputType | null
-    _max: BoolsMaxAggregateOutputType | null
+  export type AggregateEnums = {
+    _count: EnumsCountAggregateOutputType | null
+    _min: EnumsMinAggregateOutputType | null
+    _max: EnumsMaxAggregateOutputType | null
   }
 
-  export type BoolsMinAggregateOutputType = {
+  export type EnumsMinAggregateOutputType = {
     id: string | null
-    b: boolean | null
+    c: Color | null
   }
 
-  export type BoolsMaxAggregateOutputType = {
+  export type EnumsMaxAggregateOutputType = {
     id: string | null
-    b: boolean | null
+    c: Color | null
   }
 
-  export type BoolsCountAggregateOutputType = {
+  export type EnumsCountAggregateOutputType = {
     id: number
-    b: number
+    c: number
     _all: number
   }
 
 
-  export type BoolsMinAggregateInputType = {
+  export type EnumsMinAggregateInputType = {
     id?: true
-    b?: true
+    c?: true
   }
 
-  export type BoolsMaxAggregateInputType = {
+  export type EnumsMaxAggregateInputType = {
     id?: true
-    b?: true
+    c?: true
   }
 
-  export type BoolsCountAggregateInputType = {
+  export type EnumsCountAggregateInputType = {
     id?: true
-    b?: true
+    c?: true
     _all?: true
   }
 
-  export type BoolsAggregateArgs = {
+  export type EnumsAggregateArgs = {
     /**
-     * Filter which Bools to aggregate.
+     * Filter which Enums to aggregate.
      * 
     **/
-    where?: BoolsWhereInput
+    where?: EnumsWhereInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
      * 
-     * Determine the order of Bools to fetch.
+     * Determine the order of Enums to fetch.
      * 
     **/
-    orderBy?: Enumerable<BoolsOrderByWithRelationInput>
+    orderBy?: Enumerable<EnumsOrderByWithRelationInput>
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
      * 
      * Sets the start position
      * 
     **/
-    cursor?: BoolsWhereUniqueInput
+    cursor?: EnumsWhereUniqueInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Take `±n` Bools from the position of the cursor.
+     * Take `±n` Enums from the position of the cursor.
      * 
     **/
     take?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Skip the first `n` Bools.
+     * Skip the first `n` Enums.
      * 
     **/
     skip?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
      * 
-     * Count returned Bools
+     * Count returned Enums
     **/
-    _count?: true | BoolsCountAggregateInputType
+    _count?: true | EnumsCountAggregateInputType
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
      * 
      * Select which fields to find the minimum value
     **/
-    _min?: BoolsMinAggregateInputType
+    _min?: EnumsMinAggregateInputType
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
      * 
      * Select which fields to find the maximum value
     **/
-    _max?: BoolsMaxAggregateInputType
+    _max?: EnumsMaxAggregateInputType
   }
 
-  export type GetBoolsAggregateType<T extends BoolsAggregateArgs> = {
-        [P in keyof T & keyof AggregateBools]: P extends '_count' | 'count'
+  export type GetEnumsAggregateType<T extends EnumsAggregateArgs> = {
+        [P in keyof T & keyof AggregateEnums]: P extends '_count' | 'count'
       ? T[P] extends true
         ? number
-        : GetScalarType<T[P], AggregateBools[P]>
-      : GetScalarType<T[P], AggregateBools[P]>
+        : GetScalarType<T[P], AggregateEnums[P]>
+      : GetScalarType<T[P], AggregateEnums[P]>
   }
 
 
 
 
-  export type BoolsGroupByArgs = {
-    where?: BoolsWhereInput
-    orderBy?: Enumerable<BoolsOrderByWithAggregationInput>
-    by: Array<BoolsScalarFieldEnum>
-    having?: BoolsScalarWhereWithAggregatesInput
+  export type EnumsGroupByArgs = {
+    where?: EnumsWhereInput
+    orderBy?: Enumerable<EnumsOrderByWithAggregationInput>
+    by: Array<EnumsScalarFieldEnum>
+    having?: EnumsScalarWhereWithAggregatesInput
     take?: number
     skip?: number
-    _count?: BoolsCountAggregateInputType | true
-    _min?: BoolsMinAggregateInputType
-    _max?: BoolsMaxAggregateInputType
+    _count?: EnumsCountAggregateInputType | true
+    _min?: EnumsMinAggregateInputType
+    _max?: EnumsMaxAggregateInputType
   }
 
 
-  export type BoolsGroupByOutputType = {
+  export type EnumsGroupByOutputType = {
     id: string
-    b: boolean | null
-    _count: BoolsCountAggregateOutputType | null
-    _min: BoolsMinAggregateOutputType | null
-    _max: BoolsMaxAggregateOutputType | null
+    c: Color | null
+    _count: EnumsCountAggregateOutputType | null
+    _min: EnumsMinAggregateOutputType | null
+    _max: EnumsMaxAggregateOutputType | null
   }
 
-  type GetBoolsGroupByPayload<T extends BoolsGroupByArgs> = PrismaPromise<
+  type GetEnumsGroupByPayload<T extends EnumsGroupByArgs> = PrismaPromise<
     Array<
-      PickArray<BoolsGroupByOutputType, T['by']> &
+      PickArray<EnumsGroupByOutputType, T['by']> &
         {
-          [P in ((keyof T) & (keyof BoolsGroupByOutputType))]: P extends '_count'
+          [P in ((keyof T) & (keyof EnumsGroupByOutputType))]: P extends '_count'
             ? T[P] extends boolean
               ? number
-              : GetScalarType<T[P], BoolsGroupByOutputType[P]>
-            : GetScalarType<T[P], BoolsGroupByOutputType[P]>
+              : GetScalarType<T[P], EnumsGroupByOutputType[P]>
+            : GetScalarType<T[P], EnumsGroupByOutputType[P]>
         }
       >
     >
 
 
-  export type BoolsSelect = {
+  export type EnumsSelect = {
     id?: boolean
-    b?: boolean
+    c?: boolean
   }
 
 
-  export type BoolsGetPayload<S extends boolean | null | undefined | BoolsArgs> =
+  export type EnumsGetPayload<S extends boolean | null | undefined | EnumsArgs> =
     S extends { select: any, include: any } ? 'Please either choose `select` or `include`' :
-    S extends true ? Bools :
+    S extends true ? Enums :
     S extends undefined ? never :
-    S extends { include: any } & (BoolsArgs | BoolsFindManyArgs)
-    ? Bools 
-    : S extends { select: any } & (BoolsArgs | BoolsFindManyArgs)
+    S extends { include: any } & (EnumsArgs | EnumsFindManyArgs)
+    ? Enums 
+    : S extends { select: any } & (EnumsArgs | EnumsFindManyArgs)
       ? {
     [P in TruthyKeys<S['select']>]:
-    P extends keyof Bools ? Bools[P] : never
+    P extends keyof Enums ? Enums[P] : never
   } 
-      : Bools
+      : Enums
 
 
-  type BoolsCountArgs = Merge<
-    Omit<BoolsFindManyArgs, 'select' | 'include'> & {
-      select?: BoolsCountAggregateInputType | true
+  type EnumsCountArgs = Merge<
+    Omit<EnumsFindManyArgs, 'select' | 'include'> & {
+      select?: EnumsCountAggregateInputType | true
     }
   >
 
-  export interface BoolsDelegate<GlobalRejectSettings extends Prisma.RejectOnNotFound | Prisma.RejectPerOperation | false | undefined> {
+  export interface EnumsDelegate<GlobalRejectSettings extends Prisma.RejectOnNotFound | Prisma.RejectPerOperation | false | undefined> {
     /**
-     * Find zero or one Bools that matches the filter.
-     * @param {BoolsFindUniqueArgs} args - Arguments to find a Bools
+     * Find zero or one Enums that matches the filter.
+     * @param {EnumsFindUniqueArgs} args - Arguments to find a Enums
      * @example
-     * // Get one Bools
-     * const bools = await prisma.bools.findUnique({
+     * // Get one Enums
+     * const enums = await prisma.enums.findUnique({
      *   where: {
      *     // ... provide filter here
      *   }
      * })
     **/
-    findUnique<T extends BoolsFindUniqueArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
-      args: SelectSubset<T, BoolsFindUniqueArgs>
-    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findUnique', 'Bools'> extends True ? Prisma__BoolsClient<BoolsGetPayload<T>> : Prisma__BoolsClient<BoolsGetPayload<T> | null, null>
+    findUnique<T extends EnumsFindUniqueArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
+      args: SelectSubset<T, EnumsFindUniqueArgs>
+    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findUnique', 'Enums'> extends True ? Prisma__EnumsClient<EnumsGetPayload<T>> : Prisma__EnumsClient<EnumsGetPayload<T> | null, null>
 
     /**
-     * Find one Bools that matches the filter or throw an error  with `error.code='P2025'` 
+     * Find one Enums that matches the filter or throw an error  with `error.code='P2025'` 
      *     if no matches were found.
-     * @param {BoolsFindUniqueOrThrowArgs} args - Arguments to find a Bools
+     * @param {EnumsFindUniqueOrThrowArgs} args - Arguments to find a Enums
      * @example
-     * // Get one Bools
-     * const bools = await prisma.bools.findUniqueOrThrow({
+     * // Get one Enums
+     * const enums = await prisma.enums.findUniqueOrThrow({
      *   where: {
      *     // ... provide filter here
      *   }
      * })
     **/
-    findUniqueOrThrow<T extends BoolsFindUniqueOrThrowArgs>(
-      args?: SelectSubset<T, BoolsFindUniqueOrThrowArgs>
-    ): Prisma__BoolsClient<BoolsGetPayload<T>>
+    findUniqueOrThrow<T extends EnumsFindUniqueOrThrowArgs>(
+      args?: SelectSubset<T, EnumsFindUniqueOrThrowArgs>
+    ): Prisma__EnumsClient<EnumsGetPayload<T>>
 
     /**
-     * Find the first Bools that matches the filter.
+     * Find the first Enums that matches the filter.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {BoolsFindFirstArgs} args - Arguments to find a Bools
+     * @param {EnumsFindFirstArgs} args - Arguments to find a Enums
      * @example
-     * // Get one Bools
-     * const bools = await prisma.bools.findFirst({
+     * // Get one Enums
+     * const enums = await prisma.enums.findFirst({
      *   where: {
      *     // ... provide filter here
      *   }
      * })
     **/
-    findFirst<T extends BoolsFindFirstArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
-      args?: SelectSubset<T, BoolsFindFirstArgs>
-    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findFirst', 'Bools'> extends True ? Prisma__BoolsClient<BoolsGetPayload<T>> : Prisma__BoolsClient<BoolsGetPayload<T> | null, null>
+    findFirst<T extends EnumsFindFirstArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
+      args?: SelectSubset<T, EnumsFindFirstArgs>
+    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findFirst', 'Enums'> extends True ? Prisma__EnumsClient<EnumsGetPayload<T>> : Prisma__EnumsClient<EnumsGetPayload<T> | null, null>
 
     /**
-     * Find the first Bools that matches the filter or
+     * Find the first Enums that matches the filter or
      * throw `NotFoundError` if no matches were found.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {BoolsFindFirstOrThrowArgs} args - Arguments to find a Bools
+     * @param {EnumsFindFirstOrThrowArgs} args - Arguments to find a Enums
      * @example
-     * // Get one Bools
-     * const bools = await prisma.bools.findFirstOrThrow({
+     * // Get one Enums
+     * const enums = await prisma.enums.findFirstOrThrow({
      *   where: {
      *     // ... provide filter here
      *   }
      * })
     **/
-    findFirstOrThrow<T extends BoolsFindFirstOrThrowArgs>(
-      args?: SelectSubset<T, BoolsFindFirstOrThrowArgs>
-    ): Prisma__BoolsClient<BoolsGetPayload<T>>
+    findFirstOrThrow<T extends EnumsFindFirstOrThrowArgs>(
+      args?: SelectSubset<T, EnumsFindFirstOrThrowArgs>
+    ): Prisma__EnumsClient<EnumsGetPayload<T>>
 
     /**
-     * Find zero or more Bools that matches the filter.
+     * Find zero or more Enums that matches the filter.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {BoolsFindManyArgs=} args - Arguments to filter and select certain fields only.
+     * @param {EnumsFindManyArgs=} args - Arguments to filter and select certain fields only.
      * @example
-     * // Get all Bools
-     * const bools = await prisma.bools.findMany()
+     * // Get all Enums
+     * const enums = await prisma.enums.findMany()
      * 
-     * // Get first 10 Bools
-     * const bools = await prisma.bools.findMany({ take: 10 })
+     * // Get first 10 Enums
+     * const enums = await prisma.enums.findMany({ take: 10 })
      * 
      * // Only select the `id`
-     * const boolsWithIdOnly = await prisma.bools.findMany({ select: { id: true } })
+     * const enumsWithIdOnly = await prisma.enums.findMany({ select: { id: true } })
      * 
     **/
-    findMany<T extends BoolsFindManyArgs>(
-      args?: SelectSubset<T, BoolsFindManyArgs>
-    ): PrismaPromise<Array<BoolsGetPayload<T>>>
+    findMany<T extends EnumsFindManyArgs>(
+      args?: SelectSubset<T, EnumsFindManyArgs>
+    ): PrismaPromise<Array<EnumsGetPayload<T>>>
 
     /**
-     * Create a Bools.
-     * @param {BoolsCreateArgs} args - Arguments to create a Bools.
+     * Create a Enums.
+     * @param {EnumsCreateArgs} args - Arguments to create a Enums.
      * @example
-     * // Create one Bools
-     * const Bools = await prisma.bools.create({
+     * // Create one Enums
+     * const Enums = await prisma.enums.create({
      *   data: {
-     *     // ... data to create a Bools
+     *     // ... data to create a Enums
      *   }
      * })
      * 
     **/
-    create<T extends BoolsCreateArgs>(
-      args: SelectSubset<T, BoolsCreateArgs>
-    ): Prisma__BoolsClient<BoolsGetPayload<T>>
+    create<T extends EnumsCreateArgs>(
+      args: SelectSubset<T, EnumsCreateArgs>
+    ): Prisma__EnumsClient<EnumsGetPayload<T>>
 
     /**
-     * Create many Bools.
-     *     @param {BoolsCreateManyArgs} args - Arguments to create many Bools.
+     * Create many Enums.
+     *     @param {EnumsCreateManyArgs} args - Arguments to create many Enums.
      *     @example
-     *     // Create many Bools
-     *     const bools = await prisma.bools.createMany({
+     *     // Create many Enums
+     *     const enums = await prisma.enums.createMany({
      *       data: {
      *         // ... provide data here
      *       }
      *     })
      *     
     **/
-    createMany<T extends BoolsCreateManyArgs>(
-      args?: SelectSubset<T, BoolsCreateManyArgs>
+    createMany<T extends EnumsCreateManyArgs>(
+      args?: SelectSubset<T, EnumsCreateManyArgs>
     ): PrismaPromise<BatchPayload>
 
     /**
-     * Delete a Bools.
-     * @param {BoolsDeleteArgs} args - Arguments to delete one Bools.
+     * Delete a Enums.
+     * @param {EnumsDeleteArgs} args - Arguments to delete one Enums.
      * @example
-     * // Delete one Bools
-     * const Bools = await prisma.bools.delete({
+     * // Delete one Enums
+     * const Enums = await prisma.enums.delete({
      *   where: {
-     *     // ... filter to delete one Bools
+     *     // ... filter to delete one Enums
      *   }
      * })
      * 
     **/
-    delete<T extends BoolsDeleteArgs>(
-      args: SelectSubset<T, BoolsDeleteArgs>
-    ): Prisma__BoolsClient<BoolsGetPayload<T>>
+    delete<T extends EnumsDeleteArgs>(
+      args: SelectSubset<T, EnumsDeleteArgs>
+    ): Prisma__EnumsClient<EnumsGetPayload<T>>
 
     /**
-     * Update one Bools.
-     * @param {BoolsUpdateArgs} args - Arguments to update one Bools.
+     * Update one Enums.
+     * @param {EnumsUpdateArgs} args - Arguments to update one Enums.
      * @example
-     * // Update one Bools
-     * const bools = await prisma.bools.update({
+     * // Update one Enums
+     * const enums = await prisma.enums.update({
      *   where: {
      *     // ... provide filter here
      *   },
@@ -5196,34 +4134,34 @@ export namespace Prisma {
      * })
      * 
     **/
-    update<T extends BoolsUpdateArgs>(
-      args: SelectSubset<T, BoolsUpdateArgs>
-    ): Prisma__BoolsClient<BoolsGetPayload<T>>
+    update<T extends EnumsUpdateArgs>(
+      args: SelectSubset<T, EnumsUpdateArgs>
+    ): Prisma__EnumsClient<EnumsGetPayload<T>>
 
     /**
-     * Delete zero or more Bools.
-     * @param {BoolsDeleteManyArgs} args - Arguments to filter Bools to delete.
+     * Delete zero or more Enums.
+     * @param {EnumsDeleteManyArgs} args - Arguments to filter Enums to delete.
      * @example
-     * // Delete a few Bools
-     * const { count } = await prisma.bools.deleteMany({
+     * // Delete a few Enums
+     * const { count } = await prisma.enums.deleteMany({
      *   where: {
      *     // ... provide filter here
      *   }
      * })
      * 
     **/
-    deleteMany<T extends BoolsDeleteManyArgs>(
-      args?: SelectSubset<T, BoolsDeleteManyArgs>
+    deleteMany<T extends EnumsDeleteManyArgs>(
+      args?: SelectSubset<T, EnumsDeleteManyArgs>
     ): PrismaPromise<BatchPayload>
 
     /**
-     * Update zero or more Bools.
+     * Update zero or more Enums.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {BoolsUpdateManyArgs} args - Arguments to update one or more rows.
+     * @param {EnumsUpdateManyArgs} args - Arguments to update one or more rows.
      * @example
-     * // Update many Bools
-     * const bools = await prisma.bools.updateMany({
+     * // Update many Enums
+     * const enums = await prisma.enums.updateMany({
      *   where: {
      *     // ... provide filter here
      *   },
@@ -5233,59 +4171,59 @@ export namespace Prisma {
      * })
      * 
     **/
-    updateMany<T extends BoolsUpdateManyArgs>(
-      args: SelectSubset<T, BoolsUpdateManyArgs>
+    updateMany<T extends EnumsUpdateManyArgs>(
+      args: SelectSubset<T, EnumsUpdateManyArgs>
     ): PrismaPromise<BatchPayload>
 
     /**
-     * Create or update one Bools.
-     * @param {BoolsUpsertArgs} args - Arguments to update or create a Bools.
+     * Create or update one Enums.
+     * @param {EnumsUpsertArgs} args - Arguments to update or create a Enums.
      * @example
-     * // Update or create a Bools
-     * const bools = await prisma.bools.upsert({
+     * // Update or create a Enums
+     * const enums = await prisma.enums.upsert({
      *   create: {
-     *     // ... data to create a Bools
+     *     // ... data to create a Enums
      *   },
      *   update: {
      *     // ... in case it already exists, update
      *   },
      *   where: {
-     *     // ... the filter for the Bools we want to update
+     *     // ... the filter for the Enums we want to update
      *   }
      * })
     **/
-    upsert<T extends BoolsUpsertArgs>(
-      args: SelectSubset<T, BoolsUpsertArgs>
-    ): Prisma__BoolsClient<BoolsGetPayload<T>>
+    upsert<T extends EnumsUpsertArgs>(
+      args: SelectSubset<T, EnumsUpsertArgs>
+    ): Prisma__EnumsClient<EnumsGetPayload<T>>
 
     /**
-     * Count the number of Bools.
+     * Count the number of Enums.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {BoolsCountArgs} args - Arguments to filter Bools to count.
+     * @param {EnumsCountArgs} args - Arguments to filter Enums to count.
      * @example
-     * // Count the number of Bools
-     * const count = await prisma.bools.count({
+     * // Count the number of Enums
+     * const count = await prisma.enums.count({
      *   where: {
-     *     // ... the filter for the Bools we want to count
+     *     // ... the filter for the Enums we want to count
      *   }
      * })
     **/
-    count<T extends BoolsCountArgs>(
-      args?: Subset<T, BoolsCountArgs>,
+    count<T extends EnumsCountArgs>(
+      args?: Subset<T, EnumsCountArgs>,
     ): PrismaPromise<
       T extends _Record<'select', any>
         ? T['select'] extends true
           ? number
-          : GetScalarType<T['select'], BoolsCountAggregateOutputType>
+          : GetScalarType<T['select'], EnumsCountAggregateOutputType>
         : number
     >
 
     /**
-     * Allows you to perform aggregations operations on a Bools.
+     * Allows you to perform aggregations operations on a Enums.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {BoolsAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @param {EnumsAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
      * @example
      * // Ordered by age ascending
      * // Where email contains prisma.io
@@ -5305,13 +4243,13 @@ export namespace Prisma {
      *   take: 10,
      * })
     **/
-    aggregate<T extends BoolsAggregateArgs>(args: Subset<T, BoolsAggregateArgs>): PrismaPromise<GetBoolsAggregateType<T>>
+    aggregate<T extends EnumsAggregateArgs>(args: Subset<T, EnumsAggregateArgs>): PrismaPromise<GetEnumsAggregateType<T>>
 
     /**
-     * Group by Bools.
+     * Group by Enums.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {BoolsGroupByArgs} args - Group by arguments.
+     * @param {EnumsGroupByArgs} args - Group by arguments.
      * @example
      * // Group by city, order by createdAt, get count
      * const result = await prisma.user.groupBy({
@@ -5326,14 +4264,14 @@ export namespace Prisma {
      * 
     **/
     groupBy<
-      T extends BoolsGroupByArgs,
+      T extends EnumsGroupByArgs,
       HasSelectOrTake extends Or<
         Extends<'skip', Keys<T>>,
         Extends<'take', Keys<T>>
       >,
       OrderByArg extends True extends HasSelectOrTake
-        ? { orderBy: BoolsGroupByArgs['orderBy'] }
-        : { orderBy?: BoolsGroupByArgs['orderBy'] },
+        ? { orderBy: EnumsGroupByArgs['orderBy'] }
+        : { orderBy?: EnumsGroupByArgs['orderBy'] },
       OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
       ByFields extends TupleToUnion<T['by']>,
       ByValid extends Has<ByFields, OrderFields>,
@@ -5382,17 +4320,17 @@ export namespace Prisma {
             ? never
             : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
         }[OrderFields]
-    >(args: SubsetIntersection<T, BoolsGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetBoolsGroupByPayload<T> : PrismaPromise<InputErrors>
+    >(args: SubsetIntersection<T, EnumsGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetEnumsGroupByPayload<T> : PrismaPromise<InputErrors>
 
   }
 
   /**
-   * The delegate class that acts as a "Promise-like" for Bools.
+   * The delegate class that acts as a "Promise-like" for Enums.
    * Why is this prefixed with `Prisma__`?
    * Because we want to prevent naming conflicts as mentioned in
    * https://github.com/prisma/prisma-client-js/issues/707
    */
-  export class Prisma__BoolsClient<T, Null = never> implements PrismaPromise<T> {
+  export class Prisma__EnumsClient<T, Null = never> implements PrismaPromise<T> {
     [prisma]: true;
     private readonly _dmmf;
     private readonly _fetcher;
@@ -5438,25 +4376,25 @@ export namespace Prisma {
   // Custom InputTypes
 
   /**
-   * Bools base type for findUnique actions
+   * Enums base type for findUnique actions
    */
-  export type BoolsFindUniqueArgsBase = {
+  export type EnumsFindUniqueArgsBase = {
     /**
-     * Select specific fields to fetch from the Bools
+     * Select specific fields to fetch from the Enums
      * 
     **/
-    select?: BoolsSelect | null
+    select?: EnumsSelect | null
     /**
-     * Filter, which Bools to fetch.
+     * Filter, which Enums to fetch.
      * 
     **/
-    where: BoolsWhereUniqueInput
+    where: EnumsWhereUniqueInput
   }
 
   /**
-   * Bools findUnique
+   * Enums findUnique
    */
-  export interface BoolsFindUniqueArgs extends BoolsFindUniqueArgsBase {
+  export interface EnumsFindUniqueArgs extends EnumsFindUniqueArgsBase {
    /**
     * Throw an Error if query returns no results
     * @deprecated since 4.0.0: use `findUniqueOrThrow` method instead
@@ -5466,77 +4404,77 @@ export namespace Prisma {
       
 
   /**
-   * Bools findUniqueOrThrow
+   * Enums findUniqueOrThrow
    */
-  export type BoolsFindUniqueOrThrowArgs = {
+  export type EnumsFindUniqueOrThrowArgs = {
     /**
-     * Select specific fields to fetch from the Bools
+     * Select specific fields to fetch from the Enums
      * 
     **/
-    select?: BoolsSelect | null
+    select?: EnumsSelect | null
     /**
-     * Filter, which Bools to fetch.
+     * Filter, which Enums to fetch.
      * 
     **/
-    where: BoolsWhereUniqueInput
+    where: EnumsWhereUniqueInput
   }
 
 
   /**
-   * Bools base type for findFirst actions
+   * Enums base type for findFirst actions
    */
-  export type BoolsFindFirstArgsBase = {
+  export type EnumsFindFirstArgsBase = {
     /**
-     * Select specific fields to fetch from the Bools
+     * Select specific fields to fetch from the Enums
      * 
     **/
-    select?: BoolsSelect | null
+    select?: EnumsSelect | null
     /**
-     * Filter, which Bools to fetch.
+     * Filter, which Enums to fetch.
      * 
     **/
-    where?: BoolsWhereInput
+    where?: EnumsWhereInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
      * 
-     * Determine the order of Bools to fetch.
+     * Determine the order of Enums to fetch.
      * 
     **/
-    orderBy?: Enumerable<BoolsOrderByWithRelationInput>
+    orderBy?: Enumerable<EnumsOrderByWithRelationInput>
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
      * 
-     * Sets the position for searching for Bools.
+     * Sets the position for searching for Enums.
      * 
     **/
-    cursor?: BoolsWhereUniqueInput
+    cursor?: EnumsWhereUniqueInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Take `±n` Bools from the position of the cursor.
+     * Take `±n` Enums from the position of the cursor.
      * 
     **/
     take?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Skip the first `n` Bools.
+     * Skip the first `n` Enums.
      * 
     **/
     skip?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
      * 
-     * Filter by unique combinations of Bools.
+     * Filter by unique combinations of Enums.
      * 
     **/
-    distinct?: Enumerable<BoolsScalarFieldEnum>
+    distinct?: Enumerable<EnumsScalarFieldEnum>
   }
 
   /**
-   * Bools findFirst
+   * Enums findFirst
    */
-  export interface BoolsFindFirstArgs extends BoolsFindFirstArgsBase {
+  export interface EnumsFindFirstArgs extends EnumsFindFirstArgsBase {
    /**
     * Throw an Error if query returns no results
     * @deprecated since 4.0.0: use `findFirstOrThrow` method instead
@@ -5546,544 +4484,598 @@ export namespace Prisma {
       
 
   /**
-   * Bools findFirstOrThrow
+   * Enums findFirstOrThrow
    */
-  export type BoolsFindFirstOrThrowArgs = {
+  export type EnumsFindFirstOrThrowArgs = {
     /**
-     * Select specific fields to fetch from the Bools
+     * Select specific fields to fetch from the Enums
      * 
     **/
-    select?: BoolsSelect | null
+    select?: EnumsSelect | null
     /**
-     * Filter, which Bools to fetch.
+     * Filter, which Enums to fetch.
      * 
     **/
-    where?: BoolsWhereInput
+    where?: EnumsWhereInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
      * 
-     * Determine the order of Bools to fetch.
+     * Determine the order of Enums to fetch.
      * 
     **/
-    orderBy?: Enumerable<BoolsOrderByWithRelationInput>
+    orderBy?: Enumerable<EnumsOrderByWithRelationInput>
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
      * 
-     * Sets the position for searching for Bools.
+     * Sets the position for searching for Enums.
      * 
     **/
-    cursor?: BoolsWhereUniqueInput
+    cursor?: EnumsWhereUniqueInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Take `±n` Bools from the position of the cursor.
+     * Take `±n` Enums from the position of the cursor.
      * 
     **/
     take?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Skip the first `n` Bools.
+     * Skip the first `n` Enums.
      * 
     **/
     skip?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
      * 
-     * Filter by unique combinations of Bools.
+     * Filter by unique combinations of Enums.
      * 
     **/
-    distinct?: Enumerable<BoolsScalarFieldEnum>
+    distinct?: Enumerable<EnumsScalarFieldEnum>
   }
 
 
   /**
-   * Bools findMany
+   * Enums findMany
    */
-  export type BoolsFindManyArgs = {
+  export type EnumsFindManyArgs = {
     /**
-     * Select specific fields to fetch from the Bools
+     * Select specific fields to fetch from the Enums
      * 
     **/
-    select?: BoolsSelect | null
+    select?: EnumsSelect | null
     /**
-     * Filter, which Bools to fetch.
+     * Filter, which Enums to fetch.
      * 
     **/
-    where?: BoolsWhereInput
+    where?: EnumsWhereInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
      * 
-     * Determine the order of Bools to fetch.
+     * Determine the order of Enums to fetch.
      * 
     **/
-    orderBy?: Enumerable<BoolsOrderByWithRelationInput>
+    orderBy?: Enumerable<EnumsOrderByWithRelationInput>
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
      * 
-     * Sets the position for listing Bools.
+     * Sets the position for listing Enums.
      * 
     **/
-    cursor?: BoolsWhereUniqueInput
+    cursor?: EnumsWhereUniqueInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Take `±n` Bools from the position of the cursor.
+     * Take `±n` Enums from the position of the cursor.
      * 
     **/
     take?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Skip the first `n` Bools.
+     * Skip the first `n` Enums.
      * 
     **/
     skip?: number
-    distinct?: Enumerable<BoolsScalarFieldEnum>
+    distinct?: Enumerable<EnumsScalarFieldEnum>
   }
 
 
   /**
-   * Bools create
+   * Enums create
    */
-  export type BoolsCreateArgs = {
+  export type EnumsCreateArgs = {
     /**
-     * Select specific fields to fetch from the Bools
+     * Select specific fields to fetch from the Enums
      * 
     **/
-    select?: BoolsSelect | null
+    select?: EnumsSelect | null
     /**
-     * The data needed to create a Bools.
+     * The data needed to create a Enums.
      * 
     **/
-    data: XOR<BoolsCreateInput, BoolsUncheckedCreateInput>
+    data: XOR<EnumsCreateInput, EnumsUncheckedCreateInput>
   }
 
 
   /**
-   * Bools createMany
+   * Enums createMany
    */
-  export type BoolsCreateManyArgs = {
+  export type EnumsCreateManyArgs = {
     /**
-     * The data used to create many Bools.
+     * The data used to create many Enums.
      * 
     **/
-    data: Enumerable<BoolsCreateManyInput>
+    data: Enumerable<EnumsCreateManyInput>
     skipDuplicates?: boolean
   }
 
 
   /**
-   * Bools update
+   * Enums update
    */
-  export type BoolsUpdateArgs = {
+  export type EnumsUpdateArgs = {
     /**
-     * Select specific fields to fetch from the Bools
+     * Select specific fields to fetch from the Enums
      * 
     **/
-    select?: BoolsSelect | null
+    select?: EnumsSelect | null
     /**
-     * The data needed to update a Bools.
+     * The data needed to update a Enums.
      * 
     **/
-    data: XOR<BoolsUpdateInput, BoolsUncheckedUpdateInput>
+    data: XOR<EnumsUpdateInput, EnumsUncheckedUpdateInput>
     /**
-     * Choose, which Bools to update.
+     * Choose, which Enums to update.
      * 
     **/
-    where: BoolsWhereUniqueInput
+    where: EnumsWhereUniqueInput
   }
 
 
   /**
-   * Bools updateMany
+   * Enums updateMany
    */
-  export type BoolsUpdateManyArgs = {
+  export type EnumsUpdateManyArgs = {
     /**
-     * The data used to update Bools.
+     * The data used to update Enums.
      * 
     **/
-    data: XOR<BoolsUpdateManyMutationInput, BoolsUncheckedUpdateManyInput>
+    data: XOR<EnumsUpdateManyMutationInput, EnumsUncheckedUpdateManyInput>
     /**
-     * Filter which Bools to update
+     * Filter which Enums to update
      * 
     **/
-    where?: BoolsWhereInput
+    where?: EnumsWhereInput
   }
 
 
   /**
-   * Bools upsert
+   * Enums upsert
    */
-  export type BoolsUpsertArgs = {
+  export type EnumsUpsertArgs = {
     /**
-     * Select specific fields to fetch from the Bools
+     * Select specific fields to fetch from the Enums
      * 
     **/
-    select?: BoolsSelect | null
+    select?: EnumsSelect | null
     /**
-     * The filter to search for the Bools to update in case it exists.
+     * The filter to search for the Enums to update in case it exists.
      * 
     **/
-    where: BoolsWhereUniqueInput
+    where: EnumsWhereUniqueInput
     /**
-     * In case the Bools found by the `where` argument doesn't exist, create a new Bools with this data.
+     * In case the Enums found by the `where` argument doesn't exist, create a new Enums with this data.
      * 
     **/
-    create: XOR<BoolsCreateInput, BoolsUncheckedCreateInput>
+    create: XOR<EnumsCreateInput, EnumsUncheckedCreateInput>
     /**
-     * In case the Bools was found with the provided `where` argument, update it with this data.
+     * In case the Enums was found with the provided `where` argument, update it with this data.
      * 
     **/
-    update: XOR<BoolsUpdateInput, BoolsUncheckedUpdateInput>
+    update: XOR<EnumsUpdateInput, EnumsUncheckedUpdateInput>
   }
 
 
   /**
-   * Bools delete
+   * Enums delete
    */
-  export type BoolsDeleteArgs = {
+  export type EnumsDeleteArgs = {
     /**
-     * Select specific fields to fetch from the Bools
+     * Select specific fields to fetch from the Enums
      * 
     **/
-    select?: BoolsSelect | null
+    select?: EnumsSelect | null
     /**
-     * Filter which Bools to delete.
+     * Filter which Enums to delete.
      * 
     **/
-    where: BoolsWhereUniqueInput
+    where: EnumsWhereUniqueInput
   }
 
 
   /**
-   * Bools deleteMany
+   * Enums deleteMany
    */
-  export type BoolsDeleteManyArgs = {
+  export type EnumsDeleteManyArgs = {
     /**
-     * Filter which Bools to delete
+     * Filter which Enums to delete
      * 
     **/
-    where?: BoolsWhereInput
+    where?: EnumsWhereInput
   }
 
 
   /**
-   * Bools without action
+   * Enums without action
    */
-  export type BoolsArgs = {
+  export type EnumsArgs = {
     /**
-     * Select specific fields to fetch from the Bools
+     * Select specific fields to fetch from the Enums
      * 
     **/
-    select?: BoolsSelect | null
+    select?: EnumsSelect | null
   }
 
 
 
   /**
-   * Model Uuids
+   * Model Floats
    */
 
 
-  export type AggregateUuids = {
-    _count: UuidsCountAggregateOutputType | null
-    _min: UuidsMinAggregateOutputType | null
-    _max: UuidsMaxAggregateOutputType | null
+  export type AggregateFloats = {
+    _count: FloatsCountAggregateOutputType | null
+    _avg: FloatsAvgAggregateOutputType | null
+    _sum: FloatsSumAggregateOutputType | null
+    _min: FloatsMinAggregateOutputType | null
+    _max: FloatsMaxAggregateOutputType | null
   }
 
-  export type UuidsMinAggregateOutputType = {
+  export type FloatsAvgAggregateOutputType = {
+    f4: number | null
+    f8: number | null
+  }
+
+  export type FloatsSumAggregateOutputType = {
+    f4: number | null
+    f8: number | null
+  }
+
+  export type FloatsMinAggregateOutputType = {
     id: string | null
+    f4: number | null
+    f8: number | null
   }
 
-  export type UuidsMaxAggregateOutputType = {
+  export type FloatsMaxAggregateOutputType = {
     id: string | null
+    f4: number | null
+    f8: number | null
   }
 
-  export type UuidsCountAggregateOutputType = {
+  export type FloatsCountAggregateOutputType = {
     id: number
+    f4: number
+    f8: number
     _all: number
   }
 
 
-  export type UuidsMinAggregateInputType = {
-    id?: true
+  export type FloatsAvgAggregateInputType = {
+    f4?: true
+    f8?: true
   }
 
-  export type UuidsMaxAggregateInputType = {
-    id?: true
+  export type FloatsSumAggregateInputType = {
+    f4?: true
+    f8?: true
   }
 
-  export type UuidsCountAggregateInputType = {
+  export type FloatsMinAggregateInputType = {
     id?: true
+    f4?: true
+    f8?: true
+  }
+
+  export type FloatsMaxAggregateInputType = {
+    id?: true
+    f4?: true
+    f8?: true
+  }
+
+  export type FloatsCountAggregateInputType = {
+    id?: true
+    f4?: true
+    f8?: true
     _all?: true
   }
 
-  export type UuidsAggregateArgs = {
+  export type FloatsAggregateArgs = {
     /**
-     * Filter which Uuids to aggregate.
+     * Filter which Floats to aggregate.
      * 
     **/
-    where?: UuidsWhereInput
+    where?: FloatsWhereInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
      * 
-     * Determine the order of Uuids to fetch.
+     * Determine the order of Floats to fetch.
      * 
     **/
-    orderBy?: Enumerable<UuidsOrderByWithRelationInput>
+    orderBy?: Enumerable<FloatsOrderByWithRelationInput>
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
      * 
      * Sets the start position
      * 
     **/
-    cursor?: UuidsWhereUniqueInput
+    cursor?: FloatsWhereUniqueInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Take `±n` Uuids from the position of the cursor.
+     * Take `±n` Floats from the position of the cursor.
      * 
     **/
     take?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Skip the first `n` Uuids.
+     * Skip the first `n` Floats.
      * 
     **/
     skip?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
      * 
-     * Count returned Uuids
+     * Count returned Floats
     **/
-    _count?: true | UuidsCountAggregateInputType
+    _count?: true | FloatsCountAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to average
+    **/
+    _avg?: FloatsAvgAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to sum
+    **/
+    _sum?: FloatsSumAggregateInputType
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
      * 
      * Select which fields to find the minimum value
     **/
-    _min?: UuidsMinAggregateInputType
+    _min?: FloatsMinAggregateInputType
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
      * 
      * Select which fields to find the maximum value
     **/
-    _max?: UuidsMaxAggregateInputType
+    _max?: FloatsMaxAggregateInputType
   }
 
-  export type GetUuidsAggregateType<T extends UuidsAggregateArgs> = {
-        [P in keyof T & keyof AggregateUuids]: P extends '_count' | 'count'
+  export type GetFloatsAggregateType<T extends FloatsAggregateArgs> = {
+        [P in keyof T & keyof AggregateFloats]: P extends '_count' | 'count'
       ? T[P] extends true
         ? number
-        : GetScalarType<T[P], AggregateUuids[P]>
-      : GetScalarType<T[P], AggregateUuids[P]>
+        : GetScalarType<T[P], AggregateFloats[P]>
+      : GetScalarType<T[P], AggregateFloats[P]>
   }
 
 
 
 
-  export type UuidsGroupByArgs = {
-    where?: UuidsWhereInput
-    orderBy?: Enumerable<UuidsOrderByWithAggregationInput>
-    by: Array<UuidsScalarFieldEnum>
-    having?: UuidsScalarWhereWithAggregatesInput
+  export type FloatsGroupByArgs = {
+    where?: FloatsWhereInput
+    orderBy?: Enumerable<FloatsOrderByWithAggregationInput>
+    by: Array<FloatsScalarFieldEnum>
+    having?: FloatsScalarWhereWithAggregatesInput
     take?: number
     skip?: number
-    _count?: UuidsCountAggregateInputType | true
-    _min?: UuidsMinAggregateInputType
-    _max?: UuidsMaxAggregateInputType
+    _count?: FloatsCountAggregateInputType | true
+    _avg?: FloatsAvgAggregateInputType
+    _sum?: FloatsSumAggregateInputType
+    _min?: FloatsMinAggregateInputType
+    _max?: FloatsMaxAggregateInputType
   }
 
 
-  export type UuidsGroupByOutputType = {
+  export type FloatsGroupByOutputType = {
     id: string
-    _count: UuidsCountAggregateOutputType | null
-    _min: UuidsMinAggregateOutputType | null
-    _max: UuidsMaxAggregateOutputType | null
+    f4: number | null
+    f8: number | null
+    _count: FloatsCountAggregateOutputType | null
+    _avg: FloatsAvgAggregateOutputType | null
+    _sum: FloatsSumAggregateOutputType | null
+    _min: FloatsMinAggregateOutputType | null
+    _max: FloatsMaxAggregateOutputType | null
   }
 
-  type GetUuidsGroupByPayload<T extends UuidsGroupByArgs> = PrismaPromise<
+  type GetFloatsGroupByPayload<T extends FloatsGroupByArgs> = PrismaPromise<
     Array<
-      PickArray<UuidsGroupByOutputType, T['by']> &
+      PickArray<FloatsGroupByOutputType, T['by']> &
         {
-          [P in ((keyof T) & (keyof UuidsGroupByOutputType))]: P extends '_count'
+          [P in ((keyof T) & (keyof FloatsGroupByOutputType))]: P extends '_count'
             ? T[P] extends boolean
               ? number
-              : GetScalarType<T[P], UuidsGroupByOutputType[P]>
-            : GetScalarType<T[P], UuidsGroupByOutputType[P]>
+              : GetScalarType<T[P], FloatsGroupByOutputType[P]>
+            : GetScalarType<T[P], FloatsGroupByOutputType[P]>
         }
       >
     >
 
 
-  export type UuidsSelect = {
+  export type FloatsSelect = {
     id?: boolean
+    f4?: boolean
+    f8?: boolean
   }
 
 
-  export type UuidsGetPayload<S extends boolean | null | undefined | UuidsArgs> =
+  export type FloatsGetPayload<S extends boolean | null | undefined | FloatsArgs> =
     S extends { select: any, include: any } ? 'Please either choose `select` or `include`' :
-    S extends true ? Uuids :
+    S extends true ? Floats :
     S extends undefined ? never :
-    S extends { include: any } & (UuidsArgs | UuidsFindManyArgs)
-    ? Uuids 
-    : S extends { select: any } & (UuidsArgs | UuidsFindManyArgs)
+    S extends { include: any } & (FloatsArgs | FloatsFindManyArgs)
+    ? Floats 
+    : S extends { select: any } & (FloatsArgs | FloatsFindManyArgs)
       ? {
     [P in TruthyKeys<S['select']>]:
-    P extends keyof Uuids ? Uuids[P] : never
+    P extends keyof Floats ? Floats[P] : never
   } 
-      : Uuids
+      : Floats
 
 
-  type UuidsCountArgs = Merge<
-    Omit<UuidsFindManyArgs, 'select' | 'include'> & {
-      select?: UuidsCountAggregateInputType | true
+  type FloatsCountArgs = Merge<
+    Omit<FloatsFindManyArgs, 'select' | 'include'> & {
+      select?: FloatsCountAggregateInputType | true
     }
   >
 
-  export interface UuidsDelegate<GlobalRejectSettings extends Prisma.RejectOnNotFound | Prisma.RejectPerOperation | false | undefined> {
+  export interface FloatsDelegate<GlobalRejectSettings extends Prisma.RejectOnNotFound | Prisma.RejectPerOperation | false | undefined> {
     /**
-     * Find zero or one Uuids that matches the filter.
-     * @param {UuidsFindUniqueArgs} args - Arguments to find a Uuids
+     * Find zero or one Floats that matches the filter.
+     * @param {FloatsFindUniqueArgs} args - Arguments to find a Floats
      * @example
-     * // Get one Uuids
-     * const uuids = await prisma.uuids.findUnique({
+     * // Get one Floats
+     * const floats = await prisma.floats.findUnique({
      *   where: {
      *     // ... provide filter here
      *   }
      * })
     **/
-    findUnique<T extends UuidsFindUniqueArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
-      args: SelectSubset<T, UuidsFindUniqueArgs>
-    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findUnique', 'Uuids'> extends True ? Prisma__UuidsClient<UuidsGetPayload<T>> : Prisma__UuidsClient<UuidsGetPayload<T> | null, null>
+    findUnique<T extends FloatsFindUniqueArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
+      args: SelectSubset<T, FloatsFindUniqueArgs>
+    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findUnique', 'Floats'> extends True ? Prisma__FloatsClient<FloatsGetPayload<T>> : Prisma__FloatsClient<FloatsGetPayload<T> | null, null>
 
     /**
-     * Find one Uuids that matches the filter or throw an error  with `error.code='P2025'` 
+     * Find one Floats that matches the filter or throw an error  with `error.code='P2025'` 
      *     if no matches were found.
-     * @param {UuidsFindUniqueOrThrowArgs} args - Arguments to find a Uuids
+     * @param {FloatsFindUniqueOrThrowArgs} args - Arguments to find a Floats
      * @example
-     * // Get one Uuids
-     * const uuids = await prisma.uuids.findUniqueOrThrow({
+     * // Get one Floats
+     * const floats = await prisma.floats.findUniqueOrThrow({
      *   where: {
      *     // ... provide filter here
      *   }
      * })
     **/
-    findUniqueOrThrow<T extends UuidsFindUniqueOrThrowArgs>(
-      args?: SelectSubset<T, UuidsFindUniqueOrThrowArgs>
-    ): Prisma__UuidsClient<UuidsGetPayload<T>>
+    findUniqueOrThrow<T extends FloatsFindUniqueOrThrowArgs>(
+      args?: SelectSubset<T, FloatsFindUniqueOrThrowArgs>
+    ): Prisma__FloatsClient<FloatsGetPayload<T>>
 
     /**
-     * Find the first Uuids that matches the filter.
+     * Find the first Floats that matches the filter.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {UuidsFindFirstArgs} args - Arguments to find a Uuids
+     * @param {FloatsFindFirstArgs} args - Arguments to find a Floats
      * @example
-     * // Get one Uuids
-     * const uuids = await prisma.uuids.findFirst({
+     * // Get one Floats
+     * const floats = await prisma.floats.findFirst({
      *   where: {
      *     // ... provide filter here
      *   }
      * })
     **/
-    findFirst<T extends UuidsFindFirstArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
-      args?: SelectSubset<T, UuidsFindFirstArgs>
-    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findFirst', 'Uuids'> extends True ? Prisma__UuidsClient<UuidsGetPayload<T>> : Prisma__UuidsClient<UuidsGetPayload<T> | null, null>
+    findFirst<T extends FloatsFindFirstArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
+      args?: SelectSubset<T, FloatsFindFirstArgs>
+    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findFirst', 'Floats'> extends True ? Prisma__FloatsClient<FloatsGetPayload<T>> : Prisma__FloatsClient<FloatsGetPayload<T> | null, null>
 
     /**
-     * Find the first Uuids that matches the filter or
+     * Find the first Floats that matches the filter or
      * throw `NotFoundError` if no matches were found.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {UuidsFindFirstOrThrowArgs} args - Arguments to find a Uuids
+     * @param {FloatsFindFirstOrThrowArgs} args - Arguments to find a Floats
      * @example
-     * // Get one Uuids
-     * const uuids = await prisma.uuids.findFirstOrThrow({
+     * // Get one Floats
+     * const floats = await prisma.floats.findFirstOrThrow({
      *   where: {
      *     // ... provide filter here
      *   }
      * })
     **/
-    findFirstOrThrow<T extends UuidsFindFirstOrThrowArgs>(
-      args?: SelectSubset<T, UuidsFindFirstOrThrowArgs>
-    ): Prisma__UuidsClient<UuidsGetPayload<T>>
+    findFirstOrThrow<T extends FloatsFindFirstOrThrowArgs>(
+      args?: SelectSubset<T, FloatsFindFirstOrThrowArgs>
+    ): Prisma__FloatsClient<FloatsGetPayload<T>>
 
     /**
-     * Find zero or more Uuids that matches the filter.
+     * Find zero or more Floats that matches the filter.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {UuidsFindManyArgs=} args - Arguments to filter and select certain fields only.
+     * @param {FloatsFindManyArgs=} args - Arguments to filter and select certain fields only.
      * @example
-     * // Get all Uuids
-     * const uuids = await prisma.uuids.findMany()
+     * // Get all Floats
+     * const floats = await prisma.floats.findMany()
      * 
-     * // Get first 10 Uuids
-     * const uuids = await prisma.uuids.findMany({ take: 10 })
+     * // Get first 10 Floats
+     * const floats = await prisma.floats.findMany({ take: 10 })
      * 
      * // Only select the `id`
-     * const uuidsWithIdOnly = await prisma.uuids.findMany({ select: { id: true } })
+     * const floatsWithIdOnly = await prisma.floats.findMany({ select: { id: true } })
      * 
     **/
-    findMany<T extends UuidsFindManyArgs>(
-      args?: SelectSubset<T, UuidsFindManyArgs>
-    ): PrismaPromise<Array<UuidsGetPayload<T>>>
+    findMany<T extends FloatsFindManyArgs>(
+      args?: SelectSubset<T, FloatsFindManyArgs>
+    ): PrismaPromise<Array<FloatsGetPayload<T>>>
 
     /**
-     * Create a Uuids.
-     * @param {UuidsCreateArgs} args - Arguments to create a Uuids.
+     * Create a Floats.
+     * @param {FloatsCreateArgs} args - Arguments to create a Floats.
      * @example
-     * // Create one Uuids
-     * const Uuids = await prisma.uuids.create({
+     * // Create one Floats
+     * const Floats = await prisma.floats.create({
      *   data: {
-     *     // ... data to create a Uuids
+     *     // ... data to create a Floats
      *   }
      * })
      * 
     **/
-    create<T extends UuidsCreateArgs>(
-      args: SelectSubset<T, UuidsCreateArgs>
-    ): Prisma__UuidsClient<UuidsGetPayload<T>>
+    create<T extends FloatsCreateArgs>(
+      args: SelectSubset<T, FloatsCreateArgs>
+    ): Prisma__FloatsClient<FloatsGetPayload<T>>
 
     /**
-     * Create many Uuids.
-     *     @param {UuidsCreateManyArgs} args - Arguments to create many Uuids.
+     * Create many Floats.
+     *     @param {FloatsCreateManyArgs} args - Arguments to create many Floats.
      *     @example
-     *     // Create many Uuids
-     *     const uuids = await prisma.uuids.createMany({
+     *     // Create many Floats
+     *     const floats = await prisma.floats.createMany({
      *       data: {
      *         // ... provide data here
      *       }
      *     })
      *     
     **/
-    createMany<T extends UuidsCreateManyArgs>(
-      args?: SelectSubset<T, UuidsCreateManyArgs>
+    createMany<T extends FloatsCreateManyArgs>(
+      args?: SelectSubset<T, FloatsCreateManyArgs>
     ): PrismaPromise<BatchPayload>
 
     /**
-     * Delete a Uuids.
-     * @param {UuidsDeleteArgs} args - Arguments to delete one Uuids.
+     * Delete a Floats.
+     * @param {FloatsDeleteArgs} args - Arguments to delete one Floats.
      * @example
-     * // Delete one Uuids
-     * const Uuids = await prisma.uuids.delete({
+     * // Delete one Floats
+     * const Floats = await prisma.floats.delete({
      *   where: {
-     *     // ... filter to delete one Uuids
+     *     // ... filter to delete one Floats
      *   }
      * })
      * 
     **/
-    delete<T extends UuidsDeleteArgs>(
-      args: SelectSubset<T, UuidsDeleteArgs>
-    ): Prisma__UuidsClient<UuidsGetPayload<T>>
+    delete<T extends FloatsDeleteArgs>(
+      args: SelectSubset<T, FloatsDeleteArgs>
+    ): Prisma__FloatsClient<FloatsGetPayload<T>>
 
     /**
-     * Update one Uuids.
-     * @param {UuidsUpdateArgs} args - Arguments to update one Uuids.
+     * Update one Floats.
+     * @param {FloatsUpdateArgs} args - Arguments to update one Floats.
      * @example
-     * // Update one Uuids
-     * const uuids = await prisma.uuids.update({
+     * // Update one Floats
+     * const floats = await prisma.floats.update({
      *   where: {
      *     // ... provide filter here
      *   },
@@ -6093,34 +5085,34 @@ export namespace Prisma {
      * })
      * 
     **/
-    update<T extends UuidsUpdateArgs>(
-      args: SelectSubset<T, UuidsUpdateArgs>
-    ): Prisma__UuidsClient<UuidsGetPayload<T>>
+    update<T extends FloatsUpdateArgs>(
+      args: SelectSubset<T, FloatsUpdateArgs>
+    ): Prisma__FloatsClient<FloatsGetPayload<T>>
 
     /**
-     * Delete zero or more Uuids.
-     * @param {UuidsDeleteManyArgs} args - Arguments to filter Uuids to delete.
+     * Delete zero or more Floats.
+     * @param {FloatsDeleteManyArgs} args - Arguments to filter Floats to delete.
      * @example
-     * // Delete a few Uuids
-     * const { count } = await prisma.uuids.deleteMany({
+     * // Delete a few Floats
+     * const { count } = await prisma.floats.deleteMany({
      *   where: {
      *     // ... provide filter here
      *   }
      * })
      * 
     **/
-    deleteMany<T extends UuidsDeleteManyArgs>(
-      args?: SelectSubset<T, UuidsDeleteManyArgs>
+    deleteMany<T extends FloatsDeleteManyArgs>(
+      args?: SelectSubset<T, FloatsDeleteManyArgs>
     ): PrismaPromise<BatchPayload>
 
     /**
-     * Update zero or more Uuids.
+     * Update zero or more Floats.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {UuidsUpdateManyArgs} args - Arguments to update one or more rows.
+     * @param {FloatsUpdateManyArgs} args - Arguments to update one or more rows.
      * @example
-     * // Update many Uuids
-     * const uuids = await prisma.uuids.updateMany({
+     * // Update many Floats
+     * const floats = await prisma.floats.updateMany({
      *   where: {
      *     // ... provide filter here
      *   },
@@ -6130,59 +5122,59 @@ export namespace Prisma {
      * })
      * 
     **/
-    updateMany<T extends UuidsUpdateManyArgs>(
-      args: SelectSubset<T, UuidsUpdateManyArgs>
+    updateMany<T extends FloatsUpdateManyArgs>(
+      args: SelectSubset<T, FloatsUpdateManyArgs>
     ): PrismaPromise<BatchPayload>
 
     /**
-     * Create or update one Uuids.
-     * @param {UuidsUpsertArgs} args - Arguments to update or create a Uuids.
+     * Create or update one Floats.
+     * @param {FloatsUpsertArgs} args - Arguments to update or create a Floats.
      * @example
-     * // Update or create a Uuids
-     * const uuids = await prisma.uuids.upsert({
+     * // Update or create a Floats
+     * const floats = await prisma.floats.upsert({
      *   create: {
-     *     // ... data to create a Uuids
+     *     // ... data to create a Floats
      *   },
      *   update: {
      *     // ... in case it already exists, update
      *   },
      *   where: {
-     *     // ... the filter for the Uuids we want to update
+     *     // ... the filter for the Floats we want to update
      *   }
      * })
     **/
-    upsert<T extends UuidsUpsertArgs>(
-      args: SelectSubset<T, UuidsUpsertArgs>
-    ): Prisma__UuidsClient<UuidsGetPayload<T>>
+    upsert<T extends FloatsUpsertArgs>(
+      args: SelectSubset<T, FloatsUpsertArgs>
+    ): Prisma__FloatsClient<FloatsGetPayload<T>>
 
     /**
-     * Count the number of Uuids.
+     * Count the number of Floats.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {UuidsCountArgs} args - Arguments to filter Uuids to count.
+     * @param {FloatsCountArgs} args - Arguments to filter Floats to count.
      * @example
-     * // Count the number of Uuids
-     * const count = await prisma.uuids.count({
+     * // Count the number of Floats
+     * const count = await prisma.floats.count({
      *   where: {
-     *     // ... the filter for the Uuids we want to count
+     *     // ... the filter for the Floats we want to count
      *   }
      * })
     **/
-    count<T extends UuidsCountArgs>(
-      args?: Subset<T, UuidsCountArgs>,
+    count<T extends FloatsCountArgs>(
+      args?: Subset<T, FloatsCountArgs>,
     ): PrismaPromise<
       T extends _Record<'select', any>
         ? T['select'] extends true
           ? number
-          : GetScalarType<T['select'], UuidsCountAggregateOutputType>
+          : GetScalarType<T['select'], FloatsCountAggregateOutputType>
         : number
     >
 
     /**
-     * Allows you to perform aggregations operations on a Uuids.
+     * Allows you to perform aggregations operations on a Floats.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {UuidsAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @param {FloatsAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
      * @example
      * // Ordered by age ascending
      * // Where email contains prisma.io
@@ -6202,13 +5194,13 @@ export namespace Prisma {
      *   take: 10,
      * })
     **/
-    aggregate<T extends UuidsAggregateArgs>(args: Subset<T, UuidsAggregateArgs>): PrismaPromise<GetUuidsAggregateType<T>>
+    aggregate<T extends FloatsAggregateArgs>(args: Subset<T, FloatsAggregateArgs>): PrismaPromise<GetFloatsAggregateType<T>>
 
     /**
-     * Group by Uuids.
+     * Group by Floats.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {UuidsGroupByArgs} args - Group by arguments.
+     * @param {FloatsGroupByArgs} args - Group by arguments.
      * @example
      * // Group by city, order by createdAt, get count
      * const result = await prisma.user.groupBy({
@@ -6223,14 +5215,14 @@ export namespace Prisma {
      * 
     **/
     groupBy<
-      T extends UuidsGroupByArgs,
+      T extends FloatsGroupByArgs,
       HasSelectOrTake extends Or<
         Extends<'skip', Keys<T>>,
         Extends<'take', Keys<T>>
       >,
       OrderByArg extends True extends HasSelectOrTake
-        ? { orderBy: UuidsGroupByArgs['orderBy'] }
-        : { orderBy?: UuidsGroupByArgs['orderBy'] },
+        ? { orderBy: FloatsGroupByArgs['orderBy'] }
+        : { orderBy?: FloatsGroupByArgs['orderBy'] },
       OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
       ByFields extends TupleToUnion<T['by']>,
       ByValid extends Has<ByFields, OrderFields>,
@@ -6279,17 +5271,17 @@ export namespace Prisma {
             ? never
             : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
         }[OrderFields]
-    >(args: SubsetIntersection<T, UuidsGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetUuidsGroupByPayload<T> : PrismaPromise<InputErrors>
+    >(args: SubsetIntersection<T, FloatsGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetFloatsGroupByPayload<T> : PrismaPromise<InputErrors>
 
   }
 
   /**
-   * The delegate class that acts as a "Promise-like" for Uuids.
+   * The delegate class that acts as a "Promise-like" for Floats.
    * Why is this prefixed with `Prisma__`?
    * Because we want to prevent naming conflicts as mentioned in
    * https://github.com/prisma/prisma-client-js/issues/707
    */
-  export class Prisma__UuidsClient<T, Null = never> implements PrismaPromise<T> {
+  export class Prisma__FloatsClient<T, Null = never> implements PrismaPromise<T> {
     [prisma]: true;
     private readonly _dmmf;
     private readonly _fetcher;
@@ -6335,25 +5327,25 @@ export namespace Prisma {
   // Custom InputTypes
 
   /**
-   * Uuids base type for findUnique actions
+   * Floats base type for findUnique actions
    */
-  export type UuidsFindUniqueArgsBase = {
+  export type FloatsFindUniqueArgsBase = {
     /**
-     * Select specific fields to fetch from the Uuids
+     * Select specific fields to fetch from the Floats
      * 
     **/
-    select?: UuidsSelect | null
+    select?: FloatsSelect | null
     /**
-     * Filter, which Uuids to fetch.
+     * Filter, which Floats to fetch.
      * 
     **/
-    where: UuidsWhereUniqueInput
+    where: FloatsWhereUniqueInput
   }
 
   /**
-   * Uuids findUnique
+   * Floats findUnique
    */
-  export interface UuidsFindUniqueArgs extends UuidsFindUniqueArgsBase {
+  export interface FloatsFindUniqueArgs extends FloatsFindUniqueArgsBase {
    /**
     * Throw an Error if query returns no results
     * @deprecated since 4.0.0: use `findUniqueOrThrow` method instead
@@ -6363,77 +5355,77 @@ export namespace Prisma {
       
 
   /**
-   * Uuids findUniqueOrThrow
+   * Floats findUniqueOrThrow
    */
-  export type UuidsFindUniqueOrThrowArgs = {
+  export type FloatsFindUniqueOrThrowArgs = {
     /**
-     * Select specific fields to fetch from the Uuids
+     * Select specific fields to fetch from the Floats
      * 
     **/
-    select?: UuidsSelect | null
+    select?: FloatsSelect | null
     /**
-     * Filter, which Uuids to fetch.
+     * Filter, which Floats to fetch.
      * 
     **/
-    where: UuidsWhereUniqueInput
+    where: FloatsWhereUniqueInput
   }
 
 
   /**
-   * Uuids base type for findFirst actions
+   * Floats base type for findFirst actions
    */
-  export type UuidsFindFirstArgsBase = {
+  export type FloatsFindFirstArgsBase = {
     /**
-     * Select specific fields to fetch from the Uuids
+     * Select specific fields to fetch from the Floats
      * 
     **/
-    select?: UuidsSelect | null
+    select?: FloatsSelect | null
     /**
-     * Filter, which Uuids to fetch.
+     * Filter, which Floats to fetch.
      * 
     **/
-    where?: UuidsWhereInput
+    where?: FloatsWhereInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
      * 
-     * Determine the order of Uuids to fetch.
+     * Determine the order of Floats to fetch.
      * 
     **/
-    orderBy?: Enumerable<UuidsOrderByWithRelationInput>
+    orderBy?: Enumerable<FloatsOrderByWithRelationInput>
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
      * 
-     * Sets the position for searching for Uuids.
+     * Sets the position for searching for Floats.
      * 
     **/
-    cursor?: UuidsWhereUniqueInput
+    cursor?: FloatsWhereUniqueInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Take `±n` Uuids from the position of the cursor.
+     * Take `±n` Floats from the position of the cursor.
      * 
     **/
     take?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Skip the first `n` Uuids.
+     * Skip the first `n` Floats.
      * 
     **/
     skip?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
      * 
-     * Filter by unique combinations of Uuids.
+     * Filter by unique combinations of Floats.
      * 
     **/
-    distinct?: Enumerable<UuidsScalarFieldEnum>
+    distinct?: Enumerable<FloatsScalarFieldEnum>
   }
 
   /**
-   * Uuids findFirst
+   * Floats findFirst
    */
-  export interface UuidsFindFirstArgs extends UuidsFindFirstArgsBase {
+  export interface FloatsFindFirstArgs extends FloatsFindFirstArgsBase {
    /**
     * Throw an Error if query returns no results
     * @deprecated since 4.0.0: use `findFirstOrThrow` method instead
@@ -6443,237 +5435,237 @@ export namespace Prisma {
       
 
   /**
-   * Uuids findFirstOrThrow
+   * Floats findFirstOrThrow
    */
-  export type UuidsFindFirstOrThrowArgs = {
+  export type FloatsFindFirstOrThrowArgs = {
     /**
-     * Select specific fields to fetch from the Uuids
+     * Select specific fields to fetch from the Floats
      * 
     **/
-    select?: UuidsSelect | null
+    select?: FloatsSelect | null
     /**
-     * Filter, which Uuids to fetch.
+     * Filter, which Floats to fetch.
      * 
     **/
-    where?: UuidsWhereInput
+    where?: FloatsWhereInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
      * 
-     * Determine the order of Uuids to fetch.
+     * Determine the order of Floats to fetch.
      * 
     **/
-    orderBy?: Enumerable<UuidsOrderByWithRelationInput>
+    orderBy?: Enumerable<FloatsOrderByWithRelationInput>
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
      * 
-     * Sets the position for searching for Uuids.
+     * Sets the position for searching for Floats.
      * 
     **/
-    cursor?: UuidsWhereUniqueInput
+    cursor?: FloatsWhereUniqueInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Take `±n` Uuids from the position of the cursor.
+     * Take `±n` Floats from the position of the cursor.
      * 
     **/
     take?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Skip the first `n` Uuids.
+     * Skip the first `n` Floats.
      * 
     **/
     skip?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
      * 
-     * Filter by unique combinations of Uuids.
+     * Filter by unique combinations of Floats.
      * 
     **/
-    distinct?: Enumerable<UuidsScalarFieldEnum>
+    distinct?: Enumerable<FloatsScalarFieldEnum>
   }
 
 
   /**
-   * Uuids findMany
+   * Floats findMany
    */
-  export type UuidsFindManyArgs = {
+  export type FloatsFindManyArgs = {
     /**
-     * Select specific fields to fetch from the Uuids
+     * Select specific fields to fetch from the Floats
      * 
     **/
-    select?: UuidsSelect | null
+    select?: FloatsSelect | null
     /**
-     * Filter, which Uuids to fetch.
+     * Filter, which Floats to fetch.
      * 
     **/
-    where?: UuidsWhereInput
+    where?: FloatsWhereInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
      * 
-     * Determine the order of Uuids to fetch.
+     * Determine the order of Floats to fetch.
      * 
     **/
-    orderBy?: Enumerable<UuidsOrderByWithRelationInput>
+    orderBy?: Enumerable<FloatsOrderByWithRelationInput>
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
      * 
-     * Sets the position for listing Uuids.
+     * Sets the position for listing Floats.
      * 
     **/
-    cursor?: UuidsWhereUniqueInput
+    cursor?: FloatsWhereUniqueInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Take `±n` Uuids from the position of the cursor.
+     * Take `±n` Floats from the position of the cursor.
      * 
     **/
     take?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Skip the first `n` Uuids.
+     * Skip the first `n` Floats.
      * 
     **/
     skip?: number
-    distinct?: Enumerable<UuidsScalarFieldEnum>
+    distinct?: Enumerable<FloatsScalarFieldEnum>
   }
 
 
   /**
-   * Uuids create
+   * Floats create
    */
-  export type UuidsCreateArgs = {
+  export type FloatsCreateArgs = {
     /**
-     * Select specific fields to fetch from the Uuids
+     * Select specific fields to fetch from the Floats
      * 
     **/
-    select?: UuidsSelect | null
+    select?: FloatsSelect | null
     /**
-     * The data needed to create a Uuids.
+     * The data needed to create a Floats.
      * 
     **/
-    data: XOR<UuidsCreateInput, UuidsUncheckedCreateInput>
+    data: XOR<FloatsCreateInput, FloatsUncheckedCreateInput>
   }
 
 
   /**
-   * Uuids createMany
+   * Floats createMany
    */
-  export type UuidsCreateManyArgs = {
+  export type FloatsCreateManyArgs = {
     /**
-     * The data used to create many Uuids.
+     * The data used to create many Floats.
      * 
     **/
-    data: Enumerable<UuidsCreateManyInput>
+    data: Enumerable<FloatsCreateManyInput>
     skipDuplicates?: boolean
   }
 
 
   /**
-   * Uuids update
+   * Floats update
    */
-  export type UuidsUpdateArgs = {
+  export type FloatsUpdateArgs = {
     /**
-     * Select specific fields to fetch from the Uuids
+     * Select specific fields to fetch from the Floats
      * 
     **/
-    select?: UuidsSelect | null
+    select?: FloatsSelect | null
     /**
-     * The data needed to update a Uuids.
+     * The data needed to update a Floats.
      * 
     **/
-    data: XOR<UuidsUpdateInput, UuidsUncheckedUpdateInput>
+    data: XOR<FloatsUpdateInput, FloatsUncheckedUpdateInput>
     /**
-     * Choose, which Uuids to update.
+     * Choose, which Floats to update.
      * 
     **/
-    where: UuidsWhereUniqueInput
+    where: FloatsWhereUniqueInput
   }
 
 
   /**
-   * Uuids updateMany
+   * Floats updateMany
    */
-  export type UuidsUpdateManyArgs = {
+  export type FloatsUpdateManyArgs = {
     /**
-     * The data used to update Uuids.
+     * The data used to update Floats.
      * 
     **/
-    data: XOR<UuidsUpdateManyMutationInput, UuidsUncheckedUpdateManyInput>
+    data: XOR<FloatsUpdateManyMutationInput, FloatsUncheckedUpdateManyInput>
     /**
-     * Filter which Uuids to update
+     * Filter which Floats to update
      * 
     **/
-    where?: UuidsWhereInput
+    where?: FloatsWhereInput
   }
 
 
   /**
-   * Uuids upsert
+   * Floats upsert
    */
-  export type UuidsUpsertArgs = {
+  export type FloatsUpsertArgs = {
     /**
-     * Select specific fields to fetch from the Uuids
+     * Select specific fields to fetch from the Floats
      * 
     **/
-    select?: UuidsSelect | null
+    select?: FloatsSelect | null
     /**
-     * The filter to search for the Uuids to update in case it exists.
+     * The filter to search for the Floats to update in case it exists.
      * 
     **/
-    where: UuidsWhereUniqueInput
+    where: FloatsWhereUniqueInput
     /**
-     * In case the Uuids found by the `where` argument doesn't exist, create a new Uuids with this data.
+     * In case the Floats found by the `where` argument doesn't exist, create a new Floats with this data.
      * 
     **/
-    create: XOR<UuidsCreateInput, UuidsUncheckedCreateInput>
+    create: XOR<FloatsCreateInput, FloatsUncheckedCreateInput>
     /**
-     * In case the Uuids was found with the provided `where` argument, update it with this data.
+     * In case the Floats was found with the provided `where` argument, update it with this data.
      * 
     **/
-    update: XOR<UuidsUpdateInput, UuidsUncheckedUpdateInput>
+    update: XOR<FloatsUpdateInput, FloatsUncheckedUpdateInput>
   }
 
 
   /**
-   * Uuids delete
+   * Floats delete
    */
-  export type UuidsDeleteArgs = {
+  export type FloatsDeleteArgs = {
     /**
-     * Select specific fields to fetch from the Uuids
+     * Select specific fields to fetch from the Floats
      * 
     **/
-    select?: UuidsSelect | null
+    select?: FloatsSelect | null
     /**
-     * Filter which Uuids to delete.
+     * Filter which Floats to delete.
      * 
     **/
-    where: UuidsWhereUniqueInput
+    where: FloatsWhereUniqueInput
   }
 
 
   /**
-   * Uuids deleteMany
+   * Floats deleteMany
    */
-  export type UuidsDeleteManyArgs = {
+  export type FloatsDeleteManyArgs = {
     /**
-     * Filter which Uuids to delete
+     * Filter which Floats to delete
      * 
     **/
-    where?: UuidsWhereInput
+    where?: FloatsWhereInput
   }
 
 
   /**
-   * Uuids without action
+   * Floats without action
    */
-  export type UuidsArgs = {
+  export type FloatsArgs = {
     /**
-     * Select specific fields to fetch from the Uuids
+     * Select specific fields to fetch from the Floats
      * 
     **/
-    select?: UuidsSelect | null
+    select?: FloatsSelect | null
   }
 
 
@@ -7642,362 +6634,398 @@ export namespace Prisma {
 
 
   /**
-   * Model Floats
+   * Model Items
    */
 
 
-  export type AggregateFloats = {
-    _count: FloatsCountAggregateOutputType | null
-    _avg: FloatsAvgAggregateOutputType | null
-    _sum: FloatsSumAggregateOutputType | null
-    _min: FloatsMinAggregateOutputType | null
-    _max: FloatsMaxAggregateOutputType | null
+  export type AggregateItems = {
+    _count: ItemsCountAggregateOutputType | null
+    _avg: ItemsAvgAggregateOutputType | null
+    _sum: ItemsSumAggregateOutputType | null
+    _min: ItemsMinAggregateOutputType | null
+    _max: ItemsMaxAggregateOutputType | null
   }
 
-  export type FloatsAvgAggregateOutputType = {
-    f4: number | null
-    f8: number | null
+  export type ItemsAvgAggregateOutputType = {
+    intvalue_null: number | null
+    intvalue_null_default: number | null
   }
 
-  export type FloatsSumAggregateOutputType = {
-    f4: number | null
-    f8: number | null
+  export type ItemsSumAggregateOutputType = {
+    intvalue_null: number | null
+    intvalue_null_default: number | null
   }
 
-  export type FloatsMinAggregateOutputType = {
+  export type ItemsMinAggregateOutputType = {
     id: string | null
-    f4: number | null
-    f8: number | null
+    content: string | null
+    content_text_null: string | null
+    content_text_null_default: string | null
+    intvalue_null: number | null
+    intvalue_null_default: number | null
   }
 
-  export type FloatsMaxAggregateOutputType = {
+  export type ItemsMaxAggregateOutputType = {
     id: string | null
-    f4: number | null
-    f8: number | null
+    content: string | null
+    content_text_null: string | null
+    content_text_null_default: string | null
+    intvalue_null: number | null
+    intvalue_null_default: number | null
   }
 
-  export type FloatsCountAggregateOutputType = {
+  export type ItemsCountAggregateOutputType = {
     id: number
-    f4: number
-    f8: number
+    content: number
+    content_text_null: number
+    content_text_null_default: number
+    intvalue_null: number
+    intvalue_null_default: number
     _all: number
   }
 
 
-  export type FloatsAvgAggregateInputType = {
-    f4?: true
-    f8?: true
+  export type ItemsAvgAggregateInputType = {
+    intvalue_null?: true
+    intvalue_null_default?: true
   }
 
-  export type FloatsSumAggregateInputType = {
-    f4?: true
-    f8?: true
+  export type ItemsSumAggregateInputType = {
+    intvalue_null?: true
+    intvalue_null_default?: true
   }
 
-  export type FloatsMinAggregateInputType = {
+  export type ItemsMinAggregateInputType = {
     id?: true
-    f4?: true
-    f8?: true
+    content?: true
+    content_text_null?: true
+    content_text_null_default?: true
+    intvalue_null?: true
+    intvalue_null_default?: true
   }
 
-  export type FloatsMaxAggregateInputType = {
+  export type ItemsMaxAggregateInputType = {
     id?: true
-    f4?: true
-    f8?: true
+    content?: true
+    content_text_null?: true
+    content_text_null_default?: true
+    intvalue_null?: true
+    intvalue_null_default?: true
   }
 
-  export type FloatsCountAggregateInputType = {
+  export type ItemsCountAggregateInputType = {
     id?: true
-    f4?: true
-    f8?: true
+    content?: true
+    content_text_null?: true
+    content_text_null_default?: true
+    intvalue_null?: true
+    intvalue_null_default?: true
     _all?: true
   }
 
-  export type FloatsAggregateArgs = {
+  export type ItemsAggregateArgs = {
     /**
-     * Filter which Floats to aggregate.
+     * Filter which Items to aggregate.
      * 
     **/
-    where?: FloatsWhereInput
+    where?: ItemsWhereInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
      * 
-     * Determine the order of Floats to fetch.
+     * Determine the order of Items to fetch.
      * 
     **/
-    orderBy?: Enumerable<FloatsOrderByWithRelationInput>
+    orderBy?: Enumerable<ItemsOrderByWithRelationInput>
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
      * 
      * Sets the start position
      * 
     **/
-    cursor?: FloatsWhereUniqueInput
+    cursor?: ItemsWhereUniqueInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Take `±n` Floats from the position of the cursor.
+     * Take `±n` Items from the position of the cursor.
      * 
     **/
     take?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Skip the first `n` Floats.
+     * Skip the first `n` Items.
      * 
     **/
     skip?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
      * 
-     * Count returned Floats
+     * Count returned Items
     **/
-    _count?: true | FloatsCountAggregateInputType
+    _count?: true | ItemsCountAggregateInputType
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
      * 
      * Select which fields to average
     **/
-    _avg?: FloatsAvgAggregateInputType
+    _avg?: ItemsAvgAggregateInputType
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
      * 
      * Select which fields to sum
     **/
-    _sum?: FloatsSumAggregateInputType
+    _sum?: ItemsSumAggregateInputType
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
      * 
      * Select which fields to find the minimum value
     **/
-    _min?: FloatsMinAggregateInputType
+    _min?: ItemsMinAggregateInputType
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
      * 
      * Select which fields to find the maximum value
     **/
-    _max?: FloatsMaxAggregateInputType
+    _max?: ItemsMaxAggregateInputType
   }
 
-  export type GetFloatsAggregateType<T extends FloatsAggregateArgs> = {
-        [P in keyof T & keyof AggregateFloats]: P extends '_count' | 'count'
+  export type GetItemsAggregateType<T extends ItemsAggregateArgs> = {
+        [P in keyof T & keyof AggregateItems]: P extends '_count' | 'count'
       ? T[P] extends true
         ? number
-        : GetScalarType<T[P], AggregateFloats[P]>
-      : GetScalarType<T[P], AggregateFloats[P]>
+        : GetScalarType<T[P], AggregateItems[P]>
+      : GetScalarType<T[P], AggregateItems[P]>
   }
 
 
 
 
-  export type FloatsGroupByArgs = {
-    where?: FloatsWhereInput
-    orderBy?: Enumerable<FloatsOrderByWithAggregationInput>
-    by: Array<FloatsScalarFieldEnum>
-    having?: FloatsScalarWhereWithAggregatesInput
+  export type ItemsGroupByArgs = {
+    where?: ItemsWhereInput
+    orderBy?: Enumerable<ItemsOrderByWithAggregationInput>
+    by: Array<ItemsScalarFieldEnum>
+    having?: ItemsScalarWhereWithAggregatesInput
     take?: number
     skip?: number
-    _count?: FloatsCountAggregateInputType | true
-    _avg?: FloatsAvgAggregateInputType
-    _sum?: FloatsSumAggregateInputType
-    _min?: FloatsMinAggregateInputType
-    _max?: FloatsMaxAggregateInputType
+    _count?: ItemsCountAggregateInputType | true
+    _avg?: ItemsAvgAggregateInputType
+    _sum?: ItemsSumAggregateInputType
+    _min?: ItemsMinAggregateInputType
+    _max?: ItemsMaxAggregateInputType
   }
 
 
-  export type FloatsGroupByOutputType = {
+  export type ItemsGroupByOutputType = {
     id: string
-    f4: number | null
-    f8: number | null
-    _count: FloatsCountAggregateOutputType | null
-    _avg: FloatsAvgAggregateOutputType | null
-    _sum: FloatsSumAggregateOutputType | null
-    _min: FloatsMinAggregateOutputType | null
-    _max: FloatsMaxAggregateOutputType | null
+    content: string
+    content_text_null: string | null
+    content_text_null_default: string | null
+    intvalue_null: number | null
+    intvalue_null_default: number | null
+    _count: ItemsCountAggregateOutputType | null
+    _avg: ItemsAvgAggregateOutputType | null
+    _sum: ItemsSumAggregateOutputType | null
+    _min: ItemsMinAggregateOutputType | null
+    _max: ItemsMaxAggregateOutputType | null
   }
 
-  type GetFloatsGroupByPayload<T extends FloatsGroupByArgs> = PrismaPromise<
+  type GetItemsGroupByPayload<T extends ItemsGroupByArgs> = PrismaPromise<
     Array<
-      PickArray<FloatsGroupByOutputType, T['by']> &
+      PickArray<ItemsGroupByOutputType, T['by']> &
         {
-          [P in ((keyof T) & (keyof FloatsGroupByOutputType))]: P extends '_count'
+          [P in ((keyof T) & (keyof ItemsGroupByOutputType))]: P extends '_count'
             ? T[P] extends boolean
               ? number
-              : GetScalarType<T[P], FloatsGroupByOutputType[P]>
-            : GetScalarType<T[P], FloatsGroupByOutputType[P]>
+              : GetScalarType<T[P], ItemsGroupByOutputType[P]>
+            : GetScalarType<T[P], ItemsGroupByOutputType[P]>
         }
       >
     >
 
 
-  export type FloatsSelect = {
+  export type ItemsSelect = {
     id?: boolean
-    f4?: boolean
-    f8?: boolean
+    content?: boolean
+    content_text_null?: boolean
+    content_text_null_default?: boolean
+    intvalue_null?: boolean
+    intvalue_null_default?: boolean
+    other_items?: boolean | Items$other_itemsArgs
+    _count?: boolean | ItemsCountOutputTypeArgs
   }
 
 
-  export type FloatsGetPayload<S extends boolean | null | undefined | FloatsArgs> =
+  export type ItemsInclude = {
+    other_items?: boolean | Items$other_itemsArgs
+    _count?: boolean | ItemsCountOutputTypeArgs
+  } 
+
+  export type ItemsGetPayload<S extends boolean | null | undefined | ItemsArgs> =
     S extends { select: any, include: any } ? 'Please either choose `select` or `include`' :
-    S extends true ? Floats :
+    S extends true ? Items :
     S extends undefined ? never :
-    S extends { include: any } & (FloatsArgs | FloatsFindManyArgs)
-    ? Floats 
-    : S extends { select: any } & (FloatsArgs | FloatsFindManyArgs)
+    S extends { include: any } & (ItemsArgs | ItemsFindManyArgs)
+    ? Items  & {
+    [P in TruthyKeys<S['include']>]:
+        P extends 'other_items' ? Array < Other_itemsGetPayload<S['include'][P]>>  :
+        P extends '_count' ? ItemsCountOutputTypeGetPayload<S['include'][P]> :  never
+  } 
+    : S extends { select: any } & (ItemsArgs | ItemsFindManyArgs)
       ? {
     [P in TruthyKeys<S['select']>]:
-    P extends keyof Floats ? Floats[P] : never
+        P extends 'other_items' ? Array < Other_itemsGetPayload<S['select'][P]>>  :
+        P extends '_count' ? ItemsCountOutputTypeGetPayload<S['select'][P]> :  P extends keyof Items ? Items[P] : never
   } 
-      : Floats
+      : Items
 
 
-  type FloatsCountArgs = Merge<
-    Omit<FloatsFindManyArgs, 'select' | 'include'> & {
-      select?: FloatsCountAggregateInputType | true
+  type ItemsCountArgs = Merge<
+    Omit<ItemsFindManyArgs, 'select' | 'include'> & {
+      select?: ItemsCountAggregateInputType | true
     }
   >
 
-  export interface FloatsDelegate<GlobalRejectSettings extends Prisma.RejectOnNotFound | Prisma.RejectPerOperation | false | undefined> {
+  export interface ItemsDelegate<GlobalRejectSettings extends Prisma.RejectOnNotFound | Prisma.RejectPerOperation | false | undefined> {
     /**
-     * Find zero or one Floats that matches the filter.
-     * @param {FloatsFindUniqueArgs} args - Arguments to find a Floats
+     * Find zero or one Items that matches the filter.
+     * @param {ItemsFindUniqueArgs} args - Arguments to find a Items
      * @example
-     * // Get one Floats
-     * const floats = await prisma.floats.findUnique({
+     * // Get one Items
+     * const items = await prisma.items.findUnique({
      *   where: {
      *     // ... provide filter here
      *   }
      * })
     **/
-    findUnique<T extends FloatsFindUniqueArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
-      args: SelectSubset<T, FloatsFindUniqueArgs>
-    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findUnique', 'Floats'> extends True ? Prisma__FloatsClient<FloatsGetPayload<T>> : Prisma__FloatsClient<FloatsGetPayload<T> | null, null>
+    findUnique<T extends ItemsFindUniqueArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
+      args: SelectSubset<T, ItemsFindUniqueArgs>
+    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findUnique', 'Items'> extends True ? Prisma__ItemsClient<ItemsGetPayload<T>> : Prisma__ItemsClient<ItemsGetPayload<T> | null, null>
 
     /**
-     * Find one Floats that matches the filter or throw an error  with `error.code='P2025'` 
+     * Find one Items that matches the filter or throw an error  with `error.code='P2025'` 
      *     if no matches were found.
-     * @param {FloatsFindUniqueOrThrowArgs} args - Arguments to find a Floats
+     * @param {ItemsFindUniqueOrThrowArgs} args - Arguments to find a Items
      * @example
-     * // Get one Floats
-     * const floats = await prisma.floats.findUniqueOrThrow({
+     * // Get one Items
+     * const items = await prisma.items.findUniqueOrThrow({
      *   where: {
      *     // ... provide filter here
      *   }
      * })
     **/
-    findUniqueOrThrow<T extends FloatsFindUniqueOrThrowArgs>(
-      args?: SelectSubset<T, FloatsFindUniqueOrThrowArgs>
-    ): Prisma__FloatsClient<FloatsGetPayload<T>>
+    findUniqueOrThrow<T extends ItemsFindUniqueOrThrowArgs>(
+      args?: SelectSubset<T, ItemsFindUniqueOrThrowArgs>
+    ): Prisma__ItemsClient<ItemsGetPayload<T>>
 
     /**
-     * Find the first Floats that matches the filter.
+     * Find the first Items that matches the filter.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {FloatsFindFirstArgs} args - Arguments to find a Floats
+     * @param {ItemsFindFirstArgs} args - Arguments to find a Items
      * @example
-     * // Get one Floats
-     * const floats = await prisma.floats.findFirst({
+     * // Get one Items
+     * const items = await prisma.items.findFirst({
      *   where: {
      *     // ... provide filter here
      *   }
      * })
     **/
-    findFirst<T extends FloatsFindFirstArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
-      args?: SelectSubset<T, FloatsFindFirstArgs>
-    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findFirst', 'Floats'> extends True ? Prisma__FloatsClient<FloatsGetPayload<T>> : Prisma__FloatsClient<FloatsGetPayload<T> | null, null>
+    findFirst<T extends ItemsFindFirstArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
+      args?: SelectSubset<T, ItemsFindFirstArgs>
+    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findFirst', 'Items'> extends True ? Prisma__ItemsClient<ItemsGetPayload<T>> : Prisma__ItemsClient<ItemsGetPayload<T> | null, null>
 
     /**
-     * Find the first Floats that matches the filter or
+     * Find the first Items that matches the filter or
      * throw `NotFoundError` if no matches were found.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {FloatsFindFirstOrThrowArgs} args - Arguments to find a Floats
+     * @param {ItemsFindFirstOrThrowArgs} args - Arguments to find a Items
      * @example
-     * // Get one Floats
-     * const floats = await prisma.floats.findFirstOrThrow({
+     * // Get one Items
+     * const items = await prisma.items.findFirstOrThrow({
      *   where: {
      *     // ... provide filter here
      *   }
      * })
     **/
-    findFirstOrThrow<T extends FloatsFindFirstOrThrowArgs>(
-      args?: SelectSubset<T, FloatsFindFirstOrThrowArgs>
-    ): Prisma__FloatsClient<FloatsGetPayload<T>>
+    findFirstOrThrow<T extends ItemsFindFirstOrThrowArgs>(
+      args?: SelectSubset<T, ItemsFindFirstOrThrowArgs>
+    ): Prisma__ItemsClient<ItemsGetPayload<T>>
 
     /**
-     * Find zero or more Floats that matches the filter.
+     * Find zero or more Items that matches the filter.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {FloatsFindManyArgs=} args - Arguments to filter and select certain fields only.
+     * @param {ItemsFindManyArgs=} args - Arguments to filter and select certain fields only.
      * @example
-     * // Get all Floats
-     * const floats = await prisma.floats.findMany()
+     * // Get all Items
+     * const items = await prisma.items.findMany()
      * 
-     * // Get first 10 Floats
-     * const floats = await prisma.floats.findMany({ take: 10 })
+     * // Get first 10 Items
+     * const items = await prisma.items.findMany({ take: 10 })
      * 
      * // Only select the `id`
-     * const floatsWithIdOnly = await prisma.floats.findMany({ select: { id: true } })
+     * const itemsWithIdOnly = await prisma.items.findMany({ select: { id: true } })
      * 
     **/
-    findMany<T extends FloatsFindManyArgs>(
-      args?: SelectSubset<T, FloatsFindManyArgs>
-    ): PrismaPromise<Array<FloatsGetPayload<T>>>
+    findMany<T extends ItemsFindManyArgs>(
+      args?: SelectSubset<T, ItemsFindManyArgs>
+    ): PrismaPromise<Array<ItemsGetPayload<T>>>
 
     /**
-     * Create a Floats.
-     * @param {FloatsCreateArgs} args - Arguments to create a Floats.
+     * Create a Items.
+     * @param {ItemsCreateArgs} args - Arguments to create a Items.
      * @example
-     * // Create one Floats
-     * const Floats = await prisma.floats.create({
+     * // Create one Items
+     * const Items = await prisma.items.create({
      *   data: {
-     *     // ... data to create a Floats
+     *     // ... data to create a Items
      *   }
      * })
      * 
     **/
-    create<T extends FloatsCreateArgs>(
-      args: SelectSubset<T, FloatsCreateArgs>
-    ): Prisma__FloatsClient<FloatsGetPayload<T>>
+    create<T extends ItemsCreateArgs>(
+      args: SelectSubset<T, ItemsCreateArgs>
+    ): Prisma__ItemsClient<ItemsGetPayload<T>>
 
     /**
-     * Create many Floats.
-     *     @param {FloatsCreateManyArgs} args - Arguments to create many Floats.
+     * Create many Items.
+     *     @param {ItemsCreateManyArgs} args - Arguments to create many Items.
      *     @example
-     *     // Create many Floats
-     *     const floats = await prisma.floats.createMany({
+     *     // Create many Items
+     *     const items = await prisma.items.createMany({
      *       data: {
      *         // ... provide data here
      *       }
      *     })
      *     
     **/
-    createMany<T extends FloatsCreateManyArgs>(
-      args?: SelectSubset<T, FloatsCreateManyArgs>
+    createMany<T extends ItemsCreateManyArgs>(
+      args?: SelectSubset<T, ItemsCreateManyArgs>
     ): PrismaPromise<BatchPayload>
 
     /**
-     * Delete a Floats.
-     * @param {FloatsDeleteArgs} args - Arguments to delete one Floats.
+     * Delete a Items.
+     * @param {ItemsDeleteArgs} args - Arguments to delete one Items.
      * @example
-     * // Delete one Floats
-     * const Floats = await prisma.floats.delete({
+     * // Delete one Items
+     * const Items = await prisma.items.delete({
      *   where: {
-     *     // ... filter to delete one Floats
+     *     // ... filter to delete one Items
      *   }
      * })
      * 
     **/
-    delete<T extends FloatsDeleteArgs>(
-      args: SelectSubset<T, FloatsDeleteArgs>
-    ): Prisma__FloatsClient<FloatsGetPayload<T>>
+    delete<T extends ItemsDeleteArgs>(
+      args: SelectSubset<T, ItemsDeleteArgs>
+    ): Prisma__ItemsClient<ItemsGetPayload<T>>
 
     /**
-     * Update one Floats.
-     * @param {FloatsUpdateArgs} args - Arguments to update one Floats.
+     * Update one Items.
+     * @param {ItemsUpdateArgs} args - Arguments to update one Items.
      * @example
-     * // Update one Floats
-     * const floats = await prisma.floats.update({
+     * // Update one Items
+     * const items = await prisma.items.update({
      *   where: {
      *     // ... provide filter here
      *   },
@@ -8007,34 +7035,34 @@ export namespace Prisma {
      * })
      * 
     **/
-    update<T extends FloatsUpdateArgs>(
-      args: SelectSubset<T, FloatsUpdateArgs>
-    ): Prisma__FloatsClient<FloatsGetPayload<T>>
+    update<T extends ItemsUpdateArgs>(
+      args: SelectSubset<T, ItemsUpdateArgs>
+    ): Prisma__ItemsClient<ItemsGetPayload<T>>
 
     /**
-     * Delete zero or more Floats.
-     * @param {FloatsDeleteManyArgs} args - Arguments to filter Floats to delete.
+     * Delete zero or more Items.
+     * @param {ItemsDeleteManyArgs} args - Arguments to filter Items to delete.
      * @example
-     * // Delete a few Floats
-     * const { count } = await prisma.floats.deleteMany({
+     * // Delete a few Items
+     * const { count } = await prisma.items.deleteMany({
      *   where: {
      *     // ... provide filter here
      *   }
      * })
      * 
     **/
-    deleteMany<T extends FloatsDeleteManyArgs>(
-      args?: SelectSubset<T, FloatsDeleteManyArgs>
+    deleteMany<T extends ItemsDeleteManyArgs>(
+      args?: SelectSubset<T, ItemsDeleteManyArgs>
     ): PrismaPromise<BatchPayload>
 
     /**
-     * Update zero or more Floats.
+     * Update zero or more Items.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {FloatsUpdateManyArgs} args - Arguments to update one or more rows.
+     * @param {ItemsUpdateManyArgs} args - Arguments to update one or more rows.
      * @example
-     * // Update many Floats
-     * const floats = await prisma.floats.updateMany({
+     * // Update many Items
+     * const items = await prisma.items.updateMany({
      *   where: {
      *     // ... provide filter here
      *   },
@@ -8044,59 +7072,59 @@ export namespace Prisma {
      * })
      * 
     **/
-    updateMany<T extends FloatsUpdateManyArgs>(
-      args: SelectSubset<T, FloatsUpdateManyArgs>
+    updateMany<T extends ItemsUpdateManyArgs>(
+      args: SelectSubset<T, ItemsUpdateManyArgs>
     ): PrismaPromise<BatchPayload>
 
     /**
-     * Create or update one Floats.
-     * @param {FloatsUpsertArgs} args - Arguments to update or create a Floats.
+     * Create or update one Items.
+     * @param {ItemsUpsertArgs} args - Arguments to update or create a Items.
      * @example
-     * // Update or create a Floats
-     * const floats = await prisma.floats.upsert({
+     * // Update or create a Items
+     * const items = await prisma.items.upsert({
      *   create: {
-     *     // ... data to create a Floats
+     *     // ... data to create a Items
      *   },
      *   update: {
      *     // ... in case it already exists, update
      *   },
      *   where: {
-     *     // ... the filter for the Floats we want to update
+     *     // ... the filter for the Items we want to update
      *   }
      * })
     **/
-    upsert<T extends FloatsUpsertArgs>(
-      args: SelectSubset<T, FloatsUpsertArgs>
-    ): Prisma__FloatsClient<FloatsGetPayload<T>>
+    upsert<T extends ItemsUpsertArgs>(
+      args: SelectSubset<T, ItemsUpsertArgs>
+    ): Prisma__ItemsClient<ItemsGetPayload<T>>
 
     /**
-     * Count the number of Floats.
+     * Count the number of Items.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {FloatsCountArgs} args - Arguments to filter Floats to count.
+     * @param {ItemsCountArgs} args - Arguments to filter Items to count.
      * @example
-     * // Count the number of Floats
-     * const count = await prisma.floats.count({
+     * // Count the number of Items
+     * const count = await prisma.items.count({
      *   where: {
-     *     // ... the filter for the Floats we want to count
+     *     // ... the filter for the Items we want to count
      *   }
      * })
     **/
-    count<T extends FloatsCountArgs>(
-      args?: Subset<T, FloatsCountArgs>,
+    count<T extends ItemsCountArgs>(
+      args?: Subset<T, ItemsCountArgs>,
     ): PrismaPromise<
       T extends _Record<'select', any>
         ? T['select'] extends true
           ? number
-          : GetScalarType<T['select'], FloatsCountAggregateOutputType>
+          : GetScalarType<T['select'], ItemsCountAggregateOutputType>
         : number
     >
 
     /**
-     * Allows you to perform aggregations operations on a Floats.
+     * Allows you to perform aggregations operations on a Items.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {FloatsAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @param {ItemsAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
      * @example
      * // Ordered by age ascending
      * // Where email contains prisma.io
@@ -8116,13 +7144,13 @@ export namespace Prisma {
      *   take: 10,
      * })
     **/
-    aggregate<T extends FloatsAggregateArgs>(args: Subset<T, FloatsAggregateArgs>): PrismaPromise<GetFloatsAggregateType<T>>
+    aggregate<T extends ItemsAggregateArgs>(args: Subset<T, ItemsAggregateArgs>): PrismaPromise<GetItemsAggregateType<T>>
 
     /**
-     * Group by Floats.
+     * Group by Items.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {FloatsGroupByArgs} args - Group by arguments.
+     * @param {ItemsGroupByArgs} args - Group by arguments.
      * @example
      * // Group by city, order by createdAt, get count
      * const result = await prisma.user.groupBy({
@@ -8137,14 +7165,14 @@ export namespace Prisma {
      * 
     **/
     groupBy<
-      T extends FloatsGroupByArgs,
+      T extends ItemsGroupByArgs,
       HasSelectOrTake extends Or<
         Extends<'skip', Keys<T>>,
         Extends<'take', Keys<T>>
       >,
       OrderByArg extends True extends HasSelectOrTake
-        ? { orderBy: FloatsGroupByArgs['orderBy'] }
-        : { orderBy?: FloatsGroupByArgs['orderBy'] },
+        ? { orderBy: ItemsGroupByArgs['orderBy'] }
+        : { orderBy?: ItemsGroupByArgs['orderBy'] },
       OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
       ByFields extends TupleToUnion<T['by']>,
       ByValid extends Has<ByFields, OrderFields>,
@@ -8193,17 +7221,17 @@ export namespace Prisma {
             ? never
             : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
         }[OrderFields]
-    >(args: SubsetIntersection<T, FloatsGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetFloatsGroupByPayload<T> : PrismaPromise<InputErrors>
+    >(args: SubsetIntersection<T, ItemsGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetItemsGroupByPayload<T> : PrismaPromise<InputErrors>
 
   }
 
   /**
-   * The delegate class that acts as a "Promise-like" for Floats.
+   * The delegate class that acts as a "Promise-like" for Items.
    * Why is this prefixed with `Prisma__`?
    * Because we want to prevent naming conflicts as mentioned in
    * https://github.com/prisma/prisma-client-js/issues/707
    */
-  export class Prisma__FloatsClient<T, Null = never> implements PrismaPromise<T> {
+  export class Prisma__ItemsClient<T, Null = never> implements PrismaPromise<T> {
     [prisma]: true;
     private readonly _dmmf;
     private readonly _fetcher;
@@ -8220,6 +7248,7 @@ export namespace Prisma {
     constructor(_dmmf: runtime.DMMFClass, _fetcher: PrismaClientFetcher, _queryType: 'query' | 'mutation', _rootField: string, _clientMethod: string, _args: any, _dataPath: string[], _errorFormat: ErrorFormat, _measurePerformance?: boolean | undefined, _isList?: boolean);
     readonly [Symbol.toStringTag]: 'PrismaClientPromise';
 
+    other_items<T extends Items$other_itemsArgs= {}>(args?: Subset<T, Items$other_itemsArgs>): PrismaPromise<Array<Other_itemsGetPayload<T>>| Null>;
 
     private get _document();
     /**
@@ -8249,25 +7278,30 @@ export namespace Prisma {
   // Custom InputTypes
 
   /**
-   * Floats base type for findUnique actions
+   * Items base type for findUnique actions
    */
-  export type FloatsFindUniqueArgsBase = {
+  export type ItemsFindUniqueArgsBase = {
     /**
-     * Select specific fields to fetch from the Floats
+     * Select specific fields to fetch from the Items
      * 
     **/
-    select?: FloatsSelect | null
+    select?: ItemsSelect | null
     /**
-     * Filter, which Floats to fetch.
+     * Choose, which related nodes to fetch as well.
      * 
     **/
-    where: FloatsWhereUniqueInput
+    include?: ItemsInclude | null
+    /**
+     * Filter, which Items to fetch.
+     * 
+    **/
+    where: ItemsWhereUniqueInput
   }
 
   /**
-   * Floats findUnique
+   * Items findUnique
    */
-  export interface FloatsFindUniqueArgs extends FloatsFindUniqueArgsBase {
+  export interface ItemsFindUniqueArgs extends ItemsFindUniqueArgsBase {
    /**
     * Throw an Error if query returns no results
     * @deprecated since 4.0.0: use `findUniqueOrThrow` method instead
@@ -8277,77 +7311,87 @@ export namespace Prisma {
       
 
   /**
-   * Floats findUniqueOrThrow
+   * Items findUniqueOrThrow
    */
-  export type FloatsFindUniqueOrThrowArgs = {
+  export type ItemsFindUniqueOrThrowArgs = {
     /**
-     * Select specific fields to fetch from the Floats
+     * Select specific fields to fetch from the Items
      * 
     **/
-    select?: FloatsSelect | null
+    select?: ItemsSelect | null
     /**
-     * Filter, which Floats to fetch.
+     * Choose, which related nodes to fetch as well.
      * 
     **/
-    where: FloatsWhereUniqueInput
+    include?: ItemsInclude | null
+    /**
+     * Filter, which Items to fetch.
+     * 
+    **/
+    where: ItemsWhereUniqueInput
   }
 
 
   /**
-   * Floats base type for findFirst actions
+   * Items base type for findFirst actions
    */
-  export type FloatsFindFirstArgsBase = {
+  export type ItemsFindFirstArgsBase = {
     /**
-     * Select specific fields to fetch from the Floats
+     * Select specific fields to fetch from the Items
      * 
     **/
-    select?: FloatsSelect | null
+    select?: ItemsSelect | null
     /**
-     * Filter, which Floats to fetch.
+     * Choose, which related nodes to fetch as well.
      * 
     **/
-    where?: FloatsWhereInput
+    include?: ItemsInclude | null
+    /**
+     * Filter, which Items to fetch.
+     * 
+    **/
+    where?: ItemsWhereInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
      * 
-     * Determine the order of Floats to fetch.
+     * Determine the order of Items to fetch.
      * 
     **/
-    orderBy?: Enumerable<FloatsOrderByWithRelationInput>
+    orderBy?: Enumerable<ItemsOrderByWithRelationInput>
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
      * 
-     * Sets the position for searching for Floats.
+     * Sets the position for searching for Items.
      * 
     **/
-    cursor?: FloatsWhereUniqueInput
+    cursor?: ItemsWhereUniqueInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Take `±n` Floats from the position of the cursor.
+     * Take `±n` Items from the position of the cursor.
      * 
     **/
     take?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Skip the first `n` Floats.
+     * Skip the first `n` Items.
      * 
     **/
     skip?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
      * 
-     * Filter by unique combinations of Floats.
+     * Filter by unique combinations of Items.
      * 
     **/
-    distinct?: Enumerable<FloatsScalarFieldEnum>
+    distinct?: Enumerable<ItemsScalarFieldEnum>
   }
 
   /**
-   * Floats findFirst
+   * Items findFirst
    */
-  export interface FloatsFindFirstArgs extends FloatsFindFirstArgsBase {
+  export interface ItemsFindFirstArgs extends ItemsFindFirstArgsBase {
    /**
     * Throw an Error if query returns no results
     * @deprecated since 4.0.0: use `findFirstOrThrow` method instead
@@ -8357,237 +7401,295 @@ export namespace Prisma {
       
 
   /**
-   * Floats findFirstOrThrow
+   * Items findFirstOrThrow
    */
-  export type FloatsFindFirstOrThrowArgs = {
+  export type ItemsFindFirstOrThrowArgs = {
     /**
-     * Select specific fields to fetch from the Floats
+     * Select specific fields to fetch from the Items
      * 
     **/
-    select?: FloatsSelect | null
+    select?: ItemsSelect | null
     /**
-     * Filter, which Floats to fetch.
+     * Choose, which related nodes to fetch as well.
      * 
     **/
-    where?: FloatsWhereInput
+    include?: ItemsInclude | null
+    /**
+     * Filter, which Items to fetch.
+     * 
+    **/
+    where?: ItemsWhereInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
      * 
-     * Determine the order of Floats to fetch.
+     * Determine the order of Items to fetch.
      * 
     **/
-    orderBy?: Enumerable<FloatsOrderByWithRelationInput>
+    orderBy?: Enumerable<ItemsOrderByWithRelationInput>
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
      * 
-     * Sets the position for searching for Floats.
+     * Sets the position for searching for Items.
      * 
     **/
-    cursor?: FloatsWhereUniqueInput
+    cursor?: ItemsWhereUniqueInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Take `±n` Floats from the position of the cursor.
+     * Take `±n` Items from the position of the cursor.
      * 
     **/
     take?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Skip the first `n` Floats.
+     * Skip the first `n` Items.
      * 
     **/
     skip?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
      * 
-     * Filter by unique combinations of Floats.
+     * Filter by unique combinations of Items.
      * 
     **/
-    distinct?: Enumerable<FloatsScalarFieldEnum>
+    distinct?: Enumerable<ItemsScalarFieldEnum>
   }
 
 
   /**
-   * Floats findMany
+   * Items findMany
    */
-  export type FloatsFindManyArgs = {
+  export type ItemsFindManyArgs = {
     /**
-     * Select specific fields to fetch from the Floats
+     * Select specific fields to fetch from the Items
      * 
     **/
-    select?: FloatsSelect | null
+    select?: ItemsSelect | null
     /**
-     * Filter, which Floats to fetch.
+     * Choose, which related nodes to fetch as well.
      * 
     **/
-    where?: FloatsWhereInput
+    include?: ItemsInclude | null
+    /**
+     * Filter, which Items to fetch.
+     * 
+    **/
+    where?: ItemsWhereInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
      * 
-     * Determine the order of Floats to fetch.
+     * Determine the order of Items to fetch.
      * 
     **/
-    orderBy?: Enumerable<FloatsOrderByWithRelationInput>
+    orderBy?: Enumerable<ItemsOrderByWithRelationInput>
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
      * 
-     * Sets the position for listing Floats.
+     * Sets the position for listing Items.
      * 
     **/
-    cursor?: FloatsWhereUniqueInput
+    cursor?: ItemsWhereUniqueInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Take `±n` Floats from the position of the cursor.
+     * Take `±n` Items from the position of the cursor.
      * 
     **/
     take?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Skip the first `n` Floats.
+     * Skip the first `n` Items.
      * 
     **/
     skip?: number
-    distinct?: Enumerable<FloatsScalarFieldEnum>
+    distinct?: Enumerable<ItemsScalarFieldEnum>
   }
 
 
   /**
-   * Floats create
+   * Items create
    */
-  export type FloatsCreateArgs = {
+  export type ItemsCreateArgs = {
     /**
-     * Select specific fields to fetch from the Floats
+     * Select specific fields to fetch from the Items
      * 
     **/
-    select?: FloatsSelect | null
+    select?: ItemsSelect | null
     /**
-     * The data needed to create a Floats.
+     * Choose, which related nodes to fetch as well.
      * 
     **/
-    data: XOR<FloatsCreateInput, FloatsUncheckedCreateInput>
+    include?: ItemsInclude | null
+    /**
+     * The data needed to create a Items.
+     * 
+    **/
+    data: XOR<ItemsCreateInput, ItemsUncheckedCreateInput>
   }
 
 
   /**
-   * Floats createMany
+   * Items createMany
    */
-  export type FloatsCreateManyArgs = {
+  export type ItemsCreateManyArgs = {
     /**
-     * The data used to create many Floats.
+     * The data used to create many Items.
      * 
     **/
-    data: Enumerable<FloatsCreateManyInput>
+    data: Enumerable<ItemsCreateManyInput>
     skipDuplicates?: boolean
   }
 
 
   /**
-   * Floats update
+   * Items update
    */
-  export type FloatsUpdateArgs = {
+  export type ItemsUpdateArgs = {
     /**
-     * Select specific fields to fetch from the Floats
+     * Select specific fields to fetch from the Items
      * 
     **/
-    select?: FloatsSelect | null
+    select?: ItemsSelect | null
     /**
-     * The data needed to update a Floats.
+     * Choose, which related nodes to fetch as well.
      * 
     **/
-    data: XOR<FloatsUpdateInput, FloatsUncheckedUpdateInput>
+    include?: ItemsInclude | null
     /**
-     * Choose, which Floats to update.
+     * The data needed to update a Items.
      * 
     **/
-    where: FloatsWhereUniqueInput
+    data: XOR<ItemsUpdateInput, ItemsUncheckedUpdateInput>
+    /**
+     * Choose, which Items to update.
+     * 
+    **/
+    where: ItemsWhereUniqueInput
   }
 
 
   /**
-   * Floats updateMany
+   * Items updateMany
    */
-  export type FloatsUpdateManyArgs = {
+  export type ItemsUpdateManyArgs = {
     /**
-     * The data used to update Floats.
+     * The data used to update Items.
      * 
     **/
-    data: XOR<FloatsUpdateManyMutationInput, FloatsUncheckedUpdateManyInput>
+    data: XOR<ItemsUpdateManyMutationInput, ItemsUncheckedUpdateManyInput>
     /**
-     * Filter which Floats to update
+     * Filter which Items to update
      * 
     **/
-    where?: FloatsWhereInput
+    where?: ItemsWhereInput
   }
 
 
   /**
-   * Floats upsert
+   * Items upsert
    */
-  export type FloatsUpsertArgs = {
+  export type ItemsUpsertArgs = {
     /**
-     * Select specific fields to fetch from the Floats
+     * Select specific fields to fetch from the Items
      * 
     **/
-    select?: FloatsSelect | null
+    select?: ItemsSelect | null
     /**
-     * The filter to search for the Floats to update in case it exists.
+     * Choose, which related nodes to fetch as well.
      * 
     **/
-    where: FloatsWhereUniqueInput
+    include?: ItemsInclude | null
     /**
-     * In case the Floats found by the `where` argument doesn't exist, create a new Floats with this data.
+     * The filter to search for the Items to update in case it exists.
      * 
     **/
-    create: XOR<FloatsCreateInput, FloatsUncheckedCreateInput>
+    where: ItemsWhereUniqueInput
     /**
-     * In case the Floats was found with the provided `where` argument, update it with this data.
+     * In case the Items found by the `where` argument doesn't exist, create a new Items with this data.
      * 
     **/
-    update: XOR<FloatsUpdateInput, FloatsUncheckedUpdateInput>
+    create: XOR<ItemsCreateInput, ItemsUncheckedCreateInput>
+    /**
+     * In case the Items was found with the provided `where` argument, update it with this data.
+     * 
+    **/
+    update: XOR<ItemsUpdateInput, ItemsUncheckedUpdateInput>
   }
 
 
   /**
-   * Floats delete
+   * Items delete
    */
-  export type FloatsDeleteArgs = {
+  export type ItemsDeleteArgs = {
     /**
-     * Select specific fields to fetch from the Floats
+     * Select specific fields to fetch from the Items
      * 
     **/
-    select?: FloatsSelect | null
+    select?: ItemsSelect | null
     /**
-     * Filter which Floats to delete.
+     * Choose, which related nodes to fetch as well.
      * 
     **/
-    where: FloatsWhereUniqueInput
+    include?: ItemsInclude | null
+    /**
+     * Filter which Items to delete.
+     * 
+    **/
+    where: ItemsWhereUniqueInput
   }
 
 
   /**
-   * Floats deleteMany
+   * Items deleteMany
    */
-  export type FloatsDeleteManyArgs = {
+  export type ItemsDeleteManyArgs = {
     /**
-     * Filter which Floats to delete
+     * Filter which Items to delete
      * 
     **/
-    where?: FloatsWhereInput
+    where?: ItemsWhereInput
   }
 
 
   /**
-   * Floats without action
+   * Items.other_items
    */
-  export type FloatsArgs = {
+  export type Items$other_itemsArgs = {
     /**
-     * Select specific fields to fetch from the Floats
+     * Select specific fields to fetch from the Other_items
      * 
     **/
-    select?: FloatsSelect | null
+    select?: Other_itemsSelect | null
+    /**
+     * Choose, which related nodes to fetch as well.
+     * 
+    **/
+    include?: Other_itemsInclude | null
+    where?: Other_itemsWhereInput
+    orderBy?: Enumerable<Other_itemsOrderByWithRelationInput>
+    cursor?: Other_itemsWhereUniqueInput
+    take?: number
+    skip?: number
+    distinct?: Enumerable<Other_itemsScalarFieldEnum>
+  }
+
+
+  /**
+   * Items without action
+   */
+  export type ItemsArgs = {
+    /**
+     * Select specific fields to fetch from the Items
+     * 
+    **/
+    select?: ItemsSelect | null
+    /**
+     * Choose, which related nodes to fetch as well.
+     * 
+    **/
+    include?: ItemsInclude | null
   }
 
 
@@ -8613,7 +7715,6 @@ export namespace Prisma {
 
   export type JsonsCountAggregateOutputType = {
     id: number
-    js: number
     jsb: number
     _all: number
   }
@@ -8629,7 +7730,6 @@ export namespace Prisma {
 
   export type JsonsCountAggregateInputType = {
     id?: true
-    js?: true
     jsb?: true
     _all?: true
   }
@@ -8714,7 +7814,6 @@ export namespace Prisma {
 
   export type JsonsGroupByOutputType = {
     id: string
-    js: JsonValue | null
     jsb: JsonValue | null
     _count: JsonsCountAggregateOutputType | null
     _min: JsonsMinAggregateOutputType | null
@@ -8737,7 +7836,6 @@ export namespace Prisma {
 
   export type JsonsSelect = {
     id?: boolean
-    js?: boolean
     jsb?: boolean
   }
 
@@ -9498,316 +8596,332 @@ export namespace Prisma {
 
 
   /**
-   * Model Enums
+   * Model Other_items
    */
 
 
-  export type AggregateEnums = {
-    _count: EnumsCountAggregateOutputType | null
-    _min: EnumsMinAggregateOutputType | null
-    _max: EnumsMaxAggregateOutputType | null
+  export type AggregateOther_items = {
+    _count: Other_itemsCountAggregateOutputType | null
+    _min: Other_itemsMinAggregateOutputType | null
+    _max: Other_itemsMaxAggregateOutputType | null
   }
 
-  export type EnumsMinAggregateOutputType = {
+  export type Other_itemsMinAggregateOutputType = {
     id: string | null
-    c: Color | null
+    content: string | null
+    item_id: string | null
   }
 
-  export type EnumsMaxAggregateOutputType = {
+  export type Other_itemsMaxAggregateOutputType = {
     id: string | null
-    c: Color | null
+    content: string | null
+    item_id: string | null
   }
 
-  export type EnumsCountAggregateOutputType = {
+  export type Other_itemsCountAggregateOutputType = {
     id: number
-    c: number
+    content: number
+    item_id: number
     _all: number
   }
 
 
-  export type EnumsMinAggregateInputType = {
+  export type Other_itemsMinAggregateInputType = {
     id?: true
-    c?: true
+    content?: true
+    item_id?: true
   }
 
-  export type EnumsMaxAggregateInputType = {
+  export type Other_itemsMaxAggregateInputType = {
     id?: true
-    c?: true
+    content?: true
+    item_id?: true
   }
 
-  export type EnumsCountAggregateInputType = {
+  export type Other_itemsCountAggregateInputType = {
     id?: true
-    c?: true
+    content?: true
+    item_id?: true
     _all?: true
   }
 
-  export type EnumsAggregateArgs = {
+  export type Other_itemsAggregateArgs = {
     /**
-     * Filter which Enums to aggregate.
+     * Filter which Other_items to aggregate.
      * 
     **/
-    where?: EnumsWhereInput
+    where?: Other_itemsWhereInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
      * 
-     * Determine the order of Enums to fetch.
+     * Determine the order of Other_items to fetch.
      * 
     **/
-    orderBy?: Enumerable<EnumsOrderByWithRelationInput>
+    orderBy?: Enumerable<Other_itemsOrderByWithRelationInput>
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
      * 
      * Sets the start position
      * 
     **/
-    cursor?: EnumsWhereUniqueInput
+    cursor?: Other_itemsWhereUniqueInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Take `±n` Enums from the position of the cursor.
+     * Take `±n` Other_items from the position of the cursor.
      * 
     **/
     take?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Skip the first `n` Enums.
+     * Skip the first `n` Other_items.
      * 
     **/
     skip?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
      * 
-     * Count returned Enums
+     * Count returned Other_items
     **/
-    _count?: true | EnumsCountAggregateInputType
+    _count?: true | Other_itemsCountAggregateInputType
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
      * 
      * Select which fields to find the minimum value
     **/
-    _min?: EnumsMinAggregateInputType
+    _min?: Other_itemsMinAggregateInputType
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
      * 
      * Select which fields to find the maximum value
     **/
-    _max?: EnumsMaxAggregateInputType
+    _max?: Other_itemsMaxAggregateInputType
   }
 
-  export type GetEnumsAggregateType<T extends EnumsAggregateArgs> = {
-        [P in keyof T & keyof AggregateEnums]: P extends '_count' | 'count'
+  export type GetOther_itemsAggregateType<T extends Other_itemsAggregateArgs> = {
+        [P in keyof T & keyof AggregateOther_items]: P extends '_count' | 'count'
       ? T[P] extends true
         ? number
-        : GetScalarType<T[P], AggregateEnums[P]>
-      : GetScalarType<T[P], AggregateEnums[P]>
+        : GetScalarType<T[P], AggregateOther_items[P]>
+      : GetScalarType<T[P], AggregateOther_items[P]>
   }
 
 
 
 
-  export type EnumsGroupByArgs = {
-    where?: EnumsWhereInput
-    orderBy?: Enumerable<EnumsOrderByWithAggregationInput>
-    by: Array<EnumsScalarFieldEnum>
-    having?: EnumsScalarWhereWithAggregatesInput
+  export type Other_itemsGroupByArgs = {
+    where?: Other_itemsWhereInput
+    orderBy?: Enumerable<Other_itemsOrderByWithAggregationInput>
+    by: Array<Other_itemsScalarFieldEnum>
+    having?: Other_itemsScalarWhereWithAggregatesInput
     take?: number
     skip?: number
-    _count?: EnumsCountAggregateInputType | true
-    _min?: EnumsMinAggregateInputType
-    _max?: EnumsMaxAggregateInputType
+    _count?: Other_itemsCountAggregateInputType | true
+    _min?: Other_itemsMinAggregateInputType
+    _max?: Other_itemsMaxAggregateInputType
   }
 
 
-  export type EnumsGroupByOutputType = {
+  export type Other_itemsGroupByOutputType = {
     id: string
-    c: Color | null
-    _count: EnumsCountAggregateOutputType | null
-    _min: EnumsMinAggregateOutputType | null
-    _max: EnumsMaxAggregateOutputType | null
+    content: string
+    item_id: string | null
+    _count: Other_itemsCountAggregateOutputType | null
+    _min: Other_itemsMinAggregateOutputType | null
+    _max: Other_itemsMaxAggregateOutputType | null
   }
 
-  type GetEnumsGroupByPayload<T extends EnumsGroupByArgs> = PrismaPromise<
+  type GetOther_itemsGroupByPayload<T extends Other_itemsGroupByArgs> = PrismaPromise<
     Array<
-      PickArray<EnumsGroupByOutputType, T['by']> &
+      PickArray<Other_itemsGroupByOutputType, T['by']> &
         {
-          [P in ((keyof T) & (keyof EnumsGroupByOutputType))]: P extends '_count'
+          [P in ((keyof T) & (keyof Other_itemsGroupByOutputType))]: P extends '_count'
             ? T[P] extends boolean
               ? number
-              : GetScalarType<T[P], EnumsGroupByOutputType[P]>
-            : GetScalarType<T[P], EnumsGroupByOutputType[P]>
+              : GetScalarType<T[P], Other_itemsGroupByOutputType[P]>
+            : GetScalarType<T[P], Other_itemsGroupByOutputType[P]>
         }
       >
     >
 
 
-  export type EnumsSelect = {
+  export type Other_itemsSelect = {
     id?: boolean
-    c?: boolean
+    content?: boolean
+    item_id?: boolean
+    items?: boolean | ItemsArgs
   }
 
 
-  export type EnumsGetPayload<S extends boolean | null | undefined | EnumsArgs> =
+  export type Other_itemsInclude = {
+    items?: boolean | ItemsArgs
+  } 
+
+  export type Other_itemsGetPayload<S extends boolean | null | undefined | Other_itemsArgs> =
     S extends { select: any, include: any } ? 'Please either choose `select` or `include`' :
-    S extends true ? Enums :
+    S extends true ? Other_items :
     S extends undefined ? never :
-    S extends { include: any } & (EnumsArgs | EnumsFindManyArgs)
-    ? Enums 
-    : S extends { select: any } & (EnumsArgs | EnumsFindManyArgs)
+    S extends { include: any } & (Other_itemsArgs | Other_itemsFindManyArgs)
+    ? Other_items  & {
+    [P in TruthyKeys<S['include']>]:
+        P extends 'items' ? ItemsGetPayload<S['include'][P]> | null :  never
+  } 
+    : S extends { select: any } & (Other_itemsArgs | Other_itemsFindManyArgs)
       ? {
     [P in TruthyKeys<S['select']>]:
-    P extends keyof Enums ? Enums[P] : never
+        P extends 'items' ? ItemsGetPayload<S['select'][P]> | null :  P extends keyof Other_items ? Other_items[P] : never
   } 
-      : Enums
+      : Other_items
 
 
-  type EnumsCountArgs = Merge<
-    Omit<EnumsFindManyArgs, 'select' | 'include'> & {
-      select?: EnumsCountAggregateInputType | true
+  type Other_itemsCountArgs = Merge<
+    Omit<Other_itemsFindManyArgs, 'select' | 'include'> & {
+      select?: Other_itemsCountAggregateInputType | true
     }
   >
 
-  export interface EnumsDelegate<GlobalRejectSettings extends Prisma.RejectOnNotFound | Prisma.RejectPerOperation | false | undefined> {
+  export interface Other_itemsDelegate<GlobalRejectSettings extends Prisma.RejectOnNotFound | Prisma.RejectPerOperation | false | undefined> {
     /**
-     * Find zero or one Enums that matches the filter.
-     * @param {EnumsFindUniqueArgs} args - Arguments to find a Enums
+     * Find zero or one Other_items that matches the filter.
+     * @param {Other_itemsFindUniqueArgs} args - Arguments to find a Other_items
      * @example
-     * // Get one Enums
-     * const enums = await prisma.enums.findUnique({
+     * // Get one Other_items
+     * const other_items = await prisma.other_items.findUnique({
      *   where: {
      *     // ... provide filter here
      *   }
      * })
     **/
-    findUnique<T extends EnumsFindUniqueArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
-      args: SelectSubset<T, EnumsFindUniqueArgs>
-    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findUnique', 'Enums'> extends True ? Prisma__EnumsClient<EnumsGetPayload<T>> : Prisma__EnumsClient<EnumsGetPayload<T> | null, null>
+    findUnique<T extends Other_itemsFindUniqueArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
+      args: SelectSubset<T, Other_itemsFindUniqueArgs>
+    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findUnique', 'Other_items'> extends True ? Prisma__Other_itemsClient<Other_itemsGetPayload<T>> : Prisma__Other_itemsClient<Other_itemsGetPayload<T> | null, null>
 
     /**
-     * Find one Enums that matches the filter or throw an error  with `error.code='P2025'` 
+     * Find one Other_items that matches the filter or throw an error  with `error.code='P2025'` 
      *     if no matches were found.
-     * @param {EnumsFindUniqueOrThrowArgs} args - Arguments to find a Enums
+     * @param {Other_itemsFindUniqueOrThrowArgs} args - Arguments to find a Other_items
      * @example
-     * // Get one Enums
-     * const enums = await prisma.enums.findUniqueOrThrow({
+     * // Get one Other_items
+     * const other_items = await prisma.other_items.findUniqueOrThrow({
      *   where: {
      *     // ... provide filter here
      *   }
      * })
     **/
-    findUniqueOrThrow<T extends EnumsFindUniqueOrThrowArgs>(
-      args?: SelectSubset<T, EnumsFindUniqueOrThrowArgs>
-    ): Prisma__EnumsClient<EnumsGetPayload<T>>
+    findUniqueOrThrow<T extends Other_itemsFindUniqueOrThrowArgs>(
+      args?: SelectSubset<T, Other_itemsFindUniqueOrThrowArgs>
+    ): Prisma__Other_itemsClient<Other_itemsGetPayload<T>>
 
     /**
-     * Find the first Enums that matches the filter.
+     * Find the first Other_items that matches the filter.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {EnumsFindFirstArgs} args - Arguments to find a Enums
+     * @param {Other_itemsFindFirstArgs} args - Arguments to find a Other_items
      * @example
-     * // Get one Enums
-     * const enums = await prisma.enums.findFirst({
+     * // Get one Other_items
+     * const other_items = await prisma.other_items.findFirst({
      *   where: {
      *     // ... provide filter here
      *   }
      * })
     **/
-    findFirst<T extends EnumsFindFirstArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
-      args?: SelectSubset<T, EnumsFindFirstArgs>
-    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findFirst', 'Enums'> extends True ? Prisma__EnumsClient<EnumsGetPayload<T>> : Prisma__EnumsClient<EnumsGetPayload<T> | null, null>
+    findFirst<T extends Other_itemsFindFirstArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
+      args?: SelectSubset<T, Other_itemsFindFirstArgs>
+    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findFirst', 'Other_items'> extends True ? Prisma__Other_itemsClient<Other_itemsGetPayload<T>> : Prisma__Other_itemsClient<Other_itemsGetPayload<T> | null, null>
 
     /**
-     * Find the first Enums that matches the filter or
+     * Find the first Other_items that matches the filter or
      * throw `NotFoundError` if no matches were found.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {EnumsFindFirstOrThrowArgs} args - Arguments to find a Enums
+     * @param {Other_itemsFindFirstOrThrowArgs} args - Arguments to find a Other_items
      * @example
-     * // Get one Enums
-     * const enums = await prisma.enums.findFirstOrThrow({
+     * // Get one Other_items
+     * const other_items = await prisma.other_items.findFirstOrThrow({
      *   where: {
      *     // ... provide filter here
      *   }
      * })
     **/
-    findFirstOrThrow<T extends EnumsFindFirstOrThrowArgs>(
-      args?: SelectSubset<T, EnumsFindFirstOrThrowArgs>
-    ): Prisma__EnumsClient<EnumsGetPayload<T>>
+    findFirstOrThrow<T extends Other_itemsFindFirstOrThrowArgs>(
+      args?: SelectSubset<T, Other_itemsFindFirstOrThrowArgs>
+    ): Prisma__Other_itemsClient<Other_itemsGetPayload<T>>
 
     /**
-     * Find zero or more Enums that matches the filter.
+     * Find zero or more Other_items that matches the filter.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {EnumsFindManyArgs=} args - Arguments to filter and select certain fields only.
+     * @param {Other_itemsFindManyArgs=} args - Arguments to filter and select certain fields only.
      * @example
-     * // Get all Enums
-     * const enums = await prisma.enums.findMany()
+     * // Get all Other_items
+     * const other_items = await prisma.other_items.findMany()
      * 
-     * // Get first 10 Enums
-     * const enums = await prisma.enums.findMany({ take: 10 })
+     * // Get first 10 Other_items
+     * const other_items = await prisma.other_items.findMany({ take: 10 })
      * 
      * // Only select the `id`
-     * const enumsWithIdOnly = await prisma.enums.findMany({ select: { id: true } })
+     * const other_itemsWithIdOnly = await prisma.other_items.findMany({ select: { id: true } })
      * 
     **/
-    findMany<T extends EnumsFindManyArgs>(
-      args?: SelectSubset<T, EnumsFindManyArgs>
-    ): PrismaPromise<Array<EnumsGetPayload<T>>>
+    findMany<T extends Other_itemsFindManyArgs>(
+      args?: SelectSubset<T, Other_itemsFindManyArgs>
+    ): PrismaPromise<Array<Other_itemsGetPayload<T>>>
 
     /**
-     * Create a Enums.
-     * @param {EnumsCreateArgs} args - Arguments to create a Enums.
+     * Create a Other_items.
+     * @param {Other_itemsCreateArgs} args - Arguments to create a Other_items.
      * @example
-     * // Create one Enums
-     * const Enums = await prisma.enums.create({
+     * // Create one Other_items
+     * const Other_items = await prisma.other_items.create({
      *   data: {
-     *     // ... data to create a Enums
+     *     // ... data to create a Other_items
      *   }
      * })
      * 
     **/
-    create<T extends EnumsCreateArgs>(
-      args: SelectSubset<T, EnumsCreateArgs>
-    ): Prisma__EnumsClient<EnumsGetPayload<T>>
+    create<T extends Other_itemsCreateArgs>(
+      args: SelectSubset<T, Other_itemsCreateArgs>
+    ): Prisma__Other_itemsClient<Other_itemsGetPayload<T>>
 
     /**
-     * Create many Enums.
-     *     @param {EnumsCreateManyArgs} args - Arguments to create many Enums.
+     * Create many Other_items.
+     *     @param {Other_itemsCreateManyArgs} args - Arguments to create many Other_items.
      *     @example
-     *     // Create many Enums
-     *     const enums = await prisma.enums.createMany({
+     *     // Create many Other_items
+     *     const other_items = await prisma.other_items.createMany({
      *       data: {
      *         // ... provide data here
      *       }
      *     })
      *     
     **/
-    createMany<T extends EnumsCreateManyArgs>(
-      args?: SelectSubset<T, EnumsCreateManyArgs>
+    createMany<T extends Other_itemsCreateManyArgs>(
+      args?: SelectSubset<T, Other_itemsCreateManyArgs>
     ): PrismaPromise<BatchPayload>
 
     /**
-     * Delete a Enums.
-     * @param {EnumsDeleteArgs} args - Arguments to delete one Enums.
+     * Delete a Other_items.
+     * @param {Other_itemsDeleteArgs} args - Arguments to delete one Other_items.
      * @example
-     * // Delete one Enums
-     * const Enums = await prisma.enums.delete({
+     * // Delete one Other_items
+     * const Other_items = await prisma.other_items.delete({
      *   where: {
-     *     // ... filter to delete one Enums
+     *     // ... filter to delete one Other_items
      *   }
      * })
      * 
     **/
-    delete<T extends EnumsDeleteArgs>(
-      args: SelectSubset<T, EnumsDeleteArgs>
-    ): Prisma__EnumsClient<EnumsGetPayload<T>>
+    delete<T extends Other_itemsDeleteArgs>(
+      args: SelectSubset<T, Other_itemsDeleteArgs>
+    ): Prisma__Other_itemsClient<Other_itemsGetPayload<T>>
 
     /**
-     * Update one Enums.
-     * @param {EnumsUpdateArgs} args - Arguments to update one Enums.
+     * Update one Other_items.
+     * @param {Other_itemsUpdateArgs} args - Arguments to update one Other_items.
      * @example
-     * // Update one Enums
-     * const enums = await prisma.enums.update({
+     * // Update one Other_items
+     * const other_items = await prisma.other_items.update({
      *   where: {
      *     // ... provide filter here
      *   },
@@ -9817,34 +8931,34 @@ export namespace Prisma {
      * })
      * 
     **/
-    update<T extends EnumsUpdateArgs>(
-      args: SelectSubset<T, EnumsUpdateArgs>
-    ): Prisma__EnumsClient<EnumsGetPayload<T>>
+    update<T extends Other_itemsUpdateArgs>(
+      args: SelectSubset<T, Other_itemsUpdateArgs>
+    ): Prisma__Other_itemsClient<Other_itemsGetPayload<T>>
 
     /**
-     * Delete zero or more Enums.
-     * @param {EnumsDeleteManyArgs} args - Arguments to filter Enums to delete.
+     * Delete zero or more Other_items.
+     * @param {Other_itemsDeleteManyArgs} args - Arguments to filter Other_items to delete.
      * @example
-     * // Delete a few Enums
-     * const { count } = await prisma.enums.deleteMany({
+     * // Delete a few Other_items
+     * const { count } = await prisma.other_items.deleteMany({
      *   where: {
      *     // ... provide filter here
      *   }
      * })
      * 
     **/
-    deleteMany<T extends EnumsDeleteManyArgs>(
-      args?: SelectSubset<T, EnumsDeleteManyArgs>
+    deleteMany<T extends Other_itemsDeleteManyArgs>(
+      args?: SelectSubset<T, Other_itemsDeleteManyArgs>
     ): PrismaPromise<BatchPayload>
 
     /**
-     * Update zero or more Enums.
+     * Update zero or more Other_items.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {EnumsUpdateManyArgs} args - Arguments to update one or more rows.
+     * @param {Other_itemsUpdateManyArgs} args - Arguments to update one or more rows.
      * @example
-     * // Update many Enums
-     * const enums = await prisma.enums.updateMany({
+     * // Update many Other_items
+     * const other_items = await prisma.other_items.updateMany({
      *   where: {
      *     // ... provide filter here
      *   },
@@ -9854,59 +8968,59 @@ export namespace Prisma {
      * })
      * 
     **/
-    updateMany<T extends EnumsUpdateManyArgs>(
-      args: SelectSubset<T, EnumsUpdateManyArgs>
+    updateMany<T extends Other_itemsUpdateManyArgs>(
+      args: SelectSubset<T, Other_itemsUpdateManyArgs>
     ): PrismaPromise<BatchPayload>
 
     /**
-     * Create or update one Enums.
-     * @param {EnumsUpsertArgs} args - Arguments to update or create a Enums.
+     * Create or update one Other_items.
+     * @param {Other_itemsUpsertArgs} args - Arguments to update or create a Other_items.
      * @example
-     * // Update or create a Enums
-     * const enums = await prisma.enums.upsert({
+     * // Update or create a Other_items
+     * const other_items = await prisma.other_items.upsert({
      *   create: {
-     *     // ... data to create a Enums
+     *     // ... data to create a Other_items
      *   },
      *   update: {
      *     // ... in case it already exists, update
      *   },
      *   where: {
-     *     // ... the filter for the Enums we want to update
+     *     // ... the filter for the Other_items we want to update
      *   }
      * })
     **/
-    upsert<T extends EnumsUpsertArgs>(
-      args: SelectSubset<T, EnumsUpsertArgs>
-    ): Prisma__EnumsClient<EnumsGetPayload<T>>
+    upsert<T extends Other_itemsUpsertArgs>(
+      args: SelectSubset<T, Other_itemsUpsertArgs>
+    ): Prisma__Other_itemsClient<Other_itemsGetPayload<T>>
 
     /**
-     * Count the number of Enums.
+     * Count the number of Other_items.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {EnumsCountArgs} args - Arguments to filter Enums to count.
+     * @param {Other_itemsCountArgs} args - Arguments to filter Other_items to count.
      * @example
-     * // Count the number of Enums
-     * const count = await prisma.enums.count({
+     * // Count the number of Other_items
+     * const count = await prisma.other_items.count({
      *   where: {
-     *     // ... the filter for the Enums we want to count
+     *     // ... the filter for the Other_items we want to count
      *   }
      * })
     **/
-    count<T extends EnumsCountArgs>(
-      args?: Subset<T, EnumsCountArgs>,
+    count<T extends Other_itemsCountArgs>(
+      args?: Subset<T, Other_itemsCountArgs>,
     ): PrismaPromise<
       T extends _Record<'select', any>
         ? T['select'] extends true
           ? number
-          : GetScalarType<T['select'], EnumsCountAggregateOutputType>
+          : GetScalarType<T['select'], Other_itemsCountAggregateOutputType>
         : number
     >
 
     /**
-     * Allows you to perform aggregations operations on a Enums.
+     * Allows you to perform aggregations operations on a Other_items.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {EnumsAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @param {Other_itemsAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
      * @example
      * // Ordered by age ascending
      * // Where email contains prisma.io
@@ -9926,13 +9040,13 @@ export namespace Prisma {
      *   take: 10,
      * })
     **/
-    aggregate<T extends EnumsAggregateArgs>(args: Subset<T, EnumsAggregateArgs>): PrismaPromise<GetEnumsAggregateType<T>>
+    aggregate<T extends Other_itemsAggregateArgs>(args: Subset<T, Other_itemsAggregateArgs>): PrismaPromise<GetOther_itemsAggregateType<T>>
 
     /**
-     * Group by Enums.
+     * Group by Other_items.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {EnumsGroupByArgs} args - Group by arguments.
+     * @param {Other_itemsGroupByArgs} args - Group by arguments.
      * @example
      * // Group by city, order by createdAt, get count
      * const result = await prisma.user.groupBy({
@@ -9947,14 +9061,14 @@ export namespace Prisma {
      * 
     **/
     groupBy<
-      T extends EnumsGroupByArgs,
+      T extends Other_itemsGroupByArgs,
       HasSelectOrTake extends Or<
         Extends<'skip', Keys<T>>,
         Extends<'take', Keys<T>>
       >,
       OrderByArg extends True extends HasSelectOrTake
-        ? { orderBy: EnumsGroupByArgs['orderBy'] }
-        : { orderBy?: EnumsGroupByArgs['orderBy'] },
+        ? { orderBy: Other_itemsGroupByArgs['orderBy'] }
+        : { orderBy?: Other_itemsGroupByArgs['orderBy'] },
       OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
       ByFields extends TupleToUnion<T['by']>,
       ByValid extends Has<ByFields, OrderFields>,
@@ -10003,17 +9117,17 @@ export namespace Prisma {
             ? never
             : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
         }[OrderFields]
-    >(args: SubsetIntersection<T, EnumsGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetEnumsGroupByPayload<T> : PrismaPromise<InputErrors>
+    >(args: SubsetIntersection<T, Other_itemsGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetOther_itemsGroupByPayload<T> : PrismaPromise<InputErrors>
 
   }
 
   /**
-   * The delegate class that acts as a "Promise-like" for Enums.
+   * The delegate class that acts as a "Promise-like" for Other_items.
    * Why is this prefixed with `Prisma__`?
    * Because we want to prevent naming conflicts as mentioned in
    * https://github.com/prisma/prisma-client-js/issues/707
    */
-  export class Prisma__EnumsClient<T, Null = never> implements PrismaPromise<T> {
+  export class Prisma__Other_itemsClient<T, Null = never> implements PrismaPromise<T> {
     [prisma]: true;
     private readonly _dmmf;
     private readonly _fetcher;
@@ -10030,6 +9144,7 @@ export namespace Prisma {
     constructor(_dmmf: runtime.DMMFClass, _fetcher: PrismaClientFetcher, _queryType: 'query' | 'mutation', _rootField: string, _clientMethod: string, _args: any, _dataPath: string[], _errorFormat: ErrorFormat, _measurePerformance?: boolean | undefined, _isList?: boolean);
     readonly [Symbol.toStringTag]: 'PrismaClientPromise';
 
+    items<T extends ItemsArgs= {}>(args?: Subset<T, ItemsArgs>): Prisma__ItemsClient<ItemsGetPayload<T> | Null>;
 
     private get _document();
     /**
@@ -10059,25 +9174,30 @@ export namespace Prisma {
   // Custom InputTypes
 
   /**
-   * Enums base type for findUnique actions
+   * Other_items base type for findUnique actions
    */
-  export type EnumsFindUniqueArgsBase = {
+  export type Other_itemsFindUniqueArgsBase = {
     /**
-     * Select specific fields to fetch from the Enums
+     * Select specific fields to fetch from the Other_items
      * 
     **/
-    select?: EnumsSelect | null
+    select?: Other_itemsSelect | null
     /**
-     * Filter, which Enums to fetch.
+     * Choose, which related nodes to fetch as well.
      * 
     **/
-    where: EnumsWhereUniqueInput
+    include?: Other_itemsInclude | null
+    /**
+     * Filter, which Other_items to fetch.
+     * 
+    **/
+    where: Other_itemsWhereUniqueInput
   }
 
   /**
-   * Enums findUnique
+   * Other_items findUnique
    */
-  export interface EnumsFindUniqueArgs extends EnumsFindUniqueArgsBase {
+  export interface Other_itemsFindUniqueArgs extends Other_itemsFindUniqueArgsBase {
    /**
     * Throw an Error if query returns no results
     * @deprecated since 4.0.0: use `findUniqueOrThrow` method instead
@@ -10087,77 +9207,87 @@ export namespace Prisma {
       
 
   /**
-   * Enums findUniqueOrThrow
+   * Other_items findUniqueOrThrow
    */
-  export type EnumsFindUniqueOrThrowArgs = {
+  export type Other_itemsFindUniqueOrThrowArgs = {
     /**
-     * Select specific fields to fetch from the Enums
+     * Select specific fields to fetch from the Other_items
      * 
     **/
-    select?: EnumsSelect | null
+    select?: Other_itemsSelect | null
     /**
-     * Filter, which Enums to fetch.
+     * Choose, which related nodes to fetch as well.
      * 
     **/
-    where: EnumsWhereUniqueInput
+    include?: Other_itemsInclude | null
+    /**
+     * Filter, which Other_items to fetch.
+     * 
+    **/
+    where: Other_itemsWhereUniqueInput
   }
 
 
   /**
-   * Enums base type for findFirst actions
+   * Other_items base type for findFirst actions
    */
-  export type EnumsFindFirstArgsBase = {
+  export type Other_itemsFindFirstArgsBase = {
     /**
-     * Select specific fields to fetch from the Enums
+     * Select specific fields to fetch from the Other_items
      * 
     **/
-    select?: EnumsSelect | null
+    select?: Other_itemsSelect | null
     /**
-     * Filter, which Enums to fetch.
+     * Choose, which related nodes to fetch as well.
      * 
     **/
-    where?: EnumsWhereInput
+    include?: Other_itemsInclude | null
+    /**
+     * Filter, which Other_items to fetch.
+     * 
+    **/
+    where?: Other_itemsWhereInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
      * 
-     * Determine the order of Enums to fetch.
+     * Determine the order of Other_items to fetch.
      * 
     **/
-    orderBy?: Enumerable<EnumsOrderByWithRelationInput>
+    orderBy?: Enumerable<Other_itemsOrderByWithRelationInput>
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
      * 
-     * Sets the position for searching for Enums.
+     * Sets the position for searching for Other_items.
      * 
     **/
-    cursor?: EnumsWhereUniqueInput
+    cursor?: Other_itemsWhereUniqueInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Take `±n` Enums from the position of the cursor.
+     * Take `±n` Other_items from the position of the cursor.
      * 
     **/
     take?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Skip the first `n` Enums.
+     * Skip the first `n` Other_items.
      * 
     **/
     skip?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
      * 
-     * Filter by unique combinations of Enums.
+     * Filter by unique combinations of Other_items.
      * 
     **/
-    distinct?: Enumerable<EnumsScalarFieldEnum>
+    distinct?: Enumerable<Other_itemsScalarFieldEnum>
   }
 
   /**
-   * Enums findFirst
+   * Other_items findFirst
    */
-  export interface EnumsFindFirstArgs extends EnumsFindFirstArgsBase {
+  export interface Other_itemsFindFirstArgs extends Other_itemsFindFirstArgsBase {
    /**
     * Throw an Error if query returns no results
     * @deprecated since 4.0.0: use `findFirstOrThrow` method instead
@@ -10167,552 +9297,595 @@ export namespace Prisma {
       
 
   /**
-   * Enums findFirstOrThrow
+   * Other_items findFirstOrThrow
    */
-  export type EnumsFindFirstOrThrowArgs = {
+  export type Other_itemsFindFirstOrThrowArgs = {
     /**
-     * Select specific fields to fetch from the Enums
+     * Select specific fields to fetch from the Other_items
      * 
     **/
-    select?: EnumsSelect | null
+    select?: Other_itemsSelect | null
     /**
-     * Filter, which Enums to fetch.
+     * Choose, which related nodes to fetch as well.
      * 
     **/
-    where?: EnumsWhereInput
+    include?: Other_itemsInclude | null
+    /**
+     * Filter, which Other_items to fetch.
+     * 
+    **/
+    where?: Other_itemsWhereInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
      * 
-     * Determine the order of Enums to fetch.
+     * Determine the order of Other_items to fetch.
      * 
     **/
-    orderBy?: Enumerable<EnumsOrderByWithRelationInput>
+    orderBy?: Enumerable<Other_itemsOrderByWithRelationInput>
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
      * 
-     * Sets the position for searching for Enums.
+     * Sets the position for searching for Other_items.
      * 
     **/
-    cursor?: EnumsWhereUniqueInput
+    cursor?: Other_itemsWhereUniqueInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Take `±n` Enums from the position of the cursor.
+     * Take `±n` Other_items from the position of the cursor.
      * 
     **/
     take?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Skip the first `n` Enums.
+     * Skip the first `n` Other_items.
      * 
     **/
     skip?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
      * 
-     * Filter by unique combinations of Enums.
+     * Filter by unique combinations of Other_items.
      * 
     **/
-    distinct?: Enumerable<EnumsScalarFieldEnum>
+    distinct?: Enumerable<Other_itemsScalarFieldEnum>
   }
 
 
   /**
-   * Enums findMany
+   * Other_items findMany
    */
-  export type EnumsFindManyArgs = {
+  export type Other_itemsFindManyArgs = {
     /**
-     * Select specific fields to fetch from the Enums
+     * Select specific fields to fetch from the Other_items
      * 
     **/
-    select?: EnumsSelect | null
+    select?: Other_itemsSelect | null
     /**
-     * Filter, which Enums to fetch.
+     * Choose, which related nodes to fetch as well.
      * 
     **/
-    where?: EnumsWhereInput
+    include?: Other_itemsInclude | null
+    /**
+     * Filter, which Other_items to fetch.
+     * 
+    **/
+    where?: Other_itemsWhereInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
      * 
-     * Determine the order of Enums to fetch.
+     * Determine the order of Other_items to fetch.
      * 
     **/
-    orderBy?: Enumerable<EnumsOrderByWithRelationInput>
+    orderBy?: Enumerable<Other_itemsOrderByWithRelationInput>
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
      * 
-     * Sets the position for listing Enums.
+     * Sets the position for listing Other_items.
      * 
     **/
-    cursor?: EnumsWhereUniqueInput
+    cursor?: Other_itemsWhereUniqueInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Take `±n` Enums from the position of the cursor.
+     * Take `±n` Other_items from the position of the cursor.
      * 
     **/
     take?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Skip the first `n` Enums.
+     * Skip the first `n` Other_items.
      * 
     **/
     skip?: number
-    distinct?: Enumerable<EnumsScalarFieldEnum>
+    distinct?: Enumerable<Other_itemsScalarFieldEnum>
   }
 
 
   /**
-   * Enums create
+   * Other_items create
    */
-  export type EnumsCreateArgs = {
+  export type Other_itemsCreateArgs = {
     /**
-     * Select specific fields to fetch from the Enums
+     * Select specific fields to fetch from the Other_items
      * 
     **/
-    select?: EnumsSelect | null
+    select?: Other_itemsSelect | null
     /**
-     * The data needed to create a Enums.
+     * Choose, which related nodes to fetch as well.
      * 
     **/
-    data: XOR<EnumsCreateInput, EnumsUncheckedCreateInput>
+    include?: Other_itemsInclude | null
+    /**
+     * The data needed to create a Other_items.
+     * 
+    **/
+    data: XOR<Other_itemsCreateInput, Other_itemsUncheckedCreateInput>
   }
 
 
   /**
-   * Enums createMany
+   * Other_items createMany
    */
-  export type EnumsCreateManyArgs = {
+  export type Other_itemsCreateManyArgs = {
     /**
-     * The data used to create many Enums.
+     * The data used to create many Other_items.
      * 
     **/
-    data: Enumerable<EnumsCreateManyInput>
+    data: Enumerable<Other_itemsCreateManyInput>
     skipDuplicates?: boolean
   }
 
 
   /**
-   * Enums update
+   * Other_items update
    */
-  export type EnumsUpdateArgs = {
+  export type Other_itemsUpdateArgs = {
     /**
-     * Select specific fields to fetch from the Enums
+     * Select specific fields to fetch from the Other_items
      * 
     **/
-    select?: EnumsSelect | null
+    select?: Other_itemsSelect | null
     /**
-     * The data needed to update a Enums.
+     * Choose, which related nodes to fetch as well.
      * 
     **/
-    data: XOR<EnumsUpdateInput, EnumsUncheckedUpdateInput>
+    include?: Other_itemsInclude | null
     /**
-     * Choose, which Enums to update.
+     * The data needed to update a Other_items.
      * 
     **/
-    where: EnumsWhereUniqueInput
+    data: XOR<Other_itemsUpdateInput, Other_itemsUncheckedUpdateInput>
+    /**
+     * Choose, which Other_items to update.
+     * 
+    **/
+    where: Other_itemsWhereUniqueInput
   }
 
 
   /**
-   * Enums updateMany
+   * Other_items updateMany
    */
-  export type EnumsUpdateManyArgs = {
+  export type Other_itemsUpdateManyArgs = {
     /**
-     * The data used to update Enums.
+     * The data used to update Other_items.
      * 
     **/
-    data: XOR<EnumsUpdateManyMutationInput, EnumsUncheckedUpdateManyInput>
+    data: XOR<Other_itemsUpdateManyMutationInput, Other_itemsUncheckedUpdateManyInput>
     /**
-     * Filter which Enums to update
+     * Filter which Other_items to update
      * 
     **/
-    where?: EnumsWhereInput
+    where?: Other_itemsWhereInput
   }
 
 
   /**
-   * Enums upsert
+   * Other_items upsert
    */
-  export type EnumsUpsertArgs = {
+  export type Other_itemsUpsertArgs = {
     /**
-     * Select specific fields to fetch from the Enums
+     * Select specific fields to fetch from the Other_items
      * 
     **/
-    select?: EnumsSelect | null
+    select?: Other_itemsSelect | null
     /**
-     * The filter to search for the Enums to update in case it exists.
+     * Choose, which related nodes to fetch as well.
      * 
     **/
-    where: EnumsWhereUniqueInput
+    include?: Other_itemsInclude | null
     /**
-     * In case the Enums found by the `where` argument doesn't exist, create a new Enums with this data.
+     * The filter to search for the Other_items to update in case it exists.
      * 
     **/
-    create: XOR<EnumsCreateInput, EnumsUncheckedCreateInput>
+    where: Other_itemsWhereUniqueInput
     /**
-     * In case the Enums was found with the provided `where` argument, update it with this data.
+     * In case the Other_items found by the `where` argument doesn't exist, create a new Other_items with this data.
      * 
     **/
-    update: XOR<EnumsUpdateInput, EnumsUncheckedUpdateInput>
+    create: XOR<Other_itemsCreateInput, Other_itemsUncheckedCreateInput>
+    /**
+     * In case the Other_items was found with the provided `where` argument, update it with this data.
+     * 
+    **/
+    update: XOR<Other_itemsUpdateInput, Other_itemsUncheckedUpdateInput>
   }
 
 
   /**
-   * Enums delete
+   * Other_items delete
    */
-  export type EnumsDeleteArgs = {
+  export type Other_itemsDeleteArgs = {
     /**
-     * Select specific fields to fetch from the Enums
+     * Select specific fields to fetch from the Other_items
      * 
     **/
-    select?: EnumsSelect | null
+    select?: Other_itemsSelect | null
     /**
-     * Filter which Enums to delete.
+     * Choose, which related nodes to fetch as well.
      * 
     **/
-    where: EnumsWhereUniqueInput
+    include?: Other_itemsInclude | null
+    /**
+     * Filter which Other_items to delete.
+     * 
+    **/
+    where: Other_itemsWhereUniqueInput
   }
 
 
   /**
-   * Enums deleteMany
+   * Other_items deleteMany
    */
-  export type EnumsDeleteManyArgs = {
+  export type Other_itemsDeleteManyArgs = {
     /**
-     * Filter which Enums to delete
+     * Filter which Other_items to delete
      * 
     **/
-    where?: EnumsWhereInput
+    where?: Other_itemsWhereInput
   }
 
 
   /**
-   * Enums without action
+   * Other_items without action
    */
-  export type EnumsArgs = {
+  export type Other_itemsArgs = {
     /**
-     * Select specific fields to fetch from the Enums
+     * Select specific fields to fetch from the Other_items
      * 
     **/
-    select?: EnumsSelect | null
+    select?: Other_itemsSelect | null
+    /**
+     * Choose, which related nodes to fetch as well.
+     * 
+    **/
+    include?: Other_itemsInclude | null
   }
 
 
 
   /**
-   * Model Blobs
+   * Model Timestamps
    */
 
 
-  export type AggregateBlobs = {
-    _count: BlobsCountAggregateOutputType | null
-    _min: BlobsMinAggregateOutputType | null
-    _max: BlobsMaxAggregateOutputType | null
+  export type AggregateTimestamps = {
+    _count: TimestampsCountAggregateOutputType | null
+    _min: TimestampsMinAggregateOutputType | null
+    _max: TimestampsMaxAggregateOutputType | null
   }
 
-  export type BlobsMinAggregateOutputType = {
+  export type TimestampsMinAggregateOutputType = {
     id: string | null
-    blob: Uint8Array | null
+    created_at: Date | null
+    updated_at: Date | null
   }
 
-  export type BlobsMaxAggregateOutputType = {
+  export type TimestampsMaxAggregateOutputType = {
     id: string | null
-    blob: Uint8Array | null
+    created_at: Date | null
+    updated_at: Date | null
   }
 
-  export type BlobsCountAggregateOutputType = {
+  export type TimestampsCountAggregateOutputType = {
     id: number
-    blob: number
+    created_at: number
+    updated_at: number
     _all: number
   }
 
 
-  export type BlobsMinAggregateInputType = {
+  export type TimestampsMinAggregateInputType = {
     id?: true
-    blob?: true
+    created_at?: true
+    updated_at?: true
   }
 
-  export type BlobsMaxAggregateInputType = {
+  export type TimestampsMaxAggregateInputType = {
     id?: true
-    blob?: true
+    created_at?: true
+    updated_at?: true
   }
 
-  export type BlobsCountAggregateInputType = {
+  export type TimestampsCountAggregateInputType = {
     id?: true
-    blob?: true
+    created_at?: true
+    updated_at?: true
     _all?: true
   }
 
-  export type BlobsAggregateArgs = {
+  export type TimestampsAggregateArgs = {
     /**
-     * Filter which Blobs to aggregate.
+     * Filter which Timestamps to aggregate.
      * 
     **/
-    where?: BlobsWhereInput
+    where?: TimestampsWhereInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
      * 
-     * Determine the order of Blobs to fetch.
+     * Determine the order of Timestamps to fetch.
      * 
     **/
-    orderBy?: Enumerable<BlobsOrderByWithRelationInput>
+    orderBy?: Enumerable<TimestampsOrderByWithRelationInput>
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
      * 
      * Sets the start position
      * 
     **/
-    cursor?: BlobsWhereUniqueInput
+    cursor?: TimestampsWhereUniqueInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Take `±n` Blobs from the position of the cursor.
+     * Take `±n` Timestamps from the position of the cursor.
      * 
     **/
     take?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Skip the first `n` Blobs.
+     * Skip the first `n` Timestamps.
      * 
     **/
     skip?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
      * 
-     * Count returned Blobs
+     * Count returned Timestamps
     **/
-    _count?: true | BlobsCountAggregateInputType
+    _count?: true | TimestampsCountAggregateInputType
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
      * 
      * Select which fields to find the minimum value
     **/
-    _min?: BlobsMinAggregateInputType
+    _min?: TimestampsMinAggregateInputType
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
      * 
      * Select which fields to find the maximum value
     **/
-    _max?: BlobsMaxAggregateInputType
+    _max?: TimestampsMaxAggregateInputType
   }
 
-  export type GetBlobsAggregateType<T extends BlobsAggregateArgs> = {
-        [P in keyof T & keyof AggregateBlobs]: P extends '_count' | 'count'
+  export type GetTimestampsAggregateType<T extends TimestampsAggregateArgs> = {
+        [P in keyof T & keyof AggregateTimestamps]: P extends '_count' | 'count'
       ? T[P] extends true
         ? number
-        : GetScalarType<T[P], AggregateBlobs[P]>
-      : GetScalarType<T[P], AggregateBlobs[P]>
+        : GetScalarType<T[P], AggregateTimestamps[P]>
+      : GetScalarType<T[P], AggregateTimestamps[P]>
   }
 
 
 
 
-  export type BlobsGroupByArgs = {
-    where?: BlobsWhereInput
-    orderBy?: Enumerable<BlobsOrderByWithAggregationInput>
-    by: Array<BlobsScalarFieldEnum>
-    having?: BlobsScalarWhereWithAggregatesInput
+  export type TimestampsGroupByArgs = {
+    where?: TimestampsWhereInput
+    orderBy?: Enumerable<TimestampsOrderByWithAggregationInput>
+    by: Array<TimestampsScalarFieldEnum>
+    having?: TimestampsScalarWhereWithAggregatesInput
     take?: number
     skip?: number
-    _count?: BlobsCountAggregateInputType | true
-    _min?: BlobsMinAggregateInputType
-    _max?: BlobsMaxAggregateInputType
+    _count?: TimestampsCountAggregateInputType | true
+    _min?: TimestampsMinAggregateInputType
+    _max?: TimestampsMaxAggregateInputType
   }
 
 
-  export type BlobsGroupByOutputType = {
+  export type TimestampsGroupByOutputType = {
     id: string
-    blob: Uint8Array | null
-    _count: BlobsCountAggregateOutputType | null
-    _min: BlobsMinAggregateOutputType | null
-    _max: BlobsMaxAggregateOutputType | null
+    created_at: Date
+    updated_at: Date
+    _count: TimestampsCountAggregateOutputType | null
+    _min: TimestampsMinAggregateOutputType | null
+    _max: TimestampsMaxAggregateOutputType | null
   }
 
-  type GetBlobsGroupByPayload<T extends BlobsGroupByArgs> = PrismaPromise<
+  type GetTimestampsGroupByPayload<T extends TimestampsGroupByArgs> = PrismaPromise<
     Array<
-      PickArray<BlobsGroupByOutputType, T['by']> &
+      PickArray<TimestampsGroupByOutputType, T['by']> &
         {
-          [P in ((keyof T) & (keyof BlobsGroupByOutputType))]: P extends '_count'
+          [P in ((keyof T) & (keyof TimestampsGroupByOutputType))]: P extends '_count'
             ? T[P] extends boolean
               ? number
-              : GetScalarType<T[P], BlobsGroupByOutputType[P]>
-            : GetScalarType<T[P], BlobsGroupByOutputType[P]>
+              : GetScalarType<T[P], TimestampsGroupByOutputType[P]>
+            : GetScalarType<T[P], TimestampsGroupByOutputType[P]>
         }
       >
     >
 
 
-  export type BlobsSelect = {
+  export type TimestampsSelect = {
     id?: boolean
-    blob?: boolean
+    created_at?: boolean
+    updated_at?: boolean
   }
 
 
-  export type BlobsGetPayload<S extends boolean | null | undefined | BlobsArgs> =
+  export type TimestampsGetPayload<S extends boolean | null | undefined | TimestampsArgs> =
     S extends { select: any, include: any } ? 'Please either choose `select` or `include`' :
-    S extends true ? Blobs :
+    S extends true ? Timestamps :
     S extends undefined ? never :
-    S extends { include: any } & (BlobsArgs | BlobsFindManyArgs)
-    ? Blobs 
-    : S extends { select: any } & (BlobsArgs | BlobsFindManyArgs)
+    S extends { include: any } & (TimestampsArgs | TimestampsFindManyArgs)
+    ? Timestamps 
+    : S extends { select: any } & (TimestampsArgs | TimestampsFindManyArgs)
       ? {
     [P in TruthyKeys<S['select']>]:
-    P extends keyof Blobs ? Blobs[P] : never
+    P extends keyof Timestamps ? Timestamps[P] : never
   } 
-      : Blobs
+      : Timestamps
 
 
-  type BlobsCountArgs = Merge<
-    Omit<BlobsFindManyArgs, 'select' | 'include'> & {
-      select?: BlobsCountAggregateInputType | true
+  type TimestampsCountArgs = Merge<
+    Omit<TimestampsFindManyArgs, 'select' | 'include'> & {
+      select?: TimestampsCountAggregateInputType | true
     }
   >
 
-  export interface BlobsDelegate<GlobalRejectSettings extends Prisma.RejectOnNotFound | Prisma.RejectPerOperation | false | undefined> {
+  export interface TimestampsDelegate<GlobalRejectSettings extends Prisma.RejectOnNotFound | Prisma.RejectPerOperation | false | undefined> {
     /**
-     * Find zero or one Blobs that matches the filter.
-     * @param {BlobsFindUniqueArgs} args - Arguments to find a Blobs
+     * Find zero or one Timestamps that matches the filter.
+     * @param {TimestampsFindUniqueArgs} args - Arguments to find a Timestamps
      * @example
-     * // Get one Blobs
-     * const blobs = await prisma.blobs.findUnique({
+     * // Get one Timestamps
+     * const timestamps = await prisma.timestamps.findUnique({
      *   where: {
      *     // ... provide filter here
      *   }
      * })
     **/
-    findUnique<T extends BlobsFindUniqueArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
-      args: SelectSubset<T, BlobsFindUniqueArgs>
-    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findUnique', 'Blobs'> extends True ? Prisma__BlobsClient<BlobsGetPayload<T>> : Prisma__BlobsClient<BlobsGetPayload<T> | null, null>
+    findUnique<T extends TimestampsFindUniqueArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
+      args: SelectSubset<T, TimestampsFindUniqueArgs>
+    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findUnique', 'Timestamps'> extends True ? Prisma__TimestampsClient<TimestampsGetPayload<T>> : Prisma__TimestampsClient<TimestampsGetPayload<T> | null, null>
 
     /**
-     * Find one Blobs that matches the filter or throw an error  with `error.code='P2025'` 
+     * Find one Timestamps that matches the filter or throw an error  with `error.code='P2025'` 
      *     if no matches were found.
-     * @param {BlobsFindUniqueOrThrowArgs} args - Arguments to find a Blobs
+     * @param {TimestampsFindUniqueOrThrowArgs} args - Arguments to find a Timestamps
      * @example
-     * // Get one Blobs
-     * const blobs = await prisma.blobs.findUniqueOrThrow({
+     * // Get one Timestamps
+     * const timestamps = await prisma.timestamps.findUniqueOrThrow({
      *   where: {
      *     // ... provide filter here
      *   }
      * })
     **/
-    findUniqueOrThrow<T extends BlobsFindUniqueOrThrowArgs>(
-      args?: SelectSubset<T, BlobsFindUniqueOrThrowArgs>
-    ): Prisma__BlobsClient<BlobsGetPayload<T>>
+    findUniqueOrThrow<T extends TimestampsFindUniqueOrThrowArgs>(
+      args?: SelectSubset<T, TimestampsFindUniqueOrThrowArgs>
+    ): Prisma__TimestampsClient<TimestampsGetPayload<T>>
 
     /**
-     * Find the first Blobs that matches the filter.
+     * Find the first Timestamps that matches the filter.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {BlobsFindFirstArgs} args - Arguments to find a Blobs
+     * @param {TimestampsFindFirstArgs} args - Arguments to find a Timestamps
      * @example
-     * // Get one Blobs
-     * const blobs = await prisma.blobs.findFirst({
+     * // Get one Timestamps
+     * const timestamps = await prisma.timestamps.findFirst({
      *   where: {
      *     // ... provide filter here
      *   }
      * })
     **/
-    findFirst<T extends BlobsFindFirstArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
-      args?: SelectSubset<T, BlobsFindFirstArgs>
-    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findFirst', 'Blobs'> extends True ? Prisma__BlobsClient<BlobsGetPayload<T>> : Prisma__BlobsClient<BlobsGetPayload<T> | null, null>
+    findFirst<T extends TimestampsFindFirstArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
+      args?: SelectSubset<T, TimestampsFindFirstArgs>
+    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findFirst', 'Timestamps'> extends True ? Prisma__TimestampsClient<TimestampsGetPayload<T>> : Prisma__TimestampsClient<TimestampsGetPayload<T> | null, null>
 
     /**
-     * Find the first Blobs that matches the filter or
+     * Find the first Timestamps that matches the filter or
      * throw `NotFoundError` if no matches were found.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {BlobsFindFirstOrThrowArgs} args - Arguments to find a Blobs
+     * @param {TimestampsFindFirstOrThrowArgs} args - Arguments to find a Timestamps
      * @example
-     * // Get one Blobs
-     * const blobs = await prisma.blobs.findFirstOrThrow({
+     * // Get one Timestamps
+     * const timestamps = await prisma.timestamps.findFirstOrThrow({
      *   where: {
      *     // ... provide filter here
      *   }
      * })
     **/
-    findFirstOrThrow<T extends BlobsFindFirstOrThrowArgs>(
-      args?: SelectSubset<T, BlobsFindFirstOrThrowArgs>
-    ): Prisma__BlobsClient<BlobsGetPayload<T>>
+    findFirstOrThrow<T extends TimestampsFindFirstOrThrowArgs>(
+      args?: SelectSubset<T, TimestampsFindFirstOrThrowArgs>
+    ): Prisma__TimestampsClient<TimestampsGetPayload<T>>
 
     /**
-     * Find zero or more Blobs that matches the filter.
+     * Find zero or more Timestamps that matches the filter.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {BlobsFindManyArgs=} args - Arguments to filter and select certain fields only.
+     * @param {TimestampsFindManyArgs=} args - Arguments to filter and select certain fields only.
      * @example
-     * // Get all Blobs
-     * const blobs = await prisma.blobs.findMany()
+     * // Get all Timestamps
+     * const timestamps = await prisma.timestamps.findMany()
      * 
-     * // Get first 10 Blobs
-     * const blobs = await prisma.blobs.findMany({ take: 10 })
+     * // Get first 10 Timestamps
+     * const timestamps = await prisma.timestamps.findMany({ take: 10 })
      * 
      * // Only select the `id`
-     * const blobsWithIdOnly = await prisma.blobs.findMany({ select: { id: true } })
+     * const timestampsWithIdOnly = await prisma.timestamps.findMany({ select: { id: true } })
      * 
     **/
-    findMany<T extends BlobsFindManyArgs>(
-      args?: SelectSubset<T, BlobsFindManyArgs>
-    ): PrismaPromise<Array<BlobsGetPayload<T>>>
+    findMany<T extends TimestampsFindManyArgs>(
+      args?: SelectSubset<T, TimestampsFindManyArgs>
+    ): PrismaPromise<Array<TimestampsGetPayload<T>>>
 
     /**
-     * Create a Blobs.
-     * @param {BlobsCreateArgs} args - Arguments to create a Blobs.
+     * Create a Timestamps.
+     * @param {TimestampsCreateArgs} args - Arguments to create a Timestamps.
      * @example
-     * // Create one Blobs
-     * const Blobs = await prisma.blobs.create({
+     * // Create one Timestamps
+     * const Timestamps = await prisma.timestamps.create({
      *   data: {
-     *     // ... data to create a Blobs
+     *     // ... data to create a Timestamps
      *   }
      * })
      * 
     **/
-    create<T extends BlobsCreateArgs>(
-      args: SelectSubset<T, BlobsCreateArgs>
-    ): Prisma__BlobsClient<BlobsGetPayload<T>>
+    create<T extends TimestampsCreateArgs>(
+      args: SelectSubset<T, TimestampsCreateArgs>
+    ): Prisma__TimestampsClient<TimestampsGetPayload<T>>
 
     /**
-     * Create many Blobs.
-     *     @param {BlobsCreateManyArgs} args - Arguments to create many Blobs.
+     * Create many Timestamps.
+     *     @param {TimestampsCreateManyArgs} args - Arguments to create many Timestamps.
      *     @example
-     *     // Create many Blobs
-     *     const blobs = await prisma.blobs.createMany({
+     *     // Create many Timestamps
+     *     const timestamps = await prisma.timestamps.createMany({
      *       data: {
      *         // ... provide data here
      *       }
      *     })
      *     
     **/
-    createMany<T extends BlobsCreateManyArgs>(
-      args?: SelectSubset<T, BlobsCreateManyArgs>
+    createMany<T extends TimestampsCreateManyArgs>(
+      args?: SelectSubset<T, TimestampsCreateManyArgs>
     ): PrismaPromise<BatchPayload>
 
     /**
-     * Delete a Blobs.
-     * @param {BlobsDeleteArgs} args - Arguments to delete one Blobs.
+     * Delete a Timestamps.
+     * @param {TimestampsDeleteArgs} args - Arguments to delete one Timestamps.
      * @example
-     * // Delete one Blobs
-     * const Blobs = await prisma.blobs.delete({
+     * // Delete one Timestamps
+     * const Timestamps = await prisma.timestamps.delete({
      *   where: {
-     *     // ... filter to delete one Blobs
+     *     // ... filter to delete one Timestamps
      *   }
      * })
      * 
     **/
-    delete<T extends BlobsDeleteArgs>(
-      args: SelectSubset<T, BlobsDeleteArgs>
-    ): Prisma__BlobsClient<BlobsGetPayload<T>>
+    delete<T extends TimestampsDeleteArgs>(
+      args: SelectSubset<T, TimestampsDeleteArgs>
+    ): Prisma__TimestampsClient<TimestampsGetPayload<T>>
 
     /**
-     * Update one Blobs.
-     * @param {BlobsUpdateArgs} args - Arguments to update one Blobs.
+     * Update one Timestamps.
+     * @param {TimestampsUpdateArgs} args - Arguments to update one Timestamps.
      * @example
-     * // Update one Blobs
-     * const blobs = await prisma.blobs.update({
+     * // Update one Timestamps
+     * const timestamps = await prisma.timestamps.update({
      *   where: {
      *     // ... provide filter here
      *   },
@@ -10722,34 +9895,34 @@ export namespace Prisma {
      * })
      * 
     **/
-    update<T extends BlobsUpdateArgs>(
-      args: SelectSubset<T, BlobsUpdateArgs>
-    ): Prisma__BlobsClient<BlobsGetPayload<T>>
+    update<T extends TimestampsUpdateArgs>(
+      args: SelectSubset<T, TimestampsUpdateArgs>
+    ): Prisma__TimestampsClient<TimestampsGetPayload<T>>
 
     /**
-     * Delete zero or more Blobs.
-     * @param {BlobsDeleteManyArgs} args - Arguments to filter Blobs to delete.
+     * Delete zero or more Timestamps.
+     * @param {TimestampsDeleteManyArgs} args - Arguments to filter Timestamps to delete.
      * @example
-     * // Delete a few Blobs
-     * const { count } = await prisma.blobs.deleteMany({
+     * // Delete a few Timestamps
+     * const { count } = await prisma.timestamps.deleteMany({
      *   where: {
      *     // ... provide filter here
      *   }
      * })
      * 
     **/
-    deleteMany<T extends BlobsDeleteManyArgs>(
-      args?: SelectSubset<T, BlobsDeleteManyArgs>
+    deleteMany<T extends TimestampsDeleteManyArgs>(
+      args?: SelectSubset<T, TimestampsDeleteManyArgs>
     ): PrismaPromise<BatchPayload>
 
     /**
-     * Update zero or more Blobs.
+     * Update zero or more Timestamps.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {BlobsUpdateManyArgs} args - Arguments to update one or more rows.
+     * @param {TimestampsUpdateManyArgs} args - Arguments to update one or more rows.
      * @example
-     * // Update many Blobs
-     * const blobs = await prisma.blobs.updateMany({
+     * // Update many Timestamps
+     * const timestamps = await prisma.timestamps.updateMany({
      *   where: {
      *     // ... provide filter here
      *   },
@@ -10759,59 +9932,59 @@ export namespace Prisma {
      * })
      * 
     **/
-    updateMany<T extends BlobsUpdateManyArgs>(
-      args: SelectSubset<T, BlobsUpdateManyArgs>
+    updateMany<T extends TimestampsUpdateManyArgs>(
+      args: SelectSubset<T, TimestampsUpdateManyArgs>
     ): PrismaPromise<BatchPayload>
 
     /**
-     * Create or update one Blobs.
-     * @param {BlobsUpsertArgs} args - Arguments to update or create a Blobs.
+     * Create or update one Timestamps.
+     * @param {TimestampsUpsertArgs} args - Arguments to update or create a Timestamps.
      * @example
-     * // Update or create a Blobs
-     * const blobs = await prisma.blobs.upsert({
+     * // Update or create a Timestamps
+     * const timestamps = await prisma.timestamps.upsert({
      *   create: {
-     *     // ... data to create a Blobs
+     *     // ... data to create a Timestamps
      *   },
      *   update: {
      *     // ... in case it already exists, update
      *   },
      *   where: {
-     *     // ... the filter for the Blobs we want to update
+     *     // ... the filter for the Timestamps we want to update
      *   }
      * })
     **/
-    upsert<T extends BlobsUpsertArgs>(
-      args: SelectSubset<T, BlobsUpsertArgs>
-    ): Prisma__BlobsClient<BlobsGetPayload<T>>
+    upsert<T extends TimestampsUpsertArgs>(
+      args: SelectSubset<T, TimestampsUpsertArgs>
+    ): Prisma__TimestampsClient<TimestampsGetPayload<T>>
 
     /**
-     * Count the number of Blobs.
+     * Count the number of Timestamps.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {BlobsCountArgs} args - Arguments to filter Blobs to count.
+     * @param {TimestampsCountArgs} args - Arguments to filter Timestamps to count.
      * @example
-     * // Count the number of Blobs
-     * const count = await prisma.blobs.count({
+     * // Count the number of Timestamps
+     * const count = await prisma.timestamps.count({
      *   where: {
-     *     // ... the filter for the Blobs we want to count
+     *     // ... the filter for the Timestamps we want to count
      *   }
      * })
     **/
-    count<T extends BlobsCountArgs>(
-      args?: Subset<T, BlobsCountArgs>,
+    count<T extends TimestampsCountArgs>(
+      args?: Subset<T, TimestampsCountArgs>,
     ): PrismaPromise<
       T extends _Record<'select', any>
         ? T['select'] extends true
           ? number
-          : GetScalarType<T['select'], BlobsCountAggregateOutputType>
+          : GetScalarType<T['select'], TimestampsCountAggregateOutputType>
         : number
     >
 
     /**
-     * Allows you to perform aggregations operations on a Blobs.
+     * Allows you to perform aggregations operations on a Timestamps.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {BlobsAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @param {TimestampsAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
      * @example
      * // Ordered by age ascending
      * // Where email contains prisma.io
@@ -10831,13 +10004,13 @@ export namespace Prisma {
      *   take: 10,
      * })
     **/
-    aggregate<T extends BlobsAggregateArgs>(args: Subset<T, BlobsAggregateArgs>): PrismaPromise<GetBlobsAggregateType<T>>
+    aggregate<T extends TimestampsAggregateArgs>(args: Subset<T, TimestampsAggregateArgs>): PrismaPromise<GetTimestampsAggregateType<T>>
 
     /**
-     * Group by Blobs.
+     * Group by Timestamps.
      * Note, that providing `undefined` is treated as the value not being there.
      * Read more here: https://pris.ly/d/null-undefined
-     * @param {BlobsGroupByArgs} args - Group by arguments.
+     * @param {TimestampsGroupByArgs} args - Group by arguments.
      * @example
      * // Group by city, order by createdAt, get count
      * const result = await prisma.user.groupBy({
@@ -10852,14 +10025,14 @@ export namespace Prisma {
      * 
     **/
     groupBy<
-      T extends BlobsGroupByArgs,
+      T extends TimestampsGroupByArgs,
       HasSelectOrTake extends Or<
         Extends<'skip', Keys<T>>,
         Extends<'take', Keys<T>>
       >,
       OrderByArg extends True extends HasSelectOrTake
-        ? { orderBy: BlobsGroupByArgs['orderBy'] }
-        : { orderBy?: BlobsGroupByArgs['orderBy'] },
+        ? { orderBy: TimestampsGroupByArgs['orderBy'] }
+        : { orderBy?: TimestampsGroupByArgs['orderBy'] },
       OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
       ByFields extends TupleToUnion<T['by']>,
       ByValid extends Has<ByFields, OrderFields>,
@@ -10908,17 +10081,17 @@ export namespace Prisma {
             ? never
             : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
         }[OrderFields]
-    >(args: SubsetIntersection<T, BlobsGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetBlobsGroupByPayload<T> : PrismaPromise<InputErrors>
+    >(args: SubsetIntersection<T, TimestampsGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetTimestampsGroupByPayload<T> : PrismaPromise<InputErrors>
 
   }
 
   /**
-   * The delegate class that acts as a "Promise-like" for Blobs.
+   * The delegate class that acts as a "Promise-like" for Timestamps.
    * Why is this prefixed with `Prisma__`?
    * Because we want to prevent naming conflicts as mentioned in
    * https://github.com/prisma/prisma-client-js/issues/707
    */
-  export class Prisma__BlobsClient<T, Null = never> implements PrismaPromise<T> {
+  export class Prisma__TimestampsClient<T, Null = never> implements PrismaPromise<T> {
     [prisma]: true;
     private readonly _dmmf;
     private readonly _fetcher;
@@ -10964,25 +10137,25 @@ export namespace Prisma {
   // Custom InputTypes
 
   /**
-   * Blobs base type for findUnique actions
+   * Timestamps base type for findUnique actions
    */
-  export type BlobsFindUniqueArgsBase = {
+  export type TimestampsFindUniqueArgsBase = {
     /**
-     * Select specific fields to fetch from the Blobs
+     * Select specific fields to fetch from the Timestamps
      * 
     **/
-    select?: BlobsSelect | null
+    select?: TimestampsSelect | null
     /**
-     * Filter, which Blobs to fetch.
+     * Filter, which Timestamps to fetch.
      * 
     **/
-    where: BlobsWhereUniqueInput
+    where: TimestampsWhereUniqueInput
   }
 
   /**
-   * Blobs findUnique
+   * Timestamps findUnique
    */
-  export interface BlobsFindUniqueArgs extends BlobsFindUniqueArgsBase {
+  export interface TimestampsFindUniqueArgs extends TimestampsFindUniqueArgsBase {
    /**
     * Throw an Error if query returns no results
     * @deprecated since 4.0.0: use `findUniqueOrThrow` method instead
@@ -10992,77 +10165,77 @@ export namespace Prisma {
       
 
   /**
-   * Blobs findUniqueOrThrow
+   * Timestamps findUniqueOrThrow
    */
-  export type BlobsFindUniqueOrThrowArgs = {
+  export type TimestampsFindUniqueOrThrowArgs = {
     /**
-     * Select specific fields to fetch from the Blobs
+     * Select specific fields to fetch from the Timestamps
      * 
     **/
-    select?: BlobsSelect | null
+    select?: TimestampsSelect | null
     /**
-     * Filter, which Blobs to fetch.
+     * Filter, which Timestamps to fetch.
      * 
     **/
-    where: BlobsWhereUniqueInput
+    where: TimestampsWhereUniqueInput
   }
 
 
   /**
-   * Blobs base type for findFirst actions
+   * Timestamps base type for findFirst actions
    */
-  export type BlobsFindFirstArgsBase = {
+  export type TimestampsFindFirstArgsBase = {
     /**
-     * Select specific fields to fetch from the Blobs
+     * Select specific fields to fetch from the Timestamps
      * 
     **/
-    select?: BlobsSelect | null
+    select?: TimestampsSelect | null
     /**
-     * Filter, which Blobs to fetch.
+     * Filter, which Timestamps to fetch.
      * 
     **/
-    where?: BlobsWhereInput
+    where?: TimestampsWhereInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
      * 
-     * Determine the order of Blobs to fetch.
+     * Determine the order of Timestamps to fetch.
      * 
     **/
-    orderBy?: Enumerable<BlobsOrderByWithRelationInput>
+    orderBy?: Enumerable<TimestampsOrderByWithRelationInput>
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
      * 
-     * Sets the position for searching for Blobs.
+     * Sets the position for searching for Timestamps.
      * 
     **/
-    cursor?: BlobsWhereUniqueInput
+    cursor?: TimestampsWhereUniqueInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Take `±n` Blobs from the position of the cursor.
+     * Take `±n` Timestamps from the position of the cursor.
      * 
     **/
     take?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Skip the first `n` Blobs.
+     * Skip the first `n` Timestamps.
      * 
     **/
     skip?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
      * 
-     * Filter by unique combinations of Blobs.
+     * Filter by unique combinations of Timestamps.
      * 
     **/
-    distinct?: Enumerable<BlobsScalarFieldEnum>
+    distinct?: Enumerable<TimestampsScalarFieldEnum>
   }
 
   /**
-   * Blobs findFirst
+   * Timestamps findFirst
    */
-  export interface BlobsFindFirstArgs extends BlobsFindFirstArgsBase {
+  export interface TimestampsFindFirstArgs extends TimestampsFindFirstArgsBase {
    /**
     * Throw an Error if query returns no results
     * @deprecated since 4.0.0: use `findFirstOrThrow` method instead
@@ -11072,237 +10245,1134 @@ export namespace Prisma {
       
 
   /**
-   * Blobs findFirstOrThrow
+   * Timestamps findFirstOrThrow
    */
-  export type BlobsFindFirstOrThrowArgs = {
+  export type TimestampsFindFirstOrThrowArgs = {
     /**
-     * Select specific fields to fetch from the Blobs
+     * Select specific fields to fetch from the Timestamps
      * 
     **/
-    select?: BlobsSelect | null
+    select?: TimestampsSelect | null
     /**
-     * Filter, which Blobs to fetch.
+     * Filter, which Timestamps to fetch.
      * 
     **/
-    where?: BlobsWhereInput
+    where?: TimestampsWhereInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
      * 
-     * Determine the order of Blobs to fetch.
+     * Determine the order of Timestamps to fetch.
      * 
     **/
-    orderBy?: Enumerable<BlobsOrderByWithRelationInput>
+    orderBy?: Enumerable<TimestampsOrderByWithRelationInput>
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
      * 
-     * Sets the position for searching for Blobs.
+     * Sets the position for searching for Timestamps.
      * 
     **/
-    cursor?: BlobsWhereUniqueInput
+    cursor?: TimestampsWhereUniqueInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Take `±n` Blobs from the position of the cursor.
+     * Take `±n` Timestamps from the position of the cursor.
      * 
     **/
     take?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Skip the first `n` Blobs.
+     * Skip the first `n` Timestamps.
      * 
     **/
     skip?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
      * 
-     * Filter by unique combinations of Blobs.
+     * Filter by unique combinations of Timestamps.
      * 
     **/
-    distinct?: Enumerable<BlobsScalarFieldEnum>
+    distinct?: Enumerable<TimestampsScalarFieldEnum>
   }
 
 
   /**
-   * Blobs findMany
+   * Timestamps findMany
    */
-  export type BlobsFindManyArgs = {
+  export type TimestampsFindManyArgs = {
     /**
-     * Select specific fields to fetch from the Blobs
+     * Select specific fields to fetch from the Timestamps
      * 
     **/
-    select?: BlobsSelect | null
+    select?: TimestampsSelect | null
     /**
-     * Filter, which Blobs to fetch.
+     * Filter, which Timestamps to fetch.
      * 
     **/
-    where?: BlobsWhereInput
+    where?: TimestampsWhereInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
      * 
-     * Determine the order of Blobs to fetch.
+     * Determine the order of Timestamps to fetch.
      * 
     **/
-    orderBy?: Enumerable<BlobsOrderByWithRelationInput>
+    orderBy?: Enumerable<TimestampsOrderByWithRelationInput>
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
      * 
-     * Sets the position for listing Blobs.
+     * Sets the position for listing Timestamps.
      * 
     **/
-    cursor?: BlobsWhereUniqueInput
+    cursor?: TimestampsWhereUniqueInput
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Take `±n` Blobs from the position of the cursor.
+     * Take `±n` Timestamps from the position of the cursor.
      * 
     **/
     take?: number
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
      * 
-     * Skip the first `n` Blobs.
+     * Skip the first `n` Timestamps.
      * 
     **/
     skip?: number
-    distinct?: Enumerable<BlobsScalarFieldEnum>
+    distinct?: Enumerable<TimestampsScalarFieldEnum>
   }
 
 
   /**
-   * Blobs create
+   * Timestamps create
    */
-  export type BlobsCreateArgs = {
+  export type TimestampsCreateArgs = {
     /**
-     * Select specific fields to fetch from the Blobs
+     * Select specific fields to fetch from the Timestamps
      * 
     **/
-    select?: BlobsSelect | null
+    select?: TimestampsSelect | null
     /**
-     * The data needed to create a Blobs.
+     * The data needed to create a Timestamps.
      * 
     **/
-    data: XOR<BlobsCreateInput, BlobsUncheckedCreateInput>
+    data: XOR<TimestampsCreateInput, TimestampsUncheckedCreateInput>
   }
 
 
   /**
-   * Blobs createMany
+   * Timestamps createMany
    */
-  export type BlobsCreateManyArgs = {
+  export type TimestampsCreateManyArgs = {
     /**
-     * The data used to create many Blobs.
+     * The data used to create many Timestamps.
      * 
     **/
-    data: Enumerable<BlobsCreateManyInput>
+    data: Enumerable<TimestampsCreateManyInput>
     skipDuplicates?: boolean
   }
 
 
   /**
-   * Blobs update
+   * Timestamps update
    */
-  export type BlobsUpdateArgs = {
+  export type TimestampsUpdateArgs = {
     /**
-     * Select specific fields to fetch from the Blobs
+     * Select specific fields to fetch from the Timestamps
      * 
     **/
-    select?: BlobsSelect | null
+    select?: TimestampsSelect | null
     /**
-     * The data needed to update a Blobs.
+     * The data needed to update a Timestamps.
      * 
     **/
-    data: XOR<BlobsUpdateInput, BlobsUncheckedUpdateInput>
+    data: XOR<TimestampsUpdateInput, TimestampsUncheckedUpdateInput>
     /**
-     * Choose, which Blobs to update.
+     * Choose, which Timestamps to update.
      * 
     **/
-    where: BlobsWhereUniqueInput
+    where: TimestampsWhereUniqueInput
   }
 
 
   /**
-   * Blobs updateMany
+   * Timestamps updateMany
    */
-  export type BlobsUpdateManyArgs = {
+  export type TimestampsUpdateManyArgs = {
     /**
-     * The data used to update Blobs.
+     * The data used to update Timestamps.
      * 
     **/
-    data: XOR<BlobsUpdateManyMutationInput, BlobsUncheckedUpdateManyInput>
+    data: XOR<TimestampsUpdateManyMutationInput, TimestampsUncheckedUpdateManyInput>
     /**
-     * Filter which Blobs to update
+     * Filter which Timestamps to update
      * 
     **/
-    where?: BlobsWhereInput
+    where?: TimestampsWhereInput
   }
 
 
   /**
-   * Blobs upsert
+   * Timestamps upsert
    */
-  export type BlobsUpsertArgs = {
+  export type TimestampsUpsertArgs = {
     /**
-     * Select specific fields to fetch from the Blobs
+     * Select specific fields to fetch from the Timestamps
      * 
     **/
-    select?: BlobsSelect | null
+    select?: TimestampsSelect | null
     /**
-     * The filter to search for the Blobs to update in case it exists.
+     * The filter to search for the Timestamps to update in case it exists.
      * 
     **/
-    where: BlobsWhereUniqueInput
+    where: TimestampsWhereUniqueInput
     /**
-     * In case the Blobs found by the `where` argument doesn't exist, create a new Blobs with this data.
+     * In case the Timestamps found by the `where` argument doesn't exist, create a new Timestamps with this data.
      * 
     **/
-    create: XOR<BlobsCreateInput, BlobsUncheckedCreateInput>
+    create: XOR<TimestampsCreateInput, TimestampsUncheckedCreateInput>
     /**
-     * In case the Blobs was found with the provided `where` argument, update it with this data.
+     * In case the Timestamps was found with the provided `where` argument, update it with this data.
      * 
     **/
-    update: XOR<BlobsUpdateInput, BlobsUncheckedUpdateInput>
+    update: XOR<TimestampsUpdateInput, TimestampsUncheckedUpdateInput>
   }
 
 
   /**
-   * Blobs delete
+   * Timestamps delete
    */
-  export type BlobsDeleteArgs = {
+  export type TimestampsDeleteArgs = {
     /**
-     * Select specific fields to fetch from the Blobs
+     * Select specific fields to fetch from the Timestamps
      * 
     **/
-    select?: BlobsSelect | null
+    select?: TimestampsSelect | null
     /**
-     * Filter which Blobs to delete.
+     * Filter which Timestamps to delete.
      * 
     **/
-    where: BlobsWhereUniqueInput
+    where: TimestampsWhereUniqueInput
   }
 
 
   /**
-   * Blobs deleteMany
+   * Timestamps deleteMany
    */
-  export type BlobsDeleteManyArgs = {
+  export type TimestampsDeleteManyArgs = {
     /**
-     * Filter which Blobs to delete
+     * Filter which Timestamps to delete
      * 
     **/
-    where?: BlobsWhereInput
+    where?: TimestampsWhereInput
   }
 
 
   /**
-   * Blobs without action
+   * Timestamps without action
    */
-  export type BlobsArgs = {
+  export type TimestampsArgs = {
     /**
-     * Select specific fields to fetch from the Blobs
+     * Select specific fields to fetch from the Timestamps
      * 
     **/
-    select?: BlobsSelect | null
+    select?: TimestampsSelect | null
+  }
+
+
+
+  /**
+   * Model Uuids
+   */
+
+
+  export type AggregateUuids = {
+    _count: UuidsCountAggregateOutputType | null
+    _min: UuidsMinAggregateOutputType | null
+    _max: UuidsMaxAggregateOutputType | null
+  }
+
+  export type UuidsMinAggregateOutputType = {
+    id: string | null
+  }
+
+  export type UuidsMaxAggregateOutputType = {
+    id: string | null
+  }
+
+  export type UuidsCountAggregateOutputType = {
+    id: number
+    _all: number
+  }
+
+
+  export type UuidsMinAggregateInputType = {
+    id?: true
+  }
+
+  export type UuidsMaxAggregateInputType = {
+    id?: true
+  }
+
+  export type UuidsCountAggregateInputType = {
+    id?: true
+    _all?: true
+  }
+
+  export type UuidsAggregateArgs = {
+    /**
+     * Filter which Uuids to aggregate.
+     * 
+    **/
+    where?: UuidsWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of Uuids to fetch.
+     * 
+    **/
+    orderBy?: Enumerable<UuidsOrderByWithRelationInput>
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the start position
+     * 
+    **/
+    cursor?: UuidsWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` Uuids from the position of the cursor.
+     * 
+    **/
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` Uuids.
+     * 
+    **/
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Count returned Uuids
+    **/
+    _count?: true | UuidsCountAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the minimum value
+    **/
+    _min?: UuidsMinAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the maximum value
+    **/
+    _max?: UuidsMaxAggregateInputType
+  }
+
+  export type GetUuidsAggregateType<T extends UuidsAggregateArgs> = {
+        [P in keyof T & keyof AggregateUuids]: P extends '_count' | 'count'
+      ? T[P] extends true
+        ? number
+        : GetScalarType<T[P], AggregateUuids[P]>
+      : GetScalarType<T[P], AggregateUuids[P]>
+  }
+
+
+
+
+  export type UuidsGroupByArgs = {
+    where?: UuidsWhereInput
+    orderBy?: Enumerable<UuidsOrderByWithAggregationInput>
+    by: Array<UuidsScalarFieldEnum>
+    having?: UuidsScalarWhereWithAggregatesInput
+    take?: number
+    skip?: number
+    _count?: UuidsCountAggregateInputType | true
+    _min?: UuidsMinAggregateInputType
+    _max?: UuidsMaxAggregateInputType
+  }
+
+
+  export type UuidsGroupByOutputType = {
+    id: string
+    _count: UuidsCountAggregateOutputType | null
+    _min: UuidsMinAggregateOutputType | null
+    _max: UuidsMaxAggregateOutputType | null
+  }
+
+  type GetUuidsGroupByPayload<T extends UuidsGroupByArgs> = PrismaPromise<
+    Array<
+      PickArray<UuidsGroupByOutputType, T['by']> &
+        {
+          [P in ((keyof T) & (keyof UuidsGroupByOutputType))]: P extends '_count'
+            ? T[P] extends boolean
+              ? number
+              : GetScalarType<T[P], UuidsGroupByOutputType[P]>
+            : GetScalarType<T[P], UuidsGroupByOutputType[P]>
+        }
+      >
+    >
+
+
+  export type UuidsSelect = {
+    id?: boolean
+  }
+
+
+  export type UuidsGetPayload<S extends boolean | null | undefined | UuidsArgs> =
+    S extends { select: any, include: any } ? 'Please either choose `select` or `include`' :
+    S extends true ? Uuids :
+    S extends undefined ? never :
+    S extends { include: any } & (UuidsArgs | UuidsFindManyArgs)
+    ? Uuids 
+    : S extends { select: any } & (UuidsArgs | UuidsFindManyArgs)
+      ? {
+    [P in TruthyKeys<S['select']>]:
+    P extends keyof Uuids ? Uuids[P] : never
+  } 
+      : Uuids
+
+
+  type UuidsCountArgs = Merge<
+    Omit<UuidsFindManyArgs, 'select' | 'include'> & {
+      select?: UuidsCountAggregateInputType | true
+    }
+  >
+
+  export interface UuidsDelegate<GlobalRejectSettings extends Prisma.RejectOnNotFound | Prisma.RejectPerOperation | false | undefined> {
+    /**
+     * Find zero or one Uuids that matches the filter.
+     * @param {UuidsFindUniqueArgs} args - Arguments to find a Uuids
+     * @example
+     * // Get one Uuids
+     * const uuids = await prisma.uuids.findUnique({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+    **/
+    findUnique<T extends UuidsFindUniqueArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
+      args: SelectSubset<T, UuidsFindUniqueArgs>
+    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findUnique', 'Uuids'> extends True ? Prisma__UuidsClient<UuidsGetPayload<T>> : Prisma__UuidsClient<UuidsGetPayload<T> | null, null>
+
+    /**
+     * Find one Uuids that matches the filter or throw an error  with `error.code='P2025'` 
+     *     if no matches were found.
+     * @param {UuidsFindUniqueOrThrowArgs} args - Arguments to find a Uuids
+     * @example
+     * // Get one Uuids
+     * const uuids = await prisma.uuids.findUniqueOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+    **/
+    findUniqueOrThrow<T extends UuidsFindUniqueOrThrowArgs>(
+      args?: SelectSubset<T, UuidsFindUniqueOrThrowArgs>
+    ): Prisma__UuidsClient<UuidsGetPayload<T>>
+
+    /**
+     * Find the first Uuids that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {UuidsFindFirstArgs} args - Arguments to find a Uuids
+     * @example
+     * // Get one Uuids
+     * const uuids = await prisma.uuids.findFirst({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+    **/
+    findFirst<T extends UuidsFindFirstArgs,  LocalRejectSettings = T["rejectOnNotFound"] extends RejectOnNotFound ? T['rejectOnNotFound'] : undefined>(
+      args?: SelectSubset<T, UuidsFindFirstArgs>
+    ): HasReject<GlobalRejectSettings, LocalRejectSettings, 'findFirst', 'Uuids'> extends True ? Prisma__UuidsClient<UuidsGetPayload<T>> : Prisma__UuidsClient<UuidsGetPayload<T> | null, null>
+
+    /**
+     * Find the first Uuids that matches the filter or
+     * throw `NotFoundError` if no matches were found.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {UuidsFindFirstOrThrowArgs} args - Arguments to find a Uuids
+     * @example
+     * // Get one Uuids
+     * const uuids = await prisma.uuids.findFirstOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+    **/
+    findFirstOrThrow<T extends UuidsFindFirstOrThrowArgs>(
+      args?: SelectSubset<T, UuidsFindFirstOrThrowArgs>
+    ): Prisma__UuidsClient<UuidsGetPayload<T>>
+
+    /**
+     * Find zero or more Uuids that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {UuidsFindManyArgs=} args - Arguments to filter and select certain fields only.
+     * @example
+     * // Get all Uuids
+     * const uuids = await prisma.uuids.findMany()
+     * 
+     * // Get first 10 Uuids
+     * const uuids = await prisma.uuids.findMany({ take: 10 })
+     * 
+     * // Only select the `id`
+     * const uuidsWithIdOnly = await prisma.uuids.findMany({ select: { id: true } })
+     * 
+    **/
+    findMany<T extends UuidsFindManyArgs>(
+      args?: SelectSubset<T, UuidsFindManyArgs>
+    ): PrismaPromise<Array<UuidsGetPayload<T>>>
+
+    /**
+     * Create a Uuids.
+     * @param {UuidsCreateArgs} args - Arguments to create a Uuids.
+     * @example
+     * // Create one Uuids
+     * const Uuids = await prisma.uuids.create({
+     *   data: {
+     *     // ... data to create a Uuids
+     *   }
+     * })
+     * 
+    **/
+    create<T extends UuidsCreateArgs>(
+      args: SelectSubset<T, UuidsCreateArgs>
+    ): Prisma__UuidsClient<UuidsGetPayload<T>>
+
+    /**
+     * Create many Uuids.
+     *     @param {UuidsCreateManyArgs} args - Arguments to create many Uuids.
+     *     @example
+     *     // Create many Uuids
+     *     const uuids = await prisma.uuids.createMany({
+     *       data: {
+     *         // ... provide data here
+     *       }
+     *     })
+     *     
+    **/
+    createMany<T extends UuidsCreateManyArgs>(
+      args?: SelectSubset<T, UuidsCreateManyArgs>
+    ): PrismaPromise<BatchPayload>
+
+    /**
+     * Delete a Uuids.
+     * @param {UuidsDeleteArgs} args - Arguments to delete one Uuids.
+     * @example
+     * // Delete one Uuids
+     * const Uuids = await prisma.uuids.delete({
+     *   where: {
+     *     // ... filter to delete one Uuids
+     *   }
+     * })
+     * 
+    **/
+    delete<T extends UuidsDeleteArgs>(
+      args: SelectSubset<T, UuidsDeleteArgs>
+    ): Prisma__UuidsClient<UuidsGetPayload<T>>
+
+    /**
+     * Update one Uuids.
+     * @param {UuidsUpdateArgs} args - Arguments to update one Uuids.
+     * @example
+     * // Update one Uuids
+     * const uuids = await prisma.uuids.update({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+    **/
+    update<T extends UuidsUpdateArgs>(
+      args: SelectSubset<T, UuidsUpdateArgs>
+    ): Prisma__UuidsClient<UuidsGetPayload<T>>
+
+    /**
+     * Delete zero or more Uuids.
+     * @param {UuidsDeleteManyArgs} args - Arguments to filter Uuids to delete.
+     * @example
+     * // Delete a few Uuids
+     * const { count } = await prisma.uuids.deleteMany({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     * 
+    **/
+    deleteMany<T extends UuidsDeleteManyArgs>(
+      args?: SelectSubset<T, UuidsDeleteManyArgs>
+    ): PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more Uuids.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {UuidsUpdateManyArgs} args - Arguments to update one or more rows.
+     * @example
+     * // Update many Uuids
+     * const uuids = await prisma.uuids.updateMany({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+    **/
+    updateMany<T extends UuidsUpdateManyArgs>(
+      args: SelectSubset<T, UuidsUpdateManyArgs>
+    ): PrismaPromise<BatchPayload>
+
+    /**
+     * Create or update one Uuids.
+     * @param {UuidsUpsertArgs} args - Arguments to update or create a Uuids.
+     * @example
+     * // Update or create a Uuids
+     * const uuids = await prisma.uuids.upsert({
+     *   create: {
+     *     // ... data to create a Uuids
+     *   },
+     *   update: {
+     *     // ... in case it already exists, update
+     *   },
+     *   where: {
+     *     // ... the filter for the Uuids we want to update
+     *   }
+     * })
+    **/
+    upsert<T extends UuidsUpsertArgs>(
+      args: SelectSubset<T, UuidsUpsertArgs>
+    ): Prisma__UuidsClient<UuidsGetPayload<T>>
+
+    /**
+     * Count the number of Uuids.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {UuidsCountArgs} args - Arguments to filter Uuids to count.
+     * @example
+     * // Count the number of Uuids
+     * const count = await prisma.uuids.count({
+     *   where: {
+     *     // ... the filter for the Uuids we want to count
+     *   }
+     * })
+    **/
+    count<T extends UuidsCountArgs>(
+      args?: Subset<T, UuidsCountArgs>,
+    ): PrismaPromise<
+      T extends _Record<'select', any>
+        ? T['select'] extends true
+          ? number
+          : GetScalarType<T['select'], UuidsCountAggregateOutputType>
+        : number
+    >
+
+    /**
+     * Allows you to perform aggregations operations on a Uuids.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {UuidsAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @example
+     * // Ordered by age ascending
+     * // Where email contains prisma.io
+     * // Limited to the 10 users
+     * const aggregations = await prisma.user.aggregate({
+     *   _avg: {
+     *     age: true,
+     *   },
+     *   where: {
+     *     email: {
+     *       contains: "prisma.io",
+     *     },
+     *   },
+     *   orderBy: {
+     *     age: "asc",
+     *   },
+     *   take: 10,
+     * })
+    **/
+    aggregate<T extends UuidsAggregateArgs>(args: Subset<T, UuidsAggregateArgs>): PrismaPromise<GetUuidsAggregateType<T>>
+
+    /**
+     * Group by Uuids.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {UuidsGroupByArgs} args - Group by arguments.
+     * @example
+     * // Group by city, order by createdAt, get count
+     * const result = await prisma.user.groupBy({
+     *   by: ['city', 'createdAt'],
+     *   orderBy: {
+     *     createdAt: true
+     *   },
+     *   _count: {
+     *     _all: true
+     *   },
+     * })
+     * 
+    **/
+    groupBy<
+      T extends UuidsGroupByArgs,
+      HasSelectOrTake extends Or<
+        Extends<'skip', Keys<T>>,
+        Extends<'take', Keys<T>>
+      >,
+      OrderByArg extends True extends HasSelectOrTake
+        ? { orderBy: UuidsGroupByArgs['orderBy'] }
+        : { orderBy?: UuidsGroupByArgs['orderBy'] },
+      OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
+      ByFields extends TupleToUnion<T['by']>,
+      ByValid extends Has<ByFields, OrderFields>,
+      HavingFields extends GetHavingFields<T['having']>,
+      HavingValid extends Has<ByFields, HavingFields>,
+      ByEmpty extends T['by'] extends never[] ? True : False,
+      InputErrors extends ByEmpty extends True
+      ? `Error: "by" must not be empty.`
+      : HavingValid extends False
+      ? {
+          [P in HavingFields]: P extends ByFields
+            ? never
+            : P extends string
+            ? `Error: Field "${P}" used in "having" needs to be provided in "by".`
+            : [
+                Error,
+                'Field ',
+                P,
+                ` in "having" needs to be provided in "by"`,
+              ]
+        }[HavingFields]
+      : 'take' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "take", you also need to provide "orderBy"'
+      : 'skip' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "skip", you also need to provide "orderBy"'
+      : ByValid extends True
+      ? {}
+      : {
+          [P in OrderFields]: P extends ByFields
+            ? never
+            : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+        }[OrderFields]
+    >(args: SubsetIntersection<T, UuidsGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetUuidsGroupByPayload<T> : PrismaPromise<InputErrors>
+
+  }
+
+  /**
+   * The delegate class that acts as a "Promise-like" for Uuids.
+   * Why is this prefixed with `Prisma__`?
+   * Because we want to prevent naming conflicts as mentioned in
+   * https://github.com/prisma/prisma-client-js/issues/707
+   */
+  export class Prisma__UuidsClient<T, Null = never> implements PrismaPromise<T> {
+    [prisma]: true;
+    private readonly _dmmf;
+    private readonly _fetcher;
+    private readonly _queryType;
+    private readonly _rootField;
+    private readonly _clientMethod;
+    private readonly _args;
+    private readonly _dataPath;
+    private readonly _errorFormat;
+    private readonly _measurePerformance?;
+    private _isList;
+    private _callsite;
+    private _requestPromise?;
+    constructor(_dmmf: runtime.DMMFClass, _fetcher: PrismaClientFetcher, _queryType: 'query' | 'mutation', _rootField: string, _clientMethod: string, _args: any, _dataPath: string[], _errorFormat: ErrorFormat, _measurePerformance?: boolean | undefined, _isList?: boolean);
+    readonly [Symbol.toStringTag]: 'PrismaClientPromise';
+
+
+    private get _document();
+    /**
+     * Attaches callbacks for the resolution and/or rejection of the Promise.
+     * @param onfulfilled The callback to execute when the Promise is resolved.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of which ever callback is executed.
+     */
+    then<TResult1 = T, TResult2 = never>(onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null, onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null): Promise<TResult1 | TResult2>;
+    /**
+     * Attaches a callback for only the rejection of the Promise.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of the callback.
+     */
+    catch<TResult = never>(onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null): Promise<T | TResult>;
+    /**
+     * Attaches a callback that is invoked when the Promise is settled (fulfilled or rejected). The
+     * resolved value cannot be modified from the callback.
+     * @param onfinally The callback to execute when the Promise is settled (fulfilled or rejected).
+     * @returns A Promise for the completion of the callback.
+     */
+    finally(onfinally?: (() => void) | undefined | null): Promise<T>;
+  }
+
+
+
+  // Custom InputTypes
+
+  /**
+   * Uuids base type for findUnique actions
+   */
+  export type UuidsFindUniqueArgsBase = {
+    /**
+     * Select specific fields to fetch from the Uuids
+     * 
+    **/
+    select?: UuidsSelect | null
+    /**
+     * Filter, which Uuids to fetch.
+     * 
+    **/
+    where: UuidsWhereUniqueInput
+  }
+
+  /**
+   * Uuids findUnique
+   */
+  export interface UuidsFindUniqueArgs extends UuidsFindUniqueArgsBase {
+   /**
+    * Throw an Error if query returns no results
+    * @deprecated since 4.0.0: use `findUniqueOrThrow` method instead
+    */
+    rejectOnNotFound?: RejectOnNotFound
+  }
+      
+
+  /**
+   * Uuids findUniqueOrThrow
+   */
+  export type UuidsFindUniqueOrThrowArgs = {
+    /**
+     * Select specific fields to fetch from the Uuids
+     * 
+    **/
+    select?: UuidsSelect | null
+    /**
+     * Filter, which Uuids to fetch.
+     * 
+    **/
+    where: UuidsWhereUniqueInput
+  }
+
+
+  /**
+   * Uuids base type for findFirst actions
+   */
+  export type UuidsFindFirstArgsBase = {
+    /**
+     * Select specific fields to fetch from the Uuids
+     * 
+    **/
+    select?: UuidsSelect | null
+    /**
+     * Filter, which Uuids to fetch.
+     * 
+    **/
+    where?: UuidsWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of Uuids to fetch.
+     * 
+    **/
+    orderBy?: Enumerable<UuidsOrderByWithRelationInput>
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for Uuids.
+     * 
+    **/
+    cursor?: UuidsWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` Uuids from the position of the cursor.
+     * 
+    **/
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` Uuids.
+     * 
+    **/
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of Uuids.
+     * 
+    **/
+    distinct?: Enumerable<UuidsScalarFieldEnum>
+  }
+
+  /**
+   * Uuids findFirst
+   */
+  export interface UuidsFindFirstArgs extends UuidsFindFirstArgsBase {
+   /**
+    * Throw an Error if query returns no results
+    * @deprecated since 4.0.0: use `findFirstOrThrow` method instead
+    */
+    rejectOnNotFound?: RejectOnNotFound
+  }
+      
+
+  /**
+   * Uuids findFirstOrThrow
+   */
+  export type UuidsFindFirstOrThrowArgs = {
+    /**
+     * Select specific fields to fetch from the Uuids
+     * 
+    **/
+    select?: UuidsSelect | null
+    /**
+     * Filter, which Uuids to fetch.
+     * 
+    **/
+    where?: UuidsWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of Uuids to fetch.
+     * 
+    **/
+    orderBy?: Enumerable<UuidsOrderByWithRelationInput>
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for Uuids.
+     * 
+    **/
+    cursor?: UuidsWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` Uuids from the position of the cursor.
+     * 
+    **/
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` Uuids.
+     * 
+    **/
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of Uuids.
+     * 
+    **/
+    distinct?: Enumerable<UuidsScalarFieldEnum>
+  }
+
+
+  /**
+   * Uuids findMany
+   */
+  export type UuidsFindManyArgs = {
+    /**
+     * Select specific fields to fetch from the Uuids
+     * 
+    **/
+    select?: UuidsSelect | null
+    /**
+     * Filter, which Uuids to fetch.
+     * 
+    **/
+    where?: UuidsWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of Uuids to fetch.
+     * 
+    **/
+    orderBy?: Enumerable<UuidsOrderByWithRelationInput>
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for listing Uuids.
+     * 
+    **/
+    cursor?: UuidsWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` Uuids from the position of the cursor.
+     * 
+    **/
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` Uuids.
+     * 
+    **/
+    skip?: number
+    distinct?: Enumerable<UuidsScalarFieldEnum>
+  }
+
+
+  /**
+   * Uuids create
+   */
+  export type UuidsCreateArgs = {
+    /**
+     * Select specific fields to fetch from the Uuids
+     * 
+    **/
+    select?: UuidsSelect | null
+    /**
+     * The data needed to create a Uuids.
+     * 
+    **/
+    data: XOR<UuidsCreateInput, UuidsUncheckedCreateInput>
+  }
+
+
+  /**
+   * Uuids createMany
+   */
+  export type UuidsCreateManyArgs = {
+    /**
+     * The data used to create many Uuids.
+     * 
+    **/
+    data: Enumerable<UuidsCreateManyInput>
+    skipDuplicates?: boolean
+  }
+
+
+  /**
+   * Uuids update
+   */
+  export type UuidsUpdateArgs = {
+    /**
+     * Select specific fields to fetch from the Uuids
+     * 
+    **/
+    select?: UuidsSelect | null
+    /**
+     * The data needed to update a Uuids.
+     * 
+    **/
+    data: XOR<UuidsUpdateInput, UuidsUncheckedUpdateInput>
+    /**
+     * Choose, which Uuids to update.
+     * 
+    **/
+    where: UuidsWhereUniqueInput
+  }
+
+
+  /**
+   * Uuids updateMany
+   */
+  export type UuidsUpdateManyArgs = {
+    /**
+     * The data used to update Uuids.
+     * 
+    **/
+    data: XOR<UuidsUpdateManyMutationInput, UuidsUncheckedUpdateManyInput>
+    /**
+     * Filter which Uuids to update
+     * 
+    **/
+    where?: UuidsWhereInput
+  }
+
+
+  /**
+   * Uuids upsert
+   */
+  export type UuidsUpsertArgs = {
+    /**
+     * Select specific fields to fetch from the Uuids
+     * 
+    **/
+    select?: UuidsSelect | null
+    /**
+     * The filter to search for the Uuids to update in case it exists.
+     * 
+    **/
+    where: UuidsWhereUniqueInput
+    /**
+     * In case the Uuids found by the `where` argument doesn't exist, create a new Uuids with this data.
+     * 
+    **/
+    create: XOR<UuidsCreateInput, UuidsUncheckedCreateInput>
+    /**
+     * In case the Uuids was found with the provided `where` argument, update it with this data.
+     * 
+    **/
+    update: XOR<UuidsUpdateInput, UuidsUncheckedUpdateInput>
+  }
+
+
+  /**
+   * Uuids delete
+   */
+  export type UuidsDeleteArgs = {
+    /**
+     * Select specific fields to fetch from the Uuids
+     * 
+    **/
+    select?: UuidsSelect | null
+    /**
+     * Filter which Uuids to delete.
+     * 
+    **/
+    where: UuidsWhereUniqueInput
+  }
+
+
+  /**
+   * Uuids deleteMany
+   */
+  export type UuidsDeleteManyArgs = {
+    /**
+     * Filter which Uuids to delete
+     * 
+    **/
+    where?: UuidsWhereInput
+  }
+
+
+  /**
+   * Uuids without action
+   */
+  export type UuidsArgs = {
+    /**
+     * Select specific fields to fetch from the Uuids
+     * 
+    **/
+    select?: UuidsSelect | null
   }
 
 
@@ -11389,7 +11459,6 @@ export namespace Prisma {
 
   export const JsonsScalarFieldEnum: {
     id: 'id',
-    js: 'js',
     jsb: 'jsb'
   };
 
@@ -11404,13 +11473,13 @@ export namespace Prisma {
   export type NullableJsonNullValueInput = (typeof NullableJsonNullValueInput)[keyof typeof NullableJsonNullValueInput]
 
 
-  export const OtherItemsScalarFieldEnum: {
+  export const Other_itemsScalarFieldEnum: {
     id: 'id',
     content: 'content',
     item_id: 'item_id'
   };
 
-  export type OtherItemsScalarFieldEnum = (typeof OtherItemsScalarFieldEnum)[keyof typeof OtherItemsScalarFieldEnum]
+  export type Other_itemsScalarFieldEnum = (typeof Other_itemsScalarFieldEnum)[keyof typeof Other_itemsScalarFieldEnum]
 
 
   export const QueryMode: {
@@ -11460,134 +11529,70 @@ export namespace Prisma {
    */
 
 
-  export type ItemsWhereInput = {
-    AND?: Enumerable<ItemsWhereInput>
-    OR?: Enumerable<ItemsWhereInput>
-    NOT?: Enumerable<ItemsWhereInput>
+  export type BlobsWhereInput = {
+    AND?: Enumerable<BlobsWhereInput>
+    OR?: Enumerable<BlobsWhereInput>
+    NOT?: Enumerable<BlobsWhereInput>
     id?: StringFilter | string
-    content?: StringFilter | string
-    content_text_null?: StringNullableFilter | string | null
-    content_text_null_default?: StringNullableFilter | string | null
-    intvalue_null?: IntNullableFilter | number | null
-    intvalue_null_default?: IntNullableFilter | number | null
-    other_items?: XOR<OtherItemsRelationFilter, OtherItemsWhereInput> | null
+    blob?: BytesNullableFilter | Buffer | null
   }
 
-  export type ItemsOrderByWithRelationInput = {
+  export type BlobsOrderByWithRelationInput = {
     id?: SortOrder
-    content?: SortOrder
-    content_text_null?: SortOrder
-    content_text_null_default?: SortOrder
-    intvalue_null?: SortOrder
-    intvalue_null_default?: SortOrder
-    other_items?: OtherItemsOrderByWithRelationInput
+    blob?: SortOrder
   }
 
-  export type ItemsWhereUniqueInput = {
+  export type BlobsWhereUniqueInput = {
     id?: string
   }
 
-  export type ItemsOrderByWithAggregationInput = {
+  export type BlobsOrderByWithAggregationInput = {
     id?: SortOrder
-    content?: SortOrder
-    content_text_null?: SortOrder
-    content_text_null_default?: SortOrder
-    intvalue_null?: SortOrder
-    intvalue_null_default?: SortOrder
-    _count?: ItemsCountOrderByAggregateInput
-    _avg?: ItemsAvgOrderByAggregateInput
-    _max?: ItemsMaxOrderByAggregateInput
-    _min?: ItemsMinOrderByAggregateInput
-    _sum?: ItemsSumOrderByAggregateInput
+    blob?: SortOrder
+    _count?: BlobsCountOrderByAggregateInput
+    _max?: BlobsMaxOrderByAggregateInput
+    _min?: BlobsMinOrderByAggregateInput
   }
 
-  export type ItemsScalarWhereWithAggregatesInput = {
-    AND?: Enumerable<ItemsScalarWhereWithAggregatesInput>
-    OR?: Enumerable<ItemsScalarWhereWithAggregatesInput>
-    NOT?: Enumerable<ItemsScalarWhereWithAggregatesInput>
+  export type BlobsScalarWhereWithAggregatesInput = {
+    AND?: Enumerable<BlobsScalarWhereWithAggregatesInput>
+    OR?: Enumerable<BlobsScalarWhereWithAggregatesInput>
+    NOT?: Enumerable<BlobsScalarWhereWithAggregatesInput>
     id?: StringWithAggregatesFilter | string
-    content?: StringWithAggregatesFilter | string
-    content_text_null?: StringNullableWithAggregatesFilter | string | null
-    content_text_null_default?: StringNullableWithAggregatesFilter | string | null
-    intvalue_null?: IntNullableWithAggregatesFilter | number | null
-    intvalue_null_default?: IntNullableWithAggregatesFilter | number | null
+    blob?: BytesNullableWithAggregatesFilter | Buffer | null
   }
 
-  export type OtherItemsWhereInput = {
-    AND?: Enumerable<OtherItemsWhereInput>
-    OR?: Enumerable<OtherItemsWhereInput>
-    NOT?: Enumerable<OtherItemsWhereInput>
+  export type BoolsWhereInput = {
+    AND?: Enumerable<BoolsWhereInput>
+    OR?: Enumerable<BoolsWhereInput>
+    NOT?: Enumerable<BoolsWhereInput>
     id?: StringFilter | string
-    content?: StringFilter | string
-    item_id?: StringNullableFilter | string | null
-    items?: XOR<ItemsRelationFilter, ItemsWhereInput> | null
+    b?: BoolNullableFilter | boolean | null
   }
 
-  export type OtherItemsOrderByWithRelationInput = {
+  export type BoolsOrderByWithRelationInput = {
     id?: SortOrder
-    content?: SortOrder
-    item_id?: SortOrder
-    items?: ItemsOrderByWithRelationInput
+    b?: SortOrder
   }
 
-  export type OtherItemsWhereUniqueInput = {
-    id?: string
-    item_id?: string
-  }
-
-  export type OtherItemsOrderByWithAggregationInput = {
-    id?: SortOrder
-    content?: SortOrder
-    item_id?: SortOrder
-    _count?: OtherItemsCountOrderByAggregateInput
-    _max?: OtherItemsMaxOrderByAggregateInput
-    _min?: OtherItemsMinOrderByAggregateInput
-  }
-
-  export type OtherItemsScalarWhereWithAggregatesInput = {
-    AND?: Enumerable<OtherItemsScalarWhereWithAggregatesInput>
-    OR?: Enumerable<OtherItemsScalarWhereWithAggregatesInput>
-    NOT?: Enumerable<OtherItemsScalarWhereWithAggregatesInput>
-    id?: StringWithAggregatesFilter | string
-    content?: StringWithAggregatesFilter | string
-    item_id?: StringNullableWithAggregatesFilter | string | null
-  }
-
-  export type TimestampsWhereInput = {
-    AND?: Enumerable<TimestampsWhereInput>
-    OR?: Enumerable<TimestampsWhereInput>
-    NOT?: Enumerable<TimestampsWhereInput>
-    id?: StringFilter | string
-    created_at?: DateTimeFilter | Date | string
-    updated_at?: DateTimeFilter | Date | string
-  }
-
-  export type TimestampsOrderByWithRelationInput = {
-    id?: SortOrder
-    created_at?: SortOrder
-    updated_at?: SortOrder
-  }
-
-  export type TimestampsWhereUniqueInput = {
+  export type BoolsWhereUniqueInput = {
     id?: string
   }
 
-  export type TimestampsOrderByWithAggregationInput = {
+  export type BoolsOrderByWithAggregationInput = {
     id?: SortOrder
-    created_at?: SortOrder
-    updated_at?: SortOrder
-    _count?: TimestampsCountOrderByAggregateInput
-    _max?: TimestampsMaxOrderByAggregateInput
-    _min?: TimestampsMinOrderByAggregateInput
+    b?: SortOrder
+    _count?: BoolsCountOrderByAggregateInput
+    _max?: BoolsMaxOrderByAggregateInput
+    _min?: BoolsMinOrderByAggregateInput
   }
 
-  export type TimestampsScalarWhereWithAggregatesInput = {
-    AND?: Enumerable<TimestampsScalarWhereWithAggregatesInput>
-    OR?: Enumerable<TimestampsScalarWhereWithAggregatesInput>
-    NOT?: Enumerable<TimestampsScalarWhereWithAggregatesInput>
+  export type BoolsScalarWhereWithAggregatesInput = {
+    AND?: Enumerable<BoolsScalarWhereWithAggregatesInput>
+    OR?: Enumerable<BoolsScalarWhereWithAggregatesInput>
+    NOT?: Enumerable<BoolsScalarWhereWithAggregatesInput>
     id?: StringWithAggregatesFilter | string
-    created_at?: DateTimeWithAggregatesFilter | Date | string
-    updated_at?: DateTimeWithAggregatesFilter | Date | string
+    b?: BoolNullableWithAggregatesFilter | boolean | null
   }
 
   export type DatetimesWhereInput = {
@@ -11627,66 +11632,76 @@ export namespace Prisma {
     t?: DateTimeWithAggregatesFilter | Date | string
   }
 
-  export type BoolsWhereInput = {
-    AND?: Enumerable<BoolsWhereInput>
-    OR?: Enumerable<BoolsWhereInput>
-    NOT?: Enumerable<BoolsWhereInput>
+  export type EnumsWhereInput = {
+    AND?: Enumerable<EnumsWhereInput>
+    OR?: Enumerable<EnumsWhereInput>
+    NOT?: Enumerable<EnumsWhereInput>
     id?: StringFilter | string
-    b?: BoolNullableFilter | boolean | null
+    c?: EnumColorNullableFilter | Color | null
   }
 
-  export type BoolsOrderByWithRelationInput = {
+  export type EnumsOrderByWithRelationInput = {
     id?: SortOrder
-    b?: SortOrder
+    c?: SortOrder
   }
 
-  export type BoolsWhereUniqueInput = {
+  export type EnumsWhereUniqueInput = {
     id?: string
   }
 
-  export type BoolsOrderByWithAggregationInput = {
+  export type EnumsOrderByWithAggregationInput = {
     id?: SortOrder
-    b?: SortOrder
-    _count?: BoolsCountOrderByAggregateInput
-    _max?: BoolsMaxOrderByAggregateInput
-    _min?: BoolsMinOrderByAggregateInput
+    c?: SortOrder
+    _count?: EnumsCountOrderByAggregateInput
+    _max?: EnumsMaxOrderByAggregateInput
+    _min?: EnumsMinOrderByAggregateInput
   }
 
-  export type BoolsScalarWhereWithAggregatesInput = {
-    AND?: Enumerable<BoolsScalarWhereWithAggregatesInput>
-    OR?: Enumerable<BoolsScalarWhereWithAggregatesInput>
-    NOT?: Enumerable<BoolsScalarWhereWithAggregatesInput>
+  export type EnumsScalarWhereWithAggregatesInput = {
+    AND?: Enumerable<EnumsScalarWhereWithAggregatesInput>
+    OR?: Enumerable<EnumsScalarWhereWithAggregatesInput>
+    NOT?: Enumerable<EnumsScalarWhereWithAggregatesInput>
     id?: StringWithAggregatesFilter | string
-    b?: BoolNullableWithAggregatesFilter | boolean | null
+    c?: EnumColorNullableWithAggregatesFilter | Color | null
   }
 
-  export type UuidsWhereInput = {
-    AND?: Enumerable<UuidsWhereInput>
-    OR?: Enumerable<UuidsWhereInput>
-    NOT?: Enumerable<UuidsWhereInput>
-    id?: UuidFilter | string
+  export type FloatsWhereInput = {
+    AND?: Enumerable<FloatsWhereInput>
+    OR?: Enumerable<FloatsWhereInput>
+    NOT?: Enumerable<FloatsWhereInput>
+    id?: StringFilter | string
+    f4?: FloatNullableFilter | number | null
+    f8?: FloatNullableFilter | number | null
   }
 
-  export type UuidsOrderByWithRelationInput = {
+  export type FloatsOrderByWithRelationInput = {
     id?: SortOrder
+    f4?: SortOrder
+    f8?: SortOrder
   }
 
-  export type UuidsWhereUniqueInput = {
+  export type FloatsWhereUniqueInput = {
     id?: string
   }
 
-  export type UuidsOrderByWithAggregationInput = {
+  export type FloatsOrderByWithAggregationInput = {
     id?: SortOrder
-    _count?: UuidsCountOrderByAggregateInput
-    _max?: UuidsMaxOrderByAggregateInput
-    _min?: UuidsMinOrderByAggregateInput
+    f4?: SortOrder
+    f8?: SortOrder
+    _count?: FloatsCountOrderByAggregateInput
+    _avg?: FloatsAvgOrderByAggregateInput
+    _max?: FloatsMaxOrderByAggregateInput
+    _min?: FloatsMinOrderByAggregateInput
+    _sum?: FloatsSumOrderByAggregateInput
   }
 
-  export type UuidsScalarWhereWithAggregatesInput = {
-    AND?: Enumerable<UuidsScalarWhereWithAggregatesInput>
-    OR?: Enumerable<UuidsScalarWhereWithAggregatesInput>
-    NOT?: Enumerable<UuidsScalarWhereWithAggregatesInput>
-    id?: UuidWithAggregatesFilter | string
+  export type FloatsScalarWhereWithAggregatesInput = {
+    AND?: Enumerable<FloatsScalarWhereWithAggregatesInput>
+    OR?: Enumerable<FloatsScalarWhereWithAggregatesInput>
+    NOT?: Enumerable<FloatsScalarWhereWithAggregatesInput>
+    id?: StringWithAggregatesFilter | string
+    f4?: FloatNullableWithAggregatesFilter | number | null
+    f8?: FloatNullableWithAggregatesFilter | number | null
   }
 
   export type IntsWhereInput = {
@@ -11732,43 +11747,57 @@ export namespace Prisma {
     i8?: BigIntNullableWithAggregatesFilter | bigint | number | null
   }
 
-  export type FloatsWhereInput = {
-    AND?: Enumerable<FloatsWhereInput>
-    OR?: Enumerable<FloatsWhereInput>
-    NOT?: Enumerable<FloatsWhereInput>
+  export type ItemsWhereInput = {
+    AND?: Enumerable<ItemsWhereInput>
+    OR?: Enumerable<ItemsWhereInput>
+    NOT?: Enumerable<ItemsWhereInput>
     id?: StringFilter | string
-    f4?: FloatNullableFilter | number | null
-    f8?: FloatNullableFilter | number | null
+    content?: StringFilter | string
+    content_text_null?: StringNullableFilter | string | null
+    content_text_null_default?: StringNullableFilter | string | null
+    intvalue_null?: IntNullableFilter | number | null
+    intvalue_null_default?: IntNullableFilter | number | null
+    other_items?: Other_itemsListRelationFilter
   }
 
-  export type FloatsOrderByWithRelationInput = {
+  export type ItemsOrderByWithRelationInput = {
     id?: SortOrder
-    f4?: SortOrder
-    f8?: SortOrder
+    content?: SortOrder
+    content_text_null?: SortOrder
+    content_text_null_default?: SortOrder
+    intvalue_null?: SortOrder
+    intvalue_null_default?: SortOrder
+    other_items?: Other_itemsOrderByRelationAggregateInput
   }
 
-  export type FloatsWhereUniqueInput = {
+  export type ItemsWhereUniqueInput = {
     id?: string
   }
 
-  export type FloatsOrderByWithAggregationInput = {
+  export type ItemsOrderByWithAggregationInput = {
     id?: SortOrder
-    f4?: SortOrder
-    f8?: SortOrder
-    _count?: FloatsCountOrderByAggregateInput
-    _avg?: FloatsAvgOrderByAggregateInput
-    _max?: FloatsMaxOrderByAggregateInput
-    _min?: FloatsMinOrderByAggregateInput
-    _sum?: FloatsSumOrderByAggregateInput
+    content?: SortOrder
+    content_text_null?: SortOrder
+    content_text_null_default?: SortOrder
+    intvalue_null?: SortOrder
+    intvalue_null_default?: SortOrder
+    _count?: ItemsCountOrderByAggregateInput
+    _avg?: ItemsAvgOrderByAggregateInput
+    _max?: ItemsMaxOrderByAggregateInput
+    _min?: ItemsMinOrderByAggregateInput
+    _sum?: ItemsSumOrderByAggregateInput
   }
 
-  export type FloatsScalarWhereWithAggregatesInput = {
-    AND?: Enumerable<FloatsScalarWhereWithAggregatesInput>
-    OR?: Enumerable<FloatsScalarWhereWithAggregatesInput>
-    NOT?: Enumerable<FloatsScalarWhereWithAggregatesInput>
+  export type ItemsScalarWhereWithAggregatesInput = {
+    AND?: Enumerable<ItemsScalarWhereWithAggregatesInput>
+    OR?: Enumerable<ItemsScalarWhereWithAggregatesInput>
+    NOT?: Enumerable<ItemsScalarWhereWithAggregatesInput>
     id?: StringWithAggregatesFilter | string
-    f4?: FloatNullableWithAggregatesFilter | number | null
-    f8?: FloatNullableWithAggregatesFilter | number | null
+    content?: StringWithAggregatesFilter | string
+    content_text_null?: StringNullableWithAggregatesFilter | string | null
+    content_text_null_default?: StringNullableWithAggregatesFilter | string | null
+    intvalue_null?: IntNullableWithAggregatesFilter | number | null
+    intvalue_null_default?: IntNullableWithAggregatesFilter | number | null
   }
 
   export type JsonsWhereInput = {
@@ -11776,13 +11805,11 @@ export namespace Prisma {
     OR?: Enumerable<JsonsWhereInput>
     NOT?: Enumerable<JsonsWhereInput>
     id?: StringFilter | string
-    js?: JsonNullableFilter
     jsb?: JsonNullableFilter
   }
 
   export type JsonsOrderByWithRelationInput = {
     id?: SortOrder
-    js?: SortOrder
     jsb?: SortOrder
   }
 
@@ -11792,7 +11819,6 @@ export namespace Prisma {
 
   export type JsonsOrderByWithAggregationInput = {
     id?: SortOrder
-    js?: SortOrder
     jsb?: SortOrder
     _count?: JsonsCountOrderByAggregateInput
     _max?: JsonsMaxOrderByAggregateInput
@@ -11804,224 +11830,182 @@ export namespace Prisma {
     OR?: Enumerable<JsonsScalarWhereWithAggregatesInput>
     NOT?: Enumerable<JsonsScalarWhereWithAggregatesInput>
     id?: StringWithAggregatesFilter | string
-    js?: JsonNullableWithAggregatesFilter
     jsb?: JsonNullableWithAggregatesFilter
   }
 
-  export type EnumsWhereInput = {
-    AND?: Enumerable<EnumsWhereInput>
-    OR?: Enumerable<EnumsWhereInput>
-    NOT?: Enumerable<EnumsWhereInput>
+  export type Other_itemsWhereInput = {
+    AND?: Enumerable<Other_itemsWhereInput>
+    OR?: Enumerable<Other_itemsWhereInput>
+    NOT?: Enumerable<Other_itemsWhereInput>
     id?: StringFilter | string
-    c?: EnumColorNullableFilter | Color | null
+    content?: StringFilter | string
+    item_id?: StringNullableFilter | string | null
+    items?: XOR<ItemsRelationFilter, ItemsWhereInput> | null
   }
 
-  export type EnumsOrderByWithRelationInput = {
+  export type Other_itemsOrderByWithRelationInput = {
     id?: SortOrder
-    c?: SortOrder
+    content?: SortOrder
+    item_id?: SortOrder
+    items?: ItemsOrderByWithRelationInput
   }
 
-  export type EnumsWhereUniqueInput = {
+  export type Other_itemsWhereUniqueInput = {
     id?: string
   }
 
-  export type EnumsOrderByWithAggregationInput = {
+  export type Other_itemsOrderByWithAggregationInput = {
     id?: SortOrder
-    c?: SortOrder
-    _count?: EnumsCountOrderByAggregateInput
-    _max?: EnumsMaxOrderByAggregateInput
-    _min?: EnumsMinOrderByAggregateInput
+    content?: SortOrder
+    item_id?: SortOrder
+    _count?: Other_itemsCountOrderByAggregateInput
+    _max?: Other_itemsMaxOrderByAggregateInput
+    _min?: Other_itemsMinOrderByAggregateInput
   }
 
-  export type EnumsScalarWhereWithAggregatesInput = {
-    AND?: Enumerable<EnumsScalarWhereWithAggregatesInput>
-    OR?: Enumerable<EnumsScalarWhereWithAggregatesInput>
-    NOT?: Enumerable<EnumsScalarWhereWithAggregatesInput>
+  export type Other_itemsScalarWhereWithAggregatesInput = {
+    AND?: Enumerable<Other_itemsScalarWhereWithAggregatesInput>
+    OR?: Enumerable<Other_itemsScalarWhereWithAggregatesInput>
+    NOT?: Enumerable<Other_itemsScalarWhereWithAggregatesInput>
     id?: StringWithAggregatesFilter | string
-    c?: EnumColorNullableWithAggregatesFilter | Color | null
+    content?: StringWithAggregatesFilter | string
+    item_id?: StringNullableWithAggregatesFilter | string | null
   }
 
-  export type BlobsWhereInput = {
-    AND?: Enumerable<BlobsWhereInput>
-    OR?: Enumerable<BlobsWhereInput>
-    NOT?: Enumerable<BlobsWhereInput>
+  export type TimestampsWhereInput = {
+    AND?: Enumerable<TimestampsWhereInput>
+    OR?: Enumerable<TimestampsWhereInput>
+    NOT?: Enumerable<TimestampsWhereInput>
     id?: StringFilter | string
-    blob?: BytesNullableFilter | Uint8Array | null
+    created_at?: DateTimeFilter | Date | string
+    updated_at?: DateTimeFilter | Date | string
   }
 
-  export type BlobsOrderByWithRelationInput = {
+  export type TimestampsOrderByWithRelationInput = {
     id?: SortOrder
-    blob?: SortOrder
+    created_at?: SortOrder
+    updated_at?: SortOrder
   }
 
-  export type BlobsWhereUniqueInput = {
+  export type TimestampsWhereUniqueInput = {
     id?: string
   }
 
-  export type BlobsOrderByWithAggregationInput = {
+  export type TimestampsOrderByWithAggregationInput = {
     id?: SortOrder
-    blob?: SortOrder
-    _count?: BlobsCountOrderByAggregateInput
-    _max?: BlobsMaxOrderByAggregateInput
-    _min?: BlobsMinOrderByAggregateInput
+    created_at?: SortOrder
+    updated_at?: SortOrder
+    _count?: TimestampsCountOrderByAggregateInput
+    _max?: TimestampsMaxOrderByAggregateInput
+    _min?: TimestampsMinOrderByAggregateInput
   }
 
-  export type BlobsScalarWhereWithAggregatesInput = {
-    AND?: Enumerable<BlobsScalarWhereWithAggregatesInput>
-    OR?: Enumerable<BlobsScalarWhereWithAggregatesInput>
-    NOT?: Enumerable<BlobsScalarWhereWithAggregatesInput>
+  export type TimestampsScalarWhereWithAggregatesInput = {
+    AND?: Enumerable<TimestampsScalarWhereWithAggregatesInput>
+    OR?: Enumerable<TimestampsScalarWhereWithAggregatesInput>
+    NOT?: Enumerable<TimestampsScalarWhereWithAggregatesInput>
     id?: StringWithAggregatesFilter | string
-    blob?: BytesNullableWithAggregatesFilter | Uint8Array | null
+    created_at?: DateTimeWithAggregatesFilter | Date | string
+    updated_at?: DateTimeWithAggregatesFilter | Date | string
   }
 
-  export type ItemsCreateInput = {
+  export type UuidsWhereInput = {
+    AND?: Enumerable<UuidsWhereInput>
+    OR?: Enumerable<UuidsWhereInput>
+    NOT?: Enumerable<UuidsWhereInput>
+    id?: UuidFilter | string
+  }
+
+  export type UuidsOrderByWithRelationInput = {
+    id?: SortOrder
+  }
+
+  export type UuidsWhereUniqueInput = {
+    id?: string
+  }
+
+  export type UuidsOrderByWithAggregationInput = {
+    id?: SortOrder
+    _count?: UuidsCountOrderByAggregateInput
+    _max?: UuidsMaxOrderByAggregateInput
+    _min?: UuidsMinOrderByAggregateInput
+  }
+
+  export type UuidsScalarWhereWithAggregatesInput = {
+    AND?: Enumerable<UuidsScalarWhereWithAggregatesInput>
+    OR?: Enumerable<UuidsScalarWhereWithAggregatesInput>
+    NOT?: Enumerable<UuidsScalarWhereWithAggregatesInput>
+    id?: UuidWithAggregatesFilter | string
+  }
+
+  export type BlobsCreateInput = {
     id: string
-    content: string
-    content_text_null?: string | null
-    content_text_null_default?: string | null
-    intvalue_null?: number | null
-    intvalue_null_default?: number | null
-    other_items?: OtherItemsCreateNestedOneWithoutItemsInput
+    blob?: Buffer | null
   }
 
-  export type ItemsUncheckedCreateInput = {
+  export type BlobsUncheckedCreateInput = {
     id: string
-    content: string
-    content_text_null?: string | null
-    content_text_null_default?: string | null
-    intvalue_null?: number | null
-    intvalue_null_default?: number | null
-    other_items?: OtherItemsUncheckedCreateNestedOneWithoutItemsInput
+    blob?: Buffer | null
   }
 
-  export type ItemsUpdateInput = {
+  export type BlobsUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
-    content?: StringFieldUpdateOperationsInput | string
-    content_text_null?: NullableStringFieldUpdateOperationsInput | string | null
-    content_text_null_default?: NullableStringFieldUpdateOperationsInput | string | null
-    intvalue_null?: NullableIntFieldUpdateOperationsInput | number | null
-    intvalue_null_default?: NullableIntFieldUpdateOperationsInput | number | null
-    other_items?: OtherItemsUpdateOneWithoutItemsNestedInput
+    blob?: NullableBytesFieldUpdateOperationsInput | Buffer | null
   }
 
-  export type ItemsUncheckedUpdateInput = {
+  export type BlobsUncheckedUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
-    content?: StringFieldUpdateOperationsInput | string
-    content_text_null?: NullableStringFieldUpdateOperationsInput | string | null
-    content_text_null_default?: NullableStringFieldUpdateOperationsInput | string | null
-    intvalue_null?: NullableIntFieldUpdateOperationsInput | number | null
-    intvalue_null_default?: NullableIntFieldUpdateOperationsInput | number | null
-    other_items?: OtherItemsUncheckedUpdateOneWithoutItemsNestedInput
+    blob?: NullableBytesFieldUpdateOperationsInput | Buffer | null
   }
 
-  export type ItemsCreateManyInput = {
+  export type BlobsCreateManyInput = {
     id: string
-    content: string
-    content_text_null?: string | null
-    content_text_null_default?: string | null
-    intvalue_null?: number | null
-    intvalue_null_default?: number | null
+    blob?: Buffer | null
   }
 
-  export type ItemsUpdateManyMutationInput = {
+  export type BlobsUpdateManyMutationInput = {
     id?: StringFieldUpdateOperationsInput | string
-    content?: StringFieldUpdateOperationsInput | string
-    content_text_null?: NullableStringFieldUpdateOperationsInput | string | null
-    content_text_null_default?: NullableStringFieldUpdateOperationsInput | string | null
-    intvalue_null?: NullableIntFieldUpdateOperationsInput | number | null
-    intvalue_null_default?: NullableIntFieldUpdateOperationsInput | number | null
+    blob?: NullableBytesFieldUpdateOperationsInput | Buffer | null
   }
 
-  export type ItemsUncheckedUpdateManyInput = {
+  export type BlobsUncheckedUpdateManyInput = {
     id?: StringFieldUpdateOperationsInput | string
-    content?: StringFieldUpdateOperationsInput | string
-    content_text_null?: NullableStringFieldUpdateOperationsInput | string | null
-    content_text_null_default?: NullableStringFieldUpdateOperationsInput | string | null
-    intvalue_null?: NullableIntFieldUpdateOperationsInput | number | null
-    intvalue_null_default?: NullableIntFieldUpdateOperationsInput | number | null
+    blob?: NullableBytesFieldUpdateOperationsInput | Buffer | null
   }
 
-  export type OtherItemsCreateInput = {
+  export type BoolsCreateInput = {
     id: string
-    content: string
-    items?: ItemsCreateNestedOneWithoutOther_itemsInput
+    b?: boolean | null
   }
 
-  export type OtherItemsUncheckedCreateInput = {
+  export type BoolsUncheckedCreateInput = {
     id: string
-    content: string
-    item_id?: string | null
+    b?: boolean | null
   }
 
-  export type OtherItemsUpdateInput = {
+  export type BoolsUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
-    content?: StringFieldUpdateOperationsInput | string
-    items?: ItemsUpdateOneWithoutOther_itemsNestedInput
+    b?: NullableBoolFieldUpdateOperationsInput | boolean | null
   }
 
-  export type OtherItemsUncheckedUpdateInput = {
+  export type BoolsUncheckedUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
-    content?: StringFieldUpdateOperationsInput | string
-    item_id?: NullableStringFieldUpdateOperationsInput | string | null
+    b?: NullableBoolFieldUpdateOperationsInput | boolean | null
   }
 
-  export type OtherItemsCreateManyInput = {
+  export type BoolsCreateManyInput = {
     id: string
-    content: string
-    item_id?: string | null
+    b?: boolean | null
   }
 
-  export type OtherItemsUpdateManyMutationInput = {
+  export type BoolsUpdateManyMutationInput = {
     id?: StringFieldUpdateOperationsInput | string
-    content?: StringFieldUpdateOperationsInput | string
+    b?: NullableBoolFieldUpdateOperationsInput | boolean | null
   }
 
-  export type OtherItemsUncheckedUpdateManyInput = {
+  export type BoolsUncheckedUpdateManyInput = {
     id?: StringFieldUpdateOperationsInput | string
-    content?: StringFieldUpdateOperationsInput | string
-    item_id?: NullableStringFieldUpdateOperationsInput | string | null
-  }
-
-  export type TimestampsCreateInput = {
-    id: string
-    created_at: Date | string
-    updated_at: Date | string
-  }
-
-  export type TimestampsUncheckedCreateInput = {
-    id: string
-    created_at: Date | string
-    updated_at: Date | string
-  }
-
-  export type TimestampsUpdateInput = {
-    id?: StringFieldUpdateOperationsInput | string
-    created_at?: DateTimeFieldUpdateOperationsInput | Date | string
-    updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
-  }
-
-  export type TimestampsUncheckedUpdateInput = {
-    id?: StringFieldUpdateOperationsInput | string
-    created_at?: DateTimeFieldUpdateOperationsInput | Date | string
-    updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
-  }
-
-  export type TimestampsCreateManyInput = {
-    id: string
-    created_at: Date | string
-    updated_at: Date | string
-  }
-
-  export type TimestampsUpdateManyMutationInput = {
-    id?: StringFieldUpdateOperationsInput | string
-    created_at?: DateTimeFieldUpdateOperationsInput | Date | string
-    updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
-  }
-
-  export type TimestampsUncheckedUpdateManyInput = {
-    id?: StringFieldUpdateOperationsInput | string
-    created_at?: DateTimeFieldUpdateOperationsInput | Date | string
-    updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
+    b?: NullableBoolFieldUpdateOperationsInput | boolean | null
   }
 
   export type DatetimesCreateInput = {
@@ -12066,67 +12050,81 @@ export namespace Prisma {
     t?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
-  export type BoolsCreateInput = {
+  export type EnumsCreateInput = {
     id: string
-    b?: boolean | null
+    c?: Color | null
   }
 
-  export type BoolsUncheckedCreateInput = {
+  export type EnumsUncheckedCreateInput = {
     id: string
-    b?: boolean | null
+    c?: Color | null
   }
 
-  export type BoolsUpdateInput = {
+  export type EnumsUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
-    b?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    c?: NullableEnumColorFieldUpdateOperationsInput | Color | null
   }
 
-  export type BoolsUncheckedUpdateInput = {
+  export type EnumsUncheckedUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
-    b?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    c?: NullableEnumColorFieldUpdateOperationsInput | Color | null
   }
 
-  export type BoolsCreateManyInput = {
+  export type EnumsCreateManyInput = {
     id: string
-    b?: boolean | null
+    c?: Color | null
   }
 
-  export type BoolsUpdateManyMutationInput = {
+  export type EnumsUpdateManyMutationInput = {
     id?: StringFieldUpdateOperationsInput | string
-    b?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    c?: NullableEnumColorFieldUpdateOperationsInput | Color | null
   }
 
-  export type BoolsUncheckedUpdateManyInput = {
+  export type EnumsUncheckedUpdateManyInput = {
     id?: StringFieldUpdateOperationsInput | string
-    b?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    c?: NullableEnumColorFieldUpdateOperationsInput | Color | null
   }
 
-  export type UuidsCreateInput = {
+  export type FloatsCreateInput = {
     id: string
+    f4?: number | null
+    f8?: number | null
   }
 
-  export type UuidsUncheckedCreateInput = {
+  export type FloatsUncheckedCreateInput = {
     id: string
+    f4?: number | null
+    f8?: number | null
   }
 
-  export type UuidsUpdateInput = {
+  export type FloatsUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
+    f4?: NullableFloatFieldUpdateOperationsInput | number | null
+    f8?: NullableFloatFieldUpdateOperationsInput | number | null
   }
 
-  export type UuidsUncheckedUpdateInput = {
+  export type FloatsUncheckedUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
+    f4?: NullableFloatFieldUpdateOperationsInput | number | null
+    f8?: NullableFloatFieldUpdateOperationsInput | number | null
   }
 
-  export type UuidsCreateManyInput = {
+  export type FloatsCreateManyInput = {
     id: string
+    f4?: number | null
+    f8?: number | null
   }
 
-  export type UuidsUpdateManyMutationInput = {
+  export type FloatsUpdateManyMutationInput = {
     id?: StringFieldUpdateOperationsInput | string
+    f4?: NullableFloatFieldUpdateOperationsInput | number | null
+    f8?: NullableFloatFieldUpdateOperationsInput | number | null
   }
 
-  export type UuidsUncheckedUpdateManyInput = {
+  export type FloatsUncheckedUpdateManyInput = {
     id?: StringFieldUpdateOperationsInput | string
+    f4?: NullableFloatFieldUpdateOperationsInput | number | null
+    f8?: NullableFloatFieldUpdateOperationsInput | number | null
   }
 
   export type IntsCreateInput = {
@@ -12178,158 +12176,217 @@ export namespace Prisma {
     i8?: NullableBigIntFieldUpdateOperationsInput | bigint | number | null
   }
 
-  export type FloatsCreateInput = {
+  export type ItemsCreateInput = {
     id: string
-    f4?: number | null
-    f8?: number | null
+    content: string
+    content_text_null?: string | null
+    content_text_null_default?: string | null
+    intvalue_null?: number | null
+    intvalue_null_default?: number | null
+    other_items?: Other_itemsCreateNestedManyWithoutItemsInput
   }
 
-  export type FloatsUncheckedCreateInput = {
+  export type ItemsUncheckedCreateInput = {
     id: string
-    f4?: number | null
-    f8?: number | null
+    content: string
+    content_text_null?: string | null
+    content_text_null_default?: string | null
+    intvalue_null?: number | null
+    intvalue_null_default?: number | null
+    other_items?: Other_itemsUncheckedCreateNestedManyWithoutItemsInput
   }
 
-  export type FloatsUpdateInput = {
+  export type ItemsUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
-    f4?: NullableFloatFieldUpdateOperationsInput | number | null
-    f8?: NullableFloatFieldUpdateOperationsInput | number | null
+    content?: StringFieldUpdateOperationsInput | string
+    content_text_null?: NullableStringFieldUpdateOperationsInput | string | null
+    content_text_null_default?: NullableStringFieldUpdateOperationsInput | string | null
+    intvalue_null?: NullableIntFieldUpdateOperationsInput | number | null
+    intvalue_null_default?: NullableIntFieldUpdateOperationsInput | number | null
+    other_items?: Other_itemsUpdateManyWithoutItemsNestedInput
   }
 
-  export type FloatsUncheckedUpdateInput = {
+  export type ItemsUncheckedUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
-    f4?: NullableFloatFieldUpdateOperationsInput | number | null
-    f8?: NullableFloatFieldUpdateOperationsInput | number | null
+    content?: StringFieldUpdateOperationsInput | string
+    content_text_null?: NullableStringFieldUpdateOperationsInput | string | null
+    content_text_null_default?: NullableStringFieldUpdateOperationsInput | string | null
+    intvalue_null?: NullableIntFieldUpdateOperationsInput | number | null
+    intvalue_null_default?: NullableIntFieldUpdateOperationsInput | number | null
+    other_items?: Other_itemsUncheckedUpdateManyWithoutItemsNestedInput
   }
 
-  export type FloatsCreateManyInput = {
+  export type ItemsCreateManyInput = {
     id: string
-    f4?: number | null
-    f8?: number | null
+    content: string
+    content_text_null?: string | null
+    content_text_null_default?: string | null
+    intvalue_null?: number | null
+    intvalue_null_default?: number | null
   }
 
-  export type FloatsUpdateManyMutationInput = {
+  export type ItemsUpdateManyMutationInput = {
     id?: StringFieldUpdateOperationsInput | string
-    f4?: NullableFloatFieldUpdateOperationsInput | number | null
-    f8?: NullableFloatFieldUpdateOperationsInput | number | null
+    content?: StringFieldUpdateOperationsInput | string
+    content_text_null?: NullableStringFieldUpdateOperationsInput | string | null
+    content_text_null_default?: NullableStringFieldUpdateOperationsInput | string | null
+    intvalue_null?: NullableIntFieldUpdateOperationsInput | number | null
+    intvalue_null_default?: NullableIntFieldUpdateOperationsInput | number | null
   }
 
-  export type FloatsUncheckedUpdateManyInput = {
+  export type ItemsUncheckedUpdateManyInput = {
     id?: StringFieldUpdateOperationsInput | string
-    f4?: NullableFloatFieldUpdateOperationsInput | number | null
-    f8?: NullableFloatFieldUpdateOperationsInput | number | null
+    content?: StringFieldUpdateOperationsInput | string
+    content_text_null?: NullableStringFieldUpdateOperationsInput | string | null
+    content_text_null_default?: NullableStringFieldUpdateOperationsInput | string | null
+    intvalue_null?: NullableIntFieldUpdateOperationsInput | number | null
+    intvalue_null_default?: NullableIntFieldUpdateOperationsInput | number | null
   }
 
   export type JsonsCreateInput = {
     id: string
-    js?: NullableJsonNullValueInput | InputJsonValue
     jsb?: NullableJsonNullValueInput | InputJsonValue
   }
 
   export type JsonsUncheckedCreateInput = {
     id: string
-    js?: NullableJsonNullValueInput | InputJsonValue
     jsb?: NullableJsonNullValueInput | InputJsonValue
   }
 
   export type JsonsUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
-    js?: NullableJsonNullValueInput | InputJsonValue
     jsb?: NullableJsonNullValueInput | InputJsonValue
   }
 
   export type JsonsUncheckedUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
-    js?: NullableJsonNullValueInput | InputJsonValue
     jsb?: NullableJsonNullValueInput | InputJsonValue
   }
 
   export type JsonsCreateManyInput = {
     id: string
-    js?: NullableJsonNullValueInput | InputJsonValue
     jsb?: NullableJsonNullValueInput | InputJsonValue
   }
 
   export type JsonsUpdateManyMutationInput = {
     id?: StringFieldUpdateOperationsInput | string
-    js?: NullableJsonNullValueInput | InputJsonValue
     jsb?: NullableJsonNullValueInput | InputJsonValue
   }
 
   export type JsonsUncheckedUpdateManyInput = {
     id?: StringFieldUpdateOperationsInput | string
-    js?: NullableJsonNullValueInput | InputJsonValue
     jsb?: NullableJsonNullValueInput | InputJsonValue
   }
 
-  export type EnumsCreateInput = {
+  export type Other_itemsCreateInput = {
     id: string
-    c?: Color | null
+    content: string
+    items?: ItemsCreateNestedOneWithoutOther_itemsInput
   }
 
-  export type EnumsUncheckedCreateInput = {
+  export type Other_itemsUncheckedCreateInput = {
     id: string
-    c?: Color | null
+    content: string
+    item_id?: string | null
   }
 
-  export type EnumsUpdateInput = {
+  export type Other_itemsUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
-    c?: NullableEnumColorFieldUpdateOperationsInput | Color | null
+    content?: StringFieldUpdateOperationsInput | string
+    items?: ItemsUpdateOneWithoutOther_itemsNestedInput
   }
 
-  export type EnumsUncheckedUpdateInput = {
+  export type Other_itemsUncheckedUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
-    c?: NullableEnumColorFieldUpdateOperationsInput | Color | null
+    content?: StringFieldUpdateOperationsInput | string
+    item_id?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
-  export type EnumsCreateManyInput = {
+  export type Other_itemsCreateManyInput = {
     id: string
-    c?: Color | null
+    content: string
+    item_id?: string | null
   }
 
-  export type EnumsUpdateManyMutationInput = {
+  export type Other_itemsUpdateManyMutationInput = {
     id?: StringFieldUpdateOperationsInput | string
-    c?: NullableEnumColorFieldUpdateOperationsInput | Color | null
+    content?: StringFieldUpdateOperationsInput | string
   }
 
-  export type EnumsUncheckedUpdateManyInput = {
+  export type Other_itemsUncheckedUpdateManyInput = {
     id?: StringFieldUpdateOperationsInput | string
-    c?: NullableEnumColorFieldUpdateOperationsInput | Color | null
+    content?: StringFieldUpdateOperationsInput | string
+    item_id?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
-  export type BlobsCreateInput = {
+  export type TimestampsCreateInput = {
     id: string
-    blob?: Uint8Array | null
+    created_at: Date | string
+    updated_at: Date | string
   }
 
-  export type BlobsUncheckedCreateInput = {
+  export type TimestampsUncheckedCreateInput = {
     id: string
-    blob?: Uint8Array | null
+    created_at: Date | string
+    updated_at: Date | string
   }
 
-  export type BlobsUpdateInput = {
+  export type TimestampsUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
-    blob?: NullableBytesFieldUpdateOperationsInput | Uint8Array | null
+    created_at?: DateTimeFieldUpdateOperationsInput | Date | string
+    updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
-  export type BlobsUncheckedUpdateInput = {
+  export type TimestampsUncheckedUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
-    blob?: NullableBytesFieldUpdateOperationsInput | Uint8Array | null
+    created_at?: DateTimeFieldUpdateOperationsInput | Date | string
+    updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
-  export type BlobsCreateManyInput = {
+  export type TimestampsCreateManyInput = {
     id: string
-    blob?: Uint8Array | null
+    created_at: Date | string
+    updated_at: Date | string
   }
 
-  export type BlobsUpdateManyMutationInput = {
+  export type TimestampsUpdateManyMutationInput = {
     id?: StringFieldUpdateOperationsInput | string
-    blob?: NullableBytesFieldUpdateOperationsInput | Uint8Array | null
+    created_at?: DateTimeFieldUpdateOperationsInput | Date | string
+    updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
-  export type BlobsUncheckedUpdateManyInput = {
+  export type TimestampsUncheckedUpdateManyInput = {
     id?: StringFieldUpdateOperationsInput | string
-    blob?: NullableBytesFieldUpdateOperationsInput | Uint8Array | null
+    created_at?: DateTimeFieldUpdateOperationsInput | Date | string
+    updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type UuidsCreateInput = {
+    id: string
+  }
+
+  export type UuidsUncheckedCreateInput = {
+    id: string
+  }
+
+  export type UuidsUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+  }
+
+  export type UuidsUncheckedUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+  }
+
+  export type UuidsCreateManyInput = {
+    id: string
+  }
+
+  export type UuidsUpdateManyMutationInput = {
+    id?: StringFieldUpdateOperationsInput | string
+  }
+
+  export type UuidsUncheckedUpdateManyInput = {
+    id?: StringFieldUpdateOperationsInput | string
   }
 
   export type StringFilter = {
@@ -12347,72 +12404,26 @@ export namespace Prisma {
     not?: NestedStringFilter | string
   }
 
-  export type StringNullableFilter = {
-    equals?: string | null
-    in?: Enumerable<string> | null
-    notIn?: Enumerable<string> | null
-    lt?: string
-    lte?: string
-    gt?: string
-    gte?: string
-    contains?: string
-    startsWith?: string
-    endsWith?: string
-    mode?: QueryMode
-    not?: NestedStringNullableFilter | string | null
+  export type BytesNullableFilter = {
+    equals?: Buffer | null
+    in?: Enumerable<Buffer> | null
+    notIn?: Enumerable<Buffer> | null
+    not?: NestedBytesNullableFilter | Buffer | null
   }
 
-  export type IntNullableFilter = {
-    equals?: number | null
-    in?: Enumerable<number> | null
-    notIn?: Enumerable<number> | null
-    lt?: number
-    lte?: number
-    gt?: number
-    gte?: number
-    not?: NestedIntNullableFilter | number | null
-  }
-
-  export type OtherItemsRelationFilter = {
-    is?: OtherItemsWhereInput | null
-    isNot?: OtherItemsWhereInput | null
-  }
-
-  export type ItemsCountOrderByAggregateInput = {
+  export type BlobsCountOrderByAggregateInput = {
     id?: SortOrder
-    content?: SortOrder
-    content_text_null?: SortOrder
-    content_text_null_default?: SortOrder
-    intvalue_null?: SortOrder
-    intvalue_null_default?: SortOrder
+    blob?: SortOrder
   }
 
-  export type ItemsAvgOrderByAggregateInput = {
-    intvalue_null?: SortOrder
-    intvalue_null_default?: SortOrder
-  }
-
-  export type ItemsMaxOrderByAggregateInput = {
+  export type BlobsMaxOrderByAggregateInput = {
     id?: SortOrder
-    content?: SortOrder
-    content_text_null?: SortOrder
-    content_text_null_default?: SortOrder
-    intvalue_null?: SortOrder
-    intvalue_null_default?: SortOrder
+    blob?: SortOrder
   }
 
-  export type ItemsMinOrderByAggregateInput = {
+  export type BlobsMinOrderByAggregateInput = {
     id?: SortOrder
-    content?: SortOrder
-    content_text_null?: SortOrder
-    content_text_null_default?: SortOrder
-    intvalue_null?: SortOrder
-    intvalue_null_default?: SortOrder
-  }
-
-  export type ItemsSumOrderByAggregateInput = {
-    intvalue_null?: SortOrder
-    intvalue_null_default?: SortOrder
+    blob?: SortOrder
   }
 
   export type StringWithAggregatesFilter = {
@@ -12433,122 +12444,14 @@ export namespace Prisma {
     _max?: NestedStringFilter
   }
 
-  export type StringNullableWithAggregatesFilter = {
-    equals?: string | null
-    in?: Enumerable<string> | null
-    notIn?: Enumerable<string> | null
-    lt?: string
-    lte?: string
-    gt?: string
-    gte?: string
-    contains?: string
-    startsWith?: string
-    endsWith?: string
-    mode?: QueryMode
-    not?: NestedStringNullableWithAggregatesFilter | string | null
+  export type BytesNullableWithAggregatesFilter = {
+    equals?: Buffer | null
+    in?: Enumerable<Buffer> | null
+    notIn?: Enumerable<Buffer> | null
+    not?: NestedBytesNullableWithAggregatesFilter | Buffer | null
     _count?: NestedIntNullableFilter
-    _min?: NestedStringNullableFilter
-    _max?: NestedStringNullableFilter
-  }
-
-  export type IntNullableWithAggregatesFilter = {
-    equals?: number | null
-    in?: Enumerable<number> | null
-    notIn?: Enumerable<number> | null
-    lt?: number
-    lte?: number
-    gt?: number
-    gte?: number
-    not?: NestedIntNullableWithAggregatesFilter | number | null
-    _count?: NestedIntNullableFilter
-    _avg?: NestedFloatNullableFilter
-    _sum?: NestedIntNullableFilter
-    _min?: NestedIntNullableFilter
-    _max?: NestedIntNullableFilter
-  }
-
-  export type ItemsRelationFilter = {
-    is?: ItemsWhereInput | null
-    isNot?: ItemsWhereInput | null
-  }
-
-  export type OtherItemsCountOrderByAggregateInput = {
-    id?: SortOrder
-    content?: SortOrder
-    item_id?: SortOrder
-  }
-
-  export type OtherItemsMaxOrderByAggregateInput = {
-    id?: SortOrder
-    content?: SortOrder
-    item_id?: SortOrder
-  }
-
-  export type OtherItemsMinOrderByAggregateInput = {
-    id?: SortOrder
-    content?: SortOrder
-    item_id?: SortOrder
-  }
-
-  export type DateTimeFilter = {
-    equals?: Date | string
-    in?: Enumerable<Date> | Enumerable<string>
-    notIn?: Enumerable<Date> | Enumerable<string>
-    lt?: Date | string
-    lte?: Date | string
-    gt?: Date | string
-    gte?: Date | string
-    not?: NestedDateTimeFilter | Date | string
-  }
-
-  export type TimestampsCountOrderByAggregateInput = {
-    id?: SortOrder
-    created_at?: SortOrder
-    updated_at?: SortOrder
-  }
-
-  export type TimestampsMaxOrderByAggregateInput = {
-    id?: SortOrder
-    created_at?: SortOrder
-    updated_at?: SortOrder
-  }
-
-  export type TimestampsMinOrderByAggregateInput = {
-    id?: SortOrder
-    created_at?: SortOrder
-    updated_at?: SortOrder
-  }
-
-  export type DateTimeWithAggregatesFilter = {
-    equals?: Date | string
-    in?: Enumerable<Date> | Enumerable<string>
-    notIn?: Enumerable<Date> | Enumerable<string>
-    lt?: Date | string
-    lte?: Date | string
-    gt?: Date | string
-    gte?: Date | string
-    not?: NestedDateTimeWithAggregatesFilter | Date | string
-    _count?: NestedIntFilter
-    _min?: NestedDateTimeFilter
-    _max?: NestedDateTimeFilter
-  }
-
-  export type DatetimesCountOrderByAggregateInput = {
-    id?: SortOrder
-    d?: SortOrder
-    t?: SortOrder
-  }
-
-  export type DatetimesMaxOrderByAggregateInput = {
-    id?: SortOrder
-    d?: SortOrder
-    t?: SortOrder
-  }
-
-  export type DatetimesMinOrderByAggregateInput = {
-    id?: SortOrder
-    d?: SortOrder
-    t?: SortOrder
+    _min?: NestedBytesNullableFilter
+    _max?: NestedBytesNullableFilter
   }
 
   export type BoolNullableFilter = {
@@ -12579,103 +12482,79 @@ export namespace Prisma {
     _max?: NestedBoolNullableFilter
   }
 
-  export type UuidFilter = {
-    equals?: string
-    in?: Enumerable<string>
-    notIn?: Enumerable<string>
-    lt?: string
-    lte?: string
-    gt?: string
-    gte?: string
-    mode?: QueryMode
-    not?: NestedUuidFilter | string
+  export type DateTimeFilter = {
+    equals?: Date | string
+    in?: Enumerable<Date> | Enumerable<string>
+    notIn?: Enumerable<Date> | Enumerable<string>
+    lt?: Date | string
+    lte?: Date | string
+    gt?: Date | string
+    gte?: Date | string
+    not?: NestedDateTimeFilter | Date | string
   }
 
-  export type UuidsCountOrderByAggregateInput = {
+  export type DatetimesCountOrderByAggregateInput = {
     id?: SortOrder
+    d?: SortOrder
+    t?: SortOrder
   }
 
-  export type UuidsMaxOrderByAggregateInput = {
+  export type DatetimesMaxOrderByAggregateInput = {
     id?: SortOrder
+    d?: SortOrder
+    t?: SortOrder
   }
 
-  export type UuidsMinOrderByAggregateInput = {
+  export type DatetimesMinOrderByAggregateInput = {
     id?: SortOrder
+    d?: SortOrder
+    t?: SortOrder
   }
 
-  export type UuidWithAggregatesFilter = {
-    equals?: string
-    in?: Enumerable<string>
-    notIn?: Enumerable<string>
-    lt?: string
-    lte?: string
-    gt?: string
-    gte?: string
-    mode?: QueryMode
-    not?: NestedUuidWithAggregatesFilter | string
+  export type DateTimeWithAggregatesFilter = {
+    equals?: Date | string
+    in?: Enumerable<Date> | Enumerable<string>
+    notIn?: Enumerable<Date> | Enumerable<string>
+    lt?: Date | string
+    lte?: Date | string
+    gt?: Date | string
+    gte?: Date | string
+    not?: NestedDateTimeWithAggregatesFilter | Date | string
     _count?: NestedIntFilter
-    _min?: NestedStringFilter
-    _max?: NestedStringFilter
+    _min?: NestedDateTimeFilter
+    _max?: NestedDateTimeFilter
   }
 
-  export type BigIntNullableFilter = {
-    equals?: bigint | number | null
-    in?: Enumerable<bigint> | Enumerable<number> | null
-    notIn?: Enumerable<bigint> | Enumerable<number> | null
-    lt?: bigint | number
-    lte?: bigint | number
-    gt?: bigint | number
-    gte?: bigint | number
-    not?: NestedBigIntNullableFilter | bigint | number | null
+  export type EnumColorNullableFilter = {
+    equals?: Color | null
+    in?: Enumerable<Color> | null
+    notIn?: Enumerable<Color> | null
+    not?: NestedEnumColorNullableFilter | Color | null
   }
 
-  export type IntsCountOrderByAggregateInput = {
+  export type EnumsCountOrderByAggregateInput = {
     id?: SortOrder
-    i2?: SortOrder
-    i4?: SortOrder
-    i8?: SortOrder
+    c?: SortOrder
   }
 
-  export type IntsAvgOrderByAggregateInput = {
-    i2?: SortOrder
-    i4?: SortOrder
-    i8?: SortOrder
-  }
-
-  export type IntsMaxOrderByAggregateInput = {
+  export type EnumsMaxOrderByAggregateInput = {
     id?: SortOrder
-    i2?: SortOrder
-    i4?: SortOrder
-    i8?: SortOrder
+    c?: SortOrder
   }
 
-  export type IntsMinOrderByAggregateInput = {
+  export type EnumsMinOrderByAggregateInput = {
     id?: SortOrder
-    i2?: SortOrder
-    i4?: SortOrder
-    i8?: SortOrder
+    c?: SortOrder
   }
 
-  export type IntsSumOrderByAggregateInput = {
-    i2?: SortOrder
-    i4?: SortOrder
-    i8?: SortOrder
-  }
-
-  export type BigIntNullableWithAggregatesFilter = {
-    equals?: bigint | number | null
-    in?: Enumerable<bigint> | Enumerable<number> | null
-    notIn?: Enumerable<bigint> | Enumerable<number> | null
-    lt?: bigint | number
-    lte?: bigint | number
-    gt?: bigint | number
-    gte?: bigint | number
-    not?: NestedBigIntNullableWithAggregatesFilter | bigint | number | null
+  export type EnumColorNullableWithAggregatesFilter = {
+    equals?: Color | null
+    in?: Enumerable<Color> | null
+    notIn?: Enumerable<Color> | null
+    not?: NestedEnumColorNullableWithAggregatesFilter | Color | null
     _count?: NestedIntNullableFilter
-    _avg?: NestedFloatNullableFilter
-    _sum?: NestedBigIntNullableFilter
-    _min?: NestedBigIntNullableFilter
-    _max?: NestedBigIntNullableFilter
+    _min?: NestedEnumColorNullableFilter
+    _max?: NestedEnumColorNullableFilter
   }
 
   export type FloatNullableFilter = {
@@ -12732,6 +12611,173 @@ export namespace Prisma {
     _min?: NestedFloatNullableFilter
     _max?: NestedFloatNullableFilter
   }
+
+  export type IntNullableFilter = {
+    equals?: number | null
+    in?: Enumerable<number> | null
+    notIn?: Enumerable<number> | null
+    lt?: number
+    lte?: number
+    gt?: number
+    gte?: number
+    not?: NestedIntNullableFilter | number | null
+  }
+
+  export type BigIntNullableFilter = {
+    equals?: bigint | number | null
+    in?: Enumerable<bigint> | Enumerable<number> | null
+    notIn?: Enumerable<bigint> | Enumerable<number> | null
+    lt?: bigint | number
+    lte?: bigint | number
+    gt?: bigint | number
+    gte?: bigint | number
+    not?: NestedBigIntNullableFilter | bigint | number | null
+  }
+
+  export type IntsCountOrderByAggregateInput = {
+    id?: SortOrder
+    i2?: SortOrder
+    i4?: SortOrder
+    i8?: SortOrder
+  }
+
+  export type IntsAvgOrderByAggregateInput = {
+    i2?: SortOrder
+    i4?: SortOrder
+    i8?: SortOrder
+  }
+
+  export type IntsMaxOrderByAggregateInput = {
+    id?: SortOrder
+    i2?: SortOrder
+    i4?: SortOrder
+    i8?: SortOrder
+  }
+
+  export type IntsMinOrderByAggregateInput = {
+    id?: SortOrder
+    i2?: SortOrder
+    i4?: SortOrder
+    i8?: SortOrder
+  }
+
+  export type IntsSumOrderByAggregateInput = {
+    i2?: SortOrder
+    i4?: SortOrder
+    i8?: SortOrder
+  }
+
+  export type IntNullableWithAggregatesFilter = {
+    equals?: number | null
+    in?: Enumerable<number> | null
+    notIn?: Enumerable<number> | null
+    lt?: number
+    lte?: number
+    gt?: number
+    gte?: number
+    not?: NestedIntNullableWithAggregatesFilter | number | null
+    _count?: NestedIntNullableFilter
+    _avg?: NestedFloatNullableFilter
+    _sum?: NestedIntNullableFilter
+    _min?: NestedIntNullableFilter
+    _max?: NestedIntNullableFilter
+  }
+
+  export type BigIntNullableWithAggregatesFilter = {
+    equals?: bigint | number | null
+    in?: Enumerable<bigint> | Enumerable<number> | null
+    notIn?: Enumerable<bigint> | Enumerable<number> | null
+    lt?: bigint | number
+    lte?: bigint | number
+    gt?: bigint | number
+    gte?: bigint | number
+    not?: NestedBigIntNullableWithAggregatesFilter | bigint | number | null
+    _count?: NestedIntNullableFilter
+    _avg?: NestedFloatNullableFilter
+    _sum?: NestedBigIntNullableFilter
+    _min?: NestedBigIntNullableFilter
+    _max?: NestedBigIntNullableFilter
+  }
+
+  export type StringNullableFilter = {
+    equals?: string | null
+    in?: Enumerable<string> | null
+    notIn?: Enumerable<string> | null
+    lt?: string
+    lte?: string
+    gt?: string
+    gte?: string
+    contains?: string
+    startsWith?: string
+    endsWith?: string
+    mode?: QueryMode
+    not?: NestedStringNullableFilter | string | null
+  }
+
+  export type Other_itemsListRelationFilter = {
+    every?: Other_itemsWhereInput
+    some?: Other_itemsWhereInput
+    none?: Other_itemsWhereInput
+  }
+
+  export type Other_itemsOrderByRelationAggregateInput = {
+    _count?: SortOrder
+  }
+
+  export type ItemsCountOrderByAggregateInput = {
+    id?: SortOrder
+    content?: SortOrder
+    content_text_null?: SortOrder
+    content_text_null_default?: SortOrder
+    intvalue_null?: SortOrder
+    intvalue_null_default?: SortOrder
+  }
+
+  export type ItemsAvgOrderByAggregateInput = {
+    intvalue_null?: SortOrder
+    intvalue_null_default?: SortOrder
+  }
+
+  export type ItemsMaxOrderByAggregateInput = {
+    id?: SortOrder
+    content?: SortOrder
+    content_text_null?: SortOrder
+    content_text_null_default?: SortOrder
+    intvalue_null?: SortOrder
+    intvalue_null_default?: SortOrder
+  }
+
+  export type ItemsMinOrderByAggregateInput = {
+    id?: SortOrder
+    content?: SortOrder
+    content_text_null?: SortOrder
+    content_text_null_default?: SortOrder
+    intvalue_null?: SortOrder
+    intvalue_null_default?: SortOrder
+  }
+
+  export type ItemsSumOrderByAggregateInput = {
+    intvalue_null?: SortOrder
+    intvalue_null_default?: SortOrder
+  }
+
+  export type StringNullableWithAggregatesFilter = {
+    equals?: string | null
+    in?: Enumerable<string> | null
+    notIn?: Enumerable<string> | null
+    lt?: string
+    lte?: string
+    gt?: string
+    gte?: string
+    contains?: string
+    startsWith?: string
+    endsWith?: string
+    mode?: QueryMode
+    not?: NestedStringNullableWithAggregatesFilter | string | null
+    _count?: NestedIntNullableFilter
+    _min?: NestedStringNullableFilter
+    _max?: NestedStringNullableFilter
+  }
   export type JsonNullableFilter = 
     | PatchUndefined<
         Either<Required<JsonNullableFilterBase>, Exclude<keyof Required<JsonNullableFilterBase>, 'path'>>,
@@ -12757,7 +12803,6 @@ export namespace Prisma {
 
   export type JsonsCountOrderByAggregateInput = {
     id?: SortOrder
-    js?: SortOrder
     jsb?: SortOrder
   }
 
@@ -12794,88 +12839,112 @@ export namespace Prisma {
     _max?: NestedJsonNullableFilter
   }
 
-  export type EnumColorNullableFilter = {
-    equals?: Color | null
-    in?: Enumerable<Color> | null
-    notIn?: Enumerable<Color> | null
-    not?: NestedEnumColorNullableFilter | Color | null
+  export type ItemsRelationFilter = {
+    is?: ItemsWhereInput | null
+    isNot?: ItemsWhereInput | null
   }
 
-  export type EnumsCountOrderByAggregateInput = {
+  export type Other_itemsCountOrderByAggregateInput = {
     id?: SortOrder
-    c?: SortOrder
+    content?: SortOrder
+    item_id?: SortOrder
   }
 
-  export type EnumsMaxOrderByAggregateInput = {
+  export type Other_itemsMaxOrderByAggregateInput = {
     id?: SortOrder
-    c?: SortOrder
+    content?: SortOrder
+    item_id?: SortOrder
   }
 
-  export type EnumsMinOrderByAggregateInput = {
+  export type Other_itemsMinOrderByAggregateInput = {
     id?: SortOrder
-    c?: SortOrder
+    content?: SortOrder
+    item_id?: SortOrder
   }
 
-  export type EnumColorNullableWithAggregatesFilter = {
-    equals?: Color | null
-    in?: Enumerable<Color> | null
-    notIn?: Enumerable<Color> | null
-    not?: NestedEnumColorNullableWithAggregatesFilter | Color | null
-    _count?: NestedIntNullableFilter
-    _min?: NestedEnumColorNullableFilter
-    _max?: NestedEnumColorNullableFilter
-  }
-
-  export type BytesNullableFilter = {
-    equals?: Uint8Array | null
-    in?: Enumerable<Uint8Array> | null
-    notIn?: Enumerable<Uint8Array> | null
-    not?: NestedBytesNullableFilter | Uint8Array | null
-  }
-
-  export type BlobsCountOrderByAggregateInput = {
+  export type TimestampsCountOrderByAggregateInput = {
     id?: SortOrder
-    blob?: SortOrder
+    created_at?: SortOrder
+    updated_at?: SortOrder
   }
 
-  export type BlobsMaxOrderByAggregateInput = {
+  export type TimestampsMaxOrderByAggregateInput = {
     id?: SortOrder
-    blob?: SortOrder
+    created_at?: SortOrder
+    updated_at?: SortOrder
   }
 
-  export type BlobsMinOrderByAggregateInput = {
+  export type TimestampsMinOrderByAggregateInput = {
     id?: SortOrder
-    blob?: SortOrder
+    created_at?: SortOrder
+    updated_at?: SortOrder
   }
 
-  export type BytesNullableWithAggregatesFilter = {
-    equals?: Uint8Array | null
-    in?: Enumerable<Uint8Array> | null
-    notIn?: Enumerable<Uint8Array> | null
-    not?: NestedBytesNullableWithAggregatesFilter | Uint8Array | null
-    _count?: NestedIntNullableFilter
-    _min?: NestedBytesNullableFilter
-    _max?: NestedBytesNullableFilter
+  export type UuidFilter = {
+    equals?: string
+    in?: Enumerable<string>
+    notIn?: Enumerable<string>
+    lt?: string
+    lte?: string
+    gt?: string
+    gte?: string
+    mode?: QueryMode
+    not?: NestedUuidFilter | string
   }
 
-  export type OtherItemsCreateNestedOneWithoutItemsInput = {
-    create?: XOR<OtherItemsCreateWithoutItemsInput, OtherItemsUncheckedCreateWithoutItemsInput>
-    connectOrCreate?: OtherItemsCreateOrConnectWithoutItemsInput
-    connect?: OtherItemsWhereUniqueInput
+  export type UuidsCountOrderByAggregateInput = {
+    id?: SortOrder
   }
 
-  export type OtherItemsUncheckedCreateNestedOneWithoutItemsInput = {
-    create?: XOR<OtherItemsCreateWithoutItemsInput, OtherItemsUncheckedCreateWithoutItemsInput>
-    connectOrCreate?: OtherItemsCreateOrConnectWithoutItemsInput
-    connect?: OtherItemsWhereUniqueInput
+  export type UuidsMaxOrderByAggregateInput = {
+    id?: SortOrder
+  }
+
+  export type UuidsMinOrderByAggregateInput = {
+    id?: SortOrder
+  }
+
+  export type UuidWithAggregatesFilter = {
+    equals?: string
+    in?: Enumerable<string>
+    notIn?: Enumerable<string>
+    lt?: string
+    lte?: string
+    gt?: string
+    gte?: string
+    mode?: QueryMode
+    not?: NestedUuidWithAggregatesFilter | string
+    _count?: NestedIntFilter
+    _min?: NestedStringFilter
+    _max?: NestedStringFilter
   }
 
   export type StringFieldUpdateOperationsInput = {
     set?: string
   }
 
-  export type NullableStringFieldUpdateOperationsInput = {
-    set?: string | null
+  export type NullableBytesFieldUpdateOperationsInput = {
+    set?: Buffer | null
+  }
+
+  export type NullableBoolFieldUpdateOperationsInput = {
+    set?: boolean | null
+  }
+
+  export type DateTimeFieldUpdateOperationsInput = {
+    set?: Date | string
+  }
+
+  export type NullableEnumColorFieldUpdateOperationsInput = {
+    set?: Color | null
+  }
+
+  export type NullableFloatFieldUpdateOperationsInput = {
+    set?: number | null
+    increment?: number
+    decrement?: number
+    multiply?: number
+    divide?: number
   }
 
   export type NullableIntFieldUpdateOperationsInput = {
@@ -12886,24 +12955,58 @@ export namespace Prisma {
     divide?: number
   }
 
-  export type OtherItemsUpdateOneWithoutItemsNestedInput = {
-    create?: XOR<OtherItemsCreateWithoutItemsInput, OtherItemsUncheckedCreateWithoutItemsInput>
-    connectOrCreate?: OtherItemsCreateOrConnectWithoutItemsInput
-    upsert?: OtherItemsUpsertWithoutItemsInput
-    disconnect?: boolean
-    delete?: boolean
-    connect?: OtherItemsWhereUniqueInput
-    update?: XOR<OtherItemsUpdateWithoutItemsInput, OtherItemsUncheckedUpdateWithoutItemsInput>
+  export type NullableBigIntFieldUpdateOperationsInput = {
+    set?: bigint | number | null
+    increment?: bigint | number
+    decrement?: bigint | number
+    multiply?: bigint | number
+    divide?: bigint | number
   }
 
-  export type OtherItemsUncheckedUpdateOneWithoutItemsNestedInput = {
-    create?: XOR<OtherItemsCreateWithoutItemsInput, OtherItemsUncheckedCreateWithoutItemsInput>
-    connectOrCreate?: OtherItemsCreateOrConnectWithoutItemsInput
-    upsert?: OtherItemsUpsertWithoutItemsInput
-    disconnect?: boolean
-    delete?: boolean
-    connect?: OtherItemsWhereUniqueInput
-    update?: XOR<OtherItemsUpdateWithoutItemsInput, OtherItemsUncheckedUpdateWithoutItemsInput>
+  export type Other_itemsCreateNestedManyWithoutItemsInput = {
+    create?: XOR<Enumerable<Other_itemsCreateWithoutItemsInput>, Enumerable<Other_itemsUncheckedCreateWithoutItemsInput>>
+    connectOrCreate?: Enumerable<Other_itemsCreateOrConnectWithoutItemsInput>
+    createMany?: Other_itemsCreateManyItemsInputEnvelope
+    connect?: Enumerable<Other_itemsWhereUniqueInput>
+  }
+
+  export type Other_itemsUncheckedCreateNestedManyWithoutItemsInput = {
+    create?: XOR<Enumerable<Other_itemsCreateWithoutItemsInput>, Enumerable<Other_itemsUncheckedCreateWithoutItemsInput>>
+    connectOrCreate?: Enumerable<Other_itemsCreateOrConnectWithoutItemsInput>
+    createMany?: Other_itemsCreateManyItemsInputEnvelope
+    connect?: Enumerable<Other_itemsWhereUniqueInput>
+  }
+
+  export type NullableStringFieldUpdateOperationsInput = {
+    set?: string | null
+  }
+
+  export type Other_itemsUpdateManyWithoutItemsNestedInput = {
+    create?: XOR<Enumerable<Other_itemsCreateWithoutItemsInput>, Enumerable<Other_itemsUncheckedCreateWithoutItemsInput>>
+    connectOrCreate?: Enumerable<Other_itemsCreateOrConnectWithoutItemsInput>
+    upsert?: Enumerable<Other_itemsUpsertWithWhereUniqueWithoutItemsInput>
+    createMany?: Other_itemsCreateManyItemsInputEnvelope
+    set?: Enumerable<Other_itemsWhereUniqueInput>
+    disconnect?: Enumerable<Other_itemsWhereUniqueInput>
+    delete?: Enumerable<Other_itemsWhereUniqueInput>
+    connect?: Enumerable<Other_itemsWhereUniqueInput>
+    update?: Enumerable<Other_itemsUpdateWithWhereUniqueWithoutItemsInput>
+    updateMany?: Enumerable<Other_itemsUpdateManyWithWhereWithoutItemsInput>
+    deleteMany?: Enumerable<Other_itemsScalarWhereInput>
+  }
+
+  export type Other_itemsUncheckedUpdateManyWithoutItemsNestedInput = {
+    create?: XOR<Enumerable<Other_itemsCreateWithoutItemsInput>, Enumerable<Other_itemsUncheckedCreateWithoutItemsInput>>
+    connectOrCreate?: Enumerable<Other_itemsCreateOrConnectWithoutItemsInput>
+    upsert?: Enumerable<Other_itemsUpsertWithWhereUniqueWithoutItemsInput>
+    createMany?: Other_itemsCreateManyItemsInputEnvelope
+    set?: Enumerable<Other_itemsWhereUniqueInput>
+    disconnect?: Enumerable<Other_itemsWhereUniqueInput>
+    delete?: Enumerable<Other_itemsWhereUniqueInput>
+    connect?: Enumerable<Other_itemsWhereUniqueInput>
+    update?: Enumerable<Other_itemsUpdateWithWhereUniqueWithoutItemsInput>
+    updateMany?: Enumerable<Other_itemsUpdateManyWithWhereWithoutItemsInput>
+    deleteMany?: Enumerable<Other_itemsScalarWhereInput>
   }
 
   export type ItemsCreateNestedOneWithoutOther_itemsInput = {
@@ -12922,38 +13025,6 @@ export namespace Prisma {
     update?: XOR<ItemsUpdateWithoutOther_itemsInput, ItemsUncheckedUpdateWithoutOther_itemsInput>
   }
 
-  export type DateTimeFieldUpdateOperationsInput = {
-    set?: Date | string
-  }
-
-  export type NullableBoolFieldUpdateOperationsInput = {
-    set?: boolean | null
-  }
-
-  export type NullableBigIntFieldUpdateOperationsInput = {
-    set?: bigint | number | null
-    increment?: bigint | number
-    decrement?: bigint | number
-    multiply?: bigint | number
-    divide?: bigint | number
-  }
-
-  export type NullableFloatFieldUpdateOperationsInput = {
-    set?: number | null
-    increment?: number
-    decrement?: number
-    multiply?: number
-    divide?: number
-  }
-
-  export type NullableEnumColorFieldUpdateOperationsInput = {
-    set?: Color | null
-  }
-
-  export type NullableBytesFieldUpdateOperationsInput = {
-    set?: Uint8Array | null
-  }
-
   export type NestedStringFilter = {
     equals?: string
     in?: Enumerable<string>
@@ -12968,29 +13039,11 @@ export namespace Prisma {
     not?: NestedStringFilter | string
   }
 
-  export type NestedStringNullableFilter = {
-    equals?: string | null
-    in?: Enumerable<string> | null
-    notIn?: Enumerable<string> | null
-    lt?: string
-    lte?: string
-    gt?: string
-    gte?: string
-    contains?: string
-    startsWith?: string
-    endsWith?: string
-    not?: NestedStringNullableFilter | string | null
-  }
-
-  export type NestedIntNullableFilter = {
-    equals?: number | null
-    in?: Enumerable<number> | null
-    notIn?: Enumerable<number> | null
-    lt?: number
-    lte?: number
-    gt?: number
-    gte?: number
-    not?: NestedIntNullableFilter | number | null
+  export type NestedBytesNullableFilter = {
+    equals?: Buffer | null
+    in?: Enumerable<Buffer> | null
+    notIn?: Enumerable<Buffer> | null
+    not?: NestedBytesNullableFilter | Buffer | null
   }
 
   export type NestedStringWithAggregatesFilter = {
@@ -13021,24 +13074,17 @@ export namespace Prisma {
     not?: NestedIntFilter | number
   }
 
-  export type NestedStringNullableWithAggregatesFilter = {
-    equals?: string | null
-    in?: Enumerable<string> | null
-    notIn?: Enumerable<string> | null
-    lt?: string
-    lte?: string
-    gt?: string
-    gte?: string
-    contains?: string
-    startsWith?: string
-    endsWith?: string
-    not?: NestedStringNullableWithAggregatesFilter | string | null
+  export type NestedBytesNullableWithAggregatesFilter = {
+    equals?: Buffer | null
+    in?: Enumerable<Buffer> | null
+    notIn?: Enumerable<Buffer> | null
+    not?: NestedBytesNullableWithAggregatesFilter | Buffer | null
     _count?: NestedIntNullableFilter
-    _min?: NestedStringNullableFilter
-    _max?: NestedStringNullableFilter
+    _min?: NestedBytesNullableFilter
+    _max?: NestedBytesNullableFilter
   }
 
-  export type NestedIntNullableWithAggregatesFilter = {
+  export type NestedIntNullableFilter = {
     equals?: number | null
     in?: Enumerable<number> | null
     notIn?: Enumerable<number> | null
@@ -13046,23 +13092,20 @@ export namespace Prisma {
     lte?: number
     gt?: number
     gte?: number
-    not?: NestedIntNullableWithAggregatesFilter | number | null
-    _count?: NestedIntNullableFilter
-    _avg?: NestedFloatNullableFilter
-    _sum?: NestedIntNullableFilter
-    _min?: NestedIntNullableFilter
-    _max?: NestedIntNullableFilter
+    not?: NestedIntNullableFilter | number | null
   }
 
-  export type NestedFloatNullableFilter = {
-    equals?: number | null
-    in?: Enumerable<number> | null
-    notIn?: Enumerable<number> | null
-    lt?: number
-    lte?: number
-    gt?: number
-    gte?: number
-    not?: NestedFloatNullableFilter | number | null
+  export type NestedBoolNullableFilter = {
+    equals?: boolean | null
+    not?: NestedBoolNullableFilter | boolean | null
+  }
+
+  export type NestedBoolNullableWithAggregatesFilter = {
+    equals?: boolean | null
+    not?: NestedBoolNullableWithAggregatesFilter | boolean | null
+    _count?: NestedIntNullableFilter
+    _min?: NestedBoolNullableFilter
+    _max?: NestedBoolNullableFilter
   }
 
   export type NestedDateTimeFilter = {
@@ -13090,17 +13133,144 @@ export namespace Prisma {
     _max?: NestedDateTimeFilter
   }
 
-  export type NestedBoolNullableFilter = {
-    equals?: boolean | null
-    not?: NestedBoolNullableFilter | boolean | null
+  export type NestedEnumColorNullableFilter = {
+    equals?: Color | null
+    in?: Enumerable<Color> | null
+    notIn?: Enumerable<Color> | null
+    not?: NestedEnumColorNullableFilter | Color | null
   }
 
-  export type NestedBoolNullableWithAggregatesFilter = {
-    equals?: boolean | null
-    not?: NestedBoolNullableWithAggregatesFilter | boolean | null
+  export type NestedEnumColorNullableWithAggregatesFilter = {
+    equals?: Color | null
+    in?: Enumerable<Color> | null
+    notIn?: Enumerable<Color> | null
+    not?: NestedEnumColorNullableWithAggregatesFilter | Color | null
     _count?: NestedIntNullableFilter
-    _min?: NestedBoolNullableFilter
-    _max?: NestedBoolNullableFilter
+    _min?: NestedEnumColorNullableFilter
+    _max?: NestedEnumColorNullableFilter
+  }
+
+  export type NestedFloatNullableFilter = {
+    equals?: number | null
+    in?: Enumerable<number> | null
+    notIn?: Enumerable<number> | null
+    lt?: number
+    lte?: number
+    gt?: number
+    gte?: number
+    not?: NestedFloatNullableFilter | number | null
+  }
+
+  export type NestedFloatNullableWithAggregatesFilter = {
+    equals?: number | null
+    in?: Enumerable<number> | null
+    notIn?: Enumerable<number> | null
+    lt?: number
+    lte?: number
+    gt?: number
+    gte?: number
+    not?: NestedFloatNullableWithAggregatesFilter | number | null
+    _count?: NestedIntNullableFilter
+    _avg?: NestedFloatNullableFilter
+    _sum?: NestedFloatNullableFilter
+    _min?: NestedFloatNullableFilter
+    _max?: NestedFloatNullableFilter
+  }
+
+  export type NestedBigIntNullableFilter = {
+    equals?: bigint | number | null
+    in?: Enumerable<bigint> | Enumerable<number> | null
+    notIn?: Enumerable<bigint> | Enumerable<number> | null
+    lt?: bigint | number
+    lte?: bigint | number
+    gt?: bigint | number
+    gte?: bigint | number
+    not?: NestedBigIntNullableFilter | bigint | number | null
+  }
+
+  export type NestedIntNullableWithAggregatesFilter = {
+    equals?: number | null
+    in?: Enumerable<number> | null
+    notIn?: Enumerable<number> | null
+    lt?: number
+    lte?: number
+    gt?: number
+    gte?: number
+    not?: NestedIntNullableWithAggregatesFilter | number | null
+    _count?: NestedIntNullableFilter
+    _avg?: NestedFloatNullableFilter
+    _sum?: NestedIntNullableFilter
+    _min?: NestedIntNullableFilter
+    _max?: NestedIntNullableFilter
+  }
+
+  export type NestedBigIntNullableWithAggregatesFilter = {
+    equals?: bigint | number | null
+    in?: Enumerable<bigint> | Enumerable<number> | null
+    notIn?: Enumerable<bigint> | Enumerable<number> | null
+    lt?: bigint | number
+    lte?: bigint | number
+    gt?: bigint | number
+    gte?: bigint | number
+    not?: NestedBigIntNullableWithAggregatesFilter | bigint | number | null
+    _count?: NestedIntNullableFilter
+    _avg?: NestedFloatNullableFilter
+    _sum?: NestedBigIntNullableFilter
+    _min?: NestedBigIntNullableFilter
+    _max?: NestedBigIntNullableFilter
+  }
+
+  export type NestedStringNullableFilter = {
+    equals?: string | null
+    in?: Enumerable<string> | null
+    notIn?: Enumerable<string> | null
+    lt?: string
+    lte?: string
+    gt?: string
+    gte?: string
+    contains?: string
+    startsWith?: string
+    endsWith?: string
+    not?: NestedStringNullableFilter | string | null
+  }
+
+  export type NestedStringNullableWithAggregatesFilter = {
+    equals?: string | null
+    in?: Enumerable<string> | null
+    notIn?: Enumerable<string> | null
+    lt?: string
+    lte?: string
+    gt?: string
+    gte?: string
+    contains?: string
+    startsWith?: string
+    endsWith?: string
+    not?: NestedStringNullableWithAggregatesFilter | string | null
+    _count?: NestedIntNullableFilter
+    _min?: NestedStringNullableFilter
+    _max?: NestedStringNullableFilter
+  }
+  export type NestedJsonNullableFilter = 
+    | PatchUndefined<
+        Either<Required<NestedJsonNullableFilterBase>, Exclude<keyof Required<NestedJsonNullableFilterBase>, 'path'>>,
+        Required<NestedJsonNullableFilterBase>
+      >
+    | OptionalFlat<Omit<Required<NestedJsonNullableFilterBase>, 'path'>>
+
+  export type NestedJsonNullableFilterBase = {
+    equals?: InputJsonValue | JsonNullValueFilter
+    path?: Array<string>
+    string_contains?: string
+    string_starts_with?: string
+    string_ends_with?: string
+    array_contains?: InputJsonValue | null
+    array_starts_with?: InputJsonValue | null
+    array_ends_with?: InputJsonValue | null
+    lt?: InputJsonValue
+    lte?: InputJsonValue
+    gt?: InputJsonValue
+    gte?: InputJsonValue
+    not?: InputJsonValue | JsonNullValueFilter
   }
 
   export type NestedUuidFilter = {
@@ -13128,133 +13298,49 @@ export namespace Prisma {
     _max?: NestedStringFilter
   }
 
-  export type NestedBigIntNullableFilter = {
-    equals?: bigint | number | null
-    in?: Enumerable<bigint> | Enumerable<number> | null
-    notIn?: Enumerable<bigint> | Enumerable<number> | null
-    lt?: bigint | number
-    lte?: bigint | number
-    gt?: bigint | number
-    gte?: bigint | number
-    not?: NestedBigIntNullableFilter | bigint | number | null
-  }
-
-  export type NestedBigIntNullableWithAggregatesFilter = {
-    equals?: bigint | number | null
-    in?: Enumerable<bigint> | Enumerable<number> | null
-    notIn?: Enumerable<bigint> | Enumerable<number> | null
-    lt?: bigint | number
-    lte?: bigint | number
-    gt?: bigint | number
-    gte?: bigint | number
-    not?: NestedBigIntNullableWithAggregatesFilter | bigint | number | null
-    _count?: NestedIntNullableFilter
-    _avg?: NestedFloatNullableFilter
-    _sum?: NestedBigIntNullableFilter
-    _min?: NestedBigIntNullableFilter
-    _max?: NestedBigIntNullableFilter
-  }
-
-  export type NestedFloatNullableWithAggregatesFilter = {
-    equals?: number | null
-    in?: Enumerable<number> | null
-    notIn?: Enumerable<number> | null
-    lt?: number
-    lte?: number
-    gt?: number
-    gte?: number
-    not?: NestedFloatNullableWithAggregatesFilter | number | null
-    _count?: NestedIntNullableFilter
-    _avg?: NestedFloatNullableFilter
-    _sum?: NestedFloatNullableFilter
-    _min?: NestedFloatNullableFilter
-    _max?: NestedFloatNullableFilter
-  }
-  export type NestedJsonNullableFilter = 
-    | PatchUndefined<
-        Either<Required<NestedJsonNullableFilterBase>, Exclude<keyof Required<NestedJsonNullableFilterBase>, 'path'>>,
-        Required<NestedJsonNullableFilterBase>
-      >
-    | OptionalFlat<Omit<Required<NestedJsonNullableFilterBase>, 'path'>>
-
-  export type NestedJsonNullableFilterBase = {
-    equals?: InputJsonValue | JsonNullValueFilter
-    path?: Array<string>
-    string_contains?: string
-    string_starts_with?: string
-    string_ends_with?: string
-    array_contains?: InputJsonValue | null
-    array_starts_with?: InputJsonValue | null
-    array_ends_with?: InputJsonValue | null
-    lt?: InputJsonValue
-    lte?: InputJsonValue
-    gt?: InputJsonValue
-    gte?: InputJsonValue
-    not?: InputJsonValue | JsonNullValueFilter
-  }
-
-  export type NestedEnumColorNullableFilter = {
-    equals?: Color | null
-    in?: Enumerable<Color> | null
-    notIn?: Enumerable<Color> | null
-    not?: NestedEnumColorNullableFilter | Color | null
-  }
-
-  export type NestedEnumColorNullableWithAggregatesFilter = {
-    equals?: Color | null
-    in?: Enumerable<Color> | null
-    notIn?: Enumerable<Color> | null
-    not?: NestedEnumColorNullableWithAggregatesFilter | Color | null
-    _count?: NestedIntNullableFilter
-    _min?: NestedEnumColorNullableFilter
-    _max?: NestedEnumColorNullableFilter
-  }
-
-  export type NestedBytesNullableFilter = {
-    equals?: Uint8Array | null
-    in?: Enumerable<Uint8Array> | null
-    notIn?: Enumerable<Uint8Array> | null
-    not?: NestedBytesNullableFilter | Uint8Array | null
-  }
-
-  export type NestedBytesNullableWithAggregatesFilter = {
-    equals?: Uint8Array | null
-    in?: Enumerable<Uint8Array> | null
-    notIn?: Enumerable<Uint8Array> | null
-    not?: NestedBytesNullableWithAggregatesFilter | Uint8Array | null
-    _count?: NestedIntNullableFilter
-    _min?: NestedBytesNullableFilter
-    _max?: NestedBytesNullableFilter
-  }
-
-  export type OtherItemsCreateWithoutItemsInput = {
+  export type Other_itemsCreateWithoutItemsInput = {
     id: string
     content: string
   }
 
-  export type OtherItemsUncheckedCreateWithoutItemsInput = {
+  export type Other_itemsUncheckedCreateWithoutItemsInput = {
     id: string
     content: string
   }
 
-  export type OtherItemsCreateOrConnectWithoutItemsInput = {
-    where: OtherItemsWhereUniqueInput
-    create: XOR<OtherItemsCreateWithoutItemsInput, OtherItemsUncheckedCreateWithoutItemsInput>
+  export type Other_itemsCreateOrConnectWithoutItemsInput = {
+    where: Other_itemsWhereUniqueInput
+    create: XOR<Other_itemsCreateWithoutItemsInput, Other_itemsUncheckedCreateWithoutItemsInput>
   }
 
-  export type OtherItemsUpsertWithoutItemsInput = {
-    update: XOR<OtherItemsUpdateWithoutItemsInput, OtherItemsUncheckedUpdateWithoutItemsInput>
-    create: XOR<OtherItemsCreateWithoutItemsInput, OtherItemsUncheckedCreateWithoutItemsInput>
+  export type Other_itemsCreateManyItemsInputEnvelope = {
+    data: Enumerable<Other_itemsCreateManyItemsInput>
+    skipDuplicates?: boolean
   }
 
-  export type OtherItemsUpdateWithoutItemsInput = {
-    id?: StringFieldUpdateOperationsInput | string
-    content?: StringFieldUpdateOperationsInput | string
+  export type Other_itemsUpsertWithWhereUniqueWithoutItemsInput = {
+    where: Other_itemsWhereUniqueInput
+    update: XOR<Other_itemsUpdateWithoutItemsInput, Other_itemsUncheckedUpdateWithoutItemsInput>
+    create: XOR<Other_itemsCreateWithoutItemsInput, Other_itemsUncheckedCreateWithoutItemsInput>
   }
 
-  export type OtherItemsUncheckedUpdateWithoutItemsInput = {
-    id?: StringFieldUpdateOperationsInput | string
-    content?: StringFieldUpdateOperationsInput | string
+  export type Other_itemsUpdateWithWhereUniqueWithoutItemsInput = {
+    where: Other_itemsWhereUniqueInput
+    data: XOR<Other_itemsUpdateWithoutItemsInput, Other_itemsUncheckedUpdateWithoutItemsInput>
+  }
+
+  export type Other_itemsUpdateManyWithWhereWithoutItemsInput = {
+    where: Other_itemsScalarWhereInput
+    data: XOR<Other_itemsUpdateManyMutationInput, Other_itemsUncheckedUpdateManyWithoutOther_itemsInput>
+  }
+
+  export type Other_itemsScalarWhereInput = {
+    AND?: Enumerable<Other_itemsScalarWhereInput>
+    OR?: Enumerable<Other_itemsScalarWhereInput>
+    NOT?: Enumerable<Other_itemsScalarWhereInput>
+    id?: StringFilter | string
+    content?: StringFilter | string
+    item_id?: StringNullableFilter | string | null
   }
 
   export type ItemsCreateWithoutOther_itemsInput = {
@@ -13303,6 +13389,26 @@ export namespace Prisma {
     intvalue_null_default?: NullableIntFieldUpdateOperationsInput | number | null
   }
 
+  export type Other_itemsCreateManyItemsInput = {
+    id: string
+    content: string
+  }
+
+  export type Other_itemsUpdateWithoutItemsInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    content?: StringFieldUpdateOperationsInput | string
+  }
+
+  export type Other_itemsUncheckedUpdateWithoutItemsInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    content?: StringFieldUpdateOperationsInput | string
+  }
+
+  export type Other_itemsUncheckedUpdateManyWithoutOther_itemsInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    content?: StringFieldUpdateOperationsInput | string
+  }
+
 
 
   /**
@@ -13318,3 +13424,5 @@ export namespace Prisma {
    */
   export const dmmf: runtime.BaseDMMF
 }
+
+type Buffer = Omit<Uint8Array, 'set'>
