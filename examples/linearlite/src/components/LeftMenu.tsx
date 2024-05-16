@@ -19,6 +19,7 @@ import ProjectModal from './ProjectModal'
 import IssueModal from './IssueModal'
 import ItemGroup from './ItemGroup'
 import ProfileMenu from './ProfileMenu'
+import ProjectItem from './ProjectItem'
 
 function LeftMenu() {
   const ref = useRef<HTMLDivElement>() as RefObject<HTMLDivElement>
@@ -117,17 +118,17 @@ function LeftMenu() {
         </div>
 
         <div className="flex flex-col flex-shrink flex-grow overflow-y-auto mb-0.5 px-2">
-          <ItemGroup title="All Projects">
+          <ItemGroup title="Workspace">
             <Link
               to="/"
-              className="flex items-center pl-6 rounded cursor-pointer group h-7 hover:bg-gray-100"
+              className="flex items-center pl-2 rounded cursor-pointer group h-7 hover:bg-gray-100"
             >
               <IssuesIcon className="w-3.5 h-3.5 mr-2" />
               <span>All Issues</span>
             </Link>
             <Link
               to="/?status=todo,in_progress"
-              className="flex items-center pl-6 rounded cursor-pointer h-7 hover:bg-gray-100"
+              className="flex items-center pl-2 rounded cursor-pointer h-7 hover:bg-gray-100"
             >
               <span className="w-3.5 h-6 mr-2 inline-block">
                 <span className="block w-2 h-full border-r"></span>
@@ -136,57 +137,29 @@ function LeftMenu() {
             </Link>
             <Link
               to="/?status=backlog"
-              className="flex items-center pl-6 rounded cursor-pointer h-7 hover:bg-gray-100"
+              className="flex items-center pl-2 rounded cursor-pointer h-7 hover:bg-gray-100"
             >
               <BacklogIcon className="w-3.5 h-3.5 mr-2" />
               <span>Backlog</span>
             </Link>
             <Link
               to="/board"
-              className="flex items-center pl-6 rounded cursor-pointer h-7 hover:bg-gray-100"
+              className="flex items-center pl-2 rounded cursor-pointer h-7 hover:bg-gray-100"
             >
               <BoardIcon className="w-3.5 h-3.5 mr-2" />
               <span>Board</span>
             </Link>
           </ItemGroup>
-          {projects?.map((project) => (
-            <ItemGroup
-              title={project.name}
-              key={project.id}
-              projectId={project.id}
-            >
-              <Link
-                to={`/${project.id}`}
-                className="flex items-center pl-6 rounded cursor-pointer group h-7 hover:bg-gray-100"
-              >
-                <IssuesIcon className="w-3.5 h-3.5 mr-2" />
-                <span>Issues</span>
-              </Link>
-              <Link
-                to={`/${project.id}?status=todo,in_progress`}
-                className="flex items-center pl-6 rounded cursor-pointer h-7 hover:bg-gray-100"
-              >
-                <span className="w-3.5 h-6 mr-2 inline-block">
-                  <span className="block w-2 h-full border-r"></span>
-                </span>
-                <span>Active</span>
-              </Link>
-              <Link
-                to={`/${project.id}?status=backlog`}
-                className="flex items-center pl-6 rounded cursor-pointer h-7 hover:bg-gray-100"
-              >
-                <BacklogIcon className="w-3.5 h-3.5 mr-2" />
-                <span>Backlog</span>
-              </Link>
-              <Link
-                to={`/board/${project.id}`}
-                className="flex items-center pl-6 rounded cursor-pointer h-7 hover:bg-gray-100"
-              >
-                <BoardIcon className="w-3.5 h-3.5 mr-2" />
-                <span>Board</span>
-              </Link>
-            </ItemGroup>
-          ))}
+
+          <ItemGroup title="Projects">
+            {projects?.map((project) => (
+              <ProjectItem
+                title={project.name}
+                key={project.id}
+                projectId={project.id}
+              />
+            ))}
+          </ItemGroup>
 
           {/* extra space */}
           <div className="flex flex-col flex-grow flex-shrink" />
