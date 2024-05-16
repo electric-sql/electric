@@ -2075,7 +2075,8 @@ export const processTests = (test: TestFn<ContextType>) => {
     await satellite.subscribe([shapeDef1], 'testKey')
 
     const state1 = satellite.subscriptionManager.status('testKey')!
-    t.is(state1.status, 'requested')
+    if (state1.status !== 'establishing') return void t.fail()
+    t.is(state1.progress, "receiving_data")
 
     satellite.disconnect()
 

@@ -52,23 +52,6 @@ export class ShapeManager {
 
   /** Serialize internal state for external storage. Can be later loaded with {@link ShapeManager#initialize} */
   public serialize(): string {
-    // Since only one subscription is ever active, and since requested subscriptions "stack"
-    // the overshadowed subscriptions, we care only about the latest requested subscription
-    // for any given key. Since the requested subscription stays "requested" until we receive
-    // the initial data, and we cannot continue such a subscription, we only need to keep the
-    // latest requested subscription.
-    // const activeFullKeys = new Set(Object.values(this.activeSubscriptions))
-    // const requestedFullKeys = new Set(
-    //   Object.values(this.requestedSubscriptions)
-    // )
-
-    // const known = Object.fromEntries(
-    //   Object.entries(this.knownSubscriptions).filter(
-    //     ([fullKey, _]) =>
-    //       activeFullKeys.has(fullKey) || requestedFullKeys.has(fullKey)
-    //   )
-    // )
-
     return JSON.stringify({
       known: this.knownSubscriptions,
       unfulfilled: this.requestedSubscriptions,
@@ -122,6 +105,8 @@ export class ShapeManager {
     return tables
   }
 
+  // undefined | "requested" | "active" | "modifying" | "cancelling"
+
   public status(key: string): SyncStatus {
     const active = this.activeSubscriptions[key]
       ? this.knownSubscriptions[this.activeSubscriptions[key]!]!
@@ -130,19 +115,27 @@ export class ShapeManager {
       ? this.knownSubscriptions[this.requestedSubscriptions[key]!]!
       : undefined
 
-    if (active && requested)
+    if (active && requested && requested.serverId)
       return {
-        status: 'exchanging',
+        status: 'establishing',
+        progress: 'receiving_data',
+        serverId: requested.serverId,
         oldServerId: active.serverId,
-        newServerId: requested.serverId,
       } as const
     else if (requested && requested.serverId)
-      return { status: 'requested', serverId: requested.serverId } as const
+      return {
+        status: 'establishing',
+        progress: 'receiving_data',
+        serverId: requested.serverId,
+      }
     else if (active && active?.overshadowsFullKeys.length !== 0)
       return {
-        status: 'finishing_exchange',
+        status: 'establishing',
+        progress: 'removing_data',
         serverId: active.serverId!,
       } as const
+    else if (active && this.incompleteUnsubs.has(active.serverId!))
+      return { status: 'cancelling', serverId: active.serverId! }
     else if (active) return { status: 'active', serverId: active.serverId! }
     else return undefined
   }
@@ -198,7 +191,11 @@ export class ShapeManager {
         syncFailed: () => void
         promise: Promise<void>
       } {
-    const shapeHash = hash(shapes)
+    // TODO: This sorts the shapes objects for hashing to make sure that order of includes
+    //       does not affect the hash. This has the unfortunate consequence of sorting the FK spec,
+    //       but the chance of a table having two multi-column FKs over same columns BUT in a
+    //       different order feels much lower than people using includes in an arbitrary order.
+    const shapeHash = hash(shapes, { unorderedArrays: true })
     const keyOrHash = key ?? shapeHash
     /* Since multiple requests may have the same key, we'll need to differentiate them
      * based on both hash and key. We use `:` to join them because hash is base64 that
@@ -361,7 +358,7 @@ export class ShapeManager {
   }
 
   public getServerID(shapes: Shape[]): string[] {
-    const shapeHash = hash(shapes)
+    const shapeHash = hash(shapes, {unorderedArrays: true})
     const fullKey = makeFullKey(shapeHash, shapeHash)
     const serverId = this.knownSubscriptions[fullKey]?.serverId
     return serverId ? [serverId] : []

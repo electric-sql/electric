@@ -492,13 +492,10 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  public unsubscribe(sync: {
-    shapes: Shape[]
-    key?: string | undefined
-  }): Promise<void>
+  public unsubscribe(sync: { shapes: Shape[]; key?: string }): Promise<void>
   public unsubscribe(keys: string[]): Promise<void>
   public unsubscribe(
-    target: string[] | { shapes: Shape[]; key?: string | undefined }
+    target: string[] | { shapes: Shape[]; key?: string }
   ): Promise<void> {
     if (Array.isArray(target)) {
       return this.unsubscribeIds(this.subscriptionManager.getServerIDs(target))
