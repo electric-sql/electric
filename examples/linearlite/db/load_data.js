@@ -65,9 +65,12 @@ function getRandomProjectId() {
 }
 
 // Create the project if it doesn't exist.
-for (const project of projects) {
-  upsertProject(db, project)
-}
+await db.tx(async (db) => {
+  db.query(sql`SET CONSTRAINTS ALL DEFERRED;`) // disable FK checks
+  for (const project of projects) {
+    await upsertProject(db, project)
+  }
+})
 
 let commentCount = 0
 const issueToLoad = Math.min(ISSUES_TO_LOAD, issues.length)

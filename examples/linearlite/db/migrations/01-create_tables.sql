@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS "issue" (
     "kanbanorder" TEXT NOT NULL,
     "username" TEXT NOT NULL,
     CONSTRAINT "issue_pkey" PRIMARY KEY ("id"),
-    FOREIGN KEY (project_id) REFERENCES project(id)
+    FOREIGN KEY (project_id) REFERENCES project(id) DEFERRABLE
 );
 
 CREATE TABLE  IF NOT EXISTS "comment" (
