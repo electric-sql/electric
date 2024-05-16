@@ -446,6 +446,14 @@ export class SatelliteProcess implements Satellite {
 
       if (error) throw error
 
+      // notify subscribers of change
+      this.notifier.shapeSubscriptionSyncStatusChanged(
+        this.dbName,
+        request.key,
+        this.syncStatus(request.key)
+      )
+
+      // persist subscription metadata
       await this._setMeta('subscriptions', this.subscriptionManager.serialize())
 
       return {
@@ -470,7 +478,7 @@ export class SatelliteProcess implements Satellite {
       )
     } else {
       return this.unsubscribeIds(
-        this.subscriptionManager.getServerID(target.shapes)
+        this.subscriptionManager.getServerIDsForShapes(target.shapes)
       )
     }
   }
@@ -482,6 +490,19 @@ export class SatelliteProcess implements Satellite {
 
     // If the server didn't send an error, we persist the fact the subscription was deleted.
     this.subscriptionManager.unsubscribeMade(subscriptionIds)
+
+    // notify subscribers of change
+    subscriptionIds.forEach((subId) => {
+      const key = this.subscriptionManager.getKeyForServerID(subId)
+      if (!key) return
+      this.notifier.shapeSubscriptionSyncStatusChanged(
+        this.dbName,
+        key,
+        this.syncStatus(key)
+      )
+    })
+
+    // persist subscription metadata
     await this.adapter.run(
       this._setMetaStatement(
         'subscriptions',
@@ -501,6 +522,18 @@ export class SatelliteProcess implements Satellite {
       [],
       subsData.subscriptionId
     )
+
+    // notify subscribers of change
+    const key = this.subscriptionManager.getKeyForServerID(
+      subsData.subscriptionId
+    )
+    if (key)
+      this.notifier.shapeSubscriptionSyncStatusChanged(
+        this.dbName,
+        key,
+        this.syncStatus(key)
+      )
+
     const toBeUnsubbed = afterApply()
     if (toBeUnsubbed.length > 0) await this.unsubscribeIds(toBeUnsubbed)
   }
@@ -1550,6 +1583,17 @@ export class SatelliteProcess implements Satellite {
       ...this._enableTriggers(affectedTables)
     )
     this.subscriptionManager.goneBatchDelivered(subscriptionIds)
+
+    // notify subscribers of change
+    subscriptionIds.forEach((subId) => {
+      const key = this.subscriptionManager.getKeyForServerID(subId)
+      if (!key) return
+      this.notifier.shapeSubscriptionSyncStatusChanged(
+        this.dbName,
+        key,
+        this.syncStatus(key)
+      )
+    })
 
     this._notifyChanges(fakeOplogEntries, 'remote')
   }

@@ -19,14 +19,18 @@ import {
   Notifier,
   PotentialChangeCallback,
   PotentialChangeNotification,
+  ShapeSubscriptionSyncStatusChangeCallback,
+  ShapeSubscriptionSyncStatusChangeNotification,
   UnsubscribeFunction,
 } from './index'
+import { SyncStatus } from '../client/model/shapes'
 
 export const EVENT_NAMES = {
   authChange: 'auth:changed',
   actualDataChange: 'data:actually:changed',
   potentialDataChange: 'data:potentially:changed',
   connectivityStateChange: 'network:connectivity:changed',
+  shapeSubscriptionStatusChange: 'shape:status:changed',
 }
 
 // Initialise global emitter to be shared between all
@@ -201,6 +205,41 @@ export class EventNotifier implements Notifier {
     }
   }
 
+  shapeSubscriptionSyncStatusChanged(
+    dbName: string,
+    key: string,
+    status: SyncStatus
+  ): void {
+    if (!this._hasDbName(dbName)) {
+      return
+    }
+
+    this._emitShapeSubscriptionSyncStatusChange(dbName, key, status)
+  }
+
+  subscribeToShapeSubscriptionSyncStatusChanges(
+    callback: ShapeSubscriptionSyncStatusChangeCallback
+  ): UnsubscribeFunction {
+    const thisHasDbName = this._hasDbName.bind(this)
+
+    const wrappedCallback = (
+      notification: ShapeSubscriptionSyncStatusChangeNotification
+    ) => {
+      if (thisHasDbName(notification.dbName)) {
+        callback(notification)
+      }
+    }
+
+    this._subscribe(EVENT_NAMES.shapeSubscriptionStatusChange, wrappedCallback)
+
+    return () => {
+      this._unsubscribe(
+        EVENT_NAMES.shapeSubscriptionStatusChange,
+        wrappedCallback
+      )
+    }
+  }
+
   _getDbNames(): DbName[] {
     const idx = this.attachedDbIndex
 
@@ -257,6 +296,22 @@ export class EventNotifier implements Notifier {
     }
 
     this._emit(EVENT_NAMES.connectivityStateChange, notification)
+
+    return notification
+  }
+
+  _emitShapeSubscriptionSyncStatusChange(
+    dbName: DbName,
+    key: string,
+    status: SyncStatus
+  ): ShapeSubscriptionSyncStatusChangeNotification {
+    const notification = {
+      dbName: dbName,
+      key: key,
+      status: status,
+    }
+
+    this._emit(EVENT_NAMES.shapeSubscriptionStatusChange, notification)
 
     return notification
   }

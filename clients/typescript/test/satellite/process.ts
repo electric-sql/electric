@@ -1683,10 +1683,11 @@ export const processTests = (test: TestFn<ContextType>) => {
     const { synced } = await satellite.subscribe([shapeDef])
     await synced
 
-    // first notification is 'connected'
-    t.is(notifier.notifications.length, 2)
-    t.is(notifier.notifications[1].changes.length, 1)
-    t.deepEqual(notifier.notifications[1].changes[0], {
+    // first notification is 'connected', second is establishing shape,
+    // third one is initial sync, last one is shape established
+    t.is(notifier.notifications.length, 4)
+    t.is(notifier.notifications[2].changes.length, 1)
+    t.deepEqual(notifier.notifications[2].changes[0], {
       qualifiedTablename: qualifiedTableName,
       recordChanges: [
         {

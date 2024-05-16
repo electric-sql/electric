@@ -191,11 +191,7 @@ export class ShapeManager {
         syncFailed: () => void
         promise: Promise<void>
       } {
-    // TODO: This sorts the shapes objects for hashing to make sure that order of includes
-    //       does not affect the hash. This has the unfortunate consequence of sorting the FK spec,
-    //       but the chance of a table having two multi-column FKs over same columns BUT in a
-    //       different order feels much lower than people using includes in an arbitrary order.
-    const shapeHash = hash(shapes, { unorderedArrays: true })
+    const shapeHash = this.hashShapes(shapes)
     const keyOrHash = key ?? shapeHash
     /* Since multiple requests may have the same key, we'll need to differentiate them
      * based on both hash and key. We use `:` to join them because hash is base64 that
@@ -367,11 +363,26 @@ export class ShapeManager {
       .filter(onlyDefined)
   }
 
-  public getServerID(shapes: Shape[]): string[] {
-    const shapeHash = hash(shapes, { unorderedArrays: true })
+  public getServerIDsForShapes(shapes: Shape[]): string[] {
+    const shapeHash = this.hashShapes(shapes)
     const fullKey = makeFullKey(shapeHash, shapeHash)
     const serverId = this.knownSubscriptions[fullKey]?.serverId
     return serverId ? [serverId] : []
+  }
+
+  public getKeyForServerID(serverId: string): string | undefined {
+    const fullKey = this.serverIds.get(serverId)
+    if (fullKey === undefined) return
+    const [_hash, key] = splitFullKey(fullKey)
+    return key
+  }
+
+  public hashShapes(shapes: Shape[]): string {
+    // TODO: This sorts the shapes objects for hashing to make sure that order of includes
+    //       does not affect the hash. This has the unfortunate consequence of sorting the FK spec,
+    //       but the chance of a table having two multi-column FKs over same columns BUT in a
+    //       different order feels much lower than people using includes in an arbitrary order.
+    return hash(shapes, { unorderedArrays: true })
   }
 }
 
