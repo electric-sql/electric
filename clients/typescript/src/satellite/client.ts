@@ -1020,7 +1020,7 @@ export class SatelliteClient implements Client {
       }
     )
 
-    this.inbound.receivingUnsubsBatch = []
+    this.inbound.receivingUnsubsBatch = false
     this.inbound.goneBatch = []
   }
 

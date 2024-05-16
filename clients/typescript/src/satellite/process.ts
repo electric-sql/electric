@@ -143,11 +143,7 @@ export class SatelliteProcess implements Satellite {
   relations: RelationsCache
 
   previousShapeSubscriptions: { keY: string; shapes: Shape[] }[]
-  // subscriptions: InMemorySubscriptionsManager
   subscriptionManager: ShapeManager
-  // subscriptionNotifiers: Record<string, ReturnType<typeof emptyPromise<void>>>
-  subscriptionIdGenerator: (...args: any) => string
-  shapeRequestIdGenerator: (...args: any) => string
 
   /**
    * To optimize inserting a lot of data when the subscription data comes, we need to do
@@ -193,10 +189,6 @@ export class SatelliteProcess implements Satellite {
         trailing: true,
       }
     )
-    // this.subscriptionNotifiers = {}
-
-    this.subscriptionIdGenerator = () => genUUID()
-    this.shapeRequestIdGenerator = this.subscriptionIdGenerator
 
     this._connectRetryHandler = connectRetryHandler
   }
@@ -298,30 +290,6 @@ export class SatelliteProcess implements Satellite {
 
   _setAuthState(authState: AuthState): void {
     this._authState = authState
-  }
-
-  async _garbageCollectShapeHandler(
-    shapeDefs: ShapeDefinition[]
-  ): Promise<void> {
-    const namespace = this.builder.defaultNamespace
-    const allTables = shapeDefs
-      .map((def: ShapeDefinition) => def.definition)
-      .flatMap((x) => getAllTablesForShape(x, namespace))
-    const tables = uniqWith(allTables, (a, b) => a.isEqual(b))
-
-    // TODO: table and schema warrant escaping here too, but they aren't in the triggers table.
-    const deleteStmts = tables.map((x) => ({
-      sql: `DELETE FROM ${x}`,
-    }))
-
-    const stmtsWithTriggers = [
-      { sql: this.builder.deferOrDisableFKsForTx },
-      ...this._disableTriggers(tables),
-      ...deleteStmts,
-      ...this._enableTriggers(tables),
-    ]
-
-    await this.adapter.runInTransaction(...stmtsWithTriggers)
   }
 
   // Adds all the necessary listeners to the satellite client
@@ -699,9 +667,7 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  async _resetClientState(opts?: {
-    keepSubscribedShapes: boolean
-  }): Promise<void> {
+  _resetClientState(opts?: { keepSubscribedShapes: boolean }): Promise<void> {
     Log.warn(`resetting client state`)
     this.disconnect()
 
@@ -712,6 +678,10 @@ export class SatelliteProcess implements Satellite {
       reestablishSubscribed: opts?.keepSubscribedShapes,
     })
 
+    return this._clearTables(tables)
+  }
+
+  async _clearTables(tables: QualifiedTablename[]) {
     await this.adapter.runInTransaction(
       this._setMetaStatement('lsn', null),
       this._setMetaStatement(

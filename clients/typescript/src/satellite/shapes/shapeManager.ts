@@ -218,6 +218,7 @@ export class ShapeManager {
       if (sub !== undefined) {
         // A known subscription with same key, but with a different hash
         // This means we'll be unsubscribing any previous subscriptions
+        // NOTE: order matters here, we depend on it in `syncFailed`.
         overshadowsFullKeys = [sub.fullKey, ...sub.overshadowsFullKeys]
       }
 
@@ -243,6 +244,12 @@ export class ShapeManager {
   private syncFailed(key: string, fullKey: string): void {
     delete this.promises[fullKey]
     const sub = this.knownSubscriptions[fullKey]!
+
+    // We're storing full keys of any subscriptions we were meant to unsubscribe from
+    // in `sub.overshadowsFullKeys`, with last subscription's key being the first element.
+    // If that last subscription is a requested subscription that still may arrive
+    // (i.e. not active), then we're falling back to it so that previous sync call is not
+    // invalidated by this one.
     const shadowedKey: string | undefined = sub.overshadowsFullKeys[0]
     if (
       shadowedKey &&

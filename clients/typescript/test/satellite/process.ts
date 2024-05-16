@@ -46,7 +46,6 @@ import { DEFAULT_LOG_POS } from '../../src/util/common'
 
 import { Shape, SubscriptionData } from '../../src/satellite/shapes/types'
 import { mergeEntries } from '../../src/satellite/merge'
-import { MockSubscriptionsManager } from '../../src/satellite/shapes/manager'
 import { AuthState, insecureAuthToken } from '../../src/auth'
 import {
   ChangeCallback,
@@ -2320,14 +2319,6 @@ export const processTests = (test: TestFn<ContextType>) => {
 
     await runMigrations() // because the meta tables need to exist for shape GC
 
-    satellite._garbageCollectShapeHandler([
-      { uuid: '', definition: { tablename: 'parent' } },
-    ])
-
-    const subsManager = new MockSubscriptionsManager(
-      satellite._garbageCollectShapeHandler.bind(satellite)
-    )
-
     // Create the 'users' and 'posts' tables expected by sqlite
     // populate it with foreign keys and check that the subscription
     // manager does not violate the FKs when unsubscribing from all subscriptions
@@ -2348,7 +2339,10 @@ export const processTests = (test: TestFn<ContextType>) => {
       throw e
     }
 
-    await subsManager.unsubscribeAllAndGC()
+    await satellite._clearTables([
+      builder.makeQT('users'),
+      builder.makeQT('posts'),
+    ])
     // if we reach here, the FKs were not violated
 
     // Check that everything was deleted
@@ -2364,7 +2358,8 @@ export const processTests = (test: TestFn<ContextType>) => {
   })
 
   test("Garbage collecting the subscription doesn't generate oplog entries", async (t) => {
-    const { adapter, runMigrations, satellite, authState, token } = t.context
+    const { adapter, runMigrations, satellite, authState, token, builder } =
+      t.context
     await startSatellite(satellite, authState, token)
     await runMigrations()
     await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
@@ -2372,9 +2367,7 @@ export const processTests = (test: TestFn<ContextType>) => {
     await satellite._garbageCollectOplog(ts)
     t.is((await satellite._getEntries(0)).length, 0)
 
-    satellite._garbageCollectShapeHandler([
-      { uuid: '', definition: { tablename: 'parent' } },
-    ])
+    satellite._clearTables([builder.makeQT('parent')])
 
     await satellite._performSnapshot()
     t.deepEqual(await satellite._getEntries(0), [])
