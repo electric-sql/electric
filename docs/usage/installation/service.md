@@ -67,11 +67,18 @@ services:
     restart: always
     volumes:
       - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready"]
+      timeout: 5s
+      interval: 5s
+      retries: 3
+    user: postgres
 
   electric:
     image: electricsql/electric
     depends_on:
-      - pg
+      pg:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql://postgres:pg_password@pg/postgres
       DATABASE_REQUIRE_SSL: false
@@ -82,6 +89,11 @@ services:
       - 5133:5133
       - 65432:65432
     restart: always
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:5133/api/status"]
+      timeout: 5s
+      interval: 5s
+      retries: 3
 ```
 
 Then start the services:
