@@ -174,24 +174,23 @@ defmodule Electric.Satellite.WebsocketServer do
     handle_producer_msg({out_rep.pid, out_rep.stage_sub}, {:cancel, :down}, state)
   end
 
+  def handle_info(
+        {:timeout, :ping_timer},
+        %State{last_msg_time: :missed_one_ping_interval} = state
+      ) do
+    Logger.warning("Client is not responding to ping, disconnecting")
+    {:stop, :normal, {1005, "Client not responding to pings"}, state}
+  end
+
   def handle_info({:timeout, :ping_timer}, %State{} = state) do
-    case state.last_msg_time do
-      :ping_sent ->
-        Logger.info("Client is not responding to ping, disconnecting")
-        {:stop, :normal, {1005, "Client not responding to pings"}, state}
+    timediff = :timer.now_diff(state.last_msg_time, state.last_ping_time)
 
-      last_msg_time ->
-        last_msg_diff_us = :timer.now_diff(:erlang.timestamp(), last_msg_time)
-
-        # Scheduling margin error in microseconds. The scheduling can undershoot
-        # the desired ping interval
-        timing_margin_error_us = 500
-
-        if last_msg_diff_us > @ping_interval * 1000 - timing_margin_error_us do
-          {:push, {:ping, ""}, schedule_ping(%{state | last_msg_time: :ping_sent})}
-        else
-          {:ok, schedule_ping(state)}
-        end
+    if timediff > 0 do
+      # Got a "pong" or a regular message from the client, scheduling the next ping.
+      {:ok, schedule_ping(state)}
+    else
+      # Haven't received anything from the client within one ping interval.
+      {:push, {:ping, ""}, schedule_ping(%{state | last_msg_time: :missed_one_ping_interval})}
     end
   end
 
@@ -437,7 +436,7 @@ defmodule Electric.Satellite.WebsocketServer do
   @spec schedule_ping(State.t()) :: State.t()
   defp schedule_ping(%State{} = state) do
     Process.send_after(self(), {:timeout, :ping_timer}, @ping_interval)
-    state
+    %{state | last_ping_time: :erlang.timestamp()}
   end
 
   if Mix.env() == :test do
