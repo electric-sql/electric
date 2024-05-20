@@ -103,6 +103,13 @@ export function clientApi(registry: GlobalRegistry | Registry) {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function addToolbar(electric: ElectricClient<any>) {
+  if (document.getElementById(TOOLBAR_CONTAINER_ID)) {
+    console.warn(
+      '[@electric-sql/debug-toolbar] Toolbar has already been added.',
+    )
+    return
+  }
+
   const toolbarApi = clientApi(electric.registry)
 
   const containerDiv = document.createElement('div')
