@@ -16,6 +16,8 @@ interface RequestedSubscription {
   fullKey: string
 }
 
+type OnShapeSyncStatusUpdated = (key: string, status: SyncStatus) => void
+
 type OptionalRecord<T> = Record<string, T | undefined>
 
 export class ShapeManager {
@@ -32,6 +34,8 @@ export class ShapeManager {
   private promises: Record<string, PromiseWithResolvers<void>> = {}
   private serverIds: Map<string, string> = new Map()
   private incompleteUnsubs: Set<string> = new Set()
+
+  constructor(private onShapeSyncStatusUpdated?: OnShapeSyncStatusUpdated) {}
 
   /** Set internal state using a string returned from {@link ShapeManager#serialize}. */
   public initialize(serializedState: string): void {
@@ -227,10 +231,18 @@ export class ShapeManager {
 
       this.requestedSubscriptions[keyOrHash] = fullKey
 
+      let notified = false
+
       this.promises[fullKey] = emptyPromise()
       return {
         key: keyOrHash,
-        setServerId: (id) => this.setServerId(fullKey, id),
+        setServerId: (id) => {
+          this.setServerId(fullKey, id)
+          if (!notified) {
+            notified = true
+            this.onShapeSyncStatusUpdated?.(keyOrHash, this.status(keyOrHash))
+          }
+        },
         syncFailed: () => this.syncFailed(keyOrHash, fullKey),
         promise: this.promises[fullKey].promise,
       }
@@ -293,6 +305,7 @@ export class ShapeManager {
     this.activeSubscriptions[key] = fullKey
 
     if (sub.overshadowsFullKeys.length === 0) {
+      this.onShapeSyncStatusUpdated?.(key, this.status(key))
       return () => {
         this.promises[fullKey].resolve()
         delete this.promises[fullKey]
@@ -307,7 +320,15 @@ export class ShapeManager {
   }
 
   public unsubscribeMade(serverIds: string[]) {
-    for (const id of serverIds) this.incompleteUnsubs.add(id)
+    for (const id of serverIds) {
+      this.incompleteUnsubs.add(id)
+
+      if (this.onShapeSyncStatusUpdated) {
+        const key = this.getKeyForServerID(id)
+        if (!key) continue
+        this.onShapeSyncStatusUpdated(key, this.status(key))
+      }
+    }
   }
 
   /**
@@ -339,6 +360,8 @@ export class ShapeManager {
           this.promises[sub.fullKey].resolve()
         }
       }
+
+      this.onShapeSyncStatusUpdated?.(key, this.status(key))
     }
   }
 

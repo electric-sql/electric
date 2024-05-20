@@ -176,7 +176,12 @@ export class SatelliteProcess implements Satellite {
     this.relations = {}
 
     this.previousShapeSubscriptions = []
-    this.subscriptionManager = new ShapeManager()
+    this.subscriptionManager = new ShapeManager(
+      this.notifier.shapeSubscriptionSyncStatusChanged.bind(
+        this.notifier,
+        this.dbName
+      )
+    )
 
     this._throttledSnapshot = throttle(
       this._mutexSnapshot.bind(this),
@@ -446,13 +451,6 @@ export class SatelliteProcess implements Satellite {
 
       if (error) throw error
 
-      // notify subscribers of change
-      this.notifier.shapeSubscriptionSyncStatusChanged(
-        this.dbName,
-        request.key,
-        this.syncStatus(request.key)
-      )
-
       // persist subscription metadata
       await this._setMeta('subscriptions', this.subscriptionManager.serialize())
 
@@ -491,17 +489,6 @@ export class SatelliteProcess implements Satellite {
     // If the server didn't send an error, we persist the fact the subscription was deleted.
     this.subscriptionManager.unsubscribeMade(subscriptionIds)
 
-    // notify subscribers of change
-    subscriptionIds.forEach((subId) => {
-      const key = this.subscriptionManager.getKeyForServerID(subId)
-      if (!key) return
-      this.notifier.shapeSubscriptionSyncStatusChanged(
-        this.dbName,
-        key,
-        this.syncStatus(key)
-      )
-    })
-
     // persist subscription metadata
     await this.adapter.run(
       this._setMetaStatement(
@@ -522,21 +509,6 @@ export class SatelliteProcess implements Satellite {
       [],
       subsData.subscriptionId
     )
-
-    // notify subscribers of change (if finished delivering data)
-    const key = this.subscriptionManager.getKeyForServerID(
-      subsData.subscriptionId
-    )
-    if (key) {
-      const syncStatus = this.syncStatus(key)
-      if (syncStatus?.status === 'active') {
-        this.notifier.shapeSubscriptionSyncStatusChanged(
-          this.dbName,
-          key,
-          syncStatus
-        )
-      }
-    }
 
     const toBeUnsubbed = afterApply()
     if (toBeUnsubbed.length > 0) await this.unsubscribeIds(toBeUnsubbed)
@@ -1587,22 +1559,7 @@ export class SatelliteProcess implements Satellite {
       ...this._enableTriggers(affectedTables)
     )
 
-    // retrieve sub keys before they get removed
-    const subKeys = subscriptionIds.map((x) =>
-      this.subscriptionManager.getKeyForServerID(x)
-    )
-
     this.subscriptionManager.goneBatchDelivered(subscriptionIds)
-
-    // notify subscribers of change
-    subKeys.forEach((key) => {
-      if (!key) return
-      this.notifier.shapeSubscriptionSyncStatusChanged(
-        this.dbName,
-        key,
-        this.syncStatus(key)
-      )
-    })
 
     this._notifyChanges(fakeOplogEntries, 'remote')
   }
