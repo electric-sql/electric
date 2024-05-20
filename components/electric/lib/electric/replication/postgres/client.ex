@@ -35,11 +35,13 @@ defmodule Electric.Replication.Postgres.Client do
   def with_conn(conn_opts, fun) do
     # Best effort capture exit message, expect trap_exit to be set
     wait_exit = fn conn, res ->
-      receive do
-        {:EXIT, ^conn, _} -> res
-      after
-        500 -> res
-      end
+      OpenTelemetry.with_span("epgsql.await_exit", [], fn ->
+        receive do
+          {:EXIT, ^conn, _} -> res
+        after
+          500 -> res
+        end
+      end)
     end
 
     Logger.info("Postgres.Client.with_conn(#{inspect(sanitize_conn_opts(conn_opts))})")
@@ -52,7 +54,9 @@ defmodule Electric.Replication.Postgres.Client do
     with {:ok, ^conn} <- :epgsql.connect(conn, ip_addr, username, password, epgsql_conn_opts),
          :ok <- set_display_settings(conn) do
       try do
-        fun.(conn)
+        OpenTelemetry.with_span("epgsql.with_conn", [], fn ->
+          fun.(conn)
+        end)
       rescue
         e ->
           Logger.error(Exception.format(:error, e, __STACKTRACE__))
@@ -97,7 +101,10 @@ defmodule Electric.Replication.Postgres.Client do
   def with_transaction(mode \\ "", conn, fun, in_opts \\ [])
       when is_binary(mode) and is_list(in_opts) do
     opts = Keyword.merge([reraise: true, begin_opts: mode], in_opts)
-    :epgsql.with_transaction(conn, fun, opts)
+
+    OpenTelemetry.with_span("epgsql.with_transaction", %{"txn.mode" => mode}, fn ->
+      :epgsql.with_transaction(conn, fun, opts)
+    end)
   end
 
   def close(conn) do
