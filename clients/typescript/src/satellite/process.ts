@@ -57,7 +57,7 @@ import {
   toTransactions,
 } from './oplog'
 
-import { Mutex } from 'async-mutex'
+import { Mutex, MutexInterface } from 'async-mutex'
 import Log from 'loglevel'
 import { generateTableTriggers } from '../migrators/triggers'
 import { mergeEntries } from './merge'
@@ -88,10 +88,12 @@ export type ShapeSubscription = {
   synced: Promise<void>
 }
 
-type ThrottleFunction = {
+type ThrottleFunction<Args, Res> = {
   cancel: () => void
-  (): Promise<Date> | undefined
+  (a?: Args): Promise<Res> | undefined
 }
+
+type SnapshotThrottleArgs = { skipIfRunning: boolean }
 
 type MetaEntries = {
   clientId: Uuid | ''
@@ -133,7 +135,12 @@ export class SatelliteProcess implements Satellite {
 
   _pollingInterval?: any
   _unsubscribeFromPotentialDataChanges?: UnsubscribeFunction
-  _throttledSnapshot: ThrottleFunction
+
+  /**
+   * Throttle the snapshot function to avoid calling it too often.
+   * It returns the time of the snaphot or undefined if the snapshot was skipped.
+   */
+  _throttledSnapshot: ThrottleFunction<SnapshotThrottleArgs, Date | undefined>
 
   _lsn?: LSN
 
@@ -179,7 +186,7 @@ export class SatelliteProcess implements Satellite {
     this.subscriptionManager = new ShapeManager()
 
     this._throttledSnapshot = throttle(
-      this._mutexSnapshot.bind(this),
+      this._onSnapshotThrottleTick.bind(this),
       opts.minSnapshotWindow,
       {
         leading: true,
@@ -190,16 +197,53 @@ export class SatelliteProcess implements Satellite {
     this._connectRetryHandler = connectRetryHandler
   }
 
+  _onSnapshotThrottleTick(
+    { skipIfRunning } = { skipIfRunning: false }
+  ): Promise<Date | undefined> {
+    return this._mutexSnapshot({ skipIfRunning })
+  }
+
   /**
    * Perform a snapshot while taking out a mutex to avoid concurrent calls.
+   * @param queueUpIfRunning If false and a snapshot is already running, the snapshot will be skipped.
+   * @returns The timestamp of the snapshot or undefined if the snapshot was skipped.
    */
-  async _mutexSnapshot() {
-    const release = await this.snapshotMutex.acquire()
+  async _mutexSnapshot(
+    { skipIfRunning } = { skipIfRunning: false }
+  ): Promise<Date | undefined> {
+    let release: MutexInterface.Releaser
+
+    if (skipIfRunning) {
+      const maybeRelease = this.acquireIfFree(this.snapshotMutex)
+      if (!maybeRelease) {
+        // Skip the snapshot
+        return
+      }
+      release = await maybeRelease
+    } else {
+      release = await this.snapshotMutex.acquire()
+    }
+
     try {
       return await this._performSnapshot()
     } finally {
       release()
     }
+  }
+
+  /**
+   * Only acquire the mutex if it's not already locked.
+   * WARNING: For clearer intentions of this code, we keep the function "sync"
+   * @returns The releaser if the mutex was free, null otherwise.
+   */
+  private acquireIfFree(mutex: Mutex): Promise<MutexInterface.Releaser> | null {
+    // WARNING: We can do this check right before the mutex acquire because there is no async
+    // call until then, so the event loop won't interleave other code.
+    // More context here: https://github.com/electric-sql/electric/pull/1273
+    if (mutex.isLocked()) {
+      return null
+    }
+    return mutex.acquire()
   }
 
   async start(authConfig?: AuthConfig): Promise<void> {
@@ -244,13 +288,16 @@ export class SatelliteProcess implements Satellite {
       this.notifier.subscribeToAuthStateChanges(authStateHandler)
 
     // Request a snapshot whenever the data in our database potentially changes.
+    const potentialDataChangesHandler =
+      this._handlePotentialDataChanges.bind(this)
     this._unsubscribeFromPotentialDataChanges =
-      this.notifier.subscribeToPotentialDataChanges(this._throttledSnapshot)
+      this.notifier.subscribeToPotentialDataChanges(potentialDataChangesHandler)
 
     // Start polling to request a snapshot every `pollingInterval` ms.
     clearInterval(this._pollingInterval)
+    const pollingIntervalHandler = this._handlePollingInterval.bind(this)
     this._pollingInterval = setInterval(
-      this._throttledSnapshot,
+      pollingIntervalHandler,
       this.opts.pollingInterval
     )
 
@@ -274,6 +321,14 @@ export class SatelliteProcess implements Satellite {
       // this.subscriptions.setState(subscriptionsState)
       this.subscriptionManager.initialize(subscriptionsState)
     }
+  }
+
+  private async _handlePollingInterval(): Promise<void> {
+    await this._throttledSnapshot({ skipIfRunning: true })
+  }
+
+  private async _handlePotentialDataChanges(): Promise<void> {
+    await this._throttledSnapshot()
   }
 
   private async logDatabaseVersion(): Promise<void> {

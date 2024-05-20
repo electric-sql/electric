@@ -230,12 +230,12 @@ export const processTests = (test: TestFn<ContextType>) => {
 
     await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
 
-    let snapshotTimestamp = await satellite._performSnapshot()
+    const snapshotTimestamp = await satellite._performSnapshot()
 
     const clientId = satellite._authState!.clientId
-    let shadowTags = encodeTags([generateTag(clientId, snapshotTimestamp)])
+    const shadowTags = encodeTags([generateTag(clientId, snapshotTimestamp)])
 
-    var shadowRows = await adapter.query({
+    const shadowRows = await adapter.query({
       sql: `SELECT tags FROM _electric_shadow`,
     })
     t.is(shadowRows.length, 2)
@@ -294,7 +294,7 @@ export const processTests = (test: TestFn<ContextType>) => {
     const p1 = satellite._throttledSnapshot()
     const p2 = new Promise<Date>((res) => {
       // call snapshot after throttle time has expired
-      setTimeout(() => satellite._throttledSnapshot()?.then(res), 50)
+      setTimeout(() => satellite._throttledSnapshot()?.then((r) => res(r!)), 50)
     })
 
     await t.notThrowsAsync(async () => {
@@ -2657,6 +2657,48 @@ export const processTests = (test: TestFn<ContextType>) => {
 
     // Wait for the snapshot to finish to consider the test successful
     await sleepAsync(1000)
+
+    t.pass()
+  })
+
+  test("don't take the snapshot mutex when polling if one is running already", async (t) => {
+    const { runMigrations, satellite, authState, token, opts } = t.context
+
+    await runMigrations()
+
+    // Shouldn't do more than this number of snapshots. Because we are mocking a slow snaphot
+    // and the polling interval shouldn't schedule snapshots if one is running already, this is a
+    // reasonable number. If snapshots were added to the queue, this number would be higher,
+    // approximately the scheduled polls (6-7)
+    const maxSnapshots = 2
+
+    let shouldCountSnapshots = false
+    let snapshotsCount = 0
+
+    // Replace the snapshot function to simulate a slow snapshot
+    satellite._performSnapshot = async () => {
+      if (!shouldCountSnapshots) return new Date()
+      await sleepAsync(2000)
+      snapshotsCount++
+      return new Date()
+    }
+
+    const conn = await startSatellite(satellite, authState, token)
+    await conn.connectionPromise
+
+    shouldCountSnapshots = true
+
+    // Let the process poll multiple times
+    await sleepAsync(opts.pollingInterval * 6)
+
+    await satellite.stop()
+
+    // Fail if an unexpected number of snapshots were taken
+    if (snapshotsCount > maxSnapshots) {
+      t.fail(
+        `Too many snapshots: ${snapshotsCount}, expected <= ${maxSnapshots}`
+      )
+    }
 
     t.pass()
   })
