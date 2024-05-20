@@ -144,8 +144,8 @@ export interface Notifier {
   ): UnsubscribeFunction
 
   // Notification for shape subscription sync status changes.
-  // Each subscription is associated with a key a notification will fire
-  // on every status change
+  // Every notification will include a key that uniquely identifies the
+  // shape for which the sync status changed, as well as the new sync status.
   shapeSubscriptionSyncStatusChanged(
     dbName: DbName,
     key: string,

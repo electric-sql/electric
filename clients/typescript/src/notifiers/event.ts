@@ -305,11 +305,7 @@ export class EventNotifier implements Notifier {
     key: string,
     status: SyncStatus
   ): ShapeSubscriptionSyncStatusChangeNotification {
-    const notification = {
-      dbName: dbName,
-      key: key,
-      status: status,
-    }
+    const notification = { dbName, key, status }
 
     this._emit(EVENT_NAMES.shapeSubscriptionStatusChange, notification)
 
