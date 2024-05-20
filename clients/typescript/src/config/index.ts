@@ -42,7 +42,10 @@ export interface ElectricConfig {
    * Optional backoff options for connecting with Electric
    */
   connectionBackOffOptions?: ConnectionBackOffOptions
-  /** Whether to disable FK checks when applying incoming (i.e. remote) transactions. */
+  /**
+   * Whether to disable FK checks when applying incoming (i.e. remote) transactions to the local SQLite database.
+   * When using Postgres, this is the default behavior and can't be changed.
+   */
   disableFKs?: boolean
 }
 

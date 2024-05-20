@@ -24,7 +24,10 @@ export interface SatelliteOpts {
   clearOnBehindWindow: boolean
   /** Backoff options for connecting with Electric*/
   connectionBackOffOptions: ConnectionBackoffOptions
-  /** Whether to disable FK checks when applying incoming (i.e. remote) transactions. */
+  /**
+   * Whether to disable FK checks when applying incoming (i.e. remote) transactions to the local SQLite database.
+   * When using Postgres, this is the default behavior and can't be changed.
+   */
   disableFKs: boolean
   /** With debug mode enabled, Satellite can show additional logs. */
   debug: boolean
