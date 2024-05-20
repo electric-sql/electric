@@ -320,6 +320,43 @@ telemetry =
 
 config :electric, :telemetry, telemetry
 
+###
+# OpenTelemetry
+###
+
+send_to_honeycomb? = env!("HONEYCOMB_ENABLED", :boolean, false)
+
+if send_to_honeycomb? do
+  honeycomb_api_key = env!("HONEYCOMB_API_KEY", :string, "")
+
+  config :opentelemetry_exporter,
+    otlp_endpoint: "https://api.honeycomb.io",
+    otlp_headers: [{"x-honeycomb-team", honeycomb_api_key}],
+    otlp_compression: :gzip
+
+  config :opentelemetry, :processors,
+    otel_batch_processor: %{
+      scheduled_delay_ms: 1000
+      # exporter:
+      #   {:opentelemetry_exporter,
+      #    %{
+      #      endpoints: ["https://api.honeycomb.io"],
+      #      headers: [{"x-honeycomb-team", honeycomb_api_key}]
+      #    }}
+    }
+else
+  if env!("OT_DEBUG_LOG_ENABLED", :boolean, false) do
+    config :opentelemetry, :processors,
+      otel_simple_processor: %{
+        exporter: {:otel_exporter_stdout, []}
+      }
+  else
+    config :opentelemetry, :processors, []
+  end
+end
+
+###
+
 if config_env() in [:dev, :test] do
   path = Path.expand("runtime.#{config_env()}.exs", __DIR__)
 

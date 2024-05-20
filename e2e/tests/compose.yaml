@@ -20,6 +20,8 @@ services:
       LOGICAL_PUBLISHER_HOST: electric_1
       PG_PROXY_LOG_LEVEL: info
       LOG_LEVEL: "${LOG_LEVEL:-debug}"
+      HONEYCOMB_API_KEY: "${HONEYCOMB_API_KEY}"
+      HONEYCOMB_ENABLED: "${HONEYCOMB_ENABLED}"
     ports:
       - "5133:5133"
       # proxy access
