@@ -86,13 +86,16 @@ export const initElectric = async () => {
     const { addToolbar } = await import('@electric-sql/debug-toolbar')
     addToolbar(electric)
   }
+  await electric.adapter.run({
+    sql: 'PRAGMA foreign_keys=OFF;',
+  })
 
   let userId = window.sessionStorage.getItem('userId')
   if (!userId) {
     userId = genUUID()
     window.sessionStorage.setItem('userId', userId)
   }
-  const authToken = insecureAuthToken({ sub: userId })
+  const authToken = insecureAuthToken({ sub: 'user3' })
 
   await electric.connect(authToken)
   return electric

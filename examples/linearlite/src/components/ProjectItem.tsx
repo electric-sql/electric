@@ -17,17 +17,20 @@ function ProjectItem({ title, projectId }: Props) {
   const syncProject = useCallback(async () => {
     setLoading(true)
     try {
-      const synced = await db.issue.sync({
-        where: {
-          project_id: projectId,
-        },
+      const { synced } = await db.project.sync({
         include: {
-          comment: true,
-          project: true,
+          issue: {
+            where: { project_id: projectId },
+            include: {
+              comment: true,
+              project: true,
+              profile: true,
+            },
+          },
         },
         key: projectId,
       })
-      await synced.synced
+      await synced
       setSynced(true)
     } catch (err) {
       console.error(err)

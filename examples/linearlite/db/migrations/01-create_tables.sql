@@ -1,12 +1,20 @@
 -- Create the tables for the linearlite example
+CREATE TABLE IF NOT EXISTS "profile" (
+    "username" TEXT NOT NULL,
+    "created" TIMESTAMPTZ NOT NULL,
+    CONSTRAINT "user_pkey" PRIMARY KEY ("username")
+);
+
 CREATE TABLE IF NOT EXISTS "project" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "description" TEXT NOT NULL,
+    "username" TEXT NOT NULL,
     "modified" TIMESTAMPTZ NOT NULL,
     "created" TIMESTAMPTZ NOT NULL,
     "kanbanorder" TEXT NOT NULL,
-    CONSTRAINT "project_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "project_pkey" PRIMARY KEY ("id"),
+    FOREIGN KEY (username) REFERENCES "profile"(username) DEFERRABLE
 );
 
 CREATE TABLE IF NOT EXISTS "issue" (
@@ -21,6 +29,7 @@ CREATE TABLE IF NOT EXISTS "issue" (
     "kanbanorder" TEXT NOT NULL,
     "username" TEXT NOT NULL,
     CONSTRAINT "issue_pkey" PRIMARY KEY ("id"),
+    FOREIGN KEY (username) REFERENCES "profile"(username) DEFERRABLE,
     FOREIGN KEY (project_id) REFERENCES project(id) DEFERRABLE
 );
 
@@ -31,12 +40,41 @@ CREATE TABLE  IF NOT EXISTS "comment" (
     "issue_id" UUID NOT NULL,
     "created_at" TIMESTAMPTZ NOT NULL,
     CONSTRAINT "comment_pkey" PRIMARY KEY ("id"),
-    -- FOREIGN KEY (username) REFERENCES "user"(username),
+    FOREIGN KEY (username) REFERENCES "profile"(username) DEFERRABLE,
     FOREIGN KEY (issue_id) REFERENCES issue(id) DEFERRABLE
 );
 
+ELECTRIC GRANT READ
+  ON "profile"
+  TO AUTHENTICATED;
+
+ELECTRIC GRANT READ
+  ON "profile"
+  TO ("profile", 'owner');
+
+ELECTRIC ASSIGN ("profile", 'owner')
+  TO "profile".username;
+
+ELECTRIC GRANT ALL
+  ON "project"
+  TO ("project", 'owner');
+
+ELECTRIC ASSIGN ("project", 'owner')
+  TO "project".username;
+
+ELECTRIC GRANT READ
+  ON "issue"
+  TO ("project", 'owner');
+
+ELECTRIC GRANT READ
+  ON "comment"
+  TO ("project", 'owner');
+
+
+
 -- ⚡
 -- Electrify the tables
-ALTER TABLE project ENABLE ELECTRIC;
-ALTER TABLE issue ENABLE ELECTRIC;
-ALTER TABLE comment ENABLE ELECTRIC;
+ALTER TABLE "profile" ENABLE ELECTRIC;
+ALTER TABLE "project" ENABLE ELECTRIC;
+ALTER TABLE "issue" ENABLE ELECTRIC;
+ALTER TABLE "comment" ENABLE ELECTRIC;
