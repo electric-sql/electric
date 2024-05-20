@@ -44,7 +44,7 @@ defmodule Electric.MixProject do
         {:bandit, "~> 1.1"},
         {:dotenvy, "~> 0.8"},
         {:gen_stage, "~> 1.2"},
-        {:gproc, "~> 1.0"},
+        {:gproc, "~> 1.0", override: true},
         {:jason, "~> 1.4"},
         {:joken, "~> 2.6"},
         {:libgraph, "~> 0.16.0"},
@@ -89,6 +89,10 @@ defmodule Electric.MixProject do
 
   defp telemetry_deps do
     [
+      {:opentelemetry_exporter, "~> 1.7"},
+      {:opentelemetry_api, "~> 1.3"},
+      {:opentelemetry_ecto, "~> 1.2"},
+      {:opentelemetry, "~> 1.4"},
       {:telemetry, "~> 1.2"},
       {:telemetry_metrics, "~> 1.0", override: true},
       {:telemetry_metrics_statsd, "~> 0.7"},

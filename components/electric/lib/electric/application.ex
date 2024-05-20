@@ -9,6 +9,8 @@ defmodule Electric.Application do
   require Logger
 
   def start(_type, _args) do
+    Electric.Telemetry.OpenTelemetry.setup()
+
     children =
       [
         Electric.Telemetry,
