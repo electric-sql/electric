@@ -782,6 +782,11 @@ defmodule Electric.Satellite.WebsocketServerTest do
                   "id" => "parent_1",
                   "content" => "super",
                   "parent_id" => "1"
+                },
+                old_record: %{
+                  "id" => "parent_1",
+                  "content" => "repus",
+                  "parent_id" => "1"
                 }
               }
             ],
@@ -1023,7 +1028,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
         move_in_ref,
         {subquery_map, affected_txs},
         _context,
-        [reply_to: {ref, pid}, connection: _],
+        [reply_to: {ref, pid}, connection: _, relation_loader: _],
         opts \\ []
       ) do
     test_pid = Keyword.fetch!(opts, :test_pid)

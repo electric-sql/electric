@@ -290,7 +290,7 @@ defmodule Electric.Satellite.Protocol do
           Shapes.SentRowsGraph.pop_by_request_ids(state.out_rep.sent_rows_graph, request_ids)
 
         # We're sending back all subscription IDs to not confuse the client
-        {msgs, out_rep} = prepare_unsubs_data(ids, gone, out_rep)
+        {msgs, out_rep} = prepare_unsubs_data(ids, gone, out_rep, state)
 
         {msgs, %OutRep{out_rep | sent_rows_graph: graph}}
       else
@@ -310,16 +310,16 @@ defmodule Electric.Satellite.Protocol do
     end
   end
 
-  @spec prepare_unsubs_data([String.t()], [tuple()], OutRep.t()) ::
+  @spec prepare_unsubs_data([String.t()], [tuple()], OutRep.t(), State.t()) ::
           {[deep_msg_list()], OutRep.t()}
-  defp prepare_unsubs_data(subscription_ids, gone_nodes, %OutRep{} = out_rep) do
+  defp prepare_unsubs_data(subscription_ids, gone_nodes, %OutRep{} = out_rep, state) do
     {serialized_log, unknown_relations, known_relations} =
       gone_nodes
       |> Enum.map(fn {relation, pk} -> %Changes.Gone{pk: pk, relation: relation} end)
-      |> Serialization.serialize_shape_data_as_tx(out_rep.relations)
+      |> Serialization.serialize_shape_data_as_tx(out_rep.relations, relation_loader(state))
 
     msgs = [
-      serialize_unknown_relations(unknown_relations),
+      serialize_unknown_relations(unknown_relations, state),
       %SatUnsubsDataBegin{
         lsn: CachedWal.Api.serialize_wal_position(out_rep.last_seen_wal_pos),
         subscription_ids: subscription_ids
@@ -1427,7 +1427,7 @@ defmodule Electric.Satellite.Protocol do
         {msgs, out_rep} =
           case gone_batch do
             nil -> {[], out_rep}
-            {ids, gones} -> prepare_unsubs_data(ids, gones, out_rep)
+            {ids, gones} -> prepare_unsubs_data(ids, gones, out_rep, state)
           end
 
         with {:ok, state} <- query_move_in_data(actions, %{state | out_rep: out_rep}) do

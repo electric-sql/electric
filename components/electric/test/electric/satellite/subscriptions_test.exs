@@ -1394,7 +1394,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
         assert {[^request_id], data} = receive_subscription_data(conn, sub_id)
 
         assert [
-                 %SatOpInsert{row_data: %{values: [@john_doe_id, "John Doe"]}},
+                 %SatOpInsert{row_data: %{values: [@john_doe_id, "John Doe", _]}},
                  %SatOpInsert{row_data: %{values: [@entry_id, "Hello world", @john_doe_id]}}
                ] = data
 
@@ -1451,7 +1451,7 @@ defmodule Electric.Satellite.SubscriptionsTest do
         assert {[^request_id], data} = receive_subscription_data(conn, sub_id)
 
         assert [
-                 %SatOpInsert{row_data: %{values: [@john_doe_id, "John Doe"]}},
+                 %SatOpInsert{row_data: %{values: [@john_doe_id, "John Doe", _]}},
                  %SatOpInsert{row_data: %{values: [@entry_id, "Hello world", @john_doe_id]}}
                ] = data
 
