@@ -8,6 +8,7 @@ defmodule Electric.Replication.InitialSync do
 
   alias Electric.Utils
   alias Electric.Telemetry.Metrics
+  alias Electric.Telemetry.OpenTelemetry
   alias Electric.Replication.Shapes
   alias Electric.Postgres.{CachedWal, Extension}
   alias Electric.Replication.Changes.{NewRecord, Transaction}
@@ -189,7 +190,12 @@ defmodule Electric.Replication.InitialSync do
 
           xmin = String.to_integer(xmin_str)
           send(parent, {:data_insertion_point, ref, xmin})
-          fun.(conn, xmin)
+
+          OpenTelemetry.with_span(
+            "initial_sync.readonly_txn_with_checkpoint",
+            [marker: marker],
+            fn -> fun.(conn, xmin) end
+          )
         end
       )
     end)
