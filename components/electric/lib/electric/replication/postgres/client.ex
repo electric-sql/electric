@@ -11,6 +11,7 @@ defmodule Electric.Replication.Postgres.Client do
   alias Electric.Postgres.Extension
   alias Electric.Postgres.Lsn
   alias Electric.Replication.Connectors
+  alias Electric.Telemetry.OpenTelemetry
 
   require Logger
 
@@ -155,9 +156,10 @@ defmodule Electric.Replication.Postgres.Client do
     end
   end
 
-  defp squery(conn, query) do
-    Logger.debug("Postgres.Client: #{query}")
-    :epgsql.squery(conn, query)
+  def squery(conn, query) do
+    OpenTelemetry.with_span("epgsql.squery", %{"db.statement" => query}, fn ->
+      :epgsql.squery(conn, query)
+    end)
   end
 
   @spec get_system_id(connection()) :: {:ok, binary}
@@ -276,7 +278,7 @@ defmodule Electric.Replication.Postgres.Client do
   #
   # See `Electric.Postgres.display_settings/0` for details.
   defp set_display_settings(conn) do
-    results = :epgsql.squery(conn, Electric.Postgres.display_settings() |> Enum.join(";"))
+    results = squery(conn, Electric.Postgres.display_settings() |> Enum.join(";"))
     Enum.find(results, :ok, &(not match?({:ok, [], []}, &1)))
   end
 
@@ -352,8 +354,8 @@ defmodule Electric.Replication.Postgres.Client do
           {:ok, {short :: String.t(), long :: String.t(), cluster_id :: String.t()}}
           | {:error, term()}
   def get_server_versions(conn) do
-    with {:ok, _, [{short}]} <- :epgsql.squery(conn, "SHOW SERVER_VERSION"),
-         {:ok, _, [{long}]} <- :epgsql.squery(conn, "SELECT VERSION()"),
+    with {:ok, _, [{short}]} <- squery(conn, "SHOW SERVER_VERSION"),
+         {:ok, _, [{long}]} <- squery(conn, "SELECT VERSION()"),
          {:ok, _, _, [{cluster_id}]} <- Extension.save_and_get_cluster_id(conn) do
       {:ok, {short, long, cluster_id}}
     end
