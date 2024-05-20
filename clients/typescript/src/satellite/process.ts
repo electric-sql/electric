@@ -220,12 +220,12 @@ export class SatelliteProcess implements Satellite {
     let release: MutexInterface.Releaser
 
     if (skipIfRunning) {
-      const maybeRelease = await this.acquireIfFree(this.snapshotMutex)
+      const maybeRelease = this.acquireIfFree(this.snapshotMutex)
       if (!maybeRelease) {
         // Skip the snapshot
         return
       }
-      release = maybeRelease
+      release = await maybeRelease
     } else {
       release = await this.snapshotMutex.acquire()
     }
@@ -239,17 +239,17 @@ export class SatelliteProcess implements Satellite {
 
   /**
    * Only acquire the mutex if it's not already locked.
+   * WARNING: For clearer intentions of this code, we keep the function "sync"
+   * @returns The releaser if the mutex was free, null otherwise.
    */
-  private async acquireIfFree(
-    mutex: Mutex
-  ): Promise<MutexInterface.Releaser | null> {
+  private acquireIfFree(mutex: Mutex): Promise<MutexInterface.Releaser> | null {
     // WARNING: We can do this check right before the mutex acquire because there is no async
     // call until then, so the event loop won't interleave other code.
     // More context here: https://github.com/electric-sql/electric/pull/1273
     if (mutex.isLocked()) {
       return null
     }
-    return await mutex.acquire()
+    return mutex.acquire()
   }
 
   async start(authConfig?: AuthConfig): Promise<void> {
