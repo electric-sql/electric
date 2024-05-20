@@ -186,7 +186,7 @@ defmodule Electric.Replication.InitialSync do
           Task.start(fn -> perform_magic_write(conn_opts, marker) end)
 
           {:ok, _, [{xmin_str}]} =
-            :epgsql.squery(conn, "SELECT pg_snapshot_xmin(pg_current_snapshot())")
+            Client.squery(conn, "SELECT pg_snapshot_xmin(pg_current_snapshot())")
 
           xmin = String.to_integer(xmin_str)
           send(parent, {:data_insertion_point, ref, xmin})
