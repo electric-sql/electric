@@ -42,6 +42,8 @@ export interface ElectricConfig {
    * Optional backoff options for connecting with Electric
    */
   connectionBackOffOptions?: ConnectionBackOffOptions
+  /** Whether to disable FK checks when applying incoming (i.e. remote) transactions. */
+  disableFKs?: boolean
 }
 
 export type ElectricConfigWithDialect = ElectricConfig & {
@@ -61,6 +63,7 @@ export type HydratedConfig = {
   debug: boolean
   connectionBackOffOptions: ConnectionBackOffOptions
   namespace: string
+  disableFKs: boolean
 }
 
 export type InternalElectricConfig = {
@@ -73,6 +76,7 @@ export type InternalElectricConfig = {
   }
   debug?: boolean
   connectionBackOffOptions?: ConnectionBackOffOptions
+  disableFKs?: boolean
 }
 
 export const hydrateConfig = (
@@ -81,6 +85,7 @@ export const hydrateConfig = (
   const auth = config.auth ?? {}
 
   const debug = config.debug ?? false
+  const disableFKs = config.disableFKs ?? false
   const url = new URL(config.url ?? 'http://localhost:5133')
 
   const isSecureProtocol = url.protocol === 'https:' || url.protocol === 'wss:'
@@ -126,5 +131,6 @@ export const hydrateConfig = (
     debug,
     connectionBackOffOptions,
     namespace: defaultNamespace,
+    disableFKs,
   }
 }

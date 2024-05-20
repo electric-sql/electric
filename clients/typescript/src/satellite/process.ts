@@ -1469,6 +1469,18 @@ export class SatelliteProcess implements Satellite {
       .concat(stmts)
       .concat(this._enableTriggers(qualifiedTables))
 
+    let enableFKs = false
+    if (this.builder.dialect === 'SQLite' && this.opts.disableFKs) {
+      // Check if FKs are enabled
+      const [{ foreign_keys }] = await this.adapter.query({
+        sql: 'PRAGMA foreign_keys;',
+      })
+      // Disable FKs
+      await this.adapter.run({ sql: 'PRAGMA foreign_keys = OFF;' })
+      // Remember to enable FKs after TX
+      enableFKs = foreign_keys === 1
+    }
+
     if (transaction.migrationVersion) {
       // If a migration version is specified
       // then the transaction is a migration
@@ -1478,6 +1490,10 @@ export class SatelliteProcess implements Satellite {
       })
     } else {
       await this.adapter.runInTransaction(...allStatements)
+    }
+
+    if (enableFKs) {
+      await this.adapter.run({ sql: 'PRAGMA foreign_keys = ON;' })
     }
 
     this._notifyChanges(opLogEntries, 'remote')
