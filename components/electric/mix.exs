@@ -17,7 +17,16 @@ defmodule Electric.MixProject do
         "coveralls.html": :test
       ],
       releases: [
-        electric: [applications: [electric: :permanent], include_executables_for: [:unix]],
+        electric: [
+          applications: [
+            electric: :permanent,
+            # This order of application is important to ensure proper startup sequence of
+            # application dependencies, namely, inets.
+            opentelemetry_exporter: :permanent,
+            opentelemetry: :temporary
+          ],
+          include_executables_for: [:unix]
+        ],
         ws_client: [
           applications: [electric: :load],
           include_executables_for: [:unix],

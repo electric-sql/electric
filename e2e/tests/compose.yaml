@@ -19,6 +19,9 @@ services:
       ELECTRIC_WRITE_TO_PG_MODE: "${ELECTRIC_WRITE_TO_PG_MODE:-logical_replication}"
       LOGICAL_PUBLISHER_HOST: electric_1
       PG_PROXY_LOG_LEVEL: info
+      LOG_LEVEL: "${LOG_LEVEL:-debug}"
+      OTEL_EXPORT: honeycomb
+      HONEYCOMB_API_KEY: "${HONEYCOMB_API_KEY}"
     ports:
       - "5133:5133"
       # proxy access
