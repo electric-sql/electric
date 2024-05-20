@@ -168,4 +168,15 @@ defmodule Electric.Replication.Shapes.ShapeRequest do
       graph
     )
   end
+
+  def to_string(shape_requests) when is_list(shape_requests) do
+    for %Electric.Satellite.SatShapeReq{
+          shape_definition: %Electric.Satellite.SatShapeDef{selects: selects}
+        } <- shape_requests,
+        %Electric.Satellite.SatShapeDef.Select{tablename: table, where: where, include: includes} <-
+          selects do
+      "#{table} (where: #{where}), including: #{inspect(includes)}"
+    end
+    |> Enum.join("; ")
+  end
 end
