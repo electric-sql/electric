@@ -1683,10 +1683,11 @@ export const processTests = (test: TestFn<ContextType>) => {
     const { synced } = await satellite.subscribe([shapeDef])
     await synced
 
-    // first notification is 'connected'
-    t.is(notifier.notifications.length, 2)
-    t.is(notifier.notifications[1].changes.length, 1)
-    t.deepEqual(notifier.notifications[1].changes[0], {
+    // first notification is 'connected', second and third is establishing shape,
+    // final one is initial sync
+    t.is(notifier.notifications.length, 4)
+    t.is(notifier.notifications[3].changes.length, 1)
+    t.deepEqual(notifier.notifications[3].changes[0], {
       qualifiedTablename: qualifiedTableName,
       recordChanges: [
         {
@@ -2659,5 +2660,97 @@ export const processTests = (test: TestFn<ContextType>) => {
     await sleepAsync(1000)
 
     t.pass()
+  })
+
+  test('notifies for shape lifecycle', async (t) => {
+    const { client, satellite, notifier, token } = t.context
+    const { runMigrations, authState } = t.context
+    await runMigrations()
+
+    const shapeSubKey = 'foo'
+    const shapeNotifications = () =>
+      notifier.notifications.filter((n) => n.key !== undefined)
+
+    // relations must be present at subscription delivery
+    client.setRelations(relations)
+    client.setRelationData('parent', parentRecord)
+    client.setRelationData('child', childRecord)
+
+    const conn = await startSatellite(satellite, authState, token)
+    await conn.connectionPromise
+
+    satellite!.relations = relations
+    const { synced: syncedFirst } = await satellite.subscribe(
+      [{ tablename: 'parent' }],
+      shapeSubKey
+    )
+
+    // first one is establishing
+
+    t.is(shapeNotifications().length, 1)
+    const firstNotification = shapeNotifications()[0]
+    t.is(firstNotification.key, shapeSubKey)
+    t.is(firstNotification.status.status, 'establishing')
+    t.is(firstNotification.status.progress, 'receiving_data')
+    const firstServerId = firstNotification.status.serverId
+    t.true(typeof firstServerId === 'string')
+
+    await syncedFirst
+
+    // second one is active
+    t.is(shapeNotifications().length, 2)
+    const secondNotification = shapeNotifications()[1]
+    t.is(secondNotification.key, shapeSubKey)
+    t.is(secondNotification.status.status, 'active')
+    t.is(secondNotification.status.serverId, firstServerId)
+
+    // change existing sub to different shape
+    const { synced: syncedSecond } = await satellite.subscribe(
+      [{ tablename: 'child' }],
+      shapeSubKey
+    )
+
+    // third one is a "mutation" one, receiving new data
+    t.is(shapeNotifications().length, 3)
+    const thirdNotifictiaon = shapeNotifications()[2]
+    t.is(thirdNotifictiaon.key, shapeSubKey)
+    t.is(thirdNotifictiaon.status.status, 'establishing')
+    t.is(thirdNotifictiaon.status.progress, 'receiving_data')
+    t.is(thirdNotifictiaon.status.oldServerId, firstServerId)
+    const secondServerId = thirdNotifictiaon.status.serverId
+    t.true(typeof secondServerId === 'string')
+
+    await syncedSecond
+
+    t.is(shapeNotifications().length, 5)
+
+    // fourth one is another "mutation" one, removing old data
+    const fourthNotifictiaon = shapeNotifications()[3]
+    t.is(fourthNotifictiaon.key, shapeSubKey)
+    t.is(fourthNotifictiaon.status.status, 'establishing')
+    t.is(fourthNotifictiaon.status.progress, 'removing_data')
+    t.is(fourthNotifictiaon.status.serverId, secondServerId)
+
+    // fifth one should eventually get back to active
+    const fifthNotification = shapeNotifications()[4]
+    t.is(fifthNotification.key, shapeSubKey)
+    t.is(fifthNotification.status.status, 'active')
+    t.is(fifthNotification.status.serverId, secondServerId)
+
+    // cancel subscription
+    await satellite.unsubscribe([shapeSubKey])
+    await sleepAsync(100)
+
+    // sixth one first notifies of cancellation
+    t.is(shapeNotifications().length, 7)
+    const sixthNotification = shapeNotifications()[5]
+    t.is(sixthNotification.key, shapeSubKey)
+    t.is(sixthNotification.status.status, 'cancelling')
+    t.is(sixthNotification.status.serverId, secondServerId)
+
+    // last one should indicate that it is gone
+    const seventhNotification = shapeNotifications()[6]
+    t.is(seventhNotification.key, shapeSubKey)
+    t.is(seventhNotification.status, undefined)
   })
 }

@@ -16,6 +16,8 @@ interface RequestedSubscription {
   fullKey: string
 }
 
+type OnShapeSyncStatusUpdated = (key: string, status: SyncStatus) => void
+
 type OptionalRecord<T> = Record<string, T | undefined>
 
 export class ShapeManager {
@@ -32,6 +34,8 @@ export class ShapeManager {
   private promises: Record<string, PromiseWithResolvers<void>> = {}
   private serverIds: Map<string, string> = new Map()
   private incompleteUnsubs: Set<string> = new Set()
+
+  constructor(private onShapeSyncStatusUpdated?: OnShapeSyncStatusUpdated) {}
 
   /** Set internal state using a string returned from {@link ShapeManager#serialize}. */
   public initialize(serializedState: string): void {
@@ -67,7 +71,7 @@ export class ShapeManager {
   }): QualifiedTablename[] {
     const requested = Object.values(this.requestedSubscriptions)
 
-    const tables = getTableNames(
+    const tables = getTableNamesForShapes(
       Object.values(this.knownSubscriptions)
         .filter((x) => !requested.includes(x?.fullKey))
         .flatMap((x) => x?.shapes)
@@ -212,11 +216,7 @@ export class ShapeManager {
         syncFailed: () => void
         promise: Promise<void>
       } {
-    // TODO: This sorts the shapes objects for hashing to make sure that order of includes
-    //       does not affect the hash. This has the unfortunate consequence of sorting the FK spec,
-    //       but the chance of a table having two multi-column FKs over same columns BUT in a
-    //       different order feels much lower than people using includes in an arbitrary order.
-    const shapeHash = hash(shapes, { unorderedArrays: true })
+    const shapeHash = this.hashShapes(shapes)
     const keyOrHash = key ?? shapeHash
     /* Since multiple requests may have the same key, we'll need to differentiate them
      * based on both hash and key. We use `:` to join them because hash is base64 that
@@ -252,10 +252,18 @@ export class ShapeManager {
 
       this.requestedSubscriptions[keyOrHash] = fullKey
 
+      let notified = false
+
       this.promises[fullKey] = emptyPromise()
       return {
         key: keyOrHash,
-        setServerId: (id) => this.setServerId(fullKey, id),
+        setServerId: (id) => {
+          this.setServerId(fullKey, id)
+          if (!notified) {
+            notified = true
+            this.onShapeSyncStatusUpdated?.(keyOrHash, this.status(keyOrHash))
+          }
+        },
         syncFailed: () => this.syncFailed(keyOrHash, fullKey),
         promise: this.promises[fullKey].promise,
       }
@@ -318,6 +326,7 @@ export class ShapeManager {
     this.activeSubscriptions[key] = fullKey
 
     if (sub.overshadowsFullKeys.length === 0) {
+      this.onShapeSyncStatusUpdated?.(key, this.status(key))
       return () => {
         this.promises[fullKey].resolve()
         delete this.promises[fullKey]
@@ -332,7 +341,15 @@ export class ShapeManager {
   }
 
   public unsubscribeMade(serverIds: string[]) {
-    for (const id of serverIds) this.incompleteUnsubs.add(id)
+    for (const id of serverIds) {
+      this.incompleteUnsubs.add(id)
+
+      if (this.onShapeSyncStatusUpdated) {
+        const key = this.getKeyForServerID(id)
+        if (!key) continue
+        this.onShapeSyncStatusUpdated(key, this.status(key))
+      }
+    }
   }
 
   /**
@@ -364,6 +381,8 @@ export class ShapeManager {
           this.promises[sub.fullKey].resolve()
         }
       }
+
+      this.onShapeSyncStatusUpdated?.(key, this.status(key))
     }
   }
 
@@ -388,11 +407,26 @@ export class ShapeManager {
       .filter(onlyDefined)
   }
 
-  public getServerID(shapes: Shape[]): string[] {
-    const shapeHash = hash(shapes, { unorderedArrays: true })
+  public getServerIDsForShapes(shapes: Shape[]): string[] {
+    const shapeHash = this.hashShapes(shapes)
     const fullKey = makeFullKey(shapeHash, shapeHash)
     const serverId = this.knownSubscriptions[fullKey]?.serverId
     return serverId ? [serverId] : []
+  }
+
+  public getKeyForServerID(serverId: string): string | undefined {
+    const fullKey = this.serverIds.get(serverId)
+    if (fullKey === undefined) return
+    const [_hash, key] = splitFullKey(fullKey)
+    return key
+  }
+
+  public hashShapes(shapes: Shape[]): string {
+    // TODO: This sorts the shapes objects for hashing to make sure that order of includes
+    //       does not affect the hash. This has the unfortunate consequence of sorting the FK spec,
+    //       but the chance of a table having two multi-column FKs over same columns BUT in a
+    //       different order feels much lower than people using includes in an arbitrary order.
+    return hash(shapes, { unorderedArrays: true })
   }
 }
 
@@ -414,16 +448,23 @@ function splitOnce(str: string, on: string): [string, string] {
   else return [str.slice(0, found), str.slice(found + 1)]
 }
 
-function getTableNames(shapes: Shape[], schema: string): QualifiedTablename[] {
+export function getTableNamesForShapes(
+  shapes: Shape[],
+  schema: string
+): QualifiedTablename[] {
   return uniqWith(
-    shapes.flatMap((x) => doGetTableNames(x, schema)),
+    shapes.flatMap((x) => doGetTableNamesForShape(x, schema)),
     (a, b) => a.isEqual(b)
   )
 }
 
-function doGetTableNames(shape: Shape, schema: string): QualifiedTablename[] {
+function doGetTableNamesForShape(
+  shape: Shape,
+  schema: string
+): QualifiedTablename[] {
   const includes =
-    shape.include?.flatMap((x) => doGetTableNames(x.select, schema)) ?? []
+    shape.include?.flatMap((x) => doGetTableNamesForShape(x.select, schema)) ??
+    []
   includes.push(new QualifiedTablename(schema, shape.tablename))
   return includes
 }

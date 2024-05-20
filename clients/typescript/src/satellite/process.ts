@@ -176,7 +176,12 @@ export class SatelliteProcess implements Satellite {
     this.relations = {}
 
     this.previousShapeSubscriptions = []
-    this.subscriptionManager = new ShapeManager()
+    this.subscriptionManager = new ShapeManager(
+      this.notifier.shapeSubscriptionSyncStatusChanged.bind(
+        this.notifier,
+        this.dbName
+      )
+    )
 
     this._throttledSnapshot = throttle(
       this._mutexSnapshot.bind(this),
@@ -446,6 +451,7 @@ export class SatelliteProcess implements Satellite {
 
       if (error) throw error
 
+      // persist subscription metadata
       await this._setMeta('subscriptions', this.subscriptionManager.serialize())
 
       return {
@@ -470,7 +476,7 @@ export class SatelliteProcess implements Satellite {
       )
     } else {
       return this.unsubscribeIds(
-        this.subscriptionManager.getServerID(target.shapes)
+        this.subscriptionManager.getServerIDsForShapes(target.shapes)
       )
     }
   }
@@ -482,6 +488,8 @@ export class SatelliteProcess implements Satellite {
 
     // If the server didn't send an error, we persist the fact the subscription was deleted.
     this.subscriptionManager.unsubscribeMade(subscriptionIds)
+
+    // persist subscription metadata
     await this.adapter.run(
       this._setMetaStatement(
         'subscriptions',
@@ -501,6 +509,7 @@ export class SatelliteProcess implements Satellite {
       [],
       subsData.subscriptionId
     )
+
     const toBeUnsubbed = afterApply()
     if (toBeUnsubbed.length > 0) await this.unsubscribeIds(toBeUnsubbed)
   }
@@ -1549,6 +1558,7 @@ export class SatelliteProcess implements Satellite {
       ...stmts,
       ...this._enableTriggers(affectedTables)
     )
+
     this.subscriptionManager.goneBatchDelivered(subscriptionIds)
 
     this._notifyChanges(fakeOplogEntries, 'remote')

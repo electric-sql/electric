@@ -2,6 +2,7 @@ import test, { ExecutionContext } from 'ava'
 
 import { ShapeManager } from '../../../src/satellite/shapes/shapeManager'
 import { sleepAsync } from '../../../src/util'
+import { SyncStatus } from '../../../src/client/model/shapes'
 
 test('Shape manager stores the subscription and returns a promise', (t) => {
   // Setup
@@ -130,6 +131,107 @@ test('Shape manager correctly rehydrates the state', async (t) => {
   // Simulate reconnect
   mng.initialize(mng.serialize())
   t.deepEqual(mng.listContinuedSubscriptions(), ['id2'])
+})
+
+test('Shape manager notifies about shape sync status lifecycle', async (t) => {
+  // Setup
+  const syncStatusUpdates: { key: string; status: SyncStatus }[] = []
+  const subKey = 'foo'
+  const serverId1 = 'testID'
+  const serverId2 = 'testID2'
+  const mng = new ShapeManager((key, status) =>
+    syncStatusUpdates.push({ key, status })
+  )
+
+  // Assertions
+
+  // request shape sub
+  const firstResult = mng.syncRequested([{ tablename: 't1' }], subKey)
+  t.is(syncStatusUpdates.length, 0)
+  if ('existing' in firstResult) return void t.fail()
+  firstResult.setServerId(serverId1)
+  t.is(syncStatusUpdates.length, 1)
+  t.deepEqual(syncStatusUpdates[0], {
+    key: subKey,
+    status: {
+      status: 'establishing',
+      progress: 'receiving_data',
+      serverId: serverId1,
+    },
+  })
+
+  // notify when shape data delivered
+  const cb = mng.dataDelivered(serverId1)
+  t.deepEqual(cb(), [])
+  t.is(syncStatusUpdates.length, 2)
+  t.deepEqual(syncStatusUpdates[1], {
+    key: subKey,
+    status: {
+      status: 'active',
+      serverId: serverId1,
+    },
+  })
+
+  // request overshadowing shape for same key
+  const secondResult = mng.syncRequested([{ tablename: 't2' }], subKey)
+  if ('existing' in secondResult) return void t.fail()
+  secondResult.setServerId(serverId2)
+  t.is(syncStatusUpdates.length, 3)
+  t.deepEqual(syncStatusUpdates[2], {
+    key: subKey,
+    status: {
+      status: 'establishing',
+      progress: 'receiving_data',
+      serverId: serverId2,
+      oldServerId: serverId1,
+    },
+  })
+
+  // notify when new shape data delivered once unsubscribe
+  // of previous shape is made
+  const cb2 = mng.dataDelivered(serverId2)
+  t.deepEqual(cb2(), [serverId1])
+  t.is(syncStatusUpdates.length, 3)
+  mng.unsubscribeMade([serverId1])
+  t.is(syncStatusUpdates.length, 4)
+  t.deepEqual(syncStatusUpdates[3], {
+    key: subKey,
+    status: {
+      status: 'establishing',
+      progress: 'removing_data',
+      serverId: serverId2,
+    },
+  })
+
+  // notify when new shape is both delivered and old one cleaned up
+  mng.goneBatchDelivered([serverId1])
+  t.is(syncStatusUpdates.length, 5)
+  t.deepEqual(syncStatusUpdates[4], {
+    key: subKey,
+    status: {
+      status: 'active',
+      serverId: serverId2,
+    },
+  })
+
+  // notify when shape is being cancelled
+  mng.unsubscribeMade([serverId2])
+  t.is(syncStatusUpdates.length, 6)
+  t.deepEqual(syncStatusUpdates[5], {
+    key: subKey,
+    status: {
+      status: 'cancelling',
+      serverId: serverId2,
+    },
+  })
+
+  // notify when shape is completely gone
+  mng.goneBatchDelivered([serverId2])
+  t.is(syncStatusUpdates.length, 7)
+  t.deepEqual(syncStatusUpdates[6], {
+    key: subKey,
+    status: undefined,
+  })
 })
 
 async function promiseResolved(

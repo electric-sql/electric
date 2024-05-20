@@ -1,4 +1,5 @@
 import { AuthState } from '../auth/index'
+import { SyncStatus } from '../client/model/shapes'
 import { QualifiedTablename } from '../util/tablename'
 import {
   ConnectivityState,
@@ -39,11 +40,18 @@ export interface ConnectivityStateChangeNotification {
   connectivityState: ConnectivityState
 }
 
+export interface ShapeSubscriptionSyncStatusChangeNotification {
+  dbName: DbName
+  key: string
+  status: SyncStatus
+}
+
 export type Notification =
   | AuthStateNotification
   | ChangeNotification
   | PotentialChangeNotification
   | ConnectivityStateChangeNotification
+  | ShapeSubscriptionSyncStatusChangeNotification
 
 export type AuthStateCallback = (notification: AuthStateNotification) => void
 export type ChangeCallback = (notification: ChangeNotification) => void
@@ -54,11 +62,16 @@ export type ConnectivityStateChangeCallback = (
   notification: ConnectivityStateChangeNotification
 ) => void
 
+export type ShapeSubscriptionSyncStatusChangeCallback = (
+  notification: ShapeSubscriptionSyncStatusChangeNotification
+) => void
+
 export type NotificationCallback =
   | AuthStateCallback
   | ChangeCallback
   | PotentialChangeCallback
   | ConnectivityStateChangeCallback
+  | ShapeSubscriptionSyncStatusChangeCallback
 
 export type UnsubscribeFunction = () => void
 
@@ -128,5 +141,18 @@ export interface Notifier {
 
   subscribeToConnectivityStateChanges(
     callback: ConnectivityStateChangeCallback
+  ): UnsubscribeFunction
+
+  // Notification for shape subscription sync status changes.
+  // Every notification will include a key that uniquely identifies the
+  // shape for which the sync status changed, as well as the new sync status.
+  shapeSubscriptionSyncStatusChanged(
+    dbName: DbName,
+    key: string,
+    status: SyncStatus
+  ): void
+
+  subscribeToShapeSubscriptionSyncStatusChanges(
+    callback: ShapeSubscriptionSyncStatusChangeCallback
   ): UnsubscribeFunction
 }
