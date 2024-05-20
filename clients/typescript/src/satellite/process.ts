@@ -92,7 +92,7 @@ type ThrottleFunction<Args, Res> = {
   (a?: Args): Promise<Res> | undefined
 }
 
-type SnapshotThrottleArgs = { queueUpIfRunning: boolean }
+type SnapshotThrottleArgs = { skipIfRunning: boolean }
 
 type MetaEntries = {
   clientId: Uuid | ''
@@ -204,9 +204,9 @@ export class SatelliteProcess implements Satellite {
   }
 
   _onSnapshotThrottleTick(
-    { queueUpIfRunning } = { queueUpIfRunning: true }
+    { skipIfRunning } = { skipIfRunning: false }
   ): Promise<Date | undefined> {
-    return this._mutexSnapshot({ queueUpIfRunning })
+    return this._mutexSnapshot({ skipIfRunning })
   }
 
   /**
@@ -215,11 +215,11 @@ export class SatelliteProcess implements Satellite {
    * @returns The timestamp of the snapshot or undefined if the snapshot was skipped.
    */
   async _mutexSnapshot(
-    { queueUpIfRunning } = { queueUpIfRunning: true }
+    { skipIfRunning } = { skipIfRunning: false }
   ): Promise<Date | undefined> {
     let release: MutexInterface.Releaser
 
-    if (!queueUpIfRunning) {
+    if (skipIfRunning) {
       const maybeRelease = await this.acquireIfFree(this.snapshotMutex)
       if (!maybeRelease) {
         // Skip the snapshot
@@ -329,7 +329,7 @@ export class SatelliteProcess implements Satellite {
   }
 
   private async _handlePollingInterval(): Promise<void> {
-    await this._throttledSnapshot({ queueUpIfRunning: false })
+    await this._throttledSnapshot({ skipIfRunning: true })
   }
 
   private async _handlePotentialDataChanges(): Promise<void> {
