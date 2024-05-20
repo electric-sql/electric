@@ -22,6 +22,7 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   alias Electric.Postgres.Extension.SchemaLoader
   alias Electric.Postgres.Schema
   alias Electric.Postgres.Extension.SchemaCache.Global
+  alias Electric.Telemetry.OpenTelemetry
 
   require Logger
 
@@ -77,12 +78,20 @@ defmodule Electric.Postgres.Extension.SchemaCache do
 
   @impl SchemaLoader
   def load(origin) do
-    call(origin, {:load, :current})
+    OpenTelemetry.with_span(
+      "schema_cache.load",
+      [origin: origin, version: "current"],
+      fn -> call(origin, {:load, :current}) end
+    )
   end
 
   @impl SchemaLoader
   def load(origin, version) do
-    call(origin, {:load, {:version, version}})
+    OpenTelemetry.with_span(
+      "schema_cache.load",
+      [origin: origin, version: version],
+      fn -> call(origin, {:load, {:version, version}}) end
+    )
   end
 
   @impl SchemaLoader
