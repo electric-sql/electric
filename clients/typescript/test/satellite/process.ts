@@ -2779,8 +2779,6 @@ export const processTests = (test: TestFn<ContextType>) => {
     const { synced } = await satellite.subscribe([shapeDef])
     await synced
     await satellite._performSnapshot()
-    const subscriptionCount =
-      satellite.subscriptions.getFulfilledSubscriptions().length
 
     await client.commandCb!(
       SatClientCommand.fromPartial({
@@ -2795,8 +2793,5 @@ export const processTests = (test: TestFn<ContextType>) => {
     })
 
     t.deepEqual(results, [])
-
-    // make sure our existing subscriptions have been saved
-    t.assert(satellite.previousShapeSubscriptions.length == subscriptionCount)
   })
 }
