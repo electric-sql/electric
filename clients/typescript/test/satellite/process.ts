@@ -229,12 +229,12 @@ export const processTests = (test: TestFn<ContextType>) => {
 
     await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
 
-    let snapshotTimestamp = await satellite._performSnapshot()
+    const snapshotTimestamp = await satellite._performSnapshot()
 
     const clientId = satellite._authState!.clientId
-    let shadowTags = encodeTags([generateTag(clientId, snapshotTimestamp)])
+    const shadowTags = encodeTags([generateTag(clientId, snapshotTimestamp)])
 
-    var shadowRows = await adapter.query({
+    const shadowRows = await adapter.query({
       sql: `SELECT tags FROM _electric_shadow`,
     })
     t.is(shadowRows.length, 2)
@@ -293,7 +293,7 @@ export const processTests = (test: TestFn<ContextType>) => {
     const p1 = satellite._throttledSnapshot()
     const p2 = new Promise<Date>((res) => {
       // call snapshot after throttle time has expired
-      setTimeout(() => satellite._throttledSnapshot()?.then(res), 50)
+      setTimeout(() => satellite._throttledSnapshot()?.then((r) => res(r!)), 50)
     })
 
     await t.notThrowsAsync(async () => {

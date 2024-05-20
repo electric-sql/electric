@@ -56,7 +56,7 @@ import {
   toTransactions,
 } from './oplog'
 
-import { Mutex } from 'async-mutex'
+import { Mutex, MutexInterface } from 'async-mutex'
 import Log from 'loglevel'
 import { generateTableTriggers } from '../migrators/triggers'
 import { mergeEntries } from './merge'
@@ -87,9 +87,9 @@ export type ShapeSubscription = {
   synced: Promise<void>
 }
 
-type ThrottleFunction = {
+type ThrottleFunction<T> = {
   cancel: () => void
-  (): Promise<Date> | undefined
+  (): Promise<T> | undefined
 }
 
 type MetaEntries = {
@@ -131,7 +131,12 @@ export class SatelliteProcess implements Satellite {
 
   _pollingInterval?: any
   _unsubscribeFromPotentialDataChanges?: UnsubscribeFunction
-  _throttledSnapshot: ThrottleFunction
+
+  /**
+   * Throttle the snapshot function to avoid calling it too often.
+   * It returns the time of the snaphot or undefined if the snapshot was skipped.
+   */
+  _throttledSnapshot: ThrottleFunction<Date | undefined>
 
   _lsn?: LSN
 
@@ -196,23 +201,51 @@ export class SatelliteProcess implements Satellite {
     this._connectRetryHandler = connectRetryHandler
   }
 
-  _onSnapshotThrottleTick() {
-    if (this.snapshotMutex.isLocked()) {
-      return
-    }
-    return this._mutexSnapshot()
+  _onSnapshotThrottleTick(): Promise<Date | undefined> {
+    return this._mutexSnapshot({ queueUpIfRunning: false })
   }
 
   /**
    * Perform a snapshot while taking out a mutex to avoid concurrent calls.
+   * @param queueUpIfRunning If false and a snapshot is already running, the snapshot will be skipped.
+   * @returns The timestamp of the snapshot or undefined if the snapshot was skipped.
    */
-  async _mutexSnapshot() {
-    const release = await this.snapshotMutex.acquire()
+  async _mutexSnapshot(
+    { queueUpIfRunning } = { queueUpIfRunning: true }
+  ): Promise<Date | undefined> {
+    let release: MutexInterface.Releaser
+
+    if (!queueUpIfRunning) {
+      const maybeRelease = await this.acquireIfFree(this.snapshotMutex)
+      if (!maybeRelease) {
+        // Skip the snapshot
+        return
+      }
+      release = maybeRelease
+    } else {
+      release = await this.snapshotMutex.acquire()
+    }
+
     try {
       return await this._performSnapshot()
     } finally {
       release()
     }
+  }
+
+  /**
+   * Only acquire the mutex if it's not already locked.
+   */
+  private async acquireIfFree(
+    mutex: Mutex
+  ): Promise<MutexInterface.Releaser | null> {
+    // WARNING: We can do this check right before the mutex acquire because there is no async
+    // call until then, so the event loop won't interleave other code.
+    // More context here: https://github.com/electric-sql/electric/pull/1273
+    if (mutex.isLocked()) {
+      return null
+    }
+    return await mutex.acquire()
   }
 
   async start(authConfig?: AuthConfig): Promise<void> {
