@@ -71,7 +71,7 @@ export class ShapeManager {
   }): QualifiedTablename[] {
     const requested = Object.values(this.requestedSubscriptions)
 
-    const tables = getTableNames(
+    const tables = getTableNamesForShapes(
       Object.values(this.knownSubscriptions)
         .filter((x) => !requested.includes(x?.fullKey))
         .flatMap((x) => x?.shapes)
@@ -427,16 +427,23 @@ function splitOnce(str: string, on: string): [string, string] {
   else return [str.slice(0, found), str.slice(found + 1)]
 }
 
-function getTableNames(shapes: Shape[], schema: string): QualifiedTablename[] {
+export function getTableNamesForShapes(
+  shapes: Shape[],
+  schema: string
+): QualifiedTablename[] {
   return uniqWith(
-    shapes.flatMap((x) => doGetTableNames(x, schema)),
+    shapes.flatMap((x) => doGetTableNamesForShape(x, schema)),
     (a, b) => a.isEqual(b)
   )
 }
 
-function doGetTableNames(shape: Shape, schema: string): QualifiedTablename[] {
+function doGetTableNamesForShape(
+  shape: Shape,
+  schema: string
+): QualifiedTablename[] {
   const includes =
-    shape.include?.flatMap((x) => doGetTableNames(x.select, schema)) ?? []
+    shape.include?.flatMap((x) => doGetTableNamesForShape(x.select, schema)) ??
+    []
   includes.push(new QualifiedTablename(schema, shape.tablename))
   return includes
 }

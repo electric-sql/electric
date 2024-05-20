@@ -61,8 +61,8 @@ import {
 } from '../_generated/protocol/satellite'
 import { ShapeSubscription } from './process'
 import { DbSchema } from '../client/model/schema'
-import { getAllTablesForShape } from './shapes'
 import { SyncStatus } from '../client/model/shapes'
+import { getTableNamesForShapes } from './shapes/shapeManager'
 
 export const MOCK_BEHIND_WINDOW_LSN = 42
 export const MOCK_INTERNAL_ERROR = 27
@@ -276,7 +276,7 @@ export class MockSatelliteClient
     const shapeReqToUuid: Record<string, string> = {}
 
     for (const shape of shapes) {
-      const tables = getAllTablesForShape(shape.definition, 'main')
+      const tables = getTableNamesForShapes([shape.definition], 'main')
       for (const { tablename } of tables) {
         if (tablename === 'failure' || tablename === 'Items') {
           return Promise.resolve({
