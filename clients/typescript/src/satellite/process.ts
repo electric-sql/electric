@@ -87,10 +87,12 @@ export type ShapeSubscription = {
   synced: Promise<void>
 }
 
-type ThrottleFunction<T> = {
+type ThrottleFunction<Args, Res> = {
   cancel: () => void
-  (): Promise<T> | undefined
+  (a?: Args): Promise<Res> | undefined
 }
+
+type SnapshotThrottleArgs = { queueUpIfRunning: boolean }
 
 type MetaEntries = {
   clientId: Uuid | ''
@@ -136,7 +138,7 @@ export class SatelliteProcess implements Satellite {
    * Throttle the snapshot function to avoid calling it too often.
    * It returns the time of the snaphot or undefined if the snapshot was skipped.
    */
-  _throttledSnapshot: ThrottleFunction<Date | undefined>
+  _throttledSnapshot: ThrottleFunction<SnapshotThrottleArgs, Date | undefined>
 
   _lsn?: LSN
 
@@ -201,8 +203,10 @@ export class SatelliteProcess implements Satellite {
     this._connectRetryHandler = connectRetryHandler
   }
 
-  _onSnapshotThrottleTick(): Promise<Date | undefined> {
-    return this._mutexSnapshot({ queueUpIfRunning: false })
+  _onSnapshotThrottleTick(
+    { queueUpIfRunning } = { queueUpIfRunning: true }
+  ): Promise<Date | undefined> {
+    return this._mutexSnapshot({ queueUpIfRunning })
   }
 
   /**
@@ -290,13 +294,16 @@ export class SatelliteProcess implements Satellite {
       this.notifier.subscribeToAuthStateChanges(authStateHandler)
 
     // Request a snapshot whenever the data in our database potentially changes.
+    const potentialDataChangesHandler =
+      this._handlePotentialDataChanges.bind(this)
     this._unsubscribeFromPotentialDataChanges =
-      this.notifier.subscribeToPotentialDataChanges(this._throttledSnapshot)
+      this.notifier.subscribeToPotentialDataChanges(potentialDataChangesHandler)
 
     // Start polling to request a snapshot every `pollingInterval` ms.
     clearInterval(this._pollingInterval)
+    const pollingIntervalHandler = this._handlePollingInterval.bind(this)
     this._pollingInterval = setInterval(
-      this._throttledSnapshot,
+      pollingIntervalHandler,
       this.opts.pollingInterval
     )
 
@@ -319,6 +326,14 @@ export class SatelliteProcess implements Satellite {
     if (subscriptionsState) {
       this.subscriptions.setState(subscriptionsState)
     }
+  }
+
+  private async _handlePollingInterval(): Promise<void> {
+    await this._throttledSnapshot({ queueUpIfRunning: false })
+  }
+
+  private async _handlePotentialDataChanges(): Promise<void> {
+    await this._throttledSnapshot()
   }
 
   private async logDatabaseVersion(): Promise<void> {
