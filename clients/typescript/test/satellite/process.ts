@@ -2498,7 +2498,7 @@ export const processTests = (test: TestFn<ContextType>) => {
     t.plan(3)
     const { client, satellite } = t.context
 
-    client.shutdown()
+    await client.shutdown()
 
     const retry = (_e: any, a: number) => {
       if (a > 0) {
@@ -2519,7 +2519,7 @@ export const processTests = (test: TestFn<ContextType>) => {
 
   test.serial('connection cancelled on disconnect', async (t) => {
     const { client, satellite, authState, token } = t.context
-    client.shutdown() // such that satellite can't connect to Electric and will keep retrying
+    await client.shutdown() // such that satellite can't connect to Electric and will keep retrying
     const { connectionPromise } = await startSatellite(
       satellite,
       authState,

@@ -403,7 +403,8 @@ export class MockSatelliteClient
       : ReplicationStatus.STOPPED
   }
 
-  shutdown(): void {
+  async shutdown(): Promise<void> {
+    await this.waitForProcessing()
     this.isDown = true
   }
 

@@ -24,7 +24,7 @@ export class AsyncEventEmitter<Events extends EventMap> {
   private eventQueue: Array<
     EmittedEvent<keyof Events, Parameters<Events[keyof Events]>>
   > = []
-  private processing = false // indicates whether the event queue is currently being processed
+  private processing: Promise<PromiseSettledResult<void>[]> | false = false // indicates whether the event queue is currently being processed
 
   private getListeners<E extends keyof Events>(event: E): Array<Events[E]> {
     return this.listeners[event] ?? []
@@ -127,8 +127,6 @@ export class AsyncEventEmitter<Events extends EventMap> {
    * and an 'error' event is emitted, the error is thrown.
    */
   private processQueue() {
-    this.processing = true
-
     const emittedEvent = this.eventQueue.shift()
     if (emittedEvent) {
       // We call all listeners and process the next event when all listeners finished.
@@ -161,13 +159,16 @@ export class AsyncEventEmitter<Events extends EventMap> {
         }
       })
 
-      Promise
-        // wait for all listeners to finish,
-        // some may fail (i.e.return a rejected promise)
-        // but that should not stop the queue from being processed
-        // hence the use of `allSettled` rather than `all`
-        .allSettled(listenerProms)
-        .then(() => this.processQueue()) // only process the next event when all listeners have finished
+      // wait for all listeners to finish,
+      // some may fail (i.e.return a rejected promise)
+      // but that should not stop the queue from being processed
+      // hence the use of `allSettled` rather than `all`
+      const processingProm = Promise.allSettled(listenerProms)
+
+      // only process the next event when all listeners have finished
+      processingProm.then(() => this.processQueue())
+
+      this.processing = processingProm
     } else {
       // signal that the queue is no longer being processed
       this.processing = false
@@ -261,5 +262,12 @@ export class AsyncEventEmitter<Events extends EventMap> {
   setMaxListeners(maxListeners: number): this {
     this.maxListeners = maxListeners
     return this
+  }
+
+  /**
+   * Wait for event queue to finish processing.
+   */
+  async waitForProcessing(): Promise<void> {
+    await this.processing
   }
 }

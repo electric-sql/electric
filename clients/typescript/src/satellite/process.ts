@@ -386,7 +386,7 @@ export class SatelliteProcess implements Satellite {
     this.disconnect()
 
     if (shutdown) {
-      this.client.shutdown()
+      await this.client.shutdown()
     }
   }
 
@@ -503,24 +503,29 @@ export class SatelliteProcess implements Satellite {
       subsData.subscriptionId
     )
 
-    await this._applySubscriptionData(
+    const applied = await this._applySubscriptionData(
       subsData.data,
       subsData.lsn,
       [],
       subsData.subscriptionId
     )
 
-    const toBeUnsubbed = afterApply()
-    if (toBeUnsubbed.length > 0) await this.unsubscribeIds(toBeUnsubbed)
+    if (applied) {
+      const toBeUnsubbed = afterApply()
+      if (toBeUnsubbed.length > 0) await this.unsubscribeIds(toBeUnsubbed)
+    }
   }
 
-  /** Insert incoming subscription data into the database. */
+  /**
+   * Insert incoming subscription data into the database.
+   * Returns flag indicating whether application was successful or not.
+   */
   private async _applySubscriptionData(
     changes: InitialDataChange[],
     lsn: LSN,
     additionalStmts: Statement[] = [],
     subscriptionId?: string
-  ) {
+  ): Promise<boolean> {
     const namespace = this.builder.defaultNamespace
     const stmts: Statement[] = []
 
@@ -662,6 +667,7 @@ export class SatelliteProcess implements Satellite {
         })
       })
       this.notifier.actuallyChanged(this.dbName, notificationChanges, 'initial')
+      return true
     } catch (e) {
       this._handleSubscriptionError(
         new SatelliteError(
@@ -670,6 +676,7 @@ export class SatelliteProcess implements Satellite {
         ),
         subscriptionId
       )
+      return false
     }
   }
 
