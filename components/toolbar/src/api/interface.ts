@@ -31,6 +31,10 @@ export interface ToolbarInterface {
   toggleSatelliteStatus(name: string): Promise<void>
 
   getSatelliteShapeSubscriptions(name: string): DebugShape[]
+  subscribeToSatelliteShapeSubscriptions(
+    name: string,
+    callback: (shapes: DebugShape[]) => void,
+  ): UnsubscribeFunction
 
   resetDb(dbName: string): Promise<void>
   queryDb(dbName: string, statement: Statement): Promise<Row[]>

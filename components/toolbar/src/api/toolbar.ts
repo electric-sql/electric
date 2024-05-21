@@ -83,6 +83,17 @@ export class Toolbar implements ToolbarInterface {
     )
   }
 
+  subscribeToSatelliteShapeSubscriptions(
+    name: string,
+    callback: (shapes: DebugShape[]) => void,
+  ): UnsubscribeFunction {
+    const sat = this.getSatellite(name)
+    callback(this.getSatelliteShapeSubscriptions(name))
+    return sat.notifier.subscribeToShapeSubscriptionSyncStatusChanges(() =>
+      callback(this.getSatelliteShapeSubscriptions(name)),
+    )
+  }
+
   resetDb(dbName: string): Promise<void> {
     const DBDeleteRequest = window.indexedDB.deleteDatabase(dbName)
     DBDeleteRequest.onsuccess = () =>
