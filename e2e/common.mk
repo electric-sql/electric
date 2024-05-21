@@ -66,10 +66,21 @@ log_dev_env:
 	docker compose -f ${DOCKER_COMPOSE_FILE} logs --no-color --follow pg_1
 
 start_electric_%:
-	${ENV} docker compose -f ${DOCKER_COMPOSE_FILE} up --no-color --no-log-prefix electric_$*
+	docker compose -f ${DOCKER_COMPOSE_FILE} up --no-color --no-log-prefix --abort-on-container-exit electric_$*
 
 stop_electric_%:
 	docker compose -f ${DOCKER_COMPOSE_FILE} stop electric_$*
+
+run_electric_%:
+	docker run --rm \
+	-e LOG_LEVEL=debug \
+	-e AUTH_JWT_ALG=HS256 \
+	-e AUTH_JWT_KEY=integration-tests-signing-key-example \
+	-e ELECTRIC_TELEMETRY=disabled \
+	-e PG_PROXY_PASSWORD \
+	-e LOGICAL_PUBLISHER_HOST=electric_$* \
+	--name electric_$* \
+	${ELECTRIC_IMAGE}
 
 stop_dev_env:
 	if [ -n "`docker ps --filter name=elixir_client --format '{{.Names}}'`" ]; then \

@@ -2,14 +2,33 @@
 [include _shared.luxinc]
 
 [newshell electric]
-    [invoke start_electric_with_env "DATABASE_URL=http://"]
+    [invoke run_electric_with_env "DATABASE_URL=http://"]
     -
+
     ??CONFIGURATION ERROR
 
-    ??DATABASE_URL has invalid URL scheme: "http"
+    ??The following required configuration options have invalid or missing values:
+
+    ??* DATABASE_URL has invalid URL scheme: "http"
 
     ??Please review the official configuration reference at
     ??https://electric-sql.com/docs/api/service
+
+    ??••• Shutting down •••
+
+[newshell electric_2]
+    [invoke run_electric 2]
+    ??Successfully initialized Postgres connector "postgres_1"
+
+[shell electric]
+    [invoke run_electric 1]
+    -
+
+    ??Failed to establish replication connection to Postgres:
+    ??  #{msg}
+    ??
+    ??Another instance of Electric appears to be connected to this database.
+    ??Refer to https://github.com/electric-sql/electric/issues/971 for additional info.
 
 [cleanup]
    [invoke teardown]

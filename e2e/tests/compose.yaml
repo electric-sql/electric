@@ -26,6 +26,23 @@ services:
     depends_on:
       - pg_1
 
+  electric_2:
+    extends:
+      file: ../services_templates.yaml
+      service: electric
+    environment:
+      DATABASE_URL: "${DATABASE_URL:-postgresql://postgres:password@pg_1:5432/electric}"
+      DATABASE_REQUIRE_SSL: false
+      ELECTRIC_WRITE_TO_PG_MODE: "${ELECTRIC_WRITE_TO_PG_MODE:-logical_replication}"
+      LOGICAL_PUBLISHER_HOST: electric_1
+      PG_PROXY_LOG_LEVEL: info
+    ports:
+      - "5133:5133"
+      # proxy access
+      - "65432:65432"
+    depends_on:
+      - pg_1
+
   sysbench:
     extends:
       file: ../services_templates.yaml
