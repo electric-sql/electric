@@ -2684,9 +2684,9 @@ export const processTests = (test: TestFn<ContextType>) => {
       [{ tablename: 'parent' }],
       shapeSubKey
     )
-    
+
     await syncedFirst
-    
+
     // 'establishing' and 'active'
     t.is(shapeNotifications().length, 2)
 
