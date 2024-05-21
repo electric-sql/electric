@@ -103,11 +103,12 @@ export function clientApi(registry: GlobalRegistry | Registry) {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function addToolbar(electric: ElectricClient<any>) {
-  if (document.getElementById(TOOLBAR_CONTAINER_ID)) {
+  const existingToolbar = document.getElementById(TOOLBAR_CONTAINER_ID)
+  if (existingToolbar !== null) {
     console.warn(
-      '[@electric-sql/debug-toolbar] Toolbar has already been added.',
+      '[@electric-sql/debug-toolbar] Toolbar has already been added - remounting.',
     )
-    return
+    existingToolbar.remove()
   }
 
   const toolbarApi = clientApi(electric.registry)
@@ -124,7 +125,7 @@ export function addToolbar(electric: ElectricClient<any>) {
 
   // add styles to shadow dom
   const template = getToolbarTemplate()
-  shadow.appendChild(template.content)
+  shadow.appendChild(template.content.cloneNode(true))
 
   // render toolbar to shadow dom
   const toolbarDiv = document.createElement('div')
