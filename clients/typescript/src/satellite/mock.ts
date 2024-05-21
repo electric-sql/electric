@@ -329,7 +329,9 @@ export class MockSatelliteClient
         setTimeout(resolveProm, 1)
       } else {
         // Otherwise, we resolve the promise before delivering the subscription.
-        if (!this.doSkipNextEmit) setTimeout(emit, 1)
+        // Give enough time for the `Process.subscribe` promise to fully resolve before
+        // delivering the subscription.
+        if (!this.doSkipNextEmit) setTimeout(emit, 50)
         else this.doSkipNextEmit = false
         resolveProm()
       }
