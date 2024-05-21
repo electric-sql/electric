@@ -419,11 +419,11 @@ export function msgToString(message: MessageOfInterest): string {
         message.transactionId
       }}`
     case 'Electric.Satellite.SatUnsubsDataBegin':
-      return `#SatSatUnsubsDataBegin{lsn: ${base64.fromBytes(message.lsn)}, ${
+      return `#SatUnsubsDataBegin{lsn: ${base64.fromBytes(message.lsn)}, ${
         message.subscriptionIds
       }}`
     case 'Electric.Satellite.SatUnsubsDataEnd':
-      return `#SatSatUnsubsDataEnd{}`
+      return `#SatUnsubsDataEnd{}`
   }
 }
 
