@@ -2,4 +2,4 @@
 "@electric-sql/debug-toolbar": patch
 ---
 
-Guard against adding toolbar to DOM twice
+Allow toolbar to remount properly on consecutive `addToolbar` calls
