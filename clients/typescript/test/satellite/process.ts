@@ -2685,9 +2685,12 @@ export const processTests = (test: TestFn<ContextType>) => {
       shapeSubKey
     )
 
-    // first one is establishing
+    await syncedFirst
 
-    t.is(shapeNotifications().length, 1)
+    // 'establishing' and 'active'
+    t.is(shapeNotifications().length, 2)
+
+    // first one is establishing
     const firstNotification = shapeNotifications()[0]
     t.is(firstNotification.key, shapeSubKey)
     t.is(firstNotification.status.status, 'establishing')
@@ -2695,10 +2698,7 @@ export const processTests = (test: TestFn<ContextType>) => {
     const firstServerId = firstNotification.status.serverId
     t.true(typeof firstServerId === 'string')
 
-    await syncedFirst
-
     // second one is active
-    t.is(shapeNotifications().length, 2)
     const secondNotification = shapeNotifications()[1]
     t.is(secondNotification.key, shapeSubKey)
     t.is(secondNotification.status.status, 'active')
