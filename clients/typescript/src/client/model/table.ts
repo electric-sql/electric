@@ -37,6 +37,7 @@ import {
   createQueryResultSubscribeFunction,
   isObject,
   ReplicatedRowTransformer,
+  interpolateSqlArgs,
 } from '../../util'
 import { NarrowInclude } from '../input/inputNarrowing'
 import { IShapeManager } from './shapes'
@@ -1700,41 +1701,32 @@ function makeSqlWhereClause(where: string | Record<string, any>): string {
 
   const statements = Object.entries(where)
     .flatMap(([key, value]) => makeFilter(value, key, 'this.'))
-    .map(interpolateArgs)
+    .map(interpolateSqlArgsForPostgres)
 
   if (statements.length < 2) return statements[0] ?? ''
   else return statements.map((x) => '(' + x + ')').join(' AND ')
 }
 
-/** Replace all `?` parameter placeholders in SQL with provided args. */
-function interpolateArgs({
+/** Interpolate SQL arguments into a string that PostgreSQL can understand. */
+function interpolateSqlArgsForPostgres({
   sql,
   args,
 }: {
   sql: string
   args?: unknown[]
-}): string {
-  if (args === undefined) return sql
-
-  let matchPos = 0
-  const argsLength = args.length
-  /* We're looking for any `?` in the provided sql statement that aren't preceded by a word character
-     This is how `builder.ts#makeFilter` builds SQL statements, but we need to interpolate them before
-     sending to the server. SQL here shouldn't contain any user strings, only placeholders, so it's safe.
-  */
-  return sql.replaceAll(/(?<!\w)\?/g, (match) =>
-    matchPos < argsLength ? quoteValue(args[matchPos++]) : match
-  )
+}) {
+  return interpolateSqlArgs({ sql, args: args?.map(quoteValueForPostgres) })
 }
 
 /** Quote a JS value to be inserted in a PostgreSQL where query for the server. */
-function quoteValue(value: unknown): string {
+function quoteValueForPostgres(value: unknown): string {
   if (typeof value === 'string') return `'${value.replaceAll("'", "''")}'`
   if (typeof value === 'number') return value.toString()
   if (value instanceof Date && !isNaN(value.valueOf()))
     return `'${value.toISOString()}'`
   if (typeof value === 'boolean') return value.toString()
-  if (Array.isArray(value)) return `(${value.map(quoteValue).join(', ')})`
+  if (Array.isArray(value))
+    return `(${value.map(quoteValueForPostgres).join(', ')})`
 
   throw new Error(
     `Sorry! We currently cannot handle where clauses using value ${value}. You can try serializing it to a string yourself. \nPlease leave a feature request at https://github.com/electric-sql/electric/issues.`
