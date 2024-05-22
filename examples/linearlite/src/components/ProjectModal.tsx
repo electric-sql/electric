@@ -1,6 +1,7 @@
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo, useContext, useEffect, useRef, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { useElectric } from '../electric'
+import { ProfileContext } from '../App'
 import { showInfo, showWarning } from '../utils/notification'
 import { generateKeyBetween } from 'fractional-indexing'
 
@@ -18,6 +19,7 @@ interface Props {
 
 function ProjectModal({ isOpen, onDismiss }: Props) {
   const ref = useRef<HTMLInputElement>(null)
+  const userId = useContext(ProfileContext)!.userId
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState<string>()
   const { db } = useElectric()!
@@ -45,6 +47,7 @@ function ProjectModal({ isOpen, onDismiss }: Props) {
         created: date,
         modified: date,
         kanbanorder: kanbanorder,
+        user_id: userId,
       },
     })
 

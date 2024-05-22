@@ -1,8 +1,9 @@
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo, useContext, useEffect, useRef, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { generateKeyBetween } from 'fractional-indexing'
 import { useLiveQuery } from 'electric-sql/react'
 import { useElectric } from '../electric'
+import { ProfileContext } from '../App'
 
 import { BsChevronRight as ChevronRight } from 'react-icons/bs'
 import CloseIcon from '../assets/icons/close.svg?react'
@@ -25,6 +26,7 @@ interface Props {
 
 function IssueModal({ isOpen, onDismiss }: Props) {
   const ref = useRef<HTMLInputElement>(null)
+  const userId = useContext(ProfileContext)!.userId
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState<string>()
   const [priority, setPriority] = useState(Priority.NONE)
@@ -66,7 +68,7 @@ function IssueModal({ isOpen, onDismiss }: Props) {
       data: {
         id: uuidv4(),
         title: title,
-        username: 'testuser',
+        user_id: userId,
         priority: priority,
         status: status,
         description: description ?? '',

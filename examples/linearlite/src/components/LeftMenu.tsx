@@ -17,6 +17,7 @@ import Avatar from './Avatar'
 import AboutModal from './AboutModal'
 import ProjectModal from './ProjectModal'
 import IssueModal from './IssueModal'
+import ProfilePickerModal from './ProfilePickerModal'
 import ItemGroup from './ItemGroup'
 import ProfileMenu from './ProfileMenu'
 import ProjectItem from './ProjectItem'
@@ -24,6 +25,7 @@ import ProjectItem from './ProjectItem'
 function LeftMenu() {
   const ref = useRef<HTMLDivElement>() as RefObject<HTMLDivElement>
   const [showProfileMenu, setShowProfileMenu] = useState(false)
+  const [showProfileModal, setShowProfileModal] = useState(false)
   const [showAboutModal, setShowAboutModal] = useState(false)
   const [showProjectModal, setShowProjectModal] = useState(false)
   const [showIssueModal, setShowIssueModal] = useState(false)
@@ -93,6 +95,7 @@ function LeftMenu() {
                 onDismiss={() => setShowProfileMenu(false)}
                 setShowAboutModal={setShowAboutModal}
                 setShowProjectModal={setShowProjectModal}
+                setShowProfileModal={setShowProfileModal}
                 className="absolute top-10"
               />
             </div>
@@ -196,6 +199,12 @@ function LeftMenu() {
         <IssueModal
           isOpen={showIssueModal}
           onDismiss={() => setShowIssueModal(false)}
+        />
+      }
+      {
+        <ProfilePickerModal
+          isOpen={showProfileModal}
+          onDismiss={() => setShowProfileModal(false)}
         />
       }
     </>

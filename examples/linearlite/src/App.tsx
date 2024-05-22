@@ -8,6 +8,7 @@ import List from './pages/List'
 import Issue from './pages/Issue'
 import LeftMenu from './components/LeftMenu'
 
+import { getUserId, setUserId } from './utils/userId'
 import { ElectricProvider, initElectric, dbName, DEBUG } from './electric'
 import { Electric } from './generated/client'
 
@@ -47,7 +48,11 @@ function deleteDB() {
 const App = () => {
   const [electric, setElectric] = useState<Electric>()
   const [showMenu, setShowMenu] = useState(false)
-  const [userId, setUserId] = useState('testuser')
+  const userId = getUserId()
+  const setUserIdAndReset = (userId: string) => {
+    setUserId(userId)
+    deleteDB()
+  }
 
   useEffect(() => {
     const init = async () => {
@@ -79,7 +84,7 @@ const App = () => {
     }
 
     init()
-  }, [userId])
+  }, [])
 
   if (electric === undefined) {
     return null
@@ -98,7 +103,7 @@ const App = () => {
 
   return (
     <ElectricProvider db={electric}>
-      <ProfileContext.Provider value={{ userId, setUserId }}>
+      <ProfileContext.Provider value={{ userId, setUserId: setUserIdAndReset }}>
         <MenuContext.Provider value={{ showMenu, setShowMenu }}>
           <BrowserRouter>
             <div className="flex w-full h-screen overflow-y-hidden">
