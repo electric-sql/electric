@@ -6,11 +6,11 @@ import StatusIcon from '../../components/StatusIcon'
 import Avatar from '../../components/Avatar'
 import { memo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Issue, useElectric } from '../../electric'
+import { Issue, Profile, useElectric } from '../../electric'
 import { formatDate } from '../../utils/date'
 
 interface Props {
-  issue: Issue
+  issue: Issue & { profile: Profile }
   style: CSSProperties
 }
 
@@ -71,7 +71,7 @@ function IssueRow({ issue, style }: Props) {
         {formatDate(issue.created)}
       </div>
       <div className="flex-shrink-0 hidden ml-4 font-normal text-gray-500 sm:block w-15 md:block">
-        <Avatar name={issue.username} />
+        <Avatar name={issue.profile.username} />
       </div>
     </div>
   )

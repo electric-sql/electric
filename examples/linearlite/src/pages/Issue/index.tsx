@@ -8,7 +8,7 @@ import StatusMenu from '../../components/contextmenu/StatusMenu'
 import PriorityIcon from '../../components/PriorityIcon'
 import StatusIcon from '../../components/StatusIcon'
 import Avatar from '../../components/Avatar'
-import { useElectric } from '../../electric'
+import { Issue, Profile, useElectric } from '../../electric'
 import { PriorityDisplay, StatusDisplay } from '../../types/issue'
 import Editor from '../../components/editor/Editor'
 import DeleteModal from './DeleteModal'
@@ -26,9 +26,11 @@ function IssuePage() {
       where: { id: id },
       include: {
         project: true,
+        profile: true,
       },
     })
   )
+  const issueWithProfile = issue as Issue & { profile: Profile }
 
   const { results: projects } = useLiveQuery(
     db.project.liveMany({
@@ -232,8 +234,10 @@ function IssuePage() {
                 </div>
                 <div className="flex flex-[3_0_0]">
                   <button className="inline-flex items-center h-6 ps-1.5 pe-2 text-gray-500border-none rounded hover:bg-gray-100">
-                    <Avatar name={issue.username} />
-                    <span className="ml-1">{issue.username}</span>
+                    <Avatar name={issueWithProfile.profile.username} />
+                    <span className="ml-1">
+                      {issueWithProfile.profile.username}
+                    </span>
                   </button>
                 </div>
               </div>

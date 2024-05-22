@@ -18,6 +18,15 @@ interface MenuContextInterface {
 
 export const MenuContext = createContext(null as MenuContextInterface | null)
 
+interface ProfileContextInterface {
+  userId: string
+  setUserId: (userId: string) => void
+}
+
+export const ProfileContext = createContext(
+  null as ProfileContextInterface | null
+)
+
 const slideUp = cssTransition({
   enter: 'animate__animated animate__slideInUp',
   exit: 'animate__animated animate__slideOutDown',
@@ -38,11 +47,12 @@ function deleteDB() {
 const App = () => {
   const [electric, setElectric] = useState<Electric>()
   const [showMenu, setShowMenu] = useState(false)
+  const [userId, setUserId] = useState('testuser')
 
   useEffect(() => {
     const init = async () => {
       try {
-        const client = await initElectric()
+        const client = await initElectric(userId)
         setElectric(client)
 
         const { synced } = await client.db.profile.sync({
@@ -69,7 +79,7 @@ const App = () => {
     }
 
     init()
-  }, [])
+  }, [userId])
 
   if (electric === undefined) {
     return null
@@ -88,26 +98,28 @@ const App = () => {
 
   return (
     <ElectricProvider db={electric}>
-      <MenuContext.Provider value={{ showMenu, setShowMenu }}>
-        <BrowserRouter>
-          <div className="flex w-full h-screen overflow-y-hidden">
-            <LeftMenu />
-            {router}
-          </div>
-          <ToastContainer
-            position="bottom-right"
-            autoClose={5000}
-            hideProgressBar
-            newestOnTop
-            closeOnClick
-            rtl={false}
-            transition={slideUp}
-            pauseOnFocusLoss
-            draggable
-            pauseOnHover
-          />
-        </BrowserRouter>
-      </MenuContext.Provider>
+      <ProfileContext.Provider value={{ userId, setUserId }}>
+        <MenuContext.Provider value={{ showMenu, setShowMenu }}>
+          <BrowserRouter>
+            <div className="flex w-full h-screen overflow-y-hidden">
+              <LeftMenu />
+              {router}
+            </div>
+            <ToastContainer
+              position="bottom-right"
+              autoClose={5000}
+              hideProgressBar
+              newestOnTop
+              closeOnClick
+              rtl={false}
+              transition={slideUp}
+              pauseOnFocusLoss
+              draggable
+              pauseOnHover
+            />
+          </BrowserRouter>
+        </MenuContext.Provider>
+      </ProfileContext.Provider>
     </ElectricProvider>
   )
 }

@@ -37,7 +37,7 @@ function ProjectItem({ title, projectId }: Props) {
     } finally {
       setLoading(false)
     }
-  }, [projectId, db.issue])
+  }, [projectId, db.project])
 
   const unsyncProject = useCallback(async () => {
     setLoading(true)

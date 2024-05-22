@@ -1,9 +1,9 @@
 import { LIB_VERSION } from 'electric-sql/version'
 import { makeElectricContext } from 'electric-sql/react'
-import { uniqueTabId, genUUID } from 'electric-sql/util'
+import { uniqueTabId } from 'electric-sql/util'
 import { insecureAuthToken } from 'electric-sql/auth'
 import { Electric, schema } from './generated/client'
-export type { Issue } from './generated/client'
+export type { Project, Issue, Comment, Profile } from './generated/client'
 
 export const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
 
@@ -72,7 +72,7 @@ export const initWaSqlite = async () => {
   }
 }
 
-export const initElectric = async () => {
+export const initElectric = async (userId: string) => {
   const { electric, conn, config } =
     CLIENT_DB === 'wa-sqlite' ? await initWaSqlite() : await initPGlite()
 
@@ -90,12 +90,9 @@ export const initElectric = async () => {
     sql: 'PRAGMA foreign_keys=OFF;',
   })
 
-  let userId = window.sessionStorage.getItem('userId')
-  if (!userId) {
-    userId = genUUID()
-    window.sessionStorage.setItem('userId', userId)
-  }
-  const authToken = insecureAuthToken({ sub: 'user3' })
+  const authToken = insecureAuthToken({
+    sub: userId,
+  })
 
   await electric.connect(authToken)
   return electric

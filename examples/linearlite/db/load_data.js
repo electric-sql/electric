@@ -24,6 +24,14 @@ const db = createPool(DATABASE_URL)
 const profiles = JSON.parse(
   fs.readFileSync(path.join(DATA_DIR, 'profiles.json'), 'utf8')
 )
+
+// always include a test user with id 'testuser'
+profiles.unshift({
+  id: 'testuser',
+  username: 'testuser',
+  created: new Date().toISOString(),
+})
+
 const projects = JSON.parse(
   fs.readFileSync(path.join(DATA_DIR, 'projects.json'), 'utf8')
 )
@@ -80,8 +88,8 @@ function getRandomProjectId() {
   return pickRandomFromArray(projects).id
 }
 
-function getRandomUsername() {
-  return pickRandomFromArray(profiles).username
+function getRandomUserId() {
+  return pickRandomFromArray(profiles).id
 }
 
 // Create profiles if they don't exist
@@ -98,7 +106,7 @@ await db.tx(async (db) => {
   for (const project of projects) {
     await upsertProject(db, {
       ...project,
-      username: getRandomUsername(),
+      user_id: getRandomUserId(),
     })
   }
 })
@@ -113,19 +121,25 @@ for (let i = 0; i < issueToLoad; i += batchSize) {
       process.stdout.write(`Loading issue ${j + 1} of ${issueToLoad}\r`)
       const issue = issues[j]
       const id = uuidv4()
-      await importIssue(db, {
+      const modifiedIssue = {
         ...issue,
         id: id,
         project_id: getRandomProjectId(),
-        username: getRandomUsername(),
-      })
+        user_id: getRandomUserId(),
+      }
+      delete modifiedIssue.username
+      await importIssue(db, modifiedIssue)
+
       for (const comment of issue.comments) {
         commentCount++
-        await importComment(db, {
+        const modifiedComment = {
           ...comment,
           issue_id: id,
-          username: getRandomUsername(),
-        })
+          user_id: getRandomUserId(),
+        }
+        delete modifiedComment.username
+
+        await importComment(db, modifiedComment)
       }
     }
   })
