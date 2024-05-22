@@ -47,9 +47,9 @@ export interface DatabaseAdapter {
    * This snippet above ensures that no other query/transaction will be interleaved when the foreign keys are disabled.
    * @param f Function that is guaranteed to be executed in isolation from other queries/transactions executed by this adapter.
    */
-  group(
-    f: (adapter: UncoordinatedDatabaseAdapter) => Promise<void> | void
-  ): Promise<void>
+  group<T>(
+    f: (adapter: UncoordinatedDatabaseAdapter) => Promise<T> | T
+  ): Promise<T>
 
   // Get the tables potentially used by the query (so that we
   // can re-query if the data in them changes).

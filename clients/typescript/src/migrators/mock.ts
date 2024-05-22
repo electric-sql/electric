@@ -12,7 +12,10 @@ export class MockMigrator implements Migrator {
     return
   }
 
-  async applyIfNotAlready(_: StmtMigration): Promise<boolean> {
+  async applyIfNotAlready(
+    _: StmtMigration,
+    _disableFks: boolean
+  ): Promise<boolean> {
     return true
   }
 

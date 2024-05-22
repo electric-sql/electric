@@ -78,7 +78,7 @@ import { QueryBuilder } from '../migrators/query-builder'
 import groupBy from 'lodash.groupby'
 import { ShapeManager } from './shapes/shapeManager'
 import { SyncStatus } from '../client/model/shapes'
-import { RunResult } from '../electric/adapter'
+import { runInTransaction } from '../util/transactions'
 
 type ChangeAccumulator = {
   [key: string]: Change
@@ -125,6 +125,7 @@ export class SatelliteProcess implements Satellite {
   builder: QueryBuilder
 
   opts: SatelliteOpts
+  disableFKs: boolean
 
   _authState?: AuthState
   _unsubscribeFromAuthState?: UnsubscribeFunction
@@ -174,6 +175,7 @@ export class SatelliteProcess implements Satellite {
     this.builder = this.migrator.queryBuilder
 
     this.opts = opts
+    this.disableFKs = this.builder.dialect === 'SQLite' && this.opts.disableFKs
     this.relations = {}
 
     this.previousShapeSubscriptions = []
@@ -627,7 +629,7 @@ export class SatelliteProcess implements Satellite {
     )
 
     try {
-      await this.runInTransactionMaybeDisableFks(...stmts)
+      await this.runInTransaction(...stmts)
 
       // We're explicitly not specifying rowids in these changes for now,
       // because nobody uses them and we don't have the machinery to to a
@@ -665,29 +667,12 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
-  /** Disables the FKs for this transaction if the `this.opts.disableFKs` flag is enabled and we're using SQLite. */
-  async runInTransactionMaybeDisableFks(
-    ...stmts: Statement[]
-  ): Promise<RunResult> {
-    let enableFKs = false
-    if (this.builder.dialect === 'SQLite' && this.opts.disableFKs) {
-      // Check if FKs are enabled
-      const [{ foreign_keys }] = await this.adapter.query({
-        sql: 'PRAGMA foreign_keys;',
-      })
-      if (foreign_keys === 1) {
-        // Disable FKs
-        await this.adapter.run({ sql: 'PRAGMA foreign_keys = OFF;' })
-        // Remember to enable FKs after TX
-        enableFKs = foreign_keys === 1
-      }
-    }
-    const res = await this.adapter.runInTransaction(...stmts)
-    if (enableFKs) {
-      // re-enable FKs
-      await this.adapter.run({ sql: 'PRAGMA foreign_keys = ON;' })
-    }
-    return res
+  /**
+   * Runs the provided statements in a transaction and disables FK checks if `disableFKs` is true.
+   * `disableFKs` should only be set to true when using SQLite as we already disable FK checks for incoming TXs when using Postgres
+   */
+  async runInTransaction(...stmts: Statement[]) {
+    return runInTransaction(this.adapter, this.disableFKs, ...stmts)
   }
 
   _resetClientState(opts?: { keepSubscribedShapes: boolean }): Promise<void> {
@@ -705,7 +690,7 @@ export class SatelliteProcess implements Satellite {
   }
 
   async _clearTables(tables: QualifiedTablename[]) {
-    await this.runInTransactionMaybeDisableFks(
+    await this.runInTransaction(
       this._setMetaStatement('lsn', null),
       this._setMetaStatement(
         'subscriptions',
@@ -1495,31 +1480,18 @@ export class SatelliteProcess implements Satellite {
       .concat(stmts)
       .concat(this._enableTriggers(qualifiedTables))
 
-    let enableFKs = false
-    if (this.builder.dialect === 'SQLite' && this.opts.disableFKs) {
-      // Check if FKs are enabled
-      const [{ foreign_keys }] = await this.adapter.query({
-        sql: 'PRAGMA foreign_keys;',
-      })
-      // Disable FKs
-      await this.adapter.run({ sql: 'PRAGMA foreign_keys = OFF;' })
-      // Remember to enable FKs after TX
-      enableFKs = foreign_keys === 1
-    }
-
     if (transaction.migrationVersion) {
       // If a migration version is specified
       // then the transaction is a migration
-      await this.migrator.applyIfNotAlready({
-        statements: allStatements,
-        version: transaction.migrationVersion,
-      })
+      await this.migrator.applyIfNotAlready(
+        {
+          statements: allStatements,
+          version: transaction.migrationVersion,
+        },
+        this.disableFKs
+      )
     } else {
-      await this.adapter.runInTransaction(...allStatements)
-    }
-
-    if (enableFKs) {
-      await this.adapter.run({ sql: 'PRAGMA foreign_keys = ON;' })
+      await this.runInTransaction(...allStatements)
     }
 
     this._notifyChanges(opLogEntries, 'remote')
@@ -1584,7 +1556,7 @@ export class SatelliteProcess implements Satellite {
       )
     }
 
-    await this.runInTransactionMaybeDisableFks(
+    await this.runInTransaction(
       this.updateLsnStmt(lsn),
       { sql: this.builder.deferOrDisableFKsForTx },
       ...this._disableTriggers(affectedTables),
