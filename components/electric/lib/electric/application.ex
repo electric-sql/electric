@@ -107,6 +107,8 @@ defmodule Electric.Application do
     error
   end
 
+  defp log_supervisor_startup_error(error), do: error
+
   @spec log_child_error({atom, atom}, term) :: no_return
   defp log_child_error(
          {ThousandIsland, :replication_tcp_server_listener},
