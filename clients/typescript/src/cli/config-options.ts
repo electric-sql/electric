@@ -323,4 +323,11 @@ export const configOptions: Record<string, any> = {
     doc: 'The name to use for the Docker container.',
     groups: ['electric'],
   },
+  ELECTRIC_FEATURES: {
+    valueType: String,
+    valueTypeName: 'features',
+    defaultVal: '',
+    doc: 'Flags to enable experimental features',
+    groups: ['electric'],
+  },
 } as const
