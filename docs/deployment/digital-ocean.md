@@ -180,7 +180,7 @@ ID           Name                Public IPv4       Private IPv4    Public IPv6  
 You need to connect to your new Droplet once using `ssh` in order to verify the authenticity of host and add its public key to the local `known_hosts` file.
 
 :::tip
-If you get the "Conncetion refused" error when you try to ssh into the Droplet using its public IP address, wait a couple of minutes to allow the Droplet to finish its initialization.
+If you get the "Connection refused" error when you try to ssh into the Droplet using its public IP address, wait a couple of minutes to allow the Droplet to finish its initialization.
 :::
 
 ```shell
