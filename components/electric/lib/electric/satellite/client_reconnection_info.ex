@@ -1024,12 +1024,40 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
       unsub_points_table: unsub_points_table
     }
 
-    # Restore cached info for all clients at initialisation time.
-    # Later on, when any one client's write fails to be persisted in the database, its
-    # in-memory cached data will be cleared and later restored on-demand.
-    :ok = restore_cached_info(nil, state)
+    {:ok, state, {:continue, :restore_cache}}
+  end
 
-    {:ok, state}
+  @impl GenServer
+  def handle_continue(:restore_cache, state) do
+    case await_connection_pool(state.origin) do
+      :ready ->
+        # Restore cached info for all clients at initialisation time.
+        # Later on, when any one client's write fails to be persisted in the database, its
+        # in-memory cached data will be cleared and later restored on-demand.
+        :ok = restore_cached_info(nil, state)
+        {:noreply, state}
+
+      :timeout ->
+        raise "Timed out waiting for the connection pool"
+    end
+  end
+
+  @conn_pool_polling_timeout 10_000
+  @conn_pool_polling_interval 500
+
+  defp await_connection_pool(origin),
+    do: await_connection_pool(origin, @conn_pool_polling_timeout, @conn_pool_polling_interval)
+
+  defp await_connection_pool(_origin, time_remaining, _interval) when time_remaining <= 0,
+    do: :timeout
+
+  defp await_connection_pool(origin, time_remaining, interval) do
+    if Electric.Replication.ConnectionPoolObserver.ready?(origin) do
+      :ready
+    else
+      Process.sleep(interval)
+      await_connection_pool(origin, time_remaining - interval, interval)
+    end
   end
 
   @impl GenServer

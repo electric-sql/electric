@@ -34,7 +34,8 @@ defmodule Electric.Postgres.Repo do
       socket_options: Map.get(conn_opts, :tcp_opts, []),
       pool_size: Keyword.get(opts, :pool_size, @default_pool_size),
       log: false,
-      after_connect: {__MODULE__, :set_display_settings, []}
+      after_connect: {__MODULE__, :set_display_settings, []},
+      connection_listeners: Keyword.get(opts, :observer_pids, [])
     ]
   end
 
