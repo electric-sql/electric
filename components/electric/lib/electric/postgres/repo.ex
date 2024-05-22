@@ -29,6 +29,9 @@ defmodule Electric.Postgres.Repo do
       password: conn_opts.password,
       database: conn_opts.database,
       ssl: conn_opts.ssl == :required,
+      # Pass TCP options to the Postgrex adapter. This is used to let the adapter know to
+      # connect to the DB using IPv6, for example.
+      socket_options: Map.get(conn_opts, :tcp_opts, []),
       pool_size: Keyword.get(opts, :pool_size, @default_pool_size),
       log: false,
       after_connect: {__MODULE__, :set_display_settings, []}
