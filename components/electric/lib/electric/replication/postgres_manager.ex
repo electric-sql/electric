@@ -134,13 +134,24 @@ defmodule Electric.Replication.PostgresConnectorMng do
     case initialize_postgres(state) do
       {:ok, ssl_used?} ->
         state =
-          state
+          if ssl_used? do
+            # Connector config already has the right SSL configuration in this case.
+            state
+          else
+            # epgsql fell back to using an unencrypted connection. Modify the connector config
+            # accordingly, so that the correct SSL configuration is then used by
+            # `Electric.Postgres.Repo`.
+            fallback_to_nossl(state)
+          end
           |> set_status(:establishing_repl_conn)
-          |> update_connector_config(&force_ssl_mode(&1, ssl_used?))
 
         {:noreply, state, {:continue, :establish_repl_conn}}
 
       {:error, {:ssl_negotiation_failed, _}} when state.conn_opts.ssl != :required ->
+        Logger.warning(
+          "Falling back to trying an unencrypted connection to Postgres, since DATABASE_REQUIRE_SSL=false."
+        )
+
         state = fallback_to_nossl(state)
         {:noreply, state, {:continue, :init}}
 
@@ -304,15 +315,8 @@ defmodule Electric.Replication.PostgresConnectorMng do
       |> Keyword.put(:nulls, [nil, :null, :undefined])
       |> Keyword.put(:ip_addr, ip_addr)
       |> maybe_put_inet6(ip_addr)
-      |> maybe_put_sni()
-      |> maybe_verify_peer()
+      |> update_ssl_opts()
     end)
-  end
-
-  def force_ssl_mode(connector_config, ssl_mode?) do
-    new_ssl_value = if ssl_mode?, do: :required, else: false
-
-    put_in(connector_config, [:connection, :ssl], new_ssl_value)
   end
 
   # Perform a DNS lookup for an IPv6 IP address, followed by a lookup for an IPv4 address in case the first one fails.
@@ -336,25 +340,19 @@ defmodule Electric.Replication.PostgresConnectorMng do
 
   defp maybe_put_inet6(conn_opts, _), do: conn_opts
 
-  defp maybe_put_sni(conn_opts) do
+  defp update_ssl_opts(conn_opts) do
     if conn_opts[:ssl] do
-      sni_opt = {:server_name_indication, String.to_charlist(conn_opts[:host])}
-      update_in(conn_opts, [:ssl_opts], &[sni_opt | List.wrap(&1)])
+      ssl_opts =
+        ssl_verify_opts()
+        |> Keyword.put(:server_name_indication, String.to_charlist(conn_opts[:host]))
+
+      Keyword.put(conn_opts, :ssl_opts, ssl_opts)
     else
-      conn_opts
+      Keyword.delete(conn_opts, :ssl_opts)
     end
   end
 
-  defp maybe_verify_peer(conn_opts) do
-    if conn_opts[:ssl] == :required do
-      ssl_opts = get_verify_peer_opts()
-      update_in(conn_opts, [:ssl_opts], &(ssl_opts ++ List.wrap(&1)))
-    else
-      conn_opts
-    end
-  end
-
-  defp get_verify_peer_opts do
+  defp ssl_verify_opts do
     case load_cacerts() do
       {:ok, cacerts} ->
         [
@@ -405,11 +403,13 @@ defmodule Electric.Replication.PostgresConnectorMng do
   end
 
   defp fallback_to_nossl(state) do
-    Logger.warning(
-      "Falling back to trying an unencrypted connection to Postgres, since DATABASE_REQUIRE_SSL=false."
-    )
-
-    update_connector_config(state, &put_in(&1, [:connection, :ssl], false))
+    update_connector_config(state, fn connector_config ->
+      Keyword.update!(connector_config, :connection, fn conn_opts ->
+        conn_opts
+        |> Keyword.put(:ssl, false)
+        |> update_ssl_opts()
+      end)
+    end)
   end
 
   defp extra_error_description(:invalid_authorization_specification) do
