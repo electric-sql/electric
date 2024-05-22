@@ -13,7 +13,7 @@ export const sqliteTypeEncoder = {
   json: (string: string) => textEncoder.encode(string),
   timetz: (string: string) =>
     sqliteTypeEncoder.text(stringToTimetzString(string)),
-  bytea: (bytes: Uint8Array) => bytes, // no-op
+  bytea: (bytes: Uint8Array) => bytes,
 }
 
 export const sqliteTypeDecoder = {
@@ -22,7 +22,8 @@ export const sqliteTypeDecoder = {
   json: bytesToString,
   timetz: bytesToTimetzString,
   float: bytesToFloat,
-  bytea: (bytes: Uint8Array) => bytes, // no-op
+  // ensure it is in Uint8Array format and not Buffer etc
+  bytea: (bytes: Uint8Array) => new Uint8Array(bytes),
 }
 
 export function boolToBytes(b: number) {
