@@ -18,7 +18,7 @@ defmodule Electric.Replication.PostgresConnector do
     name = name(origin)
     Electric.reg(name)
 
-    children = [%{id: :mng, start: {PostgresConnectorMng, :start_link, [connector_config]}}]
+    children = [{PostgresConnectorMng, connector_config}]
     Supervisor.init(children, strategy: :one_for_all)
   end
 
