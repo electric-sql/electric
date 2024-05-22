@@ -78,6 +78,7 @@ import { QueryBuilder } from '../migrators/query-builder'
 import groupBy from 'lodash.groupby'
 import { ShapeManager } from './shapes/shapeManager'
 import { SyncStatus } from '../client/model/shapes'
+import { RunResult } from '../electric/adapter'
 
 type ChangeAccumulator = {
   [key: string]: Change
@@ -626,7 +627,7 @@ export class SatelliteProcess implements Satellite {
     )
 
     try {
-      await this.adapter.runInTransaction(...stmts)
+      await this.runInTransactionMaybeDisableFks(...stmts)
 
       // We're explicitly not specifying rowids in these changes for now,
       // because nobody uses them and we don't have the machinery to to a
@@ -664,6 +665,31 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
+  /** Disables the FKs for this transaction if the `this.opts.disableFKs` flag is enabled and we're using SQLite. */
+  async runInTransactionMaybeDisableFks(
+    ...stmts: Statement[]
+  ): Promise<RunResult> {
+    let enableFKs = false
+    if (this.builder.dialect === 'SQLite' && this.opts.disableFKs) {
+      // Check if FKs are enabled
+      const [{ foreign_keys }] = await this.adapter.query({
+        sql: 'PRAGMA foreign_keys;',
+      })
+      if (foreign_keys === 1) {
+        // Disable FKs
+        await this.adapter.run({ sql: 'PRAGMA foreign_keys = OFF;' })
+        // Remember to enable FKs after TX
+        enableFKs = foreign_keys === 1
+      }
+    }
+    const res = await this.adapter.runInTransaction(...stmts)
+    if (enableFKs) {
+      // re-enable FKs
+      await this.adapter.run({ sql: 'PRAGMA foreign_keys = ON;' })
+    }
+    return res
+  }
+
   _resetClientState(opts?: { keepSubscribedShapes: boolean }): Promise<void> {
     Log.warn(`resetting client state`)
     this.disconnect()
@@ -679,7 +705,7 @@ export class SatelliteProcess implements Satellite {
   }
 
   async _clearTables(tables: QualifiedTablename[]) {
-    await this.adapter.runInTransaction(
+    await this.runInTransactionMaybeDisableFks(
       this._setMetaStatement('lsn', null),
       this._setMetaStatement(
         'subscriptions',
@@ -1558,7 +1584,7 @@ export class SatelliteProcess implements Satellite {
       )
     }
 
-    await this.adapter.runInTransaction(
+    await this.runInTransactionMaybeDisableFks(
       this.updateLsnStmt(lsn),
       { sql: this.builder.deferOrDisableFKsForTx },
       ...this._disableTriggers(affectedTables),
