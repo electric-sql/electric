@@ -48,6 +48,7 @@ function ProjectModal({ isOpen, onDismiss }: Props) {
         modified: date,
         kanbanorder: kanbanorder,
         user_id: userId,
+        public: false,
       },
     })
 
