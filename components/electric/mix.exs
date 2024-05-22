@@ -44,6 +44,7 @@ defmodule Electric.MixProject do
       {:mox, "~> 1.1"},
       {:mock, "~> 0.3.0", only: :test},
       {:ssl_verify_fun, "~> 1.1.7", override: true},
+      {:tls_certificate_check, "~> 1.22"},
       {:jason, "~> 1.4"},
       {:dialyxir, "~> 1.4", only: [:dev], runtime: false},
       {:excoveralls, "~> 0.18", only: :test, runtime: false},
