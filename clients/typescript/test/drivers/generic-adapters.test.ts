@@ -1,6 +1,7 @@
 import test from 'ava'
 
 import { MockDatabaseAdapter } from '../../src/drivers/generic/mock'
+import { UncoordinatedDatabaseAdapter } from '../../src/electric'
 
 test('runInTransaction works', async (t) => {
   const adapter = new MockDatabaseAdapter()
@@ -269,4 +270,25 @@ test('interactive transactions roll back if commit fails', async (t) => {
   )
 
   t.false(adapter.isLocked)
+})
+
+test('grouped queries are isolated from other queries/transactions', async (t) => {
+  const adapter = new MockDatabaseAdapter()
+
+  let query1Finished = false
+
+  // Make a slow grouped query and check that it is not interleaved with other queries/transactions
+  const slowQuery = async (adapter: UncoordinatedDatabaseAdapter) => {
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    await adapter.query({ sql: 'SELECT 1' })
+    query1Finished = true
+  }
+
+  const prom1 = adapter.group(slowQuery)
+  const prom2 = adapter.transaction(async (_tx, setResult) => {
+    t.true(query1Finished)
+    setResult(5)
+  })
+
+  return Promise.all([prom1, prom2])
 })

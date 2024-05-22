@@ -1,8 +1,10 @@
+import { Mutex } from 'async-mutex'
 import {
   DatabaseAdapter as DatabaseAdapterInterface,
   RunResult,
   TableNameImpl,
   Transaction as Tx,
+  UncoordinatedDatabaseAdapter,
 } from '../../electric/adapter'
 
 import {
@@ -21,12 +23,21 @@ export class DatabaseAdapter
   db: Database
   readonly defaultNamespace = 'main'
 
+  /*
+   * Even though this driver is synchronous we need to coordinate the calls through a mutex
+   * because of the `group` method which takes a function: `f: (adapter: UncoordinatedDatabaseAdapter) => Promise<void> | void`
+   * that function may call `await` which would open the possibility for another query/transaction
+   * to be interleaved with the execution of that function
+   */
+  protected txMutex: Mutex
+
   constructor(db: Database) {
     super()
     this.db = db
+    this.txMutex = new Mutex()
   }
 
-  async runInTransaction(...statements: DbStatement[]): Promise<RunResult> {
+  async _runInTransaction(...statements: DbStatement[]): Promise<RunResult> {
     const txn = this.db.transaction((stmts: DbStatement[]) => {
       let rowsAffected = 0
       for (const stmt of stmts) {
@@ -41,7 +52,7 @@ export class DatabaseAdapter
     return txn(statements)
   }
 
-  async transaction<T>(
+  async _transaction<T>(
     f: (_tx: Tx, setResult: (res: T) => void) => void
   ): Promise<T> {
     let result: T
@@ -51,7 +62,7 @@ export class DatabaseAdapter
   }
 
   // Promise interface, but impl not actually async
-  async run({ sql, args }: DbStatement): Promise<RunResult> {
+  async _run({ sql, args }: DbStatement): Promise<RunResult> {
     const prep = this.db.prepare(sql)
     const res = prep.run(...wrapBindParams(args))
     return {
@@ -60,9 +71,58 @@ export class DatabaseAdapter
   }
 
   // This `query` function does not enforce that the query is read-only
-  async query({ sql, args }: DbStatement): Promise<Row[]> {
+  async _query({ sql, args }: DbStatement): Promise<Row[]> {
     const stmt = this.db.prepare(sql)
     return stmt.all(...wrapBindParams(args))
+  }
+
+  async _group(
+    f: (adapter: UncoordinatedDatabaseAdapter) => Promise<void> | void
+  ): Promise<void> {
+    // We create an adapter that does not go through the mutex
+    // when used by the function`f`, since we already take the mutex here
+    const adapter = {
+      run: this._run.bind(this),
+      query: this._query.bind(this),
+      transaction: this._transaction.bind(this),
+      runInTransaction: this._runInTransaction.bind(this),
+      group: this._group.bind(this),
+    }
+    return f(adapter)
+  }
+
+  async runInTransaction(...statements: DbStatement[]): Promise<RunResult> {
+    return this.txMutex.runExclusive(() => {
+      return this._runInTransaction(...statements)
+    })
+  }
+
+  async transaction<T>(
+    f: (_tx: Tx, setResult: (res: T) => void) => void
+  ): Promise<T> {
+    return this.txMutex.runExclusive(() => {
+      return this._transaction(f)
+    })
+  }
+
+  async run(stmt: Statement): Promise<RunResult> {
+    return this.txMutex.runExclusive(() => {
+      return this._run(stmt)
+    })
+  }
+
+  async query(stmt: Statement): Promise<Row[]> {
+    return this.txMutex.runExclusive(() => {
+      return this._query(stmt)
+    })
+  }
+
+  async group(
+    f: (adapter: UncoordinatedDatabaseAdapter) => Promise<void> | void
+  ): Promise<void> {
+    return this.txMutex.runExclusive(() => {
+      return this._group(f)
+    })
   }
 }
 

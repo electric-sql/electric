@@ -2,6 +2,11 @@ import { QualifiedTablename } from '../util/tablename'
 import { Row, Statement } from '../util/types'
 import { parseTableNames } from '../util'
 
+export type UncoordinatedDatabaseAdapter = Pick<
+  DatabaseAdapter,
+  'run' | 'query' | 'runInTransaction' | 'transaction' | 'group'
+>
+
 // A `DatabaseAdapter` adapts a database client to provide the
 // normalised interface defined here.
 export interface DatabaseAdapter {
@@ -27,6 +32,24 @@ export interface DatabaseAdapter {
   transaction<T>(
     f: (tx: Transaction, setResult: (res: T) => void) => void
   ): Promise<T>
+
+  /**
+   * This method is useful to execute several queries in isolation from any other queries/transactions executed through this adapter.
+   * Useful to execute queries that cannot be executed inside a transaction (e.g. SQLite does not allow the `foreign_keys` PRAGMA to be modified in a transaction).
+   * In that case we can use this `group` method:
+   *  ```
+   *  await adapter.group(async (adapter) => {
+   *    await adapter.run({ sql: 'PRAGMA foreign_keys = OFF;' })
+   *    ...
+   *    await adapter.run({ sql: 'PRAGMA foreign_keys = ON;' })
+   *  })
+   *  ```
+   * This snippet above ensures that no other query/transaction will be interleaved when the foreign keys are disabled.
+   * @param f Function that is guaranteed to be executed in isolation from other queries/transactions executed by this adapter.
+   */
+  group(
+    f: (adapter: UncoordinatedDatabaseAdapter) => Promise<void> | void
+  ): Promise<void>
 
   // Get the tables potentially used by the query (so that we
   // can re-query if the data in them changes).
