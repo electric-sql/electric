@@ -11,7 +11,7 @@ interface Props {
   onDismiss?: () => void
   setShowAboutModal?: (show: boolean) => void
   setShowProjectModal?: (show: boolean) => void
-  setShowProfileModal?: (show: boolean) => void
+  setShowProfilePickerModal?: (show: boolean) => void
   className?: string
 }
 export default function ProfileMenu({
@@ -20,7 +20,7 @@ export default function ProfileMenu({
   onDismiss,
   setShowAboutModal,
   setShowProjectModal,
-  setShowProfileModal,
+  setShowProfilePickerModal,
 }: Props) {
   const electric = useElectric()!
   const connectivityState = useConnectivityState()
@@ -64,7 +64,7 @@ export default function ProfileMenu({
           <button
             className="flex items-center h-8 px-3 hover:bg-gray-100"
             onClick={() => {
-              setShowProfileModal?.(true)
+              setShowProfilePickerModal?.(true)
               onDismiss?.()
             }}
           >
