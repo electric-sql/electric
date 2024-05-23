@@ -101,18 +101,16 @@ export function buildDatabaseURL(opts: {
 }
 
 export function extractDatabaseURL(url: string) {
-  const match = url.match(
-    /^postgres(ql)?:\/\/([^:]+)(?::([^@]+))?@([^:]+):(\d+)\/(.+)$/
-  )
-  if (!match) {
+  const parsed = new URL(url)
+  if (!(parsed.protocol == 'postgres:' || parsed.protocol == 'postgresql:')) {
     throw new Error(`Invalid database URL: ${url}`)
   }
   return {
-    user: match[2],
-    password: match[3] ?? '',
-    host: match[4],
-    port: parseInt(match[5]),
-    dbName: match[6],
+    user: decodeURIComponent(parsed.username),
+    password: decodeURIComponent(parsed.password),
+    host: decodeURIComponent(parsed.hostname),
+    port: parsed.port != '' ? parseInt(parsed.port) : null,
+    dbName: decodeURIComponent(parsed.pathname.slice(1))
   }
 }
 
