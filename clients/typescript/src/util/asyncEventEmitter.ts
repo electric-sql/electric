@@ -161,11 +161,11 @@ export class AsyncEventEmitter<Events extends EventMap> {
         // re-throw any rejected promises such that the global error
         // handler can catch them and log them, otherwise they would
         // be suppressed and bugs may go unnoticed
-        settledPromises
-          .filter((prom) => prom.status === 'rejected')
-          .forEach((rejectedProm) => {
+        settledPromises.forEach((rejectedProm) => {
+          if (rejectedProm.status === 'rejected') {
             throw rejectedProm.reason
-          })
+          }
+        })
       })
     } else {
       // signal that the queue is no longer being processed
