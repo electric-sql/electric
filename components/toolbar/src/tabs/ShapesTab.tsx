@@ -12,13 +12,11 @@ export default function ShapesTab({
   )
 
   useEffect(() => {
-    // TODO: need notifier API for shape status
-    // periodically refresh shape subscriptions
-    const interval = setInterval(
-      () => setShapes(api.getSatelliteShapeSubscriptions(dbName)),
-      500,
+    const unsubscribe = api.subscribeToSatelliteShapeSubscriptions(
+      dbName,
+      setShapes,
     )
-    return () => clearInterval(interval)
+    return unsubscribe
   }, [dbName, api])
 
   if (shapes.length === 0) {
