@@ -4,6 +4,8 @@ import { useEffect, useState, createContext } from 'react'
 import { Route, Routes, BrowserRouter } from 'react-router-dom'
 import { cssTransition, ToastContainer } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
+import ElectricIcon from './assets/images/icon.inverse.svg?react'
+import { AiOutlineLoading3Quarters } from 'react-icons/ai'
 import List from './pages/List'
 import Issue from './pages/Issue'
 import LeftMenu from './components/LeftMenu'
@@ -51,6 +53,7 @@ const App = () => {
   const userId = getUserId()
   const setUserIdAndReset = (userId: string) => {
     setUserId(userId)
+    setElectric(undefined)
     deleteDB()
   }
 
@@ -87,7 +90,17 @@ const App = () => {
   }, [])
 
   if (electric === undefined) {
-    return null
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center">
+        <div className="flex flex-col items-center">
+          <ElectricIcon className="w-20 mb-4 scale-150 fill-gray-500" />
+          <div className="flex flex-row items-center text-lg text-gray-500">
+            <AiOutlineLoading3Quarters className="animate-spin" />
+            <span className="ml-2">Loading...</span>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   const router = (
