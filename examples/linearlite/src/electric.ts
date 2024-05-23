@@ -91,9 +91,6 @@ export const initElectric = async (userId: string) => {
     const { addToolbar } = await import('@electric-sql/debug-toolbar')
     addToolbar(electric)
   }
-  await electric.adapter.run({
-    sql: 'PRAGMA foreign_keys=OFF;',
-  })
 
   const authToken = insecureAuthToken({
     sub: userId,
