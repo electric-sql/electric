@@ -19,6 +19,20 @@ To see the complete change log for each new release, see the [Releases page](htt
 - [create-electric-app](https://github.com/electric-sql/electric/blob/main/examples/starter/CHANGELOG.md)
 - [@electric-sql/prisma-generator](https://github.com/electric-sql/electric/blob/main/generator/CHANGELOG.md)
 
+## 2024-06-10 - v0.12
+
+| Component                | Version                                                                                            |
+| ------------------------ | -------------------------------------------------------------------------------------------------- |
+| [Sync service][1]        | [0.12.0](https://github.com/electric-sql/electric/blob/main/components/electric/CHANGELOG.md#0120) |
+| [TypeScript client][2]   | [0.12.0](https://github.com/electric-sql/electric/blob/main/clients/typescript/CHANGELOG.md#0120)  |
+| [create-electric-app][3] | [0.3.2](https://github.com/electric-sql/electric/blob/main/examples/starter/CHANGELOG.md#032)      |
+| [debug-toolbar][5]       | [2.0.0](https://github.com/electric-sql/electric/blob/main/components/toolbar/CHANGELOG.md#200)    |
+
+#### Compatibility notes
+
+**Sync service**
+
+- The default value for `DATABASE_REQUIRE_SSL` was reset to `false` in [v0.9.1](#2024-01-24---v09) by accident, after it had been set to `true` in v0.9.0. This release restores the intended behaviour of having `DATABASE_REQUIRE_SSL=true` by default. To use unencrypted database connections, you must explicitly configure Electric with `DATABASE_REQUIRE_SSL=false`.
 
 ## 2024-05-14 - v0.11
 
@@ -203,3 +217,4 @@ The first public release of ElectricSQL as a self-hosted sync layer on top of Po
 [2]: https://www.npmjs.com/package/electric-sql
 [3]: https://www.npmjs.com/package/create-electric-app
 [4]: https://www.npmjs.com/package/@electric-sql/prisma-generator
+[5]: https://www.npmjs.com/package/@electric-sql/debug-toolbar
