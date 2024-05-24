@@ -8,25 +8,18 @@ const composeFile = path.join(
   'compose.yaml'
 )
 
-const composeFileWithPostgres = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  'docker',
-  'compose-with-postgres.yaml'
-)
-
 export function dockerCompose(
   command: string,
   userArgs: string[] = [],
   containerName?: string,
   env: { [key: string]: string } = {}
 ) {
-  const withPostgres = env?.COMPOSE_PROFILES === 'with-postgres'
   const args = [
     'compose',
     '--ansi',
     'always',
     '-f',
-    withPostgres ? composeFileWithPostgres : composeFile,
+    composeFile,
     command,
     ...userArgs,
   ]
@@ -38,4 +31,19 @@ export function dockerCompose(
       ...env,
     },
   })
+}
+
+export function dockerComposeUp(
+  userArgs: string[] = [],
+  containerName?: string,
+  env: { [key: string]: string } = {}
+) {
+  // We use the same compose.yaml file for `electric-sql start` and `electric-sql start
+  // --with-postgres` and vary the services started by passing them as arguments to `docker
+  // compose up`.
+  const services =
+    env?.COMPOSE_PROFILES === 'with-postgres'
+      ? ['postgres', 'electric']
+      : ['electric']
+  return dockerCompose('up', userArgs.concat(services), containerName, env)
 }
