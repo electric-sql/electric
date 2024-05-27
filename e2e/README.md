@@ -24,6 +24,7 @@ Current groups are:
 - `04.*` - Auxillary Electric functions not immediately related to replication
 - `05.*` - Conflict resolution semantics tests
 - `06.*` - Permissions and write validations
+- `07.*` - Scenarios for load testing and benchmarking
 
 Feel free to add more.
 
