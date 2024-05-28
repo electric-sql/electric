@@ -23,12 +23,15 @@ COPY Makefile /app/
 COPY mix.* /app/
 RUN mix deps.get
 RUN mix deps.compile
-
 RUN mix run --no-compile --no-start -e "Application.ensure_all_started(:tzdata); Tzdata.ReleaseUpdater.poll_for_update()"
-COPY config/*runtime.exs /app/config/
-COPY lib /app/lib/
-COPY priv /app/priv
+
+# These are ordered by change frequency, with the least frequently changing dir first.
+COPY rel /app/rel
 COPY src /app/src/
+COPY priv /app/priv
+COPY lib /app/lib/
+
+COPY config/*runtime.exs /app/config/
 
 ARG ELECTRIC_VERSION=local
 ARG MAKE_RELEASE_TASK=release
