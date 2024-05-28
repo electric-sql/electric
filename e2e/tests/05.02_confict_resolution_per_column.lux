@@ -8,7 +8,7 @@
     -$fail_pattern
     [invoke start_elixir_test 1]
     [invoke client_session 1 1]
-    [invoke elixir_client_subscribe "entries"]
+    [invoke elixir_client_subscribe "\"entries\""]
     !TestWsClient.send_data(conn, ProtocolHelpers.relation("public.entries"))
     ?:ok
     ?$eprompt
@@ -17,7 +17,7 @@
     -$fail_pattern
     [invoke start_elixir_test 2]
     [invoke client_session 2 1]
-    [invoke elixir_client_subscribe "entries"]
+    [invoke elixir_client_subscribe "\"entries\""]
     !TestWsClient.send_data(conn, ProtocolHelpers.relation("public.entries"))
     ?:ok
     ?$eprompt
