@@ -13,6 +13,7 @@
             f8 FLOAT8
         );
         ALTER TABLE public.floats ENABLE ELECTRIC;
+        ELECTRIC GRANT ALL ON public.floats TO AUTHENTICATED;
         """]
     [invoke migrate_pg 20230908 $sql]
 

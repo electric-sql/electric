@@ -27,6 +27,9 @@
 
         ALTER TABLE projects ENABLE ELECTRIC;
         ALTER TABLE project_memberships ENABLE ELECTRIC;
+
+        ELECTRIC GRANT ALL ON projects TO AUTHENTICATED;
+        ELECTRIC GRANT ALL ON project_memberships TO AUTHENTICATED;
         """]
     [invoke migrate_pg 001 $sql]
 

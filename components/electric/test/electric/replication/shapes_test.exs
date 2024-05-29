@@ -181,6 +181,23 @@ defmodule Electric.Replication.ShapesTest do
             "CREATE TABLE public.parent (id uuid PRIMARY KEY, value TEXT);",
             "CREATE TABLE public.child (id uuid PRIMARY KEY, parent_id uuid REFERENCES public.parent(id));"
           ]
+        },
+        {
+          "2024031901",
+          [
+            "CREATE TABLE public.tags (id uuid PRIMARY KEY, tag TEXT);",
+            "CREATE TABLE public.child_tags (id uuid PRIMARY KEY, child_id uuid REFERENCES child(id), tag_id uuid REFERENCES tags(id));"
+          ]
+        },
+        {
+          "2024031902",
+          [
+            "CREATE TABLE public.workspaces (id uuid PRIMARY KEY);",
+            "CREATE TABLE public.projects (id uuid PRIMARY KEY, workspace_id uuid REFERENCES workspaces(id));",
+            "CREATE TABLE public.issues (id uuid PRIMARY KEY, project_id uuid REFERENCES projects(id));",
+            "CREATE TABLE public.comments (id uuid PRIMARY KEY, issue_id uuid REFERENCES issues(id));",
+            "CREATE TABLE public.reactions (id uuid PRIMARY KEY, comment_id uuid REFERENCES comments(id));"
+          ]
         }
       ])
     end
@@ -258,6 +275,55 @@ defmodule Electric.Replication.ShapesTest do
                Shapes.validate_requests([request], origin)
 
       assert is_map_key(req.layer_map, {"public", "parent"})
+    end
+
+    test "passes and auto fills many-to-many relations", %{
+      origin: origin
+    } do
+      request = %SatShapeReq{
+        request_id: "id1",
+        shape_definition: %SatShapeDef{
+          selects: [
+            %SatShapeDef.Select{
+              tablename: "child",
+              include: [
+                %SatShapeDef.Relation{
+                  foreign_key: ["child_id"],
+                  select: %SatShapeDef.Select{tablename: "child_tags"}
+                }
+              ]
+            }
+          ]
+        }
+      }
+
+      assert {:ok, [%Shapes.ShapeRequest{} = req]} =
+               Shapes.validate_requests([request], origin)
+
+      for relation <- [{"public", "child_tags"}, {"public", "tags"}] do
+        assert is_map_key(req.layer_map, relation)
+      end
+    end
+
+    test "traverses down to a permissions scope", %{
+      origin: origin
+    } do
+      request = %SatShapeReq{
+        request_id: "id1",
+        shape_definition: %SatShapeDef{
+          selects: [
+            %SatShapeDef.Select{
+              tablename: "issues"
+            }
+          ]
+        }
+      }
+
+      assert {:ok, [%Shapes.ShapeRequest{} = req]} = Shapes.validate_requests([request], origin)
+
+      for relation <- [{"public", "projects"}, {"public", "workspaces"}] do
+        assert is_map_key(req.layer_map, relation)
+      end
     end
 
     test "passes when selecting a table with it's FK targets", %{origin: origin} do

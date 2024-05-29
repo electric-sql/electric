@@ -137,68 +137,51 @@ defmodule Electric.Postgres.TestConnection do
     |> Electric.Replication.Connectors.get_connection_opts()
   end
 
+  def setup_electrified_tables(%{scenario: scenario, conn: conn, origin: origin}) do
+    setup_scenario(conn, origin, scenario)
+  end
+
   def setup_electrified_tables(%{conn: conn, origin: origin}) do
-    {:ok, [], []} =
-      :epgsql.squery(conn, """
-      CREATE TABLE public.users (
-        id UUID PRIMARY KEY,
-        name TEXT NOT NULL
-      )
-      """)
+    setup_scenario(conn, origin, :entries_and_documents)
+  end
 
-    {:ok, [], []} =
-      :epgsql.squery(conn, """
-      CREATE TABLE public.documents (
-        id UUID PRIMARY KEY,
-        title TEXT NOT NULL,
-        electric_user_id UUID REFERENCES users(id)
-      )
-      """)
+  def setup_open_permissions(%{scenario: scenario, conn: conn, origin: origin}) do
+    define_permissions(conn, origin, scenario)
+  end
 
-    {:ok, [], []} =
-      :epgsql.squery(conn, """
-      CREATE TABLE public.my_entries (
-        id UUID PRIMARY KEY,
-        content VARCHAR NOT NULL,
-        content_b TEXT
-      );
-      """)
+  def setup_open_permissions(%{conn: conn, origin: origin}) do
+    define_permissions(conn, origin, :entries_and_documents)
+  end
 
-    {:ok, [], []} =
-      :epgsql.squery(conn, """
-      CREATE TABLE public.authored_entries (
-        id UUID PRIMARY KEY,
-        content TEXT NOT NULL,
-        author_id UUID REFERENCES users(id)
-      );
-      """)
+  def define_permissions(conn, origin, scenario) do
+    ddlx = scenario_ddlx(scenario)
 
-    {:ok, [], []} =
-      :epgsql.squery(conn, """
-      CREATE TABLE public.comments (
-        id UUID PRIMARY KEY,
-        content TEXT NOT NULL,
-        entry_id UUID REFERENCES authored_entries(id),
-        author_id UUID REFERENCES users(id)
-      );
-      """)
+    sql =
+      ddlx
+      |> Enum.map(&Electric.DDLX.parse!/1)
+      |> Electric.DDLX.Command.PgSQL.to_sql()
+      |> Enum.join("\n")
 
-    statement_count =
-      :epgsql.squery(conn, """
-      BEGIN;
-      CALL electric.migration_version('20230830154422');
-      CALL electric.electrify('public.users');
-      CALL electric.electrify('public.documents');
-      CALL electric.electrify('public.my_entries');
-      CALL electric.electrify('public.authored_entries');
-      CALL electric.electrify('public.comments');
-      COMMIT;
-      """)
-      |> Enum.map(&assert {:ok, _, _} = &1)
-      |> Enum.count()
+    conn
+    |> :epgsql.squery(["BEGIN;\n", sql, "\nCOMMIT;"])
+    |> Enum.each(&(:ok = elem(&1, 0)))
 
-    electrified_count = statement_count - 3
+    :ok = wait_for_message(origin, Electric.Replication.Changes.UpdatedPermissions)
+  end
 
+  def setup_scenario(conn, origin, scenario) do
+    {:ok, electrified_table_count} = run_scenario_migrations(conn, scenario)
+
+    :ok = wait_for_message(origin, Electric.Replication.Changes.Migration)
+
+    [electrified_count: electrified_table_count]
+  end
+
+  defp wait_for_message(_origin, []) do
+    :ok
+  end
+
+  defp wait_for_message(origin, msg_type_list) when is_list(msg_type_list) do
     Stream.resource(
       fn -> 0 end,
       fn pos ->
@@ -214,26 +197,169 @@ defmodule Electric.Postgres.TestConnection do
       & &1
     )
     |> Stream.reject(&(&1.changes == []))
-    |> Enum.reduce_while(10, fn
-      _tx, 0 ->
-        {:halt, :error}
+    |> Enum.reduce_while(msg_type_list, fn
+      %{changes: changes}, wait ->
+        changes
+        |> Enum.reduce(wait, fn
+          %type{}, [type | rest] ->
+            rest
 
-      %{changes: changes}, n ->
-        if Enum.any?(changes, &is_struct(&1, Electric.Replication.Changes.Migration)) do
-          {:halt, :ok}
-        else
-          {:cont, n - 1}
+          _, wait ->
+            wait
+        end)
+        |> case do
+          [] ->
+            {:halt, :ok}
+
+          rest ->
+            {:cont, rest}
         end
     end)
     |> case do
       :ok ->
         :ok
 
-      :error ->
-        flunk("Migration statements didn't show up in the cached WAL")
+      _ ->
+        flunk("#{inspect(msg_type_list)} didn't show up in the cached WAL")
     end
+  end
 
-    [electrified_count: electrified_count]
+  defp wait_for_message(origin, type, count \\ 1) when is_atom(type) do
+    wait_list =
+      type
+      |> Stream.duplicate(count)
+      |> Enum.to_list()
+
+    wait_for_message(origin, wait_list)
+  end
+
+  def run_scenario_migrations(conn, scenario) do
+    {tables, [{version, ddl}]} = migration(scenario)
+    for sql <- ddl, do: {:ok, [], []} = :epgsql.squery(conn, sql)
+
+    :epgsql.squery(
+      conn,
+      [
+        "BEGIN;",
+        "CALL electric.migration_version('#{version}');",
+        tables |> Enum.map(&"CALL electric.electrify('#{&1}');") |> Enum.join("\n"),
+        "COMMIT;"
+      ]
+      |> Enum.join("\n")
+    )
+    |> Enum.each(&assert {:ok, _, _} = &1)
+
+    {:ok, length(tables)}
+  end
+
+  def migrations(scenario) do
+    {_tables, migrations} = migration(scenario)
+    migrations
+  end
+
+  def migration(:entries_and_documents) do
+    {sql, names} =
+      create_table_sql([
+        {"public.users",
+         """
+         id UUID PRIMARY KEY,
+         name TEXT NOT NULL,
+         role TEXT
+         """},
+        {"public.documents",
+         """
+         id UUID PRIMARY KEY,
+         title TEXT NOT NULL
+         """},
+        {"public.my_entries",
+         """
+         id UUID PRIMARY KEY,
+         content VARCHAR NOT NULL,
+         content_b TEXT
+         """},
+        {"public.authored_entries",
+         """
+         id UUID PRIMARY KEY,
+         content TEXT NOT NULL,
+         author_id UUID REFERENCES users(id)
+         """},
+        {"public.comments",
+         """
+         id UUID PRIMARY KEY,
+         content TEXT NOT NULL,
+         entry_id UUID REFERENCES authored_entries(id),
+         author_id UUID REFERENCES users(id)
+         """}
+      ])
+
+    {names, [{"20230830154422", sql}]}
+  end
+
+  def migration(:linear) do
+    {sql, names} =
+      create_table_sql([
+        {"public.users",
+         """
+         id UUID PRIMARY KEY,
+         name TEXT NOT NULL
+         """},
+        {"public.accounts",
+         """
+         id UUID PRIMARY KEY,
+         name TEXT NOT NULL
+         """},
+        {"public.projects",
+         """
+         id UUID PRIMARY KEY,
+         account_id UUID NOT NULL REFERENCES public.accounts (id),
+         name TEXT NOT NULL
+         """},
+        {"public.issues",
+         """
+         id UUID PRIMARY KEY,
+         project_id UUID NOT NULL REFERENCES public.projects (id),
+         name TEXT NOT NULL,
+         visible bool
+         """},
+        {"public.comments",
+         """
+         id UUID PRIMARY KEY,
+         issue_id UUID NOT NULL REFERENCES public.issues (id),
+         author_id UUID NOT NULL REFERENCES public.users (id),
+         comment TEXT NOT NULL,
+         visible BOOL
+         """},
+        {"public.team_memberships",
+         """
+         id UUID PRIMARY KEY,
+         account_id UUID NOT NULL REFERENCES public.accounts (id) ON DELETE CASCADE,
+         user_id UUID NOT NULL REFERENCES public.users (id) ON DELETE CASCADE,
+         role TEXT NOT NULL
+         """},
+        {"public.project_memberships",
+         """
+         id UUID PRIMARY KEY,
+         project_id UUID NOT NULL REFERENCES public.projects (id) ON DELETE CASCADE,
+         team_membership_id UUID NOT NULL REFERENCES public.team_memberships (id) ON DELETE CASCADE,
+         -- include direct user_id fk because we need it for assigns
+         user_id UUID NOT NULL REFERENCES public.users (id) ON DELETE CASCADE,
+         role TEXT NOT NULL
+         """}
+      ])
+
+    {names, [{"20240415110440", sql}]}
+  end
+
+  def scenario_ddlx(scenario) do
+    {names, _} = migration(scenario)
+
+    Enum.map(names, &"ELECTRIC GRANT ALL ON #{&1} TO AUTHENTICATED")
+  end
+
+  defp create_table_sql(tables) do
+    Enum.map_reduce(tables, [], fn {name, columns}, names ->
+      {"CREATE TABLE #{name} (" <> columns <> ");", [name | names]}
+    end)
   end
 
   def setup_with_sql_execute(%{conn: conn, with_sql: sql}) do
@@ -256,6 +382,41 @@ defmodule Electric.Postgres.TestConnection do
   end
 
   def setup_with_sql_execute(_), do: :ok
+
+  def setup_with_ddlx(%{conn: conn, ddlx: ddlx, origin: origin}) do
+    sql =
+      ddlx
+      |> List.wrap()
+      |> Enum.map(&String.trim/1)
+      |> Enum.map(fn
+        "ELECTRIC " <> _ = ddlx -> ddlx
+        ddl -> "ELECTRIC " <> ddl
+      end)
+      |> Enum.map(&Electric.DDLX.parse!/1)
+      |> Electric.DDLX.Command.pg_sql()
+      |> Enum.join("\n")
+
+    conn
+    |> :epgsql.squery(["BEGIN;\n", sql, "\nCOMMIT;"])
+    |> Enum.each(&(:ok = elem(&1, 0)))
+
+    :ok = wait_for_message(origin, Electric.Replication.Changes.UpdatedPermissions)
+
+    :ok
+  end
+
+  def setup_with_ddlx(_) do
+    :ok
+  end
+
+  def wait_for_permission_state(%{origin: origin} = cxt) do
+    msg_count =
+      cxt
+      |> Map.get(:wait_for, [])
+      |> Keyword.get(:perms, 0)
+
+    :ok = wait_for_message(origin, Electric.Replication.Changes.UpdatedPermissions, msg_count)
+  end
 
   def load_schema(%{conn: _, origin: origin}) do
     {:ok, schema} = Electric.Postgres.Extension.SchemaCache.load(origin)

@@ -12,6 +12,7 @@
             b BOOLEAN
         );
         ALTER TABLE public.bools ENABLE ELECTRIC;
+        ELECTRIC GRANT ALL ON public.bools TO AUTHENTICATED;
         """]
     [invoke migrate_pg 20230908 $sql]
 

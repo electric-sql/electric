@@ -4,15 +4,17 @@
 
 [invoke setup]
 
-[invoke setup_client 1 "electric_1" 5133]
-[invoke setup_client 2 "electric_1" 5133]
-
 [shell proxy_1]
     [invoke migrate_items_table 20230504114018]
 
+[invoke setup_client 1 "electric_1" 5133]
+[invoke setup_client 2 "electric_1" 5133]
+
 [shell satellite_1]
     ??[rpc] recv: #SatInStartReplicationResp
+    ??Connectivity state changed: connected
     [invoke node_sync_items ""]
+
 [shell satellite_2]
     ??[rpc] recv: #SatInStartReplicationResp
     [invoke node_sync_items ""]

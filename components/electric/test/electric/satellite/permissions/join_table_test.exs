@@ -6,6 +6,7 @@ defmodule Electric.Satellite.Permissions.JoinTableTest do
     Perms,
     Roles,
     Schema,
+    Server,
     Tree
   }
 
@@ -24,23 +25,36 @@ defmodule Electric.Satellite.Permissions.JoinTableTest do
   @restaurants {"public", "restaurants"}
   @riders {"public", "riders"}
 
-  def assign_rider(tree, order_id, rider_id) do
-    v = {@order_riders, [order_id, rider_id]}
-
-    tree
-    |> Tree.add_vertex(v)
-    |> Tree.add_edge(v, {@orders, [order_id]})
-    |> Tree.add_edge(v, {@riders, [rider_id]})
+  def assign_rider(tree, structure, order_id, rider_id) do
+    Server.apply_change(
+      tree,
+      structure,
+      Chgs.insert(@order_riders, %{
+        "id" => {order_id, rider_id},
+        "order_id" => order_id,
+        "rider_id" => rider_id
+      })
+    )
   end
 
-  def unassign_rider(tree, order_id, rider_id) do
-    v = {@order_riders, [order_id, rider_id]}
-
-    Tree.delete_vertex(tree, v)
+  def unassign_rider(tree, structure, order_id, rider_id) do
+    Server.apply_change(
+      tree,
+      structure,
+      Chgs.delete(@order_riders, %{
+        "id" => {order_id, rider_id},
+        "order_id" => order_id,
+        "rider_id" => rider_id
+      })
+    )
   end
 
-  def add_order(tree, restaurant_id, order_id) do
-    Tree.add_edge(tree, {@orders, [order_id]}, {@restaurants, [restaurant_id]})
+  def add_order(tree, structure, restaurant_id, order_id) do
+    Server.apply_change(
+      tree,
+      structure,
+      Chgs.insert(@orders, %{"id" => order_id, "restaurant_id" => restaurant_id})
+    )
   end
 
   describe "simple join table" do
@@ -74,39 +88,66 @@ defmodule Electric.Satellite.Permissions.JoinTableTest do
 
       tree = Tree.new(data, schema_version)
 
-      tree = add_order(tree, "rt1", "or1")
+      perms =
+        perms_build(
+          schema_version,
+          [
+            ~s[GRANT ALL ON riders TO (riders, 'self')],
+            ~s[GRANT READ ON orders TO (orders, 'rider')],
+            ~s[GRANT READ ON restaurants TO (orders, 'rider')],
+            ~s[ASSIGN (orders, 'rider') TO order_riders.rider_id],
+            ~s[ASSIGN (riders, 'self') TO riders.id]
+          ],
+          []
+        )
 
-      {:ok, tree: tree, data: data, loader: loader, schema_version: schema_version}
+      tree = add_order(tree, perms.structure, "rt1", "or1")
+
+      {:ok,
+       tree: tree,
+       data: data,
+       loader: loader,
+       schema_version: schema_version,
+       perms: perms,
+       structure: perms.structure}
     end
 
     test "scope_id resolves across join tables", cxt do
-      assert [] = Graph.scope_id(cxt.tree, @orders, @riders, ["rd1"])
+      assert [] = Graph.scope_id(cxt.tree, cxt.structure, @orders, @riders, ["rd1"])
 
-      tree = assign_rider(cxt.tree, "or1", "rd1")
+      tree = assign_rider(cxt.tree, cxt.structure, "or1", "rd1")
 
-      assert [{["or1"], _}] = Graph.scope_id(tree, @orders, @riders, ["rd1"])
-      assert [{["rt1"], _}] = Graph.scope_id(tree, @restaurants, @riders, ["rd1"])
-      assert [] = Graph.scope_id(tree, @orders, @riders, ["rd2"])
+      assert [{["or1"], _}] = Graph.scope_id(tree, cxt.structure, @orders, @riders, ["rd1"])
+
+      assert [{["rt1"], _}] =
+               Graph.scope_id(tree, cxt.structure, @restaurants, @riders, ["rd1"])
+
+      assert [] = Graph.scope_id(tree, cxt.structure, @orders, @riders, ["rd2"])
     end
 
     test "scope_path resolves across join tables", cxt do
-      assert [] = Graph.scope_path(cxt.tree, @orders, @riders, ["rd1"])
+      assert [] = Graph.scope_path(cxt.tree, cxt.structure, @orders, @riders, ["rd1"])
 
-      tree = assign_rider(cxt.tree, "or1", "rd1")
+      tree = assign_rider(cxt.tree, cxt.structure, "or1", "rd1")
 
-      assert [[{@orders, ["or1"], _}, {@order_riders, ["or1", "rd1"], _}, {@riders, ["rd1"], _}]] =
-               Graph.scope_path(tree, @orders, @riders, ["rd1"])
+      assert [
+               [
+                 {@orders, ["or1"], _},
+                 {@order_riders, [{"or1", "rd1"}], _},
+                 {@riders, ["rd1"], _}
+               ]
+             ] = Graph.scope_path(tree, cxt.structure, @orders, @riders, ["rd1"])
 
       assert [
                [
                  {@restaurants, ["rt1"], _},
                  {@orders, ["or1"], []},
-                 {@order_riders, ["or1", "rd1"], []},
+                 {@order_riders, [{"or1", "rd1"}], []},
                  {@riders, ["rd1"], []}
                ]
-             ] = Graph.scope_path(tree, @restaurants, @riders, ["rd1"])
+             ] = Graph.scope_path(tree, cxt.structure, @restaurants, @riders, ["rd1"])
 
-      assert [] = Graph.scope_path(tree, @orders, @riders, ["rd2"])
+      assert [] = Graph.scope_path(tree, cxt.structure, @orders, @riders, ["rd2"])
     end
   end
 
@@ -209,15 +250,34 @@ defmodule Electric.Satellite.Permissions.JoinTableTest do
           schema_version
         )
 
+      perms =
+        perms_build(
+          schema_version,
+          [
+            ~s[GRANT ALL ON riders TO (riders, 'self')],
+            ~s[GRANT READ ON orders TO (orders, 'rider')],
+            ~s[GRANT READ ON restaurants TO (orders, 'rider')],
+            ~s[ASSIGN (orders, 'rider') TO order_riders.rider_id],
+            ~s[ASSIGN (riders, 'self') TO riders.id]
+          ],
+          []
+        )
+
       {:ok, _} = start_supervised(Perms.Transient)
 
-      {:ok, tree: tree, loader: loader, schema_version: schema_version}
+      {:ok,
+       tree: tree,
+       loader: loader,
+       schema_version: schema_version,
+       perms: perms,
+       structure: perms.structure}
     end
 
     test "scope_id/3", cxt do
       assert [{["r2"], [_ | _]}] =
                Graph.scope_id(
                  cxt.tree,
+                 cxt.structure,
                  @restaurants,
                  Chgs.insert(@orders, %{
                    "id" => "c2-r2-o2",
@@ -227,7 +287,7 @@ defmodule Electric.Satellite.Permissions.JoinTableTest do
                )
 
       assert [{["r2"], [_ | _]}] =
-               Graph.scope_id(cxt.tree, @restaurants, @orders, %{
+               Graph.scope_id(cxt.tree, cxt.structure, @restaurants, @orders, %{
                  "id" => "c2-r2-o2",
                  "restaurant_id" => "r2",
                  "customer_id" => "c2"
@@ -236,6 +296,7 @@ defmodule Electric.Satellite.Permissions.JoinTableTest do
       assert [{["c2"], [_ | _]}] =
                Graph.scope_id(
                  cxt.tree,
+                 cxt.structure,
                  @customers,
                  Chgs.insert(@orders, %{
                    "id" => "c2-r1-o1",
@@ -245,7 +306,7 @@ defmodule Electric.Satellite.Permissions.JoinTableTest do
                )
 
       assert [{["c2"], [_ | _]}] =
-               Graph.scope_id(cxt.tree, @customers, @orders, %{
+               Graph.scope_id(cxt.tree, cxt.structure, @customers, @orders, %{
                  "id" => "c2-r1-o1",
                  "restaurant_id" => "r2",
                  "customer_id" => "c2"
@@ -253,37 +314,34 @@ defmodule Electric.Satellite.Permissions.JoinTableTest do
     end
 
     test "scope_id/3 for riders", cxt do
-      assert [] =
-               Graph.scope_id(cxt.tree, @orders, @riders, %{
-                 "id" => "d1"
-               })
+      assert [] = Graph.scope_id(cxt.tree, cxt.structure, @orders, @riders, %{"id" => "d1"})
 
-      tree = assign_rider(cxt.tree, "c2-r1-o1", "d1")
+      tree = assign_rider(cxt.tree, cxt.structure, "c2-r1-o1", "d1")
 
       assert [{["c2-r1-o1"], [_ | _]}] =
-               Graph.scope_id(tree, @orders, @riders, %{
+               Graph.scope_id(tree, cxt.structure, @orders, @riders, %{
                  "id" => "d1"
                })
 
       assert [{["c2"], [_ | _]}] =
-               Graph.scope_id(tree, @customers, @riders, %{
+               Graph.scope_id(tree, cxt.structure, @customers, @riders, %{
                  "id" => "d1"
                })
 
       assert [{["c2-r1-o1"], [_ | _]}] =
-               Graph.scope_id(tree, @orders, @riders, %{
+               Graph.scope_id(tree, cxt.structure, @orders, @riders, %{
                  "id" => "d1"
                })
 
-      tree = unassign_rider(tree, "c2-r1-o1", "d1")
+      tree = unassign_rider(tree, cxt.structure, "c2-r1-o1", "d1")
 
       assert [] =
-               Graph.scope_id(tree, @restaurants, @riders, %{
+               Graph.scope_id(tree, cxt.structure, @restaurants, @riders, %{
                  "id" => "d1"
                })
 
       assert [] =
-               Graph.scope_id(tree, @orders, @riders, %{
+               Graph.scope_id(tree, cxt.structure, @orders, @riders, %{
                  "id" => "d1"
                })
     end
@@ -304,7 +362,7 @@ defmodule Electric.Satellite.Permissions.JoinTableTest do
     # with all that said, I'm leaving this here because we might need to model the more complex
     # data structure it includes.
     test "filter_read/3", cxt do
-      tree = assign_rider(cxt.tree, "c2-r2-o2", "d1")
+      tree = assign_rider(cxt.tree, cxt.structure, "c2-r2-o2", "d1")
 
       perms =
         perms_build(
@@ -328,7 +386,7 @@ defmodule Electric.Satellite.Permissions.JoinTableTest do
         })
       ]
 
-      {filtered_tx, []} = Permissions.filter_read(perms, tree, Chgs.tx(changes))
+      {filtered_tx, [_], []} = Permissions.filter_read(perms, tree, Chgs.tx(changes))
 
       assert filtered_tx.changes == [
                Chgs.update(@addresses, %{"id" => "c2-a2", "customer_id" => "c2"}, %{

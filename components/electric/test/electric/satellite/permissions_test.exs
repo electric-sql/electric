@@ -6,18 +6,18 @@ defmodule Electric.Satellite.PermissionsTest do
   alias ElectricTest.PermissionsHelpers.{
     Auth,
     Chgs,
-    LSN,
+    XID,
     Perms,
     Roles,
     Tree
   }
 
   alias Electric.Postgres.Extension.SchemaLoader
-  alias Electric.Satellite.{Permissions, Permissions.MoveOut}
-  alias Electric.Replication.Changes
+  alias Electric.Satellite.Permissions
 
   import ElectricTest.PermissionsHelpers
 
+  @addresses {"public", "addresses"}
   @comments {"public", "comments"}
   @issues {"public", "issues"}
   @users {"public", "users"}
@@ -87,6 +87,7 @@ defmodule Electric.Satellite.PermissionsTest do
          }
        ]},
       {@users, [Auth.user_id()]},
+      {@users, [Auth.not_user_id()]},
       {@site_admins, ["sa1"], %{"role" => "site.admin", "user_id" => Auth.user_id()}, []}
     ]
 
@@ -109,6 +110,7 @@ defmodule Electric.Satellite.PermissionsTest do
           cxt,
           [
             ~s[GRANT ALL ON #{table(@comments)} TO (projects, 'editor')],
+            ~s[GRANT ALL ON #{table(@issues)} TO (projects, 'editor')],
             @projects_assign
           ],
           [
@@ -155,6 +157,7 @@ defmodule Electric.Satellite.PermissionsTest do
           cxt,
           [
             ~s[GRANT ALL ON #{table(@comments)} TO (projects, 'editor')],
+            ~s[GRANT ALL ON #{table(@issues)} TO (projects, 'editor')],
             @global_assign
           ],
           [
@@ -204,6 +207,94 @@ defmodule Electric.Satellite.PermissionsTest do
                  # issue i3 belongs to project p2 but the grant is global
                  Chgs.tx([
                    Chgs.insert(@comments, %{"id" => "c100", "issue_id" => "i3"})
+                 ])
+               )
+    end
+
+    test "scoped on user table", cxt do
+      perms =
+        perms_build(
+          cxt,
+          [
+            ~s[GRANT ALL ON #{table(@addresses)} TO (#{table(@users)}, 'self')],
+            ~s[GRANT SELECT ON #{table(@users)} TO (#{table(@users)}, 'self')],
+            ~s[GRANT UPDATE ON #{table(@users)} TO (#{table(@users)}, 'self')],
+            ~s[ASSIGN (#{table(@users)}, 'self') TO #{table(@users)}.id]
+          ],
+          [
+            # assign ourselves the 'self' role
+            Roles.role("self", @users, Auth.user_id(), "assign-1")
+          ]
+        )
+
+      assert {:ok, perms} =
+               Permissions.validate_write(
+                 perms,
+                 cxt.tree,
+                 Chgs.tx([
+                   Chgs.update(@users, %{"id" => Auth.user_id(), "name" => "Me"}, %{
+                     "name" => "You"
+                   })
+                 ])
+               )
+
+      assert {:ok, perms} =
+               Permissions.validate_write(
+                 perms,
+                 cxt.tree,
+                 Chgs.tx([
+                   Chgs.insert(@addresses, %{
+                     "id" => "ad200",
+                     "user_id" => Auth.user_id(),
+                     "address" => "Here"
+                   })
+                 ])
+               )
+
+      assert {:ok, perms} =
+               Permissions.validate_write(
+                 perms,
+                 cxt.tree,
+                 Chgs.tx([
+                   Chgs.update(
+                     @addresses,
+                     %{
+                       "id" => "ad200",
+                       "user_id" => Auth.user_id(),
+                       "address" => "Here"
+                     },
+                     %{"address" => "There"}
+                   )
+                 ])
+               )
+
+      assert {:error, _} =
+               Permissions.validate_write(
+                 perms,
+                 cxt.tree,
+                 Chgs.tx([
+                   Chgs.update(
+                     @users,
+                     %{"id" => Auth.not_user_id(), "name" => "You"},
+                     %{"name" => "Me"}
+                   )
+                 ])
+               )
+
+      assert {:error, _} =
+               Permissions.validate_write(
+                 perms,
+                 cxt.tree,
+                 Chgs.tx([
+                   Chgs.update(
+                     @addresses,
+                     %{
+                       "id" => "ad200",
+                       "user_id" => Auth.user_id(),
+                       "address" => "Here"
+                     },
+                     %{"user_id" => Auth.not_user_id()}
+                   )
                  ])
                )
     end
@@ -312,7 +403,8 @@ defmodule Electric.Satellite.PermissionsTest do
         perms_build(
           cxt,
           [
-            ~s[GRANT UPDATE ON #{table(@comments)} TO (#{table(@projects)}, 'editor')]
+            ~s[GRANT UPDATE ON #{table(@comments)} TO (#{table(@projects)}, 'editor')],
+            ~s[GRANT READ ON #{table(@issues)} TO (#{table(@projects)}, 'editor')]
           ],
           [
             Roles.role("editor", @projects, "p1", "non-existant")
@@ -986,7 +1078,7 @@ defmodule Electric.Satellite.PermissionsTest do
                 "user_id" => Auth.user_id(),
                 "project_id" => "p1",
                 "role" => "manager",
-                "valid" => false
+                "valid" => "false"
               }),
               Chgs.insert(@issues, %{
                 "id" => "i100",
@@ -1006,7 +1098,7 @@ defmodule Electric.Satellite.PermissionsTest do
                        "user_id" => Auth.user_id(),
                        "project_id" => "p1",
                        "role" => "manager",
-                       "valid" => true
+                       "valid" => "true"
                      }),
                      Chgs.insert(@issues, %{
                        "id" => "i100",
@@ -1025,7 +1117,7 @@ defmodule Electric.Satellite.PermissionsTest do
                 "user_id" => Auth.user_id(),
                 "project_id" => "p1",
                 "role" => "manager",
-                "valid" => true
+                "valid" => "true"
               }),
               Chgs.insert(@issues, %{
                 "id" => "i101",
@@ -1058,7 +1150,7 @@ defmodule Electric.Satellite.PermissionsTest do
                        "user_id" => Auth.user_id(),
                        "project_id" => "p1",
                        "role" => "site.admin",
-                       "valid" => false
+                       "valid" => "false"
                      }),
                      Chgs.insert(@regions, %{
                        "id" => "rg200"
@@ -1100,7 +1192,7 @@ defmodule Electric.Satellite.PermissionsTest do
     end
 
     test "valid tdp", cxt do
-      lsn = 99
+      xid = 99
 
       assert {:ok, _perms} =
                cxt.perms
@@ -1109,20 +1201,20 @@ defmodule Electric.Satellite.PermissionsTest do
                  target_relation: @issues,
                  target_id: ["i3"],
                  scope_id: ["p1"],
-                 valid_to: LSN.new(lsn + 1)
+                 valid_to: XID.new(xid + 1)
                )
                |> Permissions.validate_write(
                  cxt.tree,
                  # i3 belongs to project p2 where we only have read-access, but we have a
                  # transient permission that allows us to update it
                  Chgs.tx([Chgs.update(@issues, %{"id" => "i3"}, %{"description" => "changed"})],
-                   lsn: lsn
+                   xid: xid
                  )
                )
     end
 
     test "tdp out of scope", cxt do
-      lsn = 99
+      xid = 99
 
       assert {:error, _} =
                cxt.perms
@@ -1131,20 +1223,20 @@ defmodule Electric.Satellite.PermissionsTest do
                  target_relation: @issues,
                  target_id: ["i4"],
                  scope_id: ["p1"],
-                 valid_to: LSN.new(lsn + 1)
+                 valid_to: XID.new(xid + 1)
                )
                |> Permissions.validate_write(
                  cxt.tree,
                  # i3 belongs to project p2 where we only have read-access and the transient
                  # permission only applies to i4, so not allowed
                  Chgs.tx([Chgs.update(@issues, %{"id" => "i3"}, %{"description" => "changed"})],
-                   lsn: lsn
+                   xid: xid
                  )
                )
     end
 
     test "expired tdp", cxt do
-      lsn = 99
+      xid = 99
 
       assert {:error, _} =
                cxt.perms
@@ -1153,325 +1245,16 @@ defmodule Electric.Satellite.PermissionsTest do
                  target_relation: @issues,
                  target_id: ["i3"],
                  scope_id: ["p1"],
-                 valid_to: LSN.new(lsn)
+                 valid_to: XID.new(xid)
                )
                |> Permissions.validate_write(
                  cxt.tree,
                  # i3 belongs to project p2 where we only have read-access, we have a
                  # transient permission that allows us to update it but that tdp has expired
                  Chgs.tx([Chgs.update(@issues, %{"id" => "i3"}, %{"description" => "changed"})],
-                   lsn: lsn + 1
+                   xid: xid + 1
                  )
                )
-    end
-  end
-
-  describe "filter_read/3" do
-    test "removes changes we don't have permissions to see", cxt do
-      perms =
-        perms_build(
-          cxt,
-          [
-            ~s[GRANT ALL ON #{table(@issues)} TO (#{table(@projects)}, 'editor')],
-            ~s[GRANT ALL ON #{table(@comments)} TO (#{table(@projects)}, 'editor')],
-            ~s[GRANT READ ON #{table(@issues)} TO (#{table(@projects)}, 'reader')],
-            ~s[GRANT READ ON #{table(@comments)} TO (#{table(@projects)}, 'reader')],
-            ~s[GRANT ALL ON #{table(@workspaces)} TO 'global_admin'],
-            @projects_assign,
-            @global_assign
-          ],
-          [
-            Roles.role("editor", @projects, "p1", "assign-1"),
-            Roles.role("reader", @projects, "p2", "assign-1"),
-            Roles.role("global_admin", "assign-2")
-          ]
-        )
-
-      changes = [
-        Chgs.update(@issues, %{"id" => "i1", "project_id" => "p1"}, %{"text" => "updated"}),
-        Chgs.insert(@issues, %{"id" => "i100", "project_id" => "p1"}),
-        Chgs.insert(@issues, %{"id" => "i101", "project_id" => "p2"}),
-        # no perms on the p3 project scope
-        Chgs.insert(@issues, %{"id" => "i102", "project_id" => "p3"}),
-        # can update comments under p1
-        Chgs.update(@comments, %{"id" => "c1", "issue_id" => "i1"}, %{"text" => "updated"}),
-        # no perms on the reactions table
-        Chgs.update(@reactions, %{"id" => "r1", "comment_id" => "c1"}, %{"text" => "updated"}),
-        # global_admin allows inserts into workspaces
-        Chgs.insert(@workspaces, %{"id" => "w100"})
-      ]
-
-      {filtered_tx, []} = Permissions.filter_read(perms, cxt.tree, Chgs.tx(changes))
-
-      assert filtered_tx.changes == [
-               Chgs.update(@issues, %{"id" => "i1", "project_id" => "p1"}, %{"text" => "updated"}),
-               Chgs.insert(@issues, %{"id" => "i100", "project_id" => "p1"}),
-               Chgs.insert(@issues, %{"id" => "i101", "project_id" => "p2"}),
-               Chgs.update(@comments, %{"id" => "c1", "issue_id" => "i1"}, %{"text" => "updated"}),
-               Chgs.insert(@workspaces, %{"id" => "w100"})
-             ]
-    end
-
-    test "ignores column limits in grants", cxt do
-      perms =
-        perms_build(
-          cxt,
-          [
-            ~s[GRANT READ (id, title) ON #{table(@issues)} TO 'editor'],
-            @global_assign
-          ],
-          [
-            Roles.role("editor", "assign-1")
-          ]
-        )
-
-      # none of these changes would pass a write validation
-      changes = [
-        Chgs.update(@issues, %{"id" => "i1", "project_id" => "p1"}, %{"text" => "updated"}),
-        Chgs.insert(@issues, %{"id" => "i100", "project_id" => "p1"}),
-        Chgs.update(@issues, %{"id" => "i3", "project_id" => "p2"}, %{"colour" => "red"})
-      ]
-
-      {filtered_tx, []} = Permissions.filter_read(perms, cxt.tree, Chgs.tx(changes))
-
-      assert filtered_tx.changes == changes
-    end
-
-    test "incorporates in-tx additions to scope", cxt do
-      perms =
-        perms_build(
-          cxt,
-          [
-            ~s[GRANT ALL ON #{table(@issues)} TO (#{table(@projects)}, 'editor')],
-            ~s[GRANT ALL ON #{table(@comments)} TO (#{table(@projects)}, 'editor')],
-            ~s[GRANT ALL ON #{table(@reactions)} TO (#{table(@projects)}, 'editor')],
-            @projects_assign
-          ],
-          [
-            Roles.role("editor", @projects, "p1", "assign-1")
-          ]
-        )
-
-      changes = [
-        # move issue into a scope we have permissions on
-        Chgs.update(@issues, %{"id" => "i3", "project_id" => "p2"}, %{"project_id" => "p1"}),
-        # update a comment on that issue
-        Chgs.update(@comments, %{"id" => "c3", "issue_id" => "i3"}, %{"comment" => "what a mover"}),
-        # create issue in a scope we have permissions on then add a comment to it
-        Chgs.insert(@issues, %{"id" => "i100", "project_id" => "p1"}),
-        Chgs.insert(@comments, %{"id" => "c100", "issue_id" => "i100"}),
-        Chgs.insert(@reactions, %{"id" => "r100", "comment_id" => "c100", "reaction" => ":ok:"})
-      ]
-
-      {filtered_tx, []} = Permissions.filter_read(perms, cxt.tree, Chgs.tx(changes))
-      assert filtered_tx.changes == changes
-    end
-
-    test "incorporates in-tx removals from scope", cxt do
-      perms =
-        perms_build(
-          cxt,
-          [
-            ~s[GRANT ALL ON #{table(@issues)} TO (#{table(@projects)}, 'editor')],
-            ~s[GRANT ALL ON #{table(@comments)} TO (#{table(@projects)}, 'editor')],
-            @projects_assign
-          ],
-          [
-            Roles.role("editor", @projects, "p1", "assign-1"),
-            Roles.role("editor", @projects, "p2", "assign-1")
-          ]
-        )
-
-      # Some admin removing our rights on a project will generate a role change replication
-      # message which is translated into a permissions change process.
-      #
-      # This perms change will come in the tx, but I think we need a new
-      # message struct for that, so we will need to have the ability to swap out our permissions
-      # either mid-tx or find some other way to handle a perms change in an eventually consistent
-      # way. [VAX-1563](https://linear.app/electric-sql/issue/VAX-1563/handle-permissions-updates-received-in-a-tx)
-      #
-      # There are basically 3 ways to lose access to a row in a scope:
-      #
-      # 1. the root of the scope is deleted: in this case the join row will also be deleted
-      #    (assuming on delete cascade, what about on delete set null?) which will lead to a perms
-      #    change message
-      #
-      # 2. our scope membership is revoked. this will result in a perms change message
-      #
-      # 3. the row is moved from a scope we can see to a scope we can't see. this is the only
-      #    version that doesn't involve a perms change.
-      #
-      # (3) is the case we're testing here. (1) and (2) involve a permissions change (losing a role)
-      # and will be covered by VAX-1563.
-      #
-      changes =
-        [
-          # move issue into a scope we don't have permissions on then do some stuff on that issue
-          Chgs.update(@issues, %{"id" => "i1", "project_id" => "p1"}, %{"project_id" => "p3"}),
-          Chgs.update(@comments, %{"id" => "c1", "issue_id" => "i1"}, %{
-            "comment" => "what a mover"
-          }),
-          Chgs.insert(@comments, %{
-            "id" => "c100",
-            "issue_id" => "i1",
-            "comment" => "what a mover"
-          }),
-
-          # move an issue between projects we can see
-          Chgs.update(@issues, %{"id" => "i3", "project_id" => "p2"}, %{"project_id" => "p1"}),
-
-          # delete a comment and an issue that lives under it
-          Chgs.delete(@issues, %{"id" => "i2", "project_id" => "p1"}),
-          Chgs.delete(@comments, %{"id" => "c5", "issue_id" => "i2"}),
-
-          # move issue we couldn't see into a scope we still can't see
-          Chgs.update(@issues, %{"id" => "i5", "project_id" => "p3"}, %{"project_id" => "p4"})
-        ]
-
-      {filtered_tx, move_out} = Permissions.filter_read(perms, cxt.tree, Chgs.tx(changes))
-
-      assert filtered_tx.changes == [
-               Chgs.update(@issues, %{"id" => "i3", "project_id" => "p2"}, %{"project_id" => "p1"})
-             ]
-
-      assert [
-               %MoveOut{
-                 change: %Changes.UpdatedRecord{},
-                 relation: @issues,
-                 id: ["i1"],
-                 scope_path: [_ | _]
-               },
-               %MoveOut{
-                 change: %Changes.DeletedRecord{},
-                 relation: @issues,
-                 id: ["i2"],
-                 scope_path: [_ | _]
-               },
-               %MoveOut{
-                 change: %Changes.DeletedRecord{},
-                 relation: @comments,
-                 id: ["c5"],
-                 scope_path: [_ | _]
-               }
-             ] = move_out
-    end
-
-    test "removal from a scope but with global permissions", cxt do
-      perms =
-        perms_build(
-          cxt,
-          [
-            ~s[GRANT ALL ON #{table(@issues)} TO (#{table(@projects)}, 'editor')],
-            ~s[GRANT ALL ON #{table(@comments)} TO (#{table(@projects)}, 'editor')],
-            ~s[GRANT ALL ON #{table(@issues)} TO 'admin'],
-            ~s[GRANT ALL ON #{table(@comments)} TO 'admin'],
-            @projects_assign,
-            @global_assign
-          ],
-          [
-            Roles.role("editor", @projects, "p1", "assign-1"),
-            Roles.role("editor", @projects, "p2", "assign-1"),
-            Roles.role("admin", "assign-2")
-          ]
-        )
-
-      expected_changes =
-        [
-          # move issue into a scope we don't have permissions on
-          Chgs.update(@issues, %{"id" => "i1", "project_id" => "p1"}, %{"project_id" => "p3"}),
-          Chgs.update(@comments, %{"id" => "c1", "issue_id" => "i1"}, %{
-            "comment" => "what a mover"
-          }),
-          Chgs.insert(@comments, %{
-            "id" => "c100",
-            "issue_id" => "i1",
-            "comment" => "what a mover"
-          }),
-          # move an issue between projects we can see
-          Chgs.update(@issues, %{"id" => "i3", "project_id" => "p2"}, %{"project_id" => "p1"})
-        ]
-
-      changes =
-        expected_changes ++
-          [
-            Chgs.update(@workspaces, %{"id" => "w1"}, %{"name" => "changed"})
-          ]
-
-      {filtered_tx, []} = Permissions.filter_read(perms, cxt.tree, Chgs.tx(changes))
-
-      assert filtered_tx.changes == expected_changes
-    end
-
-    test "where clauses on grant", cxt do
-      perms =
-        perms_build(
-          cxt,
-          [
-            ~s[GRANT ALL ON #{table(@issues)} TO (#{table(@projects)}, 'editor') ],
-            ~s[GRANT ALL ON #{table(@comments)} TO (#{table(@projects)}, 'editor') WHERE (ROW.author_id = auth.user_id)],
-            ~s[GRANT ALL ON #{table(@reactions)} TO (#{table(@projects)}, 'editor') WHERE (ROW.is_public)],
-            @projects_assign
-          ],
-          [
-            Roles.role("editor", @projects, "p1", "assign-1"),
-            Roles.role("editor", @projects, "p2", "assign-1")
-          ]
-        )
-
-      changes = [
-        Chgs.update(@issues, %{"id" => "i1", "project_id" => "p1"}, %{"text" => "updated"}),
-        Chgs.insert(@issues, %{"id" => "i100", "project_id" => "p1"}),
-        Chgs.insert(@issues, %{"id" => "i101", "project_id" => "p2"}),
-        # author_id is us
-        Chgs.update(
-          @comments,
-          %{"id" => "c1", "issue_id" => "i1", "author_id" => Auth.user_id()},
-          %{"text" => "updated"}
-        ),
-        # author is not us, so should be filtered
-        Chgs.update(
-          @comments,
-          %{"id" => "c2", "issue_id" => "i1", "author_id" => Auth.not_user_id()},
-          %{"text" => "updated"}
-        ),
-        # matches the is_public clause
-        Chgs.update(@reactions, %{"id" => "r1", "comment_id" => "c1", "is_public" => true}, %{
-          "text" => "updated"
-        }),
-        # change of is_public fails ROW.is_public test which tests old and new values
-        Chgs.update(@reactions, %{"id" => "r2", "comment_id" => "c1", "is_public" => true}, %{
-          "text" => "updated",
-          "is_public" => false
-        }),
-        Chgs.insert(@reactions, %{"id" => "r200", "comment_id" => "c1", "is_public" => true})
-      ]
-
-      {filtered_tx, []} = Permissions.filter_read(perms, cxt.tree, Chgs.tx(changes))
-
-      assert filtered_tx.changes == [
-               Chgs.update(@issues, %{"id" => "i1", "project_id" => "p1"}, %{"text" => "updated"}),
-               Chgs.insert(@issues, %{"id" => "i100", "project_id" => "p1"}),
-               Chgs.insert(@issues, %{"id" => "i101", "project_id" => "p2"}),
-               # author_id is us
-               Chgs.update(
-                 @comments,
-                 %{"id" => "c1", "issue_id" => "i1", "author_id" => Auth.user_id()},
-                 %{"text" => "updated"}
-               ),
-               # matches the is_public clause
-               Chgs.update(
-                 @reactions,
-                 %{"id" => "r1", "comment_id" => "c1", "is_public" => true},
-                 %{
-                   "text" => "updated"
-                 }
-               ),
-               Chgs.insert(@reactions, %{
-                 "id" => "r200",
-                 "comment_id" => "c1",
-                 "is_public" => true
-               })
-             ]
     end
   end
 end

@@ -18,12 +18,10 @@ defmodule Electric.Utils do
   `Graph.Edge` structs since it will be immediately torn down when merging.
   """
   def merge_graph_edges(%Graph{} = g1, %Graph{out_edges: edges, edges: meta, vertices: vs}) do
-    edges
-    |> Enum.reduce(g1, fn {source_id, out_neighbors}, acc ->
+    Enum.reduce(edges, g1, fn {source_id, out_neighbors}, acc ->
       source = Map.get(vs, source_id)
 
-      out_neighbors
-      |> Enum.reduce(acc, fn out_neighbor, acc ->
+      Enum.reduce(out_neighbors, acc, fn out_neighbor, acc ->
         target = Map.get(vs, out_neighbor)
         meta = Map.get(meta, {source_id, out_neighbor})
 

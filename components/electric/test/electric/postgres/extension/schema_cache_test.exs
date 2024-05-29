@@ -252,11 +252,15 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
     end
   end
 
+  defp cache(origin) do
+    {Extension.SchemaCache, origin}
+  end
+
   describe "relation" do
     test_tx "relation/2 retrieves the current table info", fn conn, cxt ->
       {:ok, _producer} = bootstrap(conn, cxt)
 
-      assert {:ok, table_info} = Extension.SchemaCache.relation(cxt.origin, {"public", "a"})
+      assert {:ok, table_info} = SchemaLoader.relation(cache(cxt.origin), {"public", "a"})
 
       assert table_info == %Table{
                schema: "public",
@@ -288,7 +292,7 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
 
       oid = table_oid(conn, "public", "a")
 
-      assert {:ok, table_info} = Extension.SchemaCache.relation(cxt.origin, oid)
+      assert {:ok, table_info} = SchemaLoader.relation(cache(cxt.origin), oid)
 
       assert table_info == %Table{
                schema: "public",
@@ -328,7 +332,7 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
 
       produce_txs(producer, [migration_transaction(conn, version, stmts)])
 
-      assert {:ok, table_info} = Extension.SchemaCache.relation(cxt.origin, {"public", "a"})
+      assert {:ok, table_info} = SchemaLoader.relation(cache(cxt.origin), {"public", "a"})
 
       assert table_info.columns == [
                %Column{
@@ -378,7 +382,7 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
       produce_txs(producer, [migration_transaction(conn, version3, stmts)])
 
       assert {:ok, table_info} =
-               Extension.SchemaCache.relation(cxt.origin, {"public", "a"}, version3)
+               SchemaLoader.relation(cache(cxt.origin), {"public", "a"}, version3)
 
       assert table_info.columns == [
                %Column{
@@ -412,7 +416,7 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
              ]
 
       assert {:ok, table_info} =
-               Extension.SchemaCache.relation(cxt.origin, {"public", "a"}, version1)
+               SchemaLoader.relation(cache(cxt.origin), {"public", "a"}, version1)
 
       assert table_info.columns == [
                %Column{
@@ -431,9 +435,9 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
                }
              ]
 
-      assert {:error, _} = Extension.SchemaCache.relation(cxt.origin, {"b", "b"}, version1)
+      assert {:error, _} = SchemaLoader.relation(cache(cxt.origin), {"b", "b"}, version1)
 
-      assert {:ok, table_info} = Extension.SchemaCache.relation(cxt.origin, {"b", "b"}, version2)
+      assert {:ok, table_info} = SchemaLoader.relation(cache(cxt.origin), {"b", "b"}, version2)
 
       assert table_info == %Table{
                schema: "b",

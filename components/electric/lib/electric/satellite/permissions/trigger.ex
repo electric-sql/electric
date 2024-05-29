@@ -62,9 +62,14 @@ defmodule Electric.Satellite.Permissions.Trigger do
     relation = {schema, name}
 
     {:ok, expression} = Eval.expression_context(evaluator, assign.if, relation)
+    {:ok, pks} = SchemaLoader.Version.primary_keys(schema_version, relation)
 
     {:ok, fks} =
       case assign do
+        # scope defined on the table itself, e.g. giving yourself a role on your own row in the users table
+        %{scope: %{schema: ^schema, name: ^name}} ->
+          {:ok, pks}
+
         %{scope: %{schema: scope_schema, name: scope_table}} ->
           SchemaLoader.Version.foreign_keys(
             schema_version,
@@ -183,6 +188,11 @@ defmodule Electric.Satellite.Permissions.Trigger do
     # we lose nothing by deleting something that isn't there.
     # the callbacks should be able to handle a delete op on a non-existant role
     callback_fun.({:delete, role}, change, loader)
+  end
+
+  # ignore other messages, e.g. scopemove
+  defp change_trigger(_change, loader, _assign, _pks, _fks, _callback_fun) do
+    {[], loader}
   end
 
   defp validate_where(%{where: nil}, %Changes.UpdatedRecord{} = _change) do

@@ -17,6 +17,7 @@
           CONSTRAINT "compound_pks_pk" PRIMARY KEY ("id1", "id2")
       );
       ALTER TABLE "compound_pks" ENABLE ELECTRIC;
+      ELECTRIC GRANT ALL ON "compound_pks" TO AUTHENTICATED;
     COMMIT;
     """
     ?$psql

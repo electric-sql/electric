@@ -80,8 +80,8 @@ defmodule Electric.Satellite.Permissions.Role do
     %{role: role_name, scope: {role_scope, _id}} = role
 
     grants
-    |> Stream.reject(&predefined/1)
-    |> Stream.filter(&matching_scope(&1, role_scope))
+    |> Enum.reject(&predefined/1)
+    |> Enum.filter(&matching_scope(&1, role_scope))
     |> Enum.filter(&matching_role(&1, role_name))
   end
 

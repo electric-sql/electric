@@ -3,6 +3,7 @@ import throttle from 'lodash.throttle'
 import {
   SatOpMigrate_Type,
   SatRelation_RelationType,
+  SatClientCommand,
 } from '../_generated/protocol/satellite'
 import { AuthConfig, AuthState } from '../auth/index'
 import { DatabaseAdapter } from '../electric/adapter'
@@ -330,6 +331,9 @@ export class SatelliteProcess implements Satellite {
     const clientGoneBatchCallback = this._applyGoneBatch.bind(this)
     this.client.subscribeToGoneBatch(clientGoneBatchCallback)
 
+    const clientCommandCallback = this._handleCommand.bind(this)
+    this.client.subscribeToCommands(clientCommandCallback)
+
     const clientSubscriptionDataCallback =
       this._handleSubscriptionData.bind(this)
     const clientSubscriptionErrorCallback =
@@ -346,6 +350,7 @@ export class SatelliteProcess implements Satellite {
       this.client.unsubscribeToTransactions(clientTransactionsCallback)
       this.client.unsubscribeToAdditionalData(clientAdditionalDataCallback)
       this.client.unsubscribeToOutboundStarted(clientOutboundStartedCallback)
+      this.client.unsubscribeToCommands(clientCommandCallback)
 
       this.client.unsubscribeToSubscriptionEvents(
         clientSubscriptionDataCallback,
@@ -1597,6 +1602,14 @@ export class SatelliteProcess implements Satellite {
     this.subscriptionManager.goneBatchDelivered(subscriptionIds)
 
     this._notifyChanges(fakeOplogEntries, 'remote')
+  }
+
+  async _handleCommand(cmd: SatClientCommand) {
+    if (cmd.resetDatabase) {
+      await this._resetClientState({
+        keepSubscribedShapes: true,
+      })
+    }
   }
 
   private async maybeGarbageCollect(

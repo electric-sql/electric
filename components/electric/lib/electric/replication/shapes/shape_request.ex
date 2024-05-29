@@ -22,6 +22,7 @@ defmodule Electric.Replication.Shapes.ShapeRequest do
   alias Electric.Satellite.SatShapeDef.Select
   alias Electric.Satellite.SatShapeReq
   alias Electric.Postgres.Extension.SchemaLoader
+  alias Electric.Postgres.Schema.FkGraph
 
   defmodule Layer do
     @enforce_keys [:target_table, :target_pk, :direction]
@@ -77,6 +78,7 @@ defmodule Electric.Replication.Shapes.ShapeRequest do
 
   @type relation :: {String.t(), String.t()}
   @type layer_map :: %{relation() => [Layer.t(), ...]}
+  @type shape_data() :: %{term() => {Changes.NewRecord.t(), [term()]}}
 
   defstruct [:id, :hash, tree: [], layer_map: %{}]
 
@@ -90,11 +92,11 @@ defmodule Electric.Replication.Shapes.ShapeRequest do
   @doc """
   Convert shape request from Satellite to internal representation.
   """
-  @spec from_satellite(%SatShapeReq{}, Graph.t(), SchemaLoader.Version.t()) ::
+  @spec from_satellite(%SatShapeReq{}, FkGraph.t(), SchemaLoader.Version.t()) ::
           {:ok, t()} | Validation.error()
-  def from_satellite(%SatShapeReq{} = req, graph, schema) do
+  def from_satellite(%SatShapeReq{} = req, fk_graph, schema) do
     with {:ok, select} <- request_not_empty(req.shape_definition),
-         {:ok, tree, layer_map} <- Validation.build_tree(select, graph, schema, req.request_id) do
+         {:ok, tree, layer_map} <- Validation.build_tree(select, fk_graph, schema, req.request_id) do
       {:ok,
        %__MODULE__{
          id: req.request_id,
@@ -123,13 +125,13 @@ defmodule Electric.Replication.Shapes.ShapeRequest do
 
   def prepare_filtering_context(_previous_requests), do: %{}
 
-  @spec query_initial_data(t(), term(), SchemaLoader.Version.t(), String.t(), map()) ::
-          {:error, any()} | {:ok, %{term() => {Changes.NewRecord.t(), [term()]}}, Graph.t()}
-  def query_initial_data(%__MODULE__{} = req, conn, schema_version, origin, context) do
+  @spec query_initial_data(t(), term(), SchemaLoader.relation_loader(), String.t(), map()) ::
+          {:error, any()} | {:ok, shape_data(), Graph.t()}
+  def query_initial_data(%__MODULE__{} = req, conn, relation_loader, origin, context) do
     Querying.query_layer(
       conn,
       req.tree,
-      schema_version,
+      relation_loader,
       origin,
       Map.put(context, :request_id, req.id)
     )
@@ -139,7 +141,7 @@ defmodule Electric.Replication.Shapes.ShapeRequest do
         conn,
         %Layer{} = layer,
         moved_in_records,
-        schema_version,
+        relation_loader,
         origin,
         context
       ) do
@@ -161,7 +163,7 @@ defmodule Electric.Replication.Shapes.ShapeRequest do
     Querying.query_next_layers(
       conn,
       filtered_layer,
-      schema_version,
+      relation_loader,
       origin,
       context,
       curr_records,
