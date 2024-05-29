@@ -4,8 +4,6 @@
 
 [invoke setup]
 
-[invoke setup_client 1 "electric_1" 5133]
-
 [shell proxy_1]
     [local sql=
         """
@@ -29,8 +27,14 @@
         ALTER TABLE public.projects ENABLE ELECTRIC;
         ALTER TABLE public.issues ENABLE ELECTRIC;
         ALTER TABLE public.comments ENABLE ELECTRIC;
+
+        ELECTRIC GRANT ALL ON public.projects TO AUTHENTICATED;
+        ELECTRIC GRANT ALL ON public.issues TO AUTHENTICATED;
+        ELECTRIC GRANT ALL ON public.comments TO AUTHENTICATED;
         """]
     [invoke migrate_pg 20240130000000 $sql]
+
+[invoke setup_client 1 "electric_1" 5133]
 
 [shell satellite_1]
     ??[rpc] recv: #SatInStartReplicationResp

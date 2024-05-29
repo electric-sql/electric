@@ -53,6 +53,7 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
 
   defpostgres "bool = bool -> bool", delegate: &Kernel.==/2
   defpostgres "bool <> bool -> bool", delegate: &Kernel.!=/2
+
   defpostgres "interval = interval -> bool", delegate: &Kernel.==/2
   defpostgres "interval <> interval -> bool", delegate: &Kernel.!=/2
 

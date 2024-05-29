@@ -33,15 +33,16 @@ defmodule Electric.Satellite.WebsocketServer do
   use Electric.Satellite.Protobuf
   import Electric.Satellite.Protocol.State, only: :macros
 
-  alias Electric.Utils
   alias Electric.Postgres.CachedWal
   alias Electric.Replication.Connectors
+  alias Electric.Postgres.Extension.SchemaLoader
   alias Electric.Replication.InitialSync
   alias Electric.Satellite.Protocol
-  alias Electric.Satellite.Protocol.State
-  alias Electric.Satellite.Protocol.OutRep
   alias Electric.Satellite.Protocol.InRep
+  alias Electric.Satellite.Protocol.OutRep
+  alias Electric.Satellite.Protocol.State
   alias Electric.Satellite.Protocol.Telemetry
+  alias Electric.Utils
 
   # in milliseconds
   @ping_interval 5_000
@@ -53,6 +54,8 @@ defmodule Electric.Satellite.WebsocketServer do
   @impl WebSock
   def init(opts) do
     connector_config = Keyword.fetch!(opts, :connector_config)
+    {_module, _opts} = loader_config = Keyword.fetch!(opts, :schema_loader)
+    {:ok, schema_loader} = SchemaLoader.connect(loader_config, connector_config)
 
     {:ok,
      schedule_ping(%State{
@@ -60,6 +63,7 @@ defmodule Electric.Satellite.WebsocketServer do
        auth_provider: Keyword.fetch!(opts, :auth_provider),
        connector_config: connector_config,
        origin: Connectors.origin(connector_config),
+       schema_loader: schema_loader,
        subscription_data_fun: Keyword.fetch!(opts, :subscription_data_fun),
        move_in_data_fun: Keyword.fetch!(opts, :move_in_data_fun),
        out_rep: %OutRep{allowed_unacked_txs: Keyword.get(opts, :allowed_unacked_txs, 30)},
@@ -116,7 +120,8 @@ defmodule Electric.Satellite.WebsocketServer do
         push({reply, state})
 
       {:force_unpause, reply, state} ->
-        Protocol.unpause_and_send_pending_events([reply], state)
+        [reply]
+        |> Protocol.unpause_and_send_pending_events(state)
         |> Protocol.perform_pending_actions()
         |> push()
     end
@@ -241,7 +246,7 @@ defmodule Electric.Satellite.WebsocketServer do
     push({msgs, state})
   end
 
-  def handle_info({:subscription_data, subscription_id, _}, %State{} = state)
+  def handle_info({:subscription_data, subscription_id, _, _}, %State{} = state)
       when not is_map_key(state.subscriptions, subscription_id) do
     Logger.debug(
       "Received initial data for unknown subscription #{subscription_id}, likely it has been cancelled"
@@ -250,13 +255,15 @@ defmodule Electric.Satellite.WebsocketServer do
     {:ok, state}
   end
 
-  def handle_info({:subscription_data, subscription_id, data}, %State{} = state) do
-    Protocol.subscription_data_received(subscription_id, data, state)
+  def handle_info({:subscription_data, subscription_id, xmin, data}, %State{} = state) do
+    subscription_id
+    |> Protocol.subscription_data_received(data, xmin, state)
     |> push()
   end
 
   def handle_info({:subscription_init_failed, subscription_id, reason}, state) do
-    Protocol.subscription_data_failed(subscription_id, reason, state)
+    subscription_id
+    |> Protocol.subscription_data_failed(reason, state)
     |> push()
   end
 
@@ -309,13 +316,18 @@ defmodule Electric.Satellite.WebsocketServer do
     {:ok, state}
   end
 
-  defp handle_producer_msg(from, events, %State{} = state)
-       when is_out_rep_active(state) do
+  defp handle_producer_msg(from, events, %State{} = state) when is_out_rep_active(state) do
     GenStage.ask(from, 1)
 
-    Protocol.send_events_and_maybe_pause(events, state)
-    |> Protocol.perform_pending_actions()
-    |> push()
+    try do
+      events
+      |> Protocol.send_events_and_maybe_pause(state)
+      |> Protocol.perform_pending_actions()
+      |> push()
+    catch
+      {:close, msgs, state} ->
+        push({:close, msgs, state})
+    end
   end
 
   defp handle_producer_msg(from, events, %State{} = state)
@@ -411,10 +423,24 @@ defmodule Electric.Satellite.WebsocketServer do
 
   @typep deep_msg_list() :: PB.sq_pb_msg() | [deep_msg_list()]
 
+  # https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.1
+  # 1007 indicates that an endpoint is terminating the connection
+  #      because it has received data within a message that was not
+  #      consistent with the type of the message (e.g., non-UTF-8 [RFC3629]
+  #      data within a text message).
+  @error_code 1007
+
+  # Status codes in the range 3000-3999 are reserved for use by
+  # libraries, frameworks, and applications.
+  @normal_termination 3000
+
   @spec push(Protocol.outgoing()) :: WebSock.handle_result()
   defp push({[], %State{} = state}), do: {:ok, state}
   defp push({pb_msg, %State{} = state}), do: {:push, binary_frames(pb_msg), state}
-  defp push({:error, msgs, state}), do: {:stop, :normal, 1007, binary_frames(msgs), state}
+  defp push({:error, msgs, state}), do: {:stop, :normal, @error_code, binary_frames(msgs), state}
+
+  defp push({:close, msgs, state}),
+    do: {:stop, :normal, @normal_termination, binary_frames(msgs), state}
 
   @spec binary_frames(deep_msg_list()) :: [{:binary, iolist()}]
   defp binary_frames(pb_msg) when not is_list(pb_msg), do: [binary_frame(pb_msg)]

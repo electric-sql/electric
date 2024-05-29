@@ -1,0 +1,192 @@
+[doc Permissions changes are propagated to client connection]
+[include _shared.luxinc]
+
+[invoke setup]
+
+[global migration_version_1=20231109154018]
+[global migration_version_2=20240226114300]
+[global user_id1=95f21e62-4b90-49c3-874a-174eb17e58cf]
+[global user_id2=31377df9-c659-493e-b26f-1ce5fbb0b2df]
+[global session_id=001]
+[global project_id1=11111111-b3c6-45d7-9986-582e76db4556]
+[global project_id2=22222222-88c2-4d44-9b50-734abafa76ae]
+[global issue_id1=0f18e8c3-dd50-49dd-812a-312fec8ecc01]
+[global issue_id2=9df262ca-fd9d-48c2-80e2-0f86816e7a39]
+[global issue_id3=1011b1e6-f506-4c88-bfb0-d061ab189818]
+
+
+# this macro differs from `elixir_client_subscribe` because it doesn't match on the SatSubsDataEnd
+# message -- we're matching on the contents of the sub data
+[macro subscribe_tables id tables]
+    """!
+    {:ok, %{err: nil}} = TestWsClient.make_rpc_call(conn,  "subscribe", ProtocolHelpers.subscription_request("$id", request_1: ~w|$tables|))
+    """
+    ?%Electric.Satellite.SatSubsDataBegin{subscription_id: "$id"
+[endmacro]
+
+[shell proxy_1]
+    [invoke log "run migration $migration_version_1 on postgres"]
+    """!
+    BEGIN;
+      CALL electric.migration_version('$migration_version_1');
+
+      CREATE TABLE "users" (
+          id uuid NOT NULL PRIMARY KEY,
+          name text NOT NULL
+      );
+      CREATE TABLE "projects" (
+          id uuid NOT NULL PRIMARY KEY,
+          name text NOT NULL
+      );
+      CREATE TABLE "issues" (
+          id uuid NOT NULL PRIMARY KEY,
+          project_id uuid NOT NULL REFERENCES projects (id),
+          name text NOT NULL
+      );
+      CREATE TABLE "comments" (
+          id uuid NOT NULL PRIMARY KEY,
+          issues_id uuid NOT NULL REFERENCES issues (id),
+          author_id uuid NOT NULL REFERENCES users (id),
+          comment text NOT NULL
+      );
+      CREATE TABLE "project_memberships" (
+          id uuid NOT NULL PRIMARY KEY,
+          project_id uuid NOT NULL REFERENCES projects (id),
+          user_id uuid NOT NULL REFERENCES users (id),
+          role text NOT NULL
+      );
+
+      ALTER TABLE "users" ENABLE ELECTRIC;
+      ALTER TABLE "projects" ENABLE ELECTRIC;
+      ALTER TABLE "issues" ENABLE ELECTRIC;
+      ALTER TABLE "comments" ENABLE ELECTRIC;
+      ALTER TABLE "project_memberships" ENABLE ELECTRIC;
+
+
+      ELECTRIC GRANT ALL ON public.users TO (public.users, 'self');
+      ELECTRIC GRANT READ ON public.users TO AUTHENTICATED;
+
+      ELECTRIC GRANT READ ON public.projects TO (public.projects, 'member');
+      ELECTRIC GRANT ALL ON public.issues TO (public.projects, 'member');
+      ELECTRIC GRANT READ ON public.comments TO (public.projects, 'member');
+      ELECTRIC GRANT WRITE ON public.comments TO (public.projects, 'member') WHERE (row.author_id = auth.user_id);
+      ELECTRIC GRANT READ ON public.project_memberships TO (public.projects, 'member');
+
+      ELECTRIC ASSIGN (public.projects, public.project_memberships.role) TO public.project_memberships.user_id;
+      ELECTRIC ASSIGN (public.users, 'self') TO public.users.id;
+
+    COMMIT;
+    """
+    ?$psql
+
+
+[shell electric]
+    ?? [info] Applying migration $migration_version_1
+
+[shell pg_1]
+    """!
+    BEGIN;
+
+    INSERT INTO users (id, name) VALUES
+      ('$user_id1', 'User 1'),
+      ('$user_id2', 'User 2');
+
+    INSERT INTO projects (id, name) VALUES
+      ('$project_id1', 'Project 1'),
+      ('$project_id2', 'Project 2');
+
+    INSERT INTO issues (id, project_id, name) VALUES
+      ('$issue_id1', '$project_id1', 'Project 1/Issue 1'),
+      ('$issue_id2', '$project_id1', 'Project 1/Issue 2'),
+      ('$issue_id3', '$project_id2', 'Project 2/Issue 3');
+
+    INSERT INTO project_memberships (id, project_id, user_id, role) VALUES
+      ('80bd296e-d506-4b4c-9024-2b376d06539f', '$project_id1', '$user_id1', 'member'),
+      ('c720de9c-7078-45f5-810e-71ed410169c5', '$project_id1', '$user_id2', 'member'),
+      ('e83721cb-10df-4e7d-9729-3249c27eba50', '$project_id2', '$user_id2', 'member');
+
+    COMMIT;
+    """
+    ?$psql
+
+[newshell user_1_ws1]
+    -$fail_pattern
+    [invoke start_elixir_test 1]
+    [invoke client_session $user_id1 $session_id]
+    [invoke subscribe_tables "f624382d-b14c-424a-8836-b042bb12f65a" "issues"]
+
+[newshell user_2_ws1]
+    -$fail_pattern
+    [invoke start_elixir_test 2]
+    [invoke client_session $user_id2 $session_id]
+    [invoke subscribe_tables "8afafeef-a20e-4a88-bf7d-7b628a5fd7bb" "issues"]
+
+[shell electric]
+    ?user_id=$user_id1 .+SatOpInsert\{.+values: \["11111111-b3c6-45d7-9986-582e76db4556", "Project 1"\]
+
+[shell user_1_ws1]
+    ?+SatOpInsert\{.+values: \["$issue_id1", "$project_id1", "Project 1/Issue 1"\]
+    ?SatOpInsert\{.+values: \["$issue_id2", "$project_id1", "Project 1/Issue 2"\]
+
+[shell user_2_ws1]
+    ?+SatOpInsert\{.+values: \["$issue_id1", "$project_id1", "Project 1/Issue 1"\]
+    ?+SatOpInsert\{.+values: \["$issue_id2", "$project_id1", "Project 1/Issue 2"\]
+    ?SatOpInsert\{.+values: \["$issue_id3", "$project_id2", "Project 2/Issue 3"\]
+
+[shell user_1_ws1]
+    -"Project 2/Issue 4"
+
+[shell pg_1]
+    """!
+    BEGIN;
+    INSERT INTO issues (id, project_id, name) VALUES
+      ('c2b114a3-9527-4f3c-8863-b0dc7c85ec76', '$project_id2', 'Project 2/Issue 4');
+    COMMIT;
+    """
+    ?$psql
+
+[shell user_2_ws1]
+    ?SatOpInsert\{.+values: \["c2b114a3-9527-4f3c-8863-b0dc7c85ec76", "$project_id2", "Project 2/Issue 4"\]
+
+# add user 1 to project 2
+[shell pg_1]
+    """!
+    BEGIN;
+    INSERT INTO project_memberships (id, project_id, user_id, role) VALUES
+      ('943fcfde-cd15-4eb8-9cae-89fa07db55c8', '$project_id2', '$user_id1', 'member');
+    COMMIT;
+    """
+    ?$psql
+
+# TODO: permissions-change: perms change should not drop connection
+
+[shell user_1_ws1]
+    ?SatClientCommand\{command: .+ResetDatabase\{reason: :PERMISSIONS_CHANGE
+    ?Server closed the websocket connection
+
+    -$fail_pattern
+
+    [invoke client_session $user_id1 $session_id]
+    [invoke subscribe_tables "f624382d-b14c-424a-8836-b042bb12f65a" "issues"]
+
+    ?+SatOpInsert\{.+values: \["$issue_id1", "$project_id1", "Project 1/Issue 1"\]
+    ?+SatOpInsert\{.+values: \["$issue_id2", "$project_id1", "Project 1/Issue 2"\]
+    ?SatOpInsert\{.+values: \["$issue_id3", "$project_id2", "Project 2/Issue 3"\]
+
+[shell pg_1]
+    """!
+    BEGIN;
+    INSERT INTO issues (id, project_id, name) VALUES
+      ('12c078a1-bb7f-4b13-a415-a50f9f4c5cdc', '$project_id2', 'Project 2/Issue 5');
+    COMMIT;
+    """
+    ?$psql
+
+[shell user_1_ws1]
+    ?SatOpInsert\{.+values: \["12c078a1-bb7f-4b13-a415-a50f9f4c5cdc", "$project_id2", "Project 2/Issue 5"\]
+
+[shell user_2_ws1]
+    ?SatOpInsert\{.+values: \["12c078a1-bb7f-4b13-a415-a50f9f4c5cdc", "$project_id2", "Project 2/Issue 5"\]
+
+[cleanup]
+   [invoke teardown]

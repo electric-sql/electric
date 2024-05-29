@@ -188,6 +188,12 @@ defmodule Electric.DDLX.Command do
   end
 end
 
+defimpl Electric.DDLX.Command.PgSQL, for: List do
+  def to_sql(list) do
+    Enum.flat_map(list, &Electric.DDLX.Command.PgSQL.to_sql/1)
+  end
+end
+
 defimpl Electric.DDLX.Command.PgSQL, for: SatPerms.DDLX do
   alias Electric.Postgres.Extension
 

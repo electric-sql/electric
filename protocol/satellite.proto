@@ -678,6 +678,18 @@ message SatShapeDataBegin {
 message SatShapeDataEnd {
 }
 
+message SatClientCommand {
+    message ResetDatabase {
+        enum Reason {
+            PERMISSIONS_CHANGE = 0;
+        }
+        Reason reason = 1;
+    }
+    oneof command {
+        ResetDatabase reset_database = 1;
+    }
+}
+
 // represents the client permissions
 // - `Rules`: the global permission rules, defined by the DDLX
 // - `Roles`: a users actual assigned roles

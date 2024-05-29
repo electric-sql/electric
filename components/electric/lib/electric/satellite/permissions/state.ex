@@ -11,6 +11,8 @@ defmodule Electric.Satellite.Permissions.State do
   alias Electric.Postgres.Extension
   alias Electric.Satellite.Permissions.Trigger
 
+  require Logger
+
   @electric_ddlx Extension.ddlx_relation()
 
   @enforce_keys [:rules, :schema]
@@ -98,6 +100,7 @@ defmodule Electric.Satellite.Permissions.State do
         {[], {state, loader}}
 
       {rules, _count} ->
+        Logger.debug(fn -> "Updated global permissions id: #{rules.id}" end)
         {:ok, loader} = SchemaLoader.save_global_permissions(loader, rules)
 
         {
@@ -181,6 +184,10 @@ defmodule Electric.Satellite.Permissions.State do
       if modified? do
         with {:ok, loader, perms} <-
                SchemaLoader.save_user_permissions(loader, role.user_id, roles) do
+          Logger.debug(fn -> "Updated user permissions id: #{perms.id}" end,
+            user_id: role.user_id
+          )
+
           {:ok, loader, [updated_user_permissions(role.user_id, perms)]}
         end
       else

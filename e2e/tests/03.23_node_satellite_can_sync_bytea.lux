@@ -12,6 +12,7 @@
             blob BYTEA
         );
         ALTER TABLE public.blobs ENABLE ELECTRIC;
+        ELECTRIC GRANT ALL ON public.blobs TO AUTHENTICATED;
         """]
     [invoke migrate_pg 20230908 $sql]
 

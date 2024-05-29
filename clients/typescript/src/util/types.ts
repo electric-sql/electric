@@ -5,6 +5,7 @@ import {
   SatOpMigrate_Table,
   SatOpMigrate_Type,
   SatRelation_RelationType,
+  SatClientCommand,
 } from '../_generated/protocol/satellite'
 import { Tag } from '../satellite/oplog'
 
@@ -265,6 +266,7 @@ export type GoneBatchCallback = (
   subscriptionIds: string[],
   changes: DataGone[]
 ) => void | Promise<void>
+export type CommandCallback = (cmd: SatClientCommand) => Promise<void>
 
 export type ConnectivityStatus = 'connected' | 'disconnected'
 export type ConnectivityState = {

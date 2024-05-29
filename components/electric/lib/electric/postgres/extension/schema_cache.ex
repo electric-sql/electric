@@ -442,8 +442,8 @@ defmodule Electric.Postgres.Extension.SchemaCache do
 
   def handle_call({:save_user_permissions, user_id, roles}, _from, state) do
     case SchemaLoader.save_user_permissions(state.backend, user_id, roles) do
-      {:ok, backend} ->
-        {:reply, {:ok, state.origin}, %{state | backend: backend}}
+      {:ok, backend, perms} ->
+        {:reply, {:ok, state.origin, perms}, %{state | backend: backend}}
 
       error ->
         {:reply, error, state}

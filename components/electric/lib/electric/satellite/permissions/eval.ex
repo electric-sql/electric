@@ -23,7 +23,7 @@ defmodule Electric.Satellite.Permissions.Eval do
   # allow for where clauses to refer to the current row as `ROW` or `THIS`
   @this ["this", "row"]
   @valid_ops [:insert, :delete, :update]
-  @prefixes ~w(this row new old)
+  @prefixes Runner.row_prefixes()
   @base_auth_refs %{
     ["auth", "user_id"] => :text
   }
@@ -134,47 +134,55 @@ defmodule Electric.Satellite.Permissions.Eval do
         %ExpressionContext{relation: rel} = expr_cxt,
         %Changes.UpdatedRecord{relation: rel} = change
       ) do
+    expr = expr_cxt.expr.update
+
     values =
-      Map.new(
-        Enum.concat(
-          Enum.map(change.record, fn {k, v} -> {["new", k], v} end),
-          Enum.map(change.old_record, fn {k, v} -> {["old", k], v} end)
-        )
+      Map.merge(
+        values(expr, change.record, "new"),
+        values(expr, change.old_record, "old")
       )
 
-    execute_expr(expr_cxt, :update, values)
+    execute_expr(expr_cxt, expr, values)
   end
 
   def execute(
         %ExpressionContext{relation: rel} = expr_cxt,
         %Changes.NewRecord{relation: rel} = change
       ) do
-    values =
-      Map.new(change.record, fn {k, v} -> {["new", k], v} end)
+    expr = expr_cxt.expr.insert
+    values = values(expr, change.record, "new")
 
-    execute_expr(expr_cxt, :insert, values)
+    execute_expr(expr_cxt, expr, values)
   end
 
   def execute(
         %ExpressionContext{relation: rel} = expr_cxt,
         %Changes.DeletedRecord{relation: rel} = change
       ) do
-    values =
-      Map.new(change.old_record, fn {k, v} -> {["old", k], v} end)
+    expr = expr_cxt.expr.delete
+    values = values(expr, change.old_record, "old")
 
-    execute_expr(expr_cxt, :delete, values)
+    execute_expr(expr_cxt, expr, values)
   end
 
   # allows for testing a record (either old or new) against an expression
   def evaluate!(%ExpressionContext{} = expr_cxt, record) when is_map(record) do
-    values = Map.new(record, fn {k, v} -> {["new", k], v} end)
+    expr = expr_cxt.expr.insert
+    values = values(expr, record, "new")
 
-    {:ok, result} = execute_expr(expr_cxt, :insert, values)
+    {:ok, result} = execute_expr(expr_cxt, expr, values)
     result
   end
 
-  defp execute_expr(expr_cxt, op, values) do
-    expr = Map.fetch!(expr_cxt.expr, op)
+  defp values(expr, record, prefix) do
+    {:ok, record} = Runner.record_to_ref_values(expr.used_refs, record)
+    Map.new(record, &prefix_value(&1, prefix))
+  end
+
+  defp prefix_value({[_, k], v}, prefix), do: {[prefix, k], v}
+  defp prefix_value({[k], v}, prefix), do: {[prefix, k], v}
+
+  defp execute_expr(expr_cxt, expr, values) do
     values = Map.merge(values, expr_cxt.context)
     Runner.execute(expr, values)
   end

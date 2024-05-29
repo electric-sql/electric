@@ -9,19 +9,68 @@ defmodule Electric.Replication.Eval.RunnerTest do
       refs = %{
         ["this", "string"] => :text,
         ["this", "int"] => :int4,
-        ["this", "null_int"] => :int4
+        ["this", "null_int"] => :int4,
+        ["this", "bool"] => :bool
       }
 
       assert {:ok,
               %{
                 ["this", "string"] => "test",
                 ["this", "int"] => 5,
-                ["this", "null_int"] => nil
+                ["this", "null_int"] => nil,
+                ["this", "bool"] => true
               }} ==
                Runner.record_to_ref_values(refs, %{
                  "string" => "test",
                  "int" => "5",
-                 "null_int" => nil
+                 "null_int" => nil,
+                 "bool" => "t"
+               })
+    end
+
+    test "should allow for refs to use `row` as well as `this`" do
+      refs = %{
+        ["row", "string"] => :text,
+        ["row", "int"] => :int4,
+        ["row", "null_int"] => :int4,
+        ["row", "bool"] => :bool
+      }
+
+      assert {:ok,
+              %{
+                ["row", "string"] => "test",
+                ["row", "int"] => 5,
+                ["row", "null_int"] => nil,
+                ["row", "bool"] => true
+              }} ==
+               Runner.record_to_ref_values(refs, %{
+                 "string" => "test",
+                 "int" => "5",
+                 "null_int" => nil,
+                 "bool" => "t"
+               })
+    end
+
+    test "should allow for refs omit any prefix" do
+      refs = %{
+        ["string"] => :text,
+        ["int"] => :int4,
+        ["null_int"] => :int4,
+        ["bool"] => :bool
+      }
+
+      assert {:ok,
+              %{
+                ["string"] => "test",
+                ["int"] => 5,
+                ["null_int"] => nil,
+                ["bool"] => true
+              }} ==
+               Runner.record_to_ref_values(refs, %{
+                 "string" => "test",
+                 "int" => "5",
+                 "null_int" => nil,
+                 "bool" => "t"
                })
     end
   end
@@ -67,6 +116,13 @@ defmodule Electric.Replication.Eval.RunnerTest do
                ~S|test::text|
                |> Parser.parse_and_validate_expression!(%{["test"] => :uuid})
                |> Runner.execute(%{["test"] => "b06d507c-4e08-4a7f-896a-5c3c6c5dc332"})
+    end
+
+    test "should correctly cast booleans" do
+      assert {:ok, true} =
+               ~S|new.valid = true|
+               |> Parser.parse_and_validate_expression!(%{["new", "valid"] => :bool})
+               |> Runner.execute(%{["new", "valid"] => true})
     end
   end
 end

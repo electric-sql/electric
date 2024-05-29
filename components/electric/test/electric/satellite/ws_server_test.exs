@@ -1,19 +1,9 @@
 defmodule Electric.Satellite.WebsocketServerTest do
   use ExUnit.Case, async: false
-
-  alias Satellite.ProtocolHelpers
-  alias Electric.Replication.Changes.ReferencedRecord
   use Electric.Satellite.Protobuf
 
-  import ElectricTest.SetupHelpers
-  import ElectricTest.SatelliteHelpers
-  import Satellite.ProtocolHelpers
-
-  alias Electric.Replication.SatelliteConnector
   alias Electric.Postgres.CachedWal.Producer
-
-  alias Satellite.TestWsClient, as: MockClient
-
+  alias Electric.Replication.SatelliteConnector
   alias Electric.Replication.Changes
 
   alias Electric.Replication.Changes.{
@@ -24,6 +14,12 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
   alias Electric.Satellite.Auth
 
+  alias Satellite.ProtocolHelpers
+  alias Satellite.TestWsClient, as: MockClient
+
+  import ElectricTest.SetupHelpers
+  import ElectricTest.SatelliteHelpers
+
   require Logger
 
   @default_wait 5_000
@@ -33,11 +29,6 @@ defmodule Electric.Satellite.WebsocketServerTest do
   @test_oid 100_004
   @test_migration {"20230101",
                    "CREATE TABLE #{@test_schema}.#{@test_table} (id uuid PRIMARY KEY, electric_user_id VARCHAR(64), content VARCHAR(64))"}
-  @test_fk_migration {"20230101",
-                      [
-                        "CREATE TABLE public.test1 (id TEXT PRIMARY KEY, electric_user_id VARCHAR(64), content VARCHAR(64))",
-                        "CREATE TABLE public.test_child (id TEXT PRIMARY KEY, electric_user_id VARCHAR(64), parent_id TEXT REFERENCES test1 (id))"
-                      ]}
   @test_shape_migration {"20230101",
                          [
                            "CREATE TABLE public.test1 (id TEXT PRIMARY KEY, content VARCHAR(64))",
@@ -78,7 +69,8 @@ defmodule Electric.Satellite.WebsocketServerTest do
       )
       |> Map.put_new(:allowed_unacked_txs, 30)
 
-    connector_config = [origin: "test-origin", connection: []]
+    origin = "test-origin"
+    connector_config = [origin: origin, connection: []]
     port = 55133
 
     plug =
@@ -87,7 +79,8 @@ defmodule Electric.Satellite.WebsocketServerTest do
        connector_config: connector_config,
        subscription_data_fun: ctx.subscription_data_fun,
        move_in_data_fun: ctx.move_in_data_fun,
-       allowed_unacked_txs: ctx.allowed_unacked_txs}
+       allowed_unacked_txs: ctx.allowed_unacked_txs,
+       schema_loader: grant_all_permissions_loader(origin)}
 
     start_link_supervised!({Bandit, port: port, plug: plug})
 
@@ -95,7 +88,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
     start_link_supervised!({Electric.Satellite.ClientReconnectionInfo, connector_config})
 
-    %{port: port, server_id: server_id}
+    %{port: port, server_id: server_id, origin: origin}
   end
 
   setup_with_mocks([
@@ -433,59 +426,6 @@ defmodule Electric.Satellite.WebsocketServerTest do
           {:begin, %SatOpBegin{lsn: lsn}} = begin
           assert to_string(n) == lsn
         end)
-      end)
-    end
-
-    @tag with_migrations: [@test_fk_migration]
-    test "compensations are filtered based on electric_user_id", ctx do
-      with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->
-        rel_map = start_replication_and_assert_response(conn, 2)
-
-        [{client_name, _client_pid}] = active_clients()
-        mocked_producer = Producer.name(client_name)
-
-        {sub_id, req_id, req} =
-          simple_sub_request(test1: [include: [test_child: [over: "parent_id"]]])
-
-        assert {:ok, %SatSubsResp{subscription_id: ^sub_id, err: nil}} =
-                 MockClient.make_rpc_call(conn, "subscribe", req)
-
-        # The real data function would have made a magic write which we're emulating here
-        DownstreamProducerMock.produce(mocked_producer, build_events([], 1))
-        assert {[^req_id], []} = receive_subscription_data(conn, sub_id)
-
-        :ok =
-          DownstreamProducerMock.produce(
-            mocked_producer,
-            %Changes.Transaction{
-              lsn: 2,
-              xid: 2,
-              commit_timestamp: DateTime.utc_now(),
-              referenced_records: %{
-                {"public", "test1"} => %{
-                  ["1"] => %ReferencedRecord{
-                    pk: ["1"],
-                    record: %{"id" => "1", "electric_user_id" => "not you", "content" => "wow"},
-                    relation: {"public", "test1"}
-                  }
-                }
-              },
-              changes: [
-                %NewRecord{
-                  relation: {"public", "test_child"},
-                  record: %{
-                    "id" => "child_1",
-                    "electric_user_id" => "not you",
-                    "parent_id" => "1"
-                  }
-                }
-              ],
-              origin: ctx.client_id
-            }
-            |> then(&[{&1, 2}])
-          )
-
-        assert [] = receive_txn_changes(conn, rel_map)
       end)
     end
 
@@ -842,6 +782,11 @@ defmodule Electric.Satellite.WebsocketServerTest do
                   "id" => "parent_1",
                   "content" => "super",
                   "parent_id" => "1"
+                },
+                old_record: %{
+                  "id" => "parent_1",
+                  "content" => "repus",
+                  "parent_id" => "1"
                 }
               }
             ],
@@ -1065,7 +1010,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
   # -------------------------------------------------------------------------------
   def mock_data_function(
         {id, requests, _context},
-        [reply_to: {ref, pid}, connection: _, telemetry_span: _],
+        [reply_to: {ref, pid}, connection: _, telemetry_span: _, relation_loader: _],
         opts \\ []
       ) do
     insertion_point = Keyword.get(opts, :insertion_point, 0)
@@ -1074,7 +1019,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
 
     Process.send_after(
       pid,
-      {:subscription_data, id, {Graph.new(), %{}, Enum.map(requests, & &1.id)}},
+      {:subscription_data, id, insertion_point, {Graph.new(), %{}, Enum.map(requests, & &1.id)}},
       data_delay_ms
     )
   end
@@ -1083,7 +1028,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
         move_in_ref,
         {subquery_map, affected_txs},
         _context,
-        [reply_to: {ref, pid}, connection: _],
+        [reply_to: {ref, pid}, connection: _, relation_loader: _],
         opts \\ []
       ) do
     test_pid = Keyword.fetch!(opts, :test_pid)
