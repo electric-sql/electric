@@ -72,14 +72,14 @@ defmodule Electric.Satellite.Permissions.WhereClauseTest do
     end
 
     test "with NEW reference", cxt do
-      stmt = "NEW.user_id::text = AUTH.user_id"
+      stmt = "NEW.user_id = AUTH.user_id"
 
       assert {:ok, true} =
                execute(cxt, stmt, update(%{"user_id" => @not_user_id}, %{"user_id" => @user_id}))
     end
 
     test "with OLD reference", cxt do
-      stmt = "OLD.user_id::text = auth.user_id"
+      stmt = "OLD.user_id = auth.user_id"
 
       assert {:ok, true} =
                execute(cxt, stmt, update(%{"user_id" => @user_id}))
@@ -89,7 +89,7 @@ defmodule Electric.Satellite.Permissions.WhereClauseTest do
     end
 
     test "with ROW reference", cxt do
-      stmt = &"#{&1}user_id::text = auth.user_id"
+      stmt = &"#{&1}user_id = auth.user_id"
 
       assert {:ok, true} =
                execute(cxt, stmt, update(%{"user_id" => @user_id}))
@@ -102,7 +102,7 @@ defmodule Electric.Satellite.Permissions.WhereClauseTest do
     end
 
     test "multi-clause ROW/THIS reference", cxt do
-      stmt = &"(#{&1}user_id::text = auth.user_id) AND #{&1}valid"
+      stmt = &"(#{&1}user_id = auth.user_id) AND #{&1}valid"
 
       assert {:ok, true} =
                execute(
@@ -127,7 +127,7 @@ defmodule Electric.Satellite.Permissions.WhereClauseTest do
     end
 
     test "mixed row and NEW references", cxt do
-      stmt = &"(#{&1}user_id::text = auth.user_id) AND NOT new.valid"
+      stmt = &"(#{&1}user_id = auth.user_id) AND NOT new.valid"
 
       assert {:ok, true} =
                execute(
@@ -197,7 +197,7 @@ defmodule Electric.Satellite.Permissions.WhereClauseTest do
       ] do
     describe name do
       test "with #{ref} reference", cxt do
-        stmt = "#{unquote(ref)}.user_id::text = AUTH.user_id"
+        stmt = "#{unquote(ref)}.user_id = AUTH.user_id"
 
         assert {:ok, true} =
                  execute(cxt, stmt, change(unquote(change_fun), %{"user_id" => @user_id}))
@@ -207,7 +207,7 @@ defmodule Electric.Satellite.Permissions.WhereClauseTest do
       end
 
       test "with ROW reference", cxt do
-        stmt = &"#{&1}user_id::text = auth.user_id"
+        stmt = &"#{&1}user_id = auth.user_id"
 
         assert {:ok, true} =
                  execute(cxt, stmt, change(unquote(change_fun), %{"user_id" => @user_id}))
@@ -217,7 +217,7 @@ defmodule Electric.Satellite.Permissions.WhereClauseTest do
       end
 
       test "multi-clause ROW/THIS reference", cxt do
-        stmt = &"(#{&1}user_id::text = auth.user_id) AND #{&1}valid"
+        stmt = &"(#{&1}user_id = auth.user_id) AND #{&1}valid"
 
         assert {:ok, true} =
                  execute(
