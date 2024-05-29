@@ -809,7 +809,7 @@ test.serial('default and null test', async (t) => {
   })
 })
 
-test.serial('subscription succesful', async (t) => {
+test.serial('subscription successful', async (t) => {
   await connectAndAuth(t.context)
   const { client, server } = t.context
   await startReplication(client, server)
@@ -1310,7 +1310,7 @@ test.serial('client correctly handles additional data messages', async (t) => {
   })
 })
 
-test.serial('unsubscribe successfull', async (t) => {
+test.serial('unsubscribe successful', async (t) => {
   await connectAndAuth(t.context)
   const { client, server } = t.context
   await startReplication(client, server)

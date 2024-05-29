@@ -19,7 +19,7 @@ services:
       ELECTRIC_WRITE_TO_PG_MODE: "${ELECTRIC_WRITE_TO_PG_MODE:-logical_replication}"
       LOGICAL_PUBLISHER_HOST: electric_1
       PG_PROXY_LOG_LEVEL: info
-      ELECTRIC_FEATURES: "proxy_ddlx_grant=true:proxy_ddlx_assign=true"
+      ELECTRIC_FEATURES: "read_permissions=true"
     ports:
       - "5133:5133"
       # proxy access

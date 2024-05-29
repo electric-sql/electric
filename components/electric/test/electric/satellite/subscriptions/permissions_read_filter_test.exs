@@ -114,6 +114,7 @@ defmodule Electric.Satellite.Subscriptions.PermissionsReadFilterTest do
       :setup_electrified_tables,
       :setup_with_ddlx,
       :setup_with_sql_execute,
+      :wait_for_permission_state,
       :setup_ws
     ]
 
@@ -372,7 +373,8 @@ defmodule Electric.Satellite.Subscriptions.PermissionsReadFilterTest do
           "ASSIGN (public.accounts, public.team_memberships.role) TO public.team_memberships.user_id",
           "ASSIGN (public.projects, public.project_memberships.role) TO public.project_memberships.user_id",
           "ASSIGN (public.users, 'self') TO public.users.id"
-        ]
+        ],
+        wait_for: [perms: 8]
       }
     end
 
@@ -381,6 +383,7 @@ defmodule Electric.Satellite.Subscriptions.PermissionsReadFilterTest do
       :setup_electrified_tables,
       :setup_with_ddlx,
       :setup_with_sql_execute,
+      :wait_for_permission_state,
       :setup_ws
     ]
 
@@ -938,23 +941,15 @@ defmodule Electric.Satellite.Subscriptions.PermissionsReadFilterTest do
             ]
           )
 
-        # FIXME(magnetised): when shapes and permissions are properly integrated, we should
-        #                    receive the new comment plus all the associated elements of the new
-        #                    project tree
-        assert [
-                 %NewRecord{
-                   relation: {"public", "comments"},
-                   record: %{"id" => ^new_comment_id}
-                 },
-                 %NewRecord{
-                   relation: {"public", "issues"},
-                   record: %{"id" => @issue2_id}
-                 },
-                 %NewRecord{
-                   relation: {"public", "projects"},
-                   record: %{"id" => @project2_id}
-                 }
-               ] = receive_txn_changes(conn, rel_map)
+        reset_db_command = %SatClientCommand{
+          command:
+            {:reset_database,
+             %SatClientCommand.ResetDatabase{
+               reason: :PERMISSIONS_CHANGE
+             }}
+        }
+
+        assert_receive {^conn, ^reset_db_command}, 1_000
       end)
     end
   end

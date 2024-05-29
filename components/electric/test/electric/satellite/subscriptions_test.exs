@@ -21,8 +21,8 @@ defmodule Electric.Satellite.SubscriptionsTest do
       :setup_replicated_db,
       :setup_electrified_tables,
       :setup_open_permissions,
-      :setup_with_sql_execute,
-      :setup_with_ddlx
+      :setup_with_ddlx,
+      :setup_with_sql_execute
     ]
 
     setup ctx do

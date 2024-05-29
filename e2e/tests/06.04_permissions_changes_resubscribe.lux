@@ -148,5 +148,45 @@
 [shell user_2_ws1]
     ?SatOpInsert\{.+values: \["c2b114a3-9527-4f3c-8863-b0dc7c85ec76", "$project_id2", "Project 2/Issue 4"\]
 
+# add user 1 to project 2
+[shell pg_1]
+    """!
+    BEGIN;
+    INSERT INTO project_memberships (id, project_id, user_id, role) VALUES
+      ('943fcfde-cd15-4eb8-9cae-89fa07db55c8', '$project_id2', '$user_id1', 'member');
+    COMMIT;
+    """
+    ?$psql
+
+# TODO: permissions-change: perms change should not drop connection
+
+[shell user_1_ws1]
+    ?SatClientCommand\{command: .+ResetDatabase\{reason: :PERMISSIONS_CHANGE
+    ?Server closed the websocket connection
+
+    -$fail_pattern
+
+    [invoke client_session $user_id1 $session_id]
+    [invoke subscribe_tables "f624382d-b14c-424a-8836-b042bb12f65a" "issues"]
+
+    ?+SatOpInsert\{.+values: \["$issue_id1", "$project_id1", "Project 1/Issue 1"\]
+    ?+SatOpInsert\{.+values: \["$issue_id2", "$project_id1", "Project 1/Issue 2"\]
+    ?SatOpInsert\{.+values: \["$issue_id3", "$project_id2", "Project 2/Issue 3"\]
+
+[shell pg_1]
+    """!
+    BEGIN;
+    INSERT INTO issues (id, project_id, name) VALUES
+      ('12c078a1-bb7f-4b13-a415-a50f9f4c5cdc', '$project_id2', 'Project 2/Issue 5');
+    COMMIT;
+    """
+    ?$psql
+
+[shell user_1_ws1]
+    ?SatOpInsert\{.+values: \["12c078a1-bb7f-4b13-a415-a50f9f4c5cdc", "$project_id2", "Project 2/Issue 5"\]
+
+[shell user_2_ws1]
+    ?SatOpInsert\{.+values: \["12c078a1-bb7f-4b13-a415-a50f9f4c5cdc", "$project_id2", "Project 2/Issue 5"\]
+
 [cleanup]
    [invoke teardown]
