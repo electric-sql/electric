@@ -16946,7 +16946,7 @@
   end,
   defmodule Electric.Satellite.SatPerms.Column do
     @moduledoc false
-    defstruct table: nil, column: ""
+    defstruct table: nil, name: ""
 
     (
       (
@@ -16961,7 +16961,7 @@
 
         @spec encode!(struct) :: iodata | no_return
         def encode!(msg) do
-          [] |> encode_table(msg) |> encode_column(msg)
+          [] |> encode_table(msg) |> encode_name(msg)
         end
       )
 
@@ -16980,16 +16980,16 @@
               reraise Protox.EncodingError.new(:table, "invalid field value"), __STACKTRACE__
           end
         end,
-        defp encode_column(acc, msg) do
+        defp encode_name(acc, msg) do
           try do
-            if msg.column == "" do
+            if msg.name == "" do
               acc
             else
-              [acc, "\x12", Protox.Encode.encode_string(msg.column)]
+              [acc, "\x12", Protox.Encode.encode_string(msg.name)]
             end
           rescue
             ArgumentError ->
-              reraise Protox.EncodingError.new(:column, "invalid field value"), __STACKTRACE__
+              reraise Protox.EncodingError.new(:name, "invalid field value"), __STACKTRACE__
           end
         end
       ]
@@ -17044,7 +17044,7 @@
               {2, _, bytes} ->
                 {len, bytes} = Protox.Varint.decode(bytes)
                 {delimited, rest} = Protox.Decode.parse_delimited(bytes, len)
-                {[column: Protox.Decode.validate_string(delimited)], rest}
+                {[name: Protox.Decode.validate_string(delimited)], rest}
 
               {tag, wire_type, rest} ->
                 {_, rest} = Protox.Decode.parse_unknown(tag, wire_type, rest)
@@ -17104,7 +17104,7 @@
       def defs() do
         %{
           1 => {:table, {:scalar, nil}, {:message, Electric.Satellite.SatPerms.Table}},
-          2 => {:column, {:scalar, ""}, :string}
+          2 => {:name, {:scalar, ""}, :string}
         }
       end
 
@@ -17114,7 +17114,7 @@
             }
       def defs_by_name() do
         %{
-          column: {2, {:scalar, ""}, :string},
+          name: {2, {:scalar, ""}, :string},
           table: {1, {:scalar, nil}, {:message, Electric.Satellite.SatPerms.Table}}
         }
       end
@@ -17135,10 +17135,10 @@
           },
           %{
             __struct__: Protox.Field,
-            json_name: "column",
+            json_name: "name",
             kind: {:scalar, ""},
             label: :optional,
-            name: :column,
+            name: :name,
             tag: 2,
             type: :string
           }
@@ -17177,27 +17177,27 @@
           []
         ),
         (
-          def field_def(:column) do
+          def field_def(:name) do
             {:ok,
              %{
                __struct__: Protox.Field,
-               json_name: "column",
+               json_name: "name",
                kind: {:scalar, ""},
                label: :optional,
-               name: :column,
+               name: :name,
                tag: 2,
                type: :string
              }}
           end
 
-          def field_def("column") do
+          def field_def("name") do
             {:ok,
              %{
                __struct__: Protox.Field,
-               json_name: "column",
+               json_name: "name",
                kind: {:scalar, ""},
                label: :optional,
-               name: :column,
+               name: :name,
                tag: 2,
                type: :string
              }}
@@ -17232,7 +17232,7 @@
       def default(:table) do
         {:ok, nil}
       end,
-      def default(:column) do
+      def default(:name) do
         {:ok, ""}
       end,
       def default(_) do

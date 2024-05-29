@@ -786,7 +786,7 @@ export interface SatPerms_Table {
 export interface SatPerms_Column {
   $type: "Electric.Satellite.SatPerms.Column";
   table: SatPerms_Table | undefined;
-  column: string;
+  name: string;
 }
 
 export interface SatPerms_Path {
@@ -4791,7 +4791,7 @@ export const SatPerms_Table = {
 messageTypeRegistry.set(SatPerms_Table.$type, SatPerms_Table);
 
 function createBaseSatPerms_Column(): SatPerms_Column {
-  return { $type: "Electric.Satellite.SatPerms.Column", table: undefined, column: "" };
+  return { $type: "Electric.Satellite.SatPerms.Column", table: undefined, name: "" };
 }
 
 export const SatPerms_Column = {
@@ -4801,8 +4801,8 @@ export const SatPerms_Column = {
     if (message.table !== undefined) {
       SatPerms_Table.encode(message.table, writer.uint32(10).fork()).ldelim();
     }
-    if (message.column !== "") {
-      writer.uint32(18).string(message.column);
+    if (message.name !== "") {
+      writer.uint32(18).string(message.name);
     }
     return writer;
   },
@@ -4826,7 +4826,7 @@ export const SatPerms_Column = {
             break;
           }
 
-          message.column = reader.string();
+          message.name = reader.string();
           continue;
       }
       if ((tag & 7) === 4 || tag === 0) {
@@ -4845,7 +4845,7 @@ export const SatPerms_Column = {
     message.table = (object.table !== undefined && object.table !== null)
       ? SatPerms_Table.fromPartial(object.table)
       : undefined;
-    message.column = object.column ?? "";
+    message.name = object.name ?? "";
     return message;
   },
 };
