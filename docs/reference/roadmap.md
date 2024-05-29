@@ -34,19 +34,63 @@ See <DocPageLink path="usage/data-modelling" /> for more information.
 
 ### DDLX rules
 
-The DDLX rules for permissions, roles, validation or local SQLite commands documented on <DocPageLink path="api/ddlx" /> are not fully implemented yet. DDLX support is currently limited to electrifying tables using the `ENABLE ELECTRIC` syntax extension:
+The DDLX rules for permissions, roles, validation or local SQLite commands documented on <DocPageLink path="api/ddlx" /> are not fully implemented yet.
 
-```sql
-ALTER TABLE items ENABLE ELECTRIC;
-```
+- **ELECTRIC GRANT**:
 
-:::note
-There is one temporary feature to limit data that goes on the local device: set an `electric_user_id` field on your table. If you do, then rows will only be synced if the value of that column matches the value of the authenticated user_id provided in your [auth token](../usage/auth/index.md).
+  - Column based partial replication of tables is currently not supported
+  - Limiting `INSERT`s to a column subset is currently not supported
 
-If you're OK with just filtering the available data, you should use [filter clauses on shapes](../usage/data-access/shapes.md#filter-clauses).
+- **Permissions scopes**
 
-This is a very temporary workaround and will be removed soon!
-:::
+  - Scope resolution is via foreign key relations only, based on some simple
+    heuristics that attempt to confine the path to other tables within the same
+    scope.
+
+    For instance if you have a schema that looks like this:
+
+    ```sql
+    CREATE TABLE projects (
+        id uuid PRIMARY KEY,
+        name text
+    );
+    CREATE TABLE issues (
+        id uuid PRIMARY KEY,
+        project_id uuid NOT NULL REFERENCES projects (id),
+        title text
+    );
+    CREATE TABLE comments (
+        id uuid PRIMARY KEY,
+        issue_id uuid NOT NULL REFERENCES issues (id),
+        references_project_id uuid REFERENCES projects (id),
+        comment text
+    );
+    ```
+
+    and create scoped permissions:
+
+    ```sql
+    -- grants for projects and issues...
+    ELECTRIC GRANT ALL ON comments TO (projects, 'member');
+    ```
+
+    then the scope resolution would (correctly) identify that the project scope
+    for `comments` would be resolved through the `issue_id` column via the
+    `issues` table.
+
+    However, if you added some duplicate foreign key from `issues` to
+    `projects`, say `previous_project_id` then the scope root for an issue would
+    equally likely be resolved as the target of `project_id` or
+    `previous_project_id`.
+
+    Equally if the `issues` table doesn't have a foreign key pointing to the
+    `projects` table, then attempting to grant permissions scoped on `projects`
+    will fail.
+
+    In future the `GRANT` statement will provide some syntax to specify the
+    exact "path" to the scope root for any given table.
+
+- **ELECTRIC SQLITE** is not implemented.
 
 ### Shapes
 
