@@ -143,7 +143,7 @@ defmodule Electric.Replication.Eval.Parser do
           })
 
         %{location: loc} = node ->
-          {:error, loc, "#{internal_node_to_error(node)} is not castable to bool"}
+          {:error, {loc, "#{internal_node_to_error(node)} is not castable to bool"}}
       end
     end
   end
@@ -641,8 +641,6 @@ defmodule Electric.Replication.Eval.Parser do
       {:error, {func.location, "Failed to apply function to constant arguments"}}
   end
 
-  defp unwrap_node_string(%PgQuery.Node{node: {:string, %PgQuery.String{sval: val}}}), do: val
-
   defp identifier(ref) do
     case Enum.map(ref, &wrap_identifier/1) do
       ["pg_catalog", func] -> func
@@ -650,9 +648,12 @@ defmodule Electric.Replication.Eval.Parser do
     end
   end
 
-  defp wrap_identifier(ref) do
-    ref = if is_struct(ref, PgQuery.Node), do: unwrap_node_string(ref), else: ref
+  defp wrap_identifier(%PgQuery.Node{} = node),
+    do: node |> unwrap_node_string() |> wrap_identifier()
 
+  defp wrap_identifier(%PgQuery.String{sval: val}), do: wrap_identifier(val)
+
+  defp wrap_identifier(ref) when is_binary(ref) do
     if String.match?(ref, ~r/^[[:lower:]_][[:lower:][:digit:]_]*$/u) do
       ref
     else
@@ -672,4 +673,9 @@ defmodule Electric.Replication.Eval.Parser do
   defp find_refs(%Func{args: args}, acc), do: Enum.reduce(args, acc, &find_refs/2)
 
   defp unsnake(string) when is_binary(string), do: :binary.replace(string, "_", " ", [:global])
+
+  def unwrap_node_string(%PgQuery.Node{node: {:string, %PgQuery.String{sval: sval}}}), do: sval
+
+  def unwrap_node_string(%PgQuery.Node{node: {:a_const, %PgQuery.A_Const{val: {:sval, sval}}}}),
+    do: unwrap_node_string(sval)
 end
