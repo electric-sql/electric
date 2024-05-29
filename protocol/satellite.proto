@@ -700,7 +700,7 @@ message SatPerms {
     }
     message Column {
         Table table = 1;
-        string column = 2;
+        string name = 2;
     }
     message Path {
         repeated Column columns = 1;
