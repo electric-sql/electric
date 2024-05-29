@@ -190,12 +190,6 @@ defmodule Electric.Replication.Shapes.Querying do
          %Layer{direction: :first_layer, key: key},
          records
        ) do
-    fill_graph_layer(graph, records, key)
-  end
-
-  defp maybe_fill_first_graph_layer(%Graph{} = graph, %Layer{}, _), do: graph
-
-  defp fill_graph_layer(graph, records, key) do
     Enum.reduce(
       records,
       graph,
@@ -204,6 +198,8 @@ defmodule Electric.Replication.Shapes.Querying do
       end
     )
   end
+
+  defp maybe_fill_first_graph_layer(%Graph{} = graph, %Layer{}, _), do: graph
 
   @spec parent_pseudo_join(Layer.t(), [[String.t(), ...]] | nil) :: iodata()
   defp parent_pseudo_join(%Layer{direction: :first_layer}, nil), do: nil

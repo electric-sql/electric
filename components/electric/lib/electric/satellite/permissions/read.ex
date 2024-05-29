@@ -134,15 +134,6 @@ defmodule Electric.Satellite.Permissions.Read do
     {readable_changes, readable_referenced_records, excluded_changes, moves}
   end
 
-  # @spec filter_changes_with_context(
-  #         perms(),
-  #         graph() | nil,
-  #         graph(),
-  #         change_list(),
-  #         xid(),
-  #         mapper_fun()
-  #       ) ::
-  #         {[term()], [term()], moves()}
   defp filter_changes_with_context(perms, old_graph, graph, changes, xid, mapper_fun) do
     results =
       Enum.map(changes, fn elem ->
