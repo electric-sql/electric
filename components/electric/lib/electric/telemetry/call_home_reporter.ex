@@ -207,7 +207,9 @@ defmodule Electric.Telemetry.CallHomeReporter do
       mode: mode(items)
     }
   rescue
-    ArgumentError ->
+    [ArgumentError, Enum.EmptyError, ArithmeticError] ->
+      # Enum.EmptyError may be raised when there are no elements in the ETS table under the key `path`
+      # ArithmeticError may be raised when an element in the ETS table is `nil`
       @empty_summary
   end
 
