@@ -14,8 +14,8 @@ defmodule Electric.Telemetry.Metrics do
       This event contains the following measurements:
 
       - `transaction_count`: Number of transactions currently in cache
-      - `max_transaction_count`: Maximum number of transactions the cache will store
       - `oldest_transaction_timestamp`: `DateTime` timestamp of the oldest transaction currently in cache
+      - `max_cache_size`: Maximum total size of the cached transactions
       - `cache_memory_total`: Current estimated memory usage by the WAL cache, in bytes
 
   - `[:electric, :resources, :clients]`
