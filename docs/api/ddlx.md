@@ -189,20 +189,12 @@ ELECTRIC GRANT ALL
   TO (projects, 'admin');
 ```
 
-This grant lets users who have the role `member` in a project read the project's issues. Here `project_id` refers to a column on the `issues` table that is a foreign key pointing to a project.
+This grant lets users who have the role `member` in a project read the project's issues. 
 
 ```sql
 ELECTRIC GRANT READ
   ON issues
   TO (projects, 'member');
-```
-
-This is similar to the grant above. It lets a project member read comments on issues in a project, but the comments table doesn't itself have a foreign key pointing to the project so the `USING` parameter provides a path to where to find it.
-
-```sql
-ELECTRIC GRANT READ
-  ON comments
-  TO (projects, member');
 ```
 
 Here an `admin` can add project members with any role to the `project_members` join table, but a member can only add people as `member` or `guest`. The `CHECK` statement limits what they can do.
