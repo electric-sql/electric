@@ -1,6 +1,5 @@
 import fs from 'fs'
 import path from 'path'
-import url from 'url'
 import { InvalidArgumentError } from 'commander'
 import { appRoot } from './paths'
 
@@ -45,7 +44,7 @@ export function extractDatabaseURL(url: string) {
 }
 
 export function extractServiceURL(serviceUrl: string) {
-  const parsed = url.parse(serviceUrl)
+  const parsed = new URL(serviceUrl)
   if (!parsed.hostname) {
     throw new Error(`Invalid service URL: ${serviceUrl}`)
   }
