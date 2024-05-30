@@ -46,6 +46,14 @@ CREATE TABLE  IF NOT EXISTS "comment" (
     FOREIGN KEY (issue_id) REFERENCES issue(id) DEFERRABLE
 );
 
+-- ⚡
+-- Electrify the tables
+ALTER TABLE "profile" ENABLE ELECTRIC;
+ALTER TABLE "project" ENABLE ELECTRIC;
+ALTER TABLE "issue" ENABLE ELECTRIC;
+ALTER TABLE "comment" ENABLE ELECTRIC;
+
+
 -- Every authenticated user can see everyone's profile
 ELECTRIC GRANT READ
   ON "profile"
@@ -135,12 +143,3 @@ ELECTRIC ASSIGN ("comment", 'owner')
 ELECTRIC GRANT ALL
   ON "comment"
   TO ("comment", 'owner');  
-
-
-
--- ⚡
--- Electrify the tables
-ALTER TABLE "profile" ENABLE ELECTRIC;
-ALTER TABLE "project" ENABLE ELECTRIC;
-ALTER TABLE "issue" ENABLE ELECTRIC;
-ALTER TABLE "comment" ENABLE ELECTRIC;
