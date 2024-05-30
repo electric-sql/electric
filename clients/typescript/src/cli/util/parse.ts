@@ -11,7 +11,7 @@ export function getAppName(): string | undefined {
   return JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')).name
 }
 
-export function parsePort(str: string) {
+export function parsePort(str: string): number {
   const parsed = parseInt(str)
   if (isNaN(parsed)) {
     throw new InvalidArgumentError(`Invalid port: ${str}.`)
@@ -19,7 +19,7 @@ export function parsePort(str: string) {
   return parsed
 }
 
-export function parseTimeout(str: string) {
+export function parseTimeout(str: string): number {
   const parsed = parseInt(str)
   if (isNaN(parsed)) {
     throw new InvalidArgumentError(
@@ -29,7 +29,13 @@ export function parseTimeout(str: string) {
   return parsed
 }
 
-export function extractDatabaseURL(url: string) {
+export function extractDatabaseURL(url: string): {
+  user: string
+  password: string
+  host: string
+  port: number | null
+  dbName: string
+} {
   const parsed = new URL(url)
   if (!(parsed.protocol == 'postgres:' || parsed.protocol == 'postgresql:')) {
     throw new Error(`Invalid database URL: ${url}`)
@@ -43,7 +49,10 @@ export function extractDatabaseURL(url: string) {
   }
 }
 
-export function extractServiceURL(serviceUrl: string) {
+export function extractServiceURL(serviceUrl: string): {
+  host: string
+  port: number | null
+} {
   const parsed = new URL(serviceUrl)
   if (!parsed.hostname) {
     throw new Error(`Invalid service URL: ${serviceUrl}`)
@@ -54,7 +63,10 @@ export function extractServiceURL(serviceUrl: string) {
   }
 }
 
-export function parsePgProxyPort(str: string | number) {
+export function parsePgProxyPort(str: string | number): {
+  http: boolean
+  port: number
+} {
   if (typeof str === 'number') {
     return { http: false, port: str }
   } else if (str.includes(':')) {
