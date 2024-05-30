@@ -49,8 +49,8 @@ export function extractServiceURL(serviceUrl: string) {
     throw new Error(`Invalid service URL: ${serviceUrl}`)
   }
   return {
-    host: parsed.hostname,
-    port: parsed.port ? parseInt(parsed.port) : undefined,
+    host: decodeURIComponent(parsed.hostname),
+    port: parsed.port ? parseInt(parsed.port) : null,
   }
 }
 
