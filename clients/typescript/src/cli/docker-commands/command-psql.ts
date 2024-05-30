@@ -4,7 +4,7 @@ import {
   getConfig,
   GetConfigOptionsForGroup,
 } from '../config'
-import { buildDatabaseURL, parsePgProxyPort } from '../utils'
+import { buildDatabaseURL, parsePgProxyPort } from '../util'
 import { dockerCompose } from './docker-utils'
 
 export function makePsqlCommand() {

@@ -9,7 +9,7 @@ import http from 'node:http'
 import https from 'node:https'
 import Module from 'node:module'
 import path from 'path'
-import { buildDatabaseURL, parsePgProxyPort } from '../utils'
+import { buildDatabaseURL, parsePgProxyPort, appRoot } from '../util'
 import { buildMigrations, getMigrationNames } from './builder'
 import { findAndReplaceInFile } from '../util'
 import { getConfig, type Config } from '../config'
@@ -33,7 +33,6 @@ const generatorPath = path.join(
   'bin.js'
 )
 
-const appRoot = path.resolve() // path where the user ran `npx electric migrate`
 const sqliteMigrationsFileName = 'migrations.ts'
 const pgMigrationsFileName = 'pg-migrations.ts'
 

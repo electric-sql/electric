@@ -6,7 +6,7 @@ import {
   getConfigValue,
   type ConfigMap,
 } from './config'
-import { dedent, getAppName, buildDatabaseURL, parsePgProxyPort } from './utils'
+import { dedent, getAppName, buildDatabaseURL, parsePgProxyPort } from './util'
 import { LIB_VERSION } from '../version'
 
 const minorVersion = LIB_VERSION.split('.').slice(0, 2).join('.')

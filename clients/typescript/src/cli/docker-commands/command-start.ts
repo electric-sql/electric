@@ -1,5 +1,5 @@
 import { Command } from 'commander'
-import { dedent, parsePgProxyPort } from '../utils'
+import { dedent, parsePgProxyPort } from '../util'
 import { addOptionGroupToCommand, getConfig, Config } from '../config'
 import { dockerCompose } from './docker-utils'
 
