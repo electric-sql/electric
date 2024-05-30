@@ -100,14 +100,16 @@ test('assert database name is correctly inferred', (t) => {
   // ignores query parameters in the URL
   t.is(
     configOptions['DATABASE_NAME'].inferVal({
-      databaseUrl: 'postgres://db_user:db_password@db_host:123/db_name?sslmode=disable',
+      databaseUrl:
+        'postgres://db_user:db_password@db_host:123/db_name?sslmode=disable',
     }),
     'db_name'
   )
 
   t.is(
     configOptions['DATABASE_NAME'].inferVal({
-      proxy: 'postgres://db_user:db_password@db_host:123/db_name?sslmode=require',
+      proxy:
+        'postgres://db_user:db_password@db_host:123/db_name?sslmode=require',
     }),
     'db_name'
   )
@@ -129,11 +131,21 @@ test('assert database name is correctly inferred', (t) => {
 })
 
 test('assert DATABASE_URL may contain percent-encoded characters', (t) => {
-  const dbUrl = 'postgresql://test%2Bemail%40example.com:12%2B34@example.%63om/odd%3Adb%2Fname'
+  const dbUrl =
+    'postgresql://test%2Bemail%40example.com:12%2B34@example.%63om/odd%3Adb%2Fname'
 
-  t.is(configOptions['DATABASE_HOST'].inferVal({ databaseUrl: dbUrl }), 'example.com')
-  t.is(configOptions['DATABASE_USER'].inferVal({ databaseUrl: dbUrl }), 'test+email@example.com')
-  t.is(configOptions['DATABASE_PASSWORD'].inferVal({ databaseUrl: dbUrl }), '12+34')
+  t.is(
+    configOptions['DATABASE_HOST'].inferVal({ databaseUrl: dbUrl }),
+    'example.com'
+  )
+  t.is(
+    configOptions['DATABASE_USER'].inferVal({ databaseUrl: dbUrl }),
+    'test+email@example.com'
+  )
+  t.is(
+    configOptions['DATABASE_PASSWORD'].inferVal({ databaseUrl: dbUrl }),
+    '12+34'
+  )
 })
 
 test('assert DATABASE_PORT is inferred to the default value when not present in the URL', (t) => {
