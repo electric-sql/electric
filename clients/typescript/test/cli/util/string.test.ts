@@ -1,5 +1,5 @@
 import test from 'ava'
-import { buildDatabaseURL } from '../../../src/cli/util'
+import { buildDatabaseURL, dedent } from '../../../src/cli/util'
 
 test('buildDatabaseURL should compose valid URL', (t) => {
   const url = buildDatabaseURL({
@@ -79,4 +79,13 @@ test('buildDatabaseURL with SSL disabled', (t) => {
     url,
     'postgresql://testuser:testpass@localhost:5432/testdb?sslmode=disable'
   )
+})
+
+test('dedent removes indentation and newlines from multiline strings', (t) => {
+  const result = dedent`
+    This is a
+    multiline
+    string
+  `
+  t.is(result, 'This is a multiline string')
 })

@@ -47,6 +47,9 @@ export function dedent(
     .trim()
 }
 
+/**
+ * Builds the Postgres database URL for the given parameters.
+ */
 export function buildDatabaseURL(opts: {
   user: string
   password: string
