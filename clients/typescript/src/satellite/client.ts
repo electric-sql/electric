@@ -354,7 +354,7 @@ export class SatelliteClient implements Client {
     this.socketHandler = undefined
 
     if (this.socket !== undefined) {
-      this.socket!.closeAndRemoveListeners()
+      this.socket.closeAndRemoveListeners()
       this.socket = undefined
     }
   }
@@ -367,9 +367,10 @@ export class SatelliteClient implements Client {
     return this.outbound.isReplicating
   }
 
-  shutdown(): void {
-    this.disconnect()
+  async shutdown(): Promise<void> {
     this.emitter.removeAllListeners()
+    await this.emitter.waitForProcessing()
+    this.disconnect()
     this.isDown = true
   }
 

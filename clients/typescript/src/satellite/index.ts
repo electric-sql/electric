@@ -91,7 +91,7 @@ export interface Satellite extends IShapeManager {
 export interface Client {
   connect(): Promise<void>
   disconnect(): void
-  shutdown(): void
+  shutdown(): Promise<void>
   authenticate(authState: AuthState): Promise<AuthResponse>
   isConnected(): boolean
   getOutboundReplicationStatus(): ReplicationStatus
