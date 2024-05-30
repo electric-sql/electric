@@ -1,12 +1,18 @@
 import { useLiveQuery } from 'electric-sql/react'
 import { v4 as uuidv4 } from 'uuid'
-import { useState } from 'react'
+import { useContext, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
-import { useElectric, type Issue } from '../../electric'
+import {
+  useElectric,
+  type Issue,
+  type Comment,
+  type Profile,
+} from '../../electric'
 import Editor from '../../components/editor/Editor'
 import Avatar from '../../components/Avatar'
 import { formatDate } from '../../utils/date'
 import { showWarning } from '../../utils/notification'
+import { ProfileContext } from '../../App'
 
 export interface CommentsProps {
   issue: Issue
@@ -14,9 +20,13 @@ export interface CommentsProps {
 
 function Comments({ issue }: CommentsProps) {
   const { db } = useElectric()!
+  const { userId } = useContext(ProfileContext)!
   const [newCommentBody, setNewCommentBody] = useState<string>('')
   const { results: comments } = useLiveQuery(
     db.comment.liveMany({
+      include: {
+        profile: true,
+      },
       where: {
         issue_id: issue.id,
       },
@@ -28,15 +38,15 @@ function Comments({ issue }: CommentsProps) {
 
   const commentList = () => {
     if (comments && comments.length > 0) {
-      return comments.map((comment) => (
+      return (comments as (Comment & { profile: Profile })[]).map((comment) => (
         <div
           key={comment.id}
           className="flex flex-col w-full p-3 mb-3 bg-white rounded shadow-sm border"
         >
           <div className="flex items-center mb-2">
-            <Avatar name={comment.username} />
+            <Avatar name={comment.profile.username} />
             <span className="ms-2 text-sm text-gray-400">
-              {comment.username}
+              {comment.profile.username}
             </span>
             <span className=" ms-auto text-sm text-gray-400 ml-2">
               {formatDate(comment.created_at)}
@@ -65,7 +75,7 @@ function Comments({ issue }: CommentsProps) {
         issue_id: issue.id,
         body: newCommentBody,
         created_at: new Date(),
-        username: 'testuser',
+        user_id: userId,
       },
     })
     setNewCommentBody('')

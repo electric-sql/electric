@@ -1,9 +1,9 @@
 import { LIB_VERSION } from 'electric-sql/version'
 import { makeElectricContext } from 'electric-sql/react'
-import { uniqueTabId, genUUID } from 'electric-sql/util'
+import { uniqueTabId } from 'electric-sql/util'
 import { insecureAuthToken } from 'electric-sql/auth'
 import { Electric, schema } from './generated/client'
-export type { Issue } from './generated/client'
+export type { Project, Issue, Comment, Profile } from './generated/client'
 
 export const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
 
@@ -32,11 +32,14 @@ export const DEBUG = debugParam ? debugParam === 'true' : DEV_MODE || DEBUG_ENV
 // We export dbName so that we can delete the database if the schema changes
 export let dbName: string
 
-const initPGlite = async () => {
+const initPGlite = async (userId: string) => {
   const { electrify } = await import('electric-sql/pglite')
   const { PGlite } = await import('@electric-sql/pglite')
 
-  dbName = `idb://${discriminator}-${LIB_VERSION}-${tabId}.db`
+  dbName = `idb://${discriminator}-${LIB_VERSION}-${tabId}-${userId.slice(
+    0,
+    5
+  )}.db`
 
   const config = {
     url: electricUrl,
@@ -52,10 +55,10 @@ const initPGlite = async () => {
   }
 }
 
-export const initWaSqlite = async () => {
+export const initWaSqlite = async (userId: string) => {
   const { electrify, ElectricDatabase } = await import('electric-sql/wa-sqlite')
 
-  dbName = `${discriminator}-${LIB_VERSION}-${tabId}.db`
+  dbName = `${discriminator}-${LIB_VERSION}-${tabId}-${userId.slice(0, 5)}.db`
   console.log('dbName', dbName)
 
   const config = {
@@ -72,9 +75,11 @@ export const initWaSqlite = async () => {
   }
 }
 
-export const initElectric = async () => {
+export const initElectric = async (userId: string) => {
   const { electric, conn, config } =
-    CLIENT_DB === 'wa-sqlite' ? await initWaSqlite() : await initPGlite()
+    CLIENT_DB === 'wa-sqlite'
+      ? await initWaSqlite(userId)
+      : await initPGlite(userId)
 
   if (DEBUG) {
     console.log('initElectric')
@@ -87,12 +92,9 @@ export const initElectric = async () => {
     addToolbar(electric)
   }
 
-  let userId = window.sessionStorage.getItem('userId')
-  if (!userId) {
-    userId = genUUID()
-    window.sessionStorage.setItem('userId', userId)
-  }
-  const authToken = insecureAuthToken({ sub: userId })
+  const authToken = insecureAuthToken({
+    sub: userId,
+  })
 
   await electric.connect(authToken)
   return electric

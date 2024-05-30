@@ -5,10 +5,10 @@ import { DraggableProvided } from '@hello-pangea/dnd'
 import Avatar from '../../components/Avatar'
 import PriorityMenu from '../../components/contextmenu/PriorityMenu'
 import PriorityIcon from '../../components/PriorityIcon'
-import { Issue, useElectric } from '../../electric'
+import { Issue, Profile, useElectric } from '../../electric'
 
 interface IssueProps {
-  issue: Issue
+  issue: Issue & { profile: Profile }
   index: number
   isDragging?: boolean
   provided: DraggableProvided
@@ -70,7 +70,7 @@ const IssueItem = ({ issue, style, isDragging, provided }: IssueProps) => {
           </span>
         </div>
         <div className="flex-shrink-0">
-          <Avatar name={issue.username} />
+          <Avatar name={issue.profile.username} />
         </div>
       </div>
       <div className="mt-2.5 flex items-center">

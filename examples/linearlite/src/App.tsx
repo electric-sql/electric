@@ -4,10 +4,13 @@ import { useEffect, useState, createContext } from 'react'
 import { Route, Routes, BrowserRouter } from 'react-router-dom'
 import { cssTransition, ToastContainer } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
+import ElectricIcon from './assets/images/icon.inverse.svg?react'
+import { AiOutlineLoading3Quarters } from 'react-icons/ai'
 import List from './pages/List'
 import Issue from './pages/Issue'
 import LeftMenu from './components/LeftMenu'
 
+import { getUserId, setUserId } from './utils/userId'
 import { ElectricProvider, initElectric, dbName, DEBUG } from './electric'
 import { Electric } from './generated/client'
 
@@ -17,6 +20,15 @@ interface MenuContextInterface {
 }
 
 export const MenuContext = createContext(null as MenuContextInterface | null)
+
+interface ProfileContextInterface {
+  userId: string
+  setUserId: (userId: string) => void
+}
+
+export const ProfileContext = createContext(
+  null as ProfileContextInterface | null
+)
 
 const slideUp = cssTransition({
   enter: 'animate__animated animate__slideInUp',
@@ -38,22 +50,25 @@ function deleteDB() {
 const App = () => {
   const [electric, setElectric] = useState<Electric>()
   const [showMenu, setShowMenu] = useState(false)
+  const userId = getUserId()
+  const setUserIdAndReset = (userId: string) => {
+    setUserId(userId)
+    setElectric(undefined)
+    deleteDB()
+  }
 
   useEffect(() => {
     const init = async () => {
       try {
-        const client = await initElectric()
-        // window.electric = client
+        const client = await initElectric(userId)
         setElectric(client)
 
-        // const { synced: syncedIssues } = await client.db.issue.sync({
-        //   include: {
-        //     comment: true,
-        //   },
-        // })
-        const { synced: syncedProjects } = await client.db.project.sync()
-        // await syncedIssues
-        await syncedProjects
+        const { synced } = await client.db.profile.sync({
+          include: {
+            project: true,
+          },
+        })
+        await synced
 
         const timeToSync = performance.now()
         if (DEBUG) {
@@ -75,7 +90,17 @@ const App = () => {
   }, [])
 
   if (electric === undefined) {
-    return null
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center">
+        <div className="flex flex-col items-center">
+          <ElectricIcon className="w-20 mb-4 scale-150 fill-gray-500" />
+          <div className="flex flex-row items-center text-lg text-gray-500">
+            <AiOutlineLoading3Quarters className="animate-spin" />
+            <span className="ml-2">Loading...</span>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   const router = (
@@ -91,26 +116,28 @@ const App = () => {
 
   return (
     <ElectricProvider db={electric}>
-      <MenuContext.Provider value={{ showMenu, setShowMenu }}>
-        <BrowserRouter>
-          <div className="flex w-full h-screen overflow-y-hidden">
-            <LeftMenu />
-            {router}
-          </div>
-          <ToastContainer
-            position="bottom-right"
-            autoClose={5000}
-            hideProgressBar
-            newestOnTop
-            closeOnClick
-            rtl={false}
-            transition={slideUp}
-            pauseOnFocusLoss
-            draggable
-            pauseOnHover
-          />
-        </BrowserRouter>
-      </MenuContext.Provider>
+      <ProfileContext.Provider value={{ userId, setUserId: setUserIdAndReset }}>
+        <MenuContext.Provider value={{ showMenu, setShowMenu }}>
+          <BrowserRouter>
+            <div className="flex w-full h-screen overflow-y-hidden">
+              <LeftMenu />
+              {router}
+            </div>
+            <ToastContainer
+              position="bottom-right"
+              autoClose={5000}
+              hideProgressBar
+              newestOnTop
+              closeOnClick
+              rtl={false}
+              transition={slideUp}
+              pauseOnFocusLoss
+              draggable
+              pauseOnHover
+            />
+          </BrowserRouter>
+        </MenuContext.Provider>
+      </ProfileContext.Provider>
     </ElectricProvider>
   )
 }

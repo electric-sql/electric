@@ -2,7 +2,7 @@ import HelpIcon from '../assets/icons/help.svg?react'
 import MenuIcon from '../assets/icons/menu.svg?react'
 import ElectricIcon from '../assets/images/icon.inverse.svg?react'
 import BacklogIcon from '../assets/icons/circle-dot.svg?react'
-import { MenuContext } from '../App'
+import { MenuContext, ProfileContext } from '../App'
 import classnames from 'classnames'
 import { memo, RefObject, useRef, useState, useContext } from 'react'
 import { useConnectivityState, useLiveQuery } from 'electric-sql/react'
@@ -17,6 +17,7 @@ import Avatar from './Avatar'
 import AboutModal from './AboutModal'
 import ProjectModal from './ProjectModal'
 import IssueModal from './IssueModal'
+import ProfilePickerModal from './ProfilePickerModal'
 import ItemGroup from './ItemGroup'
 import ProfileMenu from './ProfileMenu'
 import ProjectItem from './ProjectItem'
@@ -24,12 +25,21 @@ import ProjectItem from './ProjectItem'
 function LeftMenu() {
   const ref = useRef<HTMLDivElement>() as RefObject<HTMLDivElement>
   const [showProfileMenu, setShowProfileMenu] = useState(false)
+  const [showProfilePickerModal, setShowProfilePickerModal] = useState(false)
   const [showAboutModal, setShowAboutModal] = useState(false)
   const [showProjectModal, setShowProjectModal] = useState(false)
   const [showIssueModal, setShowIssueModal] = useState(false)
   const { showMenu, setShowMenu } = useContext(MenuContext)!
   const { status } = useConnectivityState()
   const { db } = useElectric()!
+
+  const userId = useContext(ProfileContext)!.userId
+  const { results: profile } = useLiveQuery(
+    db.profile.liveUnique({
+      select: { username: true },
+      where: { id: userId },
+    })
+  )
 
   const { results: projects } = useLiveQuery(
     db.project.liveMany({
@@ -82,7 +92,7 @@ function LeftMenu() {
                 onClick={() => setShowProfileMenu(!showProfileMenu)}
               >
                 <Avatar
-                  name="Electric"
+                  name={profile?.username}
                   online={status == 'connected'}
                   showOffline={true}
                 />
@@ -93,6 +103,7 @@ function LeftMenu() {
                 onDismiss={() => setShowProfileMenu(false)}
                 setShowAboutModal={setShowAboutModal}
                 setShowProjectModal={setShowProjectModal}
+                setShowProfilePickerModal={setShowProfilePickerModal}
                 className="absolute top-10"
               />
             </div>
@@ -196,6 +207,12 @@ function LeftMenu() {
         <IssueModal
           isOpen={showIssueModal}
           onDismiss={() => setShowIssueModal(false)}
+        />
+      }
+      {
+        <ProfilePickerModal
+          isOpen={showProfilePickerModal}
+          onDismiss={() => setShowProfilePickerModal(false)}
         />
       }
     </>

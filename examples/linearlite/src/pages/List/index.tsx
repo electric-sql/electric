@@ -1,6 +1,6 @@
 import TopFilter from '../../components/TopFilter'
 import IssueList from './IssueList'
-import { Issue, useElectric } from '../../electric'
+import { Issue, Profile, useElectric } from '../../electric'
 import { useLiveQuery } from 'electric-sql/react'
 import { useParams } from 'react-router-dom'
 import { useFilterState, filterStateToWhere } from '../../utils/filterState'
@@ -11,6 +11,9 @@ function List({ showSearch = false }) {
   const { db } = useElectric()!
   const { results } = useLiveQuery(
     db.issue.liveMany({
+      include: {
+        profile: true,
+      },
       orderBy: { [filterState.orderBy]: filterState.orderDirection },
       where: {
         ...filterStateToWhere(filterState),
@@ -23,11 +26,15 @@ function List({ showSearch = false }) {
       where: { id: id },
     })
   )
-  const issues: Issue[] = results ?? []
+  const issues = (results ?? []) as (Issue & { profile: Profile })[]
 
   return (
     <div className="flex flex-col flex-grow">
-      <TopFilter issues={issues} showSearch={showSearch} title={project?.name} />
+      <TopFilter
+        issues={issues}
+        showSearch={showSearch}
+        title={project?.name}
+      />
       <IssueList issues={issues} />
     </div>
   )

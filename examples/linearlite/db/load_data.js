@@ -4,7 +4,6 @@ import path from 'path'
 import * as url from 'url'
 import { getConfig } from 'electric-sql/cli'
 import { v4 as uuidv4 } from 'uuid'
-import { generateKeyBetween } from 'fractional-indexing'
 
 /*
 Call with:
@@ -22,12 +21,22 @@ const ISSUES_TO_LOAD = process.env.ISSUES_TO_LOAD || 112
 console.info(`Connecting to Postgres at ${DATABASE_URL}`)
 const db = createPool(DATABASE_URL)
 
-const issues = JSON.parse(
-  fs.readFileSync(path.join(DATA_DIR, 'issues.json'), 'utf8')
+const profiles = JSON.parse(
+  fs.readFileSync(path.join(DATA_DIR, 'profiles.json'), 'utf8')
 )
+
+// always include a test user with id 'testuser'
+profiles.unshift({
+  id: 'testuser',
+  username: 'testuser',
+  created: new Date().toISOString(),
+})
 
 const projects = JSON.parse(
   fs.readFileSync(path.join(DATA_DIR, 'projects.json'), 'utf8')
+)
+const issues = JSON.parse(
+  fs.readFileSync(path.join(DATA_DIR, 'issues.json'), 'utf8')
 )
 
 async function makeInsertQuery(db, table, data) {
@@ -38,6 +47,15 @@ async function makeInsertQuery(db, table, data) {
     INSERT INTO ${sql.ident(table)} (${sql(columnsNames)})
     VALUES (${sql.join(values.map(sql.value), ', ')})
   `)
+}
+
+async function importIssue(db, issue) {
+  const { comments, ...rest } = issue
+  return await makeInsertQuery(db, 'issue', rest)
+}
+
+async function importComment(db, comment) {
+  return await makeInsertQuery(db, 'comment', comment)
 }
 
 async function upsertProject(db, data) {
@@ -51,24 +69,45 @@ async function upsertProject(db, data) {
   `)
 }
 
-async function importIssue(db, issue) {
-  const { comments, ...rest } = issue
-  return await makeInsertQuery(db, 'issue', rest)
+async function upsertProfile(db, data) {
+  const columns = Object.keys(data)
+  const columnsNames = columns.join(', ')
+  const values = columns.map((column) => data[column])
+  return await db.query(sql`
+    INSERT INTO profile (${sql(columnsNames)})
+    VALUES (${sql.join(values.map(sql.value), ', ')})
+    ON CONFLICT DO NOTHING
+  `)
 }
 
-async function importComment(db, comment) {
-  return await makeInsertQuery(db, 'comment', comment)
+function pickRandomFromArray(arr) {
+  return arr[Math.floor(Math.random() * arr.length)]
 }
 
 function getRandomProjectId() {
-  return projects[Math.floor(Math.random() * projects.length)].id
+  return pickRandomFromArray(projects).id
 }
 
-// Create the project if it doesn't exist.
+function getRandomUserId() {
+  return pickRandomFromArray(profiles).id
+}
+
+// Create profiles if they don't exist
+await db.tx(async (db) => {
+  db.query(sql`SET CONSTRAINTS ALL DEFERRED;`) // disable FK checks
+  for (const profile of profiles) {
+    await upsertProfile(db, profile)
+  }
+})
+
+// Create projects if they don't exist
 await db.tx(async (db) => {
   db.query(sql`SET CONSTRAINTS ALL DEFERRED;`) // disable FK checks
   for (const project of projects) {
-    await upsertProject(db, project)
+    await upsertProject(db, {
+      ...project,
+      user_id: getRandomUserId(),
+    })
   }
 })
 
@@ -82,17 +121,25 @@ for (let i = 0; i < issueToLoad; i += batchSize) {
       process.stdout.write(`Loading issue ${j + 1} of ${issueToLoad}\r`)
       const issue = issues[j]
       const id = uuidv4()
-      await importIssue(db, {
+      const modifiedIssue = {
         ...issue,
         id: id,
         project_id: getRandomProjectId(),
-      })
+        user_id: getRandomUserId(),
+      }
+      delete modifiedIssue.username
+      await importIssue(db, modifiedIssue)
+
       for (const comment of issue.comments) {
         commentCount++
-        await importComment(db, {
+        const modifiedComment = {
           ...comment,
           issue_id: id,
-        })
+          user_id: getRandomUserId(),
+        }
+        delete modifiedComment.username
+
+        await importComment(db, modifiedComment)
       }
     }
   })
