@@ -2,8 +2,8 @@ import * as Pb from '../_generated/protocol/satellite'
 import * as _m0 from 'protobufjs/minimal'
 import { SatelliteError, SatelliteErrorCode } from './types'
 import { ShapeRequest } from '../satellite/shapes/types'
-import { base64, sqliteTypeDecoder } from './encoders'
-import { getMaskBit } from './bitmaskHelpers'
+import { base64 } from './encoders'
+//import { getMaskBit } from './bitmaskHelpers'
 
 export type GetName<T extends SatPbMsg> =
   T['$type'] extends `Electric.Satellite.${infer K}` ? K : never
@@ -407,7 +407,7 @@ export function msgToString(message: MessageOfInterest): string {
     case 'Electric.Satellite.SatUnsubsResp':
       return `#SatUnsubsResp{}`
     case 'Electric.Satellite.SatOpLog':
-      return `#SatOpLog{ops: [${message.ops.map(opToString).join(', ')}]}`
+      return `#SatOpLog{ops: [...${message.ops.length}...]}`
     case 'Electric.Satellite.SatRpcRequest':
       return `#SatRpcRequest{method: ${message.method}, requestId: ${message.requestId}}`
     case 'Electric.Satellite.SatRpcResponse':
@@ -427,59 +427,47 @@ export function msgToString(message: MessageOfInterest): string {
   }
 }
 
-function opToString(op: Pb.SatTransOp): string {
-  if (op.begin)
-    return `#Begin{lsn: ${base64.fromBytes(
-      op.begin.lsn
-    )}, ts: ${op.begin.commitTimestamp.toString()}, isMigration: ${
-      op.begin.isMigration
-    }}`
-  if (op.commit) return `#Commit{lsn: ${base64.fromBytes(op.commit.lsn)}}`
-  if (op.insert)
-    return `#Insert{for: ${op.insert.relationId}, tags: [${
-      op.insert.tags
-    }], new: [${op.insert.rowData ? rowToString(op.insert.rowData) : ''}]}`
-  if (op.update)
-    return `#Update{for: ${op.update.relationId}, tags: [${
-      op.update.tags
-    }], new: [${
-      op.update.rowData ? rowToString(op.update.rowData) : ''
-    }], old: data: [${
-      op.update.oldRowData ? rowToString(op.update.oldRowData) : ''
-    }]}`
-  if (op.delete)
-    return `#Delete{for: ${op.delete.relationId}, tags: [${
-      op.delete.tags
-    }], old: [${
-      op.delete.oldRowData ? rowToString(op.delete.oldRowData) : ''
-    }]}`
-  if (op.gone)
-    return `#Gone{for: ${op.gone.relationId}, pk: ${rowToString(
-      op.gone.pkData!
-    )}}`
-  if (op.compensation)
-    return `#Compensation{for: ${op.compensation.relationId}, pk: ${rowToString(
-      op.compensation.pkData!
-    )}, tags: [${op.compensation.tags}]}`
-  if (op.migrate)
-    return `#Migrate{vsn: ${op.migrate.version}, for: ${
-      op.migrate.table?.name
-    }, stmts: [${op.migrate.stmts
-      .map((x) => x.sql.replaceAll('\n', '\\n'))
-      .join('; ')}]}`
-  if (op.additionalBegin)
-    return `#AdditionalBegin{ref: ${op.additionalBegin.ref}}`
-  if (op.additionalCommit)
-    return `#AdditionalCommit{ref: ${op.additionalCommit.ref}}`
-  return ''
-}
+//function opToString(op: Pb.SatTransOp): string {
+//  if (op.begin)
+//    return `#Begin{lsn: ${base64.fromBytes(
+//      op.begin.lsn
+//    )}, ts: ${op.begin.commitTimestamp.toString()}, isMigration: ${
+//      op.begin.isMigration
+//    }}`
+//  if (op.commit) return `#Commit{lsn: ${base64.fromBytes(op.commit.lsn)}}`
+//  if (op.insert)
+//    return `#Insert{for: ${op.insert.relationId}, tags: [${op.insert.tags}], new: [...]}`
+//  if (op.update)
+//    return `#Update{for: ${op.update.relationId}, tags: [${op.update.tags}], new: [...], old: data: [...]}`
+//  if (op.delete)
+//    return `#Delete{for: ${op.delete.relationId}, tags: [${op.delete.tags}], old: [...]}`
+//  if (op.gone)
+//    return `#Gone{for: ${op.gone.relationId}, pk: ${rowToString(
+//      op.gone.pkData!
+//    )}}`
+//  if (op.compensation)
+//    return `#Compensation{for: ${op.compensation.relationId}, pk: ${rowToString(
+//      op.compensation.pkData!
+//    )}, tags: [${op.compensation.tags}]}`
+//  if (op.migrate)
+//    return `#Migrate{vsn: ${op.migrate.version}, for: ${
+//      op.migrate.table?.name
+//    }, stmts: [${op.migrate.stmts
+//      .map((x) => x.sql.replaceAll('\n', '\\n'))
+//      .join('; ')}]}`
+//  if (op.additionalBegin)
+//    return `#AdditionalBegin{ref: ${op.additionalBegin.ref}}`
+//  if (op.additionalCommit)
+//    return `#AdditionalCommit{ref: ${op.additionalCommit.ref}}`
+//  return ''
+//}
 
-function rowToString(row: Pb.SatOpRow): string {
-  return row.values
-    .map((x, i) =>
-      getMaskBit(row.nullsBitmask, i) === 0
-        ? JSON.stringify(sqliteTypeDecoder.text(x))
-        : '∅'
-    )
-    .join(', ')
-}
+//function rowToString(row: Pb.SatOpRow): string {
+//  return row.values
+//    .map((x, i) =>
+//      getMaskBit(row.nullsBitmask, i) === 0
+//        ? JSON.stringify(sqliteTypeDecoder.text(x))
+//        : '∅'
+//    )
+//    .join(', ')
+//}

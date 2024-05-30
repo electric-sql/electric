@@ -64,8 +64,8 @@ defmodule Satellite.TestWsClient do
   @doc """
   Make Satellite RPC call to the server receiving the response
   """
-  def make_rpc_call(pid, method, message) when is_allowed_rpc_method(method),
-    do: GenServer.call(pid, {:make_rpc_call, method, message})
+  def make_rpc_call(pid, method, message, timeout \\ 5000) when is_allowed_rpc_method(method),
+    do: GenServer.call(pid, {:make_rpc_call, method, message}, timeout)
 
   # Implementation
 

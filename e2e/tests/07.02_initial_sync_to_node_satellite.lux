@@ -1,0 +1,146 @@
+[doc A parametrized scenario for initial shape subscription data fetching]
+[include _shared.luxinc]
+[include _satellite_macros.luxinc]
+
+[invoke setup]
+
+### Define utility functions
+
+[shell pg_1]
+    """!
+    CREATE FUNCTION gen_random_string(
+            IN string_length INTEGER,
+            IN possible_chars TEXT DEFAULT '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+        ) RETURNS text
+        LANGUAGE plpgsql
+        AS $$$$
+    DECLARE
+        output TEXT = '';
+        i INT4;
+        pos INT4;
+    BEGIN
+        FOR i IN 1..string_length LOOP
+            pos := 1 + CAST( random() * ( LENGTH(possible_chars) - 1) AS INT4 );
+            output := output || substr(possible_chars, pos, 1);
+        END LOOP;
+        RETURN output;
+    END;
+    $$$$;
+    """
+    ??CREATE FUNCTION
+
+### Create SQL schema
+
+[shell pg_1]
+    [local sql=
+        """
+        CREATE TABLE public.users (
+          id UUID PRIMARY KEY,
+          name TEXT NOT NULL,
+          email TEXT NOT NULL
+        );
+
+        CREATE TABLE public.projects (
+            id UUID PRIMARY KEY,
+            title TEXT
+        );
+
+        CREATE TABLE public.project_members (
+            project_id UUID NOT NULL REFERENCES projects(id),
+            user_id UUID NOT NULL REFERENCES users(id),
+            role TEXT NOT NULL,
+            PRIMARY KEY (project_id, user_id)
+        );
+
+        CREATE TABLE public.project_tasks (
+          id UUID PRIMARY KEY,
+          project_id UUID NOT NULL REFERENCES projects(id),
+          description TEXT
+        );
+        """]
+    !$sql
+    ??CREATE TABLE
+    ??CREATE TABLE
+    ??CREATE TABLE
+    ??CREATE TABLE
+
+### Seed tables with test data
+
+[shell pg_1]
+    [timeout 30]
+
+    """!
+    INSERT INTO users
+      SELECT gen_random_uuid(), name, name || '@corporate.domain' FROM
+    	  (SELECT gen_random_string(20) name FROM generate_series(1, 100000)) _;
+    """
+    ??INSERT 0 100000
+
+   """!
+   INSERT INTO projects
+     SELECT gen_random_uuid(), gen_random_string(80) FROM generate_series(1, 100000);
+   """
+   ??INSERT 0 100000
+
+   """!
+   WITH projects AS (SELECT id FROM projects ORDER BY random() LIMIT 10000)
+   INSERT INTO project_tasks
+     SELECT gen_random_uuid(), projects.id, gen_random_string(400)
+       FROM projects, generate_series(1, 1 + (random()*20)::int);
+   """
+   ??INSERT 0
+
+   """!
+   WITH
+     projects AS (SELECT id, row_number() OVER () FROM projects LIMIT 10000),
+     users AS (SELECT id, row_number() OVER () FROM users LIMIT 10000)
+   INSERT INTO project_members
+     SELECT
+       projects.id,
+       users.id,
+       ('{owner, admin, editor, reviewer, lead}'::text[])[floor(1 + random() * 5)]
+     FROM
+       projects
+     JOIN
+       users ON projects.row_number = users.row_number;
+   """
+   ??INSERT 0 10000
+
+   """!
+   select
+     table_name,
+     pg_size_pretty(pg_total_relation_size(quote_ident(table_name)))
+   from information_schema.tables
+   where table_schema = 'public';
+   """
+   ??table_name
+
+### Electrify tables
+
+[shell proxy_1]
+    [local sql=
+        """
+        ALTER TABLE public.users ENABLE ELECTRIC;
+        ALTER TABLE public.projects ENABLE ELECTRIC;
+        ALTER TABLE public.project_members ENABLE ELECTRIC;
+        ALTER TABLE public.project_tasks ENABLE ELECTRIC;
+        """]
+    [invoke migrate_pg "001" $sql]
+
+### Start a client that will subscribe to some shapes
+
+[invoke setup_client 1 "electric_1" 5133]
+
+[shell satellite_1]
+    [timeout 30]
+
+    [invoke node_sync_table "users"]
+    ??[proto] recv: #SatSubsDataEnd{}
+
+    [invoke node_sync_table_with_opts "projects" "{include: [\
+        { foreignKey: ['project_id'], select: { tablename: 'project_members' } }, \
+        { foreignKey: ['project_id'], select: { tablename: 'project_tasks' } }]}"]
+    ??[proto] recv: #SatSubsDataEnd{}
+
+[cleanup]
+    [invoke teardown]

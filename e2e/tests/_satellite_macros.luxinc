@@ -242,6 +242,10 @@
     !await client.syncTable("${table}")
 [endmacro]
 
+[macro node_sync_table_with_opts table options]
+    !await client.syncTable("${table}", ${options})
+[endmacro]
+
 # Makes both satellites and PG write rows
 [macro write sat1_msg sat2_msg pg_msg]
     [shell satellite_1]
