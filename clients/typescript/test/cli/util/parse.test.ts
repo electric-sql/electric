@@ -9,7 +9,7 @@ test('extractServiceURL decomposes electric URL', async (t) => {
 
   t.deepEqual(extractServiceURL('https://www.my-website.com'), {
     host: 'www.my-website.com',
-    port: undefined,
+    port: null,
   })
 
   t.deepEqual(extractServiceURL('https://www.my-website.com:8132'), {
