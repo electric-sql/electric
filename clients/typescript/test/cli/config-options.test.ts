@@ -34,6 +34,7 @@ const expectedEnvVars = [
   'POSTGRESQL_IMAGE',
   'ELECTRIC_IMAGE',
   'CONTAINER_NAME',
+  'ELECTRIC_FEATURES',
 ]
 
 test('assert that all expected env vars are options for CLI', (t) => {
