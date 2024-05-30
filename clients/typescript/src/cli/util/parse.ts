@@ -38,7 +38,7 @@ export function extractDatabaseURL(url: string) {
     user: decodeURIComponent(parsed.username),
     password: decodeURIComponent(parsed.password),
     host: decodeURIComponent(parsed.hostname),
-    port: parsed.port != '' ? parseInt(parsed.port) : null,
+    port: parsed.port ? parseInt(parsed.port) : null,
     dbName: decodeURIComponent(parsed.pathname.slice(1)),
   }
 }
