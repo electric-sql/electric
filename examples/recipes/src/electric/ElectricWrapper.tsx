@@ -19,7 +19,7 @@ export function ElectricWrapper(props: { children: ReactElement[] | ReactElement
 
     const init = async () => {
       const config = {
-        debug: import.meta.env.DEV,
+        debug: import.meta.env.MODE === 'development',
         url: import.meta.env.ELECTRIC_SERVICE,
       }
 
