@@ -6,10 +6,14 @@ import {
   getConfigValue,
   type ConfigMap,
 } from './config'
-import { dedent, getAppName, buildDatabaseURL, parsePgProxyPort } from './util'
-import { LIB_VERSION } from '../version'
-
-const minorVersion = LIB_VERSION.split('.').slice(0, 2).join('.')
+import {
+  dedent,
+  getAppName,
+  buildDatabaseURL,
+  parsePgProxyPort,
+  LIB_MINOR_VERSION,
+  LIB_IS_CANARY_RELEASE,
+} from './util'
 
 // Name will be prefixed with ELECTRIC_ as environment variables.
 export const configOptions: Record<string, any> = {
@@ -312,7 +316,9 @@ export const configOptions: Record<string, any> = {
   ELECTRIC_IMAGE: {
     valueType: String,
     valueTypeName: 'image',
-    defaultVal: `electricsql/electric:${minorVersion}`, // Latest minor version of this library
+    defaultVal: `electricsql/electric:${
+      LIB_IS_CANARY_RELEASE ? 'canary' : LIB_MINOR_VERSION
+    }`,
     doc: 'The Docker image to use for Electric.',
     groups: ['electric'],
   },
