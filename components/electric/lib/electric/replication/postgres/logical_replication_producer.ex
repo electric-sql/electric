@@ -111,7 +111,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
 
     publication = repl_opts.publication
     main_slot = repl_opts.slot
-    tmp_slot = main_slot <> "_rc"
+    # Ensure temporary slot name fits within Postgres' limit of 63 chars
+    tmp_slot = String.slice(main_slot, 0..59) <> "_rc"
 
     Logger.metadata(pg_producer: origin)
 
