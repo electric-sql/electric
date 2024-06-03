@@ -19,19 +19,19 @@
     "start:ios": "expo start --ios"
   },
   "dependencies": {
-    "electric-sql": "^0.10.0",
-    "expo": "~50.0.15",
-    "expo-sqlite": "^13.4.0",
-    "expo-status-bar": "~1.11.1",
+    "electric-sql": "^0.11.3",
+    "expo": "~51.0.9",
+    "expo-sqlite": "~14.0.3",
+    "expo-status-bar": "~1.12.1",
     "react": "^18.2.0",
-    "react-native": "0.73.6",
-    "react-native-get-random-values": "~1.8.0"
+    "react-native": "0.74.1",
+    "react-native-get-random-values": "~1.11.0"
   },
   "devDependencies": {
-    "@babel/core": "^7.24.4",
+    "@babel/core": "^7.24.6",
     "@databases/pg-migrations": "^5.0.3",
-    "@tsconfig/react-native": "^2.0.3",
-    "@types/react": "^18.2.74",
-    "typescript": "^5.3.3"
+    "@tsconfig/react-native": "^3.0.5",
+    "@types/react": "~18.2.79",
+    "typescript": "~5.3.3"
   }
 }
