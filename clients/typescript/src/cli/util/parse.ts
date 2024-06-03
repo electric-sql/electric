@@ -38,14 +38,20 @@ export function extractDatabaseURL(url: string): {
 } {
   const parsed = new URL(url)
   if (!(parsed.protocol == 'postgres:' || parsed.protocol == 'postgresql:')) {
-    throw new Error(`Invalid database URL: ${url}`)
+    throw new Error(`Invalid database URL scheme: ${url}`)
   }
+
+  const user = decodeURIComponent(parsed.username)
+  if (!user) {
+    throw new Error(`Invalid or missing username: ${url}`)
+  }
+
   return {
-    user: decodeURIComponent(parsed.username),
+    user: user,
     password: decodeURIComponent(parsed.password),
     host: decodeURIComponent(parsed.hostname),
     port: parsed.port ? parseInt(parsed.port) : null,
-    dbName: decodeURIComponent(parsed.pathname.slice(1)),
+    dbName: decodeURIComponent(parsed.pathname.slice(1)) || user,
   }
 }
 
