@@ -13,7 +13,6 @@ module.exports = {
         caughtErrorsIgnorePattern: '^_',
       },
     ],
-    '@typescript-eslint/no-inferrable-types': 'off', // always allow explicit typings
     '@typescript-eslint/no-explicit-any': ['warn', { ignoreRestArgs: true }],
     '@typescript-eslint/ban-ts-comment': [
       'error',
@@ -24,7 +23,6 @@ module.exports = {
   },
   ignorePatterns: [
     '**/*/mock.ts',
-    '**/*/prismaClient.d.ts',
     '**/*/_generated/**',
     '**/node_modules/**',
     '**/dist/**',
