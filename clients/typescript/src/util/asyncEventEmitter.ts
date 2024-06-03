@@ -146,7 +146,18 @@ export class AsyncEventEmitter<Events extends EventMap> {
       // deep copy because once listeners mutate the `this.listeners` array as they remove themselves
       // which breaks the `map` which iterates over that same array while the contents may shift
       const ls = [...listeners]
-      const listenerProms = ls.map((listener) => listener(...args))
+      const listenerProms = ls.map(async (listener) => {
+        try {
+          await listener(...args)
+        } catch (err) {
+          // rethrow any errors from listeners to be caught by the global
+          // error handler in the next tick to allow for the queue to be
+          // processed without suppressing errors
+          queueMicrotask(() => {
+            throw err
+          })
+        }
+      })
 
       // wait for all listeners to finish,
       // some may fail (i.e.return a rejected promise)
@@ -155,18 +166,7 @@ export class AsyncEventEmitter<Events extends EventMap> {
       this.processing = Promise.allSettled(listenerProms)
 
       // only process the next event when all listeners have finished
-      this.processing.then((settledPromises) => {
-        this.processQueue()
-
-        // re-throw any rejected promises such that the global error
-        // handler can catch them and log them, otherwise they would
-        // be suppressed and bugs may go unnoticed
-        settledPromises.forEach((rejectedProm) => {
-          if (rejectedProm.status === 'rejected') {
-            throw rejectedProm.reason
-          }
-        })
-      })
+      this.processing.then((_) => this.processQueue())
     } else {
       // signal that the queue is no longer being processed
       this.processing = false
