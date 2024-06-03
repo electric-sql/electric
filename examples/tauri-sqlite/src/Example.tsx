@@ -13,31 +13,30 @@ import './Example.css'
 const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
 
 export const Example = () => {
-  const [ electric, setElectric ] = useState<Electric>()
+  const [electric, setElectric] = useState<Electric>()
 
   useEffect(() => {
     let isMounted = true
 
     const init = async () => {
       const config = {
-        auth: {
-          token: authToken()
-        },
         debug: import.meta.env.DEV,
-        url: import.meta.env.ELECTRIC_SERVICE
+        url: import.meta.env.ELECTRIC_SERVICE,
       }
 
       const { tabId } = uniqueTabId()
       const scopedDbName = `basic-${LIB_VERSION}-${tabId}.db`
 
-      const conn = await createDatabase(scopedDbName) 
-      const electric = await electrify(conn, schema, config)
+      const conn = await createDatabase(scopedDbName)
+      const client = await electrify(conn, schema, config)
+
+      await client.connect(authToken())
 
       if (!isMounted) {
         return
       }
 
-      setElectric(electric)
+      setElectric(client)
     }
 
     init()
@@ -60,9 +59,7 @@ export const Example = () => {
 
 const ExampleComponent = () => {
   const { db } = useElectric()!
-  const { results } = useLiveQuery(
-    db.items.liveMany()
-  )
+  const { results } = useLiveQuery(db.items.liveMany())
 
   useEffect(() => {
     const syncItems = async () => {
@@ -80,7 +77,7 @@ const ExampleComponent = () => {
     await db.items.create({
       data: {
         value: genUUID(),
-      }
+      },
     })
   }
 
@@ -93,16 +90,16 @@ const ExampleComponent = () => {
   return (
     <div>
       <div className="controls">
-        <button className="button" onClick={ addItem }>
+        <button className="button" onClick={addItem}>
           Add
         </button>
-        <button className="button" onClick={ clearItems }>
+        <button className="button" onClick={clearItems}>
           Clear
         </button>
       </div>
       {items.map((item: Item, index: number) => (
-        <p key={ index } className="item">
-          <code>{ item.value }</code>
+        <p key={index} className="item">
+          <code>{item.value}</code>
         </p>
       ))}
     </div>
