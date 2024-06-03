@@ -67,7 +67,7 @@ test('test AsyncEventEmitter prependListener', async (t) => {
     event: () => void | Promise<void>
   }>()
 
-  let log: Array<Number> = []
+  const log: Array<number> = []
 
   const listener1 = () => {
     log.push(1)
@@ -174,8 +174,12 @@ test('test AsyncEventEmitter eventNames', async (t) => {
     event2: () => void | Promise<void>
   }>()
 
-  emitter.on('event1', () => {})
-  emitter.on('event2', () => {})
+  emitter.on('event1', () => {
+    // no-op
+  })
+  emitter.on('event2', () => {
+    // no-op
+  })
 
   const eventNames = emitter.eventNames()
   t.deepEqual(eventNames, ['event1', 'event2'])

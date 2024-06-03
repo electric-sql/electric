@@ -244,6 +244,8 @@ test.serial(
     })
 
     // Check that the Satellite process is unregistered
-    t.assert(!registry.satellites.hasOwnProperty(conn.name))
+    t.assert(
+      !Object.prototype.hasOwnProperty.call(registry.satellites, conn.name)
+    )
   }
 )

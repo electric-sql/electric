@@ -290,7 +290,7 @@ export const datatypeTests = (test: TestFn<ContextType>) => {
       tbl.create({
         data: {
           id: 3,
-          // @ts-ignore
+          // @ts-expect-error inserting a string as a boolean
           bool: 'true',
         },
       }),
@@ -958,7 +958,7 @@ export const datatypeTests = (test: TestFn<ContextType>) => {
       },
     })
 
-    t.deepEqual(new Uint8Array(fetchRes?.bytea!), blob)
+    t.deepEqual(new Uint8Array(fetchRes!.bytea!), blob)
   })
 
   test('support null values for BLOB type', async (t) => {

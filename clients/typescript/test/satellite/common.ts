@@ -241,7 +241,7 @@ export interface TestNotifier extends EventNotifier {
   notifications: any[]
 }
 
-export type ContextType<Extra = {}> = {
+export type ContextType<Extra = Record<string, unknown>> = {
   dbName: string
   adapter: DatabaseAdapter
   notifier: TestNotifier

@@ -185,7 +185,7 @@ export const genEncodedTags = (
   origin: string,
   dates: Date[] | number[]
 ): string => {
-  let tags = dates.map((date) => {
+  const tags = dates.map((date) => {
     if (date instanceof Date) {
       return generateTag(origin, date)
     } else {
