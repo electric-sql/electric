@@ -22,13 +22,13 @@
   },
   "dependencies": {
     "better-sqlite3": "^9.2.2",
-    "electric-sql": "^0.9.4"
+    "electric-sql": "^0.11.3"
   },
   "devDependencies": {
     "@databases/pg-migrations": "^5.0.2",
-    "@types/better-sqlite3": "^7.6.8",
+    "@types/better-sqlite3": "^7.6.10",
     "@types/node": ">=16.11.0",
-    "fs-extra": "^10.0.0",
-    "typescript": "^4.4.3"
+    "fs-extra": "^11.2.0",
+    "typescript": "^5.4.5"
   }
 }

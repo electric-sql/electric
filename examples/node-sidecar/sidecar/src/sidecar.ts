@@ -15,7 +15,7 @@ export class SideCar {
     }
 
     const conn = new Database(this.config.databaseFile)
-    const schema = new DbSchema({}, []) // empty DB schema, we won't use the client anyway
+    const schema = new DbSchema({}, [], []) // empty DB schema, we won't use the client anyway
     const client = await electrify(conn, schema, config)
     await client.connect(this.config.auth.token)
     this.electric = client
@@ -46,14 +46,12 @@ export class SideCar {
   private async syncShapes(): Promise<void> {
     // Convert the shape to the format expected by the Satellite process
     const { sync: tables } = this.config
-    const shapeDef = {
-      selects: tables.map((tbl) => ({ tablename: tbl })),
-    }
+    const shapeDefs = tables.map((tbl) => ({ tablename: tbl }))
 
     const joinedNames = tables.join(', ')
     console.log(`Syncing tables ${joinedNames}...`)
 
-    const { synced } = await this.electric!.satellite.subscribe([shapeDef])
+    const { synced } = await this.electric!.satellite.subscribe(shapeDefs)
     await synced
 
     console.log(`Synced tables ${joinedNames}`)
