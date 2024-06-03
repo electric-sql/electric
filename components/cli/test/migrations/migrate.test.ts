@@ -1,10 +1,7 @@
 import test from 'ava'
 import fs from 'fs'
-import {
-  doCapitaliseTableNames,
-  generate,
-} from '../../../src/cli/migrations/migrate'
-import { getConfig } from '../../../src/cli/config'
+import { doCapitaliseTableNames, generate } from '../../src/migrations/migrate'
+import { getConfig } from '../../src/config'
 
 const lowerCasePrismaSchema = `
 datasource db {

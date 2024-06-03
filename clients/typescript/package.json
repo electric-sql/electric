@@ -44,9 +44,6 @@
   "files": [
     "dist"
   ],
-  "bin": {
-    "electric-sql": "dist/cli/main.js"
-  },
   "exports": {
     "./browser": "./dist/drivers/wa-sqlite/index.js",
     "./capacitor": "./dist/drivers/capacitor-sqlite/index.js",
@@ -160,12 +157,11 @@
   },
   "scripts": {
     "post-version-bump": "node -p \"'export const LIB_VERSION = \\'' + require('./package.json').version + '\\''\" > src/version/index.ts",
-    "dev": "shx rm -rf dist && npm run build:copy-docker && mkdir dist && concurrently \"tsup --watch\" \"tsc -p tsconfig.build.json --watch\" \"nodemon --watch ./dist  --delay 250ms ./scripts/fix-imports.js\"",
-    "build": "shx rm -rf dist && npm run build:copy-docker && concurrently \"tsup\" \"tsc -p tsconfig.build.json\" && node scripts/fix-imports.js",
-    "build:copy-docker": "shx mkdir -p ./dist/cli/docker-commands/docker && shx cp -r ./src/cli/docker-commands/docker ./dist/cli/docker-commands",
+    "dev": "shx rm -rf dist && mkdir dist && concurrently \"tsup --watch\" \"tsc -p tsconfig.build.json --watch\" \"nodemon --watch ./dist  --delay 250ms ./scripts/fix-imports.js\"",
+    "build": "shx rm -rf dist && concurrently \"tsup\" \"tsc -p tsconfig.build.json\" && node scripts/fix-imports.js",
     "test": "ava",
     "test-CI": "DISABLE_DIALECT=postgres npm run test",
-    "generate-test-client": "npx tsx ./test/client/generateTestClient.ts",
+    "generate-test-client": "npx tsx ../../components/cli/src/client/generateTestClient.ts",
     "typecheck": "tsc -p tsconfig.json",
     "posttest": "npm run typecheck",
     "prepublishOnly": "pnpm run build",
@@ -177,19 +173,10 @@
     "**/*": "prettier --write --ignore-unknown"
   },
   "dependencies": {
-    "@electric-sql/prisma-generator": "workspace:*",
-    "@prisma/client": "4.8.1",
     "async-mutex": "^0.4.0",
     "base-64": "^1.0.0",
     "better-sqlite3": "^11.0.0",
-    "commander": "^11.1.0",
-    "cross-fetch": "^3.1.5",
-    "decompress": "^4.2.1",
-    "dotenv-flow": "^4.1.0",
-    "events": "^3.3.0",
     "exponential-backoff": "^3.1.0",
-    "frame-stream": "^3.0.1",
-    "get-port": "^7.0.0",
     "jose": "^4.14.4",
     "lodash.flow": "^3.5.0",
     "lodash.groupby": "^4.6.0",
@@ -205,10 +192,8 @@
     "object.hasown": "^1.1.2",
     "ohash": "^1.1.2",
     "prisma": "4.8.1",
-    "prompts": "^2.4.2",
     "protobufjs": "^7.1.1",
     "squel": "^5.13.0",
-    "tcp-port-used": "^1.0.2",
     "text-encoder-lite": "^2.0.0",
     "ts-dedent": "^2.2.0",
     "ws": "^8.8.1",
@@ -216,13 +201,11 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.1.5",
-    "@electric-sql/prisma-generator": "workspace:*",
     "@op-engineering/op-sqlite": ">= 2.0.16",
     "@tauri-apps/plugin-sql": "2.0.0-alpha.5",
     "@testing-library/react": "^13.4.0",
     "@types/base-64": "^1.0.0",
     "@types/better-sqlite3": "7.6.10",
-    "@types/decompress": "^4.2.4",
     "@types/lodash.flow": "^3.5.7",
     "@types/lodash.groupby": "^4.6.7",
     "@types/lodash.isequal": "^4.5.6",
@@ -234,10 +217,7 @@
     "@types/lodash.uniqwith": "^4.5.9",
     "@types/node": "^18.8.4",
     "@types/pg": "^8.11.0",
-    "@types/prompts": "^2.4.9",
     "@types/react": "^18.0.18",
-    "@types/tcp-port-used": "^1.0.2",
-    "@types/uuid": "^9.0.1",
     "@types/ws": "^8.5.3",
     "@typescript-eslint/eslint-plugin": "^5.34.0",
     "@typescript-eslint/parser": "^5.34.0",
@@ -249,7 +229,6 @@
     "expo-sqlite": "^13.1.0",
     "glob": "^10.3.10",
     "global-jsdom": "24.0.0",
-    "husky": "^8.0.3",
     "jsdom": "24.0.0",
     "lint-staged": "^13.1.0",
     "memorystorage": "^0.12.0",
@@ -267,8 +246,7 @@
     "typescript": "^5.3.3",
     "vue": "^3.4.19",
     "vue-tsc": "^1.8.27",
-    "wa-sqlite": "rhashimoto/wa-sqlite#semver:^0.9.8",
-    "web-worker": "^1.2.0"
+    "wa-sqlite": "rhashimoto/wa-sqlite#semver:^0.9.8"
   },
   "peerDependencies": {
     "@capacitor-community/sqlite": ">= 5.6.2",

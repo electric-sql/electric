@@ -1,5 +1,5 @@
 import test from 'ava'
-import { getConfigValue, redactConfigSecrets } from '../../src/cli/config'
+import { getConfigValue, redactConfigSecrets } from '../src/config'
 
 test('getConfigValue can capture `ELECTRIC_` prefixed CLI opitons', async (t) => {
   const image = getConfigValue('ELECTRIC_IMAGE', { image: 'electric:test' })

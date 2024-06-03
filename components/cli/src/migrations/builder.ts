@@ -6,9 +6,9 @@ import {
   parseMetadata,
   MetaData,
   makeMigration,
-} from '../../migrators'
-import { isObject } from '../../util'
-import { QueryBuilder } from '../../migrators/query-builder'
+} from 'electric-sql/migrators'
+import { isObject } from 'electric-sql/util'
+import { QueryBuilder } from 'electric-sql/migrators/query-builder'
 
 /*
  * This file defines functions to build migrations

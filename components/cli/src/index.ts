@@ -1,3 +1,4 @@
+export { loadMigrations } from './migrations/builder'
 export { generate } from './migrations/command-generate'
 export { start } from './docker-commands/command-start'
 export { stop } from './docker-commands/command-stop'

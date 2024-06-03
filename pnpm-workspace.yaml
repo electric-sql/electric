@@ -5,3 +5,4 @@ packages:
   - 'generator'
   - 'components/electric'
   - 'components/toolbar'
+  - 'components/cli'

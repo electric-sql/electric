@@ -1,7 +1,6 @@
 import { TestFn } from 'ava'
 import { dedent } from 'ts-dedent'
 import { makeMigration, parseMetadata } from '../../src/migrators/builder'
-import { loadMigrations } from '../../src/cli/migrations/builder'
 import {
   SatOpMigrate,
   SatOpMigrate_Table,
@@ -12,7 +11,6 @@ import {
   SatOpMigrate_ForeignKey,
 } from '../../src/_generated/protocol/satellite'
 import _m0 from 'protobufjs/minimal.js'
-import path from 'path'
 import { QueryBuilder } from '../../src/migrators/query-builder'
 
 function encodeSatOpMigrateMsg(request: SatOpMigrate) {
@@ -336,15 +334,6 @@ export const builderTests = (test: TestFn<ContextType>) => {
     t.deepEqual(migration.statements, [
       'CREATE INDEX idx_stars_username ON stars(username);',
     ])
-  })
-
-  const migrationsFolder = path.join('./test/migrators/support/migrations')
-
-  test('read migration meta data', async (t) => {
-    const { builder } = t.context
-    const migrations = await loadMigrations(migrationsFolder, builder)
-    const versions = migrations.map((m) => m.version)
-    t.deepEqual(versions, ['20230613112725_814', '20230613112735_992'])
   })
 
   test('prepareInsertBatchedStatements correctly splits up data in batches', (t) => {
