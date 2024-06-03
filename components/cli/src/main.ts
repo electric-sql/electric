@@ -6,7 +6,7 @@ dotenvFlow.config({
 })
 
 import { Command } from 'commander'
-import { LIB_VERSION } from '../version/index'
+import { LIB_VERSION } from 'electric-sql/version'
 import { makeGenerateCommand } from './migrations/command-generate'
 import { makeStartCommand } from './docker-commands/command-start'
 import { makeStopCommand } from './docker-commands/command-stop'

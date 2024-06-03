@@ -1,15 +1,18 @@
 import test from 'ava'
 import fs from 'fs/promises'
 import path from 'path'
-import { buildMigrations } from '../../../src/cli/migrations/builder'
-import { sqliteBuilder } from '../../../src/migrators/query-builder'
+import { buildMigrations } from '../../src/migrations/builder'
+import { sqliteBuilder } from 'electric-sql/migrators/query-builder'
+import { loadMigrations } from '../../src/migrations/builder'
 
-const migrationsFolder = path.join('./test/migrators/support/migrations')
+const migrationsFolder = path.join(
+  '../../clients/typescript/test/migrators/support/migrations'
+)
 
 test('write migration to configuration file', async (t) => {
   // compute absolute path to avoid differences between dynamic import and NodeJS' `fs` module
   const ogMigrationsFile = path.resolve(
-    path.join('./test/cli/support/migrations.js')
+    path.join('./test/support/migrations.js')
   )
 
   // First read the config file and store its contents
@@ -19,7 +22,7 @@ test('write migration to configuration file', async (t) => {
   // Make a temporary copy of the config file
   // on which this test will operate
   const testMigrationsFile = path.resolve(
-    path.join('./test/cli/support/migrations-tmp.js')
+    path.join('./test/support/migrations-tmp.js')
   )
   await fs.writeFile(testMigrationsFile, ogConfigContents)
 
@@ -40,5 +43,10 @@ test('write migration to configuration file', async (t) => {
   // Delete the temporary config file
   // we created for this test
   await fs.unlink(testMigrationsFile)
-  //await fs.unlink('./test/cli/support/migrations-tmp.js')
+})
+
+test('read migration meta data', async (t) => {
+  const migrations = await loadMigrations(migrationsFolder, sqliteBuilder)
+  const versions = migrations.map((m) => m.version)
+  t.deepEqual(versions, ['20230613112725_814', '20230613112735_992'])
 })

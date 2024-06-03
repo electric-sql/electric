@@ -1,5 +1,5 @@
 import fs from 'fs'
-import { LIB_VERSION } from '../../version'
+import { LIB_VERSION } from 'electric-sql/version'
 import path from 'path'
 import { fileURLToPath } from 'url'
 

@@ -1,5 +1,5 @@
 import test from 'ava'
-import { configOptions } from '../../src/cli/config-options'
+import { configOptions } from '../src/config-options'
 
 const expectedEnvVars = [
   'SERVICE',

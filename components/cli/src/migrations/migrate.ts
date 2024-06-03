@@ -16,8 +16,11 @@ import { getConfig, type Config } from '../config'
 import { start } from '../docker-commands/command-start'
 import { stop } from '../docker-commands/command-stop'
 import { withConfig } from '../configure/command-with-config'
-import { pgBuilder, sqliteBuilder } from '../../migrators/query-builder'
-import { Dialect } from '../../migrators/query-builder/builder'
+import {
+  pgBuilder,
+  sqliteBuilder,
+  Dialect,
+} from 'electric-sql/migrators/query-builder'
 
 // Rather than run `npx prisma` we resolve the path to the prisma binary so that
 // we can be sure we are using the same version of Prisma that is a dependency of

@@ -1,7 +1,7 @@
 import test, { ExecutionContext } from 'ava'
 import fs from 'fs'
 import ts from 'typescript'
-import { generateClient } from '../../../src/cli/migrations/migrate'
+import { generateClient } from '../../src/migrations/migrate'
 import path from 'path'
 
 const tempDir = `.tmp`

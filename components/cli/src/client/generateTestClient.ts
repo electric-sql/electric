@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'url'
-import { generateClient } from '../../src/cli/migrations/migrate'
+import { generateClient } from '../migrations/migrate'
 import fs from 'fs'
 import path from 'path'
 
@@ -77,7 +77,18 @@ model Dummy {
 const thisDir = path.dirname(fileURLToPath(import.meta.url))
 const prismaSchemaDir = path.join(thisDir, 'prisma')
 const prismaSchemaPath = path.join(prismaSchemaDir, 'schema.prisma')
-const generatedClientDir = path.join(thisDir, 'generated')
+const generatedClientDir = path.join(
+  thisDir,
+  '..',
+  '..',
+  '..',
+  '..',
+  'clients',
+  'typescript',
+  'test',
+  'client',
+  'generated'
+)
 const generatedClientPath = path.join(generatedClientDir, 'index.ts')
 const migrationsPath = path.join(generatedClientDir, 'migrations.ts')
 const pgMigrationsPath = path.join(generatedClientDir, 'pg-migrations.ts')

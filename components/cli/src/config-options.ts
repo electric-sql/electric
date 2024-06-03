@@ -11,8 +11,8 @@ import {
   getAppName,
   buildDatabaseURL,
   parsePgProxyPort,
-  LIB_MINOR_VERSION,
   isCanaryRelease,
+  LIB_MINOR_VERSION
 } from './util'
 
 // Name will be prefixed with ELECTRIC_ as environment variables.
