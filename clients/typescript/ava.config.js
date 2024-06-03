@@ -1,3 +1,4 @@
+/* eslint-env node */
 const [major, minor, _patch] = process.versions.node.split('.').map(Number)
 
 // Developers can provide a `TEST_ONLY_DIALECT` value of `postgres`, `pglite`, or `sqlite`
