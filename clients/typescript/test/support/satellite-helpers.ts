@@ -99,10 +99,10 @@ export const generateLocalOplogEntry = (
     oldRow = generateFrom(schema, oldValues)
   }
   let tags = clearTags
-  if (optype == OPTYPES.delete && clearTags == undefined) {
+  if (optype === OPTYPES.delete && clearTags === undefined) {
     tags = shadowTagsDefault
   }
-  if (optype != OPTYPES.delete && clearTags == undefined) {
+  if (optype !== OPTYPES.delete && clearTags === undefined) {
     tags = encodeTags([generateTag('remote', new Date(timestamp))])
   }
 
@@ -207,7 +207,7 @@ export async function getMatchingShadowEntries(
 ): Promise<ShadowEntry[]> {
   let query: Statement
   let selectTags = `SELECT namespace, tablename, "primaryKey", tags FROM ${shadowTable}`
-  if (oplog != undefined) {
+  if (oplog !== undefined) {
     selectTags =
       selectTags +
       ` WHERE

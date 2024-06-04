@@ -493,7 +493,11 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
     const insertEntryAfterSnapshot = await adapter.query({
       sql: `SELECT timestamp, "clearTags" FROM _electric_oplog WHERE rowid = 1`,
     })
-    t.assert(insertEntryAfterSnapshot[0].timestamp != null)
+
+    t.assert(
+      insertEntryAfterSnapshot[0].timestamp !== null &&
+        insertEntryAfterSnapshot[0].timestamp !== undefined
+    )
     const insertTimestamp = parseDate(
       insertEntryAfterSnapshot[0].timestamp as string
     )
@@ -546,7 +550,7 @@ export const processTagsTests = (test: TestFn<ContextType>) => {
     })
 
     const rawTimestampTx2 = updateEntryAfterSnapshot[0].timestamp
-    t.assert(rawTimestampTx2 != null)
+    t.assert(rawTimestampTx2 !== null && rawTimestampTx2 !== undefined)
     const timestampTx2 = parseDate(rawTimestampTx2 as string)
 
     t.is(

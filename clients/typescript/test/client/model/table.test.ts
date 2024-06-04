@@ -908,7 +908,7 @@ test.serial('updateMany query', async (t) => {
     new Set(allPosts4),
     new Set(
       allPosts3.map((post) => {
-        if (post.nbr == commonNbr) return { ...post, title: 'Changed' }
+        if (post.nbr === commonNbr) return { ...post, title: 'Changed' }
         else return post
       })
     )

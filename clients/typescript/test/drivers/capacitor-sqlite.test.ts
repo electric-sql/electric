@@ -40,7 +40,7 @@ test('database adapter runInTransaction works', async (t) => {
   const sql = 'select * from bars'
   const res = await adapter.runInTransaction({ sql }, { sql }, { sql })
 
-  t.assert(res.rowsAffected == 0)
+  t.assert(res.rowsAffected === 0)
 })
 
 test('database adapter interactive transaction works', async (t) => {
@@ -51,7 +51,7 @@ test('database adapter interactive transaction works', async (t) => {
   const sql = 'select * from bars;'
   const res = await adapter.transaction<number>((tx, setResult) => {
     tx.run({ sql }, (tx, res) => {
-      t.assert(res.rowsAffected == 0)
+      t.assert(res.rowsAffected === 0)
       tx.query({ sql }, (_tx, res) => {
         t.deepEqual(res, [
           {
@@ -69,7 +69,7 @@ test('database adapter interactive transaction works', async (t) => {
     })
   })
 
-  t.assert(res == 5)
+  t.assert(res === 5)
 })
 
 test('database adapter run, query, runInTransaction reject promise on failure', async (t) => {
