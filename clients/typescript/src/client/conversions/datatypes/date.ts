@@ -67,7 +67,7 @@ function ignoreTimeZone(v: Date): Date {
 type ExtractedDateTime = { date: string; time: string }
 function extractDateAndTime(v: Date): ExtractedDateTime {
   const regex = /([0-9-]*)T([0-9:.]*)Z/g
-  const [_, date, time] = regex.exec(v.toISOString())! as unknown as [
+  const [_, date, time] = regex.exec(v.toISOString()) as unknown as [
     string,
     string,
     string

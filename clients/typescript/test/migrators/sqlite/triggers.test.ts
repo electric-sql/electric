@@ -34,7 +34,9 @@ test.beforeEach(async (t) => {
     personTable,
     dialect: 'SQLite',
     migrateDb: migrateDb.bind(null, adapter, personTable, sqliteBuilder),
-    stopDb: async () => {},
+    stopDb: async () => {
+      // no-op
+    },
   }
 })
 

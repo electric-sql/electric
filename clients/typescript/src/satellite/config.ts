@@ -105,7 +105,7 @@ export const validateConfig = (config: any) => {
     if (!port) {
       errors.push(`Please provide config.replication.port`)
     }
-    if (port && typeof port != 'number') {
+    if (port && typeof port !== 'number') {
       errors.push(`Please provide correct type for config.replication.port`)
     }
   }

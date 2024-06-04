@@ -678,9 +678,9 @@ async function fetchMigrations(
   const options = new URL(endpoint)
   const zipFile = path.join(tmpFolder, 'migrations.zip')
   const requestModule =
-    options.protocol == 'http:'
+    options.protocol === 'http:'
       ? http
-      : options.protocol == 'https:'
+      : options.protocol === 'https:'
       ? https
       : undefined
 

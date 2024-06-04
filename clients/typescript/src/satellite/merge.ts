@@ -75,7 +75,7 @@ export function mergeEntries(
       let optype
 
       const tags = mergeOpTags(localChanges, incomingChanges)
-      if (tags.length == 0) {
+      if (tags.length === 0) {
         optype = OPTYPES.delete
       } else {
         optype = OPTYPES.upsert
@@ -165,7 +165,7 @@ function mergeOpTags(
 }
 
 function calculateTags(tag: Tag | null, tags: Tag[], clear: Tag[]): Tag[] {
-  if (tag == null) {
+  if (tag === null) {
     return difference(tags, clear)
   } else {
     return union([tag], difference(tags, clear))

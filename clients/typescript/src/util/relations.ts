@@ -27,7 +27,7 @@ export async function inferRelationsFromDb(
       notnull: number
       pk: number
     }[]
-    if (columnsForTable.length == 0) {
+    if (columnsForTable.length === 0) {
       continue
     }
     const relation: Relation = {

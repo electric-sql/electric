@@ -1221,7 +1221,7 @@ export class SatelliteProcess implements Satellite {
 
   async _replicateSnapshotChanges(results: OplogEntry[]): Promise<void> {
     if (
-      this.client.getOutboundReplicationStatus() != ReplicationStatus.ACTIVE
+      this.client.getOutboundReplicationStatus() !== ReplicationStatus.ACTIVE
     ) {
       return
     }
@@ -1575,7 +1575,7 @@ export class SatelliteProcess implements Satellite {
     origin: string,
     commitTimestamp: Date
   ): Promise<void> {
-    if (origin == this._authState!.clientId) {
+    if (origin === this._authState!.clientId) {
       /* Any outstanding transaction that originated on Satellite but haven't
        * been received back from the Electric is considered to be concurrent with
        * any other transaction coming from Electric.

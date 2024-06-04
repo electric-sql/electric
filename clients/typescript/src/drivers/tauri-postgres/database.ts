@@ -37,7 +37,7 @@ export class ElectricDatabase implements Database {
     const rows = JSON.parse(result, (_key: any, val: string) => {
       // The values are strings because they were serialized
       // in order to send them from the Rust backend to here
-      if (val[0] == '\u0000') {
+      if (val[0] === '\u0000') {
         // transforms an integer from its string rerpesentation as four code points into an actual int
         return (
           val.charCodeAt(1) * 2 ** 32 +

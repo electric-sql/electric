@@ -283,7 +283,7 @@ export class ShapeManager {
     if (
       shadowedKey &&
       this.requestedSubscriptions[key] === fullKey &&
-      this.activeSubscriptions[key] != shadowedKey
+      this.activeSubscriptions[key] !== shadowedKey
     ) {
       this.requestedSubscriptions[key] = shadowedKey
     } else if (this.requestedSubscriptions[key] === fullKey) {
@@ -376,7 +376,7 @@ export class ShapeManager {
 
         if (
           sub.overshadowsFullKeys.length === 0 &&
-          this.activeSubscriptions[key] == sub.fullKey
+          this.activeSubscriptions[key] === sub.fullKey
         ) {
           this.promises[sub.fullKey].resolve()
         }

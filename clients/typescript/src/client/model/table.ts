@@ -655,7 +655,7 @@ export class Table<
       sql,
       this._schema,
       (_, res) => {
-        if (res.length == 0) return continuation(null)
+        if (res.length === 0) return continuation(null)
         return this.fetchIncludes(
           [res[0]] as any,
           (data as any).include,
@@ -688,7 +688,7 @@ export class Table<
   ) {
     return rows.map((row) => {
       const relatedObjects = relatedRows.filter(
-        (r) => row[fromField] == r[toField]
+        (r) => row[fromField] === r[toField]
       )
       if (relatedObjects.length === 0) return row
       else if (relationArity === 'one') {

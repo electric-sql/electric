@@ -20,7 +20,7 @@ export function dockerCompose(
   containerName?: string,
   env: { [key: string]: string } = {}
 ) {
-  const withPostgres = env?.COMPOSE_PROFILES == 'with-postgres'
+  const withPostgres = env?.COMPOSE_PROFILES === 'with-postgres'
   const args = [
     'compose',
     '--ansi',

@@ -230,12 +230,12 @@ export const processTests = (test: TestFn<ContextType>) => {
 
     await adapter.run({ sql: `INSERT INTO parent(id) VALUES ('1'),('2')` })
 
-    let snapshotTimestamp = await satellite._performSnapshot()
+    const snapshotTimestamp = await satellite._performSnapshot()
 
     const clientId = satellite._authState!.clientId
-    let shadowTags = encodeTags([generateTag(clientId, snapshotTimestamp)])
+    const shadowTags = encodeTags([generateTag(clientId, snapshotTimestamp)])
 
-    var shadowRows = await adapter.query({
+    const shadowRows = await adapter.query({
       sql: `SELECT tags FROM _electric_shadow`,
     })
     t.is(shadowRows.length, 2)
@@ -2323,22 +2323,18 @@ export const processTests = (test: TestFn<ContextType>) => {
     // Create the 'users' and 'posts' tables expected by sqlite
     // populate it with foreign keys and check that the subscription
     // manager does not violate the FKs when unsubscribing from all subscriptions
-    try {
-      await satellite.adapter.runInTransaction(
-        { sql: `CREATE TABLE users (id TEXT PRIMARY KEY, name TEXT)` },
-        {
-          sql: `CREATE TABLE posts (id TEXT PRIMARY KEY, title TEXT, author_id TEXT, FOREIGN KEY(author_id) REFERENCES users(id) ${builder.pgOnly(
-            'DEFERRABLE INITIALLY IMMEDIATE'
-          )})`,
-        },
-        { sql: `INSERT INTO users (id, name) VALUES ('u1', 'user1')` },
-        {
-          sql: `INSERT INTO posts (id, title, author_id) VALUES ('p1', 'My first post', 'u1')`,
-        }
-      )
-    } catch (e: any) {
-      throw e
-    }
+    await satellite.adapter.runInTransaction(
+      { sql: `CREATE TABLE users (id TEXT PRIMARY KEY, name TEXT)` },
+      {
+        sql: `CREATE TABLE posts (id TEXT PRIMARY KEY, title TEXT, author_id TEXT, FOREIGN KEY(author_id) REFERENCES users(id) ${builder.pgOnly(
+          'DEFERRABLE INITIALLY IMMEDIATE'
+        )})`,
+      },
+      { sql: `INSERT INTO users (id, name) VALUES ('u1', 'user1')` },
+      {
+        sql: `INSERT INTO posts (id, title, author_id) VALUES ('p1', 'My first post', 'u1')`,
+      }
+    )
 
     await satellite._clearTables([
       builder.makeQT('users'),
