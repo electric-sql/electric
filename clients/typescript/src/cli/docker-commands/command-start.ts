@@ -1,6 +1,11 @@
 import { Command } from 'commander'
 import { dedent, parsePgProxyPort } from '../util'
-import { addOptionGroupToCommand, getConfig, Config } from '../config'
+import {
+  addOptionGroupToCommand,
+  getConfig,
+  Config,
+  redactConfigSecrets,
+} from '../config'
 import { dockerCompose } from './docker-utils'
 
 export function makeStartCommand() {
@@ -77,7 +82,7 @@ export function start(options: StartSettings) {
           }
         : {}),
     }
-    console.log('Docker compose config:', dockerConfig)
+    console.log('Docker compose config:', redactConfigSecrets(dockerConfig))
 
     const proc = dockerCompose(
       'up',

@@ -1,5 +1,5 @@
 import test from 'ava'
-import { getConfigValue } from '../../src/cli/config'
+import { getConfigValue, redactConfigSecrets } from '../../src/cli/config'
 
 test('getConfigValue can capture `ELECTRIC_` prefixed CLI opitons', async (t) => {
   const image = getConfigValue('ELECTRIC_IMAGE', { image: 'electric:test' })
@@ -9,4 +9,26 @@ test('getConfigValue can capture `ELECTRIC_` prefixed CLI opitons', async (t) =>
 
   t.is(image, 'electric:test')
   t.is(writeToPgMode, 'test')
+})
+
+test('redactConfigValue redacts value in all of the config', (t) => {
+  const config = {
+    ELECTRIC_IMAGE: 'electric:test',
+    PROXY:
+      'postgresql://postgres:proxy_password@localhost:65432/test?sslmode=disable',
+    PG_PROXY_PASSWORD: 'proxy_password',
+    ELECTRIC_WRITE_TO_PG_MODE: 'test',
+    DATABASE_URL: 'postgresql://postgres:db_password@postgres:5432/test',
+    DATABASE_PASSWORD: 'db_password',
+    RANDOM_SECRET: 'whatever_this_might_be',
+  }
+  t.deepEqual(redactConfigSecrets(config), {
+    ...config,
+
+    DATABASE_URL: 'postgresql://postgres:******@postgres:5432/test',
+    DATABASE_PASSWORD: '******',
+    PROXY: 'postgresql://postgres:******@localhost:65432/test?sslmode=disable',
+    PG_PROXY_PASSWORD: '******',
+    RANDOM_SECRET: '******',
+  })
 })

@@ -183,6 +183,39 @@ export function envFromConfig(config: Config) {
   )
 }
 
+/**
+ * Redacts the given `stringToRedact` from the `config`, returning
+ * a new config with any mention of `stringToRedact` redacted.
+ */
+function redactConfigValue(config: Config, stringToRedact: string): Config {
+  const redactedConfig = { ...config }
+  Object.entries(redactedConfig).forEach(([key, value]) => {
+    if (typeof value === 'string' && value.includes(stringToRedact)) {
+      // using `split` followed by `join` to avoid generating arbitrary
+      // regex for string replacement
+      redactedConfig[key] = value.split(stringToRedact).join('******')
+    }
+  })
+  return redactedConfig
+}
+
+/**
+ * Redacts sensitive information like secrets and passwords from the
+ * config and returns a separate, redacted version.
+ *
+ * Redaction is done based on keys that contain "PASSWORD" or "SECRET".
+ */
+export function redactConfigSecrets(config: Config): Config {
+  const passKeys = Object.keys(config).filter(
+    (k) => k.includes('PASSWORD') || k.includes('SECRET')
+  )
+  let redactedConfig = { ...config }
+  for (const passKey of passKeys) {
+    redactedConfig = redactConfigValue(redactedConfig, config[passKey])
+  }
+  return redactedConfig
+}
+
 function snakeToCamel(s: string) {
   return s
     .toLocaleLowerCase()
