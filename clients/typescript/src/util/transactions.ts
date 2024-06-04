@@ -39,7 +39,7 @@ export async function runInTransaction(
       const res = await uncoordinatedAdapter.runInTransaction(...stmts)
       return res
     } finally {
-      // TX throwed, need to restore the pragma
+      // Need to restore the pragma also if TX throwed
       if (originalPragma !== desiredPragma) {
         // restore the pragma to its original value
         await uncoordinatedAdapter.run({
