@@ -20,7 +20,6 @@ test('redactConfigValue redacts value in all of the config', (t) => {
     ELECTRIC_WRITE_TO_PG_MODE: 'test',
     DATABASE_URL: 'postgresql://postgres:db_password@postgres:5432/test',
     DATABASE_PASSWORD: 'db_password',
-    RANDOM_SECRET: 'whatever_this_might_be',
   }
   t.deepEqual(redactConfigSecrets(config), {
     ...config,
@@ -29,6 +28,5 @@ test('redactConfigValue redacts value in all of the config', (t) => {
     DATABASE_PASSWORD: '******',
     PROXY: 'postgresql://postgres:******@localhost:65432/test?sslmode=disable',
     PG_PROXY_PASSWORD: '******',
-    RANDOM_SECRET: '******',
   })
 })

@@ -16,6 +16,7 @@ export interface AnyConfigOption {
     | boolean
     | ((options: ConfigMap) => string | number | boolean)
   constructedDefault?: string
+  confidential?: true
   groups?: Readonly<string[]>
 }
 
@@ -203,15 +204,16 @@ function redactConfigValue(config: Config, stringToRedact: string): Config {
  * Redacts sensitive information like secrets and passwords from the
  * config and returns a separate, redacted version.
  *
- * Redaction is done based on keys that contain "PASSWORD" or "SECRET".
+ * Redaction is done based on the `confidential` property of the
+ * configuration option.
  */
 export function redactConfigSecrets(config: Config): Config {
-  const passKeys = Object.keys(config).filter(
-    (k) => k.includes('PASSWORD') || k.includes('SECRET')
+  const keysToRedact = Object.keys(config).filter(
+    (k) => configOptions[k].confidential
   )
   let redactedConfig = { ...config }
-  for (const passKey of passKeys) {
-    redactedConfig = redactConfigValue(redactedConfig, config[passKey])
+  for (const keyToRedact of keysToRedact) {
+    redactedConfig = redactConfigValue(redactedConfig, config[keyToRedact])
   }
   return redactedConfig
 }
