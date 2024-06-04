@@ -489,11 +489,11 @@ export const opLogEntryToChange = (
   const relation = relations[`${entry.tablename}`]
 
   let record, oldRecord
-  if (entry.newRow !== undefined) {
+  if (typeof entry.newRow === 'string') {
     record = deserialiseRow(entry.newRow, relation)
   }
 
-  if (entry.oldRow !== undefined) {
+  if (typeof entry.oldRow === 'string') {
     oldRecord = deserialiseRow(entry.oldRow, relation)
   }
 
