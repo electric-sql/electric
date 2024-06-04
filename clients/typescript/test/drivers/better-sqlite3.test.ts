@@ -5,6 +5,7 @@ import Database from 'better-sqlite3'
 import { DatabaseAdapter } from '../../src/drivers/better-sqlite3/adapter'
 import { MockDatabase } from '../../src/drivers/better-sqlite3/mock'
 import { QualifiedTablename } from '../../src/util/tablename'
+import { UncoordinatedDatabaseAdapter } from '../../src/electric'
 
 test('database adapter run works', async (t) => {
   const db = new MockDatabase('test.db')
@@ -173,4 +174,27 @@ test('adapter rolls back dependent queries on conflict', async (t) => {
     const res = await adapter.query({ sql: selectAll })
     t.deepEqual(res, [])
   }
+})
+
+test('adapter isolates grouped queries from other queries/transactions', async (t) => {
+  const adapter = await makeAdapter()
+
+  let query1Finished = false
+
+  // Make a slow grouped query and check that it is not interleaved with other queries/transactions
+  const slowQuery = async (adapter: UncoordinatedDatabaseAdapter) => {
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    await adapter.query({ sql: 'SELECT 1' })
+    query1Finished = true
+    return 7
+  }
+
+  const prom1 = adapter.runExclusively(slowQuery)
+  const prom2 = adapter.transaction(async (_tx, setResult) => {
+    t.true(query1Finished)
+    setResult(5)
+  })
+
+  const results = await Promise.all([prom1, prom2])
+  t.deepEqual(results, [7, 5])
 })

@@ -20,10 +20,16 @@ export interface SatelliteOpts {
   pollingInterval: number
   /** Throttle snapshotting to once per `minSnapshotWindow` milliseconds. */
   minSnapshotWindow: number
-  /** On reconnect, clear client's state if cannot catch up with Electric buffered WAL*/
+  /** On reconnect, clear client's state if cannot catch up with Electric buffered WAL */
   clearOnBehindWindow: boolean
   /** Backoff options for connecting with Electric*/
   connectionBackOffOptions: ConnectionBackoffOptions
+  /**
+   * Whether to disable FK checks when applying incoming (i.e. remote) transactions to the local SQLite database.
+   * When using Postgres, this is the default behavior and can't be changed.
+   * If this flag is undefined and we're running on SQLite, then the FK pragma is left untouched.
+   */
+  disableFKs: boolean | undefined
   /** With debug mode enabled, Satellite can show additional logs. */
   debug: boolean
 }
@@ -70,6 +76,7 @@ export const satelliteDefaults: (namespace: string) => SatelliteOpts = (
       numOfAttempts: 50,
       timeMultiple: 2,
     },
+    disableFKs: undefined,
     debug: false,
   }
 }

@@ -8,11 +8,14 @@ export class MockMigrator implements Migrator {
     return 1
   }
 
-  async apply(_: StmtMigration): Promise<void> {
+  async apply(_: StmtMigration, _disableFks?: boolean): Promise<void> {
     return
   }
 
-  async applyIfNotAlready(_: StmtMigration): Promise<boolean> {
+  async applyIfNotAlready(
+    _: StmtMigration,
+    _disableFks: boolean | undefined
+  ): Promise<boolean> {
     return true
   }
 

@@ -29,8 +29,11 @@ export function makeStmtMigration(migration: Migration): StmtMigration {
 
 export interface Migrator {
   up(): Promise<number>
-  apply(migration: StmtMigration): Promise<void>
-  applyIfNotAlready(migration: StmtMigration): Promise<boolean>
+  apply(migration: StmtMigration, disableFKs?: boolean): Promise<void>
+  applyIfNotAlready(
+    migration: StmtMigration,
+    disableFKs: boolean | undefined
+  ): Promise<boolean>
   querySchemaVersion(): Promise<string | undefined>
   queryBuilder: QueryBuilder
 }

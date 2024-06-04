@@ -78,6 +78,7 @@ import { QueryBuilder } from '../migrators/query-builder'
 import groupBy from 'lodash.groupby'
 import { ShapeManager } from './shapes/shapeManager'
 import { SyncStatus } from '../client/model/shapes'
+import { runInTransaction } from '../util/transactions'
 
 type ChangeAccumulator = {
   [key: string]: Change
@@ -124,6 +125,7 @@ export class SatelliteProcess implements Satellite {
   builder: QueryBuilder
 
   opts: SatelliteOpts
+  disableFKs: boolean | undefined
 
   _authState?: AuthState
   _unsubscribeFromAuthState?: UnsubscribeFunction
@@ -173,6 +175,8 @@ export class SatelliteProcess implements Satellite {
     this.builder = this.migrator.queryBuilder
 
     this.opts = opts
+    this.disableFKs =
+      this.builder.dialect === 'SQLite' ? this.opts.disableFKs : undefined
     this.relations = {}
 
     this.previousShapeSubscriptions = []
@@ -640,7 +644,7 @@ export class SatelliteProcess implements Satellite {
     )
 
     try {
-      await this.adapter.runInTransaction(...stmts)
+      await this.runInTransaction(...stmts)
 
       // We're explicitly not specifying rowids in these changes for now,
       // because nobody uses them and we don't have the machinery to to a
@@ -680,6 +684,14 @@ export class SatelliteProcess implements Satellite {
     }
   }
 
+  /**
+   * Runs the provided statements in a transaction and disables FK checks if `disableFKs` is true.
+   * `disableFKs` should only be set to true when using SQLite as we already disable FK checks for incoming TXs when using Postgres
+   */
+  async runInTransaction(...stmts: Statement[]) {
+    return runInTransaction(this.adapter, this.disableFKs, ...stmts)
+  }
+
   _resetClientState(opts?: { keepSubscribedShapes: boolean }): Promise<void> {
     Log.warn(`resetting client state`)
     this.disconnect()
@@ -695,7 +707,7 @@ export class SatelliteProcess implements Satellite {
   }
 
   async _clearTables(tables: QualifiedTablename[]) {
-    await this.adapter.runInTransaction(
+    await this.runInTransaction(
       this._setMetaStatement('lsn', null),
       this._setMetaStatement(
         'subscriptions',
@@ -1488,12 +1500,15 @@ export class SatelliteProcess implements Satellite {
     if (transaction.migrationVersion) {
       // If a migration version is specified
       // then the transaction is a migration
-      await this.migrator.applyIfNotAlready({
-        statements: allStatements,
-        version: transaction.migrationVersion,
-      })
+      await this.migrator.applyIfNotAlready(
+        {
+          statements: allStatements,
+          version: transaction.migrationVersion,
+        },
+        this.disableFKs
+      )
     } else {
-      await this.adapter.runInTransaction(...allStatements)
+      await this.runInTransaction(...allStatements)
     }
 
     this._notifyChanges(opLogEntries, 'remote')
@@ -1558,7 +1573,7 @@ export class SatelliteProcess implements Satellite {
       )
     }
 
-    await this.adapter.runInTransaction(
+    await this.runInTransaction(
       this.updateLsnStmt(lsn),
       { sql: this.builder.deferOrDisableFKsForTx },
       ...this._disableTriggers(affectedTables),

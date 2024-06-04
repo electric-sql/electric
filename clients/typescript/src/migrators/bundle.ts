@@ -12,6 +12,7 @@ import { QualifiedTablename, SatelliteError, SatelliteErrorCode } from '../util'
 import { _electric_migrations } from '../satellite/config'
 import { pgBuilder, QueryBuilder, sqliteBuilder } from './query-builder'
 import { dedent } from 'ts-dedent'
+import { runInTransaction } from '../util/transactions'
 
 export const SCHEMA_VSN_ERROR_MSG = `Local schema doesn't match server's. Clear local state through developer tools and retry connection manually. If error persists, re-generate the client. Check documentation (https://electric-sql.com/docs/reference/roadmap) to learn more.`
 
@@ -130,14 +131,17 @@ export abstract class BundleMigratorBase implements Migrator {
     return migrations.slice(existingPrefix.length)
   }
 
-  async apply({ statements, version }: StmtMigration): Promise<void> {
+  async apply(
+    { statements, version }: StmtMigration,
+    disableFKs?: boolean
+  ): Promise<void> {
     if (!VALID_VERSION_EXP.test(version)) {
       throw new Error(
         `Invalid migration version, must match ${VALID_VERSION_EXP}`
       )
     }
 
-    await this.adapter.runInTransaction(...statements, {
+    await runInTransaction(this.adapter, disableFKs, ...statements, {
       sql: dedent`
         INSERT INTO ${this.migrationsTable} (version, applied_at)
         VALUES (${this.queryBuilder.makePositionalParam(
@@ -154,7 +158,10 @@ export abstract class BundleMigratorBase implements Migrator {
    * @returns A promise that resolves to a boolean
    *          that indicates if the migration was applied.
    */
-  async applyIfNotAlready(migration: StmtMigration): Promise<boolean> {
+  async applyIfNotAlready(
+    migration: StmtMigration,
+    disableFKs: boolean | undefined
+  ): Promise<boolean> {
     const rows = await this.adapter.query({
       sql: dedent`
         SELECT 1 FROM ${this.migrationsTable}
@@ -168,7 +175,7 @@ export abstract class BundleMigratorBase implements Migrator {
     if (shouldApply) {
       // This is a new migration because its version number
       // is not in our migrations table.
-      await this.apply(migration)
+      await this.apply(migration, disableFKs)
     }
 
     return shouldApply

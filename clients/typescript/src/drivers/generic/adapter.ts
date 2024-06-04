@@ -3,6 +3,7 @@ import {
   RunResult,
   TableNameImpl,
   Transaction as Tx,
+  UncoordinatedDatabaseAdapter,
 } from '../../electric/adapter'
 import { Row, Statement } from '../../util'
 import { Mutex } from 'async-mutex'
@@ -42,19 +43,12 @@ abstract class DatabaseAdapter
   /**
    * @param statements A list of SQL statements to execute against the DB.
    */
-  abstract runInTransaction(...statements: Statement[]): Promise<RunResult>
+  abstract _runInTransaction(...statements: Statement[]): Promise<RunResult>
 
-  async transaction<T>(
+  async _transaction<T>(
     f: (_tx: Tx, setResult: (res: T) => void) => void
   ): Promise<T> {
-    const release = await this.txMutex.acquire()
-
-    try {
-      await this._run({ sql: 'BEGIN' })
-    } catch (e) {
-      release()
-      throw e
-    }
+    await this._run({ sql: 'BEGIN' })
 
     return new Promise<T>((resolve, reject) => {
       const tx = new Transaction(this, reject)
@@ -64,22 +58,26 @@ abstract class DatabaseAdapter
         // This assumes that the user does not execute any more queries after setting the result.
         this._run({ sql: 'COMMIT' })
           .then(() => {
-            // Release early if commit succeeded
-            release()
             resolve(res)
           })
           // Failed to commit
           .catch(reject)
       })
-    })
-      .catch((err) => {
-        // something went wrong
-        // let's roll back and rethrow
-        return this._run({ sql: 'ROLLBACK' }).then(() => {
-          throw err
-        })
+    }).catch((err) => {
+      // something went wrong
+      // let's roll back and rethrow
+      return this._run({ sql: 'ROLLBACK' }).then(() => {
+        throw err
       })
-      .finally(release)
+    })
+  }
+
+  async transaction<T>(
+    f: (_tx: Tx, setResult: (res: T) => void) => void
+  ): Promise<T> {
+    return this.txMutex.runExclusive(() => {
+      return this._transaction(f)
+    })
   }
 
   run(stmt: Statement): Promise<RunResult> {
@@ -95,6 +93,34 @@ abstract class DatabaseAdapter
     // Because that would make the query part of the transaction which was not the intention.
     return this.txMutex.runExclusive(() => {
       return this._query(stmt)
+    })
+  }
+
+  runInTransaction(...statements: Statement[]): Promise<RunResult> {
+    return this.txMutex.runExclusive(() => {
+      return this._runInTransaction(...statements)
+    })
+  }
+
+  async _runExclusively<T>(
+    f: (adapter: UncoordinatedDatabaseAdapter) => Promise<T> | T
+  ): Promise<T> {
+    // We create an adapter that does not go through the mutex
+    // when used by the function`f`, since we already take the mutex here
+    const adapter = {
+      run: this._run.bind(this),
+      query: this._query.bind(this),
+      transaction: this._transaction.bind(this),
+      runInTransaction: this._runInTransaction.bind(this),
+    }
+    return await f(adapter)
+  }
+
+  runExclusively<T>(
+    f: (adapter: UncoordinatedDatabaseAdapter) => Promise<T> | T
+  ): Promise<T> {
+    return this.txMutex.runExclusive(() => {
+      return this._runExclusively(f)
     })
   }
 
@@ -118,11 +144,8 @@ export abstract class BatchDatabaseAdapter
    */
   abstract execBatch(statements: Statement[]): Promise<RunResult>
 
-  async runInTransaction(...statements: Statement[]): Promise<RunResult> {
-    // Uses a mutex to ensure that transactions are not interleaved.
-    return this.txMutex.runExclusive(() => {
-      return this.execBatch(statements)
-    })
+  async _runInTransaction(...statements: Statement[]): Promise<RunResult> {
+    return this.execBatch(statements)
   }
 }
 
@@ -135,9 +158,7 @@ export abstract class SerialDatabaseAdapter
   implements DatabaseAdapterInterface
 {
   abstract readonly defaultNamespace: 'main' | 'public'
-  async runInTransaction(...statements: Statement[]): Promise<RunResult> {
-    // Uses a mutex to ensure that transactions are not interleaved.
-    const release = await this.txMutex.acquire()
+  async _runInTransaction(...statements: Statement[]): Promise<RunResult> {
     let transactionBegan = false
     let rowsAffected = 0
     try {
@@ -156,8 +177,6 @@ export abstract class SerialDatabaseAdapter
         await this._run({ sql: 'ROLLBACK' })
       }
       throw error // rejects the promise with the reason for the rollback
-    } finally {
-      release()
     }
   }
 }
