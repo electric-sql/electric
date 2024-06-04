@@ -53,20 +53,26 @@ defmodule Electric.Application do
 
     opts = [strategy: :one_for_one, name: Electric.Supervisor]
 
-    with {:ok, supervisor} <- Supervisor.start_link(children, opts) do
-      Application.get_env(:electric, Electric.Replication.Connectors, [])
-      |> Enum.each(fn {name, config} ->
-        Connectors.start_connector(
-          PostgresConnector,
-          config
-          |> Keyword.put(:origin, to_string(name))
-          |> Keyword.put(:write_to_pg_mode, write_to_pg_mode)
-        )
-      end)
-
+    with {:ok, supervisor} <- Supervisor.start_link(children, opts),
+         connectors = Application.get_env(:electric, Electric.Replication.Connectors, []),
+         :ok <- start_connectors(connectors, write_to_pg_mode) do
       {:ok, supervisor}
+    else
+      error -> log_supervisor_startup_error(error)
     end
-    |> log_supervisor_startup_error()
+  end
+
+  defp start_connectors([], _write_to_pg_mode), do: :ok
+
+  defp start_connectors([{name, config} | connectors], write_to_pg_mode) do
+    connector_config =
+      config
+      |> Keyword.put(:origin, to_string(name))
+      |> Keyword.put(:write_to_pg_mode, write_to_pg_mode)
+
+    with {:ok, _pid} <- Connectors.start_connector(PostgresConnector, connector_config) do
+      start_connectors(connectors, write_to_pg_mode)
+    end
   end
 
   defp maybe_add_child(children, nil), do: children
@@ -94,14 +100,14 @@ defmodule Electric.Application do
     end
   end
 
-  defp log_supervisor_startup_error({:ok, _sup_pid} = ok), do: ok
-
   defp log_supervisor_startup_error(
          {:error, {:shutdown, {:failed_to_start_child, child_id, reason}}} = error
        ) do
     _ = log_child_error(child_id, reason)
     error
   end
+
+  defp log_supervisor_startup_error(error), do: error
 
   @spec log_child_error({atom, atom}, term) :: no_return
   defp log_child_error(
@@ -123,6 +129,20 @@ defmodule Electric.Application do
       :init,
       "Failed to open a socket to listen for HTTP/WebSocket connections on port #{http_port()}.",
       "Another instance of Electric or a different application is already listening on the same port."
+    )
+  end
+
+  defp log_child_error(
+         Electric.Replication.PostgresConnectorMng,
+         {{:badmatch, {:error, :nxdomain}}, _stracktrace}
+       ) do
+    Electric.Errors.print_fatal_error(
+      :init,
+      "Failed to resolve the database domain name to an IP address.",
+      """
+      Double-check the value of DATABASE_URL and make sure to set
+      DATABASE_USE_IPV6=true if your database is only reachable using IPv6.
+      """
     )
   end
 
