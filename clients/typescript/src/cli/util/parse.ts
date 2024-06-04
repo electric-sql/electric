@@ -9,22 +9,27 @@ export function getAppName(): string | undefined {
   return JSON.parse(fs.readFileSync(appPackageJsonPath, 'utf8')).name
 }
 
-export function parsePort(str: string): number {
+/**
+ * Parse an integer from a string and throw the given error
+ * if parsing fails
+ */
+function parseIntOrFail(str: string, error: string) {
   const parsed = parseInt(str)
   if (isNaN(parsed)) {
-    throw new InvalidArgumentError(`Invalid port: ${str}.`)
+    throw new InvalidArgumentError(error)
   }
   return parsed
 }
 
+export function parsePort(str: string): number {
+  return parseIntOrFail(
+    str,
+    `Invalid port: ${str}. Must be integer between 1 and 65535.`
+  )
+}
+
 export function parseTimeout(str: string): number {
-  const parsed = parseInt(str)
-  if (isNaN(parsed)) {
-    throw new InvalidArgumentError(
-      `Invalid timeout: ${str}. Must be an integer.`
-    )
-  }
-  return parsed
+  return parseIntOrFail(str, `Invalid timeout: ${str}. Must be an integer.`)
 }
 
 export function extractDatabaseURL(url: string): {
