@@ -75,7 +75,8 @@ defmodule Electric.Telemetry do
         wal_cache_memory:
           last_value("electric.resources.wal_cache.cache_memory_total", unit: :byte),
         wal_transactions: last_value("electric.resources.wal_cache.transaction_count"),
-        oldest_wal_time: last_value("electric.resources.wal_cache.oldest_transaction_timestamp")
+        oldest_wal_time: last_value("electric.resources.wal_cache.oldest_transaction_timestamp"),
+        wal_cache_size: last_value("electric.resources.wal_cache.max_cache_size", unit: :byte)
       ],
       usage: [
         concurrent_clients: summary("electric.resources.clients.connected"),
