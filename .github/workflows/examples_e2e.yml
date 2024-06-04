@@ -21,7 +21,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        example_dir: ['examples/web-wa-sqlite', 'examples/web-wa-sqlite-vuejs']
+        example_dir:
+          [
+            'examples/web-wa-sqlite',
+            'examples/web-wa-sqlite-vuejs',
+            'examples/web-pglite',
+          ]
     defaults:
       run:
         working-directory: ${{ matrix.example_dir }}
@@ -33,7 +38,7 @@ jobs:
           cache: npm
           cache-dependency-path: |
             ${{ matrix.example_dir }}/package-lock.json
-            examples/_testing/package-lock.json 
+            examples/_testing/package-lock.json
       - name: Install dependencies
         run: npm ci
       - name: Start backend, run migrations, generate client
