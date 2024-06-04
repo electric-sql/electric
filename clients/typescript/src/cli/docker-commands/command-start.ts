@@ -164,7 +164,7 @@ async function waitForElectric(serviceUrl: string) {
   const statusUrl = `${serviceUrl}/api/status`
   // Status endpoint returns 200 when ready
   const start = Date.now()
-  const timeout = 20 * 1000 // 20 seconds
+  const timeout = 10 * 1000 // 10 seconds
   while (Date.now() - start < timeout) {
     try {
       const res = await fetch(statusUrl)
