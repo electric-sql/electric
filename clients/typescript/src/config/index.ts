@@ -43,10 +43,10 @@ export interface ElectricConfig {
    */
   connectionBackOffOptions?: ConnectionBackOffOptions
   /**
-   * Whether to disable FK checks when applying incoming (i.e. remote) transactions to the local SQLite database.
+   * Whether to disable FK checks when applying downstream (i.e. incoming) transactions to the local SQLite database.
    * When using Postgres, this is the default behavior and can't be changed.
    */
-  disableFKs?: boolean
+  disableForeignKeysDownstream?: boolean
 }
 
 export type ElectricConfigWithDialect = ElectricConfig & {
@@ -133,6 +133,6 @@ export const hydrateConfig = (
     debug,
     connectionBackOffOptions,
     namespace: defaultNamespace,
-    disableFKs: config.disableFKs,
+    disableFKs: config.disableForeignKeysDownstream,
   }
 }
