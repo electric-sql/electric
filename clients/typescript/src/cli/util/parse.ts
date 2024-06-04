@@ -72,7 +72,19 @@ export function extractServiceURL(serviceUrl: string): {
   }
 }
 
-export function parsePgProxyPort(str: string | number): {
+/**
+ * Parse the given string or number into a port number and whether
+ * it uses the HTTP proxy or not.
+ * @example
+ * ```
+ * parsePgProxyPort('65432') // { http: false, port: 65432 }
+ * parsePgProxyPort('http:5123') // { http: true, port: 5123 }
+ * parsePgProxyPort('http') // { http: true, port: 65432 }
+ * ```
+ */
+export function parsePgProxyPort(
+  str: number | `${number}` | `http` | `http:${number}`
+): {
   http: boolean
   port: number
 } {

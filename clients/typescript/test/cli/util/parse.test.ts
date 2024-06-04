@@ -1,5 +1,9 @@
 import test from 'ava'
-import { extractDatabaseURL, extractServiceURL } from '../../../src/cli/util'
+import {
+  extractDatabaseURL,
+  extractServiceURL,
+  parsePgProxyPort,
+} from '../../../src/cli/util'
 
 test('extractServiceURL decomposes electric URL', async (t) => {
   t.deepEqual(extractServiceURL('http://localhost:5133'), {
@@ -104,4 +108,39 @@ test('extractDatabaseURL throws for missing host', (t) => {
     instanceOf: Error,
     message: `Invalid URL`,
   })
+})
+
+test('parsePgProxyPort parses regular port number', async (t) => {
+  t.deepEqual(parsePgProxyPort(5133), {
+    http: false,
+    port: 5133,
+  })
+
+  t.deepEqual(parsePgProxyPort('65432'), {
+    http: false,
+    port: 65432,
+  })
+})
+
+test('parsePgProxyPort http proxy port', async (t) => {
+  t.deepEqual(parsePgProxyPort('http:5133'), {
+    http: true,
+    port: 5133,
+  })
+
+  // @ts-expect-error invalid port prefix
+  t.deepEqual(parsePgProxyPort('random:5133'), {
+    http: false,
+    port: 5133,
+  })
+})
+
+test('parsePgProxyPort http proxy with default port', async (t) => {
+  t.deepEqual(parsePgProxyPort('http'), {
+    http: true,
+    port: 65432,
+  })
+
+  // @ts-expect-error invalid port prefix
+  t.throws(() => parsePgProxyPort('test'))
 })
