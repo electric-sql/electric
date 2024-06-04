@@ -1,5 +1,5 @@
 import type { Command } from 'commander'
-import { extractDatabaseURL, extractServiceURL } from './utils'
+import { extractDatabaseURL, extractServiceURL } from './util'
 import { configOptions } from './config-options'
 
 export type ConfigMap = Record<string, string | number | boolean>

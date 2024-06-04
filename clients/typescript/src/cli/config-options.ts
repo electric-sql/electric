@@ -6,7 +6,7 @@ import {
   getConfigValue,
   type ConfigMap,
 } from './config'
-import { dedent, getAppName, buildDatabaseURL, parsePgProxyPort } from './utils'
+import { dedent, getAppName, buildDatabaseURL, parsePgProxyPort } from './util'
 import { LIB_VERSION } from '../version'
 
 const minorVersion = LIB_VERSION.split('.').slice(0, 2).join('.')
@@ -122,7 +122,7 @@ export const configOptions: Record<string, any> = {
   DATABASE_PORT: {
     doc: 'Port number of the database server.',
     valueType: Number,
-    inferVal: (options: ConfigMap) => inferDbUrlPart('port', options),
+    inferVal: (options: ConfigMap) => inferDbUrlPart('port', options, 5432),
     defaultVal: 5432,
     groups: ['database'],
   },
@@ -229,7 +229,7 @@ export const configOptions: Record<string, any> = {
   },
   PG_PROXY_PORT: {
     inferVal: (options: ConfigMap) =>
-      inferProxyUrlPart('port', options)?.toString(),
+      inferProxyUrlPart('port', options, 65432)?.toString(),
     defaultVal: '65432',
     valueType: String,
     valueTypeName: 'port',

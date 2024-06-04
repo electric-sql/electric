@@ -1,5 +1,5 @@
 import { Command, InvalidArgumentError } from 'commander'
-import { dedent } from '../utils'
+import { dedent } from '../util'
 import {
   generate,
   type GeneratorOptions,

@@ -2,7 +2,7 @@ import { Command } from 'commander'
 import net from 'net'
 import { WebSocket, createWebSocketStream } from 'ws'
 import { addOptionGroupToCommand, getConfig } from '../config'
-import { parsePort } from '../utils'
+import { parsePort } from '../util'
 
 export function makeProxyTunnelCommand() {
   const command = new Command('proxy-tunnel')
