@@ -40,7 +40,7 @@ test.describe('basic example', () => {
 
     // added items persist reload
     await page.reload()
-    await page.waitForTimeout(300)
+    await page.waitForTimeout(1000)
     await expect(await items.count()).toBe(3)
   })
 

@@ -21,9 +21,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        example_dir: [
-            # 'examples/web-wa-sqlite',
-            # 'examples/web-wa-sqlite-vuejs',
+        example_dir:
+          [
+            'examples/web-wa-sqlite',
+            'examples/web-wa-sqlite-vuejs',
             'examples/web-pglite',
           ]
     defaults:
