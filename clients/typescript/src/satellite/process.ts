@@ -125,7 +125,7 @@ export class SatelliteProcess implements Satellite {
   builder: QueryBuilder
 
   opts: SatelliteOpts
-  disableFKs: boolean
+  disableFKs: boolean | undefined
 
   _authState?: AuthState
   _unsubscribeFromAuthState?: UnsubscribeFunction
@@ -175,7 +175,8 @@ export class SatelliteProcess implements Satellite {
     this.builder = this.migrator.queryBuilder
 
     this.opts = opts
-    this.disableFKs = this.builder.dialect === 'SQLite' && this.opts.disableFKs
+    this.disableFKs =
+      this.builder.dialect === 'SQLite' ? this.opts.disableFKs : undefined
     this.relations = {}
 
     this.previousShapeSubscriptions = []

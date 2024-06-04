@@ -66,7 +66,7 @@ export type HydratedConfig = {
   debug: boolean
   connectionBackOffOptions: ConnectionBackOffOptions
   namespace: string
-  disableFKs: boolean
+  disableFKs: boolean | undefined
 }
 
 export type InternalElectricConfig = {
@@ -88,7 +88,6 @@ export const hydrateConfig = (
   const auth = config.auth ?? {}
 
   const debug = config.debug ?? false
-  const disableFKs = config.disableFKs ?? false
   const url = new URL(config.url ?? 'http://localhost:5133')
 
   const isSecureProtocol = url.protocol === 'https:' || url.protocol === 'wss:'
@@ -134,6 +133,6 @@ export const hydrateConfig = (
     debug,
     connectionBackOffOptions,
     namespace: defaultNamespace,
-    disableFKs,
+    disableFKs: config.disableFKs,
   }
 }

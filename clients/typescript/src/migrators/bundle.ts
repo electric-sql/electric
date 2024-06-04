@@ -133,7 +133,7 @@ export abstract class BundleMigratorBase implements Migrator {
 
   async apply(
     { statements, version }: StmtMigration,
-    disableFKs = false
+    disableFKs?: boolean
   ): Promise<void> {
     if (!VALID_VERSION_EXP.test(version)) {
       throw new Error(
@@ -160,7 +160,7 @@ export abstract class BundleMigratorBase implements Migrator {
    */
   async applyIfNotAlready(
     migration: StmtMigration,
-    disableFKs: boolean
+    disableFKs: boolean | undefined
   ): Promise<boolean> {
     const rows = await this.adapter.query({
       sql: dedent`

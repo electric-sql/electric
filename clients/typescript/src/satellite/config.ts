@@ -27,8 +27,9 @@ export interface SatelliteOpts {
   /**
    * Whether to disable FK checks when applying incoming (i.e. remote) transactions to the local SQLite database.
    * When using Postgres, this is the default behavior and can't be changed.
+   * If this flag is undefined and we're running on SQLite, then the FK pragma is left untouched.
    */
-  disableFKs: boolean
+  disableFKs: boolean | undefined
   /** With debug mode enabled, Satellite can show additional logs. */
   debug: boolean
 }
@@ -75,7 +76,7 @@ export const satelliteDefaults: (namespace: string) => SatelliteOpts = (
       numOfAttempts: 50,
       timeMultiple: 2,
     },
-    disableFKs: false,
+    disableFKs: undefined,
     debug: false,
   }
 }

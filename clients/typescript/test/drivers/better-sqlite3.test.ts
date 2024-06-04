@@ -186,6 +186,7 @@ test('adapter isolates grouped queries from other queries/transactions', async (
     await new Promise((resolve) => setTimeout(resolve, 100))
     await adapter.query({ sql: 'SELECT 1' })
     query1Finished = true
+    return 7
   }
 
   const prom1 = adapter.group(slowQuery)
@@ -194,5 +195,6 @@ test('adapter isolates grouped queries from other queries/transactions', async (
     setResult(5)
   })
 
-  return Promise.all([prom1, prom2])
+  const results = await Promise.all([prom1, prom2])
+  t.deepEqual(results, [7, 5])
 })
