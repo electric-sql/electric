@@ -40,7 +40,7 @@ export function extractDatabaseURL(url: string): {
   dbName: string
 } {
   const parsed = new URL(url)
-  if (!(parsed.protocol == 'postgres:' || parsed.protocol == 'postgresql:')) {
+  if (!(parsed.protocol === 'postgres:' || parsed.protocol === 'postgresql:')) {
     throw new Error(`Invalid database URL scheme: ${url}`)
   }
 
