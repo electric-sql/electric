@@ -143,7 +143,7 @@ export const localEntryToChanges = (
     >,
     optype: entry.optype === OPTYPES.delete ? OPTYPES.delete : OPTYPES.upsert,
     changes: {},
-    tag: entry.optype == OPTYPES.delete ? null : tag,
+    tag: entry.optype === OPTYPES.delete ? null : tag,
     clearTags: decodeTags(entry.clearTags),
   }
 
@@ -263,13 +263,13 @@ export const localOperationsToTableChanges = (
       for (const [key, value] of Object.entries(entryChanges.changes)) {
         existing.changes[key] = value
       }
-      if (entryChanges.optype == 'DELETE') {
+      if (entryChanges.optype === 'DELETE') {
         existing.tag = null
       } else {
         existing.tag = genTag(new Date(entry.timestamp))
       }
 
-      if (timestamp == entry.timestamp) {
+      if (timestamp === entry.timestamp) {
         // within the same transaction overwirte
         existing.clearTags = entryChanges.clearTags
       } else {
@@ -427,7 +427,7 @@ export const toTransactions = (
   opLogEntries: OplogEntry[],
   relations: RelationsCache
 ): DataTransaction[] => {
-  if (opLogEntries.length == 0) {
+  if (opLogEntries.length === 0) {
     return []
   }
 
@@ -489,11 +489,11 @@ export const opLogEntryToChange = (
   const relation = relations[`${entry.tablename}`]
 
   let record, oldRecord
-  if (entry.newRow != null) {
+  if (entry.newRow !== undefined) {
     record = deserialiseRow(entry.newRow, relation)
   }
 
-  if (entry.oldRow != null) {
+  if (entry.oldRow !== undefined) {
     oldRecord = deserialiseRow(entry.oldRow, relation)
   }
 

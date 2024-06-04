@@ -218,7 +218,7 @@ export class Builder {
     }
 
     const selectedFields = getSelectedFields(i.select)
-    if (selectedFields.length == 0)
+    if (selectedFields.length === 0)
       throw new InvalidArgumentError(
         `The \`select\` statement for type ${this._tableName} needs at least one truthy value.`
       )
@@ -293,7 +293,7 @@ export class Builder {
     const obj = typeof whereObject !== 'undefined' ? whereObject : {} // provide empty object if no `where` argument is provided
     const fields = Object.keys(obj)
 
-    if (fieldsRequired && fields.length == 0)
+    if (fieldsRequired && fields.length === 0)
       throw new InvalidArgumentError(
         `Argument \`where\` for query on ${this._tableName} type requires at least one argument.`
       )

@@ -391,7 +391,7 @@ export class SatelliteClient implements Client {
 
     // Perform validations and prepare the request
     let request: SatInStartReplicationReq
-    if (!lsn || lsn.length == 0) {
+    if (!lsn || lsn.length === 0) {
       Log.info(`no previous LSN, start replication from scratch`)
       if (subscriptionIds && subscriptionIds.length > 0) {
         return Promise.reject(
@@ -755,7 +755,7 @@ export class SatelliteClient implements Client {
 
   private handleAuthResp(message: SatAuthResp | SatErrorResp): AuthResponse {
     let error, serverId
-    if (message.$type == SatAuthResp.$type) {
+    if (message.$type === SatAuthResp.$type) {
       serverId = message.id
       this.inbound.authenticated = true
     } else {
@@ -770,7 +770,7 @@ export class SatelliteClient implements Client {
   private handleStartResp(
     resp: SatInStartReplicationResp
   ): StartReplicationResponse {
-    if (this.inbound.isReplicating == ReplicationStatus.STARTING) {
+    if (this.inbound.isReplicating === ReplicationStatus.STARTING) {
       if (resp.err) {
         this.inbound.isReplicating = ReplicationStatus.STOPPED
         return { error: startReplicationErrorToSatelliteError(resp.err) }
@@ -830,7 +830,7 @@ export class SatelliteClient implements Client {
       )}, and options ${JSON.stringify(message.options)}`
     )
 
-    if (this.outbound.isReplicating == ReplicationStatus.STOPPED) {
+    if (this.outbound.isReplicating === ReplicationStatus.STOPPED) {
       // Use server-sent LSN as the starting point for replication
       this.outbound = this.resetReplication(
         message.lsn,
@@ -862,7 +862,7 @@ export class SatelliteClient implements Client {
   private async handleStopReq(
     _message: SatInStopReplicationReq
   ): Promise<SatErrorResp | SatInStopReplicationResp> {
-    if (this.outbound.isReplicating == ReplicationStatus.ACTIVE) {
+    if (this.outbound.isReplicating === ReplicationStatus.ACTIVE) {
       this.outbound.isReplicating = ReplicationStatus.STOPPED
 
       if (this.throttledPushTransaction) {
@@ -886,7 +886,7 @@ export class SatelliteClient implements Client {
   }
 
   private handleStopResp(): StopReplicationResponse {
-    if (this.inbound.isReplicating == ReplicationStatus.STOPPING) {
+    if (this.inbound.isReplicating === ReplicationStatus.STOPPING) {
       this.inbound.isReplicating = ReplicationStatus.STOPPED
       return {}
     }
@@ -1308,7 +1308,7 @@ export class SatelliteClient implements Client {
       )
     }
     const obj = getObjFromString(request.$type)
-    if (obj == undefined) {
+    if (obj === undefined) {
       throw new SatelliteError(
         SatelliteErrorCode.UNEXPECTED_MESSAGE_TYPE,
         `${request.$type})`
@@ -1351,8 +1351,8 @@ export class SatelliteClient implements Client {
     // out to avoid making more traffic than required, but we always try to ack on additional data
     if (
       this.inbound.unackedTxs >= boundary ||
-      reason == 'timeout' ||
-      reason == 'additionalData'
+      reason === 'timeout' ||
+      reason === 'additionalData'
     ) {
       const msg: SatPbMsg = {
         $type: 'Electric.Satellite.SatOpLogAck',
@@ -1451,9 +1451,10 @@ export function serializeRow(
   )
   const recordValues = relation!.columns.reduce(
     (acc: Uint8Array[], c: RelationColumn) => {
-      if (rec[c.name] != null) {
+      const columnValue = rec[c.name]
+      if (columnValue !== null && columnValue !== undefined) {
         const pgColumnType = getColumnType(dbDescription, relation.table, c)
-        acc.push(serializeColumnData(rec[c.name]!, pgColumnType, encoder))
+        acc.push(serializeColumnData(columnValue, pgColumnType, encoder))
       } else {
         acc.push(serializeNullData())
         setMaskBit(recordNullBitMask, recordNumColumn)
@@ -1487,13 +1488,13 @@ export function deserializeRow(
   dbDescription: DbSchema<any>,
   decoder: TypeDecoder
 ): DbRecord | undefined {
-  if (row == undefined) {
+  if (row === undefined) {
     return undefined
   }
   return Object.fromEntries(
     relation.columns.map((c, i) => {
       let value
-      if (getMaskBit(row.nullsBitmask, i) == 1) {
+      if (getMaskBit(row.nullsBitmask, i) === 1) {
         value = null
       } else {
         const pgColumnType = getColumnType(dbDescription, relation.table, c)
@@ -1506,7 +1507,7 @@ export function deserializeRow(
 
 function calculateNumBytes(column_num: number): number {
   const rem = column_num % 8
-  if (rem == 0) {
+  if (rem === 0) {
     return column_num / 8
   } else {
     return 1 + (column_num - rem) / 8
@@ -1572,7 +1573,7 @@ export function toMessage(data: Uint8Array): SatPbMsg {
   const code = data[0]
   const type = getTypeFromCode(code)
   const obj = getObjFromString(type)
-  if (obj == undefined) {
+  if (obj === undefined) {
     throw new SatelliteError(
       SatelliteErrorCode.UNEXPECTED_MESSAGE_TYPE,
       `${code})`

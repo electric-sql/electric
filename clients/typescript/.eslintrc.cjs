@@ -20,6 +20,7 @@ module.exports = {
       { 'ts-ignore': 'allow-with-description' },
     ],
     'no-constant-condition': ['error', { checkLoops: false }],
+    eqeqeq: ['error'],
   },
   ignorePatterns: [
     '**/*/mock.ts',

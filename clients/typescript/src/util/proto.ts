@@ -477,7 +477,7 @@ function opToString(op: Pb.SatTransOp): string {
 function rowToString(row: Pb.SatOpRow): string {
   return row.values
     .map((x, i) =>
-      getMaskBit(row.nullsBitmask, i) == 0
+      getMaskBit(row.nullsBitmask, i) === 0
         ? JSON.stringify(sqliteTypeDecoder.text(x))
         : '∅'
     )

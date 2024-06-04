@@ -49,7 +49,7 @@ export class SubscriptionsDataCache extends EventEmitter {
   }
 
   isDelivering(): boolean {
-    return this.inDelivery != undefined
+    return this.inDelivery !== undefined
   }
 
   subscriptionRequest(subsRequest: SatSubsReq) {
@@ -136,7 +136,7 @@ export class SubscriptionsDataCache extends EventEmitter {
       )
     }
 
-    if (this.remainingShapes.size == 0) {
+    if (this.remainingShapes.size === 0) {
       this.internalError(
         SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
         `Received SatShapeDataBegin but all shapes have been delivered for this subscription`
@@ -182,7 +182,7 @@ export class SubscriptionsDataCache extends EventEmitter {
 
   transaction(ops: SatTransOp[]) {
     if (
-      this.remainingShapes.size == 0 ||
+      this.remainingShapes.size === 0 ||
       !this.inDelivery ||
       !this.currentShapeRequestId
     ) {

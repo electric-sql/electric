@@ -14,8 +14,8 @@ export const setLogLevel = (level: LogLevelDesc = 'TRACE') => {
 /** True if current running environment is NodeJS */
 export const isNode =
   typeof process !== 'undefined' &&
-  process.versions != null &&
-  process.versions.node != null
+  process.versions !== undefined &&
+  process.versions.node !== undefined
 
 /** True if running in NodeJS with debugger attached, but currently always false */
 export const isDebuggingNode = false

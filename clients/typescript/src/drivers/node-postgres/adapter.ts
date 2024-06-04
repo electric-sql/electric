@@ -55,9 +55,9 @@ export class DatabaseAdapter extends GenericDatabaseAdapter {
               */
 
             if (
-              oid == pg.types.builtins.TIMESTAMP ||
-              oid == pg.types.builtins.TIMESTAMPTZ ||
-              oid == pg.types.builtins.DATE
+              oid === pg.types.builtins.TIMESTAMP ||
+              oid === pg.types.builtins.TIMESTAMPTZ ||
+              oid === pg.types.builtins.DATE
             ) {
               // Parse timestamps and date values ourselves
               // because the pg parser parses them differently from what we expect
