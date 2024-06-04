@@ -1,14 +1,12 @@
 import fs from 'fs'
-import path from 'path'
 import { InvalidArgumentError } from 'commander'
-import { appRoot } from './paths'
+import { appPackageJsonPath } from './paths'
 
 /**
  * Get the name of the current project.
  */
 export function getAppName(): string | undefined {
-  const packageJsonPath = path.join(appRoot, 'package.json')
-  return JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')).name
+  return JSON.parse(fs.readFileSync(appPackageJsonPath, 'utf8')).name
 }
 
 export function parsePort(str: string): number {
