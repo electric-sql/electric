@@ -18,7 +18,7 @@ This is a desktop application using ElectricSQL with [Tauri sqlite](https://beta
 
 ## Pre-reqs
 
-You need [NodeJS ^18.0.0 | >= 20.0.0  and Docker Compose v2](https://electric-sql.com/docs/usage/installation/prereqs).
+You need [NodeJS ^18.0.0 | >= 20.0.0  and Docker Compose v2](https://electric-sql.com/docs/usage/installation/prereqs), as well as any [Tauri prerequisites](https://tauri.app/v1/guides/getting-started/prerequisites/) like Rust.
 
 ## Install
 

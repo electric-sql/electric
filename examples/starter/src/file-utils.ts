@@ -212,15 +212,11 @@ export async function installDependencies(projectDir: string): Promise<void> {
     // Run `npm install` in the project directory to install the dependencies
     // Also run `npm upgrade` to replace `electric-sql: latest` by `electric-sql: x.y.z`
     // where `x.y.z` corresponds to the latest version.
-    const proc = spawn(
-      'npm install --legacy-peer-deps && npm upgrade --legacy-peer-deps --caret electric-sql',
-      [],
-      {
-        stdio: ['ignore', 'ignore', 'pipe'],
-        cwd: projectDir,
-        shell: true,
-      },
-    )
+    const proc = spawn('npm install && npm upgrade --caret electric-sql', [], {
+      stdio: ['ignore', 'ignore', 'pipe'],
+      cwd: projectDir,
+      shell: true,
+    })
 
     let errors: Uint8Array[] = []
     proc.stderr.on('data', (data) => {
@@ -251,7 +247,7 @@ export async function regenerateReactNativePlatformProjects(
   // recreate a react native project from scratch
   await new Promise<void>((res, rej) => {
     const proc = spawn(
-      `npm install -D --legacy-peer-deps react-native-eject && npx react-native eject`,
+      `npm install -D react-native-eject && npx react-native eject`,
       [],
       {
         stdio: ['ignore', 'ignore', 'pipe'],

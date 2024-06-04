@@ -13,11 +13,11 @@
   },
   "dependencies": {
     "better-sqlite3": "^9.2.2",
-    "electric-sql": "^0.9.4"
+    "electric-sql": "^0.11.3"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.8",
-    "typescript": "^4.4.3",
-    "zod": "latest"
+    "@types/better-sqlite3": "^7.6.10",
+    "typescript": "^5.4.5",
+    "zod": "3.21.1"
   }
 }

@@ -1,5 +1,5 @@
 {
-  "name": "electric-sql-wa-sqlite-example-vuejs",
+  "name": "electric-sql-wa-sqlite-vue-js",
   "version": "0.10.0",
   "author": "ElectricSQL",
   "license": "Apache-2.0",
@@ -20,19 +20,19 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "electric-sql": "^0.10.0",
-    "vue": "^3.4.25",
+    "electric-sql": "^0.11.3",
+    "vue": "^3.4.27",
     "wa-sqlite": "github:rhashimoto/wa-sqlite#semver:^0.9.11"
   },
   "devDependencies": {
     "@databases/pg-migrations": "^5.0.3",
-    "@typescript-eslint/eslint-plugin": "^6.21.0",
-    "@typescript-eslint/parser": "^6.21.0",
-    "@vitejs/plugin-vue": "^5.0.4",
+    "@typescript-eslint/eslint-plugin": "^7.11.0",
+    "@typescript-eslint/parser": "^7.11.0",
+    "@vitejs/plugin-vue": "^5.0.5",
     "eslint": "^8.57.0",
-    "eslint-plugin-vue": "^9.25.0",
+    "eslint-plugin-vue": "^9.26.0",
     "typescript": "^5.4.5",
-    "vite": "^5.2.10",
-    "vue-tsc": "^2.0.14"
+    "vite": "^5.2.12",
+    "vue-tsc": "^2.0.19"
   }
 }
