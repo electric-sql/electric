@@ -4,6 +4,7 @@ defmodule Electric.Replication.PostgresConnector do
   require Logger
 
   alias Electric.Replication.Connectors
+  alias Electric.Replication.Postgres.LogicalReplicationProducer
   alias Electric.Replication.PostgresConnectorMng
   alias Electric.Replication.PostgresConnectorSup
 
@@ -87,7 +88,7 @@ defmodule Electric.Replication.PostgresConnector do
   end
 
   defp log_child_error(
-         :postgres_producer,
+         LogicalReplicationProducer,
          {:bad_return_value,
           {:error,
            {:error, :error, "55006", :object_in_use, "replication slot" <> _ = msg, _c_stacktrace}}},
@@ -99,12 +100,36 @@ defmodule Electric.Replication.PostgresConnector do
       Failed to establish replication connection to Postgres:
         #{msg}
       """,
-      "Another instance of Electric appears to be connected to this database."
+      """
+      Another instance of Electric appears to be connected to this database.
+      Refer to https://github.com/electric-sql/electric/issues/971 for additional info.
+      """
     )
   end
 
   defp log_child_error(
-         :postgres_producer,
+         LogicalReplicationProducer,
+         {:bad_return_value,
+          {:error,
+           {:error, :error, "42710", :duplicate_object, "replication slot " <> _ = msg,
+            _c_stacktrace}}},
+         _connector_config
+       ) do
+    Electric.Errors.print_error(
+      :conn,
+      """
+      Failed to establish replication connection to Postgres:
+        #{msg}
+      """,
+      """
+      Another instance of Electric appears to be connected to this database.
+      Refer to https://github.com/electric-sql/electric/issues/971 for additional info.
+      """
+    )
+  end
+
+  defp log_child_error(
+         LogicalReplicationProducer,
          {:bad_return_value, {:error, :wal_level_not_logical}},
          _connector_config
        ) do
@@ -119,7 +144,7 @@ defmodule Electric.Replication.PostgresConnector do
   end
 
   defp log_child_error(
-         :postgres_producer,
+         LogicalReplicationProducer,
          {:bad_return_value, {:error, {:create_replication_slot_syntax_error, msg}}},
          _connector_config
        ) do
