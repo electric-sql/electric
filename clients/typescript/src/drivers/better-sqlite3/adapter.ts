@@ -76,7 +76,7 @@ export class DatabaseAdapter
     return stmt.all(...wrapBindParams(args))
   }
 
-  async _group<T>(
+  async _runExclusively<T>(
     f: (adapter: UncoordinatedDatabaseAdapter) => Promise<T> | T
   ): Promise<T> {
     // We create an adapter that does not go through the mutex
@@ -116,11 +116,11 @@ export class DatabaseAdapter
     })
   }
 
-  async group<T>(
+  async runExclusively<T>(
     f: (adapter: UncoordinatedDatabaseAdapter) => Promise<T> | T
   ): Promise<T> {
     return this.txMutex.runExclusive(() => {
-      return this._group(f)
+      return this._runExclusively(f)
     })
   }
 }

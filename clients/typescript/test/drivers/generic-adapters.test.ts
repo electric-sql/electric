@@ -285,7 +285,7 @@ test('grouped queries are isolated from other queries/transactions', async (t) =
     return 7
   }
 
-  const prom1 = adapter.group(slowQuery)
+  const prom1 = adapter.runExclusively(slowQuery)
   const prom2 = adapter.transaction(async (_tx, setResult) => {
     t.true(query1Finished)
     setResult(5)

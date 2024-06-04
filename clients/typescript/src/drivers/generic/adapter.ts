@@ -102,7 +102,7 @@ abstract class DatabaseAdapter
     })
   }
 
-  async _group<T>(
+  async _runExclusively<T>(
     f: (adapter: UncoordinatedDatabaseAdapter) => Promise<T> | T
   ): Promise<T> {
     // We create an adapter that does not go through the mutex
@@ -116,11 +116,11 @@ abstract class DatabaseAdapter
     return await f(adapter)
   }
 
-  group<T>(
+  runExclusively<T>(
     f: (adapter: UncoordinatedDatabaseAdapter) => Promise<T> | T
   ): Promise<T> {
     return this.txMutex.runExclusive(() => {
-      return this._group(f)
+      return this._runExclusively(f)
     })
   }
 

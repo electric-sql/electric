@@ -20,7 +20,7 @@ export async function runInTransaction(
 
   const desiredPragma = disableFKs ? 0 : 1
 
-  return adapter.group(async (uncoordinatedAdapter) => {
+  return adapter.runExclusively(async (uncoordinatedAdapter) => {
     const [{ foreign_keys: originalPragma }] = await uncoordinatedAdapter.query(
       {
         sql: 'PRAGMA foreign_keys;',
