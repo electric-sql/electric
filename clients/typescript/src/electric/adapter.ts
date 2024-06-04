@@ -4,7 +4,7 @@ import { parseTableNames } from '../util'
 
 export type UncoordinatedDatabaseAdapter = Pick<
   DatabaseAdapter,
-  'run' | 'query' | 'runInTransaction' | 'transaction' | 'group'
+  'run' | 'query' | 'runInTransaction' | 'transaction'
 >
 
 // A `DatabaseAdapter` adapts a database client to provide the

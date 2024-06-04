@@ -112,7 +112,6 @@ abstract class DatabaseAdapter
       query: this._query.bind(this),
       transaction: this._transaction.bind(this),
       runInTransaction: this._runInTransaction.bind(this),
-      group: this._group.bind(this),
     }
     return await f(adapter)
   }
