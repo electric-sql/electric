@@ -12,7 +12,7 @@ import {
   buildDatabaseURL,
   parsePgProxyPort,
   LIB_MINOR_VERSION,
-  LIB_IS_CANARY_RELEASE,
+  isCanaryRelease,
 } from './util'
 
 // Name will be prefixed with ELECTRIC_ as environment variables.
@@ -317,7 +317,7 @@ export const configOptions: Record<string, any> = {
     valueType: String,
     valueTypeName: 'image',
     defaultVal: `electricsql/electric:${
-      LIB_IS_CANARY_RELEASE ? 'canary' : LIB_MINOR_VERSION
+      isCanaryRelease() ? 'canary' : LIB_MINOR_VERSION
     }`,
     doc: 'The Docker image to use for Electric.',
     groups: ['electric'],
