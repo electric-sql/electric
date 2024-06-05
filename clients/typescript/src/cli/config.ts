@@ -205,7 +205,7 @@ function redactConfigValue(config: Config, stringToRedact: string): void {
  */
 export function redactConfigSecrets(config: Config): Config {
   const valuesToRedact = Object.keys(config)
-    .filter((k) => configOptions[k].secret)
+    .filter((k) => configOptions[k]?.secret)
     .map((k) => config[k])
   const redactedConfig = { ...config }
   valuesToRedact.forEach((v) => redactConfigValue(redactedConfig, v))
