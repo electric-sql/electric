@@ -1,5 +1,5 @@
 import test from 'ava'
-import { buildDatabaseURL, dedent } from '../../../src/cli/util'
+import { buildDatabaseURL, dedent } from '../../src/util'
 
 test('buildDatabaseURL should compose valid URL', (t) => {
   const url = buildDatabaseURL({
