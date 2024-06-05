@@ -1,8 +1,13 @@
 {
+<<<<<<< HEAD
   "extends": ["./tsconfig.json", "../../common/tsconfig.build.json"],
   "include": ["src"],
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist"
   }
+=======
+  "include": ["src"],
+  "extends": ["./tsconfig.json", "../../common/tsconfig.build.json"]
+>>>>>>> 09d25edba (Rebase on latest main)
 }
