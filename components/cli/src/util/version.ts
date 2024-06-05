@@ -14,7 +14,6 @@ function readPackageJson(): Record<string, unknown> {
         '..',
         '..',
         '..',
-        '..',
         'package.json'
       ),
       'utf8'

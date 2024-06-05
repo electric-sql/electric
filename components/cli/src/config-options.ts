@@ -12,7 +12,7 @@ import {
   buildDatabaseURL,
   parsePgProxyPort,
   isCanaryRelease,
-  LIB_MINOR_VERSION
+  LIB_MINOR_VERSION,
 } from './util'
 
 // Name will be prefixed with ELECTRIC_ as environment variables.

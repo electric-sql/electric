@@ -3,7 +3,7 @@ import {
   extractDatabaseURL,
   extractServiceURL,
   parsePgProxyPort,
-} from '../../../src/cli/util'
+} from '../../src/util'
 
 test('extractServiceURL decomposes electric URL', async (t) => {
   t.deepEqual(extractServiceURL('http://localhost:5133'), {
