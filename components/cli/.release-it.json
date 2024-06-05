@@ -1,0 +1,10 @@
+{
+  "git": {
+    "commitMessage": "chore(components/cli): Release v${version}",
+    "tagName": "components/cli@${version}"
+  },
+  "github": {
+    "release": true,
+    "draft": true
+  }
+}
