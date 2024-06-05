@@ -1,5 +1,5 @@
 import { Command } from 'commander'
-import { getConfig } from '../config'
+import { getConfig, printConfig } from '../config'
 
 export function makeShowConfigCommand() {
   return new Command('show-config')
@@ -9,5 +9,5 @@ export function makeShowConfigCommand() {
 
 export function showConfig() {
   const config = getConfig()
-  console.log(config)
+  printConfig(config)
 }

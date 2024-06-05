@@ -212,6 +212,14 @@ export function redactConfigSecrets(config: Config): Config {
   return redactedConfig
 }
 
+/**
+ * Prints the provided `config` taking care to redact any
+ * sensitive values
+ */
+export function printConfig(config: Config): void {
+  console.log(redactConfigSecrets(config))
+}
+
 function snakeToCamel(s: string) {
   return s
     .toLocaleLowerCase()

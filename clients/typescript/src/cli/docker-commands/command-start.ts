@@ -1,10 +1,10 @@
 import { Command } from 'commander'
-import { dedent, parsePgProxyPort } from '../util'
+import { buildDatabaseURL, dedent, parsePgProxyPort, parsePort } from '../util'
 import {
   addOptionGroupToCommand,
   getConfig,
   Config,
-  redactConfigSecrets,
+  printConfig,
 } from '../config'
 import { dockerCompose } from './docker-utils'
 
@@ -73,16 +73,20 @@ export function start(options: StartSettings) {
       ...(options.withPostgres
         ? {
             COMPOSE_PROFILES: 'with-postgres',
-            DATABASE_URL: `postgresql://postgres:${
-              env?.DATABASE_PASSWORD ?? 'pg_password'
-            }@postgres:${env?.DATABASE_PORT ?? '5432'}/${
-              options.config.DATABASE_NAME
-            }`,
+            DATABASE_URL: buildDatabaseURL({
+              user: env.DATABASE_USER,
+              password: env.DATABASE_PASSWORD,
+              host: 'postgres',
+              port: parsePort(env.DATABASE_PORT),
+              dbName: env.DATABASE_NAME,
+            }),
             LOGICAL_PUBLISHER_HOST: 'electric',
           }
         : {}),
     }
-    console.log('Docker compose config:', redactConfigSecrets(dockerConfig))
+
+    console.log('Docker compose config:')
+    printConfig(dockerConfig)
 
     const proc = dockerCompose(
       'up',
