@@ -322,6 +322,9 @@ defmodule Electric.Satellite.Permissions do
   def fetch_id(%__MODULE__{id: id}), do: {:ok, id}
   def fetch_id(_), do: :error
 
+  @spec user_id(t()) :: Auth.user_id() | nil
+  def user_id(%__MODULE__{auth: %{user_id: user_id}}), do: user_id
+
   def update!(%__MODULE__{} = perms, %SchemaLoader.Version{} = schema, rules, roles) do
     case update(perms, schema, rules, roles) do
       {:ok, perms} ->

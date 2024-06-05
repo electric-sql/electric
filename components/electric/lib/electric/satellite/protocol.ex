@@ -1253,7 +1253,7 @@ defmodule Electric.Satellite.Protocol do
       if Permissions.filter_reads_enabled?() do
         Permissions.Read.filter_transaction(permissions, graph, tx)
       else
-        {tx, [], []}
+        {Changes.filter_changes_belonging_to_user(tx, Permissions.user_id(permissions)), [], []}
       end
 
     Shapes.process_transaction(filtered_tx, moves_out, graph, shapes)
