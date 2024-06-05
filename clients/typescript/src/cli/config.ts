@@ -205,11 +205,19 @@ function redactConfigValue(config: Config, stringToRedact: string): void {
  */
 export function redactConfigSecrets(config: Config): Config {
   const valuesToRedact = Object.keys(config)
-    .filter((k) => configOptions[k].secret)
+    .filter((k) => configOptions[k]?.secret)
     .map((k) => config[k])
   const redactedConfig = { ...config }
   valuesToRedact.forEach((v) => redactConfigValue(redactedConfig, v))
   return redactedConfig
+}
+
+/**
+ * Prints the provided `config` taking care to redact any
+ * sensitive values
+ */
+export function printConfig(config: Config): void {
+  console.log(redactConfigSecrets(config))
 }
 
 function snakeToCamel(s: string) {
