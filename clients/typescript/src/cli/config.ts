@@ -16,6 +16,7 @@ export interface AnyConfigOption {
     | boolean
     | ((options: ConfigMap) => string | number | boolean)
   constructedDefault?: string
+  secret?: true
   groups?: Readonly<string[]>
 }
 
@@ -181,6 +182,34 @@ export function envFromConfig(config: Config) {
       config[name as ConfigOptionName]?.toString(),
     ])
   )
+}
+
+/**
+ * Redacts the given `stringToRedact` from the `config` _in place_,
+ * replacing any mention of the string with `******`.
+ */
+function redactConfigValue(config: Config, stringToRedact: string): void {
+  Object.entries(config).forEach(([key, value]) => {
+    if (typeof value === 'string' && value.includes(stringToRedact)) {
+      config[key] = value.replaceAll(stringToRedact, '******')
+    }
+  })
+}
+
+/**
+ * Redacts sensitive information like secrets and passwords from the
+ * config and returns a separate, redacted version.
+ *
+ * Redaction is done based on the `secret` property of the
+ * configuration option.
+ */
+export function redactConfigSecrets(config: Config): Config {
+  const valuesToRedact = Object.keys(config)
+    .filter((k) => configOptions[k].secret)
+    .map((k) => config[k])
+  const redactedConfig = { ...config }
+  valuesToRedact.forEach((v) => redactConfigValue(redactedConfig, v))
+  return redactedConfig
 }
 
 function snakeToCamel(s: string) {
