@@ -9,7 +9,7 @@ import {
   Spinner,
   Text,
 } from '@radix-ui/themes'
-import { DbTableInfo } from 'src/api/interface'
+import { DbTableInfo } from '../api/interface'
 import { DataTable } from '../components/DataTable'
 
 export default function InspectTableTab({ dbName, api }: ToolbarTabsProps) {
