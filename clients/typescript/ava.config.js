@@ -1,5 +1,5 @@
 /* eslint-env node */
-const [major, minor, _patch] = process.versions.node.split('.').map(Number)
+import config from '../../common/ava.config.mjs'
 
 // Developers can provide a `TEST_ONLY_DIALECT` value of `postgres`, `pglite`, or `sqlite`
 // to run the unit tests only for that dialect.
@@ -12,17 +12,6 @@ if (testOnlyDialect && disableDialect) {
   throw new Error(
     'Cannot set both TEST_ONLY_DIALECT and DISABLE_DIALECT environment variables.'
   )
-}
-
-let loaderArg
-if (
-  major > 20 ||
-  (major === 20 && minor >= 6) ||
-  (major === 18 && minor >= 19)
-) {
-  loaderArg = '--import=tsx'
-} else {
-  loaderArg = '--loader=tsx'
 }
 
 const files = ['test/**/*.test.ts', 'test/**/*.test.tsx']
@@ -55,12 +44,6 @@ switch (disableDialect) {
 }
 
 export default {
-  timeout: '10m',
+  ...config,
   files,
-  extensions: {
-    ts: 'module',
-    tsx: 'module',
-  },
-  nodeArguments: ['--no-warnings', loaderArg],
-  workerThreads: false,
 }
