@@ -142,7 +142,7 @@ export const configOptions: Record<string, any> = {
     valueType: String,
     inferVal: (options: ConfigMap) => inferDbUrlPart('password', options),
     defaultVal: 'db_password',
-    confidential: true,
+    secret: true,
     groups: ['database'],
   },
   DATABASE_NAME: {
@@ -250,7 +250,7 @@ export const configOptions: Record<string, any> = {
       Password to use when connecting to the Postgres proxy via psql or any other 
       Postgres client.
     `,
-    confidential: true,
+    secret: true,
     groups: ['electric', 'client', 'proxy'],
   },
   AUTH_MODE: {

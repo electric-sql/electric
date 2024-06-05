@@ -16,7 +16,7 @@ export interface AnyConfigOption {
     | boolean
     | ((options: ConfigMap) => string | number | boolean)
   constructedDefault?: string
-  confidential?: true
+  secret?: true
   groups?: Readonly<string[]>
 }
 
@@ -185,36 +185,30 @@ export function envFromConfig(config: Config) {
 }
 
 /**
- * Redacts the given `stringToRedact` from the `config`, returning
- * a new config with any mention of `stringToRedact` redacted.
+ * Redacts the given `stringToRedact` from the `config` _in place_,
+ * replacing any mention of the string with `******`.
  */
-function redactConfigValue(config: Config, stringToRedact: string): Config {
-  const redactedConfig = { ...config }
-  Object.entries(redactedConfig).forEach(([key, value]) => {
+function redactConfigValue(config: Config, stringToRedact: string): void {
+  Object.entries(config).forEach(([key, value]) => {
     if (typeof value === 'string' && value.includes(stringToRedact)) {
-      // using `split` followed by `join` to avoid generating arbitrary
-      // regex for string replacement
-      redactedConfig[key] = value.split(stringToRedact).join('******')
+      config[key] = value.replaceAll(stringToRedact, '******')
     }
   })
-  return redactedConfig
 }
 
 /**
  * Redacts sensitive information like secrets and passwords from the
  * config and returns a separate, redacted version.
  *
- * Redaction is done based on the `confidential` property of the
+ * Redaction is done based on the `secret` property of the
  * configuration option.
  */
 export function redactConfigSecrets(config: Config): Config {
-  const keysToRedact = Object.keys(config).filter(
-    (k) => configOptions[k].confidential
-  )
-  let redactedConfig = { ...config }
-  for (const keyToRedact of keysToRedact) {
-    redactedConfig = redactConfigValue(redactedConfig, config[keyToRedact])
-  }
+  const valuesToRedact = Object.keys(config)
+    .filter((k) => configOptions[k].secret)
+    .map((k) => config[k])
+  const redactedConfig = { ...config }
+  valuesToRedact.forEach((v) => redactConfigValue(redactedConfig, v))
   return redactedConfig
 }
 
