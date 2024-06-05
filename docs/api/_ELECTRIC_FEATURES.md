@@ -1,0 +1,1 @@
+Flags to enable or disable features. Configurable via a PATH-like syntax, where flag settings are separated by colons.

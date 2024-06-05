@@ -55,6 +55,7 @@ import ElectricUseIpv6 from './_ELECTRIC_USE_IPV6.md'
 import HttpPort from './_HTTP_PORT.md'
 import ElectricResumableWalWindow from './_ELECTRIC_RESUMABLE_WAL_WINDOW.md'
 import ElectricTxnCacheSize from './_ELECTRIC_TXN_CACHE_SIZE.md'
+import ElectricFeatures from './_ELECTRIC_FEATURES.md'
 import LogLevel from './_LOG_LEVEL.md'
 
 
@@ -121,6 +122,15 @@ Configure how Electric connects to Postgres and exposes its HTTP/WebSocket API.
     defaultValue="256M"
     example="2g">
   <ElectricTxnCacheSize />
+</EnvVarConfig>
+
+### ELECTRIC_FEATURES
+
+<EnvVarConfig
+    name="ELECTRIC_FEATURES"
+    defaultValue=""
+    example="some_feature=true:another_feature=false">
+  <ElectricFeatures />
 </EnvVarConfig>
 
 ### LOG_LEVEL
