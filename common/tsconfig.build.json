@@ -6,5 +6,4 @@
     "emitDeclarationOnly": true,
     "incremental": false
   },
-  "extends": "./tsconfig.json",
 }
