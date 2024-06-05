@@ -8,5 +8,5 @@
     "incremental": false
   },
   "include": ["src"],
-  "extends": "./tsconfig.json",
+  "extends": ["./tsconfig.json", "../../common/tsconfig.build.json"],
 }
