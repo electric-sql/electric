@@ -1,5 +1,8 @@
 import { DatabaseAdapter as DatabaseAdapterI } from '@electric-sql/drivers'
-import { DatabaseAdapter, createEmbeddedPostgres } from '@electric-sql/drivers/node-postgres'
+import {
+  DatabaseAdapter,
+  createEmbeddedPostgres,
+} from '@electric-sql/drivers/node-postgres'
 import type { Database } from '@electric-sql/drivers/node-postgres'
 import { ElectricConfig } from '../../config'
 import { electrify as baseElectrify, ElectrifyOptions } from '../../electric'

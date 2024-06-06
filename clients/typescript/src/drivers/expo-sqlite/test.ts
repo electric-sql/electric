@@ -9,7 +9,10 @@ import { Notifier } from '../../notifiers/index'
 import { MockNotifier } from '../../notifiers/mock'
 import { MockRegistry } from '../../satellite/mock'
 
-import { DatabaseAdapter, MockDatabase } from '@electric-sql/drivers/expo-sqlite'
+import {
+  DatabaseAdapter,
+  MockDatabase,
+} from '@electric-sql/drivers/expo-sqlite'
 import type { Database } from '@electric-sql/drivers/expo-sqlite'
 import { MockSocket } from '../../sockets/mock'
 import { ElectricConfig } from '../../config'

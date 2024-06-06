@@ -1,4 +1,7 @@
-import { DatabaseAdapter, createDatabase } from '@electric-sql/drivers/tauri-sqlite'
+import {
+  DatabaseAdapter,
+  createDatabase,
+} from '@electric-sql/drivers/tauri-sqlite'
 import type { Database } from '@electric-sql/drivers/tauri-sqlite'
 import { ElectricConfig } from '../../config'
 import { electrify as baseElectrify, ElectrifyOptions } from '../../electric'
