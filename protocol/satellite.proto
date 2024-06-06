@@ -96,6 +96,7 @@ message SatErrorResp {
         INVALID_REQUEST = 4;
         PROTO_VSN_MISMATCH = 5;
         SCHEMA_VSN_MISMATCH = 6;
+        PERMISSION_DENIED = 7;
     }
 
     ErrorCode error_type = 1;

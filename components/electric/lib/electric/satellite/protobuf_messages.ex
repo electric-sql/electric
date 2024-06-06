@@ -194,6 +194,15 @@
           def encode("SCHEMA_VSN_MISMATCH") do
             6
           end
+        ),
+        (
+          def encode(:PERMISSION_DENIED) do
+            7
+          end
+
+          def encode("PERMISSION_DENIED") do
+            7
+          end
         )
       ]
 
@@ -223,6 +232,9 @@
         end,
         def decode(6) do
           :SCHEMA_VSN_MISMATCH
+        end,
+        def decode(7) do
+          :PERMISSION_DENIED
         end
       ]
 
@@ -239,7 +251,8 @@
           {3, :REPLICATION_FAILED},
           {4, :INVALID_REQUEST},
           {5, :PROTO_VSN_MISMATCH},
-          {6, :SCHEMA_VSN_MISMATCH}
+          {6, :SCHEMA_VSN_MISMATCH},
+          {7, :PERMISSION_DENIED}
         ]
       end
 
@@ -265,6 +278,9 @@
             true
           end,
           def has_constant?(:SCHEMA_VSN_MISMATCH) do
+            true
+          end,
+          def has_constant?(:PERMISSION_DENIED) do
             true
           end
         ]

@@ -650,6 +650,9 @@ defmodule Electric.Satellite.Permissions do
       {:ok, write_buffer},
       fn change, {:ok, write_buffer} ->
         case verify_write(change, perms, write_buffer, xid) do
+          :skip ->
+            {:cont, {:ok, write_buffer}}
+
           {:error, _} = error ->
             {:halt, error}
 
@@ -708,7 +711,12 @@ defmodule Electric.Satellite.Permissions do
     end
   end
 
-  @spec verify_write(change(), t(), Graph.impl(), xid()) :: RoleGrant.t() | {:error, String.t()}
+  @spec verify_write(change(), t(), Graph.impl(), xid()) ::
+          RoleGrant.t() | :skip | {:error, String.t()}
+  defp verify_write(%Changes.Compensation{}, _, _, _) do
+    :skip
+  end
+
   defp verify_write(change, perms, graph, xid) do
     action = required_permission(change)
 
