@@ -5,7 +5,7 @@ description: >-
 sidebar_position: 10
 ---
 
-You can integrate any SQLite or Postgres database driver by adapting it to the ElectricSQL [`DatabaseAdapter` interface](https://github.com/electric-sql/electric/blob/main/clients/typescript/src/electric/adapter.ts):
+You can integrate any SQLite or Postgres database driver by adapting it to the ElectricSQL [`DatabaseAdapter` interface](https://github.com/electric-sql/electric/blob/main/components/drivers/src/adapter.ts):
 
 ```tsx
 export interface DatabaseAdapter {
@@ -18,6 +18,12 @@ export interface DatabaseAdapter {
 
   // Run an array of sql statements within a transaction.
   runInTransaction(...statements: Statement[]): Promise<RunResult>
+
+  // Executes the function in isolation from any other queries/transactions executed through this adapter.
+  // Useful to execute queries that cannot be executed inside a transaction but still guarantee isolation from other queries.
+  runExclusively<T>(
+    f: (adapter: UncoordinatedDatabaseAdapter) => Promise<T> | T
+  ): Promise<T>
 
   // Run a query statement and return the results as an
   // array of rows.
@@ -35,7 +41,7 @@ export interface DatabaseAdapter {
 }
 ```
 
-For convenience, we provide two generic database adapters, `SerialDatabaseAdapter`` and `BatchDatabaseAdapter``. These implement the parts of the interface that are common to most adapters. This allows you to implement your own driver adapters using a simpler interface.
+For convenience, we provide two generic database adapters, `SerialDatabaseAdapter` and `BatchDatabaseAdapter`. These implement the parts of the interface that are common to most adapters. This allows you to implement your own driver adapters using a simpler interface.
 ```tsx
 export abstract class SerialDatabaseAdapter implements DatabaseAdapter {
   // Run a single SQL statement against the DB
@@ -56,7 +62,7 @@ export abstract class BatchDatabaseAdapter implements DatabaseAdapter {
 }
 ```
 
-The best guidance for this is to look at the [existing driver implementations](https://github.com/electric-sql/electric/tree/main/clients/typescript/src/drivers). You can then build on the [base electrify function](https://github.com/electric-sql/electric/blob/main/clients/typescript/src/electric/index.ts#L33) to implement your own `electrify` function, e.g.:
+The best guidance for this is to look at the [existing driver implementations](https://github.com/electric-sql/electric/tree/main/components/drivers/src). You can then build on the [base electrify function](https://github.com/electric-sql/electric/blob/main/clients/typescript/src/electric/index.ts#L48) to implement your own `electrify` function, e.g.:
 
 ```tsx
 export const electrify = async <T, DB extends DbSchema<any>>(
