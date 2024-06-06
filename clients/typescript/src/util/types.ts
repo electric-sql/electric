@@ -9,7 +9,15 @@ import {
 import { Tag } from '../satellite/oplog'
 import type { Row } from '@electric-sql/drivers/util'
 
-export type { DbName, DbNamespace, Tablename, SqlValue, Row, BindParams, Statement } from '@electric-sql/drivers/util'
+export type {
+  DbName,
+  DbNamespace,
+  Tablename,
+  SqlValue,
+  Row,
+  BindParams,
+  Statement,
+} from '@electric-sql/drivers/util'
 
 export type AnyFunction = (...args: any[]) => any
 export type EmptyFunction = () => void

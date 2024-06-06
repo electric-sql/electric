@@ -1,4 +1,7 @@
-import { DatabaseAdapter, ElectricDatabase } from '@electric-sql/drivers/wa-sqlite'
+import {
+  DatabaseAdapter,
+  ElectricDatabase,
+} from '@electric-sql/drivers/wa-sqlite'
 import { ElectricConfig } from '../../config'
 import { electrify as baseElectrify, ElectrifyOptions } from '../../electric'
 import { WebSocketWeb } from '../../sockets/web'
