@@ -12,30 +12,30 @@
   </picture>
 </a>
 
-![License](https://img.shields.io/github/license/electric-sql/electric) [![Tests](https://github.com/electric-sql/electric/actions/workflows/cli_tests.yml/badge.svg?event=push)](https://github.com/electric-sql/electric/actions/workflows/cli_tests.yml)
+![License](https://img.shields.io/github/license/electric-sql/electric) [![Tests](https://github.com/electric-sql/electric/actions/workflows/drivers_tests.yml/badge.svg?event=push)](https://github.com/electric-sql/electric/actions/workflows/drivers_tests.yml)
 
-# ElectricSQL CLI
+# ElectricSQL Drivers
 
-[ElectricSQL](https://electric-sql.com) is a local-first sync layer for modern apps. Use it to build reactive, realtime, local-first apps using standard open source Postgres and SQLite.
-
-The ElectricSQL CLI provides a set of commands to setup the Electric sync service and generate an Electric TypeScript client.
+This package implements a unified `DatabaseAdapter` interface for several SQLite and Postgres database drivers.
+Support for other drivers can be added by implementing the `DatabaseAdapter` interface or extending one of the generic drivers.
 
 See the:
 
-- [Documentation](https://electric-sql.com/docs/api/cli)
+- [Documentation](https://electric-sql.com/docs/integrations/drivers)
+- [How to add support for other drivers](https://electric-sql.com/docs/integrations/drivers/other/generic)
 
 ## Install
 
 Using yarn:
 
 ```sh
-yarn add @electric-sql/cli --dev
+yarn add @electric-sql/drivers
 ```
 
 Or using npm:
 
 ```sh
-npm install --save-dev @electric-sql/cli
+npm install --save @electric-sql/drivers
 ```
 
 ## Issues
