@@ -6,6 +6,7 @@ defmodule Electric.Satellite.Protocol.State do
 
   defstruct auth_passed: false,
             auth: nil,
+            last_ping_time: nil,
             last_msg_time: nil,
             client_id: nil,
             expiration_timer: nil,
@@ -23,7 +24,8 @@ defmodule Electric.Satellite.Protocol.State do
   @type t() :: %__MODULE__{
           auth_passed: boolean(),
           auth: nil | Electric.Satellite.Auth.t(),
-          last_msg_time: :erlang.timestamp() | nil | :ping_sent,
+          last_ping_time: :erlang.timestamp() | nil,
+          last_msg_time: :erlang.timestamp() | nil | :missed_one_ping_interval,
           client_id: String.t() | nil,
           expiration_timer: {reference(), reference()} | nil,
           in_rep: InRep.t(),
