@@ -75,10 +75,6 @@ interface SyncManager {
   unsubscribe(keys: string[]): Promise<void>
   syncStatus(key: string): SyncStatus
 }
-
-type SyncStatus =
-  | undefined
-  | { status: 'active' | 'cancelling' | 'establishing' }
 ```
 
 The Electric client above defines a property for every table in our data model: `electric.db.users`, `electric.db.projects`, etc.
@@ -246,7 +242,9 @@ const { db, sync } = await electrify()
 
 ### `sync.unsubscribe` method
 
-Using the key returned from the `.sync()` call you can cancel a previously established subscription using a `.unsubscribe(keys)` method on the top-level `sync` object:
+Using the key returned from the `.sync()` call you can cancel a previously established subscription using the `.unsubscribe(keys)` method on the top-level `sync` object.
+
+Unsubscribing will cause any rows on the device that were part of this subscription (but not any others) to be removed. Returns a promise that resolves as soon as the server accepts the unsubscribe.
 
 ```ts
 const { db, sync } = await electrify()
@@ -254,8 +252,6 @@ const { key, synced } = await db.projects.sync()
 
 sync.unsubscribe([key])
 ```
-
-Unsubscribing will cause any rows on the device that were part of this subscription (but not any others) to be removed. Returns a promise that resolves as soon as the server accepts the unsubscribe.
 
 ### `sync.syncStatus` method
 
