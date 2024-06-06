@@ -1,5 +1,26 @@
 # electric-sql
 
+## 0.12.0
+
+### Minor Changes
+
+- a8eedad: feat: server-driven unsubscribes to allow clients to unsubscribe from shapes
+
+### Patch Changes
+
+- f4f020d: Flag to disable FKs checks on incoming TXs in SQLite.
+- 17e793c: Fix asyncEventEmitter to not silence unhandled exceptions raised in event handlers.
+- d279c8a: Redact secrets from CLI Docker configuration printout.
+- 81d91f5: Use canary Docker image tag when using the canary CLI client.
+- d406e85: Use more widely supported regex features for SQL interpolation (remove negative lookbehind which has [limmited support](https://caniuse.com/js-regexp-lookbehind))
+- d3506ab: Consistently use `URL` API for parsing and constructing URLs in CLI.
+- d3506ab: Ensure default port numbers are used when starting Electric with CLI.
+- 237e323: Better throttle snapshot stop strategy
+- 17e793c: Fix `ShapeManager` bug where manager state gets reset but the Satellite process is still assuming it is accessible.
+- 25523d9: Add experimental feature flag `ELECTRIC_FEATURES` environment variable to CLI options
+- b966157: Expose `SyncStatus` type and methods for introspecting shape subscription status
+- 276149d: Add notifier method `subscribeToShapeSubscriptionSyncStatusChanges` for listening to shape subscription status updates
+
 ## 0.11.3
 
 ### Patch Changes
