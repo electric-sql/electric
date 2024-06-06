@@ -15,7 +15,7 @@ importers:
   clients/typescript:
     dependencies:
       '@electric-sql/drivers':
-        specifier: ^0.0.1
+        specifier: workspace:*
         version: link:../../components/drivers
       async-mutex:
         specifier: ^0.4.0
