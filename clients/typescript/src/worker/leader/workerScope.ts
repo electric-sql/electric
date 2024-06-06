@@ -18,12 +18,11 @@ export class LeaderWorkerHandler implements LeaderWorkerScope {
 
   private coordinationKey: string | null = null
   private globalChannel: LeaderWorkerGlobalChannel | null = null
-  private clientId: Promise<string>
+  private clientId: string | null = null
   private leaderClientId: string | null = null
   private leaderSequenceNumber: number = -1
 
   constructor(workerScope: Worker) {
-    this.clientId = this.generateClientId()
     workerScope.addEventListener('message', (event: MessageEvent) => {
       switch (event.data.type) {
         case 'activate':
@@ -46,33 +45,35 @@ export class LeaderWorkerHandler implements LeaderWorkerScope {
     this.coordinationKey = coordinationKey
     this.globalChannel = new LeaderWorkerGlobalChannel(coordinationKey)
 
-    this.subscribeToFollowerEvents()
+    // TODO: maybe try to get it at constructor and wait promise here
+    this.clientId = await getClientId()
 
-    await Promise.race([this.runForElection(), this.requestLeader()])
+    // start listening for leader changes early
+    this.subscribeToLeaderChangeEvents()
+
+    // request for any current leaders while simultanesouly
+    // running for leadership
+    this.requestLeader()
+    this.runForElection()
   }
 
-  private subscribeToFollowerEvents() {
+  private subscribeToLeaderChangeEvents() {
     this.globalChannel!.subscribe(
       GlobalChannelEventType.leaderElected,
       async (event: LeaderElectedEvent) => {
-        // only listen to new leaders with a higher sequence number
+        // only listen for new leaders with a higher sequence number
         if (
           event.leaderSequenceNumber > this.leaderSequenceNumber &&
           event.leaderClientId !== this.leaderClientId
         ) {
-          this.leaderClientId = event.leaderClientId
-          this.leaderSequenceNumber = event.leaderSequenceNumber
-          this.globalChannel!.leaderAcknowledged(
-            await this.clientId,
-            this.leaderClientId
-          )
+          this.acknowledgeLeader(event)
         }
       }
     )
   }
 
   private async requestLeader() {
-    this.globalChannel!.requestLeader(await this.clientId)
+    this.globalChannel!.requestLeader(this.clientId!)
   }
 
   private async runForElection() {
@@ -82,24 +83,32 @@ export class LeaderWorkerHandler implements LeaderWorkerScope {
     )
   }
 
+  private async acknowledgeLeader(event: LeaderElectedEvent) {
+    // TODO: perform leader change stuff
+    this.leaderClientId = event.leaderClientId
+    this.leaderSequenceNumber = event.leaderSequenceNumber
+    this.globalChannel!.leaderAcknowledged(this.clientId!, this.leaderClientId)
+  }
+
   private async assumeLeadership() {
-    this.leaderClientId = await this.clientId
+    // TODO: perform leader change stuff
+    this.leaderClientId = this.clientId!
     this.leaderSequenceNumber += 1
     this.globalChannel!.leaderElected(
       this.leaderClientId,
       this.leaderSequenceNumber
     )
   }
+}
 
-  private async generateClientId() {
-    // Use WebLock to get a clientId, inspired by:
-    // https://github.com/rhashimoto/wa-sqlite/blob/master/demo/SharedService/SharedService.js
-    const nonce = Math.random().toString()
-    const clientId = await navigator.locks.request(nonce, async () => {
-      const { held } = await navigator.locks.query()
-      return held?.find((lock) => lock.name === nonce)?.clientId
-    })
+async function getClientId() {
+  // Use WebLock to get a clientId, inspired by:
+  // https://github.com/rhashimoto/wa-sqlite/blob/master/demo/SharedService/SharedService.js
+  const nonce = Math.random().toString()
+  const clientId = await navigator.locks.request(nonce, async () => {
+    const { held } = await navigator.locks.query()
+    return held?.find((lock) => lock.name === nonce)?.clientId
+  })
 
-    return clientId!
-  }
+  return clientId!
 }
