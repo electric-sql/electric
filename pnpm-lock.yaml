@@ -322,22 +322,19 @@ importers:
       '@capacitor-community/sqlite':
         specifier: '>= 5.6.2'
         version: 5.7.2(@capacitor/core@5.7.5)
-      async-mutex:
-        specifier: ^0.4.0
-        version: 0.4.0
-      better-sqlite3:
-        specifier: ^8.4.0
-        version: 8.4.0
-    devDependencies:
-      '@electric-sql/pglite':
-        specifier: ^0.1.5
-        version: 0.1.5
       '@op-engineering/op-sqlite':
         specifier: '>= 2.0.16'
         version: 2.0.16(react-native@0.74.1)(react@18.3.1)
       '@tauri-apps/plugin-sql':
         specifier: 2.0.0-alpha.5
         version: 2.0.0-alpha.5
+      async-mutex:
+        specifier: ^0.4.0
+        version: 0.4.0
+    devDependencies:
+      '@electric-sql/pglite':
+        specifier: ^0.1.5
+        version: 0.1.5
       '@types/better-sqlite3':
         specifier: 7.6.3
         version: 7.6.3
@@ -356,6 +353,9 @@ importers:
       ava:
         specifier: ^4.3.1
         version: 4.3.3
+      better-sqlite3:
+        specifier: ^8.4.0
+        version: 8.4.0
       concurrently:
         specifier: ^8.2.2
         version: 8.2.2
@@ -4150,7 +4150,7 @@ packages:
     dependencies:
       react: 18.3.1
       react-native: 0.74.1(@babel/core@7.24.5)(@babel/preset-env@7.24.5)(@types/react@18.3.2)(react@18.3.1)
-    dev: true
+    dev: false
 
   /@op-engineering/op-sqlite@6.0.1(react-native@0.74.1)(react@18.3.1):
     resolution: {integrity: sha512-rQ/kVT9O/LcdZijqlMAuDWUK04Wl3n1kUXy7zsWty3/HIb0b2U0ppOw2z/1AiBQqs/0vF3dYUajtamF7Hq7zwg==}
@@ -6064,13 +6064,11 @@ packages:
   /@tauri-apps/api@2.0.0-alpha.13:
     resolution: {integrity: sha512-sGgCkFahF3OZAHoGN5Ozt9WK7wJlbVZSgWpPQKNag4nSOX1+Py6VDRTEWriiJHDiV+gg31CWHnNXRy6TFoZmdA==}
     engines: {node: '>= 18', npm: '>= 6.6.0', yarn: '>= 1.19.1'}
-    dev: true
 
   /@tauri-apps/plugin-sql@2.0.0-alpha.5:
     resolution: {integrity: sha512-u4rJZM357zWP+WmE/W1t1iu0/INQ9uqO8+dOFWzLSGqg2zgYcohTeV66hZoeCTRTzsV3qrKI3suWueLu1YKT7A==}
     dependencies:
       '@tauri-apps/api': 2.0.0-alpha.13
-    dev: true
 
   /@testing-library/dom@8.20.1:
     resolution: {integrity: sha512-/DiOQ5xBxgdYRC8LNk7U+RWat0S3qRLeIw3ZIkMQ9kkVlRmwD/Eg8k8CqIpD6GW7u20JIUOfMKbxtiLutpjQ4g==}
@@ -7755,7 +7753,7 @@ packages:
     dependencies:
       bindings: 1.5.0
       prebuild-install: 7.1.2
-    dev: false
+    dev: true
 
   /better-sqlite3@8.7.0:
     resolution: {integrity: sha512-99jZU4le+f3G6aIl6PmmV0cxUIWqKieHxsiF7G34CVFiE+/UabpYqkU0NJIkY/96mQKikHeBjtR27vFfs5JpEw==}
