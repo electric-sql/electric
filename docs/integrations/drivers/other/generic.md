@@ -19,6 +19,12 @@ export interface DatabaseAdapter {
   // Run an array of sql statements within a transaction.
   runInTransaction(...statements: Statement[]): Promise<RunResult>
 
+  // Executes the function in isolation from any other queries/transactions executed through this adapter.
+  // Useful to execute queries that cannot be executed inside a transaction but still guarantee isolation from other queries.
+  runExclusively<T>(
+    f: (adapter: UncoordinatedDatabaseAdapter) => Promise<T> | T
+  ): Promise<T>
+
   // Run a query statement and return the results as an
   // array of rows.
   query(statement: Statement): Promise<Row[]>
@@ -35,7 +41,7 @@ export interface DatabaseAdapter {
 }
 ```
 
-For convenience, we provide two generic database adapters, `SerialDatabaseAdapter`` and `BatchDatabaseAdapter``. These implement the parts of the interface that are common to most adapters. This allows you to implement your own driver adapters using a simpler interface.
+For convenience, we provide two generic database adapters, `SerialDatabaseAdapter` and `BatchDatabaseAdapter`. These implement the parts of the interface that are common to most adapters. This allows you to implement your own driver adapters using a simpler interface.
 ```tsx
 export abstract class SerialDatabaseAdapter implements DatabaseAdapter {
   // Run a single SQL statement against the DB
