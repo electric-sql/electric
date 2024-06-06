@@ -5,7 +5,7 @@ description: >-
 sidebar_position: 10
 ---
 
-You can integrate any SQLite or Postgres database driver by adapting it to the ElectricSQL [`DatabaseAdapter` interface](https://github.com/electric-sql/electric/blob/main/clients/typescript/src/electric/adapter.ts):
+You can integrate any SQLite or Postgres database driver by adapting it to the ElectricSQL [`DatabaseAdapter` interface](https://github.com/electric-sql/electric/blob/main/components/drivers/src/adapter.ts):
 
 ```tsx
 export interface DatabaseAdapter {
@@ -62,7 +62,7 @@ export abstract class BatchDatabaseAdapter implements DatabaseAdapter {
 }
 ```
 
-The best guidance for this is to look at the [existing driver implementations](https://github.com/electric-sql/electric/tree/main/clients/typescript/src/drivers). You can then build on the [base electrify function](https://github.com/electric-sql/electric/blob/main/clients/typescript/src/electric/index.ts#L33) to implement your own `electrify` function, e.g.:
+The best guidance for this is to look at the [existing driver implementations](https://github.com/electric-sql/electric/tree/main/components/drivers/src). You can then build on the [base electrify function](https://github.com/electric-sql/electric/blob/main/clients/typescript/src/electric/index.ts#L48) to implement your own `electrify` function, e.g.:
 
 ```tsx
 export const electrify = async <T, DB extends DbSchema<any>>(
