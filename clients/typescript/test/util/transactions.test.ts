@@ -1,8 +1,8 @@
 import t, { TestFn } from 'ava'
 import Database from 'better-sqlite3'
 import type { Database as DB } from 'better-sqlite3'
-import { DatabaseAdapter } from '../../src/drivers/better-sqlite3/adapter'
-import { DatabaseAdapter as DatabaseAdapterInterface } from '../../src/electric'
+import { DatabaseAdapter } from '../../src/drivers/better-sqlite3'
+import { DatabaseAdapter as DatabaseAdapterInterface } from '@electric-sql/drivers'
 import { runInTransaction } from '../../src/util/transactions'
 import { ForeignKeyChecks } from '../../src/config'
 

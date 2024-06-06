@@ -3,7 +3,7 @@ import Database from 'better-sqlite3'
 
 import { rm as removeFile } from 'node:fs/promises'
 
-import { DatabaseAdapter } from '../../../src/drivers/better-sqlite3/adapter'
+import { DatabaseAdapter } from '@electric-sql/drivers/better-sqlite3'
 import { SqliteBundleMigrator as BundleMigrator } from '../../../src/migrators/bundle'
 import { satelliteDefaults } from '../../../src/satellite/config'
 

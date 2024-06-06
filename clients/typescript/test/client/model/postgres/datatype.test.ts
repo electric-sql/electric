@@ -9,7 +9,7 @@ import {
 } from '../../../../src/client/validation/errors/messages'
 import { schema } from '../../generated'
 import { ContextType, datatypeTests } from '../datatype'
-import { makePgDatabase } from '../../../support/node-postgres'
+import { makePgDatabase } from '@electric-sql/drivers/node-postgres'
 import { randomValue } from '../../../../src/util'
 
 // Run all tests in this file serially

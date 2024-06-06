@@ -1,5 +1,5 @@
 import { SatRelation_RelationType } from '../_generated/protocol/satellite'
-import { DatabaseAdapter } from '../electric/adapter'
+import { DatabaseAdapter } from '@electric-sql/drivers'
 import { QueryBuilder } from '../migrators/query-builder'
 import { SatelliteOpts } from '../satellite/config'
 import { QualifiedTablename } from './tablename'

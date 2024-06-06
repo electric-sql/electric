@@ -1,5 +1,5 @@
 import { InternalElectricConfig, HydratedConfig } from '../config/index'
-import { DatabaseAdapter } from '../electric/adapter'
+import { DatabaseAdapter } from '@electric-sql/drivers'
 import { Migrator } from '../migrators/index'
 import { Notifier } from '../notifiers/index'
 import { DbName } from '../util/types'

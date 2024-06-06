@@ -1,6 +1,6 @@
 import { Statement } from '.'
 import { ForeignKeyChecks } from '../config'
-import { DatabaseAdapter, RunResult } from '../electric'
+import { DatabaseAdapter, RunResult } from '@electric-sql/drivers'
 
 /**
  * Runs the provided statements in a transaction and sets the `foreign_keys` pragma based on the `fkChecks` flag.
