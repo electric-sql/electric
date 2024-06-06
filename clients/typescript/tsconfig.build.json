@@ -1,12 +1,8 @@
 {
+  "extends": ["./tsconfig.json", "../../common/tsconfig.build.json"],
+  "include": ["src"],
   "compilerOptions": {
     "rootDir": "src",
-    "composite": false,
-    "declaration": true,
-    "noEmit": false,
-    "emitDeclarationOnly": true,
-    "incremental": false
+    "outDir": "dist",
   },
-  "include": ["src"],
-  "extends": ["./tsconfig.json", "../../common/tsconfig.build.json"]
 }
