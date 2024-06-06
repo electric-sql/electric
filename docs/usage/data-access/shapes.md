@@ -50,7 +50,7 @@ Once the data has synced onto the local device, it's kept in sync using a **shap
 
 ## Syncing shapes
 
-ElectricSQL syncs shapes using the [`sync`](../../api/clients/typescript.md#sync) client function. You can sync individual rows:
+ElectricSQL syncs shapes using the [`sync`](../../api/clients/typescript.md#sync-method) client function. You can sync individual rows:
 
 ```ts
 await db.projects.sync({
@@ -180,7 +180,7 @@ The current filtering implementation does not support non-deterministic function
 
 ### Promise workflow
 
-The [`sync`](../../api/clients/typescript.md#sync) function resolves to an object containing a promise:
+The [`sync`](../../api/clients/typescript.md#sync-method) function resolves to an object containing a promise:
 
 1. the first `sync()` promise resolves when the shape subscription has been confirmed by the server (the sync service)
 2. the second `synced` promise resolves when the data in the shape has fully synced onto the local device
@@ -277,11 +277,68 @@ const MyComponent = () => {
 
 For many applications you can simply define the data you want to sync up-front, for example, at app load time and then just code against the local database once the data has synced in. For others, you can craft more dynamic partial replication, for instance, syncing data in as the user navigates through different routes or parts of the app.
 
+### Unsubscribe, status, and shape changes
+
+A `.sync()` call is stateful in establishing a subscription: once executed on the client, a subscription will be active even if the original `.sync()` call is removed from the code. To interact with an established subscription, you can use a [`key` property](../../api/clients/typescript.md#specifying-a-key-for-sync) that `.sync()` call returns in order to check the status of a subscription, unsubscribe, or seamlessly change the subscription. This key can also be provided when you make the `.sync()` call to have more control.
+
+#### Shape changes
+
+A `key` property can be provided to the `.sync()` call. A `key` is unique across all shapes, and if a new `.sync()` call is made with the same key, the new one will be subscribed, and the old one unsubscribed. This makes `.sync()` calls more declarative while you're developing your application and figuring out which exact shape suits you best.
+
+In the following example, first a subscription is established with one filter, then it's changed to use another filter. After the last `await` is resolved, rows with status `active` but with `author_id` not `1` will be removed from the device as after an unsubscribe.
+
+```ts
+const { db, sync } = useElectric()
+const { key, synced } = await db.projects.sync({
+  where: "this.status = 'active'",
+  key: 'allProjects'
+})
+await synced
+
+const { synced: newSynced } = await db.projects.sync({
+  where: "this.author_id = '1'",
+  key: 'allProjects'
+})
+await newSynced
+```
+
+#### Unsubscribe
+
+Using the key returned from the `.sync()` call you can cancel a previously established subscription using a `.unsubscribe(keys)` method on the [top-level `sync` object](../../api/clients/typescript.md#sync-top-level-property):
+
+```ts
+const { db, sync } = useElectric()
+const { key, synced } = await db.projects.sync()
+
+sync.unsubscribe([key])
+```
+
+Unsubscribing will cause any rows on the device that were part of this subscription (but not any others) to be removed.
+
+#### Sync status
+
+If you want to check the status of a subscription, there is a `sync.syncStatus(key)` method available on the [top-level `sync` object](../../api/clients/typescript.md#sync-top-level-property).
+
+```ts
+const { db, sync } = useElectric()
+
+sync.syncStatus('testKey') // undefined, since subscription with this key is not known
+
+const { key, synced } = await db.projects.sync({ key: 'testKey' })
+sync.syncStatus(key) // { status: 'establishing' }
+
+await synced
+sync.syncStatus(key) // { status: 'active' }
+
+sync.unsubscribe([key])
+sync.syncStatus(key) // { status: 'cancelling' }
+```
+
 ## Limitations and issues
 
 Shape-based sync is under active development, and we're aware of some issues with it. We're working on fixing the bugs and lifting limitations as we go.
 
-- [`.sync`](../../api/clients/typescript.md#sync) method has a wider type signature in TypeScript than what's really supported. In particular, `limit`, `sort` and other keywords under `include` should not be there.
+- [`.sync`](../../api/clients/typescript.md#sync-method) method has a wider type signature in TypeScript than what's really supported. In particular, `limit`, `sort` and other keywords under `include` should not be there.
 - `DELETE` of the top row on the client without having synced all the children may not result in a `DELETE` on the server and the row will be restored
 - Recursive and mutually recursive tables are not supported at all for now. A foreign key loop will prevent the shape subscription from being established.
 - Shape unsubscribe is not available, which means any shape subscription established by calling `.sync()` (in development in particular) is going to be statefully persisted regardless of code changes.
@@ -289,18 +346,6 @@ Shape-based sync is under active development, and we're aware of some issues wit
 ### Foreign key and query consistency
 
 ElectricSQL maintains foreign key consistency both in the PostgreSQL central database, and in the local database on the client. To achieve it, the server will automatically follow any many-to-one relation in the requested shape. For example, if there are projects each with an owner and related issues, requesting all projects will also ensure that users who are owners of those projects are available on the device too. However, related issues won't show up on the device unless explicitly requested.
-
-#### Updating shapes
-
-:::danger Potential foot-gun in development
-We're working to fix this limitation
-:::
-
-Once a subscription is established, it remains statefully in the local database even when you change the code. For example, doing `db.projects.sync({ where: { id: 1 }})`, starting the application, then changing the code to `db.projects.sync({ where: { id: 2 }})` will result in **2 subscriptions** established, with both projects synced to the device. We're working on lifting this limitation.
-
-#### Unsubscribe not available
-
-Related to the previous heading, removing a subscription to an existing shape is not supported yet. This will be available, lifting the previous limitation as well.
 
 #### Move-in lag
 

@@ -50,7 +50,7 @@ This is a very temporary workaround and will be removed soon!
 
 ### Shapes
 
-[Shape-based sync](../usage/data-access/shapes.md) using the [`sync()` function](../api/clients/typescript.md#sync) is currently supported with some [limitations](../usage/data-access/shapes.md#limitations-and-issues). You can ask for specific tables and rows, filter them, and follow relations. The biggest current limitation is that you cannot unsubscribe from a shape.
+[Shape-based sync](../usage/data-access/shapes.md) using the [`sync()` function](../api/clients/typescript.md#sync-method) is currently supported with some [limitations](../usage/data-access/shapes.md#limitations-and-issues). You can ask for specific tables and rows, filter them, and follow relations.
 
 ### Failure modes
 
