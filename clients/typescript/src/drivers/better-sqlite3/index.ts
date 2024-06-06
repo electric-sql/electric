@@ -10,8 +10,8 @@ import {
 
 import { DbName } from '../../util/types'
 
-import { DatabaseAdapter } from './adapter'
-import { Database } from './database'
+import { DatabaseAdapter } from '@electric-sql/drivers/better-sqlite3'
+import type { Database } from '@electric-sql/drivers/better-sqlite3'
 import { ElectricClient } from '../../client/model/client'
 import { DbSchema } from '../../client/model/schema'
 import { WebSocketNode } from '../../sockets/node'

@@ -1,5 +1,5 @@
 import { TestFn } from 'ava'
-import { DatabaseAdapter } from '../../src/electric'
+import { DatabaseAdapter } from '@electric-sql/drivers'
 import { Dialect } from '../../src/migrators/query-builder/builder'
 import { Table } from '../../src/migrators/triggers'
 import { SatelliteOpts } from '../../src/satellite/config'

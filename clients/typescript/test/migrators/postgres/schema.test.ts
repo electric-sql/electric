@@ -7,7 +7,7 @@ import { satelliteDefaults } from '../../../src/satellite/config'
 import { randomValue } from '../../../src/util/random'
 
 import migrations from '../../support/migrations/pg-migrations.js'
-import { makePgDatabase } from '../../support/node-postgres'
+import { makePgDatabase } from '@electric-sql/drivers/node-postgres'
 
 type Context = {
   dbName: string

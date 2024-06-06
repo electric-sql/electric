@@ -9,7 +9,7 @@ import {
 } from '../validation/validation'
 import { UpdateInput, UpdateManyInput } from '../input/updateInput'
 import { DeleteInput, DeleteManyInput } from '../input/deleteInput'
-import { DatabaseAdapter } from '../../electric/adapter'
+import { DatabaseAdapter } from '@electric-sql/drivers'
 import { Builder, makeFilter } from './builder'
 import { Executor } from '../execution/executor'
 import { BatchPayload } from '../output/batchPayload'

@@ -1,10 +1,10 @@
 import anyTest, { ExecutionContext, TestFn } from 'ava'
-import { makePgDatabase } from '../../support/node-postgres'
+import { makePgDatabase } from '@electric-sql/drivers/node-postgres'
 import { randomValue } from '../../../src/util/random'
 import { opts } from '../common'
 import { ContextType, SetupFn, serializationTests } from '../serialization'
 import { pgTypeDecoder, pgTypeEncoder } from '../../../src/util/encoders'
-import { DatabaseAdapter as PgDatabaseAdapter } from '../../../src/drivers/node-postgres/adapter'
+import { DatabaseAdapter as PgDatabaseAdapter } from '../../../src/drivers/node-postgres'
 import { pgBuilder } from '../../../src/migrators/query-builder'
 
 const test = anyTest as TestFn<ContextType>

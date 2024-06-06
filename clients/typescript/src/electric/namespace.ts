@@ -1,6 +1,6 @@
 // This is the namespace that's patched onto the user's database client
 // (technically via the proxy machinery) as the `.electric` property.
-import { DatabaseAdapter } from './adapter'
+import { DatabaseAdapter } from '@electric-sql/drivers'
 import { Notifier, UnsubscribeFunction } from '../notifiers'
 import { ConnectivityState } from '../util/types'
 import { GlobalRegistry, Registry } from '../satellite'

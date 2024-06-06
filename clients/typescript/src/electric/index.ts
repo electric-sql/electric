@@ -1,5 +1,5 @@
 import { ElectricConfigWithDialect, hydrateConfig } from '../config/index'
-import { DatabaseAdapter } from '../electric/adapter'
+import { DatabaseAdapter } from '@electric-sql/drivers'
 import { Migrator } from '../migrators/index'
 import { EventNotifier, Notifier } from '../notifiers/index'
 import { globalRegistry, Registry } from '../satellite/index'
@@ -12,7 +12,6 @@ import { DbSchema } from '../client/model/schema'
 import { SqliteBundleMigrator } from '../migrators/bundle'
 
 export { ElectricNamespace }
-export type * from './adapter'
 
 // These are the options that should be provided to the adapter's electrify
 // entrypoint. They are all optional to optionally allow different / mock

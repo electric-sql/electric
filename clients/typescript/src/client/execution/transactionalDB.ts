@@ -1,4 +1,4 @@
-import { RunResult, Transaction } from '../../electric/adapter'
+import { RunResult, Transaction } from '@electric-sql/drivers'
 import { QueryBuilder } from 'squel'
 import { DB } from './db'
 import * as z from 'zod'

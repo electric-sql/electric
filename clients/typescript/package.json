@@ -173,6 +173,7 @@
     "**/*": "prettier --write --ignore-unknown"
   },
   "dependencies": {
+    "@electric-sql/drivers": "^0.0.1",
     "async-mutex": "^0.4.0",
     "base-64": "^1.0.0",
     "better-sqlite3": "^8.4.0",

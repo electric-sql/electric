@@ -1,5 +1,5 @@
 import { Statement } from '.'
-import { DatabaseAdapter, RunResult } from '../electric'
+import { DatabaseAdapter, RunResult } from '@electric-sql/drivers'
 
 /**
  * Runs the provided statements in a transaction and disables FK checks if `disableFKs` is true.
