@@ -138,7 +138,7 @@ const config: ElectricConfig = {
 - `disableForeignKeysDownstream?: boolean`
 
   Can be set to true to disable FK checks when applying downstream (i.e. incoming) transactions to the local SQLite database.
-  This is the default behavior when using Postgres and can't be changed.
+  When using a Postgres driver foreign keys are always disabled and this behavior can't be changed.
 
 ### Configuring example apps
 
