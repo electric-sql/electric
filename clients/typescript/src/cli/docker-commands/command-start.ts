@@ -80,7 +80,6 @@ export function start(options: StartSettings) {
               port: parsePort(env.DATABASE_PORT),
               dbName: env.DATABASE_NAME,
             }),
-            LOGICAL_PUBLISHER_HOST: 'electric',
           }
         : {}),
     }

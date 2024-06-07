@@ -5,12 +5,6 @@ defmodule Electric.Replication.ConnectorsTest do
 
   @default_origin "postgres_1"
 
-  @default_replication_config [
-    host: "host.docker.internal",
-    port: 5433,
-    dbname: "test"
-  ]
-
   @default_user_config [
     origin: @default_origin,
     producer: Electric.Replication.Postgres.LogicalReplicationProducer,
@@ -22,14 +16,12 @@ defmodule Electric.Replication.ConnectorsTest do
       password: ~c"password",
       replication: ~c"database",
       ssl: false
-    ],
-    replication: [electric_connection: @default_replication_config]
+    ]
   ]
 
   describe "get_replication_opts" do
     test "produces a valid replication config from charlist values in the user config" do
       assert %{
-               electric_connection: @default_replication_config,
                publication: "electric_publication",
                slot: "electric_replication_out_test_db_name",
                subscription: @default_origin

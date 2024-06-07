@@ -27,11 +27,8 @@ defmodule Electric.Replication.PostgresConnectorSup do
     logical_replication_producer = Postgres.LogicalReplicationProducer.name(origin)
     migration_consumer = Postgres.MigrationConsumer.name(origin)
 
-    write_to_pg_mode = Connectors.write_to_pg_mode(connector_config)
-
     migration_consumer_opts = [
-      producer: logical_replication_producer,
-      refresh_subscription: write_to_pg_mode == :logical_replication
+      producer: logical_replication_producer
     ]
 
     writer_module_opts = [
@@ -46,11 +43,7 @@ defmodule Electric.Replication.PostgresConnectorSup do
       {SatelliteCollectorProducer, connector_config},
       {Postgres.LogicalReplicationProducer, connector_config},
       {Postgres.MigrationConsumer, {connector_config, migration_consumer_opts}},
-      if write_to_pg_mode == :logical_replication do
-        {Postgres.SlotServer, writer_module_opts}
-      else
-        {Postgres.Writer, writer_module_opts}
-      end,
+      {Postgres.Writer, writer_module_opts},
       {CachedWal.EtsBacked,
        origin: origin,
        subscribe_to: [{migration_consumer, []}],

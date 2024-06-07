@@ -185,42 +185,6 @@ export const configOptions: Record<string, any> = {
     `,
     groups: ['electric'],
   },
-  ELECTRIC_WRITE_TO_PG_MODE: {
-    defaultVal: 'logical_replication',
-    valueType: String,
-    valueTypeName: 'logical_replication | direct_writes',
-    doc: dedent`
-      In logical_replication mode, Electric provides a logical replication publisher
-      service over TCP that speaks the Logical Streaming Replication Protocol.
-      Postgres connects to Electric and establishes a subscription to this.
-      Writes are then streamed in and applied using logical replication.
-
-      In direct_writes mode, Electric writes data to Postgres using a standard
-      interactive client connection. This avoids the need for Postgres to be
-      able to connect to Electric and reduces the permissions required for the
-      database user that Electric connects to Postgres as.
-
-      CAUTION: The mode you choose affects your networking config and
-      database user permissions.
-    `,
-    groups: ['electric'],
-  },
-  LOGICAL_PUBLISHER_HOST: {
-    valueType: String,
-    valueTypeName: 'url',
-    doc: dedent`
-        Host of this electric instance for the reverse connection from Postgres.
-        Required if ELECTRIC_WRITE_TO_PG_MODE is set to logical_replication.
-    `,
-    groups: ['electric'],
-  },
-  LOGICAL_PUBLISHER_PORT: {
-    defaultVal: '5433',
-    valueType: Number,
-    valueTypeName: 'port',
-    doc: 'Port number to use for reverse connections from Postgres.',
-    groups: ['electric'],
-  },
   HTTP_PORT: {
     inferVal: (options: ConfigMap) => inferServiceUrlPart('port', options),
     defaultVal: '5133',

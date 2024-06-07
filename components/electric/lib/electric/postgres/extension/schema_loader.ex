@@ -24,7 +24,6 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   @callback save(state(), version(), Schema.t(), [String.t()]) ::
               {:ok, state(), Version.t()} | {:error, term()}
   @callback relation_oid(state(), rel_type(), schema(), name()) :: oid_result()
-  @callback refresh_subscription(state(), name()) :: :ok | {:error, term()}
   @callback migration_history(state(), version() | nil) ::
               {:ok, [Migration.t()]} | {:error, term()}
   @callback known_migration_version?(state(), version()) :: boolean
@@ -67,10 +66,6 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
 
   def relation_oid({module, state}, rel_type, schema, table) do
     module.relation_oid(state, rel_type, schema, table)
-  end
-
-  def refresh_subscription({module, state}, name) do
-    module.refresh_subscription(state, name)
   end
 
   def migration_history({module, state}, version) do

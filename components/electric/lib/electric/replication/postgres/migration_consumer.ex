@@ -58,8 +58,6 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
       |> SchemaLoader.get(:backend, SchemaCache)
       |> SchemaLoader.connect(conn_config)
 
-    refresh_sub? = Keyword.get(opts, :refresh_subscription, true)
-
     Logger.info("Starting #{__MODULE__} using #{elem(loader, 0)} backend")
 
     state = %{
@@ -69,7 +67,6 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
       producer: producer,
       loader: loader,
       opts: opts,
-      refresh_subscription: refresh_sub?,
       refresh_enum_types: Keyword.get(opts, :refresh_enum_types, true),
       conn_opts: Connectors.get_connection_opts(conn_config)
     }
@@ -126,7 +123,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
   defp process_migrations(transactions, %{loader: loader} = state) do
     {:ok, %{version: schema_version}} = SchemaLoader.load(loader)
 
-    {state, num_applied_migrations} =
+    {state, _num_applied_migrations} =
       transactions
       |> transactions_to_migrations(state)
       |> skip_applied_migrations(schema_version)
@@ -134,11 +131,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
         {perform_migration(migration, state), num_applied + 1}
       end)
 
-    if num_applied_migrations > 0 do
-      refresh_subscription(state)
-    else
-      state
-    end
+    state
   end
 
   defp transactions_to_migrations(transactions, state) do
@@ -169,18 +162,6 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
     )
 
     %{state | loader: loader}
-  end
-
-  # update the subscription to add any new
-  # tables (this only works when data has been added -- doing it at the
-  # point of receiving the migration has no effect).
-  defp refresh_subscription(%{refresh_subscription: refresh?} = state) do
-    if refresh? do
-      Logger.debug("#{__MODULE__} refreshing subscription '#{state.subscription}'")
-      :ok = SchemaLoader.refresh_subscription(state.loader, state.subscription)
-    end
-
-    state
   end
 
   @impl GenStage

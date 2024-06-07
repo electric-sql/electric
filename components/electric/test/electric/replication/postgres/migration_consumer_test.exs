@@ -105,32 +105,6 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
     {:ok, origin: origin, producer: producer, version: version, loader: backend}
   end
 
-  test "refreshes subscription after receiving a migration", cxt do
-    %{producer: producer, origin: origin, version: version} = cxt
-    assert_receive {MockSchemaLoader, {:connect, _}}
-
-    events = [
-      %Transaction{
-        changes: [
-          %NewRecord{
-            relation: {"electric", "ddl_commands"},
-            record: %{
-              "id" => "6",
-              "query" => "create table something_else (id uuid primary key);",
-              "txid" => "101",
-              "txts" => "201"
-            },
-            tags: []
-          }
-        ]
-      }
-    ]
-
-    GenStage.call(producer, {:emit, cxt.loader, events, version})
-
-    assert_receive {MockSchemaLoader, {:refresh_subscription, ^origin}}, 1500
-  end
-
   test "captures migration records", cxt do
     %{origin: origin, producer: producer, version: version} = cxt
     assert_receive {MockSchemaLoader, {:connect, _}}

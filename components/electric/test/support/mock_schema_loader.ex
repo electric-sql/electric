@@ -271,16 +271,6 @@ defmodule Electric.Postgres.MockSchemaLoader do
   end
 
   @impl true
-  def refresh_subscription({:agent, pid}, name) do
-    Agent.get(pid, &refresh_subscription(&1, name))
-  end
-
-  def refresh_subscription({_versions, opts}, name) do
-    notify(opts, {:refresh_subscription, name})
-    :ok
-  end
-
-  @impl true
   def migration_history({:agent, pid}, after_version) do
     Agent.get(pid, &migration_history(&1, after_version))
   end

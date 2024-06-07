@@ -275,13 +275,6 @@ defmodule Electric.Postgres.TestConnection do
           replication: ~c"database",
           ssl: false
         ),
-      replication: [
-        electric_connection: [
-          host: "host.docker.internal",
-          port: 5433,
-          dbname: "test"
-        ]
-      ],
       proxy: [
         listen: [port: 65432],
         password: "password"

@@ -75,33 +75,6 @@ defmodule Electric.Config do
     end
   end
 
-  @spec parse_write_to_pg_mode(binary) :: {:ok, Electric.write_to_pg_mode()} | {:error, binary}
-  def parse_write_to_pg_mode("logical_replication"), do: {:ok, :logical_replication}
-  def parse_write_to_pg_mode("direct_writes"), do: {:ok, :direct_writes}
-
-  def parse_write_to_pg_mode(str) do
-    if String.trim(str) == "" do
-      {:error, "erroneously set to an empty value"}
-    else
-      {:error,
-       "has invalid value: #{inspect(str)}. Must be one of #{inspect(~w[direct_writes logical_replication])}"}
-    end
-  end
-
-  @spec parse_logical_publisher_host(
-          maybe_string,
-          {:ok, Electric.write_to_pg_mode()} | {:error, binary}
-        ) :: {:ok, maybe_string} | {:error, binary}
-  def parse_logical_publisher_host(val, {:ok, :direct_writes}), do: {:ok, val}
-
-  def parse_logical_publisher_host(val, _) do
-    if is_nil(val) or String.trim(val) == "" do
-      {:error, "not set"}
-    else
-      {:ok, val}
-    end
-  end
-
   @log_levels ~w[emergency alert critical error warning warn notice info debug]
   @public_log_levels ~w[error warning info debug]
 
