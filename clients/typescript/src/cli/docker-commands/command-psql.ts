@@ -41,10 +41,8 @@ export function psql(opts: GetConfigOptionsForGroup<'proxy' | 'electric'>) {
   proc.on('exit', (code) => {
 	if (code != 0) {
 	  const proxyUrl = config.PROXY
-	  spawn(
-		'psql',
-		[proxyUrl], {
-		  stdio: 'inherit',
+	  spawn('psql', [proxyUrl], {
+		stdio: 'inherit',
 	  })
 	}
   })
