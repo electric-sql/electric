@@ -16,12 +16,10 @@ Configuration options are passed as environment variables, e.g.:
 ```shell
 docker run \
     -e "DATABASE_URL=postgresql://..." \
-    -e "LOGICAL_PUBLISHER_HOST=..." \
     -e "PG_PROXY_PASSWORD=..." \
     -e "AUTH_JWT_ALG=HS512" \
     -e "AUTH_JWT_KEY=..." \
     -p 5133:5133 \
-    -p 5433:5433 \
     electricsql/electric
 ```
 
@@ -38,7 +36,7 @@ For a longer form description of how to successfully deploy the sync service and
 :::caution A note on ports
 Your configuration options affect the number and type of ports that need to be exposed. You must always expose the [`HTTP_PORT`](#http_port). Your [write-to-PG mode](#write-to-pg-mode) and [migrations proxy](#migrations-proxy) config then determines whether you need to expose up-to two TCP ports: the [`LOGICAL_PUBLISHER_PORT`](#logical_publisher_port) and [`PG_PROXY_PORT`](#pg_proxy_port) respectively.
 
-In development using Docker you usually want to map all the necessary ports to your host network (`-p 5133:5133` and `-p 5433:5433` in the example above).
+In development using Docker you usually want to map all the necessary ports to your host network (`-p 5133:5133` in the example above).
 
 In production you must make sure your hosting infrastructure exposes the necessary ports and protocols. If not, you can use the workarounds provided in the form of [direct writes mode](#direct-writes-mode) and the [proxy tunnel](#migrations-proxy).
 
@@ -131,88 +129,6 @@ Configure how Electric connects to Postgres and exposes its HTTP/WebSocket API.
     example="debug">
   <LogLevel />
 </EnvVarConfig>
-
-## Write-to-PG mode
-
-Electric writes data to Postgres using one of two modes:
-
-1. [logical replication](#logical-replication-mode)
-2. [direct writes](#direct-writes-mode)
-
-:::caution
-The mode you choose affects your networking config and [database user permissions](#database-user-permissions).
-:::
-
-import ElectricWriteToPgMode from './_ELECTRIC_WRITE_TO_PG_MODE.md'
-
-#### ELECTRIC_WRITE_TO_PG_MODE
-
-<EnvVarConfig
-    name="ELECTRIC_WRITE_TO_PG_MODE"
-    defaultValue="logical_replication"
-    example="direct_writes">
-  <ElectricWriteToPgMode />
-</EnvVarConfig>
-
-### Logical replication mode
-
-In `logical_replication` mode, Electric exposes a logical replication publisher service over TCP that speaks the [Logical Streaming Replication Protocol](https://www.postgresql.org/docs/current/protocol-logical-replication.html).
-
-Postgres connects to Electric on `LOGICAL_PUBLISHER_HOST:LOGICAL_PUBLISHER_PORT` and establishes a logical replication subscription to this publisher service. Writes are then streamed in and applied using the logical replication subscription.
-
-```
-         | <----------- DATABASE_URL ----------- |
-Postgres |                                       | Electric
-         | ---- LOGICAL_PUBLISHER_HOST:PORT ---> |
-```
-
-:::caution Caution
-In logical replication mode:
-
-1. the [database user](#database-user-permissions) that Electric connects to Postgres as must have the [`SUPERUSER` role attribute](https://www.postgresql.org/docs/16/role-attributes.html#ROLE-ATTRIBUTES)
-2. Postgres must be able to connect to Electric (i.e.: must be able to establish an outbound TCP connection) on the host and port that you configure
-
-As a result, you must make sure (in terms of networking / firewalls) not only that Postgres is reachable from Electric but also that Electric is reachable from Postgres. And Electric must know its own address, in order to provide it to Postgres when setting up the logical replication publication that allows writes to be replicated into Postgres.
-:::
-
-import LogicalPublisherHost from './_LOGICAL_PUBLISHER_HOST.md'
-import LogicalPublisherPort from './_LOGICAL_PUBLISHER_PORT.md'
-
-#### LOGICAL_PUBLISHER_HOST
-
-<EnvVarConfig
-    name="LOGICAL_PUBLISHER_HOST"
-    required={true}
-    example="example.com">
-  <LogicalPublisherHost />
-</EnvVarConfig>
-
-#### LOGICAL_PUBLISHER_PORT
-
-<EnvVarConfig
-    name="LOGICAL_PUBLISHER_PORT"
-    defaultValue="5433"
-    example="65433">
-  <LogicalPublisherPort />
-</EnvVarConfig>
-
-### Direct writes mode
-
-In `direct_writes` mode, Electric writes data to Postgres using a standard interactive client connection. This avoids the need for Postgres to be able to connect to Electric and reduces the permissions required for the database user that Electric connects to Postgres as.
-
-```
-Postgres | <----------- DATABASE_URL ----------- | Electric
-```
-
-No additional configuration is required for direct writes mode. The `LOGICAL_PUBLISHER_HOST` and `LOGICAL_PUBLISHER_PORT` variables are not required and are ignored.
-
-:::info Why are there two modes?
-Originally (prior to v0.8) all writes to Postgres were made using logical replication.
-
-In [version 0.8](/blog/2023/12/13/electricsql-v0.8-released#from-superuser-to-supabase), Electric added direct writes mode to reduce the database user permissions required and increase compatibility with Postgres hosting providers.
-
-In future, we may deprecate logical replication and consolidate on direct writes. However, logical replication may have performance advantages and, for now, we've kept both modes available while direct writes mode gains maturity and we learn more about the operational characteristics of both modes.
-:::
 
 ## Database user permissions
 

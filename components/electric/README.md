@@ -149,28 +149,6 @@ COMMIT;
 
 Note that this procedure **MUST** be called within the same transaction as the migration.
 
-## OSX
-
-Note that if, when running on OSX, you get errors like:
-
-```
-could not connect to the publisher: connection to server at \"host.docker.internal\" (192.168.65.2), port 5433 failed
-```
-
-You may need to adjust your docker networking or run Electric within docker. To run within Docker, you can build the docker image locally:
-
-```sh
-make docker-build
-```
-
-And then run with the right env vars, e.g.:
-
-```sh
-docker run -it -p "5433:5433" -p "5133:5133" \
-    -e "DATABASE_URL=postgresql://electric:password@host.docker.internal:54321/electric" \
-    electric:local-build
-```
-
 ## Contributing
 
 See the [Community Guidelines](https://github.com/electric-sql/meta) including the [Guide to Contributing](https://github.com/electric-sql/meta/blob/main/CONTRIBUTING.md) and [Contributor License Agreement](https://github.com/electric-sql/meta/blob/main/CLA.md).

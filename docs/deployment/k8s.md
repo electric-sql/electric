@@ -7,7 +7,7 @@ sidebar_position: 50
 
 To run the [Electric sync service](../api/service.md) in [Kubernetes](https://kubernetes.io) deploy the [Docker image](./docker.md) within a [Pod](https://kubernetes.io/docs/concepts/workloads/controllers/pod), usually via a [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment).
 
-The container image needs ports `5133`, `5433` and `65432` exposed and the environment variables described in <DocPageLink path="api/service" /> configured.
+The container image needs ports `5133`, and `65432` exposed and the environment variables described in <DocPageLink path="api/service" /> configured.
 
 For example:
 
@@ -35,8 +35,6 @@ spec:
         env:
         - name: DATABASE_URL
           value: "postgresql://..."
-        - name: LOGICAL_PUBLISHER_HOST
-          value: "..."
         - name: PG_PROXY_PASSWORD
           value: "..."
         - name: AUTH_JWT_ALG
@@ -46,8 +44,6 @@ spec:
         ports:
         - name: satellite-http
           containerPort: 5133
-        - name: logical-pub-tcp
-          containerPort: 5433
         - name: pg-proxy-tcp
           containerPort: 65432
 ```

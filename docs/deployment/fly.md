@@ -33,7 +33,6 @@ app = "electric-on-fly-test-app"
 [env]
   AUTH_MODE = "insecure"
   DATABASE_URL = "postgresql://..."
-  ELECTRIC_WRITE_TO_PG_MODE = "direct_writes"
   PG_PROXY_PASSWORD = "proxy_password"
 
 # The main Internet-facing service of Electric

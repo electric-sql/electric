@@ -51,16 +51,6 @@ services:
       value: "..."
     - key: DATABASE_URL
       value: "postgresql://..."
-    - key: LOGICAL_PUBLISHER_HOST
-      fromService:
-        type: web
-        name: tcp-proxy
-        property: host
-    - key: LOGICAL_PUBLISHER_PORT
-      fromService:
-        type: web
-        name: tcp-proxy
-        property: port
 - type: web
   name: http-proxy
   runtime: image
