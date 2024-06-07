@@ -57,7 +57,6 @@ defmodule Electric.MixProject do
         {:pg_query_ex, github: "electric-sql/pg_query_ex"},
         {:protox, "~> 1.7"},
         {:req, "~> 0.4"},
-        {:ssl_verify_fun, "~> 1.1.7", override: true},
         {:thousand_island, "~> 1.3"},
         {:timex, "~> 3.7"},
         {:tzdata, "~> 1.1"}
@@ -90,10 +89,10 @@ defmodule Electric.MixProject do
 
   defp telemetry_deps do
     [
-      {:telemetry, "~> 1.1", override: true},
+      {:telemetry, "~> 1.2"},
       {:telemetry_metrics, "~> 1.0", override: true},
       {:telemetry_metrics_statsd, "~> 0.7"},
-      {:telemetry_poller, "~> 1.0"}
+      {:telemetry_poller, "~> 1.1"}
     ]
   end
 
