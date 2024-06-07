@@ -36,7 +36,6 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:pg_password@postgres:${PG_PORT:-5432}/${APP_NAME:-electric}
       PG_PROXY_PASSWORD: proxy_password
-      LOGICAL_PUBLISHER_HOST: electric
       AUTH_MODE: insecure
     ports:
       - ${ELECTRIC_PORT:-5133}:5133

@@ -65,18 +65,11 @@ Electric connects to Postgres using a `DATABASE_URL` connection string. In addit
 
 Electric actually connects to Postgres in three ways:
 
-1. it uses a normal interactive client connection to bootstrap resources and make database queries (for example, when you subscribe to a [Shape](../usage/data-access/shapes.md), Electric uses the interactive connection to query for all the rows in the shape)
-2. it establishes a logical replication subscription to consume changes from Postgres
+1. it uses a normal interactive client connection to bootstrap resources and make database queries (for example, when you subscribe to a [Shape](../usage/data-access/shapes.md), Electric uses the interactive connection to query for all the rows in the shape),
+2. it establishes a logical replication subscription to consume changes from Postgres,
 3. it writes changes to Postgres that it receives from clients over the [Satellite replication protocol](../api/satellite.md)
 
-This last one, writes changes to Postgres, can be done in two ways:
-
-- you can set `ELECTRIC_WRITE_TO_PG_MODE=direct_writes` to write data to Postgres using a normal interactive client connection
-- you can set `ELECTRIC_WRITE_TO_PG_MODE=logical_replication` to stream data into Postgres using a logical replication publication
-
-Direct writes mode works out of the box and is the easiest mode to configure, with no additional network connectivity required. Logical replication mode requires exposing a TCP host and port to Postgres, so that Postgres can establish a logical replication subscription. This can be configured using the `LOGICAL_PUBLISHER_HOST` and `LOGICAL_PUBLISHER_PORT` env vars.
-
-See <DocPageLink path="api/service" /> for more information.
+Writes are made over a regular connection with some additional configuration to distinguish client writes and direct-to-postgres writes in conflict resolution. See <DocPageLink path="api/service" /> for more information.
 
 ### 2. Migrations <-> Proxy
 

@@ -47,14 +47,10 @@ npm run dev
 
 ### Connecting Electric to Postgres
 
-The Electric sync service connects to Postgres using the `DATABASE_URL` environment variable. Depending on your choice of write mode, Postgres may also need to connect to Electric to consume a logical replication publication.
-
-This is configured using the `LOGICAL_PUBLISHER_HOST` (and `LOGICAL_PUBLISHER_PORT`) environment variables:
+The Electric sync service connects to Postgres using the `DATABASE_URL` environment variable. Postgres is configured to use `logical` replication to stream changes to Electric.
 
 ```
-         |<--------DATABASE_URL----------|
-Postgres |                               | Electric
-         |-----LOGICAL_PUBLISHER_HOST--->|
+Postgres |<--------DATABASE_URL----------| Electric
 ```
 
 See <DocPageLink path="api/service" /> for more information.

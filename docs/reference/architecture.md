@@ -95,11 +95,7 @@ Whilst local writes are final, they are still subject to concurrent merge semant
 
 ### Streaming into Electric
 
-When the local database migrations are generated from the Postgres DDL changes, triggers are added that automatically copy insert, update and delete operations on the tables to the "oplog" table. The satellite process then processes these operations by sending them to the Electric server over the Satellite protocol. Electric then applies server-side validation and authorisation before sending on to Postgres over the incoming logical-replication stream.
-
-:::note
-Electric acts as a [logical replication publisher](https://www.postgresql.org/docs/current/logical-replication.html). This is why you configure a `LOGICAL_PUBLISHER_HOST` when deploying the Electric sync service -- so that Postgres can connect to consume inbound logical replication.
-:::
+When the local database migrations are generated from the Postgres DDL changes, triggers are added that automatically copy insert, update and delete operations on the tables to the "oplog" table. The satellite process then processes these operations by sending them to the Electric server over the Satellite protocol. Electric then applies server-side validation and authorisation before executing the writes on Postgres.
 
 ### Streaming into Postgres
 

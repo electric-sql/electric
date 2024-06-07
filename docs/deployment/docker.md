@@ -12,12 +12,10 @@ See <DocPageLink path="usage/installation/service" /> to get familiar with confi
 ```shell
 docker run \
     -e "DATABASE_URL=postgresql://..." \
-    -e "LOGICAL_PUBLISHER_HOST=..." \
     -e "PG_PROXY_PASSWORD=..." \
     -e "AUTH_JWT_ALG=HS512" \
     -e "AUTH_JWT_KEY=..." \
     -p 5133:5133 \
-    -p 5433:5433 \
     -p 65432:65432 \
     -t \
     electricsql/electric

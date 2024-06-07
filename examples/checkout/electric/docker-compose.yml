@@ -12,7 +12,6 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:xxxxx@db.yourprojecthost.supabase.co:5432/postgres
       PG_PROXY_PASSWORD: proxy_password
-      ELECTRIC_WRITE_TO_PG_MODE: direct_writes
       AUTH_MODE: secure
       AUTH_JWT_ALG: HS256
       AUTH_JWT_KEY: XXXXXXXXXXX

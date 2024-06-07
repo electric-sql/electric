@@ -225,7 +225,6 @@ services:
       DATABASE_URL: "postgresql://postgres:******@example.com/postgres"
       PG_PROXY_PASSWORD: "******"
       AUTH_MODE: "insecure"
-      ELECTRIC_WRITE_TO_PG_MODE: "direct_writes"
     ports:
       - 80:5133
       - 65432:65432
