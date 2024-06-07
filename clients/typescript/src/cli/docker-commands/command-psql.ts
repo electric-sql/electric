@@ -1,4 +1,5 @@
 import { Command } from 'commander'
+import { spawn } from 'node:child_process'
 import {
   addOptionGroupToCommand,
   getConfig,
@@ -31,9 +32,20 @@ export function psql(opts: GetConfigOptionsForGroup<'proxy' | 'electric'>) {
     port: parsePgProxyPort(config.PG_PROXY_PORT).port,
     dbName: config.DATABASE_NAME,
   })
-  dockerCompose(
+  const proc = dockerCompose(
     'exec',
     ['-it', 'postgres', 'psql', containerDbUrl],
     config.CONTAINER_NAME
   )
+
+  proc.on('exit', (code) => {
+	if (code != 0) {
+	  const proxyUrl = config.PROXY
+	  spawn(
+		'psql',
+		[proxyUrl], {
+		  stdio: 'inherit',
+	  })
+	}
+  })
 }
