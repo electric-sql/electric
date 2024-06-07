@@ -4,10 +4,10 @@ on:
   push:
     branches:
       - main
-  pull_request:
-    paths:
-      - 'pnpm-lock.yaml'
-      - 'generator/**'
+#  pull_request:
+#    paths:
+#      - 'pnpm-lock.yaml'
+#      - 'generator/**'
 
 defaults:
   run:

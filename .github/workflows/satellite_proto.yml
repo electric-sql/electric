@@ -5,10 +5,10 @@ on:
       - main
     paths:
       - "protocol/**"
-  pull_request:
-    paths:
-      - "protocol/**"
-  workflow_dispatch:
+  # pull_request:
+  #   paths:
+  #     - "protocol/**"
+  # workflow_dispatch:
 
 env:
   OTP_VERSION: "27.0"

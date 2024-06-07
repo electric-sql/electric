@@ -1,15 +1,14 @@
 name: Clients / Typescript / Tests
 
 on:
-  workflow_call:
   push:
     branches:
       - main
-  pull_request:
-    paths:
-      - 'pnpm-lock.yaml'
-      - 'clients/typescript/**'
-      - '!clients/typescript/**.md'
+#  pull_request:
+#    paths:
+#      - "pnpm-lock.yaml"
+#      - "clients/typescript/**"
+#      - "!clients/typescript/**.md"
 
 defaults:
   run:

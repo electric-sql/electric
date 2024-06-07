@@ -24,6 +24,9 @@ test-no-satellite:
 test-satellite-only:
 	${LUX} --junit tests/03.*.lux
 
+test-perftest:
+	${LUX} --junit tests/07.02*.lux
+
 pull:
 	docker compose -f services_templates.yaml pull \
 		postgresql

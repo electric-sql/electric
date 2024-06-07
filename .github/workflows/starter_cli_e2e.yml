@@ -1,15 +1,14 @@
 name: create-electric-app / E2E
 
 on:
-  workflow_call:
   push:
     branches:
       - main
-  pull_request:
-    paths:
-      - 'pnpm-lock.yaml'
-      - 'examples/**'
-      - '!examples/**/**.md'
+#  pull_request:
+#    paths:
+#      - "pnpm-lock.yaml"
+#      - "examples/**"
+#      - "!examples/**/**.md"
 
 defaults:
   run:

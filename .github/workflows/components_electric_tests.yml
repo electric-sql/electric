@@ -4,10 +4,10 @@ on:
   push:
     branches:
       - main
-  pull_request:
-    paths:
-      - "components/electric/**"
-      - "!components/electric/**README.md"
+#  pull_request:
+#    paths:
+#      - "components/electric/**"
+#      - "!components/electric/**README.md"
 
 env:
   OTP_VERSION: "27.0"

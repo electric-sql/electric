@@ -1,14 +1,13 @@
 name: Examples / E2E
 
 on:
-  workflow_call:
   push:
     branches:
       - main
-  pull_request:
-    paths:
-      - 'examples/**'
-      - '!examples/**/**.md'
+#  pull_request:
+#    paths:
+#      - "examples/**"
+#      - "!examples/**/**.md"
 
 concurrency:
   group: examples-e2e-${{ github.ref }}
@@ -23,9 +22,9 @@ jobs:
       matrix:
         example_dir:
           [
-            'examples/web-wa-sqlite',
-            'examples/web-wa-sqlite-vuejs',
-            'examples/web-pglite',
+            "examples/web-wa-sqlite",
+            "examples/web-wa-sqlite-vuejs",
+            "examples/web-pglite",
           ]
     defaults:
       run:
@@ -49,7 +48,7 @@ jobs:
       - name: Start dev server in background
         run: npm run dev < /dev/null &
       - name: Run e2e tests
-        working-directory: 'examples/_testing'
+        working-directory: "examples/_testing"
         run: npm ci && npm run web-e2e
 
   test_website_demos:
@@ -57,7 +56,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: 'examples/introduction'
+        working-directory: "examples/introduction"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -75,5 +74,5 @@ jobs:
       - name: Start dev server in background
         run: yarn dev < /dev/null &
       - name: Run e2e tests
-        working-directory: 'examples/_testing'
+        working-directory: "examples/_testing"
         run: npm ci && npm run website-demos-e2e

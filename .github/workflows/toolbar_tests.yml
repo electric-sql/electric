@@ -4,10 +4,10 @@ on:
   push:
     branches:
       - main
-  pull_request:
-    paths:
-      - 'pnpm-lock.yaml'
-      - 'components/toolbar/**'
+#  pull_request:
+#    paths:
+#      - 'pnpm-lock.yaml'
+#      - 'components/toolbar/**'
 
 defaults:
   run:
@@ -77,4 +77,3 @@ jobs:
       - run: make deps
       - run: pnpm config set '//registry.npmjs.org/:_authToken' "${{ secrets.NPM_TOKEN }}"
       - run: make publish-canary
-
