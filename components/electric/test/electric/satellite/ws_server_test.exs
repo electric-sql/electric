@@ -375,7 +375,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
     end
 
     @tag with_migrations: [@test_fk_migration],
-         with_features: [read_permissions: false]
+         with_features: [permissions: false]
     test "compensations are filtered based on electric_user_id", ctx do
       with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->
         rel_map = start_replication_and_assert_response(conn, 2)

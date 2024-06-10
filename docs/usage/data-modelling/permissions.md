@@ -10,7 +10,17 @@ import useBaseUrl from '@docusaurus/useBaseUrl'
 Once you've [electrified](./electrification.md) a table, you can grant and assign permissions to read and write the data in it using the [`GRANT`](../../api/ddlx.md#grant) and [`ASSIGN`](../../api/ddlx.md#assign) DDLX statements.
 
 :::caution Work in progress
-Permissions are not yet implemented. See the [Roadmap](../../reference/roadmap.md#ddlx-rules) for more information.
+Permissions are not yet fully implemented. See the [Roadmap](../../reference/roadmap.md#ddlx-rules) for more information.
+
+A partial implementation for read-only permissions is available behind a
+feature flag. Run the electric sync-service docker image with the environment
+variable `ELECTRIC_FEATURES=permissions=true` to enable the current permissions
+implementation.
+
+With this set, `ELECTRIC ASSIGN...` and `ELECTRIC GRANT (SELECT | READ)...`
+will work, and the declared permissions will be enforced by the server, but
+attempting to grant write permissions (e.g. `ELECTRIC GRANT UPDATE` etc.) will
+be rejected.
 :::
 
 ## 1. Grant permissions to roles

@@ -693,7 +693,7 @@ defmodule Electric.Satellite.Protocol do
       process_transaction(tx, state.out_rep.sent_rows_graph, state)
 
     state =
-      if Permissions.filter_reads_enabled?(),
+      if Permissions.enabled?(),
         do: Map.update!(state, :permissions, &Permissions.receive_transaction(&1, tx)),
         else: state
 
@@ -825,7 +825,7 @@ defmodule Electric.Satellite.Protocol do
   end
 
   defp after_permissions_change(state) do
-    if Permissions.filter_reads_enabled?() do
+    if Permissions.enabled?() do
       command =
         %SatClientCommand{
           command: {:reset_database, %SatClientCommand.ResetDatabase{reason: :PERMISSIONS_CHANGE}}
@@ -919,7 +919,7 @@ defmodule Electric.Satellite.Protocol do
 
     {filtered_graph, _, _} =
       filtered_results =
-      if Permissions.filter_reads_enabled?() do
+      if Permissions.enabled?() do
         {accepted_data, filtered_graph} =
           state.permissions
           |> Permissions.Read.filter_shape_data(graph, data, xmin)
@@ -1008,7 +1008,7 @@ defmodule Electric.Satellite.Protocol do
       SentRowsGraph.pop_by_request_ids(graph_diff, gone_request_ids, root_vertex: :fake_root)
 
     {accepted_changes, filtered_graph_diff} =
-      if Permissions.filter_reads_enabled?() do
+      if Permissions.enabled?() do
         state.permissions
         |> Permissions.Read.filter_move_in_data(
           state.out_rep.sent_rows_graph,
@@ -1297,7 +1297,7 @@ defmodule Electric.Satellite.Protocol do
 
   defp apply_permissions_and_shapes(tx, graph, shapes, permissions) do
     {filtered_tx, _rejected_changes, moves_out} =
-      if Permissions.filter_reads_enabled?() do
+      if Permissions.enabled?() do
         Permissions.Read.filter_transaction(permissions, graph, tx)
       else
         {Changes.filter_changes_belonging_to_user(tx, Permissions.user_id(permissions)), [], []}

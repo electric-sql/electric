@@ -26,7 +26,7 @@ defmodule Electric.Satellite.Permissions.Write do
   end
 
   def validate(txns, %Protocol.State{} = state) when is_list(txns) do
-    if Permissions.filter_reads_enabled?() do
+    if Permissions.enabled?() do
       %{permissions: permissions, out_rep: %{sent_rows_graph: srg}} = state
       graph_impl = Electric.Replication.ScopeGraph.impl(srg)
       validate_txns(txns, permissions, graph_impl, [])

@@ -923,6 +923,14 @@ defmodule Operation.Disallowed do
           )
       end
     end
+
+    defp error_response(%{action: {:electric, _command}} = analysis) do
+      %M.ErrorResponse{
+        code: "EX100",
+        severity: "ERROR",
+        message: "Invalid statement: #{analysis.sql}"
+      }
+    end
   end
 end
 

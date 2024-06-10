@@ -280,7 +280,7 @@ defmodule Electric.Satellite.Permissions do
           triggers: Trigger.triggers()
         }
 
-  @read_feature_flag :read_permissions
+  @feature_flag :permissions
 
   @read_privileges [:SELECT]
   @write_privileges [:INSERT, :UPDATE, :DELETE]
@@ -292,9 +292,9 @@ defmodule Electric.Satellite.Permissions do
 
   def privileges, do: @privileges
 
-  @spec filter_reads_enabled?() :: boolean()
-  def filter_reads_enabled?() do
-    Electric.Features.enabled?(@read_feature_flag)
+  @spec enabled?() :: boolean()
+  def enabled? do
+    Electric.Features.enabled?(@feature_flag)
   end
 
   @doc """
