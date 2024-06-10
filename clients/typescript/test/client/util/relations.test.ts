@@ -2,6 +2,7 @@ import anyTest, { ExecutionContext, TestFn } from 'ava'
 import keyBy from 'lodash.keyby'
 import {
   KeyedTables,
+  createDbDescription,
   createRelationsFromAllTables,
   createRelationsFromTable,
 } from '../../../src/client/util/relations'
@@ -481,38 +482,135 @@ test('createRelationsFromAllTables aggregates all relations', (t: Ctx) => {
   const { tables } = t.context
   const relations = createRelationsFromAllTables(tables)
 
-  t.assert(
-    relations.size === 3,
-    'Expected three tables to have relations created'
+  t.deepEqual(
+    relations,
+    new Map([
+      [
+        'foo',
+        [
+          new Relation(
+            'other',
+            'otherr',
+            'other_id',
+            'other',
+            'foo_otherrToother',
+            'one'
+          ),
+        ],
+      ],
+      [
+        'other',
+        [
+          new Relation('foo', '', '', 'foo', 'foo_otherrToother', 'many'),
+          new Relation(
+            'items_items_other_id1Toother',
+            '',
+            '',
+            'items',
+            'items_other_id1Toother',
+            'many'
+          ),
+          new Relation(
+            'items_items_other_id2Toother',
+            '',
+            '',
+            'items',
+            'items_other_id2Toother',
+            'many'
+          ),
+        ],
+      ],
+      [
+        'items',
+        [
+          new Relation(
+            'other_items_other_id1Toother',
+            'other_id1',
+            'other_id',
+            'other',
+            'items_other_id1Toother',
+            'one'
+          ),
+          new Relation(
+            'other_items_other_id2Toother',
+            'other_id2',
+            'other_id',
+            'other',
+            'items_other_id2Toother',
+            'one'
+          ),
+        ],
+      ],
+    ])
   )
+})
 
-  const fooRelations = relations.get('foo')
-  t.assert(
-    fooRelations && fooRelations.length === 1,
-    'Expected one relation for the `foo` table'
-  )
-
-  t.is(fooRelations![0].relationName, 'foo_otherrToother')
-
-  const itemsRelations = relations.get('items')
-  t.assert(
-    itemsRelations && itemsRelations.length === 2,
-    'Expected two relations for the `items` table'
-  )
-
-  t.is(itemsRelations![0].relationName, 'items_other_id1Toother')
-
-  t.is(itemsRelations![1].relationName, 'items_other_id2Toother')
-
-  const otherRelations = relations.get('other')
-  t.assert(
-    otherRelations && otherRelations.length === 3,
-    'Expected three relations for the `other` table'
-  )
-
-  t.is(otherRelations![0].relationName, 'foo_otherrToother')
-
-  t.is(otherRelations![1].relationName, 'items_other_id1Toother')
-
-  t.is(otherRelations![2].relationName, 'items_other_id2Toother')
+test('createDbDescription creates a DbSchema from tables', (t: Ctx) => {
+  const { tables } = t.context
+  const dbDescription = createDbDescription(tables)
+  t.deepEqual(dbDescription, {
+    foo: {
+      fields: new Map([
+        ['foo_id', 'text'],
+        ['otherr', 'text'],
+      ]),
+      relations: [
+        new Relation(
+          'other',
+          'otherr',
+          'other_id',
+          'other',
+          'foo_otherrToother',
+          'one'
+        ),
+      ],
+    },
+    other: {
+      fields: new Map([['other_id', 'text']]),
+      relations: [
+        new Relation('foo', '', '', 'foo', 'foo_otherrToother', 'many'),
+        new Relation(
+          'items_items_other_id1Toother',
+          '',
+          '',
+          'items',
+          'items_other_id1Toother',
+          'many'
+        ),
+        new Relation(
+          'items_items_other_id2Toother',
+          '',
+          '',
+          'items',
+          'items_other_id2Toother',
+          'many'
+        ),
+      ],
+    },
+    items: {
+      fields: new Map([
+        ['items_id', 'text'],
+        ['other_id1', 'text'],
+        ['other_id2', 'text'],
+      ]),
+      relations: [
+        new Relation(
+          'other_items_other_id1Toother',
+          'other_id1',
+          'other_id',
+          'other',
+          'items_other_id1Toother',
+          'one'
+        ),
+        new Relation(
+          'other_items_other_id2Toother',
+          'other_id2',
+          'other_id',
+          'other',
+          'items_other_id2Toother',
+          'one'
+        ),
+      ],
+    },
+  })
 })

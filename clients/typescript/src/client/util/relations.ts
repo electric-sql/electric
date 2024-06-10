@@ -152,3 +152,26 @@ export function createRelationsFromAllTables(
   })
   return groupedRelations
 }
+
+// TODO: remove the DbSchema type from the DAL and use this one instead
+type DbSchema = Record<
+  TableName,
+  { fields: Map<string, string>; relations: Array<Relation> }
+>
+export function createDbDescription(
+  tables: Array<SatOpMigrate_Table>
+): DbSchema {
+  const relations = createRelationsFromAllTables(tables)
+  const dbDescription: DbSchema = {}
+  tables.forEach((table) => {
+    const tableName = table.name
+    const rels = relations.get(tableName) ?? []
+    const fields = new Map<string, string>()
+    table.columns.forEach((col) => fields.set(col.name, col.pgType!.name)),
+      (dbDescription[tableName] = {
+        fields,
+        relations: rels,
+      })
+  })
+  return dbDescription
+}
