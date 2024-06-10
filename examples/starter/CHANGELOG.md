@@ -1,5 +1,11 @@
 # create-electric-app
 
+## 0.3.2
+
+### Patch Changes
+
+- 269bb0f: Remove `legacy-peer-deps` npm installation option with new templates
+
 ## 0.3.1
 
 ### Patch Changes

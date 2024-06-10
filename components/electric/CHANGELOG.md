@@ -1,5 +1,19 @@
 # @core/electric
 
+## 0.12.0
+
+### Minor Changes
+
+- a8eedad: feat: server-driven unsubscribes to allow clients to unsubscribe from shapes
+
+### Patch Changes
+
+- cbd652d: Bring back the enforcement of SSL use for database connections. The default value was changed to `false` in v0.9.1 by accident. This version restores the intended behaviour. To use unencrypted database connections, you must explicitly configure Electric with DATABASE_REQUIRE_SSL=false.
+- e77296d: The sync service now exits when a database connector fails to initialise. Previously, some initialisation errors would result in Electric running without a single database connection and not logging any erors about that.
+- 7ac268d: Increase client ping interval from 5 to 20 seconds.
+- e8e4e3b: Use the same TCP options for database connections regardless of whether they are initiated by epgsql or the Ecto repo.
+- c3873fe: Truncate temporary replication slot name to always fit within Postgres' limit of 63 chars
+
 ## 0.11.1
 
 ### Patch Changes
