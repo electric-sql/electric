@@ -8,7 +8,7 @@ ElectricSQL is in <strong className="warning-color">public alpha</strong> phase.
 
 APIs are not guaranteed to be stable. Backwards incompatible changes may (and will) be introduced in patch, minor and major version releases.
 
-This page provides an overview of major releases as well as minor- and patch-level releases that may cause compatibility issues for user apps. Such potentially problematic changes are highlighted in *Compatibility notes* sections for every release that includes those.
+This page provides an overview of major releases as well as minor- and patch-level releases that may cause compatibility issues for user apps. Such potentially problematic changes are highlighted in _Compatibility notes_ sections for every release that includes those.
 
 To learn more about the major feature releases of Electric, see release announcement posts [on our blog](/blog/tags/release).
 
@@ -42,11 +42,11 @@ This release introduces a new database driver for PGLite, enabling client applic
 
 #### Updated components
 
-Component | Version
---------- | -------
-[Sync service][1] | [0.11.1](https://github.com/electric-sql/electric/blob/main/components/electric/CHANGELOG.md#0111)
-[TypeScript client][2] | [0.11.2](https://github.com/electric-sql/electric/blob/main/clients/typescript/CHANGELOG.md#0112)
-[create-electric-app][3] | [0.3.1](https://github.com/electric-sql/electric/blob/main/examples/starter/CHANGELOG.md#031)
+| Component                | Version                                                                                            |
+| ------------------------ | -------------------------------------------------------------------------------------------------- |
+| [Sync service][1]        | [0.11.1](https://github.com/electric-sql/electric/blob/main/components/electric/CHANGELOG.md#0111) |
+| [TypeScript client][2]   | [0.11.2](https://github.com/electric-sql/electric/blob/main/clients/typescript/CHANGELOG.md#0112)  |
+| [create-electric-app][3] | [0.3.1](https://github.com/electric-sql/electric/blob/main/examples/starter/CHANGELOG.md#031)      |
 
 #### Compatibility notes
 
@@ -64,11 +64,11 @@ The first release to support where-clause and include-tree filtering with Shape-
 
 #### Updated components
 
-Component | Version
---------- | -------
-[Sync service][1] | [0.10.0](https://github.com/electric-sql/electric/blob/main/components/electric/CHANGELOG.md#0100)
-[TypeScript client][2] | [0.10.0](https://github.com/electric-sql/electric/blob/main/clients/typescript/CHANGELOG.md#0100)
-[@electric-sql/prisma-generator][4] | [1.1.4](https://github.com/electric-sql/electric/blob/main/generator/CHANGELOG.md#114)
+| Component                           | Version                                                                                            |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------- |
+| [Sync service][1]                   | [0.10.0](https://github.com/electric-sql/electric/blob/main/components/electric/CHANGELOG.md#0100) |
+| [TypeScript client][2]              | [0.10.0](https://github.com/electric-sql/electric/blob/main/clients/typescript/CHANGELOG.md#0100)  |
+| [@electric-sql/prisma-generator][4] | [1.1.4](https://github.com/electric-sql/electric/blob/main/generator/CHANGELOG.md#114)             |
 
 #### Compatibility notes
 
@@ -78,10 +78,10 @@ This release does not introduce any noteable breaking changes.
 
 #### Updated components
 
-Component | Version
---------- | -------
-[Sync service][1] | [0.9.4](https://github.com/electric-sql/electric/blob/main/components/electric/CHANGELOG.md#094)
-[TypeScript client][2] | [0.9.5](https://github.com/electric-sql/electric/blob/main/clients/typescript/CHANGELOG.md#095)
+| Component              | Version                                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------------------ |
+| [Sync service][1]      | [0.9.4](https://github.com/electric-sql/electric/blob/main/components/electric/CHANGELOG.md#094) |
+| [TypeScript client][2] | [0.9.5](https://github.com/electric-sql/electric/blob/main/clients/typescript/CHANGELOG.md#095)  |
 
 #### Compatibility notes
 
@@ -96,11 +96,11 @@ Component | Version
 
 #### Updated components
 
-Component | Version
---------- | -------
-[Sync service][1] | [0.9.3](https://github.com/electric-sql/electric/blob/main/components/electric/CHANGELOG.md#093)
-[TypeScript client][2] | [0.9.4](https://github.com/electric-sql/electric/blob/main/clients/typescript/CHANGELOG.md#094)
-[create-electric-app][3] | [0.2.8](https://github.com/electric-sql/electric/blob/main/examples/starter/CHANGELOG.md#028)
+| Component                | Version                                                                                          |
+| ------------------------ | ------------------------------------------------------------------------------------------------ |
+| [Sync service][1]        | [0.9.3](https://github.com/electric-sql/electric/blob/main/components/electric/CHANGELOG.md#093) |
+| [TypeScript client][2]   | [0.9.4](https://github.com/electric-sql/electric/blob/main/clients/typescript/CHANGELOG.md#094)  |
+| [create-electric-app][3] | [0.2.8](https://github.com/electric-sql/electric/blob/main/examples/starter/CHANGELOG.md#028)    |
 
 #### Compatibility notes
 
@@ -125,12 +125,12 @@ This release introduces a whole new client CLI, experimental support for enum ty
 
 #### Updated components
 
-Component | Version
---------- | -------
-[Sync service][1] | [0.9.1](https://github.com/electric-sql/electric/blob/main/components/electric/CHANGELOG.md#091)
-[TypeScript client][2] | [0.9.1](https://github.com/electric-sql/electric/blob/main/clients/typescript/CHANGELOG.md#091)
-[create-electric-app][3] | [0.2.5](https://github.com/electric-sql/electric/blob/main/examples/starter/CHANGELOG.md#025)
-[@electric-sql/prisma-generator][4] | [1.1.3](https://github.com/electric-sql/electric/blob/main/generator/CHANGELOG.md#113)
+| Component                           | Version                                                                                          |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------ |
+| [Sync service][1]                   | [0.9.1](https://github.com/electric-sql/electric/blob/main/components/electric/CHANGELOG.md#091) |
+| [TypeScript client][2]              | [0.9.1](https://github.com/electric-sql/electric/blob/main/clients/typescript/CHANGELOG.md#091)  |
+| [create-electric-app][3]            | [0.2.5](https://github.com/electric-sql/electric/blob/main/examples/starter/CHANGELOG.md#025)    |
+| [@electric-sql/prisma-generator][4] | [1.1.3](https://github.com/electric-sql/electric/blob/main/generator/CHANGELOG.md#113)           |
 
 #### Compatibility notes
 
@@ -151,7 +151,6 @@ Component | Version
 
 - Apps created with `create-electric-app` now use Vite as the dev server and build tool.
 
-
 ## 2023-12-13 - v0.8
 
 [Announcement post](/blog/2023/12/13/electricsql-v0.8-released).
@@ -160,12 +159,12 @@ This release improves data model and deployment compatibility, including support
 
 #### Updated components
 
-Component | Version
---------- | -------
-[Sync service][1] | [0.8.1](https://github.com/electric-sql/electric/blob/main/components/electric/CHANGELOG.md#081)
-[TypeScript client][2] | [0.8.2](https://github.com/electric-sql/electric/blob/main/clients/typescript/CHANGELOG.md#082)
-[create-electric-app][3] | [0.2.2](https://github.com/electric-sql/electric/blob/main/examples/starter/CHANGELOG.md#022)
-[@electric-sql/prisma-generator][4] | [1.1.2](https://github.com/electric-sql/electric/blob/main/generator/CHANGELOG.md#112)
+| Component                           | Version                                                                                          |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------ |
+| [Sync service][1]                   | [0.8.1](https://github.com/electric-sql/electric/blob/main/components/electric/CHANGELOG.md#081) |
+| [TypeScript client][2]              | [0.8.2](https://github.com/electric-sql/electric/blob/main/clients/typescript/CHANGELOG.md#082)  |
+| [create-electric-app][3]            | [0.2.2](https://github.com/electric-sql/electric/blob/main/examples/starter/CHANGELOG.md#022)    |
+| [@electric-sql/prisma-generator][4] | [1.1.2](https://github.com/electric-sql/electric/blob/main/generator/CHANGELOG.md#112)           |
 
 #### Compatibility notes
 
@@ -186,12 +185,12 @@ Major highlights of this release are the introduction of the Migrations proxy an
 
 #### Updated components
 
-Component | Version
---------- | -------
-[Sync service][1] | [0.7.0](https://github.com/electric-sql/electric/blob/main/components/electric/CHANGELOG.md#070)
-[TypeScript client][2] | [0.7.0](https://github.com/electric-sql/electric/blob/main/clients/typescript/CHANGELOG.md#070)
-[create-electric-app][3] | [0.2.0](https://github.com/electric-sql/electric/blob/main/examples/starter/CHANGELOG.md#020)
-[@electric-sql/prisma-generator][4] | [1.1.0](https://github.com/electric-sql/electric/blob/main/generator/CHANGELOG.md#110)
+| Component                           | Version                                                                                          |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------ |
+| [Sync service][1]                   | [0.7.0](https://github.com/electric-sql/electric/blob/main/components/electric/CHANGELOG.md#070) |
+| [TypeScript client][2]              | [0.7.0](https://github.com/electric-sql/electric/blob/main/clients/typescript/CHANGELOG.md#070)  |
+| [create-electric-app][3]            | [0.2.0](https://github.com/electric-sql/electric/blob/main/examples/starter/CHANGELOG.md#020)    |
+| [@electric-sql/prisma-generator][4] | [1.1.0](https://github.com/electric-sql/electric/blob/main/generator/CHANGELOG.md#110)           |
 
 #### Compatibility notes
 
