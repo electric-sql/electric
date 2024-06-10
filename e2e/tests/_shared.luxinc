@@ -49,8 +49,8 @@
     !make run_electric_${n}
 [endmacro]
 
-[macro run_electric_with_env env_str]
-    !USER_ENV="${env_str}" make run_electric_1
+[macro run_electric_with_env n env_str]
+    !${env_str} make run_electric_${n}
 [endmacro]
 
 [macro teardown]

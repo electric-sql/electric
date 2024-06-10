@@ -19,8 +19,8 @@ DOCKER_REGISTRY  = europe-docker.pkg.dev/vaxine/vaxine-io
 
 # using a realistic password for the proxy to prevent accidentally working tests 
 # with some default "password"
-export PG_PROXY_PASSWORD?=49_G1JYY0BXWldjnA2EFxhWl
-export PG_PROXY_PORT?=65432
+PG_PROXY_PASSWORD?=49_G1JYY0BXWldjnA2EFxhWl
+PG_PROXY_PORT?=65432
 
 export UID=$(shell id -u)
 export GID=$(shell id -g)
@@ -66,20 +66,23 @@ log_dev_env:
 	docker compose -f ${DOCKER_COMPOSE_FILE} logs --no-color --follow pg_1
 
 start_electric_%:
-	docker compose -f ${DOCKER_COMPOSE_FILE} up --no-color --no-log-prefix --abort-on-container-exit electric_$*
+	PG_PROXY_PASSWORD=${PG_PROXY_PASSWORD} PG_PROXY_PORT=${PG_PROXY_PORT} docker compose -f ${DOCKER_COMPOSE_FILE} up --no-color --no-log-prefix --abort-on-container-exit electric_$*
 
 stop_electric_%:
 	docker compose -f ${DOCKER_COMPOSE_FILE} stop electric_$*
 
 run_electric_%:
 	docker run --rm \
-	-e LOG_LEVEL=debug \
-	-e AUTH_JWT_ALG=HS256 \
-	-e AUTH_JWT_KEY=integration-tests-signing-key-example \
+	-e AUTH_MODE \
+	-e AUTH_JWT_ALG \
+	-e AUTH_JWT_KEY \
+	-e DATABASE_URL \
 	-e ELECTRIC_TELEMETRY=disabled \
+	-e ELECTRIC_WRITE_TO_PG_MODE \
+	-e LOG_LEVEL \
+	-e LOGICAL_PUBLISHER_HOST \
 	-e PG_PROXY_PASSWORD \
-	-e LOGICAL_PUBLISHER_HOST=electric_$* \
-	--name electric_$* \
+	--name e2e_test_electric_$* \
 	${ELECTRIC_IMAGE}
 
 stop_dev_env:
