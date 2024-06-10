@@ -58,7 +58,7 @@ export const electrify = async <DB extends DbSchema<any>>(
   setLogLevel(config.debug ? 'TRACE' : 'WARN')
   setUpTelemetry({ debug: config.debug })
 
-  return getTracer().startActiveSpan('electrify', async () => {
+  return getTracer().startActiveSpan('electrify', async (initSpan) => {
     const prepare = opts?.prepare ?? defaultPrepare
     await prepare(adapter)
 
@@ -69,18 +69,14 @@ export const electrify = async <DB extends DbSchema<any>>(
     const notifier = opts?.notifier || new EventNotifier(dbName)
     const registry = opts?.registry || globalRegistry
 
-    const satellite = await getTracer().startActiveSpan(
-      'registry.ensureStarted',
-      () =>
-        registry.ensureStarted(
-          dbName,
-          dbDescription,
-          adapter,
-          migrator,
-          notifier,
-          socketFactory,
-          configWithDefaults
-        )
+    const satellite = await registry.ensureStarted(
+      dbName,
+      dbDescription,
+      adapter,
+      migrator,
+      notifier,
+      socketFactory,
+      configWithDefaults
     )
 
     const dialect = configWithDefaults.replication.dialect
@@ -98,6 +94,7 @@ export const electrify = async <DB extends DbSchema<any>>(
       electric.setIsConnected(satellite.connectivityState)
     }
 
+    initSpan.end()
     return electric
   })
 }
