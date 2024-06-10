@@ -46,7 +46,7 @@ import { Rel, Shape } from '../../satellite/shapes/types'
 import { IReplicationTransformManager } from './transforms'
 import { InputTransformer } from '../conversions/input'
 import { Dialect } from '../../migrators/query-builder/builder'
-import { getTracer } from '../../telemetry'
+import { getSpanContextWithParent, getTracer } from '../../telemetry'
 
 type AnyTable = Table<any, any, any, any, any, any, any, any, any, HKT>
 
@@ -255,24 +255,35 @@ export class Table<
   ): Promise<ShapeSubscription> {
     const validatedInput = this.syncSchema.parse(i ?? {})
     const shape = this.computeShape(validatedInput)
-    return getTracer().startActiveSpan('table.sync', async () => {
-      getTracer().startSpan('table.sync.request', {
-        attributes: {
-          shape: JSON.stringify(shape),
-          key: validatedInput.key,
-        },
-      })
-      const subscription = await getTracer().startActiveSpan(
+    return getTracer().startActiveSpan('table.sync', async (parentSpan) => {
+      const context = getSpanContextWithParent(parentSpan)
+      const requestSpan = getTracer().startSpan(
         'table.sync.request',
         {
-          attributes: { shape: JSON.stringify(shape), key: validatedInput.key },
+          attributes: {
+            shape: JSON.stringify(shape),
+            key: validatedInput.key,
+          },
         },
-        () => this._shapeManager.subscribe([shape], validatedInput.key)
+        context
       )
-      const subDataSpan = getTracer().startSpan('table.sync.dataDelivered', {
-        attributes: { key: subscription.key },
+      const subscription = await this._shapeManager.subscribe(
+        [shape],
+        validatedInput.key
+      )
+      requestSpan.end()
+      const subDataSpan = getTracer().startSpan(
+        'table.sync.dataDelivered',
+
+        {
+          attributes: { key: subscription.key },
+        },
+        context
+      )
+      subscription.synced.then(() => {
+        subDataSpan.end()
+        parentSpan.end()
       })
-      subscription.synced.then(() => subDataSpan.end())
       return subscription
     })
   }

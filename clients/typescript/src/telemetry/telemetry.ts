@@ -1,3 +1,4 @@
+import { Context, context, trace, Span } from '@opentelemetry/api'
 import {
   ConsoleSpanExporter,
   WebTracerProvider,
@@ -10,7 +11,6 @@ import {
   BatchSpanProcessor,
   Tracer,
 } from '@opentelemetry/sdk-trace-base'
-// import { ZoneContextManager } from "@opentelemetry/context-zone"
 import { Resource } from '@opentelemetry/resources'
 import {
   SEMRESATTRS_SERVICE_NAME,
@@ -63,10 +63,19 @@ const getTracer = (): Tracer => {
   return getTelemetryProvider().getTracer('electric-client')
 }
 
+const getSpanContextWithParent = (parentSpan: Span): Context => {
+  return trace.setSpan(context.active(), parentSpan)
+}
+
 const shutDownTelemetry = async (): Promise<void> => {
   await getTelemetryProvider().shutdown()
   _TELEMETRY_PROVIDER = null
 }
 
-export { setUpTelemetry, getTracer, shutDownTelemetry }
+export {
+  setUpTelemetry,
+  getTracer,
+  getSpanContextWithParent,
+  shutDownTelemetry,
+}
 export type { TelemetryConfig }
