@@ -10,6 +10,7 @@ import { ElectricNamespace } from './namespace'
 import { ElectricClient } from '../client/model/client'
 import { DbSchema } from '../client/model/schema'
 import { SqliteBundleMigrator } from '../migrators/bundle'
+import { getTracer, setUpTelemetry } from '../telemetry'
 
 export { ElectricNamespace }
 export type * from './adapter'
@@ -55,40 +56,48 @@ export const electrify = async <DB extends DbSchema<any>>(
   opts?: Omit<ElectrifyOptions, 'adapter' | 'socketFactory'>
 ): Promise<ElectricClient<DB>> => {
   setLogLevel(config.debug ? 'TRACE' : 'WARN')
-  const prepare = opts?.prepare ?? defaultPrepare
-  await prepare(adapter)
+  setUpTelemetry({ debug: config.debug })
 
-  const configWithDefaults = hydrateConfig(config)
-  const migrator =
-    opts?.migrator ||
-    new SqliteBundleMigrator(adapter, dbDescription.migrations)
-  const notifier = opts?.notifier || new EventNotifier(dbName)
-  const registry = opts?.registry || globalRegistry
+  return getTracer().startActiveSpan('electrify', async () => {
+    const prepare = opts?.prepare ?? defaultPrepare
+    await prepare(adapter)
 
-  const satellite = await registry.ensureStarted(
-    dbName,
-    dbDescription,
-    adapter,
-    migrator,
-    notifier,
-    socketFactory,
-    configWithDefaults
-  )
+    const configWithDefaults = hydrateConfig(config)
+    const migrator =
+      opts?.migrator ||
+      new SqliteBundleMigrator(adapter, dbDescription.migrations)
+    const notifier = opts?.notifier || new EventNotifier(dbName)
+    const registry = opts?.registry || globalRegistry
 
-  const dialect = configWithDefaults.replication.dialect
-  const electric = ElectricClient.create(
-    dbName,
-    dbDescription,
-    adapter,
-    notifier,
-    satellite,
-    registry,
-    dialect
-  )
+    const satellite = await getTracer().startActiveSpan(
+      'registry.ensureStarted',
+      () =>
+        registry.ensureStarted(
+          dbName,
+          dbDescription,
+          adapter,
+          migrator,
+          notifier,
+          socketFactory,
+          configWithDefaults
+        )
+    )
 
-  if (satellite.connectivityState !== undefined) {
-    electric.setIsConnected(satellite.connectivityState)
-  }
+    const dialect = configWithDefaults.replication.dialect
+    const electric = ElectricClient.create(
+      dbName,
+      dbDescription,
+      adapter,
+      notifier,
+      satellite,
+      registry,
+      dialect
+    )
 
-  return electric
+    if (satellite.connectivityState !== undefined) {
+      electric.setIsConnected(satellite.connectivityState)
+    }
+
+    return electric
+  })
 }
