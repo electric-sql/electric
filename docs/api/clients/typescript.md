@@ -135,6 +135,11 @@ const config: ElectricConfig = {
   Configuration of the backoff strategy used when trying to reconnect to the Electric sync service after a failed
   connection attempt.
 
+- `disableForeignKeysDownstream?: boolean`
+
+  Can be set to true to disable FK checks when applying downstream (i.e. incoming) transactions to the local SQLite database.
+  When using a Postgres driver foreign keys are always disabled and this behavior can't be changed.
+
 ### Configuring example apps
 
 In our example apps and in apps created with `npx create-electric-app`, the `url` and `debug` options are looked up as
