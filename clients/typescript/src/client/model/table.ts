@@ -46,6 +46,7 @@ import { Rel, Shape } from '../../satellite/shapes/types'
 import { IReplicationTransformManager } from './transforms'
 import { InputTransformer } from '../conversions/input'
 import { Dialect } from '../../migrators/query-builder/builder'
+import { getTracer } from '../../telemetry'
 
 type AnyTable = Table<any, any, any, any, any, any, any, any, any, HKT>
 
@@ -249,10 +250,31 @@ export class Table<
     return includedTables
   }
 
-  sync<T extends SyncInput<Include, Where>>(i?: T): Promise<ShapeSubscription> {
+  async sync<T extends SyncInput<Include, Where>>(
+    i?: T
+  ): Promise<ShapeSubscription> {
     const validatedInput = this.syncSchema.parse(i ?? {})
     const shape = this.computeShape(validatedInput)
-    return this._shapeManager.subscribe([shape], validatedInput.key)
+    return getTracer().startActiveSpan('table.sync', async () => {
+      getTracer().startSpan('table.sync.request', {
+        attributes: {
+          shape: JSON.stringify(shape),
+          key: validatedInput.key,
+        },
+      })
+      const subscription = await getTracer().startActiveSpan(
+        'table.sync.request',
+        {
+          attributes: { shape: JSON.stringify(shape), key: validatedInput.key },
+        },
+        () => this._shapeManager.subscribe([shape], validatedInput.key)
+      )
+      const subDataSpan = getTracer().startSpan('table.sync.dataDelivered', {
+        attributes: { key: subscription.key },
+      })
+      subscription.synced.then(() => subDataSpan.end())
+      return subscription
+    })
   }
 
   /*
