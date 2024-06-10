@@ -18,6 +18,7 @@ To see the complete change log for each new release, see the [Releases page](htt
 - [TypeScript client](https://github.com/electric-sql/electric/blob/main/clients/typescript/CHANGELOG.md)
 - [create-electric-app](https://github.com/electric-sql/electric/blob/main/examples/starter/CHANGELOG.md)
 - [@electric-sql/prisma-generator](https://github.com/electric-sql/electric/blob/main/generator/CHANGELOG.md)
+- [debug-toolbar](https://github.com/electric-sql/electric/blob/main/components/toolbar/CHANGELOG.md)
 
 ## 2024-06-10 - v0.12
 
