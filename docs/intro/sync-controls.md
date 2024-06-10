@@ -45,7 +45,7 @@ For example, you can sync:
 - a region and all its locations and their data
 - a time period and all its events
 
-Shapes are live, so if new data arrives that matches the shape, that data also syncs onto the local device. And they're dynamic, so they can change at runtime, using the [`sync`](../api/clients/typescript.md#sync) function, e.g.:
+Shapes are live, so if new data arrives that matches the shape, that data also syncs onto the local device. And they're dynamic, so they can change at runtime, using the [`sync`](../api/clients/typescript.md#sync-method) function, e.g.:
 
 <!--
 
@@ -57,7 +57,7 @@ Below, we have a simplified example of a project management app. There are proje
 
 Because the data is synced onto the local app, the local app is fully functional offline. You can still navigate and engage with it without connectivity.
 
-The shape of the data that is synced changes at runtime and is defined by a simple [`sync`](../api/clients/typescript.md#sync) call:
+The shape of the data that is synced changes at runtime and is defined by a simple [`sync`](../api/clients/typescript.md#sync-method) call:
 
 -->
 

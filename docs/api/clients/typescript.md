@@ -47,6 +47,7 @@ The Electric client exposes the following interface:
 ```ts
 interface ElectricClient<DB> {
   db: ClientTables<DB> & RawQueries;
+  sync: SyncManager
   connect(token?: string): Promise<void>;
   disconnect(): void;
 }
@@ -69,6 +70,11 @@ type Statement = {
   sql: string;
   args?: BindParams;
 };
+
+interface SyncManager {
+  unsubscribe(keys: string[]): Promise<void>
+  syncStatus(key: string): SyncStatus
+}
 ```
 
 The Electric client above defines a property for every table in our data model: `electric.db.users`, `electric.db.projects`, etc.
@@ -166,7 +172,7 @@ Shapes define the portion of the database that syncs to the user's device.
 Initially, users are not subscribed to any shape.
 Tables can be synced by requesting new shape subscriptions.
 
-### `sync`
+### `sync` method
 
 Once we are connected to the sync service we can request a new shape subscription using the `sync` method on database tables.
 We can sync a single table:
@@ -207,10 +213,87 @@ await sync2;
 This approach differs from the previous code snippet because the data for the `projects` and `users` tables
 is delivered independently, whereas, in the previous example they are deliver together as one database transaction.
 
-When a table is not yet synced, it exists on the device's local database but is empty.
-If you try to read from an unsynced table you will get empty results and a warning will be logged:
+#### Specifying a `key` for sync
 
-> Reading from unsynced table memberships
+A `.sync()` call may have a key property that is unique for the entire application. It can be used to check the status of a sync, to unsubscribe,
+or to change the subscription (i.e. subscribe to the new shape and unsubscribe from the old one).
+
+In the following example, first a subscription is established with one filter, then it's changed to use another filter. After the last `await` is resolved, rows with status `active` but with `author_id` not `1` will be removed from the device as after an unsubscribe.
+
+```ts
+const { db, sync } = useElectric()
+const { key, synced } = await db.projects.sync({
+  where: "this.status = 'active'",
+  key: 'allProjects'
+})
+await synced
+
+const { synced: newSynced } = await db.projects.sync({
+  where: "this.author_id = '1'",
+  key: 'allProjects'
+})
+await newSynced
+```
+
+`.sync()` method always returns a `key` property. If one was provided, the returned one matches the provided one, and if not then it's deterministically generated based on the shape itself. 
+
+### `sync` top-level property
+
+Every Electric client contains a `sync` property that allows control over the sync process and status.
+
+```ts
+const { db, sync } = await electrify()
+```
+
+### `sync.unsubscribe` method
+
+Using the key returned from the `.sync()` call you can cancel a previously established subscription using the `.unsubscribe(keys)` method on the top-level `sync` object.
+
+Unsubscribing will cause any rows on the device that were part of this subscription (but not any others) to be removed. Returns a promise that resolves as soon as the server accepts the unsubscribe.
+
+```ts
+const { db, sync } = await electrify()
+const { key, synced } = await db.projects.sync()
+
+sync.unsubscribe([key])
+```
+
+### `sync.syncStatus` method
+
+Using the key returned from the `.sync()` call you can check the status of a subscription. It returns either `undefined` if that key is not known, or an object with a status of a subscription.
+
+```ts
+export type SyncStatus =
+  | undefined
+  | { status: 'active'; serverId: string }
+  | { status: 'cancelling'; serverId: string }
+  | {
+      status: 'establishing'
+      serverId: string
+      progress: 'receiving_data' | 'removing_data'
+      oldServerId?: string
+    }
+```
+
+The `serverId` and `oldServerId` properties should be considered opaque, but can be useful in debugging and development, and seeing if a server subscription behind a given key has changed or not.
+
+Example: 
+
+```ts
+const { db, sync } = await electrify()
+
+sync.syncStatus('testKey') // undefined, since subscription with this key is not known
+
+const { key, synced } = await db.projects.sync({ key: 'testKey' })
+sync.syncStatus(key) // { status: 'establishing' }
+
+await synced
+sync.syncStatus(key) // { status: 'active' }
+
+sync.unsubscribe([key])
+sync.syncStatus(key) // { status: 'cancelling' }
+```
+
 
 ## Queries
 
