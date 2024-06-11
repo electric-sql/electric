@@ -1,12 +1,4 @@
 import {
-  context,
-  trace,
-  Span,
-  SpanKind,
-  Attributes,
-  SpanStatusCode,
-} from '@opentelemetry/api'
-import {
   ConsoleSpanExporter,
   WebTracerProvider,
   SimpleSpanProcessor,
@@ -65,31 +57,9 @@ const getTracer = (): Tracer => {
   return provider.getTracer(tracerName)
 }
 
-const startSpan = (
-  name: string,
-  {
-    parentSpan,
-    attributes,
-    isClientRequest,
-  }: {
-    parentSpan?: Span
-    attributes?: Attributes
-    isClientRequest?: boolean
-  } = {}
-) => {
-  return getTracer().startSpan(
-    name,
-    {
-      kind: isClientRequest ? SpanKind.CLIENT : SpanKind.INTERNAL,
-      attributes,
-    },
-    parentSpan && trace.setSpan(context.active(), parentSpan)
-  )
-}
-
 const disposeTelemetry = async (): Promise<void> => {
   await provider.shutdown()
 }
 
-export { setUpTelemetry, startSpan, disposeTelemetry }
-export type { TelemetryConfig, Span, SpanStatusCode }
+export { setUpTelemetry, getTracer, disposeTelemetry }
+export type { TelemetryConfig }
