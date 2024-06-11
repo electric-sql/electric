@@ -301,7 +301,7 @@ export class SatelliteClient implements Client {
       this.disconnect()
     }
     const span = startSpan('satellite.client.connect', {
-      isClientRequest: true,
+      isClientSpan: true,
     })
     return new Promise<void>((resolve, reject) => {
       this.socket = new this.socketFactory(PROTOCOL_VSN)
@@ -398,7 +398,7 @@ export class SatelliteClient implements Client {
 
     // Perform validations and prepare the request
     const span = startSpan('satellite.client.startReplication', {
-      isClientRequest: true,
+      isClientSpan: true,
     })
     let request: SatInStartReplicationReq
     if (!lsn || lsn.length === 0) {
@@ -457,7 +457,7 @@ export class SatelliteClient implements Client {
     }
 
     const span = startSpan('satellite.client.stopReplication', {
-      isClientRequest: true,
+      isClientSpan: true,
     })
     this.inbound.isReplicating = ReplicationStatus.STOPPING
     const request = SatInStopReplicationReq.fromPartial({})
@@ -469,7 +469,7 @@ export class SatelliteClient implements Client {
 
   authenticate({ clientId, token }: AuthState): Promise<AuthResponse> {
     const span = startSpan('satellite.client.authenticate', {
-      isClientRequest: true,
+      isClientSpan: true,
     })
     const request = SatAuthReq.fromPartial({
       id: clientId,
@@ -630,7 +630,7 @@ export class SatelliteClient implements Client {
     }
 
     const span = startSpan('satellite.client.subscribe', {
-      isClientRequest: true,
+      isClientSpan: true,
     })
     const request = SatSubsReq.fromPartial({
       subscriptionId,
@@ -662,7 +662,7 @@ export class SatelliteClient implements Client {
       )
     }
     const span = startSpan('satellite.client.unsubscribe', {
-      isClientRequest: true,
+      isClientSpan: true,
     })
     const request = SatUnsubsReq.create({ subscriptionIds })
 

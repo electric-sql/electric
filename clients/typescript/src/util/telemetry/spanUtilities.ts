@@ -11,17 +11,17 @@ import {
 interface SpanOptions {
   parentSpan?: Span
   attributes?: Attributes
-  isClientRequest?: boolean
+  isClientSpan?: boolean
 }
 
 function startSpan(
   name: string,
-  { parentSpan, attributes, isClientRequest }: SpanOptions = {}
+  { parentSpan, attributes, isClientSpan }: SpanOptions = {}
 ) {
   return getTracer().startSpan(
     name,
     {
-      kind: isClientRequest ? SpanKind.CLIENT : SpanKind.INTERNAL,
+      kind: isClientSpan ? SpanKind.CLIENT : SpanKind.INTERNAL,
       attributes,
     },
     parentSpan && trace.setSpan(context.active(), parentSpan)
