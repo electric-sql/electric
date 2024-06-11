@@ -22,7 +22,7 @@
   "dependencies": {
     "@tauri-apps/api": "2.0.0-alpha.14",
     "@tauri-apps/plugin-sql": "^2.0.0-alpha.5",
-    "electric-sql": "^0.11.3",
+    "electric-sql": "^0.12.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0"
   },
