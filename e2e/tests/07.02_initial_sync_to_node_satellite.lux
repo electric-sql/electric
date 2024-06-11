@@ -146,5 +146,4 @@
     ??[proto] recv: #SatSubsDataEnd{}
 
 [cleanup]
-    [sleep 5]
     [invoke teardown]
