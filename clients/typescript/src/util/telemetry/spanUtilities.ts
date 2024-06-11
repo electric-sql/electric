@@ -28,6 +28,20 @@ function startSpan(
   )
 }
 
+/**
+ * Sets the span status to `ERROR` and optinally records the provided error
+ * ass an exception
+ */
+function recordSpanError(span: Span, error?: any) {
+  span.recordException(error)
+  span.setStatus({ code: SpanStatusCode.ERROR, message: error?.message })
+}
+
+/**
+ * Run provided function `fn` with the given span, which will start before
+ * the function execution and end after the function returns, marking its state
+ * as either failed or succeeded appropriately and recording exceptions
+ */
 function runWithSpan<T>(name: string, options: SpanOptions, fn: () => T): T
 function runWithSpan<T>(name: string, fn: () => T): T
 function runWithSpan<T>(
@@ -46,10 +60,7 @@ function runWithSpan<T>(
     if (result instanceof Promise) {
       result
         .then((_) => span.setStatus({ code: SpanStatusCode.OK }))
-        .catch((err) => {
-          span.recordException(err)
-          span.setStatus({ code: SpanStatusCode.ERROR })
-        })
+        .catch((err) => recordSpanError(span, err))
         .finally(() => span.end())
       return result
     }
@@ -58,13 +69,12 @@ function runWithSpan<T>(
     span.setStatus({ code: SpanStatusCode.OK })
     return result
   } catch (err: any) {
-    span.recordException(err)
-    span.setStatus({ code: SpanStatusCode.ERROR })
+    recordSpanError(span, err)
     throw err
   } finally {
     span.end()
   }
 }
 
-export { startSpan, runWithSpan }
+export { startSpan, runWithSpan, recordSpanError }
 export type { Span }

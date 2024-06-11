@@ -39,7 +39,7 @@ import {
   ReplicatedRowTransformer,
   interpolateSqlArgs,
 } from '../../util'
-import { startSpan } from '../../util/telemetry'
+import { recordSpanError, runWithSpan, startSpan } from '../../util/telemetry'
 import { NarrowInclude } from '../input/inputNarrowing'
 import { IShapeManager } from './shapes'
 import { ShapeSubscription } from '../../satellite'
@@ -258,18 +258,17 @@ export class Table<
     const validatedInput = this.syncSchema.parse(i ?? {})
     const shape = this.computeShape(validatedInput)
 
-    const requestSpan = startSpan('table.sync.request', {
-      attributes: {
-        shape: JSON.stringify(shape),
-        key: validatedInput.key,
+    const subscription = await runWithSpan(
+      'table.sync.request',
+      {
+        attributes: {
+          shape: JSON.stringify(shape),
+          key: validatedInput.key,
+        },
+        parentSpan: syncSpan,
       },
-      parentSpan: syncSpan,
-    })
-    const subscription = await this._shapeManager.subscribe(
-      [shape],
-      validatedInput.key
+      () => this._shapeManager.subscribe([shape], validatedInput.key)
     )
-    requestSpan.end()
 
     const subDataSpan = startSpan('table.sync.dataDelivered', {
       attributes: { key: subscription.key },
@@ -277,10 +276,12 @@ export class Table<
     })
 
     // terminate the spans when data is fully synced
-    subscription.synced.finally(() => {
-      subDataSpan.end()
-      syncSpan.end()
-    })
+    subscription.synced
+      .catch((err) => recordSpanError(subDataSpan, err))
+      .finally(() => {
+        subDataSpan.end()
+        syncSpan.end()
+      })
 
     return subscription
   }
