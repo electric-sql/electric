@@ -167,14 +167,15 @@ export function createDbDescription(
   tables.forEach((table) => {
     const tableName = table.name
     const rels = relations.get(tableName) ?? []
-    const fields: Fields = new Map()
-    table.columns.forEach((col) =>
-      fields.set(col.name, col.pgType!.name as PgType)
-    ),
-      (dbDescription[tableName] = {
-        fields,
-        relations: rels,
-      })
+    const fields: Fields = {}
+    table.columns.forEach(
+      (col) => (fields[col.name] = col.pgType!.name as PgType)
+    )
+
+    dbDescription[tableName] = {
+      fields,
+      relations: rels,
+    }
   })
   return dbDescription
 }

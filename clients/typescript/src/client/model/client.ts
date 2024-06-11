@@ -1,5 +1,5 @@
 import { ElectricNamespace } from '../../electric/namespace'
-import { DbSchema, TableSchema } from './schema'
+import { DbSchema, TableSchema, TableSchemas } from './schema'
 import { rawQuery, liveRawQuery, unsafeExec, Table } from './table'
 import { Row, Statement } from '../../util'
 import { LiveResultContext } from './model'
@@ -171,30 +171,44 @@ export class ElectricClient<
     )
     const inputTransformer = new InputTransformer(converter)
 
-    const createTable = (tableName: string) => {
-      return new Table(
-        tableName,
-        adapter,
-        notifier,
-        satellite,
-        replicationTransformManager,
-        dbDescription,
-        inputTransformer,
-        dialect
-      )
-    }
+    // Check if we need to create the DAL
+    // If the schemas are missing from the `dbDescription``
+    // it means that the user did not generate the Electric client
+    // and thus we don't create the DAL.
+    // This is needed because we piggyback the minimal DB description (that is used without the DAL)
+    // on the same DB description argument as the one that is used with the DAL.
+    const ts: Array<[string, TableSchemas]> = Object.entries(
+      dbDescription.tables
+    )
+    const withDal = ts.length > 0 && ts[0][1].modelSchema !== undefined
+    let dal = {} as ClientTables<DB>
 
-    // Create all tables
-    const dal = Object.fromEntries(
-      Object.keys(tables).map((tableName) => {
-        return [tableName, createTable(tableName)]
+    if (withDal) {
+      const createTable = (tableName: string) => {
+        return new Table(
+          tableName,
+          adapter,
+          notifier,
+          satellite,
+          replicationTransformManager,
+          dbDescription,
+          inputTransformer,
+          dialect
+        )
+      }
+
+      // Create all tables
+      dal = Object.fromEntries(
+        Object.keys(tables).map((tableName) => {
+          return [tableName, createTable(tableName)]
+        })
+      ) as ClientTables<DB>
+
+      // Now inform each table about all tables
+      Object.keys(dal).forEach((tableName) => {
+        dal[tableName].setTables(new Map(Object.entries(dal)))
       })
-    ) as ClientTables<DB>
-
-    // Now inform each table about all tables
-    Object.keys(dal).forEach((tableName) => {
-      dal[tableName].setTables(new Map(Object.entries(dal)))
-    })
+    }
 
     const db: ClientTables<DB> & RawQueries = {
       ...dal,

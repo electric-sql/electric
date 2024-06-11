@@ -251,7 +251,7 @@ export class Builder {
    * The DAL will convert the string into a BigInt in the `fromSqlite` function from `../conversions/sqlite.ts`.
    */
   private castBigIntToText(field: string) {
-    const pgType = this._tableDescription.fields.get(field)
+    const pgType = this._tableDescription.fields[field]
     if (pgType === PgBasicType.PG_INT8 && this.dialect === 'SQLite') {
       const quotedField = quoteIdentifier(field)
       return `cast(${quotedField} as TEXT) AS ${quotedField}`
@@ -308,7 +308,7 @@ export class Builder {
       // if field is of type BigInt cast the result to TEXT
       // because not all adapters deal well with BigInts
       // the DAL will convert the string into a BigInt in the `fromSqlite` function from `../conversions/sqlite.ts`.
-      const pgType = this._tableDescription.fields.get(field)
+      const pgType = this._tableDescription.fields[field]
       if (pgType === PgBasicType.PG_INT8 && this.dialect === 'SQLite') {
         // make a raw string and quote the field name ourselves
         // because otherwise Squel would add quotes around the entire cast
