@@ -68,7 +68,7 @@ import {
   SubscriptionData,
 } from './shapes/types'
 import { backOff } from 'exponential-backoff'
-import { chunkBy, genUUID } from '../util'
+import { chunkBy, genUUID, startSpan } from '../util'
 import { isFatal, isOutOfSyncError, isThrowable, wrapFatalError } from './error'
 import { inferRelationsFromDb } from '../util/relations'
 import { decodeUserIdFromToken } from '../auth/secure'
@@ -212,13 +212,18 @@ export class SatelliteProcess implements Satellite {
   }
 
   async start(authConfig?: AuthConfig): Promise<void> {
+    const span = startSpan('satellite.process.start')
     if (this.opts.debug) {
       await this.logDatabaseVersion()
     }
 
     this.setClientListeners()
 
+    const migrationsSpan = startSpan('satellite.process.migrations', {
+      parentSpan: span,
+    })
     await this.migrator.up()
+    migrationsSpan.end()
 
     const isVerified = await this._verifyTableStructure()
     if (!isVerified) {
@@ -264,7 +269,11 @@ export class SatelliteProcess implements Satellite {
     )
 
     // Starting now!
+    const snapshotSpan = startSpan('satellite.process.throttledSnapshot', {
+      parentSpan: span,
+    })
     await this._throttledSnapshot()
+    snapshotSpan.end()
 
     // Need to reload primary keys after schema migration
     this.relations = await this._getLocalRelations()
@@ -283,6 +292,7 @@ export class SatelliteProcess implements Satellite {
       // this.subscriptions.setState(subscriptionsState)
       this.subscriptionManager.initialize(subscriptionsState)
     }
+    span.end()
   }
 
   private async logDatabaseVersion(): Promise<void> {
@@ -358,6 +368,7 @@ export class SatelliteProcess implements Satellite {
   }
 
   private async _stop(shutdown?: boolean): Promise<void> {
+    const span = startSpan('satellite.process.stop')
     // Stop snapshot polling
     clearInterval(this._pollingInterval)
     this._pollingInterval = undefined
@@ -385,13 +396,22 @@ export class SatelliteProcess implements Satellite {
 
     // Make sure no snapshot is running after we stop the process, otherwise we might be trying to
     // interact with a closed database connection
+    const waitSpan = startSpan('satellite.process.waitForActiveSnapshots', {
+      parentSpan: span,
+    })
     await this._waitForActiveSnapshots()
+    waitSpan.end()
 
     this.disconnect()
 
     if (shutdown) {
+      const shutdownSpan = startSpan('satellite.client.shutdown', {
+        parentSpan: span,
+      })
       await this.client.shutdown()
+      shutdownSpan.end()
     }
+    span.end()
   }
 
   // Ensure that no snapshot is left running in the background
