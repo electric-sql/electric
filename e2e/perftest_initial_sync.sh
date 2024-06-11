@@ -13,5 +13,5 @@ for i in ${!num_users[@]}; do
 	NUM_MEMBERS=${num_members[$i]} \
 	NUM_TASKS=${num_tasks[$i]} \
   LOG_LEVEL=info \
-  ${LUX} --junit tests/07.02_initial_sync_to_node_satellite.lux
+  ${LUX} --junit load-testing/07.02_initial_sync_to_node_satellite.lux
 done

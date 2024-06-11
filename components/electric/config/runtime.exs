@@ -324,35 +324,34 @@ config :electric, :telemetry, telemetry
 # OpenTelemetry
 ###
 
-send_to_honeycomb? = env!("HONEYCOMB_ENABLED", :boolean, false)
+config :opentelemetry, :processors, otel_batch_processor: %{scheduled_delay_ms: 1000}
 
-if send_to_honeycomb? do
-  honeycomb_api_key = env!("HONEYCOMB_API_KEY", :string, "")
+otel_export = env!("OTEL_EXPORT", :string, nil)
 
-  config :opentelemetry_exporter,
-    otlp_endpoint: "https://api.honeycomb.io",
-    otlp_headers: [{"x-honeycomb-team", honeycomb_api_key}],
-    otlp_compression: :gzip
+case otel_export do
+  "honeycomb" ->
+    honeycomb_api_key = env!("HONEYCOMB_API_KEY", :string, "")
 
-  config :opentelemetry, :processors,
-    otel_batch_processor: %{
-      scheduled_delay_ms: 1000
-      # exporter:
-      #   {:opentelemetry_exporter,
-      #    %{
-      #      endpoints: ["https://api.honeycomb.io"],
-      #      headers: [{"x-honeycomb-team", honeycomb_api_key}]
-      #    }}
-    }
-else
-  if env!("OT_DEBUG_LOG_ENABLED", :boolean, false) do
+    config :opentelemetry_exporter,
+      otlp_endpoint: "https://api.honeycomb.io",
+      otlp_headers: [{"x-honeycomb-team", honeycomb_api_key}],
+      otlp_compression: :gzip
+
+  "otlp" ->
+    if endpoint = env!("OTLP_ENDPOINT", :string, nil) do
+      config :opentelemetry_exporter,
+        otlp_endpoint: endpoint,
+        otlp_compression: :gzip
+    end
+
+  "debug" ->
     config :opentelemetry, :processors,
-      otel_simple_processor: %{
-        exporter: {:otel_exporter_stdout, []}
-      }
-  else
-    config :opentelemetry, :processors, []
-  end
+      otel_simple_processor: %{exporter: {:otel_exporter_stdout, []}}
+
+  _ ->
+    config :opentelemetry,
+      processors: [],
+      traces_exporter: :none
 end
 
 ###

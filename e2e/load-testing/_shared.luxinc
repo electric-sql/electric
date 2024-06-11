@@ -1,0 +1,162 @@
+[include ../common.luxinc]
+[global fail_pattern=[Ee][Rr][Rr][Oo][Rr]]
+[global psql=electric=]
+
+[newshell log]
+
+[macro setup]
+    [newshell otel_collector]
+        !make start_otel_collector
+
+    [newshell postgres_logs]
+        [progress start development environment]
+        !make start_dev_env
+        [invoke ok]
+        !make log_dev_env
+
+    [newshell pg_1]
+        [invoke start_psql pg_1 5432]
+        -$fail_pattern
+
+    [newshell electric]
+        [invoke start_electric 1]
+        ??Successfully initialized Postgres connector "postgres_1"
+        -$fail_pattern
+        [progress setup finished]
+
+    [shell postgres_logs]
+        ??has now caught up with upstream server
+        # [@magnetised 2023-10-05] Prisma does stuff that causes errors, such
+        # as trying to insert into non-existant tables (then creating the table
+        # if it gets an error), so if I leave this fail_pattern match here the
+        # test fails even though our code is working as intended.
+        #-$fail_pattern
+
+    [newshell proxy_1]
+        [invoke start_proxy pg_1 electric_1]
+        -$fail_pattern
+
+[endmacro]
+
+[macro start_electric n]
+    !make start_electric_${n}
+[endmacro]
+
+[macro stop_electric n]
+    !make stop_electric_${n}
+    ??Stopped
+    [invoke ok]
+[endmacro]
+
+[macro teardown]
+    [progress stop development environment]
+    !make stop_dev_env
+    [invoke ok]
+[endmacro]
+
+[macro client_session user_id session_id]
+    [invoke log "user ${user_id}: session ${session_id}: start"]
+    [local client_id=client_${user_id}_${session_id}]
+    !{:ok, auth_config} = Electric.Satellite.Auth.Secure.build_config( \
+                            alg: "HS256", key: "integration-tests-signing-key-example" \
+                          )
+    ?$eprompt
+    """!{:ok, conn} = TestWsClient.connect(
+                        auth: %{auth_config: auth_config, user_id: "$user_id"},
+                        id: "$client_id",
+                        sub: "",
+                        auto_in_sub: true,
+                        host: "electric_1",
+                        auto_ping: true)
+    """
+    ?+$eprompt
+    ?+rec \[\d\]: %Electric.Satellite.SatRpcRequest\{(?:.*)method: "startReplication"
+    ?rec \[\d\]: %Electric.Satellite.SatRpcResponse\{(?:.*)method: "startReplication"
+[endmacro]
+
+[macro client_session_continue user_id session_id position subscription_ids]
+    [invoke log "user ${user_id}: session ${session_id}: start"]
+    [local client_id=client_${user_id}_${session_id}]
+    !{:ok, auth_config} = Electric.Satellite.Auth.Secure.build_config( \
+                            alg: "HS256", key: "integration-tests-signing-key-example" \
+                          )
+    ?$eprompt
+    """!{:ok, conn} = TestWsClient.connect(
+                        auth: %{auth_config: auth_config, user_id: "$user_id"},
+                        id: "$client_id",
+                        sub: "$position",
+                        subscription_ids: ~w|$subscription_ids|,
+                        auto_in_sub: true,
+                        host: "electric_1",
+                        auto_ping: true)
+    """
+    ?Connection established with protocol vsn
+    ?Auth passed
+    ?Subscribed
+    ?+rec \[\d\]: %Electric.Satellite.SatRpcRequest\{(?:.*)method: "startReplication"
+    ?rec \[\d\]: %Electric.Satellite.SatRpcResponse\{(?:.*)method: "startReplication"
+[endmacro]
+
+[macro elixir_client_subscribe tables]
+    """!
+    {:ok, %{err: nil}} = TestWsClient.make_rpc_call(conn, "subscribe", ProtocolHelpers.subscription_request(request_1: [$tables]))
+    """
+    ?rec \[\d+\]: %Electric.Satellite.SatSubsDataEnd\{\}
+[endmacro]
+
+[macro elixir_client_subscribe_with_id id tables]
+    """!
+    {:ok, %{err: nil}} = TestWsClient.make_rpc_call(conn,  "subscribe", ProtocolHelpers.subscription_request("$id", request_1: [$tables]))
+    """
+    ?rec \[\d+\]: %Electric.Satellite.SatSubsDataEnd\{\}
+[endmacro]
+
+
+[macro start_satellite name]
+[newshell satellite_${name}]
+    !make start_satellite_client_${name}
+[endmacro]
+
+[macro migrate_pg version ddl]
+    [invoke log "run migration ${version} on postgres"]
+    """!
+    BEGIN;
+    CALL electric.migration_version('$version');
+    ${ddl}
+    COMMIT;
+    """
+    ?$psql
+    [my old=$LUX_SHELLNAME]
+    [shell electric]
+        ??[info] Saved schema version $version
+    [shell $old]
+[endmacro]
+
+[macro migrate_items_table version]
+    [local sql=
+        """
+        CREATE TABLE public.items (
+            id UUID PRIMARY KEY,
+            content VARCHAR NOT NULL,
+            content_text_null VARCHAR,
+            content_text_null_default VARCHAR,
+            intvalue_null integer,
+            intvalue_null_default integer
+        );
+        ALTER TABLE public.items ENABLE ELECTRIC;
+        """]
+    [invoke migrate_pg $version $sql]
+[endmacro]
+
+[macro migrate_other_items_table version]
+    [local sql=
+        """
+        CREATE TABLE public.other_items (
+            id TEXT PRIMARY KEY,
+            content TEXT NOT NULL,
+            item_id UUID REFERENCES public.items(id)
+        );
+        ALTER TABLE public.other_items ENABLE ELECTRIC;
+        """]
+    [invoke migrate_pg $version $sql]
+[endmacro]

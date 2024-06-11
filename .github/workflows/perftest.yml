@@ -84,7 +84,6 @@ jobs:
           ELECTRIC_IMAGE_NAME: electric-sql-ci/electric
           ELECTRIC_CLIENT_IMAGE_NAME: electric-sql-ci/electric-ws-client
           ELECTRIC_IMAGE_TAG: ${{ env.ELECTRIC_VERSION }}
-          HONEYCOMB_ENABLED: true
           HONEYCOMB_API_KEY: ${{ secrets.HONEYCOMB_API_KEY }}
 
       - name: Upload lux logs

@@ -1,0 +1,291 @@
+[global node=>]
+
+[macro connect_to_electric host port migrations connectToElectric satellite_number]
+    !client = await import('./dist/client.js')
+    ??$node
+    # !migrations = await client.read_migrations(process.env.MIGRATION_DIRS + "/index.js")
+    # ?$node
+    !migrations = $migrations
+    ??$node
+    # Adds a 2nd expression that just returns 0
+    # otherwise Node will print the result of the assignment
+    # but that Database object contains the word "error"
+    # which would match the fail pattern!
+    !originalDb = await client.make_db('e2e_client_${satellite_number}_db'); 0
+    ??$node
+    [invoke electrify_db "originalDb" $host $port $migrations $connectToElectric]
+    ??(in electrify_db) config:
+[endmacro]
+
+[macro electrify_db db host port migrations connectToElectric]
+     # define `exp` to avoid `ReferenceError: exp is not defined`
+     # when trying to read `exp` when calling `electrify_db`
+     !if (typeof exp === 'undefined') { var exp = undefined }
+     ??$node
+     # Adds a 2nd expression that just returns 0
+     # otherwise Node will print the result of the assignment
+     # but that Database object contains the word "error"
+     # which would match the fail pattern!
+     !db = await client.electrify_db(originalDb, \
+                                     "$host", \
+                                     $port, \
+                                     $migrations, \
+                                     $connectToElectric, \
+                                     exp); 0
+[endmacro]
+
+[macro setup_client_with_migrations satellite_number electric port migrations connectToElectric]
+    [invoke start_satellite $satellite_number]
+    -$fail_pattern
+    ??$node
+    [invoke connect_to_electric $electric $port $migrations $connectToElectric $satellite_number]
+[endmacro]
+
+[macro client_disconnect]
+    !await client.disconnect(db)
+    ??$node
+[endmacro]
+
+[macro client_reconnect]
+    !await client.reconnect(db)
+[endmacro]
+
+[macro setup_client satellite_number electric port]
+    [invoke setup_client_with_migrations $satellite_number $electric $port "[]" "true"]
+[endmacro]
+
+[macro node_await_get match]
+    [invoke wait-for "await client.get_items(db)" "${match}" 10 $node]
+[endmacro]
+
+[macro node_await_get_from_table table match]
+    [invoke wait-for "await client.get_rows(db, '${table}')" "${match}" 10 $node]
+[endmacro]
+
+[macro node_await_get_bool id expected_bool]
+    [invoke wait-for "await client.get_bool(db, '${id}')" "${expected_bool}" 10 $node]
+[endmacro]
+
+[macro node_await_get_uuid id]
+    [invoke wait-for "await client.get_uuid(db, '${id}')" "${id}" 10 $node]
+[endmacro]
+
+[macro node_await_get_int id]
+    [invoke wait-for "await client.get_int(db, '${id}')" "${id}" 10 $node]
+[endmacro]
+
+[macro node_await_get_float id]
+    [invoke wait-for "await client.get_float(db, '${id}')" "${id}" 10 $node]
+[endmacro]
+
+[macro node_await_get_json id]
+    [invoke wait-for "await client.get_jsonb(db, '${id}')" "${id}" 10 $node]
+[endmacro]
+
+[macro node_await_get_enum id]
+    [invoke wait-for "await client.get_enum(db, '${id}')" "${id}" 10 $node]
+[endmacro]
+
+[macro node_await_get_blob id]
+    [invoke wait-for "await client.get_blob(db, '${id}')" "${id}" 10 $node]
+[endmacro]
+
+[macro node_get_uuid id]
+    !await client.get_uuid(db, '${id}')
+    ??{ id: '${id}' }
+    ??$node
+[endmacro]
+
+[macro node_get_int id expected_int2 expected_int4 expected_int8]
+    !await client.get_int(db, '${id}')
+    ??{ id: '${id}', i2: ${expected_int2}, i4: ${expected_int4}, i8: ${expected_int8} }
+    ??$node
+[endmacro]
+
+[macro node_get_float id expected_float4 expected_float8]
+    !await client.get_float(db, '${id}')
+    ??{ id: '${id}', f4: ${expected_float4}, f8: ${expected_float8} }
+    ??$node
+[endmacro]
+
+[macro node_get_json_raw id expected_json]
+    !await client.get_json_raw(db, '${id}')
+    ??${expected_json}
+    ??$node
+[endmacro]
+
+[macro node_get_jsonb_raw id expected_jsonb]
+    !await client.get_jsonb_raw(db, '${id}')
+    ??${expected_jsonb}
+    ??$node
+[endmacro]
+
+[macro node_get_json id expected_json]
+    !await client.get_json(db, '${id}')
+    ??{ id: '${id}', js: ${expected_json} }
+    ??$node
+[endmacro]
+
+[macro node_get_jsonb id expected_jsonb]
+    !await client.get_jsonb(db, '${id}')
+    ??{ id: '${id}', jsb: ${expected_jsonb} }
+    ??$node
+[endmacro]
+
+[macro node_get_jsonb_regex id expected_jsonb]
+    !await client.get_jsonb(db, '${id}')
+    ?\{ id: '${id}', jsb: ${expected_jsonb} \}
+    ??$node
+[endmacro]
+
+[macro node_get_enum id expected_enum]
+    !await client.get_enum(db, '${id}')
+    ??{ id: '${id}', c: ${expected_enum} }
+    ??$node
+[endmacro]
+
+[macro node_get_blob id expected_blob]
+    !await client.get_blob(db, '${id}')
+    ??{ id: '${id}', blob: ${expected_blob} }
+    ??$node
+[endmacro]
+
+[macro node_write_float id f4_value f8_value]
+    # Can write valid floats to the DB
+    !await client.write_float(db, '${id}', ${f4_value}, ${f8_value})
+    ??{ id: '${id}',
+    ??$node
+[endmacro]
+
+[macro node_write_enum id value]
+    # Can write valid enums to the DB
+    !await client.write_enum(db, '${id}', ${value})
+    ??{ id: '${id}', c: ${value} }
+    ??$node
+[endmacro]
+
+[macro node_write_json id jsonb_value]
+    # Can write valid JSON to the DB
+    !await client.write_json(db, '${id}', ${jsonb_value})
+    ??$node
+[endmacro]
+
+[macro node_write_blob id value]
+    # Can write valid blobs to the DB
+    !await client.write_blob(db, '${id}', ${value})
+    ??{ id: '${id}', blob:
+    ??$node
+[endmacro]
+
+[macro node_await_get_timestamps match]
+    [invoke wait-for "await client.get_timestamps(db)" "${match}" 10 $node]
+[endmacro]
+
+[macro node_await_assert_timestamp id timestamp timestamptz]
+    [invoke wait-for "await client.assert_timestamp(db, '${id}', '${timestamp}', '${timestamptz}')" "true" 10 $node]
+[endmacro]
+
+[macro node_await_assert_datetime id date time]
+    [invoke wait-for "await client.assert_datetime(db, '${id}', '${date}', '${time}')" "true" 10 $node]
+[endmacro]
+
+[macro node_await_table match]
+    [invoke wait-for "await client.get_tables(db)" "name: '${match}'" 10 $node]
+[endmacro]
+
+[macro node_await_column table column]
+    [invoke wait-for "await client.get_columns(db, '${table}')" "name: '${column}'" 10 $node]
+[endmacro]
+
+[macro node_await_column_value table column value]
+    [invoke wait-for "await client.get_item_columns(db, '${table}', '${column}')" $value 10 $node]
+[endmacro]
+
+[macro node_await_insert keys]
+    !await client.insert_item(db, ${keys})
+    ??$node
+[endmacro]
+
+[macro node_await_insert_extended obj]
+    !await client.insert_extended_item(db, ${obj})
+    ??$node
+[endmacro]
+
+[macro node_await_insert_extended_into table obj]
+    !await client.insert_extended_into(db, '${table}', ${obj})
+    ??$node
+[endmacro]
+
+[macro node_await_get_other match]
+    [invoke wait-for "client.get_other_items(db)" "${match}" 10 $node]
+[endmacro]
+
+[macro node_await_insert_other keys]
+    !await client.insert_other_item(db, ${keys})
+    ??$node
+[endmacro]
+
+[macro node_set_item_replication_transform]
+    !await client.set_item_replication_transform(db)
+    ??$node
+[endmacro]
+
+[macro node_sync_items filter]
+    !await client.syncItemsTable(db, "${filter}")
+[endmacro]
+
+[macro node_sync_other_items filter]
+    !await client.syncOtherItemsTable(db, "${filter}")
+[endmacro]
+
+[macro node_sync_table table]
+    !await client.syncTable("${table}")
+[endmacro]
+
+[macro node_sync_table_with_opts table options]
+    !await client.syncTable("${table}", ${options})
+[endmacro]
+
+# Makes both satellites and PG write rows
+[macro write sat1_msg sat2_msg pg_msg]
+    [shell satellite_1]
+        [invoke log "Insert data into satellite_1"]
+        [invoke node_await_insert "['$sat1_msg']"]
+    
+    [shell satellite_2]
+        [invoke log "Insert data into satellite_2"]
+        [invoke node_await_insert "['$sat2_msg']"]
+
+    [shell pg_1]
+        [invoke log "Insert a row on PG side"]
+        !INSERT INTO public.items (id, content) VALUES (gen_random_uuid(), '$pg_msg');
+        ?$psql
+[endmacro]
+
+# Reads the given rows on the satellites and PG
+[macro read sat1_msg sat2_msg pg_msg]
+    [shell pg_1]
+        [invoke log "Verify that pg has received data from both Satellites"]
+        [invoke wait-for "SELECT * FROM public.items;" "$sat1_msg" 15 $psql]
+        [invoke wait-for "SELECT * FROM public.items;" "$sat2_msg" 15 $psql]
+    
+    [invoke log "Verify that satellite inserts reached each other"]
+    [shell satellite_1]
+        [invoke wait-for "await client.get_items(db)" "$sat2_msg" 15 $node]
+    
+    [shell satellite_2]
+        [invoke wait-for "await client.get_items(db)" "$sat1_msg" 15 $node]
+    
+    [invoke log "Verify that pg insert has reached both Satellites"]
+    [shell satellite_1]
+        [invoke wait-for "await client.get_items(db)" "$pg_msg" 15 $node]
+    
+    [shell satellite_2]
+        [invoke wait-for "await client.get_items(db)" "$pg_msg" 15 $node]
+[endmacro]
+
+# Checks that the given rows sync between satellites and PG
+[macro test_sync sat1_msg sat2_msg pg_msg]
+    [invoke write "$sat1_msg" "$sat2_msg" "$pg_msg"]
+    [invoke read "$sat1_msg" "$sat2_msg" "$pg_msg"]
+[endmacro]

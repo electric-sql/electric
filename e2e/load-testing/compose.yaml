@@ -1,0 +1,40 @@
+services:
+  pg_1:
+    extends:
+      file: ../services_templates.yaml
+      service: postgresql
+    ports:
+      - "54320:5432"
+
+  electric_1:
+    extends:
+      file: ../services_templates.yaml
+      service: electric
+    environment:
+      DATABASE_URL: postgresql://postgres:password@pg_1:5432/electric
+      DATABASE_REQUIRE_SSL: false
+      ELECTRIC_WRITE_TO_PG_MODE: direct_writes
+      PG_PROXY_LOG_LEVEL: info
+      LOG_LEVEL: "${LOG_LEVEL:-debug}"
+      OTEL_EXPORT: otlp
+      OTLP_ENDPOINT: "http://otel-collector:4318"
+    ports:
+      - "5133:5133"
+      # proxy access
+      - "65432:65432"
+    depends_on:
+      - pg_1
+
+  satellite_client_1:
+    extends:
+      file: ../services_templates.yaml
+      service: satellite_client
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib
+    environment:
+      HONEYCOMB_API_KEY: "${HONEYCOMB_API_KEY}"
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
+    ports:
+      - 4318:4318 # OTLP http receiver
