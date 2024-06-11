@@ -35,6 +35,10 @@ const provider = new WebTracerProvider({
   }),
 })
 
+provider.register({
+  contextManager: new StackContextManager(),
+})
+
 let consoleExporterAdded = false
 const addConsoleExporter = () => {
   if (consoleExporterAdded) return
@@ -55,10 +59,6 @@ const setUpTelemetry = ({
 }: TelemetryConfig): void => {
   if (logToConsole) addConsoleExporter()
   if (exportToOTLP) addOTLPExporter()
-
-  provider.register({
-    contextManager: new StackContextManager(),
-  })
 }
 
 const getTracer = (): Tracer => {
