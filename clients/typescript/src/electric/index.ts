@@ -10,7 +10,7 @@ import { ElectricNamespace } from './namespace'
 import { ElectricClient } from '../client/model/client'
 import { DbSchema } from '../client/model/schema'
 import { SqliteBundleMigrator } from '../migrators/bundle'
-import { getTracer, setUpTelemetry } from '../telemetry'
+import { setUpTelemetry, startSpan } from '../util/telemetry'
 
 export { ElectricNamespace }
 export type * from './adapter'
@@ -35,6 +35,11 @@ export interface ElectrifyOptions {
    * @returns A promise that resolves when the database connection is prepared.
    */
   prepare?: (connection: DatabaseAdapter) => Promise<void>
+
+  /**
+   * Whether to export telemetry to an OpenTelemetry collector.
+   */
+  exportTelemetry?: boolean
 }
 
 const defaultPrepare = async (connection: DatabaseAdapter) => {
@@ -56,45 +61,47 @@ export const electrify = async <DB extends DbSchema<any>>(
   opts?: Omit<ElectrifyOptions, 'adapter' | 'socketFactory'>
 ): Promise<ElectricClient<DB>> => {
   setLogLevel(config.debug ? 'TRACE' : 'WARN')
-  setUpTelemetry({ debug: config.debug })
-
-  return getTracer().startActiveSpan('electrify', async (initSpan) => {
-    const prepare = opts?.prepare ?? defaultPrepare
-    await prepare(adapter)
-
-    const configWithDefaults = hydrateConfig(config)
-    const migrator =
-      opts?.migrator ||
-      new SqliteBundleMigrator(adapter, dbDescription.migrations)
-    const notifier = opts?.notifier || new EventNotifier(dbName)
-    const registry = opts?.registry || globalRegistry
-
-    const satellite = await registry.ensureStarted(
-      dbName,
-      dbDescription,
-      adapter,
-      migrator,
-      notifier,
-      socketFactory,
-      configWithDefaults
-    )
-
-    const dialect = configWithDefaults.replication.dialect
-    const electric = ElectricClient.create(
-      dbName,
-      dbDescription,
-      adapter,
-      notifier,
-      satellite,
-      registry,
-      dialect
-    )
-
-    if (satellite.connectivityState !== undefined) {
-      electric.setIsConnected(satellite.connectivityState)
-    }
-
-    initSpan.end()
-    return electric
+  setUpTelemetry({
+    logToConsole: config.debug,
+    exportToOTLP: opts?.exportTelemetry,
   })
+
+  const initSpan = startSpan('electrify')
+  const prepare = opts?.prepare ?? defaultPrepare
+  await prepare(adapter)
+
+  const configWithDefaults = hydrateConfig(config)
+  const migrator =
+    opts?.migrator ||
+    new SqliteBundleMigrator(adapter, dbDescription.migrations)
+  const notifier = opts?.notifier || new EventNotifier(dbName)
+  const registry = opts?.registry || globalRegistry
+
+  const satellite = await registry.ensureStarted(
+    dbName,
+    dbDescription,
+    adapter,
+    migrator,
+    notifier,
+    socketFactory,
+    configWithDefaults
+  )
+
+  const dialect = configWithDefaults.replication.dialect
+  const electric = ElectricClient.create(
+    dbName,
+    dbDescription,
+    adapter,
+    notifier,
+    satellite,
+    registry,
+    dialect
+  )
+
+  if (satellite.connectivityState !== undefined) {
+    electric.setIsConnected(satellite.connectivityState)
+  }
+
+  initSpan.end()
+  return electric
 }

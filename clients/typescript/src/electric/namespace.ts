@@ -4,6 +4,7 @@ import { DatabaseAdapter } from './adapter'
 import { Notifier, UnsubscribeFunction } from '../notifiers'
 import { ConnectivityState } from '../util/types'
 import { GlobalRegistry, Registry } from '../satellite'
+import { disposeTelemetry } from '../util/telemetry'
 
 export class ElectricNamespace {
   dbName: string
@@ -54,5 +55,6 @@ export class ElectricNamespace {
   async close(): Promise<void> {
     this._unsubscribeStateChanges()
     await this.registry.stop(this.dbName)
+    await disposeTelemetry()
   }
 }

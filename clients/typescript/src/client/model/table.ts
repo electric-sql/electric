@@ -39,6 +39,7 @@ import {
   ReplicatedRowTransformer,
   interpolateSqlArgs,
 } from '../../util'
+import { startSpan } from '../../util/telemetry'
 import { NarrowInclude } from '../input/inputNarrowing'
 import { IShapeManager } from './shapes'
 import { ShapeSubscription } from '../../satellite'
@@ -46,7 +47,6 @@ import { Rel, Shape } from '../../satellite/shapes/types'
 import { IReplicationTransformManager } from './transforms'
 import { InputTransformer } from '../conversions/input'
 import { Dialect } from '../../migrators/query-builder/builder'
-import { getSpanContextWithParent, getTracer } from '../../telemetry'
 
 type AnyTable = Table<any, any, any, any, any, any, any, any, any, HKT>
 
@@ -253,33 +253,28 @@ export class Table<
   async sync<T extends SyncInput<Include, Where>>(
     i?: T
   ): Promise<ShapeSubscription> {
-    const syncSpan = getTracer().startSpan('table.sync')
-    const syncSpanContext = getSpanContextWithParent(syncSpan)
+    const syncSpan = startSpan('table.sync', { isClientRequest: true })
 
     const validatedInput = this.syncSchema.parse(i ?? {})
     const shape = this.computeShape(validatedInput)
 
-    const requestSpan = getTracer().startSpan(
-      'table.sync.request',
-      {
-        attributes: {
-          shape: JSON.stringify(shape),
-          key: validatedInput.key,
-        },
+    const requestSpan = startSpan('table.sync.request', {
+      attributes: {
+        shape: JSON.stringify(shape),
+        key: validatedInput.key,
       },
-      syncSpanContext
-    )
+      parentSpan: syncSpan,
+    })
     const subscription = await this._shapeManager.subscribe(
       [shape],
       validatedInput.key
     )
     requestSpan.end()
 
-    const subDataSpan = getTracer().startSpan(
-      'table.sync.dataDelivered',
-      { attributes: { key: subscription.key } },
-      syncSpanContext
-    )
+    const subDataSpan = startSpan('table.sync.dataDelivered', {
+      attributes: { key: subscription.key },
+      parentSpan: syncSpan,
+    })
 
     // terminate the spans when data is fully synced
     subscription.synced.finally(() => {
