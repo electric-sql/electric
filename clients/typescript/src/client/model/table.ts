@@ -253,39 +253,41 @@ export class Table<
   async sync<T extends SyncInput<Include, Where>>(
     i?: T
   ): Promise<ShapeSubscription> {
+    const syncSpan = getTracer().startSpan('table.sync')
+    const syncSpanContext = getSpanContextWithParent(syncSpan)
+
     const validatedInput = this.syncSchema.parse(i ?? {})
     const shape = this.computeShape(validatedInput)
-    return getTracer().startActiveSpan('table.sync', async (parentSpan) => {
-      const context = getSpanContextWithParent(parentSpan)
-      const requestSpan = getTracer().startSpan(
-        'table.sync.request',
-        {
-          attributes: {
-            shape: JSON.stringify(shape),
-            key: validatedInput.key,
-          },
-        },
-        context
-      )
-      const subscription = await this._shapeManager.subscribe(
-        [shape],
-        validatedInput.key
-      )
-      requestSpan.end()
-      const subDataSpan = getTracer().startSpan(
-        'table.sync.dataDelivered',
 
-        {
-          attributes: { key: subscription.key },
+    const requestSpan = getTracer().startSpan(
+      'table.sync.request',
+      {
+        attributes: {
+          shape: JSON.stringify(shape),
+          key: validatedInput.key,
         },
-        context
-      )
-      subscription.synced.then(() => {
-        subDataSpan.end()
-        parentSpan.end()
-      })
-      return subscription
+      },
+      syncSpanContext
+    )
+    const subscription = await this._shapeManager.subscribe(
+      [shape],
+      validatedInput.key
+    )
+    requestSpan.end()
+
+    const subDataSpan = getTracer().startSpan(
+      'table.sync.dataDelivered',
+      { attributes: { key: subscription.key } },
+      syncSpanContext
+    )
+
+    // terminate the spans when data is fully synced
+    subscription.synced.finally(() => {
+      subDataSpan.end()
+      syncSpan.end()
     })
+
+    return subscription
   }
 
   /*
