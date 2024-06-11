@@ -1712,7 +1712,9 @@ export function liveRawQuery(
 }
 
 /** Compile Prisma-like where-clause object into a SQL where clause that the server can understand. */
-function makeSqlWhereClause(where: string | Record<string, any>): string {
+export function makeSqlWhereClause(
+  where: string | Record<string, any>
+): string {
   if (typeof where === 'string') return where
 
   const statements = Object.entries(where)

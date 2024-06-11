@@ -5,13 +5,20 @@ import { Row, Statement } from '../../util'
 import { LiveResultContext } from './model'
 import { Notifier } from '../../notifiers'
 import { DatabaseAdapter } from '../../electric/adapter'
-import { GlobalRegistry, Registry, Satellite } from '../../satellite'
+import {
+  GlobalRegistry,
+  Registry,
+  Satellite,
+  ShapeSubscription,
+} from '../../satellite'
 import { ReplicationTransformManager } from './transforms'
 import { Dialect } from '../../migrators/query-builder/builder'
 import { InputTransformer } from '../conversions/input'
 import { sqliteConverter } from '../conversions/sqlite'
 import { postgresConverter } from '../conversions/postgres'
 import { IShapeManager } from './shapes'
+import { ShapeInputWithTable, sync } from './sync'
+import { DbSchema as DatabaseSchema } from '../util/relations'
 
 export type ClientTables<DB extends DbSchema<any>> = {
   [Tbl in keyof DB['tables']]: DB['tables'][Tbl] extends TableSchema<
@@ -96,11 +103,17 @@ interface RawQueries {
 export class ElectricClient<
   DB extends DbSchema<any>
 > extends ElectricNamespace {
-  public sync: Omit<IShapeManager, 'subscribe'>
+  public sync: Omit<IShapeManager, 'subscribe'> & {
+    subscribe: (
+      i: ShapeInputWithTable,
+      key?: string
+    ) => Promise<ShapeSubscription>
+  }
 
   private constructor(
     public db: ClientTables<DB> & RawQueries,
     dbName: string,
+    dbDescription: DatabaseSchema,
     adapter: DatabaseAdapter,
     notifier: Notifier,
     public readonly satellite: Satellite,
@@ -111,6 +124,7 @@ export class ElectricClient<
     // Expose the Shape Sync API without additional properties
     this.sync = {
       syncStatus: this.satellite.syncStatus.bind(this.satellite),
+      subscribe: sync.bind(null, this.satellite, dbDescription),
       unsubscribe: this.satellite.unsubscribe.bind(this.satellite),
     }
   }
@@ -136,7 +150,10 @@ export class ElectricClient<
     this.satellite.clientDisconnect()
   }
 
-  // Builds the DAL namespace from a `dbDescription` object
+  /**
+   * Builds the DAL namespace from a `dbDescription` object
+   * @param minimalDbDescription - A minimal description of the database schema can be provided in order to use Electric without the DAL.
+   */
   static create<DB extends DbSchema<any>>(
     dbName: string,
     dbDescription: DB,
@@ -191,6 +208,7 @@ export class ElectricClient<
     return new ElectricClient(
       db,
       dbName,
+      dbDescription.tables,
       adapter,
       notifier,
       satellite,

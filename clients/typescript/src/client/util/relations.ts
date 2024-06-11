@@ -4,7 +4,8 @@ import {
   SatOpMigrate_ForeignKey,
   SatOpMigrate_Table,
 } from '../../_generated/protocol/satellite'
-import { TableName, Relation } from '../model/schema'
+import { TableName, Relation, Fields } from '../model/schema'
+import { PgType } from '../conversions/types'
 
 function makeRelation(
   table: SatOpMigrate_Table,
@@ -154,9 +155,9 @@ export function createRelationsFromAllTables(
 }
 
 // TODO: remove the DbSchema type from the DAL and use this one instead
-type DbSchema = Record<
+export type DbSchema = Record<
   TableName,
-  { fields: Map<string, string>; relations: Array<Relation> }
+  { fields: Fields; relations: Array<Relation> }
 >
 export function createDbDescription(
   tables: Array<SatOpMigrate_Table>
@@ -166,8 +167,10 @@ export function createDbDescription(
   tables.forEach((table) => {
     const tableName = table.name
     const rels = relations.get(tableName) ?? []
-    const fields = new Map<string, string>()
-    table.columns.forEach((col) => fields.set(col.name, col.pgType!.name)),
+    const fields: Fields = new Map()
+    table.columns.forEach((col) =>
+      fields.set(col.name, col.pgType!.name as PgType)
+    ),
       (dbDescription[tableName] = {
         fields,
         relations: rels,
