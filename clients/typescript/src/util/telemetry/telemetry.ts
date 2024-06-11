@@ -1,11 +1,4 @@
-import {
-  Context,
-  context,
-  trace,
-  Span,
-  SpanKind,
-  Attributes,
-} from '@opentelemetry/api'
+import { context, trace, Span, SpanKind, Attributes } from '@opentelemetry/api'
 import {
   ConsoleSpanExporter,
   WebTracerProvider,
@@ -83,23 +76,13 @@ const startSpan = (
       kind: isClientRequest ? SpanKind.CLIENT : SpanKind.INTERNAL,
       attributes,
     },
-    parentSpan && getSpanContextWithParent(parentSpan)
+    parentSpan && trace.setSpan(context.active(), parentSpan)
   )
-}
-
-const getSpanContextWithParent = (parentSpan: Span): Context => {
-  return trace.setSpan(context.active(), parentSpan)
 }
 
 const disposeTelemetry = async (): Promise<void> => {
   await provider.shutdown()
 }
 
-export {
-  setUpTelemetry,
-  getTracer,
-  startSpan,
-  getSpanContextWithParent,
-  disposeTelemetry,
-}
+export { setUpTelemetry, startSpan, disposeTelemetry }
 export type { TelemetryConfig }
