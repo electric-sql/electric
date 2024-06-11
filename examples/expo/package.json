@@ -19,7 +19,7 @@
     "start:ios": "expo start --ios"
   },
   "dependencies": {
-    "electric-sql": "^0.11.3",
+    "electric-sql": "^0.12.0",
     "expo": "~51.0.9",
     "expo-sqlite": "~14.0.3",
     "expo-status-bar": "~1.12.1",
