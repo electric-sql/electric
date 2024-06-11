@@ -1,6 +1,9 @@
 [doc A parametrized scenario for initial shape subscription data fetching]
+
 [include _shared.luxinc]
 [include _satellite_macros.luxinc]
+
+[progress Running test with NUM_USERS=$NUM_USERS NUM_PROJECTS=$NUM_PROJECTS NUM_MEMBERS=$NUM_MEMBERS NUM_TASKS=$NUM_TASKS]
 
 [invoke setup]
 
@@ -67,33 +70,25 @@
 ### Seed tables with test data
 
 [shell pg_1]
-    [timeout 30]
+    [timeout 60]
 
     """!
     INSERT INTO users
       SELECT gen_random_uuid(), name, name || '@corporate.domain' FROM
-    	  (SELECT gen_random_string(20) name FROM generate_series(1, 100000)) _;
+    	  (SELECT gen_random_string(20) name FROM generate_series(1, $NUM_USERS)) _;
     """
-    ??INSERT 0 100000
+    ??INSERT 0 $NUM_USERS
 
    """!
    INSERT INTO projects
-     SELECT gen_random_uuid(), gen_random_string(80) FROM generate_series(1, 100000);
+     SELECT gen_random_uuid(), gen_random_string(80) FROM generate_series(1, $NUM_PROJECTS);
    """
-   ??INSERT 0 100000
-
-   """!
-   WITH projects AS (SELECT id FROM projects ORDER BY random() LIMIT 10000)
-   INSERT INTO project_tasks
-     SELECT gen_random_uuid(), projects.id, gen_random_string(400)
-       FROM projects, generate_series(1, 1 + (random()*20)::int);
-   """
-   ??INSERT 0
+   ??INSERT 0 $NUM_PROJECTS
 
    """!
    WITH
-     projects AS (SELECT id, row_number() OVER () FROM projects LIMIT 10000),
-     users AS (SELECT id, row_number() OVER () FROM users LIMIT 10000)
+     projects AS (SELECT id, row_number() OVER () FROM projects LIMIT $NUM_MEMBERS),
+     users AS (SELECT id, row_number() OVER () FROM users LIMIT $NUM_MEMBERS)
    INSERT INTO project_members
      SELECT
        projects.id,
@@ -104,7 +99,15 @@
      JOIN
        users ON projects.row_number = users.row_number;
    """
-   ??INSERT 0 10000
+   ??INSERT 0 $NUM_MEMBERS
+
+   """!
+   WITH projects AS (SELECT id FROM projects ORDER BY random() LIMIT $NUM_TASKS)
+   INSERT INTO project_tasks
+     SELECT gen_random_uuid(), projects.id, gen_random_string(400)
+       FROM projects, generate_series(1, 1 + (random()*20)::int);
+   """
+   ??INSERT 0
 
    """!
    select
@@ -143,4 +146,5 @@
     ??[proto] recv: #SatSubsDataEnd{}
 
 [cleanup]
+    [sleep 5]
     [invoke teardown]

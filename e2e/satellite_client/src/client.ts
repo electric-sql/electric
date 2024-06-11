@@ -80,6 +80,7 @@ export const electrify_db = async (
   const config: ElectricConfig = {
     url: `electric://${host}:${port}`,
     debug: true,
+    timeout: 30000,
   }
   console.log(`(in electrify_db) config: ${JSON.stringify(config)}`)
 

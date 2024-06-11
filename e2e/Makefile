@@ -25,7 +25,7 @@ test-satellite-only:
 	${LUX} --junit tests/03.*.lux
 
 test-perftest:
-	${LUX} --junit tests/07.02*.lux
+	LUX="${LUX}" ./perftest_initial_sync.sh
 
 pull:
 	docker compose -f services_templates.yaml pull \
