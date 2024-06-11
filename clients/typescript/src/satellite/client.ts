@@ -346,7 +346,7 @@ export class SatelliteClient implements Client {
       const { host, port, ssl } = this.opts
       const url = `${ssl ? 'wss' : 'ws'}://${host}:${port}/ws`
       this.socket.open({ url })
-    }).finally(span.end)
+    }).finally(() => span.end())
   }
 
   disconnect() {
@@ -439,7 +439,7 @@ export class SatelliteClient implements Client {
         return this.handleStartResp(resp)
       },
       { allowedRpcResponses: ['startReplication'] }
-    ).finally(span.end)
+    ).finally(() => span.end())
   }
 
   stopReplication(): Promise<StopReplicationResponse> {
@@ -460,7 +460,7 @@ export class SatelliteClient implements Client {
     return this.service
       .stopReplication(request)
       .then(this.handleStopResp.bind(this))
-      .finally(span.end)
+      .finally(() => span.end())
   }
 
   authenticate({ clientId, token }: AuthState): Promise<AuthResponse> {
@@ -475,7 +475,7 @@ export class SatelliteClient implements Client {
     return this.service
       .authenticate(request)
       .then(this.handleAuthResp.bind(this))
-      .finally(span.end)
+      .finally(() => span.end())
   }
 
   subscribeToTransactions(callback: TransactionCallback) {
@@ -645,7 +645,7 @@ export class SatelliteClient implements Client {
         return this.handleSubscription(resp)
       },
       { allowedRpcResponses: ['subscribe'] }
-    ).finally(span.end)
+    ).finally(() => span.end())
   }
 
   unsubscribe(subscriptionIds: string[]): Promise<UnsubscribeResponse> {
@@ -665,7 +665,7 @@ export class SatelliteClient implements Client {
     return this.service
       .unsubscribe(request)
       .then(this.handleUnsubscribeResponse.bind(this))
-      .finally(span.end)
+      .finally(() => span.end())
   }
 
   private sendMissingRelations(
