@@ -1,4 +1,11 @@
-import { context, trace, Span, SpanKind, Attributes } from '@opentelemetry/api'
+import {
+  context,
+  trace,
+  Span,
+  SpanKind,
+  Attributes,
+  SpanStatusCode,
+} from '@opentelemetry/api'
 import {
   ConsoleSpanExporter,
   WebTracerProvider,
@@ -85,4 +92,4 @@ const disposeTelemetry = async (): Promise<void> => {
 }
 
 export { setUpTelemetry, startSpan, disposeTelemetry }
-export type { TelemetryConfig }
+export type { TelemetryConfig, Span, SpanStatusCode }
