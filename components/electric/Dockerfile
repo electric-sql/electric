@@ -24,6 +24,7 @@ COPY mix.* /app/
 RUN mix deps.get
 RUN mix deps.compile
 
+RUN mix run --no-compile --no-start -e "Application.ensure_all_started(:tzdata); Tzdata.ReleaseUpdater.poll_for_update()"
 COPY config/*runtime.exs /app/config/
 COPY lib /app/lib/
 COPY priv /app/priv
