@@ -108,7 +108,12 @@ import { RPC, rpcRespond, withRpcRequestLogging } from './RPC'
 import { Mutex } from 'async-mutex'
 import { DbSchema } from '../client/model'
 import { PgBasicType, PgDateType, PgType } from '../client/conversions/types'
-import { AsyncEventEmitter, QualifiedTablename, startSpan } from '../util'
+import {
+  AsyncEventEmitter,
+  QualifiedTablename,
+  runWithSpan,
+  startSpan,
+} from '../util'
 import { AuthState } from '../auth'
 import Long from 'long'
 
@@ -430,12 +435,11 @@ export class SatelliteClient implements Client {
 
     return this.delayIncomingMessages(
       async () => {
-        const requestSpan = startSpan(
+        const resp = await runWithSpan(
           'satellite.client.startReplication.request',
-          { parentSpan: span }
+          { parentSpan: span },
+          () => this.service.startReplication(request)
         )
-        const resp = await this.service.startReplication(request)
-        requestSpan.end()
         return this.handleStartResp(resp)
       },
       { allowedRpcResponses: ['startReplication'] }
@@ -637,11 +641,11 @@ export class SatelliteClient implements Client {
 
     return this.delayIncomingMessages(
       async () => {
-        const requestSpan = startSpan('satellite.client.subscribe.request', {
-          parentSpan: span,
-        })
-        const resp = await this.service.subscribe(request)
-        requestSpan.end()
+        const resp = await runWithSpan(
+          'satellite.client.subscribe.request',
+          { parentSpan: span },
+          () => this.service.subscribe(request)
+        )
         return this.handleSubscription(resp)
       },
       { allowedRpcResponses: ['subscribe'] }
