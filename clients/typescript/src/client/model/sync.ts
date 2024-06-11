@@ -43,7 +43,7 @@ export function sync(
   return shapeManager.subscribe([shape], key)
 }
 
-function computeShape(
+export function computeShape(
   dbSchema: DbSchema<TableSchemas>,
   tableName: TableName,
   i: ShapeInput
