@@ -25,6 +25,11 @@ defmodule Electric.Telemetry.OpenTelemetry do
     wrap_fun_with_context(span_ctx, fn -> with_span(name, attributes, fun) end)
   end
 
+  def add_span_attributes(span_ctx \\ nil, attributes) do
+    span_ctx = span_ctx || get_current_context()
+    :otel_span.set_attributes(span_ctx, attributes)
+  end
+
   def get_current_context do
     :otel_tracer.current_span_ctx()
   end

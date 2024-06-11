@@ -97,29 +97,36 @@ defmodule Electric.Replication.InitialSync do
                                                              {acc_graph, results, req_ids} ->
         start = System.monotonic_time()
 
-        case Shapes.ShapeRequest.query_initial_data(
-               request,
-               conn,
-               schema_version,
-               origin,
-               context
-             ) do
-          {:ok, data, graph} ->
-            Metrics.span_event(
-              span,
-              :shape_data,
-              %{duration: System.monotonic_time() - start},
-              %{shape_hash: request.hash}
-            )
+        request_attrs = Map.take(request, [:request_id, :source_table, :target_table])
+        span_attrs = Map.merge(request_attrs, %{subscription_id: subscription_id})
 
-            {:cont,
-             {Utils.merge_graph_edges(acc_graph, graph),
-              Map.merge(results, data, fn _, {change, v1}, {_, v2} -> {change, v1 ++ v2} end),
-              [request.id | req_ids]}}
+        OpenTelemetry.with_span("initial_sync.query_subscription_data", span_attrs, fn ->
+          Shapes.ShapeRequest.query_initial_data(request, conn, schema_version, origin, context)
+          |> case do
+            {:ok, data, graph} ->
+              Metrics.span_event(
+                span,
+                :shape_data,
+                %{duration: System.monotonic_time() - start},
+                %{shape_hash: request.hash}
+              )
 
-          {:error, reason} ->
-            {:halt, {:error, reason}}
-        end
+              graph_attrs = graph |> Graph.info() |> Map.new(fn {k, v} -> {"graph.#{k}", v} end)
+
+              OpenTelemetry.add_span_attributes(
+                Map.merge(graph_attrs, %{num_rows: map_size(data)})
+              )
+
+              {:cont,
+               {Utils.merge_graph_edges(acc_graph, graph),
+                Map.merge(results, data, fn _, {change, v1}, {_, v2} -> {change, v1 ++ v2} end),
+                [request.id | req_ids]}}
+
+            {:error, reason} ->
+              OpenTelemetry.record_exception(inspect(reason))
+              {:halt, {:error, reason}}
+          end
+        end)
       end)
       |> case do
         {:error, reason} ->
