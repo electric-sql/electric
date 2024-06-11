@@ -54,6 +54,7 @@
     "./node": "./dist/drivers/better-sqlite3/index.js",
     "./node-postgres": "./dist/drivers/node-postgres/index.js",
     "./pglite": "./dist/drivers/pglite/index.js",
+    "./protocol": "./dist/_generated/protocol/satellite.js",
     "./react": "./dist/frameworks/react/index.js",
     "./tauri-postgres": "./dist/drivers/tauri-postgres/index.js",
     "./vuejs": "./dist/frameworks/vuejs/index.js",
@@ -78,6 +79,9 @@
       "capacitor": [
         "./dist/drivers/capacitor-sqlite/index.d.ts"
       ],
+      "client": [
+        "./dist/client/index.d.ts"
+      ],
       "expo": [
         "./dist/drivers/expo-sqlite/index.d.ts"
       ],
@@ -95,6 +99,9 @@
       ],
       "pglite": [
         "./dist/drivers/pglite/index.d.ts"
+      ],
+      "protocol": [
+        "./dist/_generated/protocol/satellite.d.ts"
       ],
       "react": [
         "./dist/frameworks/react/index.d.ts"

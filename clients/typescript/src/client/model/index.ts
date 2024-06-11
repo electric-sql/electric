@@ -1,6 +1,6 @@
 export { ElectricClient } from './client'
 export type { ClientTables } from './client'
-export type { TableSchema, TableSchemas } from './schema'
+export type { TableSchema, TableSchemas, TableName } from './schema'
 export { DbSchema, Relation } from './schema'
 export { Table } from './table'
 export type { HKT } from '../util/hkt'
