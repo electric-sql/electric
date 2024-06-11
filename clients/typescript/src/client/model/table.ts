@@ -253,7 +253,7 @@ export class Table<
   async sync<T extends SyncInput<Include, Where>>(
     i?: T
   ): Promise<ShapeSubscription> {
-    const syncSpan = startSpan('table.sync', { isClientRequest: true })
+    const syncSpan = startSpan('table.sync', { isClientSpan: true })
 
     const validatedInput = this.syncSchema.parse(i ?? {})
     const shape = this.computeShape(validatedInput)
