@@ -20,7 +20,7 @@ services:
       LOGICAL_PUBLISHER_HOST: electric_1
       PG_PROXY_LOG_LEVEL: info
       # prioritise per-test settings
-      ELECTRIC_FEATURES: "${ELECTRIC_FEATURES:-}:read_permissions=true"
+      ELECTRIC_FEATURES: "${ELECTRIC_FEATURES:-}:proxy_grant_write_permissions=true:permissions=true"
     ports:
       - "5133:5133"
       # proxy access

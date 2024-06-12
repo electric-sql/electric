@@ -4,7 +4,7 @@
 
 # disable read permissions for this test only. dockerfile is configured to prioritise the 
 # features set in the local env, so this flag takes precedence over the default
-[invoke setup_with_environment "ELECTRIC_FEATURES=read_permissions=false"]
+[invoke setup_with_environment "ELECTRIC_FEATURES=permissions=false"]
 
 [invoke electrify_table owned_entries]
 
