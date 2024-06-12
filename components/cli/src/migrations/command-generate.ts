@@ -80,8 +80,6 @@ export function makeGenerateCommand(): Command {
       const { watch, withMigrations, debug, withDal, ...restOpts } = opts
       const config = getConfig(restOpts)
 
-      console.log('OPTS: ' + JSON.stringify(opts))
-
       const genOpts: GeneratorOptions = {
         config,
         withMigrations,

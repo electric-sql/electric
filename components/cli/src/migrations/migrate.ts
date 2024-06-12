@@ -22,6 +22,7 @@ import {
   Dialect,
 } from 'electric-sql/migrators/query-builder'
 import { DbSchema } from 'electric-sql/client'
+import { serializeDbDescription } from '../util/serialize'
 
 // Rather than run `npx prisma` we resolve the path to the prisma binary so that
 // we can be sure we are using the same version of Prisma that is a dependency of
@@ -64,7 +65,6 @@ export async function generate(options: GeneratorOptions) {
     )
     process.exit(1)
   }
-  console.log('Generating Electric client...')
   try {
     if (opts.withMigrations) {
       // Start new ElectricSQL and PostgreSQL containers
@@ -315,6 +315,7 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
 
     if (opts.withDal) {
       // Generate Electric client
+      console.log('Generating Electric client...')
       await introspectDbAndGenerateClient(opts, tmpFolder)
     }
 
@@ -326,6 +327,7 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
     if (!opts.withDal) {
       // User doesn't want an Electric client
       // Write the minimal database description to a file
+      console.log('Generating database schema...')
       await bundleDbDescription(dbDescription, opts.config.CLIENT_PATH)
     }
 
@@ -351,15 +353,19 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
 
 async function bundleDbDescription(dbDescription: DbSchema, outFolder: string) {
   const dbDescriptionFile = path.join(outFolder, 'index.ts')
-  const serializedDbDescription = JSON.stringify(dbDescription, null, 2)
+  const serializedDbDescription = serializeDbDescription(dbDescription)
   const dbDescriptionStr = dedent`
     import migrations from './migrations';
     import pgMigrations from './pg-migrations';
-    import { type TableSchemas, DbSchema } from 'electric-sql/client/model';
+    import { type TableSchemas, DbSchema, Relation } from 'electric-sql/client/model';
+
     const tableSchemas = ${serializedDbDescription} as unknown as TableSchemas
+
     export const schema = new DbSchema(tableSchemas, migrations, pgMigrations)
   `
   await fs.writeFile(dbDescriptionFile, dbDescriptionStr)
+  const relativePath = path.relative(appRoot, dbDescriptionFile)
+  console.log(`Successfully generated database schema at: ./${relativePath}`)
 }
 
 /**

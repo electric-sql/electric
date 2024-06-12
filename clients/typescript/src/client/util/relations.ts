@@ -169,7 +169,7 @@ export function createDbDescription(
     const rels = relations.get(tableName) ?? []
     const fields: Fields = {}
     table.columns.forEach(
-      (col) => (fields[col.name] = col.pgType!.name as PgType)
+      (col) => (fields[col.name] = col.pgType!.name.toUpperCase() as PgType)
     )
 
     dbDescription[tableName] = {
