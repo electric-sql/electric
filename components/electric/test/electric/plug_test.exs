@@ -71,7 +71,7 @@ defmodule Electric.PlugTest do
 
       assert [
                {~c"0001/migration.sql",
-                "CREATE TABLE \"a\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"a_pkey\" PRIMARY KEY (\"id\")\n);\n\nCREATE INDEX \"a_idx\" ON \"a\" (\"value\" ASC);\n\nCREATE TABLE \"b\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"b_pkey\" PRIMARY KEY (\"id\")\n)"},
+                "CREATE TABLE \"a\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"a_pkey\" PRIMARY KEY (\"id\")\n);\n\nCREATE INDEX \"a_idx\" ON \"a\" (\"value\" ASC);\n\nCREATE TABLE \"b\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"b_pkey\" PRIMARY KEY (\"id\")\n);"},
                {~c"0001/metadata.json", metadata_json_0001},
                {~c"0002/migration.sql",
                 "CREATE TABLE \"c\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"c_pkey\" PRIMARY KEY (\"id\")\n);"},
@@ -98,7 +98,7 @@ defmodule Electric.PlugTest do
                   %SatOpMigrate.Stmt{
                     type: :CREATE_TABLE,
                     sql:
-                      "CREATE TABLE \"a\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"a_pkey\" PRIMARY KEY (\"id\")\n)\n"
+                      "CREATE TABLE \"a\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"a_pkey\" PRIMARY KEY (\"id\")\n);\n"
                   },
                   %SatOpMigrate.Stmt{
                     type: :CREATE_INDEX,
@@ -226,10 +226,10 @@ defmodule Electric.PlugTest do
 
       assert [
                {~c"0003/migration.sql",
-                "CREATE TABLE \"d\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"d_pkey\" PRIMARY KEY (\"id\")\n)\n\nALTER TABLE \"d\" ADD COLUMN \"is_valid\" INTEGER;"},
+                "CREATE TABLE \"d\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"d_pkey\" PRIMARY KEY (\"id\")\n);\n\nALTER TABLE \"d\" ADD COLUMN \"is_valid\" INTEGER;"},
                {~c"0003/metadata.json", metadata_json_0003},
                {~c"0004/migration.sql",
-                "CREATE TABLE \"e\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"e_pkey\" PRIMARY KEY (\"id\")\n)"},
+                "CREATE TABLE \"e\" (\n  \"id\" TEXT NOT NULL,\n  \"value\" TEXT NOT NULL,\n  CONSTRAINT \"e_pkey\" PRIMARY KEY (\"id\")\n);"},
                {~c"0004/metadata.json", metadata_json_0004}
              ] = file_list
 

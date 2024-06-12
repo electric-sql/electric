@@ -1,18 +1,18 @@
 CREATE TABLE IF NOT EXISTS items (
   value TEXT PRIMARY KEY NOT NULL
-)
+);
 
 CREATE TABLE IF NOT EXISTS parent (
   id INTEGER PRIMARY KEY NOT NULL,
   value TEXT,
   other INTEGER DEFAULT 0
-)
+);
 
 CREATE TABLE IF NOT EXISTS child (
   id INTEGER PRIMARY KEY NOT NULL,
   parent INTEGER NOT NULL,
   FOREIGN KEY(parent) REFERENCES parent(id)
-)
+);
 
 /*---------------------------------------------
 Below are templated triggers added by Satellite
