@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 
 const PAGE_LOAD_TIME_MS = 2000
-const INTERACITON_TIME_MS = 300
+const INTERACTION_TIME_MS = 300
 
 test.describe('basic example', () => {
   test.beforeEach(async ({ page }) => {
@@ -30,7 +30,7 @@ test.describe('basic example', () => {
 
     // possible to add an item
     await addButton.click()
-    await page.waitForTimeout(INTERACITON_TIME_MS)
+    await page.waitForTimeout(INTERACTION_TIME_MS)
     await expect(await items.count()).toBe(1)
 
     // item should contain UUID (not be empty)
@@ -40,9 +40,9 @@ test.describe('basic example', () => {
 
     // possible to add more
     await addButton.click()
-    await page.waitForTimeout(INTERACITON_TIME_MS)
+    await page.waitForTimeout(INTERACTION_TIME_MS)
     await addButton.click()
-    await page.waitForTimeout(INTERACITON_TIME_MS)
+    await page.waitForTimeout(INTERACTION_TIME_MS)
     await expect(await items.count()).toBe(3)
 
     // added items persist reload
@@ -53,7 +53,7 @@ test.describe('basic example', () => {
 
     // should be able to clear them
     await clearButton.click()
-    await page.waitForTimeout(INTERACITON_TIME_MS)
+    await page.waitForTimeout(INTERACTION_TIME_MS)
     await expect(await items.count()).toBe(0)
 
     // cleared items persist reload
