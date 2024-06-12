@@ -23,6 +23,8 @@ const serverErrorToSatError: Record<
   [Pb.SatErrorResp_ErrorCode.AUTH_REQUIRED]: SatelliteErrorCode.AUTH_REQUIRED,
   [Pb.SatErrorResp_ErrorCode.INVALID_REQUEST]:
     SatelliteErrorCode.INVALID_REQUEST,
+  [Pb.SatErrorResp_ErrorCode.PERMISSION_DENIED]:
+    SatelliteErrorCode.PERMISSION_DENIED,
   [Pb.SatErrorResp_ErrorCode.PROTO_VSN_MISMATCH]:
     SatelliteErrorCode.PROTO_VSN_MISMATCH,
   [Pb.SatErrorResp_ErrorCode.REPLICATION_FAILED]:

@@ -13,7 +13,9 @@ APIs are not guaranteed to be stable. Backwards incompatible changes may (and wi
 Key aspects of the system are not fully implemented yet:
 
 1. [Data modelling](#data-modelling) &mdash; remove constraints and ensure migrations are additive
-2. [DDLX rules](#ddlx-rules) &mdash; limited to electrification
+2. [DDLX rules](#ddlx-rules) &mdash; `ELECTRIC ENABLE` fully supported.
+   Read-only permissions available using the feature flag
+   `ELECTRIC_FEATURES=permissions=true`.
 3. [Shapes](#shapes) &mdash; support following relations and partial sync, but with some limitations
 
 Plus you may encounter [failure modes](#failure-modes) that you need to work around in development
@@ -38,6 +40,8 @@ The DDLX rules for permissions, roles, validation or local SQLite commands docum
 
 - **ELECTRIC GRANT**:
 
+  - Limited to read-only permissions. Attempting to grant `INSERT`, `UPDATE`,
+    or `DELETE` privileges will be rejected by the proxy.
   - Column based partial replication of tables is currently not supported
   - Limiting `INSERT`s to a column subset is currently not supported
 

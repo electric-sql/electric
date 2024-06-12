@@ -8,6 +8,7 @@ defmodule Electric.Postgres.Proxy.QueryAnalyserTest do
   alias Electric.Postgres.SQLGenerator
   alias Electric.DDLX.Command
   alias PgProtocol.Message, as: M
+  alias ElectricTest.PermissionsHelpers.Perms
 
   def simple(sql), do: %M.Query{query: sql}
   def extended(sql, attrs \\ []), do: struct(M.Parse, Keyword.put(attrs, :query, sql))
@@ -25,13 +26,10 @@ defmodule Electric.Postgres.Proxy.QueryAnalyserTest do
       end
     end
 
-    setup do
+    setup(cxt) do
       # enable all the optional ddlx features
       Electric.Features.process_override(
-        proxy_ddlx_grant: true,
-        proxy_ddlx_revoke: true,
-        proxy_ddlx_assign: true,
-        proxy_ddlx_unassign: true,
+        proxy_grant_write_permissions: true,
         proxy_ddlx_sqlite: true
       )
 
@@ -47,6 +45,11 @@ defmodule Electric.Postgres.Proxy.QueryAnalyserTest do
 
       {:ok, loader} =
         SchemaLoader.connect(spec, [])
+
+      ddlx = Map.get(cxt, :ddlx, [])
+      rules = Perms.to_rules(ddlx)
+
+      {:ok, loader} = SchemaLoader.save_global_permissions(loader, rules)
 
       state = %State{loader: loader}
 
@@ -141,6 +144,9 @@ defmodule Electric.Postgres.Proxy.QueryAnalyserTest do
                )
     end
 
+    @tag ddlx: [
+           "GRANT ALL ON public.truths TO AUTHENTICATED"
+         ]
     test "ALTER TABLE .. ADD COLUMN", cxt do
       assert [
                %QueryAnalysis{
@@ -171,7 +177,54 @@ defmodule Electric.Postgres.Proxy.QueryAnalyserTest do
              ] = analyse("ALTER TABLE public.socks ADD COLUMN ip cidr;", cxt)
     end
 
-    test "ALTER TABLE .. ADD COLUMN: successful type checking", cxt do
+    test "ALTER TABLE .. ADD COLUMN: READ-only: successful type checking", cxt do
+      columns = [
+        "j jsonb",
+        "t text",
+        "vc varchar",
+        "vc character varying",
+        "i2 int2",
+        "i2 smallint",
+        "i4 int",
+        "i4 int4",
+        "i4 integer",
+        "i8 int8",
+        "i8 bigint",
+        "t timestamp",
+        "t timestamp with time zone",
+        "u uuid",
+        "s2a smallserial",
+        "s2b serial2",
+        "s4a serial",
+        "s4b serial4",
+        "s8a bigseriaL",
+        "s8b serial8"
+      ]
+
+      Enum.each(columns, fn column ->
+        query = "ALTER TABLE public.truths ADD COLUMN " <> column
+
+        assert [
+                 %QueryAnalysis{
+                   action: {:alter, "table"},
+                   table: {"public", "truths"},
+                   type: :table,
+                   electrified?: true,
+                   tx?: true,
+                   allowed?: true,
+                   ast: %{},
+                   source: %M.Query{query: ^query},
+                   sql: ^query,
+                   error: nil
+                 }
+               ] = analyse(query, cxt)
+      end)
+    end
+
+    @tag ddlx: [
+           "GRANT INSERT ON public.truths TO 'someone, anyone'"
+         ]
+    test "ALTER TABLE .. ADD COLUMN: READ-WRITE: successful type checking", cxt do
       columns = [
         "j jsonb",
         "t text",
@@ -209,12 +262,11 @@ defmodule Electric.Postgres.Proxy.QueryAnalyserTest do
       end)
     end
 
-    test "ALTER TABLE .. ADD COLUMN: failing type checking", cxt do
+    test "ALTER TABLE .. ADD COLUMN: READ-only: failing type checking", cxt do
       columns_and_errors = [
         {["ip cidr"], ~s|Cannot electrify column of type "cidr"|},
         {["clowns text", "ip cidr"], ~s|Cannot electrify column of type "cidr"|},
         {["j json"], ~s|Cannot electrify column of type "json"|},
-        {["s serial"], ~s|Cannot electrify column of type "serial"|},
         {["t timetz"], ~s|Cannot electrify column of type "timetz"|},
         {["t time (1)"], ~s|Cannot electrify column of type "time(1)"|},
         {["t timestamp (3)"], ~s|Cannot electrify column of type "timestamp(3)"|},
@@ -224,6 +276,48 @@ defmodule Electric.Postgres.Proxy.QueryAnalyserTest do
         {["cc char(10)"], ~s|Cannot electrify column of type "bpchar(10)"|},
         {["vc varchar(255)"], ~s|Cannot electrify column of type "varchar(255)"|},
         {["u uuid[][]"], ~s|Cannot electrify column of type "uuid[][]"|}
+      ]
+
+      Enum.each(columns_and_errors, fn {columns, error_msg} ->
+        columns_sql = columns |> Enum.map(&("ADD COLUMN " <> &1)) |> Enum.join(", ")
+        query = "ALTER TABLE public.truths " <> columns_sql
+
+        assert [
+                 %QueryAnalysis{
+                   action: {:alter, "table"},
+                   table: {"public", "truths"},
+                   type: :table,
+                   electrified?: true,
+                   tx?: true,
+                   allowed?: false,
+                   ast: %{},
+                   source: %M.Query{query: ^query},
+                   sql: ^query,
+                   error: %{message: ^error_msg}
+                 }
+               ] = analyse(query, cxt)
+      end)
+    end
+
+    @tag :wip
+    @tag ddlx: [
+           "GRANT ALL on public.truths TO ANYONE"
+         ]
+    test "ALTER TABLE .. ADD COLUMN: READ-WRITE: failing type checking", cxt do
+      columns_and_errors = [
+        {["ip cidr"], ~s|Cannot electrify column of type "cidr"|},
+        {["clowns text", "ip cidr"], ~s|Cannot electrify column of type "cidr"|},
+        {["j json"], ~s|Cannot electrify column of type "json"|},
+        {["t timetz"], ~s|Cannot electrify column of type "timetz"|},
+        {["t time (1)"], ~s|Cannot electrify column of type "time(1)"|},
+        {["t timestamp (3)"], ~s|Cannot electrify column of type "timestamp(3)"|},
+        {["t timestamptz (6)"], ~s|Cannot electrify column of type "timestamptz(6)"|},
+        {["intarr int[]"], ~s|Cannot electrify column of type "int4[]"|},
+        {["c char"], ~s|Cannot electrify column of type "bpchar(1)"|},
+        {["cc char(10)"], ~s|Cannot electrify column of type "bpchar(10)"|},
+        {["vc varchar(255)"], ~s|Cannot electrify column of type "varchar(255)"|},
+        {["u uuid[][]"], ~s|Cannot electrify column of type "uuid[][]"|},
+        {["s serial"], ~s|Cannot electrify column of type "serial"|}
       ]
 
       Enum.each(columns_and_errors, fn {columns, error_msg} ->
@@ -269,7 +363,10 @@ defmodule Electric.Postgres.Proxy.QueryAnalyserTest do
              ] = analyse(query, cxt)
     end
 
-    test "ALTER TABLE .. ADD COLUMN: disallowed constraints", cxt do
+    @tag ddlx: [
+           "GRANT WRITE ON public.truths TO AUTHENTICATED"
+         ]
+    test "ALTER TABLE .. ADD COLUMN: READ+WRITE: constraints disallowed", cxt do
       queries = [
         {"ALTER TABLE public.truths ADD COLUMN with_default text DEFAULT ''",
          "Cannot electrify column with DEFAULT clause"},
@@ -300,6 +397,35 @@ defmodule Electric.Postgres.Proxy.QueryAnalyserTest do
                    source: %M.Query{query: ^query},
                    sql: ^query,
                    error: %{message: ^error_msg}
+                 }
+               ] = analyse(query, cxt)
+      end)
+    end
+
+    test "ALTER TABLE .. ADD COLUMN: READ-only: constraints allowed", cxt do
+      queries = [
+        "ALTER TABLE public.truths ADD COLUMN with_default text DEFAULT ''",
+        "ALTER TABLE public.truths ADD COLUMN with_check text CHECK (with_check != '')",
+        "ALTER TABLE public.truths ADD COLUMN pk text PRIMARY KEY",
+        "ALTER TABLE public.truths ADD COLUMN u text UNIQUE",
+        "ALTER TABLE public.truths ADD COLUMN i int GENERATED ALWAYS AS (1) STORED",
+        "ALTER TABLE public.truths ADD COLUMN i int GENERATED BY DEFAULT AS IDENTITY",
+        "ALTER TABLE public.truths ADD COLUMN f text REFERENCES dummy(id)"
+      ]
+
+      Enum.each(queries, fn query ->
+        assert [
+                 %QueryAnalysis{
+                   action: {:alter, "table"},
+                   table: {"public", "truths"},
+                   type: :table,
+                   electrified?: true,
+                   tx?: true,
+                   allowed?: true,
+                   ast: %{},
+                   source: %M.Query{query: ^query},
+                   sql: ^query,
+                   error: nil
                  }
                ] = analyse(query, cxt)
       end)

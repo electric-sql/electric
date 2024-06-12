@@ -3,10 +3,12 @@ defmodule Electric.Replication.Shapes.Querying do
   alias Electric.Postgres.Extension.SchemaLoader
   alias Electric.Postgres.ShadowTableTransformation
   alias Electric.Replication.Changes
+  alias Electric.Replication.Changes.Ownership
   alias Electric.Replication.Eval
   alias Electric.Replication.Shapes.ChangeProcessing
   alias Electric.Replication.Shapes.ShapeRequest.Layer
   alias Electric.Replication.Shapes.SentRowsGraph
+  alias Electric.Postgres.Replication
   alias Electric.Utils
 
   import Electric.Postgres.Dialect.Postgresql, only: [quote_ident: 1]
@@ -89,7 +91,8 @@ defmodule Electric.Replication.Shapes.Querying do
     where =
       [
         where_target(layer.where_target),
-        parent_pseudo_join(layer, from)
+        parent_pseudo_join(layer, from),
+        context_filters(table_info, context, layer)
       ]
       |> Enum.reject(&(is_nil(&1) or &1 == ""))
       |> Enum.intersperse(" AND ")
@@ -296,5 +299,20 @@ defmodule Electric.Replication.Shapes.Querying do
          tags: ShadowTableTransformation.convert_tag_list_pg_to_satellite(tags, origin)
        }}
     end)
+  end
+
+  defp context_filters(%Replication.Table{} = table, %{user_id: user_id}, %Layer{} = _layer)
+       when is_binary(user_id) do
+    ownership_column = Ownership.id_column_name()
+
+    if Enum.any?(table.columns, &(&1.name == ownership_column)) do
+      escaped = :binary.replace(user_id, "'", "''", [:global])
+
+      ["this.", ownership_column, " = '", escaped, ?']
+    end
+  end
+
+  defp context_filters(%Replication.Table{} = _table, _context, %Layer{} = _layer) do
+    nil
   end
 end

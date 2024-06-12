@@ -144,4 +144,18 @@ defmodule Electric.FeaturesTest do
       assert Features.enabled?(:disabled_feature, cxt.name)
     end
   end
+
+  describe "list/1" do
+    setup [:start_feature_instance]
+
+    test "lists merged flag state", cxt do
+      Features.process_override([disabled_feature: true], cxt.name)
+
+      assert Features.list(cxt.name) == [
+               __default__: false,
+               disabled_feature: true,
+               enabled_feature: true
+             ]
+    end
+  end
 end
