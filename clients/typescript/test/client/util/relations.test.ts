@@ -550,10 +550,10 @@ test('createDbDescription creates a DbSchema from tables', (t: Ctx) => {
   const dbDescription = createDbDescription(tables)
   t.deepEqual(dbDescription, {
     foo: {
-      fields: new Map([
-        ['foo_id', 'text'],
-        ['otherr', 'text'],
-      ]),
+      fields: {
+        foo_id: 'text',
+        otherr: 'text',
+      },
       relations: [
         new Relation(
           'other',
@@ -566,7 +566,7 @@ test('createDbDescription creates a DbSchema from tables', (t: Ctx) => {
       ],
     },
     other: {
-      fields: new Map([['other_id', 'text']]),
+      fields: { other_id: 'text' },
       relations: [
         new Relation('foo', '', '', 'foo', 'foo_otherrToother', 'many'),
         new Relation(
@@ -588,11 +588,11 @@ test('createDbDescription creates a DbSchema from tables', (t: Ctx) => {
       ],
     },
     items: {
-      fields: new Map([
-        ['items_id', 'text'],
-        ['other_id1', 'text'],
-        ['other_id2', 'text'],
-      ]),
+      fields: {
+        items_id: 'text',
+        other_id1: 'text',
+        other_id2: 'text',
+      },
       relations: [
         new Relation(
           'other_items_other_id1Toother',

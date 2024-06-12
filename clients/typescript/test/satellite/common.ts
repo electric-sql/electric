@@ -379,6 +379,7 @@ export const mockElectricClient = async (
   const electric = new ElectricClient(
     {},
     dbName,
+    dbDescription,
     adapter,
     notifier,
     satellite,

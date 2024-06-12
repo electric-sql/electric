@@ -304,10 +304,10 @@ export const serializationTests = (test: TestFn<ContextType>) => {
     const boolsDbDescription = new DbSchema(
       {
         bools: {
-          fields: new Map([
-            ['id', PgBasicType.PG_INTEGER],
-            ['b', PgBasicType.PG_BOOL],
-          ]),
+          fields: {
+            id: PgBasicType.PG_INTEGER,
+            b: PgBasicType.PG_BOOL,
+          },
           relations: [],
         } as unknown as TableSchema<
           any,
