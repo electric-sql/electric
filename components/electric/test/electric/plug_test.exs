@@ -46,16 +46,16 @@ defmodule Electric.PlugTest do
   end
 
   describe "/migrations" do
-    test_tx("returns 204 if there are no migrations", fn conn ->
+    test_tx "returns 204 if there are no migrations", fn conn ->
       {:ok, _pid} = start_supervised({SchemaCache, [__connection__: conn, origin: "postgres_1"]})
 
       assert {204, _, _} =
                conn(:get, "/api/migrations", %{"dialect" => "sqlite"})
                |> Electric.Plug.Router.call([])
                |> sent_resp()
-    end)
+    end
 
-    test_tx("returns migrations translated to the sqlite dialect", fn conn ->
+    test_tx "returns migrations translated to the sqlite dialect", fn conn ->
       assert {:ok, _schema} = apply_migrations(conn)
 
       {:ok, _pid} = start_supervised({SchemaCache, [__connection__: conn, origin: "postgres_1"]})
@@ -130,9 +130,9 @@ defmodule Electric.PlugTest do
       assert {:ok, %{"ops" => [_]}} = Jason.decode(metadata_json_0002)
       assert {:ok, %{"ops" => [_, _]}} = Jason.decode(metadata_json_0003)
       assert {:ok, %{"ops" => [_]}} = Jason.decode(metadata_json_0004)
-    end)
+    end
 
-    test_tx("returns migrations translated to the postgresql dialect", fn conn ->
+    test_tx "returns migrations translated to the postgresql dialect", fn conn ->
       assert {:ok, _schema} = apply_migrations(conn)
 
       {:ok, _pid} = start_supervised({SchemaCache, [__connection__: conn, origin: "postgres_1"]})
@@ -208,9 +208,9 @@ defmodule Electric.PlugTest do
       assert {:ok, %{"version" => "0002", "ops" => [_]}} = Jason.decode(metadata_json_0002)
       assert {:ok, %{"version" => "0003", "ops" => [_, _]}} = Jason.decode(metadata_json_0003)
       assert {:ok, %{"version" => "0004", "ops" => [_]}} = Jason.decode(metadata_json_0004)
-    end)
+    end
 
-    test_tx("can return migrations after a certain point", fn conn ->
+    test_tx "can return migrations after a certain point", fn conn ->
       assert {:ok, _schema} = apply_migrations(conn)
 
       {:ok, _pid} = start_supervised({SchemaCache, [__connection__: conn, origin: "postgres_1"]})
@@ -246,7 +246,7 @@ defmodule Electric.PlugTest do
                "protocol_version" => "Electric.Satellite",
                "version" => "0004"
              } = Jason.decode!(metadata_json_0004)
-    end)
+    end
 
     test "returns error if dialect missing", _cxt do
       for params <- [%{}, %{"dialect" => "invalid"}] do
@@ -257,7 +257,7 @@ defmodule Electric.PlugTest do
       end
     end
 
-    test_tx("returns 204 if there are no new migrations after a given version", fn conn ->
+    test_tx "returns 204 if there are no new migrations after a given version", fn conn ->
       assert {:ok, _schema} = apply_migrations(conn)
       {:ok, _pid} = start_supervised({SchemaCache, [__connection__: conn, origin: "postgres_1"]})
 
@@ -265,6 +265,6 @@ defmodule Electric.PlugTest do
                conn(:get, "/api/migrations", %{"dialect" => "sqlite", "version" => "0004"})
                |> Electric.Plug.Router.call([])
                |> sent_resp()
-    end)
+    end
   end
 end
