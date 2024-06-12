@@ -10,10 +10,10 @@ defmodule Electric.DDLX.CommandTest do
     cmd
   end
 
-  def pg_sql(ddlx) do
+  def pg_sql(ddlx, ddl \\ []) do
     ddlx
     |> parse()
-    |> Command.pg_sql()
+    |> Command.proxy_sql(ddl, fn sql -> "$$" <> sql <> "$$" end)
   end
 
   def parse_pb(hex) do
@@ -27,8 +27,10 @@ defmodule Electric.DDLX.CommandTest do
     test "ELECTRIC ENABLE" do
       ddlx = "ALTER TABLE my_table ENABLE ELECTRIC"
 
-      assert pg_sql(ddlx) == [
-               "CALL electric.enable('\"public\".\"my_table\"');\n"
+      ddl = "CREATE TABLE public.my_table (id uuid PRIMARY KEY)"
+
+      assert pg_sql(ddlx, [ddl]) == [
+               "CALL electric.electrify_with_ddl('public', 'my_table', $$#{ddl}$$);\n"
              ]
     end
 

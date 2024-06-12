@@ -38,9 +38,10 @@ defmodule Electric.Postgres.Proxy.QueryAnalysis do
 end
 
 defmodule Electric.Postgres.Proxy.QueryAnalyser.Impl do
-  def unwrap_node(%PgQuery.Node{node: {_type, node}}), do: node
+  alias Electric.Postgres.Proxy.Injector
+  alias Electric.Postgres.Schema.Validator
 
-  @valid_types for t <- Electric.Postgres.supported_types(), do: to_string(t)
+  def unwrap_node(%PgQuery.Node{node: {_type, node}}), do: node
 
   # This implementation mirrors the __validate_table_column_types() SQL procedure, with the exception of enum support
   # (current limitation).
@@ -48,36 +49,32 @@ defmodule Electric.Postgres.Proxy.QueryAnalyser.Impl do
   # It is important that this implementation and the one in __validate_table_column_types() behave the same to
   # ensure consistent handling of columns both when a table is first electrified and when a new column is added to an
   # already electrified table.
-  def check_column_type(%PgQuery.ColumnDef{type_name: coltype}) do
-    proto_type = Electric.Postgres.Schema.AST.map(coltype)
+  def check_column_type(%PgQuery.ColumnDef{type_name: coltype}, %{write: write?} = _perms) do
+    type = Electric.Postgres.Schema.AST.map(coltype)
 
-    if proto_type.name in @valid_types and proto_type.size == [] and proto_type.array == [] do
-      :ok
-    else
-      {:error, {:invalid_type, Electric.Postgres.Dialect.Postgresql.map_type(proto_type)}}
+    case Validator.validate_column_type(type, readonly: !write?) do
+      :ok ->
+        :ok
+
+      {:error, type_name} ->
+        {:error, {:invalid_type, type_name}}
     end
   end
 
-  def check_column_constraints(%PgQuery.ColumnDef{constraints: constraints}) do
+  def check_column_constraints(_column_def, %{write: false}) do
+    :ok
+  end
+
+  def check_column_constraints(%PgQuery.ColumnDef{constraints: constraints}, _perms) do
     Enum.find_value(constraints, :ok, &validate_column_constraint/1)
   end
 
-  # This function clause mirrors the __validate_table_column_defaults() SQL procedure.
-  #
-  # It is important that this implementation and the one in __validate_table_column_defaults() behave the same to
-  # ensure consistent handling of columns both when a table is first electrified and when a new column is added to an
-  # already electrified table.
   defp validate_column_constraint(%PgQuery.Node{
          node: {:constraint, %PgQuery.Constraint{contype: :CONSTR_DEFAULT}}
        }) do
     {:error, :unsupported_default_clause}
   end
 
-  # This function clause mirrors the __validate_table_constraints() SQL procedure.
-  #
-  # It is important that this implementation and the one in __validate_table_constraints() behave the same to
-  # ensure consistent handling of columns both when a table is first electrified and when a new column is added to an
-  # already electrified table.
   defp validate_column_constraint(%PgQuery.Node{
          node: {:constraint, %PgQuery.Constraint{contype: constraint}}
        }) do
@@ -118,6 +115,27 @@ defmodule Electric.Postgres.Proxy.QueryAnalyser.Impl do
 
   defp decode_val({:sval, %{sval: s}}), do: s
   defp decode_val({:fval, %{fval: s}}), do: String.to_integer(s)
+
+  @write_privs Electric.Satellite.Permissions.write_privileges()
+
+  def write_permissions(%{relation: %PgQuery.RangeVar{} = relation}, state) do
+    %{schemaname: schema, relname: name} = relation
+    {:ok, rules} = Injector.State.permissions_rules(state)
+
+    rules.grants
+    |> Enum.filter(fn %{table: %{schema: s, name: n}} -> s == schema && n == name end)
+    |> Enum.reduce(
+      %{insert: false, update: false, delete: false, write: false},
+      fn %{privilege: p}, %{insert: i, update: u, delete: d, write: w} ->
+        %{
+          insert: i || p == :INSERT,
+          update: u || p == :UPDATE,
+          delete: d || p == :DELETE,
+          write: w || p in @write_privs
+        }
+      end
+    )
+  end
 end
 
 defprotocol Electric.Postgres.Proxy.QueryAnalyser do
@@ -133,7 +151,7 @@ defprotocol Electric.Postgres.Proxy.QueryAnalyser do
   def validate(stmt)
 end
 
-alias Electric.Postgres.Proxy.{QueryAnalyser, QueryAnalysis}
+alias Electric.Postgres.Proxy.{Injector, QueryAnalyser, QueryAnalysis}
 
 defimpl QueryAnalyser, for: Any do
   def analyse(_stmt, %QueryAnalysis{} = analysis, _state) do
@@ -177,12 +195,14 @@ defimpl QueryAnalyser, for: PgQuery.AlterTableStmt do
   # there's a bunch of stuff to do with inheritance, but my instinct is that
   # allowing that would cause a lot of problems
 
-  def analyse(stmt, %QueryAnalysis{} = analysis, _state) do
+  def analyse(stmt, %QueryAnalysis{} = analysis, state) do
+    perms = write_permissions(stmt, state)
+
     stmt.cmds
     |> Enum.map(&unwrap_node/1)
     |> Enum.reduce_while(
       %{analysis | tx?: true, action: {:alter, "table"}},
-      &analyse_alter_table_cmd/2
+      &analyse_alter_table_cmd(&1, &2, perms)
     )
   end
 
@@ -190,15 +210,15 @@ defimpl QueryAnalyser, for: PgQuery.AlterTableStmt do
     :ok
   end
 
-  defp analyse_alter_table_cmd(_cmd, %QueryAnalysis{electrified?: false} = analysis) do
+  defp analyse_alter_table_cmd(_cmd, %QueryAnalysis{electrified?: false} = analysis, _perms) do
     {:halt, analysis}
   end
 
-  defp analyse_alter_table_cmd(%{subtype: :AT_AddColumn} = cmd, analysis) do
+  defp analyse_alter_table_cmd(%{subtype: :AT_AddColumn} = cmd, analysis, perms) do
     column_def = unwrap_node(cmd.def)
 
-    with :ok <- check_column_type(column_def),
-         :ok <- check_column_constraints(column_def) do
+    with :ok <- check_column_type(column_def, perms),
+         :ok <- check_column_constraints(column_def, perms) do
       {:cont, %{analysis | capture?: true}}
     else
       {:error, {:invalid_type, type}} ->
@@ -227,7 +247,7 @@ defimpl QueryAnalyser, for: PgQuery.AlterTableStmt do
     end
   end
 
-  defp analyse_alter_table_cmd(%{subtype: :AT_DropColumn} = cmd, analysis) do
+  defp analyse_alter_table_cmd(%{subtype: :AT_DropColumn} = cmd, analysis, _perms) do
     {:halt,
      %{
        analysis
@@ -236,12 +256,12 @@ defimpl QueryAnalyser, for: PgQuery.AlterTableStmt do
      }}
   end
 
-  defp analyse_alter_table_cmd(%{subtype: subtype}, analysis)
+  defp analyse_alter_table_cmd(%{subtype: subtype}, analysis, _perms)
        when subtype in @allowed_subtypes do
     {:cont, %{analysis | allowed?: analysis.allowed? && true}}
   end
 
-  defp analyse_alter_table_cmd(cmd, analysis) do
+  defp analyse_alter_table_cmd(cmd, analysis, _perms) do
     {:halt, %{analysis | allowed?: false, error: error_for(cmd, analysis)}}
   end
 
@@ -255,7 +275,9 @@ defimpl QueryAnalyser, for: PgQuery.AlterTableStmt do
 end
 
 defimpl QueryAnalyser, for: PgQuery.TransactionStmt do
-  def analyse(stmt, analysis, _state) do
+  alias Electric.Postgres.Proxy.Injector.State
+
+  def analyse(stmt, analysis, state) do
     kind =
       case stmt.kind do
         :TRANS_STMT_BEGIN -> :begin
@@ -263,7 +285,25 @@ defimpl QueryAnalyser, for: PgQuery.TransactionStmt do
         :TRANS_STMT_ROLLBACK -> :rollback
       end
 
-    %{analysis | action: {:tx, kind}}
+    case {State.failed?(state), kind} do
+      {true, :commit} ->
+        %{
+          analysis
+          | action: {:tx, kind},
+            allowed?: false,
+            error: %{
+              code: "25P02",
+              message:
+                "current transaction is aborted, commands ignored until end of transaction block"
+            }
+        }
+
+      {true, :rollback} ->
+        %{analysis | action: {:tx, kind}}
+
+      {false, _} ->
+        %{analysis | action: {:tx, kind}}
+    end
   end
 
   def validate(_stmt) do
@@ -300,7 +340,16 @@ defimpl QueryAnalyser, for: PgQuery.RenameStmt do
     %{analysis | action: action(stmt), tx?: true}
   end
 
-  def analyse(stmt, %QueryAnalysis{electrified?: true} = analysis, _state) do
+  def analyse(stmt, %QueryAnalysis{electrified?: true} = analysis, state) do
+    perms = write_permissions(stmt, state)
+    analyse_with_perms(stmt, analysis, perms)
+  end
+
+  def validate(_stmt) do
+    :ok
+  end
+
+  defp analyse_with_perms(stmt, analysis, _perms) do
     %{
       analysis
       | action: action(stmt),
@@ -308,10 +357,6 @@ defimpl QueryAnalyser, for: PgQuery.RenameStmt do
         tx?: true,
         error: error(stmt, analysis)
     }
-  end
-
-  def validate(_stmt) do
-    :ok
   end
 
   defp action(%{rename_type: :OBJECT_COLUMN}) do
@@ -556,10 +601,10 @@ defimpl QueryAnalyser, for: PgQuery.DoStmt do
 end
 
 defimpl QueryAnalyser, for: PgQuery.CallStmt do
+  alias Electric.DDLX
   alias Electric.Postgres.NameParser
   alias Electric.Postgres.Proxy.Errors
   alias Electric.Postgres.Proxy.Parser
-  alias Electric.DDLX
 
   def analyse(stmt, analysis, state) do
     case extract_electric(stmt, analysis) do
@@ -579,7 +624,7 @@ defimpl QueryAnalyser, for: PgQuery.CallStmt do
           |> DDLX.Command.table_names()
           |> parse_table_name(default_schema: state.default_schema)
 
-        analysis = %{
+        %{
           analysis
           | action: {:electric, command},
             table: table,
@@ -588,16 +633,7 @@ defimpl QueryAnalyser, for: PgQuery.CallStmt do
             tx?: true,
             capture?: true
         }
-
-        if DDLX.Command.enabled?(command) do
-          analysis
-        else
-          %{
-            analysis
-            | allowed?: false,
-              error: Errors.access_control_not_supported(command, analysis.sql)
-          }
-        end
+        |> validate_enabled(command, state)
 
       {:call, analysis} ->
         %{analysis | action: :call}
@@ -614,6 +650,18 @@ defimpl QueryAnalyser, for: PgQuery.CallStmt do
 
       {:call, _analysis} ->
         :ok
+    end
+  end
+
+  defp validate_enabled(analysis, command, _state) do
+    if DDLX.Command.enabled?(command) do
+      analysis
+    else
+      %{
+        analysis
+        | allowed?: false,
+          error: Errors.command_not_supported(command, analysis.sql)
+      }
     end
   end
 

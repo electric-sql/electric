@@ -163,7 +163,7 @@ defmodule Electric.Postgres.Schema.AST do
         {table, column}
 
       :CONSTR_IDENTITY ->
-        {table, column}
+        {table, cappend(column, constraint)}
 
       col_con when col_con in [:CONSTR_NOTNULL] ->
         {table, Schema.Update.ensure_not_null_constraint(column, constraint)}

@@ -61,14 +61,17 @@ defmodule Electric.Postgres.Proxy.TestScenario.AdHoc do
     |> idle!()
   end
 
-  def assert_valid_electric_command(injector, _framework, query) do
+  def assert_valid_electric_command(injector, _framework, query, opts \\ []) do
     {:ok, command} = DDLX.parse(query)
+
+    # may not be used but needs to be valid sql
+    ddl = Keyword.get(opts, :ddl, "CREATE TABLE _not_used_ (id uuid PRIMARY KEY)")
 
     injector
     |> client(query("BEGIN"))
     |> server(complete_ready("BEGIN"))
     |> client(parse_describe(query), client: parse_describe_complete(), server: [])
-    |> electric([client: bind_execute()], command,
+    |> electric([client: bind_execute()], command, ddl,
       client: bind_execute_complete(DDLX.Command.tag(command))
     )
     |> client(commit(), server: capture_version_query())
@@ -77,16 +80,23 @@ defmodule Electric.Postgres.Proxy.TestScenario.AdHoc do
     |> idle!()
   end
 
-  def assert_electrify_server_error(injector, _framework, query, error_details) do
+  def assert_electrify_server_error(injector, _framework, query, ddl, error_details) do
     # assert that the electrify command only generates a single query
     {:ok, command} = DDLX.parse(query)
-    [electrify] = Electric.DDLX.Command.pg_sql(command) |> Enum.map(&query/1)
+    tables = Electric.DDLX.Command.table_names(command)
+    introspect_query = introspect_tables_query(tables)
+
+    [electrify | _rest] =
+      command
+      |> proxy_sql(ddl)
+      |> Enum.map(&query/1)
 
     injector
     |> client(query("BEGIN"))
     |> server(complete_ready("BEGIN"))
     |> client(parse_describe(query), client: parse_describe_complete())
-    |> client(bind_execute(), server: electrify)
+    |> client(bind_execute(), server: introspect_query)
+    |> server(introspect_result(ddl), server: electrify)
     |> server([error(error_details), ready(:failed)])
     |> client(rollback())
     |> server(complete_ready("ROLLBACK", :idle))

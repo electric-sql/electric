@@ -1,0 +1,17 @@
+CREATE OR REPLACE PROCEDURE <%= schema() %>.capture_ddl_array(VARIADIC _ddl_statements text[]) SECURITY DEFINER AS
+$function$
+DECLARE
+    _ddl_statement text;
+BEGIN
+    CALL <%= schema() %>.assign_default_version();
+
+
+    FOREACH _ddl_statement IN ARRAY _ddl_statements
+    LOOP
+        RAISE DEBUG 'capture migration: %', _ddl_statement;
+        INSERT INTO <%= ddl_table() %> (query)
+            VALUES (_ddl_statement)
+            ON CONFLICT ON CONSTRAINT ddl_table_unique_migrations DO NOTHING;
+    END LOOP;
+END;
+$function$ LANGUAGE PLPGSQL;

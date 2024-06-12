@@ -10,4 +10,7 @@ config :electric, disable_listeners: true
 
 config :electric, Electric.Postgres.Proxy.Handler.Tracing, colour: false
 
-config :electric, Electric.Features, read_permissions: true
+config :electric, Electric.Features,
+  permissions: true,
+  proxy_grant_write_permissions: true,
+  proxy_ddlx_sqlite: true

@@ -7,7 +7,16 @@ defmodule Electric.Postgres.Proxy.TestScenario do
 
   defmodule MockInjector do
     alias Electric.Postgres.Proxy.Injector
+
     @behaviour Electric.Postgres.Proxy.Injector
+
+    def proxy_sql(command, ddl) do
+      DDLX.Command.proxy_sql(command, ddl, &quote_query/1)
+    end
+
+    def introspect_tables_query(tables) do
+      Injector.introspect_tables_query(tables, "'")
+    end
 
     def capture_ddl_query(query) do
       Injector.capture_ddl_query(query, "$query$")
@@ -31,6 +40,10 @@ defmodule Electric.Postgres.Proxy.TestScenario do
 
     def alter_shadow_table_query(alteration) do
       Injector.alter_shadow_table_query(alteration, "$query$")
+    end
+
+    def quote_query(query) do
+      Injector.quote_query(query, "$query$")
     end
 
     def migration_version do
@@ -75,8 +88,12 @@ defmodule Electric.Postgres.Proxy.TestScenario do
   def scenarios, do: @scenarios
   def frameworks, do: @frameworks
 
-  def query(sql) do
+  def query(sql) when is_binary(sql) do
     %M.Query{query: sql}
+  end
+
+  def query(%M.Query{} = query) do
+    query
   end
 
   def begin() do
@@ -111,7 +128,7 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     M.NoticeResponse
   end
 
-  def parse_describe(sql, name \\ nil) do
+  def parse_describe(sql, name \\ "") do
     # would love to assert that the parse and describe messages
     # are passed as-is but getting the double incantations of this to work
     # and return the same names is tricky, and it's not **that** important
@@ -129,7 +146,7 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     ]
   end
 
-  def parse_describe_sync(sql, name \\ nil) do
+  def parse_describe_sync(sql, name \\ "") do
     # would love to assert that the parse and describe messages
     # are passed as-is but getting the double incantations of this to work
     # and return the same names is tricky, and it's not **that** important
@@ -186,20 +203,21 @@ defmodule Electric.Postgres.Proxy.TestScenario do
   end
 
   def bind_execute(name, params \\ []) do
+    source = Keyword.get(params, :source, "")
     bind_params = Keyword.get(params, :bind, [])
 
     [
       struct(
         %M.Bind{
           portal: name,
-          source: "",
+          source: source,
           parameter_format_codes: [],
           parameters: [],
           result_format_codes: []
         },
         bind_params
       ),
-      %M.Execute{portal: "", max_rows: 0},
+      %M.Execute{portal: name, max_rows: 0},
       %M.Close{type: "S", name: name},
       %M.Sync{}
     ]
@@ -233,6 +251,22 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     struct(M.ErrorResponse, Keyword.put_new(args, :severity, "ERROR"))
   end
 
+  def introspect_result(ddl, status \\ :tx) do
+    Enum.concat([
+      [%M.RowDescription{}],
+      ddl |> List.wrap() |> Enum.map(&%M.DataRow{fields: [&1]}),
+      complete_ready("SELECT #{length(List.wrap(ddl))}", status)
+    ])
+  end
+
+  def proxy_sql(command, ddl) do
+    MockInjector.proxy_sql(command, ddl)
+  end
+
+  def quote_query(query) do
+    MockInjector.quote_query(query)
+  end
+
   def capture_version_query() do
     query(MockInjector.capture_version_query())
   end
@@ -243,6 +277,10 @@ defmodule Electric.Postgres.Proxy.TestScenario do
 
   def capture_version_query(version, priority) do
     query(MockInjector.capture_version_query(to_string(version), priority))
+  end
+
+  def introspect_tables_query(tables) do
+    query(MockInjector.introspect_tables_query(tables))
   end
 
   def capture_ddl_query(sql) do
@@ -326,25 +364,33 @@ defmodule Electric.Postgres.Proxy.TestScenario do
   Can't be done declaratively because a command can return a variable number of
   sql statements that must be executed sequentially.
   """
-  def electric(injector, initial_messages, command, final_messages) do
-    case Electric.DDLX.Command.pg_sql(command) |> Enum.map(&query/1) do
+  def electric(injector, initial_messages, command, ddl, final_messages) do
+    tables = Electric.DDLX.Command.table_names(command)
+    introspect_query = introspect_tables_query(tables)
+
+    capture_ddl = List.wrap(ddl)
+
+    case proxy_sql(command, capture_ddl) |> Enum.map(&query/1) do
       [query | queries] ->
         # the initial client message which is a [bind, execute] or [query] message
         # triggers a re-write to the real procedure call
         injector =
           case initial_messages do
             [client: msgs] ->
-              client(injector, msgs, server: query)
+              injector
+              |> client(msgs, server: introspect_query)
+              |> server(introspect_result(ddl), server: query)
 
             [server: msgs] ->
-              server(injector, msgs, server: query)
+              injector
+              |> server(msgs, server: introspect_query)
+              |> server(introspect_result(ddl), server: query)
           end
 
         # this real proc call returns a readyforquery etc response which triggers
         # the next procedure call required for the electric command
         Enum.reduce(queries, injector, fn query, injector ->
-          injector
-          |> server(electric_call_complete(), server: query)
+          server(injector, electric_call_complete(), server: query)
         end)
         # on receipt of the last readyforquery, the injector returns
         # the required message sequence that the client is expecting for
@@ -465,6 +511,10 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     |> Enum.map(&to_struct_internal/1)
   end
 
+  defp to_struct_internal(sql) when is_binary(sql) do
+    query(sql)
+  end
+
   defp to_struct_internal(m) when is_atom(m) do
     struct(m)
   end
@@ -511,8 +561,10 @@ defmodule Electric.Postgres.Proxy.TestScenario do
           command
       end
 
+    ddl = Keyword.get(opts, :ddl, "")
+
     injector
-    |> electric([client: query(query)], command,
+    |> electric([client: query(query)], command, ddl,
       client: complete_ready(DDLX.Command.tag(command))
     )
   end
@@ -550,9 +602,11 @@ defmodule Electric.Postgres.Proxy.TestScenario do
           command
       end
 
+    ddl = Keyword.get(opts, :ddl, "")
+
     injector
     |> client(parse_describe(query), client: parse_describe_complete(), server: [])
-    |> electric([client: bind_execute()], command,
+    |> electric([client: bind_execute()], command, ddl,
       client: bind_execute_complete(DDLX.Command.tag(command))
     )
   end

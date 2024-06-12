@@ -67,7 +67,7 @@ defmodule Electric.Satellite.WriteValidationTest do
     }
   end
 
-  describe "validate_transactions!/3" do
+  describe "validate_transactions/3" do
     setup do
       migrations = [
         {"001",
@@ -117,7 +117,7 @@ defmodule Electric.Satellite.WriteValidationTest do
         valid_tx("003")
       ]
 
-      assert {:ok, ^txns} = WriteValidation.validate_transactions!(txns, cxt.loader)
+      assert {:ok, ^txns} = WriteValidation.validate_transactions(txns, cxt.loader)
     end
 
     test "splits valid and invalid with an error", cxt do
@@ -135,8 +135,8 @@ defmodule Electric.Satellite.WriteValidationTest do
 
       txns = pre ++ [invalid] ++ post
 
-      assert {:error, ^pre, error, ^post} =
-               WriteValidation.validate_transactions!(txns, cxt.loader)
+      assert {:error, error, ^pre, ^post} =
+               WriteValidation.validate_transactions(txns, cxt.loader)
 
       assert %{
                tx: ^invalid,

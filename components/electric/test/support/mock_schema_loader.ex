@@ -79,7 +79,7 @@ defmodule Electric.Postgres.MockSchemaLoader do
     {__MODULE__, {:agent, name}}
   end
 
-  def backend_spec(opts) do
+  def backend_spec(opts \\ []) do
     oid_loader = Keyword.get(opts, :oids, &oid_loader/3) |> make_oid_loader()
 
     versions = migrate_versions(Keyword.get(opts, :migrations, []), oid_loader)
@@ -90,6 +90,8 @@ defmodule Electric.Postgres.MockSchemaLoader do
     indexes = Keyword.get(opts, :indexes, %{})
     tables = Keyword.get(opts, :tables, %{})
 
+    rules = Keyword.get(opts, :rules, [])
+
     {__MODULE__,
      [
        parent: parent,
@@ -98,7 +100,8 @@ defmodule Electric.Postgres.MockSchemaLoader do
        pks: pks,
        txids: txids,
        indexes: indexes,
-       tables: tables
+       tables: tables,
+       rules: List.wrap(rules)
      ]}
   end
 
@@ -209,13 +212,12 @@ defmodule Electric.Postgres.MockSchemaLoader do
   end
 
   def connect(opts, conn_config) do
-    {versions, opts} =
-      opts
-      |> Map.new()
-      |> Map.pop(:versions, [])
+    opts = Map.new(opts)
+    {versions, opts} = Map.pop(opts, :versions, [])
+    {rules, opts} = Map.pop(opts, :rules, [])
 
     notify(opts, {:connect, conn_config})
-    {:ok, %__MODULE__{versions: versions, opts: opts}}
+    {:ok, %__MODULE__{versions: versions, opts: opts, global_perms: rules}}
   end
 
   @impl SchemaLoader

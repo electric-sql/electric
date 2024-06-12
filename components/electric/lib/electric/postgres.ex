@@ -70,20 +70,22 @@ defmodule Electric.Postgres do
 
   # these are pg column types
   @int_types ["smallint", "int2", "integer", "int", "int4", "bigint", "int8"]
+  @serial_types ["smallserial", "serial2", "serial", "serial4", "bigserial", "serial8"]
   @arbitrary_precision_types [
     "decimal",
     "numeric"
   ]
-  @float_types @arbitrary_precision_types ++
-                 [
-                   "real",
-                   "float",
-                   "float4",
-                   "double precision",
-                   "float8",
-                   "money"
-                 ]
-  @text_types ["character varying", "varchar", "character", "char", "text", "bpchar"]
+  @float_types [
+    "real",
+    "float",
+    "float4",
+    "double precision",
+    "float8"
+  ]
+  @decimal_types @arbitrary_precision_types ++ @float_types ++ ["money"]
+  @varchar_types ["character varying", "varchar"]
+  @character_types ["character", "char", "bpchar"]
+  @text_types @varchar_types ++ @character_types ++ ["text"]
   @binary_types ["bytea"]
   @date_types ["date"]
   @time_types ["timetz", "time", "time without time zone", "time with time zone"]
@@ -96,6 +98,34 @@ defmodule Electric.Postgres do
   @bool_types ["boolean", "bool"]
   @json_types ["json", "jsonb"]
   @uuid_types ["uuid"]
+  @interval_types ["interval"]
+
+  @all_types @int_types ++
+               @float_types ++
+               @text_types ++
+               @binary_types ++
+               @date_types ++
+               @time_types ++
+               @timestamp_types ++
+               @bool_types ++
+               @json_types ++
+               @uuid_types ++
+               @interval_types
+
+  @supported_types @int_types ++
+                     @float_types ++
+                     @bool_types ++
+                     @binary_types ++
+                     @date_types ++
+                     (@json_types -- ["json"]) ++
+                     (@time_types -- ["timetz", "time with time zone"]) ++
+                     @timestamp_types ++
+                     @uuid_types ++
+                     (@text_types -- @character_types)
+
+  @supported_types_read_only @supported_types ++ @serial_types
+
+  @supported_pk_types @text_types ++ @binary_types ++ @uuid_types
 
   # TODO: support enum types in the ast parsing -- they will just come through as text
   # I expect. an enum column comes with an associated "CREATE TYPE $type AS ENUM ('value1', 'value2')"
@@ -104,6 +134,8 @@ defmodule Electric.Postgres do
   def integer_types, do: @int_types
   def arbitrary_precision_types, do: @arbitrary_precision_types
   def float_types, do: @float_types
+  def decimal_types, do: @decimal_types
+  def varchar_types, do: @varchar_types
   def text_types, do: @text_types
   def binary_types, do: @binary_types
   def datetime_types, do: @date_types ++ @time_types ++ @timestamp_types
@@ -111,24 +143,13 @@ defmodule Electric.Postgres do
   def json_types, do: @json_types
   def bool_types, do: @bool_types
   def uuid_types, do: @uuid_types
+  def all_types, do: @all_types
 
-  def supported_types do
-    ~w[
-      bool
-      bytea
-      date
-      float4 float8
-      int2 int4 int8
-      jsonb
-      text
-      time
-      timestamp timestamptz
-      uuid
-      varchar
-    ]a
-  end
-
-  def supported_types_only_in_functions, do: ~w|interval|a
+  # this includes the "base" types and their aliases, so, e.g. `int8` and `bigint`
+  def supported_types, do: @supported_types
+  def supported_types_read_only, do: @supported_types_read_only
+  def supported_types_only_in_functions, do: @interval_types
+  def supported_pk_types, do: @supported_pk_types
 
   @display_settings [
     "SET bytea_output = 'hex'",

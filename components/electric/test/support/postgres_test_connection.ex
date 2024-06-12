@@ -159,7 +159,7 @@ defmodule Electric.Postgres.TestConnection do
     sql =
       ddlx
       |> Enum.map(&Electric.DDLX.parse!/1)
-      |> Electric.DDLX.Command.PgSQL.to_sql()
+      |> Electric.DDLX.Command.PgSQL.to_sql([], &Electric.Postgres.Proxy.Injector.quote_query/1)
       |> Enum.join("\n")
 
     conn
@@ -393,7 +393,7 @@ defmodule Electric.Postgres.TestConnection do
         ddl -> "ELECTRIC " <> ddl
       end)
       |> Enum.map(&Electric.DDLX.parse!/1)
-      |> Electric.DDLX.Command.pg_sql()
+      |> Electric.DDLX.Command.proxy_sql()
       |> Enum.join("\n")
 
     conn

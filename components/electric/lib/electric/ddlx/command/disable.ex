@@ -29,16 +29,4 @@ defmodule Electric.DDLX.Command.Disable do
        }}
     end
   end
-
-  defimpl Command.PgSQL do
-    import Electric.DDLX.Command.Common
-
-    def to_sql(disable) do
-      [
-        """
-        CALL electric.disable(#{sql_repr(disable.table_name)});
-        """
-      ]
-    end
-  end
 end
