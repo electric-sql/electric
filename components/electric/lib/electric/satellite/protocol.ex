@@ -80,20 +80,35 @@ defmodule Electric.Satellite.Protocol do
 
       {:error, :already_registered} ->
         Logger.info("attempted multiple connections from the same client")
-        {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
+
+        {:error,
+         %SatErrorResp{
+           error_type: :INVALID_REQUEST,
+           message: "Attempted multiple connections from the same client"
+         }}
 
       {:error, %Electric.Satellite.Auth.TokenError{message: message}} ->
-        Logger.warning("Client authentication failed: #{message}")
-        {:error, %SatErrorResp{error_type: :AUTH_REQUIRED}}
+        Logger.warning("Authentication failed: #{message}")
+
+        {:error,
+         %SatErrorResp{
+           error_type: :AUTH_REQUIRED,
+           message: "Authentication failed: #{message}"
+         }}
 
       {:error, reason} ->
-        Logger.error("Client authentication failed: #{inspect(reason)}")
-        {:error, %SatErrorResp{error_type: :AUTH_REQUIRED}}
+        Logger.error("Authentication failed: #{inspect(reason)}")
+
+        {:error,
+         %SatErrorResp{
+           error_type: :AUTH_REQUIRED,
+           message: "Authentication failed: #{inspect(reason)}"
+         }}
     end
   end
 
   def handle_rpc_request(%SatAuthReq{}, state) when not auth_passed?(state),
-    do: {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
+    do: {:error, %SatErrorResp{error_type: :INVALID_REQUEST, message: "Not authenticated"}}
 
   def handle_rpc_request(_, state) when not auth_passed?(state),
     do: {:error, %SatErrorResp{error_type: :AUTH_REQUIRED}}
@@ -105,7 +120,12 @@ defmodule Electric.Satellite.Protocol do
       if auth.user_id != state.auth.user_id do
         # cannot change user ID on renewal
         Logger.warning("Client authentication failed: can't change user ID on renewal")
-        {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
+
+        {:error,
+         %SatErrorResp{
+           error_type: :INVALID_REQUEST,
+           message: "Authentication failed: can't change user ID on renewal"
+         }}
       else
         Logger.info("Successfully renewed the token")
         # cancel the old expiration timer and schedule a new one
@@ -118,16 +138,23 @@ defmodule Electric.Satellite.Protocol do
     else
       {:error, %Electric.Satellite.Auth.TokenError{message: message}} ->
         Logger.warning("Client authentication failed: #{message}")
-        {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
+
+        {:error,
+         %SatErrorResp{error_type: :INVALID_REQUEST, message: "Authentication failed: #{message}"}}
 
       {:error, reason} ->
         Logger.error("Client authentication failed: #{inspect(reason)}")
-        {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
+
+        {:error,
+         %SatErrorResp{
+           error_type: :INVALID_REQUEST,
+           message: "Authentication failed: #{inspect(reason)}"
+         }}
     end
   end
 
   def handle_rpc_request(%SatAuthReq{}, state) when auth_passed?(state),
-    do: {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
+    do: {:error, %SatErrorResp{error_type: :INVALID_REQUEST, message: "Already authenticated"}}
 
   # Satellite client request replication
   def handle_rpc_request(
@@ -366,7 +393,12 @@ defmodule Electric.Satellite.Protocol do
 
       {:error, _} ->
         # Malformed message, close the connection just in case
-        {:error, %{resp | result: {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}}}
+        {:error,
+         %{
+           resp
+           | result:
+               {:error, %SatErrorResp{error_type: :INVALID_REQUEST, message: "Malformed message"}}
+         }}
     end
   end
 
@@ -378,7 +410,9 @@ defmodule Electric.Satellite.Protocol do
      %SatRpcResponse{
        method: method,
        request_id: req.request_id,
-       result: {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
+       result:
+         {:error,
+          %SatErrorResp{error_type: :INVALID_REQUEST, message: "Unknown method: #{method}"}}
      }}
   end
 
@@ -467,11 +501,12 @@ defmodule Electric.Satellite.Protocol do
         {incomplete, complete} ->
           complete = Enum.reverse(complete)
 
-          case WriteValidation.validate_transactions!(complete, {SchemaCache, state.origin}) do
-            {:ok, accepted} ->
-              {nil, send_transactions(accepted, incomplete, state)}
-
-            {:error, accepted, error, trailing} ->
+          with {:ok, accepted} <-
+                 WriteValidation.validate_transactions(complete, {SchemaCache, state.origin}),
+               {:ok, permissions} <- Permissions.Write.validate(accepted, state) do
+            {nil, send_transactions(accepted, incomplete, %{state | permissions: permissions})}
+          else
+            {:error, %WriteValidation.Error{} = error, accepted, trailing} ->
               state = send_transactions(accepted, incomplete, state)
               Telemetry.event(state, :bad_transaction)
 
@@ -482,6 +517,18 @@ defmodule Electric.Satellite.Protocol do
               ])
 
               {:error, WriteValidation.Error.error_response(error)}
+
+            {:error, %Permissions.Write.Error{} = error, permissions, accepted, trailing} ->
+              state = send_transactions(accepted, incomplete, %{state | permissions: permissions})
+              Telemetry.event(state, :bad_transaction)
+
+              Logger.error([
+                "Permissions.Error: " <> to_string(error),
+                "\n",
+                "Dropping #{length(trailing)} unapplied transactions: #{Enum.map(trailing, & &1.lsn) |> inspect()}"
+              ])
+
+              {:error, Permissions.Write.Error.error_response(error)}
           end
       end
     rescue
@@ -489,7 +536,7 @@ defmodule Electric.Satellite.Protocol do
         Telemetry.event(state, :bad_transaction)
 
         Logger.error(Exception.format(:error, e, __STACKTRACE__))
-        {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
+        {:error, %SatErrorResp{error_type: :INVALID_REQUEST, message: Exception.message(e)}}
     end
   end
 
@@ -646,7 +693,7 @@ defmodule Electric.Satellite.Protocol do
       process_transaction(tx, state.out_rep.sent_rows_graph, state)
 
     state =
-      if Permissions.filter_reads_enabled?(),
+      if Permissions.enabled?(),
         do: Map.update!(state, :permissions, &Permissions.receive_transaction(&1, tx)),
         else: state
 
@@ -778,7 +825,7 @@ defmodule Electric.Satellite.Protocol do
   end
 
   defp after_permissions_change(state) do
-    if Permissions.filter_reads_enabled?() do
+    if Permissions.enabled?() do
       command =
         %SatClientCommand{
           command: {:reset_database, %SatClientCommand.ResetDatabase{reason: :PERMISSIONS_CHANGE}}
@@ -872,7 +919,7 @@ defmodule Electric.Satellite.Protocol do
 
     {filtered_graph, _, _} =
       filtered_results =
-      if Permissions.filter_reads_enabled?() do
+      if Permissions.enabled?() do
         {accepted_data, filtered_graph} =
           state.permissions
           |> Permissions.Read.filter_shape_data(graph, data, xmin)
@@ -961,7 +1008,7 @@ defmodule Electric.Satellite.Protocol do
       SentRowsGraph.pop_by_request_ids(graph_diff, gone_request_ids, root_vertex: :fake_root)
 
     {accepted_changes, filtered_graph_diff} =
-      if Permissions.filter_reads_enabled?() do
+      if Permissions.enabled?() do
         state.permissions
         |> Permissions.Read.filter_move_in_data(
           state.out_rep.sent_rows_graph,
@@ -1250,7 +1297,7 @@ defmodule Electric.Satellite.Protocol do
 
   defp apply_permissions_and_shapes(tx, graph, shapes, permissions) do
     {filtered_tx, _rejected_changes, moves_out} =
-      if Permissions.filter_reads_enabled?() do
+      if Permissions.enabled?() do
         Permissions.Read.filter_transaction(permissions, graph, tx)
       else
         {Changes.filter_changes_belonging_to_user(tx, Permissions.user_id(permissions)), [], []}

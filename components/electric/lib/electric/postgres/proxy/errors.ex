@@ -3,10 +3,10 @@ defmodule Electric.Postgres.Proxy.Errors do
 
   import Electric.Utils, only: [inspect_relation: 1]
 
-  def access_control_not_supported(command, query) do
+  def command_not_supported(command, query) do
     %{
       code: "EX001",
-      message: "#{Electric.DDLX.Command.tag(command)} is currently unsupported",
+      message: "#{Electric.DDLX.Command.tag(command)} `#{query}`is currently unsupported",
       detail:
         "We are working on implementing access controls -- when these features are completed then this command will work",
       query: query

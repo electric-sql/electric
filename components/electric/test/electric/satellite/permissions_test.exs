@@ -13,6 +13,7 @@ defmodule Electric.Satellite.PermissionsTest do
   }
 
   alias Electric.Postgres.Extension.SchemaLoader
+  alias Electric.Replication.Changes
   alias Electric.Satellite.Permissions
 
   import ElectricTest.PermissionsHelpers
@@ -667,6 +668,34 @@ defmodule Electric.Satellite.PermissionsTest do
                    # this insert lives outside our perms
                    Chgs.insert(@comments, %{"id" => "c100", "issue_id" => "i3"}),
                    Chgs.insert(@reactions, %{"id" => "r100", "comment_id" => "c100"})
+                 ])
+               )
+    end
+
+    test "compensations are ignored", cxt do
+      perms =
+        perms_build(
+          cxt,
+          [
+            ~s[GRANT ALL ON #{table(@issues)} TO (#{table(@projects)}, 'editor')],
+            ~s[GRANT ALL ON #{table(@comments)} TO (#{table(@projects)}, 'editor')],
+            ~s[GRANT ALL ON #{table(@reactions)} TO (#{table(@projects)}, 'editor')],
+            @projects_assign
+          ],
+          [
+            Roles.role("editor", @projects, "p1", "assign-1")
+          ]
+        )
+
+      assert {:ok, _perms} =
+               Permissions.validate_write(
+                 perms,
+                 cxt.tree,
+                 Chgs.tx([
+                   Chgs.insert(@issues, %{"id" => "i100", "project_id" => "p1"}),
+                   Chgs.insert(@comments, %{"id" => "c100", "issue_id" => "i100"}),
+                   Chgs.insert(@reactions, %{"id" => "r100", "comment_id" => "c100"}),
+                   %Changes.Compensation{}
                  ])
                )
     end

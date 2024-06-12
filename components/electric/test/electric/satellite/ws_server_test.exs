@@ -1,9 +1,9 @@
 defmodule Electric.Satellite.WebsocketServerTest do
   use ExUnit.Case, async: false
   use Electric.Satellite.Protobuf
+  use ElectricTest.Satellite.WsServerHelpers
 
   alias Electric.Postgres.CachedWal.Producer
-  alias Electric.Replication.SatelliteConnector
   alias Electric.Replication.Changes
 
   alias Electric.Replication.Changes.{
@@ -41,24 +41,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
                            "CREATE TABLE public.test_child (id TEXT PRIMARY KEY, parent_id TEXT NOT NULL REFERENCES test1 (id), some_flag BOOLEAN NOT NULL)"
                          ]}
 
-  @current_wal_pos 1
-
-  import Mock
-
-  setup_with_mocks([
-    {Electric.Postgres.Repo, [:passthrough],
-     checkout: fn fun -> fun.() end,
-     transaction: fn fun -> fun.() end,
-     checked_out?: fn -> true end,
-     query: fn _, _ -> {:ok, %Postgrex.Result{columns: nil, rows: []}} end,
-     query!: fn _, _ -> %Postgrex.Result{columns: nil, rows: []} end}
-  ]) do
-    %{}
-  end
-
   setup ctx do
-    test_pid = self()
-
     case Map.get(ctx, :with_features, []) do
       [] ->
         nil
@@ -71,22 +54,6 @@ defmodule Electric.Satellite.WebsocketServerTest do
           Electric.Features.enable(feature_state)
         end)
     end
-
-    ctx =
-      ctx
-      |> Map.update(
-        :subscription_data_fun,
-        &mock_data_function/2,
-        fn {name, opts} -> &apply(__MODULE__, name, [&1, &2, opts]) end
-      )
-      |> Map.put_new(:move_in_data_fun, {:mock_move_in_data_fn, []})
-      |> Map.update!(
-        :move_in_data_fun,
-        fn {name, opts} ->
-          &apply(__MODULE__, name, [&1, &2, &3, &4, [{:test_pid, test_pid} | opts]])
-        end
-      )
-      |> Map.put_new(:allowed_unacked_txs, 30)
 
     origin = "test-origin"
     connector_config = [origin: origin, connection: []]
@@ -108,47 +75,6 @@ defmodule Electric.Satellite.WebsocketServerTest do
     start_link_supervised!({Electric.Satellite.ClientReconnectionInfo, connector_config})
 
     %{port: port, server_id: server_id, origin: origin}
-  end
-
-  setup_with_mocks([
-    {SatelliteConnector, [:passthrough],
-     [
-       start_link: fn %{name: name, producer: producer} ->
-         Supervisor.start_link(
-           [
-             {Electric.DummyConsumer, subscribe_to: [{producer, []}], name: :dummy_consumer},
-             {DownstreamProducerMock, Producer.name(name)}
-           ],
-           strategy: :one_for_one
-         )
-       end
-     ]},
-    {
-      Electric.Postgres.CachedWal.Api,
-      [:passthrough],
-      get_current_position: fn _ -> @current_wal_pos end,
-      lsn_in_cached_window?: fn _origin, pos when is_integer(pos) ->
-        pos > @current_wal_pos
-      end,
-      stream_transactions: fn _, _, _ -> [] end
-    }
-  ]) do
-    %{}
-  end
-
-  # make sure server is cleaning up connections
-  setup _cxt do
-    on_exit(fn -> clean_connections() end)
-
-    user_id = "a5408365-7bf4-48b1-afe2-cb8171631d7c"
-    client_id = "device-id-#{Enum.random(100_000..999_999)}"
-    token = Auth.Secure.create_token(user_id)
-
-    {:ok, user_id: user_id, client_id: client_id, token: token}
-  end
-
-  setup ctx do
-    start_schema_cache(ctx[:with_migrations] || [])
   end
 
   describe "resource related check" do
@@ -449,7 +375,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
     end
 
     @tag with_migrations: [@test_fk_migration],
-         with_features: [read_permissions: false]
+         with_features: [permissions: false]
     test "compensations are filtered based on electric_user_id", ctx do
       with_connect([port: ctx.port, auth: ctx, id: ctx.client_id], fn conn ->
         rel_map = start_replication_and_assert_response(conn, 2)
@@ -991,6 +917,7 @@ defmodule Electric.Satellite.WebsocketServerTest do
           start_replication_and_assert_response(conn, 1)
 
           columns = [
+            %SatRelationColumn{name: "id", type: "text"},
             %SatRelationColumn{name: "satellite-column-1", type: "text"},
             %SatRelationColumn{name: "satellite-column-2", type: "varchar"}
           ]
@@ -1003,10 +930,11 @@ defmodule Electric.Satellite.WebsocketServerTest do
             columns: columns
           }
 
-          serialize = fn [a, b] ->
-            map = %{"satellite-column-1" => a, "satellite-column-2" => b}
+          serialize = fn [a, b, c] ->
+            map = %{"id" => a, "satellite-column-1" => b, "satellite-column-2" => c}
 
             Electric.Satellite.Serialization.map_to_row(map, [
+              %{name: "id", type: :text},
               %{name: "satellite-column-1", type: :text},
               %{name: "satellite-column-2", type: :text}
             ])
@@ -1020,12 +948,12 @@ defmodule Electric.Satellite.WebsocketServerTest do
           op_log1 =
             build_op_log([
               %SatOpBegin{commit_timestamp: ct, lsn: client_lsn},
-              %SatOpInsert{relation_id: @test_oid, row_data: serialize.([<<"a">>, <<"b">>])}
+              %SatOpInsert{relation_id: @test_oid, row_data: serialize.(["1", "a", "b"])}
             ])
 
           op_log2 =
             build_op_log([
-              %SatOpInsert{relation_id: @test_oid, row_data: serialize.([<<"c">>, <<"d">>])},
+              %SatOpInsert{relation_id: @test_oid, row_data: serialize.(["2", "c", "d"])},
               %SatOpCommit{}
             ])
 
@@ -1040,11 +968,19 @@ defmodule Electric.Satellite.WebsocketServerTest do
           assert tx.changes == [
                    %NewRecord{
                      relation: {@test_schema, @test_table},
-                     record: %{"satellite-column-1" => "a", "satellite-column-2" => "b"}
+                     record: %{
+                       "id" => "1",
+                       "satellite-column-1" => "a",
+                       "satellite-column-2" => "b"
+                     }
                    },
                    %NewRecord{
                      relation: {@test_schema, @test_table},
-                     record: %{"satellite-column-1" => "c", "satellite-column-2" => "d"}
+                     record: %{
+                       "id" => "2",
+                       "satellite-column-1" => "c",
+                       "satellite-column-2" => "d"
+                     }
                    }
                  ]
 
@@ -1078,172 +1014,5 @@ defmodule Electric.Satellite.WebsocketServerTest do
         assert %SatInStartReplicationResp.ReplicationError{code: :BEHIND_WINDOW} = error
       end)
     end
-  end
-
-  # -------------------------------------------------------------------------------
-  def mock_data_function(
-        {id, requests, _context},
-        [reply_to: {ref, pid}, connection: _, telemetry_span: _, relation_loader: _],
-        opts \\ []
-      ) do
-    insertion_point = Keyword.get(opts, :insertion_point, 0)
-    data_delay_ms = Keyword.get(opts, :data_delay_ms, 0)
-    send(pid, {:data_insertion_point, ref, insertion_point})
-
-    Process.send_after(
-      pid,
-      {:subscription_data, id, insertion_point, {Graph.new(), %{}, Enum.map(requests, & &1.id)}},
-      data_delay_ms
-    )
-  end
-
-  def mock_move_in_data_fn(
-        move_in_ref,
-        {subquery_map, affected_txs},
-        _context,
-        [reply_to: {ref, pid}, connection: _, relation_loader: _],
-        opts \\ []
-      ) do
-    test_pid = Keyword.fetch!(opts, :test_pid)
-    test_ref = make_ref()
-
-    send(test_pid, {:mock_move_in, {self(), test_ref}, move_in_ref, subquery_map})
-
-    {insertion_point, graph_updates, changes} =
-      receive do
-        {:mock_move_in_data, ^test_ref, value} ->
-          value
-      end
-
-    send(pid, {:data_insertion_point, ref, insertion_point})
-
-    request_ids = MapSet.new(Map.keys(subquery_map), & &1.request_id)
-
-    receive do
-      {:mock_move_in_trigger, ^test_ref} ->
-        send(
-          pid,
-          {:move_in_query_data, move_in_ref, insertion_point,
-           {request_ids, graph_updates, changes}, affected_txs}
-        )
-    end
-  end
-
-  def clean_connections() do
-    :ok = drain_pids(active_clients())
-    :ok = drain_active_resources(connectors())
-  end
-
-  defp connectors() do
-    for {mod, pid} <- Electric.Replication.Connectors.status(:raw),
-        mod !== Electric.Replication.PostgresConnectorSup,
-        do: {mod, pid}
-  end
-
-  defp drain_active_resources([]) do
-    :ok
-  end
-
-  defp drain_active_resources([{Electric.Replication.SatelliteConnector, _} | _] = list) do
-    drain_pids(list)
-  end
-
-  defp drain_pids([]) do
-    :ok
-  end
-
-  defp drain_pids([{_client_name, client_pid} | list]) do
-    ref = Process.monitor(client_pid)
-
-    receive do
-      {:DOWN, ^ref, :process, ^client_pid, _} ->
-        drain_pids(list)
-    after
-      1000 ->
-        flunk("tcp client process didn't termivate")
-    end
-  end
-
-  defp consume_till_stop(lsn) do
-    receive do
-      {_, %SatOpLog{} = op_log} ->
-        lsn = get_lsn(op_log)
-        # Logger.warning("consumed: #{inspect(lsn)}")
-        consume_till_stop(lsn)
-
-      {_, %SatRpcResponse{method: "stopReplication"}} ->
-        lsn
-    after
-      @default_wait ->
-        flunk("Timeout while waiting for SatInStopReplicationResp")
-    end
-  end
-
-  defp receive_trans() do
-    receive do
-      {_, %SatOpLog{} = op_log} -> op_log
-    after
-      @default_wait ->
-        flunk("timeout")
-    end
-  end
-
-  defp get_lsn(%SatOpLog{ops: ops}) do
-    assert [%SatTransOp{op: begin} | _] = ops
-    assert {:begin, %SatOpBegin{lsn: lsn}} = begin
-    lsn
-  end
-
-  defp active_clients() do
-    Electric.Satellite.ClientManager.get_clients()
-    |> Enum.flat_map(fn {client_name, client_pid} ->
-      if Process.alive?(client_pid) do
-        [{client_name, client_pid}]
-      else
-        []
-      end
-    end)
-  end
-
-  defp build_events(changes, lsn, origin \\ nil) do
-    [
-      {%Changes.Transaction{
-         changes: List.wrap(changes),
-         commit_timestamp: DateTime.utc_now(),
-         origin: origin,
-         # The LSN here is faked and a number, so we're using the same monotonically growing value as xid to emulate PG
-         xid: lsn
-       }, lsn}
-    ]
-  end
-
-  defp simple_transes(user_id, n, lim \\ 0) do
-    simple_trans(user_id, n, lim, [])
-  end
-
-  defp simple_trans(user_id, n, lim, acc) when n >= lim do
-    [trans] =
-      %Changes.NewRecord{
-        record: %{"content" => "a", "id" => "fakeid", "electric_user_id" => user_id},
-        relation: {@test_schema, @test_table}
-      }
-      |> build_events(n)
-
-    simple_trans(user_id, n - 1, lim, [trans | acc])
-  end
-
-  defp simple_trans(_user_id, _n, _lim, acc) do
-    acc
-  end
-
-  def build_changes(%SatOpBegin{} = op), do: %SatTransOp{op: {:begin, op}}
-  def build_changes(%SatOpInsert{} = op), do: %SatTransOp{op: {:insert, op}}
-  def build_changes(%SatOpUpdate{} = op), do: %SatTransOp{op: {:update, op}}
-  def build_changes(%SatOpDelete{} = op), do: %SatTransOp{op: {:delete, op}}
-  def build_changes(%SatOpCommit{} = op), do: %SatTransOp{op: {:commit, op}}
-
-  defp build_op_log(changes) do
-    ops = Enum.map(changes, fn change -> build_changes(change) end)
-    %SatOpLog{ops: ops}
   end
 end

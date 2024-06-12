@@ -108,6 +108,7 @@ export enum SatErrorResp_ErrorCode {
   INVALID_REQUEST = 4,
   PROTO_VSN_MISMATCH = 5,
   SCHEMA_VSN_MISMATCH = 6,
+  PERMISSION_DENIED = 7,
   UNRECOGNIZED = -1,
 }
 

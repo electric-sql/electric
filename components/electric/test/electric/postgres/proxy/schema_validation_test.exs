@@ -151,10 +151,7 @@ defmodule Electric.Postgres.Proxy.SchemaValidationTest do
   setup do
     # enable all the optional ddlx features
     Electric.Features.process_override(
-      proxy_ddlx_grant: true,
-      proxy_ddlx_revoke: true,
-      proxy_ddlx_assign: true,
-      proxy_ddlx_unassign: true,
+      proxy_grant_write_permissions: true,
       proxy_ddlx_sqlite: true
     )
 

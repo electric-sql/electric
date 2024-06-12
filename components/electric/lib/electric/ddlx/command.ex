@@ -31,6 +31,10 @@ defmodule Electric.DDLX.Command do
     tag
   end
 
+  def statement(%__MODULE__{stmt: stmt}) do
+    stmt
+  end
+
   @perms_with_ids [:assigns, :unassigns, :grants, :revokes]
   @perms_without_ids [:sqlite]
 
@@ -73,10 +77,6 @@ defmodule Electric.DDLX.Command do
 
   def table_names(%__MODULE__{tables: tables}), do: tables
 
-  def enabled?(%__MODULE__{action: cmd}) do
-    command_enabled?(cmd)
-  end
-
   def electric_enable({_, _} = table) do
     table_name = Electric.Utils.inspect_relation(table)
 
@@ -88,6 +88,14 @@ defmodule Electric.DDLX.Command do
     }
   end
 
+  def command_list(%SatPerms.DDLX{} = ddlx) do
+    Stream.concat([ddlx.grants, ddlx.revokes, ddlx.assigns, ddlx.unassigns, ddlx.sqlite])
+  end
+
+  def enabled?(%__MODULE__{action: cmd}) do
+    command_enabled?(cmd)
+  end
+
   # shortcut the enable command, which has to be enabled
   defp command_enabled?(%DDLX.Command.Enable{}), do: true
   defp command_enabled?(%DDLX.Command.Disable{}), do: false
@@ -95,26 +103,22 @@ defmodule Electric.DDLX.Command do
   defp command_enabled?(%SatPerms.DDLX{} = ddlx) do
     ddlx
     |> command_list()
-    |> Enum.map(&feature_flag/1)
-    |> Enum.all?(&Electric.Features.enabled?/1)
+    |> Enum.all?(&ddlx_enabled?/1)
   end
 
-  def command_list(%SatPerms.DDLX{} = ddlx) do
-    Stream.concat([ddlx.grants, ddlx.revokes, ddlx.assigns, ddlx.unassigns])
+  @write_privileges Electric.Satellite.Permissions.write_privileges()
+
+  defp ddlx_enabled?(%SatPerms.Grant{privilege: p}) when p in @write_privileges do
+    Electric.Features.enabled?(:proxy_grant_write_permissions)
   end
 
-  @feature_flags %{
-    SatPerms.Grant => :proxy_ddlx_grant,
-    SatPerms.Revoke => :proxy_ddlx_revoke,
-    SatPerms.Assign => :proxy_ddlx_assign,
-    SatPerms.Unassign => :proxy_ddlx_unassign,
-    SatPerms.Sqlite => :proxy_ddlx_sqlite
-  }
+  defp ddlx_enabled?(%m{})
+       when m in [SatPerms.Grant, SatPerms.Revoke, SatPerms.Assign, SatPerms.Unassign] do
+    true
+  end
 
-  # either we have a specific flag for the command or we fallback to the
-  # default setting for the features module, which is `false`
-  defp feature_flag(%cmd{}) do
-    @feature_flags[cmd] || Electric.Features.default_key()
+  defp ddlx_enabled?(%SatPerms.Sqlite{}) do
+    Electric.Features.enabled?(:proxy_ddlx_sqlite)
   end
 
   def command_id(%SatPerms.Grant{} = grant) do

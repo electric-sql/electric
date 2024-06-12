@@ -4,7 +4,6 @@
 
 [invoke setup]
 
-[invoke setup_client 1 "electric_1" 5133]
 
 # PREPARATION: Set up dependent tables and add a row that will be referenced
 
@@ -19,15 +18,24 @@
             intvalue_null integer,
             intvalue_null_default integer
         );
-        ALTER TABLE public.items ENABLE ELECTRIC;
         CREATE TABLE public.other_items (
             content TEXT NOT NULL,
             id TEXT PRIMARY KEY,
             item_id UUID REFERENCES public.items(id)
         );
+
+        ALTER TABLE public.items ENABLE ELECTRIC;
         ALTER TABLE public.other_items ENABLE ELECTRIC;
+
+        ELECTRIC GRANT ALL ON public.other_items TO AUTHENTICATED;
+        ELECTRIC GRANT ALL ON public.items TO AUTHENTICATED;
         """]
     [invoke migrate_pg "001" $sql]
+
+[shell electric]
+    ??[debug] Updated global permissions
+
+[invoke setup_client 1 "electric_1" 5133]
 
 [shell satellite_1]
     ??[rpc] recv: #SatInStartReplicationResp

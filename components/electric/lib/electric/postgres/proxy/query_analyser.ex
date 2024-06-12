@@ -660,7 +660,7 @@ defimpl QueryAnalyser, for: PgQuery.CallStmt do
       %{
         analysis
         | allowed?: false,
-          error: Errors.access_control_not_supported(command, analysis.sql)
+          error: Errors.command_not_supported(command, analysis.sql)
       }
     end
   end
