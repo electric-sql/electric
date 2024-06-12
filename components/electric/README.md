@@ -33,7 +33,9 @@ ElectricSQL is a local-first sync layer for web and mobile apps. Use it to build
 
 ## Pre-reqs
 
-Docker and [Elixir 1.15 compiled with Erlang 25](https://thinkingelixir.com/install-elixir-using-asdf/).
+- Docker
+- Elixir 1.16 compiled with Erlang 25 (26 is not currently supported). We recommend installing Elixir using [asdf](https://thinkingelixir.com/install-elixir-using-asdf/) - the `.tool-versions` file can be found in the root of this repo
+- PostgreSQL (no need to start the service)
 
 ## Usage
 
