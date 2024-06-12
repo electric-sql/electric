@@ -1,0 +1,30 @@
+[doc Electrifying a table with fks to unelectrified tables returns a helpful error]
+
+[include _shared.luxinc]
+
+[invoke setup]
+
+[shell proxy_1]
+    -ELECTRIC ENABLE
+    """!
+    BEGIN;
+        CREATE TABLE public.items (
+            id UUID PRIMARY KEY,
+            content VARCHAR NOT NULL
+        );
+        CREATE TABLE public.other_items (
+            id TEXT PRIMARY KEY,
+            content TEXT NOT NULL,
+            item_id UUID REFERENCES public.items (id)
+        );
+
+        ALTER TABLE public.other_items ENABLE ELECTRIC;
+    ROLLBACK;
+    """
+    ??ERROR:  Cannot electrify table "public"."other_items" because it has a FOREIGN KEY reference to an un-electrified table: "public"."items"
+    ?$psql
+    -$fail_pattern
+
+
+[cleanup]
+    [invoke teardown]

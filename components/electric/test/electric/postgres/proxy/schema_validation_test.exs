@@ -37,11 +37,9 @@ defmodule Electric.Postgres.Proxy.SchemaValidationTest do
 
     def ddlx_error(injector, ddlx, ddl, _state) do
       {:ok, command} = DDLX.parse(ddlx)
-      tables = Electric.DDLX.Command.table_names(command)
-      introspect_query = introspect_tables_query(tables)
 
       injector
-      |> client(ddlx, server: introspect_query)
+      |> electric_preamble([client: ddlx], command)
       |> server(introspect_result(ddl), client: [error(), ready(:failed)])
     end
   end
@@ -75,12 +73,10 @@ defmodule Electric.Postgres.Proxy.SchemaValidationTest do
 
     def ddlx_error(injector, ddlx, ddl, _state) do
       {:ok, command} = DDLX.parse(ddlx)
-      tables = Electric.DDLX.Command.table_names(command)
-      introspect_query = introspect_tables_query(tables)
 
       injector
       |> client(parse_describe(ddlx), client: parse_describe_complete(), server: [])
-      |> client(bind_execute(), server: introspect_query)
+      |> electric_preamble([client: bind_execute()], command)
       |> server(introspect_result(ddl), client: [error(), ready(:failed)])
     end
   end
@@ -183,12 +179,11 @@ defmodule Electric.Postgres.Proxy.SchemaValidationTest do
 
     test "succeeds with a valid schema", cxt do
       ddl = "CREATE TABLE public.i_am_ok (id uuid PRIMARY KEY, value TEXT UNIQUE)"
-      relation = {"public", "i_am_ok"}
+      ddlx = "ALTER TABLE i_am_ok ENABLE ELECTRIC"
+      {:ok, command} = DDLX.parse(ddlx)
 
       cxt.injector
-      |> client("ALTER TABLE i_am_ok ENABLE ELECTRIC",
-        server: introspect_tables_query([relation])
-      )
+      |> electric_preamble([client: ddlx], command)
       |> server(introspect_result([ddl]),
         server: "CALL electric.electrify_with_ddl('public', 'i_am_ok', $query$#{ddl}$query$);\n"
       )
@@ -203,12 +198,34 @@ defmodule Electric.Postgres.Proxy.SchemaValidationTest do
 
     test "fails with an invalid schema", cxt do
       ddl = "CREATE TABLE public.i_am_bad (id uuid, value cidr)"
-      relation = {"public", "i_am_bad"}
+      ddlx = "ALTER TABLE i_am_bad ENABLE ELECTRIC"
+      {:ok, command} = DDLX.parse(ddlx)
 
       cxt.injector
-      |> client("ALTER TABLE i_am_bad ENABLE ELECTRIC",
-        server: introspect_tables_query([relation])
+      |> electric_preamble([client: ddlx], command)
+      |> server(introspect_result([ddl]),
+        client: [error(), ready(:failed)]
       )
+      |> client(rollback())
+      |> server(complete_ready("ROLLBACK", :idle))
+      |> idle!()
+    end
+
+    test "fails when fk refers to un-electrified table", cxt do
+      ddl =
+        """
+        CREATE TABLE public.i_am_bad (
+          id uuid PRIMARY KEY,
+          value text, 
+          other_id uuid references public.others (id)
+        )
+        """
+
+      ddlx = "ALTER TABLE i_am_bad ENABLE ELECTRIC"
+      {:ok, command} = DDLX.parse(ddlx)
+
+      cxt.injector
+      |> electric_preamble([client: ddlx], command)
       |> server(introspect_result([ddl]),
         client: [error(), ready(:failed)]
       )
@@ -261,13 +278,13 @@ defmodule Electric.Postgres.Proxy.SchemaValidationTest do
       relation = {"public", name}
       columns = ["id uuid PRIMARY KEY", "ip cidr"]
       ddl = create_table_ddl(relation, columns)
+      ddlx = "ALTER TABLE #{name} ENABLE ELECTRIC"
+      {:ok, command} = DDLX.parse(ddlx)
 
       cxt.injector
       |> client(begin())
       |> server(complete_ready("BEGIN", :tx))
-      |> client("ALTER TABLE #{name} ENABLE ELECTRIC",
-        server: introspect_tables_query([relation])
-      )
+      |> electric_preamble([client: ddlx], command)
       |> server(
         introspect_result(ddl),
         client: [error(), ready(:failed)]
@@ -280,14 +297,14 @@ defmodule Electric.Postgres.Proxy.SchemaValidationTest do
     test "proxy tx", cxt do
       name = "fish"
       relation = {"public", name}
+      ddlx = "ALTER TABLE #{name} ENABLE ELECTRIC"
+      {:ok, command} = DDLX.parse(ddlx)
       columns = ["id uuid PRIMARY KEY", "ip cidr"]
       ddl = create_table_ddl(relation, columns)
 
       cxt.injector
       |> client("ALTER TABLE #{name} ENABLE ELECTRIC", server: "BEGIN")
-      |> server(complete_ready("BEGIN", :tx),
-        server: introspect_tables_query([relation])
-      )
+      |> electric_preamble([server: complete_ready("BEGIN", :tx)], command)
       |> server(
         introspect_result(ddl),
         server: "ROLLBACK"
@@ -301,13 +318,13 @@ defmodule Electric.Postgres.Proxy.SchemaValidationTest do
       relation = {"public", name}
       columns = ["id uuid PRIMARY KEY", "ip cidr"]
       ddl = create_table_ddl(relation, columns)
+      ddlx = "ALTER TABLE #{name} ENABLE ELECTRIC"
+      {:ok, command} = DDLX.parse(ddlx)
 
       cxt.injector
       |> client(begin())
       |> server(complete_ready("BEGIN", :tx))
-      |> client("ALTER TABLE #{name} ENABLE ELECTRIC",
-        server: introspect_tables_query([relation])
-      )
+      |> electric_preamble([client: ddlx], command)
       |> server(
         introspect_result(ddl),
         client: [error(), ready(:failed)]

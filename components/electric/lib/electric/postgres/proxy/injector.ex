@@ -20,6 +20,7 @@ defmodule Electric.Postgres.Proxy.Injector do
 
   @callback quote_query(String.t()) :: String.t()
   @callback introspect_tables_query(Postgres.relation() | String.t() | [String.t()]) :: String.t()
+  @callback electrified_tables_query() :: String.t()
   @callback capture_ddl_query(query :: binary()) :: binary()
   @callback capture_version_query(version :: binary(), priority :: integer()) :: binary()
   @callback alter_shadow_table_query(table_modification()) :: binary()
@@ -181,6 +182,10 @@ defmodule Electric.Postgres.Proxy.Injector do
       |> Enum.join(", ")
 
     "SELECT electric.introspect_tables(#{stmts});"
+  end
+
+  def electrified_tables_query do
+    Electric.Postgres.Extension.electrified_tables_query()
   end
 
   defp normalise_name({_, _} = relation) do

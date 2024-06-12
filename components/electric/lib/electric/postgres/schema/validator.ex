@@ -62,16 +62,24 @@ defmodule Electric.Postgres.Schema.Validator do
   warning messages about potential issues with the table schema that you might hit later, e.g.
   when granting write permissions. This warnings implementation hasn't been done yet.
   """
-  @spec validate_schema_for_electrification(Postgres.Schema.t(), Postgres.relation()) ::
+  # NOTE: Rather than passing a full schema here, we only receive a partial one with just the
+  # definition of the table being electrified. This is because we have no way of retrieving
+  # a consistent view of the latest schema without a lot of work. Basically we'd have to move
+  # the updating of the schema out of the replication stream handling and into the proxy itself,
+  # then we'd know that the schema in pg was up-to-date and could load it within the 
+  # migration operation.
+  @spec validate_schema_for_electrification(Postgres.Schema.t(), Postgres.relation(), MapSet.t()) ::
           ok_warnings() | error()
-  def validate_schema_for_electrification(schema, {_, _} = relation) do
+  def validate_schema_for_electrification(schema, {_, _} = relation, electrified) do
     case relation do
       {"public", _} ->
         {:ok, table_schema} = Schema.fetch_table(schema, relation)
 
         with {:ok, warnings} <- ensure_has_primary_key(table_schema, relation, []),
              {:ok, warnings} <-
-               ensure_column_types(table_schema, schema.enums, relation, warnings) do
+               ensure_column_types(table_schema, schema.enums, relation, warnings),
+             {:ok, warnings} <-
+               ensure_fk_destinations(table_schema, electrified, warnings) do
           {:ok, warnings}
         end
 
@@ -135,6 +143,22 @@ defmodule Electric.Postgres.Schema.Validator do
       else
         {:halt, {:error, Proxy.Errors.invalid_enum(name, [value])}}
       end
+    end)
+  end
+
+  defp ensure_fk_destinations(table_schema, electrified, warnings) do
+    Enum.reduce_while(table_schema.constraints, {:ok, warnings}, fn
+      %{constraint: {:foreign, %{pk_table: target}}}, {:ok, warnings} ->
+        %{schema: sname, name: tname} = target
+
+        if MapSet.member?(electrified, {sname, tname}) do
+          {:cont, {:ok, warnings}}
+        else
+          {:halt, {:error, Proxy.Errors.missing_reference(table_schema.name, {sname, tname})}}
+        end
+
+      _, {:ok, warnings} ->
+        {:cont, {:ok, warnings}}
     end)
   end
 

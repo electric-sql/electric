@@ -86,8 +86,6 @@ defmodule Electric.Postgres.Proxy.TestScenario.FrameworkSimple do
   def assert_electrify_server_error(injector, _framework, query, ddl, error_details) do
     # assert that the electrify command only generates a single query
     {:ok, command} = DDLX.parse(query)
-    tables = Electric.DDLX.Command.table_names(command)
-    introspect_query = introspect_tables_query(tables)
 
     [electrify | _rest] =
       command
@@ -97,7 +95,7 @@ defmodule Electric.Postgres.Proxy.TestScenario.FrameworkSimple do
     injector
     |> client(query("BEGIN"))
     |> server(complete_ready("BEGIN"))
-    |> client(query(query), server: introspect_query)
+    |> electric_preamble([client: query(query)], command)
     |> server(introspect_result(ddl), server: electrify)
     |> server([error(error_details), ready(:failed)])
     |> client(rollback())
