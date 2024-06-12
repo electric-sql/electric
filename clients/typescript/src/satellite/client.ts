@@ -646,6 +646,7 @@ export class SatelliteClient implements Client {
           { parentSpan: span },
           () => this.service.subscribe(request)
         )
+        span.setAttribute('shape.subscriptionId', request.subscriptionId)
         return this.handleSubscription(resp)
       },
       { allowedRpcResponses: ['subscribe'] }
@@ -663,6 +664,9 @@ export class SatelliteClient implements Client {
     }
     const span = startSpan('satellite.client.unsubscribe', {
       isClientSpan: true,
+      attributes: {
+        'shape.subscriptionIds': subscriptionIds,
+      },
     })
     const request = SatUnsubsReq.create({ subscriptionIds })
 
