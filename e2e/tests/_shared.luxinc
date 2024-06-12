@@ -5,6 +5,10 @@
 [newshell log]
 
 [macro setup]
+    [invoke setup_with_environment ""]
+[endmacro]
+
+[macro setup_with_environment env]
     [newshell postgres_logs]
         [progress start development environment]
         !make start_dev_env
@@ -12,10 +16,14 @@
         !make log_dev_env
 
     [newshell pg_1]
+        !test -n "$env" && export $env
+        ?SH-PROMPT:
         [invoke start_psql pg_1 5432]
         -$fail_pattern
 
     [newshell electric]
+        !test -n "$env" && export $env
+        ?SH-PROMPT:
         [invoke start_electric 1]
         ??Successfully initialized Postgres connector "postgres_1"
         [progress setup finished]

@@ -90,6 +90,9 @@ export enum SatelliteErrorCode {
 
   // replication transform errors
   REPLICATION_TRANSFORM_ERROR,
+
+  // permissions
+  PERMISSION_DENIED,
 }
 
 export type SocketCloseReason =

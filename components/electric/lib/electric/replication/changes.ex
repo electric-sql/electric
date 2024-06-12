@@ -292,6 +292,27 @@ defmodule Electric.Replication.Changes do
     end
   end
 
+  @spec filter_changes_belonging_to_user(Transaction.t(), binary()) :: Transaction.t()
+  def filter_changes_belonging_to_user(
+        %Transaction{changes: changes, referenced_records: referenced} = tx,
+        user_id
+      ) do
+    %Transaction{
+      tx
+      | changes: Enum.filter(changes, &Changes.Ownership.change_belongs_to_user?(&1, user_id)),
+        referenced_records: filter_referenced_belonging_to_user(referenced, user_id)
+    }
+  end
+
+  defp filter_referenced_belonging_to_user(referenced_map, user_id) do
+    Map.new(referenced_map, fn {rel, items} ->
+      {rel,
+       Map.filter(items, fn {_pk, ref} ->
+         Changes.Ownership.change_belongs_to_user?(ref, user_id)
+       end)}
+    end)
+  end
+
   @spec generateTag(Transaction.t()) :: binary()
   def generateTag(%Transaction{origin: origin, commit_timestamp: tm}) do
     origin <> "@" <> Integer.to_string(DateTime.to_unix(tm, :millisecond))
