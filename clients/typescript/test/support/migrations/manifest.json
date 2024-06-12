@@ -17,9 +17,9 @@
       "name": "20230123_170646_833_test_schema",
       "postgres_body": "\nCREATE TABLE public.parent (\n  id bigint PRIMARY KEY,\n  value text,\n  other bigint DEFAULT 0);\nALTER TABLE public.parent REPLICA IDENTITY FULL;\n\nCREATE TABLE public.items (\n  value text PRIMARY KEY);\nALTER TABLE public.items REPLICA IDENTITY FULL;\n\nCREATE TABLE public.child (\n  id bigint PRIMARY KEY,\n  parent bigint NOT NULL,\n  FOREIGN KEY(parent) REFERENCES parent(id) MATCH SIMPLE);\nALTER TABLE public.child REPLICA IDENTITY FULL;\n",
       "satellite_body": [
-        "CREATE TABLE IF NOT EXISTS items (\n  value TEXT PRIMARY KEY NOT NULL\n) WITHOUT ROWID;",
-        "CREATE TABLE IF NOT EXISTS parent (\n  id INTEGER PRIMARY KEY NOT NULL,\n  value TEXT,\n  other INTEGER DEFAULT 0\n) WITHOUT ROWID;",
-        "CREATE TABLE IF NOT EXISTS child (\n  id INTEGER PRIMARY KEY NOT NULL,\n  parent INTEGER NOT NULL,\n  FOREIGN KEY(parent) REFERENCES parent(id)\n) WITHOUT ROWID;",
+        "CREATE TABLE IF NOT EXISTS items (\n  value TEXT PRIMARY KEY NOT NULL\n)",
+        "CREATE TABLE IF NOT EXISTS parent (\n  id INTEGER PRIMARY KEY NOT NULL,\n  value TEXT,\n  other INTEGER DEFAULT 0\n)",
+        "CREATE TABLE IF NOT EXISTS child (\n  id INTEGER PRIMARY KEY NOT NULL,\n  parent INTEGER NOT NULL,\n  FOREIGN KEY(parent) REFERENCES parent(id)\n)",
         "DROP TABLE IF EXISTS _electric_trigger_settings;",
         "CREATE TABLE _electric_trigger_settings(tablename TEXT PRIMARY KEY, flag INTEGER);",
         "INSERT INTO _electric_trigger_settings(tablename,flag) VALUES ('main.child', 1);",

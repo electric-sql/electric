@@ -136,7 +136,7 @@ defmodule Electric.Postgres.ReplicationTest do
                %SatOpMigrate.Stmt{
                  type: :CREATE_TABLE,
                  sql:
-                   "CREATE TABLE \"fish\" (\n  \"id\" INTEGER NOT NULL,\n  CONSTRAINT \"fish_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n"
+                   "CREATE TABLE \"fish\" (\n  \"id\" INTEGER NOT NULL,\n  CONSTRAINT \"fish_pkey\" PRIMARY KEY (\"id\")\n)\n"
                }
              ]
 
@@ -175,7 +175,7 @@ defmodule Electric.Postgres.ReplicationTest do
                %SatOpMigrate.Stmt{
                  type: :CREATE_TABLE,
                  sql:
-                   "CREATE TABLE \"front\" (\n  \"id\" INTEGER NOT NULL,\n  \"frog_id\" INTEGER NOT NULL,\n  CONSTRAINT \"front_frog_id_fkey\" FOREIGN KEY (\"frog_id\") REFERENCES \"fish\" (\"id\"),\n  CONSTRAINT \"front_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n"
+                   "CREATE TABLE \"front\" (\n  \"id\" INTEGER NOT NULL,\n  \"frog_id\" INTEGER NOT NULL,\n  CONSTRAINT \"front_frog_id_fkey\" FOREIGN KEY (\"frog_id\") REFERENCES \"fish\" (\"id\"),\n  CONSTRAINT \"front_pkey\" PRIMARY KEY (\"id\")\n)\n"
                }
              ]
 
@@ -345,7 +345,7 @@ defmodule Electric.Postgres.ReplicationTest do
                %SatOpMigrate.Stmt{
                  type: :CREATE_TABLE,
                  sql:
-                   "CREATE TABLE \"wall\" (\n  \"id\" INTEGER NOT NULL,\n  \"finish\" TEXT,\n  CONSTRAINT \"wall_pkey\" PRIMARY KEY (\"id\")\n) WITHOUT ROWID;\n"
+                   "CREATE TABLE \"wall\" (\n  \"id\" INTEGER NOT NULL,\n  \"finish\" TEXT,\n  CONSTRAINT \"wall_pkey\" PRIMARY KEY (\"id\")\n)\n"
                }
              ]
 

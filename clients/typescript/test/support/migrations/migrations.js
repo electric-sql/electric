@@ -16,11 +16,11 @@ export default [
   },
   {
     statements: [
-      'CREATE TABLE IF NOT EXISTS items (\n  value TEXT PRIMARY KEY NOT NULL\n) WITHOUT ROWID;',
-      'CREATE TABLE IF NOT EXISTS bigIntTable (\n  value INT8 PRIMARY KEY NOT NULL\n) WITHOUT ROWID;',
-      'CREATE TABLE IF NOT EXISTS blobTable (\n  value BLOB PRIMARY KEY NOT NULL\n) WITHOUT ROWID;',
-      'CREATE TABLE IF NOT EXISTS parent (\n  id INTEGER PRIMARY KEY NOT NULL,\n  value TEXT,\n  other INTEGER DEFAULT 0\n) WITHOUT ROWID;',
-      'CREATE TABLE IF NOT EXISTS child (\n  id INTEGER PRIMARY KEY NOT NULL,\n  parent INTEGER NOT NULL,\n  FOREIGN KEY(parent) REFERENCES parent(id)\n) WITHOUT ROWID;',
+      'CREATE TABLE IF NOT EXISTS items (\n  value TEXT PRIMARY KEY NOT NULL\n)',
+      'CREATE TABLE IF NOT EXISTS bigIntTable (\n  value INT8 PRIMARY KEY NOT NULL\n)',
+      'CREATE TABLE IF NOT EXISTS blobTable (\n  value BLOB PRIMARY KEY NOT NULL\n)',
+      'CREATE TABLE IF NOT EXISTS parent (\n  id INTEGER PRIMARY KEY NOT NULL,\n  value TEXT,\n  other INTEGER DEFAULT 0\n)',
+      'CREATE TABLE IF NOT EXISTS child (\n  id INTEGER PRIMARY KEY NOT NULL,\n  parent INTEGER NOT NULL,\n  FOREIGN KEY(parent) REFERENCES parent(id)\n)',
       'DROP TABLE IF EXISTS _electric_trigger_settings;',
       'CREATE TABLE _electric_trigger_settings(namespace TEXT, tablename TEXT, flag INTEGER, PRIMARY KEY (namespace, tablename));',
       "INSERT INTO _electric_trigger_settings(namespace,tablename,flag) VALUES ('main', 'child', 1);",
