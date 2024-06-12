@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "better-sqlite3": "^9.2.2",
-    "electric-sql": "^0.11.3"
+    "electric-sql": "^0.12.0"
   },
   "devDependencies": {
     "@databases/pg-migrations": "^5.0.2",
