@@ -31,11 +31,7 @@ export const makeMigrationMetaData = (builder: QueryBuilder) => {
           stmts: [
             SatOpMigrate_Stmt.fromPartial({
               type: SatOpMigrate_Type.CREATE_TABLE,
-              sql: `CREATE TABLE "${
-                builder.defaultNamespace
-              }"."stars" (\n  "id" TEXT NOT NULL PRIMARY KEY,\n  "avatar_url" TEXT NOT NULL,\n  "name" TEXT,\n  "starred_at" TEXT NOT NULL,\n  "username" TEXT NOT NULL\n)${builder.sqliteOnly(
-                ' WITHOUT ROWID'
-              )};\n`,
+              sql: `CREATE TABLE "${builder.defaultNamespace}"."stars" (\n  "id" TEXT NOT NULL PRIMARY KEY,\n  "avatar_url" TEXT NOT NULL,\n  "name" TEXT,\n  "starred_at" TEXT NOT NULL,\n  "username" TEXT NOT NULL\n);\n`,
             }),
           ],
           table: SatOpMigrate_Table.fromPartial({
@@ -118,11 +114,7 @@ export const builderTests = (test: TestFn<ContextType>) => {
     t.is(migration.version, migrationMetaData.version)
     t.is(
       migration.statements[0],
-      `CREATE TABLE "${
-        builder.defaultNamespace
-      }"."stars" (\n  "id" TEXT NOT NULL PRIMARY KEY,\n  "avatar_url" TEXT NOT NULL,\n  "name" TEXT,\n  "starred_at" TEXT NOT NULL,\n  "username" TEXT NOT NULL\n)${builder.sqliteOnly(
-        ' WITHOUT ROWID'
-      )};\n`
+      `CREATE TABLE "${builder.defaultNamespace}"."stars" (\n  "id" TEXT NOT NULL PRIMARY KEY,\n  "avatar_url" TEXT NOT NULL,\n  "name" TEXT,\n  "starred_at" TEXT NOT NULL,\n  "username" TEXT NOT NULL\n);\n`
     )
 
     if (builder.dialect === 'SQLite') {
