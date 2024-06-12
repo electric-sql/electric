@@ -1,5 +1,11 @@
 # create-electric-app
 
+## 0.3.3
+
+### Patch Changes
+
+- 81b1d00: Update starter templates to use `electric-sql` version `0.12.x`
+
 ## 0.3.2
 
 ### Patch Changes
