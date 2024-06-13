@@ -1491,18 +1491,19 @@ export function deserializeRow(
   if (row === undefined) {
     return undefined
   }
-  return Object.fromEntries(
-    relation.columns.map((c, i) => {
-      let value
-      if (getMaskBit(row.nullsBitmask, i) === 1) {
-        value = null
-      } else {
-        const pgColumnType = getColumnType(dbDescription, relation.table, c)
-        value = deserializeColumnData(row.values[i], pgColumnType, decoder)
-      }
-      return [c.name, value]
-    })
-  )
+  return relation.columns.reduce((deserializedRow, c, i) => {
+    if (getMaskBit(row.nullsBitmask, i) === 1) {
+      deserializedRow[c.name] = null
+    } else {
+      const pgColumnType = getColumnType(dbDescription, relation.table, c)
+      deserializedRow[c.name] = deserializeColumnData(
+        row.values[i],
+        pgColumnType,
+        decoder
+      )
+    }
+    return deserializedRow
+  }, {} as DbRecord)
 }
 
 function calculateNumBytes(column_num: number): number {
