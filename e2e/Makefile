@@ -25,7 +25,12 @@ test-satellite-only:
 	${LUX} --junit tests/03.*.lux
 
 test-perftest:
-	LUX="${LUX}" ./perftest_initial_sync.sh
+	NUM_USERS=100000 \
+	NUM_PROJECTS=100000 \
+	NUM_MEMBERS=10000 \
+	NUM_TASKS=10000 \
+	LOG_LEVEL=info \
+  ${LUX} --junit load-testing/07.02_initial_sync_to_node_satellite.lux
 
 pull:
 	docker compose -f services_templates.yaml pull \

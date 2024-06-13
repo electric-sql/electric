@@ -41,7 +41,14 @@ const addConsoleExporter = () => {
 let otlpExporterAddded = false
 const addOTLPExporter = () => {
   if (otlpExporterAddded) return
-  provider.addSpanProcessor(new BatchSpanProcessor(new OTLPTraceExporter()))
+  const exporter = new OTLPTraceExporter({
+    url: 'http://otel-collector:4318/v1/traces',
+  })
+  console.log(exporter)
+
+  provider.addSpanProcessor(
+    new BatchSpanProcessor(exporter, { scheduledDelayMillis: 1000 })
+  )
   otlpExporterAddded = true
 }
 

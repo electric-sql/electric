@@ -22,29 +22,45 @@ defmodule Electric.Telemetry.OpenTelemetry do
   end
 
   def async_fun(span_ctx \\ nil, name, attributes, fun) do
-    wrap_fun_with_context(span_ctx, fn -> with_span(name, attributes, fun) end)
+    wrap_fun_with_span_context(span_ctx, fn -> with_span(name, attributes, fun) end)
   end
 
   def add_span_attributes(span_ctx \\ nil, attributes) do
-    span_ctx = span_ctx || get_current_context()
+    span_ctx = span_ctx || get_current_span_context()
     :otel_span.set_attributes(span_ctx, attributes)
   end
 
-  def get_current_context do
+  def get_current_span_context do
+    IO.puts("current otel_ctx: #{inspect(:otel_ctx.get_current())}")
+    IO.puts("current span_ctx: #{inspect(:otel_tracer.current_span_ctx())}")
+    IO.inspect(:otel_propagator_text_map.inject([]))
+
+    IO.inspect(
+      :otel_propagator_text_map.extract([
+        {"traceparent", "00-cd2a0aa88c218bb3730612cc4cfb5687-297a51c6adc7c0b0-01"}
+      ])
+    )
+
     :otel_tracer.current_span_ctx()
+  end
+
+  def set_current_trace_context(traceparent) do
+    traceparent
+    |> :otel_propagator_text_map.extract()
+    |> :otel_ctx.attach()
   end
 
   # Set the span on otel_ctx of the current process to `span_ctx`, so that subsequent `with_span()`
   # calls are registered as its child.
-  def set_current_context(span_ctx) do
+  def set_current_span_context(span_ctx) do
     :otel_tracer.set_current_span(span_ctx)
   end
 
-  def wrap_fun_with_context(span_ctx \\ nil, fun) do
-    span_ctx = span_ctx || get_current_context()
+  def wrap_fun_with_span_context(span_ctx \\ nil, fun) do
+    span_ctx = span_ctx || get_current_span_context()
 
     fn ->
-      set_current_context(span_ctx)
+      set_current_span_context(span_ctx)
       fun.()
     end
   end
@@ -64,7 +80,11 @@ defmodule Electric.Telemetry.OpenTelemetry do
        Exception.format_stacktrace(stacktrace)}
     ]
 
-    :otel_span.add_event(get_current_context(), "exception", semantic_attributes ++ attributes)
+    :otel_span.add_event(
+      get_current_span_context(),
+      "exception",
+      semantic_attributes ++ attributes
+    )
   end
 
   def handle_poller_event(event, measurements, _metadata, nil) do
