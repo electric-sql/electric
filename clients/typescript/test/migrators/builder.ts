@@ -438,7 +438,7 @@ export const builderTests = (test: TestFn<ContextType>) => {
 
     t.deepEqual(stmts, [
       {
-        sql: `DELETE FROM test WHERE ("a" = ${posArgs[0]} AND "b" = ${posArgs[1]}) OR  ("a" = ${posArgs[2]} AND "b" = ${posArgs[3]})`,
+        sql: `DELETE FROM test WHERE ("a" = ${posArgs[0]} AND "b" = ${posArgs[1]}) OR ("a" = ${posArgs[2]} AND "b" = ${posArgs[3]})`,
 
         args: [1, 2, 3, 4],
       },
@@ -470,7 +470,7 @@ export const builderTests = (test: TestFn<ContextType>) => {
 
     t.deepEqual(stmts, [
       {
-        sql: `DELETE FROM test WHERE ("b" = ${posArgs[0]} AND "a" = ${posArgs[1]}) OR  ("b" = ${posArgs[2]} AND "a" = ${posArgs[3]})`,
+        sql: `DELETE FROM test WHERE ("b" = ${posArgs[0]} AND "a" = ${posArgs[1]}) OR ("b" = ${posArgs[2]} AND "a" = ${posArgs[3]})`,
         args: [2, 1, 4, 3],
       },
       {

@@ -349,7 +349,6 @@ export abstract class QueryBuilder {
       }
 
       const args = []
-
       for (let i = 0; i < currentInsertCount; i++) {
         for (let j = 0; j < columnCount; j++) {
           args.push(records[processed + i][columns[j]] as SqlValue)
@@ -387,38 +386,50 @@ export abstract class QueryBuilder {
     const stmts: Statement[] = []
     const columnCount = columns.length
     const recordCount = records.length
-    let processed = 0
-    let positionalParam = 1
-    const pos = (i: number) => this.makePositionalParam(i)
-    const makeWherePattern = () => {
-      const columnComparisons = Array.from(
-        { length: columnCount },
-        (_, i) => `"${columns[i] as string}" = ${pos(positionalParam++)}`
-      )
-
-      return ` (${columnComparisons.join(' AND ')})`
-    }
-
     // Amount of rows we can delete at once
     const batchMaxSize = Math.floor(maxParameters / columnCount)
+
+    // keep a temporary join array for joining strings, to avoid
+    // the overhead of generating a new array every time
+    const tempColumnComparisonJoinArr = Array.from({ length: columnCount })
+
+    let processed = 0
+    let prevDeleteCount = -1
+    let deletePattern = ''
     while (processed < recordCount) {
-      positionalParam = 1 // start counting parameters from 1 again
       const currentDeleteCount = Math.min(recordCount - processed, batchMaxSize)
-      let sql =
-        baseSql +
-        Array.from({ length: currentDeleteCount }, makeWherePattern).join(
-          ' OR '
-        )
+
+      // cache delete pattern as it is going to be the same for every batch
+      // of `batchMaxSize` - ideally we can externalize this cache since for a
+      // given adapter this is _always_ going to be the same
+      if (currentDeleteCount !== prevDeleteCount) {
+        deletePattern = Array.from(
+          { length: currentDeleteCount },
+          (_, recordIdx) => {
+            for (let i = 0; i < columnCount; i++) {
+              tempColumnComparisonJoinArr[i] = `"${
+                columns[i] as string
+              }" = ${this.makePositionalParam(recordIdx * columnCount + i + 1)}`
+            }
+            return ` (${tempColumnComparisonJoinArr.join(' AND ')})`
+          }
+        ).join(' OR')
+      }
+      let sql = baseSql + deletePattern
 
       if (suffixSql !== '') {
         sql += ' ' + suffixSql
       }
 
-      const args = records
-        .slice(processed, processed + currentDeleteCount)
-        .flatMap((record) => columns.map((col) => record[col] as SqlValue))
+      const args = []
+      for (let i = 0; i < currentDeleteCount; i++) {
+        for (let j = 0; j < columnCount; j++) {
+          args.push(records[processed + i][columns[j]] as SqlValue)
+        }
+      }
 
       processed += currentDeleteCount
+      prevDeleteCount = currentDeleteCount
       stmts.push({ sql, args })
     }
     return stmts
