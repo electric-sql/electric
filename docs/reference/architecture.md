@@ -92,18 +92,15 @@ ElectricSQL aims to provide **finality** of local writes. That is to say: valid 
 
 Whilst local writes are final, they are still subject to concurrent merge semantics. One way to understand this is that writes are always *factored in* to the history, even if their operations are actually overridden by the semantics of the conflict resolution logic.
 
-
 ### Streaming into Electric
 
-When the local database migrations are generated from the Postgres DDL changes, triggers are added that automatically copy insert, update and delete operations on the tables to the "oplog" table. The satellite process then processes these operations by sending them to the Electric server over the Satellite protocol. Electric then applies server-side validation and authorisation before sending on to Postgres over the incoming logical-replication stream.
+When the local database migrations are generated from the Postgres DDL changes, triggers are added that automatically copy insert, update and delete operations on the tables to the "oplog" table. The satellite process then processes these operations by sending them to the Electric server over the Satellite protocol.
 
-:::note
-Electric acts as a [logical replication publisher](https://www.postgresql.org/docs/current/logical-replication.html). This is why you configure a `LOGICAL_PUBLISHER_HOST` when deploying the Electric sync service -- so that Postgres can connect to consume inbound logical replication.
-:::
+Electric then applies server-side validation and authorisation before writing into Postgres using the [`ELECTRIC_WRITE_TO_PG_MODE`](../api/service#write-to-pg-mode).
 
 ### Streaming into Postgres
 
-When you electrify a table in the Postgres DDL schema, this installs triggers that handle insert, update and delete operations. When Postgres applies the operations from the inbound logical replication stream, these triggers fire and run database-side merge logic.
+When you electrify a table in the Postgres DDL schema, this installs triggers that handle insert, update and delete operations. When Postgres applies writes from the Electric sync service, these triggers fire and run database-side merge logic.
 
 ### Direct writes to Postgres
 

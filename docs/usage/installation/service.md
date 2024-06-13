@@ -11,11 +11,17 @@ You can run the [pre-packaged Docker images](#images) published on Docker Hub, o
 
 ## Configuration
 
-The Electric sync service is configured using environment variables. The three required variables are:
+The Electric sync service is configured using environment variables. The required variables are:
 
 - `DATABASE_URL` in the format of a Postgres [Connection URI](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING-URIS)
-- either `LOGICAL_PUBLISHER_HOST` that the sync service is running on (must be accessible from the Postgres instance to establish an inbound replication subscription) or set `ELECTRIC_WRITE_TO_PG_MODE=direct_writes`
 - `PG_PROXY_PASSWORD` to safe-guard access to the [Migrations proxy](../data-modelling/migrations.md#migrations-proxy)
+
+Plus depending on your [Write to PG mode](../../api/service#write-to-pg-mode) you must either:
+
+- set `ELECTRIC_WRITE_TO_PG_MODE=direct_writes`; or
+- set `LOGICAL_PUBLISHER_HOST` to a hostname that the Postgres can connect to the sync service on
+
+For example:
 
 ```shell
 DATABASE_URL="postgresql://user:password@localhost:5432/electric"
