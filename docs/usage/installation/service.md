@@ -14,12 +14,12 @@ You can run the [pre-packaged Docker images](#images) published on Docker Hub, o
 The Electric sync service is configured using environment variables. The three required variables are:
 
 - `DATABASE_URL` in the format of a Postgres [Connection URI](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING-URIS)
-- `LOGICAL_PUBLISHER_HOST` that the sync service is running on (must be accessible from the Postgres instance to establish an inbound replication subscription)
+- either `LOGICAL_PUBLISHER_HOST` that the sync service is running on (must be accessible from the Postgres instance to establish an inbound replication subscription) or set `ELECTRIC_WRITE_TO_PG_MODE=direct_writes`
 - `PG_PROXY_PASSWORD` to safe-guard access to the [Migrations proxy](../data-modelling/migrations.md#migrations-proxy)
 
 ```shell
 DATABASE_URL="postgresql://user:password@localhost:5432/electric"
-LOGICAL_PUBLISHER_HOST="localhost"
+ELECTRIC_WRITE_TO_PG_MODE="direct_writes"
 PG_PROXY_PASSWORD="..."
 ```
 
@@ -34,7 +34,7 @@ Pre-packaged images are available on Docker Hub at [electricsql/electric](https:
 ```shell
 docker run \
     -e "DATABASE_URL=postgresql://..." \
-    -e "LOGICAL_PUBLISHER_HOST=..." \
+    -e "ELECTRIC_WRITE_TO_PG_MODE=direct_writes" \
     -e "PG_PROXY_PASSWORD=..." \
     -e "AUTH_MODE=insecure" \
     -p 5133:5133 \
@@ -75,7 +75,7 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:pg_password@pg/postgres
       DATABASE_REQUIRE_SSL: false
-      LOGICAL_PUBLISHER_HOST: electric
+      ELECTRIC_WRITE_TO_PG_MODE: direct_writes
       PG_PROXY_PASSWORD: proxy_password
       AUTH_MODE: insecure
     ports:
@@ -103,7 +103,7 @@ Then run:
 ```shell
 docker run \
     -e "DATABASE_URL=postgresql://..." \
-    -e "LOGICAL_PUBLISHER_HOST=..." \
+    -e "ELECTRIC_WRITE_TO_PG_MODE=direct_writes" \
     -e "PG_PROXY_PASSWORD=..." \
     -e "AUTH_MODE=insecure" \
     -p 5133:5133 \

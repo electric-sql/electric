@@ -35,8 +35,8 @@ spec:
         env:
         - name: DATABASE_URL
           value: "postgresql://..."
-        - name: LOGICAL_PUBLISHER_HOST
-          value: "..."
+        - name: ELECTRIC_WRITE_TO_PG_MODE
+          value: "direct_writes"
         - name: PG_PROXY_PASSWORD
           value: "..."
         - name: AUTH_JWT_ALG
