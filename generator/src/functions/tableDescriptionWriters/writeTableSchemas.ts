@@ -102,7 +102,12 @@ export function writeFieldsMap(
   const fieldsWithoutRelations = model.fields.filter(
     (f) => model.relationFields.indexOf(f) === -1
   )
-  const fields = Object.fromEntries(fieldsWithoutRelations.map(field => [field.name, pgType(field, model.name)]))
+  const fields = Object.fromEntries(
+    fieldsWithoutRelations.map((field) => [
+      field.name,
+      pgType(field, model.name),
+    ])
+  )
   const serializedFields = JSON.stringify(fields, null, 2)
   fileWriter.writer.write(`${serializedFields},`)
 }
