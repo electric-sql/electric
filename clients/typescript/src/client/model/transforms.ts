@@ -129,6 +129,13 @@ export function setReplicationTransform<
   // forbid transforming relation keys to avoid breaking
   // referential integrity
   const tableName = qualifiedTableName.tablename
+
+  if (!dbDescription.hasTable(tableName)) {
+    throw new Error(
+      `Cannot set replication transform for table '${tableName}'. Table does not exist in the database schema.`
+    )
+  }
+
   const relations = dbDescription.getRelations(tableName)
   const fields = dbDescription.getFields(tableName)
   const immutableFields = relations.map((r) => r.relationField)
