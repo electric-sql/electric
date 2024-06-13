@@ -31,11 +31,7 @@ export const makeMigrationMetaData = (builder: QueryBuilder) => {
           stmts: [
             SatOpMigrate_Stmt.fromPartial({
               type: SatOpMigrate_Type.CREATE_TABLE,
-              sql: `CREATE TABLE "${
-                builder.defaultNamespace
-              }"."stars" (\n  "id" TEXT NOT NULL PRIMARY KEY,\n  "avatar_url" TEXT NOT NULL,\n  "name" TEXT,\n  "starred_at" TEXT NOT NULL,\n  "username" TEXT NOT NULL\n)${builder.sqliteOnly(
-                ' WITHOUT ROWID'
-              )};\n`,
+              sql: `CREATE TABLE "${builder.defaultNamespace}"."stars" (\n  "id" TEXT NOT NULL PRIMARY KEY,\n  "avatar_url" TEXT NOT NULL,\n  "name" TEXT,\n  "starred_at" TEXT NOT NULL,\n  "username" TEXT NOT NULL\n);\n`,
             }),
           ],
           table: SatOpMigrate_Table.fromPartial({
@@ -118,11 +114,7 @@ export const builderTests = (test: TestFn<ContextType>) => {
     t.is(migration.version, migrationMetaData.version)
     t.is(
       migration.statements[0],
-      `CREATE TABLE "${
-        builder.defaultNamespace
-      }"."stars" (\n  "id" TEXT NOT NULL PRIMARY KEY,\n  "avatar_url" TEXT NOT NULL,\n  "name" TEXT,\n  "starred_at" TEXT NOT NULL,\n  "username" TEXT NOT NULL\n)${builder.sqliteOnly(
-        ' WITHOUT ROWID'
-      )};\n`
+      `CREATE TABLE "${builder.defaultNamespace}"."stars" (\n  "id" TEXT NOT NULL PRIMARY KEY,\n  "avatar_url" TEXT NOT NULL,\n  "name" TEXT,\n  "starred_at" TEXT NOT NULL,\n  "username" TEXT NOT NULL\n);\n`
     )
 
     if (builder.dialect === 'SQLite') {
@@ -176,7 +168,7 @@ export const builderTests = (test: TestFn<ContextType>) => {
             stmts: [
               SatOpMigrate_Stmt.fromPartial({
                 type: 0,
-                sql: `CREATE TABLE "${builder.defaultNamespace}"."tenants" (\n  "id" TEXT NOT NULL,\n  "name" TEXT NOT NULL,\n  CONSTRAINT "tenants_pkey" PRIMARY KEY ("id")\n) WITHOUT ROWID;\n`,
+                sql: `CREATE TABLE "${builder.defaultNamespace}"."tenants" (\n  "id" TEXT NOT NULL,\n  "name" TEXT NOT NULL,\n  CONSTRAINT "tenants_pkey" PRIMARY KEY ("id")\n);\n`,
               }),
             ],
             table: SatOpMigrate_Table.fromPartial({
@@ -214,7 +206,7 @@ export const builderTests = (test: TestFn<ContextType>) => {
             stmts: [
               SatOpMigrate_Stmt.fromPartial({
                 type: 0,
-                sql: `CREATE TABLE "${builder.defaultNamespace}"."users" (\n  "id" TEXT NOT NULL,\n  "name" TEXT NOT NULL,\n  "email" TEXT NOT NULL,\n  "password_hash" TEXT NOT NULL,\n  CONSTRAINT "users_pkey" PRIMARY KEY ("id")\n) WITHOUT ROWID;\n`,
+                sql: `CREATE TABLE "${builder.defaultNamespace}"."users" (\n  "id" TEXT NOT NULL,\n  "name" TEXT NOT NULL,\n  "email" TEXT NOT NULL,\n  "password_hash" TEXT NOT NULL,\n  CONSTRAINT "users_pkey" PRIMARY KEY ("id")\n);\n`,
               }),
             ],
             table: SatOpMigrate_Table.fromPartial({
@@ -268,7 +260,7 @@ export const builderTests = (test: TestFn<ContextType>) => {
             stmts: [
               SatOpMigrate_Stmt.fromPartial({
                 type: 0,
-                sql: `CREATE TABLE "${builder.defaultNamespace}"."tenant_users" (\n  "tenant_id" TEXT NOT NULL,\n  "user_id" TEXT NOT NULL,\n  CONSTRAINT "tenant_users_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "tenants" ("id") ON DELETE CASCADE,\n  CONSTRAINT "tenant_users_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users" ("id") ON DELETE CASCADE,\n  CONSTRAINT "tenant_users_pkey" PRIMARY KEY ("tenant_id", "user_id")\n) WITHOUT ROWID;\n`,
+                sql: `CREATE TABLE "${builder.defaultNamespace}"."tenant_users" (\n  "tenant_id" TEXT NOT NULL,\n  "user_id" TEXT NOT NULL,\n  CONSTRAINT "tenant_users_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "tenants" ("id") ON DELETE CASCADE,\n  CONSTRAINT "tenant_users_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users" ("id") ON DELETE CASCADE,\n  CONSTRAINT "tenant_users_pkey" PRIMARY KEY ("tenant_id", "user_id")\n);\n`,
               }),
             ],
             table: SatOpMigrate_Table.fromPartial({

@@ -122,7 +122,7 @@ defmodule Electric.Postgres.Dialect.SqliteTest do
                "i6" INTEGER,
                "i7" REAL,
                CONSTRAINT "i_pkey" PRIMARY KEY ("id")
-             ) WITHOUT ROWID;
+             );
              """
     end
 
@@ -154,7 +154,7 @@ defmodule Electric.Postgres.Dialect.SqliteTest do
                  ~s["i6" INTEGER,],
                  ~s["i7" REAL,],
                  ~s[CONSTRAINT "i_pkey" PRIMARY KEY ("id")],
-                 ~s[) WITHOUT ROWID;]
+                 ~s[);]
                ])
     end
 
@@ -169,7 +169,7 @@ defmodule Electric.Postgres.Dialect.SqliteTest do
              CREATE TABLE IF NOT EXISTS "i" (
                "id" INTEGER NOT NULL,
                CONSTRAINT "i_pkey" PRIMARY KEY ("id")
-             ) WITHOUT ROWID;
+             );
              """
     end
 
@@ -186,7 +186,7 @@ defmodule Electric.Postgres.Dialect.SqliteTest do
              CREATE TABLE "i" (
                "id" INTEGER NOT NULL,
                CONSTRAINT "i_pkey" PRIMARY KEY ("id")
-             ) WITHOUT ROWID;
+             );
              """
     end
 
@@ -205,7 +205,7 @@ defmodule Electric.Postgres.Dialect.SqliteTest do
                "id" INTEGER NOT NULL,
                "name" TEXT(256) NOT NULL,
                CONSTRAINT "i_pkey" PRIMARY KEY ("id")
-             ) WITHOUT ROWID;
+             );
              """
     end
 
@@ -230,7 +230,7 @@ defmodule Electric.Postgres.Dialect.SqliteTest do
                CONSTRAINT "i_j_id_fkey" FOREIGN KEY ("j_id") REFERENCES "j" ("id") ON DELETE CASCADE ON UPDATE SET DEFAULT,
                CONSTRAINT "i_j_id2_fkey" FOREIGN KEY ("j_id2") REFERENCES "j" ("id"),
                CONSTRAINT "i_pkey" PRIMARY KEY ("id")
-             ) WITHOUT ROWID;
+             );
              """
     end
 
@@ -258,7 +258,7 @@ defmodule Electric.Postgres.Dialect.SqliteTest do
                CONSTRAINT "starts" CHECK ((substring("c3", 1, 3) == 'his')),
                CONSTRAINT "percent" CHECK ((("c2" >= 0) AND ("c2" <= 100))),
                CONSTRAINT "i_pkey" PRIMARY KEY ("id")
-             ) WITHOUT ROWID;
+             );
              """
     end
 
@@ -278,7 +278,7 @@ defmodule Electric.Postgres.Dialect.SqliteTest do
                "c1" INTEGER,
                CONSTRAINT "i_pkey" PRIMARY KEY ("id"),
                CONSTRAINT "i_c1_key" UNIQUE ("c1")
-             ) WITHOUT ROWID;
+             );
              """
     end
 
@@ -301,7 +301,7 @@ defmodule Electric.Postgres.Dialect.SqliteTest do
                "c2" INTEGER,
                CONSTRAINT "i_pkey" PRIMARY KEY ("id"),
                CONSTRAINT "i_c1_c2_key" UNIQUE ("c1", "c2")
-             ) WITHOUT ROWID;
+             );
              """
     end
 
@@ -336,7 +336,7 @@ defmodule Electric.Postgres.Dialect.SqliteTest do
                "c8" INTEGER DEFAULT (CAST('13' AS INTEGER)),
                "c9" TEXT DEFAULT current_timestamp,
                CONSTRAINT "i_pkey" PRIMARY KEY ("id")
-             ) WITHOUT ROWID;
+             );
              """
     end
 
@@ -364,7 +364,7 @@ defmodule Electric.Postgres.Dialect.SqliteTest do
                "vv1" TEXT GENERATED ALWAYS AS ("v1" || "v2") STORED,
                "vv2" TEXT GENERATED ALWAYS AS (coalesce(upper("v1"), '') || coalesce(ltrim("v2", 'x'), '') || coalesce("v3", '')) STORED,
                CONSTRAINT "i_pkey" PRIMARY KEY ("id")
-             ) WITHOUT ROWID;
+             );
              """
     end
   end
@@ -465,7 +465,7 @@ defmodule Electric.Postgres.Dialect.SqliteTest do
                "id" INTEGER NOT NULL,
                "k" INTEGER DEFAULT '0' NOT NULL,
                CONSTRAINT "i_pkey" PRIMARY KEY ("id")
-             ) WITHOUT ROWID;
+             );
              """
     end
   end

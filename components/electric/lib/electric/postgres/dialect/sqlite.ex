@@ -77,7 +77,7 @@ defmodule Electric.Postgres.Dialect.SQLite do
           "("
         ]),
         stmt(defn, join, pretty),
-        ") WITHOUT ROWID;",
+        ");",
         ""
       ],
       if(pretty, do: "\n", else: "")

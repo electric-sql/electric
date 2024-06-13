@@ -438,7 +438,7 @@ test.serial('migration transaction contains all information', async (t) => {
     stmts: [
       Proto.SatOpMigrate_Stmt.create({
         type: Proto.SatOpMigrate_Type.CREATE_TABLE,
-        sql: 'CREATE TABLE "foo" (\n  "value" TEXT NOT NULL,\n  CONSTRAINT "foo_pkey" PRIMARY KEY ("value")\n) WITHOUT ROWID;\n',
+        sql: 'CREATE TABLE "foo" (\n  "value" TEXT NOT NULL,\n  CONSTRAINT "foo_pkey" PRIMARY KEY ("value")\n);\n',
       }),
     ],
     table: Proto.SatOpMigrate_Table.create({
@@ -485,7 +485,7 @@ test.serial('migration transaction contains all information', async (t) => {
           {
             migrationType: Proto.SatOpMigrate_Type.CREATE_TABLE,
             table: migrate.table,
-            sql: 'CREATE TABLE "foo" (\n  "value" TEXT NOT NULL,\n  CONSTRAINT "foo_pkey" PRIMARY KEY ("value")\n) WITHOUT ROWID;\n',
+            sql: 'CREATE TABLE "foo" (\n  "value" TEXT NOT NULL,\n  CONSTRAINT "foo_pkey" PRIMARY KEY ("value")\n);\n',
           },
         ],
         origin: begin.origin,

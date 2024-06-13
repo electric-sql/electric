@@ -33,7 +33,7 @@ async function runAndCheckNotifications(f: () => Promise<void>) {
 async function cleanDB() {
   await adapter.run({ sql: 'DROP TABLE IF EXISTS Items' })
   await adapter.run({
-    sql: 'CREATE TABLE IF NOT EXISTS Items (value TEXT PRIMARY KEY NOT NULL, nbr INTEGER) WITHOUT ROWID;',
+    sql: 'CREATE TABLE IF NOT EXISTS Items (value TEXT PRIMARY KEY NOT NULL, nbr INTEGER);',
   })
 }
 
