@@ -23,7 +23,7 @@ docker pull electricsql/electric:latest
 docker run \
     -e "DATABASE_URL=postgresql://..." \
     -e "DATABASE_REQUIRE_SSL=false \
-    -e "LOGICAL_PUBLISHER_HOST=..." \
+    -e "ELECTRIC_WRITE_TO_PG_MODE=direct_writes" \
     -e "PG_PROXY_PASSWORD=..." \
     -e "AUTH_MODE=insecure" \
     -p 5133:5133 \

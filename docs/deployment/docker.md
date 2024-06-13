@@ -12,7 +12,7 @@ See <DocPageLink path="usage/installation/service" /> to get familiar with confi
 ```shell
 docker run \
     -e "DATABASE_URL=postgresql://..." \
-    -e "LOGICAL_PUBLISHER_HOST=..." \
+    -e "ELECTRIC_WRITE_TO_PG_MODE=direct_writes" \
     -e "PG_PROXY_PASSWORD=..." \
     -e "AUTH_JWT_ALG=HS512" \
     -e "AUTH_JWT_KEY=..." \
