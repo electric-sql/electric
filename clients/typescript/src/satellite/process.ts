@@ -660,10 +660,12 @@ export class SatelliteProcess implements Satellite {
           rowids: [],
           recordChanges: records.map((change) => {
             return {
-              primaryKey: Object.fromEntries(
-                primaryKeyColNames.map((col_name) => {
-                  return [col_name, change[col_name]]
-                })
+              primaryKey: primaryKeyColNames.reduce(
+                (primaryKeyRec, col_name) => {
+                  primaryKeyRec[col_name] = change[col_name]
+                  return primaryKeyRec
+                },
+                {} as typeof change
               ),
               type: 'INITIAL',
             }
