@@ -1,4 +1,4 @@
-lockfileVersion: '6.1'
+lockfileVersion: '6.0'
 
 settings:
   autoInstallPeers: true
@@ -430,6 +430,9 @@ importers:
       pg:
         specifier: ^8.11.3
         version: 8.11.5
+      ts-dedent:
+        specifier: ^2.2.0
+        version: 2.2.0
       uuid:
         specifier: ^9.0.0
         version: 9.0.1

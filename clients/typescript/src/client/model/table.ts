@@ -47,7 +47,7 @@ import { IReplicationTransformManager } from './transforms'
 import { InputTransformer } from '../conversions/input'
 import { Dialect } from '../../migrators/query-builder/builder'
 
-type AnyTable = Table<any, any, any, any, any, any, any, any, any, HKT>
+export type AnyTable = Table<any, any, any, any, any, any, any, any, any, HKT>
 
 export class Table<
   T extends Record<string, any>,

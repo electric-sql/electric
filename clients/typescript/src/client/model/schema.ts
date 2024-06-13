@@ -76,10 +76,20 @@ export type ExtendedTableSchema<
   incomingRelations: Relation[]
 }
 
-export type TableSchemas = Record<
-  TableName,
-  TableSchema<any, any, any, any, any, any, any, any, any, HKT>
+export type AnyTableSchema = TableSchema<
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  HKT
 >
+
+export type TableSchemas = Record<TableName, AnyTableSchema>
 
 export type ExtendedTableSchemas = Record<
   TableName,

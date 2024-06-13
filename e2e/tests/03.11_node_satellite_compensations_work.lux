@@ -19,13 +19,7 @@
     !await db.db.unsafeExec({sql: "UPDATE _electric_meta SET value = 1 WHERE key = 'compensations' RETURNING *"})
     ?$node
 
-    """!await db.db.items.create({
-      data: {
-        id: "00000000-0000-0000-0000-000000000001",
-        content: "hello world"
-      }
-    })
-    """
+    !await client.insert_item(db, "00000000-0000-0000-0000-000000000001", "hello world")
     ??[proto] send: #SatOpLog
     ??[proto] recv: #SatOpLog
 
@@ -40,14 +34,7 @@
 [shell satellite_1]
     # On a disconnected client, insert a dependent row
     ?$node
-    """!await db.db.other_items.create({
-      data: {
-        id: "other_test_id_1",
-        content: "",
-        item_id: "00000000-0000-0000-0000-000000000001"
-      }
-    })
-    """
+    !await client.insert_other_item(db, "other_test_id_1", "", "00000000-0000-0000-0000-000000000001")
     ?$node
 
 

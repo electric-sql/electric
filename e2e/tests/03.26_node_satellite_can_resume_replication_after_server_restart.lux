@@ -73,10 +73,10 @@
 
 [shell satellite_2]
     # Subscribe to "items" and include "other_items"
-    !const { synced } = await db.db.items.sync({ \
+    !await client.syncTableWithShape(db, "items", { \
        where: "this.content like 'items-_-'", \
        include: { other_items: true } \
-     }); await synced
+     })
 
     ?send: #SatSubsReq\{id: ([a-f0-9-]{36})
     [global client_2_subs_id=$1]

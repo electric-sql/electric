@@ -61,7 +61,7 @@
     -
     # Can't write invalid uuids to the DB
     # the uuid below has one digit too many in the last part
-    !await client.write_uuid(db, '09e3e433-e9f1-46b4-a18f-1e4e0b6c62789')
+    !await client.write_invalid_uuid(db, '09e3e433-e9f1-46b4-a18f-1e4e0b6c62789')
     """??
     Uncaught:
     [
