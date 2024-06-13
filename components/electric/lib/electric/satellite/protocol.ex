@@ -96,27 +96,24 @@ defmodule Electric.Satellite.Protocol do
   def handle_rpc_request(%SatAuthReq{id: client_id, token: token}, state)
       when auth_passed?(state) and client_id === state.client_id and token != "" do
     # Request to renew auth token
-    with {:ok, auth} <- Electric.Satellite.Auth.validate_token(token, state.auth_provider) do
-      if auth.user_id != state.auth.user_id do
-        # cannot change user ID on renewal
-        Logger.warning("Client authentication failed: can't change user ID on renewal")
-        {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
-      else
+    case Electric.Satellite.Auth.validate_token(token, state.auth_provider) do
+      {:ok, auth} when auth.user_id == state.auth.user_id ->
         Logger.info("Successfully renewed the token")
+
         # cancel the old expiration timer and schedule a new one
         state =
           %State{state | auth: auth}
           |> reschedule_auth_expiration(auth.expires_at)
 
         {:reply, %SatAuthResp{id: Electric.instance_id()}, state}
-      end
-    else
-      {:error, %Electric.Satellite.Auth.TokenError{message: message}} ->
-        Logger.warning("Client authentication failed: #{message}")
+
+      {:ok, auth} when auth.user_id != state.auth.user_id ->
+        # cannot change user ID on renewal
+        Logger.warning("Client authentication failed: can't change user ID on renewal")
         {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
 
-      {:error, reason} ->
-        Logger.error("Client authentication failed: #{inspect(reason)}")
+      {:error, %Electric.Satellite.Auth.TokenError{message: message}} ->
+        Logger.warning("Client authentication failed: #{message}")
         {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
     end
   end
@@ -153,15 +150,6 @@ defmodule Electric.Satellite.Protocol do
 
         {:error,
          start_replication_error(:MALFORMED_LSN, "Could not validate start replication request")}
-
-      {:error, reason} ->
-        Logger.warning("Bad start replication request: #{inspect(reason)}")
-
-        {:error,
-         start_replication_error(
-           :CODE_UNSPECIFIED,
-           "Could not validate start replication request"
-         )}
     end
   end
 
