@@ -393,11 +393,12 @@ export function extractPK(c: DataChange) {
   const columnValues = c.record ? c.record : c.oldRecord!
 
   return primaryKeyToStr(
-    Object.fromEntries(
-      c.relation.columns
-        .filter((c) => c.primaryKey)
-        .map((col) => [col.name, columnValues[col.name]!])
-    )
+    c.relation.columns
+      .filter((c) => c.primaryKey)
+      .reduce((primaryKeyRec, col) => {
+        primaryKeyRec[col.name] = columnValues[col.name]!
+        return primaryKeyRec
+      }, {} as Record<string, boolean | string | number | Uint8Array>)
   )
 }
 
