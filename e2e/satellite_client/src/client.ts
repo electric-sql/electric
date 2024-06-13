@@ -1114,24 +1114,36 @@ const delete_other_item_raw = async (electric: Electric, keys: [string]) => {
 
 export const delete_other_item = withDal ? delete_other_item_dal : delete_other_item_raw
 
-export const set_item_replication_transform = (electric: Electric) => {
-  electric.db.items.setReplicationTransform({
-    transformOutbound: (item) => ({
-      ...item,
-      content: item.content
-        .split('')
-        .map((char) => String.fromCharCode(char.charCodeAt(0) + 1))
-        .join(''),
-    }),
-    transformInbound: (item) => ({
-      ...item,
-      content: item.content
-        .split('')
-        .map((char) => String.fromCharCode(char.charCodeAt(0) - 1))
-        .join(''),
-    }),
-  })
+const replicationTransformer = {
+  transformOutbound: (item: Readonly<Item>) => ({
+    ...item,
+    content: item.content
+      .split('')
+      .map((char) => String.fromCharCode(char.charCodeAt(0) + 1))
+      .join(''),
+  }),
+  transformInbound: (item: Readonly<Item>) => ({
+    ...item,
+    content: item.content
+      .split('')
+      .map((char) => String.fromCharCode(char.charCodeAt(0) - 1))
+      .join(''),
+  }),
 }
+
+const set_item_replication_transform_dal = (electric: Electric) => {
+  electric.db.items.setReplicationTransform(replicationTransformer)
+}
+
+const set_item_replication_transform_raw = (electric: Electric) => {
+  const namespace = builder.defaultNamespace
+  electric.setReplicationTransform<Item>(
+    new QualifiedTablename(namespace, 'items'),
+    replicationTransformer
+  )
+}
+
+export const set_item_replication_transform = withDal ? set_item_replication_transform_dal : set_item_replication_transform_raw
 
 export const stop = async () => {
   await globalRegistry.stopAll()

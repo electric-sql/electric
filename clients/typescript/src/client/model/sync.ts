@@ -2,7 +2,6 @@ import { DbSchema, TableName, TableSchemas } from './schema'
 import { IShapeManager } from './shapes'
 import { ShapeSubscription } from '../../satellite'
 import { Rel, Shape } from '../../satellite/shapes/types'
-import { DbSchema as DatabaseSchema } from '../util/relations'
 import { makeSqlWhereClause } from './table'
 
 type ShapeInput = Record<string, any>
@@ -13,7 +12,7 @@ export type ShapeInputWithTable = ShapeInput & {
 
 export function sync(
   shapeManager: IShapeManager,
-  dbDescription: DatabaseSchema,
+  dbDescription: DbSchema<TableSchemas>,
   i: ShapeInputWithTable,
   key?: string
 ): Promise<ShapeSubscription> {
@@ -38,8 +37,7 @@ export function sync(
   // Compute the shape from the user input
   // FIXME: remove type cast below when we remove the DAL
   //        `dbDescription` is missing the Zod schemas but they are not used in this sync API
-  const schema = new DbSchema(dbDescription as unknown as TableSchemas, [], [])
-  const shape = computeShape(schema, tableName, i)
+  const shape = computeShape(dbDescription, tableName, i)
   return shapeManager.subscribe([shape], key)
 }
 

@@ -43,7 +43,10 @@ import { NarrowInclude } from '../input/inputNarrowing'
 import { IShapeManager } from './shapes'
 import { ShapeSubscription } from '../../satellite'
 import { Rel, Shape } from '../../satellite/shapes/types'
-import { IReplicationTransformManager } from './transforms'
+import {
+  IReplicationTransformManager,
+  setReplicationTransform,
+} from './transforms'
 import { InputTransformer } from '../conversions/input'
 import { Dialect } from '../../migrators/query-builder/builder'
 
@@ -1616,47 +1619,12 @@ export class Table<
   }
 
   setReplicationTransform(i: ReplicatedRowTransformer<T>): void {
-    // forbid transforming relation keys to avoid breaking
-    // referential integrity
-
-    // the column could be the FK column when it is an outgoing FK
-    // or it could be a PK column when it is an incoming FK
-    const fkCols = this._dbDescription
-      .getOutgoingRelations(this.tableName)
-      .map((r) => r.fromField)
-
-    // Incoming relations don't have the `fromField` and `toField` filled in
-    // so we need to fetch the `toField` from the opposite relation
-    // which is effectively a column in this table to which the FK points
-    const pkCols = this._dbDescription
-      .getIncomingRelations(this.tableName)
-      .map((r) => r.getOppositeRelation(this._dbDescription).toField)
-
-    // Merge all columns that are part of a FK relation.
-    // Remove duplicate columns in case a column has both an outgoing FK and an incoming FK.
-    const immutableFields = Array.from(new Set(fkCols.concat(pkCols)))
-
-    this._replicationTransformManager.setTableTransform(
+    setReplicationTransform<T>(
+      this._dbDescription,
+      this._replicationTransformManager,
       this._qualifiedTableName,
-      {
-        transformInbound: (record) =>
-          this._replicationTransformManager.transformTableRecord(
-            record,
-            i.transformInbound,
-            this._fields,
-            this._schema,
-            immutableFields
-          ),
-
-        transformOutbound: (record) =>
-          this._replicationTransformManager.transformTableRecord(
-            record,
-            i.transformOutbound,
-            this._fields,
-            this._schema,
-            immutableFields
-          ),
-      }
+      i,
+      this._schema
     )
   }
 

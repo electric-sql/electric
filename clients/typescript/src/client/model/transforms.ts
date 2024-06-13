@@ -10,7 +10,7 @@ import {
   validate,
   validateRecordTransformation,
 } from '../validation/validation'
-import { Fields } from './schema'
+import { DbSchema, Fields, TableSchemas } from './schema'
 import * as z from 'zod'
 
 export interface IReplicationTransformManager {
@@ -24,7 +24,7 @@ export interface IReplicationTransformManager {
     record: DataRecord,
     transformRow: (row: T) => T,
     fields: Fields,
-    schema: z.ZodTypeAny,
+    schema: z.ZodTypeAny | undefined,
     immutableFields: string[]
   ): DataRecord
 }
@@ -49,7 +49,7 @@ export class ReplicationTransformManager
     record: DataRecord,
     transformRow: (row: T) => T,
     fields: Fields,
-    schema: z.ZodTypeAny,
+    schema: z.ZodTypeAny | undefined,
     immutableFields: string[]
   ): DataRecord {
     return transformTableRecord(
@@ -78,7 +78,7 @@ export function transformTableRecord<T extends Record<string, unknown>>(
   record: DataRecord,
   transformRow: (row: T) => T,
   fields: Fields,
-  schema: z.ZodTypeAny,
+  schema: z.ZodTypeAny | undefined,
   converter: Converter,
   immutableFields: string[]
 ): DataRecord {
@@ -94,7 +94,12 @@ export function transformTableRecord<T extends Record<string, unknown>>(
   const transformedParsedRow = transformRow(parsedRow as Readonly<T>)
 
   // validate transformed row and convert back to raw record
-  const validatedTransformedParsedRow = validate(transformedParsedRow, schema)
+  // schema is only provided when using the DAL
+  // if schema is not provided, we skip validation
+  const validatedTransformedParsedRow =
+    schema !== undefined
+      ? validate(transformedParsedRow, schema)
+      : transformedParsedRow
   const transformedRecord = transformFields(
     validatedTransformedParsedRow,
     fields,
@@ -110,4 +115,40 @@ export function transformTableRecord<T extends Record<string, unknown>>(
   )
 
   return validatedTransformedRecord
+}
+
+export function setReplicationTransform<
+  T extends Record<string, unknown> = Record<string, unknown>
+>(
+  dbDescription: DbSchema<TableSchemas>,
+  replicationTransformManager: IReplicationTransformManager,
+  qualifiedTableName: QualifiedTablename,
+  i: ReplicatedRowTransformer<T>,
+  schema?: z.ZodTypeAny
+): void {
+  // forbid transforming relation keys to avoid breaking
+  // referential integrity
+  const tableName = qualifiedTableName.tablename
+  const relations = dbDescription.getRelations(tableName)
+  const fields = dbDescription.getFields(tableName)
+  const immutableFields = relations.map((r) => r.relationField)
+  replicationTransformManager.setTableTransform(qualifiedTableName, {
+    transformInbound: (record) =>
+      replicationTransformManager.transformTableRecord(
+        record,
+        i.transformInbound,
+        fields,
+        schema,
+        immutableFields
+      ),
+
+    transformOutbound: (record) =>
+      replicationTransformManager.transformTableRecord(
+        record,
+        i.transformOutbound,
+        fields,
+        schema,
+        immutableFields
+      ),
+  })
 }

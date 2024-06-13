@@ -1,7 +1,12 @@
 import { ElectricNamespace } from '../../electric/namespace'
 import { DbSchema, TableSchema, TableSchemas } from './schema'
 import { rawQuery, liveRawQuery, unsafeExec, Table } from './table'
-import { Row, Statement } from '../../util'
+import {
+  QualifiedTablename,
+  ReplicatedRowTransformer,
+  Row,
+  Statement,
+} from '../../util'
 import { LiveResultContext } from './model'
 import { Notifier } from '../../notifiers'
 import { DatabaseAdapter } from '../../electric/adapter'
@@ -11,14 +16,17 @@ import {
   Satellite,
   ShapeSubscription,
 } from '../../satellite'
-import { ReplicationTransformManager } from './transforms'
+import {
+  IReplicationTransformManager,
+  ReplicationTransformManager,
+  setReplicationTransform,
+} from './transforms'
 import { Dialect } from '../../migrators/query-builder/builder'
 import { InputTransformer } from '../conversions/input'
 import { sqliteConverter } from '../conversions/sqlite'
 import { postgresConverter } from '../conversions/postgres'
 import { IShapeManager } from './shapes'
 import { ShapeInputWithTable, sync } from './sync'
-import { DbSchema as DatabaseSchema } from '../util/relations'
 
 export type ClientTables<DB extends DbSchema<any>> = {
   [Tbl in keyof DB['tables']]: DB['tables'][Tbl] extends TableSchema<
@@ -113,20 +121,35 @@ export class ElectricClient<
   private constructor(
     public db: ClientTables<DB> & RawQueries,
     dbName: string,
-    dbDescription: DatabaseSchema,
+    private _dbDescription: DB,
     adapter: DatabaseAdapter,
     notifier: Notifier,
     public readonly satellite: Satellite,
-    registry: Registry | GlobalRegistry
+    registry: Registry | GlobalRegistry,
+    private _replicationTransformManager: IReplicationTransformManager
   ) {
     super(dbName, adapter, notifier, registry)
     this.satellite = satellite
     // Expose the Shape Sync API without additional properties
     this.sync = {
       syncStatus: this.satellite.syncStatus.bind(this.satellite),
-      subscribe: sync.bind(null, this.satellite, dbDescription),
+      subscribe: sync.bind(null, this.satellite, this._dbDescription),
       unsubscribe: this.satellite.unsubscribe.bind(this.satellite),
     }
+  }
+
+  setReplicationTransform<
+    T extends Record<string, unknown> = Record<string, unknown>
+  >(
+    qualifiedTableName: QualifiedTablename,
+    i: ReplicatedRowTransformer<T>
+  ): void {
+    setReplicationTransform<T>(
+      this._dbDescription,
+      this._replicationTransformManager,
+      qualifiedTableName,
+      i
+    )
   }
 
   /**
@@ -222,11 +245,12 @@ export class ElectricClient<
     return new ElectricClient(
       db,
       dbName,
-      dbDescription.tables,
+      dbDescription,
       adapter,
       notifier,
       satellite,
-      registry
+      registry,
+      replicationTransformManager
     )
   }
 }
