@@ -312,35 +312,52 @@ export abstract class QueryBuilder {
     const stmts: Statement[] = []
     const columnCount = columns.length
     const recordCount = records.length
-    let processed = 0
-    let positionalParam = 1
-    const pos = (i: number) => `${this.makePositionalParam(i)}`
-    const makeInsertPattern = () => {
-      const insertRow = Array.from({ length: columnCount }, () =>
-        pos(positionalParam++)
-      )
-
-      return ` (${insertRow.join(', ')})`
-    }
-
     // Amount of rows we can insert at once
     const batchMaxSize = Math.floor(maxParameters / columnCount)
+
+    // keep a temporary join array for joining strings, to avoid
+    // the overhead of generating a new array every time
+    const tempColJoinArray = Array.from({ length: columnCount })
+
+    let processed = 0
+    let prevInsertCount = -1
+    let insertPattern = ''
     while (processed < recordCount) {
-      positionalParam = 1 // start counting parameters from 1 again
       const currentInsertCount = Math.min(recordCount - processed, batchMaxSize)
-      let sql =
-        baseSql +
-        Array.from({ length: currentInsertCount }, makeInsertPattern).join(',')
+
+      // cache insert pattern as it is going to be the same for every batch
+      // of `batchMaxSize` - ideally we can externalize this cache since for a
+      // given adapter this is _always_ going to be the same
+      if (currentInsertCount !== prevInsertCount) {
+        insertPattern = Array.from(
+          { length: currentInsertCount },
+          (_, recordIdx) => {
+            for (let i = 0; i < columnCount; i++) {
+              tempColJoinArray[i] = this.makePositionalParam(
+                recordIdx * columnCount + i + 1
+              )
+            }
+            return `(${tempColJoinArray.join(', ')})`
+          }
+        ).join(',')
+      }
+
+      let sql = baseSql + insertPattern
 
       if (suffixSql !== '') {
         sql += ' ' + suffixSql
       }
 
-      const args = records
-        .slice(processed, processed + currentInsertCount)
-        .flatMap((record) => columns.map((col) => record[col] as SqlValue))
+      const args = []
+
+      for (let i = 0; i < currentInsertCount; i++) {
+        for (let j = 0; j < columnCount; j++) {
+          args.push(records[processed + i][columns[j]] as SqlValue)
+        }
+      }
 
       processed += currentInsertCount
+      prevInsertCount = currentInsertCount
       stmts.push({ sql, args })
     }
     return stmts
