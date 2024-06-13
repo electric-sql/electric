@@ -11,7 +11,9 @@ You can deploy ElectricSQL to [Fly.io](https://fly.io) and use either an externa
   2. configuring Fly Postgres and the Electric sync service to connect over Fly's private network
 
 :::info
-For background on how to successfully deploy the sync service and what needs to connect where, see <DocPageLink path="deployment/concepts" />.
+Once you've deployed the Electric sync service on Fly, you will also need to [deploy and connect your client app to it](#connecting-the-client-app-to-electric-running-on-fly).
+
+For more context, see <DocPageLink path="deployment/concepts" />.
 :::
 
 ## Deploying Electric connected to an external Postgres
