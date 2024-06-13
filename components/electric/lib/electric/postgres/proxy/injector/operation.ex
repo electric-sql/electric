@@ -563,8 +563,7 @@ defmodule Operation.AssignMigrationVersion do
     def activate(op, state, send) do
       if State.electrified?(state) do
         {version, priority, state} = migration_version(op, state)
-        query_generator = Map.fetch!(state, :query_generator)
-        sql = query_generator.capture_version_query(version, priority)
+        sql = state.query_generator.capture_version_query(version, priority)
         {op, State.tx_version(state, version), Send.server(send, [query(sql)])}
       else
         {nil, state, send}
@@ -594,8 +593,7 @@ defmodule Operation.AssignMigrationVersion do
     end
 
     defp generate_version(state) do
-      query_generator = Map.fetch!(state, :query_generator)
-      query_generator.migration_version()
+      state.query_generator.migration_version()
     end
   end
 end
@@ -710,9 +708,9 @@ defmodule Operation.Electric do
     :queries,
     :mode,
     :initial_query,
-    introspect: true,
+    introspect: [:electrified, :ddl],
     schema: nil,
-    tables: [],
+    tables: MapSet.new(),
     ddl: []
   ]
 
@@ -729,33 +727,40 @@ defmodule Operation.Electric do
     import Electric.Utils, only: [inspect_relation: 1]
 
     def activate(%O{} = op, state, send) do
-      query_generator = Map.fetch!(state, :query_generator)
-      tables = tables(op)
-      introspect_query = query_generator.introspect_tables_query(tables)
-
-      Logger.debug(fn ->
-        ["Introspecting table schemas: " | Enum.map(tables, &inspect_relation/1)]
-      end)
-
       op = %{op | schema: Schema.new()}
 
-      state = Enum.reduce(tables, state, &State.electrify(&2, &1))
+      state = op |> tables() |> Enum.reduce(state, &State.electrify(&2, &1))
 
-      {op, state, Send.server(send, query(introspect_query))}
+      send_query(op, state, send)
     end
 
-    def recv_server(%O{introspect: true} = op, %M.RowDescription{fields: [_]}, state, send) do
+    # ignore row description messages, we know the format of the responses
+    def recv_server(%O{introspect: [_ | _]} = op, %M.RowDescription{fields: [_]}, state, send) do
       {op, state, send}
     end
 
-    def recv_server(%O{introspect: true} = op, %M.DataRow{fields: [ddl]}, state, send) do
+    def recv_server(
+          %O{introspect: [:electrified | _]} = op,
+          %M.DataRow{fields: [schema, name]},
+          state,
+          send
+        ) do
+      {Map.update!(op, :tables, &MapSet.put(&1, {schema, name})), state, send}
+    end
+
+    # this ready for query is the end of the list of electrified tables query
+    def recv_server(%O{introspect: [:electrified | rest]} = op, %M.ReadyForQuery{}, state, send) do
+      send_query(%{op | introspect: rest}, state, send)
+    end
+
+    # this ready for query is the end of the ddlx introspection query
+    def recv_server(%O{introspect: [:ddl | _]} = op, %M.DataRow{fields: [ddl]}, state, send) do
       schema = Schema.update(op.schema, ddl, oid_loader: &oid_loader/3)
       {Map.update!(%{op | schema: schema}, :ddl, &[ddl | &1]), state, send}
     end
 
-    # this ready for query is the end of the ddlx introspection query
-    def recv_server(%O{introspect: true} = op, %M.ReadyForQuery{}, state, send) do
-      case DDLX.Command.validate_schema(op.command, op.schema) do
+    def recv_server(%O{introspect: [:ddl | rest]} = op, %M.ReadyForQuery{}, state, send) do
+      case DDLX.Command.validate_schema(op.command, op.schema, op.tables) do
         {:ok, _warnings} ->
           Logger.debug(fn ->
             [
@@ -765,14 +770,7 @@ defmodule Operation.Electric do
             ]
           end)
 
-          query_generator = Map.fetch!(state, :query_generator)
-
-          ddl_queries = Enum.reverse(op.ddl)
-
-          [query | queries] =
-            DDLX.Command.proxy_sql(op.command, ddl_queries, &query_generator.quote_query/1)
-
-          {%{op | queries: queries, introspect: false}, state, Send.server(send, query(query))}
+          send_query(%{op | introspect: rest}, state, send)
 
         {:error, reason} ->
           Logger.debug(fn ->
@@ -792,7 +790,7 @@ defmodule Operation.Electric do
     end
 
     def recv_server(
-          %O{introspect: false, queries: []} = op,
+          %O{introspect: [], queries: []} = op,
           %M.ReadyForQuery{} = msg,
           state,
           send
@@ -824,6 +822,34 @@ defmodule Operation.Electric do
       {op, state, send}
     end
 
+    defp send_query(%O{introspect: [:electrified | _]} = op, state, send) do
+      query = state.query_generator.electrified_tables_query()
+
+      Logger.debug(fn -> "Getting list of electrified tables" end)
+
+      {op, state, Send.server(send, query(query))}
+    end
+
+    defp send_query(%O{introspect: [:ddl | _rest]} = op, state, send) do
+      tables = tables(op)
+      introspect_query = state.query_generator.introspect_tables_query(tables)
+
+      Logger.debug(fn ->
+        ["Introspecting table schemas: " | Enum.map(tables, &inspect_relation/1)]
+      end)
+
+      {op, state, Send.server(send, query(introspect_query))}
+    end
+
+    defp send_query(%O{introspect: []} = op, state, send) do
+      ddl = Enum.reverse(op.ddl)
+
+      [query | queries] =
+        DDLX.Command.proxy_sql(op.command, ddl, &state.query_generator.quote_query/1)
+
+      {%{op | queries: queries}, state, Send.server(send, query(query))}
+    end
+
     # we don't need real oids
     defp oid_loader(type, schema, name) do
       {:ok, Enum.join(["#{type}", schema, name], ".") |> :erlang.phash2(50_000)}
@@ -844,8 +870,7 @@ defmodule Operation.Capture do
     def activate(op, state, send) do
       case op.analysis do
         %{table: {schema, table}} ->
-          query_generator = Map.fetch!(state, :query_generator)
-          sql = query_generator.capture_ddl_query(op.analysis.sql)
+          sql = state.query_generator.capture_ddl_query(op.analysis.sql)
 
           notice =
             %M.NoticeResponse{
@@ -876,8 +901,7 @@ defmodule Operation.AlterShadow do
     use Operation.Impl
 
     def activate(op, state, send) do
-      query_generator = Map.fetch!(state, :query_generator)
-      sql = query_generator.alter_shadow_table_query(op.modification)
+      sql = state.query_generator.alter_shadow_table_query(op.modification)
       {op, State.electrify(state), Send.server(send, query(sql))}
     end
   end

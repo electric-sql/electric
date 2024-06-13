@@ -4,9 +4,9 @@ defprotocol Electric.DDLX.Command.PgSQL do
   @spec to_sql(t(), [String.t()], (String.t() -> String.t())) :: [String.t()]
   def to_sql(cmd, ddl_capture, quote_fun)
 
-  @spec validate_schema(t(), Schema.t()) ::
+  @spec validate_schema(t(), Schema.t(), MapSet.t()) ::
           {:ok, [String.t()]} | {:error, %{optional(:code) => String.t(), message: String.t()}}
-  def validate_schema(cmd, schema)
+  def validate_schema(cmd, schema, electrified)
 end
 
 alias Electric.Satellite.SatPerms
@@ -71,8 +71,8 @@ defmodule Electric.DDLX.Command do
     PgSQL.to_sql(cmd, List.wrap(ddl), quote_fun)
   end
 
-  def validate_schema(cmd, schema) do
-    PgSQL.validate_schema(cmd, schema)
+  def validate_schema(cmd, schema, electrified) do
+    PgSQL.validate_schema(cmd, schema, electrified)
   end
 
   def table_names(%__MODULE__{tables: tables}), do: tables
@@ -213,8 +213,8 @@ defmodule Electric.DDLX.Command do
       Command.PgSQL.to_sql(action, ddl_capture, quote_fun)
     end
 
-    def validate_schema(%Electric.DDLX.Command{action: action}, schema) do
-      Command.PgSQL.validate_schema(action, schema)
+    def validate_schema(%Electric.DDLX.Command{action: action}, schema, electrified) do
+      Command.PgSQL.validate_schema(action, schema, electrified)
     end
   end
 end
@@ -228,9 +228,9 @@ defimpl Command.PgSQL, for: List do
     Enum.flat_map(list, &Command.PgSQL.to_sql(&1, ddl_capture, quote_fun))
   end
 
-  def validate_schema(list, schema) do
+  def validate_schema(list, schema, electrified) do
     Enum.reduce_while(list, {:ok, []}, fn cmd, {:ok, warnings} ->
-      case Command.PgSQL.validate_schema(cmd, schema) do
+      case Command.PgSQL.validate_schema(cmd, schema, electrified) do
         {:ok, w} ->
           {:cont, {:ok, warnings ++ w}}
 
@@ -254,11 +254,11 @@ defimpl Command.PgSQL, for: SatPerms.DDLX do
     ])
   end
 
-  def validate_schema(%SatPerms.DDLX{} = ddlx, schema) do
+  def validate_schema(%SatPerms.DDLX{} = ddlx, schema, electrified) do
     ddlx
     |> Command.command_list()
     |> Enum.to_list()
-    |> Command.PgSQL.validate_schema(schema)
+    |> Command.PgSQL.validate_schema(schema, electrified)
   end
 
   defp serialise_ddlx(ddlx) do
@@ -277,7 +277,7 @@ defimpl Command.PgSQL, for: SatPerms.Grant do
     []
   end
 
-  def validate_schema(%SatPerms.Grant{} = grant, schema) do
+  def validate_schema(%SatPerms.Grant{} = grant, schema, _electrified) do
     Validator.validate_schema_for_grant(schema, grant)
   end
 end
@@ -287,7 +287,7 @@ defimpl Command.PgSQL, for: SatPerms.Revoke do
     []
   end
 
-  def validate_schema(%SatPerms.Revoke{}, _schema) do
+  def validate_schema(%SatPerms.Revoke{}, _schema, _electrified) do
     {:ok, []}
   end
 end
@@ -297,7 +297,7 @@ defimpl Command.PgSQL, for: SatPerms.Assign do
     []
   end
 
-  def validate_schema(%SatPerms.Assign{}, _schema) do
+  def validate_schema(%SatPerms.Assign{}, _schema, _electrified) do
     {:ok, []}
   end
 end
@@ -307,7 +307,7 @@ defimpl Command.PgSQL, for: SatPerms.Unassign do
     []
   end
 
-  def validate_schema(%SatPerms.Unassign{}, _schema) do
+  def validate_schema(%SatPerms.Unassign{}, _schema, _electrified) do
     {:ok, []}
   end
 end
@@ -317,7 +317,7 @@ defimpl Command.PgSQL, for: SatPerms.Sqlite do
     []
   end
 
-  def validate_schema(%SatPerms.Sqlite{}, _schema) do
+  def validate_schema(%SatPerms.Sqlite{}, _schema, _electrified) do
     {:ok, []}
   end
 end
@@ -341,8 +341,8 @@ defimpl Command.PgSQL, for: Command.Enable do
     ]
   end
 
-  def validate_schema(%Enable{} = enable, schema) do
-    Validator.validate_schema_for_electrification(schema, enable.table_name)
+  def validate_schema(%Enable{} = enable, schema, electrified) do
+    Validator.validate_schema_for_electrification(schema, enable.table_name, electrified)
   end
 end
 
@@ -357,7 +357,7 @@ defimpl Command.PgSQL, for: Command.Disable do
     ]
   end
 
-  def validate_schema(%Command.Disable{}, _schema) do
+  def validate_schema(%Command.Disable{}, _schema, _electrified) do
     {:ok, []}
   end
 end
@@ -367,7 +367,7 @@ defimpl Command.PgSQL, for: Command.Error do
     []
   end
 
-  def validate_schema(_, _) do
+  def validate_schema(_, _, _) do
     {:ok, []}
   end
 end

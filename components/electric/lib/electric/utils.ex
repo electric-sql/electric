@@ -313,6 +313,11 @@ defmodule Electric.Utils do
     "#{inspect(schema)}.#{inspect(name)}"
   end
 
+  @spec inspect_relation(%{schema: String.t(), name: String.t()}) :: String.t()
+  def inspect_relation(%{schema: schema, name: name}) do
+    inspect_relation({schema, name})
+  end
+
   @doc """
   Parse a markdown table from a string
 

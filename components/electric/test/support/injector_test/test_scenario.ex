@@ -18,6 +18,10 @@ defmodule Electric.Postgres.Proxy.TestScenario do
       Injector.introspect_tables_query(tables, "'")
     end
 
+    def electrified_tables_query do
+      Injector.electrified_tables_query()
+    end
+
     def capture_ddl_query(query) do
       Injector.capture_ddl_query(query, "$query$")
     end
@@ -259,6 +263,23 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     ])
   end
 
+  def electrified_tables_result do
+    electrified_tables_result([], :tx)
+  end
+
+  def electrified_tables_result(tables, status \\ :tx) when is_list(tables) do
+    Enum.concat([
+      [%M.RowDescription{}],
+      tables
+      |> Enum.map(fn
+        {_, _} = relation -> relation
+        name when is_binary(name) -> Electric.Postgres.NameParser.parse!(name)
+      end)
+      |> Enum.map(fn {sname, tname} -> %M.DataRow{fields: [sname, tname]} end),
+      complete_ready("SELECT #{length(tables)}", status)
+    ])
+  end
+
   def proxy_sql(command, ddl) do
     MockInjector.proxy_sql(command, ddl)
   end
@@ -281,6 +302,10 @@ defmodule Electric.Postgres.Proxy.TestScenario do
 
   def introspect_tables_query(tables) do
     query(MockInjector.introspect_tables_query(tables))
+  end
+
+  def electrified_tables_query do
+    query(MockInjector.electrified_tables_query())
   end
 
   def capture_ddl_query(sql) do
@@ -326,6 +351,28 @@ defmodule Electric.Postgres.Proxy.TestScenario do
   end
 
   @doc """
+  Encapsulates the series of query-response messages issued by
+  `Operation.Electric` in order to introspect the db before allowing a DDLX
+  command.
+  """
+  def electric_preamble(injector, initial_messages, command, electrified_tables \\ []) do
+    tables = Electric.DDLX.Command.table_names(command)
+    introspect_query = introspect_tables_query(tables)
+
+    initial_messages
+    |> case do
+      [client: msgs] ->
+        injector
+        |> client(msgs, server: electrified_tables_query())
+
+      [server: msgs] ->
+        injector
+        |> server(msgs, server: electrified_tables_query())
+    end
+    |> server(electrified_tables_result(electrified_tables), server: introspect_query)
+  end
+
+  @doc """
   Given an injector mid-tx generates migration version query flows for the
   given framework modules and asserts that the version is captured correctly
 
@@ -365,9 +412,6 @@ defmodule Electric.Postgres.Proxy.TestScenario do
   sql statements that must be executed sequentially.
   """
   def electric(injector, initial_messages, command, ddl, final_messages) do
-    tables = Electric.DDLX.Command.table_names(command)
-    introspect_query = introspect_tables_query(tables)
-
     capture_ddl = List.wrap(ddl)
 
     case proxy_sql(command, capture_ddl) |> Enum.map(&query/1) do
@@ -375,17 +419,9 @@ defmodule Electric.Postgres.Proxy.TestScenario do
         # the initial client message which is a [bind, execute] or [query] message
         # triggers a re-write to the real procedure call
         injector =
-          case initial_messages do
-            [client: msgs] ->
-              injector
-              |> client(msgs, server: introspect_query)
-              |> server(introspect_result(ddl), server: query)
-
-            [server: msgs] ->
-              injector
-              |> server(msgs, server: introspect_query)
-              |> server(introspect_result(ddl), server: query)
-          end
+          injector
+          |> electric_preamble(initial_messages, command)
+          |> server(introspect_result(ddl), server: query)
 
         # this real proc call returns a readyforquery etc response which triggers
         # the next procedure call required for the electric command

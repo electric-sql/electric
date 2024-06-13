@@ -142,15 +142,6 @@ defmodule Electric.Satellite.Protocol do
 
         {:error,
          %SatErrorResp{error_type: :INVALID_REQUEST, message: "Authentication failed: #{message}"}}
-
-      {:error, reason} ->
-        Logger.error("Client authentication failed: #{inspect(reason)}")
-
-        {:error,
-         %SatErrorResp{
-           error_type: :INVALID_REQUEST,
-           message: "Authentication failed: #{inspect(reason)}"
-         }}
     end
   end
 

@@ -132,6 +132,16 @@ defmodule Electric.Postgres.Proxy.Errors do
     }
   end
 
+  def missing_reference(table, {_, _} = target) do
+    %{
+      code: "EX017",
+      message:
+        "Cannot electrify table #{inspect_relation(table)} because it has a FOREIGN KEY " <>
+          "reference to an un-electrified table: #{inspect_relation(target)}\n\n" <>
+          "Electrify the referenced table first: ALTER TABLE #{inspect_relation(target)} ENABLE ELECTRIC;"
+    }
+  end
+
   defp format_constraint(:CONSTR_CHECK), do: "CHECK"
   defp format_constraint(:CONSTR_FOREIGN), do: "FOREIGN KEY"
   defp format_constraint(:CONSTR_GENERATED), do: "GENERATED"

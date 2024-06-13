@@ -293,6 +293,11 @@ defmodule Electric.Postgres.Extension do
 
   @electrified_tables_query "SELECT schema_name, table_name FROM #{@electrified_tracking_table}"
 
+  @spec electrified_tables_query() :: String.t()
+  def electrified_tables_query do
+    @electrified_tables_query
+  end
+
   @spec electrified_tables(conn()) :: {:ok, [{String.t(), String.t()}]} | {:error, term}
   def electrified_tables(conn) do
     with {:ok, _, tables} <- :epgsql.squery(conn, @electrified_tables_query) do

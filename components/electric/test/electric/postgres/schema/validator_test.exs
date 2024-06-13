@@ -10,7 +10,7 @@ defmodule Electric.Postgres.Schema.ValidatorTest do
   import Electric.Utils, only: [inspect_relation: 1]
 
   defp schema(name, columns, extra_ddl) do
-    ddl = Enum.join([extra_ddl, create_table_ddl(name, columns)], "\n")
+    ddl = Enum.join(extra_ddl ++ [create_table_ddl(name, columns)], "\n")
     Schema.update(Schema.new(), ddl, oid_loader: &oid_loader/3)
   end
 
@@ -41,17 +41,22 @@ defmodule Electric.Postgres.Schema.ValidatorTest do
         {"sized_varchar", [valid: false], ["id uuid PRIMARY KEY", "value varchar(32)"], []},
         {"unsized_varchar", [valid: true], ["id uuid PRIMARY KEY", "value varchar"], []},
         {"valid_enum", [valid: true], ["id uuid PRIMARY KEY, value shapes"],
-         [
+         ddl: [
            "CREATE TYPE shapes AS ENUM ('circle', 'square', 'diamond');"
          ]},
         {"uppercase_enum", [valid: true], ["id uuid PRIMARY KEY, value shapes"],
-         [
+         ddl: [
            "CREATE TYPE shapes AS ENUM ('CIRCLE', 'SQUARE', 'DIAMOND');"
          ]},
         {"invalid_enum", [valid: false], ["id uuid PRIMARY KEY", "value badenum"],
-         [
+         ddl: [
            "CREATE TYPE badenum AS ENUM ('1circle', '_square', 'hello world');"
-         ]}
+         ]},
+        {"missing_fk_target", [valid: false],
+         ["id uuid PRIMARY KEY, other_id uuid REFERENCES other (id)"], [tables: []]},
+        {"valid_fk_target", [valid: true],
+         ["id uuid PRIMARY KEY, other_id uuid REFERENCES other (id)"],
+         [tables: [{"public", "other"}]]}
       ],
       Enum.map(
         unsupported_types,
@@ -61,8 +66,10 @@ defmodule Electric.Postgres.Schema.ValidatorTest do
     ])
 
   describe "validate_schema_for_electrification/2" do
-    for {name, validity, columns, extra_ddl} <- electrification_cases do
+    for {name, validity, columns, opts} <- electrification_cases do
       valid? = Keyword.get(validity, :valid, true)
+      extra_ddl = Keyword.get(opts, :ddl, [])
+      tables = opts |> Keyword.get(:tables, []) |> MapSet.new() |> Macro.escape()
 
       test_name =
         String.replace(name, ["_", "."], " ") <>
@@ -83,7 +90,10 @@ defmodule Electric.Postgres.Schema.ValidatorTest do
         assert unquote(expected) =
                  unquote(name)
                  |> schema(unquote(columns), unquote(extra_ddl))
-                 |> Validator.validate_schema_for_electrification(unquote(relation))
+                 |> Validator.validate_schema_for_electrification(
+                   unquote(relation),
+                   unquote(tables)
+                 )
       end
     end
   end
@@ -199,7 +209,7 @@ defmodule Electric.Postgres.Schema.ValidatorTest do
 
           assert unquote(expected) =
                    unquote(name)
-                   |> schema(unquote(columns), "")
+                   |> schema(unquote(columns), [])
                    |> Validator.validate_schema_for_permissions(command.action)
         end
       end

@@ -454,8 +454,6 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
 
       version = "20230915175206"
 
-      introspect = introspect_tables_query([{"public", "something"}])
-
       cxt.injector
       |> client([M.Close, M.Sync, %M.Parse{name: "s4", query: version_query}, M.Describe, M.Sync])
       |> server([M.CloseComplete, %M.ReadyForQuery{status: :idle}])
@@ -486,7 +484,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
       |> server(complete_ready("BEGIN", :tx),
         server: [query("CREATE TABLE something (id uuid PRIMARY KEY, value text)")]
       )
-      |> server(complete_ready("CREATE TABLE"), server: [query(introspect)])
+      |> electric_preamble([server: complete_ready("CREATE TABLE")], command)
       |> server(introspect_result(ddl), server: electric)
       |> server(complete_ready("CALL"),
         server: [query("CREATE TABLE ignoreme (id uuid PRIMARY KEY)")]
@@ -679,12 +677,10 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
       version_query =
         "INSERT INTO \"atdatabases_migrations_applied\"\n  (\n    index, name, script,\n    applied_at, ignored_error, obsolete\n  )\nVALUES\n  (\n    $1, $2, $3,\n    $4,\n    $5,\n    $6\n  )"
 
-      introspect = introspect_tables_query([{"public", "socks"}])
-
       cxt.injector
       |> client(query("BEGIN"))
       |> server(complete_ready("BEGIN", :tx))
-      |> client(query("ALTER TABLE public.socks ENABLE ELECTRIC;"), server: query(introspect))
+      |> electric_preamble([client: query("ALTER TABLE public.socks ENABLE ELECTRIC;")], command)
       |> server(introspect_result(ddl), server: electric)
       |> server(complete_ready("CALL", :tx), client: complete_ready("ELECTRIC ENABLE"))
       |> client(%M.Parse{query: version_query}, server: [])
@@ -759,12 +755,10 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
       version_query =
         "INSERT INTO \"atdatabases_migrations_applied\"\n  (\n    index, name, script,\n    applied_at, ignored_error, obsolete\n  )\nVALUES\n  (\n    $1, $2, $3,\n    $4,\n    $5,\n    $6\n  )"
 
-      introspect = introspect_tables_query([{"public", "socks"}])
-
       cxt.injector
       |> client(query("BEGIN"))
       |> server(complete_ready("BEGIN", :tx))
-      |> client(query("ALTER TABLE public.socks ENABLE ELECTRIC;"), server: introspect)
+      |> electric_preamble([client: query("ALTER TABLE public.socks ENABLE ELECTRIC;")], command)
       |> server(introspect_result(ddl), server: electric)
       |> server(complete_ready("CALL", :tx), client: complete_ready("ELECTRIC ENABLE"))
       |> client(%M.Parse{query: version_query}, server: [])
