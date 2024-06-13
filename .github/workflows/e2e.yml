@@ -118,12 +118,14 @@ jobs:
     strategy:
       matrix:
         dialect: [SQLite, Postgres]
+        dal: [true, false]
     defaults:
       run:
         working-directory: e2e
     env:
       BUILDKITE_ANALYTICS_TOKEN: ${{ secrets.BUILDKITE_TEST_ANALYTICS_E2E }}
       DIALECT: ${{ matrix.dialect }}
+      DAL: ${{ matrix.dal }}
     steps:
       - uses: actions/checkout@v3
         with:
