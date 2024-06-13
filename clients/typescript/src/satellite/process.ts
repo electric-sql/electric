@@ -550,6 +550,7 @@ export class SatelliteProcess implements Satellite {
       string,
       {
         relation: Relation
+        primaryKeyColNames: string[]
         records: InitialDataChange['record'][]
         table: QualifiedTablename
       }
@@ -561,26 +562,37 @@ export class SatelliteProcess implements Satellite {
     >[] = []
 
     // Group all changes by table name to be able to insert them all together
+    const fullTableNameLookup = new Map<string, string>()
     for (const op of changes) {
-      const qt = new QualifiedTablename(namespace, op.relation.table)
-      const tableName = qt.toString()
-
-      if (groupedChanges.has(tableName)) {
-        groupedChanges.get(tableName)?.records.push(op.record)
-      } else {
-        groupedChanges.set(tableName, {
+      let groupedChange
+      if (!fullTableNameLookup.has(op.relation.table)) {
+        const qt = new QualifiedTablename(namespace, op.relation.table)
+        const tableName = qt.toString()
+        fullTableNameLookup.set(op.relation.table, tableName)
+        groupedChange = {
           relation: op.relation,
+          primaryKeyColNames: op.relation.columns
+            .filter((col) => col.primaryKey)
+            .map((col) => col.name),
           records: [op.record],
-          table: qt,
-        })
+          table: new QualifiedTablename(namespace, op.relation.table),
+        }
+        groupedChanges.set(tableName, groupedChange)
+      } else {
+        groupedChange = groupedChanges.get(
+          fullTableNameLookup.get(op.relation.table)!
+        )!
+        groupedChange.records.push(op.record)
       }
 
       // Since we're already iterating changes, we can also prepare data for shadow table
-      const primaryKeyCols = op.relation.columns.reduce((agg, col) => {
-        if (col.primaryKey)
-          agg[col.name] = op.record[col.name] as string | number
-        return agg
-      }, {} as Record<string, string | number>)
+      const primaryKeyCols = groupedChange.primaryKeyColNames.reduce(
+        (agg, colName) => {
+          agg[colName] = op.record[colName] as string | number
+          return agg
+        },
+        {} as Record<string, string | number>
+      )
 
       allArgsForShadowInsert.push({
         namespace,
@@ -650,11 +662,7 @@ export class SatelliteProcess implements Satellite {
       // because nobody uses them and we don't have the machinery to to a
       // `RETURNING` clause in the middle of `runInTransaction`.
       const notificationChanges: Change[] = []
-
-      groupedChanges.forEach(({ records, table, relation }) => {
-        const primaryKeyColNames = relation.columns
-          .filter((col) => col.primaryKey)
-          .map((col) => col.name)
+      groupedChanges.forEach(({ records, table, primaryKeyColNames }) => {
         notificationChanges.push({
           qualifiedTablename: table,
           rowids: [],
