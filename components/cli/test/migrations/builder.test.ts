@@ -57,11 +57,11 @@ test('read migration meta data', async (t) => {
   t.deepEqual(dbDescription, {
     stars: {
       fields: {
-        id: 'text',
-        avatar_url: 'text',
-        name: 'text',
-        starred_at: 'text',
-        username: 'text',
+        id: 'TEXT',
+        avatar_url: 'TEXT',
+        name: 'TEXT',
+        starred_at: 'TEXT',
+        username: 'TEXT',
       },
       relations: [
         new Relation('beers', '', '', 'beers', 'beers_star_idTostars', 'many'),
@@ -69,8 +69,8 @@ test('read migration meta data', async (t) => {
     },
     beers: {
       fields: {
-        id: 'text',
-        star_id: 'text',
+        id: 'TEXT',
+        star_id: 'TEXT',
       },
       relations: [
         new Relation(

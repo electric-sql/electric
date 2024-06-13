@@ -551,8 +551,8 @@ test('createDbDescription creates a DbSchema from tables', (t: Ctx) => {
   t.deepEqual(dbDescription, {
     foo: {
       fields: {
-        foo_id: 'text',
-        otherr: 'text',
+        foo_id: 'TEXT',
+        otherr: 'TEXT',
       },
       relations: [
         new Relation(
@@ -566,7 +566,7 @@ test('createDbDescription creates a DbSchema from tables', (t: Ctx) => {
       ],
     },
     other: {
-      fields: { other_id: 'text' },
+      fields: { other_id: 'TEXT' },
       relations: [
         new Relation('foo', '', '', 'foo', 'foo_otherrToother', 'many'),
         new Relation(
@@ -589,9 +589,9 @@ test('createDbDescription creates a DbSchema from tables', (t: Ctx) => {
     },
     items: {
       fields: {
-        items_id: 'text',
-        other_id1: 'text',
-        other_id2: 'text',
+        items_id: 'TEXT',
+        other_id1: 'TEXT',
+        other_id2: 'TEXT',
       },
       relations: [
         new Relation(
