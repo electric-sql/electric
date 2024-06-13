@@ -249,6 +249,10 @@ export class Table<
     return includedTables
   }
 
+  /**
+   * @deprecated The DAL is deprecated and will be removed in a future release.
+   *             You can use the raw query API or a query builder/ORM integration.
+   */
   sync<T extends SyncInput<Include, Where>>(i?: T): Promise<ShapeSubscription> {
     const validatedInput = this.syncSchema.parse(i ?? {})
     const shape = this.computeShape(validatedInput)
@@ -264,6 +268,10 @@ export class Table<
    * As such, one can compose these methods arbitrarily and then run them inside a single transaction.
    */
 
+  /**
+   * @deprecated The DAL is deprecated and will be removed in a future release.
+   *             You can use the raw query API or a query builder/ORM integration.
+   */
   async create<T extends CreateInput<CreateData, Select, Include>>(
     i: SelectSubset<T, CreateInput<CreateData, Select, Include>>
   ): Promise<Kind<GetPayload, T>> {
@@ -275,12 +283,20 @@ export class Table<
     )
   }
 
+  /**
+   * @deprecated The DAL is deprecated and will be removed in a future release.
+   *             You can use the raw query API or a query builder/ORM integration.
+   */
   async createMany<T extends CreateManyInput<CreateData>>(
     i: SelectSubset<T, CreateManyInput<CreateData>>
   ): Promise<BatchPayload> {
     return this._executor.execute(this._createMany.bind(this, i))
   }
 
+  /**
+   * @deprecated The DAL is deprecated and will be removed in a future release.
+   *             You can use the raw query API or a query builder/ORM integration.
+   */
   async findUnique<T extends FindUniqueInput<Select, WhereUnique, Include>>(
     i: SelectSubset<T, FindUniqueInput<Select, WhereUnique, Include>>
   ): Promise<Kind<GetPayload, T> | null> {
@@ -290,12 +306,20 @@ export class Table<
     )
   }
 
+  /**
+   * @deprecated The DAL is deprecated and will be removed in a future release.
+   *             You can use the raw query API or a query builder/ORM integration.
+   */
   liveUnique<T extends FindUniqueInput<Select, WhereUnique, Include>>(
     i: SelectSubset<T, FindUniqueInput<Select, WhereUnique, Include>>
   ): LiveResultContext<Kind<GetPayload, T> | null> {
     return this.makeLiveResult(() => this.findUnique(i), i)
   }
 
+  /**
+   * @deprecated The DAL is deprecated and will be removed in a future release.
+   *             You can use the raw query API or a query builder/ORM integration.
+   */
   async findFirst<
     T extends FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
   >(
@@ -310,6 +334,10 @@ export class Table<
     )
   }
 
+  /**
+   * @deprecated The DAL is deprecated and will be removed in a future release.
+   *             You can use the raw query API or a query builder/ORM integration.
+   */
   liveFirst<
     T extends FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
   >(
@@ -321,6 +349,10 @@ export class Table<
     return this.makeLiveResult(() => this.findFirst(i), i ?? {})
   }
 
+  /**
+   * @deprecated The DAL is deprecated and will be removed in a future release.
+   *             You can use the raw query API or a query builder/ORM integration.
+   */
   async findMany<
     T extends FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
   >(
@@ -335,6 +367,10 @@ export class Table<
     )
   }
 
+  /**
+   * @deprecated The DAL is deprecated and will be removed in a future release.
+   *             You can use the raw query API or a query builder/ORM integration.
+   */
   liveMany<
     T extends FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
   >(
@@ -346,6 +382,10 @@ export class Table<
     return this.makeLiveResult(() => this.findMany(i), i ?? {})
   }
 
+  /**
+   * @deprecated The DAL is deprecated and will be removed in a future release.
+   *             You can use the raw query API or a query builder/ORM integration.
+   */
   async update<T extends UpdateInput<UpdateData, Select, WhereUnique, Include>>(
     i: SelectSubset<T, UpdateInput<UpdateData, Select, WhereUnique, Include>>
   ): Promise<Kind<GetPayload, T>> {
@@ -354,12 +394,20 @@ export class Table<
     )
   }
 
+  /**
+   * @deprecated The DAL is deprecated and will be removed in a future release.
+   *             You can use the raw query API or a query builder/ORM integration.
+   */
   async updateMany<T extends UpdateManyInput<UpdateData, Where>>(
     i: SelectSubset<T, UpdateManyInput<UpdateData, Where>>
   ): Promise<BatchPayload> {
     return this._executor.execute(this._updateMany.bind(this, i))
   }
 
+  /**
+   * @deprecated The DAL is deprecated and will be removed in a future release.
+   *             You can use the raw query API or a query builder/ORM integration.
+   */
   async upsert<
     T extends UpsertInput<CreateData, UpdateData, Select, WhereUnique, Include>
   >(
@@ -373,6 +421,10 @@ export class Table<
     )
   }
 
+  /**
+   * @deprecated The DAL is deprecated and will be removed in a future release.
+   *             You can use the raw query API or a query builder/ORM integration.
+   */
   async delete<T extends DeleteInput<Select, WhereUnique, Include>>(
     i: SelectSubset<T, DeleteInput<Select, WhereUnique, Include>>
   ): Promise<Kind<GetPayload, T>> {
@@ -381,6 +433,10 @@ export class Table<
     )
   }
 
+  /**
+   * @deprecated The DAL is deprecated and will be removed in a future release.
+   *             You can use the raw query API or a query builder/ORM integration.
+   */
   async deleteMany<T extends DeleteManyInput<Where>>(
     i?: SelectSubset<T, DeleteManyInput<Where>>
   ): Promise<BatchPayload> {
