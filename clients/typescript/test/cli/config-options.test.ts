@@ -18,12 +18,9 @@ const expectedEnvVars = [
   'DATABASE_REQUIRE_SSL',
   'DATABASE_USE_IPV6',
   'ELECTRIC_USE_IPV6',
-  'LOGICAL_PUBLISHER_HOST',
-  'LOGICAL_PUBLISHER_PORT',
   'HTTP_PORT',
   'PG_PROXY_PORT',
   'PG_PROXY_PASSWORD',
-  'ELECTRIC_WRITE_TO_PG_MODE',
   'AUTH_MODE',
   'AUTH_JWT_ALG',
   'AUTH_JWT_KEY',
@@ -49,13 +46,6 @@ test('assert that all expected env vars are options for CLI', (t) => {
     Object.keys(configOptions).length,
     expectedEnvVars.length,
     'CLI options do not match expected environment variables'
-  )
-})
-
-test('assert Electric is in logical_replication mode by default', (t) => {
-  t.is(
-    configOptions['ELECTRIC_WRITE_TO_PG_MODE'].defaultVal,
-    'logical_replication'
   )
 })
 

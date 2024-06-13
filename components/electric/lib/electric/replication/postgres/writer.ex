@@ -122,19 +122,18 @@ defmodule Electric.Replication.Postgres.Writer do
   defp load_relations_from_changes(changes) do
     changes
     |> Enum.map(& &1.relation)
+    |> Enum.uniq()
     |> ShadowTableTransformation.add_shadow_relations()
-    |> Stream.uniq()
-    |> Stream.map(&Extension.SchemaCache.Global.relation!/1)
-    |> Map.new(fn rel -> {{rel.schema, rel.name}, rel} end)
+    |> Map.new(fn rel_tuple ->
+      rel = Extension.SchemaCache.Global.relation!(rel_tuple)
+      {{rel.schema, rel.name}, rel}
+    end)
   end
 
   defp split_change_into_main_and_shadow(change, relations, tag, origin) do
     ShadowTableTransformation.split_change_into_main_and_shadow(change, relations, tag, origin)
   end
 
-  # This is the same change as the one in `Electric.Replication.SatelliteCollectorProducer.update_acked_client_lsn/1`
-  # but expressed as an SQL INSERT statement. This INSERT does not cause the `upsert_acknowledged_client_lsn` trigger to
-  # fire because the trigger is enabled with `ENABLE REPLICA TRIGGER`.
   defp acked_client_lsn_statement(tx) do
     client_id = tx.origin
     lsn = tx.lsn

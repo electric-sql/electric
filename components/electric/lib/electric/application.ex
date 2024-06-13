@@ -19,20 +19,6 @@ defmodule Electric.Application do
         Electric.Replication.Connectors
       ]
       |> maybe_add_child(
-        if Electric.write_to_pg_mode() == :logical_replication do
-          child_id = :replication_tcp_server_listener
-
-          opts =
-            [
-              supervisor_options: [name: child_id],
-              port: pg_server_port(),
-              handler_module: Electric.Replication.Postgres.TcpServer
-            ] ++ listener_opts()
-
-          sup_spec(ThousandIsland, child_id, opts)
-        end
-      )
-      |> maybe_add_child(
         unless Application.get_env(:electric, :disable_listeners, false) do
           child_id = :root_http_router_listener
 
@@ -48,30 +34,28 @@ defmodule Electric.Application do
       )
 
     app_vsn = Application.spec(:electric, :vsn)
-    write_to_pg_mode = Electric.write_to_pg_mode()
-    Logger.info("Starting ElectricSQL #{app_vsn} in #{write_to_pg_mode} mode.")
+    Logger.info("Starting ElectricSQL #{app_vsn}.")
 
     opts = [strategy: :one_for_one, name: Electric.Supervisor]
 
     with {:ok, supervisor} <- Supervisor.start_link(children, opts),
          connectors = Application.get_env(:electric, Electric.Replication.Connectors, []),
-         :ok <- start_connectors(connectors, write_to_pg_mode) do
+         :ok <- start_connectors(connectors) do
       {:ok, supervisor}
     else
       error -> log_supervisor_startup_error(error)
     end
   end
 
-  defp start_connectors([], _write_to_pg_mode), do: :ok
+  defp start_connectors([]), do: :ok
 
-  defp start_connectors([{name, config} | connectors], write_to_pg_mode) do
+  defp start_connectors([{name, config} | connectors]) do
     connector_config =
       config
       |> Keyword.put(:origin, to_string(name))
-      |> Keyword.put(:write_to_pg_mode, write_to_pg_mode)
 
     with {:ok, _pid} <- Connectors.start_connector(PostgresConnector, connector_config) do
-      start_connectors(connectors, write_to_pg_mode)
+      start_connectors(connectors)
     end
   end
 
@@ -88,7 +72,6 @@ defmodule Electric.Application do
   end
 
   defp http_port, do: Application.fetch_env!(:electric, :http_port)
-  defp pg_server_port, do: Application.fetch_env!(:electric, :pg_server_port)
 
   defp listener_opts do
     use_ipv6? = Application.get_env(:electric, :listen_on_ipv6?, false)
@@ -110,17 +93,6 @@ defmodule Electric.Application do
   defp log_supervisor_startup_error(error), do: error
 
   @spec log_child_error({atom, atom}, term) :: no_return
-  defp log_child_error(
-         {ThousandIsland, :replication_tcp_server_listener},
-         {:shutdown, {:failed_to_start_child, :listener, :eaddrinuse}}
-       ) do
-    Electric.Errors.print_fatal_error(
-      :init,
-      "Failed to open a socket to listen for PG connection on port #{pg_server_port()}.",
-      "Another instance of Electric or a different application is already listening on the same port."
-    )
-  end
-
   defp log_child_error(
          {Bandit, :root_http_router_listener},
          {:shutdown, {:failed_to_start_child, :listener, :eaddrinuse}}

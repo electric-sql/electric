@@ -6,13 +6,6 @@ defmodule Electric.Replication.Connectors do
   @type connection_config_opt() :: :epgsql.connect_option() | {:ipv6, boolean()}
   @type connection_config() :: [connection_config_opt(), ...]
 
-  @type electric_connection_opt() ::
-          {:host, binary()}
-          | {:port, pos_integer()}
-          | {:dbname, binary()}
-          | {:connect_timeout, non_neg_integer()}
-  @type replication_config() :: [{:electric_connection, [electric_connection_opt(), ...]}]
-
   @type proxy_listen_opts() :: ThousandIsland.options()
   @type proxy_config_opt() ::
           {:listen, proxy_listen_opts()}
@@ -29,7 +22,6 @@ defmodule Electric.Replication.Connectors do
   @type config_opt() ::
           {:origin, origin()}
           | {:connection, connection_config()}
-          | {:replication, replication_config()}
           | {:proxy, proxy_config()}
           | {:wal_window, wal_window_config()}
 
@@ -38,13 +30,7 @@ defmodule Electric.Replication.Connectors do
   @type replication_opts() :: %{
           slot: String.t(),
           publication: String.t(),
-          subscription: String.t(),
-          electric_connection: %{
-            host: String.t(),
-            port: pos_integer(),
-            dbname: String.t(),
-            connect_timeout: non_neg_integer()
-          }
+          subscription: String.t()
         }
 
   @type connection_opts() :: %{
@@ -127,7 +113,7 @@ defmodule Electric.Replication.Connectors do
       |> String.slice(0..(62 - String.length(Extension.slot_name()) - 1))
 
     config
-    |> Keyword.fetch!(:replication)
+    |> Keyword.get(:replication, [])
     |> Map.new()
     |> Map.put(:slot, Extension.slot_name() <> "_#{database_name}")
     |> Map.put(:publication, Extension.publication_name())
@@ -171,11 +157,6 @@ defmodule Electric.Replication.Connectors do
     config
     |> Keyword.fetch!(:wal_window)
     |> Map.new()
-  end
-
-  @spec write_to_pg_mode(config()) :: Electric.write_to_pg_mode()
-  def write_to_pg_mode(config) do
-    Keyword.get(config, :write_to_pg_mode, Electric.write_to_pg_mode())
   end
 
   # This is needed to please Dialyzer.

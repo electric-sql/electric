@@ -150,10 +150,7 @@ defmodule Electric.Postgres.Extension.SchemaCacheTest do
       start_supervised({Extension.SchemaCache, {conn_config, []}})
 
     {:ok, migration_consumer} =
-      start_supervised(
-        {Postgres.MigrationConsumer,
-         {conn_config, [producer: producer, refresh_subscription: false]}}
-      )
+      start_supervised({Postgres.MigrationConsumer, {conn_config, producer: producer}})
 
     {:ok, _pid} =
       start_supervised({MockConsumer, parent: self(), producer: migration_consumer})

@@ -9,9 +9,6 @@ defmodule Electric.Replication.SatelliteCollectorProducer do
   on the metadata, regardless of observed operation order.
   """
   use GenStage
-
-  alias Electric.Postgres.Extension
-  alias Electric.Replication.Changes.NewRecord
   alias Electric.Replication.Connectors
 
   require Logger
@@ -34,7 +31,7 @@ defmodule Electric.Replication.SatelliteCollectorProducer do
   # Internal API
 
   @impl GenStage
-  def init(connector_config) do
+  def init(_) do
     table = :ets.new(nil, [:ordered_set, keypos: 2])
 
     {:producer,
@@ -42,8 +39,7 @@ defmodule Electric.Replication.SatelliteCollectorProducer do
        table: table,
        next_key: 0,
        demand: 0,
-       starting_from: -1,
-       write_to_pg_mode: Connectors.write_to_pg_mode(connector_config)
+       starting_from: -1
      }}
   end
 
@@ -51,7 +47,6 @@ defmodule Electric.Replication.SatelliteCollectorProducer do
   def handle_call({:store_incoming_transactions, transactions}, _, state) do
     transactions
     |> Stream.reject(&Enum.empty?(&1.changes))
-    |> maybe_update_acked_client_lsns(state.write_to_pg_mode)
     |> Stream.with_index(state.next_key)
     |> Enum.to_list()
     |> then(&:ets.insert(state.table, &1))
@@ -111,39 +106,5 @@ defmodule Electric.Replication.SatelliteCollectorProducer do
         {:noreply, Enum.map(results, fn [tx, pos] -> {tx, pos} end),
          %{state | demand: demand - fulfilled, starting_from: last_key}}
     end
-  end
-
-  defp maybe_update_acked_client_lsns(tx_stream, :logical_replication),
-    do: Stream.map(tx_stream, &update_acked_client_lsn/1)
-
-  defp maybe_update_acked_client_lsns(tx_stream, :direct_writes),
-    do: tx_stream
-
-  # NOTE(alco):
-  #
-  # Potential data race scenario: a client sends a transaction to the server and then immediately disconnects.
-  # If it reconnects soon afterwards, such that Postgres has not had time to commit the transaction yet, the
-  # client's LSN fetched from Postgres will not include the already submitted transaction, cuasing the client to
-  # send it once again.
-  #
-  # We deem it a non-issue because:
-  #
-  #    * if a repeat transaction is applied immediately after the first one, our conflict-resolution
-  #      logic makes it a no-op
-  #
-  #    * if a repeat transaction is applied after an intermediate transaction from a different client
-  #      has written to the same row(s), the repeat transaction is discarded by the LWW logic.
-  defp update_acked_client_lsn(tx) do
-    Map.update!(tx, :changes, fn changes ->
-      lsn_change = %NewRecord{
-        relation: Extension.acked_client_lsn_relation(),
-        record: %{
-          "client_id" => tx.origin,
-          "lsn" => Electric.Postgres.Types.Bytea.to_postgres_hex(tx.lsn)
-        }
-      }
-
-      [lsn_change | changes]
-    end)
   end
 end

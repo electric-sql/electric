@@ -7,19 +7,15 @@ defmodule Electric.ConfigTest do
 
   describe "format_required_config_error" do
     test "complains about missing required values" do
-      write_to_pg_mode_config = parse_write_to_pg_mode("logical_replication")
-
       error_str =
         format_required_config_error(
           DATABASE_URL: parse_database_url(nil, :prod),
-          LOGICAL_PUBLISHER_HOST: parse_logical_publisher_host(nil, write_to_pg_mode_config),
           PG_PROXY_PASSWORD: parse_pg_proxy_password(nil)
         )
         |> IO.iodata_to_binary()
 
       assert error_str =~ "CONFIGURATION ERROR"
       assert error_str =~ "DATABASE_URL not set"
-      assert error_str =~ "LOGICAL_PUBLISHER_HOST not set"
       assert error_str =~ "PG_PROXY_PASSWORD not set"
     end
 
@@ -27,7 +23,6 @@ defmodule Electric.ConfigTest do
       error_str =
         format_required_config_error(
           DATABASE_URL: parse_database_url("psql://localhost", :prod),
-          ELECTRIC_WRITE_TO_PG_MODE: parse_write_to_pg_mode("foo"),
           LOG_LEVEL: parse_log_level("absolute"),
           PG_PROXY_PORT: parse_pg_proxy_port("https:443", 1)
         )
@@ -35,10 +30,6 @@ defmodule Electric.ConfigTest do
 
       assert error_str =~ "CONFIGURATION ERROR"
       assert error_str =~ "DATABASE_URL has invalid URL scheme: \"psql\""
-
-      assert error_str =~
-               "ELECTRIC_WRITE_TO_PG_MODE has invalid value: \"foo\". " <>
-                 "Must be one of [\"direct_writes\", \"logical_replication\"]"
 
       assert error_str =~
                "LOG_LEVEL has invalid value: \"absolute\". " <>

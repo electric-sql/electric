@@ -96,11 +96,6 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   end
 
   @impl SchemaLoader
-  def refresh_subscription(origin, name) do
-    call(origin, {:refresh_subscription, name})
-  end
-
-  @impl SchemaLoader
   def migration_history(origin, version) do
     call(origin, {:migration_history, version})
   end
@@ -370,39 +365,6 @@ defmodule Electric.Postgres.Extension.SchemaCache do
       end
 
     {:reply, result, state}
-  end
-
-  # Prevent deadlocks:
-  # the list of electrified tables is cached and this refresh_subscription call
-  # is done via an async Task because otherwise we get into a deadlock in the
-  # refresh-tables process:
-  #
-  # 1. we call refresh tables
-  # 2. pg **synchronously** queries the replication publication (electric)
-  #    for the list of replicated tables
-  # 3. the TcpServer calls this process to get the list of electrified tables
-  # 4. this process is waiting for the `REFRESH SUBSCRIPTION` call to finish
-  # 5. deadlock
-  #
-  # So this call to the SchemaLoader is done via a task so that this SchemaCache process
-  # is free to handle the `electrified_tables/1` call coming in from the `TcpServer`.
-  def handle_call({:refresh_subscription, name}, from, %{refresh_task: nil} = state) do
-    task =
-      Task.async(fn ->
-        result = SchemaLoader.refresh_subscription(state.backend, name)
-        GenServer.reply(from, result)
-        :ok
-      end)
-
-    {:noreply, %{state | refresh_task: task}}
-  end
-
-  def handle_call({:refresh_subscription, name}, _from, %{refresh_task: %Task{}} = state) do
-    Logger.warning(
-      "Refresh subscription already running, ingnoring duplicate refresh of subscription #{name}"
-    )
-
-    {:reply, :ok, state}
   end
 
   def handle_call({:internal_relation, relation}, _from, state) do

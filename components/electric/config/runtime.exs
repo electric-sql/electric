@@ -83,12 +83,10 @@ config :electric,
 default_log_level = "info"
 default_auth_mode = "secure"
 default_http_server_port = 5133
-default_pg_server_port = 5433
 default_pg_proxy_port = 65432
 default_listen_on_ipv6 = true
 default_database_require_ssl = true
 default_database_use_ipv6 = false
-default_write_to_pg_mode = "logical_replication"
 default_proxy_tracing_enable = false
 default_resumable_wal_window = 2 * 1024 * 1024 * 1024
 default_txn_cache_size = 256 * 1024 * 1024
@@ -119,14 +117,6 @@ database_url_config =
   env!("DATABASE_URL", :string, nil)
   |> Electric.Config.parse_database_url(config_env())
 
-write_to_pg_mode_config =
-  env!("ELECTRIC_WRITE_TO_PG_MODE", :string, default_write_to_pg_mode)
-  |> Electric.Config.parse_write_to_pg_mode()
-
-logical_publisher_host_config =
-  env!("LOGICAL_PUBLISHER_HOST", :string, nil)
-  |> Electric.Config.parse_logical_publisher_host(write_to_pg_mode_config)
-
 log_level_config =
   env!("LOG_LEVEL", :string, default_log_level)
   |> Electric.Config.parse_log_level()
@@ -143,8 +133,6 @@ potential_errors =
   auth_errors ++
     [
       {"DATABASE_URL", database_url_config},
-      {"ELECTRIC_WRITE_TO_PG_MODE", write_to_pg_mode_config},
-      {"LOGICAL_PUBLISHER_HOST", logical_publisher_host_config},
       {"LOG_LEVEL", log_level_config},
       {"PG_PROXY_PASSWORD", pg_proxy_password_config},
       {"PG_PROXY_PORT", pg_proxy_port_config}
@@ -174,17 +162,13 @@ config :logger, level: log_level
 
 config :electric, Electric.Satellite.Auth, provider: auth_provider
 
-pg_server_port = env!("LOGICAL_PUBLISHER_PORT", :integer, default_pg_server_port)
 listen_on_ipv6? = env!("ELECTRIC_USE_IPV6", :boolean, default_listen_on_ipv6)
-{:ok, write_to_pg_mode} = write_to_pg_mode_config
 
 config :electric,
   # Used in telemetry, and to identify the server to the client
   instance_id: env!("ELECTRIC_INSTANCE_ID", :string, Electric.Utils.uuid4()),
   http_port: env!("HTTP_PORT", :integer, default_http_server_port),
-  pg_server_port: pg_server_port,
-  listen_on_ipv6?: listen_on_ipv6?,
-  write_to_pg_mode: write_to_pg_mode
+  listen_on_ipv6?: listen_on_ipv6?
 
 # disable all ddlx commands apart from `ENABLE`
 # override these using the `ELECTRIC_FEATURES` environment variable, e.g.
@@ -257,8 +241,6 @@ connector_config =
       |> Keyword.put(:replication, "database")
       |> Keyword.update(:timeout, 5_000, &String.to_integer/1)
 
-    {:ok, pg_server_host} = logical_publisher_host_config
-
     {:ok, proxy_port} = pg_proxy_port_config
     {:ok, proxy_password} = pg_proxy_password_config
 
@@ -273,14 +255,6 @@ connector_config =
       postgres_1: [
         producer: Electric.Replication.Postgres.LogicalReplicationProducer,
         connection: conn_config,
-        replication: [
-          electric_connection: [
-            host: pg_server_host,
-            port: pg_server_port,
-            dbname: "electric",
-            connect_timeout: conn_config[:timeout]
-          ]
-        ],
         proxy: [
           # listen opts are ThousandIsland.options()
           # https://hexdocs.pm/thousand_island/ThousandIsland.html#t:options/0
