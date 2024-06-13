@@ -335,3 +335,9 @@ test.serial('nested shape is constructed', async (t) => {
   const shape2 = computeShape(schema, 'Post', input)
   t.deepEqual(shape2, expectedShape)
 })
+
+test('computeShape throws an error if table does not exist', (t) => {
+  t.throws(() => computeShape(schema, 'NonExistentTable', {}), {
+    message: `Cannot sync the requested shape. Table 'NonExistentTable' does not exist in the database schema.`,
+  })
+})

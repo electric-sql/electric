@@ -35,8 +35,6 @@ export function sync(
   delete input.table
 
   // Compute the shape from the user input
-  // FIXME: remove type cast below when we remove the DAL
-  //        `dbDescription` is missing the Zod schemas but they are not used in this sync API
   const shape = computeShape(dbDescription, tableName, i)
   return shapeManager.subscribe([shape], key)
 }
@@ -46,6 +44,12 @@ export function computeShape(
   tableName: TableName,
   i: ShapeInput
 ): Shape {
+  if (!dbSchema.hasTable(tableName)) {
+    throw new Error(
+      `Cannot sync the requested shape. Table '${tableName}' does not exist in the database schema.`
+    )
+  }
+
   // Recursively go over the included fields
   const include = i.include ?? {}
   const where = i.where ?? ''
