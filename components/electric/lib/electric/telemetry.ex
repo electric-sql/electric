@@ -1,6 +1,5 @@
 defmodule Electric.Telemetry do
   use Supervisor
-  alias Telemetry.Metrics
   import Telemetry.Metrics
 
   def start_link(init_arg) do
@@ -13,6 +12,7 @@ defmodule Electric.Telemetry do
     ]
 
     children
+    |> add_statsd_reporter(Application.fetch_env!(:electric, :telemetry_statsd_host))
     |> add_call_home_reporter(Application.fetch_env!(:electric, :telemetry))
     |> Supervisor.init(strategy: :one_for_one)
   end
@@ -30,6 +30,19 @@ defmodule Electric.Telemetry do
   end
 
   defp add_call_home_reporter(children, _), do: children
+
+  defp add_statsd_reporter(children, nil), do: children
+
+  defp add_statsd_reporter(children, host) do
+    children ++
+      [
+        {TelemetryMetricsStatsd,
+         host: host,
+         formatter: :datadog,
+         global_tags: [instance_id: Electric.instance_id()],
+         metrics: statsd_metrics()}
+      ]
+  end
 
   def static_info() do
     {total_mem, _, _} = :memsup.get_memory_data()
@@ -124,37 +137,45 @@ defmodule Electric.Telemetry do
     ]
   end
 
-  @doc false
-  # This function is not currently used, but is here as a general reference to the metrics exposed
-  # by our system. We're likely to want to expose them as prometheus metrics at some point.
-  def metrics(),
-    do: [
-      Metrics.last_value("electric.postgres.migration.electrified_tables"),
-      Metrics.counter("electric.postgres.replication_from.start.monotonic_time",
+  defp statsd_metrics() do
+    [
+      last_value("vm.memory.total", unit: :byte),
+      last_value("vm.memory.processes_used", unit: :byte),
+      last_value("vm.memory.binary", unit: :byte),
+      last_value("vm.memory.ets", unit: :byte),
+      last_value("vm.total_run_queue_lengths.total"),
+      last_value("vm.total_run_queue_lengths.cpu"),
+      last_value("vm.total_run_queue_lengths.io"),
+      last_value("electric.resources.wal_cache.cache_memory_total", unit: :byte),
+      last_value("electric.postgres.migration.electrified_tables"),
+      counter("electric.postgres.replication_from.start.monotonic_time",
         tags: [:short_version]
       ),
-      Metrics.last_value("electric.postgres.replication_from.start.electrified_tables"),
-      Metrics.sum("electric.postgres.replication_from.transaction.operations"),
-      Metrics.counter("electric.postgres.replication_to.start.monotonic_time"),
-      Metrics.sum("electric.postgres.replication_to.send.transactions"),
-      Metrics.summary("electric.satellite.connection.stop.duration"),
-      Metrics.summary("electric.satellite.replication.start.continued_subscriptions",
-        drop: & &1[:initial_sync]
-      ),
-      Metrics.counter("electric.satellite.replication.start.monotonic_time",
+      last_value("electric.postgres.replication_from.start.electrified_tables"),
+      sum("electric.postgres.replication_from.transaction.operations"),
+      counter("electric.postgres.replication_to.start.monotonic_time"),
+      sum("electric.postgres.replication_to.send.transactions"),
+      counter("electric.satellite.replication.start.monotonic_time",
         keep: & &1[:initial_sync]
       ),
-      Metrics.counter("electric.satellite.replication.start.monotonic_time", tags: [:client_id]),
-      Metrics.counter("electric.satellite.replication.start.monotonic_time", tags: [:user_id]),
-      Metrics.sum("electric.satellite.replication.transaction_send.operations"),
-      Metrics.sum("electric.satellite.replication.transaction_receive.operations"),
-      Metrics.counter("electric.satellite.replication.bad_transaction.monotonic_time"),
-      Metrics.summary("electric.satellite.replication.new_subscription.start.included_tables"),
-      Metrics.summary("electric.satellite.replication.new_subscription.start.shapes"),
-      Metrics.summary("electric.satellite.replication.new_subscription.shape_data.duration"),
-      Metrics.summary("electric.satellite.replication.new_subscription.stop.duration"),
-      Metrics.summary("electric.satellite.replication.new_subscription.stop.send_lag")
+      counter("electric.satellite.replication.start.monotonic_time", tags: [:client_id]),
+      counter("electric.satellite.replication.start.monotonic_time", tags: [:user_id]),
+      sum("electric.satellite.replication.transaction_send.operations"),
+      sum("electric.satellite.replication.transaction_receive.operations"),
+      counter("electric.satellite.replication.bad_transaction.monotonic_time"),
+      summary("electric.satellite.replication.new_subscription.start.monotonic_time"),
+      summary("electric.satellite.replication.new_subscription.shape_data.duration",
+        unit: {:native, :millisecond}
+      ),
+      summary("electric.satellite.replication.new_subscription.stop.duration",
+        unit: {:native, :millisecond}
+      ),
+      summary("electric.satellite.replication.new_subscription.stop.send_lag",
+        unit: {:native, :millisecond}
+      )
     ]
+    |> Enum.map(&%{&1 | tags: [:instance_id | &1.tags]})
+  end
 
   defp periodic_measurements do
     [

@@ -92,6 +92,7 @@ default_write_to_pg_mode = "logical_replication"
 default_proxy_tracing_enable = false
 default_resumable_wal_window = 2 * 1024 * 1024 * 1024
 default_txn_cache_size = 256 * 1024 * 1024
+default_metric_period = 2_000
 
 if config_env() in [:dev, :test] do
   source!([".env.#{config_env()}", ".env.#{config_env()}.local", System.get_env()])
@@ -139,6 +140,9 @@ pg_proxy_password_config =
   env!("PG_PROXY_PORT", :string, nil)
   |> Electric.Config.parse_pg_proxy_port(default_pg_proxy_port)
 
+metric_period = env!("METRICS_MEASUREMENT_PERIOD", :integer, default_metric_period)
+statsd_host = env!("STATSD_HOST", :string?, nil)
+
 potential_errors =
   auth_errors ++
     [
@@ -171,6 +175,7 @@ end
 
 {:ok, log_level} = log_level_config
 config :logger, level: log_level
+config :telemetry_poller, :default, period: metric_period
 
 config :electric, Electric.Satellite.Auth, provider: auth_provider
 
@@ -184,6 +189,7 @@ config :electric,
   http_port: env!("HTTP_PORT", :integer, default_http_server_port),
   pg_server_port: pg_server_port,
   listen_on_ipv6?: listen_on_ipv6?,
+  telemetry_statsd_host: statsd_host,
   write_to_pg_mode: write_to_pg_mode
 
 # disable all ddlx commands apart from `ENABLE`
