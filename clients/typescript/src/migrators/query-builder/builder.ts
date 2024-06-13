@@ -337,7 +337,7 @@ export abstract class QueryBuilder {
                 recordIdx * columnCount + i + 1
               )
             }
-            return `(${tempColJoinArray.join(', ')})`
+            return ` (${tempColJoinArray.join(', ')})`
           }
         ).join(',')
       }

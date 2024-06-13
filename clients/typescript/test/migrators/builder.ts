@@ -354,4 +354,50 @@ export const builderTests = (test: TestFn<ContextType>) => {
     const versions = migrations.map((m) => m.version)
     t.deepEqual(versions, ['20230613112725_814', '20230613112735_992'])
   })
+
+  test('prepareInsertBatchedStatements correctly splits up data in batches', (t) => {
+    const { builder } = t.context
+    const data = [
+      { a: 1, b: 2 },
+      { a: 3, b: 4 },
+      { a: 5, b: 6 },
+    ]
+    const stmts = builder.prepareInsertBatchedStatements(
+      'INSERT INTO test (a, b) VALUES',
+      ['a', 'b'],
+      data,
+      5 // at most 5 `?`s in one SQL statement, so we should see the split
+    )
+
+    t.deepEqual(stmts, [
+      {
+        sql: 'INSERT INTO test (a, b) VALUES (?, ?), (?, ?)',
+        args: [1, 2, 3, 4],
+      },
+      { sql: 'INSERT INTO test (a, b) VALUES (?, ?)', args: [5, 6] },
+    ])
+  })
+
+  test('prepareInsertBatchedStatements respects column order', (t) => {
+    const { builder } = t.context
+    const data = [
+      { a: 1, b: 2 },
+      { a: 3, b: 4 },
+      { a: 5, b: 6 },
+    ]
+    const stmts = builder.prepareInsertBatchedStatements(
+      'INSERT INTO test (a, b) VALUES',
+      ['b', 'a'],
+      data,
+      5
+    )
+
+    t.deepEqual(stmts, [
+      {
+        sql: 'INSERT INTO test (a, b) VALUES (?, ?), (?, ?)',
+        args: [2, 1, 4, 3],
+      },
+      { sql: 'INSERT INTO test (a, b) VALUES (?, ?)', args: [6, 5] },
+    ])
+  })
 }
