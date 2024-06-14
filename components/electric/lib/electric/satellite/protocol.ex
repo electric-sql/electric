@@ -45,8 +45,8 @@ defmodule Electric.Satellite.Protocol do
 
   @producer_demand 5
 
-  @spec handle_rpc_request(PB.rpc_req(), State.t()) :: handle_rpc_result()
-  def handle_rpc_request(%SatAuthReq{id: client_id, token: token}, state)
+  @spec handle_rpc_request(PB.rpc_req(), PG.rpc_req_opts(), State.t()) :: handle_rpc_result()
+  def handle_rpc_request(%SatAuthReq{id: client_id, token: token}, _req_opts, state)
       when not auth_passed?(state) and client_id != "" and token != "" do
     Logger.metadata(client_id: client_id)
     Logger.debug("Received auth request")
@@ -88,13 +88,13 @@ defmodule Electric.Satellite.Protocol do
     end
   end
 
-  def handle_rpc_request(%SatAuthReq{}, state) when not auth_passed?(state),
+  def handle_rpc_request(%SatAuthReq{}, _req_opts, state) when not auth_passed?(state),
     do: {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
 
-  def handle_rpc_request(_, state) when not auth_passed?(state),
+  def handle_rpc_request(_, _req_opts, state) when not auth_passed?(state),
     do: {:error, %SatErrorResp{error_type: :AUTH_REQUIRED}}
 
-  def handle_rpc_request(%SatAuthReq{id: client_id, token: token}, state)
+  def handle_rpc_request(%SatAuthReq{id: client_id, token: token}, _req_opts, state)
       when auth_passed?(state) and client_id === state.client_id and token != "" do
     # Request to renew auth token
     case Electric.Satellite.Auth.validate_token(token, state.auth_provider) do
@@ -119,12 +119,13 @@ defmodule Electric.Satellite.Protocol do
     end
   end
 
-  def handle_rpc_request(%SatAuthReq{}, state) when auth_passed?(state),
+  def handle_rpc_request(%SatAuthReq{}, _req_opts, state) when auth_passed?(state),
     do: {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
 
   # Satellite client request replication
   def handle_rpc_request(
         %SatInStartReplicationReq{lsn: client_lsn, options: opts} = msg,
+        _req_opts,
         %State{} = state
       ) do
     Logger.debug(
@@ -155,7 +156,11 @@ defmodule Electric.Satellite.Protocol do
   end
 
   # Satellite requests to stop replication
-  def handle_rpc_request(%SatInStopReplicationReq{} = _msg, %State{out_rep: out_rep} = state)
+  def handle_rpc_request(
+        %SatInStopReplicationReq{} = _msg,
+        _req_opts,
+        %State{out_rep: out_rep} = state
+      )
       when is_out_rep_active(state) do
     Logger.debug("Received stop replication request")
     Metrics.satellite_replication_event(%{stopped: 1})
@@ -167,8 +172,7 @@ defmodule Electric.Satellite.Protocol do
   end
 
   # Satellite requests a new subscription to a set of shapes
-  def handle_rpc_request(%SatSubsReq{subscription_id: id} = req, state) do
-    OpenTelemetry.set_current_trace_context(nil)
+  def handle_rpc_request(%SatSubsReq{subscription_id: id} = req, _req_opts, state) do
 
     OpenTelemetry.with_span(
       "proto.shape_subscription_req",
@@ -190,7 +194,7 @@ defmodule Electric.Satellite.Protocol do
     )
   end
 
-  def handle_rpc_request(%SatUnsubsReq{subscription_ids: ids}, %State{} = state) do
+  def handle_rpc_request(%SatUnsubsReq{subscription_ids: ids}, _req_opts, %State{} = state) do
     needs_unpausing? =
       is_out_rep_paused(state) and Enum.any?(ids, &is_next_pending_subscription(state, &1))
 
@@ -344,7 +348,7 @@ defmodule Electric.Satellite.Protocol do
 
     case PB.decode_rpc_request(method, req.message) do
       {:ok, decoded} ->
-        case handle_rpc_request(decoded, state) do
+        case handle_rpc_request(decoded, req.options, state) do
           {:reply, result, state} ->
             {%{resp | result: {:message, rpc_encode(result)}}, state}
 

@@ -18,10 +18,15 @@ syntax = "proto3";
 
 package Electric.Satellite;
 
+message SatRpcRequestOptions {
+  optional string traceparent = 1;
+}
+
 /* RPC request transport message, must be used to implement service RPC calls in the protocol */
 message SatRpcRequest {
     string method = 1;
     uint32 request_id = 2;
+    SatRpcRequestOptions options = 4;
     
     bytes message = 3;
 }

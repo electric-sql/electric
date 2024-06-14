@@ -92,6 +92,8 @@ defmodule Electric.Satellite.Protobuf do
           | %Satellite.SatSubsResp{}
           | %Satellite.SatUnsubsResp{}
 
+  @type rpc_req_opts() :: %Satellite.SatRpcRequestOptions{}
+
   defmacro __using__(_opts) do
     quote do
       alias Electric.Satellite.Protobuf, as: PB
@@ -191,4 +193,10 @@ defmodule Electric.Satellite.Protobuf do
   for {method, {_, response}} <- @rpc_calls do
     def decode_rpc_response(unquote(method), message), do: unquote(response).decode(message)
   end
+
+  def fetch_rcp_request_traceparent(%Satellite.SatRpcRequestOptions{traceparent: val})
+      when is_binary(val) and val != "",
+      do: {:ok, val}
+
+  def fetch_rcp_request_traceparent(%Satellite.SatRpcRequestOptions{}), do: :unset
 end
