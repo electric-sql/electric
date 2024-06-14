@@ -42,19 +42,23 @@ function recordSpanError(span: Span, error?: any) {
  * the function execution and end after the function returns, marking its state
  * as either failed or succeeded appropriately and recording exceptions
  */
-function runWithSpan<T>(name: string, options: SpanOptions, fn: () => T): T
-function runWithSpan<T>(name: string, fn: () => T): T
 function runWithSpan<T>(
   name: string,
-  fnOrOptions: SpanOptions | (() => T),
-  fn?: () => T
+  options: SpanOptions,
+  fn: (span: Span) => T
+): T
+function runWithSpan<T>(name: string, fn: (span: Span) => T): T
+function runWithSpan<T>(
+  name: string,
+  fnOrOptions: SpanOptions | ((span: Span) => T),
+  fn?: (span: Span) => T
 ) {
   const span = startSpan(name)
   const functionToTrace = (
     typeof fnOrOptions === 'function' ? fnOrOptions : fn
-  ) as () => T
+  ) as (span: Span) => T
   try {
-    const result = functionToTrace()
+    const result = functionToTrace(span)
 
     // if result is a promise, chain span actions to it
     if (result instanceof Promise) {
