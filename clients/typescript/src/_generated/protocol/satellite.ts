@@ -4439,7 +4439,7 @@ export interface Root {
   authenticate(request: SatAuthReq): Promise<SatAuthResp>;
   startReplication(request: SatInStartReplicationReq): Promise<SatInStartReplicationResp>;
   stopReplication(request: SatInStopReplicationReq): Promise<SatInStopReplicationResp>;
-  subscribe(request: SatSubsReq): Promise<SatSubsResp>;
+  subscribe(request: SatSubsReq, options: object): Promise<SatSubsResp>;
   unsubscribe(request: SatUnsubsReq): Promise<SatUnsubsResp>;
 }
 
@@ -4474,9 +4474,9 @@ export class RootClientImpl implements Root {
     return promise.then((data) => SatInStopReplicationResp.decode(_m0.Reader.create(data)));
   }
 
-  subscribe(request: SatSubsReq): Promise<SatSubsResp> {
+  subscribe(request: SatSubsReq, options: object): Promise<SatSubsResp> {
     const data = SatSubsReq.encode(request).finish();
-    const promise = this.rpc.request(this.service, "subscribe", data);
+    const promise = this.rpc.request(this.service, "subscribe", data, SatRpcRequestOptions.create(options));
     return promise.then((data) => SatSubsResp.decode(_m0.Reader.create(data)));
   }
 
@@ -4517,7 +4517,7 @@ export class ClientRootClientImpl implements ClientRoot {
 }
 
 interface Rpc {
-  request(service: string, method: string, data: Uint8Array): Promise<Uint8Array>;
+  request(service: string, method: string, data: Uint8Array, options?: object): Promise<Uint8Array>;
 }
 
 type Builtin = Date | Function | Uint8Array | string | number | boolean | undefined;
