@@ -31,23 +31,11 @@ defmodule Electric.Telemetry.OpenTelemetry do
   end
 
   def get_current_span_context do
-    IO.puts("current otel_ctx: #{inspect(:otel_ctx.get_current())}")
-    IO.puts("current span_ctx: #{inspect(:otel_tracer.current_span_ctx())}")
-    IO.inspect(:otel_propagator_text_map.inject([]))
-
-    IO.inspect(
-      :otel_propagator_text_map.extract([
-        {"traceparent", "00-cd2a0aa88c218bb3730612cc4cfb5687-297a51c6adc7c0b0-01"}
-      ])
-    )
-
     :otel_tracer.current_span_ctx()
   end
 
-  def set_current_trace_context(traceparent) do
-    traceparent
-    |> :otel_propagator_text_map.extract()
-    |> :otel_ctx.attach()
+  def apply_traceparent(traceparent) when is_binary(traceparent) do
+    :otel_propagator_text_map.extract([{"traceparent", traceparent}])
   end
 
   # Set the span on otel_ctx of the current process to `span_ctx`, so that subsequent `with_span()`

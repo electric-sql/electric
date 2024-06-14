@@ -2,6 +2,7 @@ import {
   Root,
   SatErrorResp,
   SatRpcRequest,
+  SatRpcRequestOptions,
   SatRpcResponse,
 } from '../_generated/protocol/satellite'
 import { SatelliteError, SatelliteErrorCode } from '../util/types'
@@ -55,14 +56,18 @@ export class RPC {
   public request(
     _service: string,
     method: string,
-    message: Uint8Array
+    message: Uint8Array,
+    reqOptions?: object
   ): Promise<Uint8Array> {
     const requestId = this.nextRequestId++
+
+    const options = SatRpcRequestOptions.create(reqOptions)
 
     const request = SatRpcRequest.create({
       method,
       requestId,
       message,
+      options,
     })
 
     // This line may throw, which is why setting global state is done right after

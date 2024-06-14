@@ -1,3 +1,4 @@
+import { SpanContext, context, propagation, trace } from '@opentelemetry/api'
 import {
   ConsoleSpanExporter,
   WebTracerProvider,
@@ -44,8 +45,6 @@ const addOTLPExporter = () => {
   const exporter = new OTLPTraceExporter({
     url: 'http://otel-collector:4318/v1/traces',
   })
-  console.log(exporter)
-
   provider.addSpanProcessor(
     new BatchSpanProcessor(exporter, { scheduledDelayMillis: 1000 })
   )
@@ -68,5 +67,18 @@ const disposeTelemetry = async (): Promise<void> => {
   await provider.shutdown()
 }
 
-export { setUpTelemetry, getTracer, disposeTelemetry }
+const getTraceParent = (ctx: SpanContext) => {
+  const output: { traceparent?: string; tracestate?: string } = {}
+
+  // Serialize the traceparent and tracestate from context into
+  // an output object.
+  //
+  // This example uses the active trace context, but you can
+  // use whatever context is appropriate to your scenario.
+  propagation.inject(trace.setSpanContext(context.active(), ctx), output)
+
+  return output
+}
+
+export { setUpTelemetry, getTracer, getTraceParent, disposeTelemetry }
 export type { TelemetryConfig }
