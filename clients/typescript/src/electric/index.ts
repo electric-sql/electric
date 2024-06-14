@@ -10,6 +10,7 @@ import { ElectricNamespace } from './namespace'
 import { ElectricClient } from '../client/model/client'
 import { DbSchema } from '../client/model/schema'
 import { SqliteBundleMigrator } from '../migrators/bundle'
+import { setUpTelemetry, startSpan } from '../util/telemetry'
 
 export { ElectricNamespace }
 export type * from './adapter'
@@ -34,6 +35,11 @@ export interface ElectrifyOptions {
    * @returns A promise that resolves when the database connection is prepared.
    */
   prepare?: (connection: DatabaseAdapter) => Promise<void>
+
+  /**
+   * Whether to export telemetry to an OpenTelemetry collector.
+   */
+  exportTelemetry?: boolean
 }
 
 const defaultPrepare = async (connection: DatabaseAdapter) => {
@@ -55,6 +61,12 @@ export const electrify = async <DB extends DbSchema<any>>(
   opts?: Omit<ElectrifyOptions, 'adapter' | 'socketFactory'>
 ): Promise<ElectricClient<DB>> => {
   setLogLevel(config.debug ? 'TRACE' : 'WARN')
+  setUpTelemetry({
+    logToConsole: config.debug,
+    exportToOTLP: opts?.exportTelemetry,
+  })
+
+  const initSpan = startSpan('electrify')
   const prepare = opts?.prepare ?? defaultPrepare
   await prepare(adapter)
 
@@ -90,5 +102,6 @@ export const electrify = async <DB extends DbSchema<any>>(
     electric.setIsConnected(satellite.connectivityState)
   }
 
+  initSpan.end()
   return electric
 }

@@ -108,7 +108,12 @@ import { RPC, rpcRespond, withRpcRequestLogging } from './RPC'
 import { Mutex } from 'async-mutex'
 import { DbSchema } from '../client/model'
 import { PgBasicType, PgDateType, PgType } from '../client/conversions/types'
-import { AsyncEventEmitter, QualifiedTablename } from '../util'
+import {
+  AsyncEventEmitter,
+  QualifiedTablename,
+  runWithSpan,
+  startSpan,
+} from '../util'
 import { AuthState } from '../auth'
 import Long from 'long'
 
@@ -295,7 +300,9 @@ export class SatelliteClient implements Client {
     if (this.isConnected()) {
       this.disconnect()
     }
-
+    const span = startSpan('satellite.client.connect', {
+      isClientSpan: true,
+    })
     return new Promise<void>((resolve, reject) => {
       this.socket = new this.socketFactory(PROTOCOL_VSN)
 
@@ -344,7 +351,7 @@ export class SatelliteClient implements Client {
       const { host, port, ssl } = this.opts
       const url = `${ssl ? 'wss' : 'ws'}://${host}:${port}/ws`
       this.socket.open({ url })
-    })
+    }).finally(() => span.end())
   }
 
   disconnect() {
@@ -390,10 +397,14 @@ export class SatelliteClient implements Client {
     }
 
     // Perform validations and prepare the request
+    const span = startSpan('satellite.client.startReplication', {
+      isClientSpan: true,
+    })
     let request: SatInStartReplicationReq
     if (!lsn || lsn.length === 0) {
       Log.info(`no previous LSN, start replication from scratch`)
       if (subscriptionIds && subscriptionIds.length > 0) {
+        span.end()
         return Promise.reject(
           new SatelliteError(
             SatelliteErrorCode.UNEXPECTED_SUBSCRIPTION_STATE,
@@ -424,11 +435,15 @@ export class SatelliteClient implements Client {
 
     return this.delayIncomingMessages(
       async () => {
-        const resp = await this.service.startReplication(request)
+        const resp = await runWithSpan(
+          'satellite.client.startReplication.request',
+          { parentSpan: span },
+          () => this.service.startReplication(request)
+        )
         return this.handleStartResp(resp)
       },
       { allowedRpcResponses: ['startReplication'] }
-    )
+    ).finally(() => span.end())
   }
 
   stopReplication(): Promise<StopReplicationResponse> {
@@ -441,14 +456,21 @@ export class SatelliteClient implements Client {
       )
     }
 
+    const span = startSpan('satellite.client.stopReplication', {
+      isClientSpan: true,
+    })
     this.inbound.isReplicating = ReplicationStatus.STOPPING
     const request = SatInStopReplicationReq.fromPartial({})
     return this.service
       .stopReplication(request)
       .then(this.handleStopResp.bind(this))
+      .finally(() => span.end())
   }
 
   authenticate({ clientId, token }: AuthState): Promise<AuthResponse> {
+    const span = startSpan('satellite.client.authenticate', {
+      isClientSpan: true,
+    })
     const request = SatAuthReq.fromPartial({
       id: clientId,
       token: token,
@@ -457,6 +479,7 @@ export class SatelliteClient implements Client {
     return this.service
       .authenticate(request)
       .then(this.handleAuthResp.bind(this))
+      .finally(() => span.end())
   }
 
   subscribeToTransactions(callback: TransactionCallback) {
@@ -606,6 +629,9 @@ export class SatelliteClient implements Client {
       )
     }
 
+    const span = startSpan('satellite.client.subscribe', {
+      isClientSpan: true,
+    })
     const request = SatSubsReq.fromPartial({
       subscriptionId,
       shapeRequests: shapeRequestToSatShapeReq(shapes),
@@ -615,11 +641,16 @@ export class SatelliteClient implements Client {
 
     return this.delayIncomingMessages(
       async () => {
-        const resp = await this.service.subscribe(request)
+        const resp = await runWithSpan(
+          'satellite.client.subscribe.request',
+          { parentSpan: span },
+          () => this.service.subscribe(request)
+        )
+        span.setAttribute('shape.subscriptionId', request.subscriptionId)
         return this.handleSubscription(resp)
       },
       { allowedRpcResponses: ['subscribe'] }
-    )
+    ).finally(() => span.end())
   }
 
   unsubscribe(subscriptionIds: string[]): Promise<UnsubscribeResponse> {
@@ -631,12 +662,18 @@ export class SatelliteClient implements Client {
         )
       )
     }
-
+    const span = startSpan('satellite.client.unsubscribe', {
+      isClientSpan: true,
+      attributes: {
+        'shape.subscriptionIds': subscriptionIds,
+      },
+    })
     const request = SatUnsubsReq.create({ subscriptionIds })
 
     return this.service
       .unsubscribe(request)
       .then(this.handleUnsubscribeResponse.bind(this))
+      .finally(() => span.end())
   }
 
   private sendMissingRelations(

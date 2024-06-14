@@ -178,6 +178,12 @@
   },
   "dependencies": {
     "@electric-sql/prisma-generator": "workspace:*",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.52.0",
+    "@opentelemetry/resources": "^1.25.0",
+    "@opentelemetry/sdk-trace-base": "^1.25.0",
+    "@opentelemetry/sdk-trace-web": "^1.25.0",
+    "@opentelemetry/semantic-conventions": "^1.25.0",
     "@prisma/client": "4.8.1",
     "async-mutex": "^0.4.0",
     "base-64": "^1.0.0",
