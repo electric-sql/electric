@@ -5,6 +5,10 @@
 [newshell log]
 
 [macro setup]
+    [newshell otel_collector]
+        !make start_otel_collector
+        ??Everything is ready. Begin running and processing data.
+
     [newshell postgres_logs]
         [progress start development environment]
         !make start_dev_env

@@ -83,8 +83,11 @@ stop_dev_env:
 		docker ps --filter name=sysbench_run --format '{{.Names}}' | xargs docker kill; \
 	fi
 	# The timeout should allow for any remaining OT batches to be exported prior to server shutdown.
-	docker compose -f ${DOCKER_COMPOSE_FILE} stop --timeout 5
-	docker compose -f ${DOCKER_COMPOSE_FILE} down
+	docker compose -f ${DOCKER_COMPOSE_FILE} stop --timeout 5 electric_1 pg_1
+	docker compose -f ${DOCKER_COMPOSE_FILE} down --timeout 5
+
+start_otel_collector:
+	docker compose -f ${DOCKER_COMPOSE_FILE} up otel-collector
 
 start_sysbench:
 	docker compose -f ${DOCKER_COMPOSE_FILE} run \
