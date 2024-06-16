@@ -53,11 +53,15 @@ services:
     extends:
       file: ../services_templates.yaml
       service: satellite_client
+    environment:
+      OTLP_ENDPOINT: "http://otel-collector:4318"
 
   satellite_client_2:
     extends:
       file: ../services_templates.yaml
       service: satellite_client
+    environment:
+      OTLP_ENDPOINT: "http://otel-collector:4318"
 
   prisma_example_1:
     image: "prisma_example:local"

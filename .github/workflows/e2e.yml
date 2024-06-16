@@ -125,6 +125,7 @@ jobs:
     env:
       BUILDKITE_ANALYTICS_TOKEN: ${{ secrets.BUILDKITE_TEST_ANALYTICS_E2E }}
       DIALECT: ${{ matrix.dialect }}
+      HONEYCOMB_API_KEY: ${{ secrets.HONEYCOMB_API_KEY }}
     steps:
       - uses: actions/checkout@v3
         with:

@@ -1,7 +1,7 @@
 import pg from 'pg'
 import SQLiteDatabase from 'better-sqlite3'
 import type { Database as BetterSqliteDatabase } from 'electric-sql/node'
-import { ElectricConfig } from 'electric-sql'
+import { ElectricConfig, ElectrifyOptions } from 'electric-sql'
 import { mockSecureAuthToken } from 'electric-sql/auth/secure'
 import type { Database as PgDatabase } from 'electric-sql/node-postgres'
 import { setLogLevel } from 'electric-sql/debug'
@@ -76,6 +76,10 @@ export const electrify_db = async (
     url: `electric://${host}:${port}`,
     debug: true,
   }
+  const opts: ElectrifyOptions = {
+    exportTelemetry: true,
+    otlpEndpoint: process.env.OTLP_ENDPOINT,
+  }
   console.log(`(in electrify_db) config: ${JSON.stringify(config)}`)
 
   switch (dialect()) {
@@ -88,9 +92,9 @@ export const electrify_db = async (
   }
   
   const electric = isPostgresDb(process.env.DIALECT, db)
-    ? await electrifyPg(db, schema, config)
-    : await electrifySqlite(db, schema, config)
-  
+    ? await electrifyPg(db, schema, config, opts)
+    : await electrifySqlite(db, schema, config, opts)
+
   const token = await mockSecureAuthToken(exp)
 
   electric.notifier.subscribeToConnectivityStateChanges(x => console.log(`Connectivity state changed: ${x.connectivityState.status}`))
