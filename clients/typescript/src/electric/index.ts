@@ -40,6 +40,7 @@ export interface ElectrifyOptions {
    * Whether to export telemetry to an OpenTelemetry collector.
    */
   exportTelemetry?: boolean
+  otlpEndpoint?: string
 }
 
 const defaultPrepare = async (connection: DatabaseAdapter) => {
@@ -64,6 +65,7 @@ export const electrify = async <DB extends DbSchema<any>>(
   setUpTelemetry({
     logToConsole: config.debug,
     exportToOTLP: opts?.exportTelemetry,
+    OTLPEndpoint: opts?.otlpEndpoint,
   })
 
   const initSpan = startSpan('electrify')

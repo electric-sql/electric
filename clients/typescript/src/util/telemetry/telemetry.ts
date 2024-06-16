@@ -1,3 +1,4 @@
+import 'path'
 import { SpanContext, context, propagation, trace } from '@opentelemetry/api'
 import {
   ConsoleSpanExporter,
@@ -19,6 +20,7 @@ const tracerName = 'electric-client' as const
 interface TelemetryConfig {
   logToConsole?: boolean
   exportToOTLP?: boolean
+  OTLPEndpoint?: string
 }
 
 const provider = new WebTracerProvider({
@@ -40,18 +42,29 @@ const addConsoleExporter = () => {
 }
 
 let otlpExporterAddded = false
-const addOTLPExporter = () => {
+const addOTLPExporter = (endpoint?: string) => {
   if (otlpExporterAddded) return
-  provider.addSpanProcessor(new BatchSpanProcessor(new OTLPTraceExporter()))
+  let config
+  if (endpoint) {
+    const url = new URL(endpoint)
+    url.pathname += 'v1/traces'
+    config = { url: url.toString() }
+  }
+  const exporter = new OTLPTraceExporter(config)
+
+  provider.addSpanProcessor(
+    new BatchSpanProcessor(exporter, { scheduledDelayMillis: 1000 })
+  )
   otlpExporterAddded = true
 }
 
 const setUpTelemetry = ({
   logToConsole,
   exportToOTLP,
+  OTLPEndpoint,
 }: TelemetryConfig): void => {
   if (logToConsole) addConsoleExporter()
-  if (exportToOTLP) addOTLPExporter()
+  if (exportToOTLP) addOTLPExporter(OTLPEndpoint)
 }
 
 const getTracer = (): Tracer => {
