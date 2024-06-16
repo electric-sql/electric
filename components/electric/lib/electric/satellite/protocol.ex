@@ -172,7 +172,11 @@ defmodule Electric.Satellite.Protocol do
   end
 
   # Satellite requests a new subscription to a set of shapes
-  def handle_rpc_request(%SatSubsReq{subscription_id: id} = req, _req_opts, state) do
+  def handle_rpc_request(%SatSubsReq{subscription_id: id} = req, req_opts, state) do
+    if traceparent = PB.fetch_rcp_request_traceparent(req_opts) do
+      OpenTelemetry.apply_traceparent(traceparent)
+    end
+
     OpenTelemetry.with_span(
       "proto.shape_subscription_req",
       [

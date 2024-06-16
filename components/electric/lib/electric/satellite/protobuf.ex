@@ -196,7 +196,8 @@ defmodule Electric.Satellite.Protobuf do
 
   def fetch_rcp_request_traceparent(%Satellite.SatRpcRequestOptions{traceparent: val})
       when is_binary(val) and val != "",
-      do: {:ok, val}
+      do: val
 
-  def fetch_rcp_request_traceparent(%Satellite.SatRpcRequestOptions{}), do: :unset
+  def fetch_rcp_request_traceparent(%Satellite.SatRpcRequestOptions{}), do: nil
+  def fetch_rcp_request_traceparent(nil), do: nil
 end
