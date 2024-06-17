@@ -352,8 +352,8 @@ importers:
         specifier: ^4.2.1
         version: 4.2.1(vite@5.2.11)
       better-sqlite3:
-        specifier: ^8.4.0
-        version: 8.7.0
+        specifier: ^11.0.0
+        version: 11.0.0
       electric-sql:
         specifier: workspace:*
         version: link:../../clients/typescript
@@ -385,8 +385,8 @@ importers:
   e2e/satellite_client:
     dependencies:
       better-sqlite3:
-        specifier: ^8.4.0
-        version: 8.7.0
+        specifier: ^11.0.0
+        version: 11.0.0
       electric-sql:
         specifier: workspace:*
         version: link:../../clients/typescript
@@ -7535,13 +7535,6 @@ packages:
 
   /better-sqlite3@11.0.0:
     resolution: {integrity: sha512-1NnNhmT3EZTsKtofJlMox1jkMxdedILury74PwUbQBjWgo4tL4kf7uTAjU55mgQwjdzqakSTjkf+E1imrFwjnA==}
-    requiresBuild: true
-    dependencies:
-      bindings: 1.5.0
-      prebuild-install: 7.1.2
-
-  /better-sqlite3@8.7.0:
-    resolution: {integrity: sha512-99jZU4le+f3G6aIl6PmmV0cxUIWqKieHxsiF7G34CVFiE+/UabpYqkU0NJIkY/96mQKikHeBjtR27vFfs5JpEw==}
     requiresBuild: true
     dependencies:
       bindings: 1.5.0
