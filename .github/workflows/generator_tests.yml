@@ -24,7 +24,7 @@ jobs:
           version: 8
       - uses: actions/setup-node@v3
         with:
-          node-version: 18
+          node-version: 22
           cache: pnpm
       - run: make deps
       - run: pnpm run check-styleguide
@@ -38,7 +38,7 @@ jobs:
           version: 8
       - uses: actions/setup-node@v3
         with:
-          node-version: 18
+          node-version: 22
           cache: pnpm
       - run: make deps
       - run: pnpm run build
@@ -47,7 +47,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: [16, 18, 20]
+        node-version: [18, 20, 22, 24]
     steps:
       - uses: actions/checkout@v3
       - uses: pnpm/action-setup@v2

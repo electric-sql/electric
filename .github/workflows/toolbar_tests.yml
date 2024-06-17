@@ -24,7 +24,7 @@ jobs:
           version: 8
       - uses: actions/setup-node@v3
         with:
-          node-version: 18
+          node-version: 22
           cache: pnpm
       - run: make deps
       - run: make check_styleguide
@@ -38,7 +38,7 @@ jobs:
           version: 8
       - uses: actions/setup-node@v3
         with:
-          node-version: 18
+          node-version: 22
           cache: pnpm
       - run: make deps
       - run: make check_types
@@ -47,7 +47,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: [16, 18, 20]
+        node-version: [18, 20, 22, 24]
     steps:
       - uses: actions/checkout@v3
       - uses: pnpm/action-setup@v2
@@ -77,4 +77,3 @@ jobs:
       - run: make deps
       - run: pnpm config set '//registry.npmjs.org/:_authToken' "${{ secrets.NPM_TOKEN }}"
       - run: make publish-canary
-
