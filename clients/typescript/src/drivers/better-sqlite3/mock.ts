@@ -20,7 +20,10 @@ export class MockDatabase implements Database {
     return this
   }
 
-  prepare<T extends BindParams = []>(_sql: string): Statement<T> {
+  // @ts-ignore annoying typings for mock
+  prepare<T extends BindParams = [], Result = unknown>(
+    _sql: string
+  ): Statement<T, Result> {
     const mockStatement: MockStatement<T> = {
       database: this as any,
       readonly: false,
@@ -42,13 +45,13 @@ export class MockDatabase implements Database {
     }
 
     // Valid only for mocking since we don't expect to need to mock full interface
-    return mockStatement as Statement<T>
+    return mockStatement as Statement<T, Result>
   }
 
   transaction<T extends (...args: any[]) => any>(fn: T): Transaction<T> {
     const self = this
 
-    const baseFn = (...args: Parameters<T>): ReturnType<T> => {
+    const baseFn = (...args: unknown[]): ReturnType<T> => {
       self.inTransaction = true
 
       const retval = fn(...args)
@@ -58,7 +61,8 @@ export class MockDatabase implements Database {
       return retval
     }
 
-    const txFn = <Transaction<T>>baseFn
+    const txFn = baseFn as unknown as Transaction<T>
+    txFn.default = baseFn
     txFn.deferred = baseFn
     txFn.immediate = baseFn
     txFn.exclusive = baseFn
