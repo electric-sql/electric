@@ -73,7 +73,7 @@ export class DatabaseAdapter
   // This `query` function does not enforce that the query is read-only
   async _query({ sql, args }: DbStatement): Promise<Row[]> {
     const stmt = this.db.prepare(sql)
-    return stmt.all(...wrapBindParams(args))
+    return stmt.all(...wrapBindParams(args)) as Row[]
   }
 
   async _runExclusively<T>(
@@ -161,7 +161,7 @@ class WrappedTx implements Tx {
   ): void {
     try {
       const stmt = this.db.prepare(sql)
-      const rows = stmt.all(...wrapBindParams(args))
+      const rows = stmt.all(...wrapBindParams(args)) as Row[]
       successCallback(this, rows)
     } catch (err) {
       if (typeof errorCallback !== 'undefined') errorCallback(err)
