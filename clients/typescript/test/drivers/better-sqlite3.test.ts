@@ -9,6 +9,7 @@ import { UncoordinatedDatabaseAdapter } from '../../src/electric'
 
 test('database adapter run works', async (t) => {
   const db = new MockDatabase('test.db')
+  //@ts-ignore issue with typechecking
   const adapter = new DatabaseAdapter(db)
 
   const sql = 'drop table badgers'
@@ -19,6 +20,7 @@ test('database adapter run works', async (t) => {
 
 test('database adapter query works', async (t) => {
   const db = new MockDatabase('test.db')
+  //@ts-ignore issue with typechecking
   const adapter = new DatabaseAdapter(db)
 
   const sql = 'select foo from bars'
@@ -29,6 +31,7 @@ test('database adapter query works', async (t) => {
 
 test('database adapter tableNames works', async (t) => {
   const db = new MockDatabase('test.db')
+  //@ts-ignore issue with typechecking
   const adapter = new DatabaseAdapter(db)
 
   const sql = 'select foo from bar'
