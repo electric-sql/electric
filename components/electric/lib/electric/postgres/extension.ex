@@ -289,7 +289,7 @@ defmodule Electric.Postgres.Extension do
 
   @spec electrified_tables(conn()) :: {:ok, [{String.t(), String.t()}]} | {:error, term}
   def electrified_tables(conn) do
-    with {:ok, _, tables} <- Client.squery(conn, @electrified_tables_query) do
+    with {:ok, _, tables} <- :epgsql.squery(conn, @electrified_tables_query) do
       {:ok, tables}
     end
   end
@@ -349,7 +349,7 @@ defmodule Electric.Postgres.Extension do
   def define_functions(conn) do
     Enum.each(Functions.list(), fn {path, sql} ->
       conn
-      |> Client.squery(sql)
+      |> :epgsql.squery(sql)
       |> List.wrap()
       |> Enum.find(&(not match?({:ok, [], []}, &1)))
       |> case do
@@ -434,7 +434,7 @@ defmodule Electric.Postgres.Extension do
     Logger.info("Running extension migration: #{version}")
 
     for sql <- module.up(@schema) do
-      results = Client.squery(txconn, sql) |> List.wrap()
+      results = :epgsql.squery(txconn, sql) |> List.wrap()
       errors = Enum.filter(results, &(elem(&1, 0) == :error))
 
       if errors == [] do
@@ -447,7 +447,7 @@ defmodule Electric.Postgres.Extension do
     end
 
     {:ok, 1} =
-      Client.squery(
+      :epgsql.squery(
         txconn,
         "INSERT INTO #{@migration_table} (version) VALUES ('#{version}')"
       )
@@ -459,14 +459,14 @@ defmodule Electric.Postgres.Extension do
   @is_transaction_sql "SELECT transaction_timestamp() != statement_timestamp() AS is_transaction"
 
   defp ensure_transaction(conn, fun) when is_function(fun, 1) do
-    case Client.squery(conn, @is_transaction_sql) do
+    case :epgsql.squery(conn, @is_transaction_sql) do
       {:ok, _cols, [{"t"}]} -> fun.(conn)
-      {:ok, _cols, [{"f"}]} -> Client.with_transaction(conn, fun)
+      {:ok, _cols, [{"f"}]} -> Client.with_transaction(conn, fun, telemetry: false)
     end
   end
 
   def create_schema(conn) do
-    {:ok, [], []} = Client.squery(conn, ~s|CREATE SCHEMA IF NOT EXISTS "#{@schema}"|)
+    {:ok, [], []} = :epgsql.squery(conn, ~s|CREATE SCHEMA IF NOT EXISTS "#{@schema}"|)
   end
 
   @create_migration_table_sql """
@@ -477,19 +477,19 @@ defmodule Electric.Postgres.Extension do
   """
 
   def create_migration_table(conn) do
-    {:ok, [], []} = Client.squery(conn, @create_migration_table_sql)
+    {:ok, [], []} = :epgsql.squery(conn, @create_migration_table_sql)
   end
 
   defp with_migration_lock(conn, fun) do
     {:ok, [], []} =
-      Client.squery(conn, "LOCK TABLE #{@migration_table} IN SHARE UPDATE EXCLUSIVE MODE")
+      :epgsql.squery(conn, "LOCK TABLE #{@migration_table} IN SHARE UPDATE EXCLUSIVE MODE")
 
     fun.()
   end
 
   defp existing_migration_versions(conn) do
     {:ok, _cols, rows} =
-      Client.squery(conn, "SELECT version FROM #{@migration_table} ORDER BY version ASC")
+      :epgsql.squery(conn, "SELECT version FROM #{@migration_table} ORDER BY version ASC")
 
     Enum.map(rows, fn {version} -> String.to_integer(version) end)
   end
@@ -628,7 +628,7 @@ defmodule Electric.Postgres.Extension do
   the already-existing value on conflict.
   """
   def save_and_get_cluster_id(conn) do
-    Client.squery(conn, """
+    :epgsql.squery(conn, """
     INSERT INTO #{transaction_marker_table()} as o (id, content)
       VALUES ('cluster_id', '"#{Utils.uuid4()}"')
     ON CONFLICT (id) DO UPDATE SET content = o.content

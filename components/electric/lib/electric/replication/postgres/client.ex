@@ -99,13 +99,20 @@ defmodule Electric.Replication.Postgres.Client do
   Wrapper for :epgsql.with_transaction/3 that always sets `reraise` to `true` by default and makes `begin_opts` a
   standalone function argument for easier code reading.
   """
-  def with_transaction(mode \\ "", conn, fun, in_opts \\ [])
-      when is_binary(mode) and is_list(in_opts) do
+  def with_transaction_mode(mode, conn, fun, in_opts \\ [])
+      when is_binary(mode) and is_pid(conn) and is_list(in_opts) do
     opts = Keyword.merge([reraise: true, begin_opts: mode], in_opts)
+    fun = fn -> :epgsql.with_transaction(conn, fun, opts) end
 
-    OpenTelemetry.with_span("epgsql.with_transaction", %{"txn.mode" => mode}, fn ->
-      :epgsql.with_transaction(conn, fun, opts)
-    end)
+    if Keyword.get(in_opts, :telemetry, true) do
+      OpenTelemetry.with_span("epgsql.with_transaction", %{"txn.mode" => mode}, fun)
+    else
+      fun.()
+    end
+  end
+
+  def with_transaction(conn, fun, opts \\ []) when is_pid(conn) and is_list(opts) do
+    with_transaction_mode("", conn, fun, opts)
   end
 
   def close(conn) do

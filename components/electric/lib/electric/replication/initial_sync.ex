@@ -182,7 +182,7 @@ defmodule Electric.Replication.InitialSync do
     conn_opts = Connectors.get_connection_opts(opts)
 
     Client.with_conn(conn_opts, fn conn ->
-      Client.with_transaction(
+      Client.with_transaction_mode(
         "ISOLATION LEVEL REPEATABLE READ READ ONLY",
         conn,
         fn conn ->
