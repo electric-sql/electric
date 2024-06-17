@@ -12,6 +12,10 @@ import {
   _RECORD_NOT_FOUND_,
 } from '../../../src/client/validation/errors/messages'
 import { schema, Post } from '../generated'
+import { makeContext } from '../../satellite/common'
+import { globalRegistry } from '../../../src/satellite'
+import { ElectricClient } from '../../../src/client/model'
+import { InvalidRecordTransformationError } from '../../../src/client/validation/errors/invalidRecordTransformationError'
 
 const db = new Database(':memory:')
 const electric = await electrify(
@@ -1743,3 +1747,97 @@ test.serial(
     t.is(res.tablenames[1].tablename, 'Post')
   }
 )
+
+test('setReplicationTransform should validate transform does not modify outgoing FK column', async (t: any) => {
+  await makeContext(t, 'main')
+
+  const { adapter, notifier, satellite, client } = t.context
+
+  const electric = await ElectricClient.create(
+    'testDB',
+    schema,
+    adapter,
+    notifier,
+    satellite,
+    globalRegistry,
+    'SQLite'
+  )
+
+  const postTable = electric.db.Post
+
+  const modifyAuthorId = (post: any) => ({
+    ...post,
+    authorId: 9, // this is a FK, should not be allowed to modify it
+  })
+
+  // postTable, userTable
+  postTable.setReplicationTransform({
+    transformInbound: modifyAuthorId,
+    transformOutbound: modifyAuthorId,
+  })
+
+  // Check outbound transform
+  t.throws(
+    () => client.replicationTransforms.get('Post').transformOutbound(post1),
+    {
+      instanceOf: InvalidRecordTransformationError,
+      message: 'Record transformation modified immutable fields: authorId',
+    }
+  )
+
+  // Also check inbound transform
+  t.throws(
+    () => client.replicationTransforms.get('Post').transformInbound(post1),
+    {
+      instanceOf: InvalidRecordTransformationError,
+      message: 'Record transformation modified immutable fields: authorId',
+    }
+  )
+})
+
+test('setReplicationTransform should validate transform does not modify incoming FK column', async (t: any) => {
+  await makeContext(t, 'main')
+
+  const { adapter, notifier, satellite, client } = t.context
+
+  const electric = await ElectricClient.create(
+    'testDB',
+    schema,
+    adapter,
+    notifier,
+    satellite,
+    globalRegistry,
+    'SQLite'
+  )
+
+  const userTable = electric.db.User
+
+  const modifyUserId = (user: any) => ({
+    ...user,
+    id: 9, // this is the column pointed at by the FK, should not be allowed to modify it
+  })
+
+  // postTable, userTable
+  userTable.setReplicationTransform({
+    transformInbound: modifyUserId,
+    transformOutbound: modifyUserId,
+  })
+
+  // Check outbound transform
+  t.throws(
+    () => client.replicationTransforms.get('User').transformOutbound(author1),
+    {
+      instanceOf: InvalidRecordTransformationError,
+      message: 'Record transformation modified immutable fields: id',
+    }
+  )
+
+  // Also check inbound transform
+  t.throws(
+    () => client.replicationTransforms.get('User').transformInbound(author1),
+    {
+      instanceOf: InvalidRecordTransformationError,
+      message: 'Record transformation modified immutable fields: id',
+    }
+  )
+})

@@ -25,6 +25,7 @@ import {
   GoneBatchCallback,
   DataGone,
   DataChangeType,
+  DbRecord,
 } from '../util/types'
 import { ElectricConfig } from '../config/index'
 
@@ -227,6 +228,11 @@ export class MockSatelliteClient
   doSkipNextEmit = false
 
   private startReplicationDelayMs: number | null = null
+
+  private replicationTransforms: Map<
+    string,
+    ReplicatedRowTransformer<DbRecord>
+  > = new Map()
 
   setStartReplicationDelayMs(delayMs: number | null) {
     this.startReplicationDelayMs = delayMs
@@ -534,12 +540,12 @@ export class MockSatelliteClient
   }
 
   setReplicationTransform(
-    _tableName: QualifiedTablename,
-    _transform: ReplicatedRowTransformer<DataRecord>
+    tableName: QualifiedTablename,
+    transform: ReplicatedRowTransformer<DataRecord>
   ): void {
-    throw new Error('Method not implemented.')
+    this.replicationTransforms.set(tableName.tablename, transform)
   }
-  clearReplicationTransform(_tableName: QualifiedTablename): void {
-    throw new Error('Method not implemented.')
+  clearReplicationTransform(tableName: QualifiedTablename): void {
+    this.replicationTransforms.delete(tableName.tablename)
   }
 }
