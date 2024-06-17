@@ -4,6 +4,7 @@ import type { Database as DB } from 'better-sqlite3'
 import { DatabaseAdapter } from '../../src/drivers/better-sqlite3/adapter'
 import { DatabaseAdapter as DatabaseAdapterInterface } from '../../src/electric'
 import { runInTransaction } from '../../src/util/transactions'
+import { ForeignKeyChecks } from '../../src/config'
 
 interface Context {
   adapter: DatabaseAdapterInterface
@@ -36,14 +37,13 @@ test.afterEach.always(async (t) => {
   db.close()
 })
 
-test('runInTransaction disables FK checks when flag is set to true', async (t) => {
+test('runInTransaction disables FK checks when flag is set to disabled', async (t) => {
   const { adapter } = t.context
 
   adapter.run({ sql: 'PRAGMA foreign_keys = ON;' })
 
   // Should succeed even though the FK is not valid
-  // because we pass `true` for the `disableFKs` flag
-  const res = await runInTransaction(adapter, true, {
+  const res = await runInTransaction(adapter, ForeignKeyChecks.disabled, {
     sql: "INSERT INTO child (cid, p) VALUES ('c1', 'p1');",
   })
 
@@ -61,14 +61,13 @@ test('runInTransaction disables FK checks when flag is set to true', async (t) =
   t.is(foreign_keys, 1)
 })
 
-test('runInTransaction disables FK checks when flag is set to true and FK pragma is already disabled', async (t) => {
+test('runInTransaction disables FK checks when flag is set to disabled and FK pragma is already disabled', async (t) => {
   const { adapter } = t.context
 
   adapter.run({ sql: 'PRAGMA foreign_keys = OFF;' })
 
   // Should succeed even though the FK is not valid
-  // because we pass `true` for the `disableFKs` flag
-  const res = await runInTransaction(adapter, true, {
+  const res = await runInTransaction(adapter, ForeignKeyChecks.disabled, {
     sql: "INSERT INTO child (cid, p) VALUES ('c1', 'p1');",
   })
 
@@ -86,15 +85,14 @@ test('runInTransaction disables FK checks when flag is set to true and FK pragma
   t.is(foreign_keys, 0)
 })
 
-test('runInTransaction enables FK checks when flag is set to false', async (t) => {
+test('runInTransaction enables FK checks when flag is set to enabled', async (t) => {
   const { adapter } = t.context
 
   adapter.run({ sql: 'PRAGMA foreign_keys = OFF;' })
 
   // Should fail because the FK is not valid
-  // because we pass `false` for the `disableFKs` flag
   await t.throwsAsync(
-    runInTransaction(adapter, false, {
+    runInTransaction(adapter, ForeignKeyChecks.enabled, {
       sql: "INSERT INTO child (cid, p) VALUES ('c1', 'p1');",
     }),
     { message: /FOREIGN KEY constraint failed/ }
@@ -106,7 +104,7 @@ test('runInTransaction enables FK checks when flag is set to false', async (t) =
   // Now insert a parent row and a child row pointing to the parent
   await runInTransaction(
     adapter,
-    false,
+    ForeignKeyChecks.enabled,
     { sql: "INSERT INTO parent (pid) VALUES ('p1');" },
     { sql: "INSERT INTO child (cid, p) VALUES ('c1', 'p1');" }
   )
@@ -129,15 +127,14 @@ test('runInTransaction enables FK checks when flag is set to false', async (t) =
   t.is(foreign_keys, 0)
 })
 
-test('runInTransaction enables FK checks when flag is set to false and pragma is already enabled', async (t) => {
+test('runInTransaction enables FK checks when flag is set to enabled and pragma is already enabled', async (t) => {
   const { adapter } = t.context
 
   adapter.run({ sql: 'PRAGMA foreign_keys = ON;' })
 
   // Should fail because the FK is not valid
-  // because we pass `false` for the `disableFKs` flag
   await t.throwsAsync(
-    runInTransaction(adapter, false, {
+    runInTransaction(adapter, ForeignKeyChecks.enabled, {
       sql: "INSERT INTO child (cid, p) VALUES ('c1', 'p1');",
     }),
     { message: /FOREIGN KEY constraint failed/ }
@@ -149,7 +146,7 @@ test('runInTransaction enables FK checks when flag is set to false and pragma is
   // Now insert a parent row and a child row pointing to the parent
   await runInTransaction(
     adapter,
-    false,
+    ForeignKeyChecks.enabled,
     { sql: "INSERT INTO parent (pid) VALUES ('p1');" },
     { sql: "INSERT INTO child (cid, p) VALUES ('c1', 'p1');" }
   )
@@ -172,15 +169,14 @@ test('runInTransaction enables FK checks when flag is set to false and pragma is
   t.is(foreign_keys, 1)
 })
 
-test('runInTransaction does not touch enabled FK pragma when flag is undefined', async (t) => {
+test('runInTransaction does not touch enabled FK pragma when flag is inherit', async (t) => {
   const { adapter } = t.context
 
   adapter.run({ sql: 'PRAGMA foreign_keys = ON;' })
 
   // Should fail because the FK is not valid
-  // because we pass `false` for the `disableFKs` flag
   await t.throwsAsync(
-    runInTransaction(adapter, undefined, {
+    runInTransaction(adapter, ForeignKeyChecks.inherit, {
       sql: "INSERT INTO child (cid, p) VALUES ('c1', 'p1');",
     }),
     { message: /FOREIGN KEY constraint failed/ }
@@ -198,7 +194,7 @@ test('runInTransaction does not touch enabled FK pragma when flag is undefined',
   // Now insert a parent row and a child row pointing to the parent
   await runInTransaction(
     adapter,
-    undefined,
+    ForeignKeyChecks.inherit,
     { sql: "INSERT INTO parent (pid) VALUES ('p1');" },
     { sql: "INSERT INTO child (cid, p) VALUES ('c1', 'p1');" }
   )
@@ -221,16 +217,16 @@ test('runInTransaction does not touch enabled FK pragma when flag is undefined',
   t.is(fk2, 1)
 })
 
-test('runInTransaction does not touch disabled FK pragma when flag is undefined', async (t) => {
+test('runInTransaction does not touch disabled FK pragma when flag is inherit', async (t) => {
   const { adapter } = t.context
 
   adapter.run({ sql: 'PRAGMA foreign_keys = OFF;' })
 
   // Should succeed even though the FK is not valid
   // because we disabled the FK pragma
-  // and passed `undefined` for the `disableFKs` flag
+  // and passed `inherit` for the `fkChecks` flag
   // which means the FK pragma is used as is
-  const res = await runInTransaction(adapter, undefined, {
+  const res = await runInTransaction(adapter, ForeignKeyChecks.inherit, {
     sql: "INSERT INTO child (cid, p) VALUES ('c1', 'p1');",
   })
 

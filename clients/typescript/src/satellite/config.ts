@@ -1,5 +1,6 @@
 import { IBackOffOptions } from 'exponential-backoff'
 import { QualifiedTablename } from '../util/tablename'
+import { ForeignKeyChecks } from '../config'
 
 export type ConnectionBackoffOptions = Omit<IBackOffOptions, 'retry'>
 export interface SatelliteOpts {
@@ -25,11 +26,12 @@ export interface SatelliteOpts {
   /** Backoff options for connecting with Electric*/
   connectionBackOffOptions: ConnectionBackoffOptions
   /**
-   * Whether to disable FK checks when applying incoming (i.e. remote) transactions to the local SQLite database.
-   * When using Postgres, this is the default behavior and can't be changed.
-   * If this flag is undefined and we're running on SQLite, then the FK pragma is left untouched.
+   * Whether to enable or disable FK checks when applying incoming (i.e. remote) transactions to the local SQLite database.
+   * When set to `inherit` the FK pragma is left untouched.
+   * This option defaults to `disable` which disables FK checks on incoming transactions.
+   * This option only affects FK checks on SQLite databases and should not be modified when using Postgres.
    */
-  disableFKs: boolean | undefined
+  fkChecks: ForeignKeyChecks
   /** With debug mode enabled, Satellite can show additional logs. */
   debug: boolean
 }
@@ -76,7 +78,7 @@ export const satelliteDefaults: (namespace: string) => SatelliteOpts = (
       numOfAttempts: 50,
       timeMultiple: 2,
     },
-    disableFKs: undefined,
+    fkChecks: ForeignKeyChecks.disabled,
     debug: false,
   }
 }
