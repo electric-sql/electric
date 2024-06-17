@@ -88,7 +88,7 @@ async function connectAndAuth(context: Context) {
 }
 
 test.serial('replication start timeout', async (t) => {
-  const { client } = t.context
+  const { client, server } = t.context
   client['opts'].timeout = 10
   client['rpcClient']['defaultTimeout'] = 10
   await client.connect()
@@ -98,6 +98,7 @@ test.serial('replication start timeout', async (t) => {
     t.fail(`start replication should throw`)
   } catch (error: any) {
     t.is(error.code, SatelliteErrorCode.TIMEOUT)
+    await server.closed()
   }
 })
 
@@ -133,6 +134,7 @@ test.serial('authentication success', async (t) => {
   t.is(res['serverId'], 'server_identity')
   t.is(client['inbound'].authenticated, true)
 })
+
 
 test.serial('replication start success', async (t) => {
   await connectAndAuth(t.context)

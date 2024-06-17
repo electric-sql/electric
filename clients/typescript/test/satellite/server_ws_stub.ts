@@ -164,6 +164,13 @@ export class SatelliteWSServerStub {
     if (queue) queue.push(responses)
     else this.rpcResponses.set(method, [responses])
   }
+
+  closed() {
+    return new Promise<void>((resolve, reject) => {
+      this.socket.onclose = () => resolve()
+      setTimeout(() => reject(new Error("Connection not closed in 1s")), 1000)
+    })
+  }
 }
 
 const encode = (msg: UnknownMessage) =>

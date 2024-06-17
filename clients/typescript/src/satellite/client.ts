@@ -424,7 +424,9 @@ export class SatelliteClient implements Client {
 
     return this.delayIncomingMessages(
       async () => {
-        const resp = await this.service.startReplication(request)
+        const replicationStarted = this.service.startReplication(request)
+        replicationStarted.catch(() => this.socket && this.disconnect())
+        const resp = await replicationStarted
         return this.handleStartResp(resp)
       },
       { allowedRpcResponses: ['startReplication'] }
