@@ -575,7 +575,7 @@ export class SatelliteProcess implements Satellite {
             .filter((col) => col.primaryKey)
             .map((col) => col.name),
           records: [op.record],
-          table: new QualifiedTablename(namespace, op.relation.table),
+          table: qt,
         }
         groupedChanges.set(tableName, groupedChange)
       } else {
