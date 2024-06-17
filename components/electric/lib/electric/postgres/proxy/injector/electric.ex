@@ -259,6 +259,21 @@ defmodule Electric.Postgres.Proxy.Injector.Electric do
 
               {[Operation.Wait.new(msgs, state, signal), stack], {electric, state}}
 
+            # psycopg sends its txn commands using the extended protocol, annoyingly
+            # it uses a [parse, describe, bind, execute, sync] message block, so all we
+            # need to do is pass that on and mark the connection as in a transaction
+            %{action: {:tx, action}} = _analysis when action in [:begin, :rollback, :commit] ->
+              state = State.transaction(state, action)
+
+              op =
+                if Enum.any?(msgs, &is_struct(&1, M.Execute)) do
+                  Operation.Wait.new(msgs, state)
+                else
+                  %Operation.BindExecute{ops: []}
+                end
+
+              {[op], {electric, state}}
+
             analysis ->
               bind = %Operation.BindExecute{
                 ops: Electric.command_from_analysis([], analysis, state)
