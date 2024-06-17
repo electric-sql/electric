@@ -118,7 +118,7 @@ export class SubscriptionsDataCache extends EventEmitter {
       subscriptionId: delivered.subscriptionId,
       lsn: delivered.lsn,
       data: delivered.transaction.map((t) =>
-        this.proccessShapeDataOperations(t, relations)
+        this.processShapeDataOperations(t, relations)
       ),
       shapeReqToUuid: delivered.shapeReqToUuid,
     }
@@ -259,7 +259,7 @@ export class SubscriptionsDataCache extends EventEmitter {
     }
   }
 
-  private proccessShapeDataOperations(
+  private processShapeDataOperations(
     op: SatTransOp,
     relations: Map<number, Relation>
   ): InitialDataChange {

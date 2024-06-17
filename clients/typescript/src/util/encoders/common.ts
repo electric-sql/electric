@@ -10,21 +10,30 @@ export const base64 = {
     Uint8Array.from(BASE64.decode(string), (c) => c.charCodeAt(0)),
   encode: (string: string) => base64.fromBytes(textEncoder.encode(string)),
   decode: (string: string) => textDecoder.decode(base64.toBytes(string)),
-}
+} as const
+
+// Initialize TextEncoder and TextDecoder late to prevent polyfill
+// race conditions, and reuse instance for performance
+let textEncoderInstance: (TextEncoder | TextEncoderLite) | null = null
+let textDecoderInstance: (TextDecoder | TextDecoderLite) | null = null
 
 export const textEncoder = {
-  encode: (string: string): Uint8Array =>
-    globalThis.TextEncoder
-      ? new TextEncoder().encode(string)
-      : new TextEncoderLite().encode(string),
-}
+  encode: (string: string): Uint8Array => {
+    textEncoderInstance ??= globalThis.TextEncoder
+      ? new TextEncoder()
+      : new TextEncoderLite()
+    return textEncoderInstance.encode(string)
+  },
+} as const
 
 export const textDecoder = {
-  decode: (bytes: Uint8Array): string =>
-    globalThis.TextDecoder
-      ? new TextDecoder().decode(bytes)
-      : new TextDecoderLite().decode(bytes),
-}
+  decode: (bytes: Uint8Array): string => {
+    textDecoderInstance ??= globalThis.TextDecoder
+      ? new TextDecoder()
+      : new TextDecoderLite()
+    return textDecoderInstance.decode(bytes)
+  },
+} as const
 
 export const trueByte = 't'.charCodeAt(0)
 export const falseByte = 'f'.charCodeAt(0)

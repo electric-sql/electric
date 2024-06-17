@@ -346,4 +346,129 @@ export const builderTests = (test: TestFn<ContextType>) => {
     const versions = migrations.map((m) => m.version)
     t.deepEqual(versions, ['20230613112725_814', '20230613112735_992'])
   })
+
+  test('prepareInsertBatchedStatements correctly splits up data in batches', (t) => {
+    const { builder } = t.context
+    const data = [
+      { a: 1, b: 2 },
+      { a: 3, b: 4 },
+      { a: 5, b: 6 },
+    ]
+    const stmts = builder.prepareInsertBatchedStatements(
+      'INSERT INTO test (a, b) VALUES',
+      ['a', 'b'],
+      data,
+      5 // at most 5 `?`s in one SQL statement, so we should see the split
+    )
+
+    const posArgs: string[] =
+      builder.dialect === 'SQLite'
+        ? ['?', '?', '?', '?']
+        : ['$1', '$2', '$3', '$4']
+
+    t.deepEqual(stmts, [
+      {
+        sql: `INSERT INTO test (a, b) VALUES (${posArgs[0]}, ${posArgs[1]}), (${posArgs[2]}, ${posArgs[3]})`,
+        args: [1, 2, 3, 4],
+      },
+      {
+        sql: `INSERT INTO test (a, b) VALUES (${posArgs[0]}, ${posArgs[1]})`,
+        args: [5, 6],
+      },
+    ])
+  })
+
+  test('prepareInsertBatchedStatements respects column order', (t) => {
+    const { builder } = t.context
+    const data = [
+      { a: 1, b: 2 },
+      { a: 3, b: 4 },
+      { a: 5, b: 6 },
+    ]
+    const stmts = builder.prepareInsertBatchedStatements(
+      'INSERT INTO test (a, b) VALUES',
+      ['b', 'a'],
+      data,
+      5
+    )
+
+    const posArgs: string[] =
+      builder.dialect === 'SQLite'
+        ? ['?', '?', '?', '?']
+        : ['$1', '$2', '$3', '$4']
+
+    t.deepEqual(stmts, [
+      {
+        sql: `INSERT INTO test (a, b) VALUES (${posArgs[0]}, ${posArgs[1]}), (${posArgs[2]}, ${posArgs[3]})`,
+        args: [2, 1, 4, 3],
+      },
+      {
+        sql: `INSERT INTO test (a, b) VALUES (${posArgs[0]}, ${posArgs[1]})`,
+        args: [6, 5],
+      },
+    ])
+  })
+
+  test('prepareDeleteBatchedStatements correctly splits up data in batches', (t) => {
+    const { builder } = t.context
+    const data = [
+      { a: 1, b: 2 },
+      { a: 3, b: 4 },
+      { a: 5, b: 6 },
+    ]
+    const stmts = builder.prepareDeleteBatchedStatements(
+      'DELETE FROM test WHERE',
+      ['a', 'b'],
+      data,
+      5 // at most 5 `?`s in one SQL statement, so we should see the split
+    )
+
+    const posArgs: string[] =
+      builder.dialect === 'SQLite'
+        ? ['?', '?', '?', '?']
+        : ['$1', '$2', '$3', '$4']
+
+    t.deepEqual(stmts, [
+      {
+        sql: `DELETE FROM test WHERE ("a" = ${posArgs[0]} AND "b" = ${posArgs[1]}) OR ("a" = ${posArgs[2]} AND "b" = ${posArgs[3]})`,
+
+        args: [1, 2, 3, 4],
+      },
+      {
+        sql: `DELETE FROM test WHERE ("a" = ${posArgs[0]} AND "b" = ${posArgs[1]})`,
+        args: [5, 6],
+      },
+    ])
+  })
+
+  test('prepareDeleteBatchedStatements respects column order', (t) => {
+    const { builder } = t.context
+    const data = [
+      { a: 1, b: 2 },
+      { a: 3, b: 4 },
+      { a: 5, b: 6 },
+    ]
+    const stmts = builder.prepareDeleteBatchedStatements(
+      'DELETE FROM test WHERE',
+      ['b', 'a'],
+      data,
+      5
+    )
+
+    const posArgs: string[] =
+      builder.dialect === 'SQLite'
+        ? ['?', '?', '?', '?']
+        : ['$1', '$2', '$3', '$4']
+
+    t.deepEqual(stmts, [
+      {
+        sql: `DELETE FROM test WHERE ("b" = ${posArgs[0]} AND "a" = ${posArgs[1]}) OR ("b" = ${posArgs[2]} AND "a" = ${posArgs[3]})`,
+        args: [2, 1, 4, 3],
+      },
+      {
+        sql: `DELETE FROM test WHERE ("b" = ${posArgs[0]} AND "a" = ${posArgs[1]})`,
+        args: [6, 5],
+      },
+    ])
+  })
 }
