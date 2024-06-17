@@ -30,8 +30,8 @@ importers:
         specifier: ^1.0.0
         version: 1.0.0
       better-sqlite3:
-        specifier: ^8.4.0
-        version: 8.7.0
+        specifier: ^11.0.0
+        version: 11.0.0
       commander:
         specifier: ^11.1.0
         version: 11.1.0
@@ -145,8 +145,8 @@ importers:
         specifier: ^1.0.0
         version: 1.0.2
       '@types/better-sqlite3':
-        specifier: 7.6.3
-        version: 7.6.3
+        specifier: 7.6.10
+        version: 7.6.10
       '@types/decompress':
         specifier: ^4.2.4
         version: 4.2.7
@@ -272,7 +272,7 @@ importers:
         version: 4.10.2
       typeorm:
         specifier: ^0.3.9
-        version: 0.3.20(better-sqlite3@8.7.0)(pg@8.11.5)
+        version: 0.3.20(better-sqlite3@11.0.0)(pg@8.11.5)
       typescript:
         specifier: ^5.3.3
         version: 5.4.5
@@ -5970,6 +5970,12 @@ packages:
     resolution: {integrity: sha512-uPgKMmM9fmn7I+Zi6YBqctOye4SlJsHKcisjHIMWpb2YKZRc36GpKyNuQ03JcT+oNXg1m7Uv4wU94EVltn8/cw==}
     dev: true
 
+  /@types/better-sqlite3@7.6.10:
+    resolution: {integrity: sha512-TZBjD+yOsyrUJGmcUj6OS3JADk3+UZcNv3NOBqGkM09bZdi28fNZw8ODqbMOLfKCu7RYCO62/ldq1iHbzxqoPw==}
+    dependencies:
+      '@types/node': 20.12.12
+    dev: true
+
   /@types/better-sqlite3@7.6.3:
     resolution: {integrity: sha512-YS64N9SNDT/NAvou3QNdzAu3E2om/W/0dhORimtPGLef+zSK5l1vDzfsWb4xgXOgfhtOI5ZDTRxnvRPb22AIVQ==}
     dependencies:
@@ -7526,6 +7532,13 @@ packages:
     dependencies:
       is-windows: 1.0.2
     dev: false
+
+  /better-sqlite3@11.0.0:
+    resolution: {integrity: sha512-1NnNhmT3EZTsKtofJlMox1jkMxdedILury74PwUbQBjWgo4tL4kf7uTAjU55mgQwjdzqakSTjkf+E1imrFwjnA==}
+    requiresBuild: true
+    dependencies:
+      bindings: 1.5.0
+      prebuild-install: 7.1.2
 
   /better-sqlite3@8.7.0:
     resolution: {integrity: sha512-99jZU4le+f3G6aIl6PmmV0cxUIWqKieHxsiF7G34CVFiE+/UabpYqkU0NJIkY/96mQKikHeBjtR27vFfs5JpEw==}
@@ -16612,7 +16625,7 @@ packages:
       typed-array-byte-offset: 1.0.2
     dev: true
 
-  /typeorm@0.3.20(better-sqlite3@8.7.0)(pg@8.11.5):
+  /typeorm@0.3.20(better-sqlite3@11.0.0)(pg@8.11.5):
     resolution: {integrity: sha512-sJ0T08dV5eoZroaq9uPKBoNcGslHBR4E4y+EBHs//SiGbblGe7IeduP/IH4ddCcj0qp3PHwDwGnuvqEAnKlq/Q==}
     engines: {node: '>=16.13.0'}
     hasBin: true
@@ -16672,7 +16685,7 @@ packages:
     dependencies:
       '@sqltools/formatter': 1.2.5
       app-root-path: 3.1.0
-      better-sqlite3: 8.7.0
+      better-sqlite3: 11.0.0
       buffer: 6.0.3
       chalk: 4.1.2
       cli-highlight: 2.1.11
