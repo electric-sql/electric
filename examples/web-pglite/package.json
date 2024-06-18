@@ -21,7 +21,7 @@
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.1.4",
-    "electric-sql": "^0.12.0",
+    "electric-sql": "^0.12.1-canary.e9dc60f",
     "react": "^18.3.0",
     "react-dom": "^18.3.0"
   },
