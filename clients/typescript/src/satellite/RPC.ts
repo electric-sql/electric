@@ -8,7 +8,12 @@ import {
 import { SatelliteError, SatelliteErrorCode } from '../util/types'
 import { emptyPromise } from '../util/common'
 import Log, { Logger } from 'loglevel'
-import { ClientRpcResponse, encodeRpcResponse, msgToString } from '../util'
+import {
+  ClientRpcResponse,
+  encodeRpcResponse,
+  getActiveTracePropagationData,
+  msgToString,
+} from '../util'
 import { isDebuggingNode } from '../util/debug'
 
 type RequestId = `${string}/${number}`
@@ -199,6 +204,29 @@ export function withRpcRequestLogging(service: Root, logger: Logger): Root {
                 return x
               }
             )
+          },
+        })
+      } else {
+        return Reflect.get(target, p)
+      }
+    },
+  })
+}
+
+export function withRpcRequestTracing(rpc: RPC): RPC {
+  return new Proxy(rpc, {
+    get(target, p, _receiver) {
+      if (typeof target[p as keyof RPC] === 'function') {
+        return new Proxy(target[p as keyof RPC], {
+          apply(target, thisArg, argArray) {
+            // for requests, enhance with trace propagation data
+            if (p === 'request') {
+              argArray[3] = {
+                ...getActiveTracePropagationData(),
+                ...(argArray[3] ?? {}),
+              }
+            }
+            return Reflect.apply(target, thisArg, argArray)
           },
         })
       } else {

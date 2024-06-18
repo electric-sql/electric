@@ -104,7 +104,12 @@ import {
 } from './shapes/types'
 import { SubscriptionsDataCache } from './shapes/cache'
 import { setMaskBit, getMaskBit } from '../util/bitmaskHelpers'
-import { RPC, rpcRespond, withRpcRequestLogging } from './RPC'
+import {
+  RPC,
+  rpcRespond,
+  withRpcRequestLogging,
+  withRpcRequestTracing,
+} from './RPC'
 import { Mutex } from 'async-mutex'
 import { DbSchema } from '../client/model'
 import { PgBasicType, PgDateType, PgType } from '../client/conversions/types'
@@ -113,7 +118,6 @@ import {
   QualifiedTablename,
   runWithSpan,
   startSpan,
-  getTracePropagationData,
 } from '../util'
 import { AuthState } from '../auth'
 import Long from 'long'
@@ -239,10 +243,8 @@ export class SatelliteClient implements Client {
       dbDescription,
       this.decoder
     )
-    this.rpcClient = new RPC(
-      this.sendMessage.bind(this),
-      this.opts.timeout,
-      Log
+    this.rpcClient = withRpcRequestTracing(
+      new RPC(this.sendMessage.bind(this), this.opts.timeout, Log)
     )
 
     this.service = withRpcRequestLogging(
@@ -645,8 +647,7 @@ export class SatelliteClient implements Client {
         const resp = await runWithSpan(
           'satellite.client.subscribe.request',
           { parentSpan: span },
-          (span) =>
-            this.service.subscribe(request, getTracePropagationData(span))
+          () => this.service.subscribe(request)
         )
         span.setAttribute('shape.subscriptionId', request.subscriptionId)
         return this.handleSubscription(resp)

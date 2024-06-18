@@ -1,4 +1,4 @@
-import { getTracer } from './telemetry'
+import { getTracer, TracePropagationData } from './telemetry'
 import {
   Span,
   Attributes,
@@ -13,11 +13,6 @@ interface SpanOptions {
   parentSpan?: Span
   attributes?: Attributes
   isClientSpan?: boolean
-}
-
-interface TracePropagationData {
-  traceparent: string
-  tracestate?: string
 }
 
 function startSpan(
@@ -86,14 +81,11 @@ function runWithSpan<T>(
   }
 }
 
-const getTracePropagationData = (span: Span): TracePropagationData => {
+const getSpanTracePropagationData = (span: Span): TracePropagationData => {
   const output: Partial<TracePropagationData> = {}
 
   // Serialize the traceparent and tracestate from context into
   // an output object.
-  //
-  // This example uses the active trace context, but you can
-  // use whatever context is appropriate to your scenario.
   propagation.inject(
     trace.setSpanContext(context.active(), span.spanContext()),
     output
@@ -102,5 +94,5 @@ const getTracePropagationData = (span: Span): TracePropagationData => {
   return output as TracePropagationData
 }
 
-export { startSpan, runWithSpan, recordSpanError, getTracePropagationData }
+export { startSpan, runWithSpan, recordSpanError, getSpanTracePropagationData }
 export type { Span, TracePropagationData }

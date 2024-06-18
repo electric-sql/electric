@@ -13,6 +13,7 @@ import {
   SEMRESATTRS_SERVICE_VERSION,
 } from '@opentelemetry/semantic-conventions'
 import { LIB_VERSION } from '../../version'
+import { context, Context, propagation } from '@opentelemetry/api'
 
 const tracerName = 'electric-client' as const
 
@@ -20,6 +21,11 @@ interface TelemetryConfig {
   logToConsole?: boolean
   exportToOTLP?: boolean
   OTLPEndpoint?: string
+}
+
+interface TracePropagationData {
+  traceparent: string
+  tracestate?: string
 }
 
 const provider = new WebTracerProvider({
@@ -70,9 +76,25 @@ const getTracer = (): Tracer => {
   return provider.getTracer(tracerName)
 }
 
+const getActiveContext = (): Context => {
+  return context.active()
+}
+
+const getActiveTracePropagationData = (): TracePropagationData => {
+  const output: Partial<TracePropagationData> = {}
+  propagation.inject(getActiveContext(), output)
+  return output as TracePropagationData
+}
+
 const disposeTelemetry = async (): Promise<void> => {
   await provider.shutdown()
 }
 
-export { setUpTelemetry, getTracer, disposeTelemetry }
-export type { TelemetryConfig }
+export {
+  setUpTelemetry,
+  getTracer,
+  getActiveContext,
+  disposeTelemetry,
+  getActiveTracePropagationData,
+}
+export type { TelemetryConfig, TracePropagationData }
