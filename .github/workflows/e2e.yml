@@ -88,7 +88,7 @@ jobs:
           ELECTRIC_IMAGE_NAME: electric-sql-ci/electric
           ELECTRIC_CLIENT_IMAGE_NAME: electric-sql-ci/electric-ws-client
           ELECTRIC_IMAGE_TAG: ${{ env.ELECTRIC_VERSION }}
-          OTEL_RESOURCE_ATTRIBUTES: deployment.environment=CI,ci.workflow=${{ github.workflow }},ci.job=${{ github.job }},ci.run=${{ github.run_id }},ci.branch=${{ github.head_ref }}
+          _OTEL_RESOURCE_ATTRIBUTES: deployment.environment=CI,ci.workflow=${{ github.workflow }},ci.job=${{ github.job }},ci.run=${{ github.run_id }},ci.branch=${{ github.head_ref }}
 
       - name: Upload lux logs
         uses: actions/upload-artifact@v3
@@ -179,7 +179,7 @@ jobs:
           ELECTRIC_IMAGE_NAME: electric-sql-ci/electric
           ELECTRIC_CLIENT_IMAGE_NAME: electric-sql-ci/electric-ws-client
           ELECTRIC_IMAGE_TAG: ${{ env.ELECTRIC_VERSION }}
-          OTEL_RESOURCE_ATTRIBUTES: deployment.environment=CI,ci.workflow=${{ github.workflow }},ci.job=${{ github.job }},ci.run=${{ github.run_id }},ci.branch=${{ github.head_ref }}
+          _OTEL_RESOURCE_ATTRIBUTES: deployment.environment=CI,ci.workflow=${{ github.workflow }},ci.job=${{ github.job }},ci.run=${{ github.run_id }},ci.branch=${{ github.head_ref }}
 
       - name: Upload lux logs
         uses: actions/upload-artifact@v3

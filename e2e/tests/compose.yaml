@@ -76,7 +76,7 @@ services:
   otel-collector:
     image: otel/opentelemetry-collector-contrib
     environment:
-      OTEL_RESOURCE_ATTRIBUTES: "${OTEL_RESOURCE_ATTRIBUTES:-}"
+      OTEL_RESOURCE_ATTRIBUTES: "${_OTEL_RESOURCE_ATTRIBUTES:-}"
       HONEYCOMB_API_KEY: "${HONEYCOMB_API_KEY}"
     volumes:
       - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml

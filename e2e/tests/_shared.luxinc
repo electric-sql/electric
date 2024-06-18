@@ -7,7 +7,7 @@
 
 [macro setup]
     [newshell otel_collector]
-        !OTEL_RESOURCE_ATTRIBUTES=ci.test_file=$test_file,$${OTEL_RESOURCE_ATTRIBUTES} \
+        !_OTEL_RESOURCE_ATTRIBUTES=ci.test_file=$test_file,$${_OTEL_RESOURCE_ATTRIBUTES} \
          make start_otel_collector
         ??Everything is ready. Begin running and processing data.
 
