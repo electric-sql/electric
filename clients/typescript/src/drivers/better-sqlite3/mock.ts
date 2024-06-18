@@ -1,5 +1,6 @@
 import { BindParams, DbName, Row, SqlValue } from '../../util/types'
 import { Database, Statement, Transaction } from './database'
+import type { Statement as OriginalStatement } from 'better-sqlite3'
 
 type MockStatement<T extends BindParams = []> = Pick<
   Statement<T>,
@@ -20,11 +21,8 @@ export class MockDatabase implements Database {
     return this
   }
 
-  // @ts-ignore annoying typings for mock
-  prepare<T extends BindParams = [], Result = unknown>(
-    _sql: string
-  ): Statement<T, Result> {
-    const mockStatement: MockStatement<T> = {
+  prepare<T extends unknown[] | {}, R>(_sql: string) {
+    const mockStatement: MockStatement = {
       database: this as any,
       readonly: false,
       source: _sql,
@@ -45,7 +43,7 @@ export class MockDatabase implements Database {
     }
 
     // Valid only for mocking since we don't expect to need to mock full interface
-    return mockStatement as Statement<T, Result>
+    return mockStatement as unknown as OriginalStatement<T, R>
   }
 
   transaction<T extends (...args: any[]) => any>(fn: T): Transaction<T> {
