@@ -324,12 +324,16 @@ config :electric, :telemetry, telemetry
 # OpenTelemetry
 ###
 
+# Currently, traces are primarily collected during E2E test runs on CI. We're setting a fairly
+# low delay between consecutive export batches to quickly go from one test to the next one.
 config :opentelemetry, :processors, otel_batch_processor: %{scheduled_delay_ms: 1000}
 
 otel_export = env!("OTEL_EXPORT", :string, nil)
 
 case otel_export do
   "honeycomb" ->
+    # Exporting directly to Honeycomb.io is left here mostly for debugging purposes. Prefer
+    # using the generic "otlp" export to a locally running OpenTelemetry Collector.
     honeycomb_api_key = env!("HONEYCOMB_API_KEY", :string, "")
 
     config :opentelemetry_exporter,
@@ -345,6 +349,7 @@ case otel_export do
     end
 
   "debug" ->
+    # In this mode, each span is printed to stdout as soon as it ends, without batching.
     config :opentelemetry, :processors,
       otel_simple_processor: %{exporter: {:otel_exporter_stdout, []}}
 
