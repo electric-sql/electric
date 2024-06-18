@@ -53,6 +53,7 @@ import {
 } from '../../src/notifiers'
 import { QueryBuilder } from '../../src/migrators/query-builder'
 import { SatelliteOpts } from '../../src/satellite/config'
+import { ForeignKeyChecks } from '../../src/config'
 
 export type ContextType = CommonContextType & {
   builder: QueryBuilder
@@ -1164,6 +1165,7 @@ export const processTests = (test: TestFn<ContextType>) => {
     await runMigrations()
 
     if (builder.dialect === 'SQLite') {
+      satellite.fkChecks = ForeignKeyChecks.inherit // set FK checks to inherit because by default they are disabled
       await adapter.run({ sql: `PRAGMA foreign_keys = ON` })
     }
     await satellite._setMeta('compensations', 0)
@@ -1297,6 +1299,7 @@ export const processTests = (test: TestFn<ContextType>) => {
     await runMigrations()
 
     if (builder.dialect === 'SQLite') {
+      satellite.fkChecks = ForeignKeyChecks.inherit // set FK checks to inherit because by default they are disabled
       await adapter.run({ sql: `PRAGMA foreign_keys = ON` })
     }
     await satellite._setMeta('compensations', 0)
@@ -1965,6 +1968,11 @@ export const processTests = (test: TestFn<ContextType>) => {
     }
 
     await runMigrations()
+
+    if (builder.dialect === 'SQLite') {
+      satellite.fkChecks = ForeignKeyChecks.inherit // set FK checks to inherit because by default they are disabled
+      await adapter.run({ sql: `PRAGMA foreign_keys = ON` })
+    }
 
     const tablename = 'child'
 

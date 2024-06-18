@@ -79,6 +79,7 @@ import groupBy from 'lodash.groupby'
 import { ShapeManager } from './shapes/shapeManager'
 import { SyncStatus } from '../client/model/shapes'
 import { runInTransaction } from '../util/transactions'
+import { ForeignKeyChecks } from '../config'
 
 type ChangeAccumulator = {
   [key: string]: Change
@@ -125,7 +126,7 @@ export class SatelliteProcess implements Satellite {
   builder: QueryBuilder
 
   opts: SatelliteOpts
-  disableFKs: boolean | undefined
+  fkChecks: ForeignKeyChecks
 
   _authState?: AuthState
   _unsubscribeFromAuthState?: UnsubscribeFunction
@@ -175,8 +176,10 @@ export class SatelliteProcess implements Satellite {
     this.builder = this.migrator.queryBuilder
 
     this.opts = opts
-    this.disableFKs =
-      this.builder.dialect === 'SQLite' ? this.opts.disableFKs : undefined
+    this.fkChecks =
+      this.builder.dialect === 'SQLite'
+        ? this.opts.fkChecks
+        : ForeignKeyChecks.inherit
     this.relations = {}
 
     this.previousShapeSubscriptions = []
@@ -695,11 +698,11 @@ export class SatelliteProcess implements Satellite {
   }
 
   /**
-   * Runs the provided statements in a transaction and disables FK checks if `disableFKs` is true.
-   * `disableFKs` should only be set to true when using SQLite as we already disable FK checks for incoming TXs when using Postgres
+   * Runs the provided statements in a transaction and disables FK checks if `this.fkChecks` is set to `disabled`.
+   * `this.fkChecks` should only be set to true when using SQLite as we already disable FK checks for incoming TXs when using Postgres
    */
   async runInTransaction(...stmts: Statement[]) {
-    return runInTransaction(this.adapter, this.disableFKs, ...stmts)
+    return runInTransaction(this.adapter, this.fkChecks, ...stmts)
   }
 
   _resetClientState(opts?: { keepSubscribedShapes: boolean }): Promise<void> {
@@ -1515,7 +1518,7 @@ export class SatelliteProcess implements Satellite {
           statements: allStatements,
           version: transaction.migrationVersion,
         },
-        this.disableFKs
+        this.fkChecks
       )
     } else {
       await this.runInTransaction(...allStatements)

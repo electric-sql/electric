@@ -1,3 +1,4 @@
+import { ForeignKeyChecks } from '../config'
 import { Statement } from '../util'
 import { QueryBuilder } from './query-builder'
 
@@ -29,10 +30,10 @@ export function makeStmtMigration(migration: Migration): StmtMigration {
 
 export interface Migrator {
   up(): Promise<number>
-  apply(migration: StmtMigration, disableFKs?: boolean): Promise<void>
+  apply(migration: StmtMigration, fkChecks: ForeignKeyChecks): Promise<void>
   applyIfNotAlready(
     migration: StmtMigration,
-    disableFKs: boolean | undefined
+    fkChecks: ForeignKeyChecks
   ): Promise<boolean>
   querySchemaVersion(): Promise<string | undefined>
   queryBuilder: QueryBuilder

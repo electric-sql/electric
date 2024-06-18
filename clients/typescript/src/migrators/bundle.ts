@@ -13,6 +13,7 @@ import { _electric_migrations } from '../satellite/config'
 import { pgBuilder, QueryBuilder, sqliteBuilder } from './query-builder'
 import { dedent } from 'ts-dedent'
 import { runInTransaction } from '../util/transactions'
+import { ForeignKeyChecks } from '../config'
 
 export const SCHEMA_VSN_ERROR_MSG = `Local schema doesn't match server's. Clear local state through developer tools and retry connection manually. If error persists, re-generate the client. Check documentation (https://electric-sql.com/docs/reference/roadmap) to learn more.`
 
@@ -133,7 +134,7 @@ export abstract class BundleMigratorBase implements Migrator {
 
   async apply(
     { statements, version }: StmtMigration,
-    disableFKs?: boolean
+    fkChecks: ForeignKeyChecks = ForeignKeyChecks.inherit
   ): Promise<void> {
     if (!VALID_VERSION_EXP.test(version)) {
       throw new Error(
@@ -141,7 +142,7 @@ export abstract class BundleMigratorBase implements Migrator {
       )
     }
 
-    await runInTransaction(this.adapter, disableFKs, ...statements, {
+    await runInTransaction(this.adapter, fkChecks, ...statements, {
       sql: dedent`
         INSERT INTO ${this.migrationsTable} (version, applied_at)
         VALUES (${this.queryBuilder.makePositionalParam(
@@ -160,7 +161,7 @@ export abstract class BundleMigratorBase implements Migrator {
    */
   async applyIfNotAlready(
     migration: StmtMigration,
-    disableFKs: boolean | undefined
+    fkChecks: ForeignKeyChecks = ForeignKeyChecks.inherit
   ): Promise<boolean> {
     const rows = await this.adapter.query({
       sql: dedent`
@@ -175,7 +176,7 @@ export abstract class BundleMigratorBase implements Migrator {
     if (shouldApply) {
       // This is a new migration because its version number
       // is not in our migrations table.
-      await this.apply(migration, disableFKs)
+      await this.apply(migration, fkChecks)
     }
 
     return shouldApply

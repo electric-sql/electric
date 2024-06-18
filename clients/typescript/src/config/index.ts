@@ -43,10 +43,17 @@ export interface ElectricConfig {
    */
   connectionBackOffOptions?: ConnectionBackOffOptions
   /**
-   * Whether to disable FK checks when applying downstream (i.e. incoming) transactions to the local SQLite database.
-   * When using Postgres, this is the default behavior and can't be changed.
+   * Whether to check foreign keys when applying downstream (i.e. incoming) transactions to the local SQLite database.
+   * Defaults to `disabled`, meaning that FKs are not checked.
+   * When using Postgres, this option cannot be changed.
    */
-  disableForeignKeysDownstream?: boolean
+  foreignKeyChecksDownstream?: ForeignKeyChecks
+}
+
+export enum ForeignKeyChecks {
+  enabled = 'enabled',
+  disabled = 'disabled',
+  inherit = 'inherit',
 }
 
 export type ElectricConfigWithDialect = ElectricConfig & {
@@ -66,7 +73,7 @@ export type HydratedConfig = {
   debug: boolean
   connectionBackOffOptions: ConnectionBackOffOptions
   namespace: string
-  disableFKs: boolean | undefined
+  fkChecks: ForeignKeyChecks
 }
 
 export type InternalElectricConfig = {
@@ -79,7 +86,7 @@ export type InternalElectricConfig = {
   }
   debug?: boolean
   connectionBackOffOptions?: ConnectionBackOffOptions
-  disableFKs?: boolean
+  fkChecks: ForeignKeyChecks
 }
 
 export const hydrateConfig = (
@@ -98,6 +105,9 @@ export const hydrateConfig = (
   const port = Number.isNaN(portInt) ? defaultPort : portInt
 
   const defaultNamespace = config.dialect === 'Postgres' ? 'public' : 'main'
+
+  const fkChecks =
+    config.foreignKeyChecksDownstream ?? ForeignKeyChecks.disabled
 
   const replication = {
     host: url.hostname,
@@ -133,6 +143,6 @@ export const hydrateConfig = (
     debug,
     connectionBackOffOptions,
     namespace: defaultNamespace,
-    disableFKs: config.disableForeignKeysDownstream,
+    fkChecks,
   }
 }

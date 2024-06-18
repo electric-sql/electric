@@ -1,6 +1,9 @@
 import test from 'ava'
 
-import { InternalElectricConfig } from '../../src/config/index'
+import {
+  ForeignKeyChecks,
+  InternalElectricConfig,
+} from '../../src/config/index'
 import { DatabaseAdapter } from '../../src/electric/adapter'
 import { Migrator } from '../../src/migrators/index'
 import { Notifier } from '../../src/notifiers/index'
@@ -18,6 +21,7 @@ const notifier = {} as Notifier
 const socketFactory = {} as SocketFactory
 const config: InternalElectricConfig = {
   auth: {},
+  fkChecks: ForeignKeyChecks.inherit,
 }
 const args = [
   dbName,
