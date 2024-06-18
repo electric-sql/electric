@@ -7,9 +7,9 @@ on:
       - main
   pull_request:
     paths:
-      - 'pnpm-lock.yaml'
-      - 'examples/**'
-      - '!examples/**/**.md'
+      - "pnpm-lock.yaml"
+      - "examples/**"
+      - "!examples/**/**.md"
 
 defaults:
   run:
@@ -27,11 +27,11 @@ jobs:
       matrix:
         node-version: [20]
     steps:
-      - uses: actions/checkout@v3
-      - uses: pnpm/action-setup@v2
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
         with:
           version: 8
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
           cache: pnpm

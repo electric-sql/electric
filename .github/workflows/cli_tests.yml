@@ -7,9 +7,9 @@ on:
       - main
   pull_request:
     paths:
-      - 'pnpm-lock.yaml'
-      - 'components/cli/**'
-      - '!components/cli/**.md'
+      - "pnpm-lock.yaml"
+      - "components/cli/**"
+      - "!components/cli/**.md"
 
 defaults:
   run:
@@ -24,11 +24,11 @@ jobs:
     name: Check formatting & linting
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v2
         with:
           version: 8
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
@@ -38,11 +38,11 @@ jobs:
     name: Check types
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v2
         with:
           version: 8
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
@@ -55,11 +55,11 @@ jobs:
       matrix:
         node-version: [18, 20, 22]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v2
         with:
           version: 8
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
           cache: pnpm
@@ -74,11 +74,11 @@ jobs:
     needs: [test, check_types, verify_formatting]
     if: ${{ github.ref_name == 'main' }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v2
         with:
           version: 8
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
           cache: pnpm
