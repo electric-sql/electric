@@ -1005,7 +1005,9 @@ defmodule Electric.Satellite.ClientReconnectionInfo do
 
   @impl GenServer
   def init(connector_config) do
+    origin = Connectors.origin(connector_config)
     Logger.metadata(component: "ClientReconnectionInfo")
+    Process.set_label({:client_reconnection_info, origin})
 
     checkpoint_table = :ets.new(@checkpoint_ets, [:named_table, :public, :set])
     subscriptions_table = :ets.new(@subscriptions_ets, [:named_table, :public, :ordered_set])
