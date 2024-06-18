@@ -43,6 +43,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
   @impl GenStage
   def init({conn_config, opts}) do
     origin = Connectors.origin(conn_config)
+    Process.set_label({:migration_consumer, origin})
 
     %{publication: publication, subscription: subscription} =
       Connectors.get_replication_opts(conn_config)

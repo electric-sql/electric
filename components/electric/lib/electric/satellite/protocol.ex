@@ -49,6 +49,7 @@ defmodule Electric.Satellite.Protocol do
       when not auth_passed?(state) and client_id != "" and token != "" do
     Logger.metadata(client_id: client_id)
     Logger.debug("Received auth request")
+    Process.set_label({:ws_server, state.origin, client_id})
 
     # NOTE: We treat successful registration with Electric.safe_reg as an
     # indication that at least the previously connected WS client is down.

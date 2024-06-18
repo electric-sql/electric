@@ -123,6 +123,7 @@ defmodule Electric.Postgres.CachedWal.EtsBacked do
   @impl GenStage
   def init(opts) do
     origin = Keyword.fetch!(opts, :origin)
+    Process.set_label({:wal_cache, origin})
 
     table = :ets.new(ets_table_name(origin), [:named_table, :ordered_set])
     Logger.metadata(origin: origin, component: "CachedWal.EtsBacked")

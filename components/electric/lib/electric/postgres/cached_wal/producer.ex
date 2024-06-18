@@ -28,6 +28,7 @@ defmodule Electric.Postgres.CachedWal.Producer do
     Logger.metadata(component: "CachedWal.Producer")
 
     origin = Keyword.fetch!(opts, :origin)
+    Process.set_label({:wal_cache_producer, origin})
 
     {:producer,
      %{
