@@ -29,6 +29,7 @@ defmodule Electric.Replication.Postgres.Writer do
     origin = Connectors.origin(conn_config)
     name = name(origin)
     Electric.reg(name)
+    Process.set_label({:writer_to_pg, origin})
 
     Logger.metadata(origin: origin)
 

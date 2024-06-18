@@ -108,6 +108,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     repl_conn_opts = Connectors.get_connection_opts(connector_config, replication: true)
     repl_opts = Connectors.get_replication_opts(connector_config)
     wal_window_opts = Connectors.get_wal_window_opts(connector_config)
+    Process.set_label({:logical_replication, origin})
 
     publication = repl_opts.publication
     main_slot = repl_opts.slot
