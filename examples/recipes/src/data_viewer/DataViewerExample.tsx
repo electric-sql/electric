@@ -13,7 +13,8 @@ export const DataViewerExample = () => {
       // Resolves when the shape subscription has been established.
       const shape = await db.commerce_orders.sync()
 
-      // Resolves when the data has been synced into the local database.
+      // Resolves when the initial data for the shape
+      // has been synced into the local database.
       await shape.synced
       setSynced(true)
     }
