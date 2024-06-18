@@ -126,8 +126,6 @@ export function setReplicationTransform<
   i: ReplicatedRowTransformer<T>,
   schema?: z.ZodTypeAny
 ): void {
-  // forbid transforming relation keys to avoid breaking
-  // referential integrity
   const tableName = qualifiedTableName.tablename
 
   if (!dbDescription.hasTable(tableName)) {
@@ -136,9 +134,28 @@ export function setReplicationTransform<
     )
   }
 
-  const relations = dbDescription.getRelations(tableName)
   const fields = dbDescription.getFields(tableName)
-  const immutableFields = relations.map((r) => r.relationField)
+
+  // forbid transforming relation keys to avoid breaking
+  // referential integrity
+
+  // the column could be the FK column when it is an outgoing FK
+  // or it could be a PK column when it is an incoming FK
+  const fkCols = dbDescription
+    .getOutgoingRelations(tableName)
+    .map((r) => r.fromField)
+
+  // Incoming relations don't have the `fromField` and `toField` filled in
+  // so we need to fetch the `toField` from the opposite relation
+  // which is effectively a column in this table to which the FK points
+  const pkCols = dbDescription
+    .getIncomingRelations(tableName)
+    .map((r) => r.getOppositeRelation(dbDescription).toField)
+
+  // Merge all columns that are part of a FK relation.
+  // Remove duplicate columns in case a column has both an outgoing FK and an incoming FK.
+  const immutableFields = Array.from(new Set(fkCols.concat(pkCols)))
+
   replicationTransformManager.setTableTransform(qualifiedTableName, {
     transformInbound: (record) =>
       replicationTransformManager.transformTableRecord(
