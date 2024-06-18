@@ -804,6 +804,133 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
       |> server(complete_ready("COMMIT", :idle))
       |> idle!()
     end
+
+    test "psycopg transactions", cxt do
+      cxt.injector
+      |> client([
+        %M.Parse{query: "BEGIN"},
+        %M.Bind{},
+        %M.Describe{},
+        %M.Execute{},
+        %M.Sync{}
+      ])
+      |> server([
+        %M.ParseComplete{},
+        %M.BindComplete{},
+        %M.NoData{},
+        %M.CommandComplete{tag: "BEGIN"},
+        %M.ReadyForQuery{status: :tx}
+      ])
+      |> client(%M.Query{query: "select pg_catalog.version()"})
+      |> server([
+        %M.RowDescription{
+          fields: [
+            %PgProtocol.Message.RowDescription.Field{
+              name: "version",
+              oid: 0,
+              attnum: 0,
+              type: 25,
+              typlen: -1,
+              typmod: -1,
+              fmt: 0
+            }
+          ]
+        },
+        %M.DataRow{
+          fields: [
+            "PostgreSQL 14.12 on x86_64-pc-linux-musl, compiled by gcc (Alpine 13.2.1_git20240309) 13.2.1 20240309, 64-bit"
+          ]
+        },
+        %M.CommandComplete{tag: "SELECT 1"},
+        %M.ReadyForQuery{status: :tx}
+      ])
+      |> client([
+        %M.Parse{name: "", query: "ROLLBACK", params: []},
+        %M.Bind{
+          portal: "",
+          source: "",
+          parameters: [],
+          parameter_format_codes: [],
+          result_format_codes: [0]
+        },
+        %M.Describe{type: "P", name: ""},
+        %M.Execute{portal: "", max_rows: 0},
+        %M.Sync{}
+      ])
+      |> server([
+        %M.ParseComplete{},
+        %M.BindComplete{},
+        %M.NoData{},
+        %M.CommandComplete{tag: "ROLLBACK"},
+        %M.ReadyForQuery{status: :idle}
+      ])
+    end
+
+    test "psycopg savepoints", cxt do
+      cxt.injector
+      |> client([
+        %M.Parse{query: "BEGIN"},
+        %M.Bind{},
+        %M.Describe{},
+        %M.Execute{},
+        %M.Sync{}
+      ])
+      |> server([
+        %M.ParseComplete{},
+        %M.BindComplete{},
+        %M.NoData{},
+        %M.CommandComplete{tag: "BEGIN"},
+        %M.ReadyForQuery{status: :tx}
+      ])
+      |> client([
+        %M.Parse{name: "", query: "SAVEPOINT \"_pg3_1\"", params: []},
+        %M.Bind{},
+        %M.Describe{type: "P", name: ""},
+        %M.Execute{portal: "", max_rows: 0},
+        %M.Sync{}
+      ])
+      |> server([
+        %M.ParseComplete{},
+        %M.BindComplete{},
+        %M.NoData{},
+        %M.CommandComplete{tag: "SAVEPOINT"},
+        %M.ReadyForQuery{status: :tx}
+      ])
+      |> client([
+        %M.Parse{name: "", query: "RELEASE \"_pg3_1\"", params: []},
+        %M.Bind{},
+        %M.Describe{type: "P", name: ""},
+        %M.Execute{portal: "", max_rows: 0},
+        %M.Sync{}
+      ])
+      |> server([
+        %M.ParseComplete{},
+        %M.BindComplete{},
+        %M.NoData{},
+        %M.CommandComplete{tag: "RELEASE"},
+        %M.ReadyForQuery{status: :tx}
+      ])
+      |> client([
+        %M.Parse{name: "", query: "ROLLBACK", params: []},
+        %M.Bind{
+          portal: "",
+          source: "",
+          parameters: [],
+          parameter_format_codes: [],
+          result_format_codes: [0]
+        },
+        %M.Describe{type: "P", name: ""},
+        %M.Execute{portal: "", max_rows: 0},
+        %M.Sync{}
+      ])
+      |> server([
+        %M.ParseComplete{},
+        %M.BindComplete{},
+        %M.NoData{},
+        %M.CommandComplete{tag: "ROLLBACK"},
+        %M.ReadyForQuery{status: :idle}
+      ])
+    end
   end
 
   describe "Injector.Electric" do

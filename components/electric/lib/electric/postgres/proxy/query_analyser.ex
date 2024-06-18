@@ -257,6 +257,8 @@ defimpl QueryAnalyser, for: PgQuery.TransactionStmt do
         :TRANS_STMT_BEGIN -> :begin
         :TRANS_STMT_COMMIT -> :commit
         :TRANS_STMT_ROLLBACK -> :rollback
+        :TRANS_STMT_SAVEPOINT -> :savepoint
+        :TRANS_STMT_RELEASE -> :release
       end
 
     %{analysis | action: {:tx, kind}}

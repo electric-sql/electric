@@ -72,6 +72,14 @@ defmodule Electric.Postgres.Proxy.Injector.State do
     not is_nil(state.tx)
   end
 
+  def transaction(%__MODULE__{} = state, action) when action in [:begin, :rollback, :commit] do
+    case action do
+      :begin -> begin(state)
+      :rollback -> rollback(state)
+      :commit -> commit(state)
+    end
+  end
+
   @doc """
   Update the transaction status to mark it as affecting electrified tables (or
   not).
