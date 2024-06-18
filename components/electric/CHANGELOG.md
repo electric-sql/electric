@@ -1,5 +1,13 @@
 # @core/electric
 
+## 0.12.1
+
+### Patch Changes
+
+- ecdd4ab: Reduce baseline memory usage by limiting the maximum number of open file descriptors.
+- 7b4b8d4: Remove `WITHOUT ROWID` specification on SQLite migrations for improved performance (see https://github.com/electric-sql/electric/pull/1349).
+- 8cddaaf: Support psycopg3 style transactions in proxy
+
 ## 0.12.0
 
 ### Minor Changes

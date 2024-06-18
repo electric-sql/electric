@@ -1,5 +1,17 @@
 # @electric-sql/debug-toolbar
 
+## 2.0.1
+
+### Patch Changes
+
+- e9dc60f: Update `better-sqlite3` dependency, dropping Node v16 support and adding Node v22 support, see [relevant PR](https://github.com/electric-sql/electric/pull/1378).
+- Updated dependencies [b3c1bdc]
+- Updated dependencies [e9dc60f]
+- Updated dependencies [7bbba53]
+- Updated dependencies [7b4b8d4]
+- Updated dependencies [fbf8a4d]
+  - electric-sql@0.12.1
+
 ## 2.0.0
 
 ### Minor Changes
