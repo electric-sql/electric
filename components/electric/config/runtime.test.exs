@@ -6,6 +6,8 @@ import Config
 #   handle_otp_reports: true,
 #   handle_sasl_reports: true
 
+config :tzdata, :autoupdate, :disabled
+
 config :electric, disable_listeners: true
 
 config :electric, Electric.Postgres.Proxy.Handler.Tracing, colour: false
