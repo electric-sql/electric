@@ -6,12 +6,18 @@ import {
   SpanKind,
   SpanStatusCode,
   trace,
+  propagation,
 } from '@opentelemetry/api'
 
 interface SpanOptions {
   parentSpan?: Span
   attributes?: Attributes
   isClientSpan?: boolean
+}
+
+interface TracePropagationData {
+  traceparent: string
+  tracestate?: string
 }
 
 function startSpan(
@@ -80,5 +86,21 @@ function runWithSpan<T>(
   }
 }
 
-export { startSpan, runWithSpan, recordSpanError }
-export type { Span }
+const getTracePropagationData = (span: Span): TracePropagationData => {
+  const output: Partial<TracePropagationData> = {}
+
+  // Serialize the traceparent and tracestate from context into
+  // an output object.
+  //
+  // This example uses the active trace context, but you can
+  // use whatever context is appropriate to your scenario.
+  propagation.inject(
+    trace.setSpanContext(context.active(), span.spanContext()),
+    output
+  )
+
+  return output as TracePropagationData
+}
+
+export { startSpan, runWithSpan, recordSpanError, getTracePropagationData }
+export type { Span, TracePropagationData }

@@ -113,7 +113,7 @@ import {
   QualifiedTablename,
   runWithSpan,
   startSpan,
-  getTraceParent,
+  getTracePropagationData,
 } from '../util'
 import { AuthState } from '../auth'
 import Long from 'long'
@@ -646,7 +646,7 @@ export class SatelliteClient implements Client {
           'satellite.client.subscribe.request',
           { parentSpan: span },
           (span) =>
-            this.service.subscribe(request, getTraceParent(span.spanContext()))
+            this.service.subscribe(request, getTracePropagationData(span))
         )
         span.setAttribute('shape.subscriptionId', request.subscriptionId)
         return this.handleSubscription(resp)
