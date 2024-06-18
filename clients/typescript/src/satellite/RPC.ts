@@ -213,6 +213,14 @@ export function withRpcRequestLogging(service: Root, logger: Logger): Root {
   })
 }
 
+/**
+ * Wrap an RPC instance to augment RPC requests with trace propagation.
+ * Potenitally slight overkill, could directly add the propagation data
+ * on
+ *
+ * @param rpc RPC instance to wrap
+ * @returns A proxy around the RPC instance
+ */
 export function withRpcRequestTracing(rpc: RPC): RPC {
   return new Proxy(rpc, {
     get(target, p, _receiver) {
@@ -220,6 +228,7 @@ export function withRpcRequestTracing(rpc: RPC): RPC {
         return new Proxy(target[p as keyof RPC], {
           apply(target, thisArg, argArray) {
             // for requests, enhance with trace propagation data
+            // from the active context
             if (p === 'request') {
               argArray[3] = {
                 ...getActiveTracePropagationData(),

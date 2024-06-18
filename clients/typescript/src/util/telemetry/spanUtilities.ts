@@ -13,13 +13,14 @@ interface SpanOptions {
   parentSpan?: Span
   attributes?: Attributes
   isClientSpan?: boolean
+  setActiveSpan?: boolean
 }
 
 function startSpan(
   name: string,
-  { parentSpan, attributes, isClientSpan }: SpanOptions = {}
+  { parentSpan, attributes, isClientSpan, setActiveSpan }: SpanOptions = {}
 ) {
-  return getTracer().startSpan(
+  const span = getTracer().startSpan(
     name,
     {
       kind: isClientSpan ? SpanKind.CLIENT : SpanKind.INTERNAL,
@@ -27,6 +28,10 @@ function startSpan(
     },
     parentSpan && trace.setSpan(context.active(), parentSpan)
   )
+  if (setActiveSpan) {
+    trace.setSpan(context.active(), span)
+  }
+  return span
 }
 
 /**
@@ -54,12 +59,15 @@ function runWithSpan<T>(
   fnOrOptions: SpanOptions | ((span: Span) => T),
   fn?: (span: Span) => T
 ) {
-  const span = startSpan(name)
+  const spanOptions = typeof fnOrOptions === 'function' ? {} : fnOrOptions
+  const span = startSpan(name, spanOptions)
   const functionToTrace = (
     typeof fnOrOptions === 'function' ? fnOrOptions : fn
   ) as (span: Span) => T
   try {
-    const result = functionToTrace(span)
+    const result = context.with(trace.setSpan(context.active(), span), () =>
+      functionToTrace(span)
+    )
 
     // if result is a promise, chain span actions to it
     if (result instanceof Promise) {

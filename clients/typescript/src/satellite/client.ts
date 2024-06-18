@@ -305,6 +305,7 @@ export class SatelliteClient implements Client {
     }
     const span = startSpan('satellite.client.connect', {
       isClientSpan: true,
+      setActiveSpan: true,
     })
     return new Promise<void>((resolve, reject) => {
       this.socket = new this.socketFactory(PROTOCOL_VSN)
@@ -461,6 +462,7 @@ export class SatelliteClient implements Client {
 
     const span = startSpan('satellite.client.stopReplication', {
       isClientSpan: true,
+      setActiveSpan: true,
     })
     this.inbound.isReplicating = ReplicationStatus.STOPPING
     const request = SatInStopReplicationReq.fromPartial({})
@@ -473,6 +475,7 @@ export class SatelliteClient implements Client {
   authenticate({ clientId, token }: AuthState): Promise<AuthResponse> {
     const span = startSpan('satellite.client.authenticate', {
       isClientSpan: true,
+      setActiveSpan: true,
     })
     const request = SatAuthReq.fromPartial({
       id: clientId,
@@ -667,6 +670,7 @@ export class SatelliteClient implements Client {
     }
     const span = startSpan('satellite.client.unsubscribe', {
       isClientSpan: true,
+      setActiveSpan: true,
       attributes: {
         'shape.subscriptionIds': subscriptionIds,
       },
