@@ -21,8 +21,8 @@ export interface Database
 export type StatementBindParams<T = BindParams> = T extends any[] ? T : [T]
 
 // The relevant subset of the Better-SQLite3 prepared statement.
-type BoundStatement<T extends any[]> = Omit<
-  OriginalStatement<T>,
+type BoundStatement<T extends unknown[], Result = unknown> = Omit<
+  OriginalStatement<T, Result>,
   'run' | 'get' | 'all' | 'iterate'
 > & {
   run: (...params: T) => RunResult
@@ -31,6 +31,7 @@ type BoundStatement<T extends any[]> = Omit<
   iterate: (...params: T) => IterableIterator<Row>
 }
 
-export type Statement<T extends BindParams = []> = T extends any[]
-  ? BoundStatement<T>
-  : BoundStatement<[T]>
+export type Statement<
+  T extends BindParams = [],
+  Result = unknown
+> = T extends any[] ? BoundStatement<T, Result> : BoundStatement<[T], Result>

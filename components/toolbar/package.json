@@ -39,7 +39,7 @@
     "@typescript-eslint/eslint-plugin": "^7.8.0",
     "@typescript-eslint/parser": "^7.8.0",
     "@vitejs/plugin-react": "^4.2.1",
-    "better-sqlite3": "^8.4.0",
+    "better-sqlite3": "^11.0.0",
     "electric-sql": "workspace:*",
     "eslint": "^8.22.0",
     "eslint-plugin-react": "^7.34.1",

@@ -1,5 +1,6 @@
 import { BindParams, DbName, Row, SqlValue } from '../../util/types'
 import { Database, Statement, Transaction } from './database'
+import type { Statement as OriginalStatement } from 'better-sqlite3'
 
 type MockStatement<T extends BindParams = []> = Pick<
   Statement<T>,
@@ -20,8 +21,8 @@ export class MockDatabase implements Database {
     return this
   }
 
-  prepare<T extends BindParams = []>(_sql: string): Statement<T> {
-    const mockStatement: MockStatement<T> = {
+  prepare<T extends unknown[] | {}, R>(_sql: string) {
+    const mockStatement: MockStatement = {
       database: this as any,
       readonly: false,
       source: _sql,
@@ -42,13 +43,13 @@ export class MockDatabase implements Database {
     }
 
     // Valid only for mocking since we don't expect to need to mock full interface
-    return mockStatement as Statement<T>
+    return mockStatement as unknown as OriginalStatement<T, R>
   }
 
   transaction<T extends (...args: any[]) => any>(fn: T): Transaction<T> {
     const self = this
 
-    const baseFn = (...args: Parameters<T>): ReturnType<T> => {
+    const baseFn = (...args: unknown[]): ReturnType<T> => {
       self.inTransaction = true
 
       const retval = fn(...args)
@@ -58,7 +59,8 @@ export class MockDatabase implements Database {
       return retval
     }
 
-    const txFn = <Transaction<T>>baseFn
+    const txFn = baseFn as unknown as Transaction<T>
+    txFn.default = baseFn
     txFn.deferred = baseFn
     txFn.immediate = baseFn
     txFn.exclusive = baseFn
