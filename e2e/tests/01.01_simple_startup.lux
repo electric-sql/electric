@@ -1,6 +1,8 @@
 [doc Sanity check test that environment starts correctly]
 [include _shared.luxinc]
 
+[global test_file=01.01_simple_startup.lux]
+
 [invoke setup]
 
 [newshell electric_curl]

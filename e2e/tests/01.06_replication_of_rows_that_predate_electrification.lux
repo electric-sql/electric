@@ -1,6 +1,8 @@
 [doc Correct processing of FK relationships for rows insert into the table prior to electrification]
 [include _shared.luxinc]
 
+[global test_file=01.06_replication_of_rows_that_predate_electrification.lux]
+
 [invoke setup]
 
 [global project_id=99adf0a5-b3c6-45d7-9986-582e76db4556]

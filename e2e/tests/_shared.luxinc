@@ -1,12 +1,14 @@
 [include ../common.luxinc]
 [global fail_pattern=[Ee][Rr][Rr][Oo][Rr]]
 [global psql=electric=]
+[global test_file=]
 
 [newshell log]
 
 [macro setup]
     [newshell otel_collector]
-        !make start_otel_collector
+        !OTEL_RESOURCE_ATTRIBUTES=ci.test_file=$test_file,$${OTEL_RESOURCE_ATTRIBUTES} \
+         make start_otel_collector
         ??Everything is ready. Begin running and processing data.
 
     [newshell postgres_logs]

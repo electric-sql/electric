@@ -1,6 +1,8 @@
 [doc generated postgres client migrations are correct]
 [include _shared.luxinc]
 
+[global test_file=04.05_generated_postgres_client_migrations.lux]
+
 [invoke setup]
 
 [global migration_version_1=20230504114018]

@@ -20,6 +20,8 @@
     ]
     """]
 
+[global test_file=03.01_node_satellite_loads_local_migrations.lux]
+
 [invoke setup]
 
 [invoke setup_client_with_migrations 1 "electric_1" 5133 $migrations "false"]

@@ -1,6 +1,8 @@
 [doc ALTER TABLE statements for electrified tables also alter shadow tables]
 [include _shared.luxinc]
 
+[global test_file=01.04_postgres_alter_table_also_alters_shadows.lux]
+
 [invoke setup]
 [invoke electrify_table entries]
 

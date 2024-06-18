@@ -1,6 +1,8 @@
 [doc Satellite-originating DELETE with correct observed tags gets accepted by PG]
 [include _shared.luxinc]
 
+[global test_file=02.05_delete_gets_registered_correctly.lux]
+
 [invoke setup]
 [invoke electrify_table entries]
 

@@ -1,6 +1,8 @@
 [doc Conflict resolution works per column]
 [include _shared.luxinc]
 
+[global test_file=05.02_confict_resolution_per_column.lux]
+
 [invoke setup]
 [invoke electrify_table entries]
 

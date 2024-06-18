@@ -1,6 +1,8 @@
 [doc In case a transaction comes while the transaction has been opened, PG picks a higher tag to win]
 [include _shared.luxinc]
 
+[global test_file=05.03_postgres_wins_against_concurrent_transactions.lux]
+
 [invoke setup]
 [invoke electrify_table entries]
 

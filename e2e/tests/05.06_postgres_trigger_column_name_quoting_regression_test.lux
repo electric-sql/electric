@@ -1,6 +1,8 @@
 [doc A regression test that verifies correct column name quoting on the generated "perform_reordered_op___*" function]
 [include _shared.luxinc]
 
+[global test_file=05.06_postgres_trigger_column_name_quoting_regression_test.lux]
+
 [invoke setup]
 
 [shell proxy_1]

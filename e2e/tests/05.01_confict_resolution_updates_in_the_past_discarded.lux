@@ -1,6 +1,8 @@
 [doc Updates in the past are discarded]
 [include _shared.luxinc]
 
+[global test_file=05.01_confict_resolution_updates_in_the_past_discarded.lux]
+
 [invoke setup]
 [invoke electrify_table entries]
 

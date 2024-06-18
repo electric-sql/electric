@@ -1,6 +1,8 @@
 [doc Prisma introspection via proxy gives correct schema for multiple fks]
 [include _shared.luxinc]
 
+[global test_file=04.04_prisma_introspection_fk.lux]
+
 [invoke setup]
 
 [global migration_version_1=20230504114018]

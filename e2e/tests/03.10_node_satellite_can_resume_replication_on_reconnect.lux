@@ -2,6 +2,8 @@
 [include _shared.luxinc]
 [include _satellite_macros.luxinc]
 
+[global test_file=03.10_node_satellite_can_resume_replication_on_reconnect.lux]
+
 [invoke setup]
 
 [global migration1_vsn=20230719_01]

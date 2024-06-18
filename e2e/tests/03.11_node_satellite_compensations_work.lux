@@ -2,6 +2,8 @@
 [include _shared.luxinc]
 [include _satellite_macros.luxinc]
 
+[global test_file=03.11_node_satellite_compensations_work.lux]
+
 [invoke setup]
 
 [invoke setup_client 1 "electric_1" 5133]
