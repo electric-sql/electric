@@ -30,8 +30,7 @@ module.exports = {
   ignorePatterns: [
     '**/*/mock.ts',
     'db/**/*',
-    'src/generated/*',
-    'src/generated/client/**/*',
+    'src/generated/**',
     'dist',
     '.eslintrc.cjs',
   ],

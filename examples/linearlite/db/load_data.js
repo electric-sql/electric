@@ -4,7 +4,6 @@ import path from 'path'
 import * as url from 'url'
 import { getConfig } from 'electric-sql/cli'
 import { v4 as uuidv4 } from 'uuid'
-import { generateKeyBetween } from 'fractional-indexing'
 
 /*
 Call with:
@@ -45,7 +44,7 @@ async function upsertProject(db, data) {
   const columnsNames = columns.join(', ')
   const values = columns.map((column) => data[column])
   return await db.query(sql`
-    INSERT INTO project (${sql(columnsNames)})
+    INSERT INTO ${sql.ident('project')} (${sql(columnsNames)})
     VALUES (${sql.join(values.map(sql.value), ', ')})
     ON CONFLICT DO NOTHING
   `)
