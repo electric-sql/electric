@@ -20,6 +20,21 @@ To see the complete change log for each new release, see the [Releases page](htt
 - [@electric-sql/prisma-generator](https://github.com/electric-sql/electric/blob/main/generator/CHANGELOG.md)
 - [debug-toolbar](https://github.com/electric-sql/electric/blob/main/components/toolbar/CHANGELOG.md)
 
+## 2024-06-19 - patch release
+
+| Component              | Version                                                                                            |
+| ---------------------- | -------------------------------------------------------------------------------------------------- |
+| [Sync service][1]      | [0.12.1](https://github.com/electric-sql/electric/blob/main/components/electric/CHANGELOG.md#0121) |
+| [TypeScript client][2] | [0.12.1](https://github.com/electric-sql/electric/blob/main/clients/typescript/CHANGELOG.md#0121)  |
+| [debug-toolbar][5]     | [2.0.1](https://github.com/electric-sql/electric/blob/main/components/toolbar/CHANGELOG.md#201)    |
+
+#### Compatibility notes
+
+**TypeScript client**
+
+- Dropped support for Node v16.
+- The `disableForeignKeysDownstream` configuration option has been renamed to `foreignKeyChecksDownstream` and its type changed from a boolean to an enum. Foreign key checks for downstream changes are now disabled by default. See https://electric-sql.com/docs/api/clients/typescript#available-options for details.
+
 ## 2024-06-10 - v0.12
 
 | Component                | Version                                                                                            |
