@@ -56,6 +56,7 @@ defmodule Electric.Postgres.Proxy.Handler do
 
   @spec initial_state(Connectors.config(), options()) :: S.t()
   def initial_state(connector_config, proxy_opts) do
+    Process.set_label(:postgres_proxy_handler)
     {loader, loader_opts} = Keyword.get(proxy_opts, :loader, {SchemaCache, []})
     password = connector_config |> get_in([:proxy, :password]) |> validate_password()
 

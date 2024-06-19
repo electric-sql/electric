@@ -63,6 +63,7 @@ defmodule Electric.Postgres.OidDatabase do
   end
 
   def init(_) do
+    Process.set_label(:oid_database)
     oid_table = :ets.new(@oid_table, [:set, :named_table, keypos: 2, read_concurrency: true])
     :ets.insert(oid_table, Electric.Postgres.OidDatabase.Defaults.get_defaults())
 
