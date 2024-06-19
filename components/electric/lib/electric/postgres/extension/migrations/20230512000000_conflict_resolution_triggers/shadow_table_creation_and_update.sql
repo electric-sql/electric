@@ -49,7 +49,7 @@ BEGIN
                 reordered_column_definitions :=
                   reordered_column_definitions
                   || format(E'    %I %s,\n', '__reordered_' || cols.col_name, cols.col_type);
-                
+
                 -- We're also building up a non-pk column name list, that's going to be used in trigger function creation
                 non_pk_column_list := non_pk_column_list || cols.col_name;
             END IF;
@@ -97,7 +97,15 @@ BEGIN
         );
 
         -- We install generate functions for newly created tables & triggers using those functions
-        PERFORM electric.install_functions_and_triggers(schema_name, table_name, primary_key_list, non_pk_column_list);
+        -- this only needs write mode because we will have previously installed the
+        -- read-mode functions and triggers when electrifying table
+        PERFORM electric.install_functions_and_triggers(
+            ARRAY['write'],
+            schema_name,
+            table_name,
+            primary_key_list,
+            non_pk_column_list
+        );
     ELSIF tag = 'ALTER TABLE' THEN
         -- Table got altered. Since we currently only support additive migrations,
         -- this can only be a column addition, but we can prepare for the future a little and query for more possible cases
@@ -181,7 +189,13 @@ BEGIN
             This is a little less flexible (if trigger logic gets altered, `install_functions_and_triggers` will need to be reran explicitly) but safer since `DROP` + `CREATE`
             can have some unexpected effects.
             */
-            PERFORM electric.install_conflict_resolution_functions(schema_name, table_name, primary_key_list, non_pk_column_list);
+            PERFORM electric.install_conflict_resolution_functions(
+                ARRAY['read','write'],
+                schema_name,
+                table_name,
+                primary_key_list,
+                non_pk_column_list
+            );
         END IF;
     END IF;
 END;

@@ -36,10 +36,7 @@ BEGIN
 
         EXECUTE format('<%= add_table_to_publication_sql("%I.%I") %>;', _schema, _table);
 
-        -- We want to disable any possible hooks from `CREATE TABLE` statements
-        PERFORM set_config('<%= schema() %>.is_in_event_trigger', 'true', true);
         PERFORM <%= schema() %>.ddlx_make_or_update_shadow_tables('CREATE TABLE', _schema, _oid);
-        PERFORM set_config('<%= schema() %>.is_in_event_trigger', '', true);
 
         EXECUTE format(
             '<%= add_table_to_publication_sql("%I.%I")  %>;',
