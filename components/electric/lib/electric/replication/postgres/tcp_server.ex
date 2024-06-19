@@ -144,6 +144,7 @@ defmodule Electric.Replication.Postgres.TcpServer do
 
   @impl ThousandIsland.Handler
   def handle_connection(socket, _init) do
+    Process.set_label(:tcp_server)
     {:ok, {ip, port}} = Socket.peername(socket)
 
     client = "#{:inet.ntoa(ip)}:#{port}"

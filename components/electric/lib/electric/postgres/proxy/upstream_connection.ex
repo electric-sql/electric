@@ -29,6 +29,7 @@ defmodule Electric.Postgres.Proxy.UpstreamConnection do
     parent = Keyword.fetch!(args, :parent)
     connector_config = Keyword.fetch!(args, :connector_config)
     session_id = Keyword.fetch!(args, :session_id)
+    Process.set_label({:upstream_connection, session_id})
 
     name = name(session_id)
     Electric.reg(name)

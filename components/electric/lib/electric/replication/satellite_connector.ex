@@ -20,6 +20,8 @@ defmodule Electric.Replication.SatelliteConnector do
 
   @impl Supervisor
   def init(%{name: name, producer: producer, origin: origin}) do
+    Process.set_label({:satellite_collector_supervisor, origin, name})
+
     # `cancel: :temporary` is used here since the death of the Satellite WS process will eventually kill the supervisor,
     # but it'll kill SatelliteCollectorConsumer first and cause it to restart with nowhere to resubscribe.
     children = [

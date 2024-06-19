@@ -44,6 +44,7 @@ defmodule Electric.Telemetry.CallHomeReporter do
     # We need to trap exits here so that `terminate/2` callback has more chances to run
     # and send data before crash/shutdown
     Process.flag(:trap_exit, true)
+    Process.set_label({:call_home_reporter, name})
 
     metrics = save_target_path_to_options(metrics)
 

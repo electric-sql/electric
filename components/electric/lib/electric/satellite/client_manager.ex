@@ -52,6 +52,7 @@ defmodule Electric.Satellite.ClientManager do
 
   @impl GenServer
   def init(_) do
+    Process.set_label(:client_manager)
     {:ok, %State{}}
   end
 

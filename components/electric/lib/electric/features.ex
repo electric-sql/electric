@@ -92,6 +92,7 @@ defmodule Electric.Features do
 
   def init(args) do
     name = Keyword.get(args, :name, __MODULE__)
+    Process.set_label({:features, name})
 
     table = :ets.new(name, [:set, :public, :named_table, read_concurrency: true])
 

@@ -35,6 +35,8 @@ defmodule Electric.Replication.SatelliteCollectorProducer do
 
   @impl GenStage
   def init(connector_config) do
+    origin = Connectors.origin(connector_config)
+    Process.set_label({:satellite_collector_producer, origin})
     table = :ets.new(nil, [:ordered_set, keypos: 2])
 
     {:producer,

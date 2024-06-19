@@ -17,6 +17,7 @@ defmodule Electric.Replication.SatelliteCollectorConsumer do
 
   @impl GenStage
   def init(opts) do
+    Process.set_label(:satellite_collector_consumer)
     {:consumer, Map.new(Keyword.take(opts, [:push_to])), Keyword.take(opts, [:subscribe_to])}
   end
 

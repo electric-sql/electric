@@ -135,6 +135,7 @@ defmodule Electric.Replication.Postgres.SlotServer do
     {:via, :gproc, producer} = Keyword.fetch!(opts, :producer)
 
     origin = Connectors.origin(conn_config)
+    Process.set_label({:slot_server, origin})
     replication_opts = Connectors.get_replication_opts(conn_config)
     slot = replication_opts.subscription
 

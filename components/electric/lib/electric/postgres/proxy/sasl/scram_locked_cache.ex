@@ -75,6 +75,7 @@ defmodule Electric.Postgres.Proxy.SASL.SCRAMLockedCache do
 
   @impl true
   def init(:ok) do
+    Process.set_label(:scram_locked_cache)
     init()
     {:ok, %{keys: %{}, ref_to_key: %{}}}
   end

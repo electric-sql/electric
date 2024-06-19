@@ -214,6 +214,7 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   @impl GenServer
   def init({conn_config, opts}) do
     origin = Connectors.origin(conn_config)
+    Process.set_label({:schema_cache, origin})
 
     Logger.metadata(pg_producer: origin)
     Logger.info("Starting #{__MODULE__} for #{origin}")
