@@ -8,8 +8,9 @@ import { Checkbox } from '@headlessui/react'
 interface Props {
   title: string
   projectId: string
+  syncOnMount?: boolean
 }
-function ProjectItem({ title, projectId }: Props) {
+function ProjectItem({ title, projectId, syncOnMount = false }: Props) {
   const { db, sync } = useElectric()!
   const [loading, setLoading] = useState(false)
   const [synced, setSynced] = useState(false)
@@ -52,7 +53,10 @@ function ProjectItem({ title, projectId }: Props) {
     const status = sync.syncStatus(projectId)
 
     // if sub not present, do nothing
-    if (!status) return
+    if (!status) {
+      if (syncOnMount) syncProject()
+      return
+    }
 
     switch (status.status) {
       case 'cancelling':
@@ -65,7 +69,7 @@ function ProjectItem({ title, projectId }: Props) {
         setSynced(true)
         break
     }
-  }, [sync, syncProject, unsyncProject, projectId])
+  }, [sync, syncProject, unsyncProject, projectId, syncOnMount])
 
   return (
     <button

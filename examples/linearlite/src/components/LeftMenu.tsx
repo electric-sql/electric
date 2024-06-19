@@ -20,6 +20,10 @@ import IssueModal from './IssueModal'
 import ItemGroup from './ItemGroup'
 import ProfileMenu from './ProfileMenu'
 import ProjectItem from './ProjectItem'
+import { runOnce } from '../utils/runOnce'
+
+const shouldSyncFirstProject =
+  runOnce('sync-first-project', () => true) ?? false
 
 function LeftMenu() {
   const ref = useRef<HTMLDivElement>() as RefObject<HTMLDivElement>
@@ -152,11 +156,12 @@ function LeftMenu() {
           </ItemGroup>
 
           <ItemGroup title="Projects">
-            {projects?.map((project) => (
+            {projects?.map((project, idx) => (
               <ProjectItem
-                title={project.name}
                 key={project.id}
+                title={project.name}
                 projectId={project.id}
+                syncOnMount={shouldSyncFirstProject && idx === 0}
               />
             ))}
           </ItemGroup>

@@ -46,13 +46,7 @@ const App = () => {
         // window.electric = client
         setElectric(client)
 
-        // const { synced: syncedIssues } = await client.db.issue.sync({
-        //   include: {
-        //     comment: true,
-        //   },
-        // })
         const { synced: syncedProjects } = await client.db.project.sync()
-        // await syncedIssues
         await syncedProjects
 
         const timeToSync = performance.now()
