@@ -7,6 +7,7 @@ import {
 } from '@opentelemetry/sdk-trace-web'
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
 import { BatchSpanProcessor, Tracer } from '@opentelemetry/sdk-trace-base'
+import { W3CTraceContextPropagator } from '@opentelemetry/core'
 import { Resource } from '@opentelemetry/resources'
 import {
   SEMRESATTRS_SERVICE_NAME,
@@ -38,6 +39,7 @@ const provider = new WebTracerProvider({
 provider.register({
   contextManager: new StackContextManager(),
 })
+propagation.setGlobalPropagator(new W3CTraceContextPropagator())
 
 let consoleExporterAdded = false
 const addConsoleExporter = () => {
