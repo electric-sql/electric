@@ -23,13 +23,11 @@ defmodule Electric.Postgres.Proxy.TestScenario.FrameworkSimple do
     version = random_version()
 
     injector
-    |> client(query("BEGIN"))
-    |> server(complete_ready("BEGIN"))
+    |> electric_begin(client: begin())
     |> client(query(query))
     |> server(complete_ready(tag))
     |> framework.assign_migration_version(version)
-    |> client(commit())
-    |> server(complete_ready("COMMIT", :idle))
+    |> electric_commit(client: commit())
     |> idle!()
   end
 
@@ -43,21 +41,18 @@ defmodule Electric.Postgres.Proxy.TestScenario.FrameworkSimple do
 
     injector =
       injector
-      |> client(query("BEGIN"))
-      |> server(complete_ready("BEGIN"))
+      |> electric_begin(client: begin())
 
     queries
     |> Enum.reduce(injector, &execute_tx_sql(&1, &2, :simple))
     |> framework.capture_migration_version(version)
-    |> client(commit())
-    |> server(complete_ready("COMMIT", :idle))
+    |> electric_commit(client: commit())
     |> idle!()
   end
 
   def assert_injector_error(injector, query, error_details) do
     injector
-    |> client(query("BEGIN"))
-    |> server(complete_ready("BEGIN"))
+    |> electric_begin(client: begin())
     |> client(query(query), client: [error(error_details), ready(:failed)])
     |> client(rollback())
     |> server(complete_ready("ROLLBACK", :idle))
@@ -72,14 +67,12 @@ defmodule Electric.Postgres.Proxy.TestScenario.FrameworkSimple do
     ddl = Keyword.get(opts, :ddl, "CREATE TABLE _not_used_ (id uuid PRIMARY KEY)")
 
     injector
-    |> client(query("BEGIN"))
-    |> server(complete_ready("BEGIN"))
+    |> electric_begin(client: begin())
     |> electric([client: query(query)], command, ddl,
       client: complete_ready(DDLX.Command.tag(command))
     )
     |> framework.capture_migration_version(version)
-    |> client(commit())
-    |> server(complete_ready("COMMIT", :idle))
+    |> electric_commit(client: commit())
     |> idle!()
   end
 
@@ -93,8 +86,7 @@ defmodule Electric.Postgres.Proxy.TestScenario.FrameworkSimple do
       |> Enum.map(&query/1)
 
     injector
-    |> client(query("BEGIN"))
-    |> server(complete_ready("BEGIN"))
+    |> electric_begin(client: begin())
     |> electric_preamble([client: query(query)], command)
     |> server(introspect_result(ddl), server: electrify)
     |> server([error(error_details), ready(:failed)])

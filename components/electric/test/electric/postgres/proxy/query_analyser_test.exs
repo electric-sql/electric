@@ -13,18 +13,18 @@ defmodule Electric.Postgres.Proxy.QueryAnalyserTest do
   def simple(sql), do: %M.Query{query: sql}
   def extended(sql, attrs \\ []), do: struct(M.Parse, Keyword.put(attrs, :query, sql))
 
+  def analyse(sql, cxt) when is_binary(sql) do
+    analyse(simple(sql), cxt)
+  end
+
+  def analyse(msg, cxt) do
+    with {:ok, stmts} <- Parser.parse(msg) do
+      Enum.map(stmts, &Parser.analyse(&1, cxt.state))
+    end
+  end
+
   describe "analyse/2" do
     alias Electric.Postgres.Proxy.QueryAnalysis
-
-    def analyse(sql, cxt) when is_binary(sql) do
-      analyse(simple(sql), cxt)
-    end
-
-    def analyse(msg, cxt) do
-      with {:ok, stmts} <- Parser.parse(msg) do
-        Enum.map(stmts, &Parser.analyse(&1, cxt.state))
-      end
-    end
 
     setup(cxt) do
       # enable all the optional ddlx features
@@ -43,15 +43,15 @@ defmodule Electric.Postgres.Proxy.QueryAnalyserTest do
 
       spec = MockSchemaLoader.backend_spec(migrations: migrations)
 
-      {:ok, loader} =
-        SchemaLoader.connect(spec, [])
+      {:ok, loader} = SchemaLoader.connect(spec, [])
 
       ddlx = Map.get(cxt, :ddlx, [])
       rules = Perms.to_rules(ddlx)
 
-      {:ok, loader} = SchemaLoader.save_global_permissions(loader, rules)
-
-      state = %State{loader: loader}
+      state =
+        %State{loader: loader}
+        |> State.begin()
+        |> State.tx_permissions(rules)
 
       {:ok, state: state, loader: loader}
     end

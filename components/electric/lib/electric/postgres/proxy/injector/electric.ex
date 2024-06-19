@@ -5,7 +5,7 @@ defmodule Electric.Postgres.Proxy.Injector.Electric do
 
   alias PgProtocol.Message, as: M
   alias Electric.Postgres.Proxy.{Parser, QueryAnalysis}
-  alias Electric.Postgres.Proxy.Injector.{Operation, Send, State}
+  alias Electric.Postgres.Proxy.Injector.{Operation, Send}
   alias __MODULE__
 
   def command_from_analysis(analysis, state) do
@@ -20,17 +20,8 @@ defmodule Electric.Postgres.Proxy.Injector.Electric do
     [%Operation.Begin{}]
   end
 
-  def command_from_analysis(_msg, %{action: {:tx, :commit}}, state) do
-    case {State.tx_version?(state), State.electrified?(state)} do
-      {_, false} ->
-        [%Operation.Commit{}]
-
-      {true, true} ->
-        [%Operation.Commit{}]
-
-      {false, true} ->
-        [%Operation.AssignMigrationVersion{}, %Operation.Commit{}]
-    end
+  def command_from_analysis(_msg, %{action: {:tx, :commit}}, _state) do
+    [%Operation.Commit{}]
   end
 
   def command_from_analysis(_msg, %{action: {:tx, :rollback}}, _state) do
@@ -213,6 +204,14 @@ defmodule Electric.Postgres.Proxy.Injector.Electric do
       end
     end
 
+    defp extended_begin_response(msg, tag \\ "BEGIN", status \\ :tx)
+
+    defp extended_begin_response(%M.Parse{}, _, _), do: %M.ParseComplete{}
+    defp extended_begin_response(%M.Bind{}, _, _), do: %M.BindComplete{}
+    defp extended_begin_response(%M.Describe{}, _, _), do: %M.NoData{}
+    defp extended_begin_response(%M.Execute{}, tag, _), do: %M.CommandComplete{tag: tag}
+    defp extended_begin_response(%M.Sync{}, _, status), do: %M.ReadyForQuery{status: status}
+
     defp handle_parse(msg, msgs, electric, state) do
       signal =
         case List.last(msgs) do
@@ -262,17 +261,26 @@ defmodule Electric.Postgres.Proxy.Injector.Electric do
             # psycopg sends its txn commands using the extended protocol, annoyingly
             # it uses a [parse, describe, bind, execute, sync] message block, so all we
             # need to do is pass that on and mark the connection as in a transaction
-            %{action: {:tx, action}} = _analysis when action in [:begin, :rollback, :commit] ->
-              state = State.transaction(state, action)
+            %{action: {:tx, :begin}} = _analysis ->
+              begin = %Operation.Begin{complete_msgs: Enum.map(msgs, &extended_begin_response/1)}
 
-              op =
-                if Enum.any?(msgs, &is_struct(&1, M.Execute)) do
-                  Operation.Wait.new(msgs, state)
-                else
-                  %Operation.BindExecute{ops: []}
-                end
+              {[begin], {electric, state}}
 
-              {[op], {electric, state}}
+            %{action: {:tx, :commit}} = _analysis ->
+              commit =
+                %Operation.Commit{
+                  complete_msgs: Enum.map(msgs, &extended_begin_response(&1, "COMMIT", :idle))
+                }
+
+              {[commit], {electric, state}}
+
+            %{action: {:tx, :rollback}} = _analysis ->
+              rollback =
+                %Operation.Rollback{
+                  complete_msgs: Enum.map(msgs, &extended_begin_response(&1, "ROLLBACK", :idle))
+                }
+
+              {[rollback], {electric, state}}
 
             analysis ->
               bind = %Operation.BindExecute{

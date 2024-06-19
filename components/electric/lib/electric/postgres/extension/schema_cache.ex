@@ -161,11 +161,6 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   end
 
   @impl SchemaLoader
-  def save_global_permissions(origin, rules) do
-    call(origin, {:save_global_permissions, rules})
-  end
-
-  @impl SchemaLoader
   def user_permissions(origin, user_id) do
     call(origin, {:user_permissions, user_id})
   end
@@ -408,16 +403,6 @@ defmodule Electric.Postgres.Extension.SchemaCache do
 
   def handle_call({:global_permissions, id}, _from, state) do
     {:reply, SchemaLoader.global_permissions(state.backend, id), state}
-  end
-
-  def handle_call({:save_global_permissions, rules}, _from, state) do
-    case SchemaLoader.save_global_permissions(state.backend, rules) do
-      {:ok, backend} ->
-        {:reply, {:ok, state.origin}, %{state | backend: backend}}
-
-      error ->
-        {:reply, error, state}
-    end
   end
 
   def handle_call({:user_permissions, user_id}, _from, state) do

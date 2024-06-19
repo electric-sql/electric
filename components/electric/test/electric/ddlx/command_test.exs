@@ -37,73 +37,25 @@ defmodule Electric.DDLX.CommandTest do
     test "ELECTRIC ASSIGN" do
       ddlx = "ELECTRIC ASSIGN (projects, memberships.role) TO memberships.user_id"
 
-      assert [
-               ~S[INSERT INTO "electric"."ddlx_commands" (ddlx) VALUES ('\x] <> hex
-             ] = pg_sql(ddlx)
-
-      assert %SatPerms.DDLX{assigns: [assign]} = parse_pb(hex)
-
-      assert %SatPerms.Assign{
-               table: %{schema: "public", name: "memberships"},
-               scope: %{schema: "public", name: "projects"},
-               user_column: "user_id",
-               role_column: "role"
-             } = assign
+      assert [] = pg_sql(ddlx)
     end
 
     test "ELECTRIC UNASSIGN" do
       ddlx = "ELECTRIC UNASSIGN (projects, memberships.role) FROM memberships.user_id"
 
-      assert [
-               ~S[INSERT INTO "electric"."ddlx_commands" (ddlx) VALUES ('\x] <> hex
-             ] = pg_sql(ddlx)
-
-      assert %SatPerms.DDLX{unassigns: [unassign]} = parse_pb(hex)
-
-      assert %SatPerms.Unassign{
-               table: %{schema: "public", name: "memberships"},
-               scope: %{schema: "public", name: "projects"},
-               user_column: "user_id",
-               role_column: "role"
-             } = unassign
+      assert [] = pg_sql(ddlx)
     end
 
     test "ELECTRIC GRANT" do
       ddlx = "ELECTRIC GRANT INSERT ON issues TO (projects, 'member')"
 
-      assert [
-               ~S[INSERT INTO "electric"."ddlx_commands" (ddlx) VALUES ('\x] <> hex
-             ] = pg_sql(ddlx)
-
-      assert %SatPerms.DDLX{grants: [grant]} = parse_pb(hex)
-
-      assert %SatPerms.Grant{
-               privilege: :INSERT,
-               table: %{schema: "public", name: "issues"},
-               role: %SatPerms.RoleName{role: {:application, "member"}},
-               columns: nil,
-               scope: %{schema: "public", name: "projects"},
-               path: nil,
-               check: nil
-             } = grant
+      assert [] = pg_sql(ddlx)
     end
 
     test "ELECTRIC REVOKE" do
       ddlx = "ELECTRIC REVOKE INSERT ON issues FROM (projects, 'member')"
 
-      assert [
-               ~S[INSERT INTO "electric"."ddlx_commands" (ddlx) VALUES ('\x] <> hex
-             ] = pg_sql(ddlx)
-
-      assert %SatPerms.DDLX{revokes: [revoke]} = parse_pb(hex)
-
-      assert %SatPerms.Revoke{
-               privilege: :INSERT,
-               table: %{schema: "public", name: "issues"},
-               role: %SatPerms.RoleName{role: {:application, "member"}},
-               scope: %{schema: "public", name: "projects"},
-               path: nil
-             } = revoke
+      assert [] = pg_sql(ddlx)
     end
   end
 end

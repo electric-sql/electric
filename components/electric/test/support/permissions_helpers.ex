@@ -151,6 +151,7 @@ defmodule ElectricTest.PermissionsHelpers do
   defmodule Perms do
     alias Electric.Satellite.SatPerms, as: P
     alias Electric.Satellite.Permissions
+    alias Electric.Postgres.MockSchemaLoader
 
     defmodule Transient do
       @name __MODULE__.Transient
@@ -211,6 +212,31 @@ defmodule ElectricTest.PermissionsHelpers do
       perms
     end
 
+    # Generate some rules and push them into our mock loader we need to do this
+    # because the schema loader is no longer responsible for saving the global
+    # perms, which happens at the point of mutation (e.g. in the proxy). Without
+    # knowledge of the current global perms, the `user_permissions/[23]` will
+    # return user perms pointing to the wrong global permissions, which
+    # wouldn't happen with a real (from pg) loader
+    def rules(mock_loader, %P.Rules{} = rules) do
+      {:ok, mock_loader} = MockSchemaLoader.save_global_permissions(mock_loader, rules)
+
+      {mock_loader, rules}
+    end
+
+    def rules(mock_loader, attrs) do
+      {:ok, old_rules} = SchemaLoader.global_permissions(mock_loader)
+
+      rules = %P.Rules{
+        id: old_rules.id,
+        parent_id: old_rules.parent_id,
+        grants: Keyword.get(attrs, :grants, []),
+        assigns: Keyword.get(attrs, :assigns, [])
+      }
+
+      rules(mock_loader, Permissions.State.commit(rules))
+    end
+
     def to_rules(ddlx) do
       ddlx
       |> make_ddlx()
@@ -261,6 +287,7 @@ defmodule ElectricTest.PermissionsHelpers do
   end
 
   defmodule Chgs do
+    alias Electric.Satellite.SatPerms, as: P
     alias Electric.DDLX.Command
     alias Electric.Replication.Changes
     alias Electric.Postgres.Extension
@@ -302,6 +329,20 @@ defmodule ElectricTest.PermissionsHelpers do
         relation: Extension.ddlx_relation(),
         record: %{
           "ddlx" => bytes
+        }
+      }
+    end
+
+    def rules(%P.Rules{} = rules) do
+      bytes = Protox.encode!(rules) |> IO.iodata_to_binary()
+
+      # this table is append-only
+      %Changes.NewRecord{
+        relation: Extension.global_perms_relation(),
+        record: %{
+          "id" => rules.id,
+          "parent_id" => rules.parent_id,
+          "rules" => bytes
         }
       }
     end

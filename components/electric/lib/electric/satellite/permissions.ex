@@ -447,6 +447,8 @@ defmodule Electric.Satellite.Permissions do
   defp rebuild(perms) do
     %{id: id, roles: roles, rules: rules, schema: schema_version} = perms.source
 
+    Logger.debug(fn -> "Built perms using #{inspect(rules)}" end)
+
     assigned_roles = build_roles(roles, perms.auth, rules.assigns)
     scoped_roles = compile_scopes(assigned_roles)
     evaluator = Eval.new(schema_version, perms.auth)

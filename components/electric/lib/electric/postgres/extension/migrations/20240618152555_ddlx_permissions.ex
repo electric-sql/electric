@@ -1,14 +1,17 @@
-defmodule Electric.Postgres.Extension.Migrations.Migration_20240214131615_PermissionsState do
+defmodule Electric.Postgres.Extension.Migrations.Migration_20240618152555_DDLXPermissions do
   alias Electric.Postgres.Extension
   alias Electric.Satellite.SatPerms
 
   @behaviour Extension.Migration
 
   @impl true
-  def version, do: 2024_02_14_13_16_15
+  def version, do: 2024_06_18_15_25_55
 
   @impl true
   def up(schema) do
+    ddlx_table = Extension.ddlx_table()
+    txid_type = Extension.txid_type()
+    txts_type = Extension.txts_type()
     global_perms_table = Extension.global_perms_table()
     user_perms_table = Extension.user_perms_table()
 
@@ -17,6 +20,15 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20240214131615_Permis
 
     [
       """
+      CREATE TABLE #{ddlx_table} (
+          id serial8 NOT NULL PRIMARY KEY,
+          txid #{txid_type} NOT NULL DEFAULT #{schema}.current_xact_id(),
+          txts #{txts_type} NOT NULL DEFAULT #{schema}.current_xact_ts(),
+          ddlx bytea NOT NULL
+      );
+      """,
+      Extension.add_table_to_publication_sql(ddlx_table),
+      """
       CREATE TABLE #{global_perms_table} (
           id int8 NOT NULL PRIMARY KEY,
           parent_id int8 UNIQUE REFERENCES #{global_perms_table} (id) ON DELETE SET NULL,
@@ -24,6 +36,7 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20240214131615_Permis
           inserted_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
       """,
+      Extension.add_table_to_publication_sql(global_perms_table),
       """
       CREATE UNIQUE INDEX ON #{global_perms_table} ((1)) WHERE parent_id IS NULL;
       """,
@@ -83,7 +96,5 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20240214131615_Permis
   end
 
   @impl true
-  def down(_schema) do
-    []
-  end
+  def down(_), do: []
 end

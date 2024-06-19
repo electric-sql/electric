@@ -135,6 +135,7 @@ defmodule Electric.Postgres.Extension do
   def version_relation, do: {@schema, @version_relation}
   def electrified_tracking_relation, do: {@schema, @electrified_tracking_relation}
   def ddlx_relation, do: {@schema, @ddlx_commands_relation}
+  def global_perms_relation, do: {@schema, @global_perms_relation}
   def acked_client_lsn_relation, do: {@schema, @acked_client_lsn_relation}
 
   def publication_name, do: @publication_name
@@ -389,11 +390,10 @@ defmodule Electric.Postgres.Extension do
       Migrations.Migration_20231206130400_ConvertReplicaTriggersToAlways,
       Migrations.Migration_20240110110200_DropUnusedFunctions,
       Migrations.Migration_20240205141200_ReinstallTriggerFunctionWriteCorrectMaxTag,
-      Migrations.Migration_20240212161153_DDLXCommands,
       Migrations.Migration_20240213160300_DropGenerateElectrifiedSqlFunction,
-      Migrations.Migration_20240214131615_PermissionsState,
       Migrations.Migration_20240417131000_ClientReconnectionInfoTables,
-      Migrations.Migration_20240501000000_UnsubPoints
+      Migrations.Migration_20240501000000_UnsubPoints,
+      Migrations.Migration_20240618152555_DDLXPermissions
     ]
   end
 

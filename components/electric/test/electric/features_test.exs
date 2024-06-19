@@ -151,11 +151,12 @@ defmodule Electric.FeaturesTest do
     test "lists merged flag state", cxt do
       Features.process_override([disabled_feature: true], cxt.name)
 
-      assert Features.list(cxt.name) == [
-               __default__: false,
-               disabled_feature: true,
-               enabled_feature: true
-             ]
+      assert Features.list(cxt.name) |> Enum.sort() ==
+               Enum.sort(
+                 __default__: false,
+                 disabled_feature: true,
+                 enabled_feature: true
+               )
     end
   end
 end

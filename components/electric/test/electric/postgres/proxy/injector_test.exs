@@ -413,22 +413,15 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
         %M.CommandComplete{tag: "MY TAG"},
         %M.ReadyForQuery{status: :idle}
       ])
-      |> client(
-        parse_describe(
-          "CREATE TABLE IF NOT EXISTS \"schema_migrations\" (\"version\" bigint, \"inserted_at\" timestamp(0), PRIMARY KEY (\"version\"))"
-        ),
-        server: [begin()]
-      )
-      |> server(complete_ready("BEGIN", :tx),
-        server:
+      |> electric_begin(
+        client:
           parse_describe(
             "CREATE TABLE IF NOT EXISTS \"schema_migrations\" (\"version\" bigint, \"inserted_at\" timestamp(0), PRIMARY KEY (\"version\"))"
           )
       )
       |> server(parse_describe_complete())
       |> client(bind_execute())
-      |> server(bind_execute_complete("CREATE TABLE", :tx), server: commit())
-      |> server(complete_ready("COMMIT", :idle),
+      |> electric_commit([server: bind_execute_complete("CREATE TABLE", :tx)],
         client: bind_execute_complete("CREATE TABLE", :idle)
       )
       |> idle!()
@@ -478,10 +471,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
         )
       )
       |> server(bind_execute_complete("INSERT 1"))
-      |> client(query(query),
-        server: [begin()]
-      )
-      |> server(complete_ready("BEGIN", :tx),
+      |> electric_begin([client: query],
         server: [query("CREATE TABLE something (id uuid PRIMARY KEY, value text)")]
       )
       |> electric_preamble([server: complete_ready("CREATE TABLE")], command)
@@ -519,8 +509,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
         ]
       )
       |> server(alter_shadow_table_complete(), server: capture_version_query(version, 2))
-      |> server(capture_version_complete(), server: commit())
-      |> server(complete_ready("COMMIT", :idle),
+      |> electric_commit([server: capture_version_complete()],
         client: [
           complete("CREATE TABLE"),
           complete("ELECTRIC ENABLE"),
@@ -543,10 +532,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
 
     test "close, sync, parse, describe, sync", cxt do
       cxt.injector
-      |> client(
-        [%M.Close{}, %M.Sync{} | parse_describe_sync("SELECT version()")]
-        # server: [%M.Close{}, %M.Sync{}]
-      )
+      |> client([%M.Close{}, %M.Sync{} | parse_describe_sync("SELECT version()")])
       |> server([
         %M.CloseComplete{},
         %M.ReadyForQuery{status: :idle} | parse_describe_sync_complete(:idle)
@@ -585,8 +571,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
       query = Enum.join([query1 <> ";", query2 <> ";", query3 <> ";", query4 <> ";"], "\n")
 
       cxt.injector
-      |> client(begin())
-      |> server(complete_ready("BEGIN"))
+      |> electric_begin(client: begin())
       |> client(query(query), server: query(query1))
       |> server(complete_ready("CREATE TABLE"), server: query(query2))
       |> server(complete_ready("CREATE FUNCTION1"), server: query(query3))
@@ -600,8 +585,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
           ready(:tx)
         ]
       )
-      |> client(commit())
-      |> server(complete_ready("COMMIT", :idle))
+      |> electric_commit(client: commit())
       |> idle!()
     end
 
@@ -615,8 +599,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
       query = Enum.join([query1 <> ";", query2 <> ";"], "\n")
 
       cxt.injector
-      |> client(begin())
-      |> server(complete_ready("BEGIN"))
+      |> electric_begin(client: begin())
       |> client(query(query), server: query(query1))
       |> server(complete_ready("CREATE FUNCTION1"), server: query(query2))
       |> server(complete_ready("ALTER TABLE"),
@@ -626,28 +609,23 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
           ready(:tx)
         ]
       )
-      |> client(commit())
-      |> server(complete_ready("COMMIT", :idle))
+      |> electric_commit(client: commit())
       |> idle!()
     end
 
     test "drop random things", cxt do
       cxt.injector
-      |> client(begin())
-      |> server(complete_ready("BEGIN"))
+      |> electric_begin(client: begin())
       |> client(query("DROP FUNCTION IF EXISTS \"electric.ddlx_sql_drop_handler\" CASCADE"))
       |> server(complete_ready("DROP FUNCTION"))
-      |> client(commit())
-      |> server(complete_ready("COMMIT", :idle))
+      |> electric_commit(client: commit())
       |> idle!()
 
       cxt.injector
-      |> client(begin())
-      |> server(complete_ready("BEGIN"))
+      |> electric_begin(client: begin())
       |> client(query("DROP EVENT TRIGGER IF EXISTS \"electric_event_trigger_sql_drop\" CASCADE"))
       |> server(complete_ready("DROP EVENT TRIGGER"))
-      |> client(commit())
-      |> server(complete_ready("COMMIT", :idle))
+      |> electric_commit(client: commit())
       |> idle!()
     end
 
@@ -678,8 +656,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
         "INSERT INTO \"atdatabases_migrations_applied\"\n  (\n    index, name, script,\n    applied_at, ignored_error, obsolete\n  )\nVALUES\n  (\n    $1, $2, $3,\n    $4,\n    $5,\n    $6\n  )"
 
       cxt.injector
-      |> client(query("BEGIN"))
-      |> server(complete_ready("BEGIN", :tx))
+      |> electric_begin(client: begin())
       |> electric_preamble([client: query("ALTER TABLE public.socks ENABLE ELECTRIC;")], command)
       |> server(introspect_result(ddl), server: electric)
       |> server(complete_ready("CALL", :tx), client: complete_ready("ELECTRIC ENABLE"))
@@ -739,8 +716,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
           %M.ReadyForQuery{status: :tx}
         ]
       )
-      |> client(query("COMMIT"))
-      |> server(complete_ready("COMMIT", :idle))
+      |> electric_commit(client: commit())
       |> idle!()
     end
 
@@ -756,8 +732,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
         "INSERT INTO \"atdatabases_migrations_applied\"\n  (\n    index, name, script,\n    applied_at, ignored_error, obsolete\n  )\nVALUES\n  (\n    $1, $2, $3,\n    $4,\n    $5,\n    $6\n  )"
 
       cxt.injector
-      |> client(query("BEGIN"))
-      |> server(complete_ready("BEGIN", :tx))
+      |> electric_begin(client: begin())
       |> electric_preamble([client: query("ALTER TABLE public.socks ENABLE ELECTRIC;")], command)
       |> server(introspect_result(ddl), server: electric)
       |> server(complete_ready("CALL", :tx), client: complete_ready("ELECTRIC ENABLE"))
@@ -819,27 +794,24 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
           %M.ReadyForQuery{status: :tx}
         ]
       )
-      |> client(query("COMMIT"))
-      |> server(complete_ready("COMMIT", :idle))
+      |> electric_commit(client: commit())
       |> idle!()
     end
 
     test "psycopg transactions", cxt do
       cxt.injector
-      |> client([
-        %M.Parse{query: "BEGIN"},
-        %M.Bind{},
-        %M.Describe{},
-        %M.Execute{},
-        %M.Sync{}
-      ])
-      |> server([
-        %M.ParseComplete{},
-        %M.BindComplete{},
-        %M.NoData{},
-        %M.CommandComplete{tag: "BEGIN"},
-        %M.ReadyForQuery{status: :tx}
-      ])
+      |> electric_begin(
+        [
+          client: [%M.Parse{query: "BEGIN"}, %M.Bind{}, %M.Describe{}, %M.Execute{}, %M.Sync{}]
+        ],
+        client: [
+          %M.ParseComplete{},
+          %M.BindComplete{},
+          %M.NoData{},
+          %M.CommandComplete{tag: "BEGIN"},
+          %M.ReadyForQuery{status: :tx}
+        ]
+      )
       |> client(%M.Query{query: "select pg_catalog.version()"})
       |> server([
         %M.RowDescription{
@@ -863,44 +835,47 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
         %M.CommandComplete{tag: "SELECT 1"},
         %M.ReadyForQuery{status: :tx}
       ])
-      |> client([
-        %M.Parse{name: "", query: "ROLLBACK", params: []},
-        %M.Bind{
-          portal: "",
-          source: "",
-          parameters: [],
-          parameter_format_codes: [],
-          result_format_codes: [0]
-        },
-        %M.Describe{type: "P", name: ""},
-        %M.Execute{portal: "", max_rows: 0},
-        %M.Sync{}
-      ])
-      |> server([
-        %M.ParseComplete{},
-        %M.BindComplete{},
-        %M.NoData{},
-        %M.CommandComplete{tag: "ROLLBACK"},
-        %M.ReadyForQuery{status: :idle}
-      ])
+      |> client(
+        [
+          %M.Parse{name: "", query: "ROLLBACK", params: []},
+          %M.Bind{
+            portal: "",
+            source: "",
+            parameters: [],
+            parameter_format_codes: [],
+            result_format_codes: [0]
+          },
+          %M.Describe{type: "P", name: ""},
+          %M.Execute{portal: "", max_rows: 0},
+          %M.Sync{}
+        ],
+        server: [rollback()]
+      )
+      |> server(complete_ready("ROLLBACK", :idle),
+        client: [
+          %M.ParseComplete{},
+          %M.BindComplete{},
+          %M.NoData{},
+          %M.CommandComplete{tag: "ROLLBACK"},
+          %M.ReadyForQuery{status: :idle}
+        ]
+      )
     end
 
     test "psycopg savepoints", cxt do
       cxt.injector
-      |> client([
-        %M.Parse{query: "BEGIN"},
-        %M.Bind{},
-        %M.Describe{},
-        %M.Execute{},
-        %M.Sync{}
-      ])
-      |> server([
-        %M.ParseComplete{},
-        %M.BindComplete{},
-        %M.NoData{},
-        %M.CommandComplete{tag: "BEGIN"},
-        %M.ReadyForQuery{status: :tx}
-      ])
+      |> electric_begin(
+        [
+          client: [%M.Parse{query: "BEGIN"}, %M.Bind{}, %M.Describe{}, %M.Execute{}, %M.Sync{}]
+        ],
+        client: [
+          %M.ParseComplete{},
+          %M.BindComplete{},
+          %M.NoData{},
+          %M.CommandComplete{tag: "BEGIN"},
+          %M.ReadyForQuery{status: :tx}
+        ]
+      )
       |> client([
         %M.Parse{name: "", query: "SAVEPOINT \"_pg3_1\"", params: []},
         %M.Bind{},
@@ -929,26 +904,31 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
         %M.CommandComplete{tag: "RELEASE"},
         %M.ReadyForQuery{status: :tx}
       ])
-      |> client([
-        %M.Parse{name: "", query: "ROLLBACK", params: []},
-        %M.Bind{
-          portal: "",
-          source: "",
-          parameters: [],
-          parameter_format_codes: [],
-          result_format_codes: [0]
-        },
-        %M.Describe{type: "P", name: ""},
-        %M.Execute{portal: "", max_rows: 0},
-        %M.Sync{}
-      ])
-      |> server([
-        %M.ParseComplete{},
-        %M.BindComplete{},
-        %M.NoData{},
-        %M.CommandComplete{tag: "ROLLBACK"},
-        %M.ReadyForQuery{status: :idle}
-      ])
+      |> client(
+        [
+          %M.Parse{name: "", query: "ROLLBACK", params: []},
+          %M.Bind{
+            portal: "",
+            source: "",
+            parameters: [],
+            parameter_format_codes: [],
+            result_format_codes: [0]
+          },
+          %M.Describe{type: "P", name: ""},
+          %M.Execute{portal: "", max_rows: 0},
+          %M.Sync{}
+        ],
+        server: rollback()
+      )
+      |> server(complete_ready("ROLLBACK", :idle),
+        client: [
+          %M.ParseComplete{},
+          %M.BindComplete{},
+          %M.NoData{},
+          %M.CommandComplete{tag: "ROLLBACK"},
+          %M.ReadyForQuery{status: :idle}
+        ]
+      )
     end
   end
 

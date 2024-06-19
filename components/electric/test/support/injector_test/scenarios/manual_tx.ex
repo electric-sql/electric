@@ -20,12 +20,10 @@ defmodule Electric.Postgres.Proxy.TestScenario.ManualTx do
     tag = random_tag()
 
     injector
-    |> client(query("BEGIN"))
-    |> server(complete_ready("BEGIN"))
+    |> electric_begin(client: begin())
     |> client(query(query))
     |> server(complete_ready(tag, :tx))
-    |> client(commit())
-    |> server(complete_ready("COMMIT", :idle))
+    |> electric_commit(client: commit())
     |> idle!()
   end
 
@@ -38,21 +36,18 @@ defmodule Electric.Postgres.Proxy.TestScenario.ManualTx do
 
     injector =
       injector
-      |> client(query("BEGIN"))
-      |> server(complete_ready("BEGIN"))
+      |> electric_begin(client: begin())
 
     queries
     |> Enum.reduce(injector, &execute_tx_sql(&1, &2, :simple))
     |> client(commit(), server: capture_version_query())
-    |> server(capture_version_complete(), server: commit())
-    |> server(complete_ready("COMMIT", :idle))
+    |> electric_commit(server: capture_version_complete())
     |> idle!()
   end
 
   def assert_injector_error(injector, query, error_details) do
     injector
-    |> client(query("BEGIN"))
-    |> server(complete_ready("BEGIN"))
+    |> electric_begin(client: begin())
     |> client(query(query), client: [error(error_details), ready(:failed)])
     |> client(rollback())
     |> server(complete_ready("ROLLBACK", :idle))
@@ -65,16 +60,32 @@ defmodule Electric.Postgres.Proxy.TestScenario.ManualTx do
     # may not be used but needs to be valid sql
     ddl = Keyword.get(opts, :ddl, "CREATE TABLE _not_used_ (id uuid PRIMARY KEY)")
 
-    injector
-    |> client(query("BEGIN"))
-    |> server(complete_ready("BEGIN"))
-    |> electric([client: query(query)], command, ddl,
-      client: complete_ready(DDLX.Command.tag(command))
-    )
-    |> client(commit(), server: capture_version_query())
-    |> server(capture_version_complete(), server: commit())
-    |> server(complete_ready("COMMIT", :idle))
-    |> idle!()
+    if modifies_permissions?(command) do
+      injector
+      |> electric_begin(client: begin())
+      |> electric([client: query(query)], command, ddl,
+        client: complete_ready(DDLX.Command.tag(command))
+      )
+      |> client(
+        commit(),
+        fn injector ->
+          rules = permissions_modified!(injector)
+          [server: save_permissions_rules_query(rules)]
+        end
+      )
+      |> server(complete_ready(), server: capture_version_query())
+      |> electric_commit(server: capture_version_complete())
+      |> idle!()
+    else
+      injector
+      |> electric_begin(client: begin())
+      |> electric([client: query(query)], command, ddl,
+        client: complete_ready(DDLX.Command.tag(command))
+      )
+      |> client(commit(), server: capture_version_query())
+      |> electric_commit(server: capture_version_complete())
+      |> idle!()
+    end
   end
 
   def assert_electrify_server_error(injector, _framework, query, ddl, error_details) do
@@ -87,8 +98,7 @@ defmodule Electric.Postgres.Proxy.TestScenario.ManualTx do
       |> Enum.map(&query/1)
 
     injector
-    |> client(query("BEGIN"))
-    |> server(complete_ready("BEGIN"))
+    |> electric_begin(client: begin())
     |> electric_preamble([client: query(query)], command)
     |> server(introspect_result(ddl), server: electrify)
     |> server([error(error_details), ready(:failed)])

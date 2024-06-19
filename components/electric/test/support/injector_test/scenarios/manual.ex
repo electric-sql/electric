@@ -17,10 +17,8 @@ defmodule Electric.Postgres.Proxy.TestScenario.Manual do
 
   def assert_non_electrified_migration(injector, _framework, query, tag \\ random_tag()) do
     injector
-    |> client(query(query), server: begin())
-    |> server(complete_ready("BEGIN", :tx), server: query(query))
-    |> server(complete_ready(tag, :tx), server: commit())
-    |> server(complete_ready("COMMIT", :idle), client: [complete_ready(tag, :idle)])
+    |> electric_begin(client: query(query))
+    |> electric_commit([server: complete_ready(tag, :tx)], client: [complete_ready(tag, :idle)])
     |> idle!()
   end
 
@@ -50,10 +48,7 @@ defmodule Electric.Postgres.Proxy.TestScenario.Manual do
     tag = random_tag()
 
     injector
-    |> client(query(query), server: begin())
-    |> server(complete_ready("BEGIN", :tx),
-      server: query(query)
-    )
+    |> electric_begin(client: query(query))
     |> server(complete_ready(tag, :tx),
       server: capture_ddl_query(query),
       client: [
@@ -61,8 +56,7 @@ defmodule Electric.Postgres.Proxy.TestScenario.Manual do
       ]
     )
     |> shadow_add_column(capture_ddl_complete(), opts, server: capture_version_query(0))
-    |> server(capture_version_complete(), server: commit())
-    |> server(complete_ready("COMMIT", :idle), client: [complete_ready(tag, :idle)])
+    |> electric_commit([server: capture_version_complete()], client: [complete_ready(tag, :idle)])
     |> idle!()
   end
 
@@ -74,26 +68,44 @@ defmodule Electric.Postgres.Proxy.TestScenario.Manual do
 
   def assert_valid_electric_command(injector, _framework, query, opts \\ []) do
     {:ok, command} = DDLX.parse(query)
+    rules = Keyword.get(opts, :rules, nil)
 
     # may not be used but needs to be valid sql
     ddl = Keyword.get(opts, :ddl, "CREATE TABLE _not_used_ (id uuid PRIMARY KEY)")
 
-    injector
-    |> client(query(query), server: begin())
-    |> electric(
-      [server: complete_ready("BEGIN", :tx)],
-      command,
-      ddl,
-      server: capture_version_query()
-    )
-    |> server(capture_version_complete(),
-      server: commit()
-      # client: complete(DDLX.Command.tag(command))
-    )
-    |> server(complete_ready("COMMIT", :idle),
-      client: complete_ready(DDLX.Command.tag(command), :idle)
-    )
-    |> idle!()
+    if modifies_permissions?(command) do
+      injector
+      |> client(query(query), server: begin())
+      |> server(complete_ready("BEGIN", :tx), server: permissions_rules_query())
+      |> electric(
+        [server: rules_query_result(rules)],
+        command,
+        ddl,
+        fn injector ->
+          rules = permissions_modified!(injector)
+          [server: save_permissions_rules_query(rules)]
+        end
+      )
+      |> server(complete_ready(), server: capture_version_query())
+      |> electric_commit([server: complete_ready("INSERT 1")],
+        client: complete_ready(DDLX.Command.tag(command), :idle)
+      )
+      |> idle!()
+    else
+      injector
+      |> client(query(query), server: begin())
+      |> server(complete_ready("BEGIN", :tx), server: permissions_rules_query())
+      |> electric(
+        [server: rules_query_result(rules)],
+        command,
+        ddl,
+        server: capture_version_query()
+      )
+      |> electric_commit([server: capture_version_complete()],
+        client: complete_ready(DDLX.Command.tag(command), :idle)
+      )
+      |> idle!()
+    end
   end
 
   def assert_electrify_server_error(injector, _framework, query, ddl, error_details) do
@@ -107,7 +119,8 @@ defmodule Electric.Postgres.Proxy.TestScenario.Manual do
 
     injector
     |> client(query(query), server: begin())
-    |> electric_preamble([server: complete_ready("BEGIN", :tx)], command)
+    |> server(complete_ready("BEGIN", :tx), server: permissions_rules_query())
+    |> electric_preamble([server: rules_query_result()], command)
     |> server(introspect_result(ddl), server: electrify)
     |> server([error(error_details), ready(:failed)], server: rollback())
     |> server(complete_ready("ROLLBACK", :idle), client: [error(error_details), ready(:failed)])

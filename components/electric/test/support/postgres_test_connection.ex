@@ -156,15 +156,21 @@ defmodule Electric.Postgres.TestConnection do
   def define_permissions(conn, origin, scenario) do
     ddlx = scenario_ddlx(scenario)
 
-    sql =
+    apply_ddlx(conn, origin, ddlx)
+  end
+
+  defp apply_ddlx(conn, origin, ddlx) do
+    alias Electric.Satellite.Permissions
+    alias Electric.Postgres.Extension
+
+    {:ok, initial_rules} = Extension.Permissions.global(conn)
+
+    rules =
       ddlx
       |> Enum.map(&Electric.DDLX.parse!/1)
-      |> Electric.DDLX.Command.PgSQL.to_sql([], &Electric.Postgres.Proxy.Injector.quote_query/1)
-      |> Enum.join("\n")
+      |> Enum.reduce(initial_rules, &Permissions.State.apply_ddlx!/2)
 
-    conn
-    |> :epgsql.squery(["BEGIN;\n", sql, "\nCOMMIT;"])
-    |> Enum.each(&(:ok = elem(&1, 0)))
+    :ok = Extension.Permissions.save_global(conn, %{rules | parent_id: initial_rules.id})
 
     :ok = wait_for_message(origin, Electric.Replication.Changes.UpdatedPermissions)
   end
@@ -384,7 +390,7 @@ defmodule Electric.Postgres.TestConnection do
   def setup_with_sql_execute(_), do: :ok
 
   def setup_with_ddlx(%{conn: conn, ddlx: ddlx, origin: origin}) do
-    sql =
+    stmts =
       ddlx
       |> List.wrap()
       |> Enum.map(&String.trim/1)
@@ -392,17 +398,8 @@ defmodule Electric.Postgres.TestConnection do
         "ELECTRIC " <> _ = ddlx -> ddlx
         ddl -> "ELECTRIC " <> ddl
       end)
-      |> Enum.map(&Electric.DDLX.parse!/1)
-      |> Electric.DDLX.Command.proxy_sql()
-      |> Enum.join("\n")
 
-    conn
-    |> :epgsql.squery(["BEGIN;\n", sql, "\nCOMMIT;"])
-    |> Enum.each(&(:ok = elem(&1, 0)))
-
-    :ok = wait_for_message(origin, Electric.Replication.Changes.UpdatedPermissions)
-
-    :ok
+    apply_ddlx(conn, origin, stmts)
   end
 
   def setup_with_ddlx(_) do

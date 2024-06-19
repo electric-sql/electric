@@ -7,6 +7,8 @@ defmodule Electric.Postgres.Proxy.Injector.ElectricTest do
   alias Electric.Postgres.Proxy.{Injector, Parser}
   alias Electric.Postgres.Proxy.TestScenario
 
+  alias ElectricTest.PermissionsHelpers.Perms
+
   def simple(sql), do: %M.Query{query: sql}
 
   def analyse(sql, cxt) when is_binary(sql) do
@@ -34,7 +36,12 @@ defmodule Electric.Postgres.Proxy.Injector.ElectricTest do
       {:ok, loader} =
         SchemaLoader.connect(spec, [])
 
-      state = %Injector.State{loader: loader}
+      rules = Perms.to_rules([])
+
+      state =
+        %Injector.State{loader: loader}
+        |> Injector.State.begin()
+        |> Injector.State.tx_permissions(rules)
 
       {:ok, state: state, loader: loader}
     end
