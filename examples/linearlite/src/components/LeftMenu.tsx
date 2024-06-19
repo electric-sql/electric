@@ -1,30 +1,47 @@
-import { ReactComponent as HelpIcon } from '../assets/icons/help.svg'
-import { ReactComponent as MenuIcon } from '../assets/icons/menu.svg'
-import { ReactComponent as ElectricIcon } from '../assets/images/icon.inverse.svg'
-import { ReactComponent as BacklogIcon } from '../assets/icons/circle-dot.svg'
+import HelpIcon from '../assets/icons/help.svg?react'
+import MenuIcon from '../assets/icons/menu.svg?react'
+import ElectricIcon from '../assets/images/icon.inverse.svg?react'
+import BacklogIcon from '../assets/icons/circle-dot.svg?react'
 import { MenuContext } from '../App'
 import classnames from 'classnames'
 import { memo, RefObject, useRef, useState, useContext } from 'react'
-import { useConnectivityState } from 'electric-sql/react'
+import { useConnectivityState, useLiveQuery } from 'electric-sql/react'
 import { BsPencilSquare as AddIcon } from 'react-icons/bs'
 import { BsSearch as SearchIcon } from 'react-icons/bs'
 import { BsFillGrid3X3GapFill as BoardIcon } from 'react-icons/bs'
 import { BsCollectionFill as IssuesIcon } from 'react-icons/bs'
 import { MdKeyboardArrowDown as ExpandMore } from 'react-icons/md'
 import { Link } from 'react-router-dom'
+import { useElectric } from '../electric'
 import Avatar from './Avatar'
 import AboutModal from './AboutModal'
+import ProjectModal from './ProjectModal'
 import IssueModal from './IssueModal'
 import ItemGroup from './ItemGroup'
 import ProfileMenu from './ProfileMenu'
+import ProjectItem from './ProjectItem'
+import { runOnce } from '../utils/runOnce'
+
+const shouldSyncFirstProject =
+  runOnce('sync-first-project', () => true) ?? false
 
 function LeftMenu() {
   const ref = useRef<HTMLDivElement>() as RefObject<HTMLDivElement>
   const [showProfileMenu, setShowProfileMenu] = useState(false)
   const [showAboutModal, setShowAboutModal] = useState(false)
+  const [showProjectModal, setShowProjectModal] = useState(false)
   const [showIssueModal, setShowIssueModal] = useState(false)
   const { showMenu, setShowMenu } = useContext(MenuContext)!
   const { status } = useConnectivityState()
+  const { db } = useElectric()!
+
+  const { results: projects } = useLiveQuery(
+    db.project.liveMany({
+      orderBy: {
+        kanbanorder: 'asc',
+      },
+    })
+  )
 
   const classes = classnames(
     'absolute z-40 lg:static inset-0 transform duration-300 lg:relative lg:translate-x-0 bg-white flex flex-col flex-shrink-0 w-56 font-sans text-sm text-gray-700 border-r border-gray-100 lg:shadow-none justify-items-start',
@@ -79,6 +96,7 @@ function LeftMenu() {
                 isOpen={showProfileMenu}
                 onDismiss={() => setShowProfileMenu(false)}
                 setShowAboutModal={setShowAboutModal}
+                setShowProjectModal={setShowProjectModal}
                 className="absolute top-10"
               />
             </div>
@@ -104,17 +122,17 @@ function LeftMenu() {
         </div>
 
         <div className="flex flex-col flex-shrink flex-grow overflow-y-auto mb-0.5 px-2">
-          <ItemGroup title="Your Issues">
+          <ItemGroup title="Workspace">
             <Link
               to="/"
-              className="flex items-center pl-6 rounded cursor-pointer group h-7 hover:bg-gray-100"
+              className="flex items-center pl-2 rounded cursor-pointer group h-7 hover:bg-gray-100"
             >
               <IssuesIcon className="w-3.5 h-3.5 mr-2" />
               <span>All Issues</span>
             </Link>
             <Link
               to="/?status=todo,in_progress"
-              className="flex items-center pl-6 rounded cursor-pointer h-7 hover:bg-gray-100"
+              className="flex items-center pl-2 rounded cursor-pointer h-7 hover:bg-gray-100"
             >
               <span className="w-3.5 h-6 mr-2 inline-block">
                 <span className="block w-2 h-full border-r"></span>
@@ -123,18 +141,29 @@ function LeftMenu() {
             </Link>
             <Link
               to="/?status=backlog"
-              className="flex items-center pl-6 rounded cursor-pointer h-7 hover:bg-gray-100"
+              className="flex items-center pl-2 rounded cursor-pointer h-7 hover:bg-gray-100"
             >
               <BacklogIcon className="w-3.5 h-3.5 mr-2" />
               <span>Backlog</span>
             </Link>
             <Link
               to="/board"
-              className="flex items-center pl-6 rounded cursor-pointer h-7 hover:bg-gray-100"
+              className="flex items-center pl-2 rounded cursor-pointer h-7 hover:bg-gray-100"
             >
               <BoardIcon className="w-3.5 h-3.5 mr-2" />
               <span>Board</span>
             </Link>
+          </ItemGroup>
+
+          <ItemGroup title="Projects">
+            {projects?.map((project, idx) => (
+              <ProjectItem
+                key={project.id}
+                title={project.name}
+                projectId={project.id}
+                syncOnMount={shouldSyncFirstProject && idx === 0}
+              />
+            ))}
           </ItemGroup>
 
           {/* extra space */}
@@ -163,6 +192,12 @@ function LeftMenu() {
         />
       }
       {
+        <ProjectModal
+          isOpen={showProjectModal}
+          onDismiss={() => setShowProjectModal(false)}
+        />
+      }
+      {
         <IssueModal
           isOpen={showIssueModal}
           onDismiss={() => setShowIssueModal(false)}
@@ -172,4 +207,6 @@ function LeftMenu() {
   )
 }
 
-export default memo(LeftMenu)
+const LeftMenuMemo = memo(LeftMenu)
+
+export default LeftMenuMemo

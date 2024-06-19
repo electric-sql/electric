@@ -82,6 +82,9 @@ export const initElectric = async () => {
     console.log(conn)
     console.log(schema)
     console.log(config)
+
+    const { addToolbar } = await import('@electric-sql/debug-toolbar')
+    addToolbar(electric)
   }
 
   let userId = window.sessionStorage.getItem('userId')

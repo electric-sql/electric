@@ -3,6 +3,13 @@ import fs from 'fs'
 import path from 'path'
 import * as url from 'url'
 import { getConfig } from 'electric-sql/cli'
+import { v4 as uuidv4 } from 'uuid'
+
+/*
+Call with:
+
+ISSUES_TO_LOAD=100 npm run reset
+*/
 
 const dirname = url.fileURLToPath(new URL('.', import.meta.url))
 const { DATABASE_URL: ELECTRIC_DATABASE_URL } = getConfig()
@@ -18,6 +25,10 @@ const issues = JSON.parse(
   fs.readFileSync(path.join(DATA_DIR, 'issues.json'), 'utf8')
 )
 
+const projects = JSON.parse(
+  fs.readFileSync(path.join(DATA_DIR, 'projects.json'), 'utf8')
+)
+
 async function makeInsertQuery(db, table, data) {
   const columns = Object.keys(data)
   const columnsNames = columns.join(', ')
@@ -25,6 +36,17 @@ async function makeInsertQuery(db, table, data) {
   return await db.query(sql`
     INSERT INTO ${sql.ident(table)} (${sql(columnsNames)})
     VALUES (${sql.join(values.map(sql.value), ', ')})
+  `)
+}
+
+async function upsertProject(db, data) {
+  const columns = Object.keys(data)
+  const columnsNames = columns.join(', ')
+  const values = columns.map((column) => data[column])
+  return await db.query(sql`
+    INSERT INTO ${sql.ident('project')} (${sql(columnsNames)})
+    VALUES (${sql.join(values.map(sql.value), ', ')})
+    ON CONFLICT DO NOTHING
   `)
 }
 
@@ -37,6 +59,18 @@ async function importComment(db, comment) {
   return await makeInsertQuery(db, 'comment', comment)
 }
 
+function getRandomProjectId() {
+  return projects[Math.floor(Math.random() * projects.length)].id
+}
+
+// Create the project if it doesn't exist.
+await db.tx(async (db) => {
+  db.query(sql`SET CONSTRAINTS ALL DEFERRED;`) // disable FK checks
+  for (const project of projects) {
+    await upsertProject(db, project)
+  }
+})
+
 let commentCount = 0
 const issueToLoad = Math.min(ISSUES_TO_LOAD, issues.length)
 const batchSize = 100
@@ -46,10 +80,18 @@ for (let i = 0; i < issueToLoad; i += batchSize) {
     for (let j = i; j < i + batchSize && j < issueToLoad; j++) {
       process.stdout.write(`Loading issue ${j + 1} of ${issueToLoad}\r`)
       const issue = issues[j]
-      await importIssue(db, issue)
+      const id = uuidv4()
+      await importIssue(db, {
+        ...issue,
+        id: id,
+        project_id: getRandomProjectId(),
+      })
       for (const comment of issue.comments) {
         commentCount++
-        await importComment(db, comment)
+        await importComment(db, {
+          ...comment,
+          issue_id: id,
+        })
       }
     }
   })

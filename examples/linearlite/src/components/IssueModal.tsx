@@ -1,11 +1,12 @@
 import { memo, useEffect, useRef, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { generateKeyBetween } from 'fractional-indexing'
+import { useLiveQuery } from 'electric-sql/react'
 import { useElectric } from '../electric'
 
 import { BsChevronRight as ChevronRight } from 'react-icons/bs'
-import { ReactComponent as CloseIcon } from '../assets/icons/close.svg'
-import { ReactComponent as ElectricIcon } from '../assets/images/icon.inverse.svg'
+import CloseIcon from '../assets/icons/close.svg?react'
+import ElectricIcon from '../assets/images/icon.inverse.svg?react'
 
 import Modal from '../components/Modal'
 import Editor from '../components/editor/Editor'
@@ -28,11 +29,28 @@ function IssueModal({ isOpen, onDismiss }: Props) {
   const [description, setDescription] = useState<string>()
   const [priority, setPriority] = useState(Priority.NONE)
   const [status, setStatus] = useState(Status.BACKLOG)
+  const [project_id, setProjectId] = useState<string>()
   const { db } = useElectric()!
+
+  const { results: projects } = useLiveQuery(
+    db.project.liveMany({
+      orderBy: {
+        name: 'asc',
+      },
+    })
+  )
 
   const handleSubmit = async () => {
     if (title === '') {
       showWarning('Please enter a title before submitting', 'Title required')
+      return
+    }
+
+    if (project_id === undefined) {
+      showWarning(
+        'Please select a project before submitting',
+        'Project required'
+      )
       return
     }
 
@@ -55,6 +73,7 @@ function IssueModal({ isOpen, onDismiss }: Props) {
         modified: date,
         created: date,
         kanbanorder: kanbanorder,
+        project_id: project_id,
       },
     })
 
@@ -121,7 +140,7 @@ function IssueModal({ isOpen, onDismiss }: Props) {
             }}
           />
           <input
-            className="w-full ml-1.5 text-lg font-semibold placeholder-gray-400 border-none h-7 focus:border-none focus:outline-none focus:ring-0"
+            className="w-full p-1 ml-1 text-lg font-semibold placeholder-gray-400 border-none h-7 focus:border-none focus:outline-none focus:ring-0"
             placeholder="Issue title"
             value={title}
             ref={ref}
@@ -155,6 +174,22 @@ function IssueModal({ isOpen, onDismiss }: Props) {
             setPriority(val)
           }}
         />
+        <select
+          className="inline-flex items-center text-xs h-6 ms-2 py-0 px-2 pe-8 text-gray-500 bg-gray-200 border-none rounded hover:bg-gray-100 hover:text-gray-700 truncate max-w-36"
+          value={project_id}
+          onChange={(e) => setProjectId(e.target.value)}
+        >
+          <option value="">Select project</option>
+          {projects?.map((project) => (
+            <option
+              key={project.id}
+              value={project.id}
+              className="truncate max-w-3"
+            >
+              {project.name}
+            </option>
+          ))}
+        </select>
       </div>
       {/* Footer */}
       <div className="flex items-center flex-shrink-0 px-4 pt-3">
@@ -175,4 +210,5 @@ function IssueModal({ isOpen, onDismiss }: Props) {
   )
 }
 
-export default memo(IssueModal)
+const IssueModalMemo = memo(IssueModal)
+export default IssueModalMemo

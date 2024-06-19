@@ -1,4 +1,4 @@
-import { DragDropContext, DropResult } from 'react-beautiful-dnd'
+import { DragDropContext, DropResult } from '@hello-pangea/dnd'
 import { useMemo, useState, useEffect } from 'react'
 import { generateKeyBetween } from 'fractional-indexing'
 import { Issue, useElectric } from '../../electric'

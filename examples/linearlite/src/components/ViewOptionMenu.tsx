@@ -8,7 +8,7 @@ interface Props {
   isOpen: boolean
   onDismiss?: () => void
 }
-export default function ({ isOpen, onDismiss }: Props) {
+export default function ViewOptionMenu({ isOpen, onDismiss }: Props) {
   const ref = useRef(null)
   const [filterState, setFilterState] = useFilterState()
 
@@ -42,14 +42,14 @@ export default function ({ isOpen, onDismiss }: Props) {
         leave="transition easy-in duration-75"
         leaveFrom="transform opacity-100 scale-100"
         leaveTo="transform opacity-0 scale-95"
-        className="fixed right-0 z-30 flex flex-col bg-white rounded-lg shadow-modal top-12 w-70"
       >
-        <div className="font-medium border-b border-gray-200 px-4.5 py-2">
-          View Options
-        </div>
+        <div className="fixed right-0 z-30 flex flex-col bg-white rounded-lg shadow-modal top-12 w-70">
+          <div className="font-medium border-b border-gray-200 px-4.5 py-2">
+            View Options
+          </div>
 
-        <div className="px-4.5 py-2 flex flex-col border-b border-gray-200">
-          {/* <div className="flex items-center min-h-8">
+          <div className="px-4.5 py-2 flex flex-col border-b border-gray-200">
+            {/* <div className="flex items-center min-h-8">
             <span className="text-gray-500">Grouping</span>
             <div className="flex ml-auto">
               <Select>
@@ -62,27 +62,28 @@ export default function ({ isOpen, onDismiss }: Props) {
             </div>
           </div> */}
 
-          <div className="flex items-center mt-1 min-h-8">
-            <span className="text-gray-500">Ordering</span>
-            <div className="flex ml-auto">
-              <Select
-                value={filterState.orderBy}
-                onChange={handleOrderByChange}
-              >
-                <option value="priority">Priority</option>
-                <option value="status">Status</option>
-                <option value="created">Created</option>
-                <option value="modified">Updated</option>
-              </Select>
-            </div>
-            <div className="flex ml-1">
-              <Select
-                value={filterState.orderDirection}
-                onChange={handleOrderDirectionChange}
-              >
-                <option value="desc">Desc</option>
-                <option value="asc">Asc</option>
-              </Select>
+            <div className="flex items-center mt-1 min-h-8">
+              <span className="text-gray-500">Ordering</span>
+              <div className="flex ml-auto">
+                <Select
+                  value={filterState.orderBy}
+                  onChange={handleOrderByChange}
+                >
+                  <option value="priority">Priority</option>
+                  <option value="status">Status</option>
+                  <option value="created">Created</option>
+                  <option value="modified">Updated</option>
+                </Select>
+              </div>
+              <div className="flex ml-1">
+                <Select
+                  value={filterState.orderDirection}
+                  onChange={handleOrderDirectionChange}
+                >
+                  <option value="desc">Desc</option>
+                  <option value="asc">Asc</option>
+                </Select>
+              </div>
             </div>
           </div>
         </div>

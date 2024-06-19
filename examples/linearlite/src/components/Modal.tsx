@@ -8,7 +8,7 @@ import React, {
 import ReactDOM from 'react-dom'
 import classnames from 'classnames'
 
-import { ReactComponent as CloseIcon } from '../assets/icons/close.svg'
+import CloseIcon from '../assets/icons/close.svg?react'
 import useLockBodyScroll from '../hooks/useLockBodyScroll'
 import { Transition } from '@headlessui/react'
 
@@ -53,14 +53,17 @@ function Modal({
     sizeClasses[size],
     className
   )
-  const handleClick = useCallback((event: MouseEvent) => {
-    event.stopPropagation()
-    event.preventDefault()
-    if (!onDismiss) return
-    if (ref.current && !ref.current.contains(event.target as Element)) {
-      onDismiss()
-    }
-  }, [])
+  const handleClick = useCallback(
+    (event: MouseEvent) => {
+      event.stopPropagation()
+      event.preventDefault()
+      if (!onDismiss) return
+      if (ref.current && !ref.current.contains(event.target as Element)) {
+        onDismiss()
+      }
+    },
+    [onDismiss]
+  )
 
   useLockBodyScroll()
 
@@ -74,18 +77,21 @@ function Modal({
         leave="transition easy-in duration-95"
         leaveFrom="transform opacity-100 scale-100"
         leaveTo="transform opacity-0 scale-95"
-        className={wrapperClasses}
       >
-        <div ref={ref} className={modalClasses}>
-          {title && (
-            <div className="flex items-center justify-between w-full pl-8 pr-4 border-b border-gray-200">
-              <div className="text-sm font-semibold text-gray-700">{title}</div>
-              <div className="p-4" onClick={onDismiss}>
-                <CloseIcon className="w-4 text-gray-500 hover:text-gray-700" />
+        <div className={wrapperClasses}>
+          <div ref={ref} className={modalClasses}>
+            {title && (
+              <div className="flex items-center justify-between w-full pl-8 pr-4 border-b border-gray-200">
+                <div className="text-sm font-semibold text-gray-700">
+                  {title}
+                </div>
+                <div className="p-4" onClick={onDismiss}>
+                  <CloseIcon className="w-4 text-gray-500 hover:text-gray-700" />
+                </div>
               </div>
-            </div>
-          )}
-          {children}
+            )}
+            {children}
+          </div>
         </div>
       </Transition>
     </div>
@@ -97,4 +103,6 @@ function Modal({
   )
 }
 
-export default memo(Modal)
+const ModalMemo = memo(Modal)
+
+export default ModalMemo

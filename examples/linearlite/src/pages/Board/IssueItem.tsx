@@ -1,7 +1,7 @@
 import { memo, type CSSProperties } from 'react'
 import classNames from 'classnames'
 import { useNavigate } from 'react-router-dom'
-import { DraggableProvided } from 'react-beautiful-dnd'
+import { DraggableProvided } from '@hello-pangea/dnd'
 import Avatar from '../../components/Avatar'
 import PriorityMenu from '../../components/contextmenu/PriorityMenu'
 import PriorityIcon from '../../components/PriorityIcon'
@@ -85,4 +85,6 @@ const IssueItem = ({ issue, style, isDragging, provided }: IssueProps) => {
   )
 }
 
-export default memo(IssueItem)
+const IssueItemMemo = memo(IssueItem)
+
+export default IssueItemMemo

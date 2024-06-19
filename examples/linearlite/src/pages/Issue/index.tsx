@@ -24,6 +24,17 @@ function IssuePage() {
   const { results: issue } = useLiveQuery(
     db.issue.liveUnique({
       where: { id: id },
+      include: {
+        project: true,
+      },
+    })
+  )
+
+  const { results: projects } = useLiveQuery(
+    db.project.liveMany({
+      orderBy: {
+        name: 'asc',
+      },
     })
   )
 
@@ -120,6 +131,18 @@ function IssuePage() {
     handleDescriptionChangeDebounced(description)
   }
 
+  const handleProjectChange = (project_id: string) => {
+    db.issue.update({
+      data: {
+        project_id: project_id,
+        modified: new Date(),
+      },
+      where: {
+        id: issue.id,
+      },
+    })
+  }
+
   const handleDelete = () => {
     db.comment.deleteMany({
       where: {
@@ -182,6 +205,27 @@ function IssuePage() {
         <div className="flex flex-1 p-3 md:p-2 overflow-hidden flex-col md:flex-row">
           <div className="md:block flex md:flex-[1_0_0] min-w-0 md:p-3 md:order-2">
             <div className="max-w-4xl flex flex-row md:flex-col">
+              <div className="flex flex-1 mb-3 mr-5 md-mr-0">
+                <div className="flex flex-[2_0_0] mr-2 md-mr-0 items-center">
+                  Project
+                </div>
+                <div className="flex flex-[3_0_0]">
+                  {/* <button className="inline-flex items-center h-6 ps-1.5 pe-2 text-gray-500border-none rounded hover:bg-gray-100">
+                    <span className="ml-1">{issue.project.name}</span>
+                  </button> */}
+                  <select
+                    className="inline-flex items-center h-6 ps-1.5 pe-8 py-0 text-gray-500border-none rounded hover:bg-gray-100 border-0 text-xs"
+                    value={issue.project_id}
+                    onChange={(e) => handleProjectChange(e.target.value)}
+                  >
+                    {projects?.map((project) => (
+                      <option key={project.id} value={project.id}>
+                        {project.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
               <div className="flex flex-1 mb-3 mr-5 md-mr-0">
                 <div className="flex flex-[2_0_0] mr-2 md-mr-0 items-center">
                   Opened by

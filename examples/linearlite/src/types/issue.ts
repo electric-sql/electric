@@ -1,16 +1,16 @@
 import type React from 'react'
 
-import { ReactComponent as CancelIcon } from '../assets/icons/cancel.svg'
-import { ReactComponent as BacklogIcon } from '../assets/icons/circle-dot.svg'
-import { ReactComponent as TodoIcon } from '../assets/icons/circle.svg'
-import { ReactComponent as DoneIcon } from '../assets/icons/done.svg'
-import { ReactComponent as InProgressIcon } from '../assets/icons/half-circle.svg'
+import CancelIcon from '../assets/icons/cancel.svg?react'
+import BacklogIcon from '../assets/icons/circle-dot.svg?react'
+import TodoIcon from '../assets/icons/circle.svg?react'
+import DoneIcon from '../assets/icons/done.svg?react'
+import InProgressIcon from '../assets/icons/half-circle.svg?react'
 
-import { ReactComponent as HighPriorityIcon } from '../assets/icons/signal-strong.svg'
-import { ReactComponent as LowPriorityIcon } from '../assets/icons/signal-weak.svg'
-import { ReactComponent as MediumPriorityIcon } from '../assets/icons/signal-medium.svg'
-import { ReactComponent as NoPriorityIcon } from '../assets/icons/dots.svg'
-import { ReactComponent as UrgentPriorityIcon } from '../assets/icons/rounded-claim.svg'
+import HighPriorityIcon from '../assets/icons/signal-strong.svg?react'
+import LowPriorityIcon from '../assets/icons/signal-weak.svg?react'
+import MediumPriorityIcon from '../assets/icons/signal-medium.svg?react'
+import NoPriorityIcon from '../assets/icons/dots.svg?react'
+import UrgentPriorityIcon from '../assets/icons/rounded-claim.svg?react'
 
 export const Priority = {
   NONE: 'none',

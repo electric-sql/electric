@@ -1,4 +1,4 @@
-import { ReactComponent as MenuIcon } from '../assets/icons/menu.svg'
+import MenuIcon from '../assets/icons/menu.svg?react'
 import { useState, useContext } from 'react'
 import { BsSortUp, BsPlus, BsX, BsSearch as SearchIcon } from 'react-icons/bs'
 import { useLiveQuery } from 'electric-sql/react'
@@ -16,7 +16,7 @@ interface Props {
   title?: string
 }
 
-export default function ({
+export default function TopFilter({
   issues,
   hideSort,
   showSearch,
@@ -57,9 +57,9 @@ export default function ({
 
   if (filterState.status?.length) {
     if (eqStatuses(['backlog'])) {
-      title = 'Backlog'
+      title += ' : Backlog'
     } else if (eqStatuses(['todo', 'in_progress'])) {
-      title = 'Active'
+      title += ' : Active'
     }
   }
 
@@ -75,9 +75,11 @@ export default function ({
             <MenuIcon className="w-3.5 text-gray-500 hover:text-gray-800" />
           </button>
 
-          <div className="p-1 font-semibold me-1">{title}</div>
+          <div className="p-1 font-semibold me-1 truncate max-w-44">
+            {title}
+          </div>
           {/* <span>{filteredIssuesCount}</span> */}
-          <span>
+          <span className="whitespace-nowrap">
             {filteredIssuesCount}
             {filteredIssuesCount !== totalIssuesCount
               ? ` of ${totalIssuesCount}`
