@@ -32,7 +32,7 @@ defmodule Electric.MixProject do
   def application do
     [
       mod: {Electric.Application, []},
-      extra_applications: [:logger, :os_mon, :runtime_tools]
+      extra_applications: [:logger, :os_mon, :runtime_tools, :observer, :wx]
     ]
   end
 
@@ -73,7 +73,8 @@ defmodule Electric.MixProject do
       {:ecto_sql, "~> 3.11"},
       {:ecto, "~> 3.11"},
       {:dotenvy, "~> 0.8"},
-      {:timex, "~> 3.7"}
+      {:timex, "~> 3.7"},
+      {:recon, "~> 2.5"}
     ]
   end
 
