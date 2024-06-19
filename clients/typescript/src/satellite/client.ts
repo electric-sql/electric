@@ -305,7 +305,6 @@ export class SatelliteClient implements Client {
     }
     const span = startSpan('satellite.client.connect', {
       isClientSpan: true,
-      setActiveSpan: true,
     })
     return new Promise<void>((resolve, reject) => {
       this.socket = new this.socketFactory(PROTOCOL_VSN)
@@ -462,12 +461,14 @@ export class SatelliteClient implements Client {
 
     const span = startSpan('satellite.client.stopReplication', {
       isClientSpan: true,
-      setActiveSpan: true,
     })
     this.inbound.isReplicating = ReplicationStatus.STOPPING
     const request = SatInStopReplicationReq.fromPartial({})
-    return this.service
-      .stopReplication(request)
+    return runWithSpan(
+      'satellite.client.stopReplication.request',
+      { parentSpan: span },
+      () => this.service.stopReplication(request)
+    )
       .then(this.handleStopResp.bind(this))
       .finally(() => span.end())
   }
@@ -475,15 +476,17 @@ export class SatelliteClient implements Client {
   authenticate({ clientId, token }: AuthState): Promise<AuthResponse> {
     const span = startSpan('satellite.client.authenticate', {
       isClientSpan: true,
-      setActiveSpan: true,
     })
     const request = SatAuthReq.fromPartial({
       id: clientId,
       token: token,
       headers: [],
     })
-    return this.service
-      .authenticate(request)
+    return runWithSpan(
+      'satellite.client.authenticate.request',
+      { parentSpan: span },
+      () => this.service.authenticate(request)
+    )
       .then(this.handleAuthResp.bind(this))
       .finally(() => span.end())
   }
@@ -670,15 +673,18 @@ export class SatelliteClient implements Client {
     }
     const span = startSpan('satellite.client.unsubscribe', {
       isClientSpan: true,
-      setActiveSpan: true,
+
       attributes: {
         'shape.subscriptionIds': subscriptionIds,
       },
     })
     const request = SatUnsubsReq.create({ subscriptionIds })
 
-    return this.service
-      .unsubscribe(request)
+    return runWithSpan(
+      'satellite.client.unsubscribe.request',
+      { parentSpan: span },
+      () => this.service.unsubscribe(request)
+    )
       .then(this.handleUnsubscribeResponse.bind(this))
       .finally(() => span.end())
   }

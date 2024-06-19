@@ -13,12 +13,11 @@ interface SpanOptions {
   parentSpan?: Span
   attributes?: Attributes
   isClientSpan?: boolean
-  setActiveSpan?: boolean
 }
 
 function startSpan(
   name: string,
-  { parentSpan, attributes, isClientSpan, setActiveSpan }: SpanOptions = {}
+  { parentSpan, attributes, isClientSpan }: SpanOptions = {}
 ) {
   const span = getTracer().startSpan(
     name,
@@ -28,9 +27,6 @@ function startSpan(
     },
     parentSpan && trace.setSpan(context.active(), parentSpan)
   )
-  if (setActiveSpan) {
-    trace.setSpan(context.active(), span)
-  }
   return span
 }
 
