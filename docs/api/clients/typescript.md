@@ -141,10 +141,11 @@ const config: ElectricConfig = {
   Configuration of the backoff strategy used when trying to reconnect to the Electric sync service after a failed
   connection attempt.
 
-- `disableForeignKeysDownstream?: boolean`
+- `foreignKeyChecksDownstream?: ForeignKeyChecks`
 
-  Can be set to true to disable FK checks when applying downstream (i.e. incoming) transactions to the local SQLite database.
-  When using a Postgres driver foreign keys are always disabled and this behavior can't be changed.
+  Configuration of FK checking behaviour when applying downstream (i.e. incoming) transactions to the local SQLite database.
+  Defaults to `disabled`, meaning that FKs are not checked. Can also be set to `enabled` to enable FK checks or `inherit` to inherit the behaviour specified by SQLite's FK pragma.
+  When using a Postgres driver, foreign key checks are always disabled and this option can't be changed.
 
 ### Configuring example apps
 
