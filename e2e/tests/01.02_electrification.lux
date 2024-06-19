@@ -1,6 +1,8 @@
 [doc Shadow tables should get correctly created for electrified tables]
 [include _shared.luxinc]
 
+[global test_file=01.02_electrification.lux]
+
 [invoke setup]
 [invoke electrify_table entries]
 

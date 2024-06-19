@@ -1,6 +1,8 @@
 [doc Updates to table primary keys are rejected]
 [include _shared.luxinc]
 
+[global test_file=06.01_prevent_updates_to_pk.lux]
+
 [invoke setup]
 
 [global migration_version_1=20231109154018]

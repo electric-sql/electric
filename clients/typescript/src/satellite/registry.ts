@@ -16,6 +16,7 @@ import { SatelliteProcess } from './process'
 import { SocketFactory } from '../sockets'
 import { SatelliteClient } from './client'
 import { DbSchema } from '../client/model'
+import { disposeTelemetry } from '../util'
 
 export abstract class BaseRegistry implements Registry {
   satellites: {
@@ -160,6 +161,11 @@ export abstract class BaseRegistry implements Registry {
       const stoppingPromise = satellite.stop(true).then(() => {
         delete satellites[dbName]
         delete stoppingPromises[dbName]
+
+        if (Object.keys(satellites).length === 0) {
+          return disposeTelemetry()
+        }
+        return Promise.resolve()
       })
 
       stoppingPromises[dbName] = stoppingPromise

@@ -2,6 +2,8 @@
 [global fail_pattern=[Ee][Rr][Rr][Oo][Rr]]
 [include _shared.luxinc]
 
+[global test_file=02.07_where_clauses_on_subscriptions.lux]
+
 [invoke setup]
 [invoke electrify_table entries]
 

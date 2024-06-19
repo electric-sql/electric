@@ -12,6 +12,8 @@
 #     QUERY:  __serialized_pk := ARRAY[__this_row.id, __this_row.sub_id]::text
 #     CONTEXT:  PL/pgSQL function electric.send_self_trigger___public__project_memberships() line 9 at assignment
 
+[global test_file=01.07_composite_primary_key_in_referenced_relation.lux]
+
 [invoke setup]
 
 [global project_id=p1]

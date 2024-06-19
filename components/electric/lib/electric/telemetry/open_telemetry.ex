@@ -79,7 +79,7 @@ defmodule Electric.Telemetry.OpenTelemetry do
   @spec async_fun(span_ctx() | nil, span_name(), span_attrs(), (-> t)) :: (-> t) when t: term
   def async_fun(span_ctx \\ nil, name, attributes, fun)
       when is_binary(name) and (is_list(attributes) or is_map(attributes)) do
-    wrap_fun_with_context(span_ctx, fn -> with_span(name, attributes, fun) end)
+    wrap_fun_with_span_context(span_ctx, fn -> with_span(name, attributes, fun) end)
   end
 
   @doc """
@@ -91,7 +91,7 @@ defmodule Electric.Telemetry.OpenTelemetry do
   """
   @spec add_span_attributes(span_ctx() | nil, span_attrs()) :: boolean()
   def add_span_attributes(span_ctx \\ nil, attributes) do
-    span_ctx = span_ctx || get_current_context()
+    span_ctx = span_ctx || get_current_span_context()
     :otel_span.set_attributes(span_ctx, attributes)
   end
 
@@ -113,26 +113,36 @@ defmodule Electric.Telemetry.OpenTelemetry do
        Exception.format_stacktrace(stacktrace)}
     ]
 
-    :otel_span.add_event(get_current_context(), "exception", semantic_attributes ++ attributes)
+    :otel_span.add_event(
+      get_current_span_context(),
+      "exception",
+      semantic_attributes ++ attributes
+    )
   end
+
+  def apply_traceparent(traceparent) when is_binary(traceparent) do
+    :otel_propagator_text_map.extract([{"traceparent", traceparent}])
+  end
+
+  ###
 
   defp tracer, do: :opentelemetry.get_tracer()
 
-  defp get_current_context do
+  defp get_current_span_context do
     :otel_tracer.current_span_ctx()
   end
 
   # Set the span on otel_ctx of the current process to `span_ctx`, so that subsequent `with_span()`
   # calls are registered as its child.
-  defp set_current_context(span_ctx) do
+  defp set_current_span_context(span_ctx) do
     :otel_tracer.set_current_span(span_ctx)
   end
 
-  defp wrap_fun_with_context(span_ctx, fun) do
-    span_ctx = span_ctx || get_current_context()
+  defp wrap_fun_with_span_context(span_ctx, fun) do
+    span_ctx = span_ctx || get_current_span_context()
 
     fn ->
-      set_current_context(span_ctx)
+      set_current_span_context(span_ctx)
       fun.()
     end
   end

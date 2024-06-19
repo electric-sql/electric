@@ -1,4 +1,4 @@
 elixir 1.17.0-otp-27
 erlang 27.0
 # keep synchronised with version pinned in .github/workflows/satellite_proto.yml
-protoc 26.1
+protoc 27.1

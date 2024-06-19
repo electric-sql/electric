@@ -2,6 +2,8 @@
 [global fail_pattern=[Ee][Rr][Rr][Oo][Rr]]
 [include _shared.luxinc]
 
+[global test_file=02.02_migrations_get_streamed_to_satellite.lux]
+
 [invoke setup]
 # Start without electrified tables
 

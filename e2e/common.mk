@@ -77,7 +77,7 @@ stop_dev_env:
 		docker ps --filter name=elixir_client --format '{{.Names}}' | xargs docker kill; \
 	fi
 	if [ -n "`docker ps --filter name=satellite_client --format '{{.Names}}'`" ]; then \
-		docker ps --filter name=satellite_client --format '{{.Names}}' | xargs docker kill; \
+		docker stop -t 5 $$(docker ps --filter name=satellite_client --format '{{.Names}}'); \
 	fi
 	if [ -n "`docker ps --filter name=sysbench_run --format '{{.Names}}'`" ]; then \
 		docker ps --filter name=sysbench_run --format '{{.Names}}' | xargs docker kill; \

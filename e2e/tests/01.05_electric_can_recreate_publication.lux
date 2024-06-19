@@ -1,6 +1,8 @@
 [doc Electric correctly recreates the publication at startup if it was deleted]
 [include _shared.luxinc]
 
+[global test_file=01.05_electric_can_recreate_publication.lux]
+
 [invoke setup]
 
 [shell proxy_1]

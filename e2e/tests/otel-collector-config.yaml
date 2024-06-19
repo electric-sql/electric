@@ -9,6 +9,8 @@ receivers:
 
 processors:
   batch:
+  resourcedetection/env:
+    detectors: [env]
 
 exporters:
   otlp/honeycomb:
@@ -23,5 +25,5 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [batch]
+      processors: [resourcedetection/env, batch]
       exporters: [otlp/honeycomb]

@@ -1,6 +1,8 @@
 [doc Prisma migration version is captured]
 [include _shared.luxinc]
 
+[global test_file=04.03_prisma_migration_version_captured.lux]
+
 [invoke setup]
 
 [newshell developer]

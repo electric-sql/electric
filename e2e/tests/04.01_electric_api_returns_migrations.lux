@@ -1,6 +1,8 @@
 [doc Electric API returns all applied migrations]
 [include _shared.luxinc]
 
+[global test_file=04.01_electric_api_returns_migrations.lux]
+
 [invoke setup]
 
 [global migration_version_1=20230504114018]

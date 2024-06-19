@@ -1,6 +1,8 @@
 [doc PG writes to the electrified tables propagate to Electric]
 [include _shared.luxinc]
 
+[global test_file=01.03_postgres_writes_propagate_to_electric.lux]
+
 [invoke setup]
 [invoke electrify_table entries]
 

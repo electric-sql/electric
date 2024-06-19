@@ -2,6 +2,8 @@
 [include _shared.luxinc]
 [include _satellite_macros.luxinc]
 
+[global test_file=03.02_node_satellite_applies_incoming_migrations.lux]
+
 [invoke setup]
 [invoke electrify_table entries]
 

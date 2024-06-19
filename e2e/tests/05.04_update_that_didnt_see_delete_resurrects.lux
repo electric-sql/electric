@@ -1,6 +1,8 @@
 [doc When an update coming from Satellite doesn't have the latest DELETE operation in the observed tags, it restores the row]
 [include _shared.luxinc]
 
+[global test_file=05.04_update_that_didnt_see_delete_resurrects.lux]
+
 [invoke setup]
 [invoke electrify_table entries]
 

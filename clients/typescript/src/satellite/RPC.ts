@@ -2,12 +2,18 @@ import {
   Root,
   SatErrorResp,
   SatRpcRequest,
+  SatRpcRequestOptions,
   SatRpcResponse,
 } from '../_generated/protocol/satellite'
 import { SatelliteError, SatelliteErrorCode } from '../util/types'
 import { emptyPromise } from '../util/common'
 import Log, { Logger } from 'loglevel'
-import { ClientRpcResponse, encodeRpcResponse, msgToString } from '../util'
+import {
+  ClientRpcResponse,
+  encodeRpcResponse,
+  getActiveTracePropagationData,
+  msgToString,
+} from '../util'
 import { isDebuggingNode } from '../util/debug'
 
 type RequestId = `${string}/${number}`
@@ -55,14 +61,18 @@ export class RPC {
   public request(
     _service: string,
     method: string,
-    message: Uint8Array
+    message: Uint8Array,
+    reqOptions?: object
   ): Promise<Uint8Array> {
     const requestId = this.nextRequestId++
+
+    const options = SatRpcRequestOptions.create(reqOptions)
 
     const request = SatRpcRequest.create({
       method,
       requestId,
       message,
+      options,
     })
 
     // This line may throw, which is why setting global state is done right after
@@ -194,6 +204,38 @@ export function withRpcRequestLogging(service: Root, logger: Logger): Root {
                 return x
               }
             )
+          },
+        })
+      } else {
+        return Reflect.get(target, p)
+      }
+    },
+  })
+}
+
+/**
+ * Wrap an RPC instance to augment RPC requests with trace propagation.
+ * Potenitally slight overkill, could directly add the propagation data
+ * on
+ *
+ * @param rpc RPC instance to wrap
+ * @returns A proxy around the RPC instance
+ */
+export function withRpcRequestTracing(rpc: RPC): RPC {
+  return new Proxy(rpc, {
+    get(target, p, _receiver) {
+      if (typeof target[p as keyof RPC] === 'function') {
+        return new Proxy(target[p as keyof RPC], {
+          apply(target, thisArg, argArray) {
+            // for requests, enhance with trace propagation data
+            // from the active context
+            if (p === 'request') {
+              argArray[3] = {
+                ...getActiveTracePropagationData(),
+                ...(argArray[3] ?? {}),
+              }
+            }
+            return Reflect.apply(target, thisArg, argArray)
           },
         })
       } else {

@@ -1,6 +1,8 @@
 [doc When an update coming from Satellite doesn't have the latest DELETE operation in the observed tags, it restores the row]
 [include _shared.luxinc]
 
+[global test_file=05.05_compensations_within_same_tx_are_fine.lux]
+
 [invoke setup]
 
 [shell proxy_1]

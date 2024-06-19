@@ -1,6 +1,8 @@
 [doc Prisma introspection via proxy returns valid schema]
 [include _shared.luxinc]
 
+[global test_file=04.02_prisma_introspection_generates_correct_schema.lux]
+
 [invoke setup]
 
 [newshell developer]

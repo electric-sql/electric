@@ -2,6 +2,8 @@
 [include _shared.luxinc]
 [include _satellite_macros.luxinc]
 
+[global test_file=03.04_node_satellite_correctly_updates_serialization_caches.lux]
+
 [invoke setup]
 
 [invoke setup_client 1 "electric_1" 5133]

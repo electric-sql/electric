@@ -1,6 +1,8 @@
 [doc A write on the Satellite makes its way to PG and back]
 [include _shared.luxinc]
 
+[global test_file=02.04_satellite_write_gets_propagated_to_postgres.lux]
+
 [invoke setup]
 [invoke electrify_table entries]
 
