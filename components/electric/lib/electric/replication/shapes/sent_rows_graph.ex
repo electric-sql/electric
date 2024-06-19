@@ -1,4 +1,5 @@
 defmodule Electric.Replication.Shapes.SentRowsGraph do
+  require Logger
   @moduledoc """
   Module responsible for operations over the sent rows graph.
 
@@ -80,6 +81,8 @@ defmodule Electric.Replication.Shapes.SentRowsGraph do
   defp do_pop_by_request_id(%Graph{} = graph, %MapSet{} = request_ids, root_vertex) do
     predicate = fn {id, _} -> MapSet.member?(request_ids, id) end
 
+    start = System.monotonic_time()
+
     {edges, vertices} =
       dfs_traverse(
         [Graph.Utils.vertex_id(root_vertex)],
@@ -96,9 +99,9 @@ defmodule Electric.Replication.Shapes.SentRowsGraph do
             end)
             |> Enum.split_with(&predicate.(elem(&1, 2)))
             |> case do
-              {_all_edges, []} ->
+              {all_edges, []} ->
                 # If all incoming edges match the request ID, we'll pop the vertex
-                {:next, {edges, [v | vertices]}}
+                {:next, {all_edges ++ edges, [v | vertices]}}
 
               {new_edges, _rest} ->
                 # If some incoming edges are unaffected, we'll pop the edges explicitly
@@ -108,10 +111,21 @@ defmodule Electric.Replication.Shapes.SentRowsGraph do
         fn meta -> any_key_matches_predicate?(meta, predicate) end
       )
 
+    Logger.warning("Traversing graph took #{System.convert_time_unit(System.monotonic_time() - start, :native, :millisecond)}")
+    start = System.monotonic_time()
+
     graph =
       edges
       |> Enum.reduce(graph, fn {v1, v2, label}, acc -> Graph.delete_edge(acc, v1, v2, label) end)
-      |> Graph.delete_vertices(vertices)
+
+    Logger.warning("Removing edges from graph took #{System.convert_time_unit(System.monotonic_time() - start, :native, :millisecond)}")
+    start = System.monotonic_time()
+    vertices_to_keep = MapSet.difference(MapSet.new(Graph.vertices(graph)), MapSet.new(vertices)) |> MapSet.to_list
+    graph = Graph.subgraph(graph, vertices_to_keep)
+    # graph = graph
+    #   |> Graph.delete_vertices(vertices)
+
+    Logger.warning("Removing vertices graph took #{System.convert_time_unit(System.monotonic_time() - start, :native, :millisecond)}")
 
     {vertices, graph}
   end
