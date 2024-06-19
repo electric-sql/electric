@@ -1,5 +1,15 @@
 # electric-sql
 
+## 0.12.1
+
+### Patch Changes
+
+- b3c1bdc: Minor performance improvements in downstream initial sync path
+- e9dc60f: Update `better-sqlite3` dependency, dropping Node v16 support and adding Node v22 support, see [relevant PR](https://github.com/electric-sql/electric/pull/1378).
+- 7bbba53: Modify FK flag option to default to disabling FK checks on SQLite.
+- 7b4b8d4: Remove `WITHOUT ROWID` specification on SQLite migrations for improved performance (see https://github.com/electric-sql/electric/pull/1349).
+- fbf8a4d: Modify setReplicationTransform to throw if a FK column is transformed.
+
 ## 0.12.0
 
 ### Minor Changes
