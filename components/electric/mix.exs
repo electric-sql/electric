@@ -74,7 +74,9 @@ defmodule Electric.MixProject do
       {:ecto, "~> 3.11"},
       {:dotenvy, "~> 0.8"},
       {:timex, "~> 3.7"},
-      {:recon, "~> 2.5"}
+      {:recon, "~> 2.5"},
+      {:vega_lite, "~> 0.1.6"},
+      {:kino_vega_lite, "~> 0.1.11"}
     ]
   end
 
