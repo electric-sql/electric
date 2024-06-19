@@ -54,6 +54,7 @@ defmodule Electric.Satellite.WebsocketServer do
 
   @impl WebSock
   def init(opts) do
+    Process.register(self(), :ws)
     connector_config = Keyword.fetch!(opts, :connector_config)
     origin = Connectors.origin(connector_config)
     Process.set_label({:ws_server, origin})
