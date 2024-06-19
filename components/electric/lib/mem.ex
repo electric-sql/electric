@@ -117,10 +117,6 @@ defmodule Mem do
     end
   end
 
-  def bin_leak(how_many_processes_to_show \\ 3) do
-    :recon.bin_leak(how_many_processes_to_show)
-  end
-
   def gc(pid) do
     :erlang.garbage_collect(pid)
   end
