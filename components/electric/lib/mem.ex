@@ -32,6 +32,16 @@ defmodule Mem do
     |> Map.get(:pid)
   end
 
+  def top_ets_tables(count \\ 5) do
+    :ets.all()
+    |> Enum.map(fn table -> %{table: table, size: :ets.info(table, :memory)} end)
+    |> Enum.sort_by(&(-&1.size))
+    |> Enum.take(count)
+    |> Enum.each(fn t ->
+      IO.puts("#{inspect(t.table)}\t#{words_to_size_pretty(t.size)}")
+    end)
+  end
+
   def process_memory(pid) do
     info =
       Process.info(pid, [:total_heap_size, :message_queue_len, :memory, :stack_size, :binary])
@@ -119,5 +129,10 @@ defmodule Mem do
 
   def gc(pid) do
     :erlang.garbage_collect(pid)
+  end
+
+  def gc do
+    Process.list()
+    |> Enum.each(&:erlang.garbage_collect/1)
   end
 end
