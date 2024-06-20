@@ -13,7 +13,7 @@ interface GenerateCommandArgs {
   watch?: number | true
   withMigrations?: string
   debug?: boolean
-  withDal?: boolean
+  withDal?: string
 }
 
 export function makeGenerateCommand(): Command {
@@ -68,11 +68,11 @@ export function makeGenerateCommand(): Command {
     )
 
     .option(
-      '--with-dal',
+      '--with-dal <boolean>',
       dedent`
         Optional flag to disable generation of the Electric client.
-          
-        When enabled, only the migrations will be generated and a minimal database description.
+        
+        Defaults to true. When set to false, only the migrations will be generated and a minimal database description but no DAL.
       `
     )
 
@@ -80,11 +80,14 @@ export function makeGenerateCommand(): Command {
       const { watch, withMigrations, debug, withDal, ...restOpts } = opts
       const config = getConfig(restOpts)
 
+      const withDalDefault = withDal ?? 'true' // defaults to true
+      const withDalOpt = withDalDefault === 'true' // convert to boolean
+
       const genOpts: GeneratorOptions = {
         config,
         withMigrations,
         debug,
-        withDal,
+        withDal: withDalOpt,
       }
       if (watch !== undefined) {
         genOpts.watch = true
