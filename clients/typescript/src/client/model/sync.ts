@@ -53,7 +53,7 @@ export function computeShape(
   const includedTables = includedFields.map((field: string): Rel => {
     // Fetch the table that is included
     const relatedTableName = dbSchema.getRelatedTable(tableName, field)
-    const fkk = dbSchema.getForeignKey(tableName, field)
+    const fk = dbSchema.getForeignKey(tableName, field)
 
     // And follow nested includes
     const includedObj = (include as any)[field]
@@ -64,12 +64,12 @@ export function computeShape(
     ) {
       // There is a nested include, follow it
       return {
-        foreignKey: [fkk],
+        foreignKey: [fk],
         select: computeShape(dbSchema, relatedTableName, includedObj),
       }
     } else if (typeof includedObj === 'boolean' && includedObj) {
       return {
-        foreignKey: [fkk],
+        foreignKey: [fk],
         select: {
           tablename: relatedTableName,
         },
