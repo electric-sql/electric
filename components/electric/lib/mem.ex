@@ -18,7 +18,7 @@ defmodule Mem do
     |> sum_all()
   end
 
-  def processes do
+  def top_processes do
     process_list()
     |> Enum.take(20)
     |> Enum.each(fn p ->
