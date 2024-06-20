@@ -436,6 +436,34 @@ export const builderTests = (test: TestFn<ContextType>) => {
     ])
   })
 
+  test('prepareDeleteBatchedStatements handles single column deletes', (t) => {
+    const { builder } = t.context
+    const data = [
+      { a: 1, b: 2 },
+      { a: 3, b: 4 },
+      { a: 5, b: 6 },
+    ]
+    const stmts = builder.prepareDeleteBatchedStatements(
+      'DELETE FROM test WHERE',
+      ['a'],
+      data,
+      5 // at most 5 `?`s in one SQL statement, so we should see the split
+    )
+
+    const posArgs: string[] =
+      builder.dialect === 'SQLite'
+        ? ['?', '?', '?', '?']
+        : ['$1', '$2', '$3', '$4']
+
+    t.deepEqual(stmts, [
+      {
+        sql: `DELETE FROM test WHERE ("a") IN (${posArgs[0]}, ${posArgs[1]}, ${posArgs[2]})`,
+
+        args: [1, 3, 5],
+      },
+    ])
+  })
+
   test('prepareDeleteBatchedStatements respects column order', (t) => {
     const { builder } = t.context
     const data = [
