@@ -1564,9 +1564,10 @@ export class SatelliteProcess implements Satellite {
 
     // Batch-delete shadow entries
     const stmts = this.builder.prepareDeleteBatchedStatements(
-      `DELETE FROM ${this.opts.shadowTable} WHERE `,
+      `DELETE FROM ${this.opts.shadowTable} WHERE`,
       ['namespace', 'tablename', 'primaryKey'],
-      fakeOplogEntries,
+      // force casting as only the three string entries will be used
+      fakeOplogEntries as unknown as Record<string, string>[],
       this.maxSqlParameters
     )
 

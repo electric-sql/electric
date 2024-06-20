@@ -312,6 +312,18 @@ class SqliteBuilder extends QueryBuilder {
   makePositionalParam(_i: number): string {
     return this.paramSign
   }
+
+  protected createInClause(
+    columns: string[],
+    args: (string | string[])[]
+  ): string {
+    const useTuples = typeof args[0] === 'object'
+    return `(${columns.map((c) => `"${c}"`).join(`, `)}) IN (${
+      useTuples
+        ? (args as string[][]).map((tup) => `(${tup.join(`, `)})`).join(', ')
+        : args.join(', ')
+    })`
+  }
 }
 
 export default new SqliteBuilder()

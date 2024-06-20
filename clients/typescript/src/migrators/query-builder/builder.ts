@@ -288,6 +288,15 @@ export abstract class QueryBuilder {
   ): string
 
   /**
+   * Generates IN clause for a WHERE statement, checking that the given
+   * columns have a value present in the given tupleArgs array
+   */
+  protected abstract createInClause(
+    columns: string[],
+    args: (string | string[])[]
+  ): string
+
+  /**
    * Prepare multiple batched insert statements for an array of records.
    *
    * Since SQLite only supports a limited amount of positional `?` parameters,
@@ -376,22 +385,19 @@ export abstract class QueryBuilder {
    * @param suffixSql optional SQL string to append to each insert statement
    * @returns array of statements ready to be executed by the adapter
    */
-  public prepareDeleteBatchedStatements<T extends object>(
+  public prepareDeleteBatchedStatements(
     baseSql: string,
-    columns: Array<keyof T>,
-    records: T[],
+    columns: string[],
+    records: Record<string, SqlValue>[],
     maxParameters: number,
     suffixSql = ''
   ): Statement[] {
     const stmts: Statement[] = []
     const columnCount = columns.length
     const recordCount = records.length
+    const isSingleColumnQuery = columnCount === 1
     // Amount of rows we can delete at once
     const batchMaxSize = Math.floor(maxParameters / columnCount)
-
-    // keep a temporary join array for joining strings, to avoid
-    // the overhead of generating a new array every time
-    const tempColumnComparisonJoinArr = Array.from({ length: columnCount })
 
     let processed = 0
     let prevDeleteCount = -1
@@ -403,17 +409,20 @@ export abstract class QueryBuilder {
       // of `batchMaxSize` - ideally we can externalize this cache since for a
       // given adapter this is _always_ going to be the same
       if (currentDeleteCount !== prevDeleteCount) {
-        deletePattern = Array.from(
-          { length: currentDeleteCount },
-          (_, recordIdx) => {
-            for (let i = 0; i < columnCount; i++) {
-              tempColumnComparisonJoinArr[i] = `"${
-                columns[i] as string
-              }" = ${this.makePositionalParam(recordIdx * columnCount + i + 1)}`
-            }
-            return ` (${tempColumnComparisonJoinArr.join(' AND ')})`
-          }
-        ).join(' OR')
+        deletePattern =
+          ' ' +
+          this.createInClause(
+            columns,
+            Array.from({ length: currentDeleteCount }, (_, recordIdx) =>
+              isSingleColumnQuery
+                ? this.makePositionalParam(recordIdx + 1)
+                : Array.from({ length: columnCount }, (_, colIdx) =>
+                    this.makePositionalParam(
+                      recordIdx * columnCount + colIdx + 1
+                    )
+                  )
+            )
+          )
       }
       let sql = baseSql + deletePattern
 

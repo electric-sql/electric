@@ -438,6 +438,20 @@ class PgBuilder extends QueryBuilder {
   makePositionalParam(i: number): string {
     return this.paramSign + i
   }
+
+  protected createInClause(
+    columns: string[],
+    args: string[] | string[][]
+  ): string {
+    const useTuples = typeof args[0] === 'object'
+    return `(${columns.map(quote).join(', ')}) IN (${
+      useTuples
+        ? ` VALUES ${(args as string[][])
+            .map((tup) => `(${tup.join(', ')})`)
+            .join(', ')}`
+        : args.join(', ')
+    })`
+  }
 }
 
 export default new PgBuilder()
