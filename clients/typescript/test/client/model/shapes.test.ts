@@ -278,7 +278,6 @@ test.serial('nested shape is constructed', async (t) => {
 
   client.setRelations(relations)
 
-  const { Post } = t.context as ContextType
   const input = {
     where: {
       OR: [
@@ -307,7 +306,7 @@ test.serial('nested shape is constructed', async (t) => {
   }
 
   // @ts-ignore `computeShape` is a protected method
-  const shape = Post.computeShape(input)
+  const shape = computeShape(schema, 'Post', input)
   const expectedShape = {
     tablename: 'Post',
     where: `(this."id" IN (3, 'test') OR this."test" LIKE '\\%hello%') AND ((NOT this."id" = 1) AND (NOT this."id" = 2)) AND (this."nbr" = 6 AND this."nbr" = 7) AND (this."title" = 'foo') AND (this."contents" = 'important''')`,
