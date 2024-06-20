@@ -30,10 +30,6 @@ export function sync(
     )
   }
 
-  // Remove the table name from the input
-  const input: ShapeInput = i
-  delete input.table
-
   // Compute the shape from the user input
   const shape = computeShape(dbDescription, tableName, i)
   return shapeManager.subscribe([shape], key)
