@@ -27,6 +27,20 @@ export interface Model<
   ScalarFieldEnum,
   GetPayload extends HKT
 > {
+  /**
+   * Subscribes to the given shape, returnig a {@link ShapeSubscription} object which
+   * can be used to wait for the shape to sync initial data.
+   *
+   * NOTE: If you establish a shape subscription that has already synced its initial data,
+   * awaiting `shape.synced` will always resolve immediately as shape subscriptions are persisted.
+   * i.e.: imagine that you re-sync the same shape during subsequent application loads.
+   * Awaiting `shape.synced` a second time will only ensure that the initial
+   * shape load is complete. It does not ensure that the replication stream
+   * has caught up to the central DB's more recent state.
+   *
+   * @param i - The shape to subscribe to
+   * @returns A shape subscription
+   */
   sync<T extends SyncInput<Include, Where>>(i?: T): Promise<ShapeSubscription>
 
   /**
