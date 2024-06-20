@@ -390,6 +390,7 @@ defmodule Electric.Postgres.Extension.SchemaCache do
   def handle_call({:refresh_subscription, name}, from, %{refresh_task: nil} = state) do
     task =
       Task.async(fn ->
+        Process.set_label({:refresh_subscription, name})
         result = SchemaLoader.refresh_subscription(state.backend, name)
         GenServer.reply(from, result)
         :ok
