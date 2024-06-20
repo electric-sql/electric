@@ -357,11 +357,13 @@ async function bundleDbDescription(dbDescription: DbSchema, outFolder: string) {
   const dbDescriptionStr = dedent`
     import migrations from './migrations';
     import pgMigrations from './pg-migrations';
-    import { type TableSchemas, DbSchema, Relation } from 'electric-sql/client/model';
+    import { type TableSchemas, DbSchema, Relation, ElectricClient } from 'electric-sql/client/model';
 
     const tableSchemas = ${serializedDbDescription} as unknown as TableSchemas
 
     export const schema = new DbSchema(tableSchemas, migrations, pgMigrations)
+    export type Electric = ElectricClient<typeof schema>
+    export const JsonNull = { __is_electric_json_null__: true }
   `
   await fs.writeFile(dbDescriptionFile, dbDescriptionStr)
   const relativePath = path.relative(appRoot, dbDescriptionFile)
