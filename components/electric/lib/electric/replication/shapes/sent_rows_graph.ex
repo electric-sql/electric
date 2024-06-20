@@ -1,5 +1,4 @@
 defmodule Electric.Replication.Shapes.SentRowsGraph do
-  require Logger
   @moduledoc """
   Module responsible for operations over the sent rows graph.
 
@@ -109,7 +108,6 @@ defmodule Electric.Replication.Shapes.SentRowsGraph do
         fn meta -> any_key_matches_predicate?(meta, predicate) end
       )
 
-
     # Remove all edges relating to the request IDs from the graph
     graph =
       edges
@@ -117,7 +115,10 @@ defmodule Electric.Replication.Shapes.SentRowsGraph do
 
     # Retain the maximally connected subgraph that does not contain the
     # vertices that have been popped
-    vertices_to_keep = MapSet.difference(MapSet.new(Graph.vertices(graph)), MapSet.new(vertices)) |> MapSet.to_list
+    vertices_to_keep =
+      MapSet.difference(MapSet.new(Graph.vertices(graph)), MapSet.new(vertices))
+      |> MapSet.to_list()
+
     graph = Graph.subgraph(graph, vertices_to_keep)
 
     {vertices, graph}
