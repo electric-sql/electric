@@ -26,8 +26,10 @@ onMounted(async () => {
   // Resolves when the shape subscription has been established.
   const shape = await client.db.items.sync()
 
-  // Resolves when the data has been synced into the local database.
+  // Resolves when the initial data for the shape
+  // has been synced into the local database.
   await shape.synced
+
   electric.value = client
 })
 

@@ -183,7 +183,7 @@ The current filtering implementation does not support non-deterministic function
 The [`sync`](../../api/clients/typescript.md#sync-method) function resolves to an object containing a promise:
 
 1. the first `sync()` promise resolves when the shape subscription has been confirmed by the server (the sync service)
-2. the second `synced` promise resolves when the data in the shape has fully synced onto the local device
+2. the second `synced` promise resolves when the initial data load for the shape has synced onto the local device
 
 ```tsx
 // Resolves once the shape subscription
@@ -196,6 +196,10 @@ await shape.synced
 ```
 
 If the shape subscription is invalid, the first promise will be rejected. If the data load fails for some reason, the second promise will be rejected.
+
+:::note
+If you establish a shape subscription that has already synced its initial data, awaiting `shape.synced` will always resolve immediately. I.e.: imagine that you re-run the code above on subsequent page loads. Awaiting `shape.synced` a second time will only ensure that the initial shape load is complete. It does not ensure that the replication stream has caught up.
+:::
 
 ### Data loading
 

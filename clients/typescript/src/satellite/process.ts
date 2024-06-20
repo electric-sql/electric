@@ -87,6 +87,14 @@ type ChangeAccumulator = {
 
 export type ShapeSubscription = {
   key: string
+  /**
+   * A promise that will resolve once the subscription has synced
+   * the initial data for the shape.
+   *
+   * NOTE: This does not wait for the most recent data changes to
+   * be synced into the local database, only an initial data batch
+   * required to establish the subesequent data replication.
+   */
   synced: Promise<void>
 }
 
