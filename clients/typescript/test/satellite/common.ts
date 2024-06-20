@@ -32,22 +32,22 @@ import { DatabaseAdapter } from '../../src/electric/adapter'
 export const dbDescription = new DbSchema(
   {
     child: {
-      fields: new Map([
-        ['id', PgBasicType.PG_INTEGER],
-        ['parent', PgBasicType.PG_INTEGER],
-      ]),
+      fields: {
+        id: PgBasicType.PG_INTEGER,
+        parent: PgBasicType.PG_INTEGER,
+      },
       relations: [],
     },
     parent: {
-      fields: new Map([
-        ['id', PgBasicType.PG_INTEGER],
-        ['value', PgBasicType.PG_TEXT],
-        ['other', PgBasicType.PG_INTEGER],
-      ]),
+      fields: {
+        id: PgBasicType.PG_INTEGER,
+        value: PgBasicType.PG_TEXT,
+        other: PgBasicType.PG_INTEGER,
+      },
       relations: [],
     },
     another: {
-      fields: new Map([['id', PgBasicType.PG_INTEGER]]),
+      fields: { id: PgBasicType.PG_INTEGER },
       relations: [],
     },
   } as unknown as Record<

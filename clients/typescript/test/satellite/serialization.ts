@@ -57,27 +57,27 @@ export const serializationTests = (test: TestFn<ContextType>) => {
     const dbDescription = new DbSchema(
       {
         table: {
-          fields: new Map([
-            ['name1', PgBasicType.PG_TEXT],
-            ['name2', PgBasicType.PG_TEXT],
-            ['name3', PgBasicType.PG_TEXT],
-            ['blob1', PgBasicType.PG_BYTEA],
-            ['blob2', PgBasicType.PG_BYTEA],
-            ['blob3', PgBasicType.PG_BYTEA],
-            ['int1', PgBasicType.PG_INTEGER],
-            ['int2', PgBasicType.PG_INTEGER],
-            ['bigint1', PgBasicType.PG_INT8],
-            ['bigint2', PgBasicType.PG_INT8],
-            ['float1', PgBasicType.PG_REAL],
-            ['float2', PgBasicType.PG_FLOAT4],
-            ['float3', PgBasicType.PG_FLOAT8],
-            ['bool1', PgBasicType.PG_BOOL],
-            ['bool2', PgBasicType.PG_BOOL],
-            ['bool3', PgBasicType.PG_BOOL],
+          fields: {
+            name1: PgBasicType.PG_TEXT,
+            name2: PgBasicType.PG_TEXT,
+            name3: PgBasicType.PG_TEXT,
+            blob1: PgBasicType.PG_BYTEA,
+            blob2: PgBasicType.PG_BYTEA,
+            blob3: PgBasicType.PG_BYTEA,
+            int1: PgBasicType.PG_INTEGER,
+            int2: PgBasicType.PG_INTEGER,
+            bigint1: PgBasicType.PG_INT8,
+            bigint2: PgBasicType.PG_INT8,
+            float1: PgBasicType.PG_REAL,
+            float2: PgBasicType.PG_FLOAT4,
+            float3: PgBasicType.PG_FLOAT8,
+            bool1: PgBasicType.PG_BOOL,
+            bool2: PgBasicType.PG_BOOL,
+            bool3: PgBasicType.PG_BOOL,
             // enum types are transformed to text type by our generator
-            ['enum1', PgBasicType.PG_TEXT],
-            ['enum2', PgBasicType.PG_TEXT],
-          ]),
+            enum1: PgBasicType.PG_TEXT,
+            enum2: PgBasicType.PG_TEXT,
+          },
           relations: [],
         } as unknown as TableSchema<
           any,
@@ -233,17 +233,17 @@ export const serializationTests = (test: TestFn<ContextType>) => {
     const dbDescription = new DbSchema(
       {
         table: {
-          fields: new Map([
-            ['bit0', PgBasicType.PG_TEXT],
-            ['bit1', PgBasicType.PG_TEXT],
-            ['bit2', PgBasicType.PG_TEXT],
-            ['bit3', PgBasicType.PG_TEXT],
-            ['bit4', PgBasicType.PG_TEXT],
-            ['bit5', PgBasicType.PG_TEXT],
-            ['bit6', PgBasicType.PG_TEXT],
-            ['bit7', PgBasicType.PG_TEXT],
-            ['bit8', PgBasicType.PG_TEXT],
-          ]),
+          fields: {
+            bit0: PgBasicType.PG_TEXT,
+            bit1: PgBasicType.PG_TEXT,
+            bit2: PgBasicType.PG_TEXT,
+            bit3: PgBasicType.PG_TEXT,
+            bit4: PgBasicType.PG_TEXT,
+            bit5: PgBasicType.PG_TEXT,
+            bit6: PgBasicType.PG_TEXT,
+            bit7: PgBasicType.PG_TEXT,
+            bit8: PgBasicType.PG_TEXT,
+          },
           relations: [],
         } as unknown as TableSchema<
           any,
