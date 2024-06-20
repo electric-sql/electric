@@ -42,13 +42,13 @@ import {
 import { NarrowInclude } from '../input/inputNarrowing'
 import { IShapeManager } from './shapes'
 import { ShapeSubscription } from '../../satellite'
-import { Rel, Shape } from '../../satellite/shapes/types'
 import {
   IReplicationTransformManager,
   setReplicationTransform,
 } from './transforms'
 import { InputTransformer } from '../conversions/input'
 import { Dialect } from '../../migrators/query-builder/builder'
+import { computeShape } from './sync'
 
 export type AnyTable = Table<any, any, any, any, any, any, any, any, any, HKT>
 
@@ -165,56 +165,6 @@ export class Table<
     this._tables = tables
   }
 
-  protected computeShape<T extends SyncInput<Include, Where>>(i: T): Shape {
-    // Recursively go over the included fields
-    const include = i.include ?? {}
-    const where = i.where ?? ''
-    const includedFields = Object.keys(include)
-    const includedTables = includedFields.map((field: string): Rel => {
-      // Fetch the table that is included
-      const relatedTableName = this._dbDescription.getRelatedTable(
-        this.tableName,
-        field
-      )
-      const fkk = this._dbDescription.getForeignKey(this.tableName, field)
-      const relatedTable = this._tables.get(relatedTableName)!
-
-      // And follow nested includes
-      const includedObj = (include as any)[field]
-      if (
-        typeof includedObj === 'object' &&
-        !Array.isArray(includedObj) &&
-        includedObj !== null
-      ) {
-        // There is a nested include, follow it
-        return {
-          foreignKey: [fkk],
-          select: relatedTable.computeShape(includedObj),
-        }
-      } else if (typeof includedObj === 'boolean' && includedObj) {
-        return {
-          foreignKey: [fkk],
-          select: {
-            tablename: relatedTableName,
-          },
-        }
-      } else {
-        throw new Error(
-          `Unexpected value in include tree for sync: ${JSON.stringify(
-            includedObj
-          )}`
-        )
-      }
-    })
-
-    const whereClause = makeSqlWhereClause(where)
-    return {
-      tablename: this.tableName,
-      include: includedTables,
-      ...(whereClause === '' ? {} : { where: whereClause }),
-    }
-  }
-
   protected getIncludedTables<T extends SyncInput<Include, unknown>>(
     i: T
   ): Set<AnyTable> {
@@ -254,7 +204,11 @@ export class Table<
 
   sync<T extends SyncInput<Include, Where>>(i?: T): Promise<ShapeSubscription> {
     const validatedInput = this.syncSchema.parse(i ?? {})
-    const shape = this.computeShape(validatedInput)
+    const shape = computeShape(
+      this._dbDescription,
+      this.tableName,
+      validatedInput
+    )
     return this._shapeManager.subscribe([shape], validatedInput.key)
   }
 
