@@ -1,0 +1,68 @@
+[doc Validate Electric's error reporting when it encounters configuration problems]
+[include _shared.luxinc]
+
+[macro match_error_prologue]
+    ??CONFIGURATION ERROR
+    ??The following required configuration options have invalid or missing values:
+[endmacro]
+
+[macro match_error_epilogue]
+    ??Please review the official configuration reference at
+    ??https://electric-sql.com/docs/api/service
+    ??••• Shutting down •••
+[endmacro]
+
+[newshell electric]
+    [timeout 4]
+
+    [invoke run_electric 1]
+    [invoke match_error_prologue]
+    ??* AUTH_JWT_ALG not set
+    ??* DATABASE_URL not set
+    ??* LOGICAL_PUBLISHER_HOST not set
+    ??* PG_PROXY_PASSWORD not set
+    [invoke match_error_epilogue]
+
+    [invoke run_electric_with_env 1 "AUTH_MODE=foo DATABASE_URL=http://"]
+    [invoke match_error_prologue]
+    ??* AUTH_MODE has invalid value: "foo". Must be one of ["secure", "insecure"]
+    ??* DATABASE_URL has invalid URL scheme: "http"
+    [invoke match_error_epilogue]
+
+    [invoke run_electric_with_env 1 "AUTH_JWT_ALG=unknown"]
+    [invoke match_error_prologue]
+    ??* AUTH_JWT_ALG has invalid value: "unknown". Must be one of [\
+        "HS256", "HS384", "HS512", "RS256", "RS384", "RS512", "ES256", "ES384", "ES512"]
+    [invoke match_error_epilogue]
+
+    [invoke run_electric_with_env 1 "AUTH_JWT_ALG=HS256 AUTH_JWT_KEY=foo"]
+    [invoke match_error_prologue]
+    ??* AUTH_JWT_KEY has to be at least 32 bytes long for HS256
+    [invoke match_error_epilogue]
+
+[shell electric]
+    [invoke run_electric_with_env 1 "DATABASE_URL=postgresql://user:pass@invalid/db AUTH_MODE=insecure ELECTRIC_WRITE_TO_PG_MODE=direct_writes PG_PROXY_PASSWORD=foo"]
+	  ??INITIALISATION ERROR
+
+	  ??Failed to resolve the database domain name to an IP address.
+
+	  ??Double-check the value of DATABASE_URL and make sure to set
+	  ??DATABASE_USE_IPV6=true if your database is only reachable using IPv6.
+	  ??••• Shutting down •••
+
+# [newshell electric_2]
+#     [invoke run_electric 2]
+#     ??Successfully initialized Postgres connector "postgres_1"
+
+# [shell electric]
+#     [invoke run_electric 1]
+#     -
+
+#     ??Failed to establish replication connection to Postgres:
+#     ??  #{msg}
+#     ??
+#     ??Another instance of Electric appears to be connected to this database.
+#     ??Refer to https://github.com/electric-sql/electric/issues/971 for additional info.
+
+# [cleanup]
+#    [invoke teardown]

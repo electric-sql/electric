@@ -45,6 +45,14 @@
     [invoke ok]
 [endmacro]
 
+[macro run_electric n]
+    !make run_electric_${n}
+[endmacro]
+
+[macro run_electric_with_env n env_str]
+    !${env_str} make run_electric_${n}
+[endmacro]
+
 [macro teardown]
     [progress stop development environment]
     !make stop_dev_env

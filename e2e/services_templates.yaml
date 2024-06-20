@@ -11,6 +11,7 @@ services:
       ELECTRIC_FEATURES:
     init: true
     stop_signal: SIGINT  # use SIGINT as the more speedy alternative to SIGTERM
+    restart: "no"
 
   sysbench:
     image: "${SYSBENCH_IMAGE}"
