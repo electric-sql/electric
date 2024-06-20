@@ -21,26 +21,22 @@
     !SELECT schemaname, tablename FROM pg_publication_tables \
          WHERE pubname = 'electric_publication' ORDER BY tablename;
     ??electric   | acknowledged_client_lsns
-    ??electric   | assignments
     ??public     | baz
     ??electric   | ddl_commands
+    ??electric   | ddlx_commands
     ??electric   | electrified
     ??public     | foo
-    ??electric   | grants
     ??public     | items
-    ??electric   | roles
     ??electric   | shadow__public__baz
     ??electric   | shadow__public__foo
     ??electric   | shadow__public__items
     ??electric   | transaction_marker
-    ??(13 rows)
+    ??(11 rows)
 
 # Make sure Electric consumes all migrations from the replication stream before stopping it.
 [shell electric]
     ?component=CachedWal.EtsBacked origin=postgres_1 \[debug\] Saving transaction\
-       .+ with changes \[%Electric.Replication.Changes.NewRecord\{\
-       relation: \{"electric", "ddl_commands"\}, \
-       record: %\{.*"query" => "CREATE TABLE baz
+       .+ with changes \[%Electric.Replication.Changes.Migration\{version: "003"
 
 [shell log]
     [invoke stop_electric 1]
@@ -63,19 +59,17 @@
     !SELECT schemaname, tablename FROM pg_publication_tables \
          WHERE pubname = 'electric_publication' ORDER BY tablename;
     ??electric   | acknowledged_client_lsns
-    ??electric   | assignments
     ??public     | baz
     ??electric   | ddl_commands
+    ??electric   | ddlx_commands
     ??electric   | electrified
     ??public     | foo
-    ??electric   | grants
     ??public     | items
-    ??electric   | roles
     ??electric   | shadow__public__baz
     ??electric   | shadow__public__foo
     ??electric   | shadow__public__items
     ??electric   | transaction_marker
-    ??(13 rows)
+    ??(11 rows)
 
 [cleanup]
     [invoke teardown]

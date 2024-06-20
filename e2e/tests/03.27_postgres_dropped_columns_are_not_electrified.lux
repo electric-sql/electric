@@ -41,8 +41,13 @@
 [shell proxy_1]
     -$fail_pattern|content_b|dropped
 
+    !BEGIN;
+    ?electric=\*#
     !ALTER TABLE entries ENABLE ELECTRIC;
     ??ELECTRIC ENABLE
+    !ELECTRIC GRANT ALL on entries TO AUTHENTICATED;
+    ?electric=\*#
+    !COMMIT;
     ??electric=#
 
 [shell pg_1]
@@ -60,6 +65,7 @@
 # Start two clients and make conflicting writes on both to verify correct conflict resolution
 # that's not affected by the dropped column content_b.
 [invoke setup_client 1 "electric_1" 5133]
+
 [shell satellite_1]
     ?send: #SatAuthReq\{id: ([a-f0-9-]{36})
     [global client_1_id=$1]

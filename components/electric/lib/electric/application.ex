@@ -16,6 +16,7 @@ defmodule Electric.Application do
         Electric.Postgres.OidDatabase,
         Electric.Postgres.Proxy.SASL.SCRAMLockedCache,
         Electric.Satellite.ClientManager,
+        Electric.Satellite.Permissions.Supervisor,
         Electric.Replication.Connectors
       ]
       |> maybe_add_child(

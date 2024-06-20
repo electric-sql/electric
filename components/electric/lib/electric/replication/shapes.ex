@@ -6,6 +6,7 @@ defmodule Electric.Replication.Shapes do
   alias Electric.Replication.Shapes.ShapeRequest.Layer
   alias Electric.Replication.Changes
   alias Electric.Satellite.SatShapeReq
+  alias Electric.Satellite.Permissions
   alias Electric.Postgres.Extension.SchemaCache
   alias Electric.Postgres.Extension.SchemaLoader.Version, as: SchemaVersion
   alias Electric.Replication.Changes.Transaction
@@ -17,9 +18,11 @@ defmodule Electric.Replication.Shapes do
 
   @type subquery_actions :: %{optional(Layer.t()) => [{Layer.graph_key(), Changes.change()}]}
 
-  @spec process_transaction(Transaction.t(), Graph.t(), [ShapeRequest.t()]) ::
+  @spec process_transaction(Transaction.t(), [Permissions.move_out()], Graph.t(), [
+          ShapeRequest.t()
+        ]) ::
           {Transaction.t(), Graph.t(), subquery_actions()}
-  def process_transaction(%Transaction{} = tx, graph, shapes) do
+  def process_transaction(%Transaction{} = tx, moves_out \\ [], graph, shapes) do
     state = Reduction.new(graph)
 
     referenced =
@@ -36,7 +39,9 @@ defmodule Electric.Replication.Shapes do
       end)
 
     state =
-      Enum.reduce(tx.changes, state, fn
+      tx.changes
+      |> Enum.concat(moves_out)
+      |> Enum.reduce(state, fn
         %{relation: relation} = change, state when is_migration_relation(relation) ->
           # For DDL changes, we let them through by always adding them to the resulting changes
           Reduction.add_passthrough_operation(state, change)
@@ -94,11 +99,11 @@ defmodule Electric.Replication.Shapes do
           {:ok, [ShapeRequest.t(), ...]} | {:error, [{String.t(), atom(), String.t()}]}
   def validate_requests(shape_requests, origin) do
     {:ok, schema_version} = SchemaCache.load(origin)
-    graph = SchemaVersion.fk_graph(schema_version)
+    fk_graph = SchemaVersion.fk_graph(schema_version)
 
     shape_requests
     |> Enum.map(fn req ->
-      case ShapeRequest.from_satellite(req, graph, schema_version) do
+      case ShapeRequest.from_satellite(req, fk_graph, schema_version) do
         {:ok, %ShapeRequest{} = result} -> result
         {:error, {code, message}} -> {req.request_id, code, message}
       end

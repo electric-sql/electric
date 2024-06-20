@@ -21,7 +21,7 @@ ALTER TABLE projects
 Then *users* are assigned *roles* based on their authentication state (usually by matching the `user_id` in their [authentication token](../usage/auth/index.md) with foreign keys to your users table):
 
 ```sql
-ELECTRIC ASSIGN 'projects:owner'
+ELECTRIC ASSIGN (projects, 'owner')
   TO projects.owner_id;
 ```
 
@@ -30,7 +30,7 @@ ELECTRIC ASSIGN 'projects:owner'
 ```sql
 ELECTRIC GRANT ALL
   ON projects
-  TO 'projects:owner';
+  TO (projects, 'owner');
 ```
 
 Data only replicates onto a user's device if that user has permission to read it and only replicates off from their device if they have permission to write it.

@@ -9,7 +9,11 @@ Nonterminals
    sqlite_stmt
    table_ident
    identifier
+   record
+   field_access
+   type_cast
    scoped_role
+   grant_scoped_role
    scope
    role
    column_ident
@@ -19,12 +23,12 @@ Nonterminals
    const
    func_args
    permissions
-   privileges
+   privilege
    using_clause
    scope_path
    column_list
    columns
-   check_clause
+   where_clause
    .
 
 % terminals are the outputs of the tokeniser, so e.g. the terminal
@@ -34,9 +38,10 @@ Nonterminals
 Terminals 
    '.' '(' ')' ',' ':'
    'ALTER' 'TABLE' 'DISABLE' 'ENABLE' 'ELECTRIC' 'NULL' 'UNASSIGN' 'ASSIGN' 'TO' 'IF'
-   'GRANT' 'ON' 'USING' 'SELECT' 'INSERT' 'UPDATE' 'DELETE' 'ALL' 'READ' 'WRITE' 'CHECK'
+   'GRANT' 'ON' 'USING' 'SELECT' 'INSERT' 'UPDATE' 'DELETE' 'ALL' 'READ' 'WRITE' 'WHERE'
    'REVOKE' 'FROM' 'SQLITE'
-   string  int float
+   'AUTHENTICATED' 'ANYONE' 'PRIVILEGES'
+   string  integer float
    unquoted_identifier quoted_identifier
    '=' '>' '<' '<=' '>=' '!=' '<>' '+' '/' '*' '-'
    'AND' 'IS' 'NOT' 'OR'
@@ -81,10 +86,10 @@ assign_stmt -> 'ELECTRIC' 'ASSIGN' scoped_role 'TO' column_ident 'IF' if_expr : 
 unassign_stmt -> 'ELECTRIC' 'UNASSIGN' scoped_role 'FROM' column_ident : unassign_cmd('$3' ++ '$5').
 
 % ELECTRIC GRANT
-grant_stmt -> 'ELECTRIC' 'GRANT' permissions 'ON' table_ident 'TO' scoped_role using_clause check_clause : grant_cmd('$3' ++ '$5' ++ '$7' ++ '$8' ++ '$9').
+grant_stmt -> 'ELECTRIC' 'GRANT' permissions 'ON' table_ident 'TO' grant_scoped_role using_clause where_clause : grant_cmd('$3' ++ '$5' ++ '$7' ++ '$8' ++ '$9').
 
 % ELECTRIC REVOKE
-revoke_stmt -> 'ELECTRIC' 'REVOKE' permissions 'ON' table_ident 'FROM' scoped_role : revoke_cmd('$3' ++ '$5' ++ '$7').
+revoke_stmt -> 'ELECTRIC' 'REVOKE' permissions 'ON' table_ident 'FROM' grant_scoped_role : revoke_cmd('$3' ++ '$5' ++ '$7').
 
 % ELECTRIC SQLITE
 sqlite_stmt -> 'ELECTRIC' 'SQLITE' string : sqlite_cmd(unwrap('$3')).
@@ -98,9 +103,17 @@ table_ident -> identifier '.' identifier : [{table_schema, '$1'}, {table_name, '
 identifier -> unquoted_identifier : unquoted_identifier('$1').
 identifier -> quoted_identifier : unwrap('$1').
 
-scoped_role -> role : [{scope, nil}] ++ '$1'.
-scoped_role -> scope ':' role : '$1' ++ '$3'.
+%% upcase the record name, so e.g. it's always `AUTH.user_id`, `NEW.field_name` etc
+record -> unquoted_identifier : 'Elixir.String':upcase(unwrap('$1')).
+record -> quoted_identifier : 'Elixir.String':upcase(unwrap('$1')).
+
+grant_scoped_role -> 'AUTHENTICATED' : [{role_name, 'AUTHENTICATED'}].
+grant_scoped_role -> 'ANYONE' : [{role_name, 'ANYONE'}].
+grant_scoped_role -> scoped_role : '$1'.
+
 scoped_role -> '(' scope ',' role ')' : '$2' ++ '$4'.
+scoped_role -> scope ':' role : '$1' ++ '$3'.
+scoped_role -> role : [{scope, nil}] ++ '$1'.
 
 role -> string : [{role_name, unwrap('$1')}].
 role -> identifier '.' identifier : [{role_table_name, '$1'}, {role_table_column, '$3'}].
@@ -122,7 +135,9 @@ if_expr -> '(' expr ')' : [{'if', erlang:iolist_to_binary('$2')}].
 
 expr -> '(' expr ')' : ["(", '$2', ")"].
 expr -> expr op expr : ['$1', " ", '$2', " ", '$3']. %[{expr, [{op, '$2'}, {left, '$1'}, {right, '$3'}]}].
+expr -> field_access : ['$1'].
 expr -> identifier '(' func_args ')' : ['$1', "(", '$3', ")"]. % [{func_call, '$1', '$3'}].
+expr -> type_cast : ['$1'].
 expr -> identifier : ['$1']. % [{name, '$1'}].
 expr -> const : ['$1']. % [{const, '$1'}].
 
@@ -142,23 +157,29 @@ op -> 'OR' : ["OR"].
 op -> 'NOT' : ["NOT"].
 op -> 'IS' : ["IS"].
 
+field_access -> record '.' identifier : ['$1', ".", '$3'].
+
+type_cast -> field_access ':' ':' identifier : ['$1', "::", '$4'].
+type_cast -> identifier ':' ':' identifier : ['$1', "::", '$4'].
+
 const -> string : ["'", unwrap('$1'), "'"]. 
-const -> int : erlang:integer_to_list(unwrap('$1')). 
+const -> integer : erlang:integer_to_list(unwrap('$1')).
 const -> float : erlang:float_to_list(unwrap('$1')). 
 
 func_args -> '$empty' : [].
 func_args -> expr : ['$1'].
 func_args -> expr ',' func_args : ['$1', "," , '$3'].
 
-permissions -> privileges column_list : [{privilege, '$1'}] ++ '$2'.
+permissions -> privilege column_list : [{privilege, '$1'}] ++ '$2'.
 
-privileges -> 'SELECT' : [<<"select">>].
-privileges -> 'INSERT' : [<<"insert">>].
-privileges -> 'UPDATE' : [<<"update">>].
-privileges -> 'DELETE' : [<<"delete">>].
-privileges -> 'ALL' :  [<<"select">>, <<"insert">>, <<"update">>, <<"delete">>].
-privileges -> 'READ' :  [<<"select">>].
-privileges -> 'WRITE' :  [<<"insert">>, <<"update">>, <<"delete">>].
+privilege -> 'ALL' :  ['SELECT', 'INSERT', 'UPDATE', 'DELETE'].
+privilege -> 'ALL' 'PRIVILEGES' :  ['SELECT', 'INSERT', 'UPDATE', 'DELETE'].
+privilege -> 'SELECT' : ['SELECT'].
+privilege -> 'INSERT' : ['INSERT'].
+privilege -> 'UPDATE' : ['UPDATE'].
+privilege -> 'DELETE' : ['DELETE'].
+privilege -> 'READ' :  ['SELECT'].
+privilege -> 'WRITE' :  ['INSERT', 'UPDATE', 'DELETE'].
 
 column_list -> '$empty' : [].
 column_list -> '(' columns ')' : [{column_names, '$2'}] .
@@ -174,8 +195,8 @@ scope_path -> '$empty' : [].
 scope_path -> identifier : ['$1'].
 scope_path -> identifier '/' scope_path : ['$1' | '$3'].
 
-check_clause -> '$empty' : [].
-check_clause -> 'CHECK' '(' expr ')' : [{check, erlang:iolist_to_binary('$3')}].
+where_clause -> '$empty' : [].
+where_clause -> 'WHERE' '(' expr ')' : [{check, erlang:iolist_to_binary('$3')}].
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 Erlang code.

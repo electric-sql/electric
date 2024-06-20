@@ -269,6 +269,10 @@ defmodule Operation.Impl do
       %M.ReadyForQuery{status: :idle}
     end
   end
+
+  def client_error?(send) do
+    Enum.any?(send.client, &is_struct(&1, M.ErrorResponse))
+  end
 end
 
 defimpl Operation, for: List do
@@ -313,7 +317,11 @@ defimpl Operation, for: List do
   def recv_server([op | rest], msg, state, send) do
     case Operation.recv_server(op, msg, state, send) do
       {nil, state, send} ->
-        Operation.activate(rest, state, send)
+        if client_error?(send) do
+          Operation.send_error(rest, state, send)
+        else
+          Operation.activate(rest, state, send)
+        end
 
       {op, state, send} ->
         {List.flatten([op | rest]), state, send}
@@ -431,11 +439,13 @@ defmodule Operation.Between do
     use Operation.Impl
 
     def activate(op, state, send) do
-      if ready?(send) do
-        %{client: client} = Send.flush(send)
-        execute(op, client, state, Send.new())
-      else
-        {op, state, send}
+      cond do
+        ready?(send) ->
+          %{client: client} = Send.flush(send)
+          execute(op, client, state, Send.new())
+
+        true ->
+          {op, state, send}
       end
     end
 
@@ -553,8 +563,7 @@ defmodule Operation.AssignMigrationVersion do
     def activate(op, state, send) do
       if State.electrified?(state) do
         {version, priority, state} = migration_version(op, state)
-        query_generator = Map.fetch!(state, :query_generator)
-        sql = query_generator.capture_version_query(version, priority)
+        sql = state.query_generator.capture_version_query(version, priority)
         {op, State.tx_version(state, version), Send.server(send, [query(sql)])}
       else
         {nil, state, send}
@@ -584,8 +593,7 @@ defmodule Operation.AssignMigrationVersion do
     end
 
     defp generate_version(state) do
-      query_generator = Map.fetch!(state, :query_generator)
-      query_generator.migration_version()
+      state.query_generator.migration_version()
     end
   end
 end
@@ -694,21 +702,99 @@ defmodule Operation.Simple do
 end
 
 defmodule Operation.Electric do
-  defstruct [:analysis, :command, :queries, :mode, :initial_query]
+  defstruct [
+    :analysis,
+    :command,
+    :queries,
+    :mode,
+    :initial_query,
+    introspect: [:electrified, :ddl],
+    schema: nil,
+    tables: MapSet.new(),
+    ddl: []
+  ]
+
+  alias __MODULE__, as: O
 
   defimpl Operation do
     use Operation.Impl
 
     alias Electric.DDLX
+    alias Electric.Postgres.Schema
 
-    def activate(op, state, send) do
-      [query | queries] = DDLX.Command.pg_sql(op.command)
-      op = %{op | queries: queries}
+    require Logger
 
-      {op, State.electrify(state, op.analysis.table), Send.server(send, query(query))}
+    import Electric.Utils, only: [inspect_relation: 1]
+
+    def activate(%O{} = op, state, send) do
+      op = %{op | schema: Schema.new()}
+
+      state = op |> tables() |> Enum.reduce(state, &State.electrify(&2, &1))
+
+      send_query(op, state, send)
     end
 
-    def recv_server(%{queries: []} = op, %M.ReadyForQuery{} = msg, state, send) do
+    # ignore row description messages, we know the format of the responses
+    def recv_server(%O{introspect: [_ | _]} = op, %M.RowDescription{fields: [_]}, state, send) do
+      {op, state, send}
+    end
+
+    def recv_server(
+          %O{introspect: [:electrified | _]} = op,
+          %M.DataRow{fields: [schema, name]},
+          state,
+          send
+        ) do
+      {Map.update!(op, :tables, &MapSet.put(&1, {schema, name})), state, send}
+    end
+
+    # this ready for query is the end of the list of electrified tables query
+    def recv_server(%O{introspect: [:electrified | rest]} = op, %M.ReadyForQuery{}, state, send) do
+      send_query(%{op | introspect: rest}, state, send)
+    end
+
+    # this ready for query is the end of the ddlx introspection query
+    def recv_server(%O{introspect: [:ddl | _]} = op, %M.DataRow{fields: [ddl]}, state, send) do
+      schema = Schema.update(op.schema, ddl, oid_loader: &oid_loader/3)
+      {Map.update!(%{op | schema: schema}, :ddl, &[ddl | &1]), state, send}
+    end
+
+    def recv_server(%O{introspect: [:ddl | rest]} = op, %M.ReadyForQuery{}, state, send) do
+      case DDLX.Command.validate_schema(op.command, op.schema, op.tables) do
+        {:ok, _warnings} ->
+          Logger.debug(fn ->
+            [
+              tables(op) |> Enum.map(&inspect_relation/1) |> Enum.join(", "),
+              " is compatible with ",
+              inspect(op.command.stmt)
+            ]
+          end)
+
+          send_query(%{op | introspect: rest}, state, send)
+
+        {:error, reason} ->
+          Logger.debug(fn ->
+            [
+              tables(op) |> Enum.map(&inspect_relation/1) |> Enum.join(", "),
+              " is incompatible with ",
+              inspect(op.command.stmt),
+              ":\n",
+              Map.get(reason, :message, "")
+            ]
+          end)
+
+          error = struct(%M.ErrorResponse{severity: "ERROR", code: "EX000"}, reason)
+          msgs = [error, %M.ReadyForQuery{status: :failed}]
+          {nil, state, Send.client(send, msgs)}
+      end
+    end
+
+    def recv_server(
+          %O{introspect: [], queries: []} = op,
+          %M.ReadyForQuery{} = msg,
+          state,
+          send
+        ) do
       tag = DDLX.Command.tag(op.command)
 
       reply =
@@ -723,12 +809,54 @@ defmodule Operation.Electric do
       {nil, state, Send.client(send, reply)}
     end
 
-    def recv_server(%{queries: [query | queries]} = op, %M.ReadyForQuery{}, state, send) do
+    def recv_server(
+          %O{introspect: false, queries: [query | queries]} = op,
+          %M.ReadyForQuery{},
+          state,
+          send
+        ) do
       {%{op | queries: queries}, state, Send.server(send, query(query))}
     end
 
-    def recv_server(op, _msg, state, send) do
+    def recv_server(%O{} = op, _msg, state, send) do
       {op, state, send}
+    end
+
+    defp send_query(%O{introspect: [:electrified | _]} = op, state, send) do
+      query = state.query_generator.electrified_tables_query()
+
+      Logger.debug(fn -> "Getting list of electrified tables" end)
+
+      {op, state, Send.server(send, query(query))}
+    end
+
+    defp send_query(%O{introspect: [:ddl | _rest]} = op, state, send) do
+      tables = tables(op)
+      introspect_query = state.query_generator.introspect_tables_query(tables)
+
+      Logger.debug(fn ->
+        ["Introspecting table schemas: " | Enum.map(tables, &inspect_relation/1)]
+      end)
+
+      {op, state, Send.server(send, query(introspect_query))}
+    end
+
+    defp send_query(%O{introspect: []} = op, state, send) do
+      ddl = Enum.reverse(op.ddl)
+
+      [query | queries] =
+        DDLX.Command.proxy_sql(op.command, ddl, &state.query_generator.quote_query/1)
+
+      {%{op | queries: queries}, state, Send.server(send, query(query))}
+    end
+
+    # we don't need real oids
+    defp oid_loader(type, schema, name) do
+      {:ok, Enum.join(["#{type}", schema, name], ".") |> :erlang.phash2(50_000)}
+    end
+
+    defp tables(op) do
+      DDLX.Command.table_names(op.command)
     end
   end
 end
@@ -742,8 +870,7 @@ defmodule Operation.Capture do
     def activate(op, state, send) do
       case op.analysis do
         %{table: {schema, table}} ->
-          query_generator = Map.fetch!(state, :query_generator)
-          sql = query_generator.capture_ddl_query(op.analysis.sql)
+          sql = state.query_generator.capture_ddl_query(op.analysis.sql)
 
           notice =
             %M.NoticeResponse{
@@ -774,8 +901,7 @@ defmodule Operation.AlterShadow do
     use Operation.Impl
 
     def activate(op, state, send) do
-      query_generator = Map.fetch!(state, :query_generator)
-      sql = query_generator.alter_shadow_table_query(op.modification)
+      sql = state.query_generator.alter_shadow_table_query(op.modification)
       {op, State.electrify(state), Send.server(send, query(sql))}
     end
   end
@@ -820,6 +946,14 @@ defmodule Operation.Disallowed do
             analysis.error
           )
       end
+    end
+
+    defp error_response(%{action: {:electric, _command}} = analysis) do
+      %M.ErrorResponse{
+        code: "EX100",
+        severity: "ERROR",
+        message: "Invalid statement: #{analysis.sql}"
+      }
     end
   end
 end
@@ -889,7 +1023,11 @@ defmodule Operation.FakeExecute do
     use Operation.Impl
 
     def activate(op, state, send) do
-      {nil, state, Send.client(send, Enum.map(op.msgs, &response(&1, op.tag, state)))}
+      if client_error?(send) do
+        {nil, state, send}
+      else
+        {nil, state, Send.client(send, Enum.map(op.msgs, &response(&1, op.tag, state)))}
+      end
     end
   end
 end

@@ -4,21 +4,23 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
   """
   use GenStage
 
-  import Electric.Postgres.Extension, only: [is_ddl_relation: 1, is_extension_relation: 1]
+  import Electric.Postgres.Extension,
+    only: [
+      is_ddl_relation: 1,
+      is_extension_relation: 1,
+      is_perms_relation: 1
+    ]
 
   alias Electric.Postgres.{
-    Extension,
     Extension.SchemaLoader,
     Extension.SchemaCache,
-    OidDatabase,
-    Schema
+    OidDatabase
   }
 
-  alias Electric.Replication.Changes.{NewRecord, Transaction}
+  alias Electric.Replication.Changes.Migration
   alias Electric.Replication.Connectors
   alias Electric.Replication.Postgres.Client
-
-  alias Electric.Telemetry.Metrics
+  alias Electric.Satellite.Permissions
 
   require Logger
 
@@ -58,6 +60,8 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
       |> SchemaLoader.get(:backend, SchemaCache)
       |> SchemaLoader.connect(conn_config)
 
+    {:ok, permissions_consumer} = Permissions.State.new(loader)
+
     refresh_sub? = Keyword.get(opts, :refresh_subscription, true)
 
     Logger.info("Starting #{__MODULE__} using #{elem(loader, 0)} backend")
@@ -68,6 +72,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
       subscription: subscription,
       producer: producer,
       loader: loader,
+      permissions: permissions_consumer,
       opts: opts,
       refresh_subscription: refresh_sub?,
       refresh_enum_types: Keyword.get(opts, :refresh_enum_types, true),
@@ -92,21 +97,33 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
 
   @impl GenStage
   def handle_events(transactions, _from, state) do
-    {:noreply, filter_transactions(transactions), process_migrations(transactions, state)}
+    {txns, state} = process_transactions(transactions, state)
+    {:noreply, txns, state}
   end
 
-  defp filter_transactions(transactions) do
-    Enum.map(transactions, &filter_transaction/1)
+  defp process_transactions(transactions, state) do
+    {_transactions, _state} =
+      Enum.map_reduce(transactions, state, &process_transaction/2)
   end
 
-  # FIXME: we need this to prevent extension metadata tables from being
-  # replicated between pg instances. Should be removed once we're only
-  # replicating a subset of tables, rather than all
-  defp filter_transaction(%Transaction{changes: changes} = tx) do
+  defp process_transaction(tx, state) do
+    {changes, state} =
+      {tx.changes, state}
+      |> process_migrations()
+      |> process_permissions()
+      |> filter_changes()
+
+    {%{tx | changes: changes}, state}
+  end
+
+  defp filter_changes({changes, state}) do
     filtered =
       Enum.filter(changes, fn
         %{relation: relation} when is_ddl_relation(relation) ->
           true
+
+        %{relation: relation} when is_perms_relation(relation) ->
+          false
 
         %{relation: relation} = change when is_extension_relation(relation) ->
           Logger.debug("---- Filtering #{inspect(change)}")
@@ -116,59 +133,47 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
           true
       end)
 
-    %{tx | changes: filtered}
+    {filtered, state}
   end
 
-  defp filter_transaction(change) do
-    change
-  end
+  defp process_migrations({changes, state}) do
+    {changes, loader} =
+      Electric.Postgres.Migration.State.update(changes, state.loader,
+        schema_change_handler: &update_oids_after_migration(&1, &2, state),
+        skip_applied: true
+      )
 
-  defp process_migrations(transactions, %{loader: loader} = state) do
-    {:ok, %{version: schema_version}} = SchemaLoader.load(loader)
+    state =
+      Enum.reduce(changes, %{state | loader: loader}, fn
+        %Migration{} = migration, state ->
+          # By pre-emptively updating the permissions with the schema changes,
+          # we are effectively re-ordering the changes within a tx. I don't think
+          # this is a problem but it's something to be aware of.
+          state
+          |> refresh_permissions_consumer(migration.schema)
+          |> refresh_subscription()
 
-    {state, num_applied_migrations} =
-      transactions
-      |> transactions_to_migrations(state)
-      |> skip_applied_migrations(schema_version)
-      |> Enum.reduce({state, 0}, fn migration, {state, num_applied} ->
-        {perform_migration(migration, state), num_applied + 1}
+        _change, state ->
+          state
       end)
 
-    if num_applied_migrations > 0 do
-      refresh_subscription(state)
-    else
-      state
+    {changes, state}
+  end
+
+  defp process_permissions({changes, state}) do
+    %{permissions: consumer_state, loader: loader} = state
+
+    {:ok, changes, consumer_state, loader} =
+      Permissions.State.update(changes, consumer_state, loader)
+
+    {changes, %{state | permissions: consumer_state, loader: loader}}
+  end
+
+  defp update_oids_after_migration(old_schema_version, new_schema_version, state) do
+    if state.refresh_enum_types &&
+         old_schema_version.schema.enums != new_schema_version.schema.enums do
+      Client.with_conn(state.conn_opts, fn conn -> OidDatabase.update_oids(conn, [:ENUM]) end)
     end
-  end
-
-  defp transactions_to_migrations(transactions, state) do
-    transactions
-    |> Enum.flat_map(&transaction_changes_to_migrations(&1, state))
-    |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
-  end
-
-  defp transaction_changes_to_migrations(%Transaction{changes: changes}, state) do
-    for %NewRecord{record: record, relation: relation} <- changes, is_ddl_relation(relation) do
-      {:ok, version} = SchemaLoader.tx_version(state.loader, record)
-      {:ok, sql} = Extension.extract_ddl_sql(record)
-      {version, sql}
-    end
-  end
-
-  defp skip_applied_migrations(migrations, schema_version) do
-    Enum.drop_while(migrations, fn {version, _stmts} -> version <= schema_version end)
-  end
-
-  defp perform_migration({version, stmts}, state) do
-    {:ok, loader, schema_version} = apply_migration(version, stmts, state)
-
-    Metrics.non_span_event(
-      [:postgres, :migration],
-      %{electrified_tables: Schema.num_electrified_tables(schema_version.schema)},
-      %{migration_version: version}
-    )
-
-    %{state | loader: loader}
   end
 
   # update the subscription to add any new
@@ -181,6 +186,11 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
     end
 
     state
+  end
+
+  defp refresh_permissions_consumer(state, schema_version) do
+    consumer_state = Permissions.State.update_schema(state.permissions, schema_version)
+    %{state | permissions: consumer_state}
   end
 
   @impl GenStage
@@ -210,38 +220,5 @@ defmodule Electric.Replication.Postgres.MigrationConsumer do
         min_demand: 10,
         max_demand: 50
       )
-  end
-
-  @doc """
-  Apply a migration, composed of a version and a list of DDL statements, to a schema
-  using the given implementation of SchemaLoader.
-  """
-  @spec apply_migration(String.t(), [String.t()], map) ::
-          {:ok, SchemaLoader.t(), SchemaLoader.Version.t()} | {:error, term()}
-  def apply_migration(version, stmts, %{loader: loader} = state) when is_list(stmts) do
-    {:ok, %{schema: schema} = schema_version} = SchemaLoader.load(loader)
-
-    Logger.info("Migrating version #{schema_version.version || "<nil>"} -> #{version}")
-
-    oid_loader = &SchemaLoader.relation_oid(loader, &1, &2, &3)
-
-    old_enums = schema.enums
-
-    schema =
-      Enum.reduce(stmts, schema_version.schema, fn stmt, schema ->
-        Logger.info("Applying migration #{version}: #{inspect(stmt)}")
-        Schema.update(schema, stmt, oid_loader: oid_loader)
-      end)
-      |> Schema.add_shadow_tables(oid_loader: oid_loader)
-
-    Logger.info("Saving schema version #{version} /#{inspect(loader)}/")
-
-    {:ok, loader, schema_version} = SchemaLoader.save(loader, version, schema, stmts)
-
-    if state.refresh_enum_types and schema.enums != old_enums do
-      Client.with_conn(state.conn_opts, fn conn -> OidDatabase.update_oids(conn, [:ENUM]) end)
-    end
-
-    {:ok, loader, schema_version}
   end
 end

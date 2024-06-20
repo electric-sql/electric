@@ -13,6 +13,7 @@
             jsb JSONB
         );
         ALTER TABLE public.jsons ENABLE ELECTRIC;
+        ELECTRIC GRANT ALL ON public.jsons TO AUTHENTICATED;
         """]
     [invoke migrate_pg 20230908 $sql]
 

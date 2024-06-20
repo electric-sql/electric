@@ -9,8 +9,8 @@ defmodule Electric.Replication.InitialSync do
   alias Electric.Utils
   alias Electric.Telemetry.Metrics
   alias Electric.Replication.Shapes
-  alias Electric.Postgres.{CachedWal, Extension}
-  alias Electric.Replication.Changes.{NewRecord, Transaction}
+  alias Electric.Postgres.{CachedWal, Extension, Migration}
+  alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.Connectors
   alias Electric.Replication.Postgres.Client
 
@@ -29,32 +29,9 @@ defmodule Electric.Replication.InitialSync do
           Transaction.t()
         ]
   def migrations_since(version, origin, lsn \\ 0) do
-    publication = Extension.publication_name()
     {:ok, migrations} = Extension.SchemaCache.migration_history(origin, version)
 
-    for migration <- migrations do
-      records =
-        for sql <- migration.stmts do
-          %NewRecord{
-            relation: Extension.ddl_relation(),
-            record: %{
-              "version" => migration.version,
-              "query" => sql,
-              "txid" => migration.txid,
-              "txts" => migration.txts
-            }
-          }
-        end
-
-      %Transaction{
-        xid: migration.txid,
-        changes: records,
-        commit_timestamp: migration.timestamp,
-        origin: origin,
-        publication: publication,
-        lsn: lsn
-      }
-    end
+    Migration.to_transactions(migrations, origin, lsn)
   end
 
   @doc """
@@ -72,7 +49,7 @@ defmodule Electric.Replication.InitialSync do
   1. `{:data_insertion_point, ^ref, xmin}` is sent immediately to know where to insert
      results when they are ready. That message **has** to be sent ASAP since if we send the results
      at the end, we might have already skipped the point where the data is relevant.
-  2. `{:subscription_data, subscription_id, data}` is when we've collected all the data.
+  2. `{:subscription_data, subscription_id, xmin, data}` is when we've collected all the data.
 
   If an error occurs while collecting the data, this function is expected to send the following message:
 
@@ -85,21 +62,21 @@ defmodule Electric.Replication.InitialSync do
   def query_subscription_data({subscription_id, requests, context},
         reply_to: {ref, parent},
         connection: opts,
-        telemetry_span: span
+        telemetry_span: span,
+        relation_loader: relation_loader
       ) do
     marker = "subscription:" <> subscription_id
     origin = Connectors.origin(opts)
-    {:ok, schema_version} = Extension.SchemaCache.load(origin)
 
-    run_in_readonly_txn_with_checkpoint(opts, {ref, parent}, marker, fn conn, _ ->
-      Enum.reduce_while(requests, {Graph.new(), %{}, []}, fn request,
-                                                             {acc_graph, results, req_ids} ->
+    run_in_readonly_txn_with_checkpoint(opts, {ref, parent}, marker, fn conn, xmin ->
+      requests
+      |> Enum.reduce_while({Graph.new(), %{}, []}, fn request, {acc_graph, results, req_ids} ->
         start = System.monotonic_time()
 
         case Shapes.ShapeRequest.query_initial_data(
                request,
                conn,
-               schema_version,
+               relation_loader,
                origin,
                context
              ) do
@@ -112,9 +89,11 @@ defmodule Electric.Replication.InitialSync do
             )
 
             {:cont,
-             {Utils.merge_graph_edges(acc_graph, graph),
-              Map.merge(results, data, fn _, {change, v1}, {_, v2} -> {change, v1 ++ v2} end),
-              [request.id | req_ids]}}
+             {
+               Utils.merge_graph_edges(acc_graph, graph),
+               Map.merge(results, data, fn _, {change, v1}, {_, v2} -> {change, v1 ++ v2} end),
+               [request.id | req_ids]
+             }}
 
           {:error, reason} ->
             {:halt, {:error, reason}}
@@ -125,18 +104,18 @@ defmodule Electric.Replication.InitialSync do
           send(parent, {:subscription_init_failed, subscription_id, reason})
 
         results ->
-          send(parent, {:subscription_data, subscription_id, results})
+          send(parent, {:subscription_data, subscription_id, xmin, results})
       end
     end)
   end
 
   def query_after_move_in(move_in_ref, {subquery_map, affected_txs}, context,
         reply_to: {ref, parent},
-        connection: opts
+        connection: opts,
+        relation_loader: relation_loader
       ) do
     marker = "tx_subquery:#{System.monotonic_time()}"
     origin = Connectors.origin(opts)
-    {:ok, schema_version} = Extension.SchemaCache.load(origin)
 
     run_in_readonly_txn_with_checkpoint(opts, {ref, parent}, marker, fn conn, xmin ->
       Enum.reduce_while(subquery_map, {MapSet.new(), Graph.new(), %{}}, fn {layer, changes},
@@ -146,7 +125,7 @@ defmodule Electric.Replication.InitialSync do
                conn,
                layer,
                changes,
-               schema_version,
+               relation_loader,
                origin,
                context
              ) do

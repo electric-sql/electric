@@ -24,6 +24,7 @@
       content VARCHAR NOT NULL
     );
     ALTER TABLE public.items ENABLE ELECTRIC;
+    ELECTRIC GRANT ALL ON public.items TO AUTHENTICATED;
 
     INSERT INTO items(id, content) VALUES ('00000000-0000-0000-0000-000000000011', 'first item');
     INSERT INTO items(id, content) VALUES ('00000000-0000-0000-0000-000000000012', 'second item');

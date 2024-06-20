@@ -6,62 +6,28 @@ DECLARE
     _schema name;
     _table text;
     _oid regclass;
-    _ddl_statement text;
     _ddl_statements text[];
 BEGIN
-    SELECT
-        schema_name, table_name, table_oid
-    INTO
-        _schema, _table, _oid
-    FROM <%= schema() %>.__resolve_table_from_names(name1, name2);
+    SELECT schema_name, table_name, table_oid
+        INTO _schema, _table, _oid
+        FROM <%= schema() %>.__resolve_table_from_names(name1, name2);
 
-    IF NOT EXISTS (SELECT pc.oid FROM pg_class pc WHERE pc.oid = _oid AND pc.relkind = 'r') THEN
-        RAISE EXCEPTION '%I.%I is not an ordinary table', _schema, _table;
-    END IF;
+    RAISE WARNING
+        E'Electrification via procedure call is deprecated.'
+        '\n\nPlease use the `ALTER %I.%I ENABLE ELECTRIC` syntax via the migrations proxy.'
+        '\n\nSee https://electric-sql.com/docs/usage/data-modelling/migrations#migrations-proxy', _schema, _table;
 
-    IF NOT EXISTS (
-        SELECT oid FROM <%= electrified_tracking_table() %> WHERE schema_name = _schema AND table_name = _table LIMIT 1
-        ) THEN
-        RAISE NOTICE 'Electrify table %I.%I', _schema, _table;
+    -- duplicate validations now run in elixir using a resolved schema
+    CALL <%= schema() %>.__validate_table_schema(_oid);
+    CALL <%= schema() %>.__validate_table_column_types(_oid);
+    CALL <%= schema() %>.__validate_table_primary_keys(_oid);
 
-        CALL <%= schema() %>.__validate_table_schema(_oid);
-        CALL <%= schema() %>.__validate_table_column_types(_oid);
-        CALL <%= schema() %>.__validate_table_column_defaults(_oid);
-        CALL <%= schema() %>.__validate_table_constraints(_oid);
+    SELECT <%= schema() %>.generate_electrified_sql(_oid) INTO _ddl_statements;
 
-        -- insert the required ddl into the migrations table
-        SELECT <%= schema() %>.generate_electrified_sql(_oid) INTO _ddl_statements;
-
-        RAISE DEBUG '%', _ddl_statements;
-
-        FOREACH _ddl_statement IN ARRAY _ddl_statements
-        LOOP
-            CALL <%= schema() %>.capture_ddl(_ddl_statement);
-        END LOOP;
-
-        EXECUTE format('ALTER TABLE %I.%I REPLICA IDENTITY FULL;', _schema, _table);
-
-        INSERT INTO <%= electrified_tracking_table() %>
-            (schema_name, table_name, oid)
-          VALUES
-            (_schema, _table, _oid);
-
-        EXECUTE format('<%= add_table_to_publication_sql("%I.%I") %>;', _schema, _table);
-
-        -- We want to disable any possible hooks from `CREATE TABLE` statements
-        PERFORM set_config('<%= schema() %>.is_in_event_trigger', 'true', true);
-        PERFORM <%= schema() %>.ddlx_make_or_update_shadow_tables('CREATE TABLE', _schema, _oid);
-        PERFORM set_config('<%= schema() %>.is_in_event_trigger', '', true);
-
-        EXECUTE format(
-            '<%= add_table_to_publication_sql("%I.%I")  %>;',
-            '<%= schema() %>',
-            ('shadow__' || _schema || '__' || _table)::name
-        );
-    ELSE
-        -- rather than raising an error and aborting, let's make this
-        -- procedure more idempotent and just ignore double electrification
-        RAISE NOTICE 'table %.% is already electrified', _schema, _table;
-    END IF;
+    CALL <%=  schema()  %>.electrify_with_ddl(
+        _schema,
+        _table,
+        VARIADIC _ddl_statements
+    );
 END;
 $function$ LANGUAGE PLPGSQL;

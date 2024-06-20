@@ -13,6 +13,7 @@
             t TIME
         );
         ALTER TABLE public.datetimes ENABLE ELECTRIC;
+        ELECTRIC GRANT ALL ON public.datetimes TO AUTHENTICATED;
         """]
     [invoke migrate_pg 20230913 $sql]
 

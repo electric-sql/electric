@@ -2,6 +2,7 @@ defmodule Electric.Replication.Shapes.ChangeProcessingTest do
   use ExUnit.Case, async: true
   use Pathex, default_mod: :json
 
+  alias Electric.Satellite.Permissions
   alias Electric.Replication.Changes.NewRecord
   alias Electric.Replication.Changes.DeletedRecord
   alias Electric.Replication.Changes.UpdatedRecord
@@ -1398,6 +1399,184 @@ defmodule Electric.Replication.Shapes.ChangeProcessingTest do
       # Never seen, cannot be GONE
       refute MapSet.member?(gone, id2)
       assert %{^e1 => {:deleted_record, _}} = operations
+    end
+
+    test "update move out only moves out what's intended" do
+      comment_author_l = %Layer{
+        source_table: {"public", "comments"},
+        source_pk: ["id"],
+        target_table: {"public", "users"},
+        target_pk: ["id"],
+        direction: :many_to_one,
+        fk: ["author_id"],
+        key: "comment_author_l",
+        parent_key: "issue_comments_l"
+      }
+
+      issue_comments_l = %Layer{
+        source_table: {"public", "issues"},
+        source_pk: ["id"],
+        target_table: {"public", "comments"},
+        target_pk: ["id"],
+        direction: :one_to_many,
+        fk: ["issue_id"],
+        key: "issue_comments_l",
+        parent_key: "issues_l",
+        next_layers: [comment_author_l]
+      }
+
+      project_account_l = %Layer{
+        source_table: {"public", "projects"},
+        source_pk: ["id"],
+        target_table: {"public", "accounts"},
+        target_pk: ["id"],
+        direction: :many_to_one,
+        fk: ["account_id"],
+        key: "project_account_l",
+        parent_key: "issue_project_l"
+      }
+
+      issue_project_l = %Layer{
+        source_table: {"public", "issues"},
+        source_pk: ["id"],
+        target_table: {"public", "projects"},
+        target_pk: ["id"],
+        direction: :many_to_one,
+        fk: ["project_id"],
+        key: "issue_project_l",
+        parent_key: "issues_l",
+        next_layers: [project_account_l]
+      }
+
+      issue_l = %Layer{
+        source_table: nil,
+        source_pk: nil,
+        target_table: {"public", "issues"},
+        target_pk: ["id"],
+        direction: :first_layer,
+        key: "issues_l",
+        where_target: @base_where,
+        next_layers: [issue_comments_l, issue_project_l]
+      }
+
+      rel_iss = issue_l.target_table
+      rel_pr = issue_project_l.target_table
+      rel_acc = project_account_l.target_table
+      rel_com = issue_comments_l.target_table
+      rel_u = comment_author_l.target_table
+
+      expected_graph =
+        Graph.new()
+        |> ChangeProcessing.add_to_graph(issue_l, {rel_iss, ["i2"]})
+        |> ChangeProcessing.add_to_graph(issue_project_l, {rel_pr, ["p1"]}, {rel_iss, ["i2"]})
+        |> ChangeProcessing.add_to_graph(project_account_l, {rel_acc, ["a1"]}, {rel_pr, ["p1"]})
+
+      state =
+        reduction(graph: expected_graph)
+        |> ChangeProcessing.add_to_graph(issue_l, {rel_iss, ["i1"]})
+        |> ChangeProcessing.add_to_graph(issue_project_l, {rel_pr, ["p1"]}, {rel_iss, ["i1"]})
+        |> ChangeProcessing.add_to_graph(issue_comments_l, {rel_com, ["c1"]}, {rel_iss, ["i1"]})
+        |> ChangeProcessing.add_to_graph(issue_comments_l, {rel_com, ["c2"]}, {rel_iss, ["i1"]})
+        |> ChangeProcessing.add_to_graph(comment_author_l, {rel_u, ["u1"]}, {rel_com, ["c1"]})
+
+      change = %UpdatedRecord{
+        relation: rel_iss,
+        record: %{"id" => "i1", "in_shape" => "f"},
+        old_record: %{"id" => "i1", "in_shape" => "t"},
+        changed_columns: MapSet.new(["in_shape"])
+      }
+
+      reduction(graph: new_graph) = ChangeProcessing.process(change, issue_l, state)
+
+      assert expected_graph == new_graph
+    end
+  end
+
+  describe "Permissions.MoveOut" do
+    test "permissions move out acts the same as an update move-out" do
+      comment_author_l = %Layer{
+        source_table: {"public", "comments"},
+        source_pk: ["id"],
+        target_table: {"public", "users"},
+        target_pk: ["id"],
+        direction: :many_to_one,
+        fk: ["author_id"],
+        key: "comment_author_l",
+        parent_key: "issue_comments_l"
+      }
+
+      issue_comments_l = %Layer{
+        source_table: {"public", "issues"},
+        source_pk: ["id"],
+        target_table: {"public", "comments"},
+        target_pk: ["id"],
+        direction: :one_to_many,
+        fk: ["issue_id"],
+        key: "issue_comments_l",
+        parent_key: "issues_l",
+        next_layers: [comment_author_l]
+      }
+
+      project_account_l = %Layer{
+        source_table: {"public", "projects"},
+        source_pk: ["id"],
+        target_table: {"public", "accounts"},
+        target_pk: ["id"],
+        direction: :many_to_one,
+        fk: ["account_id"],
+        key: "project_account_l",
+        parent_key: "issue_project_l"
+      }
+
+      issue_project_l = %Layer{
+        source_table: {"public", "issues"},
+        source_pk: ["id"],
+        target_table: {"public", "projects"},
+        target_pk: ["id"],
+        direction: :many_to_one,
+        fk: ["project_id"],
+        key: "issue_project_l",
+        parent_key: "issues_l",
+        next_layers: [project_account_l]
+      }
+
+      issue_l = %Layer{
+        source_table: nil,
+        source_pk: nil,
+        target_table: {"public", "issues"},
+        target_pk: ["id"],
+        direction: :first_layer,
+        fk: nil,
+        key: "issues_l",
+        parent_key: nil,
+        next_layers: [issue_comments_l, issue_project_l]
+      }
+
+      rel_iss = issue_l.target_table
+      rel_pr = issue_project_l.target_table
+      rel_acc = project_account_l.target_table
+      rel_com = issue_comments_l.target_table
+      rel_u = comment_author_l.target_table
+
+      expected_graph =
+        Graph.new()
+        |> ChangeProcessing.add_to_graph(issue_l, {rel_iss, "i2"})
+        |> ChangeProcessing.add_to_graph(issue_project_l, {rel_pr, "p1"}, {rel_iss, "i2"})
+        |> ChangeProcessing.add_to_graph(project_account_l, {rel_acc, "a1"}, {rel_pr, "p1"})
+
+      state =
+        reduction(graph: expected_graph)
+        |> ChangeProcessing.add_to_graph(issue_l, {rel_iss, "i1"})
+        |> ChangeProcessing.add_to_graph(issue_project_l, {rel_pr, "p1"}, {rel_iss, "i1"})
+        |> ChangeProcessing.add_to_graph(issue_comments_l, {rel_com, "c1"}, {rel_iss, "i1"})
+        |> ChangeProcessing.add_to_graph(issue_comments_l, {rel_com, "c2"}, {rel_iss, "i1"})
+        |> ChangeProcessing.add_to_graph(comment_author_l, {rel_u, "u1"}, {rel_com, "c1"})
+
+      reduction(graph: new_graph) =
+        %Permissions.MoveOut{relation: rel_iss, id: "i1"}
+        |> ChangeProcessing.process(issue_l, state)
+
+      assert expected_graph == new_graph
     end
   end
 

@@ -11,6 +11,7 @@
             content TEXT NOT NULL
         );
         ALTER TABLE public.items ENABLE ELECTRIC;
+        ELECTRIC GRANT ALL ON public.items TO AUTHENTICATED;
         """]
     [invoke migrate_pg 001 $sql]
 

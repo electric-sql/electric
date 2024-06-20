@@ -12,6 +12,9 @@ services:
       - "54321:5432"
     volumes:
       - ./postgres.conf:/etc/postgresql.conf:ro
+    tmpfs:
+      - /var/lib/postgresql/data
+      - /tmp
     entrypoint:
       - docker-entrypoint.sh
       - -c

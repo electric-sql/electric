@@ -11,6 +11,7 @@
             id UUID PRIMARY KEY
         );
         ALTER TABLE public.uuids ENABLE ELECTRIC;
+        ELECTRIC GRANT ALL ON public.uuids TO AUTHENTICATED;
         """]
     [invoke migrate_pg 20230908 $sql]
 

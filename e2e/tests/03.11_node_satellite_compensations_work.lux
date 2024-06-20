@@ -4,13 +4,13 @@
 
 [invoke setup]
 
-[invoke setup_client 1 "electric_1" 5133]
-
 # PREPARATION: Set up dependent tables and add a row that will be referenced
 
 [shell proxy_1]
     [invoke migrate_items_table 001]
     [invoke migrate_other_items_table 002]
+
+[invoke setup_client 1 "electric_1" 5133]
 
 [shell satellite_1]
     ??[rpc] recv: #SatInStartReplicationResp

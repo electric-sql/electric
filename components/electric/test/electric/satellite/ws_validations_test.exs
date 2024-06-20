@@ -114,11 +114,10 @@ defmodule Electric.Satellite.WsValidationsTest do
       %{"id" => "10", "b" => "1"},
       %{"id" => "11", "b" => "0"},
       %{"id" => "12", "b" => "True"},
-      %{"id" => "13", "b" => "false"},
-      %{"id" => "14", "b" => "+"},
-      %{"id" => "15", "b" => "-"},
-      %{"id" => "16", "b" => "yes"},
-      %{"id" => "17", "b" => "no"}
+      %{"id" => "13", "b" => "+"},
+      %{"id" => "14", "b" => "-"},
+      %{"id" => "15", "b" => "yes"},
+      %{"id" => "16", "b" => "no"}
     ]
 
     Enum.each(invalid_records, fn record ->

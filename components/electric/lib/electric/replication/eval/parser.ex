@@ -19,12 +19,20 @@ defmodule Electric.Replication.Eval.Parser do
   end
 
   defmodule Func do
-    defstruct [:args, :type, :implementation, :name, strict?: true, immutable?: true, location: 0]
+    defstruct [
+      :args,
+      :type,
+      :implementation,
+      :name,
+      strict?: true,
+      immutable?: true,
+      location: 0,
+      cast: nil
+    ]
   end
 
-  @valid_types (Electric.Postgres.supported_types() ++
-                  Electric.Postgres.supported_types_only_in_functions())
-               |> Enum.map(&Atom.to_string/1)
+  @valid_types Electric.Postgres.supported_types() ++
+                 Electric.Postgres.supported_types_only_in_functions()
 
   @type tree_part :: %Const{} | %Ref{} | %Func{}
   @type refs_map :: %{optional([String.t(), ...]) => Env.pg_type()}
@@ -496,7 +504,8 @@ defmodule Electric.Replication.Eval.Parser do
            type: target_type,
            args: [arg],
            implementation: impl,
-           name: "#{type}_to_#{target_type}"
+           name: "#{type}_to_#{target_type}",
+           cast: {type, target_type}
          }}
 
       :error ->

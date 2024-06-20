@@ -13,6 +13,7 @@
             c color
         );
         ALTER TABLE public.enums ENABLE ELECTRIC;
+        ELECTRIC GRANT ALL ON public.enums TO AUTHENTICATED;
         """]
     [invoke migrate_pg 20230908 $sql]
 

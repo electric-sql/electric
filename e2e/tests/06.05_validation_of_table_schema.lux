@@ -1,0 +1,84 @@
+[doc Table schema validation is done at GRANT WRITE, not ELECTRIFY point]
+[include _shared.luxinc]
+
+[invoke setup]
+
+[global migration_version_1=20231109154018]
+[global migration_version_2=20240226114300]
+
+[shell proxy_1]
+    """!
+    BEGIN;
+      CALL electric.migration_version('$migration_version_1');
+
+      CREATE TABLE "users" (
+          id uuid NOT NULL PRIMARY KEY,
+          -- unique constraint not allowed on writable tables
+          name text NOT NULL UNIQUE
+      );
+      CREATE TABLE "projects" (
+          id uuid NOT NULL PRIMARY KEY,
+          name text NOT NULL
+      );
+      CREATE TABLE "issues" (
+          id uuid NOT NULL PRIMARY KEY,
+          project_id uuid NOT NULL REFERENCES projects (id),
+          name text NOT NULL
+      );
+      CREATE TABLE "comments" (
+          id uuid NOT NULL PRIMARY KEY,
+          issues_id uuid NOT NULL REFERENCES issues (id),
+          author_id uuid NOT NULL REFERENCES users (id),
+          comment text NOT NULL
+      );
+      CREATE TABLE "project_memberships" (
+          id uuid NOT NULL PRIMARY KEY,
+          project_id uuid NOT NULL REFERENCES projects (id),
+          user_id uuid NOT NULL REFERENCES users (id),
+          role text NOT NULL
+      );
+
+      ALTER TABLE "users" ENABLE ELECTRIC;
+      ALTER TABLE "projects" ENABLE ELECTRIC;
+      ALTER TABLE "issues" ENABLE ELECTRIC;
+      ALTER TABLE "comments" ENABLE ELECTRIC;
+      ALTER TABLE "project_memberships" ENABLE ELECTRIC;
+
+
+      ELECTRIC GRANT READ ON public.users TO AUTHENTICATED;
+
+      ELECTRIC GRANT READ ON public.projects TO (public.projects, 'member');
+      ELECTRIC GRANT ALL ON public.issues TO (public.projects, 'member');
+      ELECTRIC GRANT READ ON public.comments TO (public.projects, 'member');
+      ELECTRIC GRANT WRITE ON public.comments TO (public.projects, 'member') WHERE (row.author_id = auth.user_id);
+      ELECTRIC GRANT READ ON public.project_memberships TO (public.projects, 'member');
+
+      ELECTRIC ASSIGN (public.projects, public.project_memberships.role) TO public.project_memberships.user_id;
+      ELECTRIC ASSIGN (public.users, 'self') TO public.users.id;
+
+    COMMIT;
+    """
+    ?$psql
+
+
+[shell electric]
+    ??[debug] "public"."users" is compatible with "ELECTRIC GRANT
+    ??[debug] "public"."projects" is compatible with "ELECTRIC GRANT
+    ??[debug] "public"."issues" is compatible with "ELECTRIC GRANT
+    ??[debug] "public"."comments" is compatible with "ELECTRIC GRANT
+    ??[debug] "public"."project_memberships" is compatible with "ELECTRIC GRANT
+    ??[info] Applying migration $migration_version_1
+
+[shell proxy_1]
+    """!
+    BEGIN;
+      CALL electric.migration_version('$migration_version_2');
+      ELECTRIC GRANT INSERT ON public.users TO AUTHENTICATED;
+    ROLLBACK;
+    """
+    -NOERROR
+    ?ERROR: +Cannot electrify column with UNIQUE constraint
+    -
+
+[cleanup]
+   [invoke teardown]

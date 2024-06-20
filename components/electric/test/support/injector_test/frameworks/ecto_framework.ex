@@ -28,6 +28,7 @@ defmodule Electric.Proxy.InjectorTest.EctoFramework do
     |> server(parse_describe_complete(params: [20, 114]))
     |> client(
       bind_execute(name,
+        source: name,
         bind: [
           parameter_format_codes: [1, 1],
           parameters: Enum.map([to_integer(version), DateTime.utc_now()], &version_pg/1)

@@ -9,6 +9,14 @@ defmodule Electric.Postgres.Schema do
 
   require Logger
 
+  defmodule UnknownTableError do
+    defexception [:schema, :name]
+
+    def message(%{schema: schema, name: name}) do
+      "Unknown table #{Electric.Utils.inspect_relation({schema, name})}"
+    end
+  end
+
   @public_schema "public"
   @search_paths [nil, @public_schema]
 
@@ -73,7 +81,7 @@ defmodule Electric.Postgres.Schema do
   def fetch_table!(schema, name) do
     case fetch_table(schema, name) do
       {:ok, table} -> table
-      {:error, reason} -> raise ArgumentError, message: reason
+      {:error, _reason} -> raise UnknownTableError, schema: schema, name: name
     end
   end
 
@@ -125,22 +133,19 @@ defmodule Electric.Postgres.Schema do
   Graph vertices are table names, and graph edges go from the table with the
   foreign key to the referenced table. Each edge is labeled with an array of
   columns that comprise the foreign key.
-
-  Only tables known to Satellite are included (currently, this means only in the `public` schema).
   """
   @spec public_fk_graph(t()) :: Graph.t()
   def public_fk_graph(%Proto.Schema{tables: tables}) do
     graph =
       tables
-      |> Enum.filter(&(&1.name.schema == @public_schema))
-      |> Enum.map(&{@public_schema, &1.name.name})
-      |> then(&Graph.add_vertices(Graph.new(), &1))
+      |> Enum.map(&{&1.name.schema, &1.name.name})
+      |> then(&Graph.add_vertices(Graph.new(vertex_identifier: fn v -> v end), &1))
 
     Enum.reduce(tables, graph, fn %Proto.Table{constraints: constraints, name: name}, graph ->
       constraints
       |> Enum.filter(&match?(%{constraint: {:foreign, _}}, &1))
       |> Enum.map(fn %{constraint: {:foreign, fk}} ->
-        {{@public_schema, name.name}, {@public_schema, fk.pk_table.name}, label: fk.fk_cols}
+        {{name.schema, name.name}, {fk.pk_table.schema, fk.pk_table.name}, label: fk.fk_cols}
       end)
       |> then(&Graph.add_edges(graph, &1))
     end)
@@ -392,6 +397,10 @@ defmodule Electric.Postgres.Schema do
   end
 
   defp qualified_names(%Pg.RangeVar{relname: n, schemaname: s}, search_paths) do
+    qualified_names({blank(s), n}, search_paths)
+  end
+
+  defp qualified_names(%{schema: s, name: n}, search_paths) do
     qualified_names({blank(s), n}, search_paths)
   end
 

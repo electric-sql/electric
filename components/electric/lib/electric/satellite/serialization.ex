@@ -2,8 +2,8 @@ defmodule Electric.Satellite.Serialization do
   alias Electric.Satellite.Protocol
   alias Electric.Satellite.SatOpGone
   alias Electric.Replication.Changes.Gone
-  alias Electric.Postgres.Extension.SchemaCache
-  alias Electric.Postgres.{Extension, Replication}
+  alias Electric.Postgres.Extension.SchemaLoader
+  alias Electric.Postgres.Replication
   alias Electric.Replication.Changes
 
   alias Electric.Replication.Changes.{
@@ -11,13 +11,14 @@ defmodule Electric.Satellite.Serialization do
     NewRecord,
     UpdatedRecord,
     DeletedRecord,
-    Compensation
+    Compensation,
+    Migration
   }
 
   use Electric.Satellite.Protobuf
 
   import Electric.Postgres.Extension,
-    only: [is_migration_relation: 1, is_ddl_relation: 1, is_extension_relation: 1]
+    only: [is_extension_relation: 1]
 
   import Bitwise
 
@@ -31,12 +32,19 @@ defmodule Electric.Satellite.Serialization do
   @doc """
   Serialize from internal format to Satellite PB format
   """
-  @spec serialize_trans(Transaction.t(), term(), relation_mapping(), module()) ::
+  @spec serialize_trans(
+          Transaction.t(),
+          term(),
+          relation_mapping(),
+          SchemaLoader.relation_loader(),
+          module()
+        ) ::
           {[%SatOpLog{}], [Changes.relation()], relation_mapping()}
   def serialize_trans(
         %Transaction{} = trans,
         offset,
         known_relations,
+        relation_loader,
         dialect \\ @default_dialect
       ) do
     tm = DateTime.to_unix(trans.commit_timestamp, :millisecond)
@@ -50,7 +58,8 @@ defmodule Electric.Satellite.Serialization do
       schema: nil,
       new_relations: [],
       known_relations: known_relations,
-      sql_dialect: dialect
+      sql_dialect: dialect,
+      relation_loader: relation_loader
     }
 
     state = Enum.reduce(trans.changes, state, &serialize_change/2)
@@ -80,11 +89,12 @@ defmodule Electric.Satellite.Serialization do
     }
   end
 
-  def serialize_move_in_data_as_tx(ref, changes, known_relations) do
+  def serialize_move_in_data_as_tx(ref, changes, known_relations, relation_loader) do
     begin_op = %SatTransOp{op: {:additional_begin, %SatOpAdditionalBegin{ref: ref}}}
     commit_op = %SatTransOp{op: {:additional_commit, %SatOpAdditionalCommit{ref: ref}}}
 
     state = %{
+      relation_loader: relation_loader,
       ops: [commit_op],
       new_relations: [],
       known_relations: known_relations
@@ -96,8 +106,9 @@ defmodule Electric.Satellite.Serialization do
     {[%SatOpLog{ops: [begin_op | state.ops]}], state.new_relations, state.known_relations}
   end
 
-  def serialize_shape_data_as_tx(changes, known_relations) do
+  def serialize_shape_data_as_tx(changes, known_relations, relation_loader) do
     state = %{
+      relation_loader: relation_loader,
       ops: [],
       new_relations: [],
       known_relations: known_relations
@@ -109,9 +120,34 @@ defmodule Electric.Satellite.Serialization do
     {[%SatOpLog{ops: state.ops}], state.new_relations, state.known_relations}
   end
 
-  defp serialize_change(record, state) when is_migration_relation(record.relation) do
-    state = serialize_migration(record, state)
-    %{state | is_migration: true}
+  defp serialize_change(%Migration{} = migration, state) do
+    Logger.info("Serializing migration #{inspect(migration.version)}")
+    %{known_relations: known_relations, sql_dialect: sql_dialect} = state
+
+    known_relations =
+      Enum.reduce(migration.relations, known_relations, fn relation, known ->
+        {_relation_id, _columns, _, known} =
+          load_new_relation(state.relation_loader, relation, known)
+
+        known
+      end)
+
+    ops =
+      migration.ops
+      |> Map.fetch!(sql_dialect)
+      |> Enum.reduce(state.ops, fn op, ops ->
+        [%SatTransOp{op: {:migrate, op}} | ops]
+      end)
+
+    %{
+      state
+      | ops: ops,
+        migration_version: migration.version,
+        schema: migration.schema,
+        new_relations: state.new_relations ++ migration.relations,
+        known_relations: known_relations,
+        is_migration: true
+    }
   end
 
   # writes to any table under the electric.* schema shoudn't be passed as DML
@@ -129,7 +165,7 @@ defmodule Electric.Satellite.Serialization do
     relation = record.relation
 
     {rel_id, rel_cols, rel_pks, new_relations, known_relations} =
-      case fetch_relation_id(relation, known_relations) do
+      case fetch_relation_id(state.relation_loader, relation, known_relations) do
         {:new, {relation_id, columns, pks, known_relations}} ->
           {relation_id, columns, pks, [relation | new_relations], known_relations}
 
@@ -140,69 +176,6 @@ defmodule Electric.Satellite.Serialization do
     op = mk_trans_op(record, rel_id, rel_cols, rel_pks)
 
     %{state | ops: [op | ops], new_relations: new_relations, known_relations: known_relations}
-  end
-
-  defp serialize_migration(%{relation: relation, record: record}, state)
-       when is_ddl_relation(relation) do
-    %{
-      origin: origin,
-      schema: schema,
-      ops: ops,
-      migration_version: version,
-      new_relations: new_relations,
-      sql_dialect: dialect
-    } = state
-
-    {:ok, v} = SchemaCache.tx_version(origin, record)
-    {:ok, sql} = Extension.extract_ddl_sql(record)
-
-    Logger.info("Serializing migration #{inspect(v)}: #{inspect(sql)}")
-
-    # unlikely since the extension tables have constraints that prevent this
-    if version && version != v,
-      do: raise("Got DDL transaction with differing migration versions")
-
-    {:ok, schema_version} = maybe_load_schema(origin, schema, v)
-
-    {ops, add_relations} =
-      case Replication.migrate(schema_version, sql, dialect) do
-        {:ok, [op], relations} ->
-          {[%SatTransOp{op: {:migrate, op}} | ops], relations}
-
-        {:ok, [], []} ->
-          {ops, []}
-      end
-
-    known_relations =
-      Enum.reduce(add_relations, state.known_relations, fn relation, known ->
-        {_relation_id, _columns, _, known} = load_new_relation(relation, known)
-        known
-      end)
-
-    %{
-      state
-      | ops: ops,
-        migration_version: v,
-        schema: schema_version,
-        new_relations: new_relations ++ add_relations,
-        known_relations: known_relations
-    }
-  end
-
-  defp serialize_migration(_record, state), do: state
-
-  defp maybe_load_schema(origin, nil, version) do
-    with {:ok, schema} <- Extension.SchemaCache.load(origin, version) do
-      {:ok, schema}
-    else
-      error ->
-        Logger.error("#{origin} Unable to load schema version #{version}: #{inspect(error)}")
-        error
-    end
-  end
-
-  defp maybe_load_schema(_origin, schema, _version) do
-    {:ok, schema}
   end
 
   defp mk_trans_op(%NewRecord{record: data, tags: tags}, rel_id, rel_cols, _) do
@@ -326,23 +299,25 @@ defmodule Electric.Satellite.Serialization do
     end
   end
 
-  def fetch_relation_id(relation, known_relations) do
+  def fetch_relation_id(relation_loader, relation, known_relations) do
     case Map.get(known_relations, relation) do
       nil ->
-        {:new, load_new_relation(relation, known_relations)}
+        {:new, load_new_relation(relation_loader, relation, known_relations)}
 
       {relation_id, columns, pks} ->
         {:existing, {relation_id, columns, pks}}
     end
   end
 
-  defp load_new_relation(relation, known_relations) do
-    %{oid: relation_id, columns: columns, primary_keys: pks} = fetch_relation(relation)
+  defp load_new_relation(relation_loader, relation, known_relations) do
+    %{oid: relation_id, columns: columns, primary_keys: pks} =
+      fetch_relation(relation_loader, relation)
+
     {relation_id, columns, pks, Map.put(known_relations, relation, {relation_id, columns, pks})}
   end
 
-  defp fetch_relation(relation) do
-    Extension.SchemaCache.Global.relation!(relation)
+  defp fetch_relation(relation_loader, relation) do
+    relation_loader.(relation)
   end
 
   @doc """
@@ -550,6 +525,13 @@ defmodule Electric.Satellite.Serialization do
   @spec decode_column_value!(binary, atom) :: binary
 
   def decode_column_value!(val, :bool) when val in ["t", "f"], do: val
+  # because we're now receiving boolean data added via the additional records mechanism,
+  # which encodes data as JSON, not using the pg protocol, we also receive booleans
+  # encoded as `"true"`.
+  #
+  # See `Electric.Replication.Postgres.LogicalReplicationProducer.process_message/2`
+  def decode_column_value!("true", :bool), do: "t"
+  def decode_column_value!("false", :bool), do: "f"
 
   def decode_column_value!(val, :bool) do
     raise "Unexpected value for bool column: #{inspect(val)}"

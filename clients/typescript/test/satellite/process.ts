@@ -54,6 +54,11 @@ import {
 import { QueryBuilder } from '../../src/migrators/query-builder'
 import { SatelliteOpts } from '../../src/satellite/config'
 import { ForeignKeyChecks } from '../../src/config'
+import {
+  SatClientCommand,
+  SatClientCommand_ResetDatabase,
+  SatClientCommand_ResetDatabase_Reason,
+} from '../../src/_generated/protocol/satellite'
 
 export type ContextType = CommonContextType & {
   builder: QueryBuilder
@@ -2756,5 +2761,41 @@ export const processTests = (test: TestFn<ContextType>) => {
     const seventhNotification = shapeNotifications()[6]
     t.is(seventhNotification.key, shapeSubKey)
     t.is(seventhNotification.status, undefined)
+  })
+
+  test('SatClientCommand.ResetDatabase clears all data', async (t) => {
+    const { client, satellite, adapter } = t.context
+    const { runMigrations, authState, token } = t.context
+    await runMigrations()
+    const tablename = 'parent'
+
+    // relations must be present at subscription delivery
+    client.setRelations(relations)
+    client.setRelationData(tablename, parentRecord)
+
+    await startSatellite(satellite, authState, token)
+
+    const shapeDef: Shape = {
+      tablename,
+    }
+
+    satellite!.relations = relations
+    const { synced } = await satellite.subscribe([shapeDef])
+    await synced
+    await satellite._performSnapshot()
+
+    await client.commandCb!(
+      SatClientCommand.fromPartial({
+        resetDatabase: SatClientCommand_ResetDatabase.fromPartial({
+          reason: SatClientCommand_ResetDatabase_Reason.PERMISSIONS_CHANGE,
+        }),
+      })
+    )
+
+    const results = await adapter.query({
+      sql: 'SELECT * FROM parent',
+    })
+
+    t.deepEqual(results, [])
   })
 }

@@ -13,9 +13,26 @@ defmodule Electric.Postgres.Proxy.Injector.Shadow do
 
   @type t() :: %__MODULE__{}
 
+  # provide a loader impl that just ignores electrification
+  defmodule NullLoader do
+    @moduledoc false
+
+    alias Electric.Postgres.Extension.SchemaLoader
+    alias Electric.Postgres.Schema
+    alias Electric.Satellite.SatPerms
+
+    def new do
+      {__MODULE__, []}
+    end
+
+    def load(_), do: {:ok, SchemaLoader.Version.new(nil, Schema.new())}
+    def table_electrified?(_, _), do: {:ok, false}
+    def global_permissions(_), do: {:ok, %SatPerms.Rules{id: 1}}
+  end
+
   def injector do
     Injector.new(
-      [loader: nil, capture_mode: [default: {__MODULE__, []}]],
+      [loader: NullLoader.new(), capture_mode: [default: {__MODULE__, []}]],
       username: "shadow"
     )
   end
@@ -114,12 +131,6 @@ defmodule Electric.Postgres.Proxy.Injector.Shadow do
         end
       end
     end
-  end
-
-  # provide a loader impl that just ignores electrification
-  defmodule NullLoader do
-    @moduledoc false
-    def table_electrified?(_, _), do: {:ok, false}
   end
 
   defimpl Operation do

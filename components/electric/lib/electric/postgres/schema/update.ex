@@ -118,7 +118,7 @@ defmodule Electric.Postgres.Schema.Update do
         {[], schema}
 
       {{:error, _}, false} ->
-        raise Error, message: "attempt to alter missing table #{name}"
+        raise Schema.UnknownTableError, schema: schema, name: name
     end
   end
 
@@ -131,7 +131,7 @@ defmodule Electric.Postgres.Schema.Update do
       "ALTER TABLE #{action.relation} RENAME COLUMN #{action.subname} TO #{action.newname}"
     )
 
-    {:ok, orig_table} = fetch_table(schema, action.relation)
+    orig_table = fetch_table!(schema, action.relation)
 
     schema =
       update_table(
@@ -163,7 +163,7 @@ defmodule Electric.Postgres.Schema.Update do
   defp do_update(%Pg.RenameStmt{rename_type: :OBJECT_TABLE} = action, schema, _opts) do
     Logger.info("ALTER TABLE #{action.relation} RENAME TO #{action.newname}")
 
-    {:ok, orig_table} = fetch_table(schema, action.relation)
+    orig_table = fetch_table!(schema, action.relation)
 
     schema =
       update_table(
@@ -185,7 +185,8 @@ defmodule Electric.Postgres.Schema.Update do
 
   defp do_update(%Pg.RenameStmt{rename_type: :OBJECT_TABCONSTRAINT} = action, schema, _opts) do
     Logger.info("ALTER TABLE #{action.relation} RENAME CONSTRAINT #{action.subname}")
-    {:ok, table} = fetch_table(schema, action.relation)
+
+    table = fetch_table!(schema, action.relation)
 
     schema =
       update_table(
@@ -254,7 +255,7 @@ defmodule Electric.Postgres.Schema.Update do
 
     if !action.missing_ok do
       Enum.each(table_names, fn table ->
-        case Schema.fetch_table(schema, table) do
+        case fetch_table(schema, table) do
           {:error, _} ->
             raise(Error, message: "attempting to drop non-existant table #{table}")
 
@@ -285,7 +286,7 @@ defmodule Electric.Postgres.Schema.Update do
   defp do_update(%DropConstraint{} = action, schema, _opts) do
     Logger.info("ALTER TABLE #{action.table} DROP CONSTRAINT #{action.name}")
 
-    {:ok, table} = fetch_table(schema, action.table)
+    table = fetch_table!(schema, action.table)
 
     schema =
       update_table(
@@ -394,7 +395,7 @@ defmodule Electric.Postgres.Schema.Update do
   end
 
   defp do_update(stmt, schema, _opts) do
-    Logger.warning("ignoring unsupported migration: #{inspect(stmt)}")
+    Logger.debug("ignoring unsupported migration: #{inspect(stmt)}")
     {[], schema}
   end
 
@@ -456,7 +457,11 @@ defmodule Electric.Postgres.Schema.Update do
       end)
 
     if count == 0 && !missing_ok,
-      do: raise("update of #{inspect(list)} matching #{inspect(name)} did not match any elements")
+      do:
+        raise(Error,
+          message:
+            "update of #{inspect(list)} matching #{inspect(name)} did not match any elements"
+        )
 
     updated
   end

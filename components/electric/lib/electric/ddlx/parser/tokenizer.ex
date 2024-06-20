@@ -4,7 +4,9 @@ defmodule Electric.DDLX.Parser.Tokenizer.Tokens do
   deftoken(:token, "ALL", do: :ALL)
   deftoken(:token, "ALTER", do: :ALTER)
   deftoken(:token, "AND", do: :AND)
+  deftoken(:token, "ANYONE", do: :ANYONE)
   deftoken(:token, "ASSIGN", do: :ASSIGN)
+  deftoken(:token, "AUTHENTICATED", do: :AUTHENTICATED)
   deftoken(:token, "CHECK", do: :CHECK)
   deftoken(:token, "DELETE", do: :DELETE)
   deftoken(:token, "DISABLE", do: :DISABLE)
@@ -29,6 +31,7 @@ defmodule Electric.DDLX.Parser.Tokenizer.Tokens do
   deftoken(:token, "UNASSIGN", do: :UNASSIGN)
   deftoken(:token, "UPDATE", do: :UPDATE)
   deftoken(:token, "USING", do: :USING)
+  deftoken(:token, "WHERE", do: :WHERE)
   deftoken(:token, "WRITE", do: :WRITE)
   def token(s), do: s
 end

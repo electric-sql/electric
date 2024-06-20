@@ -18,12 +18,10 @@ defmodule Electric.Utils do
   `Graph.Edge` structs since it will be immediately torn down when merging.
   """
   def merge_graph_edges(%Graph{} = g1, %Graph{out_edges: edges, edges: meta, vertices: vs}) do
-    edges
-    |> Enum.reduce(g1, fn {source_id, out_neighbors}, acc ->
+    Enum.reduce(edges, g1, fn {source_id, out_neighbors}, acc ->
       source = Map.get(vs, source_id)
 
-      out_neighbors
-      |> Enum.reduce(acc, fn out_neighbor, acc ->
+      Enum.reduce(out_neighbors, acc, fn out_neighbor, acc ->
         target = Map.get(vs, out_neighbor)
         meta = Map.get(meta, {source_id, out_neighbor})
 
@@ -313,6 +311,11 @@ defmodule Electric.Utils do
   @spec inspect_relation({String.t(), String.t()}) :: String.t()
   def inspect_relation({schema, name}) do
     "#{inspect(schema)}.#{inspect(name)}"
+  end
+
+  @spec inspect_relation(%{schema: String.t(), name: String.t()}) :: String.t()
+  def inspect_relation(%{schema: schema, name: name}) do
+    inspect_relation({schema, name})
   end
 
   @doc """

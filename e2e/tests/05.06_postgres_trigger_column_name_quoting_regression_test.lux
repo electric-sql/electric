@@ -12,6 +12,7 @@
         );
         CALL electric.electrify('public."camelCase"');
         --ALTER TABLE public."camelCase" ENABLE ELECTRIC;
+        ELECTRIC GRANT ALL ON public."camelCase" TO AUTHENTICATED;
         """]
     [invoke migrate_pg 20230921 $sql]
 

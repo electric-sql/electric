@@ -23,6 +23,8 @@ const serverErrorToSatError: Record<
   [Pb.SatErrorResp_ErrorCode.AUTH_REQUIRED]: SatelliteErrorCode.AUTH_REQUIRED,
   [Pb.SatErrorResp_ErrorCode.INVALID_REQUEST]:
     SatelliteErrorCode.INVALID_REQUEST,
+  [Pb.SatErrorResp_ErrorCode.PERMISSION_DENIED]:
+    SatelliteErrorCode.PERMISSION_DENIED,
   [Pb.SatErrorResp_ErrorCode.PROTO_VSN_MISMATCH]:
     SatelliteErrorCode.PROTO_VSN_MISMATCH,
   [Pb.SatErrorResp_ErrorCode.REPLICATION_FAILED]:
@@ -129,6 +131,8 @@ const msgtypetuples: MappingTuples = {
   SatOpLogAck: [23, Pb.SatOpLogAck],
   SatUnsubsDataBegin: [24, Pb.SatUnsubsDataBegin],
   SatUnsubsDataEnd: [25, Pb.SatUnsubsDataEnd],
+  SatPerms: [26, Pb.SatPerms],
+  SatClientCommand: [27, Pb.SatClientCommand],
 }
 
 const msgtypemapping = Object.fromEntries(
@@ -182,6 +186,8 @@ export type SatPbMsg =
   | Pb.SatOpLogAck
   | Pb.SatUnsubsDataBegin
   | Pb.SatUnsubsDataEnd
+  | Pb.SatPerms
+  | Pb.SatClientCommand
 
 export type SatPbMsgObj<
   Msg extends { $type: string },
@@ -424,6 +430,14 @@ export function msgToString(message: MessageOfInterest): string {
       }}`
     case 'Electric.Satellite.SatUnsubsDataEnd':
       return `#SatUnsubsDataEnd{}`
+    case 'Electric.Satellite.SatPerms':
+      return `#SatPerms{}`
+    case 'Electric.Satellite.SatClientCommand':
+      if (message.resetDatabase) {
+        return `#SatClientCommand{command: #ResetDatabase{reason: ${message.resetDatabase.reason}}}`
+      }
+
+      return `#SatClientCommand{command: <unknown>}`
   }
 }
 

@@ -90,6 +90,14 @@ defmodule Electric.Features do
     :ok
   end
 
+  def list(name \\ __MODULE__) do
+    name
+    |> :ets.tab2list()
+    |> Map.new()
+    |> Map.merge(Process.get({__MODULE__, name}, %{}))
+    |> Enum.to_list()
+  end
+
   def init(args) do
     name = Keyword.get(args, :name, __MODULE__)
 

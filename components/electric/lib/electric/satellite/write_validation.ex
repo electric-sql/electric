@@ -66,9 +66,9 @@ defmodule Electric.Satellite.WriteValidation do
     end
   end
 
-  @spec validate_transactions!(txns(), SchemaLoader.t()) ::
-          {:ok, txns()} | {:error, term()} | {:error, txns(), Error.t(), txns()}
-  def validate_transactions!(txns, schema_loader) do
+  @spec validate_transactions(txns(), SchemaLoader.t()) ::
+          {:ok, txns()} | {:error, term()} | {:error, Error.t(), txns(), txns()}
+  def validate_transactions(txns, schema_loader) do
     with {:ok, schema_version} <- SchemaLoader.load(schema_loader) do
       take_while_ok(txns, &is_valid_tx?(&1, schema_version), [])
     end
@@ -123,7 +123,7 @@ defmodule Electric.Satellite.WriteValidation do
         take_while_ok(tail, fun, [tx | acc])
 
       {:error, error} ->
-        {:error, :lists.reverse(acc), error, tail}
+        {:error, error, :lists.reverse(acc), tail}
     end
   end
 

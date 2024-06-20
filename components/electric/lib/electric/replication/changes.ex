@@ -14,7 +14,8 @@ defmodule Electric.Replication.Changes do
 
   require Logger
 
-  @type db_identifier() :: String.t()
+  @type db_identifier() :: Electric.Postgres.name()
+  @type xid() :: Electric.Postgres.xid()
   @type relation() :: {schema :: db_identifier(), table :: db_identifier()}
   @type record() :: %{(column_name :: db_identifier()) => column_data :: binary()}
   @type relation_id() :: non_neg_integer
@@ -26,10 +27,15 @@ defmodule Electric.Replication.Changes do
   @type tag() :: String.t()
   @type pk() :: [String.t(), ...]
 
-  @type change() ::
+  @type data_change() ::
           Changes.NewRecord.t()
           | Changes.UpdatedRecord.t()
           | Changes.DeletedRecord.t()
+
+  @type change() ::
+          data_change()
+          | Changes.UpdatedPermissions.t()
+          | Changes.Migration.t()
 
   defmodule Transaction do
     alias Electric.Replication.Changes
@@ -41,7 +47,7 @@ defmodule Electric.Replication.Changes do
           }
 
     @type t() :: %__MODULE__{
-            xid: non_neg_integer() | nil,
+            xid: Changes.xid() | nil,
             changes: [Changes.change()],
             referenced_records: referenced_records(),
             commit_timestamp: DateTime.t(),
@@ -82,7 +88,8 @@ defmodule Electric.Replication.Changes do
         deletes: 0,
         compensations: 0,
         truncates: 0,
-        gone: 0
+        gone: 0,
+        migration: 0
       }
 
       Enum.reduce(changes, base, fn %module{}, acc ->
@@ -94,6 +101,7 @@ defmodule Electric.Replication.Changes do
             Changes.Compensation -> :compensations
             Changes.TruncatedRelation -> :truncates
             Changes.Gone -> :gone
+            Changes.Migration -> :migration
           end
 
         Map.update!(%{acc | operations: acc.operations + 1}, key, &(&1 + 1))
@@ -208,6 +216,80 @@ defmodule Electric.Replication.Changes do
 
   defmodule TruncatedRelation do
     defstruct [:relation]
+  end
+
+  defmodule UpdatedPermissions do
+    defmodule UserPermissions do
+      # When a user's permissions are changed, through some role change, only connections for that
+      # user need to do anything and since we know the entire permissions state for the user,
+      # including the important id, at this point just send them along
+      defstruct [:user_id, :permissions]
+
+      @type t() :: %__MODULE__{user_id: binary(), permissions: %Electric.Satellite.SatPerms{}}
+    end
+
+    defmodule GlobalPermissions do
+      # When the global permissions change, i.e. some ddlx command is received via the proxy, then
+      # every connected user will have to update their permissions. The actual permission id for a
+      # given user is not knowable without asking pg, so it has to mean every active connection
+      # bashing the db to load the new permissions for the user. So it's pointless including the
+      # actual global permissions state.
+      defstruct [:permissions_id]
+
+      @type t() :: %__MODULE__{
+              permissions_id: integer()
+            }
+    end
+
+    defstruct [:type, :permissions]
+
+    @type t() ::
+            %__MODULE__{type: :user, permissions: UserPermissions.t()}
+            | %__MODULE__{type: :global, permissions: GlobalPermissions.t()}
+  end
+
+  defmodule Migration do
+    alias Electric.Postgres.Extension.SchemaLoader
+    alias Electric.Postgres
+
+    @relation Electric.Postgres.Extension.ddl_relation()
+
+    @dialects [
+      Postgres.Dialect.Postgresql,
+      Postgres.Dialect.SQLite
+    ]
+
+    defstruct [
+      :version,
+      :schema,
+      :ddl,
+      :ops,
+      :relations,
+      # give this message a relation just to make it more compatible with other messages
+      relation: @relation
+    ]
+
+    @type ops() :: %{
+            Electric.Postgres.Dialect.t() => [%Electric.Satellite.SatOpMigrate{}]
+          }
+
+    @type t() :: %__MODULE__{
+            version: SchemaLoader.version(),
+            schema: SchemaLoader.Version.t(),
+            ddl: [String.t(), ...],
+            ops: ops(),
+            relations: [Postgres.relation()],
+            relation: Postgres.relation()
+          }
+
+    @spec dialects() :: [Electric.Postgres.Dialect.t()]
+    def dialects do
+      @dialects
+    end
+
+    def empty_ops do
+      Map.new(@dialects, fn dialect -> {dialect, []} end)
+    end
   end
 
   @spec filter_changes_belonging_to_user(Transaction.t(), binary()) :: Transaction.t()

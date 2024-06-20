@@ -1,6 +1,4 @@
 defmodule Electric.DDLX.Command.Error do
-  alias Electric.DDLX.Command
-
   @type t() :: %__MODULE__{
           sql: String.t(),
           line: pos_integer(),
@@ -8,26 +6,30 @@ defmodule Electric.DDLX.Command.Error do
           message: String.t()
         }
 
-  @keys [
+  @enforce_keys [:sql, :message]
+
+  defstruct [
     :sql,
-    :line,
-    :position,
-    :message
+    :message,
+    :code,
+    line: 0,
+    position: 0
   ]
 
-  @enforce_keys @keys
+  @behaviour Exception
 
-  defstruct @keys
+  @impl Exception
+  def blame(error, stacktrace) do
+    {error, stacktrace}
+  end
 
-  defimpl Command do
-    def pg_sql(_) do
-      []
-    end
+  @impl Exception
+  def exception(args) do
+    struct(__MODULE__, args)
+  end
 
-    def table_name(_) do
-      ""
-    end
-
-    def tag(_), do: "ELECTRIC ERROR"
+  @impl Exception
+  def message(%__MODULE__{message: message}) do
+    message
   end
 end

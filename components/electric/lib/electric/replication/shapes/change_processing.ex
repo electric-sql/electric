@@ -63,6 +63,7 @@ defmodule Electric.Replication.Shapes.ChangeProcessing do
   alias Electric.Replication.Shapes.ShapeRequest.Layer
   alias Electric.Replication.Shapes.ChangeProcessing.Reduction
   alias Electric.Replication.Changes
+  alias Electric.Satellite.Permissions
 
   use Pathex, default_mod: :json
   require Pathex.Lenses
@@ -147,22 +148,27 @@ defmodule Electric.Replication.Shapes.ChangeProcessing do
 
     case layer.direction do
       :first_layer ->
-        case {was_in_where?, is_in_where?} do
-          {true, true} ->
-            # it's guaranteed to be already in the graph if it's a first layer and where clause passed before
-            # TODO: assumption above likely doesn't hold under permissions unless we include that check in
-            #       the `was_in_where` boolean, which seems reasonable, since permissions-caused moves are moves.
+        case {was_in_where?, is_in_where?, is_in_graph?} do
+          {true, true, false} ->
+            # update to a record has altered the row's permissions state, from rejected to
+            # accepted so we're seeing it for the first time. treat this as a move in so that
+            # permissions are applied immediately and the client receives the new data
+            move_in(state, r, layer, own_id)
+
+          {true, true, true} ->
             state
             |> add_operation(r, own_id, as: :updated_record)
             |> mark_gone_superseded(own_id)
 
-          {false, true} ->
+          {false, true, false} ->
+            # TODO: This should probably differentiate between a compensation
+            # we should skip and actual update that moved into the shape
             move_in(state, r, layer, own_id)
 
-          {true, false} ->
+          {true, false, true} ->
             move_out(state, r, layer, own_id)
 
-          {false, false} ->
+          {false, false, _} ->
             skip(state)
         end
 
@@ -231,6 +237,23 @@ defmodule Electric.Replication.Shapes.ChangeProcessing do
           {false, false, false} ->
             skip(state)
         end
+    end
+  end
+
+  def process(%Permissions.MoveOut{} = m, %Layer{} = layer, reduction() = state)
+      when m.relation == layer.target_table do
+    own_id = {m.relation, m.id}
+
+    if row_in_graph?(state, own_id, layer.key) do
+      reduction(gone_nodes: gone) = state
+      gone = MapSet.put(gone, own_id)
+
+      state
+      |> reduction(gone_nodes: gone)
+      |> remove_layer_connection(layer, own_id)
+      |> cascade_remove_from_graph(layer, own_id)
+    else
+      state
     end
   end
 
@@ -376,8 +399,14 @@ defmodule Electric.Replication.Shapes.ChangeProcessing do
         reduction(graph: graph) = state ->
           graph = Graph.delete_edge(graph, starting_id, next_id, key)
 
-          reduction(state, graph: graph)
-          |> cascade_remove_from_graph(next_layer, next_id)
+          if row_in_graph?(graph, next_id, key) do
+            # There are other same-layer references to this id, so they keep the subtree in the shape
+            state
+          else
+            # Any references to the next id come from different paths, so continue cascade
+            reduction(state, graph: graph)
+            |> cascade_remove_from_graph(next_layer, next_id)
+          end
       end
 
     if Graph.in_degree(graph, starting_id) > 0 or not Graph.has_vertex?(graph, starting_id) do

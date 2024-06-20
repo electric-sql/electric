@@ -196,17 +196,16 @@ config :electric,
 # override these using the `ELECTRIC_FEATURES` environment variable, e.g.
 # to add a flag enabling `ELECTRIC GRANT` use:
 #
-#     export ELECTRIC_FEATURES="proxy_ddlx_grant=true:${ELECTRIC_FEATURES:-}"
+#     export ELECTRIC_FEATURES="permissions=true:${ELECTRIC_FEATURES:-}"
 #
 # or if you want to just set flags, ignoring any previous env settings
 #
-#     export ELECTRIC_FEATURES="proxy_ddlx_grant=true:proxy_ddlx_assign=true"
+#     export ELECTRIC_FEATURES="permissions=true:proxy_grant_write_permissions=true"
 #
 config :electric, Electric.Features,
-  proxy_ddlx_grant: false,
-  proxy_ddlx_revoke: false,
-  proxy_ddlx_assign: false,
-  proxy_ddlx_unassign: false
+  permissions: false,
+  proxy_grant_write_permissions: false,
+  proxy_ddlx_sqlite: false
 
 {:ok, conn_config} = database_url_config
 

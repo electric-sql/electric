@@ -2,6 +2,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Version do
   alias Electric.Postgres.Schema
   alias Electric.Postgres.Extension.SchemaLoader
   alias Electric.Postgres.Schema.Proto.Table
+  alias Electric.Postgres.Schema.FkGraph
 
   defstruct [:version, :schema, :fk_graph, tables: %{}, primary_keys: %{}]
 
@@ -14,17 +15,17 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Version do
   @type t() :: %__MODULE__{
           version: nil | version(),
           schema: Schema.t(),
-          fk_graph: Graph.t(),
+          fk_graph: FkGraph.t(),
           tables: %{relation() => %Table{}},
           primary_keys: %{relation() => [String.t()]}
         }
 
-  @spec new(nil | version(), Schema.t()) :: t()
+  @spec new(version() | nil, Schema.t()) :: t()
   def new(version, %Schema.Proto.Schema{} = schema) do
     %__MODULE__{version: version, schema: schema}
     |> Map.update!(:tables, &cache_tables_by_name(&1, schema))
     |> Map.update!(:primary_keys, &cache_pks_by_name(&1, schema))
-    |> Map.put(:fk_graph, Schema.public_fk_graph(schema))
+    |> Map.put(:fk_graph, FkGraph.for_schema(schema))
   end
 
   defp cache_tables_by_name(tables, schema) do
@@ -108,7 +109,20 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Version do
     end
   end
 
-  @spec fk_graph(t()) :: Graph.t()
+  def foreign_keys(%__MODULE__{} = version, {_, _} = relation, {_, _} = target) do
+    fk_graph = fk_graph(version)
+
+    case FkGraph.fetch_join_type(fk_graph, relation, target) do
+      {:ok, {:many_to_one, {^relation, fks}, _}} ->
+        {:ok, fks}
+
+      _ ->
+        {:error,
+         "no foreign key found from #{Electric.Utils.inspect_relation(relation)} to #{Electric.Utils.inspect_relation(target)}"}
+    end
+  end
+
+  @spec fk_graph(t()) :: FkGraph.t()
   def fk_graph(%__MODULE__{fk_graph: fk_graph}) do
     fk_graph
   end
@@ -118,5 +132,17 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Version do
       {:ok, value} -> {:ok, value}
       :error -> {:error, "Table #{Electric.Utils.inspect_relation(relation)} not found"}
     end
+  end
+
+  def table_info(%__MODULE__{schema: schema}, oid_or_relation) do
+    Schema.table_info(schema, oid_or_relation)
+  end
+
+  def table_info!(%__MODULE__{schema: schema}, oid_or_relation) do
+    Schema.table_info!(schema, oid_or_relation)
+  end
+
+  def enums(%__MODULE__{schema: schema}) do
+    {:ok, schema.enums}
   end
 end
