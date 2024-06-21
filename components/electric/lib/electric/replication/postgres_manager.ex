@@ -355,11 +355,8 @@ defmodule Electric.Replication.PostgresConnectorMng do
   end
 
   defp get_verify_peer_opts do
-    case :public_key.cacerts_load() do
-      :ok ->
-        cacerts = :public_key.cacerts_get()
-        Logger.info("Successfully loaded #{length(cacerts)} cacerts from the OS")
-
+    case load_cacerts() do
+      {:ok, cacerts} ->
         [
           verify: :verify_peer,
           cacerts: cacerts,
@@ -370,13 +367,40 @@ defmodule Electric.Replication.PostgresConnectorMng do
           ]
         ]
 
+      :error ->
+        [verify: :verify_none]
+    end
+  end
+
+  # This attribute silences dialyzer's warning:
+  #
+  #     lib/electric/replication/postgres_manager.ex:381:pattern_match
+  #     The pattern can never match the type.
+  #
+  #     Pattern:
+  #     :undefined
+  #
+  #     Type:
+  #     :ok | {:error, _}
+  #
+  # As explained in https://github.com/erlang/otp/issues/8604, the function spec of
+  # `:public_key.cacerts_load()` is incorrect.
+  @dialyzer {:nowarn_function, load_cacerts: 0}
+
+  defp load_cacerts do
+    case :public_key.cacerts_load() do
+      :ok ->
+        cacerts = :public_key.cacerts_get()
+        Logger.info("Successfully loaded #{length(cacerts)} cacerts from the OS")
+        {:ok, cacerts}
+
       {:error, reason} ->
         Logger.warning("Failed to load cacerts from the OS: #{inspect(reason)}")
-        # We're not sure how reliable OS certificate stores are in general, so keep going even
-        # if the loading of cacerts has failed. A warning will be logged every time a new
-        # database connection is established without the `verify_peer` option, so the issue will be
-        # visible to the developer.
-        []
+        :error
+
+      :undefined ->
+        Logger.warning("Failed to load cacerts from the OS.")
+        :error
     end
   end
 
