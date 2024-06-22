@@ -1,0 +1,7 @@
+services:
+  electric:
+    network_mode: host
+
+  postgres:
+    # Postgres must be on the same network as the sync service.
+    network_mode: host

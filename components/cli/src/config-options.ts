@@ -335,7 +335,14 @@ export const configOptions: Record<string, any> = {
     valueType: String,
     valueTypeName: 'features',
     defaultVal: '',
-    doc: 'Flags to enable experimental features',
+    doc: 'Flags to enable experimental features.',
+    groups: ['electric'],
+  },
+  DOCKER_NETWORK_USE_EXTERNAL: {
+    valueType: String,
+    valueTypeName: "'host' | name",
+    defaultVal: '',
+    doc: "Name of an existing Docker network to use or 'host' to run the container using the host OS networking.",
     groups: ['electric'],
   },
 } as const
