@@ -73,11 +73,12 @@ defmodule Electric.Satellite.Serialization do
     begin_op = %SatTransOp{op: {:begin, tx_begin}}
     commit_op = %SatTransOp{op: {:commit, tx_commit}}
 
-    {
-      [%SatOpLog{ops: [begin_op | Enum.reverse([commit_op | state.ops])]}],
-      state.new_relations,
-      state.known_relations
-    }
+    messages =
+      [begin_op | Enum.reverse([commit_op | state.ops])]
+      |> Enum.chunk_every(100)
+      |> Enum.map(&%SatOpLog{ops: &1})
+
+    {messages, state.new_relations, state.known_relations}
   end
 
   def serialize_move_in_data_as_tx(ref, changes, known_relations) do
@@ -93,7 +94,12 @@ defmodule Electric.Satellite.Serialization do
     # The changes cannot be migration relations, so our "state" is limited
     state = Enum.reduce(changes, state, &serialize_change/2)
 
-    {[%SatOpLog{ops: [begin_op | state.ops]}], state.new_relations, state.known_relations}
+    messages =
+      [begin_op | state.ops]
+      |> Enum.chunk_every(100)
+      |> Enum.map(&%SatOpLog{ops: &1})
+
+    {messages, state.new_relations, state.known_relations}
   end
 
   def serialize_shape_data_as_tx(changes, known_relations) do
@@ -106,7 +112,12 @@ defmodule Electric.Satellite.Serialization do
     # The changes cannot be migration relations, so our "state" is limited
     state = Enum.reduce(changes, state, &serialize_change/2)
 
-    {[%SatOpLog{ops: state.ops}], state.new_relations, state.known_relations}
+    messages =
+      state.ops
+      |> Enum.chunk_every(100)
+      |> Enum.map(&%SatOpLog{ops: &1})
+
+    {messages, state.new_relations, state.known_relations}
   end
 
   defp serialize_change(record, state) when is_migration_relation(record.relation) do
