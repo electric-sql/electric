@@ -80,6 +80,7 @@ defmodule Electric.Replication.PostgresConnectorMng do
   @impl GenServer
   def init(connector_config) do
     origin = Connectors.origin(connector_config)
+    Process.set_label({:postgres_manager, origin})
     name = name(origin)
     Electric.reg(name)
 

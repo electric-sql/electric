@@ -49,6 +49,7 @@ defmodule Electric.Satellite.Protocol do
       when not auth_passed?(state) and client_id != "" and token != "" do
     Logger.metadata(client_id: client_id)
     Logger.debug("Received auth request")
+    Process.set_label({:ws_server, state.origin, client_id})
 
     # NOTE: We treat successful registration with Electric.safe_reg as an
     # indication that at least the previously connected WS client is down.
@@ -1102,6 +1103,7 @@ defmodule Electric.Satellite.Protocol do
 
     Task.start(fn ->
       # This is `InitialSync.query_subscription_data/2` by default, but can be overridden for tests.
+      Process.set_label({:initial_sync, state.origin, id})
       # Please see documentation on that function for context on the next `receive` block.
       fun.({id, requests, context},
         reply_to: {ref, parent},
@@ -1165,6 +1167,7 @@ defmodule Electric.Satellite.Protocol do
     move_in_ref = state.out_rep.move_in_next_ref
 
     Task.start(fn ->
+      Process.set_label({:initial_sync_query_move_in_data, state.origin})
       # This is `InitialSync.query_move_in_data/4` by default, but can be overridden for tests.
       # Please see documentation on that function for context on the next `receive` block.
       fun.(move_in_ref, actions, context,

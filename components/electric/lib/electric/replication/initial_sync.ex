@@ -182,7 +182,10 @@ defmodule Electric.Replication.InitialSync do
           # 1. is made after the current transaction has started
           # 2. is in a separate transaction (thus on a different connection)
           # 3. is before the potentially big read queries to ensure this arrives ASAP on any data size
-          Task.start(fn -> perform_magic_write(conn_opts, marker) end)
+          Task.start(fn ->
+            Process.set_label(:magic_write)
+            perform_magic_write(conn_opts, marker)
+          end)
 
           {:ok, _, [{xmin_str}]} =
             :epgsql.squery(conn, "SELECT pg_snapshot_xmin(pg_current_snapshot())")
