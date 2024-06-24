@@ -81,7 +81,7 @@ export function makeGenerateCommand(): Command {
       const config = getConfig(restOpts)
 
       const withDalDefault = withDal ?? 'true' // defaults to true
-      const withDalOpt = withDalDefault === 'true' // convert to boolean
+      const withDalOpt = withDalDefault !== 'false' // convert to boolean, everything is true except 'false'
 
       const genOpts: GeneratorOptions = {
         config,
