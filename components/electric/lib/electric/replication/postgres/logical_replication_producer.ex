@@ -121,7 +121,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
       "Starting replication with publication=#{publication} and slots=#{main_slot},#{tmp_slot}}"
     )
 
-    # The replication connection is used to consumer the logical replication stream from
+    # The replication connection is used to consume the logical replication stream from
     # Postgres and to send acknowledgements about received transactions back to Postgres,
     # allowing it to advance the replication slot forward and discard obsolete WAL records.
     with {:ok, repl_conn} <- Client.connect(repl_conn_opts),
@@ -228,7 +228,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   end
 
   defp process_message(
-         %Message{transactional?: true, prefix: "electric.fk_chain_touch", content: content},
+         %Message{transactional?: true, prefix: "electric.fk_chain_touch", content: content} =
+           msg,
          state
        ) do
     received = Jason.decode!(content)
@@ -241,6 +242,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
         ShadowTableTransformation.convert_tag_list_pg_to_satellite(received["tags"], state.origin)
     }
 
+    ack(msg.lsn, state)
+
     {lsn, txn} = state.transaction
 
     {:noreply, [],
@@ -249,6 +252,8 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
 
   defp process_message(%Message{} = msg, state) do
     Logger.info("Got a message from PG via logical replication: #{inspect(msg)}")
+
+    ack(msg.lsn, state)
 
     {:noreply, [], state}
   end
@@ -417,6 +422,10 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   end
 
   def ack(%Transaction{lsn: lsn}, state) do
+    ack(lsn, state)
+  end
+
+  def ack(%Lsn{} = lsn, state) do
     Logger.debug("Acknowledging #{lsn}", origin: state.origin)
     Client.acknowledge_lsn(state.repl_conn, lsn)
   end
