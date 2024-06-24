@@ -24,8 +24,8 @@ importers:
         specifier: ^1.0.0
         version: 1.0.0
       better-sqlite3:
-        specifier: ^8.4.0
-        version: 8.7.0
+        specifier: ^11.0.0
+        version: 11.0.0
       exponential-backoff:
         specifier: ^3.1.0
         version: 3.1.1
@@ -112,8 +112,8 @@ importers:
         specifier: ^1.0.0
         version: 1.0.2
       '@types/better-sqlite3':
-        specifier: 7.6.3
-        version: 7.6.3
+        specifier: 7.6.10
+        version: 7.6.10
       '@types/lodash.flow':
         specifier: ^3.5.7
         version: 3.5.9
@@ -233,7 +233,7 @@ importers:
         version: 1.8.27(typescript@5.4.5)
       wa-sqlite:
         specifier: rhashimoto/wa-sqlite#semver:^0.9.8
-        version: github.com/rhashimoto/wa-sqlite/ca2084cdd188c56532ba3e272696d0b9e21a23bf
+        version: github.com/rhashimoto/wa-sqlite/6dbe4f044502a7a285e815896f56304a808fe25b
 
   components/cli:
     dependencies:
@@ -17149,8 +17149,8 @@ packages:
     resolution: {integrity: sha512-+dTu2m6gmCbO9Ahm4ZBDapx2O6ZY9QSPXst2WXjcznPMwf2YNpn3RevLx4KkZp1OPW/ouFcoBtBzFz/LeY69oA==}
     dev: false
 
-  github.com/rhashimoto/wa-sqlite/ca2084cdd188c56532ba3e272696d0b9e21a23bf:
-    resolution: {tarball: https://codeload.github.com/rhashimoto/wa-sqlite/tar.gz/ca2084cdd188c56532ba3e272696d0b9e21a23bf}
+  github.com/rhashimoto/wa-sqlite/6dbe4f044502a7a285e815896f56304a808fe25b:
+    resolution: {tarball: https://codeload.github.com/rhashimoto/wa-sqlite/tar.gz/6dbe4f044502a7a285e815896f56304a808fe25b}
     name: wa-sqlite
-    version: 0.9.13
+    version: 0.9.14
     dev: true
