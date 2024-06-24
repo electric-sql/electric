@@ -6,7 +6,7 @@ defmodule Electric.Replication.Postgres.Client do
   doesn't support connecting via a unix socket.
   """
 
-  import Electric.Postgres.Dialect.Postgresql, only: [quote_ident: 1]
+  import Electric.Postgres.Dialect.Postgresql, only: [escape_quotes: 2, quote_ident: 1]
 
   alias Electric.Postgres.Extension
   alias Electric.Postgres.Lsn
@@ -302,6 +302,26 @@ defmodule Electric.Replication.Postgres.Client do
   def advance_replication_slot(conn, slot_name, to_lsn) do
     with {:ok, _, _} <-
            squery(conn, "SELECT pg_replication_slot_advance('#{slot_name}', '#{to_lsn}')") do
+      :ok
+    end
+  end
+
+  @type logical_message_option :: {:transactional?, boolean} | {:prefix, String.t()}
+  @doc """
+  Emit a logical message to be consumed by LogicalReplicationProducer.
+  """
+  @spec emit_logical_message(connection, String.t(), [logical_message_option()]) ::
+          :ok | {:error, term}
+  def emit_logical_message(conn, message, opts \\ []) do
+    transactional? = Keyword.get(opts, :transactional?, false)
+    prefix = Keyword.get(opts, :prefix, "") |> escape_quotes(?')
+    message = escape_quotes(message, ?')
+
+    with {:ok, _, _} <-
+           squery(
+             conn,
+             "SELECT pg_logical_emit_message(#{transactional?}, '#{prefix}', '#{message}')"
+           ) do
       :ok
     end
   end

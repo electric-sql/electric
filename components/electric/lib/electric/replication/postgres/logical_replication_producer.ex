@@ -53,6 +53,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
               advance_timer: nil,
               main_slot: "",
               main_slot_lsn: %Lsn{},
+              acked_lsn: %Lsn{},
               resumable_wal_window: 1
 
     @type t() :: %__MODULE__{
@@ -70,6 +71,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
             advance_timer: reference() | nil,
             main_slot: binary(),
             main_slot_lsn: Lsn.t(),
+            acked_lsn: Lsn.t(),
             resumable_wal_window: pos_integer()
           }
   end
@@ -85,6 +87,10 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   if Mix.env() == :test do
     @advance_timeout 1_000
   end
+
+  # 100 MB is somewhat arbitrary, chosen to balance between the frequency of acks and extra
+  # disk usage.
+  @active_slot_lag_bytes 100 * 1024 * 1024
 
   @spec start_link(Connectors.config()) :: :ignore | {:error, any} | {:ok, pid}
   def start_link(connector_config) do
@@ -242,7 +248,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
         ShadowTableTransformation.convert_tag_list_pg_to_satellite(received["tags"], state.origin)
     }
 
-    ack(msg.lsn, state)
+    state = ack(msg.lsn, state)
 
     {lsn, txn} = state.transaction
 
@@ -252,9 +258,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
 
   defp process_message(%Message{} = msg, state) do
     Logger.info("Got a message from PG via logical replication: #{inspect(msg)}")
-
-    ack(msg.lsn, state)
-
+    state = ack(msg.lsn, state)
     {:noreply, [], state}
   end
 
@@ -390,16 +394,14 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
 
   defp dispatch_events(%{demand: demand, queue: queue, queue_len: queue_len} = state)
        when demand >= queue_len do
-    queue |> :queue.last() |> ack(state)
-
+    state = queue |> :queue.last() |> ack(state)
     state = %{state | queue: :queue.new(), queue_len: 0, demand: demand - queue_len}
     {:noreply, :queue.to_list(queue), state}
   end
 
   defp dispatch_events(%{demand: demand, queue: queue, queue_len: queue_len} = state) do
     {to_emit, queue_remaining} = :queue.split(demand, queue)
-    to_emit |> :queue.last() |> ack(state)
-
+    state = to_emit |> :queue.last() |> ack(state)
     state = %{state | queue: queue_remaining, queue_len: queue_len - demand, demand: 0}
     {:noreply, :queue.to_list(to_emit), state}
   end
@@ -413,12 +415,10 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     |> Map.new(fn {column, data} -> {column.name, data} end)
   end
 
-  @spec ack(Transaction.t(), State.t()) :: :ok
+  @spec ack(Transaction.t() | Lsn.t(), State.t()) :: State.t()
 
   if Mix.env() == :test do
-    def ack(%Transaction{}, %State{repl_conn: :conn}) do
-      :ok
-    end
+    def ack(_, %State{repl_conn: :conn} = state), do: state
   end
 
   def ack(%Transaction{lsn: lsn}, state) do
@@ -426,8 +426,11 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   end
 
   def ack(%Lsn{} = lsn, state) do
+    :gt = Lsn.compare(lsn, state.acked_lsn)
+
     Logger.debug("Acknowledging #{lsn}", origin: state.origin)
-    Client.acknowledge_lsn(state.repl_conn, lsn)
+    :ok = Client.acknowledge_lsn(state.repl_conn, lsn)
+    %{state | acked_lsn: lsn}
   end
 
   # Advance the replication slot to let Postgres discard old WAL records.
@@ -436,6 +439,9 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
   # connected client. See VAX-1552.
   defp advance_main_slot(state) do
     {:ok, current_lsn} = Client.current_lsn(state.svc_conn)
+
+    check_active_slot_lag(current_lsn, state)
+
     min_in_window_lsn = Lsn.increment(current_lsn, -state.resumable_wal_window)
 
     if Lsn.compare(state.main_slot_lsn, min_in_window_lsn) == :lt do
@@ -446,6 +452,17 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
       %{state | main_slot_lsn: min_in_window_lsn}
     else
       state
+    end
+  end
+
+  defp check_active_slot_lag(current_lsn, state) do
+    lsn_threshold = Lsn.increment(current_lsn, -@active_slot_lag_bytes)
+
+    if Lsn.compare(state.acked_lsn, lsn_threshold) == :lt do
+      # If there's more than `@active_slot_lag_bytes` between the current LSN and the last
+      # ack'ed LSN, emit a logical message to be consumed by the producer in order to advance
+      # the active slot and prevent it from stalling removal of old WAL records by Postgres.
+      :ok = Client.emit_logical_message(state.svc_conn, "advance active slot")
     end
   end
 
