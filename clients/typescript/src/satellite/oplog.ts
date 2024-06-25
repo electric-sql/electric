@@ -24,7 +24,7 @@ export type Tag = string
 export type ShadowKey = string
 
 // Oplog table schema.
-export interface OplogEntry {
+export type OplogEntry = {
   namespace: string
   tablename: string
   primaryKey: string // json object
