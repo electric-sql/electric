@@ -27,7 +27,7 @@ defmodule Electric.Replication.Shapes.SentRowsGraphTest do
         |> Graph.add_edge(:root, :v1, label: {"r2", "l1"})
         |> Graph.add_edge(:v1, :v2, label: {"r1", "l2"})
 
-      assert {[:v2, :v1], %Graph{} = graph_new} =
+      assert {[:v1, :v2], %Graph{} = graph_new} =
                SentRowsGraph.pop_by_request_ids(graph_init, ["r1", "r2"], root_vertex: :root)
 
       assert [:root] = Graph.vertices(graph_new)

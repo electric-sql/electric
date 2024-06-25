@@ -48,7 +48,7 @@ defmodule Electric.Replication.Shapes.SentRowsGraph do
       ...>   |> Graph.add_edge(:v1, :v2, label: {"r1", "l2"})
       ...>   |> pop_by_request_ids(["r1", "r2"])
       iex> popped_vertices
-      [:v2, :v1]
+      [:v1, :v2]
       iex> new_graph
       #Graph<type: directed, vertices: [:root], edges: []>
 
@@ -80,25 +80,25 @@ defmodule Electric.Replication.Shapes.SentRowsGraph do
   defp do_pop_by_request_id(%Graph{} = graph, %MapSet{} = request_ids, root_vertex) do
     predicate = fn {id, _} -> MapSet.member?(request_ids, id) end
 
-    {edges, vertices} =
+    {edges, vertices_to_drop} =
       dfs_traverse(
         [Graph.Utils.vertex_id(root_vertex)],
         graph,
-        {[], []},
+        {[], %{}},
         fn
-          ^root_vertex, _, acc ->
+          _, ^root_vertex, _, acc ->
             {:next, acc}
 
-          v, incoming_edges, {edges, vertices} ->
+          v_id, v, incoming_edges, {edges, vertices} ->
             incoming_edges
             |> Enum.flat_map(fn {source_v, meta} ->
               Enum.map(Map.keys(meta), &{source_v, v, &1})
             end)
             |> Enum.split_with(&predicate.(elem(&1, 2)))
             |> case do
-              {new_edges, []} ->
+              {_new_edges, []} ->
                 # If all incoming edges match the request ID, we'll pop the vertex
-                {:next, {new_edges ++ edges, [v | vertices]}}
+                {:next, {edges, Map.put(vertices, v_id, v)}}
 
               {new_edges, _rest} ->
                 # If some incoming edges are unaffected, we'll pop the edges explicitly
@@ -108,20 +108,19 @@ defmodule Electric.Replication.Shapes.SentRowsGraph do
         fn meta -> any_key_matches_predicate?(meta, predicate) end
       )
 
-    # Remove all edges relating to the request IDs from the graph
+    vertices_to_keep =
+      Enum.flat_map(graph.vertices, fn {v_id, v} ->
+        if is_map_key(vertices_to_drop, v_id), do: [], else: [v]
+      end)
+
     graph =
       edges
+      # Remove all edges relating to the request IDs from the graph
       |> Enum.reduce(graph, fn {v1, v2, label}, acc -> Graph.delete_edge(acc, v1, v2, label) end)
+      # Retain the subgraph that does not contain the dropped vertices
+      |> Graph.subgraph(vertices_to_keep)
 
-    # Retain the maximally connected subgraph that does not contain the
-    # vertices that have been popped
-    vertices_to_keep =
-      MapSet.difference(MapSet.new(Graph.vertices(graph)), MapSet.new(vertices))
-      |> MapSet.to_list()
-
-    graph = Graph.subgraph(graph, vertices_to_keep)
-
-    {vertices, graph}
+    {Map.values(vertices_to_drop), graph}
   end
 
   defp any_key_matches_predicate?(map, predicate) when is_map(map),
@@ -155,14 +154,14 @@ defmodule Electric.Replication.Shapes.SentRowsGraph do
         edge_predicate_fun,
         visited
       )
-      when is_function(fun, 3) and is_function(edge_predicate_fun, 1) do
+      when is_function(fun, 4) and is_function(edge_predicate_fun, 1) do
     if MapSet.member?(visited, v_id) do
       dfs_traverse(rest, g, acc, fun, edge_predicate_fun, visited)
     else
       v = Map.get(vs, v_id)
       in_edges = Enum.map(Map.get(ie, v_id, []), &{Map.fetch!(vs, &1), Map.fetch!(e, {&1, v_id})})
 
-      case fun.(v, in_edges, acc) do
+      case fun.(v_id, v, in_edges, acc) do
         {:next, acc2} ->
           visited = MapSet.put(visited, v_id)
 
