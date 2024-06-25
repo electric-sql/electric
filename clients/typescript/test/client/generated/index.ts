@@ -3457,7 +3457,7 @@ export const tableSchemas = {
     deleteSchema: ItemsDeleteArgsSchema,
     deleteManySchema: ItemsDeleteManyArgsSchema
   } as TableSchema<
-    z.infer<typeof ItemsUncheckedCreateInputSchema>,
+    z.infer<typeof ItemsCreateInputSchema>,
     Prisma.ItemsCreateArgs['data'],
     Prisma.ItemsUpdateArgs['data'],
     Prisma.ItemsFindFirstArgs['select'],
@@ -3500,7 +3500,7 @@ export const tableSchemas = {
     deleteSchema: UserDeleteArgsSchema,
     deleteManySchema: UserDeleteManyArgsSchema
   } as TableSchema<
-    z.infer<typeof UserUncheckedCreateInputSchema>,
+    z.infer<typeof UserCreateInputSchema>,
     Prisma.UserCreateArgs['data'],
     Prisma.UserUpdateArgs['data'],
     Prisma.UserFindFirstArgs['select'],
@@ -3550,7 +3550,7 @@ export const tableSchemas = {
     deleteSchema: PostDeleteArgsSchema,
     deleteManySchema: PostDeleteManyArgsSchema
   } as TableSchema<
-    z.infer<typeof PostUncheckedCreateInputSchema>,
+    z.infer<typeof PostCreateInputSchema>,
     Prisma.PostCreateArgs['data'],
     Prisma.PostUpdateArgs['data'],
     Prisma.PostFindFirstArgs['select'],
@@ -3601,7 +3601,7 @@ export const tableSchemas = {
     deleteSchema: ProfileDeleteArgsSchema,
     deleteManySchema: ProfileDeleteManyArgsSchema
   } as TableSchema<
-    z.infer<typeof ProfileUncheckedCreateInputSchema>,
+    z.infer<typeof ProfileCreateInputSchema>,
     Prisma.ProfileCreateArgs['data'],
     Prisma.ProfileUpdateArgs['data'],
     Prisma.ProfileFindFirstArgs['select'],
@@ -3733,7 +3733,7 @@ export const tableSchemas = {
     deleteSchema: DataTypesDeleteArgsSchema,
     deleteManySchema: DataTypesDeleteManyArgsSchema
   } as TableSchema<
-    z.infer<typeof DataTypesUncheckedCreateInputSchema>,
+    z.infer<typeof DataTypesCreateInputSchema>,
     Prisma.DataTypesCreateArgs['data'],
     Prisma.DataTypesUpdateArgs['data'],
     Prisma.DataTypesFindFirstArgs['select'],
@@ -3771,7 +3771,7 @@ export const tableSchemas = {
     deleteSchema: DummyDeleteArgsSchema,
     deleteManySchema: DummyDeleteManyArgsSchema
   } as TableSchema<
-    z.infer<typeof DummyUncheckedCreateInputSchema>,
+    z.infer<typeof DummyCreateInputSchema>,
     Prisma.DummyCreateArgs['data'],
     Prisma.DummyUpdateArgs['data'],
     Prisma.DummyFindFirstArgs['select'],
