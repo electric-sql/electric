@@ -23,12 +23,23 @@ defmodule Electric.Postgres.ExtensionTest do
         "CREATE TABLE #{schema}.things (id uuid PRIMARY KEY)"
       ]
     end
+  end
+
+  defmodule MigrationInvalidPublication do
+    @behaviour Electric.Postgres.Extension.Migration
 
     @impl true
-    def down(schema) do
+    def version(), do: 2024_06_25_11_36_50
+
+    @impl true
+    def up(_schema) do
       [
-        "DROP TABLE #{schema}.things CASCADE"
+        Extension.add_table_to_publication_sql("electric.my_table")
       ]
+    end
+
+    def migrations do
+      [__MODULE__]
     end
   end
 
@@ -103,6 +114,17 @@ defmodule Electric.Postgres.ExtensionTest do
 
   test "default migrations are valid", cxt do
     tx(&migrate/1, cxt)
+  end
+
+  test "adding table to publication via sql raises", cxt do
+    tx(
+      fn conn ->
+        assert_raise RuntimeError, fn ->
+          migrate_module(conn, cxt, MigrationInvalidPublication)
+        end
+      end,
+      cxt
+    )
   end
 
   test_tx "we can retrieve and set the current schema json", fn conn ->

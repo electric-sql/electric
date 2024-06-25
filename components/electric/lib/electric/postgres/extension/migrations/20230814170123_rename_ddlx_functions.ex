@@ -165,11 +165,6 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230814170123_Rename
     ]
   end
 
-  @impl true
-  def down(_schema) do
-    []
-  end
-
   EEx.function_from_file(:defp, :ddlgen_sql, sql_file, [
     :schema
   ])

@@ -27,7 +27,6 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20240618152555_DDLXPe
           ddlx bytea NOT NULL
       );
       """,
-      Extension.add_table_to_publication_sql(ddlx_table),
       """
       CREATE TABLE #{global_perms_table} (
           id int8 NOT NULL PRIMARY KEY,
@@ -36,7 +35,6 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20240618152555_DDLXPe
           inserted_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
       """,
-      Extension.add_table_to_publication_sql(global_perms_table),
       """
       CREATE UNIQUE INDEX ON #{global_perms_table} ((1)) WHERE parent_id IS NULL;
       """,
@@ -96,5 +94,10 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20240618152555_DDLXPe
   end
 
   @impl true
-  def down(_), do: []
+  def published_tables do
+    [
+      Extension.ddlx_relation(),
+      Extension.global_perms_relation()
+    ]
+  end
 end

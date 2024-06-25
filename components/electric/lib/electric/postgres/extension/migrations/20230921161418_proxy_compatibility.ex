@@ -101,7 +101,4 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230921161418_ProxyC
       """
     ]
   end
-
-  @impl true
-  def down(_), do: []
 end

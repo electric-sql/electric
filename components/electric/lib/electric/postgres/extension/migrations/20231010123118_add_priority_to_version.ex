@@ -20,9 +20,4 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20231010123118_AddPri
       """
     ]
   end
-
-  @impl true
-  def down(_schema) do
-    []
-  end
 end

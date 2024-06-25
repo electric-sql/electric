@@ -10,9 +10,4 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20231016141000_Conver
   def up(schema) do
     ["DROP ROUTINE IF EXISTS #{schema}.__validate_table_column_types(text)"]
   end
-
-  @impl true
-  def down(_schema) do
-    []
-  end
 end

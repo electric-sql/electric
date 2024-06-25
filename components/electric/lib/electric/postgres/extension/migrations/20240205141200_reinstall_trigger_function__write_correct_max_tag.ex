@@ -16,9 +16,4 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20240205141200_Reinst
       "CALL #{schema}.reinstall_trigger_function('install_function__write_correct_max_tag')"
     ]
   end
-
-  @impl true
-  def down(_schema) do
-    []
-  end
 end

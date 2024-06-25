@@ -19,7 +19,4 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20240501000000_UnsubP
       """
     ]
   end
-
-  @impl true
-  def down(_), do: []
 end

@@ -134,6 +134,7 @@ defmodule Electric.Postgres.Extension do
   def ddl_relation, do: {@schema, @ddl_relation}
   def version_relation, do: {@schema, @version_relation}
   def electrified_tracking_relation, do: {@schema, @electrified_tracking_relation}
+  def transaction_marker_relation, do: {@schema, @transaction_marker_relation}
   def ddlx_relation, do: {@schema, @ddlx_commands_relation}
   def global_perms_relation, do: {@schema, @global_perms_relation}
   def acked_client_lsn_relation, do: {@schema, @acked_client_lsn_relation}
@@ -306,17 +307,6 @@ defmodule Electric.Postgres.Extension do
     end
   end
 
-  # These are tables in the "electric" schema, each of which was added to the publication in
-  # one of the extension migrations. They can be found by searching the codebase for
-  # "add_table_to_publication_sql".
-  @published_extension_tables [
-    {@schema, @ddl_relation},
-    {@schema, @electrified_tracking_relation},
-    {@schema, @transaction_marker_relation},
-    {@schema, @acked_client_lsn_relation},
-    {@schema, @ddlx_commands_relation}
-  ]
-
   @doc """
   The list of fully-qualified table identifiers that should be included in "#{@publication_name}".
 
@@ -327,9 +317,17 @@ defmodule Electric.Postgres.Extension do
   def published_tables(conn) do
     with {:ok, tables} <- electrified_tables(conn) do
       tables_with_shadows = Enum.flat_map(tables, &[&1, shadow_of(&1)])
-      published_tables = Enum.concat(tables_with_shadows, @published_extension_tables)
+      published_tables = Enum.concat(tables_with_shadows, published_extension_tables())
       {:ok, published_tables}
     end
+  end
+
+  defp published_extension_tables(module \\ __MODULE__) do
+    module
+    |> migration_versions()
+    |> Enum.flat_map(fn {_version, migration_module} ->
+      migration_published_tables(migration_module)
+    end)
   end
 
   def create_table_ddl(conn, %Proto.RangeVar{} = table_name) do
@@ -444,7 +442,16 @@ defmodule Electric.Postgres.Extension do
     Logger.info("Running extension migration: #{version}")
 
     for sql <- module.up(@schema) do
+      # guard against adding publications via raw sql to protect consistency of
+      # `published_tables/1`
+      if sql =~ ~r/ALTER +PUBLICATION +.?#{@publication_name}.? +ADD +TABLE/,
+        do:
+          raise(
+            "Invalid migration: add relation to `#{module}.published_tables/0` to publish a table"
+          )
+
       results = :epgsql.squery(txconn, sql) |> List.wrap()
+
       errors = Enum.filter(results, &(elem(&1, 0) == :error))
 
       if errors == [] do
@@ -456,6 +463,17 @@ defmodule Electric.Postgres.Extension do
       end
     end
 
+    module
+    |> migration_published_tables()
+    |> Enum.each(fn
+      {_schema, _name} = table ->
+        sql = table |> Electric.Utils.inspect_relation() |> add_table_to_publication_sql()
+        {:ok, [], []} = :epgsql.squery(txconn, sql)
+
+      name when is_binary(name) ->
+        raise "migration published_tables/0 should return a list of relations in `{schema, name}` form"
+    end)
+
     {:ok, 1} =
       :epgsql.squery(
         txconn,
@@ -463,6 +481,14 @@ defmodule Electric.Postgres.Extension do
       )
 
     :ok
+  end
+
+  defp migration_published_tables(module) do
+    if function_exported?(module, :published_tables, 0) do
+      module.published_tables()
+    else
+      []
+    end
   end
 
   # https://dba.stackexchange.com/a/311714

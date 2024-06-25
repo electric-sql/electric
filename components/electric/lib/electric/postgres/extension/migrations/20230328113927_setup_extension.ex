@@ -53,13 +53,14 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230328113927 do
       ##################
       """
       CREATE PUBLICATION "#{publication_name}";
-      """,
-      Extension.add_table_to_publication_sql(ddl_table)
+      """
     ]
   end
 
   @impl true
-  def down(_schema) do
-    []
+  def published_tables do
+    [
+      Extension.ddl_relation()
+    ]
   end
 end

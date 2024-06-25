@@ -14,9 +14,4 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20240213160300_DropGe
       "DROP ROUTINE IF EXISTS #{schema}.generate_electrified_sql(regclass)"
     ]
   end
-
-  @impl true
-  def down(_schema) do
-    []
-  end
 end

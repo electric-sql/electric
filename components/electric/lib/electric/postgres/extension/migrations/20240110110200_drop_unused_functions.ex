@@ -13,9 +13,4 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20240110110200_DropUn
       "DROP ROUTINE IF EXISTS #{schema}.__validate_table_column_types(text)"
     ]
   end
-
-  @impl true
-  def down(_schema) do
-    []
-  end
 end
