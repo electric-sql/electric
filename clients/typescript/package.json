@@ -229,7 +229,7 @@
     "@typescript-eslint/parser": "^5.34.0",
     "@vue/test-utils": "^2.4.4",
     "ava": "^4.3.1",
-    "better-sqlite3": "^8.4.0",
+    "better-sqlite3": "^11.0.0",
     "concurrently": "^8.2.2",
     "eslint": "^8.22.0",
     "expo-sqlite": "^13.1.0",

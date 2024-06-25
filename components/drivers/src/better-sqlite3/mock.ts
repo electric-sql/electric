@@ -1,5 +1,6 @@
 import { BindParams, DbName, Row, SqlValue } from '../util/types.js'
 import { Database, Statement, Transaction } from './database.js'
+import type { Statement as OriginalStatement } from 'better-sqlite3'
 
 type MockStatement<T extends BindParams = []> = Pick<
   Statement<T>,
