@@ -1,5 +1,5 @@
 import { ForeignKey } from '../triggers'
-import { QualifiedTablename, SqlValue, Statement } from '../../util'
+import { QualifiedTablename, Row, SqlValue, Statement } from '../../util'
 
 export type Dialect = 'SQLite' | 'Postgres'
 export abstract class QueryBuilder {
@@ -311,10 +311,10 @@ export abstract class QueryBuilder {
    * @param suffixSql optional SQL string to append to each insert statement
    * @returns array of statements ready to be executed by the adapter
    */
-  prepareInsertBatchedStatements(
+  prepareInsertBatchedStatements<T extends Row>(
     baseSql: string,
-    columns: string[],
-    records: Record<string, SqlValue>[],
+    columns: Extract<keyof T, string>[],
+    records: Row[],
     maxParameters: number,
     suffixSql = ''
   ): Statement[] {
@@ -385,10 +385,10 @@ export abstract class QueryBuilder {
    * @param suffixSql optional SQL string to append to each insert statement
    * @returns array of statements ready to be executed by the adapter
    */
-  public prepareDeleteBatchedStatements(
+  public prepareDeleteBatchedStatements<T extends Row>(
     baseSql: string,
-    columns: string[],
-    records: Record<string, SqlValue>[],
+    columns: Extract<keyof T, string>[],
+    records: T[],
     maxParameters: number,
     suffixSql = ''
   ): Statement[] {
