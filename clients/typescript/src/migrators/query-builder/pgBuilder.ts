@@ -443,7 +443,7 @@ class PgBuilder extends QueryBuilder {
     columns: string[],
     args: string[] | string[][]
   ): string {
-    const useTuples = typeof args[0] === 'object'
+    const useTuples = columns.length > 1
     return `(${columns.map(quote).join(', ')}) IN (${
       useTuples
         ? ` VALUES ${(args as string[][])

@@ -317,7 +317,7 @@ class SqliteBuilder extends QueryBuilder {
     columns: string[],
     args: (string | string[])[]
   ): string {
-    const useTuples = typeof args[0] === 'object'
+    const useTuples = columns.length > 1
     return `(${columns.map((c) => `"${c}"`).join(`, `)}) IN (${
       useTuples
         ? (args as string[][]).map((tup) => `(${tup.join(`, `)})`).join(', ')
