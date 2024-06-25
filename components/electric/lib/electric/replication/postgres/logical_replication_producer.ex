@@ -248,7 +248,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
         ShadowTableTransformation.convert_tag_list_pg_to_satellite(received["tags"], state.origin)
     }
 
-    state = ack(msg.lsn, state)
+    state = ack_message(msg, state)
 
     {lsn, txn} = state.transaction
 
@@ -258,7 +258,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
 
   defp process_message(%Message{} = msg, state) do
     Logger.info("Got a message from PG via logical replication: #{inspect(msg)}")
-    state = ack(msg.lsn, state)
+    state = ack_message(msg, state)
     {:noreply, [], state}
   end
 
@@ -394,14 +394,14 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
 
   defp dispatch_events(%{demand: demand, queue: queue, queue_len: queue_len} = state)
        when demand >= queue_len do
-    state = queue |> :queue.last() |> ack(state)
+    state = queue |> :queue.last() |> ack_transaction(state)
     state = %{state | queue: :queue.new(), queue_len: 0, demand: demand - queue_len}
     {:noreply, :queue.to_list(queue), state}
   end
 
   defp dispatch_events(%{demand: demand, queue: queue, queue_len: queue_len} = state) do
     {to_emit, queue_remaining} = :queue.split(demand, queue)
-    state = to_emit |> :queue.last() |> ack(state)
+    state = to_emit |> :queue.last() |> ack_transaction(state)
     state = %{state | queue: queue_remaining, queue_len: queue_len - demand, demand: 0}
     {:noreply, :queue.to_list(to_emit), state}
   end
@@ -415,23 +415,50 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
     |> Map.new(fn {column, data} -> {column.name, data} end)
   end
 
-  @spec ack(Transaction.t() | Lsn.t(), State.t()) :: State.t()
+  @spec ack_message(Message.t(), State.t()) :: State.t()
 
   if Mix.env() == :test do
-    def ack(_, %State{repl_conn: :conn} = state), do: state
+    def ack_message(_, %State{repl_conn: :conn} = state), do: state
   end
 
-  def ack(%Transaction{lsn: lsn}, state) do
-    ack(lsn, state)
+  def ack_message(%Message{lsn: lsn}, state) do
+    cond do
+      state.queue_len > 0 ->
+        # We still have unacknowledged transactions waiting in the queue. Can't acknowledge the
+        # message before all transactions in the queue have been processed.
+        state
+
+      Lsn.compare(lsn, state.acked_lsn) != :gt ->
+        # Either lsn == state.acked_lsn, in which case we can skip acknowledging it for the second time,
+        # or lsn < state.acked_lsn, which could mean that the message's LSN is lower than the
+        # LSN of the transaction it was emitted from or another transaction with a higher LSN
+        # has already been acknowledged.
+        state
+
+      true ->
+        ack_lsn(lsn, state)
+    end
   end
 
-  def ack(%Lsn{} = lsn, state) do
-    :gt = Lsn.compare(lsn, state.acked_lsn)
+  @spec ack_transaction(Transaction.t(), State.t()) :: State.t()
+
+  if Mix.env() == :test do
+    def ack_transaction(_, %State{repl_conn: :conn} = state), do: state
+  end
+
+  def ack_transaction(%Transaction{lsn: lsn}, state) do
+    ack_lsn(lsn, state)
+  end
+
+  def ack_lsn(%Lsn{} = lsn, state) do
+    assert_lsn_is_advancing!(lsn, state.acked_lsn, Lsn.compare(lsn, state.acked_lsn))
 
     Logger.debug("Acknowledging #{lsn}", origin: state.origin)
     :ok = Client.acknowledge_lsn(state.repl_conn, lsn)
     %{state | acked_lsn: lsn}
   end
+
+  defp assert_lsn_is_advancing!(_lsn, _acked_lsn, :gt), do: :ok
 
   # Advance the replication slot to let Postgres discard old WAL records.
   #
