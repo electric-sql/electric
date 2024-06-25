@@ -407,24 +407,28 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
   describe "permissions" do
     alias ElectricTest.PermissionsHelpers.Proto
     alias ElectricTest.PermissionsHelpers.Chgs
+    alias ElectricTest.PermissionsHelpers.Perms
 
     test "converts ddlx events into global permission change messages", cxt do
       %{origin: origin, producer: producer, version: version} = cxt
       assert_receive {MockSchemaLoader, {:connect, _}}
 
+      {loader, rules} =
+        Perms.rules(cxt.loader,
+          assigns: [
+            Proto.assign(
+              table: Proto.table("project_memberships"),
+              user_column: "user_id",
+              role_column: "project_role",
+              scope: Proto.table("projects")
+            )
+          ]
+        )
+
       raw_events = [
         %Transaction{
           changes: [
-            Chgs.ddlx(
-              assigns: [
-                Proto.assign(
-                  table: Proto.table("project_memberships"),
-                  user_column: "user_id",
-                  role_column: "project_role",
-                  scope: Proto.table("projects")
-                )
-              ]
-            )
+            Chgs.rules(rules)
           ],
           commit_timestamp: ~U[2023-05-02 10:08:00.948788Z],
           origin: origin,
@@ -433,7 +437,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
         }
       ]
 
-      GenStage.call(producer, {:emit, cxt.loader, raw_events, version})
+      GenStage.call(producer, {:emit, loader, raw_events, version})
 
       assert_receive {FakeConsumer, :events, filtered_events}, 1000
 
@@ -456,19 +460,22 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
       %{origin: origin, producer: producer, version: version} = cxt
       assert_receive {MockSchemaLoader, {:connect, _}}
 
+      {loader, rules} =
+        Perms.rules(cxt.loader,
+          assigns: [
+            Proto.assign(
+              table: Proto.table("project_memberships"),
+              user_column: "user_id",
+              role_column: "project_role",
+              scope: Proto.table("projects")
+            )
+          ]
+        )
+
       raw_events = [
         %Transaction{
           changes: [
-            Chgs.ddlx(
-              assigns: [
-                Proto.assign(
-                  table: Proto.table("project_memberships"),
-                  user_column: "user_id",
-                  role_column: "project_role",
-                  scope: Proto.table("projects")
-                )
-              ]
-            )
+            Chgs.rules(rules)
           ],
           commit_timestamp: ~U[2023-05-02 10:08:00.948788Z],
           origin: origin,
@@ -477,8 +484,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
         }
       ]
 
-      GenStage.call(producer, {:emit, cxt.loader, raw_events, version})
-      assert_receive {MockSchemaLoader, {:save_global_permissions, _}}, 500
+      GenStage.call(producer, {:emit, loader, raw_events, version})
 
       assert_receive {FakeConsumer, :events, _filtered_events}, 1000
 
@@ -503,7 +509,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
         }
       ]
 
-      GenStage.call(producer, {:emit, cxt.loader, raw_events, version})
+      GenStage.call(producer, {:emit, loader, raw_events, version})
 
       assert_receive {FakeConsumer, :events, filtered_events}, 1000
 
@@ -531,6 +537,18 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
     test "uses updated schema information", cxt do
       %{origin: origin, producer: producer, version: version} = cxt
       assert_receive {MockSchemaLoader, {:connect, _}}
+
+      {loader, rules} =
+        Perms.rules(cxt.loader,
+          assigns: [
+            Proto.assign(
+              table: Proto.table("team_memberships"),
+              user_column: "user_id",
+              role_column: "team_role",
+              scope: Proto.table("teams")
+            )
+          ]
+        )
 
       insert =
         Chgs.insert(
@@ -573,16 +591,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
               },
               tags: []
             },
-            Chgs.ddlx(
-              assigns: [
-                Proto.assign(
-                  table: Proto.table("team_memberships"),
-                  user_column: "user_id",
-                  role_column: "team_role",
-                  scope: Proto.table("teams")
-                )
-              ]
-            ),
+            Chgs.rules(rules),
             insert
           ],
           commit_timestamp: ~U[2023-05-02 10:08:00.948788Z],
@@ -592,7 +601,7 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
         }
       ]
 
-      GenStage.call(producer, {:emit, cxt.loader, raw_events, version})
+      GenStage.call(producer, {:emit, loader, raw_events, version})
 
       assert_receive {FakeConsumer, :events, filtered_events}, 1000
 

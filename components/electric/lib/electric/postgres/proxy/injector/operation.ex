@@ -235,7 +235,8 @@ defmodule Operation.Impl do
   Used by Electric DDLX commands which fake the responses from
   Parse/Describe and Bind/Execute.
   """
-  @spec response(PgProtocol.Message.t(), String.t() | nil, State.t()) :: PgProtocol.Message.t()
+  @spec response(PgProtocol.Message.t(), String.t() | nil, State.t()) ::
+          PgProtocol.Message.t()
   def response(msg, tag \\ nil, state)
 
   def response(%M.Parse{}, _tag, _state) do
@@ -487,42 +488,252 @@ defmodule Operation.Between do
   end
 end
 
-defmodule Operation.Begin do
-  defstruct hidden?: false
+defmodule Operation.AssignMigrationVersion do
+  defstruct [:version]
+
+  alias __MODULE__, as: O
+
+  defimpl Operation do
+    use Operation.Impl
+
+    @generated_version_priority 0
+    @session_version_priority 2
+    @tx_version_priority 4
+
+    def activate(%O{} = op, state, send) do
+      if State.capture_version?(state) do
+        {version, priority, state} = migration_version(op, state)
+        sql = state.query_generator.capture_version_query(version, priority)
+        {op, State.tx_version(state, version), Send.server(send, [query(sql)])}
+      else
+        {nil, state, send}
+      end
+    end
+
+    defp migration_version(%O{version: nil}, state) do
+      case State.retrieve_version_metadata(state) do
+        {{:ok, version}, state} ->
+          # this version is coming from some previous query, outside the
+          # current transaction so give it a priority < the priority of any tx
+          # assigned version.
+          {version, @session_version_priority, state}
+
+        {:error, state} ->
+          # priority 0 will only be used if the automatic version assignment
+          # wasn't called for some reason
+          {generate_version(state), @generated_version_priority, state}
+      end
+    end
+
+    defp migration_version(%O{version: version}, state)
+         when is_binary(version) do
+      # this version is coming from the current transaction, so give it the
+      # highest priority of all these options
+      {version, @tx_version_priority, state}
+    end
+
+    defp generate_version(state) do
+      state.query_generator.migration_version()
+    end
+  end
+end
+
+defmodule IntrospectionQuery do
+  defstruct [:query, :callback, rows: []]
 
   defimpl Operation do
     use Operation.Impl
 
     def activate(op, state, send) do
-      {if(op.hidden?, do: op, else: nil), State.begin(state),
-       Send.server(send, [%M.Query{query: "BEGIN"}])}
+      {op, state, Send.server(send, %M.Query{query: op.query})}
+    end
+
+    def recv_server(op, %M.RowDescription{}, state, send) do
+      {op, state, send}
+    end
+
+    def recv_server(op, %M.DataRow{fields: row}, state, send) do
+      {%{op | rows: [row | op.rows]}, state, send}
+    end
+
+    def recv_server(op, %M.CommandComplete{}, state, send) do
+      {op, state, send}
+    end
+
+    def recv_server(op, %M.ReadyForQuery{}, state, send) do
+      callback = op.callback || (&null_callback/3)
+      {state, send} = callback.(Enum.reverse(op.rows), state, send)
+      {nil, state, send}
+    end
+
+    defp null_callback(_rows, state, send) do
+      {state, send}
+    end
+  end
+end
+
+defmodule Operation.Begin do
+  defstruct hidden?: false,
+            complete_msgs: [
+              %M.CommandComplete{tag: "BEGIN"},
+              %M.ReadyForQuery{status: :tx}
+            ],
+            introspect: [:perms],
+            rules: nil
+
+  alias Electric.Satellite.Permissions
+
+  alias __MODULE__, as: O
+
+  defimpl Operation do
+    use Operation.Impl
+
+    def activate(op, state, send) do
+      {op, State.begin(state), Send.server(send, [%M.Query{query: "BEGIN"}])}
+    end
+
+    def recv_server(%O{hidden?: true} = op, %M.ReadyForQuery{}, state, send) do
+      introspect(op, state, send)
+    end
+
+    def recv_server(%O{} = op, %M.ReadyForQuery{}, state, send) do
+      introspect(
+        op,
+        state,
+        send
+      )
+    end
+
+    def recv_server(%O{} = op, _msg, state, send) do
+      {op, state, send}
+    end
+
+    defp introspect(op, state, send) do
+      stack = [
+        %IntrospectionQuery{
+          query: state.query_generator.permissions_rules_query(),
+          callback: fn [[data]], state, send ->
+            {:ok, rules} = Permissions.State.decode_rules(data)
+            {State.tx_permissions(state, rules), send}
+          end
+        },
+        if(op.hidden?, do: [], else: Operation.Pass.client(op.complete_msgs))
+      ]
+
+      Operation.activate(stack, state, send)
     end
   end
 end
 
 defmodule Operation.Rollback do
-  defstruct hidden?: false
+  defstruct hidden?: false,
+            complete_msgs: [
+              %M.CommandComplete{tag: "ROLLBACK"},
+              %M.ReadyForQuery{status: :idle}
+            ]
 
   defimpl Operation do
     use Operation.Impl
 
     def activate(op, state, send) do
-      {if(op.hidden?, do: op, else: nil), State.rollback(state),
-       Send.server(send, [%M.Query{query: "ROLLBACK"}])}
+      {op, state, Send.server(send, [%M.Query{query: "ROLLBACK"}])}
+    end
+
+    def recv_server(%{hidden?: false} = op, %M.ReadyForQuery{}, state, send) do
+      {nil, State.rollback(state), Send.client(send, op.complete_msgs)}
+    end
+
+    def recv_server(%{hidden?: true}, %M.ReadyForQuery{}, state, send) do
+      {nil, State.rollback(state), send}
+    end
+
+    def recv_server(op, _msg, state, send) do
+      {op, state, send}
+    end
+  end
+end
+
+defmodule Operation.Map do
+  defstruct msgs: [], response: []
+
+  defimpl Operation do
+    use Operation.Impl
+
+    def activate(op, state, send) do
+      {op, state, Send.server(send, op.msgs)}
+    end
+
+    def recv_server(op, %M.ReadyForQuery{}, state, send) do
+      {nil, state, Send.client(send, op.response)}
+    end
+
+    def recv_server(op, _msg, state, send) do
+      {op, state, send}
+    end
+  end
+end
+
+defmodule Operation.SavePermissionsRules do
+  defstruct []
+
+  defimpl Operation do
+    use Operation.Impl
+
+    def activate(op, state, send) do
+      if rules = State.permissions_modified(state) do
+        query = state.query_generator.save_permissions_rules_query(rules)
+
+        {op, state, Send.server(send, %M.Query{query: query})}
+      else
+        {nil, state, send}
+      end
+    end
+
+    def recv_server(_op, %M.ReadyForQuery{}, state, send) do
+      {nil, State.permissions_saved(state), send}
+    end
+
+    def recv_server(op, _msg, state, send) do
+      {op, state, send}
     end
   end
 end
 
 defmodule Operation.Commit do
-  defstruct hidden?: false
+  defstruct hidden?: false,
+            complete_msgs: [
+              %M.CommandComplete{tag: "COMMIT"},
+              %M.ReadyForQuery{status: :idle}
+            ]
+
+  defmodule Complete do
+    defstruct []
+
+    defimpl Operation do
+      use Operation.Impl
+
+      def activate(_op, state, send) do
+        {nil, State.commit(state), send}
+      end
+    end
+  end
 
   defimpl Operation do
     use Operation.Impl
 
     def activate(op, state, send) do
-      {if(op.hidden?, do: op, else: nil), State.commit(state),
-       Send.server(send, [%M.Query{query: "COMMIT"}])}
+      stack = [
+        %Operation.SavePermissionsRules{},
+        %Operation.AssignMigrationVersion{},
+        %Operation.Map{msgs: [%M.Query{query: "COMMIT"}], response: response_msgs(op)},
+        %Complete{}
+      ]
+
+      Operation.activate(stack, state, send)
     end
+
+    defp response_msgs(%{hidden?: true}), do: []
+    defp response_msgs(%{hidden?: false, complete_msgs: msgs}), do: msgs
 
     def send_error(_op, state, send) do
       %{client: client} = Send.flush(send)
@@ -550,54 +761,6 @@ defmodule Operation.Commit do
   end
 end
 
-defmodule Operation.AssignMigrationVersion do
-  defstruct [:version]
-
-  defimpl Operation do
-    use Operation.Impl
-
-    @generated_version_priority 0
-    @session_version_priority 2
-    @tx_version_priority 4
-
-    def activate(op, state, send) do
-      if State.electrified?(state) do
-        {version, priority, state} = migration_version(op, state)
-        sql = state.query_generator.capture_version_query(version, priority)
-        {op, State.tx_version(state, version), Send.server(send, [query(sql)])}
-      else
-        {nil, state, send}
-      end
-    end
-
-    defp migration_version(%Operation.AssignMigrationVersion{version: nil}, state) do
-      case State.retrieve_version_metadata(state) do
-        {{:ok, version}, state} ->
-          # this version is coming from some previous query, outside the
-          # current transaction so give it a priority < the priority of any tx
-          # assigned version.
-          {version, @session_version_priority, state}
-
-        {:error, state} ->
-          # priority 0 will only be used if the automatic version assignment
-          # wasn't called for some reason
-          {generate_version(state), @generated_version_priority, state}
-      end
-    end
-
-    defp migration_version(%Operation.AssignMigrationVersion{version: version}, state)
-         when is_binary(version) do
-      # this version is coming from the current transaction, so give it the
-      # highest priority of all these options
-      {version, @tx_version_priority, state}
-    end
-
-    defp generate_version(state) do
-      state.query_generator.migration_version()
-    end
-  end
-end
-
 defmodule Operation.Simple do
   defstruct [:stmts, :op, :tx?, complete: [], ready: nil]
 
@@ -617,7 +780,6 @@ defmodule Operation.Simple do
           op,
           %Operation.Between{
             commands: [
-              %Operation.AssignMigrationVersion{},
               %Operation.Commit{hidden?: true}
             ],
             status: :idle
@@ -708,7 +870,7 @@ defmodule Operation.Electric do
     :queries,
     :mode,
     :initial_query,
-    introspect: [:electrified, :ddl],
+    introspect: [:lock, :electrified, :ddl],
     schema: nil,
     tables: MapSet.new(),
     ddl: []
@@ -731,6 +893,7 @@ defmodule Operation.Electric do
 
       state = op |> tables() |> Enum.reduce(state, &State.electrify(&2, &1))
 
+      # TODO: refactor as a stack of ops
       send_query(op, state, send)
     end
 
@@ -750,6 +913,10 @@ defmodule Operation.Electric do
 
     # this ready for query is the end of the list of electrified tables query
     def recv_server(%O{introspect: [:electrified | rest]} = op, %M.ReadyForQuery{}, state, send) do
+      send_query(%{op | introspect: rest}, state, send)
+    end
+
+    def recv_server(%O{introspect: [:lock | rest]} = op, %M.ReadyForQuery{}, state, send) do
       send_query(%{op | introspect: rest}, state, send)
     end
 
@@ -810,7 +977,7 @@ defmodule Operation.Electric do
     end
 
     def recv_server(
-          %O{introspect: false, queries: [query | queries]} = op,
+          %O{introspect: [], queries: [query | queries]} = op,
           %M.ReadyForQuery{},
           state,
           send
@@ -820,6 +987,14 @@ defmodule Operation.Electric do
 
     def recv_server(%O{} = op, _msg, state, send) do
       {op, state, send}
+    end
+
+    defp send_query(%O{introspect: [:lock | _]} = op, state, send) do
+      query = state.query_generator.lock_rules_table_query()
+
+      Logger.debug(fn -> "Locking global rules table" end)
+
+      {op, state, Send.server(send, query(query))}
     end
 
     defp send_query(%O{introspect: [:electrified | _]} = op, state, send) do
@@ -844,10 +1019,34 @@ defmodule Operation.Electric do
     defp send_query(%O{introspect: []} = op, state, send) do
       ddl = Enum.reverse(op.ddl)
 
-      [query | queries] =
-        DDLX.Command.proxy_sql(op.command, ddl, &state.query_generator.quote_query/1)
+      # TODO: rename this proxy_sql function, should be command_sql or
+      # something. only electrify returns something here perms commands return
+      # nothing for this
+      #
+      # TODO: we also need to run actions based on the command so for an
+      # assign, we need to query the assign table in this txn in order to
+      # generate roles for all the existing entries in the assign table by
+      # iterating the rows in that table and running the assign triggers
+      # against them. this is much better than my idea of capturing a snapshot
+      # and using it later in the replication consumer.
+      case DDLX.Command.proxy_sql(op.command, ddl, &state.query_generator.quote_query/1) do
+        [query | queries] ->
+          {%{op | queries: queries}, state, Send.server(send, query(query))}
 
-      {%{op | queries: queries}, state, Send.server(send, query(query))}
+        [] ->
+          tag = DDLX.Command.tag(op.command)
+
+          reply =
+            case op.mode do
+              :simple ->
+                [%M.CommandComplete{tag: tag}, %M.ReadyForQuery{status: :tx}]
+
+              :extended ->
+                []
+            end
+
+          {nil, State.update_permissions(state, op.command), Send.client(send, reply)}
+      end
     end
 
     # we don't need real oids
@@ -1049,7 +1248,6 @@ defmodule Operation.AutoTx do
           op.ops,
           %Operation.Between{
             commands: [
-              %Operation.AssignMigrationVersion{},
               %Operation.Commit{hidden?: true}
             ],
             status: :idle

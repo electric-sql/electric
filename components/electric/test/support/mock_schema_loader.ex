@@ -501,12 +501,11 @@ defmodule Electric.Postgres.MockSchemaLoader do
     end
   end
 
-  @impl SchemaLoader
-  def save_global_permissions({:agent, pid}, rules) do
+  def save_global_permissions({__MODULE__, {:agent, pid}}, rules) do
     Agent.get_and_update(pid, fn state ->
-      case save_global_permissions(state, rules) do
-        {:ok, state} ->
-          {{:ok, {:agent, pid}}, state}
+      case save_global_permissions({__MODULE__, state}, rules) do
+        {:ok, {__MODULE__, state}} ->
+          {{:ok, {__MODULE__, {:agent, pid}}}, state}
 
         error ->
           {error, state}
@@ -515,7 +514,7 @@ defmodule Electric.Postgres.MockSchemaLoader do
   end
 
   def save_global_permissions(
-        %{global_perms: global_perms, opts: opts} = state,
+        {__MODULE__, %{global_perms: global_perms, opts: opts} = state},
         %SatPerms.Rules{} = rules
       ) do
     notify(opts, {:save_global_permissions, rules})
@@ -530,7 +529,8 @@ defmodule Electric.Postgres.MockSchemaLoader do
       end)
 
     {:ok,
-     %{state | user_perms: user_perms ++ state.user_perms, global_perms: [rules | global_perms]}}
+     {__MODULE__,
+      %{state | user_perms: user_perms ++ state.user_perms, global_perms: [rules | global_perms]}}}
   end
 
   @impl SchemaLoader

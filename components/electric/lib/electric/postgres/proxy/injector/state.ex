@@ -14,8 +14,10 @@ defmodule Electric.Postgres.Proxy.Injector.State do
               id: 0,
               tables: %{},
               rules: nil,
+              rules_modifications: 0,
               schema: nil,
-              failed: false
+              failed: false,
+              permissions: %{}
 
     @type t() :: %__MODULE__{
             electrified: boolean(),
@@ -23,24 +25,21 @@ defmodule Electric.Postgres.Proxy.Injector.State do
             tables: %{Postgres.relation() => true},
             id: pos_integer(),
             rules: nil | %SatPerms.Rules{},
+            rules_modifications: non_neg_integer(),
             schema: nil | Postgres.Schema.t(),
-            failed: boolean()
+            failed: boolean(),
+            permissions: %{module() => term()}
           }
 
     def new(loader) do
-      # TODO: These rules and schema version could be inconsistent with the database
+      # TODO: These schema version could be inconsistent with the database
       #       there could be a migration in the replication stream that hasn't reached
       #       our state maintenance consumer (MigrationConsumer)
       #       Perhaps we could move the schema mutation/update to within the proxy itself
       #       and provide a way to retrieve based on txid or something.
-      #
-      #       We also need to maintain the permissions state in sync with the current
-      #       transaction.
-      {:ok, rules} = SchemaLoader.global_permissions(loader)
       {:ok, schema_version} = SchemaLoader.load(loader)
 
       %__MODULE__{
-        rules: rules,
         schema: schema_version.schema,
         id: System.unique_integer([:positive, :monotonic])
       }
@@ -211,6 +210,19 @@ defmodule Electric.Postgres.Proxy.Injector.State do
     end
   end
 
+  def capture_version?(%__MODULE__{} = state) do
+    case {tx_version?(state), electrified?(state)} do
+      {_, false} ->
+        false
+
+      {true, true} ->
+        false
+
+      {false, true} ->
+        true
+    end
+  end
+
   def assign_version_metadata(%__MODULE__{} = state, version) do
     Map.update!(state, :metadata, &Map.put(&1, :version, to_string(version)))
   end
@@ -231,4 +243,38 @@ defmodule Electric.Postgres.Proxy.Injector.State do
 
   def failed?(%__MODULE__{tx: nil}), do: false
   def failed?(%__MODULE__{tx: tx}), do: tx.failed
+
+  def txn_permissions(%__MODULE__{tx: nil}, _rules) do
+    raise "no in transaction"
+  end
+
+  def tx_permissions(%__MODULE__{} = state, rules) do
+    Map.update!(state, :tx, fn tx ->
+      %{tx | rules: rules, permissions: Map.put(tx.permissions, Electric.DDLX, rules)}
+    end)
+  end
+
+  def update_permissions(%__MODULE__{} = state, %Electric.DDLX.Command{} = command) do
+    {:ok, n, rules} =
+      Electric.Satellite.Permissions.State.apply_ddlx_txn(command.action, state.tx.rules)
+
+    Map.update!(
+      state,
+      :tx,
+      &%{&1 | rules: rules, rules_modifications: &1.rules_modifications + n}
+    )
+  end
+
+  def permissions_modified(%__MODULE__{tx: %{rules_modifications: n, rules: rules}})
+      when n > 0 do
+    Electric.Satellite.Permissions.State.commit(rules)
+  end
+
+  def permissions_modified(%__MODULE__{}) do
+    nil
+  end
+
+  def permissions_saved(%__MODULE__{tx: tx} = state) do
+    %{state | tx: %{tx | rules_modifications: 0}}
+  end
 end

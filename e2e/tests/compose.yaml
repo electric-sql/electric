@@ -19,6 +19,7 @@ services:
       ELECTRIC_WRITE_TO_PG_MODE: "${ELECTRIC_WRITE_TO_PG_MODE:-logical_replication}"
       LOGICAL_PUBLISHER_HOST: electric_1
       PG_PROXY_LOG_LEVEL: info
+      # PROXY_TRACING_ENABLE: true
       # prioritise per-test settings
       ELECTRIC_FEATURES: "${ELECTRIC_FEATURES:-}:proxy_grant_write_permissions=true:permissions=true"
     ports:

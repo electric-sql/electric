@@ -208,15 +208,6 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
   end
 
   @impl SchemaLoader
-  def save_global_permissions(pool, permissions) do
-    checkout!(pool, fn conn ->
-      with :ok <- Extension.Permissions.save_global(conn, permissions) do
-        {:ok, pool}
-      end
-    end)
-  end
-
-  @impl SchemaLoader
   def user_permissions(pool, user_id) do
     checkout!(pool, fn conn ->
       with {:ok, perms} <- Extension.Permissions.user(conn, user_id) do

@@ -20,13 +20,16 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230829000000_Acknow
         WHEN (pg_trigger_depth() < 1)
         EXECUTE FUNCTION #{schema}.upsert_acknowledged_client_lsn()
         """,
-        "ALTER TABLE #{table} ENABLE REPLICA TRIGGER upsert_acknowledged_client_lsn",
-        Extension.add_table_to_publication_sql(table)
+        "ALTER TABLE #{table} ENABLE REPLICA TRIGGER upsert_acknowledged_client_lsn"
       ]
   end
 
   @impl true
-  def down(_), do: []
+  def published_tables do
+    [
+      Extension.acked_client_lsn_relation()
+    ]
+  end
 
   @impl true
   def replicated_table_ddls do

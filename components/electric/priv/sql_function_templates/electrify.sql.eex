@@ -14,7 +14,7 @@ BEGIN
 
     RAISE WARNING
         E'Electrification via procedure call is deprecated.'
-        '\n\nPlease use the `ALTER %I.%I ENABLE ELECTRIC` syntax via the migrations proxy.'
+        '\n\nPlease use the `ALTER "%"."%" ENABLE ELECTRIC` syntax via the migrations proxy.'
         '\n\nSee https://electric-sql.com/docs/usage/data-modelling/migrations#migrations-proxy', _schema, _table;
 
     -- duplicate validations now run in elixir using a resolved schema

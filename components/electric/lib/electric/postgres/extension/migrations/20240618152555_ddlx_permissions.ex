@@ -1,14 +1,17 @@
-defmodule Electric.Postgres.Extension.Migrations.Migration_20240214131615_PermissionsState do
+defmodule Electric.Postgres.Extension.Migrations.Migration_20240618152555_DDLXPermissions do
   alias Electric.Postgres.Extension
   alias Electric.Satellite.SatPerms
 
   @behaviour Extension.Migration
 
   @impl true
-  def version, do: 2024_02_14_13_16_15
+  def version, do: 2024_06_18_15_25_55
 
   @impl true
   def up(schema) do
+    ddlx_table = Extension.ddlx_table()
+    txid_type = Extension.txid_type()
+    txts_type = Extension.txts_type()
     global_perms_table = Extension.global_perms_table()
     user_perms_table = Extension.user_perms_table()
 
@@ -16,6 +19,14 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20240214131615_Permis
       %SatPerms.Rules{id: 1} |> Protox.encode!() |> IO.iodata_to_binary() |> Base.encode16()
 
     [
+      """
+      CREATE TABLE #{ddlx_table} (
+          id serial8 NOT NULL PRIMARY KEY,
+          txid #{txid_type} NOT NULL DEFAULT #{schema}.current_xact_id(),
+          txts #{txts_type} NOT NULL DEFAULT #{schema}.current_xact_ts(),
+          ddlx bytea NOT NULL
+      );
+      """,
       """
       CREATE TABLE #{global_perms_table} (
           id int8 NOT NULL PRIMARY KEY,
@@ -83,7 +94,10 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20240214131615_Permis
   end
 
   @impl true
-  def down(_schema) do
-    []
+  def published_tables do
+    [
+      Extension.ddlx_relation(),
+      Extension.global_perms_relation()
+    ]
   end
 end

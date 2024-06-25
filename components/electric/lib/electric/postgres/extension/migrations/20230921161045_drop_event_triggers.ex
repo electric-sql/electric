@@ -24,7 +24,4 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230921161045_DropEv
       """
     ]
   end
-
-  @impl true
-  def down(_), do: []
 end

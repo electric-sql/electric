@@ -18,7 +18,4 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230918115714_DDLCom
       """
     ]
   end
-
-  @impl true
-  def down(_), do: []
 end

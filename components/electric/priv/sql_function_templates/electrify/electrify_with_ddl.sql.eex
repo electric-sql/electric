@@ -21,7 +21,7 @@ BEGIN
     IF NOT EXISTS (
         SELECT oid FROM <%= electrified_tracking_table() %> WHERE schema_name = _schema AND table_name = _table LIMIT 1
         ) THEN
-        RAISE NOTICE 'Electrify table %I.%I', _schema, _table;
+        RAISE NOTICE 'Electrify table %.%', _schema, _table;
 
         RAISE DEBUG '%', ddl;
 

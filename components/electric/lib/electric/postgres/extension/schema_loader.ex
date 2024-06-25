@@ -49,8 +49,6 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   @callback user_permissions(state(), user_id :: binary(), id :: integer()) ::
               {:ok, %SatPerms{}} | {:error, term()}
 
-  @callback save_global_permissions(state(), %SatPerms.Rules{}) ::
-              {:ok, state()} | {:error, term()}
   @callback save_user_permissions(state(), user_id :: binary(), %SatPerms.Roles{}) ::
               {:ok, state(), %SatPerms{}} | {:error, term()}
 
@@ -146,13 +144,6 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   @impl true
   def global_permissions({module, state}, id) do
     module.global_permissions(state, id)
-  end
-
-  @impl true
-  def save_global_permissions({module, state}, rules) do
-    with {:ok, state} <- module.save_global_permissions(state, rules) do
-      {:ok, {module, state}}
-    end
   end
 
   @impl true

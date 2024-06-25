@@ -61,9 +61,4 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230424154425_DDLX d
       """
     ]
   end
-
-  @impl true
-  def down(_schema) do
-    []
-  end
 end

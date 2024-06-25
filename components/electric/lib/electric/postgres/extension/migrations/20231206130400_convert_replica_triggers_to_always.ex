@@ -23,9 +23,4 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20231206130400_Conver
       String.replace(@migration_sql, "electric", schema)
     ]
   end
-
-  @impl true
-  def down(_schema) do
-    []
-  end
 end

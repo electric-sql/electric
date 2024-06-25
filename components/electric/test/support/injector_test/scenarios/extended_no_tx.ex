@@ -19,8 +19,7 @@ defmodule Electric.Postgres.Proxy.TestScenario.ExtendedNoTx do
     tag = random_tag()
 
     injector
-    |> client(parse_describe(query), server: begin())
-    |> server(complete_ready("BEGIN", :tx), server: parse_describe(query))
+    |> electric_begin(client: parse_describe(query))
     |> server(parse_describe_complete())
     |> client(bind_execute())
     |> server(bind_execute_complete(tag), server: commit())
@@ -58,17 +57,18 @@ defmodule Electric.Postgres.Proxy.TestScenario.ExtendedNoTx do
     tag = random_tag()
 
     injector
-    |> client(parse_describe(query), server: begin())
-    |> server(complete_ready("BEGIN", :tx), server: parse_describe(query))
+    |> electric_begin(client: parse_describe(query))
     |> server(parse_describe_complete())
     |> client(bind_execute())
-    |> server(bind_execute_complete(tag),
+    |> server(
+      bind_execute_complete(tag),
       server: capture_ddl_query(query),
       client: capture_notice(query)
     )
     |> shadow_add_column(capture_ddl_complete(), opts, server: capture_version_query())
-    |> server(capture_version_complete(), server: commit())
-    |> server(complete_ready("COMMIT", :idle), client: [bind_execute_complete(tag, :idle)])
+    |> electric_commit([server: capture_version_complete()],
+      client: [bind_execute_complete(tag, :idle)]
+    )
     |> idle!()
   end
 
@@ -84,24 +84,27 @@ defmodule Electric.Postgres.Proxy.TestScenario.ExtendedNoTx do
     # may not be used but needs to be valid sql
     ddl = Keyword.get(opts, :ddl, "CREATE TABLE _not_used_ (id uuid PRIMARY KEY)")
 
-    injector
-    |> client(parse_describe(query), server: begin())
-    |> server(complete_ready("BEGIN", :tx), client: parse_describe_complete(), server: [])
-    |> electric(
-      [client: bind_execute()],
-      command,
-      ddl,
-      # bind_execute_complete(DDLX.Command.tag(command)),
-      server: capture_version_query()
-    )
-    |> server(capture_version_complete(),
-      server: commit()
-      # client: complete(DDLX.Command.tag(command))
-    )
-    |> server(complete_ready("COMMIT", :idle),
-      client: bind_execute_complete(DDLX.Command.tag(command), :idle)
-    )
-    |> idle!()
+    if modifies_permissions?(command) do
+      injector
+      |> electric_begin([client: parse_describe(query)], client: parse_describe_complete())
+      |> electric([client: bind_execute()], command, ddl, fn injector ->
+        rules = permissions_modified!(injector)
+        [server: save_permissions_rules_query(rules)]
+      end)
+      |> server(complete_ready(), server: capture_version_query())
+      |> electric_commit([server: capture_version_complete()],
+        client: [bind_execute_complete(DDLX.Command.tag(command), :idle)]
+      )
+      |> idle!()
+    else
+      injector
+      |> electric_begin([client: parse_describe(query)], client: parse_describe_complete())
+      |> electric([client: bind_execute()], command, ddl, server: capture_version_query())
+      |> electric_commit([server: capture_version_complete()],
+        client: [bind_execute_complete(DDLX.Command.tag(command), :idle)]
+      )
+      |> idle!()
+    end
   end
 
   def assert_electrify_server_error(injector, _framework, query, ddl, error_details) do
@@ -114,8 +117,7 @@ defmodule Electric.Postgres.Proxy.TestScenario.ExtendedNoTx do
       |> Enum.map(&query/1)
 
     injector
-    |> client(parse_describe(query), server: begin())
-    |> server(complete_ready("BEGIN", :tx), client: parse_describe_complete(), server: [])
+    |> electric_begin([client: parse_describe(query)], client: parse_describe_complete())
     |> electric_preamble([client: bind_execute()], command)
     |> server(introspect_result(ddl), server: electrify)
     |> server([error(error_details), ready(:failed)], server: rollback())

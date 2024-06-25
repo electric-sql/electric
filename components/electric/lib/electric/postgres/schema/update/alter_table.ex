@@ -159,7 +159,7 @@ defmodule Electric.Postgres.Schema.Update.AlterTable do
 
   def update(%{node: {:alter_table_cmd, %{subtype: subtype} = act}}, table) do
     Logger.warning(
-      "Un-supported alter table statement on #{table.name} #{subtype}: #{inspect(act)}"
+      "Ignoring unsupported alter table statement on #{table.name} #{subtype}: #{inspect(act)}"
     )
 
     {[], table}

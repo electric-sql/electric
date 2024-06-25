@@ -26,9 +26,4 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230512000000_confli
     ]
     |> Enum.map(&String.replace(&1, "electric", schema))
   end
-
-  @impl true
-  def down(_schema) do
-    []
-  end
 end

@@ -43,7 +43,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader.EpgsqlTest do
         ]
       }
 
-    assert {:ok, _loader} = SchemaLoader.save_global_permissions(loader, rules)
+    assert :ok = Extension.Permissions.save_global(conn, rules)
 
     {loader, rules}
   end
@@ -58,7 +58,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader.EpgsqlTest do
     assert {:ok, %SatPerms.Rules{id: 1} = _rules} = SchemaLoader.global_permissions(loader, 1)
   end
 
-  test_tx "save_global_permissions/2", fn conn ->
+  test_tx "save_global/2", fn conn ->
     loader = epgsql_loader(conn)
 
     rules =
@@ -88,7 +88,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader.EpgsqlTest do
         ]
       }
 
-    assert {:ok, _loader} = SchemaLoader.save_global_permissions(loader, rules)
+    assert :ok = Extension.Permissions.save_global(conn, rules)
     assert {:ok, %SatPerms.Rules{id: 2} = ^rules} = SchemaLoader.global_permissions(loader)
   end
 
@@ -150,7 +150,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader.EpgsqlTest do
              SchemaLoader.user_permissions(loader, "e815dfe6-f64d-472a-a322-bfc9e7993d27")
   end
 
-  test_tx "save_global_permissions/2 migrates existing user roles", fn conn ->
+  test_tx "save_global/2 migrates existing user roles", fn conn ->
     {loader, rules} = epgsql_loader_with_rules(conn)
 
     assert {:ok, _loader,
@@ -199,9 +199,9 @@ defmodule Electric.Postgres.Extension.SchemaLoader.EpgsqlTest do
         ]
       )
 
-    rules = State.apply_ddlx(rules, ddlx)
+    rules = State.apply_ddlx!(ddlx, rules)
 
-    assert {:ok, _loader} = SchemaLoader.save_global_permissions(loader, rules)
+    assert :ok = Extension.Permissions.save_global(conn, rules)
 
     assert {:ok, _loader,
             %SatPerms{
@@ -231,9 +231,9 @@ defmodule Electric.Postgres.Extension.SchemaLoader.EpgsqlTest do
         ]
       )
 
-    rules = State.apply_ddlx(rules, ddlx)
+    rules = State.apply_ddlx!(ddlx, rules)
 
-    assert {:ok, _loader} = SchemaLoader.save_global_permissions(loader, rules)
+    assert :ok = Extension.Permissions.save_global(conn, rules)
 
     assert {:ok, _loader,
             %SatPerms{

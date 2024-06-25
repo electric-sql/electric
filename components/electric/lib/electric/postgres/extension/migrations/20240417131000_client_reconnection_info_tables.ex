@@ -57,7 +57,4 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20240417131000_Client
       """
     ]
   end
-
-  @impl true
-  def down(_), do: []
 end

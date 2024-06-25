@@ -19,11 +19,14 @@ defmodule Electric.Postgres.Extension.Migrations.Migration_20230715000000_Utilit
       """,
       """
       INSERT INTO #{table} (id, content) VALUES ('magic write', '{}')
-      """,
-      Extension.add_table_to_publication_sql(table)
+      """
     ]
   end
 
   @impl true
-  def down(_), do: []
+  def published_tables do
+    [
+      Extension.transaction_marker_relation()
+    ]
+  end
 end

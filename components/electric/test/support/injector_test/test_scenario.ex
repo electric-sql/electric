@@ -2,6 +2,7 @@ defmodule Electric.Postgres.Proxy.TestScenario do
   alias PgProtocol.Message, as: M
   alias Electric.Postgres.Proxy.Injector
   alias Electric.DDLX
+  alias Electric.Satellite.SatPerms
 
   import ExUnit.Assertions
 
@@ -18,8 +19,20 @@ defmodule Electric.Postgres.Proxy.TestScenario do
       Injector.introspect_tables_query(tables, "'")
     end
 
+    def lock_rules_table_query do
+      Injector.lock_rules_table_query()
+    end
+
     def electrified_tables_query do
       Injector.electrified_tables_query()
+    end
+
+    def permissions_rules_query do
+      Injector.permissions_rules_query()
+    end
+
+    def save_permissions_rules_query(rules) do
+      Injector.save_permissions_rules_query(rules)
     end
 
     def capture_ddl_query(query) do
@@ -69,6 +82,7 @@ defmodule Electric.Postgres.Proxy.TestScenario do
       alias Electric.DDLX
       alias unquote(m).MockInjector
       alias Electric.Postgres.MockSchemaLoader
+      alias Electric.Postgres.Proxy.Injector
 
       unquote(message_aliases)
 
@@ -300,8 +314,20 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     query(MockInjector.capture_version_query(to_string(version), priority))
   end
 
+  def lock_rules_table_query do
+    query(MockInjector.lock_rules_table_query())
+  end
+
   def introspect_tables_query(tables) do
     query(MockInjector.introspect_tables_query(tables))
+  end
+
+  def permissions_rules_query do
+    query(MockInjector.permissions_rules_query())
+  end
+
+  def save_permissions_rules_query(rules) do
+    query(MockInjector.save_permissions_rules_query(rules))
   end
 
   def electrified_tables_query do
@@ -324,6 +350,44 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     electric_call_complete(status)
   end
 
+  def modifies_permissions?([_ | _] = cmds) do
+    Enum.any?(cmds, &modifies_permissions?/1)
+  end
+
+  def modifies_permissions?(%Electric.DDLX.Command{action: cmd}) do
+    modifies_permissions?(cmd)
+  end
+
+  def modifies_permissions?(%SatPerms.DDLX{} = ddlx) do
+    Enum.any?(
+      ddlx
+      |> DDLX.Command.command_list()
+      |> Enum.to_list(),
+      &modifies_permissions?/1
+    )
+  end
+
+  def modifies_permissions?(%DDLX.Command.Enable{}) do
+    false
+  end
+
+  def modifies_permissions?(%DDLX.Command.Disable{}) do
+    false
+  end
+
+  def modifies_permissions?(%DDLX.Command.Error{}) do
+    false
+  end
+
+  def modifies_permissions?(%SatPerms.Sqlite{}) do
+    false
+  end
+
+  def modifies_permissions?(%m{})
+      when m in [SatPerms.Grant, SatPerms.Revoke, SatPerms.Assign, SatPerms.Unassign] do
+    true
+  end
+
   # splitting this out as a function in order to simplify the process of
   # updating the expected messages when calling an electric procedure
   def electric_call_complete(status \\ :tx) do
@@ -331,6 +395,24 @@ defmodule Electric.Postgres.Proxy.TestScenario do
       %M.CommandComplete{tag: "CALL"},
       %M.ReadyForQuery{status: status}
     ]
+  end
+
+  def state({_stack, state}) do
+    state
+  end
+
+  def tx({_stack, %{tx: nil}}) do
+    raise "No active transaction"
+  end
+
+  def tx({_stack, %{tx: tx}}) do
+    tx
+  end
+
+  def permissions_modified!({_stack, state}) do
+    if rules = Injector.State.permissions_modified(state),
+      do: rules,
+      else: raise("permissions are not modified")
   end
 
   @doc """
@@ -359,17 +441,104 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     tables = Electric.DDLX.Command.table_names(command)
     introspect_query = introspect_tables_query(tables)
 
-    initial_messages
-    |> case do
-      [client: msgs] ->
-        injector
-        |> client(msgs, server: electrified_tables_query())
-
-      [server: msgs] ->
-        injector
-        |> server(msgs, server: electrified_tables_query())
-    end
+    injector
+    |> command(initial_messages, server: lock_rules_table_query())
+    |> server(complete_ready("LOCK TABLE"), server: electrified_tables_query())
     |> server(electrified_tables_result(electrified_tables), server: introspect_query)
+  end
+
+  def electric_begin(injector) do
+    electric_begin(injector, client: begin())
+  end
+
+  def electric_begin(injector, initial_messages, opts \\ []) do
+    rules =
+      case Keyword.fetch(opts, :rules) do
+        {:ok, rules} ->
+          rules
+
+        :error ->
+          nil
+      end
+
+    {injector, final_messages} =
+      case initial_messages do
+        [client: "BEGIN"] ->
+          {client(injector, begin(), server: begin()), client: complete_ready("BEGIN", :tx)}
+
+        [client: %M.Query{query: "BEGIN"} = msg] ->
+          {client(injector, msg, server: begin()), client: complete_ready("BEGIN", :tx)}
+
+        [client: [%M.Query{query: "BEGIN"}] = msgs] ->
+          {client(injector, msgs, server: begin()), client: complete_ready("BEGIN", :tx)}
+
+        [client: msgs] ->
+          final =
+            case Keyword.fetch(opts, :client) do
+              {:ok, msgs} ->
+                [client: msgs]
+
+              :error ->
+                [server: Keyword.get(opts, :server, msgs)]
+            end
+
+          {client(injector, msgs, server: begin()), final}
+      end
+
+    injector
+    |> server(complete_ready("BEGIN", :tx), server: permissions_rules_query())
+    |> server(rules_query_result(rules), final_messages)
+  end
+
+  @doc """
+  If the transaction has unwritten permissions updates, then they are written here.
+  """
+  def electric_commit({_stack, state} = injector, initial_messages, final_messages \\ nil) do
+    version? = Injector.State.capture_version?(state)
+
+    [state_msg | state_messages] =
+      if rules = Injector.State.permissions_modified(state) do
+        [
+          save_permissions_rules_query(rules),
+          if(version?, do: capture_version_query(), else: []),
+          commit()
+        ]
+      else
+        [
+          if(version?, do: capture_version_query(), else: []),
+          commit()
+        ]
+      end
+      |> List.flatten()
+
+    injector = command(injector, initial_messages, server: state_msg)
+
+    commit_complete = complete_ready("COMMIT", :idle)
+    final_messages = final_messages || [client: commit_complete]
+
+    state_messages
+    |> Enum.reduce(injector, fn msg, injector ->
+      server(injector, complete_ready("INSERT 1", :tx), server: msg)
+    end)
+    |> server(commit_complete, final_messages)
+  end
+
+  def rules_query_result() do
+    rules_query_result(nil)
+  end
+
+  def rules_query_result(nil) do
+    rules_query_result(%SatPerms.Rules{id: 1})
+  end
+
+  def rules_query_result(%SatPerms.Rules{} = rules) do
+    rules_data = rules |> Protox.encode!() |> IO.iodata_to_binary()
+
+    [
+      %M.RowDescription{},
+      %M.DataRow{fields: [rules_data]}
+      | complete_ready("SELECT 1", :tx)
+    ]
   end
 
   @doc """
@@ -414,14 +583,20 @@ defmodule Electric.Postgres.Proxy.TestScenario do
   def electric(injector, initial_messages, command, ddl, final_messages) do
     capture_ddl = List.wrap(ddl)
 
+    # the initial client message which is a [bind, execute] or [query] message
+    # triggers a re-write to the real procedure call
+
+    injector = electric_preamble(injector, initial_messages, command)
+
     case proxy_sql(command, capture_ddl) |> Enum.map(&query/1) do
+      [] ->
+        # if the electric command doesn't result in any immediate queries, then
+        # we're done, pending the final message from the preamble introspection
+        # queries
+        server(injector, introspect_result(ddl), final_messages)
+
       [query | queries] ->
-        # the initial client message which is a [bind, execute] or [query] message
-        # triggers a re-write to the real procedure call
-        injector =
-          injector
-          |> electric_preamble(initial_messages, command)
-          |> server(introspect_result(ddl), server: query)
+        injector = server(injector, introspect_result(ddl), server: query)
 
         # this real proc call returns a readyforquery etc response which triggers
         # the next procedure call required for the electric command
@@ -455,22 +630,8 @@ defmodule Electric.Postgres.Proxy.TestScenario do
       server([%M.ReadyForQuery{status: :tx}], server: [%M.Query{query: "COMMIT"}])
 
   """
-  def server(injector, server_messages, receipients) do
-    expected_proxy_server =
-      Keyword.get(receipients, :server, []) |> to_struct()
-
-    expected_proxy_client =
-      Keyword.get(receipients, :client, []) |> to_struct()
-
-    {:ok, injector, proxy_server, proxy_client} =
-      Injector.recv_server(injector, to_struct(server_messages))
-
-    assert_messages_equal(
-      proxy_server: {proxy_server, expected_proxy_server},
-      proxy_client: {proxy_client, expected_proxy_client}
-    )
-
-    injector
+  def server(injector, server_messages, recipients) do
+    command(injector, [server: server_messages], recipients)
   end
 
   @doc """
@@ -487,12 +648,31 @@ defmodule Electric.Postgres.Proxy.TestScenario do
   `:client` or the `:server`.
 
   """
-  def client(injector, client_messages, receipients) do
-    expected_proxy_server = Keyword.get(receipients, :server, []) |> to_struct()
-    expected_proxy_client = Keyword.get(receipients, :client, []) |> to_struct()
+  def client(injector, client_messages, recipients) do
+    command(injector, [client: client_messages], recipients)
+  end
 
+  def command(injector, msgs, recipients) do
     {:ok, injector, proxy_server, proxy_client} =
-      Injector.recv_client(injector, to_struct(client_messages))
+      case msgs do
+        [client: client_msgs] ->
+          Injector.recv_client(injector, to_struct(client_msgs))
+
+        [server: server_msgs] ->
+          Injector.recv_server(injector, to_struct(server_msgs))
+      end
+
+    final =
+      case recipients do
+        fun when is_function(fun) ->
+          fun.(injector)
+
+        list when is_list(list) ->
+          list
+      end
+
+    expected_proxy_server = Keyword.get(final, :server, []) |> to_struct()
+    expected_proxy_client = Keyword.get(final, :client, []) |> to_struct()
 
     assert_messages_equal(
       proxy_server: {proxy_server, expected_proxy_server},
@@ -715,7 +895,5 @@ defmodule Electric.Postgres.Proxy.TestScenario do
     injector
     |> server(capture_ddl_complete(), server: capture_version_query(version))
     |> server(capture_version_complete(), final_msg)
-
-    # injector = server(injector, capture_ddl_complete(), final_msg)
   end
 end
