@@ -3,6 +3,8 @@ import { QualifiedTablename, SqlValue, Statement } from '../../util'
 import { QueryBuilder } from './builder'
 import { ForeignKey } from '../triggers'
 
+const quote = (col: string) => `"${col}"`
+
 class SqliteBuilder extends QueryBuilder {
   readonly dialect = 'SQLite'
   readonly AUTOINCREMENT_PK = 'INTEGER PRIMARY KEY AUTOINCREMENT'
@@ -318,7 +320,7 @@ class SqliteBuilder extends QueryBuilder {
     args: (string | string[])[]
   ): string {
     const useTuples = columns.length > 1
-    return `(${columns.map((c) => `"${c}"`).join(`, `)}) IN (${
+    return `(${columns.map(quote).join(`, `)}) IN (${
       useTuples
         ? (args as string[][]).map((tup) => `(${tup.join(`, `)})`).join(', ')
         : args.join(', ')
