@@ -350,18 +350,22 @@ export const builderTests = (test: TestFn<ContextType>) => {
       5 // at most 5 `?`s in one SQL statement, so we should see the split
     )
 
-    const posArgs: string[] =
-      builder.dialect === 'SQLite'
-        ? ['?', '?', '?', '?']
-        : ['$1', '$2', '$3', '$4']
-
     t.deepEqual(stmts, [
       {
-        sql: `INSERT INTO test (a, b) VALUES (${posArgs[0]}, ${posArgs[1]}), (${posArgs[2]}, ${posArgs[3]})`,
+        sql: `INSERT INTO test (a, b) VALUES ${Array.from(
+          { length: 2 },
+          (_, idx) =>
+            `(${builder.makePositionalParam(
+              2 * idx + 1
+            )}, ${builder.makePositionalParam(2 * idx + 2)})`
+        ).join(', ')}`,
         args: [1, 2, 3, 4],
       },
       {
-        sql: `INSERT INTO test (a, b) VALUES (${posArgs[0]}, ${posArgs[1]})`,
+        sql: `INSERT INTO test (a, b) VALUES (${Array.from(
+          { length: 2 },
+          (_, idx) => builder.makePositionalParam(idx + 1)
+        ).join(', ')})`,
         args: [5, 6],
       },
     ])
@@ -381,18 +385,22 @@ export const builderTests = (test: TestFn<ContextType>) => {
       5
     )
 
-    const posArgs: string[] =
-      builder.dialect === 'SQLite'
-        ? ['?', '?', '?', '?']
-        : ['$1', '$2', '$3', '$4']
-
     t.deepEqual(stmts, [
       {
-        sql: `INSERT INTO test (a, b) VALUES (${posArgs[0]}, ${posArgs[1]}), (${posArgs[2]}, ${posArgs[3]})`,
+        sql: `INSERT INTO test (a, b) VALUES ${Array.from(
+          { length: 2 },
+          (_, idx) =>
+            `(${builder.makePositionalParam(
+              2 * idx + 1
+            )}, ${builder.makePositionalParam(2 * idx + 2)})`
+        ).join(', ')}`,
         args: [2, 1, 4, 3],
       },
       {
-        sql: `INSERT INTO test (a, b) VALUES (${posArgs[0]}, ${posArgs[1]})`,
+        sql: `INSERT INTO test (a, b) VALUES (${Array.from(
+          { length: 2 },
+          (_, idx) => builder.makePositionalParam(idx + 1)
+        ).join(', ')})`,
         args: [6, 5],
       },
     ])
@@ -412,25 +420,26 @@ export const builderTests = (test: TestFn<ContextType>) => {
       5 // at most 5 `?`s in one SQL statement, so we should see the split
     )
 
-    const posArgs: string[] =
-      builder.dialect === 'SQLite'
-        ? ['?', '?', '?', '?']
-        : ['$1', '$2', '$3', '$4']
-
-    const withValues = builder.dialect !== 'SQLite'
-
     t.deepEqual(stmts, [
       {
-        sql: `DELETE FROM test WHERE ("a", "b") IN (${
-          withValues ? ' VALUES ' : ''
-        }(${posArgs[0]}, ${posArgs[1]}), (${posArgs[2]}, ${posArgs[3]}))`,
+        sql: `DELETE FROM test WHERE ("a", "b") IN (${builder.pgOnly(
+          ' VALUES '
+        )}${Array.from(
+          { length: 2 },
+          (_, idx) =>
+            `(${builder.makePositionalParam(
+              2 * idx + 1
+            )}, ${builder.makePositionalParam(2 * idx + 2)})`
+        ).join(', ')})`,
 
         args: [1, 2, 3, 4],
       },
       {
-        sql: `DELETE FROM test WHERE ("a", "b") IN (${
-          withValues ? ' VALUES ' : ''
-        }(${posArgs[0]}, ${posArgs[1]}))`,
+        sql: `DELETE FROM test WHERE ("a", "b") IN (${builder.pgOnly(
+          ' VALUES '
+        )}(${Array.from({ length: 2 }, (_, idx) =>
+          builder.makePositionalParam(idx + 1)
+        ).join(', ')}))`,
         args: [5, 6],
       },
     ])
@@ -450,14 +459,12 @@ export const builderTests = (test: TestFn<ContextType>) => {
       5 // at most 5 `?`s in one SQL statement, so we should see the split
     )
 
-    const posArgs: string[] =
-      builder.dialect === 'SQLite'
-        ? ['?', '?', '?', '?']
-        : ['$1', '$2', '$3', '$4']
-
     t.deepEqual(stmts, [
       {
-        sql: `DELETE FROM test WHERE ("a") IN (${posArgs[0]}, ${posArgs[1]}, ${posArgs[2]})`,
+        sql: `DELETE FROM test WHERE ("a") IN (${Array.from(
+          { length: 3 },
+          (_, idx) => builder.makePositionalParam(idx + 1)
+        ).join(', ')})`,
 
         args: [1, 3, 5],
       },
@@ -478,24 +485,25 @@ export const builderTests = (test: TestFn<ContextType>) => {
       5
     )
 
-    const posArgs: string[] =
-      builder.dialect === 'SQLite'
-        ? ['?', '?', '?', '?']
-        : ['$1', '$2', '$3', '$4']
-
-    const withValues = builder.dialect !== 'SQLite'
-
     t.deepEqual(stmts, [
       {
-        sql: `DELETE FROM test WHERE ("b", "a") IN (${
-          withValues ? ' VALUES ' : ''
-        }(${posArgs[0]}, ${posArgs[1]}), (${posArgs[2]}, ${posArgs[3]}))`,
+        sql: `DELETE FROM test WHERE ("b", "a") IN (${builder.pgOnly(
+          ' VALUES '
+        )}${Array.from(
+          { length: 2 },
+          (_, idx) =>
+            `(${builder.makePositionalParam(
+              2 * idx + 1
+            )}, ${builder.makePositionalParam(2 * idx + 2)})`
+        ).join(', ')})`,
         args: [2, 1, 4, 3],
       },
       {
-        sql: `DELETE FROM test WHERE ("b", "a") IN (${
-          withValues ? ' VALUES ' : ''
-        }(${posArgs[0]}, ${posArgs[1]}))`,
+        sql: `DELETE FROM test WHERE ("b", "a") IN (${builder.pgOnly(
+          ' VALUES '
+        )}(${Array.from({ length: 2 }, (_, idx) =>
+          builder.makePositionalParam(idx + 1)
+        ).join(', ')}))`,
         args: [6, 5],
       },
     ])
