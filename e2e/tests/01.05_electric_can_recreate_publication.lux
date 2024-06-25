@@ -26,12 +26,13 @@
     ??electric   | ddlx_commands
     ??electric   | electrified
     ??public     | foo
+    ??electric   | global_perms_state
     ??public     | items
     ??electric   | shadow__public__baz
     ??electric   | shadow__public__foo
     ??electric   | shadow__public__items
     ??electric   | transaction_marker
-    ??(11 rows)
+    ??(12 rows)
 
 # Make sure Electric consumes all migrations from the replication stream before stopping it.
 [shell electric]
@@ -64,12 +65,13 @@
     ??electric   | ddlx_commands
     ??electric   | electrified
     ??public     | foo
+    ??electric   | global_perms_state
     ??public     | items
     ??electric   | shadow__public__baz
     ??electric   | shadow__public__foo
     ??electric   | shadow__public__items
     ??electric   | transaction_marker
-    ??(11 rows)
+    ??(12 rows)
 
 [cleanup]
     [invoke teardown]
