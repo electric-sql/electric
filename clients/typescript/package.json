@@ -223,7 +223,7 @@
     "@types/lodash.throttle": "^4.1.7",
     "@types/lodash.uniqwith": "^4.5.9",
     "@types/node": "^18.8.4",
-    "@types/react": "^18.0.18",
+    "@types/react": "^18.3.1",
     "@types/ws": "^8.5.3",
     "@typescript-eslint/eslint-plugin": "^5.34.0",
     "@typescript-eslint/parser": "^5.34.0",
