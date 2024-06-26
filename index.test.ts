@@ -65,6 +65,8 @@ afterAll(async () => {
   await context.client.query(`TRUNCATE TABLE issues`)
   await context.client.query(`TRUNCATE TABLE foo`)
   await context.client.end()
+
+  // TODO do any needed server cleanup
   context = {}
 })
 
