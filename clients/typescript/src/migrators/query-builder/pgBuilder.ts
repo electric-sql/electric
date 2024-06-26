@@ -441,7 +441,7 @@ class PgBuilder extends QueryBuilder {
 
   protected createInClause(
     columns: string[],
-    args: string[] | string[][]
+    args: (string | string[])[]
   ): string {
     const useTuples = columns.length > 1
     return `(${columns.map(quote).join(', ')}) IN (${

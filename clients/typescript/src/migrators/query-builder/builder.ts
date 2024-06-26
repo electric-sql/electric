@@ -289,7 +289,7 @@ export abstract class QueryBuilder {
 
   /**
    * Generates IN clause for a WHERE statement, checking that the given
-   * columns have a value present in the given tupleArgs array
+   * columns have a value present in the given args array
    *
    * The `args` array must be an array of values to compare each column to.
    *
