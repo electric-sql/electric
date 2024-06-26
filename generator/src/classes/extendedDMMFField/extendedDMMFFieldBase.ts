@@ -60,7 +60,7 @@ export class ExtendedDMMFFieldBase
     this.isId = field.isId
     this.isReadOnly = field.isReadOnly
     this.type = field.type
-    this.dbName = field.dbName
+    this.dbName = field['dbName']
     this.isGenerated = field.isGenerated
     this.isUpdatedAt = field.isUpdatedAt
     this.hasDefaultValue = field.hasDefaultValue
