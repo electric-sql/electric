@@ -17,6 +17,7 @@ declare module 'wa-sqlite/src/examples/IDBBatchAtomicVFS.js' {
   // https://stackoverflow.com/questions/52930536/typescript-declare-class-implementing-interface
 
   /* eslint-disable @typescript-eslint/no-empty-interface */
+  /* eslint-disable @typescript-eslint/no-unsafe-declaration-merging */
   interface IDBBatchAtomicVFS extends SQLiteVFS {}
   export class IDBBatchAtomicVFS {
     constructor(idbDatabaseName: string, options?: VFSOptions)
