@@ -113,17 +113,19 @@ jobs:
             https://analytics-api.buildkite.com/v1/uploads
 
   e2e_satellite_tests:
-    name: E2E Satellite tests
     runs-on: electric-e2e-8-32
     strategy:
       matrix:
         dialect: [SQLite, Postgres]
+        dal: [true, false]
+    name: E2E Satellite tests (Dialect ${{ matrix.dialect }} - uses DAL? ${{ matrix.dal }})
     defaults:
       run:
         working-directory: e2e
     env:
       BUILDKITE_ANALYTICS_TOKEN: ${{ secrets.BUILDKITE_TEST_ANALYTICS_E2E }}
       DIALECT: ${{ matrix.dialect }}
+      DAL: ${{ matrix.dal }}
     steps:
       - uses: actions/checkout@v3
         with:

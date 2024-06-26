@@ -21,6 +21,8 @@ import {
   sqliteBuilder,
   Dialect,
 } from 'electric-sql/migrators/query-builder'
+import { DbSchema } from 'electric-sql/client'
+import { serializeDbDescription } from '../util/serialize'
 
 // Rather than run `npx prisma` we resolve the path to the prisma binary so that
 // we can be sure we are using the same version of Prisma that is a dependency of
@@ -45,6 +47,7 @@ export interface GeneratorOptions {
   watch?: boolean
   pollingInterval?: number
   withMigrations?: string
+  withDal?: boolean
   debug?: boolean
   exitOnError?: boolean
   config: Config
@@ -62,7 +65,6 @@ export async function generate(options: GeneratorOptions) {
     )
     process.exit(1)
   }
-  console.log('Generating Electric client...')
   try {
     if (opts.withMigrations) {
       // Start new ElectricSQL and PostgreSQL containers
@@ -243,8 +245,47 @@ async function bundleMigrationsFor(
   // Build the migrations
   const builder = dialect === 'SQLite' ? sqliteBuilder : pgBuilder
   return async () => {
-    await buildMigrations(migrationsFolder, migrationsFile, builder)
+    return await buildMigrations(migrationsFolder, migrationsFile, builder)
   }
+}
+
+async function buildAndBundleMigrations(
+  opts: Omit<GeneratorOptions, 'watch'>,
+  tmpFolder: string
+) {
+  const buildSqliteMigrations = await bundleMigrationsFor(
+    'SQLite',
+    opts,
+    tmpFolder
+  )
+  const buildPgMigrations = await bundleMigrationsFor(
+    'Postgres',
+    opts,
+    tmpFolder
+  )
+
+  console.log('Building migrations...')
+  const dbDescription = await buildSqliteMigrations()
+  await buildPgMigrations()
+  console.log('Successfully built migrations')
+  return dbDescription
+}
+
+async function introspectDbAndGenerateClient(
+  opts: Omit<GeneratorOptions, 'watch'>,
+  tmpFolder: string
+) {
+  const config = opts.config
+  const prismaSchema = await createIntrospectionSchema(tmpFolder, opts)
+
+  // Introspect the created DB to update the Prisma schema
+  await introspectDB(prismaSchema)
+
+  // Generate the Electric client from the given introspected schema
+  await generateClient(prismaSchema, config.CLIENT_PATH)
+
+  const relativePath = path.relative(appRoot, config.CLIENT_PATH)
+  console.log(`Successfully generated Electric client at: ./${relativePath}`)
 }
 
 /**
@@ -269,32 +310,26 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
   let generationFailed = false
 
   try {
-    const buildSqliteMigrations = await bundleMigrationsFor(
-      'SQLite',
-      opts,
-      tmpFolder
-    )
-    const buildPgMigrations = await bundleMigrationsFor(
-      'Postgres',
-      opts,
-      tmpFolder
-    )
+    // Create `CLIENT_PATH` if it doesn't exist
+    await fs.mkdir(config.CLIENT_PATH, { recursive: true })
 
-    const prismaSchema = await createIntrospectionSchema(tmpFolder, opts)
+    if (opts.withDal) {
+      // Generate Electric client
+      console.log('Generating Electric client...')
+      await introspectDbAndGenerateClient(opts, tmpFolder)
+    }
 
-    // Introspect the created DB to update the Prisma schema
-    await introspectDB(prismaSchema)
+    // Build and bundle the SQLite and PG migrations
+    // This needs to happen after generating the Electric client
+    // otherwise Prisma overwrites the files containing the bundled migrations
+    const dbDescription = await buildAndBundleMigrations(opts, tmpFolder)
 
-    // Generate the Electric client from the given introspected schema
-    await generateClient(prismaSchema, config.CLIENT_PATH)
-
-    const relativePath = path.relative(appRoot, config.CLIENT_PATH)
-    console.log(`Successfully generated Electric client at: ./${relativePath}`)
-
-    console.log('Building migrations...')
-    await buildSqliteMigrations()
-    await buildPgMigrations()
-    console.log('Successfully built migrations')
+    if (!opts.withDal) {
+      // User doesn't want an Electric client
+      // Write the minimal database description to a file
+      console.log('Generating database schema...')
+      await bundleDbDescription(dbDescription, opts.config.CLIENT_PATH)
+    }
 
     if (
       ['nodenext', 'node16'].includes(
@@ -314,6 +349,25 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
     // In case of process exit, make sure to run after folder removal
     if (generationFailed && opts.exitOnError) process.exit(1)
   }
+}
+
+async function bundleDbDescription(dbDescription: DbSchema, outFolder: string) {
+  const dbDescriptionFile = path.join(outFolder, 'index.ts')
+  const serializedDbDescription = serializeDbDescription(dbDescription)
+  const dbDescriptionStr = dedent`
+    import migrations from './migrations';
+    import pgMigrations from './pg-migrations';
+    import { type TableSchemas, DbSchema, Relation, ElectricClient } from 'electric-sql/client/model';
+
+    const tableSchemas = ${serializedDbDescription} as unknown as TableSchemas
+
+    export const schema = new DbSchema(tableSchemas, migrations, pgMigrations)
+    export type Electric = ElectricClient<typeof schema>
+    export const JsonNull = { __is_electric_json_null__: true }
+  `
+  await fs.writeFile(dbDescriptionFile, dbDescriptionStr)
+  const relativePath = path.relative(appRoot, dbDescriptionFile)
+  console.log(`Successfully generated database schema at: ./${relativePath}`)
 }
 
 /**

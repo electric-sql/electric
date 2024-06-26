@@ -279,10 +279,10 @@ test.serial('receive transaction over multiple messages', async (t) => {
   const dbDescription = new DbSchema(
     {
       table: {
-        fields: new Map([
-          ['name1', PgBasicType.PG_TEXT],
-          ['name2', PgBasicType.PG_TEXT],
-        ]),
+        fields: {
+          name1: PgBasicType.PG_TEXT,
+          name2: PgBasicType.PG_TEXT,
+        },
         relations: [],
       } as unknown as TableSchema<
         any,
@@ -706,14 +706,14 @@ test.serial('default and null test', async (t) => {
   })
 
   const tbl = {
-    fields: new Map([
-      ['id', PgBasicType.PG_UUID],
-      ['content', PgBasicType.PG_VARCHAR],
-      ['text_null', PgBasicType.PG_TEXT],
-      ['text_null_default', PgBasicType.PG_TEXT],
-      ['intvalue_null', PgBasicType.PG_INT4],
-      ['intvalue_null_default', PgBasicType.PG_INT4],
-    ]),
+    fields: {
+      id: PgBasicType.PG_UUID,
+      content: PgBasicType.PG_VARCHAR,
+      text_null: PgBasicType.PG_TEXT,
+      text_null_default: PgBasicType.PG_TEXT,
+      intvalue_null: PgBasicType.PG_INT4,
+      intvalue_null_default: PgBasicType.PG_INT4,
+    },
     relations: [],
   } as unknown as TableSchema<any, any, any, any, any, any, any, any, any, HKT>
 
@@ -1056,10 +1056,10 @@ test.serial('subscription correct protocol sequence with data', async (t) => {
   const tablename = 'THE_TABLE_ID'
 
   const tbl = {
-    fields: new Map([
-      ['name1', PgBasicType.PG_TEXT],
-      ['name2', PgBasicType.PG_TEXT],
-    ]),
+    fields: {
+      name1: PgBasicType.PG_TEXT,
+      name2: PgBasicType.PG_TEXT,
+    },
     relations: [],
   } as unknown as TableSchema<any, any, any, any, any, any, any, any, any, HKT>
 
@@ -1176,10 +1176,10 @@ test.serial('client correctly handles additional data messages', async (t) => {
   const dbDescription = new DbSchema(
     {
       table: {
-        fields: new Map([
-          ['name1', PgBasicType.PG_TEXT],
-          ['name2', PgBasicType.PG_TEXT],
-        ]),
+        fields: {
+          name1: PgBasicType.PG_TEXT,
+          name2: PgBasicType.PG_TEXT,
+        },
         relations: [],
       } as unknown as TableSchema<
         any,

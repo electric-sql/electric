@@ -41,6 +41,9 @@ importers:
       lodash.isequal:
         specifier: ^4.5.0
         version: 4.5.0
+      lodash.keyby:
+        specifier: ^4.6.0
+        version: 4.6.0
       lodash.mapvalues:
         specifier: ^4.6.0
         version: 4.6.0
@@ -123,6 +126,9 @@ importers:
       '@types/lodash.isequal':
         specifier: ^4.5.6
         version: 4.5.8
+      '@types/lodash.keyby':
+        specifier: ^4.6.9
+        version: 4.6.9
       '@types/lodash.mapvalues':
         specifier: ^4.6.7
         version: 4.6.9
@@ -424,6 +430,9 @@ importers:
       pg:
         specifier: ^8.11.3
         version: 8.11.5
+      ts-dedent:
+        specifier: ^2.2.0
+        version: 2.2.0
       uuid:
         specifier: ^9.0.0
         version: 9.0.1
@@ -6153,6 +6162,12 @@ packages:
 
   /@types/lodash.isequal@4.5.8:
     resolution: {integrity: sha512-uput6pg4E/tj2LGxCZo9+y27JNyB2OZuuI/T5F+ylVDYuqICLG2/ktjxx0v6GvVntAf8TvEzeQLcV0ffRirXuA==}
+    dependencies:
+      '@types/lodash': 4.17.1
+    dev: true
+
+  /@types/lodash.keyby@4.6.9:
+    resolution: {integrity: sha512-N8xfQdZ2ADNPDL72TaLozIL4K1xFCMG1C1T9GN4dOFI+sn1cjl8d4U+POp8PRCAnNxDCMkYAZVD/rOBIWYPT5g==}
     dependencies:
       '@types/lodash': 4.17.1
     dev: true
@@ -12196,6 +12211,9 @@ packages:
 
   /lodash.isstring@4.0.1:
     resolution: {integrity: sha512-0wJxfxH1wgO3GrbuP+dTTk7op+6L41QCXbGINEmD+ny/G/eCqGzxyCsh7159S+mgDDcoarnBw6PC1PS5+wUGgw==}
+
+  /lodash.keyby@4.6.0:
+    resolution: {integrity: sha512-PRe4Cn20oJM2Sn6ljcZMeKgyhTHpzvzFmdsp9rK+6K0eJs6Tws0MqgGFpfX/o2HjcoQcBny1Eik9W7BnVTzjIQ==}
     dev: false
 
   /lodash.mapvalues@4.6.0:

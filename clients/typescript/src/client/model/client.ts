@@ -1,17 +1,32 @@
 import { ElectricNamespace } from '../../electric/namespace'
-import { DbSchema, TableSchema } from './schema'
+import { DbSchema, TableSchema, TableSchemas } from './schema'
 import { rawQuery, liveRawQuery, unsafeExec, Table } from './table'
-import { Row, Statement } from '../../util'
+import {
+  QualifiedTablename,
+  ReplicatedRowTransformer,
+  Row,
+  Statement,
+} from '../../util'
 import { LiveResultContext } from './model'
 import { Notifier } from '../../notifiers'
 import { DatabaseAdapter } from '../../electric/adapter'
-import { GlobalRegistry, Registry, Satellite } from '../../satellite'
-import { ReplicationTransformManager } from './transforms'
+import {
+  GlobalRegistry,
+  Registry,
+  Satellite,
+  ShapeSubscription,
+} from '../../satellite'
+import {
+  IReplicationTransformManager,
+  ReplicationTransformManager,
+  setReplicationTransform,
+} from './transforms'
 import { Dialect } from '../../migrators/query-builder/builder'
 import { InputTransformer } from '../conversions/input'
 import { sqliteConverter } from '../conversions/sqlite'
 import { postgresConverter } from '../conversions/postgres'
 import { IShapeManager } from './shapes'
+import { ShapeInputWithTable, sync } from './sync'
 
 export type ClientTables<DB extends DbSchema<any>> = {
   [Tbl in keyof DB['tables']]: DB['tables'][Tbl] extends TableSchema<
@@ -96,23 +111,60 @@ interface RawQueries {
 export class ElectricClient<
   DB extends DbSchema<any>
 > extends ElectricNamespace {
-  public sync: Omit<IShapeManager, 'subscribe'>
+  public sync: Omit<IShapeManager, 'subscribe'> & {
+    /**
+     * Subscribes to the given shape, returnig a {@link ShapeSubscription} object which
+     * can be used to wait for the shape to sync initial data.
+     *
+     * NOTE: If you establish a shape subscription that has already synced its initial data,
+     * awaiting `shape.synced` will always resolve immediately as shape subscriptions are persisted.
+     * i.e.: imagine that you re-sync the same shape during subsequent application loads.
+     * Awaiting `shape.synced` a second time will only ensure that the initial
+     * shape load is complete. It does not ensure that the replication stream
+     * has caught up to the central DB's more recent state.
+     *
+     * @param i - The shape to subscribe to
+     * @param key - An optional unique key that identifies the subscription
+     * @returns A shape subscription
+     */
+    subscribe: (
+      i: ShapeInputWithTable,
+      key?: string
+    ) => Promise<ShapeSubscription>
+  }
 
   private constructor(
     public db: ClientTables<DB> & RawQueries,
     dbName: string,
+    private _dbDescription: DB,
     adapter: DatabaseAdapter,
     notifier: Notifier,
     public readonly satellite: Satellite,
-    registry: Registry | GlobalRegistry
+    registry: Registry | GlobalRegistry,
+    private _replicationTransformManager: IReplicationTransformManager
   ) {
     super(dbName, adapter, notifier, registry)
     this.satellite = satellite
     // Expose the Shape Sync API without additional properties
     this.sync = {
       syncStatus: this.satellite.syncStatus.bind(this.satellite),
+      subscribe: sync.bind(null, this.satellite, this._dbDescription),
       unsubscribe: this.satellite.unsubscribe.bind(this.satellite),
     }
+  }
+
+  setReplicationTransform<
+    T extends Record<string, unknown> = Record<string, unknown>
+  >(
+    qualifiedTableName: QualifiedTablename,
+    i: ReplicatedRowTransformer<T>
+  ): void {
+    setReplicationTransform<T>(
+      this._dbDescription,
+      this._replicationTransformManager,
+      qualifiedTableName,
+      i
+    )
   }
 
   /**
@@ -136,7 +188,10 @@ export class ElectricClient<
     this.satellite.clientDisconnect()
   }
 
-  // Builds the DAL namespace from a `dbDescription` object
+  /**
+   * Builds the DAL namespace from a `dbDescription` object
+   * @param minimalDbDescription - A minimal description of the database schema can be provided in order to use Electric without the DAL.
+   */
   static create<DB extends DbSchema<any>>(
     dbName: string,
     dbDescription: DB,
@@ -154,30 +209,44 @@ export class ElectricClient<
     )
     const inputTransformer = new InputTransformer(converter)
 
-    const createTable = (tableName: string) => {
-      return new Table(
-        tableName,
-        adapter,
-        notifier,
-        satellite,
-        replicationTransformManager,
-        dbDescription,
-        inputTransformer,
-        dialect
-      )
-    }
+    // Check if we need to create the DAL
+    // If the schemas are missing from the `dbDescription``
+    // it means that the user did not generate the Electric client
+    // and thus we don't create the DAL.
+    // This is needed because we piggyback the minimal DB description (that is used without the DAL)
+    // on the same DB description argument as the one that is used with the DAL.
+    const ts: Array<[string, TableSchemas]> = Object.entries(
+      dbDescription.tables
+    )
+    const withDal = ts.length > 0 && ts[0][1].modelSchema !== undefined
+    let dal = {} as ClientTables<DB>
 
-    // Create all tables
-    const dal = Object.fromEntries(
-      Object.keys(tables).map((tableName) => {
-        return [tableName, createTable(tableName)]
+    if (withDal) {
+      const createTable = (tableName: string) => {
+        return new Table(
+          tableName,
+          adapter,
+          notifier,
+          satellite,
+          replicationTransformManager,
+          dbDescription,
+          inputTransformer,
+          dialect
+        )
+      }
+
+      // Create all tables
+      dal = Object.fromEntries(
+        Object.keys(tables).map((tableName) => {
+          return [tableName, createTable(tableName)]
+        })
+      ) as ClientTables<DB>
+
+      // Now inform each table about all tables
+      Object.keys(dal).forEach((tableName) => {
+        dal[tableName].setTables(new Map(Object.entries(dal)))
       })
-    ) as ClientTables<DB>
-
-    // Now inform each table about all tables
-    Object.keys(dal).forEach((tableName) => {
-      dal[tableName].setTables(new Map(Object.entries(dal)))
-    })
+    }
 
     const db: ClientTables<DB> & RawQueries = {
       ...dal,
@@ -191,10 +260,12 @@ export class ElectricClient<
     return new ElectricClient(
       db,
       dbName,
+      dbDescription,
       adapter,
       notifier,
       satellite,
-      registry
+      registry,
+      replicationTransformManager
     )
   }
 }

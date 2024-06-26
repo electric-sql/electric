@@ -3432,16 +3432,10 @@ interface DummyGetPayload extends HKT {
 
 export const tableSchemas = {
   Items: {
-    fields: new Map([
-      [
-        "value",
-        "TEXT"
-      ],
-      [
-        "nbr",
-        "INT4"
-      ]
-    ]),
+    fields: {
+      value: "TEXT",
+      nbr: "INT4"
+    },
     relations: [
     ],
     modelSchema: (ItemsCreateInputSchema as any)
@@ -3469,20 +3463,11 @@ export const tableSchemas = {
     ItemsGetPayload
   >,
   User: {
-    fields: new Map([
-      [
-        "id",
-        "INT4"
-      ],
-      [
-        "name",
-        "TEXT"
-      ],
-      [
-        "meta",
-        "TEXT"
-      ]
-    ]),
+    fields: {
+      id: "INT4",
+      name: "TEXT",
+      meta: "TEXT"
+    },
     relations: [
       new Relation("posts", "", "", "Post", "PostToUser", "many"),
       new Relation("profile", "", "", "Profile", "ProfileToUser", "one"),
@@ -3512,28 +3497,13 @@ export const tableSchemas = {
     UserGetPayload
   >,
   Post: {
-    fields: new Map([
-      [
-        "id",
-        "INT4"
-      ],
-      [
-        "title",
-        "TEXT"
-      ],
-      [
-        "contents",
-        "TEXT"
-      ],
-      [
-        "nbr",
-        "INT4"
-      ],
-      [
-        "authorId",
-        "INT4"
-      ]
-    ]),
+    fields: {
+      "id": "INT4",
+      "title": "TEXT",
+      "contents": "TEXT",
+      "nbr": "INT4",
+      "authorId": "INT4"
+    },
     relations: [
       new Relation("author", "authorId", "id", "User", "PostToUser", "one"),
     ],
@@ -3562,28 +3532,13 @@ export const tableSchemas = {
     PostGetPayload
   >,
   Profile: {
-    fields: new Map([
-      [
-        "id",
-        "INT4"
-      ],
-      [
-        "bio",
-        "TEXT"
-      ],
-      [
-        "meta",
-        "JSONB"
-      ],
-      [
-        "userId",
-        "INT4"
-      ],
-      [
-        "imageId",
-        "TEXT"
-      ]
-    ]),
+    fields: {
+      "id": "INT4",
+      "bio": "TEXT",
+      "meta": "JSONB",
+      "userId": "INT4",
+      "imageId": "TEXT"
+    },
     relations: [
       new Relation("user", "userId", "id", "User", "ProfileToUser", "one"),
       new Relation("image", "imageId", "id", "ProfileImage", "ProfileToProfileImage", "one"),
@@ -3613,16 +3568,10 @@ export const tableSchemas = {
     ProfileGetPayload
   >,
   ProfileImage: {
-    fields: new Map([
-      [
-        "id",
-        "TEXT"
-      ],
-      [
-        "image",
-        "BYTEA"
-      ]
-    ]),
+    fields: {
+      "id": "TEXT",
+      "image": "BYTEA"
+    },
     relations: [
       new Relation("profile", "", "", "Profile", "ProfileToProfileImage", "one"),
     ],
@@ -3651,72 +3600,24 @@ export const tableSchemas = {
     ProfileImageGetPayload
   >,
   DataTypes: {
-    fields: new Map([
-      [
-        "id",
-        "INT4"
-      ],
-      [
-        "date",
-        "DATE"
-      ],
-      [
-        "time",
-        "TIME"
-      ],
-      [
-        "timetz",
-        "TIMETZ"
-      ],
-      [
-        "timestamp",
-        "TIMESTAMP"
-      ],
-      [
-        "timestamptz",
-        "TIMESTAMPTZ"
-      ],
-      [
-        "bool",
-        "BOOL"
-      ],
-      [
-        "uuid",
-        "UUID"
-      ],
-      [
-        "int2",
-        "INT2"
-      ],
-      [
-        "int4",
-        "INT4"
-      ],
-      [
-        "int8",
-        "INT8"
-      ],
-      [
-        "float4",
-        "FLOAT4"
-      ],
-      [
-        "float8",
-        "FLOAT8"
-      ],
-      [
-        "json",
-        "JSONB"
-      ],
-      [
-        "bytea",
-        "BYTEA"
-      ],
-      [
-        "relatedId",
-        "INT4"
-      ]
-    ]),
+    fields: {
+      "id": "INT4",
+      "date": "DATE",
+      "time": "TIME",
+      "timetz": "TIMETZ",
+      "timestamp": "TIMESTAMP",
+      "timestamptz": "TIMESTAMPTZ",
+      "bool": "BOOL",
+      "uuid": "UUID",
+      "int2": "INT2",
+      "int4": "INT4",
+      "int8": "INT8",
+      "float4": "FLOAT4",
+      "float8": "FLOAT8",
+      "json": "JSONB",
+      "bytea": "BYTEA",
+      "relatedId": "INT4"
+    },
     relations: [
       new Relation("related", "relatedId", "id", "Dummy", "DataTypesToDummy", "one"),
     ],
@@ -3745,16 +3646,10 @@ export const tableSchemas = {
     DataTypesGetPayload
   >,
   Dummy: {
-    fields: new Map([
-      [
-        "id",
-        "INT4"
-      ],
-      [
-        "timestamp",
-        "TIMESTAMP"
-      ]
-    ]),
+    fields: {
+      "id": "INT4",
+      "timestamp": "TIMESTAMP"
+    },
     relations: [
       new Relation("datatype", "", "", "DataTypes", "DataTypesToDummy", "many"),
     ],

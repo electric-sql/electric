@@ -3327,16 +3327,10 @@ interface UuidsGetPayload extends HKT {
 
 export const tableSchemas = {
   blobs: {
-    fields: new Map([
-      [
-        "id",
-        "TEXT"
-      ],
-      [
-        "blob",
-        "BYTEA"
-      ]
-    ]),
+    fields: {
+      "id": "TEXT",
+      "blob": "BYTEA"
+    },
     relations: [
     ],
     modelSchema: (BlobsCreateInputSchema as any)
@@ -3364,16 +3358,10 @@ export const tableSchemas = {
     BlobsGetPayload
   >,
   bools: {
-    fields: new Map([
-      [
-        "id",
-        "TEXT"
-      ],
-      [
-        "b",
-        "BOOL"
-      ]
-    ]),
+    fields: {
+      "id": "TEXT",
+      "b": "BOOL"
+    },
     relations: [
     ],
     modelSchema: (BoolsCreateInputSchema as any)
@@ -3401,20 +3389,11 @@ export const tableSchemas = {
     BoolsGetPayload
   >,
   datetimes: {
-    fields: new Map([
-      [
-        "id",
-        "TEXT"
-      ],
-      [
-        "d",
-        "DATE"
-      ],
-      [
-        "t",
-        "TIME"
-      ]
-    ]),
+    fields: {
+      "id": "TEXT",
+      "d": "DATE",
+      "t": "TIME"
+    },
     relations: [
     ],
     modelSchema: (DatetimesCreateInputSchema as any)
@@ -3442,16 +3421,10 @@ export const tableSchemas = {
     DatetimesGetPayload
   >,
   enums: {
-    fields: new Map([
-      [
-        "id",
-        "TEXT"
-      ],
-      [
-        "c",
-        "TEXT"
-      ]
-    ]),
+    fields: {
+      "id": "TEXT",
+      "c": "TEXT"
+    },
     relations: [
     ],
     modelSchema: (EnumsCreateInputSchema as any)
@@ -3479,20 +3452,11 @@ export const tableSchemas = {
     EnumsGetPayload
   >,
   floats: {
-    fields: new Map([
-      [
-        "id",
-        "TEXT"
-      ],
-      [
-        "f4",
-        "FLOAT4"
-      ],
-      [
-        "f8",
-        "FLOAT8"
-      ]
-    ]),
+    fields: {
+      "id": "TEXT",
+      "f4": "FLOAT4",
+      "f8": "FLOAT8"
+    },
     relations: [
     ],
     modelSchema: (FloatsCreateInputSchema as any)
@@ -3520,24 +3484,12 @@ export const tableSchemas = {
     FloatsGetPayload
   >,
   ints: {
-    fields: new Map([
-      [
-        "id",
-        "TEXT"
-      ],
-      [
-        "i2",
-        "INT2"
-      ],
-      [
-        "i4",
-        "INT4"
-      ],
-      [
-        "i8",
-        "INT8"
-      ]
-    ]),
+    fields: {
+      "id": "TEXT",
+      "i2": "INT2",
+      "i4": "INT4",
+      "i8": "INT8"
+    },
     relations: [
     ],
     modelSchema: (IntsCreateInputSchema as any)
@@ -3565,32 +3517,14 @@ export const tableSchemas = {
     IntsGetPayload
   >,
   items: {
-    fields: new Map([
-      [
-        "id",
-        "TEXT"
-      ],
-      [
-        "content",
-        "TEXT"
-      ],
-      [
-        "content_text_null",
-        "TEXT"
-      ],
-      [
-        "content_text_null_default",
-        "TEXT"
-      ],
-      [
-        "intvalue_null",
-        "INT4"
-      ],
-      [
-        "intvalue_null_default",
-        "INT4"
-      ]
-    ]),
+    fields: {
+      "id": "TEXT",
+      "content": "TEXT",
+      "content_text_null": "TEXT",
+      "content_text_null_default": "TEXT",
+      "intvalue_null": "INT4",
+      "intvalue_null_default": "INT4"
+    },
     relations: [
       new Relation("other_items", "", "", "other_items", "ItemsToOther_items", "many"),
     ],
@@ -3619,16 +3553,10 @@ export const tableSchemas = {
     ItemsGetPayload
   >,
   jsons: {
-    fields: new Map([
-      [
-        "id",
-        "TEXT"
-      ],
-      [
-        "jsb",
-        "JSONB"
-      ]
-    ]),
+    fields: {
+      "id": "TEXT",
+      "jsb": "JSONB"
+    },
     relations: [
     ],
     modelSchema: (JsonsCreateInputSchema as any)
@@ -3656,20 +3584,11 @@ export const tableSchemas = {
     JsonsGetPayload
   >,
   other_items: {
-    fields: new Map([
-      [
-        "id",
-        "TEXT"
-      ],
-      [
-        "content",
-        "TEXT"
-      ],
-      [
-        "item_id",
-        "TEXT"
-      ]
-    ]),
+    fields: {
+      "id": "TEXT",
+      "content": "TEXT",
+      "item_id": "TEXT"
+    },
     relations: [
       new Relation("items", "item_id", "id", "items", "ItemsToOther_items", "one"),
     ],
@@ -3698,20 +3617,11 @@ export const tableSchemas = {
     Other_itemsGetPayload
   >,
   timestamps: {
-    fields: new Map([
-      [
-        "id",
-        "TEXT"
-      ],
-      [
-        "created_at",
-        "TIMESTAMP"
-      ],
-      [
-        "updated_at",
-        "TIMESTAMPTZ"
-      ]
-    ]),
+    fields: {
+      "id": "TEXT",
+      "created_at": "TIMESTAMP",
+      "updated_at": "TIMESTAMPTZ"
+    },
     relations: [
     ],
     modelSchema: (TimestampsCreateInputSchema as any)
@@ -3739,12 +3649,9 @@ export const tableSchemas = {
     TimestampsGetPayload
   >,
   uuids: {
-    fields: new Map([
-      [
-        "id",
-        "UUID"
-      ]
-    ]),
+    fields: {
+      "id": "UUID"
+    },
     relations: [
     ],
     modelSchema: (UuidsCreateInputSchema as any)

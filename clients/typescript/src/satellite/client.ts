@@ -1421,10 +1421,10 @@ function getColumnType(
 ): PgType {
   if (
     dbDescription.hasTable(table) &&
-    dbDescription.getFields(table).has(column.name)
+    Object.hasOwn(dbDescription.getFields(table), column.name)
   ) {
     // The table and column are known in the DB description
-    return dbDescription.getFields(table).get(column.name)!
+    return dbDescription.getFields(table)[column.name]!
   } else {
     // The table or column is not known.
     // There must have been a migration that added it to the DB while the app was running.

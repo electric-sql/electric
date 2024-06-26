@@ -100,6 +100,7 @@ start_satellite_client_%:
 		--rm \
 		-e TERM=dumb \
 		-e DIALECT=${DIALECT} \
+		-e DAL=${DAL} \
 		satellite_client_$*
 
 

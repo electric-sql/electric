@@ -42,12 +42,15 @@ import {
 import { NarrowInclude } from '../input/inputNarrowing'
 import { IShapeManager } from './shapes'
 import { ShapeSubscription } from '../../satellite'
-import { Rel, Shape } from '../../satellite/shapes/types'
-import { IReplicationTransformManager } from './transforms'
+import {
+  IReplicationTransformManager,
+  setReplicationTransform,
+} from './transforms'
 import { InputTransformer } from '../conversions/input'
 import { Dialect } from '../../migrators/query-builder/builder'
+import { computeShape } from './sync'
 
-type AnyTable = Table<any, any, any, any, any, any, any, any, any, HKT>
+export type AnyTable = Table<any, any, any, any, any, any, any, any, any, HKT>
 
 export class Table<
   T extends Record<string, any>,
@@ -162,56 +165,6 @@ export class Table<
     this._tables = tables
   }
 
-  protected computeShape<T extends SyncInput<Include, Where>>(i: T): Shape {
-    // Recursively go over the included fields
-    const include = i.include ?? {}
-    const where = i.where ?? ''
-    const includedFields = Object.keys(include)
-    const includedTables = includedFields.map((field: string): Rel => {
-      // Fetch the table that is included
-      const relatedTableName = this._dbDescription.getRelatedTable(
-        this.tableName,
-        field
-      )
-      const fkk = this._dbDescription.getForeignKey(this.tableName, field)
-      const relatedTable = this._tables.get(relatedTableName)!
-
-      // And follow nested includes
-      const includedObj = (include as any)[field]
-      if (
-        typeof includedObj === 'object' &&
-        !Array.isArray(includedObj) &&
-        includedObj !== null
-      ) {
-        // There is a nested include, follow it
-        return {
-          foreignKey: [fkk],
-          select: relatedTable.computeShape(includedObj),
-        }
-      } else if (typeof includedObj === 'boolean' && includedObj) {
-        return {
-          foreignKey: [fkk],
-          select: {
-            tablename: relatedTableName,
-          },
-        }
-      } else {
-        throw new Error(
-          `Unexpected value in include tree for sync: ${JSON.stringify(
-            includedObj
-          )}`
-        )
-      }
-    })
-
-    const whereClause = makeSqlWhereClause(where)
-    return {
-      tablename: this.tableName,
-      include: includedTables,
-      ...(whereClause === '' ? {} : { where: whereClause }),
-    }
-  }
-
   protected getIncludedTables<T extends SyncInput<Include, unknown>>(
     i: T
   ): Set<AnyTable> {
@@ -251,7 +204,11 @@ export class Table<
 
   sync<T extends SyncInput<Include, Where>>(i?: T): Promise<ShapeSubscription> {
     const validatedInput = this.syncSchema.parse(i ?? {})
-    const shape = this.computeShape(validatedInput)
+    const shape = computeShape(
+      this._dbDescription,
+      this.tableName,
+      validatedInput
+    )
     return this._shapeManager.subscribe([shape], validatedInput.key)
   }
 
@@ -1616,47 +1573,12 @@ export class Table<
   }
 
   setReplicationTransform(i: ReplicatedRowTransformer<T>): void {
-    // forbid transforming relation keys to avoid breaking
-    // referential integrity
-
-    // the column could be the FK column when it is an outgoing FK
-    // or it could be a PK column when it is an incoming FK
-    const fkCols = this._dbDescription
-      .getOutgoingRelations(this.tableName)
-      .map((r) => r.fromField)
-
-    // Incoming relations don't have the `fromField` and `toField` filled in
-    // so we need to fetch the `toField` from the opposite relation
-    // which is effectively a column in this table to which the FK points
-    const pkCols = this._dbDescription
-      .getIncomingRelations(this.tableName)
-      .map((r) => r.getOppositeRelation(this._dbDescription).toField)
-
-    // Merge all columns that are part of a FK relation.
-    // Remove duplicate columns in case a column has both an outgoing FK and an incoming FK.
-    const immutableFields = Array.from(new Set(fkCols.concat(pkCols)))
-
-    this._replicationTransformManager.setTableTransform(
+    setReplicationTransform<T>(
+      this._dbDescription,
+      this._replicationTransformManager,
       this._qualifiedTableName,
-      {
-        transformInbound: (record) =>
-          this._replicationTransformManager.transformTableRecord(
-            record,
-            i.transformInbound,
-            this._fields,
-            this._schema,
-            immutableFields
-          ),
-
-        transformOutbound: (record) =>
-          this._replicationTransformManager.transformTableRecord(
-            record,
-            i.transformOutbound,
-            this._fields,
-            this._schema,
-            immutableFields
-          ),
-      }
+      i,
+      this._schema
     )
   }
 
@@ -1712,7 +1634,9 @@ export function liveRawQuery(
 }
 
 /** Compile Prisma-like where-clause object into a SQL where clause that the server can understand. */
-function makeSqlWhereClause(where: string | Record<string, any>): string {
+export function makeSqlWhereClause(
+  where: string | Record<string, any>
+): string {
   if (typeof where === 'string') return where
 
   const statements = Object.entries(where)

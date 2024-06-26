@@ -102,15 +102,14 @@ export function writeFieldsMap(
   const fieldsWithoutRelations = model.fields.filter(
     (f) => model.relationFields.indexOf(f) === -1
   )
-  const fieldArray = JSON.stringify(
+  const fields = Object.fromEntries(
     fieldsWithoutRelations.map((field) => [
       field.name,
       pgType(field, model.name),
-    ]),
-    null,
-    2
+    ])
   )
-  fileWriter.writer.write(`new Map(${fieldArray}),`)
+  const serializedFields = JSON.stringify(fields, null, 2)
+  fileWriter.writer.write(`${serializedFields},`)
 }
 
 function pgType(field: ExtendedDMMFField, modelName: string): string {

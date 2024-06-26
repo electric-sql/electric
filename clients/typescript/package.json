@@ -54,6 +54,7 @@
     "./node": "./dist/drivers/better-sqlite3/index.js",
     "./node-postgres": "./dist/drivers/node-postgres/index.js",
     "./pglite": "./dist/drivers/pglite/index.js",
+    "./protocol": "./dist/_generated/protocol/satellite.js",
     "./react": "./dist/frameworks/react/index.js",
     "./tauri-postgres": "./dist/drivers/tauri-postgres/index.js",
     "./vuejs": "./dist/frameworks/vuejs/index.js",
@@ -78,6 +79,9 @@
       "capacitor": [
         "./dist/drivers/capacitor-sqlite/index.d.ts"
       ],
+      "client": [
+        "./dist/client/index.d.ts"
+      ],
       "expo": [
         "./dist/drivers/expo-sqlite/index.d.ts"
       ],
@@ -95,6 +99,9 @@
       ],
       "pglite": [
         "./dist/drivers/pglite/index.d.ts"
+      ],
+      "protocol": [
+        "./dist/_generated/protocol/satellite.d.ts"
       ],
       "react": [
         "./dist/frameworks/react/index.d.ts"
@@ -181,6 +188,7 @@
     "lodash.flow": "^3.5.0",
     "lodash.groupby": "^4.6.0",
     "lodash.isequal": "^4.5.0",
+    "lodash.keyby": "^4.6.0",
     "lodash.mapvalues": "^4.6.0",
     "lodash.omitby": "^4.6.0",
     "lodash.partition": "^4.6.0",
@@ -209,6 +217,7 @@
     "@types/lodash.flow": "^3.5.7",
     "@types/lodash.groupby": "^4.6.7",
     "@types/lodash.isequal": "^4.5.6",
+    "@types/lodash.keyby": "^4.6.9",
     "@types/lodash.mapvalues": "^4.6.7",
     "@types/lodash.omitby": "^4.6.7",
     "@types/lodash.partition": "^4.6.7",

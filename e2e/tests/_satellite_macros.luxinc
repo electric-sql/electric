@@ -202,7 +202,7 @@
 [endmacro]
 
 [macro node_await_insert keys]
-    !await client.insert_item(db, ${keys})
+    !await client.insert_items(db, ${keys})
     ??$node
 [endmacro]
 
@@ -221,7 +221,7 @@
 [endmacro]
 
 [macro node_await_insert_other keys]
-    !await client.insert_other_item(db, ${keys})
+    !await client.insert_other_items(db, ${keys})
     ??$node
 [endmacro]
 

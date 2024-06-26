@@ -4,6 +4,7 @@ import path from 'path'
 import { buildMigrations } from '../../src/migrations/builder'
 import { sqliteBuilder } from 'electric-sql/migrators/query-builder'
 import { loadMigrations } from '../../src/migrations/builder'
+import { Relation } from 'electric-sql/client/model'
 
 const migrationsFolder = path.join(
   '../../clients/typescript/test/migrators/support/migrations'
@@ -46,7 +47,41 @@ test('write migration to configuration file', async (t) => {
 })
 
 test('read migration meta data', async (t) => {
-  const migrations = await loadMigrations(migrationsFolder, sqliteBuilder)
+  const { migrations, dbDescription } = await loadMigrations(
+    migrationsFolder,
+    sqliteBuilder
+  )
   const versions = migrations.map((m) => m.version)
   t.deepEqual(versions, ['20230613112725_814', '20230613112735_992'])
+
+  t.deepEqual(dbDescription, {
+    stars: {
+      fields: {
+        id: 'TEXT',
+        avatar_url: 'TEXT',
+        name: 'TEXT',
+        starred_at: 'TEXT',
+        username: 'TEXT',
+      },
+      relations: [
+        new Relation('beers', '', '', 'beers', 'beers_star_idTostars', 'many'),
+      ],
+    },
+    beers: {
+      fields: {
+        id: 'TEXT',
+        star_id: 'TEXT',
+      },
+      relations: [
+        new Relation(
+          'stars',
+          'star_id',
+          'id',
+          'stars',
+          'beers_star_idTostars',
+          'one'
+        ),
+      ],
+    },
+  })
 })

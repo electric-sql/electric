@@ -17,7 +17,7 @@ export type TableName = string
 export type FieldName = string
 export type RelationName = string
 
-export type Fields = Map<FieldName, PgType>
+export type Fields = Record<FieldName, PgType>
 
 export type TableSchema<
   T extends Record<string, any>,
@@ -76,10 +76,20 @@ export type ExtendedTableSchema<
   incomingRelations: Relation[]
 }
 
-export type TableSchemas = Record<
-  TableName,
-  TableSchema<any, any, any, any, any, any, any, any, any, HKT>
+export type AnyTableSchema = TableSchema<
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  HKT
 >
+
+export type TableSchemas = Record<TableName, AnyTableSchema>
 
 export type ExtendedTableSchemas = Record<
   TableName,
@@ -190,7 +200,7 @@ export class DbSchema<T extends TableSchemas> {
   }
 
   getFieldNames(table: TableName): FieldName[] {
-    return Array.from(this.getFields(table).keys())
+    return Array.from(Object.keys(this.getFields(table)))
   }
 
   hasRelationForField(table: TableName, field: FieldName): boolean {

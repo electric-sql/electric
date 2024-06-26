@@ -5,9 +5,12 @@ import {
   _RECORD_NOT_FOUND_,
 } from '../../../src/client/validation/errors/messages'
 import { schema, Post } from '../generated'
-import { transformTableRecord } from '../../../src/client/model/transforms'
+import {
+  setReplicationTransform,
+  transformTableRecord,
+} from '../../../src/client/model/transforms'
 import { InvalidRecordTransformationError } from '../../../src/client/validation/errors/invalidRecordTransformationError'
-import { DbRecord } from '../../../src/util'
+import { DbRecord, QualifiedTablename } from '../../../src/util'
 import { sqliteConverter } from '../../../src/client/conversions/sqlite'
 
 const tableName = 'Post'
@@ -83,4 +86,23 @@ test('transformTableRecord should validate output does not modify immutable fiel
   t.throws(() => liftedTransform(post1), {
     instanceOf: InvalidRecordTransformationError,
   })
+})
+
+test('setReplicationTransform throws an error if table does not exist', (t) => {
+  t.throws(
+    () => {
+      setReplicationTransform(
+        schema,
+        undefined as any, // won't be used anyway
+        new QualifiedTablename('main', 'non_existent_table'),
+        {
+          transformInbound: (_) => _,
+          transformOutbound: (_) => _,
+        }
+      )
+    },
+    {
+      message: `Cannot set replication transform for table 'non_existent_table'. Table does not exist in the database schema.`,
+    }
+  )
 })

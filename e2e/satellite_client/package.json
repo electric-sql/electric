@@ -21,6 +21,7 @@
     "electric-sql": "workspace:*",
     "jsonwebtoken": "^9.0.0",
     "pg": "^8.11.3",
+    "ts-dedent": "^2.2.0",
     "uuid": "^9.0.0",
     "zod": "3.21.1"
   },

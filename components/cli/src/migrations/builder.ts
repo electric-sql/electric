@@ -9,6 +9,8 @@ import {
 } from 'electric-sql/migrators'
 import { isObject } from 'electric-sql/util'
 import { QueryBuilder } from 'electric-sql/migrators/query-builder'
+import { TableName, DbSchema, createDbDescription } from 'electric-sql/client'
+import { SatOpMigrate_Table } from 'electric-sql/protocol'
 
 /*
  * This file defines functions to build migrations
@@ -38,14 +40,18 @@ export async function buildMigrations(
   migrationsFolder: string,
   migrationsFile: string,
   builder: QueryBuilder
-) {
+): Promise<DbSchema> {
   try {
-    const migrations = await loadMigrations(migrationsFolder, builder)
+    const { migrations, dbDescription } = await loadMigrations(
+      migrationsFolder,
+      builder
+    )
     // Update the configuration file
     await fs.writeFile(
       migrationsFile,
       `export default ${JSON.stringify(migrations, null, 2)}`
     )
+    return dbDescription
   } catch (e) {
     if (e instanceof z.ZodError)
       throw new Error('Could not build migrations:\n' + e.message)
@@ -70,14 +76,15 @@ export async function getMigrationNames(
 }
 
 /**
- * Loads all migrations that are present in the provided migrations folder.
+ * Loads all migrations that are present in the provided migrations folder,
+ * and builds a database description from them.
  * @param migrationsFolder Folder where migrations are stored.
- * @returns An array of migrations.
+ * @returns An object containing an array of migrations as well as database schema describing the tables.
  */
 export async function loadMigrations(
   migrationsFolder: string,
   builder: QueryBuilder
-): Promise<Migration[]> {
+): Promise<{ migrations: Migration[]; dbDescription: DbSchema }> {
   const dirNames = await getMigrationNames(migrationsFolder)
   const migrationPaths = dirNames.map((dirName) =>
     path.join(migrationsFolder, dirName, 'metadata.json')
@@ -85,7 +92,29 @@ export async function loadMigrations(
   const migrationMetaDatas = await Promise.all(
     migrationPaths.map(readMetadataFile)
   )
-  return migrationMetaDatas.map((data) => makeMigration(data, builder))
+  // Aggregate table information from all migrations
+  // and create the database description
+  const tables = aggregateTableInfo(migrationMetaDatas)
+  const dbDescription = createDbDescription(tables)
+  return {
+    migrations: migrationMetaDatas.map((data) => makeMigration(data, builder)),
+    dbDescription,
+  }
+}
+
+function aggregateTableInfo(migrations: MetaData[]): Array<SatOpMigrate_Table> {
+  const tables = new Map<TableName, SatOpMigrate_Table>()
+  migrations.forEach((migration) => {
+    migration.ops.forEach((satOpMigrate) => {
+      const tbl = satOpMigrate.table
+      if (tbl !== undefined) {
+        // table information from later migrations
+        // overwrite information from earlier migrations
+        tables.set(tbl.name, tbl)
+      }
+    })
+  })
+  return Array.from(tables.values())
 }
 
 /**

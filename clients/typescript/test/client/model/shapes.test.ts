@@ -11,6 +11,7 @@ import { ElectricClient } from '../../../src/client/model/client'
 import { cleanAndStopSatellite } from '../../satellite/common'
 import { satelliteDefaults } from '../../../src/satellite/config'
 import { insecureAuthToken } from '../../../src/auth'
+import { computeShape } from '../../../src/client/model/sync'
 
 const test = testAny as TestFn<ContextType>
 
@@ -277,7 +278,6 @@ test.serial('nested shape is constructed', async (t) => {
 
   client.setRelations(relations)
 
-  const { Post } = t.context as ContextType
   const input = {
     where: {
       OR: [
@@ -306,8 +306,8 @@ test.serial('nested shape is constructed', async (t) => {
   }
 
   // @ts-ignore `computeShape` is a protected method
-  const shape = Post.computeShape(input)
-  t.deepEqual(shape, {
+  const shape = computeShape(schema, 'Post', input)
+  const expectedShape = {
     tablename: 'Post',
     where: `(this."id" IN (3, 'test') OR this."test" LIKE '\\%hello%') AND ((NOT this."id" = 1) AND (NOT this."id" = 2)) AND (this."nbr" = 6 AND this."nbr" = 7) AND (this."title" = 'foo') AND (this."contents" = 'important''')`,
     include: [
@@ -327,5 +327,16 @@ test.serial('nested shape is constructed', async (t) => {
         },
       },
     ],
+  }
+  t.deepEqual(shape, expectedShape)
+
+  // Also check the `computeShape` we extracted out of the DAL
+  const shape2 = computeShape(schema, 'Post', input)
+  t.deepEqual(shape2, expectedShape)
+})
+
+test('computeShape throws an error if table does not exist', (t) => {
+  t.throws(() => computeShape(schema, 'NonExistentTable', {}), {
+    message: `Cannot sync the requested shape. Table 'NonExistentTable' does not exist in the database schema.`,
   })
 })

@@ -1825,7 +1825,9 @@ test('setReplicationTransform should validate transform does not modify incoming
 
   // Check outbound transform
   t.throws(
-    () => client.replicationTransforms.get('User').transformOutbound(author1),
+    () => {
+      client.replicationTransforms.get('User').transformOutbound(author1)
+    },
     {
       instanceOf: InvalidRecordTransformationError,
       message: 'Record transformation modified immutable fields: id',

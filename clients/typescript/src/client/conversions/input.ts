@@ -247,7 +247,7 @@ export class InputTransformer {
     value: any,
     fields: Fields
   ): any {
-    const pgType = fields.get(field)
+    const pgType = fields[field]
 
     if (!pgType) throw new InvalidArgumentError(`Unknown field ${field}`)
 
@@ -335,7 +335,7 @@ export function transformFields(
   // as those will be transformed later when the query on the related field is processed.
   const copied: Record<string, any> = { ...o }
   Object.entries(o).forEach(([field, value]) => {
-    const pgType = fields.get(field)
+    const pgType = fields[field]
     // Skip anything that's not an actual column on the table
     if (pgType === undefined) return
 
@@ -363,7 +363,10 @@ export function isFilterObject(value: any): boolean {
  * @returns A filtered object.
  */
 function keepTableFieldsOnly(o: object, fields: Fields) {
-  return filterKeys(o, fields)
+  return filterKeys(o, {
+    ...fields,
+    has: (x) => Object.hasOwn(fields, x),
+  })
 }
 
 /**
