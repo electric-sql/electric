@@ -40,11 +40,3 @@ const _ensureQualified = (
 
   return `${defaultNamespace}.${candidate}`
 }
-
-/** Function to parse Postgres date values (dates, timestamps, etc.) */
-export function parseDate(v: any): Date {
-  const millis = Date.parse(v)
-  if (isNaN(millis))
-    throw new Error(`Could not parse date, invalid format: ${v}`)
-  else return new Date(millis)
-}

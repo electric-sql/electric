@@ -3,7 +3,6 @@ import { Database } from './database.js'
 import { Row, Statement } from '../util/types.js'
 import { SerialDatabaseAdapter as GenericDatabaseAdapter } from '../generic/adapter.js'
 import { RunResult } from '../adapter.js'
-import { parseDate } from '../util/parser.js'
 
 const originalGetTypeParser = pg.types.getTypeParser
 
@@ -58,4 +57,12 @@ export class DatabaseAdapter extends GenericDatabaseAdapter {
       rowsModified: rowCount ?? 0,
     }
   }
+}
+
+/** Function to parse Postgres date values (dates, timestamps, etc.) */
+function parseDate(v: any): Date {
+  const millis = Date.parse(v)
+  if (isNaN(millis))
+    throw new Error(`Could not parse date, invalid format: ${v}`)
+  else return new Date(millis)
 }

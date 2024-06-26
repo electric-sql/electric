@@ -1,5 +1,4 @@
 import { PgDateType } from '../types'
-import { parseDate } from '@electric-sql/drivers/util'
 
 // Serialises a `Date` object into a SQLite compatible date string
 export function serialiseDate(v: Date, pgType: PgDateType): string {
@@ -67,4 +66,12 @@ function extractDateAndTime(v: Date): ExtractedDateTime {
     string
   ]
   return { date, time }
+}
+
+/** Function to parse Postgres date values (dates, timestamps, etc.) */
+function parseDate(v: any): Date {
+  const millis = Date.parse(v)
+  if (isNaN(millis))
+    throw new Error(`Could not parse date, invalid format: ${v}`)
+  else return new Date(millis)
 }
