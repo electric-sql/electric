@@ -370,22 +370,23 @@ export const builderTests = (test: TestFn<ContextType>) => {
       5 // at most 5 `?`s in one SQL statement, so we should see the split
     )
 
+    let parameters: string[]
+    switch (builder.dialect) {
+      case 'SQLite':
+        parameters = ['(?, ?), (?, ?)', '(?, ?)']
+        break
+      case 'Postgres':
+        parameters = ['($1, $2), ($3, $4)', '($1, $2)']
+        break
+    }
+
     t.deepEqual(stmts, [
       {
-        sql: `INSERT INTO test (a, b) VALUES ${Array.from(
-          { length: 2 },
-          (_, idx) =>
-            `(${builder.makePositionalParam(
-              2 * idx + 1
-            )}, ${builder.makePositionalParam(2 * idx + 2)})`
-        ).join(', ')}`,
+        sql: `INSERT INTO test (a, b) VALUES ${parameters[0]}`,
         args: [1, 2, 3, 4],
       },
       {
-        sql: `INSERT INTO test (a, b) VALUES (${Array.from(
-          { length: 2 },
-          (_, idx) => builder.makePositionalParam(idx + 1)
-        ).join(', ')})`,
+        sql: `INSERT INTO test (a, b) VALUES ${parameters[1]}`,
         args: [5, 6],
       },
     ])
@@ -405,22 +406,23 @@ export const builderTests = (test: TestFn<ContextType>) => {
       5
     )
 
+    let parameters: string[]
+    switch (builder.dialect) {
+      case 'SQLite':
+        parameters = ['(?, ?), (?, ?)', '(?, ?)']
+        break
+      case 'Postgres':
+        parameters = ['($1, $2), ($3, $4)', '($1, $2)']
+        break
+    }
+
     t.deepEqual(stmts, [
       {
-        sql: `INSERT INTO test (a, b) VALUES ${Array.from(
-          { length: 2 },
-          (_, idx) =>
-            `(${builder.makePositionalParam(
-              2 * idx + 1
-            )}, ${builder.makePositionalParam(2 * idx + 2)})`
-        ).join(', ')}`,
+        sql: `INSERT INTO test (a, b) VALUES ${parameters[0]}`,
         args: [2, 1, 4, 3],
       },
       {
-        sql: `INSERT INTO test (a, b) VALUES (${Array.from(
-          { length: 2 },
-          (_, idx) => builder.makePositionalParam(idx + 1)
-        ).join(', ')})`,
+        sql: `INSERT INTO test (a, b) VALUES ${parameters[1]}`,
         args: [6, 5],
       },
     ])
@@ -440,26 +442,28 @@ export const builderTests = (test: TestFn<ContextType>) => {
       5 // at most 5 `?`s in one SQL statement, so we should see the split
     )
 
+    let parameters: string[]
+    switch (builder.dialect) {
+      case 'SQLite':
+        parameters = ['(?, ?), (?, ?)', '(?, ?)']
+        break
+      case 'Postgres':
+        parameters = ['($1, $2), ($3, $4)', '($1, $2)']
+        break
+    }
+
     t.deepEqual(stmts, [
       {
         sql: `DELETE FROM test WHERE ("a", "b") IN (${builder.pgOnly(
           ' VALUES '
-        )}${Array.from(
-          { length: 2 },
-          (_, idx) =>
-            `(${builder.makePositionalParam(
-              2 * idx + 1
-            )}, ${builder.makePositionalParam(2 * idx + 2)})`
-        ).join(', ')})`,
+        )}${parameters[0]})`,
 
         args: [1, 2, 3, 4],
       },
       {
         sql: `DELETE FROM test WHERE ("a", "b") IN (${builder.pgOnly(
           ' VALUES '
-        )}(${Array.from({ length: 2 }, (_, idx) =>
-          builder.makePositionalParam(idx + 1)
-        ).join(', ')}))`,
+        )}${parameters[1]})`,
         args: [5, 6],
       },
     ])
@@ -479,12 +483,19 @@ export const builderTests = (test: TestFn<ContextType>) => {
       5 // at most 5 `?`s in one SQL statement, so we should see the split
     )
 
+    let parameters: string[]
+    switch (builder.dialect) {
+      case 'SQLite':
+        parameters = ['?, ?, ?']
+        break
+      case 'Postgres':
+        parameters = ['$1, $2, $3']
+        break
+    }
+
     t.deepEqual(stmts, [
       {
-        sql: `DELETE FROM test WHERE ("a") IN (${Array.from(
-          { length: 3 },
-          (_, idx) => builder.makePositionalParam(idx + 1)
-        ).join(', ')})`,
+        sql: `DELETE FROM test WHERE ("a") IN (${parameters[0]})`,
 
         args: [1, 3, 5],
       },
@@ -505,25 +516,27 @@ export const builderTests = (test: TestFn<ContextType>) => {
       5
     )
 
+    let parameters: string[]
+    switch (builder.dialect) {
+      case 'SQLite':
+        parameters = ['(?, ?), (?, ?)', '(?, ?)']
+        break
+      case 'Postgres':
+        parameters = ['($1, $2), ($3, $4)', '($1, $2)']
+        break
+    }
+
     t.deepEqual(stmts, [
       {
         sql: `DELETE FROM test WHERE ("b", "a") IN (${builder.pgOnly(
           ' VALUES '
-        )}${Array.from(
-          { length: 2 },
-          (_, idx) =>
-            `(${builder.makePositionalParam(
-              2 * idx + 1
-            )}, ${builder.makePositionalParam(2 * idx + 2)})`
-        ).join(', ')})`,
+        )}${parameters[0]})`,
         args: [2, 1, 4, 3],
       },
       {
         sql: `DELETE FROM test WHERE ("b", "a") IN (${builder.pgOnly(
           ' VALUES '
-        )}(${Array.from({ length: 2 }, (_, idx) =>
-          builder.makePositionalParam(idx + 1)
-        ).join(', ')}))`,
+        )}${parameters[1]})`,
         args: [6, 5],
       },
     ])
