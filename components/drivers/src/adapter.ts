@@ -1,6 +1,4 @@
-import { QualifiedTablename } from './util/tablename.js'
 import { Row, Statement } from './util/types.js'
-import { parseTableNames } from './util/parser.js'
 
 export type UncoordinatedDatabaseAdapter = Pick<
   DatabaseAdapter,
@@ -50,16 +48,6 @@ export interface DatabaseAdapter {
   transaction<T>(
     f: (tx: Transaction, setResult: (res: T) => void) => void
   ): Promise<T>
-
-  // Get the tables potentially used by the query (so that we
-  // can re-query if the data in them changes).
-  tableNames(statement: Statement): QualifiedTablename[]
-}
-
-export class TableNameImpl {
-  tableNames({ sql }: Statement): QualifiedTablename[] {
-    return parseTableNames(sql)
-  }
 }
 
 export interface Transaction {

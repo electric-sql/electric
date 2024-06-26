@@ -4,7 +4,6 @@ import Database from 'better-sqlite3'
 
 import { DatabaseAdapter } from '../src/better-sqlite3/adapter.js'
 import { MockDatabase } from '../src/better-sqlite3/mock.js'
-import { QualifiedTablename } from '../src/util/tablename.js'
 import { UncoordinatedDatabaseAdapter } from '../src/adapter.js'
 
 test('database adapter run works', async (t) => {
@@ -25,16 +24,6 @@ test('database adapter query works', async (t) => {
   const result = await adapter.query({ sql })
 
   t.deepEqual(result, [{ foo: 'bar' }, { foo: 'baz' }])
-})
-
-test('database adapter tableNames works', async (t) => {
-  const db = new MockDatabase('test.db')
-  const adapter = new DatabaseAdapter(db)
-
-  const sql = 'select foo from bar'
-  const r1 = adapter.tableNames({ sql })
-
-  t.deepEqual(r1, [new QualifiedTablename('main', 'bar')])
 })
 
 // Test with an actual better-sqlite3 DB

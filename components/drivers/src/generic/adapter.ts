@@ -1,7 +1,6 @@
 import {
   DatabaseAdapter as DatabaseAdapterInterface,
   RunResult,
-  TableNameImpl,
   Transaction as Tx,
   UncoordinatedDatabaseAdapter,
 } from '../adapter.js'
@@ -14,15 +13,11 @@ import { Mutex } from 'async-mutex'
  * Concrete adapters extending this class must implement the
  * `_run`, `_query`, and `runInTransaction` methods.
  */
-abstract class DatabaseAdapter
-  extends TableNameImpl
-  implements DatabaseAdapterInterface
-{
+abstract class DatabaseAdapter implements DatabaseAdapterInterface {
   protected txMutex: Mutex
   abstract readonly defaultNamespace: 'main' | 'public'
 
   constructor() {
-    super()
     this.txMutex = new Mutex()
   }
 

@@ -2,7 +2,6 @@ import test from 'ava'
 
 import { MockDatabase } from '../src/wa-sqlite/mock.js'
 import { DatabaseAdapter } from '../src/wa-sqlite/adapter.js'
-import { QualifiedTablename } from '../src/util/tablename.js'
 
 test('database adapter run works', async (t) => {
   const db = new MockDatabase('test.db')
@@ -106,14 +105,4 @@ test('database adapter interactive transaction rejects promise on failure', asyn
     }),
     { instanceOf: Error, message: 'Oops' }
   )
-})
-
-test('database adapter tableNames works', async (t) => {
-  const db = new MockDatabase('test.db')
-  const adapter = new DatabaseAdapter(db)
-
-  const sql = 'select db from bar'
-  const r1 = adapter.tableNames({ sql })
-
-  t.deepEqual(r1, [new QualifiedTablename('main', 'bar')])
 })

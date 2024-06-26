@@ -11,14 +11,14 @@ import type { Row } from '@electric-sql/drivers/util'
 
 export type {
   DbName,
-  DbNamespace,
-  Tablename,
   SqlValue,
   Row,
   BindParams,
   Statement,
 } from '@electric-sql/drivers/util'
 
+export type DbNamespace = string
+export type Tablename = string
 export type AnyFunction = (...args: any[]) => any
 export type EmptyFunction = () => void
 export type FunctionMap = { [key: string]: AnyFunction }

@@ -2,7 +2,6 @@ import { Mutex } from 'async-mutex'
 import {
   DatabaseAdapter as DatabaseAdapterInterface,
   RunResult,
-  TableNameImpl,
   Transaction as Tx,
   UncoordinatedDatabaseAdapter,
 } from '../adapter.js'
@@ -16,10 +15,7 @@ import {
 
 import { Database, StatementBindParams } from './database.js'
 
-export class DatabaseAdapter
-  extends TableNameImpl
-  implements DatabaseAdapterInterface
-{
+export class DatabaseAdapter implements DatabaseAdapterInterface {
   db: Database
   readonly defaultNamespace = 'main'
 
@@ -32,7 +28,6 @@ export class DatabaseAdapter
   protected txMutex: Mutex
 
   constructor(db: Database) {
-    super()
     this.db = db
     this.txMutex = new Mutex()
   }
