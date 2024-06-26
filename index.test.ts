@@ -1,4 +1,4 @@
-import { beforeAll, afterAll, describe, it, expect } from "vitest"
+import { beforeAll, afterAll, describe, it, expect, assert } from "vitest"
 import { ShapeStream } from "./client"
 import { v4 as uuidv4 } from "uuid"
 import { parse } from "cache-control-parser"
@@ -66,7 +66,7 @@ afterAll(async () => {
   await context.client.query(`TRUNCATE TABLE foo`)
   await context.client.end()
 
-  // TODO do any needed server cleanup
+  // TODO do any needed server cleanup.
   context = {}
 })
 
@@ -98,6 +98,12 @@ describe(`HTTP Sync`, () => {
     const values = [...shapeData.values()]
 
     expect(values).toHaveLength(0)
+  })
+
+  it(`returns a header with the server shape id`, async () => {
+    const res = await fetch(`http://localhost:3000/shape/issues?offset=-1`, {})
+    const shapeId = res.headers.get(`x-electric-shape-id`)
+    assert.exists(shapeId)
   })
 
   it(`should get initial data`, async () => {
@@ -173,7 +179,6 @@ describe(`HTTP Sync`, () => {
     const values = [...shapeData.values()]
 
     expect(values).toHaveLength(1)
-    console.log({ values })
     expect(values[0].title).toEqual(`I AM FOO TABLE`)
   })
 
@@ -192,9 +197,6 @@ describe(`HTTP Sync`, () => {
     await new Promise((resolve) => {
       issueStream.subscribe((messages) => {
         messages.forEach(async (message) => {
-          if (message.headers?.[`control`] === `batch-done`) {
-            batchDoneCount += 1
-          }
           if (message.headers?.hasOwnProperty(`action`)) {
             shapeData.set(message.key, message.value)
           }
@@ -242,7 +244,7 @@ describe(`HTTP Sync`, () => {
     })
 
     const promise1 = new Promise(async (resolve) => {
-      issueStream1.subscribe(async (messages) => {
+      issueStream1.subscribe((messages) => {
         messages.forEach(async (message) => {
           if (message.headers?.hasOwnProperty(`action`)) {
             shapeData1.set(message.key, message.value)
@@ -337,6 +339,7 @@ describe(`HTTP Sync`, () => {
       subscribe: true,
       signal: newAborter.signal,
       offset: lastOffset,
+      shapeId: issueStream.shapeId,
     })
     await new Promise((resolve) => {
       newIssueStream.subscribe((messages) => {
@@ -379,9 +382,10 @@ describe(`HTTP Sync`, () => {
   })
 
   it(`should return as uncachable if &live is set`, async () => {
+    const initialRes = await fetch(`http://localhost:3000/shape/issues`, {})
+    const shapeId = initialRes.headers.get(`x-electric-shape-id`)
     const res = await fetch(
-      `http://localhost:3000/shape/issues?offset=10&live`,
-      {}
+      `http://localhost:3000/shape/issues?offset=10&live&shapeId=${shapeId}`
     )
     const cacheHeaders = res.headers.get(`cache-control`)
     const directives = parse(cacheHeaders)
@@ -401,6 +405,7 @@ describe(`HTTP Sync`, () => {
 
   it(`should revalidate etags`, async () => {
     const res = await fetch(`http://localhost:3000/shape/issues?offset=-1`, {})
+    const shapeId = res.headers.get(`x-electric-shape-id`)
     const etag = res.headers.get(`etag`)
 
     const etagValidation = await fetch(
@@ -415,7 +420,7 @@ describe(`HTTP Sync`, () => {
 
     // Get etag for catchup
     const catchupEtagRes = await fetch(
-      `http://localhost:3000/shape/issues?offset=4`,
+      `http://localhost:3000/shape/issues?offset=4&shapeId=${shapeId}`,
       {}
     )
     const catchupEtag = catchupEtagRes.headers.get(`etag`)
@@ -423,7 +428,7 @@ describe(`HTTP Sync`, () => {
     // Catch-up offsets should also use the same etag as they're
     // also working through the end of the current log.
     const catchupEtagValidation = await fetch(
-      `http://localhost:3000/shape/issues?offset=${etag}&notLive`,
+      `http://localhost:3000/shape/issues?offset=${etag}&notLive&shapeId=${shapeId}`,
       {
         headers: { "if-None-Else": catchupEtag },
       }
@@ -455,6 +460,7 @@ describe(`HTTP Sync`, () => {
   // if (typeof message.offset === `number`) {
   // maxOffset = Math.max(maxOffset, message.offset)
   // if (message.offset > offsetBeforeUpdate) {
+  // toggleNetworkConnectivity()
   // aborter.abort()
   // return resolve()
   // }
@@ -471,4 +477,18 @@ describe(`HTTP Sync`, () => {
   // })
   // context.secondRowId = secondRowId
   // })
+  // TODO fetch, delete shape, fetch again with header and get error
+  it(`should return "must-refetch" as only log entry if the shapeId has changed`, async () => {
+    const initialRes = await fetch(`http://localhost:3000/shape/issues`, {})
+    const shapeId = initialRes.headers.get(`x-electric-shape-id`)
+
+    deleteShape(`issues`)
+
+    const res = await fetch(
+      `http://localhost:3000/shape/issues?offset=10&live&shapeId=${shapeId}`
+    )
+
+    const data = await res.json()
+    expect(data).toEqual([{ headers: { control: `must-refetch` } }])
+  })
 })
