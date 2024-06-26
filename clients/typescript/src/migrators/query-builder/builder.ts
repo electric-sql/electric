@@ -321,7 +321,7 @@ export abstract class QueryBuilder {
    */
   prepareInsertBatchedStatements<T extends Row>(
     baseSql: string,
-    columns: Extract<keyof T, string>[],
+    columns: Array<keyof T>,
     records: Row[],
     maxParameters: number,
     suffixSql = ''
@@ -395,7 +395,7 @@ export abstract class QueryBuilder {
    */
   public prepareDeleteBatchedStatements<T extends Row>(
     baseSql: string,
-    columns: Extract<keyof T, string>[],
+    columns: string[],
     records: T[],
     maxParameters: number,
     suffixSql = ''
