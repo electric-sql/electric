@@ -40,6 +40,7 @@ import {
   ReplicatedRowTransformer,
   DataGone,
   ServerTransaction,
+  Row,
 } from '../util/types'
 import { SatelliteOpts } from './config'
 import { Client, Satellite } from './index'
@@ -1564,7 +1565,7 @@ export class SatelliteProcess implements Satellite {
 
     // Batch-delete shadow entries
     const stmts = this.builder.prepareDeleteBatchedStatements(
-      `DELETE FROM ${this.opts.shadowTable} WHERE `,
+      `DELETE FROM ${this.opts.shadowTable} WHERE`,
       ['namespace', 'tablename', 'primaryKey'],
       fakeOplogEntries,
       this.maxSqlParameters
@@ -1588,7 +1589,7 @@ export class SatelliteProcess implements Satellite {
         ...this.builder.prepareDeleteBatchedStatements(
           `DELETE FROM ${fqtn} WHERE`,
           pkCols,
-          gone.map((x) => x.oldRecord) as Record<string, SqlValue>[],
+          gone.map((x) => x.oldRecord as Row),
           this.maxSqlParameters
         )
       )
