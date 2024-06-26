@@ -336,6 +336,26 @@ export const builderTests = (test: TestFn<ContextType>) => {
     ])
   })
 
+  test('makePositionalParam generates correct parameter strings', (t) => {
+    const { builder } = t.context
+    const numParams = 4
+    let expectedParams: string[]
+    switch (builder.dialect) {
+      case 'SQLite':
+        expectedParams = ['?', '?', '?', '?']
+        break
+      case 'Postgres':
+        expectedParams = ['$1', '$2', '$3', '$4']
+        break
+    }
+    t.deepEqual(
+      Array.from({ length: numParams }, (_, idx) =>
+        builder.makePositionalParam(idx + 1)
+      ),
+      expectedParams
+    )
+  })
+
   test('prepareInsertBatchedStatements correctly splits up data in batches', (t) => {
     const { builder } = t.context
     const data = [
