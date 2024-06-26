@@ -1,10 +1,12 @@
-import { DatabaseAdapter } from './adapter'
-import { ElectricDatabase } from './database'
+import {
+  DatabaseAdapter,
+  ElectricDatabase,
+} from '@electric-sql/drivers/wa-sqlite'
 import { ElectricConfig } from '../../config'
 import { electrify as baseElectrify, ElectrifyOptions } from '../../electric'
 import { WebSocketWeb } from '../../sockets/web'
 import { ElectricClient, DbSchema } from '../../client/model'
-import { Database } from './database'
+import type { Database } from '@electric-sql/drivers/wa-sqlite'
 
 export { DatabaseAdapter, ElectricDatabase }
 export type { Database }

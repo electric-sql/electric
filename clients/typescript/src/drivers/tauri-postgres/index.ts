@@ -1,6 +1,9 @@
-import { DatabaseAdapter as DatabaseAdapterI } from '../../electric/adapter'
-import { DatabaseAdapter } from './adapter'
-import { Database, ElectricDatabase } from './database'
+import { DatabaseAdapter as DatabaseAdapterI } from '@electric-sql/drivers'
+import { DatabaseAdapter } from '@electric-sql/drivers/tauri-postgres'
+import type {
+  Database,
+  ElectricDatabase,
+} from '@electric-sql/drivers/tauri-postgres'
 import { ElectricConfig } from '../../config'
 import { electrify as baseElectrify, ElectrifyOptions } from '../../electric'
 import { WebSocketWeb } from '../../sockets/web'

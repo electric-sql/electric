@@ -1,4 +1,4 @@
-import { DbNamespace, Tablename } from './types'
+import { DbNamespace, Tablename } from './types.js'
 
 export class QualifiedTablename {
   namespace: DbNamespace

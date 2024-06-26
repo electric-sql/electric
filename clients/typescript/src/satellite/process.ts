@@ -5,7 +5,7 @@ import {
   SatRelation_RelationType,
 } from '../_generated/protocol/satellite'
 import { AuthConfig, AuthState } from '../auth/index'
-import { DatabaseAdapter } from '../electric/adapter'
+import { DatabaseAdapter } from '@electric-sql/drivers'
 import { Migrator } from '../migrators/index'
 import {
   AuthStateNotification,

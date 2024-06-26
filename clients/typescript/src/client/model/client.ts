@@ -9,7 +9,7 @@ import {
 } from '../../util'
 import { LiveResultContext } from './model'
 import { Notifier } from '../../notifiers'
-import { DatabaseAdapter } from '../../electric/adapter'
+import { DatabaseAdapter } from '@electric-sql/drivers'
 import {
   GlobalRegistry,
   Registry,

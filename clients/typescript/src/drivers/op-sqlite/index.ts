@@ -5,9 +5,9 @@ import {
   electrify as baseElectrify,
 } from '../../electric/index'
 
-import { DatabaseAdapter } from './adapter'
+import { DatabaseAdapter } from '@electric-sql/drivers/op-sqlite'
 import { ElectricConfig } from '../../config'
-import { Database } from './database'
+import type { Database } from '@electric-sql/drivers/op-sqlite'
 import { ElectricClient } from '../../client/model/client'
 import { DbSchema } from '../../client/model/schema'
 import { WebSocketReactNative } from '../../sockets/react-native'

@@ -23,11 +23,11 @@ import { ElectricClient } from '../../src/client/model'
 import EventEmitter from 'events'
 import { QueryBuilder } from '../../src/migrators/query-builder'
 import { BundleMigratorBase } from '../../src/migrators/bundle'
-import { makePgDatabase } from '../support/node-postgres'
-import { DatabaseAdapter as PgDatabaseAdapter } from '../../src/drivers/node-postgres/adapter'
+import { makePgDatabase } from '@electric-sql/drivers/node-postgres'
+import { DatabaseAdapter as PgDatabaseAdapter } from '../../src/drivers/node-postgres'
 import { PGlite } from '@electric-sql/pglite'
-import { DatabaseAdapter as PgliteDatabaseAdapter } from '../../src/drivers/pglite/adapter'
-import { DatabaseAdapter } from '../../src/electric/adapter'
+import { DatabaseAdapter as PgliteDatabaseAdapter } from '../../src/drivers/pglite'
+import { DatabaseAdapter } from '@electric-sql/drivers'
 
 export const dbDescription = new DbSchema(
   {

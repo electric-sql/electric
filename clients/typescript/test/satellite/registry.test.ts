@@ -4,7 +4,7 @@ import {
   ForeignKeyChecks,
   InternalElectricConfig,
 } from '../../src/config/index'
-import { DatabaseAdapter } from '../../src/electric/adapter'
+import { DatabaseAdapter } from '@electric-sql/drivers'
 import { Migrator } from '../../src/migrators/index'
 import { Notifier } from '../../src/notifiers/index'
 import { MockSatelliteProcess, MockRegistry } from '../../src/satellite/mock'

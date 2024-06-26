@@ -1,0 +1,25 @@
+import { Database } from './database.js'
+import { Row, Statement } from '../util/types.js'
+import { SerialDatabaseAdapter as GenericDatabaseAdapter } from '../generic/adapter.js'
+import { RunResult } from '../adapter.js'
+
+export class DatabaseAdapter extends GenericDatabaseAdapter {
+  readonly db: Database
+  readonly defaultNamespace = 'public'
+
+  constructor(db: Database) {
+    super()
+    this.db = db
+  }
+
+  async _run(statement: Statement): Promise<RunResult> {
+    const res = await this.db.query(statement.sql, statement.args)
+    return {
+      rowsAffected: res.affectedRows ?? 0,
+    }
+  }
+
+  async _query(statement: Statement): Promise<Row[]> {
+    return (await this.db.query<Row>(statement.sql, statement.args)).rows
+  }
+}

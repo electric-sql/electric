@@ -1,7 +1,7 @@
 import anyTest, { TestFn } from 'ava'
 import { makeMigration, parseMetadata } from '../../../src/migrators/builder'
 import { ContextType, builderTests, makeMigrationMetaData } from '../builder'
-import { makePgDatabase } from '../../support/node-postgres'
+import { makePgDatabase } from '@electric-sql/drivers/node-postgres'
 import { DatabaseAdapter } from '../../../src/drivers/node-postgres'
 import { PgBundleMigrator } from '../../../src/migrators'
 import { pgBuilder } from '../../../src/migrators/query-builder'

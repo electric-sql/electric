@@ -1,0 +1,87 @@
+name: Drivers / Tests
+
+on:
+  workflow_call:
+  push:
+    branches:
+      - main
+  pull_request:
+    paths:
+      - 'pnpm-lock.yaml'
+      - 'components/drivers/**'
+      - '!components/drivers/**.md'
+
+defaults:
+  run:
+    working-directory: components/drivers
+
+concurrency:
+  group: drivers-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify_formatting:
+    name: Check formatting & linting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 8
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: make deps
+      - run: pnpm run check-styleguide
+  check_types:
+    name: Check types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 8
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: make deps
+      - run: pnpm run typecheck
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [18, 20, 22]
+    steps:
+      - uses: actions/checkout@v3
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 8
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: pnpm
+      - name: Install
+        run: make deps
+      - name: Build
+        run: make build
+      - name: Run tests
+        run: make tests
+  maybe_publish:
+    runs-on: ubuntu-latest
+    needs: [test, check_types, verify_formatting]
+    if: ${{ github.ref_name == 'main' }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 8
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: pnpm
+      - run: make deps
+      - run: pnpm config set '//registry.npmjs.org/:_authToken' "${{ secrets.NPM_TOKEN }}"
+      - run: make publish-canary

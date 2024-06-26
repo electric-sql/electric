@@ -9,7 +9,7 @@
   "license": "Apache-2.0",
   "scripts": {
     "build": "rm -rf ./dist && vite build && tsc  -p tsconfig.build.json",
-    "check-styleguide": "prettier --check --loglevel warn . && eslint src --quiet",
+    "check-styleguide": "prettier --check --log-level warn . && eslint src --quiet",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "pnpm build",
     "test": "vitest run"
@@ -31,17 +31,18 @@
     "sql-formatter": "^15.3.1"
   },
   "devDependencies": {
+    "@electric-sql/drivers": "^0.0.1",
     "@electric-sql/pglite": "^0.1.5",
     "@types/better-sqlite3": "7.6.3",
     "@types/node": "^20.12.7",
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.0",
-    "@typescript-eslint/eslint-plugin": "^7.8.0",
-    "@typescript-eslint/parser": "^7.8.0",
+    "@typescript-eslint/eslint-plugin": "^7.14.1",
+    "@typescript-eslint/parser": "^7.14.1",
     "@vitejs/plugin-react": "^4.2.1",
     "better-sqlite3": "^11.0.0",
     "electric-sql": "workspace:*",
-    "eslint": "^8.22.0",
+    "eslint": "^8.57.0",
     "eslint-plugin-react": "^7.34.1",
     "happy-dom": "^14.10.2",
     "prettier": "3.2.5",
@@ -51,6 +52,7 @@
     "vitest": "^1.5.0"
   },
   "peerDependencies": {
+    "@electric-sql/drivers": "^0.0.1",
     "electric-sql": "workspace:*"
   },
   "files": [

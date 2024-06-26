@@ -1,4 +1,4 @@
-import { DatabaseAdapter, RunResult } from '../../electric/adapter'
+import { DatabaseAdapter, RunResult } from '@electric-sql/drivers'
 import { QueryBuilder } from 'squel'
 import { DB } from './db'
 import * as z from 'zod'

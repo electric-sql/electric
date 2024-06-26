@@ -7,7 +7,7 @@ import {
   personTable as getPersonTable,
 } from '../../satellite/common'
 import { pgBuilder } from '../../../src/migrators/query-builder'
-import { makePgDatabase } from '../../support/node-postgres'
+import { makePgDatabase } from '@electric-sql/drivers/node-postgres'
 import { Database, DatabaseAdapter } from '../../../src/drivers/node-postgres'
 import { ContextType, triggerTests } from '../triggers'
 
