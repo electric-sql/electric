@@ -1,12 +1,5 @@
 import mapValues from 'lodash.mapvalues'
 import partition from 'lodash.partition'
-import * as z from 'zod'
-import { CreateInput, CreateManyInput } from '../input/createInput'
-import { FindInput, FindUniqueInput } from '../input/findInput'
-import { UpdateInput, UpdateManyInput } from '../input/updateInput'
-import { UpsertInput } from '../input/upsertInput'
-import { DeleteInput, DeleteManyInput } from '../input/deleteInput'
-import { HKT } from '../util/hkt'
 import groupBy from 'lodash.groupby'
 import { Migration } from '../../migrators'
 import { PgType } from '../conversions/types'
@@ -19,82 +12,19 @@ export type RelationName = string
 
 export type Fields = Record<FieldName, PgType>
 
-export type TableSchema<
-  T extends Record<string, any>,
-  CreateData extends object,
-  UpdateData extends object,
-  Select,
-  Where extends object | undefined,
-  WhereUnique extends object,
-  Include extends Record<string, any>,
-  OrderBy,
-  ScalarFieldEnum,
-  _GetPayload extends HKT
-> = {
+export type TableSchema = {
   fields: Fields
   relations: Relation[]
-  modelSchema: z.ZodType<Partial<T>>
-  createSchema: z.ZodType<CreateInput<CreateData, Select, Include>>
-  createManySchema: z.ZodType<CreateManyInput<CreateData>>
-  findUniqueSchema: z.ZodType<FindUniqueInput<Select, WhereUnique, Include>>
-  findSchema: z.ZodType<
-    FindInput<Select, Where, Include, OrderBy, ScalarFieldEnum>
-  >
-  updateSchema: z.ZodType<UpdateInput<UpdateData, Select, WhereUnique, Include>>
-  updateManySchema: z.ZodType<UpdateManyInput<UpdateData, Where>>
-  upsertSchema: z.ZodType<
-    UpsertInput<CreateData, UpdateData, Select, WhereUnique, Include>
-  >
-  deleteSchema: z.ZodType<DeleteInput<Select, WhereUnique, Include>>
-  deleteManySchema: z.ZodType<DeleteManyInput<Where>>
 }
 
-export type ExtendedTableSchema<
-  T extends Record<string, any>,
-  CreateData extends object,
-  UpdateData extends object,
-  Select,
-  Where extends object | undefined,
-  WhereUnique extends object,
-  Include extends Record<string, any>,
-  OrderBy,
-  ScalarFieldEnum,
-  GetPayload extends HKT
-> = TableSchema<
-  T,
-  CreateData,
-  UpdateData,
-  Select,
-  Where,
-  WhereUnique,
-  Include,
-  OrderBy,
-  ScalarFieldEnum,
-  GetPayload
-> & {
+export type ExtendedTableSchema = TableSchema & {
   outgoingRelations: Relation[]
   incomingRelations: Relation[]
 }
 
-export type AnyTableSchema = TableSchema<
-  any,
-  any,
-  any,
-  any,
-  any,
-  any,
-  any,
-  any,
-  any,
-  HKT
->
+export type TableSchemas = Record<TableName, TableSchema>
 
-export type TableSchemas = Record<TableName, AnyTableSchema>
-
-export type ExtendedTableSchemas = Record<
-  TableName,
-  ExtendedTableSchema<any, any, any, any, any, any, any, any, any, HKT>
->
+export type ExtendedTableSchemas = Record<TableName, ExtendedTableSchema>
 
 export class Relation {
   constructor(
@@ -102,10 +32,7 @@ export class Relation {
     public fromField: FieldName,
     public toField: FieldName,
     public relatedTable: TableName,
-    public relationName: RelationName,
-    // 'one' if this object can have only one related object,
-    // 'many' if this object potentially has many related objects
-    public relatedObjects: Arity
+    public relationName: RelationName
   ) {}
 
   isIncomingRelation(): boolean {
@@ -189,9 +116,7 @@ export class DbSchema<T extends TableSchemas> {
     return Object.keys(this.extendedTables).includes(table)
   }
 
-  getTableDescription(
-    table: TableName
-  ): ExtendedTableSchema<any, any, any, any, any, any, any, any, any, HKT> {
+  getTableDescription(table: TableName): ExtendedTableSchema {
     return this.extendedTables[table]
   }
 

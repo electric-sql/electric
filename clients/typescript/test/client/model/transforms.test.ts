@@ -1,10 +1,5 @@
-import { z } from 'zod'
 import test from 'ava'
-import {
-  _NOT_UNIQUE_,
-  _RECORD_NOT_FOUND_,
-} from '../../../src/client/validation/errors/messages'
-import { schema, Post } from '../generated'
+import { schema } from '../generated'
 import {
   setReplicationTransform,
   transformTableRecord,
@@ -15,8 +10,14 @@ import { sqliteConverter } from '../../../src/client/conversions/sqlite'
 
 const tableName = 'Post'
 const fields = schema.getFields(tableName)
-const tableDescription = schema.getTableDescription(tableName)
-const modelSchema = tableDescription.modelSchema
+
+type Post = {
+  id: number
+  title: string
+  contents: string
+  nbr: number
+  authorId: number
+}
 
 const post1 = {
   id: 1,
@@ -25,32 +26,6 @@ const post1 = {
   nbr: 18,
   authorId: 1,
 }
-
-test('transformTableRecord should validate the input', (t) => {
-  const liftedTransform = (r: DbRecord) =>
-    transformTableRecord(
-      r,
-      (row: Post) => row,
-      fields,
-      modelSchema,
-      sqliteConverter,
-      []
-    )
-
-  // should not throw for properly typed input
-  t.notThrows(() => liftedTransform(post1))
-
-  // should throw for improperly typed input
-  t.throws(() => liftedTransform({ ...post1, title: 3 }), {
-    instanceOf: z.ZodError,
-  })
-  t.throws(() => liftedTransform({ ...post1, contents: 3 }), {
-    instanceOf: z.ZodError,
-  })
-  t.throws(() => liftedTransform({ ...post1, nbr: 'string' }), {
-    instanceOf: z.ZodError,
-  })
-})
 
 test('transformTableRecord should validate the output', (t) => {
   const liftedTransform = (r: DbRecord) =>
@@ -62,12 +37,13 @@ test('transformTableRecord should validate the output', (t) => {
         title: 3,
       }),
       fields,
-      modelSchema,
       sqliteConverter,
       []
     )
   // should throw for improperly typed input
-  t.throws(() => liftedTransform(post1), { instanceOf: z.ZodError })
+  t.throws(() => liftedTransform(post1), {
+    instanceOf: InvalidRecordTransformationError,
+  })
 })
 
 test('transformTableRecord should validate output does not modify immutable fields', (t) => {
@@ -79,7 +55,6 @@ test('transformTableRecord should validate output does not modify immutable fiel
         title: row.title + ' modified',
       }),
       fields,
-      modelSchema,
       sqliteConverter,
       ['title']
     )

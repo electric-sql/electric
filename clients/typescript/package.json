@@ -199,7 +199,7 @@
     "long": "^5.2.0",
     "object.hasown": "^1.1.2",
     "ohash": "^1.1.2",
-    "prisma": "4.8.1",
+    "prompts": "^2.4.2",
     "protobufjs": "^7.1.1",
     "squel": "^5.13.0",
     "text-encoder-lite": "^2.0.0",
@@ -252,7 +252,6 @@
     "vue-tsc": "^1.8.27"
   },
   "peerDependencies": {
-    "prisma": "4.8.1",
     "react": ">= 16.8.0",
     "react-dom": ">= 16.8.0",
     "react-native": ">= 0.68.0",
@@ -262,9 +261,6 @@
   },
   "peerDependenciesMeta": {
     "expo-sqlite": {
-      "optional": true
-    },
-    "prisma": {
       "optional": true
     },
     "react": {

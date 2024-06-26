@@ -9,7 +9,11 @@ import {
 } from 'electric-sql/migrators'
 import { isObject } from 'electric-sql/util'
 import { QueryBuilder } from 'electric-sql/migrators/query-builder'
-import { TableName, DbSchema, createDbDescription } from 'electric-sql/client'
+import {
+  TableName,
+  MinimalDbSchema,
+  createDbDescription,
+} from 'electric-sql/client'
 import { SatOpMigrate_Table } from 'electric-sql/protocol'
 
 /*
@@ -40,7 +44,7 @@ export async function buildMigrations(
   migrationsFolder: string,
   migrationsFile: string,
   builder: QueryBuilder
-): Promise<DbSchema> {
+): Promise<MinimalDbSchema> {
   try {
     const { migrations, dbDescription } = await loadMigrations(
       migrationsFolder,
@@ -84,7 +88,7 @@ export async function getMigrationNames(
 export async function loadMigrations(
   migrationsFolder: string,
   builder: QueryBuilder
-): Promise<{ migrations: Migration[]; dbDescription: DbSchema }> {
+): Promise<{ migrations: Migration[]; dbDescription: MinimalDbSchema }> {
   const dirNames = await getMigrationNames(migrationsFolder)
   const migrationPaths = dirNames.map((dirName) =>
     path.join(migrationsFolder, dirName, 'metadata.json')

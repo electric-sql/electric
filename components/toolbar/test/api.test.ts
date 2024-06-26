@@ -40,17 +40,6 @@ describe.each(configurations)(`api - $dialect`, async (config) => {
 
   await electric.connect('test-token')
 
-  // test boilerplate copied from electric-sql/test/client/model/table.test.ts
-  const tbl = electric.db.Post
-  const postTable = tbl
-  const userTable = electric.db.User
-  const profileTable = electric.db.Profile
-
-  // Sync all shapes such that we don't get warnings on every query
-  await postTable.sync()
-  await userTable.sync()
-  await profileTable.sync()
-
   // Create some tables in the DB first
   async function clear() {
     console.log('whatsap')

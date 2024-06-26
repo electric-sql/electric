@@ -57,25 +57,5 @@
     [invoke node_get_uuid "02c0c547-7e2c-4afb-aa40-38413fd91dc4"]
     [invoke node_get_uuid "67b2db7d-7a4e-4ead-8883-01bf4946fec2"]
 
-    # Reset the failure pattern because we don't want it to match the error below
-    -
-    # Can't write invalid uuids to the DB
-    # the uuid below has one digit too many in the last part
-    !await client.write_invalid_uuid(db, '09e3e433-e9f1-46b4-a18f-1e4e0b6c62789')
-    """??
-    Uncaught:
-    [
-      {
-        "validation": "uuid",
-        "code": "invalid_string",
-        "message": "Invalid uuid",
-        "path": [
-          "data",
-          "id"
-        ]
-      }
-    ]
-    """
-
 [cleanup]
   [invoke teardown]

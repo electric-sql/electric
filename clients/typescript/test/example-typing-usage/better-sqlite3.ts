@@ -7,8 +7,7 @@ const original = new Database('example.db')
 
 // Electrify the DB and use the DAL to query the `Items` table
 const { db } = await electrify(original, schema)
-await db.Items.findMany({
-  select: {
-    value: true,
-  },
+await db.rawQuery({
+  sql: 'SELECT value FROM Items WHERE id = ?',
+  args: [1],
 })

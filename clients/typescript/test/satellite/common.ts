@@ -16,9 +16,8 @@ import sqliteMigrations from '../support/migrations/migrations.js'
 import pgMigrations from '../support/migrations/pg-migrations.js'
 import { ExecutionContext } from 'ava'
 import { AuthState, insecureAuthToken } from '../../src/auth'
-import { DbSchema, TableSchema } from '../../src/client/model/schema'
+import { DbSchema } from '../../src/client/model/schema'
 import { PgBasicType } from '../../src/client/conversions/types'
-import { HKT } from '../../src/client/util/hkt'
 import { ElectricClient } from '../../src/client/model'
 import EventEmitter from 'events'
 import { QueryBuilder } from '../../src/migrators/query-builder'
@@ -50,10 +49,7 @@ export const dbDescription = new DbSchema(
       fields: { id: PgBasicType.PG_INTEGER },
       relations: [],
     },
-  } as unknown as Record<
-    string,
-    TableSchema<any, any, any, any, any, any, any, any, any, HKT>
-  >,
+  },
   [],
   []
 )

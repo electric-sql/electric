@@ -50,10 +50,6 @@ async function makeContext(t: ExecutionContext<ContextType>) {
     registry,
     'SQLite'
   )
-  const Post = electric.db.Post
-  const Items = electric.db.Items
-  const User = electric.db.User
-  const Profile = electric.db.Profile
 
   const runMigrations = async () => {
     return await migrator.up()
@@ -66,17 +62,11 @@ async function makeContext(t: ExecutionContext<ContextType>) {
     client,
     runMigrations,
     electric,
-    Post,
-    Items,
-    User,
-    Profile,
   }
 
   init(t.context)
 }
 
-type TableType<T extends keyof ElectricClient<typeof schema>['db']> =
-  ElectricClient<typeof schema>['db'][T]
 type ContextType = {
   dbName: string
   db: any
@@ -84,10 +74,6 @@ type ContextType = {
   client: MockSatelliteClient
   runMigrations: () => Promise<number>
   electric: ElectricClient<typeof schema>
-  Post: TableType<'Post'>
-  Items: TableType<'Items'>
-  User: TableType<'User'>
-  Profile: TableType<'Profile'>
 }
 
 // Create a Post table in the DB first
@@ -196,14 +182,13 @@ const startSatellite = async (satellite: SatelliteProcess, token: string) => {
 }
 
 test.serial('promise resolves when subscription starts loading', async (t) => {
-  const { satellite, client } = t.context as ContextType
+  const { electric, satellite, client } = t.context as ContextType
   await startSatellite(satellite, config.auth.token)
 
   client.setRelations(relations)
   client.setRelationData('Post', post)
 
-  const { Post } = t.context as ContextType
-  const { synced } = await Post.sync()
+  const { synced } = await electric.sync.subscribe({ table: 'Post' })
   // always await this promise otherwise the next test may issue a subscription
   // while this one is not yet fulfilled and that will lead to issues
   await synced
@@ -213,40 +198,42 @@ test.serial('promise resolves when subscription starts loading', async (t) => {
 test.serial(
   'synced promise resolves when subscription is fulfilled',
   async (t) => {
-    const { satellite, client } = t.context as ContextType
+    const { electric, satellite, client } = t.context as ContextType
     await startSatellite(satellite, config.auth.token)
 
     // We can request a subscription
     client.setRelations(relations)
     client.setRelationData('Profile', profile)
 
-    const { Profile } = t.context as ContextType
-    const { synced: profileSynced } = await Profile.sync()
+    const { synced: profileSynced } = await electric.sync.subscribe({
+      table: 'Profile',
+    })
 
     // Once the subscription has been acknowledged
     // we can request another one
     client.setRelations(relations)
     client.setRelationData('Post', post)
 
-    const { Post } = t.context as ContextType
-    const { synced } = await Post.sync()
+    const { synced } = await electric.sync.subscribe({ table: 'Post' })
     await synced
 
     // Check that the data was indeed received
-    const posts = await Post.findMany()
-    t.deepEqual(posts, [post])
+    const posts = await electric.db.rawQuery({
+      sql: 'SELECT "id", "title", "contents", "nbr", "authorId" FROM "Post"',
+    })
+    t.is(posts.length, 1)
+    t.deepEqual(posts[0], post)
 
     await profileSynced
   }
 )
 
 test.serial('promise is rejected on failed subscription request', async (t) => {
-  const { satellite } = t.context as ContextType
+  const { electric, satellite } = t.context as ContextType
   await startSatellite(satellite, config.auth.token)
 
-  const { Items } = t.context as ContextType
   try {
-    await Items.sync()
+    await electric.sync.subscribe({ table: 'Items' })
     t.fail()
   } catch (_e) {
     t.pass()
@@ -254,13 +241,13 @@ test.serial('promise is rejected on failed subscription request', async (t) => {
 })
 
 test.serial('synced promise is rejected on invalid shape', async (t) => {
-  const { satellite, User } = t.context as ContextType
+  const { electric, satellite } = t.context as ContextType
   await startSatellite(satellite, config.auth.token)
 
   let loadingPromResolved = false
 
   try {
-    const { synced } = await User.sync()
+    const { synced } = await electric.sync.subscribe({ table: 'User' })
     loadingPromResolved = true
     await synced
     t.fail()

@@ -29,9 +29,8 @@ import {
 } from '../../src/util/types'
 import { dbDescription, relations } from './common'
 import { RpcResponse, SatelliteWSServerStub } from './server_ws_stub'
-import { DbSchema, TableSchema } from '../../src/client/model/schema'
+import { DbSchema } from '../../src/client/model/schema'
 import { PgBasicType } from '../../src/client/conversions/types'
-import { HKT } from '../../src/client/util/hkt'
 import { AUTH_EXPIRED_CLOSE_EVENT } from '../../src/sockets'
 
 interface Context extends AuthState {
@@ -284,18 +283,7 @@ test.serial('receive transaction over multiple messages', async (t) => {
           name2: PgBasicType.PG_TEXT,
         },
         relations: [],
-      } as unknown as TableSchema<
-        any,
-        any,
-        any,
-        any,
-        any,
-        any,
-        any,
-        any,
-        any,
-        HKT
-      >,
+      },
     },
     [],
     []
@@ -715,7 +703,7 @@ test.serial('default and null test', async (t) => {
       intvalue_null_default: PgBasicType.PG_INT4,
     },
     relations: [],
-  } as unknown as TableSchema<any, any, any, any, any, any, any, any, any, HKT>
+  }
 
   const dbDescription = new DbSchema(
     {
@@ -1061,7 +1049,7 @@ test.serial('subscription correct protocol sequence with data', async (t) => {
       name2: PgBasicType.PG_TEXT,
     },
     relations: [],
-  } as unknown as TableSchema<any, any, any, any, any, any, any, any, any, HKT>
+  }
 
   const dbDescription = new DbSchema(
     {
@@ -1181,18 +1169,7 @@ test.serial('client correctly handles additional data messages', async (t) => {
           name2: PgBasicType.PG_TEXT,
         },
         relations: [],
-      } as unknown as TableSchema<
-        any,
-        any,
-        any,
-        any,
-        any,
-        any,
-        any,
-        any,
-        any,
-        HKT
-      >,
+      },
     },
     [],
     []

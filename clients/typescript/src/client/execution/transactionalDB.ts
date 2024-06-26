@@ -4,7 +4,6 @@ import { DB } from './db'
 import * as z from 'zod'
 import { Row, Statement } from '../../util'
 import { Fields } from '../model/schema'
-import { Transformation, transformFields } from '../conversions/input'
 import { Converter } from '../conversions/converter'
 
 export class TransactionalDB implements DB {
@@ -52,12 +51,9 @@ export class TransactionalDB implements DB {
             // convert SQLite/PG values back to JS values
             // and then parse the transformed object
             // with the Zod schema to validate it
-            const transformedRow = transformFields(
-              row,
-              this._fields,
-              this._converter,
-              Transformation.Decode
-            )
+            const transformedRow = this._converter.decodeRow(row, {
+              fields: this._fields,
+            })
             return schema.parse(transformedRow)
           })
           successCallback(

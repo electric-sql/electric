@@ -19,3 +19,27 @@ export function mapObject<V, W, T extends Record<string, V>>(
     })
   )
 }
+
+/**
+ * Checks that the two objects have the same keys
+ * and the value associated to each key is of the same type.
+ */
+export function equallyTypedObjects(
+  o1: Record<string, any>,
+  o2: Record<string, any>
+): boolean {
+  const keys1 = Object.keys(o1)
+  const keys2 = Object.keys(o2)
+
+  if (keys1.length !== keys2.length) {
+    return false
+  }
+
+  for (const key of keys1) {
+    if (!Object.hasOwn(o2, key) || typeof o1[key] !== typeof o2[key]) {
+      return false
+    }
+  }
+
+  return true
+}

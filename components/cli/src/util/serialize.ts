@@ -1,5 +1,5 @@
 import { dedent } from 'ts-dedent'
-import { DbSchema } from 'electric-sql/client'
+import { MinimalDbSchema } from 'electric-sql/client'
 
 /**
  * Custom serialization function that serializes the DB description
@@ -8,7 +8,7 @@ import { DbSchema } from 'electric-sql/client'
  * (as it instantiates `Relation` objects)
  * that is meant to be imported by the Electric application.
  */
-export function serializeDbDescription(dbDescription: DbSchema) {
+export function serializeDbDescription(dbDescription: MinimalDbSchema) {
   const tables = Object.entries(dbDescription)
     .map(([table, schema]) => {
       return dedent`
@@ -29,8 +29,7 @@ export function serializeDbDescription(dbDescription: DbSchema) {
                 "${r.fromField}",
                 "${r.toField}",
                 "${r.relatedTable}",
-                "${r.relationName}",
-                "${r.relatedObjects}"
+                "${r.relationName}"
               )
             `
             })

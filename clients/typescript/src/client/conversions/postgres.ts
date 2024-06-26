@@ -1,8 +1,9 @@
 import { InvalidArgumentError } from '../validation/errors/invalidArgumentError'
-import { Converter } from './converter'
+import { Converter, mapRow, mapRows } from './converter'
 import { deserialiseDate, serialiseDate } from './datatypes/date'
 import { isJsonNull } from './datatypes/json'
 import { PgBasicType, PgDateType, PgType } from './types'
+import { TableSchema } from '../model/schema'
 
 /**
  * This module takes care of converting TypeScript values to a Postgres storeable value and back.
@@ -11,7 +12,7 @@ import { PgBasicType, PgDateType, PgType } from './types'
  * Currently, no conversions are needed for the data types we support.
  */
 
-function toPostgres(v: any, pgType: PgType): any {
+export function toPostgres(v: any, pgType: PgType): any {
   if (v === null) {
     // don't transform null values
     return v
@@ -52,7 +53,7 @@ function toPostgres(v: any, pgType: PgType): any {
   }
 }
 
-function fromPostgres(v: any, pgType: PgType): any {
+export function fromPostgres(v: any, pgType: PgType): any {
   if (v === null) {
     // don't transform null values
     return v
@@ -97,5 +98,21 @@ function fromPostgres(v: any, pgType: PgType): any {
 
 export const postgresConverter: Converter = {
   encode: toPostgres,
+  encodeRow: <T extends Record<string, unknown> = Record<string, unknown>>(
+    row: Record<string, unknown>,
+    tableSchema: TableSchema
+  ) => mapRow<T>(row, tableSchema, toPostgres),
+  encodeRows: <T extends Record<string, unknown> = Record<string, unknown>>(
+    rows: Array<Record<string, unknown>>,
+    tableSchema: TableSchema
+  ) => mapRows<T>(rows, tableSchema, toPostgres),
   decode: fromPostgres,
+  decodeRow: <T extends Record<string, any> = Record<string, any>>(
+    row: Record<string, unknown>,
+    tableSchema: TableSchema
+  ) => mapRow<T>(row, tableSchema, fromPostgres),
+  decodeRows: <T extends Record<string, any> = Record<string, any>>(
+    rows: Array<Record<string, unknown>>,
+    tableSchema: TableSchema
+  ) => mapRows<T>(rows, tableSchema, fromPostgres),
 }
