@@ -1,0 +1,36 @@
+{
+  "name": "electric-next",
+  "version": "0.0.1",
+  "description": "The Next Electric",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/electric-sql/electric-next.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/electric-sql/electric-next/issues"
+  },
+  "homepage": "https://github.com/electric-sql/electric-next#readme",
+  "dependencies": {
+    "@types/pg": "^8.11.6",
+    "@types/uuid": "^10.0.0",
+    "@typescript-eslint/eslint-plugin": "^7.14.1",
+    "@typescript-eslint/parser": "^7.14.1",
+    "cache-control-parser": "^2.0.6",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-config-react": "^1.1.7",
+    "eslint-plugin-prettier": "^5.1.3",
+    "eslint-plugin-react": "^7.34.3",
+    "pg": "^8.12.0",
+    "prettier": "^3.3.2",
+    "typescript": "^5.5.2",
+    "uuid": "^10.0.0",
+    "vitest": "^1.6.0"
+  }
+}
