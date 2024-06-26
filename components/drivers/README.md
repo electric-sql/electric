@@ -17,7 +17,7 @@
 # ElectricSQL Drivers
 
 This package implements a unified `DatabaseAdapter` interface for several SQLite and Postgres database drivers.
-Support for other drivers can be added by implementing the `DatabaseAdapter` interface or extending one of the generic drivers.
+Support for other drivers can be added by implementing the `DatabaseAdapter` interface or extending one of the generic drivers: `SerialDatabaseAdapter` or `BatchDatabaseAdapter`. Implement the latter if the underlying driver supports batch execution of queries, otherwise implement the former.
 
 See the:
 
