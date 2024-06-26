@@ -6,6 +6,7 @@ interface ShapeStreamOptions {
   subscribe?: boolean
   signal?: AbortSignal
   offset?: number
+  shapeId?: string
 }
 
 class Subscriber {
@@ -40,12 +41,14 @@ export class ShapeStream {
   private closedPromise: Promise<unknown>
   private outsideResolve?: (value?: unknown) => void
   options: ShapeStreamOptions
+  shapeId: string
 
   constructor(options: ShapeStreamOptions) {
     this.validateOptions(options)
     this.instanceId = Math.random()
     this.options = { subscribe: true, ...options }
     console.log(`constructor`, this)
+    this.shapeId = this.options.shapeId || ``
     this.startStream()
 
     this.outsideResolve
@@ -72,7 +75,12 @@ export class ShapeStream {
         `Invalid signal option. It must be an instance of AbortSignal.`
       )
     }
-    // Add more validation rules as needed
+
+    if (options.offset > -1 && !options.shapeId) {
+      throw new Error(
+        `shapeId is required if this isn't an initial fetch (i.e. offset > -1)`
+      )
+    }
   }
 
   private async startStream() {
@@ -100,12 +108,18 @@ export class ShapeStream {
       } else {
         url.searchParams.set(`notLive`, ``)
       }
-      console.log({
-        lastOffset,
-        upToDate,
-        pollCount,
-        url: url.toString(),
-      })
+
+      url.searchParams.set(`shapeId`, this.shapeId)
+      console.log(
+        `client`,
+        { table: this.options.shape.table },
+        {
+          lastOffset,
+          upToDate,
+          pollCount,
+          url: url.toString(),
+        }
+      )
       try {
         await fetch(url.toString(), {
           signal: this.options.signal ? this.options.signal : undefined,
@@ -114,6 +128,8 @@ export class ShapeStream {
             if (!response.ok) {
               throw new Error(`HTTP error! Status: ${response.status}`)
             }
+            this.shapeId = response.headers.get(`x-electric-shape-id`)
+            console.log({ shapeId: this.shapeId })
             attempt = 0
             if (response.status === 204) {
               return []
