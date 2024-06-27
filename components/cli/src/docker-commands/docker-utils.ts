@@ -10,15 +10,14 @@ function composeFilePath(filename: string) {
   )
 }
 
-function useExternalDockerNetwork(opt: string): string {
-  if (opt === undefined || opt === null) return 'false'
-  return (opt.length > 0).toString()
+function useExternalDockerNetwork(networkName?: string): boolean {
+  return !!(networkName && networkName.length > 0)
 }
 
 // Derive network name from the current working directory, matching Docker Compose's default
 // naming.
-function deriveNetworkName(opt: string): string {
-  if (opt && opt.length > 0) return opt
+function deriveNetworkName(networkName?: string): string {
+  if (networkName && networkName.length > 0) return networkName
   return path.basename(process.cwd()) + '_ip6net'
 }
 
@@ -49,7 +48,7 @@ export function dockerCompose(
     env: {
       ELECTRIC_COMPOSE_NETWORK_IS_EXTERNAL: useExternalDockerNetwork(
         env.DOCKER_NETWORK_USE_EXTERNAL
-      ),
+      ).toString(),
       ELECTRIC_COMPOSE_EXTERNAL_NETWORK_NAME: deriveNetworkName(
         env.DOCKER_NETWORK_USE_EXTERNAL
       ),
